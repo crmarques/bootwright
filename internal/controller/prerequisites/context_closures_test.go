@@ -27,15 +27,15 @@ func (s fixedStorage) ReadController(_ context.Context, _ string, read func(Stor
 }
 
 func controllerMachine() api.Object {
-	return api.NewObject(api.Machine, "controller", api.Value{}, api.MapValue().With("capabilities", api.StringList("container-runtime")).WithPath(api.BoolValue(true), "os", "provided").WithPath(api.BoolValue(true), "access", "local").WithPath(api.MapValue(), "proxy", "direct"))
+	return api.NewObject(api.Machine, "controller", api.Value{}, api.MapValue().WithPath(api.BoolValue(true), "os", "provided").WithPath(api.BoolValue(true), "access", "local").WithPath(api.MapValue(), "proxy", "direct"))
 }
 
 func agentClusterObjects(spec api.Value, extra ...api.Object) []api.Object {
-	spec = spec.WithPath(api.StringValue("openshift"), "distribution", "type").WithPath(api.StringValue("4.21.15"), "distribution", "release", "version").WithPath(api.StringValue("agent"), "install", "method")
+	spec = spec.WithPath(api.StringValue("openshift"), "distribution", "type").WithPath(api.StringValue("4.21.15"), "distribution", "release", "version").WithPath(api.MapValue(), "install", "agent")
 	objects := []api.Object{
 		api.NewObject(api.Environment, "example", api.Value{}, api.MapValue().WithPath(api.StringValue("controller"), "controller", "machineRef")),
 		controllerMachine(),
-		api.NewObject(api.ContainerCluster, "cluster", api.Value{}, spec),
+		api.NewObject(api.OpenShiftCluster, "cluster", api.Value{}, spec),
 	}
 	return append(objects, extra...)
 }
@@ -48,9 +48,9 @@ func nodeNetworkConfiguration() []api.Object {
 func probedVirtualIPGraph() []api.Object {
 	attachment := api.MapValue().With("libvirt", api.MapValue().With("management", api.StringValue("managed")).With("address", api.StringValue("198.51.100.1/24")).With("bridge", api.StringValue("virbr-lab")))
 	provider := api.NewObject(api.InfraProvider, "hosted", api.Value{}, api.MapValue().WithPath(api.StringValue("controller"), "libvirt", "machineRef").With("networkAttachments", api.ListValue(attachment)))
-	spec := api.MapValue().WithPath(api.StringValue("baremetal"), "install", "platform", "type").With("nodes", api.ListValue(api.MapValue(), api.MapValue(), api.MapValue()))
+	spec := api.MapValue().WithPath(api.MapValue(), "install", "agent").WithPath(api.MapValue(), "install", "platform", "baremetal").With("nodes", api.ListValue(api.MapValue(), api.MapValue(), api.MapValue()))
 	for _, slot := range []string{"api", "api-int", "ingress"} {
-		spec = spec.WithPath(api.StringValue("198.51.100.10"), "install", "endpoints", slot, "address").WithPath(api.StringValue("openshift"), "install", "endpoints", slot, "source", "type")
+		spec = spec.WithPath(api.StringValue("198.51.100.10"), "install", "endpoints", slot, "address").WithPath(api.StringValue("installer"), "install", "endpoints", slot, "source", "type")
 	}
 	return agentClusterObjects(spec, provider)
 }

@@ -1,0 +1,27 @@
+Environment/synthetic
+  $.spec.controller.machineRef: authored
+  $.spec.domains.base: authored
+  $.spec.domains.machines: derived
+  $.spec.domains.clusters: derived
+  $.spec.domains.containerClusters: derived
+  $.spec.domains.storageClusters: derived
+  $.spec.defaults.LoadBalancer.management: authored
+Machine/service-host
+  $.spec.os.provided: authored
+  $.spec.access.local: authored
+  $.spec.access.rootLogin: derived
+  $.spec.network.addresses[0].name: authored
+  $.spec.network.addresses[0].address: authored
+  $.spec.network.addresses[1].name: derived
+  $.spec.network.addresses[1].address: derived
+  $.spec.proxy.direct: derived
+LoadBalancer/edge
+  $.spec.bindAddresses[0].address: authored
+  $.spec.management: defaults.LoadBalancer
+CustomPlaybook/tune
+  $.spec.gates: authored
+  $.spec.playbook: authored
+  $.spec.target.machines[0]: authored
+  $.spec.enabled: built-in
+Secret/credential
+  $.spec.type: authored

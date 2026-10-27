@@ -271,7 +271,7 @@ func conditionStatus(status string) bool {
 }
 
 func AllowedProduced(ref ProducedRef) bool {
-	return ref.Kind == "StorageExport" && ref.Output == "external-details" && validName(ref.Object)
+	return ref.Kind == "CephConsumer" && ref.Output == "external-details" && validName(ref.Object)
 }
 
 func validatePlacement(entry PlacementEntry, namespaces []string) error {

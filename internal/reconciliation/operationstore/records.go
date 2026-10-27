@@ -131,6 +131,18 @@ type Executable struct {
 	Commit  string `json:"commit"`
 }
 
+func BuildIdentity(e Executable) string {
+	switch {
+	case e.Version == "" && e.Commit == "":
+		return ""
+	case e.Version == "":
+		return "devel (" + e.Commit + ")"
+	case e.Commit == "":
+		return e.Version
+	}
+	return e.Version + " (" + e.Commit + ")"
+}
+
 // Build is the build that ran one attempt or resolution; the operation keeps naming its registering build.
 type Build struct {
 	AutomationDigest string     `json:"automationDigest"`

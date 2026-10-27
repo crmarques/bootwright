@@ -129,10 +129,10 @@ func validateDeclaration(o api.Object, c api.Catalog, partial bool) []api.Issue 
 				return issues[:maxIssues]
 			}
 			field := indexed(indexed("spec.inputs", i)+".effects", j)
-			wrongStorageKind := input.Get("resourceKind").Text() != string(api.StorageExport) && (!partial || input.Has("resourceKind") || input.Has("secretType"))
+			wrongStorageKind := input.Get("resourceKind").Text() != string(api.CephConsumer) && (!partial || input.Has("resourceKind") || input.Has("secretType"))
 			missingStorageCapability := !providesStorage && (!partial || s.Has("provides"))
-			if effect.Has("storageExportAttachment") && (wrongStorageKind || missingStorageCapability) {
-				issues = append(issues, addonIssue("api.invariant", field, "Storage attachment requires a StorageExport input and the dataFoundation capability.", "make the input a StorageExport resourceKind input and add dataFoundation to provides, or remove the storageExportAttachment effect"))
+			if effect.Has("cephConsumerAttachment") && (wrongStorageKind || missingStorageCapability) {
+				issues = append(issues, addonIssue("api.invariant", field, "Storage attachment requires a CephConsumer input and the dataFoundation capability.", "make the input a CephConsumer resourceKind input and add dataFoundation to provides, or remove the cephConsumerAttachment effect"))
 			}
 			if effect.Has("globalPullSecretMerge") && input.Get("secretType").Text() != "token" && (!partial || input.Has("resourceKind") || input.Has("secretType")) {
 				issues = append(issues, addonIssue("api.invariant", field, "Global pull-secret merging requires a token Secret input.", "make the input a token Secret input (secretType: token), or remove the globalPullSecretMerge effect"))
@@ -230,9 +230,9 @@ func validateStepTarget(target api.Value, inputs map[string]api.Value, inputsPre
 			return issues
 		}
 		input, found := inputs[from.Get("input").Text()]
-		validKind := slices.Contains([]string{string(api.StorageExport), string(api.StorageCluster), string(api.ContainerCluster), string(api.Machine)}, input.Get("resourceKind").Text())
-		if !found || !validKind && (!partial || input.Has("resourceKind") || input.Has("secretType")) || input.Get("resourceKind").Text() == string(api.StorageExport) && !hasEffect(input, "storageExportAttachment") && (!partial || input.Has("effects")) {
-			issues = append(issues, addonIssue("api.reference", field+".fromInput.input", "Input targets require a declared supported resource input and any required storage-attachment effect.", "name a declared input whose resourceKind is StorageExport, StorageCluster, ContainerCluster or Machine; a StorageExport input also needs the storageExportAttachment effect"))
+		validKind := slices.Contains([]string{string(api.CephConsumer), string(api.CephCluster), string(api.OpenShiftCluster), string(api.Machine)}, input.Get("resourceKind").Text())
+		if !found || !validKind && (!partial || input.Has("resourceKind") || input.Has("secretType")) || input.Get("resourceKind").Text() == string(api.CephConsumer) && !hasEffect(input, "cephConsumerAttachment") && (!partial || input.Has("effects")) {
+			issues = append(issues, addonIssue("api.reference", field+".fromInput.input", "Input targets require a declared supported resource input and any required storage-attachment effect.", "name a declared input whose resourceKind is CephConsumer, CephCluster, OpenShiftCluster or Machine; a CephConsumer input also needs the cephConsumerAttachment effect"))
 		}
 	}
 	return boundedIssues(issues)

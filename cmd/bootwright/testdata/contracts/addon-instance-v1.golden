@@ -1,6 +1,6 @@
 implementation: addon-instance-v1
-content-digest: e15fa2a2a2109ab0d0b22080fb1244340c0c561109eda150c3550771b5f3d790
-request-version: addon-instance-request-v1
+content-digest: dcaac583985bad147820a2d68fde4f8e3f7a680be945c0b0cc4dd86ad54b2598
+request-version: addon-instance-request-v2
 automation-formats: none
 mark-formats: bootwright.cluster-objects.owner-v1, bootwright.io/owner
 proof-ids: none

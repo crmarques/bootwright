@@ -23,7 +23,7 @@ import (
 func domainEffects(object api.Object) (Bearing, bool) {
 	if reason, bears := infrastructureservices.EffectBearing(object); bears {
 		machine, installOnly := infrastructureservices.Placement(object)
-		return Bearing{Reason: reason, Shared: true, Machine: machine, InstallOnly: installOnly}, true
+		return Bearing{Reason: reason, Remedy: infrastructureservices.UnclaimedRemedy(object), Shared: true, Machine: machine, InstallOnly: installOnly}, true
 	}
 	for _, predicate := range []func(api.Object) (string, bool){
 		substrate.EffectBearing, managedos.EffectBearing, containercluster.EffectBearing,
@@ -59,7 +59,7 @@ func TestUnclaimedObjectTableMatchesTheEngine(t *testing.T) {
 	playbook := func(name string, enabled bool) api.Object {
 		return api.NewObject(api.CustomPlaybook, name, api.Value{}, api.MapValue(api.FieldValue{Name: "enabled", Value: api.BoolValue(enabled)}))
 	}
-	storage := api.NewObject(api.StorageCluster, "ceph", api.Value{}, api.MapValue())
+	storage := api.NewObject(api.CephCluster, "ceph", api.Value{}, api.MapValue())
 	proxy := managed(api.Proxy, "lab-proxy", "managed")
 	bare := machine("bare", false)
 	tune := playbook("tune", true)
@@ -67,6 +67,8 @@ func TestUnclaimedObjectTableMatchesTheEngine(t *testing.T) {
 		"An unclaimed effect-bearing kind": {api.NewCatalog([]api.Object{storage}), []string{"Machine"}, storage},
 		"An unclaimed managed service": {api.NewCatalog([]api.Object{proxy, managed(api.Proxy, "upstream", "external")}),
 			nil, proxy},
+		"An unclaimed managed Registry or LoadBalancer": {api.NewCatalog([]api.Object{managed(api.Registry, "mirror", "managed"), managed(api.LoadBalancer, "edge", "external")}),
+			nil, managed(api.Registry, "mirror", "managed")},
 		"A Machine to install with no capability": {api.NewCatalog([]api.Object{bare, machine("ready", true)}), nil, bare},
 		"An enabled CustomPlaybook":               {api.NewCatalog([]api.Object{tune, playbook("idle", false)}), nil, tune},
 	}

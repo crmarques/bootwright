@@ -14,17 +14,17 @@ func replicationFixture(env api.Object) []api.Object {
 	return selectionFixture(env,
 		selectionObject(api.Machine, "s3-n"),
 		selectionStorage("s3", "s3-n"),
-		selectionObject(api.StoragePool, "s3-rbd", "clusterRef", "s3"),
-		selectionObject(api.StorageReplication, "s1-to-s3", "clusterRef", "s1", "type", "rbd", "poolRef", "s1-rbd", "peerClusterRef", "s3", "peerPoolRef", "s3-rbd"),
+		selectionObject(api.CephPool, "s3-rbd", "clusterRef", "s3"),
+		selectionObject(api.CephReplication, "s1-to-s3", "clusterRef", "s1", "type", "rbd", "poolRef", "s1-rbd", "peerClusterRef", "s3", "peerPoolRef", "s3-rbd"),
 	)
 }
 
 // TestSelectingEitherEndOfAReplicationRetainsBothClustersWhole holds the
-// StorageReplication rule: selecting the primary or the peer retains the
+// CephReplication rule: selecting the primary or the peer retains the
 // relationship and both clusters with every child, and a cluster kept only
 // through an export keeps its node closure alone.
 func TestSelectingEitherEndOfAReplicationRetainsBothClustersWhole(t *testing.T) {
-	whole := []string{"StorageReplication/s1-to-s3", "StorageCluster/s1", "StorageCluster/s3", "StoragePool/s1-other", "StoragePool/s3-rbd", "StorageNFSExport/s1-nfs", "Machine/s1-n", "Machine/s3-n"}
+	whole := []string{"CephReplication/s1-to-s3", "CephCluster/s1", "CephCluster/s3", "CephPool/s1-other", "CephPool/s3-rbd", "CephNFSExport/s1-nfs", "Machine/s1-n", "Machine/s3-n"}
 	for _, row := range []struct {
 		name     string
 		selected []string
@@ -40,26 +40,26 @@ func TestSelectingEitherEndOfAReplicationRetainsBothClustersWhole(t *testing.T) 
 			if slices.Contains(selection.ExcludedStorageClusters, "s1") || slices.Contains(selection.ExcludedStorageClusters, "s3") {
 				t.Errorf("a replication end is reported excluded: %v", selection.ExcludedStorageClusters)
 			}
-			if slices.Contains(kept, "StorageCluster/s2") {
+			if slices.Contains(kept, "CephCluster/s2") {
 				t.Errorf("the replication retained an unrelated cluster: %v", kept)
 			}
 		})
 	}
 	t.Run("an export-only cluster keeps its node closure", func(t *testing.T) {
 		env := selectionEnvironment("env", "containerClusters", []string{"c1"}, "storageClusters", []string{"s2"})
-		selection := environment.Select(api.NewCatalog(replicationFixture(env)), []environment.Attachment{{ClusterRef: "c1", ExportRef: "e1"}}, testClusterMembers)
+		selection := environment.Select(api.NewCatalog(replicationFixture(env)), []environment.Attachment{{ClusterRef: "c1", ConsumerRef: "e1"}}, testClusterMembers)
 		kept := selectionIdentities(selection.Catalog.Objects())
-		if !slices.Contains(kept, "StorageCluster/s1") || !slices.Contains(kept, "Machine/s1-n") {
+		if !slices.Contains(kept, "CephCluster/s1") || !slices.Contains(kept, "Machine/s1-n") {
 			t.Fatalf("the attached export's cluster and node are gone: %v", kept)
 		}
 		omitted := false
 		for _, problem := range selection.Problems {
-			omitted = omitted || (problem.Issue.Code == "api.invariant" && problem.Issue.Field == "$.spec.storageClusters" && problem.Target == "StorageCluster/s1")
+			omitted = omitted || (problem.Issue.Code == "api.invariant" && problem.Issue.Field == "$.spec.storageClusters" && problem.Target == "CephCluster/s1")
 		}
 		if !omitted {
 			t.Errorf("the attachment-only cluster is not refused by the omitted-root rule: %+v", selection.Problems)
 		}
-		for _, identity := range []string{"StorageReplication/s1-to-s3", "StorageCluster/s3", "StoragePool/s1-other"} {
+		for _, identity := range []string{"CephReplication/s1-to-s3", "CephCluster/s3", "CephPool/s1-other"} {
 			if slices.Contains(kept, identity) {
 				t.Errorf("export-only retention widened to %s: %v", identity, kept)
 			}
@@ -104,7 +104,7 @@ func TestAnAuthoredClusterListKeepsStandaloneInstalledMachines(t *testing.T) {
 		}
 	}
 	want := sortedSelection([]string{
-		"ContainerCluster/c1 api.selection $.metadata.name", "ContainerCluster/c2 api.selection $.metadata.name",
+		"OpenShiftCluster/c1 api.selection $.metadata.name", "OpenShiftCluster/c2 api.selection $.metadata.name",
 		"Machine/orphan api.selection $.metadata.name", "Machine/existing api.selection $.metadata.name", "InfraProvider/unused api.selection $.metadata.name",
 	})
 	if problems := selectionProblems(selection); !slices.Equal(problems, want) {
@@ -134,7 +134,7 @@ func TestSelectingANestedClusterRetainsItsHostCluster(t *testing.T) {
 	}
 	selection := environment.Select(api.NewCatalog(objects), nil, testClusterMembers)
 	kept := selectionIdentities(selection.Catalog.Objects())
-	for _, identity := range []string{"ContainerCluster/hub-multidc-01", "Machine/hub-01-n", "InfraProvider/kubevirt-ocp-multidc-01", "ContainerCluster/ocp-multidc-01", "Machine/ocp-01-n", "ClusterAddonBinding/ocp-01-addons", "ClusterAddon/openshift-virtualization"} {
+	for _, identity := range []string{"OpenShiftCluster/hub-multidc-01", "Machine/hub-01-n", "InfraProvider/kubevirt-ocp-multidc-01", "OpenShiftCluster/ocp-multidc-01", "Machine/ocp-01-n", "ClusterAddonBinding/ocp-01-addons", "ClusterAddon/openshift-virtualization"} {
 		if !slices.Contains(kept, identity) {
 			t.Errorf("selecting the nested cluster dropped %s: %v", identity, kept)
 		}
@@ -150,14 +150,14 @@ func TestSelectingANestedClusterRetainsItsHostCluster(t *testing.T) {
 func TestExcludedObjectsNameTheListThatRetainsThem(t *testing.T) {
 	selection := environment.Select(api.NewCatalog(selectionFixture(selectionEnvironment("env", "containerClusters", []string{"c0"}))), nil, testClusterMembers)
 	for identity, want := range map[string]string{
-		"ContainerCluster/c1": "add c1 to Environment spec.containerClusters",
+		"OpenShiftCluster/c1": "add c1 to Environment spec.containerClusters",
 		"Machine/c1-n":        "select the cluster that retains Machine/c1-n in Environment spec.containerClusters",
 	} {
 		if got := selection.Excluded[identity]; got != want {
 			t.Errorf("remedy for %s = %q, want %q", identity, got, want)
 		}
 	}
-	if _, found := selection.Excluded["ContainerCluster/c0"]; found {
+	if _, found := selection.Excluded["OpenShiftCluster/c0"]; found {
 		t.Error("a selected root is listed as excluded")
 	}
 }

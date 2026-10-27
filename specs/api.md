@@ -8,8 +8,8 @@ live in:
 - [Environment](api/environment.md);
 - [machines and infrastructure](api/machines.md);
 - [infrastructure services](api/infrastructure-services.md);
-- [container clusters](api/container-clusters.md);
-- [storage](api/storage.md);
+- [container clusters](api/openshift-clusters.md);
+- [storage](api/ceph.md);
 - [add-ons](api/addons.md);
 - [custom playbooks](api/custom-playbooks.md); and
 - [Secrets and entitlements](api/secrets.md).
@@ -27,6 +27,53 @@ execute Secret, media, manifest, playbook or other payload bytes. They perform
 no filesystem writes, random generation, subprocesses, network or live-target
 access, native rendering or platform mutation. Accepting a declaration claims
 no executable support for its effectful consumer.
+
+An admitted declaration that no capability of this build realizes refuses at
+`plan`, before registration, with `lifecycle.unsupported`: that is the default
+refusal point, and each capability's refusal table names its rows. Admission
+refuses a declaration with `api.invariant` instead only when no build of this
+API version has any consumer for it, as it refuses `spec.lifecycle.rescue`
+under [D29](milestones/backlog.md#decisions). Kind pages link this rule rather
+than restate it.
+
+### Admitted but unrealized
+
+`validate`, `plan` and `apply` warn `api.unrealized` at the path of each
+declaration below, naming the object and the item that tracks its
+realization, so an operator learns before planning that `plan` refuses it.
+The warning is also in `validate`'s `advisories`
+([JSON output](cli/output.md#json-output)). The rows are data in
+`api/v1alpha1` (`UnrealizedDeclarations`), and
+`TestUnrealizedTableMatchesUnsupported` holds this table to that data and
+proves each row warned and refused at `plan`.
+
+| Kind | Declaration | Tracked by |
+| --- | --- | --- |
+| InfraProvider | `spec.vsphere` | [B99](milestones/m1.md#b99) |
+| InfraProvider | `spec.kubevirt` | [B87](milestones/m1.md#b87) |
+| MachineInstallProfile | `spec.installer.templateClone` | [B853](milestones/backlog.md#b853) |
+| MachineInstallProfile | `spec.installer.anaconda.packageSource.mirror` | [B854](milestones/backlog.md#b854) |
+| MachineInstallProfile | `spec.installer.anaconda.packageSource.fromSubscription` | [B854](milestones/backlog.md#b854) |
+| MachineInstallProfile | `spec.customizations.ssh.initialPassword` | [B855](milestones/backlog.md#b855) |
+| ArtifactServer | `spec.retention: installOnly` | [B856](milestones/backlog.md#b856) |
+| Registry | `spec.management: managed` | [B68](milestones/m1.md#b68) |
+| LoadBalancer | `spec.management: managed` | [B100](milestones/backlog.md#b100) |
+| OpenShiftCluster | `spec.distribution.type: okd` | [B748](milestones/backlog.md#b748) |
+| OpenShiftCluster | `spec.install.mode: disconnected` | [B69](milestones/m3.md#b69) |
+| OpenShiftCluster | `spec.install.servingCertificates` | [B723](milestones/m3.md#b723) |
+| ClusterAddonBinding | `spec.addonRefs` | [B90](milestones/m4.md#b90) |
+| ClusterAddonBinding | `spec.profileRefs` | [B90](milestones/m4.md#b90) |
+| CustomPlaybook | `spec.enabled: true` | [B102](milestones/backlog.md#b102) |
+
+An install-profile row is refused on each Machine that selects the profile.
+Other plan-time refusals, such as bounds, placements and trust shapes, stay in
+their capabilities' refusal tables and raise no warning here. `api.deferred`
+stays the warning for a declaration that plans but changes nothing: an
+OpenShift endpoint `dnsName` and node `labels` and `taints`
+([inert fields](openshift-clusters.md#selection-and-refusal)), an OS-ready
+Machine's root-device hints other than `deviceName` and `wwn`
+([root device](api/machines.md#bmc-and-root-device-shape)), a disabled
+`CustomPlaybook`, and a Ceph stretch topology without a tiebreaker.
 
 ## Version authority
 
@@ -70,8 +117,8 @@ Outside explicitly open native fields, YAML numeric scalars other than
 schema-declared integers are rejected except at these finite-number fields:
 
 - an OSD declaration's `dataAllocateFraction`;
-- `StoragePool.spec.autoscale.targetSizeRatio`; and
-- `StoragePool.spec.compression.requiredRatio`.
+- `CephPool.spec.autoscale.targetSizeRatio`; and
+- `CephPool.spec.compression.requiredRatio`.
 
 Those fields accept a base-10 integer, fractional, or exponent spelling without
 a base prefix or digit separator and decode with IEEE-754 binary64 semantics.
@@ -109,8 +156,8 @@ fields; their presence does not make a containing object extensible.
 Unsupported API versions, retired kinds, alternate spellings, aliases between
 schema generations, and translation fallbacks are rejected. A field, arm or
 kind the schema has removed is unknown like any other name; the
-[retired fields](#retired-fields) table names the replacement of each retired
-Environment path.
+[retired fields](#retired-fields) and [retired kinds](#retired-kinds) tables
+name the replacement of each retired path and kind.
 
 Every refusal carries what the operator needs to correct it:
 
@@ -132,10 +179,6 @@ Every refusal carries what the operator needs to correct it:
   identifier, a reference name that is a DNS label, a repeated entry's name
   that is a DNS label, and a Secret's declared type that is one of the Secret
   types.
-
-Not yet met: `ClusterAddonBinding` diagnostics index the normalized, sorted
-lists, not the authored positions; tracked as
-[B826](milestones/backlog.md#b826).
 
 Loading returns `filesSeen`, `objectsDecoded`, sorted diagnostics, and a state
 only when there are no errors. `filesSeen` counts every unique discovered YAML
@@ -189,13 +232,23 @@ Every document has exactly these top-level fields:
 | `apiVersion` | string | yes | Exactly `bootwright.io/v1alpha1`. |
 | `kind` | string | yes | One of the registered kinds in the [kind catalog](#kind-catalog); case-sensitive. |
 | `metadata` | object | yes | Contains only `name` and optional `labels`. |
-| `metadata.name` | string | yes | DNS label matching `[a-z0-9]([-a-z0-9]*[a-z0-9])?`. |
+| `metadata.name` | string | yes | DNS label of 1 to 63 bytes matching `[a-z0-9]([-a-z0-9]*[a-z0-9])?`; the [one name rule](#object-names). |
 | `metadata.labels` | object | no | String-to-string map; keys emit lexically in effective state. |
 | `spec` | object | yes | Kind-specific schema. |
 
 Metadata labels describe the Bootwright object. Native labels such as
 OpenShift node labels and cephadm host labels remain on their owning native
 fields.
+
+### Object names
+
+Every kind's `metadata.name` follows this one rule: a DNS label of at most 63
+bytes. No kind shortens it for an internal prefix or for the services a cluster
+declares; a lifecycle block whose identity would pass 63 bytes
+[hashes an identity over 63 bytes](state-reconciliation.md#durable-identities-and-private-paths).
+A name that is also a native identifier, such as an S3 bucket name or a CephFS
+filesystem name, keeps the native grammar its kind page states, and a refusal
+for such a limit names the native rule, never a block prefix.
 
 ## Public authoring grammar
 
@@ -212,7 +265,7 @@ The deliberate exceptions are:
   selection lists, not references;
 - `CustomPlaybook.spec.target.{clusters,machines,hostGroups}` and the matching
   cluster-add-on step target lists are inventory selections;
-- `StorageFilesystem.spec.dataPoolRefs` accepts either scalar names or the
+- `CephFilesystem.spec.dataPoolRefs` accepts either scalar names or the
   owning schema's `{name, default}` records;
 - `InfraProvider` KubeVirt `networkRef` is the sole object-form external
   reference and carries its Kubernetes group, kind, name, and a namespace only
@@ -231,42 +284,54 @@ Reference fields fall into these classes:
 | Native service | `mdsServiceRef`, `serviceRef`, `serviceID` | One entry of the cluster's native service declarations, written `<service_type>.<service_id>`; the owning page fixes the form. |
 | External object | KubeVirt `networkRef` | The object form above. |
 
-Not yet met: the nested and native-service fields that are plain non-empty
-strings, such as `cephadm.bootstrap.node`, bypass the shared reference
-diagnostics and suppression rules; tracked as
-[B826](milestones/backlog.md#b826).
+The schema types every reference field with its class, and
+`TestEveryReferenceFieldEndsInRefAndIsTyped` holds every registered schema to
+it: a field whose name ends in `Ref` or `Refs` is a typed reference of one of
+these classes, and a reference field outside the exceptions above ends in
+`Ref` or `Refs`.
+
+Not yet met: a nested, endpoint or native-service reference, such as
+`cephadm.bootstrap.nodeRef`, is resolved by its owner's admission rather than
+by the shared unresolved-reference diagnostic and its suppression rules;
+tracked as [B826](milestones/backlog.md#b826).
 
 ### Unions
 
-A discriminated union retains `type` when it identifies a meaningful domain
-variant, including `StorageCluster`, `StoragePool`, `StorageExport`, and
-container installation platforms. Inactive configuration arms are rejected.
-A matching configuration arm need not exist where the owning schema defines
-only a type value. `ContainerCluster.spec.install.platform` may omit its
-matching configuration arm. `StoragePool.spec` requires `erasure` configuration
-for that type, while a replicated pool may omit `replicated`, whose unset value
-shape [replicated protection](api/storage.md#replicated-protection) owns.
+One rule decides between a presence arm and an enum, and
+`TestEveryUnionFollowsTheOneRule` holds every registered schema to it:
 
-A presence union carries no discriminator. Exactly one arm
-selects `InfraProvider` and `ClusterAddon`; a `type` field on either is
-unknown. An arm must satisfy its own required
-fields after defaulting. Presence choices also cover provider attachments,
-machine-install backends and package sources, authentication, proxy choices,
-and `Secret.spec.source`. The owning field specifies whether an empty arm is a
-valid selection and whether omission is invalid or selects a default. In
-particular, Secret source omission selects `contextStore`.
+1. An alternative with configuration of its own is a presence arm: its block
+   is its own field, the union selects exactly one arm (or at most one where
+   the owning field says so), and no sibling `type`, `method` or other
+   discriminator selects it.
+2. An enum selects a variant only when no variant has a block of its own. The
+   managed-service `implementation`, `management`, `Secret.spec.type` and
+   `OpenShiftCluster.spec.distribution.type` are enums for this reason.
+3. No enum value names a sibling block. `Entitlement.spec.type`, the
+   set-of-arms form below, is the one enum that governs sibling blocks, and
+   none of its values names one.
+4. Omission may select one stated arm, which effective output shows.
+
+Presence unions select `InfraProvider` and `ClusterAddon` (a `type` field on
+either is unknown), the Machine [substrate arm](api/machines.md#substrate-arm),
+provider attachments, machine-install backends and package sources,
+authentication, proxy choices, `Secret.spec.source`,
+`OpenShiftCluster.spec.install.agent` and `spec.install.platform`,
+`CephCluster.spec.distribution`, the `CephPool` protection and the
+`CephConsumer` arms. An arm must satisfy its own required fields after
+defaulting, and an inactive arm is refused. The owning field specifies whether
+an empty arm is a valid selection and whether omission is invalid or selects
+an arm: `Secret.spec.source` selects `contextStore`, `install.agent` selects
+`{}`, `CephPool` selects `replicated` and `CephCluster.spec.distribution`
+selects `oss`.
 
 `Entitlement.spec.type` is the one set-of-arms discriminator: each product type
 permits only the `rhsm`, `registry`, and `license` arms that
 [secrets.md](api/secrets.md) lists for it, requires some of them, and refuses
 any other arm. Entitlement kind defaults never introduce an arm the authored
-type does not permit: an authored `ibm-storage-ceph` type, for example, never
+type does not permit: an authored `ibmStorageCeph` type, for example, never
 inherits `rhsm`
 ([kind-default rule 6](api/environment.md#kind-defaults)).
-
-Not yet met: admission refuses only `rhsm` on `ibm-storage-ceph`, so an unused
-arm on any other type is admitted without meaning; tracked as
-[B826](milestones/backlog.md#b826).
 
 ### Collections, enablement, and reserved words
 
@@ -278,7 +343,10 @@ only when that schema says the effective representation is sorted.
 
 Optional features are normally enabled by block presence. An `enabled`
 boolean is used only when its owning field defines how omission differs from
-explicit `false`; otherwise absence and false are the same. `type` is reserved
+explicit `false`; otherwise absence and false are the same. A feature with no
+settings of its own may be a plain `enabled` boolean when omission equals its
+stated default, such as `fips.enabled` and `firewall.enabled`; a presence block
+is not required for it. `type` is reserved
 for kind-of-thing discriminators. The who-runs-it axis is always
 `management: managed|external`. Direct proxy access is the presence choice
 `direct: {}`; `none` is not a proxy-selection or management value.
@@ -289,7 +357,10 @@ These rules govern every new kind, field, arm, enum value and reference.
 
 - A kind name is a PascalCase noun that says what one object is. It abbreviates
   only an established acronym (DNS, NTP, RBD, NFS, SMB).
-- Fields and union arms are lowerCamel.
+- Fields and union arms are lowerCamel, and so is every Bootwright-owned enum
+  value. A value a native product, protocol or the kind catalog owns keeps
+  its spelling; `TestEveryBootwrightEnumValueIsLowerCamel` holds every
+  registered schema to the rule and lists those native fields.
 - A new field whose value names a Bootwright object ends in `Ref`, and a list
   of such names in `Refs`. A row for a value the native product owns says
   "native value" or "native ID" and keeps the native spelling.
@@ -299,45 +370,162 @@ These rules govern every new kind, field, arm, enum value and reference.
 - A field with exactly one legal value enters `v1alpha1` only when a spec
   sentence names its consumer or the planned variant.
 
-Not yet met: existing names that break these rules remain, among them the
-`bootstrap.credentials` Secret name of the gitops package without `Ref` and the
-mixed kebab and lowerCamel spellings of Bootwright-owned enum values, tracked as
-[B824](milestones/backlog.md#b824), and the fields that admit one value only,
-tracked as [B826](milestones/backlog.md#b826).
-
 ### Retired fields
 
-| Retired Environment path | Use instead |
+| Kind | Retired path | Use instead |
+| --- | --- | --- |
+| Environment | `spec.controller.proxy` | The controller Machine's [proxy choice](api/machines.md#machine-proxy). |
+| Environment | `spec.proxy`, `spec.infraComponents`, `spec.registries`, `spec.componentImages`, `spec.trustedCAs` | The owning consumer or service object: registry policy, image pins and connection facts stay there, and installation trust belongs to each [OpenShiftCluster](api/openshift-clusters.md#additional-installation-trust). |
+| Environment | `spec.machineAccess` | `spec.remoteMachinesAccessKey.keyRef`. |
+| Environment | `spec.safety` | Nothing: lifecycle authorization is command intent, never desired state. |
+| Environment | `spec.resources` | Nothing: the Environment's directory is the scope, and `spec.containerClusters` and `spec.storageClusters` are the only [narrowing](api/environment.md#cluster-selection). |
+| Machine | `spec.os.install.proxy` | The Machine's [proxy choice](api/machines.md#machine-proxy). |
+| Machine | `spec.capabilities` | Nothing: node roles, the container runtime and the libvirt host follow from the objects that place the Machine ([substrate arm](api/machines.md#substrate-arm)). |
+| Machine | `spec.substrate.profileRef` | `spec.substrate.libvirt.profileRef`, `kubevirt.profileRef` or `vsphere.profileRef`, the provider's arm. |
+| Machine | `spec.hardware.management` | `spec.substrate.baremetal.bmc`. |
+| Machine | `spec.hardware.nics[].macAddress` | `spec.substrate.baremetal.nics[]` or `spec.substrate.vsphere.nics[]`, each naming its NIC with `nicRef`. |
+| Machine | `spec.os.install.rootDeviceHints` | `spec.hardware.rootDevice` for `deviceName`, `model`, `vendor`, `minSizeGigabytes` and `rotational`; `spec.substrate.baremetal.rootDevice` for `wwn`, `hctl` and `serialNumber`. |
+| Machine | `spec.network.interfaceAttachments` | `spec.substrate.libvirt.interfaceAttachments` or `spec.substrate.kubevirt.interfaceAttachments`. |
+| InfraProvider | `spec.libvirt.bmcEmulationDefaults` | `spec.libvirt.bmcEmulation`. |
+| InfraProvider | `spec.libvirt.bmcEmulation.enabled`, `spec.libvirt.bmcEmulation.protocol`, `spec.libvirt.bmcEmulation.emulator` | Nothing: the emulated BMC always runs, speaks Redfish and is sushy-tools. |
+| InfraProvider | `spec.vsphere.nodeNetworking` | The cluster's `spec.install.platform.vsphere.nodeNetworking` ([platform union](api/openshift-clusters.md#platform-union-and-derivation)). |
+| InfraProvider | `spec.baremetal.boot` | Nothing: a bare-metal Machine always boots its installer from Redfish virtual media. |
+| OpenShiftCluster | `spec.install.method` | Nothing: the agent installer is the [`install.agent` arm](api/openshift-clusters.md#install-selection), which defaults to `{}`. |
+| OpenShiftCluster | `spec.install.platform.type` | The platform's arm: `install.platform.baremetal`, `vsphere`, `none` or `external` ([platform union](api/openshift-clusters.md#platform-union-and-derivation)). |
+| CephCluster | `spec.type` | Nothing: the kind is the engine. |
+| CephCluster | `spec.ceph` | Its fields, directly under `spec` ([Ceph kinds](api/ceph.md#kinds)). |
+| CephCluster | `spec.cephadm.bootstrap.node` | `spec.cephadm.bootstrap.nodeRef`, naming a `spec.topology.nodes` entry. |
+| CephCluster | `spec.ibm`, `spec.community` | The [distribution arm](api/ceph.md): `spec.distribution.ibm` holds `callHome` and `packages`, and `spec.distribution.oss` holds `mirror` and `checksum`. |
+| CephPool | `spec.type` | The protection arm: `spec.replicated`, the default, or `spec.erasure`. |
+| CephConsumer | `spec.type` | Nothing: `spec.dataFoundation` or `spec.externalDetails` says what the consumer is. |
+| ClusterAddonBinding | `spec.packages.fdf.storageExportRef` | `spec.packages.fdf.cephConsumerRef`. |
+| ClusterAddonBinding | `spec.packages.gitops.bootstrap.credentials` | `spec.packages.gitops.bootstrap.credentialsRef`. |
+| ClusterAddon | `spec.inputs[].effects[].storageExportAttachment` | `cephConsumerAttachment`. |
+
+The unknown-field diagnostic for a listed path, authored on the object or under
+its kind's `spec.defaults` entry, says it is retired and names its replacement
+as the remedy; a `[]` segment stands for every list index. The rows are data in
+`api/v1alpha1` (`RetiredFields`), and `TestRetiredTablesMatchTheData` holds
+this table and the next two to it. The native-service migration's retired Ceph
+fields stay described on their [owning page](ceph-native-api.md#migration-and-implementation-sequence), which names
+each replacement.
+
+### Retired values
+
+| Kind | Retired value | Use instead |
+| --- | --- | --- |
+| OpenShiftCluster | `spec.nodes[].role: master`, `spec.security.diskEncryption.roles[]: master` | `controlPlane`, which Bootwright renders as `master` for the installer. |
+| OpenShiftCluster | `spec.install.endpoints.api.source.type: openshift`, `spec.install.endpoints.api-int.source.type: openshift`, `spec.install.endpoints.ingress.source.type: openshift` | `installer`, still the default. |
+| CephCluster | `spec.distribution: oss`, `spec.distribution: redhat`, `spec.distribution: ibm` | The distribution arm: `distribution: {oss: {}}`, `{redhat: {}}` or `{ibm: {...}}`. |
+| ClusterAddon | `spec.inputs[].resourceKind: StorageCluster` | `CephCluster`. |
+| ClusterAddon | `spec.inputs[].resourceKind: StorageExport` | `CephConsumer`. |
+| Machine | `spec.substrate.baremetal.bmc.virtualMedia.tls.trust: disable-verification`, `spec.substrate.baremetal.bmc.virtualMedia.tls.trust: import-certificate` | `disableVerification` and `importCertificate`, respectively. |
+| InfraProvider | `spec.baremetal.defaults.bmc.virtualMedia.tls.trust: disable-verification`, `spec.baremetal.defaults.bmc.virtualMedia.tls.trust: import-certificate` | `disableVerification` and `importCertificate`, respectively. |
+| CephCluster | `spec.cephadm.clusterSSH.transport: verified-tunnel` | `verifiedTunnel`. |
+| ArtifactServer | `spec.retention: install-only` | `installOnly`. |
+| CephClient | `spec.access: read-only`, `spec.access: read-write` | `readOnly` and `readWrite`, respectively. |
+| CephPool | `spec.role: cephfs-metadata`, `spec.role: cephfs-data` | `cephfsMetadata` and `cephfsData`, respectively. |
+| Entitlement | `spec.type: redhat-rhel`, `spec.type: redhat-ceph`, `spec.type: ibm-storage-ceph` | `redhatRhel`, `redhatCeph` and `ibmStorageCeph`, respectively. |
+| Secret | `spec.source.generated.keyType: ecdsa-p256`, `spec.source.generated.keyType: ecdsa-p384`, `spec.source.generated.keyType: ecdsa-p521` | `ecdsaP256`, `ecdsaP384` and `ecdsaP521`, respectively. |
+| CustomPlaybook | `spec.gates: add-ons` | `addOns`. |
+| CustomPlaybook | `spec.follows: add-ons` | `addOns`. |
+
+A listed value, authored on the object or under its kind's `spec.defaults`
+entry, refuses `api.value` saying it is retired and naming its replacement as
+the remedy; the rows are data in `api/v1alpha1` (`RetiredValues`).
+
+### Retired kinds
+
+| Retired kind | Use instead |
 | --- | --- |
-| `spec.controller.proxy` | The controller Machine's [proxy choice](api/machines.md#machine-proxy). |
-| `spec.proxy`, `spec.infraComponents`, `spec.registries`, `spec.componentImages`, `spec.trustedCAs` | The owning consumer or service object: registry policy, image pins and connection facts stay there, and installation trust belongs to each [ContainerCluster](api/container-clusters.md#additional-installation-trust). |
-| `spec.safety` | Nothing: lifecycle authorization is command intent, never desired state. |
-| `spec.resources` | Nothing: the Environment's directory is the scope, and `spec.containerClusters` and `spec.storageClusters` are the only [narrowing](api/environment.md#cluster-selection). |
+| `ContainerCluster` | `OpenShiftCluster`; OKD stays `spec.distribution.type: okd`. |
+| `StorageCluster` | `CephCluster`, with its fields directly under `spec` and no `type`. |
+| `StoragePlacementPolicy` | `CephPlacementPolicy`. |
+| `StoragePool` | `CephPool`. |
+| `StorageRBDImage` | `CephRBDImage`. |
+| `StorageClient` | `CephClient`. |
+| `StorageFilesystem` | `CephFilesystem`. |
+| `StorageSubvolume` | `CephSubvolume`. |
+| `StorageObjectGateway` | `CephObjectGateway`. |
+| `StorageObjectUser` | `CephObjectUser`. |
+| `StorageObjectBucket` | `CephObjectBucket`. |
+| `StorageNFSExport` | `CephNFSExport`. |
+| `StorageSMBResource` | `CephSMBResource`. |
+| `StorageNVMeoFSubsystem` | `CephNVMeoFSubsystem`. |
+| `StorageReplication` | `CephReplication`. |
+| `StorageExport` | `CephConsumer`, without `spec.type`. |
+| `InfraComponent` | The typed service object it described: Proxy, DNSServer, NTPServer, ArtifactServer, Registry or LoadBalancer, with `management` on its spec. |
 
-The unknown-field diagnostic for a listed path names its replacement. A retired
-path of another kind stays described on its owning page, which names its
-replacement.
-
-Not yet met: the unknown-field remedy does not yet consult this table; tracked
-as [B826](milestones/backlog.md#b826).
+A document of a listed kind refuses `api.kind` naming its replacement as the
+remedy, and so does a listed kind named as an Environment `spec.defaults` key
+(`api.field`) or as a ClusterAddon `spec.inputs[].resourceKind` value
+(`api.value`, where a retired-value row above takes precedence); the rows are
+data in `api/v1alpha1` (`RetiredKinds`). An operation
+frozen with a retired kind, or a block record naming one, cannot be planned
+again by a build that no longer registers it, so its continuation refuses
+`lifecycle.state` naming the build that registered it
+([cross-build continuation](state-reconciliation.md#continuation-and-removal)).
 
 ## Kind catalog
 
 The `v1alpha1` catalog contains exactly these authored kinds. No page states a
-count of kinds, and a new kind enters this table in the change that adds it:
+count of kinds, and a new kind enters this table, the canonical kind order of
+[effective output](#defaults-normalization-and-effective-state) and the Kinds
+table of its field page in the change that adds it, which
+`TestEveryKindHasItsCatalogRowOrderAndPageRow` checks:
 
-| Schema catalog group | Kinds | Architectural semantic owner |
+| Schema catalog group | Kinds | Architectural semantic owner | Field page |
+| --- | --- | --- | --- |
+| Environment | `Environment` | Environment | [environment](api/environment.md#kinds) |
+| Secrets and entitlements | `Secret`, `Entitlement` | Secrets owns `Secret` custody; Managed OS owns `redhatRhel` semantics; Storage owns `redhatCeph` and `ibmStorageCeph` semantics. | [secrets](api/secrets.md#kinds) |
+| Machines and networks | `Machine`, `NetworkConfig` | Machine | [machines](api/machines.md#kinds) |
+| Managed operating systems | `MachineImage`, `MachineInstallProfile` | Managed OS | [machines](api/machines.md#kinds) |
+| Substrates | `InfraProvider` | Substrate | [machines](api/machines.md#kinds) |
+| Infrastructure services | `Proxy`, `DNSServer`, `NTPServer`, `ArtifactServer`, `Registry`, `LoadBalancer` | Infrastructure services | [infrastructure services](api/infrastructure-services.md#kinds) |
+| Container clusters | `OpenShiftCluster` | Container cluster (OpenShift implementation) | [OpenShift clusters](api/openshift-clusters.md#kinds) |
+| Storage | `CephCluster`, `CephPlacementPolicy`, `CephPool`, `CephRBDImage`, `CephClient`, `CephFilesystem`, `CephSubvolume`, `CephObjectGateway`, `CephObjectUser`, `CephObjectBucket`, `CephNFSExport`, `CephSMBResource`, `CephNVMeoFSubsystem`, `CephReplication`, `CephConsumer` | Storage | [Ceph](api/ceph.md#kinds) |
+| Add-ons | `ClusterAddon`, `ClusterAddonProfile`, `ClusterAddonBinding` | Add-ons | [add-ons](api/addons.md#kinds) |
+| Reserved operator automation | `CustomPlaybook` | Desired state owns boundary validation; no executable domain capability is implied. | [custom playbooks](api/custom-playbooks.md#kinds) |
+
+### Cluster family registry
+
+Cluster kinds are registered in families (`api/v1alpha1` `Families()`), each
+mapping one category to its kinds:
+
+| Category | Environment selection and domain field | Kinds |
 | --- | --- | --- |
-| Environment | `Environment` | Environment |
-| Secrets and entitlements | `Secret`, `Entitlement` | Secrets owns `Secret` custody; Managed OS owns `redhat-rhel` semantics; Storage owns `redhat-ceph` and `ibm-storage-ceph` semantics. |
-| Machines and networks | `Machine`, `NetworkConfig` | Machine |
-| Managed operating systems | `MachineImage`, `MachineInstallProfile` | Managed OS |
-| Substrates | `InfraProvider` | Substrate |
-| Infrastructure services | `Proxy`, `DNSServer`, `NTPServer`, `ArtifactServer`, `Registry`, `LoadBalancer` | Infrastructure services |
-| Container clusters | `ContainerCluster` | Container cluster |
-| Storage | `StorageCluster`, `StoragePlacementPolicy`, `StoragePool`, `StorageRBDImage`, `StorageClient`, `StorageFilesystem`, `StorageSubvolume`, `StorageObjectGateway`, `StorageObjectUser`, `StorageObjectBucket`, `StorageNFSExport`, `StorageSMBResource`, `StorageNVMeoFSubsystem`, `StorageReplication`, `StorageExport` | Storage |
-| Add-ons | `ClusterAddon`, `ClusterAddonProfile`, `ClusterAddonBinding` | Add-ons |
-| Reserved operator automation | `CustomPlaybook` | Desired state owns boundary validation; no executable domain capability is implied. |
+| `containerCluster` | `spec.containerClusters`, `spec.domains.containerClusters` | `OpenShiftCluster` |
+| `storageCluster` | `spec.storageClusters`, `spec.domains.storageClusters` | `CephCluster` |
+
+The Environment's selection and domain fields keep their category names, so a
+new kind of a category is selected by the existing field. A reference whose
+target is a category, such as a `ClusterAddonBinding` `clusterRef`, an
+InfraProvider `kubevirt.hostClusterRef`, or a profile's or step's static
+`clusters`, accepts every kind of that category. Every cluster kind of every
+category shares one name namespace, so a cluster command resolves a name to
+one object: two cluster roots of one name refuse `api.duplicate` at
+`metadata.name`, each naming the other.
+
+A family owns its kinds and the child kinds whose required `clusterRef` names
+one of them, not a category (`FamilyKinds()`); `ClusterAddonBinding`, whose
+`clusterRef` names the `containerCluster` category, stays a general kind. A
+family also names the kinds that fill its roles, so the general flow finds them
+without naming them:
+
+| Role | Read by | `storageCluster` kind |
+| --- | --- | --- |
+| `client` | `cluster keyring` and the keyring access row of `cluster info` | `CephClient` |
+| `objectGateway`, `objectUser` | `cluster info --object-user` | `CephObjectGateway`, `CephObjectUser` |
+| `consumer` | [cluster selection](api/environment.md#cluster-selection) of an attached consumer | `CephConsumer` |
+| `consumerShare` | cluster selection: the kinds a retained consumer keeps on its cluster | `CephNFSExport` |
+
+A child kind with a `peerClusterRef` to a cluster kind keeps both of its
+clusters whole in selection, and normalization runs the family kinds in
+registry order, each root before its children. Reconciliation, desired state,
+Environment and the CLI iterate the registry and name no family kind or
+family-owned child kind, which `TestGeneralFlowNamesNoImplementation` holds; a
+new family therefore adds its registry row, its schemas and its domain without
+editing the general flow.
 
 ## Graph validation
 
@@ -348,7 +536,7 @@ rules; each schema page adds its own:
 - object names are unique within a kind, with Environment additionally using
   its stronger exactly-one cardinality rule; every colliding object receives a
   diagnostic, no value wins, and a reference to the name remains ambiguous;
-- `ContainerCluster` and `StorageCluster` additionally share one cluster-name
+- `OpenShiftCluster` and `CephCluster` additionally share one cluster-name
   namespace;
 - the selected controller and local-access cardinality satisfy
   [Environment controller selection](api/environment.md#controller-machine);
@@ -429,6 +617,16 @@ bits and normalize the host and prefix separately. Digest algorithms and
 hexadecimal digests normalize to lowercase. Set-valued lists sort only where
 their owning schema says so; ordered lists retain authored order.
 
+A value with exactly one valid derivation is derived, not authored and
+compared: a managed service's `bindAddress`
+([deployment defaults](api/infrastructure-services.md#proxy-dns-ntp-and-registry-deployment)),
+a generated certificate's names ([Secret generation](api/secrets.md#secret)),
+a CephFilesystem's `mdsServiceRef` and an SMB share's `cluster_id` and an SMB
+cluster's `resourceRefs` ([Ceph](ceph-resources.md#cephfilesystem)). Where an
+authored value is admitted, it is an override that a disagreeing value refuses
+at its field, or, for a node `fqdn`, an explicit override of the derived name;
+examples author none of these values unless they show the override.
+
 Composed machine and cluster hostnames, Environment defaults, provider and
 component defaults, cluster networking defaults, and other normalized values
 follow their owning pages. A diagnostic concerning a reference injected from
@@ -441,11 +639,11 @@ Canonical effective output:
 1. orders kinds as `Environment`, `Entitlement`, `Machine`, `MachineImage`,
    `MachineInstallProfile`, `NetworkConfig`, `InfraProvider`, `Proxy`,
    `DNSServer`, `NTPServer`, `ArtifactServer`, `Registry`, `LoadBalancer`,
-   `ContainerCluster`, `StorageCluster`, `StoragePlacementPolicy`,
-   `StoragePool`, `StorageRBDImage`, `StorageClient`, `StorageFilesystem`,
-   `StorageSubvolume`, `StorageObjectGateway`, `StorageObjectUser`,
-   `StorageObjectBucket`, `StorageNFSExport`, `StorageSMBResource`,
-   `StorageNVMeoFSubsystem`, `StorageReplication`, `StorageExport`, `ClusterAddon`,
+   `OpenShiftCluster`, `CephCluster`, `CephPlacementPolicy`,
+   `CephPool`, `CephRBDImage`, `CephClient`, `CephFilesystem`,
+   `CephSubvolume`, `CephObjectGateway`, `CephObjectUser`,
+   `CephObjectBucket`, `CephNFSExport`, `CephSMBResource`,
+   `CephNVMeoFSubsystem`, `CephReplication`, `CephConsumer`, `ClusterAddon`,
    `ClusterAddonProfile`, `ClusterAddonBinding`, `CustomPlaybook`,
    then `Secret`;
 2. orders objects within a kind by `metadata.name`;

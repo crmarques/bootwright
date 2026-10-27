@@ -5,11 +5,13 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"slices"
 	"strings"
 	"unicode/utf8"
 
 	"github.com/crmarques/bootwright/internal/canonicaljson"
+	"github.com/crmarques/bootwright/internal/diagnostics"
 )
 
 const (
@@ -272,8 +274,11 @@ func order(definitions []BlockDefinition) ([]BlockDefinition, error) {
 		if err := validateDefinition(definition); err != nil {
 			return nil, err
 		}
-		if _, duplicate := known[definition.ID]; duplicate {
-			return nil, planError("lifecycle plan repeats a block identity")
+		if earlier, duplicate := known[definition.ID]; duplicate {
+			if earlier.Kind == definition.Kind && earlier.Object == definition.Object {
+				return nil, planError("lifecycle plan repeats a block identity")
+			}
+			return nil, diagnostics.NewFailureWithRemediation("lifecycle.state", fmt.Sprintf("%s %s and %s %s both name the block %s", earlier.Kind, earlier.Object, definition.Kind, definition.Object, definition.ID), "", "rename one of the two objects so their block identities differ")
 		}
 		known[definition.ID] = definition
 	}

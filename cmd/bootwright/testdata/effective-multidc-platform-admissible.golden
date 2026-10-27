@@ -28,7 +28,7 @@ spec:
         - serverRef: default-01
         - serverRef: default-02
         - serverRef: default-03
-    ContainerCluster:
+    OpenShiftCluster:
       install:
         proxy:
           proxyRef: default
@@ -50,7 +50,7 @@ kind: Entitlement
 metadata:
   name: acceptance-redhat-ceph
 spec:
-  type: redhat-ceph
+  type: redhatCeph
   rhsm:
     management: external
   registry:
@@ -62,7 +62,7 @@ kind: Entitlement
 metadata:
   name: ceph-entitlement
 spec:
-  type: ibm-storage-ceph
+  type: ibmStorageCeph
   registry:
     url: cp.icr.io/cp
     credentialsRef: ceph-registry-credentials
@@ -74,7 +74,7 @@ kind: Entitlement
 metadata:
   name: rhel-satellite
 spec:
-  type: redhat-rhel
+  type: redhatRhel
   rhsm:
     management: managed
     organizationRef: satellite-org
@@ -90,10 +90,10 @@ kind: Machine
 metadata:
   name: acceptance-clone-node
 spec:
-  capabilities: []
   substrate:
     providerRef: acceptance-vsphere
-    profileRef: clone
+    vsphere:
+      profileRef: clone
   os:
     provided: false
     installProfileRef: acceptance-clone
@@ -127,9 +127,6 @@ kind: Machine
 metadata:
   name: acceptance-hypervisor
 spec:
-  capabilities:
-    - container-runtime
-    - libvirt
   os:
     provided: true
   proxy:
@@ -151,20 +148,19 @@ kind: Machine
 metadata:
   name: acceptance-sno-node
 spec:
-  capabilities:
-    - openshift-node
   substrate:
     providerRef: kubevirt-ocp-multidc-01
-    profileRef: general
+    kubevirt:
+      profileRef: general
+      interfaceAttachments:
+        - interface: primary
+          attachmentRef: hub-vm-machine
+        - interface: ceph-public
+          attachmentRef: hub-vm-ceph-public
   os:
     provided: false
   network:
     configRef: hub-vm-network
-    interfaceAttachments:
-      - interface: primary
-        attachmentRef: hub-vm-machine
-      - interface: ceph-public
-        attachmentRef: hub-vm-ceph-public
     installAddressRef: primary
     addresses:
       - name: primary
@@ -181,8 +177,6 @@ kind: Machine
 metadata:
   name: controller
 spec:
-  capabilities:
-    - container-runtime
   os:
     provided: true
   proxy:
@@ -211,19 +205,11 @@ metadata:
   labels:
     datacenter: site-a
 spec:
-  capabilities:
-    - openshift-node
   placement:
     site: site-a
   substrate:
     providerRef: bare-metal
-  hardware:
-    nics:
-      - name: eth0
-        macAddress: 02:00:00:00:00:18
-      - name: eth2
-        macAddress: 02:00:00:00:00:19
-    management:
+    baremetal:
       bmc:
         address: https://bmc-edge-a-01.example.com/redfish/v1/Systems/1
         protocol: redfish
@@ -233,11 +219,19 @@ spec:
         virtualMedia:
           tls:
             trust: established
+      nics:
+        - nicRef: eth0
+          macAddress: 02:00:00:00:00:18
+        - nicRef: eth2
+          macAddress: 02:00:00:00:00:19
+  hardware:
+    nics:
+      - name: eth0
+      - name: eth2
+    rootDevice:
+      deviceName: /dev/sda
   os:
     provided: false
-    install:
-      rootDeviceHints:
-        deviceName: /dev/sda
   network:
     configRef: ocp-bare-metal-network
     attachmentRef: ocp-bare-metal-network
@@ -265,19 +259,11 @@ metadata:
   labels:
     datacenter: site-a
 spec:
-  capabilities:
-    - openshift-node
   placement:
     site: site-a
   substrate:
     providerRef: bare-metal
-  hardware:
-    nics:
-      - name: eth0
-        macAddress: 02:00:00:00:00:1a
-      - name: eth2
-        macAddress: 02:00:00:00:00:1b
-    management:
+    baremetal:
       bmc:
         address: https://bmc-edge-a-02.example.com/redfish/v1/Systems/1
         protocol: redfish
@@ -287,11 +273,19 @@ spec:
         virtualMedia:
           tls:
             trust: established
+      nics:
+        - nicRef: eth0
+          macAddress: 02:00:00:00:00:1a
+        - nicRef: eth2
+          macAddress: 02:00:00:00:00:1b
+  hardware:
+    nics:
+      - name: eth0
+      - name: eth2
+    rootDevice:
+      deviceName: /dev/sda
   os:
     provided: false
-    install:
-      rootDeviceHints:
-        deviceName: /dev/sda
   network:
     configRef: ocp-bare-metal-network
     attachmentRef: ocp-bare-metal-network
@@ -319,19 +313,11 @@ metadata:
   labels:
     datacenter: site-a
 spec:
-  capabilities:
-    - openshift-node
   placement:
     site: site-a
   substrate:
     providerRef: bare-metal
-  hardware:
-    nics:
-      - name: eth0
-        macAddress: 02:00:00:00:00:1c
-      - name: eth2
-        macAddress: 02:00:00:00:00:1d
-    management:
+    baremetal:
       bmc:
         address: https://bmc-edge-a-03.example.com/redfish/v1/Systems/1
         protocol: redfish
@@ -341,11 +327,19 @@ spec:
         virtualMedia:
           tls:
             trust: established
+      nics:
+        - nicRef: eth0
+          macAddress: 02:00:00:00:00:1c
+        - nicRef: eth2
+          macAddress: 02:00:00:00:00:1d
+  hardware:
+    nics:
+      - name: eth0
+      - name: eth2
+    rootDevice:
+      deviceName: /dev/sda
   os:
     provided: false
-    install:
-      rootDeviceHints:
-        deviceName: /dev/sda
   network:
     configRef: ocp-bare-metal-network
     attachmentRef: ocp-bare-metal-network
@@ -373,19 +367,11 @@ metadata:
   labels:
     datacenter: site-b
 spec:
-  capabilities:
-    - openshift-node
   placement:
     site: site-b
   substrate:
     providerRef: bare-metal
-  hardware:
-    nics:
-      - name: eth0
-        macAddress: 02:00:00:00:00:1e
-      - name: eth2
-        macAddress: 02:00:00:00:00:1f
-    management:
+    baremetal:
       bmc:
         address: https://bmc-edge-b-01.example.com/redfish/v1/Systems/1
         protocol: redfish
@@ -395,11 +381,19 @@ spec:
         virtualMedia:
           tls:
             trust: established
+      nics:
+        - nicRef: eth0
+          macAddress: 02:00:00:00:00:1e
+        - nicRef: eth2
+          macAddress: 02:00:00:00:00:1f
+  hardware:
+    nics:
+      - name: eth0
+      - name: eth2
+    rootDevice:
+      deviceName: /dev/sda
   os:
     provided: false
-    install:
-      rootDeviceHints:
-        deviceName: /dev/sda
   network:
     configRef: ocp-bare-metal-network
     attachmentRef: ocp-bare-metal-network
@@ -427,19 +421,11 @@ metadata:
   labels:
     datacenter: site-b
 spec:
-  capabilities:
-    - openshift-node
   placement:
     site: site-b
   substrate:
     providerRef: bare-metal
-  hardware:
-    nics:
-      - name: eth0
-        macAddress: 02:00:00:00:00:20
-      - name: eth2
-        macAddress: 02:00:00:00:00:21
-    management:
+    baremetal:
       bmc:
         address: https://bmc-edge-b-02.example.com/redfish/v1/Systems/1
         protocol: redfish
@@ -449,11 +435,19 @@ spec:
         virtualMedia:
           tls:
             trust: established
+      nics:
+        - nicRef: eth0
+          macAddress: 02:00:00:00:00:20
+        - nicRef: eth2
+          macAddress: 02:00:00:00:00:21
+  hardware:
+    nics:
+      - name: eth0
+      - name: eth2
+    rootDevice:
+      deviceName: /dev/sda
   os:
     provided: false
-    install:
-      rootDeviceHints:
-        deviceName: /dev/sda
   network:
     configRef: ocp-bare-metal-network
     attachmentRef: ocp-bare-metal-network
@@ -481,19 +475,11 @@ metadata:
   labels:
     datacenter: site-b
 spec:
-  capabilities:
-    - openshift-node
   placement:
     site: site-b
   substrate:
     providerRef: bare-metal
-  hardware:
-    nics:
-      - name: eth0
-        macAddress: 02:00:00:00:00:22
-      - name: eth2
-        macAddress: 02:00:00:00:00:23
-    management:
+    baremetal:
       bmc:
         address: https://bmc-edge-b-03.example.com/redfish/v1/Systems/1
         protocol: redfish
@@ -503,11 +489,19 @@ spec:
         virtualMedia:
           tls:
             trust: established
+      nics:
+        - nicRef: eth0
+          macAddress: 02:00:00:00:00:22
+        - nicRef: eth2
+          macAddress: 02:00:00:00:00:23
+  hardware:
+    nics:
+      - name: eth0
+      - name: eth2
+    rootDevice:
+      deviceName: /dev/sda
   os:
     provided: false
-    install:
-      rootDeviceHints:
-        deviceName: /dev/sda
   network:
     configRef: ocp-bare-metal-network
     attachmentRef: ocp-bare-metal-network
@@ -533,22 +527,21 @@ kind: Machine
 metadata:
   name: hub-multidc-01-infra-01
 spec:
-  capabilities:
-    - openshift-node
   placement:
     site: site-a
   substrate:
     providerRef: kubevirt-ocp-multidc-01
-    profileRef: large
+    kubevirt:
+      profileRef: large
+      interfaceAttachments:
+        - interface: primary
+          attachmentRef: hub-vm-machine
+        - interface: ceph-public
+          attachmentRef: hub-vm-ceph-public
   os:
     provided: false
   network:
     configRef: hub-vm-network
-    interfaceAttachments:
-      - interface: primary
-        attachmentRef: hub-vm-machine
-      - interface: ceph-public
-        attachmentRef: hub-vm-ceph-public
     installAddressRef: ip
     addresses:
       - name: fqdn
@@ -566,22 +559,21 @@ kind: Machine
 metadata:
   name: hub-multidc-01-infra-02
 spec:
-  capabilities:
-    - openshift-node
   placement:
     site: site-a
   substrate:
     providerRef: kubevirt-ocp-multidc-01
-    profileRef: large
+    kubevirt:
+      profileRef: large
+      interfaceAttachments:
+        - interface: primary
+          attachmentRef: hub-vm-machine
+        - interface: ceph-public
+          attachmentRef: hub-vm-ceph-public
   os:
     provided: false
   network:
     configRef: hub-vm-network
-    interfaceAttachments:
-      - interface: primary
-        attachmentRef: hub-vm-machine
-      - interface: ceph-public
-        attachmentRef: hub-vm-ceph-public
     installAddressRef: ip
     addresses:
       - name: fqdn
@@ -599,22 +591,21 @@ kind: Machine
 metadata:
   name: hub-multidc-01-infra-03
 spec:
-  capabilities:
-    - openshift-node
   placement:
     site: site-a
   substrate:
     providerRef: kubevirt-ocp-multidc-01
-    profileRef: large
+    kubevirt:
+      profileRef: large
+      interfaceAttachments:
+        - interface: primary
+          attachmentRef: hub-vm-machine
+        - interface: ceph-public
+          attachmentRef: hub-vm-ceph-public
   os:
     provided: false
   network:
     configRef: hub-vm-network
-    interfaceAttachments:
-      - interface: primary
-        attachmentRef: hub-vm-machine
-      - interface: ceph-public
-        attachmentRef: hub-vm-ceph-public
     installAddressRef: ip
     addresses:
       - name: fqdn
@@ -632,22 +623,21 @@ kind: Machine
 metadata:
   name: hub-multidc-01-master-01
 spec:
-  capabilities:
-    - openshift-node
   placement:
     site: site-a
   substrate:
     providerRef: kubevirt-ocp-multidc-01
-    profileRef: general
+    kubevirt:
+      profileRef: general
+      interfaceAttachments:
+        - interface: primary
+          attachmentRef: hub-vm-machine
+        - interface: ceph-public
+          attachmentRef: hub-vm-ceph-public
   os:
     provided: false
   network:
     configRef: hub-vm-network
-    interfaceAttachments:
-      - interface: primary
-        attachmentRef: hub-vm-machine
-      - interface: ceph-public
-        attachmentRef: hub-vm-ceph-public
     installAddressRef: ip
     addresses:
       - name: fqdn
@@ -665,22 +655,21 @@ kind: Machine
 metadata:
   name: hub-multidc-01-master-02
 spec:
-  capabilities:
-    - openshift-node
   placement:
     site: site-a
   substrate:
     providerRef: kubevirt-ocp-multidc-01
-    profileRef: general
+    kubevirt:
+      profileRef: general
+      interfaceAttachments:
+        - interface: primary
+          attachmentRef: hub-vm-machine
+        - interface: ceph-public
+          attachmentRef: hub-vm-ceph-public
   os:
     provided: false
   network:
     configRef: hub-vm-network
-    interfaceAttachments:
-      - interface: primary
-        attachmentRef: hub-vm-machine
-      - interface: ceph-public
-        attachmentRef: hub-vm-ceph-public
     installAddressRef: ip
     addresses:
       - name: fqdn
@@ -698,22 +687,21 @@ kind: Machine
 metadata:
   name: hub-multidc-01-master-03
 spec:
-  capabilities:
-    - openshift-node
   placement:
     site: site-a
   substrate:
     providerRef: kubevirt-ocp-multidc-01
-    profileRef: general
+    kubevirt:
+      profileRef: general
+      interfaceAttachments:
+        - interface: primary
+          attachmentRef: hub-vm-machine
+        - interface: ceph-public
+          attachmentRef: hub-vm-ceph-public
   os:
     provided: false
   network:
     configRef: hub-vm-network
-    interfaceAttachments:
-      - interface: primary
-        attachmentRef: hub-vm-machine
-      - interface: ceph-public
-        attachmentRef: hub-vm-ceph-public
     installAddressRef: ip
     addresses:
       - name: fqdn
@@ -731,22 +719,21 @@ kind: Machine
 metadata:
   name: hub-multidc-01-worker-01
 spec:
-  capabilities:
-    - openshift-node
   placement:
     site: site-a
   substrate:
     providerRef: kubevirt-ocp-multidc-01
-    profileRef: general
+    kubevirt:
+      profileRef: general
+      interfaceAttachments:
+        - interface: primary
+          attachmentRef: hub-vm-machine
+        - interface: ceph-public
+          attachmentRef: hub-vm-ceph-public
   os:
     provided: false
   network:
     configRef: hub-vm-network
-    interfaceAttachments:
-      - interface: primary
-        attachmentRef: hub-vm-machine
-      - interface: ceph-public
-        attachmentRef: hub-vm-ceph-public
     installAddressRef: ip
     addresses:
       - name: fqdn
@@ -764,22 +751,21 @@ kind: Machine
 metadata:
   name: hub-multidc-01-worker-02
 spec:
-  capabilities:
-    - openshift-node
   placement:
     site: site-a
   substrate:
     providerRef: kubevirt-ocp-multidc-01
-    profileRef: general
+    kubevirt:
+      profileRef: general
+      interfaceAttachments:
+        - interface: primary
+          attachmentRef: hub-vm-machine
+        - interface: ceph-public
+          attachmentRef: hub-vm-ceph-public
   os:
     provided: false
   network:
     configRef: hub-vm-network
-    interfaceAttachments:
-      - interface: primary
-        attachmentRef: hub-vm-machine
-      - interface: ceph-public
-        attachmentRef: hub-vm-ceph-public
     installAddressRef: ip
     addresses:
       - name: fqdn
@@ -797,22 +783,21 @@ kind: Machine
 metadata:
   name: hub-multidc-01-worker-03
 spec:
-  capabilities:
-    - openshift-node
   placement:
     site: site-a
   substrate:
     providerRef: kubevirt-ocp-multidc-01
-    profileRef: general
+    kubevirt:
+      profileRef: general
+      interfaceAttachments:
+        - interface: primary
+          attachmentRef: hub-vm-machine
+        - interface: ceph-public
+          attachmentRef: hub-vm-ceph-public
   os:
     provided: false
   network:
     configRef: hub-vm-network
-    interfaceAttachments:
-      - interface: primary
-        attachmentRef: hub-vm-machine
-      - interface: ceph-public
-        attachmentRef: hub-vm-ceph-public
     installAddressRef: ip
     addresses:
       - name: fqdn
@@ -830,22 +815,21 @@ kind: Machine
 metadata:
   name: hub-multidc-02-infra-01
 spec:
-  capabilities:
-    - openshift-node
   placement:
     site: site-b
   substrate:
     providerRef: kubevirt-ocp-multidc-02
-    profileRef: large
+    kubevirt:
+      profileRef: large
+      interfaceAttachments:
+        - interface: primary
+          attachmentRef: hub-vm-machine
+        - interface: ceph-public
+          attachmentRef: hub-vm-ceph-public
   os:
     provided: false
   network:
     configRef: hub-vm-network
-    interfaceAttachments:
-      - interface: primary
-        attachmentRef: hub-vm-machine
-      - interface: ceph-public
-        attachmentRef: hub-vm-ceph-public
     installAddressRef: ip
     addresses:
       - name: fqdn
@@ -863,22 +847,21 @@ kind: Machine
 metadata:
   name: hub-multidc-02-infra-02
 spec:
-  capabilities:
-    - openshift-node
   placement:
     site: site-b
   substrate:
     providerRef: kubevirt-ocp-multidc-02
-    profileRef: large
+    kubevirt:
+      profileRef: large
+      interfaceAttachments:
+        - interface: primary
+          attachmentRef: hub-vm-machine
+        - interface: ceph-public
+          attachmentRef: hub-vm-ceph-public
   os:
     provided: false
   network:
     configRef: hub-vm-network
-    interfaceAttachments:
-      - interface: primary
-        attachmentRef: hub-vm-machine
-      - interface: ceph-public
-        attachmentRef: hub-vm-ceph-public
     installAddressRef: ip
     addresses:
       - name: fqdn
@@ -896,22 +879,21 @@ kind: Machine
 metadata:
   name: hub-multidc-02-infra-03
 spec:
-  capabilities:
-    - openshift-node
   placement:
     site: site-b
   substrate:
     providerRef: kubevirt-ocp-multidc-02
-    profileRef: large
+    kubevirt:
+      profileRef: large
+      interfaceAttachments:
+        - interface: primary
+          attachmentRef: hub-vm-machine
+        - interface: ceph-public
+          attachmentRef: hub-vm-ceph-public
   os:
     provided: false
   network:
     configRef: hub-vm-network
-    interfaceAttachments:
-      - interface: primary
-        attachmentRef: hub-vm-machine
-      - interface: ceph-public
-        attachmentRef: hub-vm-ceph-public
     installAddressRef: ip
     addresses:
       - name: fqdn
@@ -929,22 +911,21 @@ kind: Machine
 metadata:
   name: hub-multidc-02-master-01
 spec:
-  capabilities:
-    - openshift-node
   placement:
     site: site-b
   substrate:
     providerRef: kubevirt-ocp-multidc-02
-    profileRef: general
+    kubevirt:
+      profileRef: general
+      interfaceAttachments:
+        - interface: primary
+          attachmentRef: hub-vm-machine
+        - interface: ceph-public
+          attachmentRef: hub-vm-ceph-public
   os:
     provided: false
   network:
     configRef: hub-vm-network
-    interfaceAttachments:
-      - interface: primary
-        attachmentRef: hub-vm-machine
-      - interface: ceph-public
-        attachmentRef: hub-vm-ceph-public
     installAddressRef: ip
     addresses:
       - name: fqdn
@@ -962,22 +943,21 @@ kind: Machine
 metadata:
   name: hub-multidc-02-master-02
 spec:
-  capabilities:
-    - openshift-node
   placement:
     site: site-b
   substrate:
     providerRef: kubevirt-ocp-multidc-02
-    profileRef: general
+    kubevirt:
+      profileRef: general
+      interfaceAttachments:
+        - interface: primary
+          attachmentRef: hub-vm-machine
+        - interface: ceph-public
+          attachmentRef: hub-vm-ceph-public
   os:
     provided: false
   network:
     configRef: hub-vm-network
-    interfaceAttachments:
-      - interface: primary
-        attachmentRef: hub-vm-machine
-      - interface: ceph-public
-        attachmentRef: hub-vm-ceph-public
     installAddressRef: ip
     addresses:
       - name: fqdn
@@ -995,22 +975,21 @@ kind: Machine
 metadata:
   name: hub-multidc-02-master-03
 spec:
-  capabilities:
-    - openshift-node
   placement:
     site: site-b
   substrate:
     providerRef: kubevirt-ocp-multidc-02
-    profileRef: general
+    kubevirt:
+      profileRef: general
+      interfaceAttachments:
+        - interface: primary
+          attachmentRef: hub-vm-machine
+        - interface: ceph-public
+          attachmentRef: hub-vm-ceph-public
   os:
     provided: false
   network:
     configRef: hub-vm-network
-    interfaceAttachments:
-      - interface: primary
-        attachmentRef: hub-vm-machine
-      - interface: ceph-public
-        attachmentRef: hub-vm-ceph-public
     installAddressRef: ip
     addresses:
       - name: fqdn
@@ -1028,22 +1007,21 @@ kind: Machine
 metadata:
   name: hub-multidc-02-worker-01
 spec:
-  capabilities:
-    - openshift-node
   placement:
     site: site-b
   substrate:
     providerRef: kubevirt-ocp-multidc-02
-    profileRef: general
+    kubevirt:
+      profileRef: general
+      interfaceAttachments:
+        - interface: primary
+          attachmentRef: hub-vm-machine
+        - interface: ceph-public
+          attachmentRef: hub-vm-ceph-public
   os:
     provided: false
   network:
     configRef: hub-vm-network
-    interfaceAttachments:
-      - interface: primary
-        attachmentRef: hub-vm-machine
-      - interface: ceph-public
-        attachmentRef: hub-vm-ceph-public
     installAddressRef: ip
     addresses:
       - name: fqdn
@@ -1061,22 +1039,21 @@ kind: Machine
 metadata:
   name: hub-multidc-02-worker-02
 spec:
-  capabilities:
-    - openshift-node
   placement:
     site: site-b
   substrate:
     providerRef: kubevirt-ocp-multidc-02
-    profileRef: general
+    kubevirt:
+      profileRef: general
+      interfaceAttachments:
+        - interface: primary
+          attachmentRef: hub-vm-machine
+        - interface: ceph-public
+          attachmentRef: hub-vm-ceph-public
   os:
     provided: false
   network:
     configRef: hub-vm-network
-    interfaceAttachments:
-      - interface: primary
-        attachmentRef: hub-vm-machine
-      - interface: ceph-public
-        attachmentRef: hub-vm-ceph-public
     installAddressRef: ip
     addresses:
       - name: fqdn
@@ -1094,22 +1071,21 @@ kind: Machine
 metadata:
   name: hub-multidc-02-worker-03
 spec:
-  capabilities:
-    - openshift-node
   placement:
     site: site-b
   substrate:
     providerRef: kubevirt-ocp-multidc-02
-    profileRef: general
+    kubevirt:
+      profileRef: general
+      interfaceAttachments:
+        - interface: primary
+          attachmentRef: hub-vm-machine
+        - interface: ceph-public
+          attachmentRef: hub-vm-ceph-public
   os:
     provided: false
   network:
     configRef: hub-vm-network
-    interfaceAttachments:
-      - interface: primary
-        attachmentRef: hub-vm-machine
-      - interface: ceph-public
-        attachmentRef: hub-vm-ceph-public
     installAddressRef: ip
     addresses:
       - name: fqdn
@@ -1127,23 +1103,11 @@ kind: Machine
 metadata:
   name: storage-a-01
 spec:
-  capabilities:
-    - ceph-node
   placement:
     site: site-a
   substrate:
     providerRef: bare-metal
-  hardware:
-    nics:
-      - name: nic0
-        macAddress: 02:00:00:00:00:00
-      - name: nic1
-        macAddress: 02:00:00:00:00:01
-      - name: nic2
-        macAddress: 02:00:00:00:00:02
-      - name: nic3
-        macAddress: 02:00:00:00:00:03
-    management:
+    baremetal:
       bmc:
         address: https://bmc-storage-a-01.example.com/redfish/v1/Systems/1
         protocol: redfish
@@ -1153,6 +1117,23 @@ spec:
         virtualMedia:
           tls:
             trust: established
+      nics:
+        - nicRef: nic0
+          macAddress: 02:00:00:00:00:00
+        - nicRef: nic1
+          macAddress: 02:00:00:00:00:01
+        - nicRef: nic2
+          macAddress: 02:00:00:00:00:02
+        - nicRef: nic3
+          macAddress: 02:00:00:00:00:03
+  hardware:
+    nics:
+      - name: nic0
+      - name: nic1
+      - name: nic2
+      - name: nic3
+    rootDevice:
+      deviceName: /dev/disk/by-id/wwn-0x5000c500a1b2c311
   os:
     provided: false
     installProfileRef: rhel-ceph-node
@@ -1162,8 +1143,6 @@ spec:
         - serverRef: default-01
         - serverRef: default-02
         - serverRef: default-03
-      rootDeviceHints:
-        deviceName: /dev/disk/by-id/wwn-0x5000c500a1b2c311
   proxy:
     proxyRef: default
     noProxy:
@@ -1208,23 +1187,11 @@ kind: Machine
 metadata:
   name: storage-a-02
 spec:
-  capabilities:
-    - ceph-node
   placement:
     site: site-a
   substrate:
     providerRef: bare-metal
-  hardware:
-    nics:
-      - name: nic0
-        macAddress: 02:00:00:00:00:04
-      - name: nic1
-        macAddress: 02:00:00:00:00:05
-      - name: nic2
-        macAddress: 02:00:00:00:00:06
-      - name: nic3
-        macAddress: 02:00:00:00:00:07
-    management:
+    baremetal:
       bmc:
         address: https://bmc-storage-a-02.example.com/redfish/v1/Systems/1
         protocol: redfish
@@ -1234,6 +1201,23 @@ spec:
         virtualMedia:
           tls:
             trust: established
+      nics:
+        - nicRef: nic0
+          macAddress: 02:00:00:00:00:04
+        - nicRef: nic1
+          macAddress: 02:00:00:00:00:05
+        - nicRef: nic2
+          macAddress: 02:00:00:00:00:06
+        - nicRef: nic3
+          macAddress: 02:00:00:00:00:07
+  hardware:
+    nics:
+      - name: nic0
+      - name: nic1
+      - name: nic2
+      - name: nic3
+    rootDevice:
+      deviceName: /dev/disk/by-id/wwn-0x5000c500a1b2c312
   os:
     provided: false
     installProfileRef: rhel-ceph-node
@@ -1243,8 +1227,6 @@ spec:
         - serverRef: default-01
         - serverRef: default-02
         - serverRef: default-03
-      rootDeviceHints:
-        deviceName: /dev/disk/by-id/wwn-0x5000c500a1b2c312
   proxy:
     proxyRef: default
     noProxy:
@@ -1289,23 +1271,11 @@ kind: Machine
 metadata:
   name: storage-a-03
 spec:
-  capabilities:
-    - ceph-node
   placement:
     site: site-a
   substrate:
     providerRef: bare-metal
-  hardware:
-    nics:
-      - name: nic0
-        macAddress: 02:00:00:00:00:08
-      - name: nic1
-        macAddress: 02:00:00:00:00:09
-      - name: nic2
-        macAddress: 02:00:00:00:00:0a
-      - name: nic3
-        macAddress: 02:00:00:00:00:0b
-    management:
+    baremetal:
       bmc:
         address: https://bmc-storage-a-03.example.com/redfish/v1/Systems/1
         protocol: redfish
@@ -1315,6 +1285,23 @@ spec:
         virtualMedia:
           tls:
             trust: established
+      nics:
+        - nicRef: nic0
+          macAddress: 02:00:00:00:00:08
+        - nicRef: nic1
+          macAddress: 02:00:00:00:00:09
+        - nicRef: nic2
+          macAddress: 02:00:00:00:00:0a
+        - nicRef: nic3
+          macAddress: 02:00:00:00:00:0b
+  hardware:
+    nics:
+      - name: nic0
+      - name: nic1
+      - name: nic2
+      - name: nic3
+    rootDevice:
+      deviceName: /dev/disk/by-id/wwn-0x5000c500a1b2c313
   os:
     provided: false
     installProfileRef: rhel-ceph-node
@@ -1324,8 +1311,6 @@ spec:
         - serverRef: default-01
         - serverRef: default-02
         - serverRef: default-03
-      rootDeviceHints:
-        deviceName: /dev/disk/by-id/wwn-0x5000c500a1b2c313
   proxy:
     proxyRef: default
     noProxy:
@@ -1370,23 +1355,11 @@ kind: Machine
 metadata:
   name: storage-b-01
 spec:
-  capabilities:
-    - ceph-node
   placement:
     site: site-b
   substrate:
     providerRef: bare-metal
-  hardware:
-    nics:
-      - name: nic0
-        macAddress: 02:00:00:00:00:0c
-      - name: nic1
-        macAddress: 02:00:00:00:00:0d
-      - name: nic2
-        macAddress: 02:00:00:00:00:0e
-      - name: nic3
-        macAddress: 02:00:00:00:00:0f
-    management:
+    baremetal:
       bmc:
         address: https://bmc-storage-b-01.example.com/redfish/v1/Systems/1
         protocol: redfish
@@ -1396,6 +1369,23 @@ spec:
         virtualMedia:
           tls:
             trust: established
+      nics:
+        - nicRef: nic0
+          macAddress: 02:00:00:00:00:0c
+        - nicRef: nic1
+          macAddress: 02:00:00:00:00:0d
+        - nicRef: nic2
+          macAddress: 02:00:00:00:00:0e
+        - nicRef: nic3
+          macAddress: 02:00:00:00:00:0f
+  hardware:
+    nics:
+      - name: nic0
+      - name: nic1
+      - name: nic2
+      - name: nic3
+    rootDevice:
+      deviceName: /dev/disk/by-id/wwn-0x5000c500a1b2c314
   os:
     provided: false
     installProfileRef: rhel-ceph-node
@@ -1405,8 +1395,6 @@ spec:
         - serverRef: default-01
         - serverRef: default-02
         - serverRef: default-03
-      rootDeviceHints:
-        deviceName: /dev/disk/by-id/wwn-0x5000c500a1b2c314
   proxy:
     proxyRef: default
     noProxy:
@@ -1451,23 +1439,11 @@ kind: Machine
 metadata:
   name: storage-b-02
 spec:
-  capabilities:
-    - ceph-node
   placement:
     site: site-b
   substrate:
     providerRef: bare-metal
-  hardware:
-    nics:
-      - name: nic0
-        macAddress: 02:00:00:00:00:10
-      - name: nic1
-        macAddress: 02:00:00:00:00:11
-      - name: nic2
-        macAddress: 02:00:00:00:00:12
-      - name: nic3
-        macAddress: 02:00:00:00:00:13
-    management:
+    baremetal:
       bmc:
         address: https://bmc-storage-b-02.example.com/redfish/v1/Systems/1
         protocol: redfish
@@ -1477,6 +1453,23 @@ spec:
         virtualMedia:
           tls:
             trust: established
+      nics:
+        - nicRef: nic0
+          macAddress: 02:00:00:00:00:10
+        - nicRef: nic1
+          macAddress: 02:00:00:00:00:11
+        - nicRef: nic2
+          macAddress: 02:00:00:00:00:12
+        - nicRef: nic3
+          macAddress: 02:00:00:00:00:13
+  hardware:
+    nics:
+      - name: nic0
+      - name: nic1
+      - name: nic2
+      - name: nic3
+    rootDevice:
+      deviceName: /dev/disk/by-id/wwn-0x5000c500a1b2c315
   os:
     provided: false
     installProfileRef: rhel-ceph-node
@@ -1486,8 +1479,6 @@ spec:
         - serverRef: default-01
         - serverRef: default-02
         - serverRef: default-03
-      rootDeviceHints:
-        deviceName: /dev/disk/by-id/wwn-0x5000c500a1b2c315
   proxy:
     proxyRef: default
     noProxy:
@@ -1532,23 +1523,11 @@ kind: Machine
 metadata:
   name: storage-b-03
 spec:
-  capabilities:
-    - ceph-node
   placement:
     site: site-b
   substrate:
     providerRef: bare-metal
-  hardware:
-    nics:
-      - name: nic0
-        macAddress: 02:00:00:00:00:14
-      - name: nic1
-        macAddress: 02:00:00:00:00:15
-      - name: nic2
-        macAddress: 02:00:00:00:00:16
-      - name: nic3
-        macAddress: 02:00:00:00:00:17
-    management:
+    baremetal:
       bmc:
         address: https://bmc-storage-b-03.example.com/redfish/v1/Systems/1
         protocol: redfish
@@ -1558,6 +1537,23 @@ spec:
         virtualMedia:
           tls:
             trust: established
+      nics:
+        - nicRef: nic0
+          macAddress: 02:00:00:00:00:14
+        - nicRef: nic1
+          macAddress: 02:00:00:00:00:15
+        - nicRef: nic2
+          macAddress: 02:00:00:00:00:16
+        - nicRef: nic3
+          macAddress: 02:00:00:00:00:17
+  hardware:
+    nics:
+      - name: nic0
+      - name: nic1
+      - name: nic2
+      - name: nic3
+    rootDevice:
+      deviceName: /dev/disk/by-id/wwn-0x5000c500a1b2c316
   os:
     provided: false
     installProfileRef: rhel-ceph-node
@@ -1567,8 +1563,6 @@ spec:
         - serverRef: default-01
         - serverRef: default-02
         - serverRef: default-03
-      rootDeviceHints:
-        deviceName: /dev/disk/by-id/wwn-0x5000c500a1b2c316
   proxy:
     proxyRef: default
     noProxy:
@@ -1613,9 +1607,6 @@ kind: Machine
 metadata:
   name: storage-witness-01
 spec:
-  capabilities:
-    - ceph-node
-    - ceph-arbiter
   placement:
     site: site-c
   os:
@@ -1995,10 +1986,7 @@ spec:
   libvirt:
     machineRef: acceptance-hypervisor
     uri: qemu:///system
-    bmcEmulationDefaults:
-      enabled: true
-      protocol: redfish
-      emulator: sushy-tools
+    bmcEmulation:
       bindAddress: 192.0.2.60
       certificateRef: acceptance-bmc-tls
       port: 8000
@@ -2043,8 +2031,6 @@ metadata:
   name: bare-metal
 spec:
   baremetal:
-    boot:
-      method: redfishVirtualMedia
     defaults:
       bmc:
         credentialsRef: ocp-bmc-credentials
@@ -2279,7 +2265,7 @@ spec:
     - address: 192.0.2.200
 ---
 apiVersion: bootwright.io/v1alpha1
-kind: ContainerCluster
+kind: OpenShiftCluster
 metadata:
   name: acceptance-sno
 spec:
@@ -2288,10 +2274,9 @@ spec:
     release:
       image: quay.io/example/okd:4.99.1
   install:
-    method: agent
     mode: connected
     platform:
-      type: none
+      none: {}
     proxy:
       proxyRef: default
       noProxy:
@@ -2318,6 +2303,7 @@ spec:
         interfaceNetworks: []
         source:
           type: node
+    agent: {}
     pullSecretRef: openshift-pull-secret
     nodeSSH:
       keyPairRef: acceptance-sno-cluster-admin-ssh-key
@@ -2331,11 +2317,11 @@ spec:
   nodes:
     - name: master
       fqdn: master.acceptance-sno.clusters.example.com
-      role: master
+      role: controlPlane
       machineRef: acceptance-sno-node
 ---
 apiVersion: bootwright.io/v1alpha1
-kind: ContainerCluster
+kind: OpenShiftCluster
 metadata:
   name: hub-multidc-01
 spec:
@@ -2345,10 +2331,9 @@ spec:
       version: 4.21.15
       channel: stable-4.21
   install:
-    method: agent
     mode: connected
     platform:
-      type: none
+      none: {}
     proxy:
       proxyRef: default
       noProxy:
@@ -2376,6 +2361,7 @@ spec:
         interfaceNetworks: []
         source:
           type: external
+    agent: {}
     pullSecretRef: openshift-pull-secret
     nodeSSH:
       keyPairRef: hub-multidc-01-cluster-admin-ssh-key
@@ -2395,21 +2381,21 @@ spec:
       unlock:
         tpm2: {}
       roles:
-        - master
+        - controlPlane
         - worker
         - infra
   nodes:
     - name: master-01
       fqdn: master-01.hub-multidc-01.clusters.example.com
-      role: master
+      role: controlPlane
       machineRef: hub-multidc-01-master-01
     - name: master-02
       fqdn: master-02.hub-multidc-01.clusters.example.com
-      role: master
+      role: controlPlane
       machineRef: hub-multidc-01-master-02
     - name: master-03
       fqdn: master-03.hub-multidc-01.clusters.example.com
-      role: master
+      role: controlPlane
       machineRef: hub-multidc-01-master-03
     - name: worker-01
       fqdn: worker-01.hub-multidc-01.clusters.example.com
@@ -2437,7 +2423,7 @@ spec:
       machineRef: hub-multidc-01-infra-03
 ---
 apiVersion: bootwright.io/v1alpha1
-kind: ContainerCluster
+kind: OpenShiftCluster
 metadata:
   name: hub-multidc-02
 spec:
@@ -2447,10 +2433,9 @@ spec:
       version: 4.21.15
       channel: stable-4.21
   install:
-    method: agent
     mode: connected
     platform:
-      type: none
+      none: {}
     proxy:
       proxyRef: default
       noProxy:
@@ -2478,6 +2463,7 @@ spec:
         interfaceNetworks: []
         source:
           type: external
+    agent: {}
     pullSecretRef: openshift-pull-secret
     nodeSSH:
       keyPairRef: hub-multidc-02-cluster-admin-ssh-key
@@ -2497,21 +2483,21 @@ spec:
       unlock:
         tpm2: {}
       roles:
-        - master
+        - controlPlane
         - worker
         - infra
   nodes:
     - name: master-01
       fqdn: master-01.hub-multidc-02.clusters.example.com
-      role: master
+      role: controlPlane
       machineRef: hub-multidc-02-master-01
     - name: master-02
       fqdn: master-02.hub-multidc-02.clusters.example.com
-      role: master
+      role: controlPlane
       machineRef: hub-multidc-02-master-02
     - name: master-03
       fqdn: master-03.hub-multidc-02.clusters.example.com
-      role: master
+      role: controlPlane
       machineRef: hub-multidc-02-master-03
     - name: worker-01
       fqdn: worker-01.hub-multidc-02.clusters.example.com
@@ -2539,7 +2525,7 @@ spec:
       machineRef: hub-multidc-02-infra-03
 ---
 apiVersion: bootwright.io/v1alpha1
-kind: ContainerCluster
+kind: OpenShiftCluster
 metadata:
   name: ocp-multidc-01
 spec:
@@ -2549,10 +2535,9 @@ spec:
       version: 4.21.15
       channel: stable-4.21
   install:
-    method: agent
     mode: connected
     platform:
-      type: none
+      none: {}
     proxy:
       proxyRef: default
       noProxy:
@@ -2604,23 +2589,23 @@ spec:
       unlock:
         tpm2: {}
       roles:
-        - master
+        - controlPlane
   nodes:
     - name: master-01
       fqdn: master-01.ocp-multidc-01.clusters.example.com
-      role: master
+      role: controlPlane
       machineRef: edge-a-01
     - name: master-02
       fqdn: master-02.ocp-multidc-01.clusters.example.com
-      role: master
+      role: controlPlane
       machineRef: edge-a-02
     - name: master-03
       fqdn: master-03.ocp-multidc-01.clusters.example.com
-      role: master
+      role: controlPlane
       machineRef: edge-a-03
 ---
 apiVersion: bootwright.io/v1alpha1
-kind: ContainerCluster
+kind: OpenShiftCluster
 metadata:
   name: ocp-multidc-02
 spec:
@@ -2630,10 +2615,9 @@ spec:
       version: 4.21.15
       channel: stable-4.21
   install:
-    method: agent
     mode: connected
     platform:
-      type: none
+      none: {}
     proxy:
       proxyRef: default
       noProxy:
@@ -2685,146 +2669,143 @@ spec:
       unlock:
         tpm2: {}
       roles:
-        - master
+        - controlPlane
   nodes:
     - name: master-01
       fqdn: master-01.ocp-multidc-02.clusters.example.com
-      role: master
+      role: controlPlane
       machineRef: edge-b-01
     - name: master-02
       fqdn: master-02.ocp-multidc-02.clusters.example.com
-      role: master
+      role: controlPlane
       machineRef: edge-b-02
     - name: master-03
       fqdn: master-03.ocp-multidc-02.clusters.example.com
-      role: master
+      role: controlPlane
       machineRef: edge-b-03
 ---
 apiVersion: bootwright.io/v1alpha1
-kind: StorageCluster
+kind: CephCluster
 metadata:
   name: acceptance-external-storage
 spec:
-  type: ceph
   management: external
 ---
 apiVersion: bootwright.io/v1alpha1
-kind: StorageCluster
+kind: CephCluster
 metadata:
   name: ceph-multidc-01
 spec:
-  type: ceph
   management: managed
-  ceph:
-    distribution: ibm
-    release: 9.9.1.2
-    packageVersion: 20.2.1-405.el9cp
-    packageRepository: https://packages.example.test/ibm-ceph/9/rhel9/x86_64
-    packageRepositoryTrustBundleRef: custom-ca-bundle
-    packageRepositoryKey: https://packages.example.test/keys/ibm.asc
-    image:
-      base: cp.icr.io/cp/ibm-ceph/ceph-9-rhel9
-      version: sha256:1111111111111111111111111111111111111111111111111111111111111111
+  distribution:
     ibm:
       callHome: disabled
       packages:
         source: vendor
-    entitlementRef: ceph-entitlement
-    cephadm:
+  release: 9.9.1.2
+  packageVersion: 20.2.1-405.el9cp
+  packageRepository: https://packages.example.test/ibm-ceph/9/rhel9/x86_64
+  packageRepositoryTrustBundleRef: custom-ca-bundle
+  packageRepositoryKey: https://packages.example.test/keys/ibm.asc
+  image:
+    base: cp.icr.io/cp/ibm-ceph/ceph-9-rhel9
+    version: sha256:1111111111111111111111111111111111111111111111111111111111111111
+  entitlementRef: ceph-entitlement
+  cephadm:
+    addressRef: ssh
+    ansible:
+      packageVersion: 5.0.3-1
+    clusterSSH:
+      user: cephadm
+      keyRef: ceph-multidc-01-cephadm-ssh-key
+      transport: verifiedTunnel
+    bootstrap:
+      nodeRef: node-01
       addressRef: ssh
-      ansible:
-        packageVersion: 5.0.3-1
-      clusterSSH:
-        user: cephadm
-        keyRef: ceph-multidc-01-cephadm-ssh-key
-        transport: verified-tunnel
-      bootstrap:
-        node: node-01
-        addressRef: ssh
-        singleHostDefaults: false
-    networks:
-      publicCIDRs:
-        - 198.51.100.0/25
-      clusterCIDRs:
-        - 203.0.113.0/24
-    security:
-      fips:
-        enabled: true
-      cephx:
-        keyType: aes
-    config:
-      global:
-        osd_pool_default_min_size: "2"
-        osd_pool_default_size: "2"
-    services:
-      - service_type: mon
-        placement:
-          label: ceph-core
-          count: 3
-      - service_type: mgr
-        placement:
-          label: ceph-core
-          count: 2
-      - service_type: osd
-        service_id: data
-        placement:
-          label: ceph-core
-        spec:
-          data_devices:
-            paths:
-              - /dev/sdb
-      - service_type: mds
-        service_id: odf-cephfs
-        placement:
-          label: ceph-core
-          count: 2
-      - service_type: rgw
-        service_id: objects
-        placement:
-          label: ceph-core
-          count: 2
-        spec:
-          rgw_frontend_port: 8080
-          rgw_realm: objects
-          rgw_zone: objects
-          rgw_zonegroup: objects
-      - service_type: nfs
-        service_id: acceptance-nfs
-        placement:
-          label: ceph-core
-          count: 1
-      - service_type: nvmeof
-        service_id: block
-        placement:
-          hosts:
-            - node-01.ceph-multidc-01.clusters.example.com
-            - node-02.ceph-multidc-01.clusters.example.com
-        spec:
-          group: block
-          pool: odf-hub-multidc-01-rbd
-    topology:
-      nodes:
-        - name: node-01
-          fqdn: node-01.ceph-multidc-01.clusters.example.com
-          machineRef: storage-a-01
-          site: site-a
-          labels:
-            - ceph-core
-        - name: node-02
-          fqdn: node-02.ceph-multidc-01.clusters.example.com
-          machineRef: storage-a-02
-          site: site-a
-          labels:
-            - ceph-core
-        - name: node-03
-          fqdn: node-03.ceph-multidc-01.clusters.example.com
-          machineRef: storage-a-03
-          site: site-a
-          labels:
-            - ceph-core
+      singleHostDefaults: false
+  networks:
+    publicCIDRs:
+      - 198.51.100.0/25
+    clusterCIDRs:
+      - 203.0.113.0/24
+  security:
+    fips:
+      enabled: true
+    cephx:
+      keyType: aes
+  config:
+    global:
+      osd_pool_default_min_size: "2"
+      osd_pool_default_size: "2"
+  services:
+    - service_type: mon
+      placement:
+        label: ceph-core
+        count: 3
+    - service_type: mgr
+      placement:
+        label: ceph-core
+        count: 2
+    - service_type: osd
+      service_id: data
+      placement:
+        label: ceph-core
+      spec:
+        data_devices:
+          paths:
+            - /dev/sdb
+    - service_type: mds
+      service_id: odf-cephfs
+      placement:
+        label: ceph-core
+        count: 2
+    - service_type: rgw
+      service_id: objects
+      placement:
+        label: ceph-core
+        count: 2
+      spec:
+        rgw_frontend_port: 8080
+        rgw_realm: objects
+        rgw_zone: objects
+        rgw_zonegroup: objects
+    - service_type: nfs
+      service_id: acceptance-nfs
+      placement:
+        label: ceph-core
+        count: 1
+    - service_type: nvmeof
+      service_id: block
+      placement:
+        hosts:
+          - node-01.ceph-multidc-01.clusters.example.com
+          - node-02.ceph-multidc-01.clusters.example.com
+      spec:
+        group: block
+        pool: odf-hub-multidc-01-rbd
+  topology:
+    nodes:
+      - name: node-01
+        fqdn: node-01.ceph-multidc-01.clusters.example.com
+        machineRef: storage-a-01
+        site: site-a
+        labels:
+          - ceph-core
+      - name: node-02
+        fqdn: node-02.ceph-multidc-01.clusters.example.com
+        machineRef: storage-a-02
+        site: site-a
+        labels:
+          - ceph-core
+      - name: node-03
+        fqdn: node-03.ceph-multidc-01.clusters.example.com
+        machineRef: storage-a-03
+        site: site-a
+        labels:
+          - ceph-core
 ---
 apiVersion: bootwright.io/v1alpha1
-kind: StoragePlacementPolicy
+kind: CephPlacementPolicy
 metadata:
   name: host-spread
 spec:
@@ -2836,50 +2817,50 @@ spec:
     minSize: 2
 ---
 apiVersion: bootwright.io/v1alpha1
-kind: StoragePool
+kind: CephPool
 metadata:
   name: objects-data
 spec:
   clusterRef: ceph-multidc-01
   placementPolicyRef: host-spread
-  type: replicated
   role: rgw
+  replicated: {}
 ---
 apiVersion: bootwright.io/v1alpha1
-kind: StoragePool
+kind: CephPool
 metadata:
   name: odf-cephfs-data
 spec:
   clusterRef: ceph-multidc-01
   placementPolicyRef: host-spread
-  type: replicated
-  role: cephfs-data
+  role: cephfsData
   application: cephfs
+  replicated: {}
 ---
 apiVersion: bootwright.io/v1alpha1
-kind: StoragePool
+kind: CephPool
 metadata:
   name: odf-cephfs-metadata
 spec:
   clusterRef: ceph-multidc-01
   placementPolicyRef: host-spread
-  type: replicated
-  role: cephfs-metadata
+  role: cephfsMetadata
   application: cephfs
+  replicated: {}
 ---
 apiVersion: bootwright.io/v1alpha1
-kind: StoragePool
+kind: CephPool
 metadata:
   name: odf-hub-multidc-01-rbd
 spec:
   clusterRef: ceph-multidc-01
   placementPolicyRef: host-spread
-  type: replicated
   role: rbd
   application: rbd
+  replicated: {}
 ---
 apiVersion: bootwright.io/v1alpha1
-kind: StorageRBDImage
+kind: CephRBDImage
 metadata:
   name: acceptance-rbd-image
 spec:
@@ -2891,16 +2872,16 @@ spec:
     - exclusive-lock
 ---
 apiVersion: bootwright.io/v1alpha1
-kind: StorageClient
+kind: CephClient
 metadata:
   name: acceptance-rbd-client
 spec:
   clusterRef: ceph-multidc-01
   poolRef: odf-hub-multidc-01-rbd
-  access: read-only
+  access: readOnly
 ---
 apiVersion: bootwright.io/v1alpha1
-kind: StorageFilesystem
+kind: CephFilesystem
 metadata:
   name: odf-cephfs
 spec:
@@ -2918,7 +2899,7 @@ spec:
       mode: "755"
 ---
 apiVersion: bootwright.io/v1alpha1
-kind: StorageSubvolume
+kind: CephSubvolume
 metadata:
   name: acceptance-subvolume
 spec:
@@ -2927,7 +2908,7 @@ spec:
   sizeBytes: 10737418240
 ---
 apiVersion: bootwright.io/v1alpha1
-kind: StorageObjectGateway
+kind: CephObjectGateway
 metadata:
   name: objects
 spec:
@@ -2942,7 +2923,7 @@ spec:
     fqdn: objects.ceph-multidc-01.clusters.example.com
 ---
 apiVersion: bootwright.io/v1alpha1
-kind: StorageObjectUser
+kind: CephObjectUser
 metadata:
   name: app-writer
 spec:
@@ -2951,7 +2932,7 @@ spec:
   displayName: App writer
 ---
 apiVersion: bootwright.io/v1alpha1
-kind: StorageObjectBucket
+kind: CephObjectBucket
 metadata:
   name: app-data
 spec:
@@ -2972,7 +2953,7 @@ spec:
     Version: "2012-10-17"
 ---
 apiVersion: bootwright.io/v1alpha1
-kind: StorageNFSExport
+kind: CephNFSExport
 metadata:
   name: acceptance-nfs
 spec:
@@ -3000,7 +2981,7 @@ spec:
       - TCP
 ---
 apiVersion: bootwright.io/v1alpha1
-kind: StorageSMBResource
+kind: CephSMBResource
 metadata:
   name: acceptance-smb
 spec:
@@ -3020,7 +3001,7 @@ spec:
         source_type: resource
 ---
 apiVersion: bootwright.io/v1alpha1
-kind: StorageSMBResource
+kind: CephSMBResource
 metadata:
   name: acceptance-smb-users
 spec:
@@ -3037,7 +3018,7 @@ spec:
         - name: smbuser
 ---
 apiVersion: bootwright.io/v1alpha1
-kind: StorageNVMeoFSubsystem
+kind: CephNVMeoFSubsystem
 metadata:
   name: acceptance-nvmeof
 spec:

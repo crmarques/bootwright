@@ -25,13 +25,13 @@ func allPreflightCommand() commandSpec {
 
 func environmentClusterCommands() []commandSpec {
 	return []commandSpec{
-		available(commandSpec{path: "cluster list", short: "List container and storage clusters", long: "List container and storage clusters in canonical name order. Applicable to all selected ContainerClusters and StorageClusters, including external storage clusters."}),
+		available(commandSpec{path: "cluster list", short: "List container and storage clusters", long: "List container and storage clusters in canonical name order. Applicable to all selected OpenShiftClusters and CephClusters, including external storage clusters."}),
 		available(commandSpec{path: "cluster info", short: "Show cluster details and static access applicability", long: "Show cluster details and static access applicability, readiness and invocation templates from local desired state and evidence, with no host contact." +
-			" Applicable to all selected ContainerClusters and StorageClusters, including external storage clusters." +
-			" A managed Ceph StorageCluster also reports its release, FSID, frozen image, monitors and administrator command." +
+			" Applicable to all selected OpenShiftClusters and CephClusters, including external storage clusters." +
+			" A managed CephCluster also reports its release, FSID, frozen image, monitors and administrator command." +
 			" --name takes a comma-separated list." +
-			" --secrets and --object-user each require --name naming exactly one cluster and apply to managed Ceph StorageClusters only:" +
-			" --secrets reveals the dashboard administrator password, and --object-user <name> reveals that StorageObjectUser's S3 keys alone.", flags: []flagSpec{stringFlag("name", "Select comma-separated cluster names (default: all)"), boolFlag("secrets", "Reveal the dashboard administrator password"), stringFlag("object-user", "Reveal the S3 keys of this one StorageObjectUser")}}),
+			" --secrets and --object-user each require --name naming exactly one cluster and apply to managed CephClusters only:" +
+			" --secrets reveals the dashboard administrator password, and --object-user <name> reveals that CephObjectUser's S3 keys alone.", flags: []flagSpec{stringFlag("name", "Select comma-separated cluster names (default: all)"), boolFlag("secrets", "Reveal the dashboard administrator password"), stringFlag("object-user", "Reveal the S3 keys of this one CephObjectUser")}}),
 		available(clusterSessionCommand(commandSpec{path: "cluster rsh", short: "Open an SSH session on a cluster node's Machine"})),
 		available(clusterExecCommand()),
 	}
@@ -40,13 +40,13 @@ func environmentClusterCommands() []commandSpec {
 func clusterSessionCommand(spec commandSpec) commandSpec {
 	spec.flags = []flagSpec{nameFlag(), stringFlag("node", "Select a declared node by name, then FQDN (default: the first node in name order)")}
 	spec = sessionCommand(spec)
-	spec.long += " The session opens on the Machine behind one node of a managed Ceph StorageCluster: --node selects" +
+	spec.long += " The session opens on the Machine behind one node of a managed CephCluster: --node selects" +
 		" the node by name, then by FQDN, and defaults to the first node in name order." +
 		clusterSessionLimits
 	return spec
 }
 
-const clusterSessionLimits = " External StorageClusters are inapplicable, and sessions on OpenShift/OKD ContainerClusters are not yet available."
+const clusterSessionLimits = " External CephClusters are inapplicable, and sessions on OpenShiftClusters are not yet available."
 
 func clusterExecCommand() commandSpec {
 	spec := sessionCommand(commandSpec{path: "cluster exec", short: "Run a command over SSH on cluster nodes' Machines", payload: true,

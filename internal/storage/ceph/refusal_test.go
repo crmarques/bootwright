@@ -77,7 +77,7 @@ func TestAClusterRefusalReachesTheOperatorWithItsRemedy(t *testing.T) {
 	r := coreRequest()
 	e := withMaterial(executionFor(t, r), r)
 	runner := &refusingRunner{reason: "dashboard-drift"}
-	observation, err := New(api.StorageCluster, runner).Observe(context.Background(), e)
+	observation, err := New(api.CephCluster, runner).Observe(context.Background(), e)
 	d := diagnostics.Of(err)
 	if observation.Effect != reconciliation.EffectUnknown || len(d) != 1 ||
 		d[0].Message != "the Ceph dashboard user admin no longer matches the password this context's custody holds" ||
@@ -93,7 +93,7 @@ func TestAForeignClientRefusalNamesTheClientAndFrozenInputRecovery(t *testing.T)
 		t.Fatal(err)
 	}
 	e = withMaterial(e, r)
-	_, err := New(api.StorageClient, &refusingRunner{reason: "foreign-client"}).Observe(context.Background(), e)
+	_, err := New(api.CephClient, &refusingRunner{reason: "foreign-client"}).Observe(context.Background(), e)
 	d := diagnostics.Of(err)
 	if len(d) != 1 || d[0].Code != "lifecycle.unknown" ||
 		d[0].Message != "Ceph client client.consumer exists that this operation did not create" ||
@@ -109,7 +109,7 @@ func TestADashboardManagerRefusalNamesTheManagerContainerNotTheAdminUser(t *test
 	r := coreRequest()
 	e := withMaterial(executionFor(t, r), r)
 	runner := &refusingRunner{reason: "dashboard-manager"}
-	observation, err := New(api.StorageCluster, runner).Observe(context.Background(), e)
+	observation, err := New(api.CephCluster, runner).Observe(context.Background(), e)
 	d := diagnostics.Of(err)
 	if observation.Effect != reconciliation.EffectUnknown || len(d) != 1 || d[0].Code != "lifecycle.unknown" ||
 		d[0].Message != "a Ceph MGR's container or dashboard port no longer matches the deployment this operation recorded" ||
@@ -122,11 +122,11 @@ func TestACallHomeUnqualifiedRefusalReachesTheOperatorAsUnsupportedWithItsRemedy
 	r := coreRequest()
 	e := withMaterial(executionFor(t, r), r)
 	runner := &refusingRunner{reason: "call-home-unqualified"}
-	_, err := New(api.StorageCluster, runner).Observe(context.Background(), e)
+	_, err := New(api.CephCluster, runner).Observe(context.Background(), e)
 	d := diagnostics.Of(err)
 	if len(d) != 1 || d[0].Code != "lifecycle.unsupported" || d[0].Message != "IBM Call Home intent has no qualified path on the selected Ceph build" ||
 		d[0].Remediation != "the apply froze this input, so take back what it owns with bootwright destroy --context <context>, "+
-			"correct ceph.ibm.callHome for the selected build with bootwright context update, then apply; see .agents/knowledge/version-specializations.md" {
+			"correct spec.distribution.ibm.callHome for the selected build with bootwright context update, then apply; see .agents/knowledge/version-specializations.md" {
 		t.Fatalf("a call-home-unqualified refusal reached the operator as %+v", d)
 	}
 }
@@ -135,7 +135,7 @@ func TestANativeOptionUndeclaredRefusalNamesTheDestroyItsInputChangeNeeds(t *tes
 	r := coreRequest()
 	e := withMaterial(executionFor(t, r), r)
 	runner := &refusingRunner{reason: "native-option-undeclared"}
-	_, err := New(api.StorageCluster, runner).Observe(context.Background(), e)
+	_, err := New(api.CephCluster, runner).Observe(context.Background(), e)
 	d := diagnostics.Of(err)
 	if len(d) != 1 || d[0].Code != "lifecycle.unsupported" ||
 		!strings.HasPrefix(d[0].Remediation, "the apply froze this input, so take back what it owns with bootwright destroy --context <context>, ") ||
@@ -148,7 +148,7 @@ func TestAForeignImageRefusalNamesTheSettingAndNeverOverwrites(t *testing.T) {
 	r := coreRequest()
 	r.Action, r.Settings = "settings", &Settings{Modules: []string{"nfs"}}
 	e := withMaterial(executionFor(t, r), r)
-	observation, err := New(api.StorageCluster, &refusingRunner{reason: "foreign-image"}).Observe(context.Background(), e)
+	observation, err := New(api.CephCluster, &refusingRunner{reason: "foreign-image"}).Observe(context.Background(), e)
 	d := diagnostics.Of(err)
 	if observation.Effect != reconciliation.EffectUnknown || len(d) != 1 || d[0].Code != "lifecycle.unknown" ||
 		d[0].Message != "a cephadm container_image setting of the Ceph cluster holds an image this operation did not freeze, is set outside the mgr section, or no longer holds the frozen image a declared service needs" ||
@@ -168,7 +168,7 @@ func nfsUnitRequest() Request {
 func TestANFSModuleDisabledRefusalNamesTheSettingsBlock(t *testing.T) {
 	r := nfsUnitRequest()
 	e := withMaterial(executionFor(t, r), r)
-	observation, err := New(api.StorageCluster, &refusingRunner{reason: "nfs-module-disabled"}).Observe(context.Background(), e)
+	observation, err := New(api.CephCluster, &refusingRunner{reason: "nfs-module-disabled"}).Observe(context.Background(), e)
 	d := diagnostics.Of(err)
 	if observation.Effect != reconciliation.EffectUnknown || len(d) != 1 || d[0].Code != "lifecycle.unknown" ||
 		d[0].Message != "the Ceph cluster's nfs manager module is disabled, although the cluster's settings block enabled it for the declared NFS service" ||
@@ -181,7 +181,7 @@ func TestANFSModuleDisabledRefusalNamesTheSettingsBlock(t *testing.T) {
 func TestANFSPoolForeignRefusalNamesThePool(t *testing.T) {
 	r := nfsUnitRequest()
 	e := withMaterial(executionFor(t, r), r)
-	observation, err := New(api.StorageCluster, &refusingRunner{reason: "nfs-pool-foreign"}).Observe(context.Background(), e)
+	observation, err := New(api.CephCluster, &refusingRunner{reason: "nfs-pool-foreign"}).Observe(context.Background(), e)
 	d := diagnostics.Of(err)
 	if observation.Effect != reconciliation.EffectUnknown || len(d) != 1 || d[0].Code != "lifecycle.unknown" ||
 		d[0].Message != "a Ceph pool named .nfs exists that this operation's NFS services did not create, or it is not the pool they recorded" ||
@@ -196,8 +196,8 @@ func gatewayRefusal(t *testing.T, reason string) (reconciliation.EffectState, []
 	r := coreRequest()
 	r.Action, r.Gateway = "gateway", gatewayRuntimeRequest().Gateway
 	e := withMaterial(executionFor(t, r), r)
-	e.Block.ID, e.Block.Kind, e.Block.Object = GatewayBlockID("objects"), string(api.StorageObjectGateway), "objects"
-	observation, err := New(api.StorageObjectGateway, &refusingRunner{reason: reason}).Observe(context.Background(), e)
+	e.Block.ID, e.Block.Kind, e.Block.Object = GatewayBlockID("objects"), string(api.CephObjectGateway), "objects"
+	observation, err := New(api.CephObjectGateway, &refusingRunner{reason: reason}).Observe(context.Background(), e)
 	return observation.Effect, diagnostics.Of(err)
 }
 
@@ -205,9 +205,9 @@ func TestAnObjectRealmForeignRefusalNamesItsNextStep(t *testing.T) {
 	effect, d := gatewayRefusal(t, "object-realm-foreign")
 	if effect != reconciliation.EffectUnknown || len(d) != 1 || d[0].Code != "lifecycle.unknown" ||
 		d[0].Message != "the cluster holds RGW configuration this operation did not create: a .rgw.root pool without this operation's claim, "+
-			"or a realm, zone group or zone of the StorageObjectGateway's names without its creation record, or one it created that is gone or changed" ||
+			"or a realm, zone group or zone of the CephObjectGateway's names without its creation record, or one it created that is gone or changed" ||
 		d[0].Remediation != "find what the native error names with ceph osd pool ls and radosgw-admin realm list, zonegroup list and zone list; "+
-			"for a foreign name, rename spec.realm, spec.zoneGroup or spec.zone of the StorageObjectGateway, or remove the foreign configuration outside Bootwright, "+
+			"for a foreign name, rename spec.realm, spec.zoneGroup or spec.zone of the CephObjectGateway, or remove the foreign configuration outside Bootwright, "+
 			"then apply again; when the native error says one this operation created is gone or changed, take back what this context owns with "+
 			"bootwright destroy --context <context>, then apply; "+
 			"Bootwright never adopts RGW configuration it did not create" {
@@ -218,7 +218,7 @@ func TestAnObjectRealmForeignRefusalNamesItsNextStep(t *testing.T) {
 func TestAnObjectZonePoolsRefusalNamesItsNextStep(t *testing.T) {
 	effect, d := gatewayRefusal(t, "object-zone-pools")
 	if effect != reconciliation.EffectUnknown || len(d) != 1 || d[0].Code != "lifecycle.unknown" ||
-		d[0].Message != "the zone a StorageObjectGateway created names a pool Bootwright did not plan, or its default placement does not hold the pools the gateway froze" ||
+		d[0].Message != "the zone a CephObjectGateway created names a pool Bootwright did not plan, or its default placement does not hold the pools the gateway froze" ||
 		d[0].Remediation != "inspect the zone with radosgw-admin zone get --rgw-realm <realm> --rgw-zone <zone>; the native error names the pool; "+
 			"take back what this context owns with bootwright destroy --context <context>, then apply; "+
 			"Bootwright creates every zone pool before RGW starts and never lets RGW create a pool it did not plan" {
@@ -229,7 +229,7 @@ func TestAnObjectZonePoolsRefusalNamesItsNextStep(t *testing.T) {
 func TestAnObjectEndpointCertificateRefusalNamesItsNextStep(t *testing.T) {
 	effect, d := gatewayRefusal(t, "object-endpoint-certificate")
 	if effect != reconciliation.EffectUnknown || len(d) != 1 || d[0].Code != "lifecycle.unknown" ||
-		d[0].Message != "a TLS service of a StorageObjectGateway holds a certificate or private key other than the one its bound Secret holds" ||
+		d[0].Message != "a TLS service of a CephObjectGateway holds a certificate or private key other than the one its bound Secret holds" ||
 		d[0].Remediation != "find the service the native error names with ceph orch ls; Bootwright never replaces the certificate of a deployed gateway service: "+
 			"store the deployed certificate and key in the Secret again with bootwright secret set --name <secret> --certificate-file <path> --private-key-file <path>, "+
 			"or take back what this context owns with bootwright destroy --context <context>, then apply" {
@@ -242,17 +242,17 @@ func nfsExportRefusal(t *testing.T, reason string) (reconciliation.EffectState, 
 	r := coreRequest()
 	r.Action, r.NFSExport = "nfs-export", &NFSExport{Filesystem: "files", Name: "docs", Service: "shares", Native: NFSExportNative{AccessType: "RW", Clients: []NFSExportClient{},
 		FSAL: NFSExportFSAL{CmountPath: "/", FSName: "files", Name: "CEPH"}, Path: "/", Protocols: []int{4}, Pseudo: "/docs", SecurityLabel: true, Squash: "root_squash", Transports: []string{"TCP"}}}
-	observation, err := New(api.StorageNFSExport, &refusingRunner{reason: reason}).Observe(context.Background(), withMaterial(exportExecution(t, r), r))
+	observation, err := New(api.CephNFSExport, &refusingRunner{reason: reason}).Observe(context.Background(), withMaterial(exportExecution(t, r), r))
 	return observation.Effect, diagnostics.Of(err)
 }
 
 func TestANFSExportForeignRefusalNamesItsNextStep(t *testing.T) {
 	effect, d := nfsExportRefusal(t, "nfs-export-foreign")
 	if effect != reconciliation.EffectUnknown || len(d) != 1 || d[0].Code != "lifecycle.unknown" ||
-		d[0].Message != "an NFS export exists at the StorageNFSExport's pseudo path on its NFS service that this operation did not create, "+
+		d[0].Message != "an NFS export exists at the CephNFSExport's pseudo path on its NFS service that this operation did not create, "+
 			"or the export this operation created is gone or now has another export ID, CephFS principal or S3 key" ||
 		d[0].Remediation != "find the export the native error names with ceph nfs export info <service> <pseudo>; for an export this operation did not create, "+
-			"set another spec.native.pseudo on the StorageNFSExport or remove the foreign export outside Bootwright, then apply again; "+
+			"set another spec.native.pseudo on the CephNFSExport or remove the foreign export outside Bootwright, then apply again; "+
 			"when the native error says the export this operation created is gone or changed, take back what this context owns with "+
 			"bootwright destroy --context <context>, then apply; Bootwright never adopts or overwrites an NFS export it did not create" {
 		t.Fatalf("an nfs-export-foreign refusal reached the operator as %s %+v", effect, d)
@@ -262,7 +262,7 @@ func TestANFSExportForeignRefusalNamesItsNextStep(t *testing.T) {
 func TestANFSExportApplyRefusalNamesItsNextStep(t *testing.T) {
 	effect, d := nfsExportRefusal(t, "nfs-export-apply")
 	if effect != reconciliation.EffectUnknown || len(d) != 1 || d[0].Code != "lifecycle.unknown" ||
-		d[0].Message != "the NFS manager did not apply the StorageNFSExport's export cleanly: its NFS service is not listed, the apply failed or reported a warning, "+
+		d[0].Message != "the NFS manager did not apply the CephNFSExport's export cleanly: its NFS service is not listed, the apply failed or reported a warning, "+
 			"or the stored export differs from the one applied" ||
 		d[0].Remediation != "read the native error, which holds the NFS manager's answer; check the service with ceph nfs cluster ls and the export with "+
 			"ceph nfs export info <service> <pseudo>, correct what the error names outside Bootwright (a missing directory, a path another protocol claims, "+
@@ -274,7 +274,7 @@ func TestANFSExportApplyRefusalNamesItsNextStep(t *testing.T) {
 func TestANFSExportPathEscapeRefusalNamesItsNextStep(t *testing.T) {
 	effect, d := nfsExportRefusal(t, "nfs-export-path-escape")
 	if effect != reconciliation.EffectUnknown || len(d) != 1 || d[0].Code != "lifecycle.unknown" ||
-		d[0].Message != "the StorageNFSExport's spec.native.path does not lie within the StorageSubvolume it binds, "+
+		d[0].Message != "the CephNFSExport's spec.native.path does not lie within the CephSubvolume it binds, "+
 			"or its spec.native.fsal.cmount_path is neither / nor the export path or a directory above it" ||
 		d[0].Remediation != "omit spec.native.path so the export serves the subvolume's own path, or set it to the path ceph fs subvolume getpath reports "+
 			"for the subvolume or a directory below it, and set spec.native.fsal.cmount_path to / or a directory that contains the export path, "+
@@ -286,7 +286,7 @@ func TestANFSExportPathEscapeRefusalNamesItsNextStep(t *testing.T) {
 func TestANFSExportRealmDefaultRefusalNamesItsNextStep(t *testing.T) {
 	effect, d := nfsExportRefusal(t, "nfs-export-realm-default")
 	if effect != reconciliation.EffectUnknown || len(d) != 1 || d[0].Code != "lifecycle.unknown" ||
-		d[0].Message != "an export of an RGW user needs its StorageObjectGateway's realm as the cluster's default realm, through which the NFS manager "+
+		d[0].Message != "an export of an RGW user needs its CephObjectGateway's realm as the cluster's default realm, through which the NFS manager "+
 			"and NFS-Ganesha find the user, and another realm is the default realm" ||
 		d[0].Remediation != "find the default realm with radosgw-admin realm list on the bootstrap host; when nothing else relies on it, clear it with "+
 			"radosgw-admin realm default rm outside Bootwright, then apply again; Bootwright wrote nothing for this export and never moves a default "+
@@ -296,13 +296,13 @@ func TestANFSExportRealmDefaultRefusalNamesItsNextStep(t *testing.T) {
 }
 
 func TestAnIngressFirewallRefusalNamesItsNextStep(t *testing.T) {
-	const message = "a host that runs the ingress of a Ceph NFS service or StorageObjectGateway has an active firewalld that does not permit " +
+	const message = "a host that runs the ingress of a Ceph NFS service or CephObjectGateway has an active firewalld that does not permit " +
 		"VRRP (IP protocol 112) or the ingress's client port on the interface that carries its virtual IP"
 	const remedy = "permit VRRP (IP protocol 112) and the port the native error names in the firewalld zone it names on the host it names, " +
 		"for example with firewall-cmd --permanent --zone=<zone> --add-protocol=vrrp --add-port=<port>/tcp and firewall-cmd --reload, " +
 		"or install that host without an active firewall, then apply again; Bootwright never changes a host's firewall, and this apply changed nothing before the check"
 	r := nfsUnitRequest()
-	observation, err := New(api.StorageCluster, &refusingRunner{reason: "ingress-firewall"}).Observe(context.Background(), withMaterial(executionFor(t, r), r))
+	observation, err := New(api.CephCluster, &refusingRunner{reason: "ingress-firewall"}).Observe(context.Background(), withMaterial(executionFor(t, r), r))
 	unit := diagnostics.Of(err)
 	effect, gateway := gatewayRefusal(t, "ingress-firewall")
 	for _, d := range [][]diagnostics.Diagnostic{unit, gateway} {
@@ -392,7 +392,7 @@ func TestResourceRefusalsNameTheirNextStep(t *testing.T) {
 func TestAnUnverifiedSSORefusalNamesTheSkipAndItsRemedies(t *testing.T) {
 	d := diagnostics.Of(adapterRefusals()["sso-unverified"])
 	const message = "an oauth2-proxy daemon of a Ceph management gateway runs with a configuration that skips the identity provider's certificate verification, so Bootwright did not enable the dashboard's single sign-on"
-	const remedy = "the native error names the host, the daemon and where the skip was found; take back what this context owns with bootwright destroy --context <context>, then with bootwright context update either select a Ceph image whose cephadm renders oauth2-proxy without that skip, or remove the oauth2-proxy service, its spec.ceph.serviceBindings entries and spec.enable_auth on the mgmt-gateway, then apply; Bootwright never changes an applied management gateway unit, so removing the service without that destroy refuses"
+	const remedy = "the native error names the host, the daemon and where the skip was found; take back what this context owns with bootwright destroy --context <context>, then with bootwright context update either select a Ceph image whose cephadm renders oauth2-proxy without that skip, or remove the oauth2-proxy service, its spec.serviceBindings entries and spec.enable_auth on the mgmt-gateway, then apply; Bootwright never changes an applied management gateway unit, so removing the service without that destroy refuses"
 	if len(d) != 1 || d[0].Code != "lifecycle.unknown" || d[0].Message != message || d[0].Remediation != remedy {
 		t.Fatalf("an sso-unverified refusal reached the operator as %+v", d)
 	}
@@ -400,7 +400,7 @@ func TestAnUnverifiedSSORefusalNamesTheSkipAndItsRemedies(t *testing.T) {
 
 func TestAPoolDriftRefusalNamesTheSettingsAndBothRemedies(t *testing.T) {
 	d := diagnostics.Of(adapterRefusals()["pool-drift"])
-	const message = "a setting this operation completed on the Ceph pool (size, min_size, a quota, a compression option, erasure-coded overwrites or its application) no longer has the value its StoragePool or StorageObjectGateway froze"
+	const message = "a setting this operation completed on the Ceph pool (size, min_size, a quota, a compression option, erasure-coded overwrites or its application) no longer has the value its CephPool or CephObjectGateway froze"
 	if len(d) != 1 || d[0].Code != "lifecycle.unknown" || d[0].Message != message ||
 		!strings.Contains(d[0].Remediation, "outside Bootwright") || !strings.Contains(d[0].Remediation, "bootwright destroy --context <context>") {
 		t.Fatalf("a pool-drift refusal reached the operator as %+v", d)
@@ -417,15 +417,15 @@ func smbRefusal(t *testing.T, reason string) []diagnostics.Diagnostic {
 
 func TestSMBRefusalsNameOnlyNextStepsAFailedApplyCanTake(t *testing.T) {
 	for reason, want := range map[string][2]string{
-		"smb-identity": {"an SMB resource of the StorageSMBResource's type and ID exists that this operation did not create, or the one it created is gone or no longer matches its frozen document",
+		"smb-identity": {"an SMB resource of the CephSMBResource's type and ID exists that this operation did not create, or the one it created is gone or no longer matches its frozen document",
 			"find the resource the native error names with ceph smb show <name> --password-filter hidden; for a resource this operation did not create, remove it outside Bootwright, " +
-				"then apply again with the same input; when the one this operation created is gone or changed, or the StorageSMBResource must change, take back what this context owns with " +
+				"then apply again with the same input; when the one this operation created is gone or changed, or the CephSMBResource must change, take back what this context owns with " +
 				"bootwright destroy --context <context>, which retires the cluster with its Machines, then apply; Bootwright never adopts an SMB resource it did not create"},
-		"smb-result": {"the SMB manager did not apply the StorageSMBResource's resource: its answer was not one successful result for that resource",
+		"smb-result": {"the SMB manager did not apply the CephSMBResource's resource: its answer was not one successful result for that resource",
 			"check the SMB manager's state with ceph smb show --password-filter hidden, correct what blocks the resource (an unknown cluster, a share name in use, a path that is not a " +
-				"directory in the volume, or a resource still in use) outside Bootwright, then apply again with the same input; when the StorageSMBResource itself must change, take back " +
+				"directory in the volume, or a resource still in use) outside Bootwright, then apply again with the same input; when the CephSMBResource itself must change, take back " +
 				"what this context owns with bootwright destroy --context <context>, which retires the cluster with its Machines, then apply"},
-		"foreign-service": {"an SMB cluster or smb service exists on the Ceph cluster that no StorageSMBResource of this cluster declares, or a daemon of a declared smb service runs on a host outside its placement",
+		"foreign-service": {"an SMB cluster or smb service exists on the Ceph cluster that no CephSMBResource of this cluster declares, or a daemon of a declared smb service runs on a host outside its placement",
 			"find it with ceph smb cluster ls, ceph orch ls --service_type smb and ceph orch ps --daemon_type smb; remove it outside Bootwright, then apply again with the same input; " +
 				"Bootwright never adopts an SMB cluster, service or daemon it did not create"},
 	} {
@@ -436,7 +436,7 @@ func TestSMBRefusalsNameOnlyNextStepsAFailedApplyCanTake(t *testing.T) {
 	}
 	for reason, refusal := range smbRefusals() {
 		remedy := diagnostics.Of(refusal)[0].Remediation
-		for _, edit := range []string{"in the StorageSMBResource", "another ID", "declare it"} {
+		for _, edit := range []string{"in the CephSMBResource", "another ID", "declare it"} {
 			if strings.Contains(remedy, edit) {
 				t.Errorf("the %s remedy asks for an input edit a failed apply refuses: %q", reason, remedy)
 			}
@@ -463,7 +463,7 @@ func TestAnSSHPolicyRefusalReachesTheOperatorWithItsRemedy(t *testing.T) {
 	for reason, message := range map[string]string{"ssh-policy-host-excluded": excluded, "ssh-policy-unavailable": unavailable, "tunnel-host-key-excluded": tunnel} {
 		t.Run(reason, func(t *testing.T) {
 			r := coreRequest()
-			_, err := New(api.StorageCluster, &refusingRunner{reason: reason}).Observe(context.Background(), withMaterial(executionFor(t, r), r))
+			_, err := New(api.CephCluster, &refusingRunner{reason: reason}).Observe(context.Background(), withMaterial(executionFor(t, r), r))
 			if d := diagnostics.Of(err); len(d) != 1 || d[0].Code != "lifecycle.unsupported" || d[0].Message != message || d[0].Remediation == "" {
 				t.Fatalf("a cluster %s refusal reached the operator as %+v", reason, d)
 			}

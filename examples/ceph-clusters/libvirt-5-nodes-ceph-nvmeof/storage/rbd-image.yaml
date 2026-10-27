@@ -1,0 +1,16 @@
+apiVersion: bootwright.io/v1alpha1
+kind: CephRBDImage
+metadata:
+  name: rbd-disk
+
+spec:
+  clusterRef: ceph-lab
+  poolRef: rbd-data
+  sizeBytes: 1073741824
+
+  features:
+    - layering
+    - exclusive-lock
+    - object-map
+    - fast-diff
+    - deep-flatten

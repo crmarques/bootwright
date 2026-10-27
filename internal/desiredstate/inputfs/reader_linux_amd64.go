@@ -37,6 +37,7 @@ type discovery struct {
 	entries     int
 	filePaths   int
 	markerPaths int
+	secrets     []string
 }
 
 func (r Reader) Read(ctx context.Context, paths []string) (desiredstate.Sources, error) {
@@ -149,7 +150,8 @@ func (r Reader) read(ctx context.Context, paths []string, directoryOnly bool) (d
 	if err := scan.verifyDirectories(); err != nil {
 		return desiredstate.Sources{}, err
 	}
-	return desiredstate.Sources{Roots: roots, Files: files, Markers: markers}, nil
+	slices.Sort(scan.secrets)
+	return desiredstate.Sources{Roots: roots, Files: files, Markers: markers, SkippedSecrets: slices.Compact(scan.secrets)}, nil
 }
 
 // begin starts the one session every open of an acquisition goes through;
@@ -276,6 +278,12 @@ func (s *discovery) directory(path string, depth int) error {
 			if handle != nil {
 				handle.Close()
 			}
+			if isDir && entry.name == desiredstate.SecretsDirectory && !marker {
+				budget := desiredstate.MaxEntries
+				if s.holdsYAML(file, entry.name, depth+1, &budget) {
+					s.secrets = append(s.secrets, child)
+				}
+			}
 			continue
 		}
 		if handle == nil {
@@ -315,6 +323,35 @@ func (s *discovery) directory(path string, depth int) error {
 	}
 	s.directories[path] = before
 	return nil
+}
+
+func (s *discovery) holdsYAML(parent *os.File, name string, depth int, budget *int) bool {
+	if depth > desiredstate.MaxPathDepth || *budget <= 0 || s.ctx.Err() != nil {
+		return false
+	}
+	directory, err := s.session.OpenAt(parent, name, syscall.O_RDONLY|syscall.O_DIRECTORY)
+	if err != nil {
+		return false
+	}
+	defer directory.Close()
+	entries, err := s.listing(directory, *budget+1)
+	if err != nil {
+		return false
+	}
+	*budget -= len(entries)
+	slices.SortFunc(entries, func(a, b directoryEntry) int { return strings.Compare(a.name, b.name) })
+	for _, entry := range entries {
+		if *budget < 0 {
+			return false
+		}
+		if entry.kind == syscall.DT_REG && yamlPath(entry.name) {
+			return true
+		}
+		if entry.kind == syscall.DT_DIR && s.holdsYAML(directory, entry.name, depth+1, budget) {
+			return true
+		}
+	}
+	return false
 }
 
 func (s *discovery) candidate(path string, stat syscall.Stat_t, marker bool) error {

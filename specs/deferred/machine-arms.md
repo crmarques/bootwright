@@ -39,18 +39,16 @@ domain exists; with one domain the reference is implicit.
 
 Node networking has one owner, the cluster's
 `spec.install.platform.vsphere.nodeNetworking`
-([platform union](../api/container-clusters.md#platform-union-and-derivation)),
-so this arm carries no `nodeNetworking` field and no rule that requires it.
-
-Not yet met: the closed schema still admits `spec.vsphere.nodeNetworking` and
-requires it for a failure domain with more than one topology network; tracked
-as [B827](../milestones/backlog.md#b827).
+([platform union](../api/openshift-clusters.md#platform-union-and-derivation)),
+so this arm carries no `nodeNetworking` field and no rule that requires it;
+the arm's former `spec.vsphere.nodeNetworking` is a
+[retired field](../api.md#retired-fields).
 
 ### KubeVirt arm
 
 | Field | Type | Required | Default | Rule |
 | --- | --- | --- | --- | --- |
-| `spec.kubevirt.hostClusterRef` | string | union | — | Global `ContainerCluster` reference. |
+| `spec.kubevirt.hostClusterRef` | string | union | — | Global `OpenShiftCluster` reference. |
 | `spec.kubevirt.kubeconfigRef` | string | union | — | Kubeconfig-bearing `opaque` `Secret` reference. |
 | `spec.kubevirt.namespace` | string | yes | — | Kubernetes DNS label. |
 | `spec.kubevirt.storageClassRef` | string | no | — | External Kubernetes storage-class name. |
@@ -86,23 +84,27 @@ the native resource's scope.
 
 ## Machine fields
 
-Each virtual arm states where an interface's MAC comes from. A libvirt
-interface's MAC is derived by the provider and never authored
+Each virtual Machine arm ([substrate arm](../api/machines.md#substrate-arm))
+states where an interface's MAC comes from. A libvirt interface's MAC is
+derived by the provider and never authored
 ([machine realization](../substrates.md#machine-realization)). A vSphere MAC
-is authored in the manual assignment range `00:50:56:00:00:00` through
-`00:50:56:3f:ff:ff`, or else derived in that range from the context, Machine
-and interface names
+is authored in `spec.substrate.vsphere.nics[].macAddress`, in the manual
+assignment range `00:50:56:00:00:00` through `00:50:56:3f:ff:ff`, or else
+derived in that range from the context, Machine and interface names
 ([vSphere machine realization](../substrates.md#vsphere-machine-realization)).
 A KubeVirt interface carries a pinned `macAddress`
 ([KubeVirt machine realization](../substrates.md#kubevirt-machine-realization))
 that the provider derives from the context, Machine and interface names, as
-libvirt's does, and that is never authored: a KubeVirt Machine's
-`hardware.nics[].macAddress` refuses, and it authors no `interfaceBinding`
+libvirt's does, and that is never authored: the KubeVirt arm has no MAC field,
+and a KubeVirt Machine's `network.interfaceBinding` refuses
 ([B87](../milestones/m1.md#b87), D183, Q79).
 
 | Field | Type | Required | Default | Rule |
 | --- | --- | --- | --- | --- |
-| `interfaceAttachments` | array | conditional | `[]` | Per-interface attachments, on libvirt as on KubeVirt, as [network configuration](../api/machines.md#network-configuration) states; on a KubeVirt Machine each `attachmentRef` resolves to a KubeVirt arm of its provider. |
+| `spec.substrate.kubevirt.profileRef` | string | conditional | — | Provider-local `machineProfiles[].name`; required when the OS is not provided. |
+| `spec.substrate.kubevirt.interfaceAttachments` | array | conditional | — | Per-interface attachments, on libvirt as on KubeVirt, as [network configuration](../api/machines.md#network-configuration) states; each `attachmentRef` resolves to a KubeVirt arm of its provider. |
+| `spec.substrate.vsphere.profileRef` | string | conditional | — | Provider-local `machineProfiles[].name`; required when the OS is not provided. The profile carries `template` and `failureDomainRef`. |
+| `spec.substrate.vsphere.nics` | array | no | — | `{nicRef, macAddress}` keyed by `nicRef`, each MAC in the manual assignment range above. |
 
 ## Template-clone installer arm
 

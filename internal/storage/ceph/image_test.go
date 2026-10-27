@@ -30,7 +30,7 @@ func imageBlock(t *testing.T, cluster, authored string) reconciliation.Block {
 	if err != nil {
 		t.Fatal(err)
 	}
-	definition := reconciliation.BlockDefinition{ID: ImageBlockID(cluster), Kind: string(api.StorageCluster), Object: cluster, Implementation: ImageImplementation, ContentDigest: ImageContentDigest(), Request: canonical}
+	definition := reconciliation.BlockDefinition{ID: ImageBlockID(cluster), Kind: string(api.CephCluster), Object: cluster, Implementation: ImageImplementation, ContentDigest: ImageContentDigest(), Request: canonical}
 	digest, err := reconciliation.RequestDigest(definition)
 	if err != nil {
 		t.Fatal(err)
@@ -73,7 +73,7 @@ func TestPlanEmitsTheImageBlockEveryCephBlockDependsOn(t *testing.T) {
 		t.Fatal(diagnostics.Of(err))
 	}
 	definitions = append(definitions, hosts.Definitions...)
-	for _, kind := range []api.Kind{api.StorageCluster, api.StoragePool, api.StorageClient} {
+	for _, kind := range []api.Kind{api.CephCluster, api.CephPool, api.CephClient} {
 		plan, err := New(kind, runner).Plan(context.Background(), input)
 		if err != nil {
 			t.Fatal(kind, diagnostics.Of(err))
@@ -94,7 +94,7 @@ func TestPlanEmitsTheImageBlockEveryCephBlockDependsOn(t *testing.T) {
 		blocks[block.ID] = block
 	}
 	resolved, ok := blocks["ceph-image-example"]
-	if !ok || resolved.Implementation != ImageImplementation || resolved.Stage != reconciliation.StageClusters || resolved.Kind != string(api.StorageCluster) || resolved.Object != "example" || len(resolved.Dependencies) != 0 {
+	if !ok || resolved.Implementation != ImageImplementation || resolved.Stage != reconciliation.StageClusters || resolved.Kind != string(api.CephCluster) || resolved.Object != "example" || len(resolved.Dependencies) != 0 {
 		t.Fatalf("image block %+v", resolved)
 	}
 	request, err := DecodeImageRequest(resolved.Request)
@@ -115,7 +115,7 @@ func TestPrepareFillsTheImageFromTheOriginalResolutionWithoutResolvingAgain(t *t
 	r := coreRequest()
 	first := executionFor(t, r)
 	frozen := bytes.Clone(first.Block.Request)
-	capability := New(api.StorageCluster, nil)
+	capability := New(api.CephCluster, nil)
 	prepared, err := capability.prepare(context.Background(), first)
 	if err != nil || prepared.Image != PinnedRepository+"@"+resolvedDigest {
 		t.Fatalf("prepared image %q err=%v", prepared.Image, err)
@@ -168,7 +168,7 @@ func TestPrepareRefusesMissingAmbiguousOrForeignResolution(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			e := executionFor(t, coreRequest())
 			damage(&e)
-			if _, err := New(api.StorageCluster, nil).prepare(context.Background(), e); err == nil {
+			if _, err := New(api.CephCluster, nil).prepare(context.Background(), e); err == nil {
 				t.Fatal("missing, ambiguous or foreign image resolution accepted")
 			}
 		})
@@ -180,14 +180,14 @@ func TestAuthoredDigestMustEqualTheResolvedChildManifest(t *testing.T) {
 	r := coreRequest()
 	r.Image = authored
 	e := executionFor(t, r)
-	if prepared, err := New(api.StorageCluster, nil).prepare(context.Background(), e); err != nil || prepared.Image != authored {
+	if prepared, err := New(api.CephCluster, nil).prepare(context.Background(), e); err != nil || prepared.Image != authored {
 		t.Fatalf("matching authored digest refused: %v", err)
 	}
 	index := "sha256:" + strings.Repeat("e", 64)
 	e.ApplyProved = []lifecycle.BlockEvidence{imageProof(t, r.Cluster, PinnedRepository+"@"+index, resolvedDigest)}
 	r.Image = PinnedRepository + "@" + index
 	e.Block.Request, _ = r.Canonical()
-	if _, err := New(api.StorageCluster, nil).prepare(context.Background(), e); len(diagnostics.Of(err)) != 1 || !strings.Contains(diagnostics.Of(err)[0].Message, "image-digest-mismatch") {
+	if _, err := New(api.CephCluster, nil).prepare(context.Background(), e); len(diagnostics.Of(err)) != 1 || !strings.Contains(diagnostics.Of(err)[0].Message, "image-digest-mismatch") {
 		t.Fatalf("index digest accepted: %v", diagnostics.Of(err))
 	}
 	block := imageBlock(t, "example", PinnedRepository+"@"+index)

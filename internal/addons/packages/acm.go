@@ -23,7 +23,7 @@ func normalizeACM(v api.Value) api.Value {
 
 func admitACM(i addons.Instance, f addons.ClusterFacts) []api.Issue {
 	if len(f.Nodes) == 1 && i.Config.Get("hub", "availabilityConfig").Text() != "Basic" {
-		return []api.Issue{{Code: "api.invariant", Field: ".hub.availabilityConfig", Message: "package acm on single-node ContainerCluster/" + i.Cluster + " needs hub availabilityConfig Basic", Remediation: "set hub availabilityConfig to Basic"}}
+		return []api.Issue{{Code: "api.invariant", Field: ".hub.availabilityConfig", Message: "package acm on single-node OpenShiftCluster/" + i.Cluster + " needs hub availabilityConfig Basic", Remediation: "set hub availabilityConfig to Basic"}}
 	}
 	return nil
 }

@@ -55,6 +55,14 @@ type State struct {
 	authored  api.Catalog
 	effective api.Catalog
 	origins   map[string]diagnostics.SourceLocation
+	fields    map[string]func() []FieldOrigin
+}
+
+func (s *State) FieldOrigins(identity string) []FieldOrigin {
+	if origins, ok := s.fields[identity]; ok {
+		return origins()
+	}
+	return nil
 }
 
 func NewState(authored, effective api.Catalog, origins map[string]diagnostics.SourceLocation) *State {
@@ -99,6 +107,7 @@ func (c Compiler) Compile(ctx context.Context, sources desiredstate.Sources) (*S
 		}
 		return compilationFailure(ctx, ds)
 	}
+	ds.skippedSecrets(sources.SkippedSecrets)
 	r := &run{
 		compiler: c, sources: sources, documents: documents, parsed: parseDiagnostics, ds: ds,
 		report: &Report{

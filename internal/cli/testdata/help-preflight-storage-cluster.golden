@@ -1,5 +1,5 @@
   bootwright / preflight storage-cluster
-      Check StorageCluster readiness
+      Check CephCluster readiness
 
   Usage
     bootwright preflight storage-cluster [flags]

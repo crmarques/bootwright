@@ -98,11 +98,11 @@ func ComposeNetwork(o api.Object, c api.Catalog) (api.Value, []api.Issue) {
 	issues = appendIssues(issues, bindingIssues...)
 	for index, binding := range bindings.Items() {
 		position := interfaceIndex(interfaces, binding.Get("interfaceName").Text())
-		nic, exists := namedValue(o.Spec().Get("hardware", "nics"), binding.Get("nicRef").Text())
-		if position < 0 || !exists || !nic.Has("macAddress") {
+		address := substrate.MachineMAC(o, binding.Get("nicRef").Text())
+		if position < 0 || address == "" {
 			continue
 		}
-		mac, ok := canonicalMAC(nic.Get("macAddress").Text())
+		mac, ok := canonicalMAC(address)
 		if !ok {
 			continue
 		}

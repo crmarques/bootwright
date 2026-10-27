@@ -35,7 +35,7 @@ func (c Capability) Plan(ctx context.Context, input lifecycle.PlanInput) (lifecy
 	if len(issues) > 0 {
 		return plan, fmt.Errorf("cluster network provider selection: %s", issues[0].Issue.Message)
 	}
-	for _, cluster := range catalog.OfKind(api.ContainerCluster) {
+	for _, cluster := range catalog.OfKind(api.OpenShiftCluster) {
 		if cluster.Spec().Get("networking", "secondaryNetworks").Len() == 0 {
 			continue
 		}
@@ -54,7 +54,7 @@ func (c Capability) Plan(ctx context.Context, input lifecycle.PlanInput) (lifecy
 		if err != nil {
 			return plan, err
 		}
-		requires := []reconciliation.ObjectRef{{Kind: "ContainerCluster", Object: cluster.Name()}}
+		requires := []reconciliation.ObjectRef{{Kind: "OpenShiftCluster", Object: cluster.Name()}}
 		for _, instance := range selected {
 			if instance.Instance.Cluster == cluster.Name() && slices.Contains(instance.Package.Provides, "nmstate") {
 				requires = append(requires, reconciliation.ObjectRef{Kind: "ClusterAddonBinding", Object: cluster.Name() + "." + instance.Package.Name})
@@ -86,14 +86,14 @@ func renderRequest(cluster api.Object, controller string) (Request, error) {
 	if err != nil {
 		return Request{}, err
 	}
-	return Request{BudgetSeconds: 1800, Cluster: cluster.Name(), Placement: machine.Placement{Connection: machine.ConnectionLocal, Machine: controller}, ProducedInputs: []lifecycle.ProducedInput{{Kind: "ContainerCluster", Object: cluster.Name(), Output: "kubeconfig"}}, Program: data, Tool: Tool{Kind: "openshift-clients", Compatibility: "openshift", Version: cluster.Spec().Get("distribution", "release", "version").Text()}, Version: requestVersion}, nil
+	return Request{BudgetSeconds: 1800, Cluster: cluster.Name(), Placement: machine.Placement{Connection: machine.ConnectionLocal, Machine: controller}, ProducedInputs: []lifecycle.ProducedInput{{Kind: "OpenShiftCluster", Object: cluster.Name(), Output: "kubeconfig"}}, Program: data, Tool: Tool{Kind: "openshift-clients", Compatibility: "openshift", Version: cluster.Spec().Get("distribution", "release", "version").Text()}, Version: requestVersion}, nil
 }
 func (c Capability) Unsupported(state *compilation.State) []lifecycle.Refusal {
 	if state == nil {
 		return nil
 	}
 	result := []lifecycle.Refusal{}
-	for _, cluster := range state.Effective().OfKind(api.ContainerCluster) {
+	for _, cluster := range state.Effective().OfKind(api.OpenShiftCluster) {
 		if cluster.Spec().Get("networking", "secondaryNetworks").Len() == 0 {
 			continue
 		}

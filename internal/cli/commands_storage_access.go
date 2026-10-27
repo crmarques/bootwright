@@ -10,9 +10,9 @@ import (
 
 func storageAccessCommands() []commandSpec {
 	return []commandSpec{
-		available(commandSpec{path: "cluster keyring", short: "Export a StorageClient's raw sensitive Ceph keyring bytes to standard output",
-			flags: []flagSpec{nameFlag(), requiredFlag("client", "Select the exact StorageClient name")},
-			long:  "Export the raw sensitive Ceph keyring bytes of one StorageClient to standard output. Applicable to managed Ceph StorageClusters only."}),
+		available(commandSpec{path: "cluster keyring", short: "Export a CephClient's raw sensitive Ceph keyring bytes to standard output",
+			flags: []flagSpec{nameFlag(), requiredFlag("client", "Select the exact CephClient name")},
+			long:  "Export the raw sensitive Ceph keyring bytes of one CephClient to standard output. Applicable to managed CephClusters only."}),
 	}
 }
 
@@ -45,6 +45,6 @@ func keyringWarnings(result *inspection.KeyringResult) []diagnostic {
 	if !result.Unproved {
 		return nil
 	}
-	return []diagnostic{{Severity: "warning", Code: "access.unproved", Message: "the keyring of StorageClient " + result.Client + " of StorageCluster " + result.Cluster +
+	return []diagnostic{{Severity: "warning", Code: "access.unproved", Message: "the keyring of CephClient " + result.Client + " of CephCluster " + result.Cluster +
 		" was kept from an apply that never proved it, so the access it grants was not proved"}}
 }

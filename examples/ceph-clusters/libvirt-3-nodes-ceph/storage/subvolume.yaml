@@ -1,0 +1,9 @@
+apiVersion: bootwright.io/v1alpha1
+kind: CephSubvolume
+metadata:
+  name: docs
+
+spec:
+  clusterRef: ceph-lab
+  filesystemRef: files
+  sizeBytes: 1073741824

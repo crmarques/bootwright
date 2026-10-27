@@ -59,7 +59,9 @@ func (c PhysicalRetirementCapability) WithUninstalledProofs(reader PhysicalUnins
 	return c
 }
 
-func PhysicalRetirementBlockID(cluster string) string { return "ceph-erase-" + cluster }
+func PhysicalRetirementBlockID(cluster string) string {
+	return reconciliation.BlockIdentity("ceph-erase-", cluster)
+}
 
 func PhysicalRetirementContentDigest() string {
 	digest := sha256.Sum256([]byte(PhysicalRetirementImplementation + ":original-host-and-completed-erase-proof-v1"))
@@ -107,10 +109,10 @@ func (PhysicalRetirementCapability) PhysicalRetirement(catalog api.Catalog, mach
 	if !found || !substrate.RealizesPhysicalNICs(provider) {
 		return references, nil
 	}
-	for _, cluster := range catalog.OfKind(api.StorageCluster) {
-		for _, node := range cluster.Spec().Get("ceph", "topology", "nodes").Items() {
+	for _, cluster := range catalog.OfKind(api.CephCluster) {
+		for _, node := range cluster.Spec().Get("topology", "nodes").Items() {
 			if node.Get("machineRef").Text() == machineName {
-				references = append(references, reconciliation.ObjectRef{Kind: string(api.StorageCluster), Object: cluster.Name(), Family: PhysicalRetirementFamily})
+				references = append(references, reconciliation.ObjectRef{Kind: string(api.CephCluster), Object: cluster.Name(), Family: PhysicalRetirementFamily})
 				break
 			}
 		}
@@ -167,7 +169,7 @@ func (c PhysicalRetirementCapability) Plan(ctx context.Context, input lifecycle.
 		return plan, physicalPolicyFailure()
 	}
 	catalog := input.State.Effective()
-	for _, object := range catalog.OfKind(api.StorageCluster) {
+	for _, object := range catalog.OfKind(api.CephCluster) {
 		cluster, err := baseRequest(catalog, object, input.Context.Name)
 		if err != nil {
 			return plan, err
@@ -185,7 +187,7 @@ func (c PhysicalRetirementCapability) Plan(ctx context.Context, input lifecycle.
 			return plan, err
 		}
 		definition := reconciliation.BlockDefinition{ID: PhysicalRetirementBlockID(cluster.Cluster), Description: "retain the physical Ceph retirement policy of " + cluster.Cluster,
-			Stage: reconciliation.StageMachines, Requires: claims, Kind: string(api.StorageCluster), Object: cluster.Cluster, Family: PhysicalRetirementFamily, Implementation: PhysicalRetirementImplementation,
+			Stage: reconciliation.StageMachines, Requires: claims, Kind: string(api.CephCluster), Object: cluster.Cluster, Family: PhysicalRetirementFamily, Implementation: PhysicalRetirementImplementation,
 			ContentDigest: PhysicalRetirementContentDigest(), Request: canonical}
 		if input.Verb == reconciliation.Destroy {
 			definition.Description = "verify physical Ceph retirement before releasing " + cluster.Cluster

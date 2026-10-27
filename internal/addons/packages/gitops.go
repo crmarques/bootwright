@@ -35,7 +35,7 @@ func admitGitOps(i addons.Instance, _ addons.ClusterFacts) []api.Issue {
 	}
 	u, err := url.Parse(b.Get("repoURL").Text())
 	if err == nil && u.User != nil {
-		add("api.field", "repoURL", "bootstrap repoURL of package gitops carries user information", "remove the user information and name a usernamePassword Secret in bootstrap.credentials")
+		add("api.field", "repoURL", "bootstrap repoURL of package gitops carries user information", "remove the user information and name a usernamePassword Secret in bootstrap.credentialsRef")
 	} else if err != nil || u.Scheme != "https" || u.Hostname() == "" || u.RawQuery != "" || u.ForceQuery || u.Fragment != "" || strings.Contains(b.Get("repoURL").Text(), "#") {
 		add("api.field", "repoURL", "bootstrap repoURL of package gitops is not an https URL with a host and no query or fragment", "set the https URL of the repository")
 	}
@@ -70,8 +70,8 @@ func renderGitOps(i addons.Instance) (addons.Rendered, error) {
 		return result, nil
 	}
 	phase := co.Phase{Gate: []co.Check{crd("applications.argoproj.io"), phaseCheck(argo, "status.phase", "Available")}}
-	if b.Credentials != "" {
-		phase.Secrets = []co.SecretPlacement{{Secret: b.Credentials, Namespace: "openshift-gitops", Name: "bootwright-bootstrap-repository", Type: "Opaque", Keys: []co.KeyPart{{Key: "username", Part: "username"}, {Key: "password", Part: "password"}}, Labels: map[string]string{"argocd.argoproj.io/secret-type": "repository"}, Strings: map[string]string{"type": "git", "url": b.RepoURL}}}
+	if b.CredentialsRef != "" {
+		phase.Secrets = []co.SecretPlacement{{Secret: b.CredentialsRef, Namespace: "openshift-gitops", Name: "bootwright-bootstrap-repository", Type: "Opaque", Keys: []co.KeyPart{{Key: "username", Part: "username"}, {Key: "password", Part: "password"}}, Labels: map[string]string{"argocd.argoproj.io/secret-type": "repository"}, Strings: map[string]string{"type": "git", "url": b.RepoURL}}}
 	}
 	if b.Access != nil {
 		role := co.Ref{APIVersion: "rbac.authorization.k8s.io/v1", Kind: "ClusterRole", Name: b.Access.ClusterRole}

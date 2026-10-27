@@ -17,7 +17,7 @@ import (
 
 func TestAdmittedInertFieldsDoNotChangePlans(t *testing.T) {
 	base := singleNodeCatalog()
-	cluster, _ := base.Find(api.ContainerCluster, "sno")
+	cluster, _ := base.Find(api.OpenShiftCluster, "sno")
 	changes := map[string]api.Value{
 		"release channel": cluster.Spec().WithPath(api.StringValue("fast-4.21"), "distribution", "release", "channel"),
 	}
@@ -42,7 +42,7 @@ func TestAdmittedInertFieldsDoNotChangePlans(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			objects := base.Objects()
 			for i, object := range objects {
-				if object.Kind() == api.ContainerCluster {
+				if object.Kind() == api.OpenShiftCluster {
 					objects[i] = object.WithSpec(spec)
 				}
 			}
@@ -73,7 +73,7 @@ func TestAdmittedInertFieldsDoNotChangePlans(t *testing.T) {
 // at its own path, so plan and apply name the field to change.
 func TestUnusedEndpointFieldsRefuseAtTheirPath(t *testing.T) {
 	base := singleNodeCatalog()
-	cluster, _ := base.Find(api.ContainerCluster, "sno")
+	cluster, _ := base.Find(api.OpenShiftCluster, "sno")
 	for _, test := range []struct {
 		slot, field string
 		value       api.Value
@@ -89,7 +89,7 @@ func TestUnusedEndpointFieldsRefuseAtTheirPath(t *testing.T) {
 		t.Run(path, func(t *testing.T) {
 			objects := base.Objects()
 			for i, object := range objects {
-				if object.Kind() == api.ContainerCluster {
+				if object.Kind() == api.OpenShiftCluster {
 					objects[i] = cluster.WithSpec(cluster.Spec().WithPath(test.value, "install", "endpoints", test.slot, test.field))
 				}
 			}
@@ -105,11 +105,11 @@ func TestUnusedEndpointFieldsRefuseAtTheirPath(t *testing.T) {
 
 func TestClusterNameAdmissionBoundFitsEveryBlock(t *testing.T) {
 	for _, blockID := range []func(string) string{MediaBlockID, InstallBlockID} {
-		if !api.ValidLexical("name", blockID(strings.Repeat("a", 47))) {
-			t.Fatal("admitted cluster name exceeds a block identity bound")
+		if block := blockID(strings.Repeat("a", 63)); !api.ValidLexical("name", block) || block == blockID(strings.Repeat("a", 62)+"b") {
+			t.Fatalf("a 63-byte cluster name yields %q, not a distinct block identity", block)
 		}
 	}
-	if api.ValidLexical("name", InstallBlockID(strings.Repeat("a", 48))) {
-		t.Fatal("installation block no longer establishes the 47-byte admission bound")
+	if got, want := InstallBlockID(strings.Repeat("a", 47)), "cluster-install-"+strings.Repeat("a", 47); got != want {
+		t.Fatalf("a 63-byte identity moved to %q", got)
 	}
 }

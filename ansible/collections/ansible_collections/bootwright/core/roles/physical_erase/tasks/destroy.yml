@@ -7,12 +7,12 @@
 - name: Validate the frozen private physical erase boundary
   ansible.builtin.assert:
     that:
-      - bootwright_physical_erase_request.version == 'physical-erase-v1'
+      - bootwright_physical_erase_request.version == 'physical-erase-v2'
       - bootwright_physical_erase_request.install.target.physical | bool
       - bootwright_physical_erase_request.install.target.substrate == 'baremetal'
       - bootwright_physical_erase_request.install.target.controller.tlsVerify | bool
       - bootwright_physical_erase_request.install.target.controller.endpoint.startswith('https://')
-      - bootwright_physical_erase_request.install.target.controller.virtualMedia.trust in ['established', 'import-certificate']
+      - bootwright_physical_erase_request.install.target.controller.virtualMedia.trust in ['established', 'importCertificate']
       - bootwright_physical_erase_material.pinnedUUIDBase64 | length > 0
     quiet: true
   no_log: true

@@ -92,7 +92,7 @@
     fail_msg: >-
       the machine answering at {{ substrate_baremetal_machine_target_endpoint }}
       is not the system this operation proved for its Machine, so it must not
-      be erased; correct spec.hardware.management.bmc.address, or destroy and
+      be erased; correct spec.substrate.baremetal.bmc.address, or destroy and
       apply this context so the machine is proved again
     quiet: true
 

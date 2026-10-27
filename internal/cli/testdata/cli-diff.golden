@@ -3,19 +3,18 @@ Against:  apply op-3f9a0c12 (done) of input revision rev-1b7e55a0, as its record
 Input:    changed since op-3f9a0c12; bootwright apply refuses it until bootwright destroy --context lab takes back what that apply owns
 Plan:     this executable plans 1 block differently, 1 more and 1 fewer
 
-diff applied/StoragePool/rbd-archive desired/StoragePool/rbd-archive
+diff applied/CephPool/rbd-archive desired/CephPool/rbd-archive
 # plan: added (ceph-pool-rbd-archive); realized: none
 # no operation of this context realized it
 --- /dev/null
-+++ desired/StoragePool/rbd-archive
-@@ -0,0 +1,13 @@
++++ desired/CephPool/rbd-archive
+@@ -0,0 +1,12 @@
 +apiVersion: bootwright.io/v1alpha1
-+kind: StoragePool
++kind: CephPool
 +metadata:
 +  name: rbd-archive
 +spec:
 +  clusterRef: ceph-lab
-+  type: replicated
 +  role: rbd
 +  replicated:
 +    size: 3
@@ -23,12 +22,12 @@ diff applied/StoragePool/rbd-archive desired/StoragePool/rbd-archive
 +  autoscale:
 +    mode: on
 
-diff applied/StoragePool/rbd-data desired/StoragePool/rbd-data
+diff applied/CephPool/rbd-data desired/CephPool/rbd-data
 # plan: changed (ceph-pool-rbd-data); realized: done
---- applied/StoragePool/rbd-data
-+++ desired/StoragePool/rbd-data
-@@ -7,7 +7,7 @@
-   type: replicated
+--- applied/CephPool/rbd-data
++++ desired/CephPool/rbd-data
+@@ -6,7 +6,7 @@
+   clusterRef: ceph-lab
    role: rbd
    replicated:
 -    size: 2
@@ -37,18 +36,18 @@ diff applied/StoragePool/rbd-data desired/StoragePool/rbd-data
    autoscale:
      mode: on
 
-diff applied/StorageClient/rbd-canary desired/StorageClient/rbd-canary
+diff applied/CephClient/rbd-canary desired/CephClient/rbd-canary
 # plan: removed (ceph-client-rbd-canary); realized: done
---- applied/StorageClient/rbd-canary
+--- applied/CephClient/rbd-canary
 +++ /dev/null
 @@ -1,8 +0,0 @@
 -apiVersion: bootwright.io/v1alpha1
--kind: StorageClient
+-kind: CephClient
 -metadata:
 -  name: rbd-canary
 -spec:
 -  clusterRef: ceph-lab
 -  poolRef: rbd-data
--  access: read-write
+-  access: readWrite
 
 3 objects differ: 1 changed, 1 added, 1 removed, 0 unknown; 1 unchanged

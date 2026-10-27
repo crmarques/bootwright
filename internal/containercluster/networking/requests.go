@@ -56,7 +56,7 @@ func (r Request) validate() error {
 	if r.Tool.Kind != "openshift-clients" || r.Tool.Compatibility != "openshift" || r.Tool.Version == "" {
 		return fmt.Errorf("invalid cluster network client")
 	}
-	if len(r.ProducedInputs) != 1 || r.ProducedInputs[0] != (lifecycle.ProducedInput{Kind: "ContainerCluster", Object: r.Cluster, Output: "kubeconfig"}) {
+	if len(r.ProducedInputs) != 1 || r.ProducedInputs[0] != (lifecycle.ProducedInput{Kind: "OpenShiftCluster", Object: r.Cluster, Output: "kubeconfig"}) {
 		return fmt.Errorf("cluster network must consume its cluster kubeconfig")
 	}
 	program, err := r.Objects()

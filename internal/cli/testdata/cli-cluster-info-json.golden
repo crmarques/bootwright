@@ -8,17 +8,17 @@
     "clusters": [
       {
         "name": "edge",
-        "kind": "ContainerCluster",
+        "kind": "OpenShiftCluster",
         "accessCommands": [
           {
             "command": "cluster exec",
             "status": "not-implemented",
-            "reason": "sessions on an OpenShift or OKD ContainerCluster are not yet implemented; the cluster is reached through bootwright cluster kubeconfig"
+            "reason": "sessions on an OpenShiftCluster are not yet implemented; the cluster is reached through bootwright cluster kubeconfig"
           },
           {
             "command": "cluster keyring",
             "status": "not-applicable",
-            "reason": "applies to managed Ceph StorageClusters only"
+            "reason": "applies to managed CephClusters only"
           },
           {
             "command": "cluster kubeconfig",
@@ -37,23 +37,23 @@
           {
             "command": "cluster rsh",
             "status": "not-implemented",
-            "reason": "sessions on an OpenShift or OKD ContainerCluster are not yet implemented; the cluster is reached through bootwright cluster kubeconfig"
+            "reason": "sessions on an OpenShiftCluster are not yet implemented; the cluster is reached through bootwright cluster kubeconfig"
           }
         ]
       },
       {
         "name": "okd-lab",
-        "kind": "ContainerCluster",
+        "kind": "OpenShiftCluster",
         "accessCommands": [
           {
             "command": "cluster exec",
             "status": "not-implemented",
-            "reason": "sessions on an OpenShift or OKD ContainerCluster are not yet implemented; the cluster is reached through bootwright cluster kubeconfig"
+            "reason": "sessions on an OpenShiftCluster are not yet implemented; the cluster is reached through bootwright cluster kubeconfig"
           },
           {
             "command": "cluster keyring",
             "status": "not-applicable",
-            "reason": "applies to managed Ceph StorageClusters only"
+            "reason": "applies to managed CephClusters only"
           },
           {
             "command": "cluster kubeconfig",
@@ -72,7 +72,7 @@
           {
             "command": "cluster rsh",
             "status": "not-implemented",
-            "reason": "sessions on an OpenShift or OKD ContainerCluster are not yet implemented; the cluster is reached through bootwright cluster kubeconfig"
+            "reason": "sessions on an OpenShiftCluster are not yet implemented; the cluster is reached through bootwright cluster kubeconfig"
           }
         ]
       }
@@ -80,43 +80,43 @@
     "storage": [
       {
         "name": "archive",
-        "kind": "StorageCluster",
+        "kind": "CephCluster",
         "accessCommands": [
           {
             "command": "cluster exec",
             "status": "not-applicable",
-            "reason": "the external StorageCluster archive declares no node roster; sessions apply to managed Ceph StorageClusters"
+            "reason": "the external CephCluster archive declares no node roster; sessions apply to managed CephClusters"
           },
           {
             "command": "cluster keyring",
             "status": "not-applicable",
-            "reason": "applies to managed Ceph StorageClusters only"
+            "reason": "applies to managed CephClusters only"
           },
           {
             "command": "cluster kubeconfig",
             "status": "not-applicable",
-            "reason": "applies to OpenShift and OKD ContainerClusters only"
+            "reason": "applies to OpenShiftClusters only"
           },
           {
             "command": "cluster kubectl",
             "status": "not-applicable",
-            "reason": "applies to OpenShift and OKD ContainerClusters only"
+            "reason": "applies to OpenShiftClusters only"
           },
           {
             "command": "cluster oc",
             "status": "not-applicable",
-            "reason": "applies to OpenShift and OKD ContainerClusters only"
+            "reason": "applies to OpenShiftClusters only"
           },
           {
             "command": "cluster rsh",
             "status": "not-applicable",
-            "reason": "the external StorageCluster archive declares no node roster; sessions apply to managed Ceph StorageClusters"
+            "reason": "the external CephCluster archive declares no node roster; sessions apply to managed CephClusters"
           }
         ]
       },
       {
         "name": "storage",
-        "kind": "StorageCluster",
+        "kind": "CephCluster",
         "accessCommands": [
           {
             "command": "cluster exec",
@@ -130,17 +130,17 @@
           {
             "command": "cluster kubeconfig",
             "status": "not-applicable",
-            "reason": "applies to OpenShift and OKD ContainerClusters only"
+            "reason": "applies to OpenShiftClusters only"
           },
           {
             "command": "cluster kubectl",
             "status": "not-applicable",
-            "reason": "applies to OpenShift and OKD ContainerClusters only"
+            "reason": "applies to OpenShiftClusters only"
           },
           {
             "command": "cluster oc",
             "status": "not-applicable",
-            "reason": "applies to OpenShift and OKD ContainerClusters only"
+            "reason": "applies to OpenShiftClusters only"
           },
           {
             "command": "cluster rsh",
@@ -198,19 +198,19 @@
         },
         "resources": [
           {
-            "kind": "StoragePool",
+            "kind": "CephPool",
             "name": "rbd-data",
             "status": "done",
             "scope": "replicated size 2/min 2, application rbd"
           },
           {
-            "kind": "StorageClient",
+            "kind": "CephClient",
             "name": "rbd-canary",
             "status": "done",
             "scope": "client.rbd-canary read-write on pool rbd-data"
           },
           {
-            "kind": "StorageObjectGateway",
+            "kind": "CephObjectGateway",
             "name": "objects",
             "status": "unsupported",
             "scope": "zone lab/lab/lab-a"

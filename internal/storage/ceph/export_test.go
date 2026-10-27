@@ -26,25 +26,25 @@ func managedExportPlan(t *testing.T, gateway bool) reconciliation.BlockDefinitio
 		refs = refs.With("objectGatewayRef", api.StringValue("objects"))
 		children = append(children, objectGateway("objects", "endpoint", requestMap("fqdn", "objects.example.test")))
 	}
-	children = append(children, childOf(api.StorageExport, "consumer", "dataFoundation", refs))
+	children = append(children, childOf(api.CephConsumer, "consumer", "dataFoundation", refs))
 	change := func(spec api.Value) api.Value {
 		spec = withMDS(spec)
-		services := append(spec.Get("ceph", "services").Items(), requestMap("service_type", "prometheus", "placement", requestMap("count", 1)))
-		spec = spec.WithPath(api.ListValue(services...), "ceph", "services")
+		services := append(spec.Get("services").Items(), requestMap("service_type", "prometheus", "placement", requestMap("count", 1)))
+		spec = spec.WithPath(api.ListValue(services...), "services")
 		if gateway {
 			spec = withPairAndHTTPRGW(spec)
-			services := spec.Get("ceph", "services").Items()
+			services := spec.Get("services").Items()
 			for i, service := range services {
 				if service.Get("service_type").Text() == "rgw" {
 					services[i] = service.WithPath(api.IntegerValue("3"), "placement", "count")
 				}
 			}
-			spec = spec.WithPath(api.ListValue(services...), "ceph", "services")
+			spec = spec.WithPath(api.ListValue(services...), "services")
 		}
 		return spec
 	}
 	catalog := filesystemCatalog(change, children...)
-	plan, err := NewExport(nil).Plan(context.Background(), lifecycle.PlanInput{Verb: reconciliation.Apply, Context: lifecycle.ContextIdentity{Name: "synthetic"}, Controller: "controller", State: compilation.NewState(catalog, catalog, nil)})
+	plan, err := NewConsumer(nil).Plan(context.Background(), lifecycle.PlanInput{Verb: reconciliation.Apply, Context: lifecycle.ContextIdentity{Name: "synthetic"}, Controller: "controller", State: compilation.NewState(catalog, catalog, nil)})
 	if err != nil || len(plan.Definitions) != 1 {
 		t.Fatalf("export plan: %+v %v %v", plan, err, diagnostics.Of(err))
 	}
@@ -58,14 +58,14 @@ func TestExportRequestGolden(t *testing.T) {
 			name += "-gateway"
 		}
 		matchesGolden(t, name, block.Request, false)
-		r, err := DecodeExportRequest(block.Request)
+		r, err := DecodeConsumerRequest(block.Request)
 		if err != nil {
 			t.Fatal(err)
 		}
-		if block.ID != "ceph-export-consumer" || block.Implementation != ExportImplementation || !slices.Equal(block.Exclusive, []string{"ceph/example"}) {
+		if block.ID != "ceph-consumer-consumer" || block.Implementation != ConsumerImplementation || !slices.Equal(block.Exclusive, []string{"ceph/example"}) {
 			t.Fatalf("wrong block: %+v", block)
 		}
-		for _, ref := range []reconciliation.ObjectRef{{Kind: string(api.StorageCluster), Object: r.Cluster}, {Kind: string(api.StoragePool), Object: "block"}, {Kind: string(api.StorageFilesystem), Object: "files"}} {
+		for _, ref := range []reconciliation.ObjectRef{{Kind: string(api.CephCluster), Object: r.Cluster}, {Kind: string(api.CephPool), Object: "block"}, {Kind: string(api.CephFilesystem), Object: "files"}} {
 			if !slices.Contains(block.Requires, ref) {
 				t.Fatalf("missing prerequisite %+v", ref)
 			}
@@ -78,27 +78,27 @@ func TestExportRequestGolden(t *testing.T) {
 
 func TestExportDeclaresProducedOutputOnlyForItsFrozenIdentity(t *testing.T) {
 	block := reconciliation.Block{BlockDefinition: managedExportPlan(t, false)}
-	outputs, err := NewExport(nil).ProducedOutputs(block)
-	if err != nil || !slices.Equal(outputs, []string{ExportOutput}) {
+	outputs, err := NewConsumer(nil).ProducedOutputs(block)
+	if err != nil || !slices.Equal(outputs, []string{ConsumerOutput}) {
 		t.Fatalf("produced outputs: %v %v", outputs, err)
 	}
 	for _, mutate := range []func(*reconciliation.Block){
 		func(b *reconciliation.Block) { b.ID = "other" },
 		func(b *reconciliation.Block) { b.Object = "other" },
-		func(b *reconciliation.Block) { b.Kind = string(api.StorageClient) },
+		func(b *reconciliation.Block) { b.Kind = string(api.CephClient) },
 		func(b *reconciliation.Block) { b.Implementation = Implementation },
 		func(b *reconciliation.Block) { b.Request = json.RawMessage(`{}`) },
 	} {
 		wrong := block
 		mutate(&wrong)
-		if outputs, err := NewExport(nil).ProducedOutputs(wrong); err == nil || len(outputs) != 0 {
+		if outputs, err := NewConsumer(nil).ProducedOutputs(wrong); err == nil || len(outputs) != 0 {
 			t.Fatal("foreign or malformed block declared produced output")
 		}
 	}
 }
 func TestExportEvidenceGolden(t *testing.T) {
 	block := managedExportPlan(t, false)
-	r, err := DecodeExportRequest(block.Request)
+	r, err := DecodeConsumerRequest(block.Request)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -111,9 +111,9 @@ func TestExportEvidenceGolden(t *testing.T) {
 	address := r.Monitors[leader]
 	principals := map[string]map[string]string{}
 	for suffix, caps := range r.Principals {
-		principals["client."+ExportPrincipalPrefix("apply-test", r.Name)+"-"+suffix] = caps
+		principals["client."+ConsumerPrincipalPrefix("apply-test", r.Name)+"-"+suffix] = caps
 	}
-	e := ExportEvidence{Leader: leader, Address: address, Entries: exportEntries(r, "apply-test"), Principals: principals, KeyType: r.KeyType, Version: ExportEvidenceVersion, Name: r.Name, Owner: "apply-test", FSID: FSIDFor("apply-test", r.Cluster), Request: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef", Ready: true}
+	e := ConsumerEvidence{Leader: leader, Address: address, Entries: exportEntries(r, "apply-test"), Principals: principals, KeyType: r.KeyType, Version: ConsumerEvidenceVersion, Name: r.Name, Owner: "apply-test", FSID: FSIDFor("apply-test", r.Cluster), Request: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef", Ready: true}
 	data, err := json.Marshal(e)
 	if err != nil {
 		t.Fatal(err)
@@ -122,7 +122,7 @@ func TestExportEvidenceGolden(t *testing.T) {
 	if effect, err := EvaluateExportEvidence(data, r, e.Owner, e.Request); err != nil || effect != reconciliation.EffectCompleted {
 		t.Fatalf("evidence: %s %v", effect, err)
 	}
-	for _, mutate := range []func(*ExportEvidence){func(e *ExportEvidence) { e.Owner = "other" }, func(e *ExportEvidence) { e.FSID = FSIDFor("other", r.Cluster) }, func(e *ExportEvidence) { e.Name = "other" }, func(e *ExportEvidence) { e.Request = "other" }} {
+	for _, mutate := range []func(*ConsumerEvidence){func(e *ConsumerEvidence) { e.Owner = "other" }, func(e *ConsumerEvidence) { e.FSID = FSIDFor("other", r.Cluster) }, func(e *ConsumerEvidence) { e.Name = "other" }, func(e *ConsumerEvidence) { e.Request = "other" }} {
 		wrong := e
 		mutate(&wrong)
 		raw, _ := json.Marshal(wrong)
@@ -133,26 +133,26 @@ func TestExportEvidenceGolden(t *testing.T) {
 }
 func TestExportRequestRejectsExpandedCapsAndRuntimeScope(t *testing.T) {
 	block := managedExportPlan(t, false)
-	r, _ := DecodeExportRequest(block.Request)
+	r, _ := DecodeConsumerRequest(block.Request)
 	r.Principals["rbd-node"]["mon"] = "allow *"
 	data, _ := r.Canonical()
-	if _, err := DecodeExportRequest(data); err == nil {
+	if _, err := DecodeConsumerRequest(data); err == nil {
 		t.Fatal("widened caps accepted")
 	}
-	r, _ = DecodeExportRequest(block.Request)
+	r, _ = DecodeConsumerRequest(block.Request)
 	r.Scope = json.RawMessage(`{}`)
 	data, _ = r.Canonical()
-	if _, err := DecodeExportRequest(data); err == nil {
+	if _, err := DecodeConsumerRequest(data); err == nil {
 		t.Fatal("runtime scope frozen")
 	}
 }
 func TestExportSurvivingHostRemovalRefuses(t *testing.T) {
 	block := managedExportPlan(t, false)
 	e := lifecycle.Execution{Block: reconciliation.Block{BlockDefinition: block}, ApplyOperation: "apply-test"}
-	if _, err := NewExport(nil).Destroy(context.Background(), e); err == nil {
+	if _, err := NewConsumer(nil).Destroy(context.Background(), e); err == nil {
 		t.Fatal("surviving hosts permitted")
 	}
-	if _, err := NewExport(nil).ObserveRemoval(context.Background(), e); err == nil {
+	if _, err := NewConsumer(nil).ObserveRemoval(context.Background(), e); err == nil {
 		t.Fatal("surviving observation permitted")
 	}
 }
@@ -169,8 +169,8 @@ func TestExportGrantGolden(t *testing.T) {
 		if gateway {
 			refs = refs.With("objectGatewayRef", api.StringValue("objects"))
 		}
-		declared := api.NewCatalog([]api.Object{childOf(api.StorageExport, "consumer", "dataFoundation", refs)})
-		views[name] = shown{Plan: block.Impacts, Scope: ResourceScope(declared, api.StorageExport, "consumer", nil)}
+		declared := api.NewCatalog([]api.Object{childOf(api.CephConsumer, "consumer", "dataFoundation", refs)})
+		views[name] = shown{Plan: block.Impacts, Scope: ResourceScope(declared, api.CephConsumer, "consumer", nil)}
 	}
 	data, err := json.Marshal(views)
 	if err != nil {
@@ -179,8 +179,8 @@ func TestExportGrantGolden(t *testing.T) {
 	matchesGolden(t, "export-grant", data, false)
 }
 
-func syntheticDetails(r ExportRequest, owner string) []exportEntry {
-	prefix := ExportPrincipalPrefix(owner, r.Name)
+func syntheticDetails(r ConsumerRequest, owner string) []exportEntry {
+	prefix := ConsumerPrincipalPrefix(owner, r.Name)
 	keyBytes := make([]byte, 28)
 	keyBytes[0] = 1
 	keyBytes[10] = 16
@@ -234,11 +234,11 @@ func detailsProduced(t *testing.T, entries []exportEntry) []lifecycle.Produced {
 	if err != nil {
 		t.Fatal(err)
 	}
-	return []lifecycle.Produced{{Name: ExportOutput, Material: secrets.NewMaterial(map[secrets.Part][]byte{secrets.ValuePart: data})}}
+	return []lifecycle.Produced{{Name: ConsumerOutput, Material: secrets.NewMaterial(map[secrets.Part][]byte{secrets.ValuePart: data})}}
 }
 func TestExportProducedDetailsValidator(t *testing.T) {
 	block := managedExportPlan(t, true)
-	r, _ := DecodeExportRequest(block.Request)
+	r, _ := DecodeConsumerRequest(block.Request)
 	owner := "apply-test"
 	good := detailsProduced(t, syntheticDetails(r, owner))
 	defer lifecycle.ClearProduced(good)
@@ -306,7 +306,7 @@ func TestExportProducedDetailsValidator(t *testing.T) {
 
 func TestExportTLSRequestGolden(t *testing.T) {
 	block := managedExportPlan(t, true)
-	r, err := DecodeExportRequest(block.Request)
+	r, err := DecodeConsumerRequest(block.Request)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -320,15 +320,15 @@ func TestExportTLSRequestGolden(t *testing.T) {
 		t.Fatal(err)
 	}
 	matchesGolden(t, "request-export-tls", data, false)
-	if _, err := DecodeExportRequest(data); err != nil {
+	if _, err := DecodeConsumerRequest(data); err != nil {
 		t.Fatal(err)
 	}
 	block.Request = data
-	if err := NewExport(nil).ProveBinding(context.Background(), "synthetic", reconciliation.Block{BlockDefinition: block}, nil); err == nil {
+	if err := NewConsumer(nil).ProveBinding(context.Background(), "synthetic", reconciliation.Block{BlockDefinition: block}, nil); err == nil {
 		t.Fatal("missing gateway certificate accepted")
 	}
 	e := lifecycle.Execution{Block: reconciliation.Block{BlockDefinition: block}, ApplyOperation: "apply-test", RetiredWithHosts: true}
-	if _, err := NewExport(nil).Destroy(context.Background(), e); err == nil {
+	if _, err := NewConsumer(nil).Destroy(context.Background(), e); err == nil {
 		t.Fatal("physical export retirement accepted")
 	}
 }

@@ -100,11 +100,11 @@ func TestApplyAdmissionReceivesOnlyTheBlocksTheTransitionMayStart(t *testing.T) 
 	}
 	staged := newPlannedHarness(t, []reconciliation.BlockDefinition{alpha, bravo})
 	seen = record(staged)
-	if _, err := staged.service.Apply(context.Background(), ApplyRequest{ContextName: testContextName, Stages: []string{"infra-components"}, SkipConfirmation: true}); err != nil {
+	if _, err := staged.service.Apply(context.Background(), ApplyRequest{ContextName: testContextName, Stages: []string{"infrastructure-services"}, SkipConfirmation: true}); err != nil {
 		t.Fatal(err)
 	}
 	if len(*seen) != 2 || !slices.Equal((*seen)[0], []string{"alpha"}) || !slices.Equal((*seen)[1], []string{"alpha"}) {
-		t.Fatalf("a selection of infra-components admitted %v", *seen)
+		t.Fatalf("a selection of infrastructure-services admitted %v", *seen)
 	}
 	*seen = nil
 	if _, err := staged.service.Apply(context.Background(), ApplyRequest{ContextName: testContextName, SkipConfirmation: true}); err != nil {
@@ -116,7 +116,7 @@ func TestApplyAdmissionReceivesOnlyTheBlocksTheTransitionMayStart(t *testing.T) 
 	unresolved := newPlannedHarness(t, []reconciliation.BlockDefinition{alpha, bravo})
 	unresolved.capability.outcomeFor = map[string]Result{"bravo": {Outcome: reconciliation.OutcomeUnknown}}
 	seen = record(unresolved)
-	if _, err := unresolved.service.Apply(context.Background(), ApplyRequest{ContextName: testContextName, Stages: []string{"infra-components"}, SkipConfirmation: true}); err != nil {
+	if _, err := unresolved.service.Apply(context.Background(), ApplyRequest{ContextName: testContextName, Stages: []string{"infrastructure-services"}, SkipConfirmation: true}); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := unresolved.service.Apply(context.Background(), ApplyRequest{ContextName: testContextName, Stages: []string{"machines"}, SkipConfirmation: true}); err == nil {
@@ -127,8 +127,8 @@ func TestApplyAdmissionReceivesOnlyTheBlocksTheTransitionMayStart(t *testing.T) 
 	}
 	*seen = nil
 	unresolved.capability.observations = []Observation{{Effect: reconciliation.EffectCompleted}}
-	_, _ = unresolved.service.Apply(context.Background(), ApplyRequest{ContextName: testContextName, Stages: []string{"infra-components"}, SkipConfirmation: true})
+	_, _ = unresolved.service.Apply(context.Background(), ApplyRequest{ContextName: testContextName, Stages: []string{"infrastructure-services"}, SkipConfirmation: true})
 	if len(*seen) != 2 || !slices.Equal((*seen)[0], []string{"bravo"}) || !slices.Equal((*seen)[1], []string{"bravo"}) {
-		t.Fatalf("a selection of infra-components beside an unknown Machine block admitted %v", *seen)
+		t.Fatalf("a selection of infrastructure-services beside an unknown Machine block admitted %v", *seen)
 	}
 }

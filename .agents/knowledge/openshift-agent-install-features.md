@@ -2,7 +2,7 @@
 
 How FIPS, disk encryption, a proxy, registry mirrors and install-time manifests
 reach the agent installer's inputs, and what each does when it is wrong.
-[Container clusters](../../specs/container-clusters.md) owns the required
+[Container clusters](../../specs/openshift-clusters.md) owns the required
 behavior; this page records native facts for
 [B719](../../specs/milestones/m3.md#b719) (install-time manifests),
 [B720](../../specs/milestones/m3.md#b720) (TPM2 disk encryption),

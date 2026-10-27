@@ -461,7 +461,7 @@ func TestIndependentFailedBlocksAreRetriedTogether(t *testing.T) {
 // whose selection adds the stage of the first one.
 func TestAFailedBlockOutsideTheSelectionIsNeverRetried(t *testing.T) {
 	first := definition("alpha")
-	first.Stage = reconciliation.StageInfraComponents
+	first.Stage = reconciliation.StageInfrastructureServices
 	second := definition("bravo")
 	second.Stage = reconciliation.StageMachines
 	h := scheduled(t, 4, first, second)
@@ -493,7 +493,7 @@ func TestAFailedBlockOutsideTheSelectionIsNeverRetried(t *testing.T) {
 		ContextName: "lab", Stages: []string{"substrates"}, SkipConfirmation: true,
 	})
 	reported := diagnostics.Of(err)
-	if len(reported) != 1 || reported[0].Code != "lifecycle.stage" || reported[0].Remediation != "repeat bootwright apply --context lab --stage infra-components,substrates" {
+	if len(reported) != 1 || reported[0].Code != "lifecycle.stage" || reported[0].Remediation != "repeat bootwright apply --context lab --stage infrastructure-services,substrates" {
 		t.Fatalf("retry refusal = %+v", reported)
 	}
 	if len(h.capability.applies) != 3 {
@@ -519,7 +519,7 @@ func TestFailedBlocksNamingOneResourceAreRetriedOneAtATime(t *testing.T) {
 	states := map[string]reconciliation.BlockState{
 		"alpha": reconciliation.BlockFailed, "bravo": reconciliation.BlockFailed, "charlie": reconciliation.BlockFailed,
 	}
-	run := Service{options: Options{Concurrency: 4}}.newScheduler(nil, nil, approved{}, nil, operationstore.Operation{}, plan, states, nil, nil)
+	run := Service{options: Options{Concurrency: 4}}.newScheduler(nil, nil, approved{}, nil, operationstore.Operation{}, plan, states, nil, reconciliation.Selection{})
 	retried, _, ok := run.next()
 	if !ok || retried.ID != "alpha" {
 		t.Fatalf("the first retry = %q (%t)", retried.ID, ok)
@@ -559,7 +559,7 @@ func TestAnUnprovedEffectIsResolvedBeforeAnyRetry(t *testing.T) {
 	states := map[string]reconciliation.BlockState{
 		"alpha": reconciliation.BlockUnknown, "bravo": reconciliation.BlockFailed, "charlie": reconciliation.BlockFailed,
 	}
-	run := Service{options: Options{Concurrency: 4}}.newScheduler(nil, nil, approved{}, nil, operationstore.Operation{}, plan, states, nil, nil)
+	run := Service{options: Options{Concurrency: 4}}.newScheduler(nil, nil, approved{}, nil, operationstore.Operation{}, plan, states, nil, reconciliation.Selection{})
 	observed, _, ok := run.next()
 	if !ok || observed.ID != "alpha" {
 		t.Fatalf("the first admission = %q (%t), want the unknown block", observed.ID, ok)
@@ -594,7 +594,7 @@ func TestAdmissionAfterARetryDoesNotDependOnCompletionOrder(t *testing.T) {
 	}
 	plan, err := reconciliation.NewPlan(reconciliation.Apply, []reconciliation.BlockDefinition{
 		staged(definition("first-failed"), reconciliation.StageMachines),
-		staged(definition("second-failed"), reconciliation.StageInfraComponents),
+		staged(definition("second-failed"), reconciliation.StageInfrastructureServices),
 		staged(definition("first-pending"), reconciliation.StageMachines),
 		staged(dependent("second-pending", "first-pending"), reconciliation.StageMachines),
 		staged(dependent("after-retry", "first-failed"), reconciliation.StageMachines),
@@ -607,7 +607,7 @@ func TestAdmissionAfterARetryDoesNotDependOnCompletionOrder(t *testing.T) {
 			states := map[string]reconciliation.BlockState{
 				"first-failed": reconciliation.BlockFailed, "second-failed": reconciliation.BlockFailed,
 			}
-			selection := reconciliation.StageSelection{reconciliation.StageMachines}
+			selection := reconciliation.Selection{Stages: reconciliation.StageSelection{reconciliation.StageMachines}}
 			run := Service{options: Options{Concurrency: 4}}.newScheduler(nil, nil, approved{}, nil, operationstore.Operation{}, plan, states, nil, selection)
 			started := []string{}
 			drain := func() {
@@ -640,14 +640,14 @@ func TestAdmissionAfterARetryDoesNotDependOnCompletionOrder(t *testing.T) {
 // operation stops because nothing more may start, which is resumable.
 func TestAStageBoundaryPausesWhileBlocksRunTogether(t *testing.T) {
 	first := definition("alpha")
-	first.Stage = reconciliation.StageInfraComponents
+	first.Stage = reconciliation.StageInfrastructureServices
 	second := definition("bravo")
-	second.Stage = reconciliation.StageInfraComponents
+	second.Stage = reconciliation.StageInfrastructureServices
 	later := dependent("charlie", "alpha")
 	later.Stage = reconciliation.StageMachines
 	h := scheduled(t, 4, first, second, later)
 	result, err := h.service.Apply(context.Background(), ApplyRequest{
-		ContextName: "lab", Stages: []string{"infra-components"}, SkipConfirmation: true,
+		ContextName: "lab", Stages: []string{"infrastructure-services"}, SkipConfirmation: true,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -793,7 +793,7 @@ func TestARetryAfterAResolutionThatFailsAgainStopsFirstAttempts(t *testing.T) {
 // command taking it on, and its row reports the failure.
 func TestABlockAResolutionLeavesFailedOutsideTheSelectionIsNotRetried(t *testing.T) {
 	first := definition("alpha")
-	first.Stage = reconciliation.StageInfraComponents
+	first.Stage = reconciliation.StageInfrastructureServices
 	second := definition("bravo")
 	second.Stage = reconciliation.StageMachines
 	h := scheduled(t, 4, first, second)
@@ -845,7 +845,7 @@ func TestAnAnnouncedRetryThatNeverStartsIsSettledFailed(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			progress := &testProgress{}
 			states := map[string]reconciliation.BlockState{"alpha": reconciliation.BlockUnknown}
-			run := Service{options: Options{Concurrency: 4, Progress: progress}}.newScheduler(nil, nil, approved{}, nil, operationstore.Operation{}, plan, states, nil, nil)
+			run := Service{options: Options{Concurrency: 4, Progress: progress}}.newScheduler(nil, nil, approved{}, nil, operationstore.Operation{}, plan, states, nil, reconciliation.Selection{})
 			run.settle(step{block: "alpha", state: reconciliation.BlockFailed, announced: true, position: 1})
 			if tc.worked {
 				run.worked["alpha"] = true
@@ -875,17 +875,17 @@ func TestAFailedResolutionIsRetriedButAFailedAttemptIsNot(t *testing.T) {
 		t.Fatal(err)
 	}
 	failed := map[string]reconciliation.BlockState{"alpha": reconciliation.BlockFailed, "bravo": reconciliation.BlockPending}
-	if kind, admitted := firstAdmission(plan, failed, nil, map[string]bool{"alpha": true}, nil, nil); kind != StepRetry || !slices.Equal(admitted, []int{0, 1}) {
+	if kind, admitted := firstAdmission(plan, failed, reconciliation.Selection{}, map[string]bool{"alpha": true}, nil, nil); kind != StepRetry || !slices.Equal(admitted, []int{0, 1}) {
 		t.Fatalf("after a resolution admission = %s %v, want the retry of alpha beside the start of bravo", kind, admitted)
 	}
-	if kind, admitted := firstAdmission(plan, failed, nil, nil, map[string]bool{"alpha": true}, nil); kind != StepRetry || len(admitted) != 0 {
+	if kind, admitted := firstAdmission(plan, failed, reconciliation.Selection{}, nil, map[string]bool{"alpha": true}, nil); kind != StepRetry || len(admitted) != 0 {
 		t.Fatalf("after an attempt admission = %s %v, want nothing", kind, admitted)
 	}
 	alone, err := reconciliation.NewPlan(reconciliation.Apply, []reconciliation.BlockDefinition{definition("alpha")})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if kind, admitted := firstAdmission(alone, map[string]reconciliation.BlockState{"alpha": reconciliation.BlockFailed}, nil, map[string]bool{"alpha": true}, nil, nil); kind != StepRetry || !slices.Equal(admitted, []int{0}) {
+	if kind, admitted := firstAdmission(alone, map[string]reconciliation.BlockState{"alpha": reconciliation.BlockFailed}, reconciliation.Selection{}, map[string]bool{"alpha": true}, nil, nil); kind != StepRetry || !slices.Equal(admitted, []int{0}) {
 		t.Fatalf("after a resolution of a lone block admission = %s %v, want its retry", kind, admitted)
 	}
 	unknown := map[string]reconciliation.BlockState{"alpha": reconciliation.BlockUnknown, "bravo": reconciliation.BlockPending}
@@ -893,7 +893,7 @@ func TestAFailedResolutionIsRetriedButAFailedAttemptIsNot(t *testing.T) {
 		"observed": {observed: map[string]bool{"alpha": true}},
 		"worked":   {worked: map[string]bool{"alpha": true}},
 	} {
-		if kind, admitted := firstAdmission(plan, unknown, nil, tc.observed, tc.worked, nil); kind != StepResolve || len(admitted) != 0 {
+		if kind, admitted := firstAdmission(plan, unknown, reconciliation.Selection{}, tc.observed, tc.worked, nil); kind != StepResolve || len(admitted) != 0 {
 			t.Fatalf("an unproved effect already %s admission = %s %v, want nothing to resolve", name, kind, admitted)
 		}
 	}

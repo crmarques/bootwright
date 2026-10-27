@@ -37,7 +37,13 @@ func (s Service) RenderEffective(ctx context.Context, request EffectiveRequest) 
 	}
 	// Inspection has no successful warning channel. Validation retains its
 	// complete report, while rendering exposes only canonical state and counts.
-	return &EffectiveResult{Counts: report.Counts, Effective: state.Effective()}, nil
+	result := &EffectiveResult{Counts: report.Counts, Effective: state.Effective()}
+	if request.Origins {
+		for _, object := range state.Effective().Objects() {
+			result.Origins = append(result.Origins, ObjectOrigins{Object: object.Identity(), Fields: state.FieldOrigins(object.Identity())})
+		}
+	}
+	return result, nil
 }
 
 func (s Service) compile(ctx context.Context, contextName string, files []string) (*State, *Report, error) {

@@ -28,8 +28,8 @@ func validateLibvirtAttachmentMTUs(o, provider api.Object, native api.Value) []a
 			return mtu
 		}
 		reference := network.Get("attachmentRef").Text()
-		if network.Has("interfaceAttachments") {
-			entry, _ := namedValueBy(network.Get("interfaceAttachments"), "interface", name)
+		if attachments := substrate.MachineInterfaceAttachments(o); attachments.Present() {
+			entry, _ := namedValueBy(attachments, "interface", name)
 			reference = entry.Get("attachmentRef").Text()
 		}
 		attachment, _ := namedValue(provider.Spec().Get("networkAttachments"), reference)

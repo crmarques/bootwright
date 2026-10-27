@@ -14,7 +14,7 @@ at least 34 logical CPUs, 95 GiB available memory and 820 GiB free pool disk,
 plus about 7 GiB for five image copies. Each master requests 6 vCPU, 16 GiB
 memory and a 120 GiB root disk. Each of three Ceph guests requests 4 vCPU,
 13 GiB memory, a 60 GiB root disk and an 80 GiB data disk; the provider reserves another 4 CPUs, 8 GiB
-and 40 GiB. See [acceptance profiles](../../../specs/container-cluster-coverage.md#acceptance-profiles).
+and 40 GiB. See [acceptance profiles](../../../specs/openshift-coverage.md#acceptance-profiles).
 
 | Input | Purpose |
 | --- | --- |
@@ -81,7 +81,7 @@ chmod 600 ~/pull-secret.json
 ./bin/bootwright plan --context lab-compact-df
 ./bin/bootwright apply --context lab-compact-df --stage controller --yes
 ./bin/bootwright preflight controller --context lab-compact-df
-./bin/bootwright apply --context lab-compact-df --stage infra-components --yes
+./bin/bootwright apply --context lab-compact-df --stage infrastructure-services --yes
 ```
 
 Configure the controller's conditional resolver for the managed cluster zone
@@ -179,11 +179,11 @@ controller runtime and tool cache remain.
 ## Data Foundation preparation and acceptance
 
 The [binding](add-ons/binding.yaml) consumes the
-[managed export](storage/export.yaml), its RBD pool, CephFS `csi` subvolume
+[managed CephConsumer](storage/consumer.yaml), its RBD pool, CephFS `csi` subvolume
 group, Prometheus service and TLS object gateway. The gateway endpoint and all
 node addresses are synthetic; Ceph nodes use `.31` to `.33` and compact nodes
 `.21` to `.23`. One RGW daemon is explicitly placed on `rhel-01`; the managed
-DNS service publishes its address under the export's gateway name. This lab
+DNS service publishes its address under the consumer's gateway name. This lab
 placement has no gateway failover.
 Reserve six consecutive emulated BMC ports starting at 8000. Include IBM
 entitlement credentials in the OpenShift installation pull secret before
@@ -192,7 +192,7 @@ initializing the context; Bootwright never merges a live global pull secret.
 Replace the RHEL boot-image URL and digest, verify the IBM Ceph coordinates,
 and replace the synthetic Prometheus image digest. Import the selected boot
 image through the media workflow before applying Machines; follow the
-[three-node Ceph preparation](../../storage-clusters/libvirt-3-nodes-ceph/README.md#initial-setup).
+[three-node Ceph preparation](../../ceph-clusters/libvirt-3-nodes-ceph/README.md#initial-setup).
 The gateway certificate must cover `s3.lab.example.test` (or your replacement),
 and its issuer must match `rgw-issuer`; the cluster selects it under `Always`.
 

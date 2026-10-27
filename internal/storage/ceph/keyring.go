@@ -10,7 +10,7 @@ import (
 
 const ClientOutput = "client"
 
-func ClientBlockID(client string) string { return "ceph-client-" + client }
+func ClientBlockID(client string) string { return reconciliation.BlockIdentity("ceph-client-", client) }
 
 func ClientKeyring(value []byte, client string) ([]byte, bool) {
 	if client == "" {

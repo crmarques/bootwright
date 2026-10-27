@@ -13,7 +13,7 @@ spec:
 
   packages:
     fdf:
-      storageExportRef: ceph-multidc-01-odf-ocp-multidc-02
+      cephConsumerRef: ceph-multidc-01-odf-ocp-multidc-02
 
       subscription:
         channel: stable-4.20

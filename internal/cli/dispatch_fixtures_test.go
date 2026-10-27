@@ -357,14 +357,14 @@ func dispatchFlags() *pflag.FlagSet {
 		"value-file": "secret.bin", "password-file": "", "certificate-file": "",
 		"private-key-file": "", "public-key-file": "", "type": "local-keyring",
 		"username": "", "input-dir": "inputs", "output-dir": "artifacts",
-		"stage": "infra-components,substrates", "wheel-mirror": "file:///srv/wheels", "dest-dir": "/srv/wheels-out",
+		"stage": "infrastructure-services,substrates", "until": "compact.gitops", "wheel-mirror": "file:///srv/wheels", "dest-dir": "/srv/wheels-out",
 	} {
 		flags.String(name, value, "")
 	}
 	for _, name := range []string{
 		"yes", "purge", "allow-orphans", "short", "renew", "checksums", "dry-run",
 		"trust-on-first-use", "sensitive", "silent", "secrets", "power-status",
-		"ssh-ask-sudo-password", "ssh-user-for-provisioned", "observe", "download-only",
+		"ssh-ask-sudo-password", "ssh-user-for-provisioned", "observe", "download-only", "origins",
 	} {
 		flags.Bool(name, true, "")
 	}

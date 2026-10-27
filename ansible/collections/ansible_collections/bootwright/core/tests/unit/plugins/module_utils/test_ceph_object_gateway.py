@@ -50,7 +50,7 @@ def gateway_request(spec=None, **members):
                "endpoint": "", "indexPool": "objects.rgw.buckets.index", "name": "objects", "realm": "objects", "zone": "objects", "zoneGroup": "objects",
                "zonePools": list(DERIVED)}
     gateway.update(members)
-    request = dict(settings.cluster(), clusterSSHTransport="verified-tunnel", action="gateway", gateway=gateway)
+    request = dict(settings.cluster(), clusterSSHTransport="verifiedTunnel", action="gateway", gateway=gateway)
     request["delegated"] = [{"name": "rgw.objects", "hosts": list(HOSTS)}]
     return request
 

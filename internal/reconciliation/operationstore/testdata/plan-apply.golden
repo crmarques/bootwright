@@ -4,7 +4,7 @@
     {
       "id": "server-lab",
       "description": "serve artifacts for lab",
-      "stage": "infra-components",
+      "stage": "infrastructure-services",
       "dependencies": [],
       "impacts": [
         "create-container-unit lab"

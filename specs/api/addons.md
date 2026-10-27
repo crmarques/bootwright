@@ -6,8 +6,10 @@ This page owns `ClusterAddon`, `ClusterAddonProfile`, and
 [built-in package](#built-in-packages) is an add-on compiled into the executable
 and selected by name. Profiles compose
 authored add-ons and other profiles. Bindings attach the expanded set and any
-built-in packages to one `ContainerCluster`, supplying scalar input values to
+built-in packages to one `OpenShiftCluster`, supplying scalar input values to
 authored add-ons and typed configuration to packages.
+
+Each of these kinds names its objects under the [one name rule](../api.md#object-names).
 
 [The add-on boundary](../add-ons.md) owns what these declarations may never
 grant, the [add-on lifecycle](../add-ons.md#built-in-packages-and-selection)
@@ -17,13 +19,21 @@ acceptance implies no execution support; all declarations obey
 [the compiler boundary](../api.md#compiler-boundary).
 
 References are plain scalar names in fixed namespaces: `clusterRef` names a
-`ContainerCluster`, `profileRefs` name `ClusterAddonProfile` objects,
+`OpenShiftCluster`, `profileRefs` name `ClusterAddonProfile` objects,
 `addonRefs` and `addonRef` name `ClusterAddon` objects, and `secretRefs` name
 `Secret` objects, each effect material that a binding places in its cluster as
 an [owned Secret](../add-ons.md#owned-secrets). An input's `resourceKind` or `secretType` constrains its
 binding value as described below. [Environment kind defaults](environment.md#kind-defaults)
 may supply only the fields permitted by that closed contract; this page owns
 their kind-specific validation and built-in defaults.
+
+## Kinds
+
+| Kind | Declares |
+| --- | --- |
+| `ClusterAddon` | One authored add-on definition; a reserved shape that validates but never runs. |
+| `ClusterAddonProfile` | One reusable selection of add-on configuration bound to clusters. |
+| `ClusterAddonBinding` | The add-ons of one cluster: its built-in packages and authored add-on bindings. |
 
 ## ClusterAddon
 
@@ -43,7 +53,7 @@ unknown arms are invalid; the selected arm must satisfy its required fields.
 
 Add-on capability tokens match `^[A-Za-z0-9][A-Za-z0-9._-]*$` and are unique
 in each list. They name what an add-on or package provides to a cluster, not a
-Machine capability or a lifecycle capability. `provides` and `requires` are not
+lifecycle capability. `provides` and `requires` are not
 closed enums. The names `kubevirt`, `dataFoundation`, `metallb` and `nmstate`
 have defined downstream meanings, but all valid tokens participate in
 dependency ordering. A built-in package
@@ -76,7 +86,7 @@ known arm:
 
 | Arm | Shape | Rule |
 | --- | --- | --- |
-| `storageExportAttachment` | `{}` | Input is `resourceKind: StorageExport` and the add-on provides `dataFoundation`; the bound export supplies storage integration for the binding's cluster. |
+| `cephConsumerAttachment` | `{}` | Input is `resourceKind: CephConsumer` and the add-on provides `dataFoundation`; the bound consumer supplies storage integration for the binding's cluster. |
 | `globalPullSecretMerge` | `{registry, username}` | Input is `secretType: token`; both strings are non-empty. The token supplies credentials for that registry and username in the binding's cluster global pull secret. |
 
 Validation checks effect compatibility and resolves supplied object names.
@@ -126,7 +136,7 @@ that CSV. No authored add-on runs, because the
 Not yet met: the authored defaults are not aligned with the package
 Subscription block, which the custom-package lifecycle of
 [B90](../milestones/m4.md#b90) requires before any authored add-on runs;
-tracked as [B828](../milestones/backlog.md#b828).
+tracked as B90. The full-platform nmstate example says so in a note.
 
 Omitting `operatorGroup` requests no group. `operatorGroup: {}` requests the
 namespace-named group targeting that namespace. An explicit `targetNamespaces`
@@ -204,11 +214,12 @@ occurrences are dropped.
 
 | Field | Type | Required | Default | Rule |
 | --- | --- | --- | --- | --- |
-| `spec.clusterRef` | string | yes | — | One `ContainerCluster`. |
+| `spec.clusterRef` | string | yes | — | One `OpenShiftCluster`. |
 | `spec.profileRefs` | array of strings | no | `[]` | Ordered profiles expanded first. |
 | `spec.addonRefs` | array of strings | no | `[]` | Ordered direct add-ons appended afterward. |
 | `spec.addonConfigs` | array of objects | no | `[]` | Set keyed by `addonRef`; supplies inputs but does not select an add-on. |
 | `spec.packages` | object | no | `{}` | Closed record whose optional members are [built-in package](#built-in-packages) names; a present member selects that package and holds its configuration. |
+| `spec.afterRefs` | array of strings | no | `[]` | Set of other `ClusterAddonBinding` refs of the same cluster; everything this binding selects runs after everything they select. |
 
 At least one profile, direct add-on or package is selected. Every config has:
 
@@ -234,6 +245,15 @@ A package is bound to one cluster at most once across that cluster's
 bindings, and packages take part in the capability graph with the add-ons
 the cluster's bindings select.
 
+`spec.afterRefs` authors ordering the capability graph does not derive: every
+package and add-on the binding selects runs after every one each named binding
+selects, and planning adds each such edge beside the derived ones, so an
+instance requires the instances of the bindings it names. A named binding
+binds the same cluster. The authored edges, the capability edges and a
+[last package](../add-ons.md#built-in-packages-and-selection)'s edges together
+form one acyclic order: naming the binding that selects a last package is a
+cycle, because the last package already runs after everything else.
+
 ## Admission diagnostics
 
 Add-on and package diagnostics follow the style of every other kind: a
@@ -243,26 +263,27 @@ diagnostic, so several faults of one binding never merge. Indexes are the
 authored positions in the document, as
 [the refusal rule](../api.md#yaml-streams-and-decoding) states for every list.
 
-Not yet met: the binding diagnostics index the normalized, sorted
-`addonConfigs` and `inputs` lists; tracked as
-[B826](../milestones/backlog.md#b826).
-
 | Fault | Code | Field | Message | Remedy |
 | --- | --- | --- | --- | --- |
 | A required input is missing | `api.required` | `$.spec.addonConfigs[<i>].inputs`, or `$.spec.addonConfigs` when the binding has no entry for the add-on | `required input <input> of ClusterAddon/<addon> is not supplied` | `add an input named <input> to the spec.addonConfigs entry of <addon>, naming a <kind>` (or `naming a Secret of type <secretType>`) |
 | An input names no object of its kind | `api.reference` | `$.spec.addonConfigs[<i>].inputs[<j>].value` | `input <input> of ClusterAddon/<addon> names <value>, which is not a <kind> in the selected input` (or `which is not a Secret of type <secretType> in the selected input`) | `set the value to the name of a <kind> declared in the selected input` (or `of a Secret of type <secretType>`) |
 | An input is not declared | `api.field` | `$.spec.addonConfigs[<i>].inputs[<j>].name` | `ClusterAddon/<addon> declares no input named <input>` | `remove the input, or use an input <addon> declares: <names>` (at most eight names, then `and <n> more`; `remove the input` when it declares none) |
 | A profile reaches a missing add-on or profile | `api.reference` | `$.spec.profileRefs[<i>]` | `profile <profile> expands to <Kind>/<name>, which is not in the selected input` | `declare <Kind>/<name>, add its file to the selection, or remove it from ClusterAddonProfile/<owner>` |
-| A required capability has no provider | `api.reference` | the selecting entry: `$.spec.addonRefs[<k>]`, `$.spec.profileRefs[<i>]` through which the binding reaches the add-on, or `$.spec.packages.<package>` | `<subject> requires capability <capability>, which nothing else selected for ContainerCluster/<cluster> provides` (`<subject>` is `ClusterAddon/<addon>` or `package <package>`) | `select a package or add-on that provides <capability> for ContainerCluster/<cluster>, or remove <subject> from the selection` |
-| Capability requirements form a cycle | `api.invariant` | the selecting entry of the cycle's first member in canonical order | `capability requirements of the packages and add-ons selected for ContainerCluster/<cluster> form a cycle through <member list>` | `remove one requires entry among <member list> to break the cycle` |
-| An add-on is bound twice to one cluster | `api.duplicate` | the selecting entry in the later binding in canonical order | `ClusterAddon/<addon> is already bound to ContainerCluster/<cluster> by ClusterAddonBinding/<binding>` | `bind <addon> to <cluster> through one ClusterAddonBinding only` |
-| A package is bound twice to one cluster | `api.duplicate` | `$.spec.packages.<package>` of the later binding in canonical order | `package <package> is already bound to ContainerCluster/<cluster> by ClusterAddonBinding/<binding>` | `select package <package> for <cluster> in one ClusterAddonBinding only` |
-| Two last packages on one cluster | `api.invariant` | `$.spec.packages.<package>` of the later binding in canonical order | `packages <first> and <second> both run last on ContainerCluster/<cluster>` | `select one of <first> and <second> for <cluster>` |
+| A required capability has no provider | `api.reference` | the selecting entry: `$.spec.addonRefs[<k>]`, `$.spec.profileRefs[<i>]` through which the binding reaches the add-on, or `$.spec.packages.<package>` | `<subject> requires capability <capability>, which nothing else selected for OpenShiftCluster/<cluster> provides` (`<subject>` is `ClusterAddon/<addon>` or `package <package>`) | `select a package or add-on that provides <capability> for OpenShiftCluster/<cluster>, or remove <subject> from the selection` |
+| Capability requirements form a cycle | `api.invariant` | the selecting entry of the cycle's first member in canonical order | `capability requirements of the packages and add-ons selected for OpenShiftCluster/<cluster> form a cycle through <member list>` | `remove one requires entry among <member list> to break the cycle` |
+| An add-on is bound twice to one cluster | `api.duplicate` | the selecting entry in the later binding in canonical order | `ClusterAddon/<addon> is already bound to OpenShiftCluster/<cluster> by ClusterAddonBinding/<binding>` | `bind <addon> to <cluster> through one ClusterAddonBinding only` |
+| A package is bound twice to one cluster | `api.duplicate` | `$.spec.packages.<package>` of the later binding in canonical order | `package <package> is already bound to OpenShiftCluster/<cluster> by ClusterAddonBinding/<binding>` | `select package <package> for <cluster> in one ClusterAddonBinding only` |
+| Two last packages on one cluster | `api.invariant` | `$.spec.packages.<package>` of the later binding in canonical order | `packages <first> and <second> both run last on OpenShiftCluster/<cluster>` | `select one of <first> and <second> for <cluster>` |
 | A configuration names an unselected add-on | `api.reference` | `$.spec.addonConfigs[<i>].addonRef` | `ClusterAddon/<addon> is configured but not selected by this binding` | `select <addon> through spec.addonRefs or a profile, or remove this spec.addonConfigs entry` |
 | A binding selects nothing | `api.invariant` | `$.spec` | `the binding selects no profile, add-on or package` | `add a package to spec.packages, a profile to spec.profileRefs or an add-on to spec.addonRefs` |
 | Profile expansion returns to a profile | `api.invariant` | `$.spec.profileRefs[<i>]` | `profile expansion returns to ClusterAddonProfile/<profile>` | `remove the reference to <profile> from this list or from a profile it expands` |
+| An ordering names a binding of another cluster | `api.invariant` | `$.spec.afterRefs[<i>]` | `spec.afterRefs names ClusterAddonBinding/<other>, which binds OpenShiftCluster/<other cluster>, not OpenShiftCluster/<cluster>` | `name a binding of OpenShiftCluster/<cluster>, or remove <other> from spec.afterRefs` |
+| Bindings order each other in a cycle | `api.invariant` | `$.spec.afterRefs[<i>]` of the cycle's first binding in canonical order, at its first entry on the cycle | `spec.afterRefs of the bindings of OpenShiftCluster/<cluster> form a cycle through <binding list>` | `remove one spec.afterRefs entry among <binding list> to break the cycle` |
+| Authored ordering closes a cycle with capability or last-package edges | `api.invariant` | `$.spec.afterRefs[<i>]` of the first cycle member in canonical order with an authored edge on the cycle | `ordering of the packages and add-ons selected for OpenShiftCluster/<cluster> forms a cycle through <member list> once spec.afterRefs applies` | `remove one spec.afterRefs or requires entry among <member list> to break the cycle` |
 
-A missing capability and a cycle are reported once for the cluster, on the
+A `spec.afterRefs` entry naming no binding is reported by the reference rule
+at its own indexed field. A binding cycle is reported instead of, never beside,
+the member cycle it would also cause. A missing capability and a cycle are reported once for the cluster, on the
 binding that selects the requiring member, never repeated on the cluster's
 other bindings. A direct `addonRefs` or `profileRefs` entry naming a missing
 object is reported by the reference rule at its own indexed field, with no
@@ -277,7 +298,7 @@ package's closed configuration, and diagnostics name fields under
 `$.spec.packages.<name>`. Every package accepts `timeout`, a positive Go
 duration of at most `5h50m` that defaults to the package's readiness
 timeout. A package's own rules check its configuration against the bound
-`ContainerCluster` and the effective catalog, never a live system.
+`OpenShiftCluster` and the effective catalog, never a live system.
 
 Registry construction proves that every provided capability token has a reader or a
 defined downstream meaning. `NewRegistryWithExamples` accepts explicit
@@ -357,20 +378,20 @@ again after a destroy.
 | --- | --- | --- | --- | --- |
 | Non-canonical entry | `api.value` | `$.spec.packages.metallb.pools[<i>].addresses[<j>]` | `address <entry> of pool <pool> is not a canonical CIDR or <first>-<last> range` | `write it as <canonical>` |
 | Reversed or mixed range | `api.value` | as above | `range <entry> of pool <pool> ends before it starts or mixes address families` | `write the range as <first>-<last> of one family, first not after last` |
-| Wrong family | `api.invariant` | as above | `address <entry> of pool <pool> is not of the <family> family of ContainerCluster/<cluster>` | `use <family> addresses for the pools of <cluster>` |
-| Outside every machine network | `api.invariant` | as above | `address <entry> of pool <pool> lies outside every machine network of ContainerCluster/<cluster>` | `use addresses inside <cidrs>, or name the interface whose subnet holds them under l2.interface` |
+| Wrong family | `api.invariant` | as above | `address <entry> of pool <pool> is not of the <family> family of OpenShiftCluster/<cluster>` | `use <family> addresses for the pools of <cluster>` |
+| Outside every machine network | `api.invariant` | as above | `address <entry> of pool <pool> lies outside every machine network of OpenShiftCluster/<cluster>` | `use addresses inside <cidrs>, or name the interface whose subnet holds them under l2.interface` |
 | Pool spans networks | `api.invariant` | `$.spec.packages.metallb.pools[<i>].addresses` | `pool <pool> spans <network> and <network>` | `split the pool so that each pool lies inside one network` |
-| Interface missing on a node | `api.invariant` | `$.spec.packages.metallb.pools[<i>].l2.interface` | `interface <interface> of pool <pool> is not declared on node <machine> of ContainerCluster/<cluster>` | `declare <interface> on every node of <cluster>, or omit l2.interface` |
+| Interface missing on a node | `api.invariant` | `$.spec.packages.metallb.pools[<i>].l2.interface` | `interface <interface> of pool <pool> is not declared on node <machine> of OpenShiftCluster/<cluster>` | `declare <interface> on every node of <cluster>, or omit l2.interface` |
 | Interface without an address | `api.invariant` | as above | `interface <interface> of pool <pool> carries no <family> address on node <machine>` | `assign <interface> an address in the pool's subnet on every node through network.addresses` |
 | Interface on several subnets | `api.invariant` | as above | `interface <interface> of pool <pool> is on <subnet> on node <machine> and on <subnet> on node <machine>` | `assign every node's <interface> address in one subnet` |
 | Outside the interface subnet | `api.invariant` | `$.spec.packages.metallb.pools[<i>].addresses[<j>]` | `address <entry> of pool <pool> lies outside <subnet>, the subnet of <interface>` | `use addresses inside <subnet>` |
 | Default-route interface | `api.invariant` | `$.spec.packages.metallb.pools[<i>].l2.interface` | `interface <interface> of pool <pool> is the default-route interface of node <machine> or br-ex` | `omit l2.interface to announce a pool on the machine network` |
 | Secondary-network uplink | `api.invariant` | as above | `interface <interface> of pool <pool> is the uplink of secondary network <network>, which carries no host address` | `name an interface that carries a node address, or omit l2.interface` |
-| No host routing | `api.invariant` | as above | `pool <pool> announces on <interface>, which needs gatewayConfig.routingViaHost: true on ContainerCluster/<cluster>` | `set spec.networking.ovnKubernetesConfig.gatewayConfig.routingViaHost: true on <cluster>, or omit l2.interface` |
-| No forwarding | `api.invariant` | as above | `pool <pool> announces on <interface>, which needs gatewayConfig.ipForwarding: Global on ContainerCluster/<cluster>` | `set spec.networking.ovnKubernetesConfig.gatewayConfig.ipForwarding: Global on <cluster>, or omit l2.interface` |
+| No host routing | `api.invariant` | as above | `pool <pool> announces on <interface>, which needs gatewayConfig.routingViaHost: true on OpenShiftCluster/<cluster>` | `set spec.networking.ovnKubernetesConfig.gatewayConfig.routingViaHost: true on <cluster>, or omit l2.interface` |
+| No forwarding | `api.invariant` | as above | `pool <pool> announces on <interface>, which needs gatewayConfig.ipForwarding: Global on OpenShiftCluster/<cluster>` | `set spec.networking.ovnKubernetesConfig.gatewayConfig.ipForwarding: Global on <cluster>, or omit l2.interface` |
 | Held address | `api.invariant` | `$.spec.packages.metallb.pools[<i>].addresses[<j>]` | `address <entry> of pool <pool> includes <address>, held by <holder>` | `exclude <address> from the pool` |
 | Network or broadcast address | `api.invariant` | as above | `address <entry> of pool <pool> includes <address>, the network or broadcast address of <subnet>` | `exclude <address> from the pool` |
-| Overlapping network | `api.invariant` | as above | `address <entry> of pool <pool> overlaps <cidr>, the <network kind> of ContainerCluster/<cluster>` | `use addresses outside <cidr>` |
+| Overlapping network | `api.invariant` | as above | `address <entry> of pool <pool> overlaps <cidr>, the <network kind> of OpenShiftCluster/<cluster>` | `use addresses outside <cidr>` |
 | Overlapping pools | `api.duplicate` | `$.spec.packages.metallb.pools[<i>].addresses[<j>]` of the later pool | `pool <pool> overlaps pool <other> at <address>` | `make the addresses of <pool> and <other> disjoint` |
 
 ### Package fdf
@@ -387,7 +408,7 @@ openshift-marketplace` on a Red Hat catalog. It provides `dataFoundation`.
 | Field | Type | Required | Default | Rule |
 | --- | --- | --- | --- | --- |
 | `subscription` | object | yes | — | The [shared block](#subscription); `source` is required, with no default, and names the owned `catalogSource` or a default catalog. |
-| `storageExportRef` | string | yes | — | A managed `StorageExport` this package instance consumes; no other instance names it. |
+| `cephConsumerRef` | string | yes | — | A managed `CephConsumer` this package instance consumes; no other instance names it. |
 | `defaultStorageClass` | boolean | no | `false` | Makes the RBD storage class the cluster's default. |
 | `timeout` | string | no | `1h` | As every package's `timeout`. |
 
@@ -396,8 +417,8 @@ Rules, each at its field under `$.spec.packages.fdf`:
 | Fault | Code | Field | Message | Remedy |
 | --- | --- | --- | --- | --- |
 | The catalog is neither owned nor a default catalog | `api.invariant` | `subscription.source` | `package fdf subscribes from catalog <source>, which no cluster Bootwright installs serves` | `declare subscription.catalogSource named <source> with the IBM catalog image and an explicit priority, or name redhat-operators` |
-| The export is consumed twice | `api.duplicate` | `storageExportRef` of the later binding in canonical order | `StorageExport/<export> is already consumed by package fdf of ClusterAddonBinding/<binding>` | `give each consuming cluster its own StorageExport` |
-| A TLS object gateway reaches no cluster trust | `api.invariant` | `storageExportRef` | `StorageExport/<export> attaches an object gateway over TLS, and ContainerCluster/<cluster> adds no trust bundle to its cluster-wide trusted CA` | `add the gateway certificate's issuing CA to spec.install.additionalTrustBundleRefs of <cluster> under additionalTrustBundlePolicy Always` |
+| The consumer is consumed twice | `api.duplicate` | `cephConsumerRef` of the later binding in canonical order | `CephConsumer/<consumer> is already consumed by package fdf of ClusterAddonBinding/<binding>` | `give each consuming cluster its own CephConsumer` |
+| A TLS object gateway reaches no cluster trust | `api.invariant` | `cephConsumerRef` | `CephConsumer/<consumer> attaches an object gateway over TLS, and OpenShiftCluster/<cluster> adds no trust bundle to its cluster-wide trusted CA` | `add the gateway certificate's issuing CA to spec.install.additionalTrustBundleRefs of <cluster> under additionalTrustBundlePolicy Always` |
 
 The default catalogs are `redhat-operators`, `certified-operators`,
 `community-operators` and `redhat-marketplace`. The trust rule holds when the
@@ -433,7 +454,7 @@ Red Hat Advanced Cluster Management for Kubernetes
 
 | Fault | Code | Field | Message | Remedy |
 | --- | --- | --- | --- | --- |
-| A single-node cluster without the basic hub | `api.invariant` | `$.spec.packages.acm.hub.availabilityConfig` | `package acm on single-node ContainerCluster/<cluster> needs hub availabilityConfig Basic` | `set hub.availabilityConfig to Basic` |
+| A single-node cluster without the basic hub | `api.invariant` | `$.spec.packages.acm.hub.availabilityConfig` | `package acm on single-node OpenShiftCluster/<cluster> needs hub availabilityConfig Basic` | `set hub.availabilityConfig to Basic` |
 
 ### Package gitops
 
@@ -464,10 +485,6 @@ Red Hat OpenShift GitOps with its default Argo CD instance, a
 | Prune or self-heal without automation | `api.invariant` | `$.spec.packages.gitops.bootstrap.sync` | `bootstrap sync prune and selfHeal of package gitops need sync.automated` | `set sync.automated to true, or remove prune and selfHeal` |
 
 Diagnostics never echo a repository URL, which could hold credentials.
-
-Not yet met: the schema, the diagnostic remedy and the tracked examples still
-spell the field `bootstrap.credentials`; tracked as
-[B824](../milestones/backlog.md#b824).
 
 ### Package certmgr
 

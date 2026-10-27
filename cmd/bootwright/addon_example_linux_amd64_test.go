@@ -113,7 +113,7 @@ func TestExportConsumerRetirementFactsReachTheRemovalEngine(t *testing.T) {
 		}
 		return block, capability
 	}
-	exportBlock, export := capabilityOf("ceph-export-compact-storage")
+	exportBlock, export := capabilityOf("ceph-consumer-compact-storage")
 	outputs, err := export.(lifecycle.ProducedOutputProvider).ProducedOutputs(exportBlock)
 	if _, bound := export.(lifecycle.HostBound); err != nil || !bound || len(outputs) != 1 {
 		t.Fatalf("export outputs = %v (%v)", outputs, err)
@@ -144,7 +144,7 @@ func TestAddonExamplesPreviewWithAllProducedInputs(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			services, _ := productionExampleContext(t, name, name)
 			out, _ := contextRun(t, services, 0, "plan", "--context", name, "--output", "json")
-			if name == "lab-compact-df" && (!strings.Contains(out, "ceph-export-compact-storage") || !strings.Contains(out, "addon-fdf-compact")) {
+			if name == "lab-compact-df" && (!strings.Contains(out, "ceph-consumer-compact-storage") || !strings.Contains(out, "addon-fdf-compact")) {
 				t.Fatal("preview omitted export or its consumer", out)
 			}
 			if name == "lab-compact-hub" && (!strings.Contains(out, "addon-acm-compact") || !strings.Contains(out, "addon-gitops-compact")) {

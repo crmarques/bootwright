@@ -110,7 +110,7 @@ func writeConciseHelp(w io.Writer, command *cobra.Command) error {
 }
 
 func presentationCommand(path string) bool {
-	return path == "help" || path == "version" || strings.HasPrefix(path, "completion ")
+	return path == "help" || path == "version" || path == "schema" || strings.HasPrefix(path, "completion ")
 }
 
 func helpExample(path string) string {
@@ -123,7 +123,7 @@ func helpExample(path string) string {
 		"validate": "--file ./input --output json", "preflight controller": "--context lab", "preflight storage-cluster": "--context lab --output json", "preflight container-cluster": "--context lab --output json", "plan": "--context lab --stage machines", "status": "--context lab", "diff": "--context lab --observe", "render effective": "--context lab --output json", "apply": "--context lab --stage machines", "destroy": "--context lab",
 		"machine list": "--context lab --power-status", "machine rsh": "--context lab --name node", "machine exec": "--context lab --name node -- uname -a", "machine start": "--context lab --name node", "machine stop": "--context lab --name node", "machine restart": "--context lab --name node", "machine trust": "--context lab --dry-run", "setup": "--dry-run", "cluster kubeconfig": "--context lab --name cluster", "cluster keyring": "--context lab --name storage --client vm-disks",
 		"cluster list": "--context lab", "cluster info": "--context lab --name storage", "cluster rsh": "--context lab --name storage --node node-1", "cluster exec": "--context lab --name storage -- uname -a",
-		"version": "", "help": "context init", "completion bash": "", "completion zsh": "", "completion fish": "", "completion powershell": "",
+		"version": "", "schema": "--format json-schema", "help": "context init", "completion bash": "", "completion zsh": "", "completion fish": "", "completion powershell": "",
 	}
 	suffix, ok := examples[path]
 	if !ok {

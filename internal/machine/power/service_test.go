@@ -600,7 +600,7 @@ func TestAPinnedRunRefusesAnotherSystemNamingTheMachineAndTheRemedy(t *testing.T
 		Message: "the management controller at https://bmc.example.test/redfish/v1/Systems/1 answers as another system " +
 			"than the one this context's current apply proved, so no power request was sent",
 		Object: &diagnostics.ObjectIdentity{APIVersion: api.APIVersion, Kind: "Machine", Name: "metal"},
-		Remediation: "correct spec.hardware.management.bmc.address on Machine/metal, or run bootwright destroy --context lab " +
+		Remediation: "correct spec.substrate.baremetal.bmc.address on Machine/metal, or run bootwright destroy --context lab " +
 			"and bootwright apply --context lab so the machine is proved again; " + lentRemediation + " for both identities",
 	}}
 	proved := &pins{identity: machine.HardwareIdentity{UUID: "4C4C4544-0042-3510-8052-B4C04F4D4E31", Serial: "SN1"}, found: true}
@@ -882,7 +882,8 @@ func TestAnUnpinnedPhysicalMachineDeclaringNoMACRefuses(t *testing.T) {
 	_, err := New(objects, evidenceSource{}, &pins{}, runtime, runner, nil, nil, nil, nil).
 		Stop(context.Background(), PowerRequest{ContextName: "lab", Names: []string{"metal"}, SkipConfirmation: true})
 	reported := diagnostics.Of(err)
-	if len(reported) != 1 || reported[0].Code != "machine.power" || !strings.Contains(reported[0].Message, "declares no MAC address") || runtime.entered != 0 {
+	if len(reported) != 1 || reported[0].Code != "machine.power" || !strings.Contains(reported[0].Message, "declares no MAC address") ||
+		reported[0].Remediation != "declare spec.substrate.baremetal.nics[] (nicRef and macAddress) on Machine/metal, or apply the context so its bare-metal block proves it" || runtime.entered != 0 {
 		t.Fatalf("refusal = %+v, lent %d", reported, runtime.entered)
 	}
 	pinned := &pins{identity: machine.HardwareIdentity{UUID: "4C4C4544-0042-3510-8052-B4C04F4D4E31"}, found: true}
@@ -892,7 +893,7 @@ func TestAnUnpinnedPhysicalMachineDeclaringNoMACRefuses(t *testing.T) {
 	}
 }
 
-// stripped answers with the fixture less one hardware field of a Machine.
+// stripped answers with the fixture less one bare-metal arm field of a Machine.
 type stripped struct{ catalog api.Catalog }
 
 func (s stripped) RenderEffective(context.Context, compilation.EffectiveRequest) (*compilation.EffectiveResult, error) {
@@ -903,7 +904,7 @@ func catalogWithout(name, field string) stripped {
 	objects := catalog().Objects()
 	for index, candidate := range objects {
 		if candidate.Kind() == api.Machine && candidate.Name() == name {
-			objects[index] = candidate.WithSpec(candidate.Spec().With("hardware", candidate.Spec().Get("hardware").Without(field)))
+			objects[index] = candidate.WithSpec(candidate.Spec().WithPath(candidate.Spec().Get("substrate", "baremetal").Without(field), "substrate", "baremetal"))
 		}
 	}
 	return stripped{catalog: api.NewCatalog(objects)}

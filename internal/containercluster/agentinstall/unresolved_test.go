@@ -41,7 +41,7 @@ func TestUnresolvedNamesTheRefusingCheck(t *testing.T) {
 		execution, _ := mediaExecution(t, testDigest)
 		block := execution.Block
 		block.Object = "sno"
-		subject := "the agent media of ContainerCluster sno on Machine controller"
+		subject := "the agent media of OpenShiftCluster sno on Machine controller"
 		another := mediaEvidence(t, testDigest, func(e *MediaEvidence) { e.Installer = "4.21.14" })
 		requireUnresolved(t, NewMedia(nil, material.AuthorizedKey), block, map[string]unresolvedCase{
 			"an apply over another release's build": {reconciliation.Apply, another, lifecycle.Unresolved{
@@ -60,7 +60,7 @@ func TestUnresolvedNamesTheRefusingCheck(t *testing.T) {
 		execution, _ := installExecution(t, singleNodeCatalog(), testDigest)
 		block := execution.Block
 		block.Object = "sno"
-		subject := "the installation of ContainerCluster sno on Machine controller"
+		subject := "the installation of OpenShiftCluster sno on Machine controller"
 		another := installEvidence(t, testDigest, func(e *InstallEvidence) { e.Release = "4.21.14" })
 		stray := installEvidence(t, testDigest, func(e *InstallEvidence) {
 			e.Postcondition, e.Media, e.OwnMedia = false, []string{"sno-01", "sno-02"}, []string{"sno-01"}

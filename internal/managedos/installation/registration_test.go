@@ -33,12 +33,12 @@ func rhelEntitlement(overrides ...api.FieldValue) api.Object {
 	for _, override := range overrides {
 		rhsm = rhsm.With(override.Name, override.Value)
 	}
-	return api.NewObject(api.Entitlement, "rhel", api.Value{}, api.MapValue(text("type", "redhat-rhel"), field("rhsm", rhsm)))
+	return api.NewObject(api.Entitlement, "rhel", api.Value{}, api.MapValue(text("type", "redhatRhel"), field("rhsm", rhsm)))
 }
 
 func externalEntitlement() api.Object {
 	return api.NewObject(api.Entitlement, "rhel", api.Value{}, api.MapValue(
-		text("type", "redhat-rhel"), field("rhsm", api.MapValue(text("management", "external"))),
+		text("type", "redhatRhel"), field("rhsm", api.MapValue(text("management", "external"))),
 	))
 }
 

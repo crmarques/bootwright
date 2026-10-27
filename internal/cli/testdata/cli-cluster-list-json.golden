@@ -8,19 +8,19 @@
     "clusters": [
       {
         "name": "archive",
-        "kind": "StorageCluster"
+        "kind": "CephCluster"
       },
       {
         "name": "edge",
-        "kind": "ContainerCluster"
+        "kind": "OpenShiftCluster"
       },
       {
         "name": "okd-lab",
-        "kind": "ContainerCluster"
+        "kind": "OpenShiftCluster"
       },
       {
         "name": "storage",
-        "kind": "StorageCluster"
+        "kind": "CephCluster"
       }
     ]
   },

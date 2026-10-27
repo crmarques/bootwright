@@ -125,9 +125,10 @@ func stringScalar(node *desiredstate.Node) string {
 }
 
 func unregisteredKind(kind api.Kind) (string, string) {
+	if retired, ok := api.RetiredKindNamed(string(kind)); ok {
+		return retired.Name + " is retired", retired.Replacement
+	}
 	switch kind {
-	case "InfraComponent":
-		return "InfraComponent is retired; declare Proxy, DNSServer, NTPServer, ArtifactServer, Registry, or LoadBalancer with management on its spec", "replace it with the typed service object it described"
 	case "Context":
 		return "a Context is a standalone context configuration document, not desired state", "keep it outside the input directory and pass it to context init or context update with -f"
 	}
@@ -204,6 +205,17 @@ func nullNode(node *desiredstate.Node) bool {
 }
 
 func (d *decoder) typeMismatch(node *desiredstate.Node, expected *api.Shape, path string) {
+	if node.Kind == desiredstate.ScalarKind {
+		kind, ownerPath := api.Kind(nodeText(mappingNode(documentBody(d.document), "kind"))), path
+		if rest, ok := strings.CutPrefix(path, "$.spec.defaults."); ok && kind == api.Environment {
+			owner, tail, _ := strings.Cut(rest, ".")
+			kind, ownerPath = api.Kind(owner), "$.spec."+tail
+		}
+		if retired, ok := api.RetiredValueAt(kind, ownerPath, node.Value); ok {
+			d.fail(node, "api.value", path, string(retired.Kind)+" "+strings.TrimPrefix(retired.Path, "$.spec.")+" value "+retired.Value+" is retired", retired.Replacement)
+			return
+		}
+	}
 	found := typeName(scalarType(node))
 	switch node.Kind {
 	case desiredstate.MappingKind:
@@ -333,8 +345,8 @@ func (d *decoder) unknownField(key *desiredstate.Node, shape *api.Shape, path st
 			return
 		}
 	}
-	if message := d.retiredFieldMessage(path, key.Value); message != "" {
-		d.fail(key, "api.field", childPath, message, "remove the retired field")
+	if retired, ok := api.RetiredFieldAt(kind, ownerPath); ok {
+		d.fail(key, "api.field", childPath, string(retired.Kind)+" "+strings.TrimPrefix(retired.Path, "$.spec.")+" is retired", retired.Replacement)
 		return
 	}
 	names := make([]string, 0, len(shape.Fields))
@@ -353,6 +365,10 @@ func (d *decoder) unknownField(key *desiredstate.Node, shape *api.Shape, path st
 }
 
 func (d *decoder) unknownKindDefault(key *desiredstate.Node, path string) {
+	if retired, ok := api.RetiredKindNamed(key.Value); ok {
+		d.fail(key, "api.field", path+"."+key.Value, "kind defaults name "+retired.Name+", which is retired", retired.Replacement)
+		return
+	}
 	if !schemaIdentifier.MatchString(key.Value) {
 		d.fail(key, "api.field", path, "kind defaults name no registered kind", "use a registered kind name such as Machine")
 		return
@@ -440,39 +456,6 @@ func (d *decoder) refusedConstruct(node *desiredstate.Node, path string) bool {
 		return true
 	}
 	return false
-}
-
-func (d *decoder) retiredFieldMessage(path, field string) string {
-	kind := nodeText(mappingNode(documentBody(d.document), "kind"))
-	if field == "proxy" {
-		if kind == string(api.Environment) && (path == "$.spec.controller" || path == "$.spec.defaults.Environment.controller") {
-			return "Environment controller.proxy is retired; put proxy on the Machine selected by controller.machineRef"
-		}
-		if kind == string(api.Machine) && path == "$.spec.os.install" || kind == string(api.Environment) && path == "$.spec.defaults.Machine.os.install" {
-			return "Machine os.install.proxy is retired; use Machine.spec.proxy or its kind defaults"
-		}
-	}
-	if kind == string(api.Environment) && (path == "$.spec" || path == "$.spec.defaults.Environment") {
-		switch field {
-		case "infraComponents":
-			return "infraComponents is retired; declare typed service objects and reference them from their consumers"
-		case "proxy":
-			return "Environment proxy is retired; use Machine.spec.proxy on the controller and proxy choices on install consumers or their kind defaults"
-		case "registries":
-			return "Environment registries is retired; declare Registry objects and select them through ContainerCluster install.registries"
-		case "componentImages":
-			return "componentImages is retired; put image pins on managed service objects or their kind defaults"
-		case "trustedCAs":
-			return "Environment trustedCAs is retired; reference caBundle Secrets through ContainerCluster.spec.install.additionalTrustBundleRefs or its kind defaults; connection trust remains on the consuming service or Entitlement"
-		case "machineAccess":
-			return "Environment machineAccess is retired; use spec.remoteMachinesAccessKey.keyRef"
-		case "resources":
-			return "Environment resources is retired; the Environment directory is the scope, and spec.containerClusters and spec.storageClusters are the only narrowing"
-		case "safety":
-			return "Environment safety is retired; authorize data loss per command with --authorize data-loss on apply or destroy"
-		}
-	}
-	return ""
 }
 
 func allowedTag(n *desiredstate.Node) bool {

@@ -197,7 +197,7 @@ realize says so and may name its backlog item.
 `TestRefusalsNameNoVendorRelease` check the Go sources and the collection's
 plugins.
 A context-backed next action carries `--context <name>` for the context the
-invocation resolved. The context-free commands `setup`, `media` and `version`
+invocation resolved. The context-free commands `setup`, `media`, `version` and `schema`
 take none. No diagnostic carries confidential material.
 
 ## JSON output
@@ -227,6 +227,7 @@ Successful result objects have stable top-level fields:
 | --- | --- |
 | `help` and explicit help | `command`, `usage`, `description`, `commands`, `flags` |
 | `version` | `version`, `commit`, `source`, `go`, `target`, `dependencyBundle` |
+| `schema` | `format`, `schema` |
 | `completion <shell>`, `secret show`, `cluster kubeconfig`, `cluster keyring` | `export` |
 | `context init`, `context update` | `context`, `counts`, `filesCopied`, `inputChanged` |
 | `context use`, `context current` | `context` |
@@ -235,7 +236,7 @@ Successful result objects have stable top-level fields:
 | `secret set`, `secret generate`, `secret delete` | `context`, optional `name`, `changed`, `unchanged`, `changedNames`, `unchangedNames`, `parts` |
 | `secret encryption init`, `secret encryption rotate` | `context`, `implementation`, `activeKey`, `changed`, `retiredKeys`, `reencryptedVersions`, `reencryptedParts` |
 | `media add`, `media delete` | `name`, `outcome`, `size`, optional `sha256` |
-| `plan` | `context`, `verb`, `steps`, `stages`, `waves`, `widest`, `bound`, `startable`, `deferred`, `continuation`, `finalizes`, optional `anotherBuild`, `stops`, `stopsAfterOnline`, optional `checks`, `receipt` |
+| `plan` | `context`, `verb`, `steps`, `stages`, optional `until`, `waves`, `widest`, `bound`, `startable`, `deferred`, `continuation`, `finalizes`, optional `anotherBuild`, `stops`, `stopsAfterOnline`, optional `checks`, `receipt` |
 | `apply`, `destroy` | `context`, `verb`, `steps`, `blocks`, `settled`, `recovered`, `next`, `receipt` |
 | `add-ons list` | `addOns` (each: `name`, `provides`, `requires`, `olmPackage`, `defaultSource`, `configuration`) |
 | `secret check`, `secret list`, `secret info` | `context`, `secrets` |
@@ -246,7 +247,7 @@ Successful result objects have stable top-level fields:
 | `status` | `context`, `setupChecks`, `desired`, `clusters`, `storageClusters`, `shared`, `secrets`, `nextSteps`, `lifecycle`, `handoff`, `contradictions` |
 | `diff` | `context`, `operation`, `input`, `plan`, `observed`, `blocks`, `objects`, `summary` |
 | `render` | `inputDir`, `outputDir`, `effectiveStatePath`, `lockPath`, `inventoryPath`, `varsPath`, `installer`, `storage` |
-| `render effective` | `counts`, `effectiveState` |
+| `render effective` | `counts`, `effectiveState`, and with `--origins` `origins` |
 | `render installer` | `clusters` |
 | `render storage` | `clusters` |
 | `setup` (with `--download-only`) | `directory`, `outcome`, `files`, `next` |
@@ -283,7 +284,8 @@ steps it waits for), `wave` (the earliest round it can start in, counted from
 one) and `consumes` (the authorizations its consequence needs). `blocks` lists
 what an `apply` or `destroy` reached for those blocks: `id`, `description`,
 `stage`, `state`, `outcome`, `attempts` and, for an unproved block, `unresolved`.
-`stages` names the stages the plan holds; `waves`, `widest`, `bound`, `startable`
+`stages` names the stages the plan holds; `until` is the `--until` add-on
+instance, as `<cluster>.<package>`, when one was given; `waves`, `widest`, `bound`, `startable`
 and `deferred` are the counts of the `Concurrency` and selection fields below;
 `continuation` and `finalizes` say whether a preview continues an operation or
 only completes its finalization; `stops` and `stopsAfterOnline` name the
@@ -293,9 +295,6 @@ when the plan consumes one, lists each required token bound to the digest of
 its steps, as `data-loss=<digest>`; `settled` says the result
 performed no work and `recovered` names what it first completed; and `next` is
 the command of the `Next` field.
-
-Not yet met: each `blocks` entry also carries a `groups` member; tracked as
-[B824](../milestones/backlog.md#b824).
 
 YAML mode encodes the same tagged CLI-owned envelope and result DTO, using
 JSON field names and preserving integer values, array order, explicit nulls and
@@ -345,8 +344,8 @@ The cluster-exclusion arrays contain unique names in ascending bytewise order.
 Exclusion diagnostics carry the object identities and the selection list to
 extend.
 
-`advisories` contains the ordered `api.deferred` warning subset using the
-diagnostic shape below. Those warnings also remain in envelope `diagnostics`;
+`advisories` contains the ordered `api.deferred` and `api.unrealized` warning
+subset using the diagnostic shape below. Those warnings also remain in envelope `diagnostics`;
 human output presents each diagnostic only once. All four arrays are always
 present, including when empty. Every failed `validate` invocation returns
 `result: null`; partial loader counts remain internal.
@@ -359,9 +358,11 @@ secret info also shows the available durable version identifier; machine
 consumers must reference that identifier rather than the ordinal.
 
 `render effective` returns admission `counts` and `effectiveState`, the canonical
-ordered array of complete effective objects. Successful `diagnostics` and
+ordered array of complete effective objects, and with `--origins` also
+`origins`, one `{object, field, origin}` entry per effective leaf
+([field origins](../cli.md#effective-field-origins)). Successful `diagnostics` and
 `logs` are empty. Text mode emits the exact canonical YAML bytes, including
-the final LF, with empty stderr. Context commands also support their tagged
+the final LF, with empty stderr, or with `--origins` the origin listing. Context commands also support their tagged
 structured result presentations.
 
 A successful human `validate` writes exactly one summary line to standard
@@ -523,11 +524,11 @@ contact no host and read no credential bytes unless `--secrets` asks.
 
 `cluster list` returns one `clusters` array containing both cluster kinds in
 ascending bytewise order of cluster name. Every entry identifies `name` and
-`kind`, with `kind` exactly `ContainerCluster` or `StorageCluster`. Human output
+`kind`, with `kind` exactly `OpenShiftCluster` or `CephCluster`. Human output
 shows the same names and kinds in the same order.
 
 `cluster info` retains its `context`, `clusters`, and `storage` result fields.
-`clusters` is the ContainerCluster array and `storage` is the StorageCluster
+`clusters` is the OpenShiftCluster array and `storage` is the CephCluster
 array; each sorts by cluster name and is empty when its kind is not selected.
 Each cluster entry includes `name`, `kind`, and `accessCommands` alongside its
 endpoints and artifact metadata. Human output shows container clusters then
@@ -536,7 +537,7 @@ selected unknown or excluded cluster fails `access.target` with exit `1` under
 the selected human, JSON or YAML failure mode; it never yields a successful empty
 selection. Without `--name`, the catalog's default-all selection applies.
 
-A managed Ceph StorageCluster entry adds these fields, in this order, after its
+A managed CephCluster entry adds these fields, in this order, after its
 `name`, `kind` and `accessCommands`:
 
 | Field | Contract |
@@ -544,39 +545,39 @@ A managed Ceph StorageCluster entry adds these fields, in this order, after its
 | `management` | `managed`. |
 | `release` | The declared Ceph release. |
 | `fsid` | The cluster FSID its bootstrap evidence proves. |
-| `image` | `{reference, digest, platform}` of the [frozen image](../storage.md#frozen-release-and-trust), from the cluster's image evidence. |
+| `image` | `{reference, digest, platform}` of the [frozen image](../ceph.md#frozen-release-and-trust), from the cluster's image evidence. |
 | `specializations` | The sorted [version specialization](../../.agents/knowledge/version-specializations.md) ids that the cluster's bootstrap apply evidence and its ceph-host apply evidence name; omitted when none and on an unavailable entry. |
 | `monitors` | `[{host, fqdn, address}]`, one per monitor in its cluster-block evidence, mapped to the declared node it runs on. |
 | `adminNode` | The declared name of the bootstrap node, which holds the administrator keyring. |
 | `cephCommand` | The exact prefix that runs the Ceph CLI as the administrator through `cluster exec`: `bootwright cluster exec --context <context> --name <cluster> --node <adminNode> -- sudo -n ceph --conf /var/lib/bootwright/ceph/<fsid>/ceph.conf --keyring /var/lib/bootwright/ceph/<fsid>/ceph.client.admin.keyring`. The operator appends the Ceph arguments. |
 | `status` | `ready`, or `unavailable` with a `reason` and the remedy `bootwright apply --context <context> --stage clusters` when the evidence above is missing; an unavailable entry omits the fields that evidence would carry. |
 | `dashboard` | `{status, user, urls, certificateSHA256}`: `status` is `ready`, or `unproved` with a `reason` when the apply could not reach the dashboard; `user` is the administrator account; `urls` and `certificateSHA256` are those the apply proved. |
-| `resources` | `[{kind, name, status, scope}]`: the rows `status` reports under this cluster, in the same order with the same `status`, on a ready and an unavailable entry alike. `scope` is a one-line redacted statement of the object in the spellings below, built from the request the current operation froze for it; it is omitted when no request of this build froze the object. For StorageObjectGateway it is the gateway request, not the zone pools that object also freezes. StorageExport takes it from its declaration, which holds references only. No `scope` carries a key, password, Secret reference or other Secret material. |
+| `resources` | `[{kind, name, status, scope}]`: the rows `status` reports under this cluster, in the same order with the same `status`, on a ready and an unavailable entry alike. `scope` is a one-line redacted statement of the object in the spellings below, built from the request the current operation froze for it; it is omitted when no request of this build froze the object. For CephObjectGateway it is the gateway request, not the zone pools that object also freezes. CephConsumer takes it from its declaration, which holds references only. No `scope` carries a key, password, Secret reference or other Secret material. |
 | `endpoints` | `[{service, urls, certificateSHA256, issuer, status, reason}]`: one row for each management gateway, NFS service and object gateway request the current operation froze for this cluster, ordered by `service`; always an array, empty on an unavailable entry. `service` is `mgmt-gateway`, `nfs.<service_id>` or `rgw.<service_id>`. Each URL derives from the frozen request and spells an IPv6 host in brackets. The management gateway is `https://<virtual_ip>:<port>/`, or `https://<host>:<port>/` for each placement host when it declares no virtual IP. An NFS service behind an ingress is `nfs://<ingress virtual IP>:<port>/`, the port being the NFS `port` behind a keepalive-only ingress and otherwise the ingress `frontend_port`, default 2049; without an ingress it is the NFS `virtual_ip`, else each placement host, at the NFS `port`, default 2049. An object gateway is `https` when its terminating document, the ingress when one fronts it and otherwise the rgw service, sets `ssl`, else `http`, at the ingress `frontend_port`, else `rgw_frontend_port`, else 443 or 80, on its endpoint FQDN, else the ingress virtual IP, else each placement host. `status` is `ready` when the apply evidence of that block in the current operation, for the same frozen request, proves the endpoint ready (a management or object gateway also reached by that apply's probe from the cluster's bootstrap host; no connect from the controller is made or implied), else `unproved` with a `reason`; an NFS service without an ingress is always `unproved`, because the apply proves an NFS address only through the virtual IP of an ingress in front of it. `certificateSHA256` is the SHA-256 fingerprint of the leaf certificate that probe observed, present only on a `ready` TLS endpoint. `issuer` is `bound` when the request binds a stored certificate and `cephadm` when cephadm signs it, and is omitted for a plaintext endpoint. No endpoint carries Secret material. |
 
 | Kind | `scope` |
 | --- | --- |
-| StoragePlacementPolicy | `rule <rule>, failure domain <failureDomain>`, then `, device class <deviceClass>` when one is set |
-| StoragePool, replicated | `replicated size <size>/min <minSize>, application <application>` |
-| StoragePool, erasure | `erasure k=<dataChunks> m=<codingChunks>, application <application>`, then `, overwrites` when overwrites are enabled |
-| StorageRBDImage | `image <pool>/<name>, <sizeBytes> bytes`, then `, data pool <dataPool>` when one is set |
-| StorageClient | `client.<name> <access> on pool <pool>`, then `, data pools <dataPools separated by spaces>` when the frozen request derives any |
-| StorageFilesystem | `filesystem <name>, metadata <metadataPool>, data <dataPools separated by spaces>` |
-| StorageSubvolume | `subvolume <filesystem>/<group>/<name>`, with `_nogroup`, cephadm's default group, when no group is set |
-| StorageObjectGateway | `zone <realm>/<zoneGroup>/<zone>` |
-| StorageNVMeoFSubsystem | `subsystem <nqn> on nvmeof.<serviceID>` |
-| StorageNFSExport | `export <native.pseudo> on nfs.<serviceID>`, cephadm's service name |
-| StorageSMBResource | `smb cluster <cluster_id>, <auth_mode>`, `share <share_id> on smb cluster <cluster_id>`, `join auth <auth_id>` or `users and groups <users_groups_id>`, by `native.resource_type` |
-| StorageExport | `export of pool <rbdPoolRef>, filesystem <filesystemRef>`, then `, object gateway <objectGatewayRef>` when set, then its grant: `; grants consumer administrators every path of filesystem <filesystemRef>`, with a gateway `; grants consumer administrators every RGW user, bucket and key in the realm of object gateway <objectGatewayRef>`, and `; is not isolated from other exports that share its cluster, filesystem or gateway`; `export` without `dataFoundation` |
+| CephPlacementPolicy | `rule <rule>, failure domain <failureDomain>`, then `, device class <deviceClass>` when one is set |
+| CephPool, replicated | `replicated size <size>/min <minSize>, application <application>` |
+| CephPool, erasure | `erasure k=<dataChunks> m=<codingChunks>, application <application>`, then `, overwrites` when overwrites are enabled |
+| CephRBDImage | `image <pool>/<name>, <sizeBytes> bytes`, then `, data pool <dataPool>` when one is set |
+| CephClient | `client.<name> <access> on pool <pool>`, then `, data pools <dataPools separated by spaces>` when the frozen request derives any |
+| CephFilesystem | `filesystem <name>, metadata <metadataPool>, data <dataPools separated by spaces>` |
+| CephSubvolume | `subvolume <filesystem>/<group>/<name>`, with `_nogroup`, cephadm's default group, when no group is set |
+| CephObjectGateway | `zone <realm>/<zoneGroup>/<zone>` |
+| CephNVMeoFSubsystem | `subsystem <nqn> on nvmeof.<serviceID>` |
+| CephNFSExport | `export <native.pseudo> on nfs.<serviceID>`, cephadm's service name |
+| CephSMBResource | `smb cluster <cluster_id>, <auth_mode>`, `share <share_id> on smb cluster <cluster_id>`, `join auth <auth_id>` or `users and groups <users_groups_id>`, by `native.resource_type` |
+| CephConsumer | `export of pool <rbdPoolRef>, filesystem <filesystemRef>`, then `, object gateway <objectGatewayRef>` when set, then its grant: `; grants consumer administrators every path of filesystem <filesystemRef>`, with a gateway `; grants consumer administrators every RGW user, bucket and key in the realm of object gateway <objectGatewayRef>`, and `; is not isolated from other exports that share its cluster, filesystem or gateway`; `export` without `dataFoundation` |
 
-A StorageExport that sets an object gateway or a filesystem also states, in
+A CephConsumer that sets an object gateway or a filesystem also states, in
 `plan` and in these resource rows, what it grants: consumer administrators hold
 every RGW user, bucket and key of the gateway's realm and every path of the
-filesystem, and exports that share a cluster, filesystem or gateway are not
+filesystem, and consumers that share a cluster, filesystem or gateway are not
 isolated from each other
-([trust extent](../storage-resources.md#storageexport)). In `plan` the export's
+([trust extent](../ceph-resources.md#cephconsumer)). In `plan` the consumer's
 apply step carries each grant clause above, without its leading `; `, as an
-impact line after `create per-export Ceph principals for <export>`.
+impact line after `create per-consumer Ceph principals for <consumer>`.
 
 `--secrets --name <cluster>` adds `passwordValue` to `dashboard`, the only
 field that carries a secret. Its contract, refusals and warning are the
@@ -599,7 +600,7 @@ Within an available `cluster info` result, evaluate each entry as follows:
    [applicability rule](commands.md#cluster-command-applicability).
 2. `not-implemented`: the command applies but this executable does not implement
    the requested access use case, as for `cluster oc`, `cluster kubectl` and the
-   sessions of an OpenShift or OKD ContainerCluster.
+   sessions of an OpenShiftCluster.
 3. `unavailable`: the command applies and is implemented, but local access
    metadata, credential-artifact availability, identity, ownership, or context
    state does not establish the prerequisites. The reason identifies the
@@ -612,9 +613,9 @@ Within an available `cluster info` result, evaluate each entry as follows:
 SSH entries describe the default node selected under
 [cluster sessions](../cli.md#cluster-sessions); readiness for that node makes no
 claim about other nodes. The `cluster keyring` entry of a managed Ceph cluster
-derives from its StorageClient resource rows and reads no custody: no
-StorageClient row is `unavailable`, saying the cluster declares no
-StorageClient; client rows none of which is `done` are `unavailable` with the
+derives from its CephClient resource rows and reads no custody: no
+CephClient row is `unavailable`, saying the cluster declares no
+CephClient; client rows none of which is `done` are `unavailable` with the
 `bootwright apply --context <context> --stage clusters` remedy; otherwise it is
 `ready`, with no node, and its template ends in `--client <client>`. Ready
 says one client of the cluster completed an apply; it claims nothing about any
@@ -696,10 +697,12 @@ field naming each token the whole frozen plan requires, bound to the digest of
 the steps that consume it, and those steps, as
 `--authorize data-loss=3f2a9c01b7e4d6a8 (step 3, 5)`; a finalization's preview
 carries none, because the `apply` or `destroy` that completes it runs no block
-and requires no authorization. With a stage selection,
+and requires no authorization. With a stage selection or `--until`,
 each pending step also says whether this invocation would start it, that it is
-not selected, or which block it waits on, and a closing field reports how many
-blocks would start and how many are deferred. While a block is unproved, the
+not selected, or which block it waits on; closing `Stages` and `Until` fields
+name the selection, as `Until  lab.gitops`, and a closing `Starts` field
+reports how many blocks would start and how many are deferred, as
+`1 of 2 blocks, 1 deferred`. While a block is unproved, the
 blocks the next `apply` resolves are marked `resolve` and counted as started,
 and every other ready step reads deferred, waiting on the first of them; that
 `apply` then admits the rest by what the resolutions prove, retrying a block
@@ -727,8 +730,8 @@ probe. Its result orders these fields:
 | `context` | `name`, `mode` of the resolved context. `mode` is the context record's mode, which a lifecycle read admits only as `ready`. |
 | `setupChecks` | `{id, status}` rows derived from stored controller evidence alone, without host probes: `controller-binding`, then `execution-bundle` (shown to humans as "Controller setup"), the identities [controller readiness](../controller.md#results-and-qualification) gives the same prerequisites. `execution-bundle` is `ready` when the setup subtree holds a receipt and no interrupted setup, which is what an apply needs before it claims the host, and `not-ready` otherwise. `controller-binding` is `ready` when that record binds this context, `pending` when it does not and the context holds no operation, because the first apply publishes it, and `not-ready` when it does not while an operation exists. Readiness itself never reports `pending`. |
 | `desired` | `revision`, `environment` and admission `counts` of the selected immutable input. `counts` holds `filesSeen` and `objectsDecoded`, and an input that does not compile fails `status` with its diagnostics, so `desired` is always an object. |
-| `clusters` | Ordered `{name, kind, status}` rows for selected ContainerCluster roots, `status` in the realization vocabulary below. |
-| `storageClusters` | Ordered `{name, kind, status, resources}` rows for selected StorageClusters. `resources` holds one `{kind, name, status}` row for each selected storage child object (a kind whose `clusterRef` names a StorageCluster) whose `clusterRef` names this cluster, ordered by API kind order then name, `status` in the realization vocabulary below; it is `[]` for an external StorageCluster and for one with no such object. |
+| `clusters` | Ordered `{name, kind, status}` rows for selected OpenShiftCluster roots, `status` in the realization vocabulary below. |
+| `storageClusters` | Ordered `{name, kind, status, resources}` rows for selected CephClusters. `resources` holds one `{kind, name, status}` row for each selected storage child object (a kind whose `clusterRef` names a CephCluster) whose `clusterRef` names this cluster, ordered by API kind order then name, `status` in the realization vocabulary below; it is `[]` for an external CephCluster and for one with no such object. |
 | `shared` | Ordered `{kind, name, machine, status}` rows for selected managed shared services, `status` in the realization vocabulary below. |
 | `secrets` | `declared`, the Secret objects the selected input declares, and `bindings`, the Secret bindings the current operation's record holds: one per operation however many Secrets it covers, and 0 beside no operation and once a completed removal finalized, which its pristine evidence proves without reading the keyring. |
 | `nextSteps` | Ordered command strings whose decision would pass over the records `status` read, as the [lifecycle receipt](../cli.md#lifecycle-receipt) states; empty when none would. |
@@ -742,7 +745,7 @@ object's blocks prove, whatever its declaration now says:
 
 - `unsupported`: no capability of this executable claims the kind, its
   capability refuses the object, or it is a managed service retained
-  `install-only`;
+  `installOnly`;
 - `pending`: this context has not realized it: nothing names it, its blocks
   have not started, or a removal took it back or released it; the next apply
   realizes it;
@@ -796,7 +799,7 @@ carries `unresolved`, with its
 object of `objects` beside the unified `patch` lines the text result prints:
 
 ```json
-{"context":{"name":"lab","revision":"rev-8c41d07e"},"operation":{"id":"op-3f9a0c12","verb":"apply","state":"done","apply":"op-3f9a0c12","revision":"rev-1b7e55a0","applied":"readable"},"input":"changed","plan":{"state":"differs","reason":"","changed":1,"added":0,"removed":0,"rebuilt":[]},"observed":false,"blocks":{"observed":0,"unknown":0,"unprojected":0},"objects":[{"kind":"StoragePool","name":"rbd-data","difference":"changed","plan":"changed","blocks":["ceph-pool-rbd-data"],"realization":"done","real":{"source":"applied","state":"present","document":{},"notCompared":[],"notes":[],"reason":"","remedy":""},"desired":{"document":{}},"patch":["--- applied/StoragePool/rbd-data","+++ desired/StoragePool/rbd-data"]}],"summary":{"none":0,"changed":1,"added":0,"removed":0,"unknown":0,"applied":0}}
+{"context":{"name":"lab","revision":"rev-8c41d07e"},"operation":{"id":"op-3f9a0c12","verb":"apply","state":"done","apply":"op-3f9a0c12","revision":"rev-1b7e55a0","applied":"readable"},"input":"changed","plan":{"state":"differs","reason":"","changed":1,"added":0,"removed":0,"rebuilt":[]},"observed":false,"blocks":{"observed":0,"unknown":0,"unprojected":0},"objects":[{"kind":"CephPool","name":"rbd-data","difference":"changed","plan":"changed","blocks":["ceph-pool-rbd-data"],"realization":"done","real":{"source":"applied","state":"present","document":{},"notCompared":[],"notes":[],"reason":"","remedy":""},"desired":{"document":{}},"patch":["--- applied/CephPool/rbd-data","+++ desired/CephPool/rbd-data"]}],"summary":{"none":0,"changed":1,"added":0,"removed":0,"unknown":0,"applied":0}}
 ```
 
 | Field | Contract |
@@ -845,6 +848,7 @@ it to a variable.
 | `input.symlink` | An input or managed path violates the link policy. |
 | `input.read` | An input cannot be safely read. |
 | `input.limit` | A documented resource limit was exceeded. |
+| `input.secrets-directory` | A warning: a [skipped `secrets` directory](../api/input.md#discovery) holds YAML, which discovery never reads; its source names the directory. |
 | `yaml.syntax` | YAML is malformed or is not valid UTF-8. |
 | `yaml.duplicate-key` | A mapping repeats a key. |
 | `yaml.alias` | An anchor, alias, or merge key is present, on a value or a mapping key. |
@@ -861,6 +865,7 @@ it to a variable.
 | `api.invariant` | A cross-field or cross-object rule is violated. |
 | `api.selection` | Environment selection excludes an otherwise discovered authored object. |
 | `api.deferred` | Valid authored state declares inactive operational semantics. |
+| `api.unrealized` | A warning: valid authored state declares something this build admits but no capability realizes, so `plan` refuses it with `lifecycle.unsupported`; it names the path and the tracking item ([admitted but unrealized](../api.md#admitted-but-unrealized)). |
 | `cli.usage` | Arguments or flags do not match this contract. |
 | `cli.not-implemented` | The command is defined but its application use case is not available. |
 | `runtime.encode` | A trustworthy result could not be encoded. |
@@ -940,7 +945,7 @@ duplicates only when every present or absent member is equal.
 
 ## Private operation logs
 
-Help, completion, `version`, every `validate`, `render effective`, `plan`, and
+Help, completion, `version`, `schema`, every `validate`, `render effective`, `plan`, and
 local list/current/status reads create no cache, temporary file, state record,
 output path, or log. Other render commands create only their declared
 artifacts. Preflight, local setup, sensitive export, and access handoff allocate

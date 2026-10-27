@@ -3,6 +3,7 @@ package lifecycle
 import (
 	"context"
 	"slices"
+	"strings"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/availability"
@@ -105,7 +106,7 @@ func (s Service) Plan(ctx context.Context, request PlanRequest) (*PlanResult, er
 	if err := s.available(ctx); err != nil {
 		return nil, err
 	}
-	selection, err := reconciliation.ParseStages(request.Stages)
+	selection, err := reconciliation.ParseSelection(request.Stages, request.Until)
 	if err != nil {
 		return nil, err
 	}
@@ -148,7 +149,7 @@ func (s Service) Plan(ctx context.Context, request PlanRequest) (*PlanResult, er
 // stops at the decision: it allocates no identity and writes nothing. It also
 // returns that decision and the durable state it was read from, before any
 // finalization it previews.
-func (s Service) preview(ctx context.Context, view View, selection reconciliation.StageSelection) (*PlanResult, transition, basis, error) {
+func (s Service) preview(ctx context.Context, view View, selection reconciliation.Selection) (*PlanResult, transition, basis, error) {
 	verb, err := s.previewed(ctx, view)
 	if err != nil {
 		return nil, transition{}, basis{}, err
@@ -157,7 +158,7 @@ func (s Service) preview(ctx context.Context, view View, selection reconciliatio
 	// Destroy passes none.
 	decideSelection := selection
 	if verb == reconciliation.Destroy {
-		decideSelection = nil
+		decideSelection = reconciliation.Selection{}
 	}
 	decided, err := s.decide(ctx, view, verb, decideSelection)
 	if err != nil {
@@ -169,10 +170,17 @@ func (s Service) preview(ctx context.Context, view View, selection reconciliatio
 			return nil, transition{}, basis{}, err
 		}
 	}
-	if verb == reconciliation.Destroy && len(selection) != 0 {
+	if verb == reconciliation.Destroy && !selection.Empty() {
+		given := []string{}
+		if len(selection.Stages) != 0 {
+			given = append(given, "--stage")
+		}
+		if selection.Until != "" {
+			given = append(given, "--until")
+		}
 		return nil, transition{}, basis{}, failure("lifecycle.stage",
 			"the next operation is a destroy, which accepts no stage selection",
-			"repeat "+contextCommand(view.Identity().Name, "plan")+" without --stage")
+			"repeat "+contextCommand(view.Identity().Name, "plan")+" without "+strings.Join(given, " and "))
 	}
 	var result PlanResult
 	switch {
@@ -180,7 +188,7 @@ func (s Service) preview(ctx context.Context, view View, selection reconciliatio
 		// Only a finalization leads here, because no verb a preview decides as
 		// settles over a record whose finalization is not due. What it calls
 		// for is read from the record it finalizes, not the one it leaves.
-		result = planPreview(decided.plan, decided.states, nil)
+		result = planPreview(decided.plan, decided.states, reconciliation.Selection{})
 		result.Verb, result.Continuation, result.Finalizes = string(verb), true, true
 		result.Receipt = Receipt{Operation: decided.operation.ID, Verb: "plan", State: "preview", Next: nextAction(marked.operation, marked.plan, marked.states)}
 	case decided.fresh:
@@ -256,16 +264,16 @@ func steps(plan reconciliation.Plan, states map[string]reconciliation.BlockState
 // deferred behind the first of them, while the failed blocks it retries start
 // beside every ready block that does not wait on one of them. Without a
 // selection the steps carry no marker.
-func planPreview(plan reconciliation.Plan, states map[string]reconciliation.BlockState, selection reconciliation.StageSelection) PlanResult {
+func planPreview(plan reconciliation.Plan, states map[string]reconciliation.BlockState, selection reconciliation.Selection) PlanResult {
 	schedule := reconciliation.ScheduleOf(plan)
 	result := PlanResult{
-		Steps: steps(plan, states), Stages: selection.Names(),
+		Steps: steps(plan, states), Stages: selection.Stages.Names(), Until: selection.Until,
 		Waves: schedule.Count, Widest: schedule.Widest,
 	}
 	for _, token := range requiredTokens(plan) {
 		result.Authorizations = append(result.Authorizations, token+"="+AuthorizationDigest(plan, token))
 	}
-	if len(selection) == 0 {
+	if selection.Empty() {
 		return result
 	}
 	kind, admitted := firstAdmission(plan, states, selection, nil, nil, nil)

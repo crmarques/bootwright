@@ -127,11 +127,11 @@ func Memberships(c api.Catalog) map[string][]string {
 			memberships[name] = append(memberships[name], cluster)
 		}
 	}
-	for _, cluster := range c.OfKind(api.ContainerCluster) {
+	for _, cluster := range c.OfKind(api.OpenShiftCluster) {
 		add(cluster.Name(), cluster.Spec().Get("nodes").Items())
 	}
-	for _, cluster := range c.OfKind(api.StorageCluster) {
-		add(cluster.Name(), cluster.Spec().Get("ceph", "topology", "nodes").Items())
+	for _, cluster := range c.OfKind(api.CephCluster) {
+		add(cluster.Name(), cluster.Spec().Get("topology", "nodes").Items())
 	}
 	for name := range memberships {
 		slices.Sort(memberships[name])

@@ -13,7 +13,7 @@ func TestTrustBundlePolicyProjectionGolden(t *testing.T) {
 			c := externalCatalog()
 			objects := c.Objects()
 			for index, o := range objects {
-				if o.Kind() == api.ContainerCluster && policy != "absent" {
+				if o.Kind() == api.OpenShiftCluster && policy != "absent" {
 					objects[index] = o.WithSpec(o.Spec().WithPath(api.StringValue(policy), "install", "additionalTrustBundlePolicy"))
 				}
 			}
@@ -41,7 +41,7 @@ func TestTrustBundlePolicyWithoutBundlesRefusesProjection(t *testing.T) {
 	c := singleNodeCatalog()
 	objects := c.Objects()
 	for index, o := range objects {
-		if o.Kind() == api.ContainerCluster {
+		if o.Kind() == api.OpenShiftCluster {
 			objects[index] = o.WithSpec(o.Spec().WithPath(api.StringValue("Always"), "install", "additionalTrustBundlePolicy"))
 		}
 	}

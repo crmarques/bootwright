@@ -21,7 +21,7 @@ kind: Entitlement
 metadata:
   name: ibm-ceph
 spec:
-  type: ibm-storage-ceph
+  type: ibmStorageCeph
   registry:
     url: cp.icr.io
     credentialsRef: ibm-registry
@@ -33,8 +33,6 @@ kind: Machine
 metadata:
   name: controller
 spec:
-  capabilities:
-    - container-runtime
   os:
     provided: true
   proxy:
@@ -54,10 +52,23 @@ kind: Machine
 metadata:
   name: metal-01
 spec:
-  capabilities:
-    - ceph-node
   substrate:
     providerRef: lab-metal
+    baremetal:
+      bmc:
+        address: https://bmc-01.metal.example.test/redfish/v1/Systems/1
+        protocol: redfish
+        credentialsRef: lab-bmc-credentials
+        tls:
+          verify: true
+          trustBundleRef: lab-bmc-ca
+        virtualMedia:
+          tls:
+            trust: importCertificate
+            removeCertificateAfterBoot: false
+      nics:
+        - nicRef: eno1
+          macAddress: 52:54:00:9a:1b:01
   hardware:
     eraseOnRemoval:
       method: logicalOverwrite
@@ -72,19 +83,8 @@ spec:
           sizeBytes: 107374182400
     nics:
       - name: eno1
-        macAddress: 52:54:00:9a:1b:01
-    management:
-      bmc:
-        address: https://bmc-01.metal.example.test/redfish/v1/Systems/1
-        protocol: redfish
-        credentialsRef: lab-bmc-credentials
-        tls:
-          verify: true
-          trustBundleRef: lab-bmc-ca
-        virtualMedia:
-          tls:
-            trust: import-certificate
-            removeCertificateAfterBoot: false
+    rootDevice:
+      deviceName: /dev/disk/by-id/wwn-0x6000000000000001
   os:
     provided: false
     installProfileRef: rhel-9-8
@@ -93,8 +93,6 @@ spec:
       ntp:
         - serverRef: lab-ntp
           endpointRef: ip
-      rootDeviceHints:
-        deviceName: /dev/disk/by-id/wwn-0x6000000000000001
   proxy:
     direct: {}
   network:
@@ -124,10 +122,23 @@ kind: Machine
 metadata:
   name: metal-02
 spec:
-  capabilities:
-    - ceph-node
   substrate:
     providerRef: lab-metal
+    baremetal:
+      bmc:
+        address: https://bmc-02.metal.example.test/redfish/v1/Systems/1
+        protocol: redfish
+        credentialsRef: lab-bmc-credentials
+        tls:
+          verify: true
+          trustBundleRef: lab-bmc-ca
+        virtualMedia:
+          tls:
+            trust: importCertificate
+            removeCertificateAfterBoot: false
+      nics:
+        - nicRef: eno1
+          macAddress: 52:54:00:9a:1b:02
   hardware:
     eraseOnRemoval:
       method: logicalOverwrite
@@ -142,19 +153,8 @@ spec:
           sizeBytes: 107374182400
     nics:
       - name: eno1
-        macAddress: 52:54:00:9a:1b:02
-    management:
-      bmc:
-        address: https://bmc-02.metal.example.test/redfish/v1/Systems/1
-        protocol: redfish
-        credentialsRef: lab-bmc-credentials
-        tls:
-          verify: true
-          trustBundleRef: lab-bmc-ca
-        virtualMedia:
-          tls:
-            trust: import-certificate
-            removeCertificateAfterBoot: false
+    rootDevice:
+      deviceName: /dev/disk/by-id/wwn-0x6000000000000002
   os:
     provided: false
     installProfileRef: rhel-9-8
@@ -163,8 +163,6 @@ spec:
       ntp:
         - serverRef: lab-ntp
           endpointRef: ip
-      rootDeviceHints:
-        deviceName: /dev/disk/by-id/wwn-0x6000000000000002
   proxy:
     direct: {}
   network:
@@ -194,10 +192,23 @@ kind: Machine
 metadata:
   name: metal-03
 spec:
-  capabilities:
-    - ceph-node
   substrate:
     providerRef: lab-metal
+    baremetal:
+      bmc:
+        address: https://bmc-03.metal.example.test/redfish/v1/Systems/1
+        protocol: redfish
+        credentialsRef: lab-bmc-credentials
+        tls:
+          verify: true
+          trustBundleRef: lab-bmc-ca
+        virtualMedia:
+          tls:
+            trust: importCertificate
+            removeCertificateAfterBoot: false
+      nics:
+        - nicRef: eno1
+          macAddress: 52:54:00:9a:1b:03
   hardware:
     eraseOnRemoval:
       method: logicalOverwrite
@@ -212,19 +223,8 @@ spec:
           sizeBytes: 107374182400
     nics:
       - name: eno1
-        macAddress: 52:54:00:9a:1b:03
-    management:
-      bmc:
-        address: https://bmc-03.metal.example.test/redfish/v1/Systems/1
-        protocol: redfish
-        credentialsRef: lab-bmc-credentials
-        tls:
-          verify: true
-          trustBundleRef: lab-bmc-ca
-        virtualMedia:
-          tls:
-            trust: import-certificate
-            removeCertificateAfterBoot: false
+    rootDevice:
+      deviceName: /dev/disk/by-id/wwn-0x6000000000000003
   os:
     provided: false
     installProfileRef: rhel-9-8
@@ -233,8 +233,6 @@ spec:
       ntp:
         - serverRef: lab-ntp
           endpointRef: ip
-      rootDeviceHints:
-        deviceName: /dev/disk/by-id/wwn-0x6000000000000003
   proxy:
     direct: {}
   network:
@@ -347,8 +345,6 @@ metadata:
   name: lab-metal
 spec:
   baremetal:
-    boot:
-      method: redfishVirtualMedia
     defaults:
       bmc:
         credentialsRef: lab-bmc-credentials
@@ -357,7 +353,7 @@ spec:
           trustBundleRef: lab-bmc-ca
         virtualMedia:
           tls:
-            trust: import-certificate
+            trust: importCertificate
             removeCertificateAfterBoot: false
   networkAttachments:
     - name: lab-metal
@@ -423,106 +419,104 @@ spec:
       addressRef: ip
 ---
 apiVersion: bootwright.io/v1alpha1
-kind: StorageCluster
+kind: CephCluster
 metadata:
   name: ceph-lab
 spec:
-  type: ceph
   management: managed
-  ceph:
-    distribution: ibm
-    release: 9.9.2.0
-    packageVersion: 20.2.2-349.el9cp
-    image:
-      base: cp.icr.io/cp/ibm-ceph/ceph-9-rhel10
-      version: v9.9.2-26947
+  distribution:
     ibm:
       callHome: enabled
       packages:
         source: vendor
-    entitlementRef: ibm-ceph
-    cephadm:
+  release: 9.9.2.0
+  packageVersion: 20.2.2-349.el9cp
+  image:
+    base: cp.icr.io/cp/ibm-ceph/ceph-9-rhel10
+    version: v9.9.2-26947
+  entitlementRef: ibm-ceph
+  cephadm:
+    addressRef: ip
+    ansible:
+      packageVersion: 5.0.3-1.el9cp
+    clusterSSH:
+      user: bootwright
+      keyRef: ceph-cluster-key
+      transport: verifiedTunnel
+    bootstrap:
+      nodeRef: metal-01
       addressRef: ip
-      ansible:
-        packageVersion: 5.0.3-1.el9cp
-      clusterSSH:
-        user: bootwright
-        keyRef: ceph-cluster-key
-        transport: verified-tunnel
-      bootstrap:
-        node: metal-01
-        addressRef: ip
-    networks:
-      publicCIDRs:
-        - 198.51.100.0/24
-    config:
-      global:
-        osd_pool_default_min_size: "2"
-        osd_pool_default_size: "2"
-      osd:
-        osd_memory_target: "4294967296"
-        osd_memory_target_autotune: "false"
-    services:
-      - service_type: mon
-        placement:
-          label: ceph-core
-          count: 3
-      - service_type: mgr
-        placement:
-          label: ceph-core
-          count: 2
-      - service_type: osd
-        service_id: data-1
-        placement:
-          hosts:
-            - metal-01.metal.example.test
-        spec:
-          data_devices:
-            paths:
-              - /dev/disk/by-id/wwn-0x5000000000000001
-      - service_type: osd
-        service_id: data-2
-        placement:
-          hosts:
-            - metal-02.metal.example.test
-        spec:
-          data_devices:
-            paths:
-              - /dev/disk/by-id/wwn-0x5000000000000002
-      - service_type: osd
-        service_id: data-3
-        placement:
-          hosts:
-            - metal-03.metal.example.test
-        spec:
-          data_devices:
-            paths:
-              - /dev/disk/by-id/wwn-0x5000000000000003
-      - service_type: mds
-        service_id: files
-        placement:
-          label: ceph-core
-          count: 1
-    topology:
-      nodes:
-        - name: metal-01
-          fqdn: metal-01.metal.example.test
-          machineRef: metal-01
-          labels:
-            - ceph-core
-        - name: metal-02
-          fqdn: metal-02.metal.example.test
-          machineRef: metal-02
-          labels:
-            - ceph-core
-        - name: metal-03
-          fqdn: metal-03.metal.example.test
-          machineRef: metal-03
-          labels:
-            - ceph-core
+  networks:
+    publicCIDRs:
+      - 198.51.100.0/24
+  config:
+    global:
+      osd_pool_default_min_size: "2"
+      osd_pool_default_size: "2"
+    osd:
+      osd_memory_target: "4294967296"
+      osd_memory_target_autotune: "false"
+  services:
+    - service_type: mon
+      placement:
+        label: ceph-core
+        count: 3
+    - service_type: mgr
+      placement:
+        label: ceph-core
+        count: 2
+    - service_type: osd
+      service_id: data-1
+      placement:
+        hosts:
+          - metal-01.metal.example.test
+      spec:
+        data_devices:
+          paths:
+            - /dev/disk/by-id/wwn-0x5000000000000001
+    - service_type: osd
+      service_id: data-2
+      placement:
+        hosts:
+          - metal-02.metal.example.test
+      spec:
+        data_devices:
+          paths:
+            - /dev/disk/by-id/wwn-0x5000000000000002
+    - service_type: osd
+      service_id: data-3
+      placement:
+        hosts:
+          - metal-03.metal.example.test
+      spec:
+        data_devices:
+          paths:
+            - /dev/disk/by-id/wwn-0x5000000000000003
+    - service_type: mds
+      service_id: files
+      placement:
+        label: ceph-core
+        count: 1
+  topology:
+    nodes:
+      - name: metal-01
+        fqdn: metal-01.metal.example.test
+        machineRef: metal-01
+        labels:
+          - ceph-core
+      - name: metal-02
+        fqdn: metal-02.metal.example.test
+        machineRef: metal-02
+        labels:
+          - ceph-core
+      - name: metal-03
+        fqdn: metal-03.metal.example.test
+        machineRef: metal-03
+        labels:
+          - ceph-core
 ---
 apiVersion: bootwright.io/v1alpha1
-kind: StoragePlacementPolicy
+kind: CephPlacementPolicy
 metadata:
   name: ssd-hosts
 spec:
@@ -534,36 +528,33 @@ spec:
     minSize: 2
 ---
 apiVersion: bootwright.io/v1alpha1
-kind: StoragePool
+kind: CephPool
 metadata:
   name: cephfs-data
 spec:
   clusterRef: ceph-lab
-  type: replicated
-  role: cephfs-data
+  role: cephfsData
   replicated:
     size: 2
     minSize: 2
 ---
 apiVersion: bootwright.io/v1alpha1
-kind: StoragePool
+kind: CephPool
 metadata:
   name: cephfs-metadata
 spec:
   clusterRef: ceph-lab
-  type: replicated
-  role: cephfs-metadata
+  role: cephfsMetadata
   replicated:
     size: 2
     minSize: 2
 ---
 apiVersion: bootwright.io/v1alpha1
-kind: StoragePool
+kind: CephPool
 metadata:
   name: rbd-data
 spec:
   clusterRef: ceph-lab
-  type: replicated
   role: rbd
   replicated:
     size: 2
@@ -572,7 +563,7 @@ spec:
     mode: on
 ---
 apiVersion: bootwright.io/v1alpha1
-kind: StorageRBDImage
+kind: CephRBDImage
 metadata:
   name: rbd-disk
 spec:
@@ -581,16 +572,16 @@ spec:
   sizeBytes: 1073741824
 ---
 apiVersion: bootwright.io/v1alpha1
-kind: StorageClient
+kind: CephClient
 metadata:
   name: rbd-canary
 spec:
   clusterRef: ceph-lab
   poolRef: rbd-data
-  access: read-write
+  access: readWrite
 ---
 apiVersion: bootwright.io/v1alpha1
-kind: StorageFilesystem
+kind: CephFilesystem
 metadata:
   name: files
 spec:
@@ -602,7 +593,7 @@ spec:
       default: true
 ---
 apiVersion: bootwright.io/v1alpha1
-kind: StorageSubvolume
+kind: CephSubvolume
 metadata:
   name: docs
 spec:

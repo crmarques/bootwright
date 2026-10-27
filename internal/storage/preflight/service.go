@@ -75,13 +75,13 @@ func (s Service) Check(ctx context.Context, request PreflightRequest) (*Report, 
 	if err != nil {
 		return nil, err
 	}
-	clusters := catalog.OfKind(api.StorageCluster)
+	clusters := catalog.OfKind(api.CephCluster)
 	names := slices.Clone(request.Clusters)
 	slices.Sort(names)
 	names = slices.Compact(names)
 	for _, name := range names {
 		if !slices.ContainsFunc(clusters, func(object api.Object) bool { return object.Name() == name }) {
-			return nil, diagnostics.NewFailureWithRemediation("access.target", "the context selects no StorageCluster named "+name, "", "run bootwright cluster list --context "+selected)
+			return nil, diagnostics.NewFailureWithRemediation("access.target", "the context selects no CephCluster named "+name, "", "run bootwright cluster list --context "+selected)
 		}
 	}
 	hosts := map[string]bool{}
@@ -94,7 +94,7 @@ func (s Service) Check(ctx context.Context, request PreflightRequest) (*Report, 
 			result.Checks = append(result.Checks, Check{ID: "cluster.prerequisites", Target: cluster.Name(), Status: capacity.Unknown, Reason: "external cluster prerequisite observation is unavailable", Next: "verify the external cluster through its owner"})
 			continue
 		}
-		for _, node := range cluster.Spec().Get("ceph", "topology", "nodes").Items() {
+		for _, node := range cluster.Spec().Get("topology", "nodes").Items() {
 			hosts[node.Get("machineRef").Text()] = true
 		}
 	}

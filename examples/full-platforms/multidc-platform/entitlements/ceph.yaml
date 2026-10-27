@@ -5,7 +5,7 @@ metadata:
   name: ceph-entitlement
 
 spec:
-  type: ibm-storage-ceph
+  type: ibmStorageCeph
 
   registry:
     url: cp.icr.io/cp

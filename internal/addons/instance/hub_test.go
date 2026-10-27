@@ -14,7 +14,7 @@ import (
 func TestGitOpsBootstrapProgramAndPlacementNamespace(t *testing.T) {
 	registry := packages.Builtin()
 	pkg, _ := registry.Find("gitops")
-	config := api.MapValue(api.FieldValue{Name: "subscription", Value: api.MapValue(api.FieldValue{Name: "channel", Value: api.StringValue("latest")}, api.FieldValue{Name: "startingCSV", Value: api.StringValue("gitops.v1")})}, api.FieldValue{Name: "bootstrap", Value: api.MapValue(api.FieldValue{Name: "repoURL", Value: api.StringValue("https://example.test/repo.git")}, api.FieldValue{Name: "targetRevision", Value: api.StringValue("main")}, api.FieldValue{Name: "path", Value: api.StringValue(".")}, api.FieldValue{Name: "destinationNamespace", Value: api.StringValue("application")}, api.FieldValue{Name: "credentials", Value: api.StringValue("repository-login")})})
+	config := api.MapValue(api.FieldValue{Name: "subscription", Value: api.MapValue(api.FieldValue{Name: "channel", Value: api.StringValue("latest")}, api.FieldValue{Name: "startingCSV", Value: api.StringValue("gitops.v1")})}, api.FieldValue{Name: "bootstrap", Value: api.MapValue(api.FieldValue{Name: "repoURL", Value: api.StringValue("https://example.test/repo.git")}, api.FieldValue{Name: "targetRevision", Value: api.StringValue("main")}, api.FieldValue{Name: "path", Value: api.StringValue(".")}, api.FieldValue{Name: "destinationNamespace", Value: api.StringValue("application")}, api.FieldValue{Name: "credentialsRef", Value: api.StringValue("repository-login")})})
 	binding := api.NewObject(api.ClusterAddonBinding, "hub", api.MapValue(), api.MapValue(api.FieldValue{Name: "clusterRef", Value: api.StringValue("cluster")}, api.FieldValue{Name: "packages", Value: api.MapValue(api.FieldValue{Name: "gitops", Value: config})}))
 	binding, _ = addons.NormalizePackages(binding, registry)
 	selected := addons.SelectedInstance{Package: pkg, Instance: addons.Instance{Cluster: "cluster", Binding: "hub", Config: binding.Spec().Get("packages", "gitops")}}
@@ -73,19 +73,19 @@ func TestFDFProducedPlacementFreezesExactDependency(t *testing.T) {
 	if !ok {
 		t.Fatal("fdf not registered")
 	}
-	config := api.MapValue(api.FieldValue{Name: "subscription", Value: api.MapValue(api.FieldValue{Name: "channel", Value: api.StringValue("stable")}, api.FieldValue{Name: "startingCSV", Value: api.StringValue("odf.v1")}, api.FieldValue{Name: "source", Value: api.StringValue("redhat-operators")})}, api.FieldValue{Name: "storageExportRef", Value: api.StringValue("export")})
+	config := api.MapValue(api.FieldValue{Name: "subscription", Value: api.MapValue(api.FieldValue{Name: "channel", Value: api.StringValue("stable")}, api.FieldValue{Name: "startingCSV", Value: api.StringValue("odf.v1")}, api.FieldValue{Name: "source", Value: api.StringValue("redhat-operators")})}, api.FieldValue{Name: "cephConsumerRef", Value: api.StringValue("export")})
 	binding := api.NewObject(api.ClusterAddonBinding, "df", api.MapValue(), api.MapValue(api.FieldValue{Name: "clusterRef", Value: api.StringValue("cluster")}, api.FieldValue{Name: "packages", Value: api.MapValue(api.FieldValue{Name: "fdf", Value: config})}))
 	binding, _ = addons.NormalizePackages(binding, registry)
 	selected := addons.SelectedInstance{Package: pkg, Instance: addons.Instance{Cluster: "cluster", Binding: "df", Config: binding.Spec().Get("packages", "fdf")}}
-	facts := addons.ClusterFacts{Release: "4.20", Exports: []addons.ExportFacts{{Name: "export", Gateway: true}}}
+	facts := addons.ClusterFacts{Release: "4.20", Exports: []addons.ConsumerFacts{{Name: "export", Gateway: true}}}
 	request, requires, err := instance.Render(selected, facts, "controller")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(request.ProducedInputs) != 2 || request.ProducedInputs[1].Kind != "StorageExport" || request.ProducedInputs[1].Object != "export" || request.ProducedInputs[1].Output != "external-details" || len(request.Secrets) != 0 {
+	if len(request.ProducedInputs) != 2 || request.ProducedInputs[1].Kind != "CephConsumer" || request.ProducedInputs[1].Object != "export" || request.ProducedInputs[1].Output != "external-details" || len(request.Secrets) != 0 {
 		t.Fatal(request)
 	}
-	if len(requires) != 2 || requires[1].Kind != "StorageExport" || requires[1].Object != "export" {
+	if len(requires) != 2 || requires[1].Kind != "CephConsumer" || requires[1].Object != "export" {
 		t.Fatal(requires)
 	}
 	program, err := request.Objects()

@@ -61,10 +61,10 @@ func TestServiceConsumersUseScalarTypedReferences(t *testing.T) {
 		{MachineInstallProfile, []string{"proxy", "proxyRef"}, Proxy},
 		{MachineInstallProfile, []string{"ntp", "serverRef"}, NTPServer},
 		{NetworkConfig, []string{"dns", "serverRef"}, DNSServer},
-		{ContainerCluster, []string{"install", "proxy", "proxyRef"}, Proxy},
-		{ContainerCluster, []string{"install", "ntp", "serverRef"}, NTPServer},
-		{ContainerCluster, []string{"install", "registries", "mirror", "registryRef"}, Registry},
-		{ContainerCluster, []string{"install", "endpoints", "api", "source", "loadBalancerRef"}, LoadBalancer},
+		{OpenShiftCluster, []string{"install", "proxy", "proxyRef"}, Proxy},
+		{OpenShiftCluster, []string{"install", "ntp", "serverRef"}, NTPServer},
+		{OpenShiftCluster, []string{"install", "registries", "mirror", "registryRef"}, Registry},
+		{OpenShiftCluster, []string{"install", "endpoints", "api", "source", "loadBalancerRef"}, LoadBalancer},
 	}
 	for _, tc := range cases {
 		shape := Schema(tc.kind)

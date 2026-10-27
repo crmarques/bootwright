@@ -9,7 +9,6 @@ const remoteServiceHost = `apiVersion: bootwright.io/v1alpha1
 kind: Machine
 metadata: {name: remote-services}
 spec:
-  capabilities: [container-runtime]
   os: {provided: true}
   network:
     addresses: [{name: service, address: 192.0.2.20}]

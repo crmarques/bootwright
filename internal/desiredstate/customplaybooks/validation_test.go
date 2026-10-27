@@ -23,7 +23,10 @@ func TestReservedPlaybooksNormalizeWithoutExecutionDefaults(t *testing.T) {
 			t.Fatal("explicit disabled state lost")
 		}
 		issues := Validate(candidate, api.NewCatalog([]api.Object{candidate}))
-		if len(issues) != 1 || issues[0].Code != "api.deferred" {
+		if enabled && len(issues) != 0 {
+			t.Fatal("an enabled reserved declaration is warned once, as unrealized, by the compiler", issues)
+		}
+		if !enabled && (len(issues) != 1 || issues[0].Code != "api.deferred") {
 			t.Fatal("valid reserved declaration did not report deferred execution", issues)
 		}
 	}
@@ -156,7 +159,7 @@ func TestEnabledCapabilityOrdering(t *testing.T) {
 	provider := playbook("provider").WithSpec(playbook("provider").Spec().With("provides", api.StringList("available")))
 	consumer := playbook("consumer").WithSpec(playbook("consumer").Spec().With("requires", api.StringList("available")))
 	valid := api.NewCatalog([]api.Object{consumer, provider})
-	if issues := Validate(consumer, valid); len(issues) != 1 || issues[0].Code != "api.deferred" {
+	if issues := Validate(consumer, valid); len(issues) != 0 {
 		t.Fatal(issues)
 	}
 	if !hasCode(Validate(consumer, api.NewCatalog([]api.Object{consumer})), "api.reference") {

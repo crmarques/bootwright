@@ -92,9 +92,9 @@ func TestTheRequirementGrammarAdmitsNamesAndCapabilitiesOnly(t *testing.T) {
 func TestAgentMediaSelectsNMStateFromItsClusterNodes(t *testing.T) {
 	objects := []api.Object{
 		api.NewObject(api.Environment, "example", api.Value{}, api.MapValue().WithPath(api.StringValue("controller"), "controller", "machineRef")),
-		api.NewObject(api.Machine, "controller", api.Value{}, api.MapValue().With("capabilities", api.StringList("container-runtime")).WithPath(api.BoolValue(true), "os", "provided").WithPath(api.BoolValue(true), "access", "local").WithPath(api.MapValue(), "proxy", "direct")),
+		api.NewObject(api.Machine, "controller", api.Value{}, api.MapValue().WithPath(api.BoolValue(true), "os", "provided").WithPath(api.BoolValue(true), "access", "local").WithPath(api.MapValue(), "proxy", "direct")),
 		api.NewObject(api.Machine, "node", api.Value{}, api.MapValue()),
-		api.NewObject(api.ContainerCluster, "cluster", api.Value{}, api.MapValue().WithPath(api.StringValue("agent"), "install", "method").With("nodes", api.ListValue(api.MapValue().With("machineRef", api.StringValue("node"))))),
+		api.NewObject(api.OpenShiftCluster, "cluster", api.Value{}, api.MapValue().WithPath(api.MapValue(), "install", "agent").With("nodes", api.ListValue(api.MapValue().With("machineRef", api.StringValue("node"))))),
 	}
 	selected, err := controller.Select(api.NewCatalog(objects))
 	if err != nil {
@@ -111,24 +111,24 @@ func TestAgentMediaSelectsNMStateFromItsClusterNodes(t *testing.T) {
 func TestOnlyAProbedInstallerVIPSelectsIPUtils(t *testing.T) {
 	objects := []api.Object{
 		api.NewObject(api.Environment, "example", api.Value{}, api.MapValue().WithPath(api.StringValue("controller"), "controller", "machineRef")),
-		api.NewObject(api.Machine, "controller", api.Value{}, api.MapValue().With("capabilities", api.StringList("container-runtime")).WithPath(api.BoolValue(true), "os", "provided").WithPath(api.BoolValue(true), "access", "local").WithPath(api.MapValue(), "proxy", "direct")),
+		api.NewObject(api.Machine, "controller", api.Value{}, api.MapValue().WithPath(api.BoolValue(true), "os", "provided").WithPath(api.BoolValue(true), "access", "local").WithPath(api.MapValue(), "proxy", "direct")),
 		api.NewObject(api.InfraProvider, "hosted", api.Value{}, api.MapValue().WithPath(api.StringValue("controller"), "libvirt", "machineRef").With("networkAttachments", api.ListValue(api.MapValue().With("libvirt", api.MapValue().With("management", api.StringValue("managed")).With("address", api.StringValue("198.51.100.1/24")).With("bridge", api.StringValue("virbr-lab")))))),
 	}
 	for _, test := range []struct {
 		name, address, platform, source string
 		want                            bool
 	}{
-		{"local IPv4 VIP", "198.51.100.10", "baremetal", "openshift", true},
-		{"off network", "192.0.2.10", "baremetal", "openshift", false},
-		{"IPv6", "2001:db8::10", "baremetal", "openshift", false},
+		{"local IPv4 VIP", "198.51.100.10", "baremetal", "installer", true},
+		{"off network", "192.0.2.10", "baremetal", "installer", false},
+		{"IPv6", "2001:db8::10", "baremetal", "installer", false},
 		{"external", "198.51.100.10", "none", "external", false},
 	} {
 		t.Run(test.name, func(t *testing.T) {
-			spec := api.MapValue().WithPath(api.StringValue("agent"), "install", "method").WithPath(api.StringValue(test.platform), "install", "platform", "type").With("nodes", api.ListValue(api.MapValue(), api.MapValue(), api.MapValue()))
+			spec := api.MapValue().WithPath(api.MapValue(), "install", "agent").WithPath(api.MapValue(), "install", "platform", test.platform).With("nodes", api.ListValue(api.MapValue(), api.MapValue(), api.MapValue()))
 			for _, slot := range []string{"api", "api-int", "ingress"} {
 				spec = spec.WithPath(api.StringValue(test.address), "install", "endpoints", slot, "address").WithPath(api.StringValue(test.source), "install", "endpoints", slot, "source", "type")
 			}
-			selection, err := controller.Select(api.NewCatalog(append(slices.Clone(objects), api.NewObject(api.ContainerCluster, "cluster", api.Value{}, spec))))
+			selection, err := controller.Select(api.NewCatalog(append(slices.Clone(objects), api.NewObject(api.OpenShiftCluster, "cluster", api.Value{}, spec))))
 			if err != nil {
 				t.Fatal(err)
 			}

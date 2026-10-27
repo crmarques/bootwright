@@ -14,8 +14,8 @@ import (
 func TestSelectionClassifiesEveryKindExactlyOnce(t *testing.T) {
 	classes := map[string][]api.Kind{
 		"root":       rootKinds(),
-		"cluster":    {api.ContainerCluster, api.StorageCluster},
-		"child":      append(api.Children(api.StorageCluster), api.Children(api.ContainerCluster)...),
+		"cluster":    {api.OpenShiftCluster, api.CephCluster},
+		"child":      append(api.Children(api.CephCluster), api.Children(api.OpenShiftCluster)...),
 		"dependency": {api.Machine, api.InfraProvider, api.ClusterAddon, api.ClusterAddonProfile},
 	}
 	for _, kind := range api.Kinds() {

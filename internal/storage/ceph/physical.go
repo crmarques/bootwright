@@ -18,7 +18,7 @@ var hardwareMAC = regexp.MustCompile(`^[0-9a-f]{2}(?::[0-9a-f]{2}){5}$`)
 
 func physicalDevices(cluster api.Object, node string) ([]Device, error) {
 	paths := []string{}
-	for _, service := range cluster.Spec().Get("ceph", "services").Items() {
+	for _, service := range cluster.Spec().Get("services").Items() {
 		if service.Get("service_type").Text() != "osd" {
 			continue
 		}

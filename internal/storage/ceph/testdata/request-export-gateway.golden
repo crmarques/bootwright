@@ -68,5 +68,5 @@
       "osd": "profile rbd pool=block"
     }
   },
-  "version": "ceph-export-request-v1"
+  "version": "ceph-export-request-v2"
 }

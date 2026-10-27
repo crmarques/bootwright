@@ -19,7 +19,7 @@ import (
 const userMaterial = `{"accessKey":"Q7ZK2M9X4B1R8T5W3N6P","secretKey":"u8Rj2Lq5Zx1Vb7Nc4Hk9Tg3Ws6Fd0Ym2Pa8Ee5Oi","uid":"app-writer"}`
 
 func objectUserObject(name string, pairs ...any) api.Object {
-	return childOf(api.StorageObjectUser, name, append([]any{"objectGatewayRef", "objects"}, pairs...)...)
+	return childOf(api.CephObjectUser, name, append([]any{"objectGatewayRef", "objects"}, pairs...)...)
 }
 
 func userCatalog(user api.Object) api.Catalog {
@@ -29,7 +29,7 @@ func userCatalog(user api.Object) api.Catalog {
 func userPlan(t *testing.T, catalog api.Catalog) reconciliation.BlockDefinition {
 	t.Helper()
 	input := lifecycle.PlanInput{Verb: reconciliation.Apply, Context: lifecycle.ContextIdentity{Name: "synthetic"}, State: compilation.NewState(catalog, catalog, nil), Controller: "controller"}
-	plan, err := New(api.StorageObjectUser, nil).Plan(context.Background(), input)
+	plan, err := New(api.CephObjectUser, nil).Plan(context.Background(), input)
 	if err != nil || len(plan.Definitions) != 1 {
 		t.Fatalf("the object user planned %+v (%v)", plan.Definitions, diagnostics.Of(err))
 	}
@@ -55,15 +55,15 @@ func userProduced(values ...string) []lifecycle.Produced {
 
 func TestObjectUserBlockRequiresItsGateway(t *testing.T) {
 	block := userPlan(t, userCatalog(objectUserObject("app-writer")))
-	if block.ID != "ceph-object-user-app-writer" || block.ID != ObjectUserBlockID("app-writer") || block.Kind != string(api.StorageObjectUser) || block.Object != "app-writer" ||
+	if block.ID != "ceph-object-user-app-writer" || block.ID != ObjectUserBlockID("app-writer") || block.Kind != string(api.CephObjectUser) || block.Object != "app-writer" ||
 		block.Stage != reconciliation.StageClusters || !slices.Equal(block.Exclusive, []string{"ceph/example"}) || block.Description != "realize Ceph object user app-writer" {
 		t.Fatalf("the object user block is %+v", block)
 	}
 	if !slices.Equal(block.Dependencies, []string{"ceph-cluster-example", "ceph-image-example"}) ||
-		!slices.Equal(block.Requires, []reconciliation.ObjectRef{{Kind: string(api.StorageObjectGateway), Object: "objects"}}) {
+		!slices.Equal(block.Requires, []reconciliation.ObjectRef{{Kind: string(api.CephObjectGateway), Object: "objects"}}) {
 		t.Fatalf("the object user block depends on %v and requires %v", block.Dependencies, block.Requires)
 	}
-	removal, err := New(api.StorageObjectUser, nil).Removal(context.Background(), reconciliation.Block{BlockDefinition: block})
+	removal, err := New(api.CephObjectUser, nil).Removal(context.Background(), reconciliation.Block{BlockDefinition: block})
 	if err != nil || removal.Description != "remove Ceph object user app-writer" {
 		t.Fatalf("the object user removal is %+v (%v)", removal, err)
 	}
@@ -84,7 +84,7 @@ func TestObjectUserRequestGolden(t *testing.T) {
 	if user := plannedUser(t, objectUserObject("app-writer")).ObjectUser; user.DisplayName != "app-writer" {
 		t.Fatalf("an omitted display name froze as %q", user.DisplayName)
 	}
-	renamed := childOf(api.StorageObjectGateway, "objects", "serviceRef", "rgw.objects", "realm", "r1", "zoneGroup", "g1", "zone", "z1")
+	renamed := childOf(api.CephObjectGateway, "objects", "serviceRef", "rgw.objects", "realm", "r1", "zoneGroup", "g1", "zone", "z1")
 	r, err = DecodeRequest(userPlan(t, planCatalog(3, 3, withPairAndHTTPRGW, renamed, objectUserObject("app-writer"))).Request)
 	if err != nil || r.ObjectUser.Realm != "r1" || r.ObjectUser.ZoneGroup != "g1" || r.ObjectUser.Zone != "z1" {
 		t.Fatalf("the user's zone froze as %+v (%v)", r.ObjectUser, err)
@@ -101,15 +101,14 @@ func TestObjectUserRequestCarriesNoKey(t *testing.T) {
 	}
 }
 
-func TestObjectUserPlanRefusesAnOverlongNameAndPropagatesGatewayRefusals(t *testing.T) {
-	_, err := planned(t, userCatalog(objectUserObject(strings.Repeat("u", 47))), api.StorageObjectUser, strings.Repeat("u", 47))
-	refusedWith(t, err, "api.invariant", "StorageObjectUser "+strings.Repeat("u", 47)+" has a name too long to identify its block, whose identity holds at most 63 characters", "rename the StorageObjectUser to at most 46 characters")
-	if !reconciliation.ValidSegment(ObjectUserBlockID(strings.Repeat("u", 46))) {
-		t.Fatal("a 46-character user name does not fit its block identity")
+func TestObjectUserPlanAdmitsALongNameAndPropagatesGatewayRefusals(t *testing.T) {
+	long := strings.Repeat("u", 63)
+	if _, err := planned(t, userCatalog(objectUserObject(long)), api.CephObjectUser, long); err != nil || !reconciliation.ValidSegment(ObjectUserBlockID(long)) {
+		t.Fatalf("a 63-character user name: %v", diagnostics.Of(err))
 	}
 	catalog := planCatalog(3, 2, withPairAndHTTPRGW, objectGateway("objects"), objectUserObject("app-writer"))
 	_, gatewayErr := gatewayRequests(catalog, objectGateway("objects"), "synthetic")
-	_, err = planned(t, catalog, api.StorageObjectUser, "app-writer")
+	_, err := planned(t, catalog, api.CephObjectUser, "app-writer")
 	if gatewayErr == nil || err == nil || !reflect.DeepEqual(diagnostics.Of(err), diagnostics.Of(gatewayErr)) {
 		t.Fatalf("the user refused %v; its gateway refused %v", diagnostics.Of(err), diagnostics.Of(gatewayErr))
 	}
@@ -178,13 +177,13 @@ func TestObjectUserHandoffRequiresItsOriginalAppliedScope(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	proof := lifecycle.BlockEvidence{Kind: string(api.StorageObjectUser), Object: user.Name(), Implementation: Implementation, Verb: reconciliation.Apply, State: reconciliation.BlockDone,
-		Block: reconciliation.Block{BlockDefinition: reconciliation.BlockDefinition{ID: ObjectUserBlockID(user.Name()), Kind: string(api.StorageObjectUser), Object: user.Name(), Implementation: Implementation, Request: request}, RequestDigest: "digest"}, Evidence: evidenceBytes(t, e)}
+	proof := lifecycle.BlockEvidence{Kind: string(api.CephObjectUser), Object: user.Name(), Implementation: Implementation, Verb: reconciliation.Apply, State: reconciliation.BlockDone,
+		Block: reconciliation.Block{BlockDefinition: reconciliation.BlockDefinition{ID: ObjectUserBlockID(user.Name()), Kind: string(api.CephObjectUser), Object: user.Name(), Implementation: Implementation, Request: request}, RequestDigest: "digest"}, Evidence: evidenceBytes(t, e)}
 	if !ObjectUserProved(catalog, user, []lifecycle.BlockEvidence{proof}) {
 		t.Fatal("the original applied scope was not proved")
 	}
 	for _, key := range []string{"realm", "zoneGroup", "zone"} {
-		gateway, _ := catalog.Find(api.StorageObjectGateway, "objects")
+		gateway, _ := catalog.Find(api.CephObjectGateway, "objects")
 		objects := catalog.Objects()
 		for i, object := range objects {
 			if object.Kind() == gateway.Kind() && object.Name() == gateway.Name() {
@@ -255,8 +254,8 @@ func TestAKeyIsRetainedOnlyWhenTheCanonicalJSONKeepsItVerbatim(t *testing.T) {
 }
 
 func TestObjectUserScopeRowNamesItsZone(t *testing.T) {
-	block := frozenScopeBlock(t, api.StorageObjectUser, "app-writer", userRuntime())
-	if got := ResourceScope(api.Catalog{}, api.StorageObjectUser, "app-writer", []reconciliation.Block{block}); got != "user app-writer in zone objects/objects/objects" {
+	block := frozenScopeBlock(t, api.CephObjectUser, "app-writer", userRuntime())
+	if got := ResourceScope(api.Catalog{}, api.CephObjectUser, "app-writer", []reconciliation.Block{block}); got != "user app-writer in zone objects/objects/objects" {
 		t.Fatalf("the object user scope row reads %q", got)
 	}
 }
@@ -264,7 +263,7 @@ func TestObjectUserScopeRowNamesItsZone(t *testing.T) {
 func userExecution(t *testing.T, r Request) lifecycle.Execution {
 	t.Helper()
 	e := executionFor(t, r)
-	e.Block.ID, e.Block.Kind, e.Block.Object = ObjectUserBlockID(r.ObjectUser.Name), string(api.StorageObjectUser), r.ObjectUser.Name
+	e.Block.ID, e.Block.Kind, e.Block.Object = ObjectUserBlockID(r.ObjectUser.Name), string(api.CephObjectUser), r.ObjectUser.Name
 	return withMaterial(e, r)
 }
 
@@ -277,7 +276,7 @@ func TestObjectUserObservationCapturesOnlyItsOutput(t *testing.T) {
 	evidence := readyEvidence(runtime)
 	evidence.Request, evidence.Resource = e.Block.RequestDigest, ResourceEvidence{ID: "app-writer"}
 	runner := &recordingRunner{result: lifecycle.RunResult{Evidence: evidenceBytes(t, evidence), Produced: userProduced(userMaterial)}}
-	observation, err := New(api.StorageObjectUser, runner).Observe(context.Background(), e)
+	observation, err := New(api.CephObjectUser, runner).Observe(context.Background(), e)
 	if err != nil || observation.Effect != reconciliation.EffectCompleted || len(observation.Produced) != 1 || observation.Produced[0].Name != ObjectUserOutput {
 		t.Fatalf("the user observation returned %+v (%v)", observation, diagnostics.Of(err))
 	}
@@ -289,12 +288,12 @@ func TestObjectUserObservationCapturesOnlyItsOutput(t *testing.T) {
 		t.Fatalf("the user observation ran %+v", runner.request)
 	}
 	runner.result.Produced = userProduced(strings.Replace(userMaterial, "app-writer", "other", 1))
-	if observation, err := New(api.StorageObjectUser, runner).Observe(context.Background(), e); err == nil || observation.Effect != reconciliation.EffectUnknown {
+	if observation, err := New(api.CephObjectUser, runner).Observe(context.Background(), e); err == nil || observation.Effect != reconciliation.EffectUnknown {
 		t.Fatalf("a foreign key pair was accepted: %+v (%v)", observation, err)
 	}
 	mismatched := e
-	mismatched.Block.Kind = string(api.StorageObjectGateway)
-	if _, err := New(api.StorageObjectUser, runner).Observe(context.Background(), mismatched); err == nil {
+	mismatched.Block.Kind = string(api.CephObjectGateway)
+	if _, err := New(api.CephObjectUser, runner).Observe(context.Background(), mismatched); err == nil {
 		t.Fatal("a user request under another kind was accepted")
 	}
 }

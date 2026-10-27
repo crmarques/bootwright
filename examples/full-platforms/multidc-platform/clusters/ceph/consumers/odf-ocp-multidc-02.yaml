@@ -1,0 +1,12 @@
+apiVersion: bootwright.io/v1alpha1
+kind: CephConsumer
+metadata:
+  name: ceph-multidc-01-odf-ocp-multidc-02
+
+spec:
+  clusterRef: ceph-multidc-01
+
+  dataFoundation:
+    rbdPoolRef: odf-ocp-multidc-02-rbd
+    filesystemRef: odf-cephfs
+    objectGatewayRef: odf-rgw-all

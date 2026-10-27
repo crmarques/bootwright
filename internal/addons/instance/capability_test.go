@@ -92,7 +92,7 @@ func (r *scriptedRunner) Run(_ context.Context, request lifecycle.RunRequest) (l
 func fixtureExecution(t *testing.T, request Request) lifecycle.Execution {
 	t.Helper()
 	return lifecycle.Execution{Block: fixtureBlock(t, request), ApplyOperation: "operation-1", ApplyRegistered: "2026-01-01T00:00:00Z", Attempt: 1, LendProduced: func(_ context.Context, ref lifecycle.ProducedInput) (secrets.Material, error) {
-		if ref != (lifecycle.ProducedInput{Kind: "ContainerCluster", Object: "cluster", Output: "kubeconfig"}) {
+		if ref != (lifecycle.ProducedInput{Kind: "OpenShiftCluster", Object: "cluster", Output: "kubeconfig"}) {
 			t.Fatal(ref)
 		}
 		return secrets.NewMaterial(map[secrets.Part][]byte{secrets.ValuePart: []byte("private-kubeconfig")}), nil
@@ -205,7 +205,7 @@ func TestPlanIdentityDependenciesBudgetAndDeterminism(t *testing.T) {
 		t.Fatal("unstable planning")
 	}
 	block := first.Definitions[0]
-	if block.ID != "addon-fixture-cluster" || block.Object != "cluster.fixture" || block.Stage != reconciliation.StageAddOns || len(block.Requires) != 1 || block.Requires[0] != (reconciliation.ObjectRef{Kind: "ContainerCluster", Object: "cluster"}) {
+	if block.ID != "addon-fixture-cluster" || block.Object != "cluster.fixture" || block.Stage != reconciliation.StageAddOns || len(block.Requires) != 1 || block.Requires[0] != (reconciliation.ObjectRef{Kind: "OpenShiftCluster", Object: "cluster"}) {
 		t.Fatalf("%+v", block)
 	}
 	request, err := DecodeRequest(block.Request)

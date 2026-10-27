@@ -20,7 +20,7 @@ import (
 // name every Ceph implementation whose worker derives from them.
 func cephMarkerSources() map[string][]string {
 	core, host := ceph.Implementation, ceph.HostImplementation
-	export, smb, replication := ceph.ExportImplementation, ceph.SMBImplementation, ceph.ReplicationImplementation
+	export, smb, replication := ceph.ConsumerImplementation, ceph.SMBImplementation, ceph.ReplicationImplementation
 	return map[string][]string{
 		"ceph_native.py":               {core, export, smb, replication},
 		"ceph_native_resources.py":     {core, export, smb, replication},

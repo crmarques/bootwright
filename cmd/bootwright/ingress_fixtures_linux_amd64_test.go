@@ -101,7 +101,7 @@ func TestIngressFixturesWithoutTheirImagesRefuseNamingTheField(t *testing.T) {
 // TestIngressFixturesPlanWithSelectedImages selects synthetic auxiliary
 // images on each ingress variant: nothing is refused, every production binding
 // plans, the image and cluster blocks carry exactly the selected images, and
-// the effective StorageCluster matches its golden.
+// the effective CephCluster matches its golden.
 func TestIngressFixturesPlanWithSelectedImages(t *testing.T) {
 	for _, name := range ingressFixtureNames {
 		t.Run(name, func(t *testing.T) {
@@ -149,7 +149,7 @@ func TestIngressFixturesPlanWithSelectedImages(t *testing.T) {
 			for _, id := range fixture.Planned {
 				block(id)
 			}
-			cluster := requireObject(t, state.Effective(), api.StorageCluster, "ceph-lab")
+			cluster := requireObject(t, state.Effective(), api.CephCluster, "ceph-lab")
 			data, err := effectiveencoding.YAML(context.Background(), api.NewCatalog([]api.Object{cluster}))
 			if err != nil {
 				t.Fatal(err)
@@ -163,22 +163,20 @@ func selectedIngressImages(t *testing.T, fixture ingressFixture) []ceph.Auxiliar
 	t.Helper()
 	var documents struct {
 		Spec struct {
-			Ceph struct {
-				Images map[string]struct {
-					Base    string `yaml:"base"`
-					Version string `yaml:"version"`
-				} `yaml:"images"`
-			} `yaml:"ceph"`
+			Images map[string]struct {
+				Base    string `yaml:"base"`
+				Version string `yaml:"version"`
+			} `yaml:"images"`
 		} `yaml:"spec"`
 	}
 	var want []ceph.AuxiliaryReference
 	for _, edit := range fixture.Select {
-		if err := yaml.Unmarshal([]byte("spec:\n  ceph:"+edit.With), &documents); err != nil {
+		if err := yaml.Unmarshal([]byte("spec:"+edit.With), &documents); err != nil {
 			t.Fatal(err)
 		}
 	}
 	for _, name := range fixture.Images {
-		image, ok := documents.Spec.Ceph.Images[name]
+		image, ok := documents.Spec.Images[name]
 		if !ok {
 			t.Fatalf("the selection authors no %s", name)
 		}

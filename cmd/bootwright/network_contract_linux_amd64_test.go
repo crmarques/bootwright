@@ -62,7 +62,7 @@ func contractNetworkExample(t *testing.T, resolver capabilityResolver) contractE
 		if err := yaml.Unmarshal(file.Bytes(), &doc); err != nil {
 			t.Fatal(err)
 		}
-		if doc["kind"] != "ContainerCluster" {
+		if doc["kind"] != "OpenShiftCluster" {
 			continue
 		}
 		metadata := doc["metadata"].(map[string]any)

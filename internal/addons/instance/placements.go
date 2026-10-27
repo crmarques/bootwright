@@ -18,8 +18,8 @@ func validatePlacements(request Request, catalog api.Catalog) error {
 		}
 		p := step.Place
 		if p.Produced != nil {
-			if _, ok := catalog.Find(api.StorageExport, p.Produced.Object); !ok {
-				return refusal("Secret placement "+p.Name+" names an undeclared StorageExport "+p.Produced.Object, "declare the managed StorageExport before planning")
+			if _, ok := catalog.Find(api.CephConsumer, p.Produced.Object); !ok {
+				return refusal("Secret placement "+p.Name+" names an undeclared CephConsumer "+p.Produced.Object, "declare the managed CephConsumer before planning")
 			}
 			continue
 		}

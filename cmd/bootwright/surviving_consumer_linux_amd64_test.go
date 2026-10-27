@@ -23,15 +23,16 @@ kind: Machine
 metadata:
   name: compact-01
 spec:
-  capabilities:
-    - openshift-node
   substrate:
     providerRef: lab-metal
+    baremetal:
+      bmc:
+        address: https://bmc-01.example.test/redfish/v1/Systems/1
+      nics:
+        - nicRef: enp1s0
+          macAddress: 52:54:00:9a:1b:21
   os:
     provided: false
-    install:
-      rootDeviceHints:
-        deviceName: /dev/sda
   network:
     configRef: lab-guests
     attachmentRef: lab-metal
@@ -45,10 +46,8 @@ spec:
   hardware:
     nics:
       - name: enp1s0
-        macAddress: 52:54:00:9a:1b:21
-    management:
-      bmc:
-        address: https://bmc-01.example.test/redfish/v1/Systems/1
+    rootDevice:
+      deviceName: /dev/sda
 `
 
 const metalProvider = `apiVersion: bootwright.io/v1alpha1
@@ -57,8 +56,6 @@ metadata:
   name: lab-metal
 spec:
   baremetal:
-    boot:
-      method: redfishVirtualMedia
     defaults:
       bmc:
         credentialsRef: lab-bmc-credentials
@@ -90,7 +87,7 @@ func metalCompactInput(t *testing.T, input string) {
 	if err != nil || strings.Count(string(data), "    mode: connected\n") != 1 {
 		t.Fatalf("the compact cluster is not the declaration this variant edits (%v)", err)
 	}
-	platform := "    mode: connected\n\n    platform:\n      type: baremetal\n\n      baremetal:\n        provisioningNetwork: disabled\n"
+	platform := "    mode: connected\n\n    platform:\n      baremetal:\n        provisioningNetwork: disabled\n"
 	if err := os.WriteFile(cluster, []byte(strings.Replace(string(data), "    mode: connected\n", platform, 1)), 0600); err != nil {
 		t.Fatal(err)
 	}
@@ -134,7 +131,7 @@ func TestADestroyRefusesWhileAPhysicalCompactConsumerSurvives(t *testing.T) {
 	}
 	services := assembleServices(deps)
 	contextRun(t, services, 0, "context", "init", "--name", "alpha", "--input-dir", input)
-	const pair = "ContainerCluster/compact consumes StorageExport/compact-storage"
+	const pair = "OpenShiftCluster/compact consumes CephConsumer/compact-storage"
 	if _, stderr := contextRun(t, services, 0, "plan", "--context", "alpha"); !strings.Contains(stderr, "lifecycle.surviving-consumer") || !strings.Contains(humanContent(stderr), humanContent(pair+" and outlives")) {
 		t.Fatalf("the apply plan warns %q", stderr)
 	}
@@ -150,7 +147,7 @@ func TestADestroyRefusesWhileAPhysicalCompactConsumerSurvives(t *testing.T) {
 	}
 	before := stateFingerprint(t, root)
 	_, stderr := contextRun(t, services, 1, "destroy", "--context", "alpha", "--authorize", reviewedDataLoss(t, services, "alpha"), "--yes")
-	for _, want := range []string{"lifecycle.live", pair + " and survives this destroy, which takes back StorageExport/compact-storage,", "StorageCluster/ceph-lab"} {
+	for _, want := range []string{"lifecycle.live", pair + " and survives this destroy, which takes back CephConsumer/compact-storage,", "CephCluster/ceph-lab"} {
 		if !strings.Contains(humanContent(stderr), humanContent(want)) {
 			t.Fatalf("the destroy refusal does not name %q:\n%s", want, stderr)
 		}

@@ -38,7 +38,7 @@ def core_request():
               "devices": [{"path": "/dev/vdb", "serial": "disk" + str(i), "sizeBytes": 1024 ** 3}], "labels": [], "location": {},
               "sshKeyRef": "fleet-key"} for i in range(1, 4)]
     names = [h["name"] for h in hosts]
-    return {"controller": "controller", "version": "ceph-core-v32", "action": "cluster", "cluster": "example", "owner": "apply-123",
+    return {"controller": "controller", "version": "ceph-core-v33", "action": "cluster", "cluster": "example", "owner": "apply-123",
             "fsid": "4c0a4300-aa43-458c-86d7-ac2256d1fc00", "image": "registry.example.test/ceph@sha256:" + "a" * 64,
             "cephadm": {"path": "/usr/sbin/cephadm", "packageVersion": "20.2.1-405.el9cp"},
             "release": "synthetic-release", "ansiblePackageVersion": "synthetic-ansible",
@@ -252,8 +252,8 @@ TAG_ONLY = "registry.example.test/ceph:v9.9.2"
 MALFORMED_DIGEST = "registry.example.test/ceph@sha256:" + "g" * 64
 UNSUPPORTED = [
     pytest.param({}, "^unsupported-release$", id="native-transport"),
-    pytest.param({"clusterSSHTransport": "verified-tunnel", "image": TAG_ONLY}, "^(request|unsupported-release)$", id="tunnel-tag-only"),
-    pytest.param({"clusterSSHTransport": "verified-tunnel", "image": MALFORMED_DIGEST}, "^(request|unsupported-release)$", id="tunnel-malformed-digest"),
+    pytest.param({"clusterSSHTransport": "verifiedTunnel", "image": TAG_ONLY}, "^(request|unsupported-release)$", id="tunnel-tag-only"),
+    pytest.param({"clusterSSHTransport": "verifiedTunnel", "image": MALFORMED_DIGEST}, "^(request|unsupported-release)$", id="tunnel-malformed-digest"),
 ]
 
 
@@ -288,7 +288,7 @@ def test_dispatch_reaches_osd_prepare_only_over_a_supported_transport(core_reque
         return sentinel
 
     monkeypatch.setattr(ceph_native.Worker, "osd_prepare", osd_prepare)
-    supported = dict(core_request, clusterSSHTransport="verified-tunnel")
+    supported = dict(core_request, clusterSSHTransport="verifiedTunnel")
     assert ceph_native.dispatch({"request": supported, "host": "node-1", "phase": "osd_prepare", "private": {}}) is sentinel
     assert reached == ["node-1"]
     with pytest.raises(ceph_native.Refusal, match="^unsupported-release$"):
@@ -356,7 +356,7 @@ def host_block(core_request):
         {"host": host["name"], "profile": "rhel", "media": "rhel-dvd.iso", "mediaSHA256": "e" * 64, "mediaSize": 1024,
          "publicationPath": "/var/lib/bootwright-services/example/public/os/rhel/tree", "url": "https://192.0.2.10:8443/os/rhel/tree",
          "certificateRef": "serving-tls"} for host in cluster["hosts"]]}
-    request = {"version": "ceph-host-v7", "cluster": cluster, "host": "node-2"}
+    request = {"version": "ceph-host-v8", "cluster": cluster, "host": "node-2"}
     record = {"version": "ceph-host-evidence-v3", "host": "node-2", "owner": cluster["owner"], "fsid": cluster["fsid"], "image": cluster["image"],
               "ready": False, "removed": False, "imageID": "", "uid": 0, "gid": 0, "label": "", "policySHA256": "", "cephadmSHA256": "",
               "planDigest": "", "route": False, "devices": []}
@@ -524,7 +524,7 @@ def test_worker_budget_stays_within_a_fixed_launcher_ceiling(core_request):
 
 
 def test_authorize_refuses_an_excluded_tunnel_pin_before_any_effect(core_request, tmp_path, monkeypatch):
-    request = dict(core_request, clusterSSHTransport="verified-tunnel")
+    request = dict(core_request, clusterSSHTransport="verifiedTunnel")
     markers = tunnel_native.Markers(tmp_path / request["fsid"])
     effects = []
     native = ceph_native.Worker(request, "node-1", run=lambda *args, **kwargs: effects.append("run"), markers=markers)
@@ -557,7 +557,7 @@ def test_authorize_refuses_an_excluded_tunnel_pin_before_any_effect(core_request
 
 
 def test_an_excluded_tunnel_pin_refuses_before_any_host_is_claimed_or_authorized(core_request, monkeypatch):
-    core_request["clusterSSHTransport"] = "verified-tunnel"
+    core_request["clusterSSHTransport"] = "verifiedTunnel"
     package_intent(core_request)
     names = [host["name"] for host in core_request["hosts"]]
     managers = names[1:]
@@ -860,7 +860,7 @@ def test_an_unproved_pool_id_still_refuses_observation(core_request, case):
 
 
 def test_client_caps_and_legacy_hash_binding_refuse_unproved_identity(core_request, monkeypatch):
-    core_request.update(action="client", client={"name": "reader", "pool": "volumes", "access": "read-only", "dataPools": [],
+    core_request.update(action="client", client={"name": "reader", "pool": "volumes", "access": "readOnly", "dataPools": [],
                                                  "filesystem": "", "group": "", "subvolume": ""})
     marks = Markers()
     marks.records["pool-volumes.json"] = {"name": "volumes"}
@@ -911,7 +911,7 @@ def test_bounded_process_timeout_never_returns_a_native_transcript():
 
 def test_client_recovery_reads_only_the_owned_principal(core_request, monkeypatch):
     core_request["action"] = "client"
-    core_request["client"] = {"name": "consumer", "pool": "volumes", "access": "read-only", "dataPools": [], "filesystem": "", "group": "", "subvolume": ""}
+    core_request["client"] = {"name": "consumer", "pool": "volumes", "access": "readOnly", "dataPools": [], "filesystem": "", "group": "", "subvolume": ""}
     markers = Markers()
     markers.records["client-consumer.json"] = core_request["client"]
     key = "PRIVATE-KEY-SENTINEL"
@@ -963,7 +963,7 @@ def test_owned_cluster_without_daemons_does_not_prove_cleanup(core_request):
 @pytest.mark.parametrize("phase", ["observe", "host_state", "client_read"])
 def test_native_reads_require_unchanged_artifacts_before_observation(core_request, phase):
     if phase == "client_read":
-        core_request.update(action="client", client={"name": "consumer", "pool": "volumes", "access": "read-only", "dataPools": [],
+        core_request.update(action="client", client={"name": "consumer", "pool": "volumes", "access": "readOnly", "dataPools": [],
                                                      "filesystem": "", "group": "", "subvolume": ""})
     native, calls = worker(core_request, {})
 
@@ -1367,7 +1367,7 @@ def test_observation_proves_each_owned_osd_effective_memory(core_request):
 def test_absent_native_resource_retains_owned_cleanup_work(core_request, action, owned):
     core_request.update(action=action, config=memory_config())
     resource = (replicated_pool()
-                if action == "pool" else {"name": "consumer", "pool": "volumes", "access": "read-only", "dataPools": [],
+                if action == "pool" else {"name": "consumer", "pool": "volumes", "access": "readOnly", "dataPools": [],
                                           "filesystem": "", "group": "", "subvolume": ""})
     core_request[action] = resource
     answers = memory_observation_answers(core_request)
@@ -1804,7 +1804,7 @@ def test_async_apply_waits_read_only_with_shrinking_aggregate_budget(core_reques
     assert stat.S_IMODE(os.stat(tmp_path / "dashboard").st_mode) == 0o600
 
 
-@pytest.mark.parametrize("mode", ["native", "verified-tunnel"])
+@pytest.mark.parametrize("mode", ["native", "verifiedTunnel"])
 def test_registry_material_only_reaches_each_hosts_authorization(core_request, monkeypatch, mode, tmp_path):
     core_request["clusterSSHTransport"] = mode
     package_intent(core_request)
@@ -1813,7 +1813,7 @@ def test_registry_material_only_reaches_each_hosts_authorization(core_request, m
 
     class ProjectionTransport(ReadinessTransport):
         def call(self, host, phase, private=None, *, timeout=None, devices=None, service=None):
-            if mode == "verified-tunnel" and phase == "prerequisites":
+            if mode == "verifiedTunnel" and phase == "prerequisites":
                 self.calls.append((host["name"], phase, timeout))
                 return {"name": host["name"], "owned": False, "exists": False,
                         "recovery": ceph_tunnel_staging.recovery_record(core_request, host["name"], "unclaimed")}
@@ -1833,7 +1833,7 @@ def test_registry_material_only_reaches_each_hosts_authorization(core_request, m
     monkeypatch.setattr(ceph_native, "supported_transport", lambda request: True)
     outputs = {"dashboard": str(tmp_path / "dashboard")}
     assert ceph_core.execute(core_request, "apply", "d" * 64, transport, outputs, now=clock.now, pause=clock.pause)["evidence"]["ready"]
-    if mode == "verified-tunnel":
+    if mode == "verifiedTunnel":
         calls = [(host, phase) for host, phase, unused in transport.calls]
         enroll = calls.index(("node-1", "enroll"))
         assert sorted(host for host, phase in calls[:enroll] if phase == "cache") == ["node-1", "node-2", "node-3"]
@@ -1845,7 +1845,7 @@ def test_registry_material_only_reaches_each_hosts_authorization(core_request, m
     for unused, material in authorized:
         assert material["registryJSON"] == "protected-registry-material"
         expected = {"clusterPublicKey", "registryJSON"}
-        if mode == "verified-tunnel":
+        if mode == "verifiedTunnel":
             expected |= {"clusterPrivateKey", "knownHosts"}
         assert set(material) == expected
     for unused, phase, material in private_calls:
@@ -2113,9 +2113,9 @@ def test_the_bootstrap_launcher_admits_only_bootstrap_within_its_ceiling():
 
 
 def tunnel_observation_worker(core_request, manager):
-    """A ready verified-tunnel snapshot whose bootstrap host holds the given manager daemon row."""
+    """A ready verifiedTunnel snapshot whose bootstrap host holds the given manager daemon row."""
     core_request["config"] = memory_config()
-    core_request["clusterSSHTransport"] = "verified-tunnel"
+    core_request["clusterSSHTransport"] = "verifiedTunnel"
     answers = memory_observation_answers(core_request)
     name = "mgr." + answers[("mgr", "dump")]["active_name"]
     answers[("/usr/sbin/cephadm", "ls")] = [dict({"fsid": core_request["fsid"], "name": name, "style": "cephadm:v1"}, **manager)]

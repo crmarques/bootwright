@@ -5,7 +5,7 @@ import (
 	"slices"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
-	"github.com/crmarques/bootwright/internal/containercluster"
+	"github.com/crmarques/bootwright/internal/containercluster/openshift"
 	"github.com/crmarques/bootwright/internal/machine"
 	"github.com/crmarques/bootwright/internal/reconciliation"
 )
@@ -152,8 +152,8 @@ func MachineRecords(catalog api.Catalog) []Record {
 // pointing nowhere.
 func ClusterRecords(catalog api.Catalog) []Record {
 	var records []Record
-	for _, cluster := range catalog.OfKind(api.ContainerCluster) {
-		for _, endpoint := range containercluster.Endpoints(catalog, cluster) {
+	for _, cluster := range catalog.OfKind(api.OpenShiftCluster) {
+		for _, endpoint := range openshift.Endpoints(catalog, cluster) {
 			if address := hostAddress(endpoint.Address); address != "" {
 				records = append(records, Record{Addresses: []string{address}, Name: endpoint.Name, Subtree: endpoint.Subtree})
 			}

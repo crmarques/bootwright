@@ -16,7 +16,6 @@ func number(name, value string) api.FieldValue { return field(name, api.IntegerV
 
 func controller() api.Object {
 	return api.NewObject(api.Machine, "controller", api.Value{}, api.MapValue(
-		field("capabilities", api.StringList("container-runtime", "libvirt")),
 		field("os", api.MapValue(field("provided", api.BoolValue(true)))),
 		field("network", api.MapValue(field("addresses", api.ListValue(
 			api.MapValue(text("name", "fqdn"), text("address", "controller.lab.example.test")),
@@ -30,7 +29,6 @@ func controller() api.Object {
 // lifecycle placement requires.
 func remoteHost() api.Object {
 	return api.NewObject(api.Machine, "hypervisor", api.Value{}, api.MapValue(
-		field("capabilities", api.StringList("libvirt")),
 		field("os", api.MapValue(field("provided", api.BoolValue(true)))),
 		field("network", api.MapValue(field("addresses", api.ListValue(
 			api.MapValue(text("name", "fqdn"), text("address", "hypervisor.lab.example.test")),
@@ -47,8 +45,7 @@ func provider(fields ...api.FieldValue) api.Object {
 	libvirtArm := api.MapValue(
 		text("machineRef", "controller"),
 		text("uri", "qemu:///system"),
-		field("bmcEmulationDefaults", api.MapValue(
-			field("enabled", api.BoolValue(true)), text("protocol", "redfish"), text("emulator", "sushy-tools"),
+		field("bmcEmulation", api.MapValue(
 			text("bindAddress", "192.0.2.1"), number("port", "8000"), text("certificateRef", "lab-bmc-tls"),
 			field("auth", api.MapValue(text("credentialsRef", "lab-bmc-credentials"))),
 		)),
@@ -90,9 +87,9 @@ func networkConfig() api.Object {
 
 func guest(name string, fields ...api.FieldValue) api.Object {
 	spec := api.MapValue(
-		field("substrate", api.MapValue(text("providerRef", "lab-libvirt"), text("profileRef", "rhel"))),
-		field("os", api.MapValue(field("provided", api.BoolValue(false)), text("installProfileRef", "rhel-9-8"),
-			field("install", api.MapValue(field("rootDeviceHints", api.MapValue(text("deviceName", "/dev/vda"))))))),
+		field("substrate", api.MapValue(text("providerRef", "lab-libvirt"), field("libvirt", api.MapValue(text("profileRef", "rhel"))))),
+		field("os", api.MapValue(field("provided", api.BoolValue(false)), text("installProfileRef", "rhel-9-8"))),
+		field("hardware", api.MapValue(field("rootDevice", api.MapValue(text("deviceName", "/dev/vda"))))),
 		field("network", api.MapValue(
 			text("configRef", "lab-guests"), text("attachmentRef", "lab-guests"), text("installAddressRef", "ip"),
 			field("addresses", api.ListValue(

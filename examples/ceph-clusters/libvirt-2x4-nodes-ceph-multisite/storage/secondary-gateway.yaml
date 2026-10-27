@@ -1,0 +1,14 @@
+apiVersion: bootwright.io/v1alpha1
+kind: CephObjectGateway
+metadata:
+  name: secondary-objects
+
+spec:
+  clusterRef: secondary
+  serviceRef: rgw.secondary-objects
+  realm: secondary
+  zoneGroup: secondary
+  zone: secondary
+
+  endpoint:
+    fqdn: secondary-s3.lab.example.test

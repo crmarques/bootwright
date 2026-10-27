@@ -31,7 +31,7 @@ func packageCatalog() api.Catalog {
 func packageRequest(t *testing.T) Request {
 	t.Helper()
 	catalog := packageCatalog()
-	cluster, _ := catalog.Find(api.StorageCluster, "example")
+	cluster, _ := catalog.Find(api.CephCluster, "example")
 	r, err := baseRequest(catalog, cluster, "synthetic")
 	if err != nil {
 		t.Fatal(err)
@@ -170,12 +170,12 @@ func TestPackageRequestGolden(t *testing.T) {
 func TestPackageRequestFreezesTheRepositoryTrustBundle(t *testing.T) {
 	objects := packageCatalog().Objects()
 	for i, object := range objects {
-		if object.Kind() == api.StorageCluster {
-			objects[i] = object.WithSpec(object.Spec().WithPath(api.StringValue("https://packages.example.test/ceph"), "ceph", "packageRepository").WithPath(api.StringValue("https://packages.example.test/keys/ibm.asc"), "ceph", "packageRepositoryKey").WithPath(api.StringValue("repository-ca"), "ceph", "packageRepositoryTrustBundleRef"))
+		if object.Kind() == api.CephCluster {
+			objects[i] = object.WithSpec(object.Spec().WithPath(api.StringValue("https://packages.example.test/ceph"), "packageRepository").WithPath(api.StringValue("https://packages.example.test/keys/ibm.asc"), "packageRepositoryKey").WithPath(api.StringValue("repository-ca"), "packageRepositoryTrustBundleRef"))
 		}
 	}
 	catalog := api.NewCatalog(objects)
-	cluster, _ := catalog.Find(api.StorageCluster, "example")
+	cluster, _ := catalog.Find(api.CephCluster, "example")
 	r, err := baseRequest(catalog, cluster, "synthetic")
 	if err != nil {
 		t.Fatal(err)

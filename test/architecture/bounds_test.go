@@ -83,7 +83,7 @@ func documentedBounds() []documentedBound {
 		{contexts, "| The longest deadline a lifecycle adapter request may state | %s |", lifecycleRequest, "MaxDeadline", &application{runner: "execute", source: lifecycleRun, ceiling: true}, false},
 		{contexts, "| One controller Ansible run: the base of a controller-stage tool publication | %s |", setupRun, "runTimeout", &application{runner: "runProcess"}, false},
 		{contexts, "| The longest deadline a controller-stage client installation may run under | %s |", setupRun, "clientStageCeiling", &application{runner: "runProcess", ceiling: true}, false},
-		{"specs/container-clusters.md", "whose `minSizeGigabytes` exceeds %s", "internal/containercluster/agentinstall/selection.go", "maxInstallerRootDeviceGigabytes", nil, false},
+		{"specs/openshift-clusters.md", "whose `minSizeGigabytes` exceeds %s", "internal/containercluster/agentinstall/selection.go", "maxInstallerRootDeviceGigabytes", nil, false},
 		{contexts, "| Bytes in one installer media image | %s |", mediaRecords, "MaxMediaBytes", nil, true},
 		{contexts, "| Installer media images one host holds | %s |", mediaRecords, "MaxMediaEntries", nil, false},
 		{contexts, "| Bytes in an installer media name | %s |", mediaRecords, "MaxMediaName", nil, false},

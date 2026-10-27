@@ -1,5 +1,5 @@
 ---
-- name: Observe one virtual machine and its controller
+- name: Observe one virtual machine and its emulated BMC
   hosts: bootwright_target
   gather_facts: false
   any_errors_fatal: true

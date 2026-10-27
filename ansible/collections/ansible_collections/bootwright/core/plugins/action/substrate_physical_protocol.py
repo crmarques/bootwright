@@ -32,7 +32,7 @@ def bounded(value, limit=128):
 
 class UnprovableIdentity(ValueError):
     """A reported UUID or serial the evidence may not carry, named by its field
-    and its controller and never by its value."""
+    and its BMC and never by its value."""
 
 
 def identity(value, field, endpoint):

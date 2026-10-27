@@ -1,14 +1,16 @@
   bootwright / plan
       Preview the next legal full-context operation, or the exact continuation point of an
-      incomplete one. It reads durable state and changes nothing. With --stage it also shows
-      which blocks that selection would start.
+      incomplete one. It reads durable state and changes nothing. With --stage or --until it
+      also shows which blocks that selection would start.
 
   Usage
     bootwright plan [flags]
 
   Command flags
       --stage  Select comma-separated stages to start (default: all) (values: controller,
-               infra-components, substrates, machines, clusters, add-ons)
+               infrastructure-services, substrates, machines, clusters, add-ons)
+      --until  Stop after one add-on instance, named <cluster>.<package>, and the blocks it
+               requires
 
   Common flags
       --ascii       Use ASCII status markers

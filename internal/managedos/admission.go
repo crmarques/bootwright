@@ -16,7 +16,7 @@ import (
 )
 
 func Normalize(o api.Object, c api.Catalog) (api.Object, []api.Issue) {
-	if o.Kind() == api.Entitlement && o.Spec().Get("type").Text() == "redhat-rhel" {
+	if o.Kind() == api.Entitlement && o.Spec().Get("type").Text() == "redhatRhel" {
 		return NormalizeRHSM(o), nil
 	}
 	if o.Kind() == api.MachineImage {
@@ -69,7 +69,7 @@ func Normalize(o api.Object, c api.Catalog) (api.Object, []api.Issue) {
 }
 
 func ValidateAuthored(o api.Object, c api.Catalog) []api.Issue {
-	if o.Kind() == api.Entitlement && o.Spec().Get("type").Text() == "redhat-rhel" {
+	if o.Kind() == api.Entitlement && o.Spec().Get("type").Text() == "redhatRhel" {
 		return ValidateRHSM(o, true)
 	}
 	if o.Kind() != api.MachineInstallProfile {
@@ -80,7 +80,7 @@ func ValidateAuthored(o api.Object, c api.Catalog) []api.Issue {
 }
 
 func Validate(o api.Object, c api.Catalog) []api.Issue {
-	if o.Kind() == api.Entitlement && o.Spec().Get("type").Text() == "redhat-rhel" {
+	if o.Kind() == api.Entitlement && o.Spec().Get("type").Text() == "redhatRhel" {
 		return ValidateRHSM(o, false)
 	}
 	if o.Kind() == api.MachineImage {
@@ -203,9 +203,9 @@ func validateSubscription(s api.Value, c api.Catalog) []api.Issue {
 		path  string
 	}{{subscription, "$.spec.subscription"}, {fromSubscription, "$.spec.installer.anaconda.packageSource.fromSubscription"}} {
 		if ref := entry.value.Get("entitlementRef"); ref.Present() {
-			if entitlement, ok := c.Find(api.Entitlement, ref.Text()); ok && entitlement.Spec().Get("type").Text() != "redhat-rhel" {
-				issues = add(issues, reference(entry.path+".entitlementRef", "OS registration requires a redhat-rhel Entitlement",
-					"select an Entitlement of type redhat-rhel in "+strings.TrimPrefix(entry.path, "$.")+".entitlementRef"))
+			if entitlement, ok := c.Find(api.Entitlement, ref.Text()); ok && entitlement.Spec().Get("type").Text() != "redhatRhel" {
+				issues = add(issues, reference(entry.path+".entitlementRef", "OS registration requires a redhatRhel Entitlement",
+					"select an Entitlement of type redhatRhel in "+strings.TrimPrefix(entry.path, "$.")+".entitlementRef"))
 			}
 		}
 	}
@@ -355,7 +355,7 @@ func validateConsumers(o api.Object, c api.Catalog) []api.Issue {
 			continue
 		}
 		variant := substrate.Variant(provider)
-		profileName := machine.Spec().Get("substrate", "profileRef").Text()
+		profileName := substrate.MachineProfileRef(machine)
 		profile, profileOK := localProfile(provider.Spec().Get(variant, "machineProfiles"), profileName)
 		if s.Has("installer", "templateClone") && (variant != substrate.ArmVSphere || profileOK && !profile.Has("template")) {
 			issues = add(issues, issue("$.spec.installer.templateClone", "template clone consumers require a vSphere profile with a template",
@@ -371,7 +371,7 @@ func validateConsumers(o api.Object, c api.Catalog) []api.Issue {
 
 // NormalizeRHSM supplies declared registration defaults for either Red Hat entitlement.
 func NormalizeRHSM(o api.Object) api.Object {
-	if o.Kind() != api.Entitlement || !slices.Contains([]string{"redhat-rhel", "redhat-ceph"}, o.Spec().Get("type").Text()) || !o.Spec().Has("rhsm") {
+	if o.Kind() != api.Entitlement || !slices.Contains([]string{"redhatRhel", "redhatCeph"}, o.Spec().Get("type").Text()) || !o.Spec().Has("rhsm") {
 		return o
 	}
 	s := o.Spec()
@@ -393,7 +393,7 @@ func NormalizeRHSM(o api.Object) api.Object {
 
 // ValidateRHSM checks declared RHSM intent without resolving or reading Secret material.
 func ValidateRHSM(o api.Object, authored bool) []api.Issue {
-	if o.Kind() != api.Entitlement || !slices.Contains([]string{"redhat-rhel", "redhat-ceph"}, o.Spec().Get("type").Text()) {
+	if o.Kind() != api.Entitlement || !slices.Contains([]string{"redhatRhel", "redhatCeph"}, o.Spec().Get("type").Text()) {
 		return nil
 	}
 	rhsm := o.Spec().Get("rhsm")

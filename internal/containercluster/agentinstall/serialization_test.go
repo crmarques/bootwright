@@ -16,7 +16,7 @@ func TestTwoClusterPlanSerializesInstallationsOnlyGolden(t *testing.T) {
 	objects := singleNodeCatalog().Objects()
 	objects = append(objects, guest("other-01", "198.51.100.22/24"), cluster("other",
 		installSelection(endpoints("198.51.100.22", "198.51.100.22", "198.51.100.22", "node")),
-		node("master-0", "master", "other-01", "master-0.other.lab.example.test")))
+		node("master-0", "controlPlane", "other-01", "master-0.other.lab.example.test")))
 	catalog := api.NewCatalog(objects)
 	input := lifecycle.PlanInput{Verb: reconciliation.Apply, State: compilation.NewState(catalog, catalog, nil),
 		Controller: "controller", Context: lifecycle.ContextIdentity{Name: testContext}}

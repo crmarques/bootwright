@@ -27,7 +27,6 @@ func text(name, value string) api.FieldValue { return field(name, api.StringValu
 
 func controller() api.Object {
 	return api.NewObject(api.Machine, "controller", api.Value{}, api.MapValue(
-		field("capabilities", api.ListValue(api.StringValue("container-runtime"))),
 		field("os", api.MapValue(field("provided", api.BoolValue(true)))),
 		field("proxy", api.MapValue(field("direct", api.MapValue()))),
 		field("network", api.MapValue(field("addresses", api.ListValue(
@@ -127,7 +126,6 @@ func TestRequestCanonicalFormIsStableAndOrdered(t *testing.T) {
 // own context compares their sockets there.
 func TestSSHPlacementRequiresKeyAndHostKeyAndClaimsOnItsHostAlone(t *testing.T) {
 	remote := api.NewObject(api.Machine, "services", api.Value{}, api.MapValue(
-		field("capabilities", api.ListValue(api.StringValue("container-runtime"))),
 		field("os", api.MapValue(field("provided", api.BoolValue(true)))),
 		field("network", api.MapValue(field("addresses", api.ListValue(
 			api.MapValue(text("name", "ip"), text("address", "192.0.2.9")),
@@ -665,7 +663,7 @@ func TestClusterRecordsNameEveryEndpointAndNode(t *testing.T) {
 func TestAnUnresolvedEndpointContributesNoRecord(t *testing.T) {
 	catalog := api.NewCatalog([]api.Object{
 		clusterEnvironment(),
-		api.NewObject(api.ContainerCluster, "sno", api.Value{}, api.MapValue(
+		api.NewObject(api.OpenShiftCluster, "sno", api.Value{}, api.MapValue(
 			field("install", api.MapValue(field("endpoints", api.MapValue(
 				field("api", api.MapValue(text("address", "198.51.100.21"))),
 			)))),
@@ -700,7 +698,6 @@ func clusterCatalog() api.Catalog {
 		)))),
 	))
 	node := api.NewObject(api.Machine, "sno-01", api.Value{}, api.MapValue(
-		field("capabilities", api.ListValue(api.StringValue("openshift-node"))),
 		field("os", api.MapValue(field("provided", api.BoolValue(false)))),
 		field("network", api.MapValue(
 			text("configRef", "guests"), text("installAddressRef", "ip"),
@@ -709,14 +706,14 @@ func clusterCatalog() api.Catalog {
 			)),
 		)),
 	))
-	cluster := api.NewObject(api.ContainerCluster, "sno", api.Value{}, api.MapValue(
+	cluster := api.NewObject(api.OpenShiftCluster, "sno", api.Value{}, api.MapValue(
 		field("install", api.MapValue(field("endpoints", api.MapValue(
 			field("api", api.MapValue(text("address", "198.51.100.21"))),
 			field("api-int", api.MapValue(text("address", "198.51.100.21"))),
 			field("ingress", api.MapValue(text("address", "198.51.100.21"))),
 		)))),
 		field("nodes", api.ListValue(api.MapValue(
-			text("name", "master-0"), text("role", "master"), text("machineRef", "sno-01"),
+			text("name", "master-0"), text("role", "controlPlane"), text("machineRef", "sno-01"),
 			text("fqdn", "master-0.sno.clusters.example.test"),
 		))),
 	))

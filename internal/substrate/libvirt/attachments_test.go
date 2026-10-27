@@ -17,10 +17,10 @@ func TestPerInterfaceLibvirtAttachmentsAndMTURequestGolden(t *testing.T) {
 	interfaces = append(interfaces, api.MapValue(text("name", "enp2s0"), text("type", "ethernet"), text("state", "up")))
 	n = n.WithSpec(n.Spec().WithPath(api.ListValue(interfaces...), "nmstate", "interfaces"))
 	g := guest("rhel-01")
-	g = g.WithSpec(g.Spec().With("network", g.Spec().Get("network").Without("attachmentRef").With("interfaceAttachments", api.ListValue(
+	g = g.WithSpec(g.Spec().With("network", g.Spec().Get("network").Without("attachmentRef")).WithPath(api.ListValue(
 		api.MapValue(text("interface", "enp1s0"), text("attachmentRef", "lab-guests")),
 		api.MapValue(text("interface", "enp2s0"), text("attachmentRef", "storage")),
-	))))
+	), "substrate", "libvirt", "interfaceAttachments"))
 	requests, err := MachineRequests(catalogOf(controller(), p, n, g), "controller", testContext)
 	if err != nil || len(requests) != 1 {
 		t.Fatalf("requests: %v %v", requests, err)

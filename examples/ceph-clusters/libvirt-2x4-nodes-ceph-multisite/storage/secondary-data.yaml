@@ -1,0 +1,12 @@
+apiVersion: bootwright.io/v1alpha1
+kind: CephPool
+metadata:
+  name: secondary-data
+
+spec:
+  clusterRef: secondary
+  role: cephfsData
+
+  replicated:
+    size: 3
+    minSize: 2

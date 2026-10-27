@@ -28,7 +28,7 @@ func exitStamp() time.Time { return time.Date(2026, 9, 30, 12, 0, 0, 0, time.UTC
 func exitPlan(t *testing.T) reconciliation.Plan {
 	t.Helper()
 	plan, err := reconciliation.NewPlan(reconciliation.Apply, []reconciliation.BlockDefinition{{
-		ID: "alpha", Description: "serve alpha", Stage: reconciliation.StageInfraComponents,
+		ID: "alpha", Description: "serve alpha", Stage: reconciliation.StageInfrastructureServices,
 		Kind: "ArtifactServer", Object: "alpha", Implementation: "artifact-server-nginx-v1",
 		ContentDigest: strings.Repeat("c", 64), Request: json.RawMessage(`{"name":"alpha"}`),
 		Groups: []reconciliation.Group{{ID: "pull-image", Description: "acquire the pinned server image", Machines: []string{"service-host"}}},

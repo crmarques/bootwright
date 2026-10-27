@@ -21,7 +21,7 @@ import (
 	"github.com/crmarques/bootwright/internal/machine"
 	"github.com/crmarques/bootwright/internal/managedos"
 	"github.com/crmarques/bootwright/internal/secrets"
-	"github.com/crmarques/bootwright/internal/storage"
+	"github.com/crmarques/bootwright/internal/storage/cephcluster"
 )
 
 var update = flag.Bool("update", false, "rewrite testdata/*.golden from the current output")
@@ -37,7 +37,7 @@ func refusalCompiler() compilation.Compiler {
 		compilation.Rules{Normalize: environment.Normalize, Validate: testEnvironmentValidate},
 		compilation.Rules{Normalize: secrets.Normalize, ValidateAuthored: secrets.ValidateAuthored, ValidatePartial: secrets.ValidatePartial, Validate: secrets.Validate},
 		compilation.Rules{Normalize: managedos.Normalize, ValidateAuthored: managedos.ValidateAuthored, ValidatePartial: managedos.ValidatePartial, Validate: managedos.Validate},
-		compilation.Rules{RetiredField: storage.RetiredField, Normalize: storage.Normalize, ValidateAuthored: storage.ValidateAuthored, ValidatePartial: storage.ValidatePartial, Validate: storage.Validate},
+		compilation.Rules{RetiredField: cephcluster.RetiredField, Normalize: cephcluster.Normalize, ValidateAuthored: cephcluster.ValidateAuthored, ValidatePartial: cephcluster.ValidatePartial, Validate: cephcluster.Validate},
 		compilation.Rules{Normalize: machine.Normalize, NormalizationOrigins: machine.NormalizationOrigins, ValidateAuthored: machine.ValidateAuthored, ValidatePartial: machine.ValidatePartial, Validate: machine.Validate},
 		compilation.Rules{Normalize: infrastructureservices.Normalize, ValidateAuthored: infrastructureservices.ValidateAuthored, ValidatePartial: infrastructureservices.ValidatePartial, Validate: infrastructureservices.Validate})
 }
@@ -52,6 +52,7 @@ func refusalRows() []refusalRow {
 		{"quoted boolean", environmentYAML, "apiVersion: bootwright.io/v1alpha1\nkind: Machine\nmetadata: {name: probe}\nspec:\n  os: {provided: \"false\"}\n"},
 		{"plain number in a string field", environmentYAML + "  sites: [{name: east, description: 9.8}]\n", ""},
 		{"missing reference", environmentYAML + "  remoteMachinesAccessKey: {keyRef: missing}\n", ""},
+		{"missing afterRefs binding", environmentYAML, "apiVersion: bootwright.io/v1alpha1\nkind: ClusterAddonBinding\nmetadata: {name: probe}\nspec: {clusterRef: probe, afterRefs: [missing]}\n"},
 		{"wrong Secret type", environmentYAML + "  remoteMachinesAccessKey: {keyRef: probe}\n", refusalSecret + "  type: opaque\n"},
 		{"typo key", environmentYAML, refusalSecret + "  typ: opaque\n"},
 		{"nested typo", strings.Replace(environmentYAML, "    base: example.test\n", "    base: example.test\n    basee: example.test\n", 1), ""},
@@ -62,6 +63,38 @@ func refusalRows() []refusalRow {
 		{"Context document", environmentYAML, "apiVersion: bootwright.io/v1alpha1\nkind: Context\nmetadata: {name: probe}\nspec: {secretStore: {type: local-keyring}}\n"},
 		{"machineAccess", environmentYAML + "  machineAccess: {}\n", ""},
 		{"safety", environmentYAML + "  safety: {}\n", ""},
+		{"retired kind", environmentYAML, "apiVersion: bootwright.io/v1alpha1\nkind: InfraComponent\nmetadata: {name: probe}\nspec: {}\n"},
+		{"retired path in kind defaults", environmentYAML + "  defaults:\n    Machine:\n      os: {install: {proxy: {}}}\n", ""},
+		{"retired cluster kind", environmentYAML, "apiVersion: bootwright.io/v1alpha1\nkind: ContainerCluster\nmetadata: {name: probe}\nspec: {}\n"},
+		{"retired install method", environmentYAML + "  defaults:\n    OpenShiftCluster:\n      install: {method: agent}\n", ""},
+		{"retired platform discriminator", environmentYAML + "  defaults:\n    OpenShiftCluster:\n      install: {platform: {type: none}}\n", ""},
+		{"retired node role", environmentYAML, "apiVersion: bootwright.io/v1alpha1\nkind: OpenShiftCluster\nmetadata: {name: probe}\nspec:\n  nodes: [{name: node-0, role: master, machineRef: node-0}]\n"},
+		{"retired encryption role in kind defaults", environmentYAML + "  defaults:\n    OpenShiftCluster:\n      security: {diskEncryption: {unlock: {tpm2: {}}, roles: [master]}}\n", ""},
+		{"retired endpoint source", environmentYAML + "  defaults:\n    OpenShiftCluster:\n      install: {endpoints: {ingress: {source: {type: openshift}}}}\n", ""},
+		{"retired storage kind", environmentYAML, "apiVersion: bootwright.io/v1alpha1\nkind: StorageExport\nmetadata: {name: probe}\nspec: {}\n"},
+		{"retired ceph block", environmentYAML, "apiVersion: bootwright.io/v1alpha1\nkind: CephCluster\nmetadata: {name: probe}\nspec:\n  ceph: {release: 9.9.2.0}\n"},
+		{"retired storage engine discriminator in kind defaults", environmentYAML + "  defaults:\n    CephCluster:\n      type: ceph\n", ""},
+		{"retired bootstrap node in kind defaults", environmentYAML + "  defaults:\n    CephCluster:\n      cephadm: {bootstrap: {node: node-0}}\n", ""},
+		{"retired pool discriminator", environmentYAML, "apiVersion: bootwright.io/v1alpha1\nkind: CephPool\nmetadata: {name: probe}\nspec:\n  clusterRef: probe\n  type: erasure\n"},
+		{"retired consumer discriminator in kind defaults", environmentYAML + "  defaults:\n    CephConsumer:\n      type: dataFoundation\n", ""},
+		{"retired consumer reference in kind defaults", environmentYAML + "  defaults:\n    ClusterAddonBinding:\n      packages: {fdf: {storageExportRef: probe}}\n", ""},
+		{"retired consumer effect", environmentYAML, "apiVersion: bootwright.io/v1alpha1\nkind: ClusterAddon\nmetadata: {name: probe}\nspec:\n  inputs: [{name: storage, resourceKind: CephConsumer, effects: [{storageExportAttachment: {}}]}]\n"},
+		{"retired add-on input kind", environmentYAML, "apiVersion: bootwright.io/v1alpha1\nkind: ClusterAddon\nmetadata: {name: probe}\nspec:\n  inputs: [{name: storage, resourceKind: StorageExport}]\n"},
+		{"retired Machine capabilities", environmentYAML, "apiVersion: bootwright.io/v1alpha1\nkind: Machine\nmetadata: {name: probe}\nspec:\n  os: {provided: true}\n  capabilities: [container-runtime]\n"},
+		{"retired Machine profile", environmentYAML, "apiVersion: bootwright.io/v1alpha1\nkind: Machine\nmetadata: {name: probe}\nspec:\n  os: {provided: true}\n  substrate: {providerRef: lab, profileRef: small}\n"},
+		{"retired Machine management controller", environmentYAML, "apiVersion: bootwright.io/v1alpha1\nkind: Machine\nmetadata: {name: probe}\nspec:\n  os: {provided: true}\n  hardware: {management: {bmc: {address: https://bmc.example.test/redfish/v1/Systems/1}}}\n"},
+		{"retired Machine MAC", environmentYAML, "apiVersion: bootwright.io/v1alpha1\nkind: Machine\nmetadata: {name: probe}\nspec:\n  os: {provided: true}\n  hardware: {nics: [{name: eth0, macAddress: 02:00:00:00:00:01}]}\n"},
+		{"retired Machine root-device hints in kind defaults", environmentYAML + "  defaults:\n    Machine:\n      os: {install: {rootDeviceHints: {deviceName: /dev/vda}}}\n", ""},
+		{"retired Machine interface attachments", environmentYAML, "apiVersion: bootwright.io/v1alpha1\nkind: Machine\nmetadata: {name: probe}\nspec:\n  os: {provided: true}\n  network: {interfaceAttachments: [{interface: eth0, attachmentRef: net}]}\n"},
+		{"retired libvirt emulation block in kind defaults", environmentYAML + "  defaults:\n    InfraProvider:\n      libvirt: {bmcEmulationDefaults: {port: 8000}}\n", ""},
+		{"retired single-value emulation field in kind defaults", environmentYAML + "  defaults:\n    InfraProvider:\n      libvirt: {bmcEmulation: {emulator: sushy-tools}}\n", ""},
+		{"retired kebab enum value", environmentYAML, "apiVersion: bootwright.io/v1alpha1\nkind: Entitlement\nmetadata: {name: probe}\nspec:\n  type: redhat-rhel\n"},
+		{"retired kebab enum value in kind defaults", environmentYAML + "  defaults:\n    CephCluster:\n      cephadm: {clusterSSH: {transport: verified-tunnel}}\n", ""},
+		{"registry arm on a RHEL entitlement", environmentYAML, "apiVersion: bootwright.io/v1alpha1\nkind: Entitlement\nmetadata: {name: probe}\nspec:\n  type: redhatRhel\n  rhsm: {management: external}\n  registry: {}\n"},
+		{"license arm on a Red Hat Ceph entitlement", environmentYAML, "apiVersion: bootwright.io/v1alpha1\nkind: Entitlement\nmetadata: {name: probe}\nspec:\n  type: redhatCeph\n  rhsm: {management: external}\n  registry: {credentialsRef: probe}\n  license: {accept: true}\n"},
+		{"rhsm arm on an IBM entitlement", environmentYAML, "apiVersion: bootwright.io/v1alpha1\nkind: Entitlement\nmetadata: {name: probe}\nspec:\n  type: ibmStorageCeph\n  rhsm: {management: external}\n  registry: {credentialsRef: probe}\n  license: {accept: true}\n"},
+		{"retired vSphere provider node networking in kind defaults", environmentYAML + "  defaults:\n    InfraProvider:\n      vsphere: {nodeNetworking: {}}\n", ""},
+		{"retired bare-metal boot method", environmentYAML, "apiVersion: bootwright.io/v1alpha1\nkind: InfraProvider\nmetadata: {name: probe}\nspec:\n  baremetal: {boot: {method: redfishVirtualMedia}}\n"},
 		{"no Environment", "", refusalSecret + "  type: opaque\n"},
 		{"two Environments", environmentYAML + secondEnvironment, ""},
 		{"empty required list", environmentYAML, "apiVersion: bootwright.io/v1alpha1\nkind: LoadBalancer\nmetadata: {name: probe}\nspec:\n  management: external\n  bindAddresses: []\n"},
@@ -83,7 +116,6 @@ func refusalRows() []refusalRow {
 		{"non-provided Machine without a provider", environmentYAML, "apiVersion: bootwright.io/v1alpha1\nkind: Machine\nmetadata: {name: probe}\nspec:\n  os: {provided: false}\n"},
 		{"controller that is not OS-ready", environmentYAML, ""},
 		{"controller without local access", environmentYAML, ""},
-		{"controller without the container-runtime capability", environmentYAML, ""},
 		{"a second local Machine", environmentYAML, "apiVersion: bootwright.io/v1alpha1\nkind: Machine\nmetadata: {name: probe}\nspec:\n  os: {provided: true}\n  access: {local: true}\n"},
 	}
 }
@@ -91,9 +123,8 @@ func refusalRows() []refusalRow {
 const refusalControllerHead = "\n---\napiVersion: bootwright.io/v1alpha1\nkind: Machine\nmetadata: {name: controller}\nspec:\n"
 
 var refusalControllers = map[string]string{
-	"controller that is not OS-ready":                     refusalControllerHead + "  capabilities: [container-runtime]\n  os: {provided: false}\n  access: {local: true}\n",
-	"controller without local access":                     refusalControllerHead + "  capabilities: [container-runtime]\n  os: {provided: true}\n",
-	"controller without the container-runtime capability": refusalControllerHead + "  os: {provided: true}\n  access: {local: true}\n",
+	"controller that is not OS-ready": refusalControllerHead + "  os: {provided: false}\n  access: {local: true}\n",
+	"controller without local access": refusalControllerHead + "  os: {provided: true}\n",
 }
 
 func refusalSources(row refusalRow) desiredstate.Sources {
@@ -257,7 +288,7 @@ func TestOneInvalidSecretTypeYieldsOneDiagnostic(t *testing.T) {
 	}
 }
 
-const undecodableCluster = "apiVersion: bootwright.io/v1alpha1\nkind: ContainerCluster\nmetadata: {name: probe}\nspec:\n  extra: x\n"
+const undecodableCluster = "apiVersion: bootwright.io/v1alpha1\nkind: OpenShiftCluster\nmetadata: {name: probe}\nspec:\n  extra: x\n"
 
 func TestAnUndecodableTargetHasOnlyItsOwnDiagnostics(t *testing.T) {
 	referenceRule := compilation.Rules{Validate: func(object api.Object, _ api.Catalog) []api.Issue {
@@ -276,7 +307,7 @@ func TestAnUndecodableTargetHasOnlyItsOwnDiagnostics(t *testing.T) {
 		{"Secret with an unknown field", refusalCompiler(), refusalRow{environment: environmentYAML + "  remoteMachinesAccessKey: {keyRef: probe}\n", probe: refusalSecret + "  type: sshKeyPair\n  extra: x\n"}, "Secret"},
 		{"Secret whose type is not a string", refusalCompiler(), refusalRow{environment: environmentYAML + "  remoteMachinesAccessKey: {keyRef: probe}\n", probe: refusalSecret + "  type: 1\n"}, "Secret"},
 		{"domain reference check", withReferenceRule, refusalRow{environment: environmentYAML + "  remoteMachinesAccessKey: {keyRef: probe}\n", probe: refusalSecret + "  type: sshKeyPair\n  extra: x\n"}, "Secret"},
-		{"selected cluster", refusalCompiler(), refusalRow{environment: environmentYAML + "  containerClusters: [probe]\n", probe: undecodableCluster}, "ContainerCluster"},
+		{"selected cluster", refusalCompiler(), refusalRow{environment: environmentYAML + "  containerClusters: [probe]\n", probe: undecodableCluster}, "OpenShiftCluster"},
 	} {
 		t.Run(probe.name, func(t *testing.T) {
 			_, _, err := probe.compiler.Compile(context.Background(), refusalSources(probe.row))
@@ -293,7 +324,7 @@ func TestAnUndecodableTargetHasOnlyItsOwnDiagnostics(t *testing.T) {
 }
 
 func TestDefaultedMarksOnlyAFieldTheObjectHolds(t *testing.T) {
-	probe := "apiVersion: bootwright.io/v1alpha1\nkind: Entitlement\nmetadata: {name: probe}\nspec:\n  type: redhat-rhel\n  rhsm: {}\n"
+	probe := "apiVersion: bootwright.io/v1alpha1\nkind: Entitlement\nmetadata: {name: probe}\nspec:\n  type: redhatRhel\n  rhsm: {}\n"
 	rules := compilation.Rules{Validate: func(object api.Object, _ api.Catalog) []api.Issue {
 		if object.Kind() != api.Entitlement {
 			return nil

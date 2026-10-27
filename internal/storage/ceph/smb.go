@@ -29,7 +29,7 @@ func SMBContentDigest() string {
 	return hex.EncodeToString(d[:])
 }
 
-func SMBBlockID(object string) string { return "ceph-smb-" + object }
+func SMBBlockID(object string) string { return reconciliation.BlockIdentity("ceph-smb-", object) }
 
 type SMBBinding struct {
 	Path      string `json:"path"`
@@ -113,7 +113,7 @@ func (r SMBRequest) nativeLeaf(name string) string {
 
 func (r SMBRequest) consistent() bool {
 	leaf, known := smbIdentityLeaves[r.ResourceType]
-	if !known || r.Cluster == "" || r.Controller == "" || r.Object == "" || r.ID == "" || len(r.Scope) != 0 || !reconciliation.ValidSegment(SMBBlockID(r.Object)) ||
+	if !known || r.Cluster == "" || r.Controller == "" || r.Object == "" || r.ID == "" || len(r.Scope) != 0 || !reconciliation.ValidSegment(r.Object) ||
 		!strictlySorted(r.Machines) || r.Bindings == nil || canonicaljson.ProveObject(r.Native) != nil || r.nativeLeaf("resource_type") != r.ResourceType || r.nativeLeaf(leaf) != r.ID {
 		return false
 	}
@@ -202,7 +202,7 @@ func smbNative(c api.Catalog, cluster, object api.Object) (json.RawMessage, erro
 	value, ok := smbValue(native)
 	document, mapped := value.(map[string]any)
 	if !ok || !mapped {
-		return nil, failure("lifecycle.state", "StorageSMBResource "+object.Name()+" holds a native value Bootwright cannot freeze", "")
+		return nil, failure("lifecycle.state", "CephSMBResource "+object.Name()+" holds a native value Bootwright cannot freeze", "")
 	}
 	switch native.Get("resource_type").Text() {
 	case api.SMBCluster:
@@ -226,7 +226,7 @@ func smbNative(c api.Catalog, cluster, object api.Object) (json.RawMessage, erro
 		}
 		cephfs["volume"] = object.Spec().Get("filesystemRef").Text()
 		if ref := object.Spec().Get("subvolumeRef").Text(); ref != "" {
-			subvolume, _ := c.Find(api.StorageSubvolume, ref)
+			subvolume, _ := c.Find(api.CephSubvolume, ref)
 			cephfs["volume"], cephfs["subvolume"] = subvolume.Spec().Get("filesystemRef").Text(), subvolume.Name()
 			if group := subvolume.Spec().Get("group").Text(); group != "" {
 				cephfs["subvolumegroup"] = group
@@ -297,7 +297,7 @@ func smbImages(auxiliary []AuxiliaryReference) []SMBImage {
 func smbRequest(c api.Catalog, object api.Object, base Request, controller string) (SMBRequest, error) {
 	spec := object.Spec()
 	rt := spec.Get("native", "resource_type").Text()
-	cluster, _ := c.Find(api.StorageCluster, base.Cluster)
+	cluster, _ := c.Find(api.CephCluster, base.Cluster)
 	r := SMBRequest{Version: SMBVersion, Object: object.Name(), Cluster: base.Cluster, Controller: controller, ResourceType: rt, ID: spec.Get("native", smbIdentityLeaves[rt]).Text(),
 		Machines: requestMachines(base), Bindings: []SMBBinding{}}
 	native, err := smbNative(c, cluster, object)
@@ -314,7 +314,7 @@ func smbRequest(c api.Catalog, object api.Object, base Request, controller strin
 	case api.SMBCluster, api.SMBShare:
 		smbCluster := object
 		if rt == api.SMBShare {
-			smbCluster, _ = c.Find(api.StorageSMBResource, spec.Get("smbClusterRef").Text())
+			smbCluster, _ = c.Find(api.CephSMBResource, spec.Get("smbClusterRef").Text())
 		}
 		if r.Service, err = smbServiceOf(cluster, smbCluster); err != nil {
 			return SMBRequest{}, err
@@ -328,15 +328,15 @@ func smbRequires(spec api.Value, rt string) []reconciliation.ObjectRef {
 	requires := []reconciliation.ObjectRef{}
 	switch rt {
 	case api.SMBShare:
-		requires = append(requires, reconciliation.ObjectRef{Kind: string(api.StorageSMBResource), Object: spec.Get("smbClusterRef").Text()})
+		requires = append(requires, reconciliation.ObjectRef{Kind: string(api.CephSMBResource), Object: spec.Get("smbClusterRef").Text()})
 		if ref := spec.Get("subvolumeRef").Text(); ref != "" {
-			requires = append(requires, reconciliation.ObjectRef{Kind: string(api.StorageSubvolume), Object: ref})
+			requires = append(requires, reconciliation.ObjectRef{Kind: string(api.CephSubvolume), Object: ref})
 		} else {
-			requires = append(requires, reconciliation.ObjectRef{Kind: string(api.StorageFilesystem), Object: spec.Get("filesystemRef").Text()})
+			requires = append(requires, reconciliation.ObjectRef{Kind: string(api.CephFilesystem), Object: spec.Get("filesystemRef").Text()})
 		}
 	case api.SMBCluster:
 		for _, member := range spec.Get("resourceRefs").Strings() {
-			requires = append(requires, reconciliation.ObjectRef{Kind: string(api.StorageSMBResource), Object: member})
+			requires = append(requires, reconciliation.ObjectRef{Kind: string(api.CephSMBResource), Object: member})
 		}
 	}
 	slices.SortFunc(requires, func(a, b reconciliation.ObjectRef) int {
@@ -366,7 +366,7 @@ func (c SMBCapability) Plan(ctx context.Context, input lifecycle.PlanInput) (lif
 		return plan, failure("lifecycle.state", "Ceph planning requires compiled state", "")
 	}
 	catalog := input.State.Effective()
-	for _, object := range catalog.OfKind(api.StorageSMBResource) {
+	for _, object := range catalog.OfKind(api.CephSMBResource) {
 		definition, secrets, err := smbDefinition(catalog, object, input)
 		if err != nil {
 			return plan, err
@@ -380,10 +380,7 @@ func (c SMBCapability) Plan(ctx context.Context, input lifecycle.PlanInput) (lif
 }
 
 func smbDefinition(c api.Catalog, object api.Object, input lifecycle.PlanInput) (reconciliation.BlockDefinition, []string, error) {
-	if !reconciliation.ValidSegment(SMBBlockID(object.Name())) {
-		return reconciliation.BlockDefinition{}, nil, failure("api.invariant", "StorageSMBResource "+object.Name()+" has a name too long to identify its block, whose identity holds at most 63 characters", "rename the StorageSMBResource to at most 54 characters")
-	}
-	cluster, _ := c.Find(api.StorageCluster, object.Spec().Get("clusterRef").Text())
+	cluster, _ := c.Find(api.CephCluster, object.Spec().Get("clusterRef").Text())
 	base, err := baseRequest(c, cluster, input.Context.Name)
 	if err != nil {
 		return reconciliation.BlockDefinition{}, nil, err
@@ -413,7 +410,7 @@ func smbDefinition(c api.Catalog, object api.Object, input lifecycle.PlanInput) 
 		}
 	}
 	return reconciliation.BlockDefinition{ID: SMBBlockID(object.Name()), Description: removal.Description, Stage: reconciliation.StageClusters, Requires: smbRequires(object.Spec(), r.ResourceType),
-		Dependencies: dependencies, Exclusive: []string{"ceph/" + r.Cluster}, Impacts: removal.Impacts, Consumes: removal.Consumes, Kind: string(api.StorageSMBResource), Object: object.Name(),
+		Dependencies: dependencies, Exclusive: []string{"ceph/" + r.Cluster}, Impacts: removal.Impacts, Consumes: removal.Consumes, Kind: string(api.CephSMBResource), Object: object.Name(),
 		Implementation: SMBImplementation, ContentDigest: SMBContentDigest(), Request: canonical}, secrets, nil
 }
 
@@ -438,7 +435,7 @@ func (SMBCapability) identity(ctx context.Context, e lifecycle.Execution) (SMBRe
 	if err != nil {
 		return SMBRequest{}, err
 	}
-	if e.Block.Kind != string(api.StorageSMBResource) || e.Block.Object != r.Object || e.Block.ID != SMBBlockID(r.Object) {
+	if e.Block.Kind != string(api.CephSMBResource) || e.Block.Object != r.Object || e.Block.ID != SMBBlockID(r.Object) {
 		return SMBRequest{}, failure("lifecycle.state", "Ceph SMB request does not match its frozen resource identity", "")
 	}
 	if e.ApplyOperation == "" {
@@ -457,16 +454,16 @@ func (c SMBCapability) prepare(ctx context.Context, e lifecycle.Execution) (SMBR
 		return SMBRequest{}, ProvedClusterScope{}, err
 	}
 	if !slices.Equal(r.Machines, scope.Machines) {
-		return SMBRequest{}, ProvedClusterScope{}, failure("lifecycle.state", "StorageSMBResource "+r.Object+" froze another Machine set than the creation proof of StorageCluster "+r.Cluster, "restore the original apply evidence")
+		return SMBRequest{}, ProvedClusterScope{}, failure("lifecycle.state", "CephSMBResource "+r.Object+" froze another Machine set than the creation proof of CephCluster "+r.Cluster, "restore the original apply evidence")
 	}
 	if r.Service != nil && len(r.Images) == 0 {
-		return SMBRequest{}, ProvedClusterScope{}, failure("lifecycle.state", "StorageSMBResource "+r.Object+" froze no samba image", "")
+		return SMBRequest{}, ProvedClusterScope{}, failure("lifecycle.state", "CephSMBResource "+r.Object+" froze no samba image", "")
 	}
 	for i, image := range r.Images {
 		authored := slices.IndexFunc(scope.Authored, func(a AuxiliaryReference) bool { return a.Name == image.Name })
 		completed := slices.IndexFunc(scope.Scope.Auxiliary, func(a AuxiliaryReference) bool { return a.Name == image.Name })
 		if authored < 0 || completed < 0 || scope.Authored[authored].Image != image.Image {
-			return SMBRequest{}, ProvedClusterScope{}, failure("lifecycle.state", "StorageSMBResource "+r.Object+" froze a samba image its StorageCluster's settings did not freeze", "restore the original apply evidence")
+			return SMBRequest{}, ProvedClusterScope{}, failure("lifecycle.state", "CephSMBResource "+r.Object+" froze a samba image its CephCluster's settings did not freeze", "restore the original apply evidence")
 		}
 		r.Images[i].Image = scope.Scope.Auxiliary[completed].Image
 	}

@@ -21,9 +21,9 @@ This relationship adds no kind or inferred Machine role. Additional
 installation trust uses the cluster's direct Secret references; Environment
 has no separate CA list to merge into consumers.
 
-The approved M2 native-service consolidation adds minimal `StorageClient`
+The approved M2 native-service consolidation adds minimal `CephClient`
 admission and retires duplicate daemon helper fields. The
-[storage schema](../../specs/api/storage.md) owns the current supported shape
+[storage schema](../../specs/api/ceph.md) owns the current supported shape
 and remaining qualification gates.
 
 This update does not reinstate the other shapes from the older 27-kind
@@ -48,10 +48,10 @@ aliases or translation paths from the proposal.
 | `Machine` with inline NMState only | `Machine` plus reusable `NetworkConfig`. |
 | `InfrastructureProvider` | `InfraProvider`. |
 | `ArtifactServer`, `LoadBalancer`, `HTTPProxy`, `DNSResolver`, `NTPServer`, `ContainerRegistry` | One `InfraComponent` with service implementation arms. |
-| `OpenShiftCluster` | `ContainerCluster`. |
-| `CephCluster`, `CephCrushRule`, `CephPool`, `CephFilesystem`, `CephObjectGateway` | `StorageCluster`, `StoragePlacementPolicy`, `StoragePool`, `StorageFilesystem`, `StorageObjectGateway`. |
-| Separate `CephNFSService` and `CephNFSExport` | One `StorageNFSExport`. |
-| `DataFoundationStorageExport` | `StorageExport`. |
+| `OpenShiftCluster` | `OpenShiftCluster`. |
+| `CephCluster`, `CephCrushRule`, `CephPool`, `CephFilesystem`, `CephObjectGateway` | `CephCluster`, `CephPlacementPolicy`, `CephPool`, `CephFilesystem`, `CephObjectGateway`. |
+| Separate `CephNFSService` and `CephNFSExport` | One `CephNFSExport`. |
+| `DataFoundationStorageExport` | `CephConsumer`. |
 | `Secret` with mandatory file/generated source | `Secret` whose omitted source selects `contextStore`, alongside the established file and generated arms. |
 
 `MachineImage`, `MachineInstallProfile`, `ClusterAddon`,

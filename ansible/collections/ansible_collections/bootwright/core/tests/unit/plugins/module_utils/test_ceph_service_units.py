@@ -40,7 +40,7 @@ REACHABLE = ceph_native_nfs.reachable
 
 
 def cluster():
-    return dict(settings.cluster(), clusterSSHTransport="verified-tunnel")
+    return dict(settings.cluster(), clusterSSHTransport="verifiedTunnel")
 
 
 def documents(mode):

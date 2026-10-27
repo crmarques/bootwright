@@ -67,8 +67,8 @@ PRIVILEGE = (401, 403)
 # The virtual-media trusts a frozen request names for the BMC-to-artifact-server
 # leg. established asks nothing of the device.
 TRUST_ESTABLISHED = "established"
-TRUST_IMPORT = "import-certificate"
-TRUST_DISABLED = "disable-verification"
+TRUST_IMPORT = "importCertificate"
+TRUST_DISABLED = "disableVerification"
 # A device's certificate collection is read in full before anything is added to
 # or removed from it, so one listing more members than this fails closed rather
 # than being read in part.
@@ -80,8 +80,8 @@ PEM_BEGIN = "-----BEGIN CERTIFICATE-----"
 PEM_END = "-----END CERTIFICATE-----"
 # What importing leaves an operator when a controller cannot take it: no other
 # trust is ever substituted.
-NO_IMPORT = "no fallback: established, or disable-verification on this Machine, which private delivery refuses"
-NO_DISABLE = "verification stays on; use import-certificate or established"
+NO_IMPORT = "no fallback: established, or disableVerification on this Machine, which private delivery refuses"
+NO_DISABLE = "verification stays on; use importCertificate or established"
 STALE = ("remove the stale certificate from the controller's virtual-media certificate collection,"
          " or set removeCertificateAfterBoot")
 # What an operator checks when the controller reports that it could not fetch
@@ -113,7 +113,7 @@ def _trust_context(verify, ca_data):
     controller that did not answer.
     """
     if ca_data and not verify:
-        raise ControllerError("a controller trust bundle requires verification, and verification is off")
+        raise ControllerError("a BMC trust bundle requires verification, and verification is off")
     if not verify:
         context = ssl.create_default_context()
         context.check_hostname = False
@@ -652,9 +652,9 @@ class Client:
         """Make the device trust the server it fetches media from as the frozen
         trust says: whether a write was sent.
 
-        established asks nothing. import-certificate adds the server's
+        established asks nothing. importCertificate adds the server's
         certificate unless it is present and turns verification on;
-        disable-verification turns it off when it reads on. Neither falls back
+        disableVerification turns it off when it reads on. Neither falls back
         to the other or to anything else.
         """
         if trust == TRUST_IMPORT:

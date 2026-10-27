@@ -14,7 +14,7 @@ import (
 	"github.com/crmarques/bootwright/internal/environment"
 	"github.com/crmarques/bootwright/internal/infrastructureservices"
 	"github.com/crmarques/bootwright/internal/secrets"
-	"github.com/crmarques/bootwright/internal/storage"
+	"github.com/crmarques/bootwright/internal/storage/cephcluster"
 	"github.com/crmarques/bootwright/internal/substrate"
 )
 
@@ -32,7 +32,7 @@ func regressionCompiler() compilation.Compiler {
 		compilation.Rules{Normalize: environment.Normalize, Validate: testEnvironmentValidate},
 		compilation.Rules{Normalize: infrastructureservices.Normalize, ValidateAuthored: infrastructureservices.ValidateAuthored, ValidatePartial: infrastructureservices.ValidatePartial, Validate: infrastructureservices.Validate},
 		compilation.Rules{Normalize: secrets.Normalize, ValidateAuthored: secrets.ValidateAuthored, ValidatePartial: secrets.ValidatePartial, Validate: secrets.Validate},
-		compilation.Rules{RetiredField: storage.RetiredField, Normalize: storage.Normalize, ValidateAuthored: storage.ValidateAuthored, ValidatePartial: storage.ValidatePartial, Validate: storage.Validate},
+		compilation.Rules{RetiredField: cephcluster.RetiredField, Normalize: cephcluster.Normalize, ValidateAuthored: cephcluster.ValidateAuthored, ValidatePartial: cephcluster.ValidatePartial, Validate: cephcluster.Validate},
 		compilation.Rules{Normalize: substrate.Normalize, ValidateAuthored: substrate.ValidateAuthored, ValidatePartial: substrate.ValidatePartial, Validate: substrate.Validate})
 }
 
@@ -55,10 +55,10 @@ func requireCompilationFailure(t *testing.T, state *compilation.State, report *c
 
 func TestUnusedDefaultsRejectPresentContradictions(t *testing.T) {
 	for _, test := range []struct{ name, fields, field string }{
-		{"discriminator", "  defaults:\n    StoragePool:\n      type: replicated\n      erasure: {dataChunks: 2, codingChunks: 1}\n", "$.spec.defaults.StoragePool.erasure"},
+		{"two protection arms", "  defaults:\n    CephPool:\n      replicated: {size: 2}\n      erasure: {dataChunks: 2, codingChunks: 1}\n", "$.spec.defaults.CephPool"},
 		{"secret parameters", "  defaults:\n    Secret:\n      type: token\n      source: {generated: {username: alice}}\n", "$.spec.defaults.Secret.source.generated.username"},
 		{"external service placement", "  defaults:\n    Proxy:\n      management: external\n      machineRef: host\n", "$.spec.defaults.Proxy.machineRef"},
-		{"storage range", "  defaults:\n    StoragePool:\n      compression: {minBlobSize: 20, maxBlobSize: 10}\n", "$.spec.defaults.StoragePool.compression"},
+		{"storage range", "  defaults:\n    CephPool:\n      compression: {minBlobSize: 20, maxBlobSize: 10}\n", "$.spec.defaults.CephPool.compression"},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			state, report, err := regressionCompiler().Compile(context.Background(), sources(environmentYAML+test.fields))
@@ -74,7 +74,7 @@ func TestUnusedDefaultsRejectPresentContradictions(t *testing.T) {
 }
 
 func TestUnusedDefaultsPermitMissingRequiredArmsAndReferences(t *testing.T) {
-	input := sources(environmentYAML + "  defaults:\n    InfraProvider:\n      baremetal: {}\n      networkAttachments: [{name: network}]\n    StoragePool:\n      clusterRef: future\n      compression: {minBlobSize: 20}\n    Secret:\n      source: {generated: {bytes: 32}}\n")
+	input := sources(environmentYAML + "  defaults:\n    InfraProvider:\n      baremetal: {}\n      networkAttachments: [{name: network}]\n    CephPool:\n      clusterRef: future\n      compression: {minBlobSize: 20}\n    Secret:\n      source: {generated: {bytes: 32}}\n")
 	state, report, err := regressionCompiler().Compile(context.Background(), input)
 	if err != nil || report.Counts.ObjectsDecoded != 2 || len(state.Effective().Objects()) != 2 {
 		t.Fatalf("partial defaults were completed or required a recipient: state=%v report=%v err=%v", state, report, err)
@@ -87,7 +87,7 @@ func TestUnusedDefaultsPermitMissingRequiredArmsAndReferences(t *testing.T) {
 }
 
 func TestSelectedDuplicateRootsRemainAmbiguousAndEachReceiveDiagnostics(t *testing.T) {
-	cluster := "apiVersion: bootwright.io/v1alpha1\nkind: StorageCluster\nmetadata: {name: storage}\nspec: {type: ceph, management: external}\n"
+	cluster := "apiVersion: bootwright.io/v1alpha1\nkind: CephCluster\nmetadata: {name: storage}\nspec: {management: external}\n"
 	input := sources(environmentYAML + "  storageClusters: [storage]\n---\n" + cluster + "---\n" + cluster)
 	state, report, err := regressionCompiler().Compile(context.Background(), input)
 	sink := requireCompilationFailure(t, state, report, err)
@@ -97,7 +97,7 @@ func TestSelectedDuplicateRootsRemainAmbiguousAndEachReceiveDiagnostics(t *testi
 		if d.Code == "api.reference" && d.Field == "$.spec.storageClusters[0]" {
 			selectionFailed = true
 		}
-		if d.Code == "api.duplicate" && d.Object != nil && d.Object.Kind == string(api.StorageCluster) && d.Object.Name == "storage" && d.Source != nil {
+		if d.Code == "api.duplicate" && d.Object != nil && d.Object.Kind == string(api.CephCluster) && d.Object.Name == "storage" && d.Source != nil {
 			documents[d.Source.Document] = true
 		}
 		if d.Severity == "warning" {
@@ -171,12 +171,12 @@ func TestInheritedReferenceProvenanceAndImmutableSourceState(t *testing.T) {
 
 func TestCompilerInheritancePreservesExplicitModesAndNestedSuppression(t *testing.T) {
 	input := sources(environmentYAML + `  defaults:
-    ContainerCluster:
+    OpenShiftCluster:
       distribution:
         type: openshift
         release: {channel: stable}
       install:
-        platform: {type: baremetal, baremetal: {provisioningNetwork: disabled}}
+        platform: {baremetal: {provisioningNetwork: disabled}}
         agent:
           bootArtifacts:
             artifactServerEndpoint: {serverRef: install, endpointRef: media}
@@ -189,17 +189,17 @@ metadata: {name: node}
 spec: {os: {provided: true}}
 ---
 apiVersion: bootwright.io/v1alpha1
-kind: ContainerCluster
+kind: OpenShiftCluster
 metadata: {name: cluster}
 spec:
   distribution: {type: okd, release: {version: 4.20.0}}
   install:
     mode: connected
-    platform: {type: none}
+    platform: {none: {}}
     endpoints:
       api: {source: {type: node}}
       ingress: {}
-  nodes: [{name: master, role: master, machineRef: node}]
+  nodes: [{name: master, role: controlPlane, machineRef: node}]
 `)
 	// Isolate compiler inheritance using the production wire shapes. Component
 	// runtime prerequisites are tested by their owning admission suites.
@@ -207,18 +207,18 @@ spec:
 	if err != nil {
 		t.Fatal(diagnostics.Of(err))
 	}
-	cluster, _ := state.Effective().Find(api.ContainerCluster, "cluster")
+	cluster, _ := state.Effective().Find(api.OpenShiftCluster, "cluster")
 	spec := cluster.Spec()
 	for _, path := range [][]string{{"distribution", "release", "channel"}, {"install", "platform", "baremetal"}, {"install", "agent", "bootArtifacts"}, {"install", "endpoints", "api", "address"}} {
 		if spec.Has(path...) {
 			t.Fatalf("inactive Environment fallback leaked into explicit mode: %v", path)
 		}
 	}
-	if spec.Get("install", "platform", "type").Text() != "none" || spec.Get("distribution", "type").Text() != "okd" || spec.Get("install", "mode").Text() != "connected" {
+	if !spec.Has("install", "platform", "none") || spec.Get("distribution", "type").Text() != "okd" || spec.Get("install", "mode").Text() != "connected" {
 		t.Fatal("Environment defaults changed an explicit discriminator")
 	}
 	env, _ := state.Effective().Find(api.Environment, "synthetic")
-	if !env.Spec().Has("defaults", "ContainerCluster", "install", "agent", "bootArtifacts") {
+	if !env.Spec().Has("defaults", "OpenShiftCluster", "install", "agent", "bootArtifacts") {
 		t.Fatal("recipient suppression mutated the authored defaults fragment")
 	}
 }
@@ -229,17 +229,17 @@ func TestExcludedClusterRootIsASelectionWarning(t *testing.T) {
 	cluster := `
 ---
 apiVersion: bootwright.io/v1alpha1
-kind: ContainerCluster
+kind: OpenShiftCluster
 metadata: {name: NAME}
 spec:
-  distribution: {type: okd, release: {version: 4.20.0}}
+  distribution: {type: openshift, release: {version: 4.20.0}}
   install:
     mode: connected
-    platform: {type: none}
+    platform: {none: {}}
     endpoints:
       api: {source: {type: node}}
       ingress: {}
-  nodes: [{name: master, role: master, machineRef: node}]
+  nodes: [{name: master, role: controlPlane, machineRef: node}]
 `
 	input := sources(environmentYAML + "  containerClusters: [kept]\n---\napiVersion: bootwright.io/v1alpha1\nkind: Machine\nmetadata: {name: node}\nspec: {os: {provided: true}}\n" +
 		strings.Replace(cluster, "NAME", "kept", 1) + strings.Replace(cluster, "NAME", "dropped", 1))
@@ -248,7 +248,7 @@ spec:
 	if err != nil {
 		t.Fatal(diagnostics.Of(err))
 	}
-	if _, ok := state.Effective().Find(api.ContainerCluster, "dropped"); ok {
+	if _, ok := state.Effective().Find(api.OpenShiftCluster, "dropped"); ok {
 		t.Fatal("the excluded cluster root stayed in effective state")
 	}
 	if !reflect.DeepEqual(report.ExcludedContainerClusters, []string{"dropped"}) || len(report.Advisories) != 0 || len(report.Diagnostics) != 1 || report.Diagnostics[0].Code != "api.selection" {
@@ -258,13 +258,13 @@ spec:
 
 func TestStorageRetirementGuidanceSurvivesStrictDecoding(t *testing.T) {
 	for _, row := range []struct{ name, body, field, replacement string }{
-		{"helper", "  ceph:\n    monitoring: {enabled: true}\n", "$.spec.ceph.monitoring", "$.spec.ceph.services"},
-		{"node roles", "  ceph:\n    topology:\n      nodes: [{name: node, machineRef: controller, roles: [mon]}]\n", "$.spec.ceph.topology.nodes[0].roles", "$.spec.ceph.services"},
-		{"drive group", "  ceph:\n    topology:\n      osdDrivegroups: []\n", "$.spec.ceph.topology.osdDrivegroups", "$.spec.ceph.services[].spec.data_devices"},
-		{"service identity", "  ceph:\n    services: [{serviceType: mon}]\n", "$.spec.ceph.services[0].serviceType", "$.spec.ceph.services[0].service_type"},
+		{"helper", "  monitoring: {enabled: true}\n", "$.spec.monitoring", "$.spec.services"},
+		{"node roles", "  topology:\n    nodes: [{name: node, machineRef: controller, roles: [mon]}]\n", "$.spec.topology.nodes[0].roles", "$.spec.services"},
+		{"drive group", "  topology:\n    osdDrivegroups: []\n", "$.spec.topology.osdDrivegroups", "$.spec.services[].spec.data_devices"},
+		{"service identity", "  services: [{serviceType: mon}]\n", "$.spec.services[0].serviceType", "$.spec.services[0].service_type"},
 	} {
 		t.Run(row.name, func(t *testing.T) {
-			input := sources(environmentYAML + "---\napiVersion: bootwright.io/v1alpha1\nkind: StorageCluster\nmetadata: {name: storage}\nspec:\n  type: ceph\n" + row.body)
+			input := sources(environmentYAML + "---\napiVersion: bootwright.io/v1alpha1\nkind: CephCluster\nmetadata: {name: storage}\nspec:\n" + row.body)
 			state, report, err := regressionCompiler().Compile(context.Background(), input)
 			sink := requireCompilationFailure(t, state, report, err)
 			if len(sink) != 1 || sink[0].Code != "api.field" || sink[0].Field != row.field || sink[0].Remediation != "replace "+row.field+" with "+row.replacement || !strings.Contains(sink[0].Message, "native-service migration") {
@@ -272,10 +272,28 @@ func TestStorageRetirementGuidanceSurvivesStrictDecoding(t *testing.T) {
 			}
 		})
 	}
-	input := sources(environmentYAML + "  defaults:\n    StorageCluster:\n      ceph:\n        mgmtGateway: {}\n")
+	input := sources(environmentYAML + "  defaults:\n    CephCluster:\n      mgmtGateway: {}\n")
 	state, report, err := regressionCompiler().Compile(context.Background(), input)
 	sink := requireCompilationFailure(t, state, report, err)
-	if len(sink) != 1 || sink[0].Field != "$.spec.defaults.StorageCluster.ceph.mgmtGateway" || sink[0].Remediation != "replace $.spec.defaults.StorageCluster.ceph.mgmtGateway with $.spec.defaults.StorageCluster.ceph.services" {
+	if len(sink) != 1 || sink[0].Field != "$.spec.defaults.CephCluster.mgmtGateway" || sink[0].Remediation != "replace $.spec.defaults.CephCluster.mgmtGateway with $.spec.defaults.CephCluster.services" {
 		t.Fatalf("retired default lost its owner: %+v", sink)
+	}
+}
+
+// Every cluster family kind shares one name namespace, so the cluster commands
+// resolve a name to one object; each colliding root names the other.
+func TestClusterKindsOfOneNameRefuseNamingEachOther(t *testing.T) {
+	storage := "apiVersion: bootwright.io/v1alpha1\nkind: CephCluster\nmetadata: {name: shared}\nspec: {management: external}\n"
+	container := "apiVersion: bootwright.io/v1alpha1\nkind: OpenShiftCluster\nmetadata: {name: shared}\nspec: {}\n"
+	state, report, err := regressionCompiler().Compile(context.Background(), sources(environmentYAML+"---\n"+storage+"---\n"+container))
+	sink := requireCompilationFailure(t, state, report, err)
+	named := map[string]string{}
+	for _, d := range sink {
+		if d.Code == "api.duplicate" && d.Object != nil && d.Field == "$.metadata.name" {
+			named[d.Object.Kind] = d.Message
+		}
+	}
+	if !strings.Contains(named["CephCluster"], "OpenShiftCluster/shared") || !strings.Contains(named["OpenShiftCluster"], "CephCluster/shared") {
+		t.Fatalf("colliding cluster roots = %q, want each naming the other", named)
 	}
 }

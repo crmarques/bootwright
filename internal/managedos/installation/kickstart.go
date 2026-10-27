@@ -18,11 +18,11 @@ const kickstartVersion = "kickstart-anaconda-v13"
 // than at first boot, so the republished copy is the key sshd presents. Each
 // names the ssh-keygen arguments that generate it explicitly, none when
 // ssh-keygen -A does; a FIPS-mode system refuses Ed25519 and gets ECDSA.
-var guestHostKeys = map[string]string{"ed25519": "", "ecdsa-p256": "-t ecdsa -b 256"}
+var guestHostKeys = map[string]string{"ed25519": "", "ecdsaP256": "-t ecdsa -b 256"}
 
 func guestHostKeyType(fips bool) string {
 	if fips {
-		return "ecdsa-p256"
+		return "ecdsaP256"
 	}
 	return "ed25519"
 }
@@ -131,7 +131,7 @@ func RenderKickstart(input Installation) (string, error) {
 	// choose; a physical one is named by its by-id WWN path.
 	if input.Physical && !durableRootDevice(input.RootDevice) {
 		return "", refusal("lifecycle.state", "a physical installation names no root disk by its /dev/disk/by-id/wwn-0x path to erase",
-			"set spec.os.install.rootDeviceHints.deviceName to the disk's /dev/disk/by-id/wwn-0x path; a wwn-only selection is not yet supported")
+			"set spec.hardware.rootDevice.deviceName to the disk's /dev/disk/by-id/wwn-0x path; a wwn-only selection is not yet supported")
 	}
 	if _, known := deliveredHostKeys[input.HostKeyType]; input.Channel == substrate.ChannelDeliveredKey && !known {
 		return "", refusal("lifecycle.state", "the delivered SSH host key type "+input.HostKeyType+" has no installed path",
@@ -203,7 +203,7 @@ var kickstartFields = []struct {
 	{"the install address", "spec.network.addresses of the Machine", kickstartToken, func(i Installation) []string { return []string{i.Address} }},
 	{"an additional locale", "spec.customizations.localization.additionalLocales of the install profile", kickstartListElement, func(i Installation) []string { return i.AdditionalLocale }},
 	{"the identity channel", "the Machine's substrate", kickstartToken, func(i Installation) []string { return []string{i.Channel} }},
-	{"a declared hardware address", "spec.hardware.nics of the Machine", kickstartToken, func(i Installation) []string { return i.ExpectedMACs }},
+	{"a declared hardware address", "spec.substrate.baremetal.nics of the Machine", kickstartToken, func(i Installation) []string { return i.ExpectedMACs }},
 	{"the install interface type", "the type of the install interface in the Machine's NMState network configuration", kickstartToken, func(i Installation) []string { return []string{i.InterfaceType} }},
 	{"the VLAN base interface", "vlan.base-iface of the install interface in the Machine's NMState network configuration", kickstartToken, func(i Installation) []string { return []string{i.VLANBase} }},
 	{"a bond port", "link-aggregation.port of the install bond in the Machine's NMState network configuration", kickstartListElement, func(i Installation) []string { return i.BondPorts }},
@@ -226,7 +226,7 @@ var kickstartFields = []struct {
 	{"a time source", "the NTP server selections of the install profile or of spec.os.install.ntp on the Machine", kickstartListElement, func(i Installation) []string { return i.NTPServers }},
 	{"a package entry", "spec.customizations.packages.install of the install profile", kickstartPackage, func(i Installation) []string { return i.Packages }},
 	{"the package source", "spec.installer.anaconda.packageSource of the install profile", kickstartPackageSource, func(i Installation) []string { return []string{i.PackageSource} }},
-	{"the root device", "spec.os.install.rootDeviceHints.deviceName of the Machine", kickstartToken, func(i Installation) []string { return []string{i.RootDevice} }},
+	{"the root device", "spec.hardware.rootDevice.deviceName of the Machine", kickstartToken, func(i Installation) []string { return []string{i.RootDevice} }},
 	{"the SELinux mode", "spec.customizations.security.selinux.mode of the install profile", kickstartToken, func(i Installation) []string { return []string{i.SELinux} }},
 	{"the time zone", "spec.customizations.localization.timezone of the install profile", kickstartToken, func(i Installation) []string { return []string{i.Timezone} }},
 	{"the install account", "the product-owned install account", kickstartToken, func(i Installation) []string { return []string{i.User} }},
@@ -585,11 +585,11 @@ type deliveredHostKey struct {
 // deliveredHostKeys are the generated SSH key types an installation can
 // deliver, each at the path sshd's own generation gives that type.
 var deliveredHostKeys = map[string]deliveredHostKey{
-	"ed25519":    {path: "/etc/ssh/ssh_host_ed25519_key", algorithm: "ssh-ed25519"},
-	"rsa":        {path: "/etc/ssh/ssh_host_rsa_key", algorithm: "ssh-rsa"},
-	"ecdsa-p256": {path: "/etc/ssh/ssh_host_ecdsa_key", algorithm: "ecdsa-sha2-nistp256"},
-	"ecdsa-p384": {path: "/etc/ssh/ssh_host_ecdsa_key", algorithm: "ecdsa-sha2-nistp384"},
-	"ecdsa-p521": {path: "/etc/ssh/ssh_host_ecdsa_key", algorithm: "ecdsa-sha2-nistp521"},
+	"ed25519":   {path: "/etc/ssh/ssh_host_ed25519_key", algorithm: "ssh-ed25519"},
+	"rsa":       {path: "/etc/ssh/ssh_host_rsa_key", algorithm: "ssh-rsa"},
+	"ecdsaP256": {path: "/etc/ssh/ssh_host_ecdsa_key", algorithm: "ecdsa-sha2-nistp256"},
+	"ecdsaP384": {path: "/etc/ssh/ssh_host_ecdsa_key", algorithm: "ecdsa-sha2-nistp384"},
+	"ecdsaP521": {path: "/etc/ssh/ssh_host_ecdsa_key", algorithm: "ecdsa-sha2-nistp521"},
 }
 
 // deliveredHostKeyDropIn names the delivered key as sshd's host key. Naming

@@ -15,6 +15,9 @@ import (
 	"github.com/crmarques/bootwright/internal/diagnostics"
 )
 
+// Normalization sorts addonConfigs and inputs, but a diagnostic names the
+// authored positions, the field and the line alike (specs/api.md, YAML streams
+// and decoding).
 func TestSortedNestedListsKeepAuthoredAndInheritedDiagnosticLocations(t *testing.T) {
 	list := "    - addonRef: z-addon\n      inputs:\n        - name: z-input\n          value: present\n        - name: a-input\n          value: ''\n    - addonRef: a-addon\n"
 	binding := "apiVersion: bootwright.io/v1alpha1\nkind: ClusterAddonBinding\nmetadata:\n  name: selected\nspec:\n  clusterRef: cluster\n"
@@ -35,7 +38,7 @@ func TestSortedNestedListsKeepAuthoredAndInheritedDiagnosticLocations(t *testing
 			want := strings.Count(strings.Split(content, "value: ''")[0], "\n") + 1
 			found := false
 			for _, diagnostic := range diagnostics.Of(err) {
-				if diagnostic.Object != nil && diagnostic.Object.Kind == string(api.ClusterAddonBinding) && diagnostic.Field == "$.spec.addonConfigs[1].inputs[0].value" {
+				if diagnostic.Object != nil && diagnostic.Object.Kind == string(api.ClusterAddonBinding) && diagnostic.Field == "$.spec.addonConfigs[0].inputs[1].value" {
 					found = true
 					if diagnostic.Source == nil || diagnostic.Source.Line != want {
 						t.Fatalf("wrong origin: want line%d got%+v", want, diagnostic)

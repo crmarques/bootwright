@@ -158,7 +158,7 @@ func writeValidation(out, errOut io.Writer, command string, report *compilation.
 	diagnostics := displayDiagnostics(report.Diagnostics)
 	advisories := []diagnostic{}
 	for _, d := range diagnostics {
-		if d.Code == "api.deferred" && d.Severity == "warning" {
+		if (d.Code == "api.deferred" || d.Code == "api.unrealized") && d.Severity == "warning" {
 			advisories = append(advisories, d)
 		}
 	}

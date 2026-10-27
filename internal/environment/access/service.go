@@ -84,31 +84,31 @@ func sessionTargets(catalog api.Catalog, command, contextName string, names []st
 	var unknown []string
 	var clusters, containers []api.Object
 	for _, name := range names {
-		if storage, ok := catalog.Find(api.StorageCluster, name); ok {
+		if storage, ok := catalog.FindInCategory(api.StorageClusterCategory, name); ok {
 			clusters = append(clusters, storage)
-		} else if container, ok := catalog.Find(api.ContainerCluster, name); ok {
+		} else if container, ok := catalog.FindInCategory(api.ContainerClusterCategory, name); ok {
 			containers = append(containers, container)
 		} else {
 			unknown = append(unknown, name)
 		}
 	}
 	if len(unknown) > 0 {
-		subject, remedy := "no ContainerCluster or StorageCluster named ", "name a cluster the context selects; "
+		subject, remedy := "no OpenShiftCluster or CephCluster named ", "name a cluster the context selects; "
 		if len(unknown) > 1 {
-			subject, remedy = "no ContainerClusters or StorageClusters named ", "name clusters the context selects; "
+			subject, remedy = "no OpenShiftClusters or CephClusters named ", "name clusters the context selects; "
 		}
 		return nil, failure("access.target", "the context "+contextName+" selects "+subject+strings.Join(unknown, ", "), remedy+discovery+" lists them")
 	}
 	for _, storage := range clusters {
 		if management := storage.Spec().Get("management").Text(); management != "" && management != "managed" {
 			return nil, failure("cluster.not-applicable",
-				"bootwright "+command+" does not apply to "+storage.Name()+", an "+management+" Ceph StorageCluster; it applies to managed Ceph StorageClusters, whose declared nodes it opens a session on",
+				"bootwright "+command+" does not apply to "+storage.Name()+", an "+management+" CephCluster; it applies to managed CephClusters, whose declared nodes it opens a session on",
 				discovery+" lists the clusters this context selects and their kinds")
 		}
 	}
 	if len(containers) > 0 {
 		return nil, diagnostics.NewFailure("access.unavailable",
-			"bootwright "+command+" is not available for "+containers[0].Name()+", an OpenShift or OKD ContainerCluster: sessions are not yet implemented for that kind, and the cluster is reached through bootwright cluster kubeconfig", "")
+			"bootwright "+command+" is not available for "+containers[0].Name()+", an OpenShiftCluster: sessions are not yet implemented for that kind, and the cluster is reached through bootwright cluster kubeconfig", "")
 	}
 	return clusters, nil
 }

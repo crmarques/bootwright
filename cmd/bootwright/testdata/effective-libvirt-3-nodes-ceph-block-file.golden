@@ -21,7 +21,7 @@ kind: Entitlement
 metadata:
   name: ibm-ceph
 spec:
-  type: ibm-storage-ceph
+  type: ibmStorageCeph
   registry:
     url: cp.icr.io
     credentialsRef: ibm-registry
@@ -33,9 +33,6 @@ kind: Machine
 metadata:
   name: controller
 spec:
-  capabilities:
-    - container-runtime
-    - libvirt
   os:
     provided: true
   proxy:
@@ -55,11 +52,13 @@ kind: Machine
 metadata:
   name: rhel-01
 spec:
-  capabilities:
-    - ceph-node
   substrate:
     providerRef: lab-libvirt
-    profileRef: rhel
+    libvirt:
+      profileRef: rhel
+  hardware:
+    rootDevice:
+      deviceName: /dev/vda
   os:
     provided: false
     installProfileRef: rhel-9-8
@@ -67,8 +66,6 @@ spec:
       ntp:
         - serverRef: lab-ntp
           endpointRef: ip
-      rootDeviceHints:
-        deviceName: /dev/vda
   proxy:
     direct: {}
   network:
@@ -95,11 +92,13 @@ kind: Machine
 metadata:
   name: rhel-02
 spec:
-  capabilities:
-    - ceph-node
   substrate:
     providerRef: lab-libvirt
-    profileRef: rhel
+    libvirt:
+      profileRef: rhel
+  hardware:
+    rootDevice:
+      deviceName: /dev/vda
   os:
     provided: false
     installProfileRef: rhel-9-8
@@ -107,8 +106,6 @@ spec:
       ntp:
         - serverRef: lab-ntp
           endpointRef: ip
-      rootDeviceHints:
-        deviceName: /dev/vda
   proxy:
     direct: {}
   network:
@@ -135,11 +132,13 @@ kind: Machine
 metadata:
   name: rhel-03
 spec:
-  capabilities:
-    - ceph-node
   substrate:
     providerRef: lab-libvirt
-    profileRef: rhel
+    libvirt:
+      profileRef: rhel
+  hardware:
+    rootDevice:
+      deviceName: /dev/vda
   os:
     provided: false
     installProfileRef: rhel-9-8
@@ -147,8 +146,6 @@ spec:
       ntp:
         - serverRef: lab-ntp
           endpointRef: ip
-      rootDeviceHints:
-        deviceName: /dev/vda
   proxy:
     direct: {}
   network:
@@ -283,10 +280,7 @@ spec:
       cpu: 1
       memoryMiB: 2048
       diskGiB: 10
-    bmcEmulationDefaults:
-      enabled: true
-      protocol: redfish
-      emulator: sushy-tools
+    bmcEmulation:
       bindAddress: 127.0.0.1
       certificateRef: lab-bmc-tls
       port: 8000
@@ -384,87 +378,85 @@ spec:
       addressRef: ip
 ---
 apiVersion: bootwright.io/v1alpha1
-kind: StorageCluster
+kind: CephCluster
 metadata:
   name: ceph-lab
 spec:
-  type: ceph
   management: managed
-  ceph:
-    distribution: ibm
-    release: 9.9.2.0
-    packageVersion: 20.2.2-349.el9cp
-    image:
-      base: cp.icr.io/cp/ibm-ceph/ceph-9-rhel10
-      version: v9.9.2-26947
+  distribution:
     ibm:
       callHome: enabled
       packages:
         source: vendor
-    entitlementRef: ibm-ceph
-    cephadm:
+  release: 9.9.2.0
+  packageVersion: 20.2.2-349.el9cp
+  image:
+    base: cp.icr.io/cp/ibm-ceph/ceph-9-rhel10
+    version: v9.9.2-26947
+  entitlementRef: ibm-ceph
+  cephadm:
+    addressRef: ip
+    ansible:
+      packageVersion: 5.0.3-1.el9cp
+    clusterSSH:
+      user: bootwright
+      keyRef: ceph-cluster-key
+      transport: verifiedTunnel
+    bootstrap:
+      nodeRef: rhel-01
       addressRef: ip
-      ansible:
-        packageVersion: 5.0.3-1.el9cp
-      clusterSSH:
-        user: bootwright
-        keyRef: ceph-cluster-key
-        transport: verified-tunnel
-      bootstrap:
-        node: rhel-01
-        addressRef: ip
-    networks:
-      publicCIDRs:
-        - 198.51.100.0/24
-    config:
-      global:
-        osd_pool_default_min_size: "2"
-        osd_pool_default_size: "2"
-      osd:
-        osd_memory_target: "2147483648"
-        osd_memory_target_autotune: "false"
-    services:
-      - service_type: mon
-        placement:
-          label: ceph-core
-          count: 3
-      - service_type: mgr
-        placement:
-          label: ceph-core
-          count: 2
-      - service_type: osd
-        service_id: data
-        placement:
-          label: ceph-core
-        spec:
-          data_devices:
-            paths:
-              - /dev/sda
-      - service_type: mds
-        service_id: files
-        placement:
-          label: ceph-core
-          count: 2
-    topology:
-      nodes:
-        - name: rhel-01
-          fqdn: rhel-01.lab.example.test
-          machineRef: rhel-01
-          labels:
-            - ceph-core
-        - name: rhel-02
-          fqdn: rhel-02.lab.example.test
-          machineRef: rhel-02
-          labels:
-            - ceph-core
-        - name: rhel-03
-          fqdn: rhel-03.lab.example.test
-          machineRef: rhel-03
-          labels:
-            - ceph-core
+  networks:
+    publicCIDRs:
+      - 198.51.100.0/24
+  config:
+    global:
+      osd_pool_default_min_size: "2"
+      osd_pool_default_size: "2"
+    osd:
+      osd_memory_target: "2147483648"
+      osd_memory_target_autotune: "false"
+  services:
+    - service_type: mon
+      placement:
+        label: ceph-core
+        count: 3
+    - service_type: mgr
+      placement:
+        label: ceph-core
+        count: 2
+    - service_type: osd
+      service_id: data
+      placement:
+        label: ceph-core
+      spec:
+        data_devices:
+          paths:
+            - /dev/sda
+    - service_type: mds
+      service_id: files
+      placement:
+        label: ceph-core
+        count: 2
+  topology:
+    nodes:
+      - name: rhel-01
+        fqdn: rhel-01.lab.example.test
+        machineRef: rhel-01
+        labels:
+          - ceph-core
+      - name: rhel-02
+        fqdn: rhel-02.lab.example.test
+        machineRef: rhel-02
+        labels:
+          - ceph-core
+      - name: rhel-03
+        fqdn: rhel-03.lab.example.test
+        machineRef: rhel-03
+        labels:
+          - ceph-core
 ---
 apiVersion: bootwright.io/v1alpha1
-kind: StoragePlacementPolicy
+kind: CephPlacementPolicy
 metadata:
   name: ssd-hosts
 spec:
@@ -476,43 +468,41 @@ spec:
     minSize: 2
 ---
 apiVersion: bootwright.io/v1alpha1
-kind: StoragePool
+kind: CephPool
 metadata:
   name: cephfs-data
 spec:
   clusterRef: ceph-lab
-  type: replicated
-  role: cephfs-data
+  role: cephfsData
   replicated:
     size: 2
     minSize: 2
 ---
 apiVersion: bootwright.io/v1alpha1
-kind: StoragePool
+kind: CephPool
 metadata:
   name: cephfs-metadata
 spec:
   clusterRef: ceph-lab
-  type: replicated
-  role: cephfs-metadata
+  role: cephfsMetadata
   replicated:
     size: 2
     minSize: 2
 ---
 apiVersion: bootwright.io/v1alpha1
-kind: StoragePool
+kind: CephPool
 metadata:
   name: rbd-data
 spec:
   clusterRef: ceph-lab
   placementPolicyRef: ssd-hosts
-  type: replicated
   role: rbd
+  replicated: {}
   autoscale:
     mode: on
 ---
 apiVersion: bootwright.io/v1alpha1
-kind: StorageRBDImage
+kind: CephRBDImage
 metadata:
   name: rbd-disk
 spec:
@@ -527,16 +517,16 @@ spec:
     - deep-flatten
 ---
 apiVersion: bootwright.io/v1alpha1
-kind: StorageClient
+kind: CephClient
 metadata:
   name: rbd-canary
 spec:
   clusterRef: ceph-lab
   poolRef: rbd-data
-  access: read-write
+  access: readWrite
 ---
 apiVersion: bootwright.io/v1alpha1
-kind: StorageFilesystem
+kind: CephFilesystem
 metadata:
   name: files
 spec:
@@ -555,7 +545,7 @@ spec:
       mode: "750"
 ---
 apiVersion: bootwright.io/v1alpha1
-kind: StorageSubvolume
+kind: CephSubvolume
 metadata:
   name: docs
 spec:

@@ -87,7 +87,7 @@ func (d inspectionCustody) ClientKeyring(ctx context.Context, contextName, clien
 type cephInspection struct{ reconciler cephReader }
 
 func (c cephInspection) ObjectUserProved(ctx context.Context, contextName string, catalog api.Catalog, user api.Object) (bool, error) {
-	proofs, err := c.reconciler.Evidence(ctx, contextName, string(api.StorageObjectUser), user.Name())
+	proofs, err := c.reconciler.Evidence(ctx, contextName, string(api.CephObjectUser), user.Name())
 	if err != nil {
 		return false, err
 	}
@@ -120,8 +120,8 @@ func (c cephInspection) Resources(ctx context.Context, contextName string, catal
 	}
 	rows := map[string][]inspection.Resource{}
 	for _, cluster := range found.Clusters {
-		declared, ok := catalog.Find(api.StorageCluster, cluster.Name)
-		if management := declared.Spec().Get("management").Text(); cluster.Kind != string(api.StorageCluster) || !ok || management != "" && management != inspection.ManagementManaged {
+		declared, ok := catalog.Find(api.CephCluster, cluster.Name)
+		if management := declared.Spec().Get("management").Text(); cluster.Kind != string(api.CephCluster) || !ok || management != "" && management != inspection.ManagementManaged {
 			continue
 		}
 		resources := make([]inspection.Resource, 0, len(cluster.Resources))
@@ -138,7 +138,7 @@ func (cephInspection) ObjectUserGateway(user api.Object) string { return ceph.Ob
 
 func (c cephInspection) ManagedStorage(ctx context.Context, contextName string, catalog api.Catalog, cluster api.Object) (inspection.StorageProof, error) {
 	administration := ceph.ClusterAdministration(cluster)
-	proofs, err := c.reconciler.Evidence(ctx, contextName, string(api.StorageCluster), cluster.Name())
+	proofs, err := c.reconciler.Evidence(ctx, contextName, string(api.CephCluster), cluster.Name())
 	if err != nil {
 		return inspection.StorageProof{}, err
 	}
@@ -178,7 +178,7 @@ func (c cephInspection) endpoints(ctx context.Context, contextName, cluster stri
 	}
 	all := slices.Clone(proofs)
 	for _, name := range ceph.EndpointGateways(cluster, frozen) {
-		gateway, err := c.reconciler.Evidence(ctx, contextName, string(api.StorageObjectGateway), name)
+		gateway, err := c.reconciler.Evidence(ctx, contextName, string(api.CephObjectGateway), name)
 		if err != nil {
 			return nil, err
 		}
@@ -195,7 +195,7 @@ func (c cephInspection) endpoints(ctx context.Context, contextName, cluster stri
 type installProofs struct{ reconciler evidenceReader }
 
 func (i installProofs) Installed(ctx context.Context, contextName, cluster string) (bool, error) {
-	proofs, err := i.reconciler.Evidence(ctx, contextName, string(api.ContainerCluster), cluster)
+	proofs, err := i.reconciler.Evidence(ctx, contextName, string(api.OpenShiftCluster), cluster)
 	if err != nil {
 		return false, err
 	}

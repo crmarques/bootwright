@@ -1,10 +1,10 @@
   ○ cluster | edge
     Topology
-      Type  ContainerCluster
+      Type  OpenShiftCluster
     Access
       cluster exec  not-implemented
-      sessions on an OpenShift or OKD ContainerCluster are not yet implemented; the cluster is
-      reached through bootwright cluster kubeconfig
+      sessions on an OpenShiftCluster are not yet implemented; the cluster is reached through
+      bootwright cluster kubeconfig
       cluster keyring  not-applicable
       cluster kubeconfig  ready
       bootwright cluster kubeconfig --context lab --name edge
@@ -15,16 +15,16 @@
       this handoff is not yet implemented; the cluster is reached through bootwright cluster
       kubeconfig
       cluster rsh  not-implemented
-      sessions on an OpenShift or OKD ContainerCluster are not yet implemented; the cluster is
-      reached through bootwright cluster kubeconfig
+      sessions on an OpenShiftCluster are not yet implemented; the cluster is reached through
+      bootwright cluster kubeconfig
 
   ○ cluster | okd-lab
     Topology
-      Type  ContainerCluster
+      Type  OpenShiftCluster
     Access
       cluster exec  not-implemented
-      sessions on an OpenShift or OKD ContainerCluster are not yet implemented; the cluster is
-      reached through bootwright cluster kubeconfig
+      sessions on an OpenShiftCluster are not yet implemented; the cluster is reached through
+      bootwright cluster kubeconfig
       cluster keyring  not-applicable
       cluster kubeconfig  ready
       bootwright cluster kubeconfig --context lab --name okd-lab
@@ -35,12 +35,12 @@
       this handoff is not yet implemented; the cluster is reached through bootwright cluster
       kubeconfig
       cluster rsh  not-implemented
-      sessions on an OpenShift or OKD ContainerCluster are not yet implemented; the cluster is
-      reached through bootwright cluster kubeconfig
+      sessions on an OpenShiftCluster are not yet implemented; the cluster is reached through
+      bootwright cluster kubeconfig
 
   ○ cluster | archive
     Topology
-      Type  StorageCluster
+      Type  CephCluster
     Access
       cluster exec  not-applicable
       cluster keyring  not-applicable
@@ -51,7 +51,7 @@
 
   ○ cluster | storage · ready
     Topology
-      Type        StorageCluster
+      Type        CephCluster
       Management  managed
       Release     9.9.1.2
       Admin node  rhel-01
@@ -82,9 +82,9 @@
     Evidence
       Status  ready
     Resources
-      StoragePool/rbd-data          done
-      StorageClient/rbd-canary      done
-      StorageObjectGateway/objects  unsupported
+      CephPool/rbd-data          done
+      CephClient/rbd-canary      done
+      CephObjectGateway/objects  unsupported
     Custody
       User      admin
       Password  hidden; rerun with --secrets --name storage

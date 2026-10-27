@@ -40,12 +40,12 @@ func TestManagedOSRefusalTableMatchesUnsupported(t *testing.T) {
 	}
 	untrusting := server(api.MapValue(text("deviceName", "/dev/disk/by-id/wwn-0x5000c500a1b2c3d4")))
 	untrusting = untrusting.WithSpec(untrusting.Spec().WithPath(api.StringValue(substrate.TrustDisableVerification),
-		"hardware", "management", "bmc", "virtualMedia", "tls", "trust"))
+		"substrate", "baremetal", "bmc", "virtualMedia", "tls", "trust"))
 	unverified := server(api.MapValue(text("deviceName", "/dev/disk/by-id/wwn-0x5000c500a1b2c3d4")))
-	unverified = unverified.WithSpec(unverified.Spec().WithPath(api.BoolValue(false), "hardware", "management", "bmc", "tls", "verify"))
+	unverified = unverified.WithSpec(unverified.Spec().WithPath(api.BoolValue(false), "substrate", "baremetal", "bmc", "tls", "verify"))
 	rotational := guest()
 	rotational = rotational.WithSpec(rotational.Spec().WithPath(
-		api.MapValue(text("deviceName", "/dev/vda"), field("rotational", api.BoolValue(false))), "os", "install", "rootDeviceHints"))
+		api.MapValue(text("deviceName", "/dev/vda"), field("rotational", api.BoolValue(false))), "hardware", "rootDevice"))
 	onMetal := map[string]string{"<machine>": "Machine/metal-01"}
 	onProfile := map[string]string{"<machine>": "Machine/rhel-01", "<profile>": "MachineInstallProfile/rhel-9-8"}
 	onGuest := map[string]string{"<machine>": "Machine/rhel-01"}
@@ -69,15 +69,15 @@ func TestManagedOSRefusalTableMatchesUnsupported(t *testing.T) {
 	providerOnHypervisor := provider()
 	providerOnHypervisor = providerOnHypervisor.WithSpec(providerOnHypervisor.Spec().
 		WithPath(api.StringValue("hv-01"), "libvirt", "machineRef").
-		WithPath(api.StringValue("192.0.2.3"), "libvirt", "bmcEmulationDefaults", "bindAddress"))
+		WithPath(api.StringValue("192.0.2.3"), "libvirt", "bmcEmulation", "bindAddress"))
 	cases := map[string]refusalCase{
 		"A physical Machine naming no root device": {
 			labCatalog(metalProvider(), server(api.MapValue(text("deviceName", "/dev/sda")))), "Machine/metal-01", onMetal,
 		},
 		"A root-device hint other than deviceName": {labCatalog(rotational), "Machine/rhel-01",
-			map[string]string{"<machine>": "Machine/rhel-01", "<hints>": "spec.os.install.rootDeviceHints.rotational"}},
+			map[string]string{"<machine>": "Machine/rhel-01", "<hints>": "spec.hardware.rootDevice.rotational"}},
 		"An unverified fetch of private material": {labCatalog(metalProvider(), untrusting), "Machine/metal-01", onMetal},
-		"An unverified controller leg for private delivery": {
+		"An unverified BMC leg for private delivery": {
 			labCatalog(metalProvider(), unverified, sshKeySecret(api.MapValue(field("generated", api.MapValue())))), "Machine/metal-01",
 			map[string]string{"<machine>": "Machine/metal-01", "<provider>": "InfraProvider/lab-metal"},
 		},

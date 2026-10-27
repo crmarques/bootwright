@@ -588,7 +588,7 @@ def listed(*hosts, identity="6a4ba3e8-0000-4000-8000-000000000000"):
 # The read's wire contract, spelled here rather than taken from the module, so
 # a test fails when the module's spelling drifts from it: port 8090 and the
 # base the image's common.sh builds from SERVICE_BASE_URL, which the Waiting
-# paragraph of specs/container-clusters.md states, the cluster list asked with
+# paragraph of specs/openshift-clusters.md states, the cluster list asked with
 # its hosts, and the header the installer's watcher-token client sends the
 # token in (openshift-install 4.21.10 carries "/v2/clusters", "with_hosts" and
 # "Watcher-Authorization"), with the time bound that paragraph states.

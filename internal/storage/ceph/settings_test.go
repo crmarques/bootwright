@@ -24,7 +24,7 @@ func cephDefinitions(t *testing.T, catalog api.Catalog) []reconciliation.BlockDe
 	runner := &recordingRunner{}
 	var definitions []reconciliation.BlockDefinition
 	capabilities := []lifecycle.Capability{NewImage(runner), NewHost(runner)}
-	for _, kind := range []api.Kind{api.StorageCluster, api.StoragePlacementPolicy, api.StoragePool, api.StorageClient, api.StorageRBDImage, api.StorageFilesystem, api.StorageSubvolume} {
+	for _, kind := range []api.Kind{api.CephCluster, api.CephPlacementPolicy, api.CephPool, api.CephClient, api.CephRBDImage, api.CephFilesystem, api.CephSubvolume} {
 		capabilities = append(capabilities, New(kind, runner))
 	}
 	for _, capability := range capabilities {
@@ -83,7 +83,7 @@ func blockOf(t *testing.T, plan reconciliation.Plan, id string) reconciliation.B
 func settingsCatalog(t *testing.T, services []api.Value, extra ...api.Object) api.Catalog {
 	t.Helper()
 	return api.NewCatalog(append(pinnedCatalog(t, func(spec api.Value) api.Value {
-		return spec.WithPath(api.ListValue(append(spec.Get("ceph", "services").Items(), services...)...), "ceph", "services")
+		return spec.WithPath(api.ListValue(append(spec.Get("services").Items(), services...)...), "services")
 	}).Objects(), extra...))
 }
 
@@ -113,7 +113,7 @@ func TestSettingsBlockEmittedOnlyWhenNeeded(t *testing.T) {
 		t.Fatalf("a cluster with an nfs service plans %d settings blocks", len(found))
 	}
 	settings := found[0]
-	if settings.ID != "ceph-settings-example" || settings.Kind != string(api.StorageCluster) || settings.Object != "example" || settings.Implementation != Implementation ||
+	if settings.ID != "ceph-settings-example" || settings.Kind != string(api.CephCluster) || settings.Object != "example" || settings.Implementation != Implementation ||
 		settings.Stage != reconciliation.StageClusters || !slices.Equal(settings.Exclusive, []string{"ceph/example"}) || len(settings.Requires) != 0 ||
 		!slices.Equal(settings.Dependencies, []string{"ceph-cluster-example", "ceph-image-example"}) || settings.ContentDigest != ContentDigest() ||
 		!slices.Equal(settings.Impacts, []string{"realize Ceph settings example"}) {
@@ -124,7 +124,7 @@ func TestSettingsBlockEmittedOnlyWhenNeeded(t *testing.T) {
 		t.Fatalf("the settings request is %+v (%v)", r, err)
 	}
 	catalog := delegatedCatalog(nil, nil)
-	cluster, _ := catalog.Find(api.StorageCluster, "example")
+	cluster, _ := catalog.Find(api.CephCluster, "example")
 	base := Request{Version: Version, Action: "cluster", Cluster: "example", Auxiliary: frozenAuxiliaryReferences()}
 	r, needed := settingsRequest(catalog, base, cluster)
 	if !needed || r.Action != "settings" || r.Settings == nil || r.Settings.Modules == nil || len(r.Settings.Modules) != 0 || len(r.Auxiliary) != 2 {
@@ -183,7 +183,7 @@ func TestSettingsDeadline(t *testing.T) {
 
 func TestSettingsIdentity(t *testing.T) {
 	r := settingsRequestFor(coreRequest())
-	if _, err := New(api.StorageCluster, nil).identity(context.Background(), executionFor(t, r)); err != nil {
+	if _, err := New(api.CephCluster, nil).identity(context.Background(), executionFor(t, r)); err != nil {
 		t.Fatalf("a settings block fails its identity: %+v", diagnostics.Of(err))
 	}
 	unset := r
@@ -191,12 +191,12 @@ func TestSettingsIdentity(t *testing.T) {
 	carried := coreRequest()
 	carried.Settings = &Settings{Modules: []string{}}
 	for name, request := range map[string]Request{"settings without its member": unset, "cluster with a settings member": carried} {
-		_, err := New(api.StorageCluster, nil).identity(context.Background(), executionFor(t, request))
+		_, err := New(api.CephCluster, nil).identity(context.Background(), executionFor(t, request))
 		if d := diagnostics.Of(err); len(d) != 1 || d[0].Code != "lifecycle.state" || d[0].Message != "Ceph request does not match its frozen resource identity" {
 			t.Fatalf("a %s passes its identity: %+v", name, d)
 		}
 	}
-	if _, err := New(api.StoragePool, nil).identity(context.Background(), executionFor(t, r)); err == nil {
+	if _, err := New(api.CephPool, nil).identity(context.Background(), executionFor(t, r)); err == nil {
 		t.Fatal("a pool capability executes a settings request")
 	}
 }
@@ -216,11 +216,11 @@ func TestSettingsEvidence(t *testing.T) {
 }
 
 func TestClusterChildrenDependOnCoreBlockByID(t *testing.T) {
-	objects := []api.Object{cephfsPool("fs-meta", "cephfs-metadata"), cephfsPool("fs-data", "cephfs-data"), filesystemOf(), subvolumeOf(),
-		childOf(api.StoragePlacementPolicy, "fast", "ruleName", "fast-hosts", "replicated", requestMap("size", 2, "minSize", 2)),
-		childOf(api.StorageRBDImage, "disk", "poolRef", "volumes", "sizeBytes", 10737418240)}
+	objects := []api.Object{cephfsPool("fs-meta", "cephfsMetadata"), cephfsPool("fs-data", "cephfsData"), filesystemOf(), subvolumeOf(),
+		childOf(api.CephPlacementPolicy, "fast", "ruleName", "fast-hosts", "replicated", requestMap("size", 2, "minSize", 2)),
+		childOf(api.CephRBDImage, "disk", "poolRef", "volumes", "sizeBytes", 10737418240)}
 	for _, object := range pinnedCatalog(t, withMDS).Objects() {
-		if object.Kind() == api.StoragePool {
+		if object.Kind() == api.CephPool {
 			object = object.WithSpec(object.Spec().With("placementPolicyRef", api.StringValue("fast")))
 		}
 		objects = append(objects, object)
@@ -229,19 +229,19 @@ func TestClusterChildrenDependOnCoreBlockByID(t *testing.T) {
 	kinds := map[string]bool{}
 	for _, definition := range cephDefinitions(t, catalog) {
 		kinds[definition.Kind] = true
-		if definition.Implementation != Implementation || definition.Kind == string(api.StorageCluster) {
+		if definition.Implementation != Implementation || definition.Kind == string(api.CephCluster) {
 			continue
 		}
 		if !slices.Contains(definition.Dependencies, ClusterBlockID("example")) {
 			t.Errorf("%s depends on %v, not on its cluster block", definition.ID, definition.Dependencies)
 		}
 		for _, ref := range definition.Requires {
-			if ref.Kind == string(api.StorageCluster) {
-				t.Errorf("%s requires the StorageCluster %s", definition.ID, ref.Object)
+			if ref.Kind == string(api.CephCluster) {
+				t.Errorf("%s requires the CephCluster %s", definition.ID, ref.Object)
 			}
 		}
 	}
-	for _, kind := range []api.Kind{api.StoragePlacementPolicy, api.StoragePool, api.StorageClient, api.StorageRBDImage, api.StorageFilesystem, api.StorageSubvolume} {
+	for _, kind := range []api.Kind{api.CephPlacementPolicy, api.CephPool, api.CephClient, api.CephRBDImage, api.CephFilesystem, api.CephSubvolume} {
 		if !kinds[string(kind)] {
 			t.Errorf("the catalog plans no %s block", kind)
 		}

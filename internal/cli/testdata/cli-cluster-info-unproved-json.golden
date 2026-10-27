@@ -9,7 +9,7 @@
     "storage": [
       {
         "name": "storage",
-        "kind": "StorageCluster",
+        "kind": "CephCluster",
         "accessCommands": [
           {
             "command": "cluster exec",
@@ -23,17 +23,17 @@
           {
             "command": "cluster kubeconfig",
             "status": "not-applicable",
-            "reason": "applies to OpenShift and OKD ContainerClusters only"
+            "reason": "applies to OpenShiftClusters only"
           },
           {
             "command": "cluster kubectl",
             "status": "not-applicable",
-            "reason": "applies to OpenShift and OKD ContainerClusters only"
+            "reason": "applies to OpenShiftClusters only"
           },
           {
             "command": "cluster oc",
             "status": "not-applicable",
-            "reason": "applies to OpenShift and OKD ContainerClusters only"
+            "reason": "applies to OpenShiftClusters only"
           },
           {
             "command": "cluster rsh",
@@ -90,19 +90,19 @@
         },
         "resources": [
           {
-            "kind": "StoragePool",
+            "kind": "CephPool",
             "name": "rbd-data",
             "status": "done",
             "scope": "replicated size 2/min 2, application rbd"
           },
           {
-            "kind": "StorageClient",
+            "kind": "CephClient",
             "name": "rbd-canary",
             "status": "done",
             "scope": "client.rbd-canary read-write on pool rbd-data"
           },
           {
-            "kind": "StorageObjectGateway",
+            "kind": "CephObjectGateway",
             "name": "objects",
             "status": "unsupported",
             "scope": "zone lab/lab/lab-a"
@@ -142,7 +142,7 @@
     {
       "severity": "warning",
       "code": "access.unproved",
-      "message": "the dashboard administrator password of StorageCluster storage was kept from an apply that never proved the dashboard reachable, so the access it grants was not proved"
+      "message": "the dashboard administrator password of CephCluster storage was kept from an apply that never proved the dashboard reachable, so the access it grants was not proved"
     }
   ],
   "logs": []

@@ -30,7 +30,7 @@ def six_hosts(request):
 
 def test_six_host_fresh_call_plan_has_concurrent_rounds(core_request, monkeypatch, tmp_path):
     six_hosts(core_request)
-    core_request["clusterSSHTransport"] = "verified-tunnel"
+    core_request["clusterSSHTransport"] = "verifiedTunnel"
     core.package_intent(core_request)
     extra = copy.deepcopy(core_request["services"][-1])
     extra["service_id"] = "second"

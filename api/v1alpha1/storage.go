@@ -1,21 +1,23 @@
 package v1alpha1
 
+import "slices"
+
 func init() {
-	register(StorageCluster, storageClusterSchema)
-	register(StoragePlacementPolicy, storagePlacementPolicySchema)
-	register(StoragePool, storagePoolSchema)
-	register(StorageReplication, storageReplicationSchema)
-	register(StorageRBDImage, storageRBDImageSchema)
-	register(StorageFilesystem, storageFilesystemSchema)
-	register(StorageSubvolume, storageSubvolumeSchema)
-	register(StorageObjectGateway, storageObjectGatewaySchema)
-	register(StorageObjectUser, storageObjectUserSchema)
-	register(StorageObjectBucket, storageObjectBucketSchema)
-	register(StorageNFSExport, storageNFSExportSchema)
-	register(StorageSMBResource, storageSMBResourceSchema)
-	register(StorageNVMeoFSubsystem, storageNVMeoFSubsystemSchema)
-	register(StorageExport, storageExportSchema)
-	register(StorageClient, storageClientSchema)
+	register(CephCluster, storageClusterSchema)
+	register(CephPlacementPolicy, storagePlacementPolicySchema)
+	register(CephPool, storagePoolSchema)
+	register(CephReplication, storageReplicationSchema)
+	register(CephRBDImage, storageRBDImageSchema)
+	register(CephFilesystem, storageFilesystemSchema)
+	register(CephSubvolume, storageSubvolumeSchema)
+	register(CephObjectGateway, storageObjectGatewaySchema)
+	register(CephObjectUser, storageObjectUserSchema)
+	register(CephObjectBucket, storageObjectBucketSchema)
+	register(CephNFSExport, storageNFSExportSchema)
+	register(CephSMBResource, storageSMBResourceSchema)
+	register(CephNVMeoFSubsystem, storageNVMeoFSubsystemSchema)
+	register(CephConsumer, cephConsumerSchema)
+	register(CephClient, storageClientSchema)
 }
 
 func storagePlacement() *Shape {
@@ -66,69 +68,89 @@ func cephAuxiliaryImages() *Shape {
 	return s
 }
 
+var cephManagedFields = []string{"distribution", "release", "packageVersion", "packageRepository", "packageRepositoryTrustBundleRef", "packageRepositoryKey", "nfsGanesha", "image", "images",
+	"entitlementRef", "cephadm", "networks", "security", "config", "mgrModules", "services", "serviceBindings", "topology"}
+
+func CephManagedFields() []string { return slices.Clone(cephManagedFields) }
+
+var cephDistributions = []string{"oss", "redhat", "ibm"}
+
+func CephDistribution(spec Value) string {
+	for _, arm := range cephDistributions {
+		if spec.Has("distribution", arm) {
+			return arm
+		}
+	}
+	return ""
+}
+
+func cephDistributionSchema() *Shape {
+	return choice(field("oss", record(field("mirror", lexical("https-url")), field("checksum", lexical("checksum")))), field("redhat", record()),
+		field("ibm", record(required("callHome", enumeration("enabled", "disabled")), field("packages", record(required("source", enumeration("vendor")))))))
+}
+
 func storageClusterSchema() *Shape {
 	configValues := stringsMap()
 	configValues.Element = nonempty()
 	config := &Shape{Type: Mapping, Open: true, Element: configValues, Atomic: true}
-	cluster := record(
-		defaulted("distribution", enumeration("oss", "redhat", "ibm"), StringValue("oss")), required("release", lexical("native-version")), field("packageVersion", lexical("native-version")), field("packageRepository", lexical("package-repository")), field("packageRepositoryTrustBundleRef", secret("caBundle")), field("packageRepositoryKey", lexical("package-repository-key")), field("nfsGanesha", record(required("packageVersion", lexical("native-version")))), field("image", record(field("base", lexical("registry-base")), field("version", lexical("native-version")))), field("images", cephAuxiliaryImages()), field("community", record(field("mirror", lexical("https-url")), field("checksum", lexical("checksum")))),
-		field("ibm", record(required("callHome", enumeration("enabled", "disabled")), field("packages", record(required("source", enumeration("vendor")))))), field("entitlementRef", ref(Entitlement)),
-		required("cephadm", record(field("addressRef", nonempty()), field("ansible", record(field("packageVersion", lexical("native-version")))), field("clusterSSH", record(field("user", lexical("posix-user")), field("keyRef", secret("sshKeyPair")), field("transport", enumeration("native", "verified-tunnel")))), required("bootstrap", record(required("node", nonempty()), field("addressRef", nonempty()), field("singleHostDefaults", boolean()))))),
-		field("networks", record(field("publicCIDRs", set(cidr())), field("clusterCIDRs", set(cidr())))), field("security", record(field("fips", record(field("enabled", boolean()))), field("cephx", record(required("keyType", enumeration("aes", "aes256k")))))), field("config", config), field("mgrModules", set(nonempty())), required("services", nonemptyArray(array(storageNativeService()))), field("serviceBindings", storageServiceBindings()),
-		required("topology", record(required("nodes", nonemptyArray(named(record(required("name", name()), field("fqdn", dns()), required("machineRef", ref(Machine)), field("site", name()), field("labels", set(nonempty())), field("location", stringsMap()))))), field("stretch", record(required("failureDomain", nonempty()), field("dataSites", set(name())), field("tiebreaker", record(field("node", text()), field("site", text()))), defaulted("ruleName", nonempty(), StringValue("stretch-rule")))))),
+	s := record(
+		defaulted("management", enumeration("managed", "external"), StringValue("managed")),
+		field("distribution", cephDistributionSchema()), field("release", lexical("native-version")), field("packageVersion", lexical("native-version")), field("packageRepository", lexical("package-repository")), field("packageRepositoryTrustBundleRef", secret("caBundle")), field("packageRepositoryKey", lexical("package-repository-key")), field("nfsGanesha", record(required("packageVersion", lexical("native-version")))), field("image", record(field("base", lexical("registry-base")), field("version", lexical("native-version")))), field("images", cephAuxiliaryImages()),
+		field("entitlementRef", ref(Entitlement)),
+		field("cephadm", record(field("addressRef", nestedRef()), field("ansible", record(field("packageVersion", lexical("native-version")))), field("clusterSSH", record(field("user", lexical("posix-user")), field("keyRef", secret("sshKeyPair")), field("transport", enumeration("native", "verifiedTunnel")))), required("bootstrap", record(required("nodeRef", nestedRef()), field("addressRef", nestedRef()), field("singleHostDefaults", boolean()))))),
+		field("networks", record(field("publicCIDRs", set(cidr())), field("clusterCIDRs", set(cidr())))), field("security", record(field("fips", record(field("enabled", boolean()))), field("cephx", record(required("keyType", enumeration("aes", "aes256k")))))), field("config", config), field("mgrModules", set(nonempty())), field("services", nonemptyArray(array(storageNativeService()))), field("serviceBindings", storageServiceBindings()),
+		field("topology", record(required("nodes", nonemptyArray(named(record(required("name", name()), field("fqdn", dns()), required("machineRef", ref(Machine)), field("site", name()), field("labels", set(nonempty())), field("location", stringsMap()))))), field("stretch", record(required("failureDomain", nonempty()), field("dataSites", set(name())), field("tiebreaker", record(field("node", text()), field("site", text()))), defaulted("ruleName", nonempty(), StringValue("stretch-rule")))))),
 	)
-	cluster.Suppress = []Suppression{{Field: "distribution", Value: StringValue("oss"), Fields: []string{"ibm", "entitlementRef", "packageVersion"}}, {Field: "distribution", Value: StringValue("redhat"), Fields: []string{"community", "ibm"}}, {Field: "distribution", Value: StringValue("ibm"), Fields: []string{"community"}}}
-	s := record(required("type", enumeration("ceph")), defaulted("management", enumeration("managed", "external"), StringValue("managed")), field("ceph", cluster))
-	s.Suppress = []Suppression{{Field: "management", Value: StringValue("external"), Fields: []string{"ceph"}}}
+	s.Suppress = []Suppression{{Field: "distribution.oss", Fields: []string{"entitlementRef", "packageVersion"}},
+		{Field: "management", Value: StringValue("external"), Fields: CephManagedFields()}}
 	return s
 }
 
 func storageClientSchema() *Shape {
-	return record(required("clusterRef", ref(StorageCluster)), field("poolRef", ref(StoragePool)), field("filesystemRef", ref(StorageFilesystem)),
-		field("subvolumeRef", ref(StorageSubvolume)), required("access", enumeration("read-only", "read-write")))
+	return record(required("clusterRef", ref(CephCluster)), field("poolRef", ref(CephPool)), field("filesystemRef", ref(CephFilesystem)),
+		field("subvolumeRef", ref(CephSubvolume)), required("access", enumeration("readOnly", "readWrite")))
 }
 
 func storageRBDImageSchema() *Shape {
-	return record(required("clusterRef", ref(StorageCluster)), required("poolRef", ref(StoragePool)), required("sizeBytes", integer("1", "9223372036854775807")), field("dataPoolRef", ref(StoragePool)), field("features", set(enumeration("layering", "exclusive-lock", "object-map", "fast-diff", "deep-flatten", "journaling"))))
+	return record(required("clusterRef", ref(CephCluster)), required("poolRef", ref(CephPool)), required("sizeBytes", integer("1", "9223372036854775807")), field("dataPoolRef", ref(CephPool)), field("features", set(enumeration("layering", "exclusive-lock", "object-map", "fast-diff", "deep-flatten", "journaling"))))
 }
 
 func storagePlacementPolicySchema() *Shape {
-	return record(required("clusterRef", ref(StorageCluster)), field("failureDomain", nonempty()), required("ruleName", nonempty()), field("crushDeviceClass", nonempty()), field("replicated", storageReplicated()))
+	return record(required("clusterRef", ref(CephCluster)), field("failureDomain", nonempty()), required("ruleName", nonempty()), field("crushDeviceClass", nonempty()), field("replicated", storageReplicated()))
 }
 
 func storagePoolSchema() *Shape {
 	erasure := record(required("dataChunks", integer("1", "")), required("codingChunks", integer("1", "")), field("plugin", enumeration("", "jerasure", "isa", "clay", "lrc", "shec")), field("technique", nonempty()), field("crushDeviceClass", nonempty()), field("crushRoot", nonempty()), field("stripeUnit", integer("1", "")), field("parameters", stringsMap()))
-	s := record(required("clusterRef", ref(StorageCluster)), field("nativeName", name()), field("placementPolicyRef", ref(StoragePlacementPolicy)), defaulted("type", enumeration("replicated", "erasure"), StringValue("replicated")), field("role", enumeration("rbd", "cephfs-metadata", "cephfs-data", "rgw")), field("application", nonempty()), field("replicated", storageReplicated()), field("erasure", erasure), field("autoscale", record(field("mode", enumeration("on", "off", "warn")), field("targetSizeRatio", number("0", "")), field("targetSizeBytes", nonempty()), field("pgNumMin", integer("0", "")), field("pgNumMax", integer("0", "")), field("bulk", boolean()))), field("quota", record(field("maxBytes", integer("0", "9223372036854775807")), field("maxObjects", integer("0", "9223372036854775807")))), field("compression", record(field("mode", enumeration("none", "passive", "aggressive", "force")), field("algorithm", enumeration("", "lz4", "snappy", "zlib", "zstd")), field("requiredRatio", number("0", "1")), field("minBlobSize", integer("0", "18446744073709551615")), field("maxBlobSize", integer("0", "18446744073709551615")))), field("mirroring", record(required("mode", enumeration("image", "pool")))))
-	s.Discriminator, s.Arms = "type", []string{"replicated", "erasure"}
-	s.ArmValues, s.InertArms = map[string][]string{"replicated": {"replicated"}, "erasure": {"erasure"}}, []string{"replicated"}
+	s := record(required("clusterRef", ref(CephCluster)), field("nativeName", name()), field("placementPolicyRef", ref(CephPlacementPolicy)), field("role", enumeration("rbd", "cephfsMetadata", "cephfsData", "rgw")), field("application", nonempty()), defaulted("replicated", storageReplicated(), MapValue()), field("erasure", erasure), field("autoscale", record(field("mode", enumeration("on", "off", "warn")), field("targetSizeRatio", number("0", "")), field("targetSizeBytes", nonempty()), field("pgNumMin", integer("0", "")), field("pgNumMax", integer("0", "")), field("bulk", boolean()))), field("quota", record(field("maxBytes", integer("0", "9223372036854775807")), field("maxObjects", integer("0", "9223372036854775807")))), field("compression", record(field("mode", enumeration("none", "passive", "aggressive", "force")), field("algorithm", enumeration("", "lz4", "snappy", "zlib", "zstd")), field("requiredRatio", number("0", "1")), field("minBlobSize", integer("0", "18446744073709551615")), field("maxBlobSize", integer("0", "18446744073709551615")))), field("mirroring", record(required("mode", enumeration("image", "pool")))))
+	s.Arms = []string{"replicated", "erasure"}
 	return s
 }
 
 func storageFilesystemSchema() *Shape {
-	dataPool := &Shape{Alternatives: []*Shape{ref(StoragePool), record(required("name", ref(StoragePool)), field("default", boolean()))}}
+	dataPool := &Shape{Alternatives: []*Shape{ref(CephPool), record(required("name", ref(CephPool)), field("default", boolean()))}}
 	mds := record(field("activeCount", integer("1", "256")), field("standbyReplay", boolean()), field("standbyCountWanted", integer("0", "2147483647")))
-	group := record(required("name", nonempty()), field("poolLayoutRef", ref(StoragePool)), field("mode", nonempty()), field("uid", integer("0", "2147483647")), field("gid", integer("0", "2147483647")), field("sizeBytes", integer("1", "9223372036854775807")))
-	return record(required("clusterRef", ref(StorageCluster)), required("mdsServiceRef", nonempty()), required("metadataPoolRef", ref(StoragePool)), required("dataPoolRefs", nonemptyArray(array(dataPool))), field("mds", mds), field("subvolumeGroups", named(group)))
+	group := record(required("name", nonempty()), field("poolLayoutRef", ref(CephPool)), field("mode", nonempty()), field("uid", integer("0", "2147483647")), field("gid", integer("0", "2147483647")), field("sizeBytes", integer("1", "9223372036854775807")))
+	return record(required("clusterRef", ref(CephCluster)), field("mdsServiceRef", serviceRef()), required("metadataPoolRef", ref(CephPool)), required("dataPoolRefs", nonemptyArray(array(dataPool))), field("mds", mds), field("subvolumeGroups", named(group)))
 }
 
 func storageSubvolumeSchema() *Shape {
-	return record(required("clusterRef", ref(StorageCluster)), required("filesystemRef", ref(StorageFilesystem)), field("group", nonempty()), field("sizeBytes", integer("1", "9223372036854775807")), field("poolLayoutRef", ref(StoragePool)), field("uid", integer("0", "2147483647")), field("gid", integer("0", "2147483647")), field("mode", nonempty()))
+	return record(required("clusterRef", ref(CephCluster)), required("filesystemRef", ref(CephFilesystem)), field("group", nonempty()), field("sizeBytes", integer("1", "9223372036854775807")), field("poolLayoutRef", ref(CephPool)), field("uid", integer("0", "2147483647")), field("gid", integer("0", "2147483647")), field("mode", nonempty()))
 }
 
 func storageObjectGatewaySchema() *Shape {
-	return record(required("clusterRef", ref(StorageCluster)), required("serviceRef", nonempty()), required("realm", name()), required("zoneGroup", name()), required("zone", name()), field("pools", record(field("indexPoolRef", ref(StoragePool)), field("dataPoolRef", ref(StoragePool)), field("dataExtraPoolRef", ref(StoragePool)))), field("endpoint", record(field("fqdn", dns()))))
+	return record(required("clusterRef", ref(CephCluster)), required("serviceRef", serviceRef()), required("realm", name()), required("zoneGroup", name()), required("zone", name()), field("pools", record(field("indexPoolRef", ref(CephPool)), field("dataPoolRef", ref(CephPool)), field("dataExtraPoolRef", ref(CephPool)))), field("endpoint", record(field("fqdn", dns()))))
 }
 
 func storageObjectUserSchema() *Shape {
-	return record(required("clusterRef", ref(StorageCluster)), required("objectGatewayRef", ref(StorageObjectGateway)), field("displayName", nonempty()))
+	return record(required("clusterRef", ref(CephCluster)), required("objectGatewayRef", ref(CephObjectGateway)), field("displayName", nonempty()))
 }
 
 func storageObjectBucketSchema() *Shape {
-	return record(required("clusterRef", ref(StorageCluster)), required("objectGatewayRef", ref(StorageObjectGateway)), required("ownerRef", ref(StorageObjectUser)), field("policy", native()))
+	return record(required("clusterRef", ref(CephCluster)), required("objectGatewayRef", ref(CephObjectGateway)), required("ownerRef", ref(CephObjectUser)), field("policy", native()))
 }
 
 func storageNFSExportSchema() *Shape {
-	return record(required("clusterRef", ref(StorageCluster)), required("serviceID", nonempty()), field("filesystemRef", ref(StorageFilesystem)), field("subvolumeRef", ref(StorageSubvolume)), field("objectUserRef", ref(StorageObjectUser)), required("native", native()))
+	return record(required("clusterRef", ref(CephCluster)), required("serviceID", nonempty()), field("filesystemRef", ref(CephFilesystem)), field("subvolumeRef", ref(CephSubvolume)), field("objectUserRef", ref(CephObjectUser)), required("native", native()))
 }
 
 func StorageNFSExportNativeSchema() *Shape {
@@ -141,10 +163,10 @@ func StorageNFSExportNativeSchema() *Shape {
 	return record(required("pseudo", nonempty()), field("path", nonempty()), field("access_type", access()), field("squash", squash()), field("security_label", boolean()), field("protocols", set(integer("3", "4"))), field("transports", set(enumeration("TCP", "UDP"))), field("sectype", set(enumeration("sys", "krb5", "krb5i", "krb5p"))), required("fsal", fsal), field("clients", array(client)))
 }
 
-func storageExportSchema() *Shape {
-	return record(field("type", enumeration("dataFoundation")), required("clusterRef", ref(StorageCluster)), field("dataFoundation", record(required("rbdPoolRef", ref(StoragePool)), required("filesystemRef", ref(StorageFilesystem)), field("objectGatewayRef", ref(StorageObjectGateway)), field("cephxKeyType", enumeration("aes", "aes256k")))), field("externalDetails", record(required("fromSecretRef", secret("opaque")))))
+func cephConsumerSchema() *Shape {
+	return record(required("clusterRef", ref(CephCluster)), field("dataFoundation", record(required("rbdPoolRef", ref(CephPool)), required("filesystemRef", ref(CephFilesystem)), field("objectGatewayRef", ref(CephObjectGateway)), field("cephxKeyType", enumeration("aes", "aes256k")))), field("externalDetails", record(required("fromSecretRef", secret("opaque")))))
 }
 
 func storageReplicationSchema() *Shape {
-	return record(required("clusterRef", ref(StorageCluster)), required("type", enumeration("rbd")), required("poolRef", ref(StoragePool)), required("peerClusterRef", ref(StorageCluster)), required("peerPoolRef", ref(StoragePool)), field("imageRefs", set(ref(StorageRBDImage))))
+	return record(required("clusterRef", ref(CephCluster)), required("type", enumeration("rbd")), required("poolRef", ref(CephPool)), required("peerClusterRef", ref(CephCluster)), required("peerPoolRef", ref(CephPool)), field("imageRefs", set(ref(CephRBDImage))))
 }

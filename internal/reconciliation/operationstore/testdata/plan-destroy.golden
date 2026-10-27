@@ -47,7 +47,7 @@
     {
       "id": "server-lab",
       "description": "serve artifacts for lab",
-      "stage": "infra-components",
+      "stage": "infrastructure-services",
       "dependencies": [
         "install-node-01"
       ],

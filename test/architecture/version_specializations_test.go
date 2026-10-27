@@ -14,7 +14,7 @@ const (
 	specializationPlugins = "ansible/collections/ansible_collections/bootwright/core/plugins/module_utils/"
 	specializationTests   = "ansible/collections/ansible_collections/bootwright/core/tests/unit/plugins/module_utils/"
 	specializationCatalog = ".agents/knowledge/version-specializations.md"
-	topologySource        = "internal/containercluster/topology.go"
+	topologySource        = "internal/containercluster/openshift/topology.go"
 	generalTopologyID     = "openshift-general-topology"
 )
 
@@ -360,9 +360,9 @@ func TestTheCatalogTestFindsARegistryByItsMarker(t *testing.T) {
 	sources := map[string]string{
 		known:                                  "SPECIALIZATIONS = (\n    Specialization(\n        id=\"a-b\",\n",
 		"internal/storage/fixture/registry.py": "RECORDS = (Specialization(id=\"c-d\"),)\n",
-		"internal/containercluster/registry_test.go":   "var _ = Specialization{}\n",
-		"internal/containercluster/topology.go":        "var generalTopology = releaseTopology{}\n",
-		"ansible/collections/x/tests/unit/registry.py": "Specialization(id=\"e-f\")\n",
+		"internal/containercluster/registry_test.go":      "var _ = Specialization{}\n",
+		"internal/containercluster/openshift/topology.go": "var generalTopology = releaseTopology{}\n",
+		"ansible/collections/x/tests/unit/registry.py":    "Specialization(id=\"e-f\")\n",
 	}
 	read := func(path string) string { return sources[path] }
 	marked := specializationRegistries(slices.Sorted(maps.Keys(sources)), read)

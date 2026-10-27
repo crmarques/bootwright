@@ -12,9 +12,8 @@ const (
 )
 
 func diffPool(name, size string) *api.Object {
-	object := api.NewObject(api.StoragePool, name, api.Value{}, api.MapValue(
+	object := api.NewObject(api.CephPool, name, api.Value{}, api.MapValue(
 		api.FieldValue{Name: "clusterRef", Value: api.StringValue("ceph-lab")},
-		api.FieldValue{Name: "type", Value: api.StringValue("replicated")},
 		api.FieldValue{Name: "role", Value: api.StringValue("rbd")},
 		api.FieldValue{Name: "replicated", Value: api.MapValue(
 			api.FieldValue{Name: "size", Value: api.IntegerValue(size)},
@@ -26,10 +25,10 @@ func diffPool(name, size string) *api.Object {
 }
 
 func diffClient(name string) *api.Object {
-	object := api.NewObject(api.StorageClient, name, api.Value{}, api.MapValue(
+	object := api.NewObject(api.CephClient, name, api.Value{}, api.MapValue(
 		api.FieldValue{Name: "clusterRef", Value: api.StringValue("ceph-lab")},
 		api.FieldValue{Name: "poolRef", Value: api.StringValue("rbd-data")},
-		api.FieldValue{Name: "access", Value: api.StringValue("read-write")},
+		api.FieldValue{Name: "access", Value: api.StringValue("readWrite")},
 	))
 	return &object
 }
@@ -45,7 +44,7 @@ func diffRecorded() *lifecycle.DiffResult {
 	changed := diffApplied(diffPool("rbd-data", "2"), lifecycle.RealizationDone, "changed", "ceph-pool-rbd-data")
 	changed.Desired = diffPool("rbd-data", "3")
 	added := lifecycle.ObjectDiff{
-		Kind: api.StoragePool, Name: "rbd-archive", Plan: "added", Blocks: []string{"ceph-pool-rbd-archive"},
+		Kind: api.CephPool, Name: "rbd-archive", Plan: "added", Blocks: []string{"ceph-pool-rbd-archive"},
 		Desired: diffPool("rbd-archive", "3"),
 		Real:    lifecycle.RealSide{Source: "applied", State: "absent", Reason: "no operation of this context realized it"},
 	}
@@ -67,7 +66,7 @@ func diffUnknown() *lifecycle.DiffResult {
 	result.Plan = lifecycle.DiffPlan{State: "same", Rebuilt: []string{}}
 	result.Context.Revision = diffAppliedRevision
 	unknown := lifecycle.ObjectDiff{
-		Kind: api.StorageClient, Name: "rbd-fenced", Plan: "same", Blocks: []string{"ceph-client-rbd-fenced"}, Realization: lifecycle.RealizationFailed,
+		Kind: api.CephClient, Name: "rbd-fenced", Plan: "same", Blocks: []string{"ceph-client-rbd-fenced"}, Realization: lifecycle.RealizationFailed,
 		Desired: diffClient("rbd-fenced"),
 		Real: lifecycle.RealSide{
 			Source: "applied", State: "unknown",
@@ -117,7 +116,7 @@ func diffObserved() *lifecycle.DiffResult {
 		Kind: api.InfraProvider, Name: "lab-libvirt", Plan: "same", Blocks: []string{"substrate-host-lab-libvirt"}, Realization: lifecycle.RealizationDone,
 		Desired: diffProvider("80"),
 		Real: lifecycle.RealSide{Source: "observed", State: "present", Object: diffProvider("100"), NotCompared: []string{
-			"spec.libvirt.uri", "spec.libvirt.machineRef", "spec.libvirt.bmcEmulationDefaults", "spec.libvirt.networkAttachments",
+			"spec.libvirt.uri", "spec.libvirt.machineRef", "spec.libvirt.bmcEmulation", "spec.libvirt.networkAttachments",
 			"spec.libvirt.machineProfiles[rhel].cpu", "spec.libvirt.machineProfiles[rhel].memoryMiB",
 		}},
 	}
@@ -126,7 +125,7 @@ func diffObserved() *lifecycle.DiffResult {
 		Desired: diffMachine("rhel-01"),
 		Real: lifecycle.RealSide{
 			Source: "observed", State: "partial", Object: diffMachine("rhel-01"),
-			NotCompared: []string{"spec.capabilities", "spec.substrate.profileRef", "spec.hardware", "spec.os", "spec.network", "spec.access"},
+			NotCompared: []string{"spec.substrate.libvirt.profileRef", "spec.hardware", "spec.os", "spec.network", "spec.access"},
 			Notes: []string{
 				"machine-rhel-01: part of this effect is realized as its frozen request states",
 				"machine-rhel-01: domain running; its controller reports power On",

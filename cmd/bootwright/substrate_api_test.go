@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"strings"
 	"testing"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
@@ -15,11 +14,11 @@ import (
 // diagnostic for the same field. An IPv6 address compiles in the one spelling
 // netip prints.
 func TestALibvirtProviderMustNameItsEmulatedBMCAddress(t *testing.T) {
-	const field = "$.spec.libvirt.bmcEmulationDefaults.bindAddress"
-	host := strings.Replace(serviceHost, "[container-runtime]", "[container-runtime, libvirt]", 1)
+	const field = "$.spec.libvirt.bmcEmulation.bindAddress"
+	host := serviceHost
 	credential := "apiVersion: bootwright.io/v1alpha1\nkind: Secret\nmetadata: {name: emulated-bmc}\nspec: {type: usernamePassword}\n---\napiVersion: bootwright.io/v1alpha1\nkind: Secret\nmetadata: {name: emulated-bmc-tls}\nspec: {type: tlsCertificate}\n"
 	provider := func(defaults string) string {
-		return "apiVersion: bootwright.io/v1alpha1\nkind: InfraProvider\nmetadata: {name: lab}\nspec:\n  libvirt:\n    machineRef: service-host\n    uri: qemu:///system\n    bmcEmulationDefaults:\n" + defaults + "      certificateRef: emulated-bmc-tls\n      auth: {credentialsRef: emulated-bmc}\n"
+		return "apiVersion: bootwright.io/v1alpha1\nkind: InfraProvider\nmetadata: {name: lab}\nspec:\n  libvirt:\n    machineRef: service-host\n    uri: qemu:///system\n    bmcEmulation:\n" + defaults + "      certificateRef: emulated-bmc-tls\n      auth: {credentialsRef: emulated-bmc}\n"
 	}
 	omitted := controllerInputs(serviceEnvironment, host, credential, provider(""))
 	trustFailure(t, omitted, "api.required", field)
@@ -31,7 +30,7 @@ func TestALibvirtProviderMustNameItsEmulatedBMCAddress(t *testing.T) {
 	}
 	compileAcceptance(t, controllerInputs(serviceEnvironment, host, credential, provider("      bindAddress: 192.0.2.10\n")))
 	state, _ := compileAcceptance(t, controllerInputs(serviceEnvironment, host, credential, provider("      bindAddress: '2001:DB8:0::10'\n")))
-	if address := requireObject(t, state.Effective(), api.InfraProvider, "lab").Spec().Get("libvirt", "bmcEmulationDefaults", "bindAddress").Text(); address != "2001:db8::10" {
+	if address := requireObject(t, state.Effective(), api.InfraProvider, "lab").Spec().Get("libvirt", "bmcEmulation", "bindAddress").Text(); address != "2001:db8::10" {
 		t.Fatalf("an IPv6 listener compiled to %q", address)
 	}
 }

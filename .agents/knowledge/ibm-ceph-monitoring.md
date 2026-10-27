@@ -3,8 +3,8 @@
 Facts the monitoring unit and the management gateway unit rely on, read from
 upstream Ceph v20.2.1 sources and from the IBM 20.2.1-405 build research.
 Required behavior lives in
-[storage](../../specs/storage.md#resources-readiness-and-access) and in the
-[native records](../../specs/storage-native-api.md#observability-and-management-gateway-records).
+[storage](../../specs/ceph.md#resources-readiness-and-access) and in the
+[native records](../../specs/ceph-native-api.md#observability-and-management-gateway-records).
 Another build may differ. A difference is absorbed by the general flow or
 becomes a declared seam
 ([version specializations](version-specializations.md#adding-a-specialization)),
@@ -75,9 +75,9 @@ settles it, and the direct dashboard certificate is parked
 [`PrometheusService.config`](https://github.com/ceph/ceph/blob/v20.2.1/src/pybind/mgr/cephadm/services/monitoring.py#L480-L489)
 runs `mgr module enable prometheus` when the manager map's services lack
 `prometheus`, and the monitor then respawns the active manager. So the module
-is the declared service's derived effect, and `spec.ceph.mgrModules` refuses it
+is the declared service's derived effect, and `spec.mgrModules` refuses it
 (see the
-[native records](../../specs/storage-native-api.md#observability-and-management-gateway-records)).
+[native records](../../specs/ceph-native-api.md#observability-and-management-gateway-records)).
 
 The unit never enables the module. It reads readiness from `ceph mgr services`
 inside one served-manager block, so a respawn reads as unfinished work
@@ -95,7 +95,7 @@ The exporter on its default port without a Prometheus service is parked
 [`generate_config`](https://github.com/ceph/ceph/blob/v20.2.1/src/pybind/mgr/cephadm/services/monitoring.py#L312-L324)
 reads only `user_data.default_webhook_urls`
 (`test_alertmanager_document_carries_default_webhook_urls`). The
-[native records](../../specs/storage-native-api.md#observability-and-management-gateway-records)
+[native records](../../specs/ceph-native-api.md#observability-and-management-gateway-records)
 state the refusal of other keys.
 
 ## oauth2-proxy and dashboard roles

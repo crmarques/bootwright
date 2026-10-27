@@ -48,10 +48,10 @@ func TestExampleBlockFilePlansAllBlocks(t *testing.T) {
 		t.Fatalf("the core Ceph capability plans %q, want %q", ids, want)
 	}
 	requires := map[string][]reconciliation.ObjectRef{
-		"ceph-pool-rbd-data":    {{Kind: string(api.StoragePlacementPolicy), Object: "ssd-hosts"}},
-		"ceph-rbd-rbd-disk":     {{Kind: string(api.StoragePool), Object: "rbd-data"}},
-		"ceph-filesystem-files": {{Kind: string(api.StoragePool), Object: "cephfs-metadata"}, {Kind: string(api.StoragePool), Object: "cephfs-data"}},
-		"ceph-subvolume-docs":   {{Kind: string(api.StorageFilesystem), Object: "files"}},
+		"ceph-pool-rbd-data":    {{Kind: string(api.CephPlacementPolicy), Object: "ssd-hosts"}},
+		"ceph-rbd-rbd-disk":     {{Kind: string(api.CephPool), Object: "rbd-data"}},
+		"ceph-filesystem-files": {{Kind: string(api.CephPool), Object: "cephfs-metadata"}, {Kind: string(api.CephPool), Object: "cephfs-data"}},
+		"ceph-subvolume-docs":   {{Kind: string(api.CephFilesystem), Object: "files"}},
 	}
 	for id, refs := range requires {
 		for _, ref := range refs {

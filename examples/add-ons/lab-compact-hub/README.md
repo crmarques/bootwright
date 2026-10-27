@@ -11,7 +11,7 @@ virtualization, root/sudo access, outbound repository and registry access,
 at least 28 logical CPUs, 80 GiB available memory and 400 GiB free pool disk,
 plus about 7 GiB for five image copies. Each master requests 8 vCPU, 24 GiB
 memory and a 120 GiB root disk; the provider reserves another 4 CPUs, 8 GiB
-and 40 GiB. See [acceptance profiles](../../../specs/container-cluster-coverage.md#acceptance-profiles).
+and 40 GiB. See [acceptance profiles](../../../specs/openshift-coverage.md#acceptance-profiles).
 
 | Input | Purpose |
 | --- | --- |
@@ -73,7 +73,7 @@ chmod 600 ~/pull-secret.json
 ./bin/bootwright plan --context lab-compact-hub
 ./bin/bootwright apply --context lab-compact-hub --stage controller --yes
 ./bin/bootwright preflight controller --context lab-compact-hub
-./bin/bootwright apply --context lab-compact-hub --stage infra-components --yes
+./bin/bootwright apply --context lab-compact-hub --stage infrastructure-services --yes
 ```
 
 Configure the controller's conditional resolver for the managed cluster zone

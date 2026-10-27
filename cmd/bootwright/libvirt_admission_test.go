@@ -49,7 +49,7 @@ spec:
     machineRef: controller
     uri: qemu:///system
 
-    bmcEmulationDefaults:
+    bmcEmulation:
       bindAddress: 192.0.2.1
       port: 9000
       certificateRef: artifact-server-tls
@@ -82,7 +82,7 @@ func TestLibvirtAdmissionRefusesWhatTheHostCannotRealize(t *testing.T) {
 		edits                        []exampleEdit
 		code, object, field, message string
 	}{
-		"an attachment name outside the label grammar": {[]exampleEdit{{labProvider, "- name: lab-guests", "- name: Lab_Guests"}, {"infra/machines/rhel-01.yaml", "attachmentRef: lab-guests", "attachmentRef: Lab_Guests"}},
+		"an attachment name outside the label grammar": {[]exampleEdit{{labProvider, "- name: lab-guests", "- name: Lab_Guests"}, {"infra/machines/rhel-01.yaml", "    installAddressRef: ip\n", "    attachmentRef: Lab_Guests\n    installAddressRef: ip\n"}},
 			"api.value", provider, "$.spec.networkAttachments[0].name", "value does not match the required name grammar"},
 		"a data disk name outside the label grammar": {[]exampleEdit{withDataDisks("Data_1")},
 			"api.value", provider, "$.spec.libvirt.machineProfiles[0].dataDisks[0].name", "value does not match the required name grammar"},
@@ -102,10 +102,10 @@ func TestLibvirtAdmissionRefusesWhatTheHostCannotRealize(t *testing.T) {
 			"api.value", provider, "$.spec.networkAttachments[0].libvirt.bridge", "value does not match the required bridge grammar"},
 		"a bridge longer than an interface name": {[]exampleEdit{{labProvider, "bridge: virbr-lab", "bridge: virbr-lab-guests1"}},
 			"api.value", provider, "$.spec.networkAttachments[0].libvirt.bridge", "value does not match the required bridge grammar"},
-		"an attachment interface holding a quote": {[]exampleEdit{{"infra/machines/rhel-01.yaml", "    attachmentRef: lab-guests\n", "    interfaceAttachments:\n      - interface: 'enp1s0\"x'\n        attachmentRef: lab-guests\n"}},
-			"api.value", guest, "$.spec.network.interfaceAttachments[0].interface", "value does not match the required ifname grammar"},
+		"an attachment interface holding a quote": {[]exampleEdit{{"infra/machines/rhel-01.yaml", "      profileRef: rhel\n", "      profileRef: rhel\n      interfaceAttachments:\n        - interface: 'enp1s0\"x'\n          attachmentRef: lab-guests\n"}},
+			"api.value", guest, "$.spec.substrate.libvirt.interfaceAttachments[0].interface", "value does not match the required ifname grammar"},
 		"the retired certificate opt-out": {[]exampleEdit{{labProvider, "        credentialsRef: lab-bmc-credentials\n", "        credentialsRef: lab-bmc-credentials\n      disableCertificateVerification: false\n"}},
-			"api.field", provider, "$.spec.libvirt.bmcEmulationDefaults.disableCertificateVerification", ""},
+			"api.field", provider, "$.spec.libvirt.bmcEmulation.disableCertificateVerification", ""},
 	}
 	for name, test := range cases {
 		t.Run(name, func(t *testing.T) {

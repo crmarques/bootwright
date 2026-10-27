@@ -1,6 +1,6 @@
 implementation: cluster-install-agent-v1
-content-digest: 7a7e35e4139dd28fd0a14ecdcd3412b34e8281e55418595444e102f1fe337fe4
-request-version: cluster-install-agent-v7
+content-digest: c66d89a1d3a7f0808b79e5ea5476e748c3e10aabb91d4782d455c1392ccb4efb
+request-version: cluster-install-agent-v8
 automation-formats: none
 mark-formats: none
 proof-ids: .bootwright-booted, /.bootwright-booted, bootwright/containercluster/identity/v2

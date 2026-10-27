@@ -84,7 +84,7 @@ func installationFor(catalog api.Catalog, machine, profile api.Object, request R
 		PackageSource:    source,
 		Prefix:           prefix,
 		Repositories:     repositories,
-		RootDevice:       machine.Spec().Get("os", "install", "rootDeviceHints", "deviceName").Text(),
+		RootDevice:       substrate.RootDevicePath(machine),
 		SELinux:          customizations.Get("security", "selinux", "mode").Text(),
 		Timezone:         orDefault(customizations.Get("localization", "timezone").Text(), "UTC"),
 		User:             installUser,

@@ -168,7 +168,7 @@ func TestTheAgentFilterEditIsProvedRatherThanAssumed(t *testing.T) {
 // A Machine with no root-device hint lets the installer choose, because a
 // predicate the graph never declared is not a target selector.
 func TestAMachineWithoutHintsPartitionsAutomatically(t *testing.T) {
-	noHints := guest(field("os", api.MapValue(
+	noHints := guest(field("hardware", api.MapValue()), field("os", api.MapValue(
 		field("provided", api.BoolValue(false)), text("installProfileRef", "rhel-9-8"),
 	)))
 	kickstart := kickstartOf(t, labCatalog(noHints))
@@ -430,9 +430,9 @@ func TestADeliveredKeyIsInstalledAtItsOwnTypesPath(t *testing.T) {
 	for _, row := range []struct{ keyType, path, algorithm string }{
 		{"ed25519", "/etc/ssh/ssh_host_ed25519_key", "ssh-ed25519"},
 		{"rsa", "/etc/ssh/ssh_host_rsa_key", "ssh-rsa"},
-		{"ecdsa-p256", "/etc/ssh/ssh_host_ecdsa_key", "ecdsa-sha2-nistp256"},
-		{"ecdsa-p384", "/etc/ssh/ssh_host_ecdsa_key", "ecdsa-sha2-nistp384"},
-		{"ecdsa-p521", "/etc/ssh/ssh_host_ecdsa_key", "ecdsa-sha2-nistp521"},
+		{"ecdsaP256", "/etc/ssh/ssh_host_ecdsa_key", "ecdsa-sha2-nistp256"},
+		{"ecdsaP384", "/etc/ssh/ssh_host_ecdsa_key", "ecdsa-sha2-nistp384"},
+		{"ecdsaP521", "/etc/ssh/ssh_host_ecdsa_key", "ecdsa-sha2-nistp521"},
 	} {
 		t.Run(row.keyType, func(t *testing.T) {
 			input := physicalInstallation()

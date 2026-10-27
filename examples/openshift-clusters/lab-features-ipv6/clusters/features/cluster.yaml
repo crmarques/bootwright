@@ -1,0 +1,93 @@
+apiVersion: bootwright.io/v1alpha1
+kind: OpenShiftCluster
+metadata:
+  name: features
+
+spec:
+  distribution:
+    type: openshift
+
+    release:
+      version: 4.21.15
+
+  install:
+    mode: connected
+
+    endpoints:
+      api:
+        address: 2001:db8:2::10
+
+        source:
+          type: installer
+
+      ingress:
+        address: 2001:db8:2::11
+
+        source:
+          type: installer
+
+    agent:
+      redfishVirtualMedia:
+        artifactServerEndpoint:
+          serverRef: lab-artifacts
+          endpointRef: ip-https
+
+    pullSecretRef: openshift-pull-secret
+
+    nodeSSH:
+      keyPairRef: features-cluster-admin-ssh-key
+
+    ntp:
+      - serverRef: lab-ntp
+        endpointRef: ip
+
+    proxy:
+      proxyRef: lab-proxy
+      endpointRef: ip
+
+      noProxy:
+        - '*.lab.example.test'
+
+    registries:
+      mirror:
+        registryRef: lab-mirror
+
+      imageDigestSources:
+        - source: quay.io/openshift-release-dev/ocp-release
+
+          mirrors:
+            - mirror.example.test/ocp-release
+
+        - source: quay.io/openshift-release-dev/ocp-v4.0-art-dev
+
+          mirrors:
+            - mirror.example.test/ocp-v4.0-art-dev
+
+    additionalTrustBundleRefs:
+      - mirror-ca
+
+  nodes:
+    - name: master-0
+      role: controlPlane
+      machineRef: features-01
+
+    - name: master-1
+      role: controlPlane
+      machineRef: features-02
+
+    - name: master-2
+      role: controlPlane
+      machineRef: features-03
+
+  security:
+    diskEncryption:
+      unlock:
+        tpm2: {}
+
+  networking:
+    clusterNetwork:
+      - cidr: fd00:10:128::/56
+        hostPrefix: 64
+
+    serviceNetwork:
+      - fd00:172:30::/112

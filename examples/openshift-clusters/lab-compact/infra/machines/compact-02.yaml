@@ -1,0 +1,30 @@
+apiVersion: bootwright.io/v1alpha1
+kind: Machine
+metadata:
+  name: compact-02
+
+spec:
+  substrate:
+    providerRef: lab-libvirt
+    libvirt:
+      profileRef: compact
+
+  hardware:
+    rootDevice:
+      deviceName: /dev/vda
+
+  os:
+    provided: false
+
+  network:
+    configRef: lab-guests
+    attachmentRef: lab-guests
+    installAddressRef: ip
+
+    addresses:
+      - name: fqdn
+        address: compact-02.lab.example.test
+
+      - name: ip
+        address: 198.51.100.22/24
+        interface: enp1s0

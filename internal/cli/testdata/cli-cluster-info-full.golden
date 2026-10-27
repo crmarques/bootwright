@@ -1,13 +1,13 @@
   ○ cluster | edge
     Topology
-      Type  ContainerCluster
+      Type  OpenShiftCluster
     Access
       cluster exec  not-implemented
-      sessions on an OpenShift or OKD ContainerCluster are not yet implemented; the cluster is
-      reached through bootwright cluster kubeconfig
+      sessions on an OpenShiftCluster are not yet implemented; the cluster is reached through
+      bootwright cluster kubeconfig
       template (not-implemented): bootwright cluster exec --context lab --name edge --node <node> -- <command>...
       cluster keyring  not-applicable
-      applies to managed Ceph StorageClusters only
+      applies to managed CephClusters only
       cluster kubeconfig  ready
       bootwright cluster kubeconfig --context lab --name edge
       cluster kubectl  not-implemented
@@ -19,20 +19,20 @@
       kubeconfig
       template (not-implemented): bootwright cluster oc --context lab --name edge -- <command>...
       cluster rsh  not-implemented
-      sessions on an OpenShift or OKD ContainerCluster are not yet implemented; the cluster is
-      reached through bootwright cluster kubeconfig
+      sessions on an OpenShiftCluster are not yet implemented; the cluster is reached through
+      bootwright cluster kubeconfig
       template (not-implemented): bootwright cluster rsh --context lab --name edge --node <node>
 
   ○ cluster | okd-lab
     Topology
-      Type  ContainerCluster
+      Type  OpenShiftCluster
     Access
       cluster exec  not-implemented
-      sessions on an OpenShift or OKD ContainerCluster are not yet implemented; the cluster is
-      reached through bootwright cluster kubeconfig
+      sessions on an OpenShiftCluster are not yet implemented; the cluster is reached through
+      bootwright cluster kubeconfig
       template (not-implemented): bootwright cluster exec --context lab --name okd-lab --node <node> -- <command>...
       cluster keyring  not-applicable
-      applies to managed Ceph StorageClusters only
+      applies to managed CephClusters only
       cluster kubeconfig  ready
       bootwright cluster kubeconfig --context lab --name okd-lab
       cluster kubectl  not-implemented
@@ -44,32 +44,32 @@
       kubeconfig
       template (not-implemented): bootwright cluster oc --context lab --name okd-lab -- <command>...
       cluster rsh  not-implemented
-      sessions on an OpenShift or OKD ContainerCluster are not yet implemented; the cluster is
-      reached through bootwright cluster kubeconfig
+      sessions on an OpenShiftCluster are not yet implemented; the cluster is reached through
+      bootwright cluster kubeconfig
       template (not-implemented): bootwright cluster rsh --context lab --name okd-lab --node <node>
 
   ○ cluster | archive
     Topology
-      Type  StorageCluster
+      Type  CephCluster
     Access
       cluster exec  not-applicable
-      the external StorageCluster archive declares no node roster; sessions apply to managed
-      Ceph StorageClusters
+      the external CephCluster archive declares no node roster; sessions apply to managed
+      CephClusters
       cluster keyring  not-applicable
-      applies to managed Ceph StorageClusters only
+      applies to managed CephClusters only
       cluster kubeconfig  not-applicable
-      applies to OpenShift and OKD ContainerClusters only
+      applies to OpenShiftClusters only
       cluster kubectl  not-applicable
-      applies to OpenShift and OKD ContainerClusters only
+      applies to OpenShiftClusters only
       cluster oc  not-applicable
-      applies to OpenShift and OKD ContainerClusters only
+      applies to OpenShiftClusters only
       cluster rsh  not-applicable
-      the external StorageCluster archive declares no node roster; sessions apply to managed
-      Ceph StorageClusters
+      the external CephCluster archive declares no node roster; sessions apply to managed
+      CephClusters
 
   ○ cluster | storage · ready
     Topology
-      Type        StorageCluster
+      Type        CephCluster
       Management  managed
       Release     9.9.1.2
       Admin node  rhel-01
@@ -79,11 +79,11 @@
       cluster keyring  ready
       bootwright cluster keyring --context lab --name storage --client <client>
       cluster kubeconfig  not-applicable
-      applies to OpenShift and OKD ContainerClusters only
+      applies to OpenShiftClusters only
       cluster kubectl  not-applicable
-      applies to OpenShift and OKD ContainerClusters only
+      applies to OpenShiftClusters only
       cluster oc  not-applicable
-      applies to OpenShift and OKD ContainerClusters only
+      applies to OpenShiftClusters only
       cluster rsh  ready
       bootwright cluster rsh --context lab --name storage --node rhel-01
       Monitors  rhel-01  rhel-01.lab.test  192.0.2.11
@@ -113,9 +113,9 @@
       Platform         linux/amd64
       Specializations  ceph-bootstrap-license-call-continues
     Resources
-      StoragePool/rbd-data          done  replicated size 2/min 2, application rbd
-      StorageClient/rbd-canary      done  client.rbd-canary read-write on pool rbd-data
-      StorageObjectGateway/objects  unsupported  zone lab/lab/lab-a
+      CephPool/rbd-data          done  replicated size 2/min 2, application rbd
+      CephClient/rbd-canary      done  client.rbd-canary read-write on pool rbd-data
+      CephObjectGateway/objects  unsupported  zone lab/lab/lab-a
     Custody
       User      admin
       Password  hidden; rerun with --secrets --name storage

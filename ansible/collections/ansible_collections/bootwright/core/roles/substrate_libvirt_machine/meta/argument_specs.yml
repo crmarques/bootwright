@@ -302,7 +302,7 @@ argument_specs:
           trust:
             type: str
             required: true
-            choices: [established, import-certificate, disable-verification]
+            choices: [established, importCertificate, disableVerification]
           certificate:
             type: path
 

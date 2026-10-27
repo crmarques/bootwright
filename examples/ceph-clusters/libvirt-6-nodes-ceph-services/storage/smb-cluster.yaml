@@ -1,0 +1,24 @@
+apiVersion: bootwright.io/v1alpha1
+kind: CephSMBResource
+metadata:
+  name: files-smb
+
+spec:
+  clusterRef: ceph-lab
+
+  native:
+    resource_type: ceph.smb.cluster
+    cluster_id: files
+    auth_mode: user
+    clustering: always
+
+    user_group_settings:
+      - source_type: resource
+        ref: files
+
+    placement:
+      count: 2
+
+      hosts:
+        - rhel-04.lab.example.test
+        - rhel-05.lab.example.test

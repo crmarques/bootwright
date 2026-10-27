@@ -1,6 +1,6 @@
   ○ cluster | storage · ready
     Topology
-      Type        StorageCluster
+      Type        CephCluster
       Management  managed
       Release     9.9.1.2
       Admin node  rhel-01
@@ -32,9 +32,9 @@
     Evidence
       Status  ready
     Resources
-      StoragePool/rbd-data          done
-      StorageClient/rbd-canary      done
-      StorageObjectGateway/objects  unsupported
+      CephPool/rbd-data          done
+      CephClient/rbd-canary      done
+      CephObjectGateway/objects  unsupported
     Custody
       User      admin
       Password  Xq7-Lm2_Rv9.Tk4-Wz8_Hn3.Pb6-Jd5_

@@ -17,7 +17,7 @@ func TestAMirrorAnEarlierBuildFrozeStillObservesAsNoEffect(t *testing.T) {
 		capability := stage(&fakeTools{}, newDnf(), &fakeSetup{}, &fakeInstaller{})
 		capability.tools = bundlelocal.NewToolCatalog()
 		downloads := field("downloads", api.MapValue(text("helmMirror", mirror)))
-		block := planBlock(t, capability, stateOf(environment(downloads), machine("container-runtime"), cluster()), reconciliation.Apply)
+		block := planBlock(t, capability, stateOf(environment(downloads), machine(), cluster()), reconciliation.Apply)
 		frozen := false
 		for _, tool := range stageRequest(t, block).Tools {
 			frozen = frozen || tool.Kind == "helm" && tool.Mirror == mirror

@@ -121,7 +121,7 @@ func TestPoolAndClientRequireHealthyCompleteCore(t *testing.T) {
 			r := runtimeRequest()
 			r.Action = action
 			r.Pool = &Pool{Name: "volumes"}
-			r.Client = &Client{Name: "consumer", Pool: "volumes", Access: "read-only"}
+			r.Client = &Client{Name: "consumer", Pool: "volumes", Access: "readOnly"}
 			e := readyEvidence(r)
 			if action == "pool" {
 				e.Resource = ResourceEvidence{ID: "1"}
@@ -150,7 +150,7 @@ func TestAbsentNativeResourceWithOwnedResidueRemainsPartial(t *testing.T) {
 			if action == "pool" {
 				r.Pool = &Pool{Name: "volumes"}
 			} else {
-				r.Client = &Client{Name: "consumer", Pool: "volumes", Access: "read-only"}
+				r.Client = &Client{Name: "consumer", Pool: "volumes", Access: "readOnly"}
 			}
 			e := readyEvidence(r)
 			e.Ready = false
@@ -232,7 +232,7 @@ func resourceRequest(action string) Request {
 	case "pool":
 		r.Pool = &Pool{Name: "volumes"}
 	case "client":
-		r.Client = &Client{Name: "consumer", Pool: "volumes", Access: "read-only"}
+		r.Client = &Client{Name: "consumer", Pool: "volumes", Access: "readOnly"}
 	}
 	return r
 }

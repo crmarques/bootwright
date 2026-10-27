@@ -22,7 +22,7 @@ func TestClusterKeyringRevealsOneClientThroughCustody(t *testing.T) {
 		t.Fatalf("keyring = %q, standard error %q, want exactly %q", out, errOut, clientCanary)
 	}
 	out, errOut = contextRun(t, services, 1, "cluster", "keyring", "--context", "lab-ceph", "--name", "ceph-lab", "--client", "rbd-missing")
-	if out != "" || !strings.Contains(errOut, "access.target") || !strings.Contains(errOut, "selects no StorageClient named rbd-missing") || strings.Contains(errOut, clientKeyToken) {
+	if out != "" || !strings.Contains(errOut, "access.target") || !strings.Contains(errOut, "selects no CephClient named rbd-missing") || strings.Contains(errOut, clientKeyToken) {
 		t.Fatalf("an unknown client wrote %q and %q", out, errOut)
 	}
 	out, errOut = contextRun(t, services, 0, "cluster", "keyring", "--context", "lab-ceph", "--name", "ceph-lab", "--client", "rbd-canary", "--output", "json")

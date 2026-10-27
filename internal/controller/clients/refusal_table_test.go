@@ -32,7 +32,7 @@ func proxied(bypass ...string) api.Object {
 	if len(bypass) != 0 {
 		choice = choice.With("noProxy", api.StringList(bypass...))
 	}
-	controller := machine("container-runtime")
+	controller := machine()
 	return controller.WithSpec(controller.Spec().With("proxy", choice))
 }
 
@@ -53,8 +53,6 @@ func TestControllerRefusalTableMatchesUnsupported(t *testing.T) {
 		bypass[index] = "host-" + strconv.Itoa(index) + ".example.test"
 	}
 	cases := map[string]refusalCase{
-		"Another capability": {[]api.Object{machine("container-runtime", "libvirt", "ceph-node")},
-			map[string]string{"<machine>": "Machine/controller", "<index>": "2"}},
 		"Too many bypass entries": {[]api.Object{proxied(bypass...), externalProxy(endpoint)}, names},
 		"Managed Proxy": {[]api.Object{proxied(), api.NewObject(api.Proxy, "egress", api.Value{}, api.MapValue(text("management", "managed")))},
 			names},

@@ -1,7 +1,7 @@
 # IBM Ceph native SSH qualification
 
 Observed while reviewing M2b against the latest IBM release on 2026-10-11.
-This page records artifact findings; [storage](../../specs/storage.md) owns
+This page records artifact findings; [storage](../../specs/ceph.md) owns
 trust requirements and [B472](../../specs/milestones/m2.md#b472) owns promotion.
 
 IBM's [release mapping](https://www.ibm.com/support/pages/what-are-red-hat-and-ibm-storage-ceph-releases-and-corresponding-ceph-package-versions)
@@ -30,7 +30,7 @@ the native configuration therefore does not prove manager-to-host verification.
 
 This is a concrete failure of the inspected source path, not a missing
 entitlement key alone. It does not qualify a running container, a workaround
-or a negative wrong-key test. Ordinary apply admits only `verified-tunnel`
+or a negative wrong-key test. Ordinary apply admits only `verifiedTunnel`
 for the operator-selected, digest-frozen image, and `native` stays refused (D143); the host block's
 route probe proves the provider's SSH class on each host before that release's
 cluster block starts.

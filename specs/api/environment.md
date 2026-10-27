@@ -8,6 +8,14 @@ Shared services are independent objects in
 [infrastructure-services.md](infrastructure-services.md). [The compiler boundary](../api.md#compiler-boundary)
 applies to every declaration below.
 
+Every kind on this page names its objects under the [one name rule](../api.md#object-names).
+
+## Kinds
+
+| Kind | Declares |
+| --- | --- |
+| `Environment` | The one root of a context's desired state: its domains, sites, controller Machine, cluster selection and kind defaults. |
+
 ## Environment
 
 Environment fields emit in this order:
@@ -16,8 +24,8 @@ Environment fields emit in this order:
 | --- | --- | --- | --- | --- |
 | `spec.domains` | object | yes | — | Fleet DNS zones; closed shape below. |
 | `spec.sites` | array of objects | no | omitted | Estate site registry, keyed by `name`. |
-| `spec.containerClusters` | array of strings | no | all loaded container clusters | Non-empty unique `ContainerCluster` root selection. |
-| `spec.storageClusters` | array of strings | no | all loaded storage clusters | Non-empty unique `StorageCluster` root selection. |
+| `spec.containerClusters` | array of strings | no | all loaded container clusters | Non-empty unique root selection of the `containerCluster` category's kinds ([family registry](../api.md#cluster-family-registry)): `OpenShiftCluster`. |
+| `spec.storageClusters` | array of strings | no | all loaded storage clusters | Non-empty unique root selection of the `storageCluster` category's kinds: `CephCluster`. |
 | `spec.remoteMachinesAccessKey` | object | conditional | — | Fleet key for the `bootwright` account installed on managed machines. |
 | `spec.defaults` | kind-keyed partial specs | no | `{}` | Omitted object fields inherit the corresponding kind entry under the rules below. |
 | `spec.downloads` | object | no | source-specific | Closed download-mirror policy below. |
@@ -115,10 +123,10 @@ Composition uses one rule throughout the API:
 - a Machine's implicit `fqdn` address is
   `<Machine.metadata.name>.<domains.machines>`;
 - a container node without an explicit `fqdn` is
-  `<node.name>.<ContainerCluster.metadata.name>.<domains.containerClusters>`;
+  `<node.name>.<OpenShiftCluster.metadata.name>.<domains.containerClusters>`;
   and
 - a storage node without an explicit `fqdn` is
-  `<node.name>.<StorageCluster.metadata.name>.<domains.storageClusters>`.
+  `<node.name>.<CephCluster.metadata.name>.<domains.storageClusters>`.
 
 Authored node `name` values are DNS labels. A separate `fqdn` field is the only
 way to pin a cluster-visible host name outside the composed zone.
@@ -174,25 +182,25 @@ The cluster-selection closure is authoritative and independent of file layout:
 | Starting selection | Retained objects |
 | --- | --- |
 | Every selection | The selected `Environment`, its required controller Machine and that Machine's provider/provider-host closure, plus every `Entitlement`, `MachineImage`, `MachineInstallProfile`, `NetworkConfig`, `Proxy`, `DNSServer`, `NTPServer`, `ArtifactServer`, `Registry`, `LoadBalancer`, `CustomPlaybook`, and `Secret` objects; every retained managed service also retains its placement Machine and that Machine's `InfraProvider` and provider-host Machine closure; and every Bootwright-installed Machine (`os.provided: false` with `installProfileRef`) that is neither a node nor a node's provider host of any declared cluster, as a root with its provider and provider-host closure. |
-| One `ContainerCluster` | That root; its node Machines; the Machines' `InfraProvider` objects and any libvirt provider-host Machines; each KubeVirt provider's `hostClusterRef` `ContainerCluster`, retained as a root with its own row; Machines hosting managed infrastructure services consumed by the root; bindings for the root plus their recursively expanded profiles and add-ons; and each `StorageExport` attached through a selected add-on's `storageExportAttachment` effect or named by a selected package's configuration, its referenced storage cluster, policy/pool/filesystem/gateway chain, and every `StorageNFSExport` on that retained storage cluster. |
-| One `StorageCluster` | That root and every storage child whose `clusterRef` names it, which is every `Storage*` kind except `StorageCluster`, `StorageExport` included; its node, provider, provider-host, and consumed-service Machines; and each `ContainerCluster` attached to one of those exports through a `storageExportAttachment` effect or a package's configuration, together with that container root's bindings, recursively expanded profiles, and add-ons. |
+| One `OpenShiftCluster` | That root; its node Machines; the Machines' `InfraProvider` objects and any libvirt provider-host Machines; each KubeVirt provider's `hostClusterRef` `OpenShiftCluster`, retained as a root with its own row; Machines hosting managed infrastructure services consumed by the root; bindings for the root plus their recursively expanded profiles and add-ons; and each `CephConsumer` attached through a selected add-on's `cephConsumerAttachment` effect or named by a selected package's configuration, its referenced storage cluster, policy/pool/filesystem/gateway chain, and every `CephNFSExport` on that retained storage cluster. |
+| One `CephCluster` | That root and every storage child whose `clusterRef` names it, which is every `Storage*` kind except `CephCluster`, `CephConsumer` included; its node, provider, provider-host, and consumed-service Machines; and each `OpenShiftCluster` attached to one of those exports through a `cephConsumerAttachment` effect or a package's configuration, together with that container root's bindings, recursively expanded profiles, and add-ons. |
 
 Closures for all listed roots are unioned and then emitted in canonical API
-order. The rules apply until nothing more is retained. A `ContainerCluster`
+order. The rules apply until nothing more is retained. An `OpenShiftCluster`
 retained through an attachment brings everything its own row names, its node
 Machines and its other attached exports and their chains included. A
-`StorageCluster` retained only through a `StorageExport` keeps its node
+`CephCluster` retained only through a `CephConsumer` keeps its node
 Machines and their provider and provider-host closure, but not every object
-naming it and no other attached `ContainerCluster`. When an attachment reaches
+naming it and no other attached `OpenShiftCluster`. When an attachment reaches
 a cluster root that its authored list omits, `validate` refuses with an error
 on that list naming the root and the export that reached it, because the
 selection of a completed apply cannot change
 ([D153](../state-reconciliation.md#lifecycle-unit)); a cluster retained only
 through an attachment is therefore always refused by that omitted-root rule.
 A retained
-`StorageReplication` retains both its clusters as full roots, and selecting
+`CephReplication` retains both its clusters as full roots, and selecting
 either end of the relationship retains it; this widens nothing else, so a
-`StorageCluster` retained only through a `StorageExport` still keeps its node
+`CephCluster` retained only through a `CephConsumer` still keeps its node
 closure alone. A `Machine` or `InfraProvider` not reached by the rules above is
 excluded; when no excluded cluster root accounts for it as a node, a node's
 provider or a provider host, `validate` warns, naming it and stating that no
@@ -220,7 +228,7 @@ an already provided machine keeps its own `Machine.spec.access`. The Secret is
 install places its public half in that account.
 
 The fleet key must differ from every Machine access key and every
-`StorageCluster.spec.ceph.cephadm.clusterSSH.keyRef`. Each cluster SSH key must
+`CephCluster.spec.cephadm.clusterSSH.keyRef`. Each cluster SSH key must
 also differ from every Machine-authored private key. Validation checks
 reference identity and type, preventing Ceph key reuse for fleet access. The
 fleet key must also differ from every Machine's `os.install.hostKeyRef`; the
@@ -235,12 +243,12 @@ kind's `spec`, without an additional `spec` wrapper. For example:
 ```yaml
 spec:
   defaults:
-    ContainerCluster:
+    OpenShiftCluster:
       install:
         pullSecretRef: openshift-pull-secret
 ```
 
-Every loaded `ContainerCluster` missing `spec.install.pullSecretRef` receives
+Every loaded `OpenShiftCluster` missing `spec.install.pullSecretRef` receives
 that reference. The mechanism applies to every registered kind, not only
 installation material. It never creates objects or supplies `apiVersion`,
 `kind`, or `metadata`. Unknown kinds or fields are errors.
@@ -279,7 +287,7 @@ Defaults obey these rules in order:
 6. An authored discriminator or populated arm selects the
    variant, using that union's own arm-population rules. An explicitly unset
    value-shape arm, such as an empty or all-zero
-   [replicated pool block](storage.md#replicated-protection), does not select
+   [replicated pool block](../ceph-resources.md#replicated-protection), does not select
    a variant.
    Defaults never introduce an alternative arm or change that selection.
    Compatible ordinary records within the selected arm may inherit missing
@@ -357,17 +365,18 @@ sole Machine, hostname, capability or local-access declaration never selects
 it implicitly. Controller egress belongs to the selected Machine's
 [proxy choice](machines.md#machine-proxy).
 
-The referenced Machine must have effective `os.provided: true`,
-`access.local: true` and the declared `container-runtime` capability.
+The referenced Machine must have effective `os.provided: true`
+and `access.local: true`; it always receives the container runtime, which no
+Machine declares ([substrate arm](machines.md#substrate-arm)).
 Selection never supplies these values or changes an SSH transport into local
 execution. This is the sole local-access Machine in the
-retained graph and cannot be a node of a selected ContainerCluster or
-StorageCluster. Other retained Machines must not declare local access.
+retained graph and cannot be a node of a selected OpenShiftCluster or
+CephCluster. Other retained Machines must not declare local access.
 
 Each controller violation is refused with `api.invariant` at
 `spec.controller.machineRef` and names its remedy on the Machine it concerns:
 set `os.provided` to true, give the controller `access.local: true` and no
-`access.ssh`, add `container-runtime` to its capabilities, remove
+`access.ssh`, remove
 `access.local` from the other Machine, or remove the controller from the
 cluster's nodes; or select another controller Machine.
 
@@ -399,9 +408,6 @@ metadata:
   name: controller
 
 spec:
-  capabilities:
-    - container-runtime
-
   os:
     provided: true
 
@@ -413,10 +419,9 @@ spec:
 ```
 
 A controller may host a managed service when that service explicitly selects
-its `machineRef` and the Machine has the service's required capabilities.
-`container-runtime` is required for the controller even when no managed service
-is selected. A capability declaration does not install or prove a runtime;
-`setup` installs an absent qualified Podman and verifies its dependencies.
+its `machineRef`. The controller receives the container runtime even when no
+managed service is selected: `setup` installs an absent qualified Podman and
+verifies its dependencies.
 No service placement defaults to the controller.
 
 Admission checks these declarations without inspecting the invoking host,
@@ -428,7 +433,7 @@ connection facts stay with their owning consumers and service objects; the
 [retired fields](../api.md#retired-fields) name each replacement.
 
 Additional installation trust belongs to each
-[ContainerCluster](container-clusters.md#additional-installation-trust). Kind
+[OpenShiftCluster](openshift-clusters.md#additional-installation-trust). Kind
 defaults can share that consumer field using its normal replacement rules.
 Each service declares any connection trust it requires separately.
 
@@ -452,12 +457,10 @@ registration with `lifecycle.unsupported` naming this Environment, and
 controller selection refuses the first one it meets with
 `controller.unsupported` on the declaring object and field. Its reason and
 remedy are the diagnostic's message and remediation, in which `<machine>` is
-the controller Machine, `<proxy>` the Proxy it selects and `<index>` the
-position of the refused capability.
+the controller Machine and `<proxy>` the Proxy it selects.
 
 | Refusal | Path | Reason | Remedy |
 | --- | --- | --- | --- |
-| Another capability | `spec.capabilities[<index>]` of the controller `Machine` is neither `container-runtime` nor `libvirt` | `this executable's controller stage prepares only the container-runtime and libvirt capabilities, and <machine> declares another at spec.capabilities[<index>]` | `remove spec.capabilities[<index>] from <machine>` |
 | Too many bypass entries | more than 128 `spec.proxy.noProxy` entries on the controller `Machine` | `this executable's controller route carries at most 128 bypass entries, and <machine> declares more in spec.proxy.noProxy` | `keep at most 128 entries in spec.proxy.noProxy on <machine>` |
 | Managed Proxy | `spec.proxy.proxyRef` of the controller `Machine` names a managed `Proxy` | `this executable's controller stage acquires only directly or through an external Proxy that is already ready, and <machine> selects the managed <proxy>` | `select direct: {} or an external Proxy in spec.proxy on <machine>` |
 | Proxy authentication | `spec.connection.auth.proxyAuthRef` on the selected external `Proxy` | `this executable's controller stage acquires through no authenticated proxy, and <proxy> sets spec.connection.auth.proxyAuthRef` | `select direct: {} or an external Proxy that needs no authentication in spec.proxy on <machine>` |

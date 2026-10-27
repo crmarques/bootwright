@@ -3,18 +3,18 @@ base: libvirt-3-nodes-ceph
 phase: admission
 edits:
 - file: storage/pool.yaml
-  replace: "  type: replicated\n  role: rbd\n\n  replicated:\n    size: 2\n    minSize: 2\n"
-  with: "  type: erasure\n  role: rbd\n\n  erasure:\n    dataChunks: 2\n    codingChunks: 2\n"
+  replace: "  role: rbd\n\n  replicated:\n    size: 2\n    minSize: 2\n"
+  with: "  role: rbd\n\n  erasure:\n    dataChunks: 2\n    codingChunks: 2\n"
 expect:
 - code: api.invariant
-  kind: StoragePool
+  kind: CephPool
   name: rbd-data
   field: $.spec.erasure
   message: "erasure profile 2+2 needs 4 OSD hosts, one per chunk under failure domain host; 3 are declared"
   remediation: add OSD-bearing hosts until 4 carry OSDs, or lower dataChunks and codingChunks
 - code: api.invariant
-  kind: StorageRBDImage
+  kind: CephRBDImage
   name: rbd-disk
   field: $.spec.poolRef
-  message: "StoragePool rbd-data is erasure-coded; an RBD image keeps its header and metadata in a replicated pool"
+  message: "CephPool rbd-data is erasure-coded; an RBD image keeps its header and metadata in a replicated pool"
   remediation: point spec.poolRef at a replicated rbd pool and name the erasure-coded pool in spec.dataPoolRef

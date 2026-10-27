@@ -13,9 +13,9 @@ nothing. A new term enters this page with its owner link in the same change.
   Machine that `spec.controller.machineRef` names ([controller](controller.md)).
   Bare "controller" never names anything else.
 
-  Not yet met: container-clusters.md and container-cluster-coverage.md still
+  Not yet met: openshift-clusters.md and openshift-coverage.md still
   call a BMC a controller; tracked as
-  [B824](milestones/backlog.md#b824).
+  [B851](milestones/backlog.md#b851).
 - **BMC** or **management controller**: a Machine's out-of-band Redfish
   endpoint, physical or emulated ([substrates](substrates.md)).
 - **Realized target**: what a substrate derives for a Machine: the management
@@ -27,7 +27,7 @@ nothing. A new term enters this page with its owner link in the same change.
   substrate, so `Infra` in `InfraProvider` means substrate; an infrastructure
   service is a shared service kind, managed or external, such as `Proxy` or
   `DNSServer` ([infrastructure services](infrastructure-services.md)). The
-  `infra-components` stage token names the service layer.
+  `infrastructure-services` stage token names the service layer.
 - **Reservation**: a host-wide claim, such as a socket, BMC, media or machine,
   that refuses a conflicting context
   ([host reservations](infrastructure-services.md#host-reservations)).
@@ -51,9 +51,8 @@ nothing. A new term enters this page with its owner link in the same change.
   ([`MachineInstallProfile`](api/machines.md#machineinstallprofile)), add-on
   profile ([`ClusterAddonProfile`](api/addons.md#clusteraddonprofile)) or
   acceptance profile (a row of a coverage page, such as the
-  [Ceph profile catalog](storage-coverage.md#profile-catalog)).
-- **Capability**: always a Machine capability (`spec.capabilities`, a host
-  prerequisite or role of a [Machine](api/machines.md#machine)), an add-on
+  [Ceph profile catalog](ceph-coverage.md#profile-catalog)).
+- **Capability**: always an add-on
   capability token (what an [add-on](api/addons.md#clusteraddon) provides or
   requires for ordering), a lifecycle capability (a module of one bounded
   context, [architecture](architecture.md#adding-a-lifecycle-capability)) or,

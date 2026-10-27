@@ -40,7 +40,7 @@
         "virtualMedia": {
           "removeCertificate": false,
           "restoreVerification": false,
-          "trust": "import-certificate"
+          "trust": "importCertificate"
         }
       },
       "controllerKind": "physical",
@@ -67,7 +67,7 @@
         "virtualMedia": {
           "removeCertificate": false,
           "restoreVerification": false,
-          "trust": "import-certificate"
+          "trust": "importCertificate"
         }
       },
       "controllerKind": "physical",
@@ -94,7 +94,7 @@
         "virtualMedia": {
           "removeCertificate": false,
           "restoreVerification": false,
-          "trust": "import-certificate"
+          "trust": "importCertificate"
         }
       },
       "controllerKind": "physical",
@@ -132,7 +132,7 @@
     "kind": "openshift-install",
     "version": "4.21.15"
   },
-  "version": "cluster-install-agent-v7",
+  "version": "cluster-install-agent-v8",
   "vips": [],
   "workRoot": "/var/lib/bootwright-clusters/lab/metal"
 }

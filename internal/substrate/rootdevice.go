@@ -34,23 +34,13 @@ func (h RootDeviceHints) Names() []string {
 	return names
 }
 
-// UnmatchableRootDeviceHints are the admitted names, sorted, of the hints no
-// disk the provider creates can match. A libvirt domain presents file-backed
-// virtio disks that carry no WWN, SCSI address or serial number, while a
-// physical machine's own disks may carry any of them.
-func UnmatchableRootDeviceHints(provider api.Object) []string {
-	if Variant(provider) == ArmLibvirt {
-		return []string{"hctl", "serialNumber", "wwn"}
-	}
-	return nil
-}
-
 func rootDeviceHints(machine api.Object) RootDeviceHints {
-	declared := machine.Spec().Get("os", "install", "rootDeviceHints")
+	declared := machine.Spec().Get("hardware", "rootDevice")
+	physical := machine.Spec().Get("substrate", ArmBaremetal, "rootDevice")
 	hints := RootDeviceHints{
-		DeviceName: declared.Get("deviceName").Text(), HCTL: declared.Get("hctl").Text(),
+		DeviceName: declared.Get("deviceName").Text(), HCTL: physical.Get("hctl").Text(),
 		Model: declared.Get("model").Text(), Vendor: declared.Get("vendor").Text(),
-		SerialNumber: declared.Get("serialNumber").Text(), WWN: declared.Get("wwn").Text(),
+		SerialNumber: physical.Get("serialNumber").Text(), WWN: physical.Get("wwn").Text(),
 		MinSizeGigabytes: declared.Get("minSizeGigabytes").Text(),
 	}
 	if rotational := declared.Get("rotational"); rotational.Present() {
@@ -59,3 +49,16 @@ func rootDeviceHints(machine api.Object) RootDeviceHints {
 	}
 	return hints
 }
+
+func RootDeviceHintPath(name string) string {
+	if slices.Contains([]string{"hctl", "serialNumber", "wwn"}, name) {
+		return "spec.substrate." + ArmBaremetal + ".rootDevice." + name
+	}
+	return "spec.hardware.rootDevice." + name
+}
+
+func RootDevicePath(machine api.Object) string {
+	return machine.Spec().Get("hardware", "rootDevice", "deviceName").Text()
+}
+
+func MachineRootDeviceHints(machine api.Object) RootDeviceHints { return rootDeviceHints(machine) }

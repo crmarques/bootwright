@@ -81,7 +81,7 @@ make build
 ./bin/bootwright plan
 ./bin/bootwright apply --stage controller
 ./bin/bootwright preflight controller --context libvirt-network-variants
-./bin/bootwright apply --stage infra-components
+./bin/bootwright apply --stage infrastructure-services
 ./bin/bootwright apply
 ./bin/bootwright status
 ./bin/bootwright machine list --power-status
@@ -250,7 +250,7 @@ Then run each command separately:
 ./bin/bootwright secret generate
 ./bin/bootwright secret check
 ./bin/bootwright apply --stage controller
-./bin/bootwright apply --stage infra-components
+./bin/bootwright apply --stage infrastructure-services
 ./bin/bootwright apply
 ```
 

@@ -15,9 +15,9 @@ import (
 
 // refusalSpec owns this capability's refusal table, read from this package's
 // directory.
-const refusalSpec = "../../../specs/storage.md"
+const refusalSpec = "../../../specs/ceph.md"
 
-// refusalCase is the set of edits to the pinned catalog's StorageCluster spec
+// refusalCase is the set of edits to the pinned catalog's CephCluster spec
 // that one row of the refusal table refuses, and the value of each placeholder
 // the row's reason and remedy write in angle brackets, with the objects the
 // row adds to the catalog.
@@ -28,8 +28,8 @@ type refusalCase struct {
 }
 
 // TestCephRefusalTableMatchesUnsupported holds the Ceph capability's
-// Unsupported to the storage refusal table: each row refuses the StorageCluster
-// and the StoragePool and StorageClient that name it with exactly its reason
+// Unsupported to the storage refusal table: each row refuses the CephCluster
+// and the CephPool and CephClient that name it with exactly its reason
 // and remedy, and a row added or removed on either side fails here. A later
 // refusal adds one row to the table and one case here.
 func TestCephRefusalTableMatchesUnsupported(t *testing.T) {
@@ -38,44 +38,52 @@ func TestCephRefusalTableMatchesUnsupported(t *testing.T) {
 	}
 	cases := map[string]refusalCase{
 		"More than six Ceph hosts": {edits: map[string]func(api.Value) api.Value{"seven hosts": func(spec api.Value) api.Value {
-			nodes := spec.Get("ceph", "topology", "nodes").Items()
-			return spec.WithPath(api.ListValue(slices.Repeat(nodes[:1], 7)...), "ceph", "topology", "nodes")
+			nodes := spec.Get("topology", "nodes").Items()
+			return spec.WithPath(api.ListValue(slices.Repeat(nodes[:1], 7)...), "topology", "nodes")
 		}}, values: map[string]string{"<cluster>": "example", "<hosts>": "7"}},
-		"Incomplete or unsafe Ceph coordinates or transport": {edits: map[string]func(api.Value) api.Value{
-			"native transport": set("native", "ceph", "cephadm", "clusterSSH", "transport"),
-			"omitted transport": func(spec api.Value) api.Value {
-				return spec.WithPath(requestMap("user", "operator", "keyRef", "cluster-key"), "ceph", "cephadm", "clusterSSH")
+		"A distribution that core Ceph does not realize": {edits: map[string]func(api.Value) api.Value{
+			"oss arm": func(spec api.Value) api.Value {
+				return spec.WithPath(requestMap("oss", api.MapValue()), "distribution")
 			},
-			"empty release": set("", "ceph", "release"),
+			"redhat arm": func(spec api.Value) api.Value {
+				return spec.WithPath(requestMap("redhat", api.MapValue()), "distribution")
+			},
+		}},
+		"Incomplete or unsafe Ceph coordinates or transport": {edits: map[string]func(api.Value) api.Value{
+			"native transport": set("native", "cephadm", "clusterSSH", "transport"),
+			"omitted transport": func(spec api.Value) api.Value {
+				return spec.WithPath(requestMap("user", "operator", "keyRef", "cluster-key"), "cephadm", "clusterSSH")
+			},
+			"empty release": set("", "release"),
 		}},
 		"A replication network that a Ceph host has no address inside": {edits: map[string]func(api.Value) api.Value{
 			"no host address inside": func(spec api.Value) api.Value {
-				return spec.WithPath(api.StringList("198.51.100.0/24"), "ceph", "networks", "clusterCIDRs")
+				return spec.WithPath(api.StringList("198.51.100.0/24"), "networks", "clusterCIDRs")
 			},
 		}, values: map[string]string{"<host>": "node-1", "<machine>": "node-1", "<cidrs>": "198.51.100.0/24"}},
 		"An ingress that resolves to no declared service": {edits: map[string]func(api.Value) api.Value{
 			"ingress fronting no declared service": func(spec api.Value) api.Value {
-				services := append(spec.Get("ceph", "services").Items(), requestMap("service_type", "ingress", "service_id", "rgw.objects",
+				services := append(spec.Get("services").Items(), requestMap("service_type", "ingress", "service_id", "rgw.objects",
 					"placement", requestMap("label", "mon", "count", 2), "spec", requestMap("backend_service", "rgw.objects", "virtual_ip", "192.0.2.50/24")))
-				return spec.WithPath(api.ListValue(services...), "ceph", "services")
+				return spec.WithPath(api.ListValue(services...), "services")
 			},
 		}, values: map[string]string{"<service>": "ingress.rgw.objects"}},
 		"A native service whose auxiliary image is not selected": {edits: map[string]func(api.Value) api.Value{
 			"prometheus service": func(spec api.Value) api.Value {
-				services := append(spec.Get("ceph", "services").Items(), requestMap("service_type", "prometheus", "placement", requestMap("label", "mon", "count", 1)))
-				return spec.WithPath(api.ListValue(services...), "ceph", "services")
+				services := append(spec.Get("services").Items(), requestMap("service_type", "prometheus", "placement", requestMap("label", "mon", "count", 1)))
+				return spec.WithPath(api.ListValue(services...), "services")
 			},
 		}, values: map[string]string{"<family>": "prometheus", "<service>": "prometheus", "<name>": "prometheus", "<cluster>": "example"}},
-		"StorageSMBResource objects whose samba images are not selected": {edits: map[string]func(api.Value) api.Value{
+		"CephSMBResource objects whose samba images are not selected": {edits: map[string]func(api.Value) api.Value{
 			"a join auth and a users resource": nil,
 		}, values: map[string]string{"<smb>": "smb-join", "<cluster>": "example", "<name>": "samba"}, extra: []api.Object{smbUsers(), smbJoin()}},
 		"An auxiliary image that no declared service needs": {edits: map[string]func(api.Value) api.Value{
 			"haproxy without an ingress": func(spec api.Value) api.Value {
-				return spec.WithPath(requestMap("base", PinnedRegistry+"/synthetic/haproxy", "version", "synthetic-1"), "ceph", "images", "haproxy")
+				return spec.WithPath(requestMap("base", PinnedRegistry+"/synthetic/haproxy", "version", "synthetic-1"), "images", "haproxy")
 			},
 		}, values: map[string]string{"<name>": "haproxy", "<cluster>": "example"}},
 	}
-	refused := map[api.Kind]string{api.StorageCluster: "example", api.StoragePool: "volumes", api.StorageClient: "consumer"}
+	refused := map[api.Kind]string{api.CephCluster: "example", api.CephPool: "volumes", api.CephClient: "consumer"}
 	for _, row := range refusalTable(t) {
 		test, found := cases[row.name]
 		if !found {

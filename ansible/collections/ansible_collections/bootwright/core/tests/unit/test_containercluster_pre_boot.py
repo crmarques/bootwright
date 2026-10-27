@@ -8,7 +8,7 @@ request froze and the identity its Machine block pinned earlier in the same
 operation. Both includes sit inside the block a node already running from this
 cluster's image skips, so such a node is neither proved nor given media, and
 inside the block the boot phase's budget bounds, so a proof spends only what
-that budget has left (specs/container-clusters.md, Boot and Budgets).
+that budget has left (specs/openshift-clusters.md, Boot and Budgets).
 
 These cases find each include by its role and the tasks_from stem pre_boot, and
 render its variables through the loop that includes boot.yml (apply.yml), over

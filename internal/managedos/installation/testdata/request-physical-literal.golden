@@ -88,7 +88,7 @@
       "virtualMedia": {
         "removeCertificate": true,
         "restoreVerification": false,
-        "trust": "import-certificate"
+        "trust": "importCertificate"
       }
     },
     "hardware": {
@@ -107,5 +107,5 @@
   },
   "tlsCertificateRef": "lab-artifacts-tls",
   "user": "bootwright",
-  "version": "os-install-anaconda-v16"
+  "version": "os-install-anaconda-v17"
 }

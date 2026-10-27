@@ -36,7 +36,9 @@ type Definition struct {
 	Extend func(catalog api.Catalog, spec api.Value, request *Request) error
 }
 
-func (d Definition) BlockID(service string) string { return d.Slug + "-" + service }
+func (d Definition) BlockID(service string) string {
+	return reconciliation.BlockIdentity("", d.Slug+"-"+service)
+}
 
 // ContentDigest binds the plan to the exact behavior this build implements, so
 // changing the request shape, the compiled image or the host layout
@@ -86,7 +88,7 @@ func (c Capability) Plan(ctx context.Context, input lifecycle.PlanInput) (lifecy
 		plan.Definitions = append(plan.Definitions, reconciliation.BlockDefinition{
 			ID:             request.Identity.Block,
 			Description:    c.definition.describe(input.Verb, request),
-			Stage:          reconciliation.StageInfraComponents,
+			Stage:          reconciliation.StageInfrastructureServices,
 			Requires:       BridgeRequirements(catalog, request.Placement.Machine, request.ProbeTargets()),
 			Impacts:        impacts(input.Verb, request),
 			Groups:         groups(input.Verb, request),

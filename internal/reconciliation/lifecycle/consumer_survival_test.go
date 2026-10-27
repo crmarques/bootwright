@@ -116,7 +116,7 @@ func arrangedPreview(t *testing.T, h *harness, c *consumingTestCapability, arran
 	return preview.Warnings, nil
 }
 
-// The specs/storage-resources.md export refusal row "Removing an export while
+// The specs/ceph-resources.md export refusal row "Removing an export while
 // a consuming container cluster survives the removal": virtual storage hosts
 // and a consumer that outlives the destroy refuse before registration, though
 // the capability admits every block, and the apply plan warns of exactly that

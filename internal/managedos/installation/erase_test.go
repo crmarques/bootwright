@@ -216,7 +216,7 @@ func TestPhysicalEraseOrdersAfterClaimAndBeforeInstallation(t *testing.T) {
 type retiringPolicy struct{ family string }
 
 func (p retiringPolicy) PhysicalRetirement(_ api.Catalog, machine string) ([]reconciliation.ObjectRef, error) {
-	return []reconciliation.ObjectRef{{Kind: "StorageCluster", Object: "holds-" + machine, Family: p.family}}, nil
+	return []reconciliation.ObjectRef{{Kind: "CephCluster", Object: "holds-" + machine, Family: p.family}}, nil
 }
 
 // Installation and erasure wait for the retirement of every policy composition
@@ -242,7 +242,7 @@ func TestPhysicalInstallationAndEraseWaitForEveryRetirementPolicy(t *testing.T) 
 		}
 		checked++
 		for _, family := range []string{"first-retirement", "second-retirement"} {
-			want := reconciliation.ObjectRef{Kind: "StorageCluster", Object: "holds-" + machine.Name(), Family: family}
+			want := reconciliation.ObjectRef{Kind: "CephCluster", Object: "holds-" + machine.Name(), Family: family}
 			if !slices.Contains(definition.Requires, want) || len(definition.Dependencies) != 0 {
 				t.Fatalf("%s requires %v and depends on %v", definition.ID, definition.Requires, definition.Dependencies)
 			}

@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	api "github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/environment/inspection"
 	"github.com/crmarques/bootwright/internal/secrets"
 )
@@ -14,10 +15,10 @@ import (
 const clusterDashboardPassword = "Xq7-Lm2_Rv9.Tk4-Wz8_Hn3.Pb6-Jd5_"
 
 const (
-	clusterNotImplementedSessions = "sessions on an OpenShift or OKD ContainerCluster are not yet implemented; the cluster is reached through bootwright cluster kubeconfig"
+	clusterNotImplementedSessions = "sessions on an OpenShiftCluster are not yet implemented; the cluster is reached through bootwright cluster kubeconfig"
 	clusterNotImplementedHandoff  = "this handoff is not yet implemented; the cluster is reached through bootwright cluster kubeconfig"
-	clusterContainerOnly          = "applies to OpenShift and OKD ContainerClusters only"
-	clusterManagedCephOnly        = "applies to managed Ceph StorageClusters only"
+	clusterContainerOnly          = "applies to OpenShiftClusters only"
+	clusterManagedCephOnly        = "applies to managed CephClusters only"
 )
 
 func containerAccess(kubeconfig inspection.AccessCommand) []inspection.AccessCommand {
@@ -35,9 +36,9 @@ func containerAccess(kubeconfig inspection.AccessCommand) []inspection.AccessCom
 func cephAccess(session inspection.AccessCommand, ceph *inspection.ManagedCeph) []inspection.AccessCommand {
 	exec, rsh := session, session
 	exec.Command, rsh.Command = inspection.CommandExec, inspection.CommandRsh
-	keyring := inspection.AccessCommand{Command: inspection.CommandKeyring, Status: inspection.StatusUnavailable, Reason: "the StorageCluster storage declares no StorageClient"}
+	keyring := inspection.AccessCommand{Command: inspection.CommandKeyring, Status: inspection.StatusUnavailable, Reason: "the CephCluster storage declares no CephClient"}
 	for _, resource := range ceph.Resources {
-		if resource.Kind == "StorageClient" && resource.Status == inspection.ResourceDone {
+		if resource.Kind == "CephClient" && resource.Status == inspection.ResourceDone {
 			keyring = inspection.AccessCommand{Command: inspection.CommandKeyring, Status: inspection.StatusReady}
 		}
 	}
@@ -52,7 +53,7 @@ func cephAccess(session inspection.AccessCommand, ceph *inspection.ManagedCeph) 
 }
 
 func externalAccess() []inspection.AccessCommand {
-	roster := "the external StorageCluster archive declares no node roster; sessions apply to managed Ceph StorageClusters"
+	roster := "the external CephCluster archive declares no node roster; sessions apply to managed CephClusters"
 	return []inspection.AccessCommand{
 		{Command: inspection.CommandExec, Status: inspection.StatusNotApplicable, Reason: roster},
 		{Command: inspection.CommandKeyring, Status: inspection.StatusNotApplicable, Reason: clusterManagedCephOnly},
@@ -65,10 +66,10 @@ func externalAccess() []inspection.AccessCommand {
 
 func clusterListResult() *inspection.ListResult {
 	return &inspection.ListResult{Context: "lab", Clusters: []inspection.ClusterRef{
-		{Name: "archive", Kind: inspection.KindStorageCluster},
-		{Name: "edge", Kind: inspection.KindContainerCluster},
-		{Name: "okd-lab", Kind: inspection.KindContainerCluster},
-		{Name: "storage", Kind: inspection.KindStorageCluster},
+		{Name: "archive", Kind: string(api.CephCluster)},
+		{Name: "edge", Kind: string(api.OpenShiftCluster)},
+		{Name: "okd-lab", Kind: string(api.OpenShiftCluster)},
+		{Name: "storage", Kind: string(api.CephCluster)},
 	}}
 }
 
@@ -105,9 +106,9 @@ func readyCeph() *inspection.ManagedCeph {
 			},
 		},
 		Resources: []inspection.Resource{
-			{Kind: "StoragePool", Name: "rbd-data", Status: inspection.ResourceDone, Scope: "replicated size 2/min 2, application rbd"},
-			{Kind: "StorageClient", Name: "rbd-canary", Status: inspection.ResourceDone, Scope: "client.rbd-canary read-write on pool rbd-data"},
-			{Kind: "StorageObjectGateway", Name: "objects", Status: inspection.ResourceUnsupported, Scope: "zone lab/lab/lab-a"},
+			{Kind: "CephPool", Name: "rbd-data", Status: inspection.ResourceDone, Scope: "replicated size 2/min 2, application rbd"},
+			{Kind: "CephClient", Name: "rbd-canary", Status: inspection.ResourceDone, Scope: "client.rbd-canary read-write on pool rbd-data"},
+			{Kind: "CephObjectGateway", Name: "objects", Status: inspection.ResourceUnsupported, Scope: "zone lab/lab/lab-a"},
 		},
 		Endpoints: []inspection.Endpoint{
 			{Service: "mgmt-gateway", URLs: []string{"https://192.0.2.50:9443/"}, CertificateSHA256: "cd" + strings.Repeat("0e", 31), Issuer: inspection.IssuerCephadm, Status: inspection.EndpointReady},
@@ -132,7 +133,7 @@ func revealedCeph(unproved bool) *inspection.ManagedCeph {
 
 func storageOnly(ceph *inspection.ManagedCeph) *inspection.InfoResult {
 	return &inspection.InfoResult{Context: "lab", Clusters: []inspection.ContainerEntry{}, Storage: []inspection.StorageEntry{
-		{Name: "storage", Kind: inspection.KindStorageCluster, AccessCommands: cephAccess(inspection.AccessCommand{Status: inspection.StatusReady, Node: "rhel-01"}, ceph), Ceph: ceph},
+		{Name: "storage", Kind: string(api.CephCluster), AccessCommands: cephAccess(inspection.AccessCommand{Status: inspection.StatusReady, Node: "rhel-01"}, ceph), Ceph: ceph},
 	}}
 }
 
@@ -141,7 +142,7 @@ func unavailableCeph() *inspection.ManagedCeph {
 		Management: inspection.ManagementManaged, Release: "9.9.1.2", AdminNode: "rhel-01", Status: inspection.StatusUnavailable,
 		Reason:    "no apply of this context's current operation has completed the cluster's bootstrap",
 		Remedy:    "bootwright apply --context lab --stage clusters",
-		Resources: []inspection.Resource{{Kind: "StoragePool", Name: "rbd-data", Status: inspection.ResourcePending}},
+		Resources: []inspection.Resource{{Kind: "CephPool", Name: "rbd-data", Status: inspection.ResourcePending}},
 	}
 }
 
@@ -149,12 +150,12 @@ func clusterInfoResult(ceph *inspection.ManagedCeph, session inspection.AccessCo
 	return &inspection.InfoResult{
 		Context: "lab",
 		Clusters: []inspection.ContainerEntry{
-			{Name: "edge", Kind: inspection.KindContainerCluster, AccessCommands: containerAccess(readyKubeconfig())},
-			{Name: "okd-lab", Kind: inspection.KindContainerCluster, AccessCommands: containerAccess(kubeconfig)},
+			{Name: "edge", Kind: string(api.OpenShiftCluster), AccessCommands: containerAccess(readyKubeconfig())},
+			{Name: "okd-lab", Kind: string(api.OpenShiftCluster), AccessCommands: containerAccess(kubeconfig)},
 		},
 		Storage: []inspection.StorageEntry{
-			{Name: "archive", Kind: inspection.KindStorageCluster, AccessCommands: externalAccess()},
-			{Name: "storage", Kind: inspection.KindStorageCluster, AccessCommands: cephAccess(session, ceph), Ceph: ceph},
+			{Name: "archive", Kind: string(api.CephCluster), AccessCommands: externalAccess()},
+			{Name: "storage", Kind: string(api.CephCluster), AccessCommands: cephAccess(session, ceph), Ceph: ceph},
 		},
 	}
 }
@@ -172,7 +173,7 @@ func clusterGoldens() []cliGolden {
 	revealed := func(r *dispatchRecord) { r.result.clusterInfo = storageOnly(revealedCeph(false)) }
 	unproved := func(r *dispatchRecord) { r.result.clusterInfo = storageOnly(revealedCeph(true)) }
 	warning := "  warning  access.unproved\n" +
-		"    the dashboard administrator password of StorageCluster storage was kept from an apply that\n" +
+		"    the dashboard administrator password of CephCluster storage was kept from an apply that\n" +
 		"    never proved the dashboard reachable, so the access it grants was not proved\n"
 	return []cliGolden{
 		{golden: "cli-cluster-list", args: "cluster list", record: list},
@@ -191,9 +192,8 @@ func clusterGoldens() []cliGolden {
 		{
 			args: "cluster keyring --name storage --client missing", code: 1, record: func(r *dispatchRecord) { r.err = keyringTargetRefusal },
 			stderr: "  error  access.target\n" +
-				"    the context lab selects no StorageClient named missing\n" +
-				"    Next: bootwright cluster info --context lab --name storage lists the StorageClients of\n" +
-				"    storage\n",
+				"    the context lab selects no CephClient named missing\n" +
+				"    Next: bootwright cluster info --context lab --name storage lists the CephClients of storage\n",
 		},
 	}
 }

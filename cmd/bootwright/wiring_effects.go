@@ -15,7 +15,7 @@ import (
 func effectBearing(object api.Object) (lifecycle.Bearing, bool) {
 	if reason, bears := infrastructureservices.EffectBearing(object); bears {
 		machine, installOnly := infrastructureservices.Placement(object)
-		return lifecycle.Bearing{Reason: reason, Shared: true, Machine: machine, InstallOnly: installOnly}, true
+		return lifecycle.Bearing{Reason: reason, Remedy: infrastructureservices.UnclaimedRemedy(object), Shared: true, Machine: machine, InstallOnly: installOnly}, true
 	}
 	for _, predicate := range domainEffects() {
 		if reason, bears := predicate(object); bears {

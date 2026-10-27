@@ -31,11 +31,11 @@ func TestProviderVariantsAndNormalization(t *testing.T) {
 	domain := m("name", "zone-a", "server", "vcenter.example.test", "region", "region", "zone", "zone", "topology", m("datacenter", "dc", "computeCluster", "cluster", "datastore", "store", "networks", api.StringList("network")))
 	providers := map[string]api.Value{
 		"baremetal": m("baremetal", m("defaults", m("bmc", m("credentialsRef", "bmc")))),
-		"libvirt":   m("libvirt", m("machineRef", "host", "uri", "qemu:///system", "bmcEmulationDefaults", bmc), "networkAttachments", list(m("name", "net", "libvirt", m("bridge", "virbr-lab", "management", "managed", "address", "192.0.2.1/24")))),
+		"libvirt":   m("libvirt", m("machineRef", "host", "uri", "qemu:///system", "bmcEmulation", bmc), "networkAttachments", list(m("name", "net", "libvirt", m("bridge", "virbr-lab", "management", "managed", "address", "192.0.2.1/24")))),
 		"vsphere":   m("vsphere", m("vcenters", list(m("server", "vcenter.example.test", "datacenters", api.StringList("dc"), "credentialsRef", "vcenter")), "failureDomains", list(domain), "isoStaging", m("folder", "media"), "machineProfiles", list(m("name", "small", "cpu", api.IntegerValue("2"), "memoryMiB", api.IntegerValue("4096"), "diskGiB", api.IntegerValue("20"))))),
 		"kubevirt":  m("kubevirt", m("kubeconfigRef", "host-access", "namespace", "workloads"), "networkAttachments", list(m("name", "net", "kubevirt", m("networkRef", m("kind", "UserDefinedNetwork", "name", "net"))))),
 	}
-	host := obj(api.Machine, "host", m("capabilities", api.StringList("libvirt")))
+	host := obj(api.Machine, "host", m())
 	for variant, spec := range providers {
 		t.Run(variant, func(t *testing.T) {
 			o := obj(api.InfraProvider, variant, spec)
@@ -70,10 +70,9 @@ func TestProviderVariantsAndNormalization(t *testing.T) {
 }
 func TestProviderContradictions(t *testing.T) {
 	cases := map[string]api.Value{
-		"disabled emulation":      m("libvirt", m("bmcEmulationDefaults", m("enabled", false))),
-		"managed without address": m("libvirt", m("bmcEmulationDefaults", m("port", api.IntegerValue("8000"))), "networkAttachments", list(m("name", "net", "libvirt", m("bridge", "br0", "management", "managed")))),
-		"external with address":   m("libvirt", m("bmcEmulationDefaults", m("port", api.IntegerValue("8000"))), "networkAttachments", list(m("name", "net", "libvirt", m("bridge", "br0", "address", "192.0.2.1/24")))),
-		"network address":         m("libvirt", m("bmcEmulationDefaults", m("port", api.IntegerValue("8000"))), "networkAttachments", list(m("name", "net", "libvirt", m("bridge", "br0", "management", "managed", "address", "192.0.2.0/24")))),
+		"managed without address": m("libvirt", m("bmcEmulation", m("port", api.IntegerValue("8000"))), "networkAttachments", list(m("name", "net", "libvirt", m("bridge", "br0", "management", "managed")))),
+		"external with address":   m("libvirt", m("bmcEmulation", m("port", api.IntegerValue("8000"))), "networkAttachments", list(m("name", "net", "libvirt", m("bridge", "br0", "address", "192.0.2.1/24")))),
+		"network address":         m("libvirt", m("bmcEmulation", m("port", api.IntegerValue("8000"))), "networkAttachments", list(m("name", "net", "libvirt", m("bridge", "br0", "management", "managed", "address", "192.0.2.0/24")))),
 		"wrong attachment":        m("baremetal", m(), "networkAttachments", list(m("name", "net", "libvirt", m("bridge", "br0")))),
 		"cluster namespace":       m("kubevirt", m("namespace", "workloads"), "networkAttachments", list(m("name", "net", "kubevirt", m("networkRef", m("name", "net", "kind", "ClusterUserDefinedNetwork", "apiGroup", "k8s.ovn.org", "namespace", "workloads"))))),
 		"unknown group":           m("kubevirt", m("namespace", "workloads"), "networkAttachments", list(m("name", "net", "kubevirt", m("networkRef", m("name", "net", "kind", "CustomNetwork"))))),
@@ -91,12 +90,12 @@ func TestProviderContradictions(t *testing.T) {
 }
 func TestLibvirtBMCPortRangesDoNotOverlapOnOneHost(t *testing.T) {
 	provider := func(name, port string) api.Object {
-		return obj(api.InfraProvider, name, m("libvirt", m("machineRef", "host", "uri", "qemu:///system", "bmcEmulationDefaults", m("port", api.IntegerValue(port), "bindAddress", "192.0.2.1", "auth", m("credentialsRef", "bmc")))))
+		return obj(api.InfraProvider, name, m("libvirt", m("machineRef", "host", "uri", "qemu:///system", "bmcEmulation", m("port", api.IntegerValue(port), "bindAddress", "192.0.2.1", "auth", m("credentialsRef", "bmc")))))
 	}
 	machine := func(name, provider string) api.Object {
 		return obj(api.Machine, name, m("substrate", m("providerRef", provider)))
 	}
-	host := obj(api.Machine, "host", m("capabilities", api.StringList("libvirt")))
+	host := obj(api.Machine, "host", m())
 	a, b := provider("a", "8000"), provider("b", "8001")
 	if issues := Validate(a, api.NewCatalog([]api.Object{a, b, host, machine("one", "a")})); len(issues) != 0 {
 		t.Fatal("adjacent ranges rejected", issues)
@@ -115,10 +114,10 @@ func TestLibvirtBMCPortRangesDoNotOverlapOnOneHost(t *testing.T) {
 // gives it. An absent address is the schema's to refuse, so this rule says
 // nothing about it.
 func TestAnEmulatedBMCListensOnOneNameableUnicastAddress(t *testing.T) {
-	const field = "$.spec.libvirt.bmcEmulationDefaults.bindAddress"
-	host := obj(api.Machine, "host", m("capabilities", api.StringList("libvirt")))
+	const field = "$.spec.libvirt.bmcEmulation.bindAddress"
+	host := obj(api.Machine, "host", m())
 	provider := func(defaults api.Value) api.Object {
-		return obj(api.InfraProvider, "lab", m("libvirt", m("machineRef", "host", "uri", "qemu:///system", "bmcEmulationDefaults", defaults)))
+		return obj(api.InfraProvider, "lab", m("libvirt", m("machineRef", "host", "uri", "qemu:///system", "bmcEmulation", defaults)))
 	}
 	for address, nameable := range map[string]bool{
 		"0.0.0.0": false, "::": false, "::0": false, "0:0:0:0:0:0:0:0": false, "::ffff:0.0.0.0": false,
@@ -137,7 +136,7 @@ func TestAnEmulatedBMCListensOnOneNameableUnicastAddress(t *testing.T) {
 		})
 	}
 	normalized, _ := Normalize(provider(m("port", api.IntegerValue("8000"), "bindAddress", "2001:DB8:0::1", "auth", m("credentialsRef", "bmc"))), api.Catalog{})
-	if address := normalized.Spec().Get("libvirt", "bmcEmulationDefaults", "bindAddress").Text(); address != "2001:db8::1" {
+	if address := normalized.Spec().Get("libvirt", "bmcEmulation", "bindAddress").Text(); address != "2001:db8::1" {
 		t.Fatalf("normalized address = %q", address)
 	}
 	if NameableListener("2001:DB8:0::1") {
@@ -153,11 +152,11 @@ func TestAnEmulatedBMCListensOnOneNameableUnicastAddress(t *testing.T) {
 // is refused where it is declared instead of at planning. KubeVirt keeps the
 // materialized zero.
 func TestLibvirtProfilesRequirePositiveCapacity(t *testing.T) {
-	host := obj(api.Machine, "host", m("capabilities", api.StringList("libvirt")))
+	host := obj(api.Machine, "host", m())
 	positive := m("name", "large", "cpu", api.IntegerValue("4"), "memoryMiB", api.IntegerValue("8192"), "diskGiB", api.IntegerValue("60"))
 	libvirt := func(profiles ...api.Value) api.Object {
 		return obj(api.InfraProvider, "lab", m("libvirt", m("machineRef", "host", "uri", "qemu:///system",
-			"bmcEmulationDefaults", m("port", api.IntegerValue("8000"), "bindAddress", "192.0.2.1", "auth", m("credentialsRef", "bmc")),
+			"bmcEmulation", m("port", api.IntegerValue("8000"), "bindAddress", "192.0.2.1", "auth", m("credentialsRef", "bmc")),
 			"machineProfiles", list(profiles...))))
 	}
 	if o := libvirt(positive); len(Validate(o, api.NewCatalog([]api.Object{o, host}))) != 0 {
@@ -205,18 +204,18 @@ func TestTrustBundleRequiresVerification(t *testing.T) {
 			t.Fatalf("%s: issues at %v, want %s", name, fields, want)
 		}
 		if issues[0].Code != "api.invariant" || issues[0].Remediation != "set tls.verify: true where the bundle is declared, or remove tls.trustBundleRef" ||
-			issues[0].Message != "a controller trust bundle requires verification, and tls.verify is false here, whether authored or inherited" {
+			issues[0].Message != "a BMC trust bundle requires verification, and tls.verify is false here, whether authored or inherited" {
 			t.Fatalf("%s: issue = %+v", name, issues[0])
 		}
 	}
 	machine := m("address", "https://bmc.example.test/redfish/v1/Systems/1", "tls", bundled.Get("tls"))
 	for name, authored := range map[string]bool{"authored Machine": true, "effective Machine under an inherited opt-out": false} {
-		if fields := fieldsOf(ValidateBMCDefaults(machine, "$.spec.hardware.management.bmc", authored)); len(fields) != 1 || fields[0] != "$.spec.hardware.management.bmc.tls.trustBundleRef" {
+		if fields := fieldsOf(ValidateBMCDefaults(machine, "$.spec.substrate.baremetal.bmc", authored)); len(fields) != 1 || fields[0] != "$.spec.substrate.baremetal.bmc.tls.trustBundleRef" {
 			t.Fatalf("%s: issues at %v", name, fields)
 		}
 	}
 	for _, tls := range []api.Value{m("verify", true, "trustBundleRef", "bmc-ca"), m("trustBundleRef", "bmc-ca"), m("verify", false)} {
-		if issues := ValidateBMCDefaults(m("tls", tls), "$.spec.hardware.management.bmc", true); len(issues) != 0 {
+		if issues := ValidateBMCDefaults(m("tls", tls), "$.spec.substrate.baremetal.bmc", true); len(issues) != 0 {
 			t.Fatalf("tls %v refused: %v", tls, issues)
 		}
 	}
@@ -241,7 +240,7 @@ func TestVirtualMediaTrustDefaultsToImportCertificate(t *testing.T) {
 	}
 }
 
-// disable-verification is a per-Machine exception, so a provider default that
+// disableVerification is a per-Machine exception, so a provider default that
 // would hand it to every Machine the provider hosts refuses, whether authored
 // on the provider or offered as an InfraProvider kind default. On a Machine it
 // stays admitted.
@@ -256,8 +255,8 @@ func TestProviderVirtualMediaDisableVerificationRefuses(t *testing.T) {
 		if fields := fieldsOf(issues); len(fields) != 1 || fields[0] != want {
 			t.Fatalf("%s: issues at %v, want %s", name, fields, want)
 		}
-		if issues[0].Message != "disable-verification is a per-Machine exception and never a provider default" ||
-			issues[0].Remediation != "declare hardware.management.bmc.virtualMedia.tls.trust: disable-verification on each Machine that needs it" {
+		if issues[0].Message != "disableVerification is a per-Machine exception and never a provider default" ||
+			issues[0].Remediation != "declare substrate.baremetal.bmc.virtualMedia.tls.trust: disableVerification on each Machine that needs it" {
 			t.Fatalf("%s: issue = %+v", name, issues[0])
 		}
 	}
@@ -268,7 +267,7 @@ func TestProviderVirtualMediaDisableVerificationRefuses(t *testing.T) {
 		}
 	}
 	machine := m("virtualMedia", m("tls", m("trust", TrustDisableVerification, "restoreVerificationAfterBoot", false)))
-	if issues := ValidateBMCDefaults(machine, "$.spec.hardware.management.bmc", true); len(issues) != 0 {
+	if issues := ValidateBMCDefaults(machine, "$.spec.substrate.baremetal.bmc", true); len(issues) != 0 {
 		t.Fatalf("a Machine's own exception refused: %v", issues)
 	}
 }
@@ -281,12 +280,12 @@ func TestRestoreVerificationFreezesOnlyUnderDisableVerification(t *testing.T) {
 		tls  api.Value
 		want VirtualMedia
 	}{
-		"disable-verification":             {m("trust", TrustDisableVerification), VirtualMedia{Trust: TrustDisableVerification, RestoreVerification: true}},
-		"disable-verification, kept off":   {m("trust", TrustDisableVerification, "restoreVerificationAfterBoot", false), VirtualMedia{Trust: TrustDisableVerification}},
-		"import-certificate":               {m("trust", TrustImportCertificate), VirtualMedia{Trust: TrustImportCertificate}},
-		"import-certificate, then removed": {m("trust", TrustImportCertificate, "removeCertificateAfterBoot", true), VirtualMedia{Trust: TrustImportCertificate, RemoveCertificate: true}},
-		"established":                      {m("trust", TrustEstablished), VirtualMedia{Trust: TrustEstablished}},
-		"the default":                      {m(), VirtualMedia{Trust: TrustImportCertificate}},
+		"disableVerification":             {m("trust", TrustDisableVerification), VirtualMedia{Trust: TrustDisableVerification, RestoreVerification: true}},
+		"disableVerification, kept off":   {m("trust", TrustDisableVerification, "restoreVerificationAfterBoot", false), VirtualMedia{Trust: TrustDisableVerification}},
+		"importCertificate":               {m("trust", TrustImportCertificate), VirtualMedia{Trust: TrustImportCertificate}},
+		"importCertificate, then removed": {m("trust", TrustImportCertificate, "removeCertificateAfterBoot", true), VirtualMedia{Trust: TrustImportCertificate, RemoveCertificate: true}},
+		"established":                     {m("trust", TrustEstablished), VirtualMedia{Trust: TrustEstablished}},
+		"the default":                     {m(), VirtualMedia{Trust: TrustImportCertificate}},
 	} {
 		if media := virtualMediaTrust(test.tls); media != test.want {
 			t.Fatalf("%s: frozen %+v, want %+v", name, media, test.want)

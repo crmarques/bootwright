@@ -9,6 +9,7 @@ import (
 	"github.com/crmarques/bootwright/internal/diagnostics"
 	"github.com/crmarques/bootwright/internal/infrastructureservices/managedservice"
 	machineref "github.com/crmarques/bootwright/internal/machine"
+	"github.com/crmarques/bootwright/internal/reconciliation"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
 )
 
@@ -22,9 +23,9 @@ func Refusals(catalog api.Catalog) []lifecycle.Refusal {
 		if server.Spec().Get("management").Text() != "managed" {
 			continue
 		}
-		if server.Spec().Get("retention").Text() == "install-only" {
+		if server.Spec().Get("retention").Text() == "installOnly" {
 			found = append(found, lifecycle.RefusalOf(server,
-				"this executable serves no managed artifact server with install-only retention",
+				"this executable serves no managed artifact server with installOnly retention",
 				"declare spec.retention: persistent on "+server.Identity()+", or omit it"))
 		}
 		found = append(found, managedservice.PlacementRefusals(catalog, server)...)
@@ -117,7 +118,7 @@ func requestFor(catalog api.Catalog, server api.Object, controllerMachine, conte
 	return request, nil
 }
 
-func BlockID(service string) string { return "artifact-server-" + service }
+func BlockID(service string) string { return reconciliation.BlockIdentity("artifact-server-", service) }
 
 func listenersFor(spec api.Value, identity string) ([]Listener, error) {
 	items := spec.Get("listeners").Items()

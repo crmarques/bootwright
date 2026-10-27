@@ -1,0 +1,52 @@
+---
+- name: Validate the frozen Ceph export request
+  ansible.builtin.assert:
+    that:
+      - bootwright_ceph_export_request.version == 'ceph-export-request-v2'
+      - bootwright_ceph_export_digest is match('^[0-9a-f]{64}$')
+      - ansible_connection == 'local'
+    quiet: true
+  no_log: true
+
+- name: Complete the export execution handoff
+  bootwright.core.ceph_export_protocol:
+    phase: loaded
+  no_log: true
+
+- name: Execute the fixed Ceph export observe operation
+  bootwright.core.ceph_export:
+    request: '{{ bootwright_ceph_export_request }}'
+    operation: observe
+    digest: '{{ bootwright_ceph_export_digest }}'
+    material: '{{ bootwright_ceph_export_material }}'
+    outputs: '{{ bootwright_ceph_export_outputs }}'
+  register: storage_ceph_consumer_result
+  failed_when: false
+  no_log: true
+  diff: false
+
+- name: Publish the fixed Ceph export refusal
+  bootwright.core.ceph_export_protocol:
+    phase: refused
+    reason: '{{ storage_ceph_consumer_result.reason | default("adapter-exception") }}'
+    native_error: '{{ storage_ceph_consumer_result.nativeError | default(omit) }}'
+    detail: >-
+      {{ storage_ceph_consumer_result.detail
+        | default(omit if storage_ceph_consumer_result.reason is defined else "module-failure") }}
+  when: storage_ceph_consumer_result.evidence is not defined
+  no_log: true
+
+- name: Refuse an unproved Ceph export operation
+  ansible.builtin.fail:
+    msg: The Ceph export operation was refused; the run names its reason
+  when: storage_ceph_consumer_result.evidence is not defined
+
+- name: Publish bounded Ceph export evidence
+  bootwright.core.ceph_export_protocol:
+    phase: completed
+    digest: '{{ bootwright_ceph_export_digest }}'
+    outcome: '{{ "changed" if storage_ceph_consumer_result.changed else "unchanged" }}'
+    observed: true
+    removed: false
+    evidence: '{{ storage_ceph_consumer_result.evidence }}'
+  no_log: true

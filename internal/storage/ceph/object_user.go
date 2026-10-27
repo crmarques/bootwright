@@ -19,17 +19,19 @@ type ObjectUser struct {
 	ZoneGroup   string `json:"zoneGroup"`
 }
 
-func ObjectUserBlockID(name string) string { return "ceph-object-user-" + name }
+func ObjectUserBlockID(name string) string {
+	return reconciliation.BlockIdentity("ceph-object-user-", name)
+}
 
 func ObjectUserProved(catalog api.Catalog, user api.Object, proofs []lifecycle.BlockEvidence) bool {
-	gateway, exists := catalog.Find(api.StorageObjectGateway, user.Spec().Get("objectGatewayRef").Text())
+	gateway, exists := catalog.Find(api.CephObjectGateway, user.Spec().Get("objectGatewayRef").Text())
 	cluster := user.Spec().Get("clusterRef").Text()
 	if !exists || gateway.Spec().Get("clusterRef").Text() != cluster {
 		return false
 	}
 	matched := 0
 	for _, proof := range proofs {
-		if proof.Kind != string(api.StorageObjectUser) || proof.Object != user.Name() || proof.Implementation != Implementation || proof.Verb != reconciliation.Apply || proof.State != reconciliation.BlockDone || proof.Block.ID != ObjectUserBlockID(user.Name()) || proof.Block.Kind != proof.Kind || proof.Block.Object != proof.Object || proof.Block.Implementation != Implementation {
+		if proof.Kind != string(api.CephObjectUser) || proof.Object != user.Name() || proof.Implementation != Implementation || proof.Verb != reconciliation.Apply || proof.State != reconciliation.BlockDone || proof.Block.ID != ObjectUserBlockID(user.Name()) || proof.Block.Kind != proof.Kind || proof.Block.Object != proof.Object || proof.Block.Implementation != Implementation {
 			return false
 		}
 		r, err := DecodeRequest(proof.Block.Request)
@@ -51,10 +53,7 @@ func ObjectUserProved(catalog api.Catalog, user api.Object, proofs []lifecycle.B
 
 func objectUserRequest(c api.Catalog, user api.Object, contextName string) (Request, error) {
 	name, spec := user.Name(), user.Spec()
-	if !reconciliation.ValidSegment(ObjectUserBlockID(name)) {
-		return Request{}, failure("api.invariant", "StorageObjectUser "+name+" has a name too long to identify its block, whose identity holds at most 63 characters", "rename the StorageObjectUser to at most 46 characters")
-	}
-	gateway, _ := c.Find(api.StorageObjectGateway, spec.Get("objectGatewayRef").Text())
+	gateway, _ := c.Find(api.CephObjectGateway, spec.Get("objectGatewayRef").Text())
 	requests, err := gatewayRequests(c, gateway, contextName)
 	if err != nil {
 		return Request{}, err

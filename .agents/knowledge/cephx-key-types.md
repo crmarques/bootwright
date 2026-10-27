@@ -54,7 +54,7 @@ R3:C54 could not confirm these three claims, which come from v1:
 The evidence-based statement is narrower: upstream Ceph from the releases above
 can create `aes256k` keys, and the Rook and ODF scripts expose `aes` and
 `aes256k` selection. The guard "refuse a key whose type is not 1" and
-`spec.ceph.security.cephx.keyType: aes` are Bootwright-side constructs, not an
+`spec.security.cephx.keyType: aes` are Bootwright-side constructs, not an
 ODF contract.
 
 ## Observed by v1 on one IBM build

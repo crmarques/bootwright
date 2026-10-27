@@ -127,7 +127,7 @@ OPTIONS = {
 # across that reboot would boot it back into the installer (specs/substrates.md,
 # Identity and power operations). The installed disk the managed OS boots once
 # the installer has powered off is powered on for the identity wait; a release
-# powers nothing on (specs/container-clusters.md, Releasing the media).
+# powers nothing on (specs/openshift-clusters.md, Releasing the media).
 ASKED = {
     ("containercluster_install_agent/tasks/boot.yml", "baremetal", "pre_boot"): {BAREMETAL + "_target_require_tpm": False},
     ("managedos_install_anaconda/tasks/boot.yml", "baremetal", "pre_boot"): {BAREMETAL + "_target_require_tpm": False},

@@ -29,10 +29,10 @@ func TestResourceLayoutsPreserveFactsAcrossWidths(t *testing.T) {
 					{"machine-info", func(out io.Writer) error { return writeMachineInfo(out, "machine info", machines, false) }, []string{"guest", "guest.lab.example.test", "198.51.100.20, 192.0.2.20", "installed", "lab", "applied", "node", "provided", "ocp", "not-applied", "not read", "Placement", "Access", "Evidence"}},
 					{"secret-list", func(out io.Writer) error { return writeSecretList(out, "secret list", infoSecrets(), false) }, []string{"alpha", "alpha-two", "token", "contextStore", "value", "current", "v2", "sshKeyPair", "generated", "private-key", "public-key", "orphaned"}},
 					{"secret-info", func(out io.Writer) error { return writeSecretInfo(out, "secret info", infoSecrets(), false) }, []string{"alpha", "alpha-two", "token", "contextStore", "value", "current", "v2", "sshKeyPair", "generated", "private-key", "public-key", "orphaned", "version-opaque-id", "Identity", "Custody"}},
-					{"cluster-list", func(out io.Writer) error { return writeClusterList(out, "cluster list", clusterListResult(), false) }, []string{"archive", "edge", "okd-lab", "storage", "ContainerCluster", "StorageCluster"}},
+					{"cluster-list", func(out io.Writer) error { return writeClusterList(out, "cluster list", clusterListResult(), false) }, []string{"archive", "edge", "okd-lab", "storage", "OpenShiftCluster", "CephCluster"}},
 					{"cluster-info", func(out io.Writer) error {
 						return writeClusterInfo(out, io.Discard, "cluster info", storageOnly(readyCeph()), false)
-					}, []string{"storage", "StorageCluster", "Topology", "Access", "Evidence", "Custody", "9.9.1.2", "ready", "FSID", "Digest", "Certificate SHA-256", "hidden; rerun with --secrets --name storage", "Resources", "StoragePool/rbd-data"}},
+					}, []string{"storage", "CephCluster", "Topology", "Access", "Evidence", "Custody", "9.9.1.2", "ready", "FSID", "Digest", "Certificate SHA-256", "hidden; rerun with --secrets --name storage", "Resources", "CephPool/rbd-data"}},
 				} {
 					t.Run(fmt.Sprintf("%s/%d/%s/ascii=%t", test.name, width, color, ascii), func(t *testing.T) {
 						var output bytes.Buffer
@@ -73,7 +73,7 @@ func TestResourceInfoCompactDetailOmitsOnlyVerboseFacts(t *testing.T) {
 		{"secret", func(out io.Writer) error { return writeSecretInfo(out, "secret info", infoSecrets(), false) }, []string{"Identity", "Custody", "contextStore", "v2", "Bound versions"}, []string{"version-opaque-id", "Version ID"}},
 		{"cluster", func(out io.Writer) error {
 			return writeClusterInfo(out, io.Discard, "cluster info", storageOnly(readyCeph()), false)
-		}, []string{"Resources", "StoragePool/rbd-data", "done"}, []string{"replicated size 2/min 2, application rbd", "client.rbd-canary read-write on pool rbd-data"}},
+		}, []string{"Resources", "CephPool/rbd-data", "done"}, []string{"replicated size 2/min 2, application rbd", "client.rbd-canary read-write on pool rbd-data"}},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			var compact, full bytes.Buffer

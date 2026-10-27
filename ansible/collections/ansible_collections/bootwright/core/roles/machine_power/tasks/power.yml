@@ -177,7 +177,7 @@
       | bootwright.core.printable)[:128] }}' and serial
       '{{ (bootwright_machine_power_material.pinnedSerialBase64 | default('') | b64decode
       | bootwright.core.printable)[:128] }}', so no
-      power request was sent. Correct spec.hardware.management.bmc.address, or destroy and apply
+      power request was sent. Correct spec.substrate.baremetal.bmc.address, or destroy and apply
       this context so the machine is proved again.
   when: >-
     (bootwright_machine_power_material.pinnedUUIDBase64 | default('') | length > 0)

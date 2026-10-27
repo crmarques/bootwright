@@ -25,7 +25,7 @@ import (
 func plannedBlocks(t *testing.T) map[string]reconciliation.Block {
 	t.Helper()
 	blocks := map[string]reconciliation.Block{}
-	for _, block := range plannedCephPlan(t, childOf(api.StorageRBDImage, "disk", "poolRef", "volumes", "sizeBytes", 10737418240)).Blocks {
+	for _, block := range plannedCephPlan(t, childOf(api.CephRBDImage, "disk", "poolRef", "volumes", "sizeBytes", 10737418240)).Blocks {
 		blocks[block.ID] = block
 	}
 	return blocks
@@ -42,7 +42,7 @@ func plannedCephPlanWith(t *testing.T, change func(api.Value) api.Value, extra .
 	input := lifecycle.PlanInput{Verb: reconciliation.Apply, Context: lifecycle.ContextIdentity{Name: "synthetic"}, State: compilation.NewState(catalog, catalog, nil), Controller: "controller"}
 	runner := &recordingRunner{}
 	var definitions []reconciliation.BlockDefinition
-	for _, capability := range []lifecycle.Capability{NewImage(runner), NewHost(runner), New(api.StorageCluster, runner), New(api.StoragePool, runner), New(api.StorageClient, runner), New(api.StorageRBDImage, runner), New(api.StorageFilesystem, runner), New(api.StorageSubvolume, runner)} {
+	for _, capability := range []lifecycle.Capability{NewImage(runner), NewHost(runner), New(api.CephCluster, runner), New(api.CephPool, runner), New(api.CephClient, runner), New(api.CephRBDImage, runner), New(api.CephFilesystem, runner), New(api.CephSubvolume, runner)} {
 		plan, err := capability.Plan(context.Background(), input)
 		if err != nil {
 			t.Fatal(diagnostics.Of(err))
@@ -222,7 +222,7 @@ func hostExecution(t *testing.T, host string) (lifecycle.Execution, HostRequest,
 	if err != nil {
 		t.Fatal(err)
 	}
-	definition := reconciliation.BlockDefinition{ID: HostBlockID("example", host), Kind: string(api.StorageCluster), Object: "example", Implementation: HostImplementation, ContentDigest: HostContentDigest(), Request: canonical}
+	definition := reconciliation.BlockDefinition{ID: HostBlockID("example", host), Kind: string(api.CephCluster), Object: "example", Implementation: HostImplementation, ContentDigest: HostContentDigest(), Request: canonical}
 	digest, err := reconciliation.RequestDigest(definition)
 	if err != nil {
 		t.Fatal(err)
@@ -388,7 +388,7 @@ func TestHostReleaseMakesNoEffectAndItsRemovalContactsNothing(t *testing.T) {
 func hostProof(t *testing.T, host string, change func(*HostEvidence)) lifecycle.BlockEvidence {
 	t.Helper()
 	e, r, _ := hostExecution(t, host)
-	return lifecycle.BlockEvidence{Kind: string(api.StorageCluster), Object: "example", Implementation: HostImplementation, Verb: reconciliation.Apply, State: reconciliation.BlockDone,
+	return lifecycle.BlockEvidence{Kind: string(api.CephCluster), Object: "example", Implementation: HostImplementation, Verb: reconciliation.Apply, State: reconciliation.BlockDone,
 		Evidence: preparedEvidence(t, e, r, change), Block: e.Block}
 }
 
@@ -537,7 +537,7 @@ func TestRequestSchemaChangeLeavesHostDigest(t *testing.T) {
 	r.RegistryTrustBundleRef = "registry-ca"
 	r.Security = &Security{FIPS: true, CephXKeyType: "aes"}
 	r.PublicNetworks, r.ClusterNetworks = []string{"192.0.2.0/24"}, []string{"198.51.100.0/24"}
-	r.Action, r.Pool, r.Client = "pool", &Pool{Name: "volumes"}, &Client{Name: "consumer", Pool: "volumes", Access: "read-only"}
+	r.Action, r.Pool, r.Client = "pool", &Pool{Name: "volumes"}, &Client{Name: "consumer", Pool: "volumes", Access: "readOnly"}
 	scope := scopeOf(r)
 	for field, value := range reflect.ValueOf(scope).Fields() {
 		if value.IsZero() {

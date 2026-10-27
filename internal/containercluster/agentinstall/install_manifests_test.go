@@ -8,7 +8,7 @@ import (
 )
 
 func TestInstallNetworkManifestGolden(t *testing.T) {
-	cluster := api.NewObject(api.ContainerCluster, "cluster", api.MapValue(), api.MapValue(api.FieldValue{Name: "networking", Value: api.MapValue(api.FieldValue{Name: "ovnKubernetesConfig", Value: api.MapValue(api.FieldValue{Name: "mtu", Value: api.IntegerValue("1400")}, api.FieldValue{Name: "gatewayConfig", Value: api.MapValue(api.FieldValue{Name: "routingViaHost", Value: api.BoolValue(true)}, api.FieldValue{Name: "ipForwarding", Value: api.StringValue("Global")})})})}))
+	cluster := api.NewObject(api.OpenShiftCluster, "cluster", api.MapValue(), api.MapValue(api.FieldValue{Name: "networking", Value: api.MapValue(api.FieldValue{Name: "ovnKubernetesConfig", Value: api.MapValue(api.FieldValue{Name: "mtu", Value: api.IntegerValue("1400")}, api.FieldValue{Name: "gatewayConfig", Value: api.MapValue(api.FieldValue{Name: "routingViaHost", Value: api.BoolValue(true)}, api.FieldValue{Name: "ipForwarding", Value: api.StringValue("Global")})})})}))
 	manifests := installManifests(cluster)
 	if err := validateInstallManifests(manifests); err != nil {
 		t.Fatal(err)

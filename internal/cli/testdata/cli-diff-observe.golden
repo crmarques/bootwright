@@ -5,7 +5,7 @@ Plan:     this executable plans the same blocks
 
 diff real/Machine/rhel-01 desired/Machine/rhel-01
 # plan: same (machine-rhel-01); realized: done
-# not compared: spec.capabilities, spec.substrate.profileRef, spec.hardware, spec.os, spec.network, spec.access
+# not compared: spec.substrate.libvirt.profileRef, spec.hardware, spec.os, spec.network, spec.access
 # machine-rhel-01: part of this effect is realized as its frozen request states
 # machine-rhel-01: domain running; its controller reports power On
 
@@ -16,7 +16,7 @@ diff real/Machine/rhel-02 desired/Machine/rhel-02
 
 diff real/InfraProvider/lab-libvirt desired/InfraProvider/lab-libvirt
 # plan: same (substrate-host-lab-libvirt); realized: done
-# not compared: spec.libvirt.uri, spec.libvirt.machineRef, spec.libvirt.bmcEmulationDefaults, spec.libvirt.networkAttachments, spec.libvirt.machineProfiles[rhel].cpu, spec.libvirt.machineProfiles[rhel].memoryMiB
+# not compared: spec.libvirt.uri, spec.libvirt.machineRef, spec.libvirt.bmcEmulation, spec.libvirt.networkAttachments, spec.libvirt.machineProfiles[rhel].cpu, spec.libvirt.machineProfiles[rhel].memoryMiB
 --- real/InfraProvider/lab-libvirt
 +++ desired/InfraProvider/lab-libvirt
 @@ -6,5 +6,5 @@

@@ -79,8 +79,8 @@ func refusedPublication(catalog api.Catalog, machine, profile api.Object, derive
 		}
 	}
 	if derivedOK && !derived.Physical && imageHost != "" && derived.PlacementMachine.Name() != imageHost {
-		return "an emulated controller fetches the installer image without verifying its server, so the provider host it runs on is the Machine the artifact server is placed on",
-			machine.Identity() + " is booted through a controller on " + derived.PlacementMachine.Identity() + " and " + imageServer.Identity() + " is placed on " +
+		return "an emulated BMC fetches the installer image without verifying its server, so the provider host it runs on is the Machine the artifact server is placed on",
+			machine.Identity() + " is booted through a BMC on " + derived.PlacementMachine.Identity() + " and " + imageServer.Identity() + " is placed on " +
 				machineIdentity(imageHost) + "; place " + string(api.InfraProvider) + "/" + derived.Provider + " on " + machineIdentity(imageHost)
 	}
 	return "", ""

@@ -1,0 +1,256 @@
+package cephcluster
+
+import (
+	"fmt"
+	"math/big"
+	"slices"
+	"strings"
+
+	api "github.com/crmarques/bootwright/api/v1alpha1"
+)
+
+type admission struct {
+	object  api.Object
+	catalog api.Catalog
+	issues  []api.Issue
+	partial bool
+}
+
+func isStorage(kind api.Kind) bool {
+	return slices.Contains([]api.Kind{api.CephCluster, api.CephPlacementPolicy, api.CephPool, api.CephFilesystem, api.CephObjectGateway, api.CephObjectUser, api.CephObjectBucket, api.CephNFSExport, api.CephSMBResource, api.CephNVMeoFSubsystem, api.CephReplication, api.CephConsumer, api.CephClient, api.CephRBDImage, api.CephSubvolume}, kind)
+}
+
+func (a *admission) issue(code, field, message, remediation string) {
+	if cephProduct(a.object) {
+		message = textOf(a.object.Spec(), "type") + " Entitlement " + field + ": " + message
+	}
+	if len(a.issues) < 999 {
+		a.issues = append(a.issues, api.Issue{Code: code, Field: field, Message: message, Remediation: remediation})
+	}
+}
+
+func (a *admission) invalid(field, message, remediation string) {
+	a.issue("api.invariant", field, message, remediation)
+}
+
+func (a *admission) deferred(field, message, what, item string) {
+	a.issue("api.invariant", field, message, "remove "+what+"; "+item+" delivers it")
+}
+
+func (a *admission) required(value api.Value, key, field string) {
+	if !a.partial && !value.Has(key) {
+		remedy := "supply " + field + "." + key + " using its documented type"
+		if cephProduct(a.object) {
+			remedy = "set " + field + "." + key
+			if key == "registry" {
+				remedy += " with credentialsRef naming the registry-credentials Secret"
+			} else if key == "credentialsRef" {
+				remedy += " to the registry-credentials Secret name"
+			}
+		}
+		a.issue("api.required", field+"."+key, "this declaration requires the named field", remedy)
+	}
+}
+
+func (a *admission) forbid(value api.Value, field string, keys ...string) {
+	for _, key := range keys {
+		if value.Has(key) {
+			message := "this field is forbidden for the selected storage mode"
+			if cephProduct(a.object) {
+				message = "this field is forbidden for the selected entitlement product or RHSM management"
+			}
+			a.invalid(field+"."+key, message, "remove "+field+"."+key)
+		}
+	}
+}
+
+func textOf(value api.Value, path ...string) string { return value.Get(path...).Text() }
+func fallback(value api.Value, fallback string) string {
+	if value.Present() {
+		return value.Text()
+	}
+	return fallback
+}
+func numeric(value api.Value) *big.Int {
+	if value.Type() != api.Integer {
+		return new(big.Int)
+	}
+	n, ok := new(big.Int).SetString(value.Text(), 10)
+	if !ok {
+		return new(big.Int)
+	}
+	return n
+}
+func positive(value api.Value) bool               { return numeric(value).Sign() > 0 }
+func floatPositive(value api.Value) bool          { n, ok := value.Float64(); return ok && n > 0 }
+func indexed(field string, index int) string      { return fmt.Sprintf("%s[%d]", field, index) }
+func contains(value api.Value, token string) bool { return slices.Contains(value.Strings(), token) }
+func hasRole(node api.Value, role string) bool    { return contains(node.Get("roles"), role) }
+func lookupNode(cluster api.Object, name string) (api.Value, bool) {
+	var result api.Value
+	count := 0
+	for _, node := range cluster.Spec().Get("topology", "nodes").Items() {
+		if textOf(node, "name") == name && name != "" {
+			result = node
+			count++
+		}
+	}
+	return result, count == 1
+}
+func (a *admission) owner() (api.Object, bool) {
+	return a.catalog.Find(api.CephCluster, textOf(a.object.Spec(), "clusterRef"))
+}
+func (a *admission) sameOwner(kind api.Kind, name, field string, owner api.Object) (api.Object, bool) {
+	target, ok := a.catalog.Find(kind, name)
+	if !ok {
+		return api.Object{}, false
+	}
+	if textOf(target.Spec(), "clusterRef") != owner.Name() {
+		a.invalid(field, "referenced storage child belongs to a different cluster", "select a referenced resource whose spec.clusterRef matches this resource")
+		return target, false
+	}
+	return target, true
+}
+func (a *admission) entitlement(value api.Value, path, expected string) {
+	if target, ok := a.catalog.Find(api.Entitlement, value.Text()); ok && textOf(target.Spec(), "type") != "" && textOf(target.Spec(), "type") != expected {
+		a.invalid(path, "entitlement product does not match this storage consumer", "set "+path+" to an Entitlement whose spec.type is "+expected)
+	}
+}
+
+func ValidateAuthored(object api.Object, catalog api.Catalog) []api.Issue {
+	if !isStorage(object.Kind()) && !cephProduct(object) {
+		return nil
+	}
+	a := admission{object: object, catalog: catalog}
+	if cephProduct(object) {
+		a.cephEntitlement()
+		return a.issues
+	}
+	a.lexicalValues()
+	if object.Kind() == api.CephCluster {
+		a.retiredCluster(object.Spec())
+	}
+	return a.issues
+}
+
+func Validate(object api.Object, catalog api.Catalog) []api.Issue {
+	if !isStorage(object.Kind()) && !cephProduct(object) {
+		return nil
+	}
+	a := admission{object: object, catalog: catalog}
+	if cephProduct(object) {
+		a.cephEntitlement()
+		return a.issues
+	}
+	a.lexicalValues()
+	a.intrinsic()
+	if object.Kind() == api.CephCluster {
+		a.cluster()
+		return a.issues
+	}
+	owner, ok := a.owner()
+	if !ok {
+		return a.issues
+	}
+	managed := fallback(owner.Spec().Get("management"), "managed") == "managed"
+	if !managed && object.Kind() != api.CephConsumer {
+		a.invalid("$.spec.clusterRef", "this storage child requires a managed cluster", "set spec.clusterRef to a CephCluster with spec.management managed")
+		return a.issues
+	}
+	if object.Kind() == api.CephConsumer && !managed {
+		a.deferred("$.spec", "this storage resource family requires its later qualified service slice", "this CephConsumer from the input", "parked item B107")
+		return a.issues
+	}
+	switch object.Kind() {
+	case api.CephPlacementPolicy:
+		a.replication(owner, api.Object{})
+		a.policy(owner)
+	case api.CephReplication:
+		a.storageReplication(owner)
+	case api.CephPool:
+		a.pool(owner)
+	case api.CephFilesystem:
+		a.filesystem(owner)
+	case api.CephObjectGateway:
+		a.gateway(owner)
+	case api.CephObjectUser:
+		a.objectUser(owner)
+	case api.CephObjectBucket:
+		a.objectBucket(owner)
+	case api.CephNFSExport:
+		a.nfsExport(owner)
+	case api.CephSMBResource:
+		a.smbResource(owner)
+	case api.CephNVMeoFSubsystem:
+		a.nvmeofSubsystem(owner)
+	case api.CephConsumer:
+		a.export(owner, managed)
+	case api.CephRBDImage:
+		a.rbdImage(owner)
+	case api.CephSubvolume:
+		a.subvolume(owner)
+	case api.CephClient:
+		a.client(owner)
+	}
+	return a.issues
+}
+
+const clientScopes = "a CephClient grants exactly one scope, so it declares exactly one of spec.poolRef, spec.filesystemRef and spec.subvolumeRef"
+
+func (a *admission) clientScopeCount() int {
+	count := 0
+	for _, key := range []string{"poolRef", "filesystemRef", "subvolumeRef"} {
+		if a.object.Spec().Has(key) {
+			count++
+		}
+	}
+	return count
+}
+
+func (a *admission) clientIntrinsic() {
+	if a.clientScopeCount() > 1 {
+		a.issue("api.invariant", "$.spec", clientScopes, "keep only one of spec.poolRef, spec.filesystemRef and spec.subvolumeRef; declare another CephClient for another scope")
+	}
+}
+
+func (a *admission) client(owner api.Object) {
+	spec := a.object.Spec()
+	a.required(spec, "access", "$.spec")
+	if access := textOf(spec, "access"); access != "readOnly" && access != "readWrite" {
+		a.invalid("$.spec.access", "client access must be read-only or read-write", "set spec.access to read-only or read-write")
+	}
+	if spec.Has("poolRef") {
+		a.poolRole(textOf(spec, "poolRef"), "$.spec.poolRef", "rbd", owner)
+	}
+	if spec.Has("filesystemRef") {
+		a.sameOwner(api.CephFilesystem, textOf(spec, "filesystemRef"), "$.spec.filesystemRef", owner)
+	}
+	if spec.Has("subvolumeRef") {
+		a.sameOwner(api.CephSubvolume, textOf(spec, "subvolumeRef"), "$.spec.subvolumeRef", owner)
+	}
+	if a.clientScopeCount() == 0 && !a.partial {
+		a.issue("api.required", "$.spec", clientScopes, "set spec.poolRef, spec.filesystemRef or spec.subvolumeRef")
+	}
+}
+
+func (a *admission) uniqueValues(values []string, field, message string) {
+	seen := map[string]bool{}
+	for i, value := range values {
+		if value == "" {
+			continue
+		}
+		if seen[value] {
+			a.invalid(indexed(field, i), message, "remove the duplicate entry from "+field)
+		}
+		seen[value] = true
+	}
+}
+
+func nonemptyStrings(value api.Value) bool {
+	for _, item := range value.Items() {
+		if strings.TrimSpace(item.Text()) != "" {
+			return true
+		}
+	}
+	return false
+}

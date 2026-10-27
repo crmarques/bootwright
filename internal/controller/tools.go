@@ -47,7 +47,7 @@ func SelectToolsWithRegistry(catalog api.Catalog, registry addons.Registry) ([]T
 	}
 	virtctl := ToolRequest{Kind: "virtctl", Version: versions["virtctl"], Compatibility: "kubevirt", Mirror: downloads.Get("virtctlMirror").Text()}
 	result := []ToolRequest{}
-	for _, cluster := range catalog.OfKind(api.ContainerCluster) {
+	for _, cluster := range catalog.OfKind(api.OpenShiftCluster) {
 		distribution := cluster.Spec().Get("distribution")
 		kind, version := distribution.Get("type").Text(), distribution.Get("release", "version").Text()
 		// A pinned release image is the payload, not a client version. The

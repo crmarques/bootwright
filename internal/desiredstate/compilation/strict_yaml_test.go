@@ -175,7 +175,7 @@ func strictYAMLRefusals() []strictYAMLRow {
 		{"quoted merge key", strictYAMLSecret("  '<<': {type: opaque}\n"), []string{"yaml.alias $.spec"}},
 		{"tagged merge key", strictYAMLSecret("  !!merge <<: {type: opaque}\n"), []string{"yaml.alias $.spec"}},
 		{"unknown field", strictYAMLSecret("  type: opaque\n  unexpected: value\n"), []string{"api.field $.spec.unexpected"}},
-		{"null capabilities element", strictYAMLMachine("  capabilities: [container-runtime, null]\n  os: {provided: true}\n  access: {local: true}\n"), []string{"api.type $.spec.capabilities[1]"}},
+		{"null NIC element", strictYAMLMachine("  hardware: {nics: [{name: eth0}, null]}\n  os: {provided: true}\n  access: {local: true}\n"), []string{"api.type $.spec.hardware.nics[1]"}},
 	}
 	for _, tag := range []string{"!custom opaque", "!!binary b3BhcXVl", "!!timestamp 2001-12-14"} {
 		rows = append(rows, strictYAMLRow{"tag " + tag, strictYAMLSecret("  type: " + tag + "\n"), []string{"yaml.tag $.spec.type"}},
@@ -214,11 +214,11 @@ func strictYAMLMachine(spec string) string {
 }
 
 func strictYAMLPlaybook(extraVars string) string {
-	return "apiVersion: bootwright.io/v1alpha1\nkind: CustomPlaybook\nmetadata:\n  name: probe\nspec:\n  gates: base\n  playbook: site.yml\n  target: {machines: [controller]}\n  extraVars: " + extraVars + "\n"
+	return "apiVersion: bootwright.io/v1alpha1\nkind: CustomPlaybook\nmetadata:\n  name: probe\nspec:\n  enabled: false\n  gates: base\n  playbook: site.yml\n  target: {machines: [controller]}\n  extraVars: " + extraVars + "\n"
 }
 
 func strictYAMLRatio(value string) string {
-	return "apiVersion: bootwright.io/v1alpha1\nkind: StoragePool\nmetadata:\n  name: probe\nspec:\n  clusterRef: missing\n  autoscale:\n    targetSizeRatio: " + value + "\n"
+	return "apiVersion: bootwright.io/v1alpha1\nkind: CephPool\nmetadata:\n  name: probe\nspec:\n  clusterRef: missing\n  autoscale:\n    targetSizeRatio: " + value + "\n"
 }
 
 // strictYAMLCompile compiles one probe beside a valid Environment and returns

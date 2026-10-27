@@ -10,6 +10,14 @@ disabled objects alike: both are strictly decoded, normalized,
 reference-checked and rendered. The retired `run` and `onFailure` fields are
 unknown and rejected.
 
+A `CustomPlaybook` name follows the [one name rule](../api.md#object-names).
+
+## Kinds
+
+| Kind | Declares |
+| --- | --- |
+| `CustomPlaybook` | One reserved operator playbook declaration; it validates and never runs. |
+
 ## Reserved-shape contract
 
 Admission checks source, path, reference, tag and Secret-type spelling
@@ -30,8 +38,10 @@ declarations enter none. It grants no execution.
 An enabled `CustomPlaybook` is an object no capability realizes, so a fresh
 `plan` and a fresh `apply` refuse it under the
 [unrealizable-kind rule](../state-reconciliation.md#stages-and-the-pause-boundary)
-before content access or operation registration, with no authorization bypass.
-A disabled declaration plans no work.
+before content access or operation registration, with no authorization bypass,
+and `validate` warns it `api.unrealized`
+([admitted but unrealized](../api.md#admitted-but-unrealized)). A disabled
+declaration plans no work and is warned `api.deferred`.
 
 Executable custom automation requires a separately authorized replacement
 schema that meets every prerequisite of the

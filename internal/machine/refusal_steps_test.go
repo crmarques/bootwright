@@ -33,13 +33,13 @@ func TestMachineRefusalsNameTheirStep(t *testing.T) {
 				machine, catalog := installedFixture()
 				return machine.WithSpec(machine.Spec().With("os", m("provided", true, "install", m("hostKeyRef", "node-host-key")))), catalog
 			}},
-		{"a BMC without credentials on a bare-metal provider", "api.invariant", "$.spec.hardware.management.bmc.credentialsRef",
-			"set spec.hardware.management.bmc.credentialsRef, or inherit it from the provider's spec.baremetal.defaults.bmc.credentialsRef",
+		{"a BMC without credentials on a bare-metal provider", "api.invariant", "$.spec.substrate.baremetal.bmc.credentialsRef",
+			"set spec.substrate.baremetal.bmc.credentialsRef, or inherit it from the provider's spec.baremetal.defaults.bmc.credentialsRef",
 			func() (api.Object, api.Catalog) {
 				machine, catalog := installedFixture()
 				spec := machine.Spec()
-				bmc := spec.Get("hardware", "management", "bmc").Without("credentialsRef")
-				return machine.WithSpec(spec.With("hardware", spec.Get("hardware").With("management", m("bmc", bmc)))), catalog
+				bmc := spec.Get("substrate", "baremetal", "bmc").Without("credentialsRef")
+				return machine.WithSpec(spec.WithPath(bmc, "substrate", "baremetal", "bmc")), catalog
 			}},
 		{"native interfaces that are not a list", "api.type", "$.spec.nmstate.interfaces", "write interfaces as a list",
 			func() (api.Object, api.Catalog) {
@@ -64,7 +64,7 @@ func TestMachineRefusalsNameTheirStep(t *testing.T) {
 func TestAnacondaInstallAddressWithoutANetworkIsRefusedOnce(t *testing.T) {
 	machine, catalog := fixture()
 	machine = machine.WithSpec(machine.Spec().
-		With("os", m("provided", false, "installProfileRef", "rhel", "install", m("rootDeviceHints", m("deviceName", "/dev/sda")))).
+		With("os", m("provided", false, "installProfileRef", "rhel")).
 		With("network", m("installAddressRef", "primary", "addresses", list(
 			m("name", "fqdn", "address", "node.example.test"),
 			m("name", "primary", "address", "192.0.2.11/24")))))

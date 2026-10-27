@@ -48,13 +48,13 @@ type PackageTree struct {
 }
 
 func packageSources(c api.Catalog, r Request, contextName string) (*PackageRequest, error) {
-	cluster, _ := c.Find(api.StorageCluster, r.Cluster)
-	entitlement, _ := c.Find(api.Entitlement, cluster.Spec().Get("ceph", "entitlementRef").Text())
+	cluster, _ := c.Find(api.CephCluster, r.Cluster)
+	entitlement, _ := c.Find(api.Entitlement, cluster.Spec().Get("entitlementRef").Text())
 	accepted := entitlement.Spec().Get("license", "accept").Bool()
 	if !accepted {
 		return nil, failure("lifecycle.unsupported", "the frozen IBM package entitlement has no accepted license", "review the provider license and declare Entitlement.spec.license.accept")
 	}
-	result := &PackageRequest{LicenseAccepted: accepted, PackageRepositoryTrustBundleRef: cluster.Spec().Get("ceph", "packageRepositoryTrustBundleRef").Text(), Version: PackageVersion, Sources: []PackageSource{}}
+	result := &PackageRequest{LicenseAccepted: accepted, PackageRepositoryTrustBundleRef: cluster.Spec().Get("packageRepositoryTrustBundleRef").Text(), Version: PackageVersion, Sources: []PackageSource{}}
 	for _, host := range r.Hosts {
 		m, _ := c.Find(api.Machine, host.Machine)
 		profile, ok := c.Find(api.MachineInstallProfile, m.Spec().Get("os", "installProfileRef").Text())

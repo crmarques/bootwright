@@ -28,7 +28,7 @@ func diskEncryption(cluster api.Object) *DiskEncryption {
 	enableOn := "workers"
 	if all {
 		enableOn = "all"
-	} else if slices.Contains(roles, "master") {
+	} else if slices.Contains(roles, "controlPlane") {
 		enableOn = "masters"
 	}
 	return &DiskEncryption{EnableOn: enableOn, Mode: "tpmv2"}
@@ -36,7 +36,7 @@ func diskEncryption(cluster api.Object) *DiskEncryption {
 
 func encryptedRole(cluster api.Object, role string) bool {
 	roles := cluster.Spec().Get("security", "diskEncryption", "roles").Strings()
-	if role == "master" {
+	if role == "controlPlane" {
 		return slices.Contains(roles, role)
 	}
 	return (role == "worker" || role == "infra") && (slices.Contains(roles, "worker") || slices.Contains(roles, "infra"))

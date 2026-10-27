@@ -9,7 +9,7 @@ import (
 
 func lifecycleInspectionCommands() []commandSpec {
 	return []commandSpec{
-		available(commandSpec{path: "plan", short: "Preview the next complete lifecycle operation", flags: []flagSpec{stageFlag()}, long: "Preview the next legal full-context operation, or the exact continuation point of an incomplete one. It reads durable state and changes nothing. With --stage it also shows which blocks that selection would start."}),
+		available(commandSpec{path: "plan", short: "Preview the next complete lifecycle operation", flags: []flagSpec{stageFlag(), untilFlag()}, long: "Preview the next legal full-context operation, or the exact continuation point of an incomplete one. It reads durable state and changes nothing. With --stage or --until it also shows which blocks that selection would start."}),
 		available(commandSpec{path: "status", short: "Show context readiness and lifecycle state", long: "Report context readiness, desired state and lifecycle progress from durable records. It performs no probe."}),
 		available(commandSpec{path: "diff", short: "Compare desired state with what this context realized", flags: []flagSpec{boolFlag("observe", "Read each realized block's target through its read-only observation")}, long: "Compare the context's desired state with what its apply realized, object by object. Without --observe it reads durable records only and contacts no host; with --observe it reads each realized block's target through that block's read-only observation. It changes nothing."}),
 	}
@@ -17,7 +17,7 @@ func lifecycleInspectionCommands() []commandSpec {
 
 func lifecycleMutationCommands() []commandSpec {
 	return []commandSpec{
-		available(commandSpec{path: "apply", short: "Apply the complete selected lifecycle unit", flags: []flagSpec{authorizationFlag(), stageFlag(), confirmationFlag()}, long: "Realize the complete selected Environment, or continue the exact operation an interruption left behind. The plan is always complete; --stage only gates which blocks this invocation starts, and the operation pauses at that boundary. Review the plan before confirming; --yes skips ordinary confirmation."}),
+		available(commandSpec{path: "apply", short: "Apply the complete selected lifecycle unit", flags: []flagSpec{authorizationFlag(), stageFlag(), untilFlag(), confirmationFlag()}, long: "Realize the complete selected Environment, or continue the exact operation an interruption left behind. The plan is always complete; --stage only gates which blocks this invocation starts, and the operation pauses at that boundary. --until <cluster>.<package> starts only that add-on instance and the blocks it requires, then pauses; a later apply continues the rest. Review the plan before confirming; --yes skips ordinary confirmation."}),
 		available(commandSpec{path: "destroy", short: "Destroy the complete selected lifecycle unit", flags: []flagSpec{authorizationFlag(), unregisteredFlag(), confirmationFlag()}, long: "Remove what this context's apply owns, whether that apply completed or not, proving each removal before it registers; a failed destroy is replaced by a fresh removal. Follow the plan's Stop first and Stop after online cleanup lists (bootwright machine stop): online cleanup, such as storage cleanup or a subscription unregistration, needs its Machines running, and destroy pauses for their stop after it. A plan that deletes disks needs --authorize data-loss; with --yes or without a terminal it must be --authorize data-loss=<digest>, the digest bootwright plan prints for those steps. A rotated management controller or registry login credential is presented at its current version only with --authorize rebind=<secret>, which records a new binding version. A Machine whose subscription registration cannot be read and that you unregistered with the subscription service's own tools is named with --unregistered. Review the plan before confirming; --yes skips ordinary confirmation."}),
 	}
 }
@@ -41,6 +41,7 @@ func (s Services) invokeLifecycle(ctx context.Context, path string, values *requ
 		result.lifecyclePlan, err = invokeResult(ctx, values, lifecycle.PlanRequest{
 			ContextName: values.text("context"),
 			Stages:      values.names("stage"),
+			Until:       values.text("until"),
 		}, s.Lifecycle.Plan)
 	case "status":
 		result.lifecycleStatus, err = invokeResult(ctx, values, lifecycle.StatusRequest{
@@ -55,6 +56,7 @@ func (s Services) invokeLifecycle(ctx context.Context, path string, values *requ
 		result.lifecycleOperation, err = invokeResult(ctx, values, lifecycle.ApplyRequest{
 			ContextName:      values.text("context"),
 			Stages:           values.names("stage"),
+			Until:            values.text("until"),
 			Authorizations:   values.authorizations(),
 			SkipConfirmation: values.boolean("yes"),
 			Unattended:       values.boolean("yes"),

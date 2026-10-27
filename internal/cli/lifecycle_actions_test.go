@@ -16,8 +16,8 @@ import (
 func TestEveryActionIsItsFrozenDescriptionWithItsObjectHighlightedOnce(t *testing.T) {
 	for _, tc := range []struct{ kind, implementation, verb, description, object string }{
 		{"DNSServer", "dns-server-dnsmasq-v1", "apply", "resolve names for demo-dns", "demo-dns"},
-		{"Machine", "machine-libvirt-v1", "destroy", "remove the virtual machine demo-node and its controller", "demo-node"},
-		{"StorageCluster", "storage-ceph-host-v1", "apply", "prepare host demo-node for demo-storage", "demo-storage"},
+		{"Machine", "machine-libvirt-v1", "destroy", "remove the virtual machine demo-node and its emulated BMC", "demo-node"},
+		{"CephCluster", "storage-ceph-host-v1", "apply", "prepare host demo-node for demo-storage", "demo-storage"},
 		{"Future", "future-v1", "apply", "perform future action on demo-object", "demo-object"},
 	} {
 		var output bytes.Buffer

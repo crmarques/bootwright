@@ -4,14 +4,37 @@ metadata:
   name: storage-a-02
 
 spec:
-  capabilities:
-    - ceph-node
-
   placement:
     site: site-a
 
   substrate:
     providerRef: bare-metal
+
+    baremetal:
+      bmc:
+        address: https://bmc-storage-a-02.example.com/redfish/v1/Systems/1
+        protocol: redfish
+        credentialsRef: ceph-bmc-credentials
+
+        tls:
+          verify: true
+
+        virtualMedia:
+          tls:
+            trust: established
+
+      nics:
+        - nicRef: nic0
+          macAddress: 02:00:00:00:00:04
+
+        - nicRef: nic1
+          macAddress: 02:00:00:00:00:05
+
+        - nicRef: nic2
+          macAddress: 02:00:00:00:00:06
+
+        - nicRef: nic3
+          macAddress: 02:00:00:00:00:07
 
   os:
     provided: false
@@ -19,9 +42,6 @@ spec:
 
     install:
       hostKeyRef: storage-a-02-host-key
-
-      rootDeviceHints:
-        deviceName: /dev/disk/by-id/wwn-0x5000c500a1b2c312
 
   network:
     configRef: ceph-network
@@ -58,26 +78,9 @@ spec:
   hardware:
     nics:
       - name: nic0
-        macAddress: 02:00:00:00:00:04
-
       - name: nic1
-        macAddress: 02:00:00:00:00:05
-
       - name: nic2
-        macAddress: 02:00:00:00:00:06
-
       - name: nic3
-        macAddress: 02:00:00:00:00:07
 
-    management:
-      bmc:
-        address: https://bmc-storage-a-02.example.com/redfish/v1/Systems/1
-        protocol: redfish
-        credentialsRef: ceph-bmc-credentials
-
-        tls:
-          verify: true
-
-        virtualMedia:
-          tls:
-            trust: established
+    rootDevice:
+      deviceName: /dev/disk/by-id/wwn-0x5000c500a1b2c312

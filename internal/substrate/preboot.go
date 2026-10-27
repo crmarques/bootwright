@@ -62,10 +62,10 @@ func PreBootRefusals(arm, contextName, continuation, machine, endpoint string) m
 			RefusalHardwareMismatch: refused("the machine answering at "+endpoint+" does not report exactly the hardware addresses "+identity+
 				" declares, or its inventory could not be read in full, so no media was inserted into it and it was not booted",
 				"once the machine reports the hardware "+identity+" declares in full, run "+next+"; to correct that declaration instead, "+destroy+
-					", correct spec.hardware.management.bmc.address or spec.hardware.nics on "+identity+update+", then run "+apply),
+					", correct spec.substrate.baremetal.bmc.address or spec.substrate.baremetal.nics on "+identity+update+", then run "+apply),
 			RefusalIdentityMismatch: refused("the management controller at "+endpoint+" answers as another system than the one this operation proved for "+
 				identity+", so no media was inserted into it and it was not booted",
-				destroy+", correct spec.hardware.management.bmc.address on "+identity+" if it names another controller"+update+", then run "+apply+
+				destroy+", correct spec.substrate.baremetal.bmc.address on "+identity+" if it names another controller"+update+", then run "+apply+
 					", so the machine is proved again"),
 			RefusalMachineRunning: running,
 			RefusalTPMAbsent:      refused(identity+" does not positively report an enabled TPM 2.0, so no encrypted installer was booted", "enable a supported TPM 2.0 on "+identity+", then run "+next),

@@ -71,7 +71,7 @@ Taken together, the file is a static, ten-year, unrevocable, group-readable
 cluster-administrator credential. That is why add-on work is given a lent copy
 and keeps none ([B64](../../specs/milestones/delivered.md#b64)). The required
 handling is in [secrets](../../specs/secrets.md) and
-[container clusters](../../specs/container-clusters.md), not here.
+[container clusters](../../specs/openshift-clusters.md), not here.
 
 ## The certificate authority it trusts
 

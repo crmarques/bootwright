@@ -16,10 +16,10 @@ func topologyCatalog(masters, workers, infra int, ipv6 bool) api.Catalog {
 	objects := largeCatalog(masters + workers + infra).Objects()
 	for i, object := range objects {
 		spec := object.Spec()
-		if object.Kind() == api.ContainerCluster {
+		if object.Kind() == api.OpenShiftCluster {
 			nodes := spec.Get("nodes").Items()
 			for j := range nodes {
-				role := "master"
+				role := "controlPlane"
 				if j >= masters {
 					role = "worker"
 				}

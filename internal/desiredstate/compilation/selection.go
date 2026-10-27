@@ -2,6 +2,7 @@ package compilation
 
 import (
 	"path/filepath"
+	"slices"
 	"strings"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
@@ -28,7 +29,7 @@ func validateIdentities(records []*objectRecord, ds *diagnosticSink, members fun
 	clusters := map[string][]*objectRecord{}
 	for _, record := range records {
 		identities[record.object.Identity()] = append(identities[record.object.Identity()], record)
-		if record.object.Kind() == api.ContainerCluster || record.object.Kind() == api.StorageCluster {
+		if api.IsClusterKind(record.object.Kind()) {
 			clusters[record.object.Name()] = append(clusters[record.object.Name()], record)
 		}
 	}
@@ -36,13 +37,10 @@ func validateIdentities(records []*objectRecord, ds *diagnosticSink, members fun
 		if len(identities[record.object.Identity()]) > 1 {
 			ds.issue(record, api.Issue{Code: "api.duplicate", Field: "$.metadata.name", Message: "object identity is ambiguous; every declaration must be unique within its kind"})
 		}
-		if record.object.Kind() == api.ContainerCluster || record.object.Kind() == api.StorageCluster {
-			kinds := map[api.Kind]bool{}
-			for _, collision := range clusters[record.object.Name()] {
-				kinds[collision.object.Kind()] = true
-			}
-			if len(kinds) > 1 {
-				ds.issue(record, api.Issue{Code: "api.duplicate", Field: "$.metadata.name", Message: "container and storage clusters share one name namespace"})
+		if api.IsClusterKind(record.object.Kind()) {
+			if others := otherClusterKinds(record, clusters[record.object.Name()]); len(others) > 0 {
+				ds.issue(record, api.Issue{Code: "api.duplicate", Field: "$.metadata.name", Message: "every cluster kind shares one name namespace, and " + strings.Join(others, ", ") + " also takes this name",
+					Remediation: "rename one of " + strings.Join(append([]string{record.object.Identity()}, others...), ", ") + " and every reference to it"})
 			}
 		}
 	}
@@ -63,6 +61,17 @@ func validateIdentities(records []*objectRecord, ds *diagnosticSink, members fun
 			}
 		}
 	}
+}
+
+func otherClusterKinds(record *objectRecord, collisions []*objectRecord) []string {
+	var others []string
+	for _, collision := range collisions {
+		if collision.object.Kind() != record.object.Kind() && !slices.Contains(others, collision.object.Identity()) {
+			others = append(others, collision.object.Identity())
+		}
+	}
+	slices.Sort(others)
+	return others
 }
 
 func validateSourcePaths(record *objectRecord, sources desiredstate.Sources, ds *diagnosticSink) {

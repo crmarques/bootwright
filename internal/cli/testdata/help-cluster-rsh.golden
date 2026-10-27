@@ -4,9 +4,9 @@
       runs as the identity the Machine's desired state authorizes, over a host key proved
       before any credential is offered; an unproved key is confirmed interactively or refused.
       The exit status is the client's. The session opens on the Machine behind one node of a
-      managed Ceph StorageCluster: --node selects the node by name, then by FQDN, and defaults
-      to the first node in name order. External StorageClusters are inapplicable, and sessions
-      on OpenShift/OKD ContainerClusters are not yet available.
+      managed CephCluster: --node selects the node by name, then by FQDN, and defaults to the
+      first node in name order. External CephClusters are inapplicable, and sessions on
+      OpenShiftClusters are not yet available.
 
   Usage
     bootwright cluster rsh [flags]

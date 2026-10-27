@@ -36,7 +36,7 @@ func TestPowerEvidenceRemediesNameTheExactCommand(t *testing.T) {
 		if test.state == machine.PowerOff {
 			wrong = machine.PowerOn
 		}
-		reread := "once its controller answers, read its power state with bootwright machine list --context lab --power-status, and repeat " +
+		reread := "once its BMC answers, read its power state with bootwright machine list --context lab --power-status, and repeat " +
 			test.command + " if it is not " + test.state
 		for _, evidence := range []struct {
 			name     string

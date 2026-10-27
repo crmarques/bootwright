@@ -46,7 +46,7 @@ replaced: the serve loop's
 [_check_daemons](https://github.com/ceph/ceph/blob/v20.2.1/src/pybind/mgr/cephadm/serve.py)
 (lines 1696-1708) runs a scheduled redeploy later, on whichever manager is then
 active, so a standby still pending at failover would become the active target.
-The [storage contract](../../specs/storage.md#bootstrap-identity-and-continuation)
+The [storage contract](../../specs/ceph.md#bootstrap-identity-and-continuation)
 owns that behavior. The
 [dashboard regressions](../../ansible/collections/ansible_collections/bootwright/core/tests/unit/plugins/module_utils/test_ceph_dashboard.py)
 model certificate storage, endpoint publication and deployment port capture as

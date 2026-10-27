@@ -7,21 +7,34 @@ metadata:
     datacenter: site-b
 
 spec:
-  capabilities:
-    - openshift-node
-
   placement:
     site: site-b
 
   substrate:
     providerRef: bare-metal
 
+    baremetal:
+      bmc:
+        address: https://bmc-edge-b-02.example.com/redfish/v1/Systems/1
+        protocol: redfish
+        credentialsRef: ocp-bmc-credentials
+
+        tls:
+          verify: true
+
+        virtualMedia:
+          tls:
+            trust: established
+
+      nics:
+        - nicRef: eth0
+          macAddress: 02:00:00:00:00:20
+
+        - nicRef: eth2
+          macAddress: 02:00:00:00:00:21
+
   os:
     provided: false
-
-    install:
-      rootDeviceHints:
-        deviceName: /dev/sda
 
   network:
     configRef: ocp-bare-metal-network
@@ -52,20 +65,7 @@ spec:
   hardware:
     nics:
       - name: eth0
-        macAddress: 02:00:00:00:00:20
-
       - name: eth2
-        macAddress: 02:00:00:00:00:21
 
-    management:
-      bmc:
-        address: https://bmc-edge-b-02.example.com/redfish/v1/Systems/1
-        protocol: redfish
-        credentialsRef: ocp-bmc-credentials
-
-        tls:
-          verify: true
-
-        virtualMedia:
-          tls:
-            trust: established
+    rootDevice:
+      deviceName: /dev/sda

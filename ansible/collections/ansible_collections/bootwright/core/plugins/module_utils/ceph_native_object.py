@@ -1,6 +1,6 @@
 """Fixed Ceph object gateway worker phases, shipped beside the core worker as source.
 
-A gateway request carries one StorageObjectGateway: its realm, zone group and zone, created with radosgw-admin and never
+A gateway request carries one CephObjectGateway: its realm, zone group and zone, created with radosgw-admin and never
 with --default (src/rgw/radosgw-admin/radosgw-admin.cc:5110-5133), its zone's default-placement pools, the period
 commit, then its rgw document and the ingress that fronts it applied as one `orch apply -i -` stream. Every radosgw-admin access to the config
 store creates the shared `.rgw.root` pool when it is absent (src/rgw/driver/rados/config/impl.h:93,
@@ -10,10 +10,10 @@ recorded realm that is gone refuses with no effect. The gateway's record is writ
 passes, before its first create, so a refused name leaves no record. A realm, zone group or zone of the gateway's
 names is adopted only under this operation's attempt record. The gateway never reads or creates an object user. A TLS service's
 `ssl_cert` and `ssl_key` are bound Secret leaves: the documents are normalized and recorded with fixed placeholders, the leaves are spliced into
-the apply stream in memory only, and readiness proves the served leaf by SHA-256. A user request carries one StorageObjectUser in its
+the apply stream in memory only, and readiness proves the served leaf by SHA-256. A user request carries one CephObjectUser in its
 gateway's zone: `radosgw-admin user create` without key arguments generates its S3 key pair (src/rgw/radosgw-admin/radosgw-admin.cc:6872-6875),
 so no key ever reaches an argument; the pair crosses only stdout and is retained in custody before it is produced. A bucket request carries one
-StorageObjectBucket: radosgw-admin creates no bucket and puts no bucket policy (its command table, src/rgw/radosgw-admin/radosgw-admin.cc:946-977),
+CephObjectBucket: radosgw-admin creates no bucket and puts no bucket policy (its command table, src/rgw/radosgw-admin/radosgw-admin.cc:946-977),
 so the worker signs S3 CreateBucket and PutBucketPolicy with AWS Signature Version 4 under its owner's key pair, read in memory from `user info`
 and never answered, logged or recorded, and sends them to an rgw daemon of the gateway's backend service; over TLS the daemon's leaf is pinned by
 SHA-256 to the bound certificate before any byte is sent. An NFS export of an object user extends the NFS export worker: the NFS manager
@@ -79,7 +79,7 @@ USER_APPLY_PHASES = ("object_user",)
 USER_READ_ONLY_PHASES = frozenset(("object_user_read",))
 USER_PHASES = frozenset(USER_APPLY_PHASES) | USER_READ_ONLY_PHASES
 USER_MEMBERS = frozenset(("displayName", "gateway", "name", "realm", "zone", "zoneGroup"))
-# the mgr dashboard module creates a system user of this ID in each realm (src/pybind/mgr/dashboard/services/rgw_client.py); a StorageObjectUser never takes it.
+# the mgr dashboard module creates a system user of this ID in each realm (src/pybind/mgr/dashboard/services/rgw_client.py); a CephObjectUser never takes it.
 RESERVED_USERS = ("dashboard",)
 MAX_USERS = 65536
 MAX_DISPLAY = 256
@@ -580,7 +580,7 @@ class ObjectWorker(ceph_native_units.UnitWorker):
 
     def radosgw(self, *args, json_result=True):
         """radosgw-admin with the cluster's original admin custody, as `ceph` runs; never a user, key, caps or metadata command."""
-        proof = self.bootstrap_hold() if self.request["clusterSSHTransport"] == "verified-tunnel" else contextlib.nullcontext()
+        proof = self.bootstrap_hold() if self.request["clusterSSHTransport"] == "verifiedTunnel" else contextlib.nullcontext()
         with proof:
             return self.command([
                 RADOSGW_ADMIN, "--conf", os.path.join(self.markers.path, "ceph.conf"),
@@ -934,7 +934,7 @@ class UserWorker(ObjectWorker):
         argv = [RADOSGW_ADMIN, "--conf", os.path.join(self.markers.path, "ceph.conf"),
                 "--keyring", os.path.join(self.markers.path, "ceph.client.admin.keyring"),
                 "--format", "json", "user", *args, *self.site("realm", "zonegroup", "zone")]
-        proof = self.bootstrap_hold() if self.request["clusterSSHTransport"] == "verified-tunnel" else contextlib.nullcontext()
+        proof = self.bootstrap_hold() if self.request["clusterSSHTransport"] == "verifiedTunnel" else contextlib.nullcontext()
         with proof:
             code, output = self.run(argv, timeout=60)
         if code != 0:
@@ -1319,7 +1319,7 @@ class ExportGateway(UserWorker):
         if current not in ("", ids["realm"]):
             user = self.user()
             raise NativeFailure("nfs-export-realm-default", self.native_coordinate(), "the default realm has ID " + current + ", not realm "
-                                + user["realm"] + " of StorageObjectGateway " + user["gateway"])
+                                + user["realm"] + " of CephObjectGateway " + user["gateway"])
         return current == ids["realm"]
 
     def defaulted(self, ids):

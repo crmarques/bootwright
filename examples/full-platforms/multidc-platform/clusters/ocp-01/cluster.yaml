@@ -1,5 +1,5 @@
 apiVersion: bootwright.io/v1alpha1
-kind: ContainerCluster
+kind: OpenShiftCluster
 metadata:
   name: ocp-multidc-01
 
@@ -20,16 +20,13 @@ spec:
         tpm2: {}
 
       roles:
-        - master
+        - controlPlane
 
   install:
     additionalTrustBundlePolicy: Always
-    method: agent
     mode: connected
 
     platform:
-      type: baremetal
-
       baremetal:
         provisioningNetwork: disabled
 
@@ -82,16 +79,16 @@ spec:
 
   nodes:
     - name: master-01
-      role: master
+      role: controlPlane
       machineRef: edge-a-01
       fqdn: master-01.ocp-multidc-01.clusters.example.com
 
     - name: master-02
-      role: master
+      role: controlPlane
       machineRef: edge-a-02
       fqdn: master-02.ocp-multidc-01.clusters.example.com
 
     - name: master-03
-      role: master
+      role: controlPlane
       machineRef: edge-a-03
       fqdn: master-03.ocp-multidc-01.clusters.example.com

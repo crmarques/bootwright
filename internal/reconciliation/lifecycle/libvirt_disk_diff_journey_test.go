@@ -49,7 +49,7 @@ func libvirtDeclaration(diskGiB string) []api.Object {
 			))),
 		)))),
 		api.NewObject(api.Machine, "rhel-01", api.Value{}, api.MapValue(
-			field("substrate", api.MapValue(text("providerRef", "lab-libvirt"), text("profileRef", "rhel"))),
+			field("substrate", api.MapValue(text("providerRef", "lab-libvirt"), field("libvirt", api.MapValue(text("profileRef", "rhel"))))),
 		)),
 	}
 }
@@ -66,7 +66,7 @@ func diskDiffJourney(t *testing.T, hypervisor resizingHypervisor) *lifecycle.Cap
 		lifecycle.CapabilityBinding{Kind: libvirt.MachineKind, Implementation: libvirt.MachineImplementation},
 		lifecycle.CapabilityPlan{
 			Definitions: []reconciliation.BlockDefinition{{
-				ID: lostMachine, Description: "realize the virtual machine rhel-01 and its controller", Stage: reconciliation.StageMachines,
+				ID: lostMachine, Description: "realize the virtual machine rhel-01 and its emulated BMC", Stage: reconciliation.StageMachines,
 				Kind: libvirt.MachineKind, Object: "rhel-01", Implementation: libvirt.MachineImplementation,
 				ContentDigest: strings.Repeat("d", 64), Request: canonical,
 				Groups: []reconciliation.Group{{ID: "define-domain", Description: "define the domain", Machines: []string{"rhel-01"}}},

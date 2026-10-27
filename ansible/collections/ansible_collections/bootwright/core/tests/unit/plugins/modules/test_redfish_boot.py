@@ -1039,7 +1039,7 @@ def test_established_without_private_delivery_reads_no_security_service(monkeypa
 
 def test_private_delivery_refuses_disable_verification_before_any_request(monkeypatch):
     firmware = verifying(xfusion())
-    with pytest.raises(ControllerError, match="an insert carrying private material refuses disable-verification"):
+    with pytest.raises(ControllerError, match="an insert carrying private material refuses disableVerification"):
         run(monkeypatch, firmware, "insert", image=IMAGE, trust=redfish_control.TRUST_DISABLED, **PRIVATE)
     assert firmware.calls == []
 
@@ -1063,7 +1063,7 @@ def test_the_module_carries_private_delivery_to_the_client(monkeypatch):
 
 
 # Importing the certificate turns verification on and reads it back, so a
-# private insert under import-certificate reads nothing more and is not
+# private insert under importCertificate reads nothing more and is not
 # refused by a device that verifies nothing before the import.
 def test_private_delivery_under_import_certificate_adds_no_read(monkeypatch):
     firmware = emulator()
@@ -1605,7 +1605,7 @@ def test_a_read_only_verify_certificate_refuses_import(monkeypatch, status):
     with pytest.raises(ControllerError) as failure:
         run(monkeypatch, firmware, "insert", image=IMAGE, **IMPORT)
     assert str(failure.value).endswith(
-        "HTTP %d, no fallback: established, or disable-verification on this Machine, which private delivery refuses"
+        "HTTP %d, no fallback: established, or disableVerification on this Machine, which private delivery refuses"
         % status)
     assert refused_before_attach(firmware) and firmware.verify_certificate is False
 
@@ -1749,7 +1749,7 @@ def test_disable_verification_writes_only_when_verification_is_on(monkeypatch):
     firmware = emulator()
     firmware.verify_certificate = True
     firmware.script("PATCH", firmware.system + DEVICE, (405, None, {}))
-    with pytest.raises(ControllerError, match="verification stays on; use import-certificate or established"):
+    with pytest.raises(ControllerError, match="verification stays on; use importCertificate or established"):
         run(monkeypatch, firmware, "insert", image=IMAGE, **disabling)
     assert refused_before_attach(firmware) and firmware.verify_certificate is True
 
@@ -1945,7 +1945,7 @@ def security_ca():
 def test_security_service_import_reads_slots_and_uses_only_discovered_text_action(monkeypatch):
     firmware, actions = security_ca()
     client = connect(monkeypatch, firmware)
-    assert client.insert(IMAGE, trust="import-certificate", certificate=SERVER + ISSUER, private=True)
+    assert client.insert(IMAGE, trust="importCertificate", certificate=SERVER + ISSUER, private=True)
     target = actions[redfish_remote_ca.IMPORT]["target"]
     post = next(i for i, call in enumerate(firmware.calls) if call[0] == "POST" and urlsplit(call[1]).path == target)
     assert sum(call[0] == "GET" and urlsplit(call[1]).path == SECURITY_SERVICE for call in firmware.calls[:post]) >= 3
@@ -1984,7 +1984,7 @@ def test_security_service_unknown_or_foreign_trust_refuses_before_any_write(monk
     else:
         chain = SERVER
     with pytest.raises(ControllerError):
-        connect(monkeypatch, firmware).insert(IMAGE, trust="import-certificate", certificate=chain, private=True)
+        connect(monkeypatch, firmware).insert(IMAGE, trust="importCertificate", certificate=chain, private=True)
     assert not writes(firmware)
 
 
@@ -2056,7 +2056,7 @@ def test_security_service_multiple_oem_links_refuse_before_trust_mutation(monkey
         "SecurityService": {"@odata.id": "/redfish/v1/Managers/1/OtherSecurityService"}}
     firmware.resources["/redfish/v1/Managers/1/OtherSecurityService"] = {"HttpsTransferCertVerification": True}
     with pytest.raises(ControllerError, match="unambiguous discovered security service"):
-        connect(monkeypatch, firmware).insert(IMAGE, trust="import-certificate", certificate=SERVER + ISSUER)
+        connect(monkeypatch, firmware).insert(IMAGE, trust="importCertificate", certificate=SERVER + ISSUER)
     assert not writes(firmware)
 
 
@@ -2066,7 +2066,7 @@ def test_security_service_module_returns_the_proved_slot(monkeypatch):
     monkeypatch.setattr(redfish_control, "Client", lambda *args, **kwargs: client)
     ending = Module({"endpoint": firmware.endpoint, "user": "operator", "password": PASSWORD, "verify": True,
                      "ca_data": "", "operation": "insert", "image": IMAGE, "target": "Cd", "attempts": 3,
-                     "trust": "import-certificate", "certificate": SERVER + ISSUER,
+                     "trust": "importCertificate", "certificate": SERVER + ISSUER,
                      "restore_verification": False, "remove_certificate": False, "private_delivery": True})
     monkeypatch.setattr(redfish_boot, "AnsibleModule", ending.build)
     redfish_boot.main()

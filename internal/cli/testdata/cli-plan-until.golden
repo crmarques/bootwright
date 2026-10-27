@@ -1,0 +1,16 @@
+  Apply plan
+
+  Plan
+  Add-ons · 2 blocks
+    ○ 1. install add-on gitops on lab · pending · start
+      install-addon gitops lab
+    ○ 2. install add-on logging on lab · pending · not selected
+      install-addon logging lab
+
+    Until        lab.gitops
+    Starts       1 of 2 blocks, 1 deferred
+    Concurrency  2 waves, widest 1 step
+operation: none
+verb: plan
+state: preview
+next: apply

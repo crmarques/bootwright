@@ -35,7 +35,7 @@ func TestEachConflictingHeldClaimIsItsOwnDiagnostic(t *testing.T) {
 			Remediation: "run bootwright destroy --context alpha first, or change spec.networkAttachments[].libvirt.address on InfraProvider/lab-libvirt"},
 		{Severity: "error", Code: "controller.conflict", Object: machine,
 			Message:     "context alpha holds socket 0.0.0.0:8000 for InfraProvider/alpha-libvirt, which conflicts with socket 192.0.2.1:8000 that Machine/rhel-01 of this context claims",
-			Remediation: "run bootwright destroy --context alpha first, or change spec.libvirt.bmcEmulationDefaults.bindAddress or spec.libvirt.bmcEmulationDefaults.port on the InfraProvider of Machine/rhel-01"},
+			Remediation: "run bootwright destroy --context alpha first, or change spec.libvirt.bmcEmulation.bindAddress or spec.libvirt.bmcEmulation.port on the InfraProvider of Machine/rhel-01"},
 	}
 	conflicts := Conflicts(held, wanted)
 	if len(conflicts) != len(want) {
@@ -63,7 +63,7 @@ func TestAPhysicalServerConflictNamesBothMachinesAndTheBMCField(t *testing.T) {
 	}
 	got := ConflictDiagnostic(conflicts[0])
 	message := "context alpha holds a bmc reservation for Machine/node-a, which conflicts with the same bmc reservation that Machine/node-b of this context claims"
-	remediation := "run bootwright destroy --context alpha first, or change spec.hardware.management.bmc.address on Machine/node-b"
+	remediation := "run bootwright destroy --context alpha first, or change spec.substrate.baremetal.bmc.address on Machine/node-b"
 	if got.Message != message || got.Remediation != remediation || got.Object == nil || got.Object.Kind != "Machine" || got.Object.Name != "node-b" {
 		t.Fatalf("diagnostic = %+v", got)
 	}
@@ -81,7 +81,7 @@ func TestAConflictRemedyNamesTheFieldThatChoosesTheKey(t *testing.T) {
 		{"ntp", "NTPServer/b", "run bootwright destroy --context alpha first, or change spec.bindAddress or spec.port on NTPServer/b", true},
 		{"artifact-server", "ArtifactServer/b", "run bootwright destroy --context alpha first, or change spec.bindAddress or a spec.listeners[].port on ArtifactServer/b", true},
 		{"os-install", "Machine/b", "run bootwright destroy --context alpha first", true},
-		{"cluster-media", "ContainerCluster/b", "run bootwright destroy --context alpha first", true},
+		{"cluster-media", "OpenShiftCluster/b", "run bootwright destroy --context alpha first", true},
 		{"substrate-physical", "Machine/b", "run bootwright destroy --context alpha first", true},
 		{"unnamed-kind", "unnamed-kind b", "run bootwright destroy --context alpha first", false},
 	} {

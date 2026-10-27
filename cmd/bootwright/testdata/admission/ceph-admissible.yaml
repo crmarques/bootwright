@@ -1,139 +1,137 @@
 apiVersion: bootwright.io/v1alpha1
-kind: StorageCluster
+kind: CephCluster
 metadata:
   name: ceph-multidc-01
 
 spec:
-  type: ceph
   management: managed
 
-  ceph:
-    distribution: ibm
-    release: 9.9.1.2
-    packageVersion: 20.2.1-405.el9cp
-    packageRepository: https://packages.example.test/ibm-ceph/9/rhel9/x86_64
-    packageRepositoryKey: https://packages.example.test/keys/ibm.asc
-    packageRepositoryTrustBundleRef: custom-ca-bundle
-
-    image:
-      base: cp.icr.io/cp/ibm-ceph/ceph-9-rhel9
-      version: sha256:1111111111111111111111111111111111111111111111111111111111111111
-
+  distribution:
     ibm:
       callHome: disabled
       packages:
         source: vendor
 
-    entitlementRef: ceph-entitlement
+  release: 9.9.1.2
+  packageVersion: 20.2.1-405.el9cp
+  packageRepository: https://packages.example.test/ibm-ceph/9/rhel9/x86_64
+  packageRepositoryKey: https://packages.example.test/keys/ibm.asc
+  packageRepositoryTrustBundleRef: custom-ca-bundle
 
-    cephadm:
-      ansible:
-        packageVersion: 5.0.3-1
+  image:
+    base: cp.icr.io/cp/ibm-ceph/ceph-9-rhel9
+    version: sha256:1111111111111111111111111111111111111111111111111111111111111111
+
+  entitlementRef: ceph-entitlement
+
+  cephadm:
+    ansible:
+      packageVersion: 5.0.3-1
+    addressRef: ssh
+    clusterSSH:
+      user: cephadm
+      keyRef: ceph-multidc-01-cephadm-ssh-key
+    bootstrap:
+      nodeRef: node-01
       addressRef: ssh
-      clusterSSH:
-        user: cephadm
-        keyRef: ceph-multidc-01-cephadm-ssh-key
-      bootstrap:
-        node: node-01
-        addressRef: ssh
-        singleHostDefaults: false
+      singleHostDefaults: false
 
-    networks:
-      publicCIDRs:
-        - 198.51.100.0/25
-      clusterCIDRs:
-        - 203.0.113.0/24
+  networks:
+    publicCIDRs:
+      - 198.51.100.0/25
+    clusterCIDRs:
+      - 203.0.113.0/24
 
-    security:
-      fips:
-        enabled: true
-      cephx:
-        keyType: aes
+  security:
+    fips:
+      enabled: true
+    cephx:
+      keyType: aes
 
-    config:
-      global:
-        osd_pool_default_size: '2'
-        osd_pool_default_min_size: '2'
+  config:
+    global:
+      osd_pool_default_size: '2'
+      osd_pool_default_min_size: '2'
 
-    topology:
-      nodes:
-        - name: node-01
-          fqdn: node-01.ceph-multidc-01.clusters.example.com
-          machineRef: storage-a-01
-          site: site-a
-          labels:
-            - ceph-core
+  topology:
+    nodes:
+      - name: node-01
+        fqdn: node-01.ceph-multidc-01.clusters.example.com
+        machineRef: storage-a-01
+        site: site-a
+        labels:
+          - ceph-core
 
-        - name: node-02
-          fqdn: node-02.ceph-multidc-01.clusters.example.com
-          machineRef: storage-a-02
-          site: site-a
-          labels:
-            - ceph-core
+      - name: node-02
+        fqdn: node-02.ceph-multidc-01.clusters.example.com
+        machineRef: storage-a-02
+        site: site-a
+        labels:
+          - ceph-core
 
-        - name: node-03
-          fqdn: node-03.ceph-multidc-01.clusters.example.com
-          machineRef: storage-a-03
-          site: site-a
-          labels:
-            - ceph-core
+      - name: node-03
+        fqdn: node-03.ceph-multidc-01.clusters.example.com
+        machineRef: storage-a-03
+        site: site-a
+        labels:
+          - ceph-core
 
-    services:
-      - service_type: mon
-        placement:
-          count: 3
-          label: ceph-core
+  services:
+    - service_type: mon
+      placement:
+        count: 3
+        label: ceph-core
 
-      - service_type: mgr
-        placement:
-          count: 2
-          label: ceph-core
+    - service_type: mgr
+      placement:
+        count: 2
+        label: ceph-core
 
-      - service_type: osd
-        service_id: data
-        placement:
-          label: ceph-core
-        spec:
-          data_devices:
-            paths:
-              - /dev/sdb
+    - service_type: osd
+      service_id: data
+      placement:
+        label: ceph-core
+      spec:
+        data_devices:
+          paths:
+            - /dev/sdb
 
-      - service_type: mds
-        service_id: odf-cephfs
-        placement:
-          count: 2
-          label: ceph-core
+    - service_type: mds
+      service_id: odf-cephfs
+      placement:
+        count: 2
+        label: ceph-core
 
-      - service_type: rgw
-        service_id: objects
-        placement:
-          count: 2
-          label: ceph-core
-        spec:
-          rgw_realm: objects
-          rgw_zonegroup: objects
-          rgw_zone: objects
-          rgw_frontend_port: 8080
+    - service_type: rgw
+      service_id: objects
+      placement:
+        count: 2
+        label: ceph-core
+      spec:
+        rgw_realm: objects
+        rgw_zonegroup: objects
+        rgw_zone: objects
+        rgw_frontend_port: 8080
 
-      - service_type: nfs
-        service_id: acceptance-nfs
-        placement:
-          count: 1
-          label: ceph-core
+    - service_type: nfs
+      service_id: acceptance-nfs
+      placement:
+        count: 1
+        label: ceph-core
 
-      - service_type: nvmeof
-        service_id: block
-        placement:
-          hosts:
-            - node-01.ceph-multidc-01.clusters.example.com
-            - node-02.ceph-multidc-01.clusters.example.com
-        spec:
-          pool: odf-hub-multidc-01-rbd
-          group: block
+    - service_type: nvmeof
+      service_id: block
+      placement:
+        hosts:
+          - node-01.ceph-multidc-01.clusters.example.com
+          - node-02.ceph-multidc-01.clusters.example.com
+      spec:
+        pool: odf-hub-multidc-01-rbd
+        group: block
 
 ---
 apiVersion: bootwright.io/v1alpha1
-kind: StoragePlacementPolicy
+kind: CephPlacementPolicy
 metadata:
   name: host-spread
 
@@ -148,46 +146,43 @@ spec:
 
 ---
 apiVersion: bootwright.io/v1alpha1
-kind: StoragePool
+kind: CephPool
 metadata:
   name: odf-hub-multidc-01-rbd
 
 spec:
   clusterRef: ceph-multidc-01
   placementPolicyRef: host-spread
-  type: replicated
   role: rbd
   application: rbd
 
 ---
 apiVersion: bootwright.io/v1alpha1
-kind: StoragePool
+kind: CephPool
 metadata:
   name: odf-cephfs-metadata
 
 spec:
   clusterRef: ceph-multidc-01
   placementPolicyRef: host-spread
-  type: replicated
-  role: cephfs-metadata
+  role: cephfsMetadata
   application: cephfs
 
 ---
 apiVersion: bootwright.io/v1alpha1
-kind: StoragePool
+kind: CephPool
 metadata:
   name: odf-cephfs-data
 
 spec:
   clusterRef: ceph-multidc-01
   placementPolicyRef: host-spread
-  type: replicated
-  role: cephfs-data
+  role: cephfsData
   application: cephfs
 
 ---
 apiVersion: bootwright.io/v1alpha1
-kind: StorageFilesystem
+kind: CephFilesystem
 metadata:
   name: odf-cephfs
 
@@ -209,19 +204,18 @@ spec:
 
 ---
 apiVersion: bootwright.io/v1alpha1
-kind: StoragePool
+kind: CephPool
 metadata:
   name: objects-data
 
 spec:
   clusterRef: ceph-multidc-01
   placementPolicyRef: host-spread
-  type: replicated
   role: rgw
 
 ---
 apiVersion: bootwright.io/v1alpha1
-kind: StorageObjectGateway
+kind: CephObjectGateway
 metadata:
   name: objects
 
@@ -238,7 +232,7 @@ spec:
 
 ---
 apiVersion: bootwright.io/v1alpha1
-kind: StorageObjectUser
+kind: CephObjectUser
 metadata:
   name: app-writer
 
@@ -249,7 +243,7 @@ spec:
 
 ---
 apiVersion: bootwright.io/v1alpha1
-kind: StorageObjectBucket
+kind: CephObjectBucket
 metadata:
   name: app-data
 
@@ -274,7 +268,7 @@ spec:
 
 ---
 apiVersion: bootwright.io/v1alpha1
-kind: StorageNFSExport
+kind: CephNFSExport
 metadata:
   name: acceptance-nfs
 

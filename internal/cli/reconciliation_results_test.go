@@ -20,7 +20,7 @@ func previewResult() *lifecycle.PlanResult {
 		Verb:    "apply",
 		Steps: []lifecycle.PlanStep{{
 			ID: "artifact-server-lab", Description: "serve artifacts for lab on controller",
-			Stage: "infra-components", Impacts: []string{"open-listener 192.0.2.1:8443"}, State: "pending",
+			Stage: "infrastructure-services", Impacts: []string{"open-listener 192.0.2.1:8443"}, State: "pending",
 		}},
 		Receipt: lifecycle.Receipt{Operation: "none", Verb: "plan", State: "preview", Next: "apply"},
 	}
@@ -70,7 +70,7 @@ func TestPlanNestsEachImpactUnderTheStepThatCausesIt(t *testing.T) {
 	result := previewResult()
 	result.Steps[0].Impacts = []string{"open-listener 192.0.2.1:8443", "create-path /var/lib/artifacts"}
 	result.Steps = append(result.Steps, lifecycle.PlanStep{
-		ID: "dns-lab", Description: "resolve names for lab-dns on controller", Stage: "infra-components",
+		ID: "dns-lab", Description: "resolve names for lab-dns on controller", Stage: "infrastructure-services",
 		Impacts: []string{"open-listener 192.0.2.1:53"}, State: "pending",
 	})
 	var out bytes.Buffer
@@ -174,7 +174,7 @@ func TestSettledOperationSaysItDidNothing(t *testing.T) {
 	if !strings.HasPrefix(rendered, "  ✓ Apply done") {
 		t.Fatalf("headline = %q", rendered)
 	}
-	if !strings.Contains(rendered, "Nothing to do: this context already holds the state it declares.") {
+	if !strings.Contains(rendered, "Nothing to do; bootwright diff --observe compares the records with the hosts.") {
 		t.Fatalf("a settled apply did not say it did nothing: %q", rendered)
 	}
 	if !strings.HasSuffix(rendered, "operation: op-abc\nverb: apply\nstate: done\nnext: none\n") {
@@ -194,7 +194,7 @@ func TestSettledOperationSaysItDidNothing(t *testing.T) {
 	for _, test := range []struct {
 		verb, recovered, note, plain string
 	}{
-		{"apply", lifecycle.RecoveredFinalization, "Nothing to do: this invocation only completed an interrupted finalization.", "Nothing to do: this context already holds the state it declares."},
+		{"apply", lifecycle.RecoveredFinalization, "Nothing to do: this invocation only completed an interrupted finalization.", "Nothing to do; bootwright diff --observe compares the records with the hosts."},
 		{"destroy", lifecycle.RecoveredFinalization, "Nothing to remove: this invocation only completed an interrupted finalization.", "Nothing to remove: this context owns no realized state."},
 		{"destroy", lifecycle.RecoveredRelease, "Nothing to remove: this invocation only released what an interrupted registration left.", "Nothing to remove: this context owns no realized state."},
 	} {
@@ -424,7 +424,7 @@ func TestPausedOperationReportsSuccessAndItsContinuation(t *testing.T) {
 	result := &lifecycle.OperationResult{
 		Context: lifecycle.ContextIdentity{Name: "lab"}, Verb: "apply",
 		Blocks: []lifecycle.BlockResult{
-			{ID: "artifact-server-lab", Description: "serve artifacts", Stage: "infra-components", State: "done"},
+			{ID: "artifact-server-lab", Description: "serve artifacts", Stage: "infrastructure-services", State: "done"},
 			{ID: "provider-metal", Description: "realize metal", Stage: "substrates", State: "pending"},
 		},
 		Receipt: lifecycle.Receipt{Operation: "op-abc", Verb: "apply", State: "paused", Next: "continue-apply"},
@@ -791,8 +791,8 @@ func TestPlanNamesTheStepsEachOneWaitsFor(t *testing.T) {
 	result := previewResult()
 	result.Waves, result.Widest = 3, 2
 	result.Steps = []lifecycle.PlanStep{
-		{ID: "artifacts", Description: "serve artifacts for lab", Stage: "infra-components", State: "pending", Wave: 1},
-		{ID: "names", Description: "resolve names for lab", Stage: "infra-components", State: "pending", Wave: 1},
+		{ID: "artifacts", Description: "serve artifacts for lab", Stage: "infrastructure-services", State: "pending", Wave: 1},
+		{ID: "names", Description: "resolve names for lab", Stage: "infrastructure-services", State: "pending", Wave: 1},
 		{ID: "provider", Description: "realize the libvirt host", Stage: "substrates", State: "pending", After: []int{1, 2}, Wave: 2},
 		{ID: "machine", Description: "realize the machine rhel-01", Stage: "machines", State: "pending", After: []int{3}, Wave: 3},
 	}
@@ -823,7 +823,7 @@ func TestPlanReportsAChainAsOneStepAtATime(t *testing.T) {
 	result.Waves, result.Widest = 2, 1
 	result.Steps = []lifecycle.PlanStep{
 		{ID: "first", Description: "prepare the controller", Stage: "controller", State: "pending", Wave: 1},
-		{ID: "second", Description: "serve artifacts for lab", Stage: "infra-components", State: "pending", After: []int{1}, Wave: 2},
+		{ID: "second", Description: "serve artifacts for lab", Stage: "infrastructure-services", State: "pending", After: []int{1}, Wave: 2},
 	}
 	var out bytes.Buffer
 	if err := writeLifecyclePlan(&out, result); err != nil {
@@ -870,7 +870,7 @@ func TestPlanMarksTheStepsAnAuthorizationAcknowledges(t *testing.T) {
 	result.Continuation = true
 	result.Steps = []lifecycle.PlanStep{
 		{ID: "machine", Description: "realize the machine rhel-01", Stage: "machines", State: "done", Consumes: []string{"data-loss"}},
-		{ID: "artifacts", Description: "serve artifacts for lab", Stage: "infra-components", State: "pending", Selection: lifecycle.StepStart},
+		{ID: "artifacts", Description: "serve artifacts for lab", Stage: "infrastructure-services", State: "pending", Selection: lifecycle.StepStart},
 		{ID: "metal", Description: "install metal-01", Stage: "machines", State: "pending", Consumes: []string{"data-loss"}, Selection: lifecycle.StepNotSelected, After: []int{2}},
 	}
 	var out bytes.Buffer

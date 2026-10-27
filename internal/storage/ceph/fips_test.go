@@ -14,18 +14,18 @@ import (
 func fipsCatalog() api.Catalog {
 	objects := poolRequestCatalog(3, 3).Objects()
 	for i, object := range objects {
-		if object.Kind() == api.StorageCluster {
-			objects[i] = object.WithSpec(object.Spec().WithPath(requestMap("fips", requestMap("enabled", true), "cephx", requestMap("keyType", "aes")), "ceph", "security"))
+		if object.Kind() == api.CephCluster {
+			objects[i] = object.WithSpec(object.Spec().WithPath(requestMap("fips", requestMap("enabled", true), "cephx", requestMap("keyType", "aes")), "security"))
 		}
 	}
 	objects = append(objects, api.NewObject(api.MachineInstallProfile, "rhel", api.Value{}, requestMap("customizations", requestMap("security", requestMap("fips", requestMap("enabled", true))))))
-	objects = append(objects, api.NewObject(api.Secret, "cluster-key", api.Value{}, requestMap("source", requestMap("generated", requestMap("keyType", "ecdsa-p256")))))
+	objects = append(objects, api.NewObject(api.Secret, "cluster-key", api.Value{}, requestMap("source", requestMap("generated", requestMap("keyType", "ecdsaP256")))))
 	return api.NewCatalog(objects)
 }
 
 func TestFIPSPlanningFreezesPolicyAndRefusesUnsafeInputs(t *testing.T) {
 	catalog := fipsCatalog()
-	cluster, _ := catalog.Find(api.StorageCluster, "example")
+	cluster, _ := catalog.Find(api.CephCluster, "example")
 	r, err := baseRequest(catalog, cluster, "synthetic")
 	if err != nil || r.Security == nil || !r.Security.FIPS || r.Security.CephXKeyType != "aes" {
 		t.Fatalf("FIPS request: %+v %v", r.Security, err)
@@ -34,7 +34,7 @@ func TestFIPSPlanningFreezesPolicyAndRefusesUnsafeInputs(t *testing.T) {
 		t.Fatal("host scope lost FIPS policy")
 	}
 	for _, kind := range []string{"aes256k", "unknown"} {
-		changed := cluster.WithSpec(cluster.Spec().WithPath(api.StringValue(kind), "ceph", "security", "cephx", "keyType"))
+		changed := cluster.WithSpec(cluster.Spec().WithPath(api.StringValue(kind), "security", "cephx", "keyType"))
 		if _, err := baseRequest(catalog, changed, "synthetic"); err == nil {
 			t.Fatalf("admitted %s", kind)
 		}

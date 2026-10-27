@@ -9,6 +9,13 @@ func EffectBearing(object api.Object) (string, bool) {
 	return "no capability of this executable manages the " + string(object.Kind()) + " kind", true
 }
 
+func UnclaimedRemedy(object api.Object) string {
+	if object.Kind() != api.Registry && object.Kind() != api.LoadBalancer {
+		return ""
+	}
+	return "declare spec.management: external on " + object.Identity() + " to use a " + string(object.Kind()) + " the operator runs, or remove it from the selected Environment"
+}
+
 func Placement(object api.Object) (machine string, installOnly bool) {
-	return object.Spec().Get("machineRef").Text(), object.Spec().Get("retention").Text() == "install-only"
+	return object.Spec().Get("machineRef").Text(), object.Spec().Get("retention").Text() == "installOnly"
 }

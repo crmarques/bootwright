@@ -1,6 +1,9 @@
 package reconciliation
 
-import "slices"
+import (
+	"slices"
+	"strings"
+)
 
 // Stage groups blocks by the kind of platform work they perform. A block's
 // stage is frozen with the plan; a selection gates which blocks an invocation
@@ -8,16 +11,16 @@ import "slices"
 type Stage string
 
 const (
-	StageController      Stage = "controller"
-	StageInfraComponents Stage = "infra-components"
-	StageSubstrates      Stage = "substrates"
-	StageMachines        Stage = "machines"
-	StageClusters        Stage = "clusters"
-	StageAddOns          Stage = "add-ons"
+	StageController             Stage = "controller"
+	StageInfrastructureServices Stage = "infrastructure-services"
+	StageSubstrates             Stage = "substrates"
+	StageMachines               Stage = "machines"
+	StageClusters               Stage = "clusters"
+	StageAddOns                 Stage = "add-ons"
 )
 
 func Stages() []Stage {
-	return []Stage{StageController, StageInfraComponents, StageSubstrates, StageMachines, StageClusters, StageAddOns}
+	return []Stage{StageController, StageInfrastructureServices, StageSubstrates, StageMachines, StageClusters, StageAddOns}
 }
 
 func ValidStage(value Stage) bool { return slices.Contains(Stages(), value) }
@@ -49,6 +52,72 @@ func (s StageSelection) Selects(stage Stage) bool {
 	return len(s) == 0 || slices.Contains(s, stage)
 }
 
+type Selection struct {
+	Stages StageSelection
+	Until  string
+	within map[string]bool
+}
+
+func ParseSelection(stages []string, until string) (Selection, error) {
+	parsed, err := ParseStages(stages)
+	if err != nil {
+		return Selection{}, err
+	}
+	return Selection{Stages: parsed, Until: until}, nil
+}
+
+func (s Selection) Empty() bool { return len(s.Stages) == 0 && s.Until == "" }
+
+func (s Selection) Bind(plan Plan) (Selection, bool) {
+	s.within = nil
+	if s.Until == "" {
+		return s, true
+	}
+	target := ""
+	for _, block := range plan.Blocks {
+		if untilTarget(block) && block.Object == s.Until {
+			if target != "" {
+				return s, false
+			}
+			target = block.ID
+		}
+	}
+	if target == "" {
+		return s, false
+	}
+	s.within = map[string]bool{}
+	for queue := []string{target}; len(queue) > 0; queue = queue[1:] {
+		if s.within[queue[0]] {
+			continue
+		}
+		s.within[queue[0]] = true
+		if block, ok := plan.Block(queue[0]); ok {
+			queue = append(queue, block.Dependencies...)
+		}
+	}
+	return s, true
+}
+
+func (s Selection) Admits(block Block) bool {
+	return s.Stages.Selects(block.Stage) && (s.Until == "" || s.within[block.ID])
+}
+
+func untilTarget(block Block) bool {
+	cluster, instance, found := strings.Cut(block.Object, ".")
+	return block.Stage == StageAddOns && found && ValidSegment(cluster) && ValidSegment(instance)
+}
+
+func UntilCandidates(plan Plan) []string {
+	objects := []string{}
+	for _, block := range plan.Blocks {
+		if untilTarget(block) && !slices.Contains(objects, block.Object) {
+			objects = append(objects, block.Object)
+		}
+	}
+	slices.Sort(objects)
+	return objects
+}
+
 func (s StageSelection) Names() []string {
 	names := make([]string, 0, len(s))
 	for _, stage := range s {
@@ -70,12 +139,12 @@ func Ready(plan Plan, states map[string]BlockState) []Block {
 	return ready
 }
 
-// Startable narrows Ready to the stages this invocation admits. Everything
-// else stays pending; a stage selection never fails a block.
-func Startable(plan Plan, states map[string]BlockState, selection StageSelection) []Block {
+// Startable narrows Ready to the blocks this invocation admits. Everything
+// else stays pending; a selection never fails a block.
+func Startable(plan Plan, states map[string]BlockState, selection Selection) []Block {
 	startable := make([]Block, 0, len(plan.Blocks))
 	for _, block := range Ready(plan, states) {
-		if selection.Selects(block.Stage) {
+		if selection.Admits(block) {
 			startable = append(startable, block)
 		}
 	}
@@ -98,13 +167,13 @@ type Deferral struct {
 
 // Deferrals explains every pending block a selection cannot start, so a
 // preview can show the operator what a wider selection would unblock.
-func Deferrals(plan Plan, states map[string]BlockState, selection StageSelection) map[string]Deferral {
+func Deferrals(plan Plan, states map[string]BlockState, selection Selection) map[string]Deferral {
 	deferrals := map[string]Deferral{}
 	for _, block := range plan.Blocks {
 		if blockState(states, block.ID) != BlockPending {
 			continue
 		}
-		if !selection.Selects(block.Stage) {
+		if !selection.Admits(block) {
 			deferrals[block.ID] = Deferral{Reason: DeferredNotSelected, Stage: block.Stage}
 			continue
 		}

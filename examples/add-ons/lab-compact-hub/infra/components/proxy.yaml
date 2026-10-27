@@ -7,7 +7,6 @@ spec:
   management: managed
   machineRef: controller
   implementation: squid
-  bindAddress: 192.0.2.1
   port: 3128
 
   endpoints:

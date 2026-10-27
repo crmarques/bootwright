@@ -121,7 +121,7 @@ func realizing(references []reconciliation.ObjectRef) []reconciliation.BlockDefi
 	for index, reference := range references {
 		definitions = append(definitions, reconciliation.BlockDefinition{
 			ID:          "realizes-" + strings.ToLower(reference.Kind) + "-" + reference.Object,
-			Description: "realize " + reference.Object, Stage: reconciliation.StageInfraComponents,
+			Description: "realize " + reference.Object, Stage: reconciliation.StageInfrastructureServices,
 			Kind: reference.Kind, Object: reference.Object, Implementation: "placeholder",
 			ContentDigest: strings.Repeat("a", 64),
 			Request:       json.RawMessage(`{"index":` + string(rune('0'+index)) + `}`),
@@ -543,11 +543,11 @@ func TestAFrozenRefusedInstallationRefusesOnlyItsApply(t *testing.T) {
 	}{
 		"an http controller": {
 			func(r *Request) { r.Target.Controller.Endpoint = "http://bmc-01.lab.example.test/redfish/v1/Systems/1" },
-			"this operation froze a private publication for Machine/rhel-01 whose controller is not reached over a verified connection, which this executable refuses",
+			"this operation froze a private publication for Machine/rhel-01 whose BMC is not reached over a verified connection, which this executable refuses",
 		},
 		"an unverified controller": {
 			func(r *Request) { r.Target.Controller.TLSVerify = false },
-			"this operation froze a private publication for Machine/rhel-01 whose controller is not reached over a verified connection, which this executable refuses",
+			"this operation froze a private publication for Machine/rhel-01 whose BMC is not reached over a verified connection, which this executable refuses",
 		},
 		"both publications": {
 			func(r *Request) { r.Image = public },
@@ -795,7 +795,7 @@ func TestDeliveredKeyMatchesRefusesAnotherType(t *testing.T) {
 	if err := deliveredKeyMatches(request, "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABExample metal-01"); err != nil {
 		t.Fatalf("a matching key refused: %v", diagnostics.Of(err))
 	}
-	request.Target.HostKeyType = "ecdsa-p256"
+	request.Target.HostKeyType = "ecdsaP256"
 	if err := deliveredKeyMatches(request, "ecdsa-sha2-nistp256 AAAAE2VjZHNhExample"); err != nil {
 		t.Fatalf("a matching key refused: %v", diagnostics.Of(err))
 	}

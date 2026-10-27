@@ -277,10 +277,10 @@ preflight with `controller.unsupported`.
 Under the FIPS crypto policy (`update-crypto-policies --show` prints `FIPS`),
 OpenSSH accepts no Ed25519 key. Declare `remoteMachinesAccessKey` and every SSH
 access `privateKeyRef` with an `sshKeyPair` Secret of `keyType` `rsa`
-(generated at 3072 bits), `ecdsa-p256`, `ecdsa-p384` or `ecdsa-p521`, never the
+(generated at 3072 bits), `ecdsaP256`, `ecdsaP384` or `ecdsaP521`, never the
 default `ed25519` ([generated source](../specs/api/secrets.md#generated-source)).
 A delivered `hostKeyRef` follows the same rule: declare it `rsa` or
-`ecdsa-p256` and the installation installs it at its type's path and pins its
+`ecdsaP256` and the installation installs it at its type's path and pins its
 type.
 
 ### A host an earlier Bootwright build manages
@@ -299,10 +299,9 @@ environments are retired and its store removed. Store commands refuse there
 ([contexts](../specs/contexts.md#storage-locking-and-publication)). Every build
 from before the setup v2 cut-over (X88) wrote registry version 5, which this
 build neither reads nor converts, so its first command, `setup` included,
-refuses before any plan with `context.state`, "/var/lib/bootwright holds a
-store an earlier Bootwright build wrote (registry version 5), which this
-build does not read or convert". The way across is a fresh install, in this
-order:
+refuses before any plan with the `context.state` refusal and fresh-install
+remedy that [contexts](../specs/contexts.md#storage-locking-and-publication)
+states. The way across is a fresh install, in this order:
 
 1. With the build that wrote the store, the one that applied or prepared each
    context, destroy every environment and delete every context. Keep that
@@ -419,7 +418,7 @@ same sockets and the same guest bridge.
 | Journey | What it runs | Gate |
 | --- | --- | --- |
 | [lab-rhel](../examples/machines/lab-rhel/README.md#run-it) | One RHEL guest installed through an emulated Redfish BMC, machine list and power reads, exec/rsh sessions, drift observation, replay, restart and safe removal; extended acceptance checks are below | [B72](../specs/milestones/delivered.md#x38--the-real-host-run-of-2026-10-05) operator gate, accepted; M1's extended checks follow [D59](../specs/milestones/backlog.md#decisions) |
-| [lab-sno](../examples/container-clusters/lab-sno/README.md#run-it) | A single-node OpenShift cluster installed by the agent installer on one libvirt guest | [B61](../specs/milestones/m3.md#b61) operator gate |
+| [lab-sno](../examples/openshift-clusters/lab-sno/README.md#run-it) | A single-node OpenShift cluster installed by the agent installer on one libvirt guest | [B61](../specs/milestones/m3.md#b61) operator gate |
 | [lab-baremetal](../examples/machines/lab-baremetal/README.md#run-it) | One physical Machine claimed, proved and installed through its own Redfish BMC, its installer image and host key published privately; the [separate rehearsal substrate](../examples/machines/lab-baremetal-substrate/README.md) supplies a generated CA-issued emulator leaf, [B496](../specs/milestones/m1.md#b496) | [B73](../specs/milestones/m1.md#b73) operator gate, not run |
 
 Run each block from the repository root, one line at a time, and keep the

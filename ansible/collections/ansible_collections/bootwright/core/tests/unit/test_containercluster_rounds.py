@@ -93,7 +93,7 @@ def test_each_install_port_request_matches_the_selected_arm_entrypoint():
                          containercluster_install_agent_node={
                              'physical': arm == 'baremetal', 'controller': {
                                  'endpoint': 'https://bmc.example.test', 'tlsVerify': True,
-                                 'virtualMedia': {'trust': 'import-certificate', 'restoreVerification': True, 'removeCertificate': True}}},
+                                 'virtualMedia': {'trust': 'importCertificate', 'restoreVerification': True, 'removeCertificate': True}}},
                          containercluster_install_agent_user='/material/user', containercluster_install_agent_password='/material/password',
                          containercluster_install_agent_ca='/material/ca', containercluster_install_agent_index=0,
                          bootwright_run_scratch='/scratch', bootwright_cluster_install_material={'artifactCertificate': '/material/certificate'})

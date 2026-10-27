@@ -129,7 +129,7 @@ class ReplicationWorker(ceph_native_resources.ResourceWorker):
 
     def native(self, program, args, data=b"", secret=False, missing=False):
         """Tokens and auth reads never enter diagnostics, including malformed output and nonzero exits."""
-        proof = self.bootstrap_hold() if self.request["clusterSSHTransport"] == "verified-tunnel" else contextlib.nullcontext()
+        proof = self.bootstrap_hold() if self.request["clusterSSHTransport"] == "verifiedTunnel" else contextlib.nullcontext()
         argv = ["/usr/bin/" + program, "--conf", os.path.join(self.markers.path, "ceph.conf"), "--keyring",
                 os.path.join(self.markers.path, "ceph.client.admin.keyring"), *QUIET, *args]
         with proof:

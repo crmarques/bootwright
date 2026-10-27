@@ -14,7 +14,7 @@ func TestALibvirtMachineCanShareItsProvidersName(t *testing.T) {
 	lab := topologyProvider("lab", "host", "8000", topologyProfile())
 	other := topologyProvider("other", "host", "8100", topologyProfile())
 	hostedOn := func(provider string) api.Object {
-		return obj(api.Machine, "lab", m("substrate", m("providerRef", provider, "profileRef", "small")))
+		return obj(api.Machine, "lab", m("substrate", m("providerRef", provider, "libvirt", m("profileRef", "small"))))
 	}
 	for name, catalog := range map[string]api.Catalog{
 		"hosted on the provider it is named after": api.NewCatalog([]api.Object{lab, host, hostedOn("lab")}),

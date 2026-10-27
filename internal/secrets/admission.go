@@ -38,6 +38,32 @@ func Normalize(object api.Object, _ api.Catalog) (api.Object, []api.Issue) {
 	return object.WithSpec(spec), nil
 }
 
+func DeriveCertificateNames(object api.Object, catalog api.Catalog, consumers ...func(api.Catalog, string) []string) api.Object {
+	generated := object.Spec().Get("source", "generated")
+	if object.Kind() != api.Secret || object.Spec().Get("type").Text() != "tlsCertificate" || !generated.Present() || generated.Has("dnsNames") || generated.Has("ipAddresses") {
+		return object
+	}
+	var names, addresses []string
+	for _, consumer := range consumers {
+		for _, name := range consumer(catalog, object.Name()) {
+			if address, err := netip.ParseAddr(name); err == nil {
+				addresses = append(addresses, address.String())
+			} else if name != "" {
+				names = append(names, strings.ToLower(name))
+			}
+		}
+	}
+	slices.Sort(names)
+	slices.Sort(addresses)
+	if names = slices.Compact(names); len(names) != 0 {
+		generated = generated.With("dnsNames", api.StringList(names...))
+	}
+	if addresses = slices.Compact(addresses); len(addresses) != 0 {
+		generated = generated.With("ipAddresses", api.StringList(addresses...))
+	}
+	return object.WithSpec(object.Spec().WithPath(generated, "source", "generated"))
+}
+
 func ValidateAuthored(object api.Object, catalog api.Catalog) []api.Issue {
 	return validate(object, true, false)
 }

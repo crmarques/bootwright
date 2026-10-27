@@ -29,8 +29,8 @@ import (
 )
 
 const (
-	cephCoverageSpec  = "../../specs/storage-coverage.md"
-	cephStorageSpec   = "../../specs/storage.md"
+	cephCoverageSpec  = "../../specs/ceph-coverage.md"
+	cephStorageSpec   = "../../specs/ceph.md"
 	cephAcceptanceDoc = "../../docs/acceptance.md"
 	cephMatrixDir     = "testdata/matrix"
 )
@@ -44,7 +44,7 @@ var (
 	cephCorePhrases      = []string{"single public network", "one explicit data disk", "explicit 2/2 replicated pool", "minimal pool client"}
 	cephRunbookHeadings  = []string{"## Budget and prerequisites", "## Initial setup", "## IBM entitlement", "## Create the context", "## Apply by stage", "## Validate the cluster", "## Client access", "## Failover", "## Interruption and continuation", "## Replay", "## Check that changed intent is refused", "## Measured budget", "## Cleanup"}
 	cephLedgerFields     = []string{"Guests", "Declared vCPU", "Declared RAM GiB", "Declared disk GiB", "MemAvailable at (a)/(b)/(c)", "Minimum MemAvailable during clusters stage", "Allocated vs apparent disk bytes", "Per-guest balloon RSS", "Daemons by type", "Clusters-stage wall time", "OOM kills"}
-	cephExampleLinkRegex = regexp.MustCompile(`^\[([^\]/]+)/\]\(\.\./examples/storage-clusters/([^/)]+)/\)$`)
+	cephExampleLinkRegex = regexp.MustCompile(`^\[([^\]/]+)/\]\(\.\./examples/ceph-clusters/([^/)]+)/\)$`)
 )
 
 type matrixFixture struct {
@@ -322,7 +322,7 @@ func runCombinationFixture(t *testing.T, id string) {
 // example without it compiles and no capability refuses it.
 func TestAnOmittedCephTransportCompilesAndPlans(t *testing.T) {
 	fixture := matrixFixture{Row: "omitted transport", Base: "libvirt-3-nodes-ceph",
-		Edits: []matrixEdit{{File: "storage/cluster.yaml", Replace: "        transport: verified-tunnel\n", With: ""}}}
+		Edits: []matrixEdit{{File: "storage/cluster.yaml", Replace: "      transport: verifiedTunnel\n", With: ""}}}
 	state, _, err := wireCompiler().Compile(context.Background(), fixture.sources(t))
 	if err != nil {
 		t.Fatalf("an omitted transport refuses: %v", diagnostics.Of(err))
@@ -468,7 +468,7 @@ func exampleBudget(t *testing.T, catalog api.Catalog) profileBudget {
 	t.Helper()
 	var budget profileBudget
 	for _, machine := range catalog.OfKind(api.Machine) {
-		profileName := machine.Spec().Get("substrate", "profileRef").Text()
+		profileName := machine.Spec().Get("substrate", "libvirt", "profileRef").Text()
 		if profileName == "" {
 			continue
 		}
@@ -707,14 +707,14 @@ func TestCephProfilesPlanWithoutRefusal(t *testing.T) {
 			if _, err := reconciliation.NewPlan(reconciliation.Apply, definitions); err != nil {
 				t.Fatalf("%s: %v", profile.id, err)
 			}
-			for _, cluster := range state.Effective().OfKind(api.StorageCluster) {
+			for _, cluster := range state.Effective().OfKind(api.CephCluster) {
 				var want []string
-				for _, node := range cluster.Spec().Get("ceph", "topology", "nodes").Items() {
+				for _, node := range cluster.Spec().Get("topology", "nodes").Items() {
 					want = append(want, ceph.HostBlockID(cluster.Name(), node.Get("machineRef").Text()))
 				}
 				slices.Sort(want)
 				if got := hostBlockIDs(definitions, cluster.Name()); !slices.Equal(got, want) {
-					t.Errorf("%s: StorageCluster/%s plans the host blocks %q, its topology declares %q", profile.id, cluster.Name(), got, want)
+					t.Errorf("%s: CephCluster/%s plans the host blocks %q, its topology declares %q", profile.id, cluster.Name(), got, want)
 				}
 			}
 		})

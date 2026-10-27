@@ -211,9 +211,9 @@ func machineRequires(catalog api.Catalog, provider string, request MachineReques
 
 func machineDescription(verb reconciliation.Verb, request MachineRequest) string {
 	if verb == reconciliation.Destroy {
-		return "remove the virtual machine " + request.Identity.Object + " and its controller"
+		return "remove the virtual machine " + request.Identity.Object + " and its emulated BMC"
 	}
-	return "realize the virtual machine " + request.Identity.Object + " and its controller"
+	return "realize the virtual machine " + request.Identity.Object + " and its emulated BMC"
 }
 
 func machineImpacts(verb reconciliation.Verb, request MachineRequest) []string {
@@ -630,9 +630,9 @@ func (c MachineCapability) Quiescent(ctx context.Context, probe lifecycle.Probe)
 func silentHypervisor(power, stop string) lifecycle.Quiescence {
 	switch power {
 	case "Off":
-		return lifecycle.Quiescence{State: lifecycle.Quiescent, Reason: "its hypervisor did not answer and its controller reports it off"}
+		return lifecycle.Quiescence{State: lifecycle.Quiescent, Reason: "its hypervisor did not answer and its emulated BMC reports it off"}
 	case "On":
-		return lifecycle.Quiescence{State: lifecycle.Live, Reason: "its hypervisor did not answer and its controller reports it on", Stop: stop}
+		return lifecycle.Quiescence{State: lifecycle.Live, Reason: "its hypervisor did not answer and its emulated BMC reports it on", Stop: stop}
 	}
 	return unprovedStop("neither its hypervisor nor its controller answered", stop)
 }

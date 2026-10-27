@@ -9,7 +9,7 @@ import (
 	"testing"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
-	"github.com/crmarques/bootwright/internal/containercluster"
+	"github.com/crmarques/bootwright/internal/containercluster/openshift"
 	containerpreflight "github.com/crmarques/bootwright/internal/containercluster/preflight"
 	"github.com/crmarques/bootwright/internal/machine"
 	"github.com/crmarques/bootwright/internal/reconciliation"
@@ -46,8 +46,8 @@ func TestContainerPreflightUsesCompletedDNSAndApplyCapacityRows(t *testing.T) {
 	allocation := allocations[0]
 	block := reconciliation.Block{BlockDefinition: reconciliation.BlockDefinition{Kind: libvirt.MachineKind, Object: allocation.Machine}}
 	slots := map[string]string{}
-	for _, cluster := range catalog.OfKind(api.ContainerCluster) {
-		for _, endpoint := range containercluster.Endpoints(catalog, cluster) {
+	for _, cluster := range catalog.OfKind(api.OpenShiftCluster) {
+		for _, endpoint := range openshift.Endpoints(catalog, cluster) {
 			slots[endpoint.Slot] = endpoint.Address
 		}
 	}

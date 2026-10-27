@@ -118,7 +118,7 @@ func TestObservationUsesOnlyFleetIdentityAndKnownHostsAndFrozenDigest(t *testing
 	evidence := readyEvidence(runtime)
 	evidence.Request = e.Block.RequestDigest
 	runner := &recordingRunner{result: lifecycle.RunResult{Evidence: evidenceBytes(t, evidence), Produced: dashboardProduced(dashboardPassword)}}
-	observation, err := New(api.StorageCluster, runner).Observe(context.Background(), e)
+	observation, err := New(api.CephCluster, runner).Observe(context.Background(), e)
 	if err != nil || observation.Effect != reconciliation.EffectCompleted || len(observation.Produced) != 1 || observation.Produced[0].Name != DashboardOutput {
 		t.Fatalf("observation failed: %+v %v", observation, err)
 	}
@@ -193,7 +193,7 @@ func TestProducedDashboardPasswordIsBoundedToTheGeneratorsShape(t *testing.T) {
 func TestProducedClientMaterialRejectsAdminOrForeignCaps(t *testing.T) {
 	r := coreRequest()
 	r.Action = "client"
-	r.Client = &Client{Name: "consumer", Pool: "volumes", Access: "read-only"}
+	r.Client = &Client{Name: "consumer", Pool: "volumes", Access: "readOnly"}
 	caps := map[string]string{"mon": "profile rbd", "mgr": "profile rbd-read-only pool=volumes", "osd": "profile rbd-read-only pool=volumes"}
 	entries := []clientCredential{{Entity: "client.consumer", Key: base64.StdEncoding.EncodeToString([]byte("private-key")), Caps: caps}}
 	encode := func() []lifecycle.Produced {
@@ -224,7 +224,7 @@ func TestHostTrustComesFromOriginalCompletedInstallation(t *testing.T) {
 	r := coreRequest()
 	h := r.Hosts[0]
 	h.HostKeyRef = ""
-	frozen := installation.Request{Version: "os-install-anaconda-v16", Address: h.Address, Identity: installation.Identity{Context: "original", Object: h.Machine, Profile: "profile"}}
+	frozen := installation.Request{Version: "os-install-anaconda-v17", Address: h.Address, Identity: installation.Identity{Context: "original", Object: h.Machine, Profile: "profile"}}
 	request, err := frozen.Canonical()
 	if err != nil {
 		t.Fatal(err)
@@ -258,7 +258,7 @@ func TestHostTrustComesFromOriginalCompletedInstallation(t *testing.T) {
 func TestProvedHostKeyRequiresConvergedNetwork(t *testing.T) {
 	h := coreRequest().Hosts[0]
 	h.HostKeyRef = ""
-	frozen := installation.Request{Version: "os-install-anaconda-v16", Address: h.Address, Identity: installation.Identity{Context: "original", Object: h.Machine, Profile: "profile"}}
+	frozen := installation.Request{Version: "os-install-anaconda-v17", Address: h.Address, Identity: installation.Identity{Context: "original", Object: h.Machine, Profile: "profile"}}
 	request, err := frozen.Canonical()
 	if err != nil {
 		t.Fatal(err)

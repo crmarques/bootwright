@@ -14,20 +14,20 @@ import (
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
 )
 
-const clusterNetworksRemedy = ", or remove spec.ceph.networks.clusterCIDRs"
+const clusterNetworksRemedy = ", or remove spec.networks.clusterCIDRs"
 
 func withClusterCIDRs(cidrs ...string) func(api.Value) api.Value {
 	return func(spec api.Value) api.Value {
-		return spec.WithPath(api.StringList(cidrs...), "ceph", "networks", "clusterCIDRs")
+		return spec.WithPath(api.StringList(cidrs...), "networks", "clusterCIDRs")
 	}
 }
 
 func withNodeFQDN(index int, fqdn string, change func(api.Value) api.Value) func(api.Value) api.Value {
 	return func(spec api.Value) api.Value {
 		spec = change(spec)
-		nodes := spec.Get("ceph", "topology", "nodes").Items()
+		nodes := spec.Get("topology", "nodes").Items()
 		nodes[index-1] = nodes[index-1].WithPath(api.StringValue(fqdn), "fqdn")
-		return spec.WithPath(api.ListValue(nodes...), "ceph", "topology", "nodes")
+		return spec.WithPath(api.ListValue(nodes...), "topology", "nodes")
 	}
 }
 
@@ -51,9 +51,9 @@ func replicationAddresses(format string) map[int]string {
 
 func clusterOf(t *testing.T, catalog api.Catalog) api.Object {
 	t.Helper()
-	cluster, found := catalog.Find(api.StorageCluster, "example")
+	cluster, found := catalog.Find(api.CephCluster, "example")
 	if !found {
-		t.Fatal("the catalog holds no StorageCluster example")
+		t.Fatal("the catalog holds no CephCluster example")
 	}
 	return cluster
 }
@@ -69,7 +69,7 @@ func assertInvariant(t *testing.T, err error, message, remediation string) {
 func clusterNetworkRefusals(catalog api.Catalog) map[api.Kind][]lifecycle.Refusal {
 	state := compilation.NewState(catalog, catalog, nil)
 	out := map[api.Kind][]lifecycle.Refusal{}
-	for _, kind := range []api.Kind{api.StorageCluster, api.StoragePool, api.StorageClient} {
+	for _, kind := range []api.Kind{api.CephCluster, api.CephPool, api.CephClient} {
 		out[kind] = New(kind, nil).Unsupported(state)
 	}
 	return out
@@ -110,7 +110,7 @@ func TestEveryCephHostNeedsAnAddressInsideTheClusterNetworks(t *testing.T) {
 			reason := "Ceph host " + test.refused + " (Machine " + test.refused + ") has no address inside the replication networks " + listed
 			remedy := "add an address inside one of " + listed + " to the network of " + test.refused + clusterNetworksRemedy
 			assertInvariant(t, err, reason, remedy)
-			for kind, name := range map[api.Kind]string{api.StorageCluster: "example", api.StoragePool: "volumes", api.StorageClient: "consumer"} {
+			for kind, name := range map[api.Kind]string{api.CephCluster: "example", api.CephPool: "volumes", api.CephClient: "consumer"} {
 				want := []lifecycle.Refusal{{Kind: string(kind), Name: name, Reason: reason, Remediation: remedy}}
 				if !reflect.DeepEqual(refusals[kind], want) {
 					t.Fatalf("%s: got %+v, want %+v", kind, refusals[kind], want)
@@ -133,7 +133,7 @@ func TestClusterNetworkRefusalNamesHostMachineAndCIDRs(t *testing.T) {
 	if got := diagnostics.Of(err); len(got) != 1 || got[0].Message != want {
 		t.Fatalf("baseRequest reported %+v", got)
 	}
-	if got := clusterNetworkRefusals(catalog)[api.StorageCluster]; len(got) != 1 || got[0].Reason != want {
+	if got := clusterNetworkRefusals(catalog)[api.CephCluster]; len(got) != 1 || got[0].Reason != want {
 		t.Fatalf("Unsupported reported %+v", got)
 	}
 }
@@ -141,15 +141,15 @@ func TestClusterNetworkRefusalNamesHostMachineAndCIDRs(t *testing.T) {
 func TestClusterNetworkRefusalNamesTheNextStep(t *testing.T) {
 	catalog := namedHostCatalog(t)
 	const reason = "Ceph host ceph-b.example.test (Machine node-2) has no address inside the replication networks 198.51.100.0/24, 2001:db8:100::/64"
-	const want = "add an address inside one of 198.51.100.0/24, 2001:db8:100::/64 to the network of node-2, or remove spec.ceph.networks.clusterCIDRs"
+	const want = "add an address inside one of 198.51.100.0/24, 2001:db8:100::/64 to the network of node-2, or remove spec.networks.clusterCIDRs"
 	_, err := baseRequest(catalog, clusterOf(t, catalog), "synthetic")
 	assertInvariant(t, err, reason, want)
-	if got := clusterNetworkRefusals(catalog)[api.StorageCluster]; len(got) != 1 || got[0].Remediation != want {
+	if got := clusterNetworkRefusals(catalog)[api.CephCluster]; len(got) != 1 || got[0].Remediation != want {
 		t.Fatalf("Unsupported reported %+v", got)
 	}
 	input := lifecycle.PlanInput{Verb: reconciliation.Apply, Context: lifecycle.ContextIdentity{Name: "synthetic"}, State: compilation.NewState(catalog, catalog, nil), Controller: "controller"}
 	runner := &recordingRunner{}
-	for _, capability := range []lifecycle.Capability{New(api.StorageCluster, runner), NewHost(runner), NewImage(runner)} {
+	for _, capability := range []lifecycle.Capability{New(api.CephCluster, runner), NewHost(runner), NewImage(runner)} {
 		plan, err := capability.Plan(context.Background(), input)
 		assertInvariant(t, err, reason, want)
 		if len(plan.Definitions) != 0 || len(plan.Secrets) != 0 {
@@ -163,7 +163,7 @@ func TestClusterNetworkRefusalNamesTheNextStep(t *testing.T) {
 
 func TestNoClusterNetworksKeepsThePublicOnlyPlan(t *testing.T) {
 	empty := func(spec api.Value) api.Value {
-		return spec.WithPath(api.ListValue(), "ceph", "networks", "clusterCIDRs")
+		return spec.WithPath(api.ListValue(), "networks", "clusterCIDRs")
 	}
 	for name, change := range map[string]func(api.Value) api.Value{"absent": nil, "empty": empty} {
 		t.Run(name, func(t *testing.T) {
@@ -174,7 +174,7 @@ func TestNoClusterNetworksKeepsThePublicOnlyPlan(t *testing.T) {
 				}
 			}
 			input := lifecycle.PlanInput{Verb: reconciliation.Apply, Context: lifecycle.ContextIdentity{Name: "synthetic"}, State: compilation.NewState(catalog, catalog, nil), Controller: "controller"}
-			plan, err := New(api.StorageCluster, nil).Plan(context.Background(), input)
+			plan, err := New(api.CephCluster, nil).Plan(context.Background(), input)
 			if err != nil {
 				t.Fatal(diagnostics.Of(err))
 			}
@@ -204,7 +204,7 @@ func TestAnIPv6HostAddressMatchesOnlyAnIPv6ClusterNetwork(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			catalog := withReplicationAddresses(pinnedCatalog(t, withClusterCIDRs(test.cidr)), replicationAddresses(test.format))
 			_, err := baseRequest(catalog, clusterOf(t, catalog), "synthetic")
-			refusals := clusterNetworkRefusals(catalog)[api.StorageCluster]
+			refusals := clusterNetworkRefusals(catalog)[api.CephCluster]
 			if test.accepted {
 				if err != nil || refusals != nil {
 					t.Fatalf("refused: %+v %+v", diagnostics.Of(err), refusals)

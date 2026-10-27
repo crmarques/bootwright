@@ -43,7 +43,7 @@ func TestFreshPlanAndApplyShareOneDecision(t *testing.T) {
 		{
 			name: "an unsupported shape", definitions: nestedDefinitions(), refusal: "lifecycle.unsupported",
 			prepare: func(h *harness) {
-				h.capability.unsupported = []Refusal{{Kind: "ContainerCluster", Name: "sno", Reason: "unsupported"}}
+				h.capability.unsupported = []Refusal{{Kind: "OpenShiftCluster", Name: "sno", Reason: "unsupported"}}
 			},
 		},
 		{
@@ -51,7 +51,7 @@ func TestFreshPlanAndApplyShareOneDecision(t *testing.T) {
 			prepare: func(h *harness) { h.service.compiler = testCompiler{state: withEnabledPlaybook()} },
 		},
 		{name: "a zero-block plan", refusal: "lifecycle.state"},
-		{name: "a stage boundary", definitions: controlled, stages: []string{"infra-components"}, refusal: "lifecycle.stage"},
+		{name: "a stage boundary", definitions: controlled, stages: []string{"infrastructure-services"}, refusal: "lifecycle.stage"},
 		{
 			name: "its own sockets in conflict", definitions: nestedDefinitions(), refusal: "api.invariant",
 			prepare: func(h *harness) { h.capability.reservations = conflictingSockets() },
@@ -459,7 +459,7 @@ func previewRows(ctx context.Context) []previewRow {
 	}
 	paused := func(t *testing.T, stages string) previewCase {
 		h := newPlannedHarness(t, nestedDefinitions())
-		if _, err := h.service.Apply(ctx, ApplyRequest{ContextName: testContextName, SkipConfirmation: true, Stages: []string{"infra-components"}}); err != nil {
+		if _, err := h.service.Apply(ctx, ApplyRequest{ContextName: testContextName, SkipConfirmation: true, Stages: []string{"infrastructure-services"}}); err != nil {
 			t.Fatal(err)
 		}
 		return harnessCase(h, reconciliation.Apply, stages)
@@ -511,7 +511,7 @@ func previewRows(ctx context.Context) []previewRow {
 		{
 			name: "a continuation whose selection excludes the failed block", refusal: "lifecycle.stage",
 			message: "the block this operation must retry is outside the selected stages",
-			remedy:  "repeat bootwright apply --context lab --stage infra-components,machines",
+			remedy:  "repeat bootwright apply --context lab --stage infrastructure-services,machines",
 			prepare: func(t *testing.T) previewCase {
 				h := newHarness(t, "alpha")
 				failApply(t, h, "alpha")
@@ -609,7 +609,7 @@ func TestAStagePreviewMarksWhatTheNextApplyAdmits(t *testing.T) {
 			startable: 2, admitted: []string{"apply:os-install-rhel-01", "apply:os-install-rhel-02"},
 		},
 		{
-			name: "three failed blocks beside a pending one", stage: "infra-components",
+			name: "three failed blocks beside a pending one", stage: "infrastructure-services",
 			definitions: []reconciliation.BlockDefinition{
 				definition("alpha"), definition("bravo"), definition("charlie"), definition("delta"), dependent("echo", "alpha"),
 			},
@@ -638,7 +638,7 @@ func TestAStagePreviewMarksWhatTheNextApplyAdmits(t *testing.T) {
 			startable: 1, deferred: 1, admitted: []string{"observe:os-install-rhel-01"},
 		},
 		{
-			name: "a lone failed block", definitions: []reconciliation.BlockDefinition{definition("alpha")}, stage: "infra-components",
+			name: "a lone failed block", definitions: []reconciliation.BlockDefinition{definition("alpha")}, stage: "infrastructure-services",
 			prepare: func(h *harness) {
 				h.capability.outcomeFor = map[string]Result{"alpha": {Outcome: reconciliation.OutcomeFailed}}
 			},
@@ -718,7 +718,7 @@ func TestADestroyPreviewRefusesAStageSelection(t *testing.T) {
 			h := newHarness(t, "alpha")
 			prepare(t, h)
 			records, evidence, mutations := h.workspace.area.clone(), slices.Clone(h.workspace.evidence), h.workspace.mutations
-			_, err := h.service.Plan(context.Background(), PlanRequest{ContextName: testContextName, Stages: []string{"infra-components"}})
+			_, err := h.service.Plan(context.Background(), PlanRequest{ContextName: testContextName, Stages: []string{"infrastructure-services"}})
 			reported := diagnostics.Of(err)
 			if len(reported) != 1 || reported[0].Code != "lifecycle.stage" || reported[0].Remediation != "repeat bootwright plan --context lab without --stage" {
 				t.Fatalf("preview = %+v (%v)", reported, err)

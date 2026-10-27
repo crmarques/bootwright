@@ -17,12 +17,12 @@ import (
 const subvolumeID = "0f8fad5b-d9cb-469f-a165-70867728950e"
 
 func subvolumeOf(pairs ...any) api.Object {
-	return childOf(api.StorageSubvolume, "docs", append([]any{"filesystemRef", "files"}, pairs...)...)
+	return childOf(api.CephSubvolume, "docs", append([]any{"filesystemRef", "files"}, pairs...)...)
 }
 
 func plannedSubvolume(t *testing.T, catalog api.Catalog) Request {
 	t.Helper()
-	r, err := planned(t, catalog, api.StorageSubvolume, "docs")
+	r, err := planned(t, catalog, api.CephSubvolume, "docs")
 	if err != nil {
 		t.Fatal(diagnostics.Of(err))
 	}
@@ -40,7 +40,7 @@ func TestSubvolumeDefaultsInheritGroup(t *testing.T) {
 	refs := api.ListValue(requestMap("name", "fs-data", "default", true), api.StringValue("fs-alt"))
 	fs := filesystemOf("dataPoolRefs", refs, "subvolumeGroups", api.ListValue(group))
 	catalog := func(subvolume api.Object) api.Catalog {
-		return filesystemCatalog(withMDS, cephfsPool("fs-alt", "cephfs-data"), fs, subvolume)
+		return filesystemCatalog(withMDS, cephfsPool("fs-alt", "cephfsData"), fs, subvolume)
 	}
 	for _, tt := range []struct {
 		subvolume api.Object
@@ -104,13 +104,13 @@ func TestSubvolumeEvidencePathShape(t *testing.T) {
 func TestSubvolumeBlockIDAndRequires(t *testing.T) {
 	catalog := filesystemCatalog(withMDS, filesystemOf(), subvolumeOf())
 	input := lifecycle.PlanInput{Verb: reconciliation.Apply, Context: lifecycle.ContextIdentity{Name: "synthetic"}, State: compilation.NewState(catalog, catalog, nil), Controller: "controller"}
-	plan, err := New(api.StorageSubvolume, nil).Plan(context.Background(), input)
+	plan, err := New(api.CephSubvolume, nil).Plan(context.Background(), input)
 	if err != nil || len(plan.Definitions) != 1 {
 		t.Fatalf("the subvolume planned %+v (%v)", plan.Definitions, diagnostics.Of(err))
 	}
 	block := plan.Definitions[0]
-	if block.ID != "ceph-subvolume-docs" || block.Kind != string(api.StorageSubvolume) || block.Object != "docs" ||
-		!slices.Equal(block.Requires, []reconciliation.ObjectRef{{Kind: string(api.StorageFilesystem), Object: "files"}}) {
+	if block.ID != "ceph-subvolume-docs" || block.Kind != string(api.CephSubvolume) || block.Object != "docs" ||
+		!slices.Equal(block.Requires, []reconciliation.ObjectRef{{Kind: string(api.CephFilesystem), Object: "files"}}) {
 		t.Fatalf("the subvolume block is %+v", block)
 	}
 	if !slices.Equal(block.Dependencies, []string{ClusterBlockID("example"), ImageBlockID("example")}) || !slices.Equal(block.Exclusive, []string{"ceph/example"}) {
@@ -120,9 +120,9 @@ func TestSubvolumeBlockIDAndRequires(t *testing.T) {
 
 func TestSubvolumeInverseBeforeFilesystemBeforePools(t *testing.T) {
 	change := func(spec api.Value) api.Value {
-		return spec.WithPath(api.ListValue(append(spec.Get("ceph", "services").Items(), mdsRequestService("files"))...), "ceph", "services")
+		return spec.WithPath(api.ListValue(append(spec.Get("services").Items(), mdsRequestService("files"))...), "services")
 	}
-	plan := plannedCephPlanWith(t, change, cephfsPool("fs-meta", "cephfs-metadata"), cephfsPool("fs-data", "cephfs-data"), filesystemOf(), subvolumeOf())
+	plan := plannedCephPlanWith(t, change, cephfsPool("fs-meta", "cephfsMetadata"), cephfsPool("fs-data", "cephfsData"), filesystemOf(), subvolumeOf())
 	for _, block := range plan.Blocks {
 		if block.ID == "ceph-subvolume-docs" && !slices.Contains(block.Dependencies, "ceph-filesystem-files") {
 			t.Fatalf("the planned subvolume block lacks its filesystem: %v", block.Dependencies)
@@ -146,9 +146,9 @@ func TestSubvolumeInverseBeforeFilesystemBeforePools(t *testing.T) {
 			t.Fatalf("the filesystem does not precede pool %s in removal: %v", pool, order)
 		}
 	}
-	capability := New(api.StorageSubvolume, &recordingRunner{})
+	capability := New(api.CephSubvolume, &recordingRunner{})
 	e := executionFor(t, frozenSubvolume())
-	e.Block.ID, e.Block.Kind, e.Block.Object = "ceph-subvolume-docs", string(api.StorageSubvolume), "docs"
+	e.Block.ID, e.Block.Kind, e.Block.Object = "ceph-subvolume-docs", string(api.CephSubvolume), "docs"
 	if q, err := capability.Quiescent(context.Background(), lifecycle.Probe{Block: e.Block, RetiredWithHosts: true}); err != nil || q.State != lifecycle.Quiescent || q.Reason != retiredReason {
 		t.Fatalf("a retired subvolume is not quiescent with its hosts: %+v %v", q, err)
 	}
@@ -161,9 +161,9 @@ func TestSubvolumeInverseBeforeFilesystemBeforePools(t *testing.T) {
 }
 
 func TestSubvolumeExecutionMatchesItsFrozenIdentity(t *testing.T) {
-	capability := New(api.StorageSubvolume, nil)
+	capability := New(api.CephSubvolume, nil)
 	e := executionFor(t, frozenSubvolume())
-	e.Block.ID, e.Block.Kind, e.Block.Object = "ceph-subvolume-docs", string(api.StorageSubvolume), "docs"
+	e.Block.ID, e.Block.Kind, e.Block.Object = "ceph-subvolume-docs", string(api.CephSubvolume), "docs"
 	prepared, err := capability.prepare(context.Background(), e)
 	if err != nil || prepared.Action != "subvolume" || prepared.Subvolume == nil || prepared.Subvolume.Name != "docs" || prepared.Owner != "apply-original" {
 		t.Fatalf("a planned subvolume block did not match its frozen identity: %+v %v", prepared.Subvolume, err)
@@ -172,16 +172,16 @@ func TestSubvolumeExecutionMatchesItsFrozenIdentity(t *testing.T) {
 	if _, err := capability.prepare(context.Background(), e); len(diagnostics.Of(err)) != 1 || diagnostics.Of(err)[0].Code != "lifecycle.state" {
 		t.Fatalf("a subvolume block named after its filesystem matched the subvolume identity: %v", err)
 	}
-	e.Block.Object, e.Block.Kind = "docs", string(api.StorageFilesystem)
-	if _, err := New(api.StorageFilesystem, nil).prepare(context.Background(), e); len(diagnostics.Of(err)) != 1 || diagnostics.Of(err)[0].Code != "lifecycle.state" {
+	e.Block.Object, e.Block.Kind = "docs", string(api.CephFilesystem)
+	if _, err := New(api.CephFilesystem, nil).prepare(context.Background(), e); len(diagnostics.Of(err)) != 1 || diagnostics.Of(err)[0].Code != "lifecycle.state" {
 		t.Fatalf("a filesystem capability accepted a frozen subvolume request: %v", err)
 	}
 }
 
 func TestSubvolumePlanPropagatesFilesystemRefusals(t *testing.T) {
-	ec := childOf(api.StoragePool, "fs-data", "type", "erasure", "role", "cephfs-data", "erasure", requestMap("dataChunks", 4, "codingChunks", 2))
-	_, err := planned(t, planCatalog(6, 6, withMDS, cephfsPool("fs-meta", "cephfs-metadata"), ec, filesystemOf(), subvolumeOf()), api.StorageSubvolume, "docs")
-	refusedWith(t, err, "lifecycle.unsupported", "StorageFilesystem files names erasure-coded pool fs-data as its default data pool; ceph fs new refuses it unless forced, and Bootwright never forces it", "mark a replicated cephfs-data pool default in spec.dataPoolRefs and attach erasure-coded pools as additional data pools")
-	_, err = planned(t, filesystemCatalog(withCorePair, filesystemOf(), subvolumeOf()), api.StorageSubvolume, "docs")
-	refusedWith(t, err, "api.invariant", "StorageCluster example projects no MDS service mds.files for StorageFilesystem files", "declare the mds service entry with service_id files in spec.ceph.services")
+	ec := childOf(api.CephPool, "fs-data", "role", "cephfsData", "erasure", requestMap("dataChunks", 4, "codingChunks", 2))
+	_, err := planned(t, planCatalog(6, 6, withMDS, cephfsPool("fs-meta", "cephfsMetadata"), ec, filesystemOf(), subvolumeOf()), api.CephSubvolume, "docs")
+	refusedWith(t, err, "lifecycle.unsupported", "CephFilesystem files names erasure-coded pool fs-data as its default data pool; ceph fs new refuses it unless forced, and Bootwright never forces it", "mark a replicated cephfsData pool default in spec.dataPoolRefs and attach erasure-coded pools as additional data pools")
+	_, err = planned(t, filesystemCatalog(withCorePair, filesystemOf(), subvolumeOf()), api.CephSubvolume, "docs")
+	refusedWith(t, err, "api.invariant", "CephCluster example projects no MDS service mds.files for CephFilesystem files", "declare the mds service entry with service_id files in spec.services")
 }

@@ -32,7 +32,7 @@ fail before the fix; a defect probe that never failed proves nothing.
   `--suite syntax <path to a playbook>`.
 - The command itself: `make build`, then the changed command on an example it
   affects, such as `bin/bootwright validate --file
-  examples/storage-clusters/libvirt-3-nodes-ceph`, which needs no context.
+  examples/ceph-clusters/libvirt-3-nodes-ceph`, which needs no context.
 
 ## Focus
 

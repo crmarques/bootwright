@@ -15,8 +15,8 @@ import (
 
 const keyringFixture = "[client.vm-disks]\n\tkey = AQBx57l5Y2FuYXJ5LWNsaWVudC1rZXk9PQ==\n"
 
-var keyringTargetRefusal = diagnostics.NewFailureWithRemediation("access.target", "the context lab selects no StorageClient named missing", "",
-	"bootwright cluster info --context lab --name storage lists the StorageClients of storage")
+var keyringTargetRefusal = diagnostics.NewFailureWithRemediation("access.target", "the context lab selects no CephClient named missing", "",
+	"bootwright cluster info --context lab --name storage lists the CephClients of storage")
 
 func keyringResult(unproved bool) *inspection.KeyringResult {
 	return &inspection.KeyringResult{Context: "lab", Cluster: "storage", Client: "vm-disks", Unproved: unproved,
@@ -48,8 +48,8 @@ func TestKeyringExactBytes(t *testing.T) {
 	}
 	for _, failure := range []error{
 		keyringTargetRefusal,
-		diagnostics.NewFailureWithRemediation("cluster.not-applicable", "bootwright cluster keyring does not apply to edge, an OpenShift or OKD ContainerCluster; it applies to managed Ceph StorageClusters only", "", "bootwright cluster info --context lab lists the clusters this context selects and their kinds"),
-		diagnostics.NewFailureWithRemediation("access.unavailable", "this context holds no keyring for StorageClient vm-disks of StorageCluster storage", "", "bootwright apply --context lab --stage clusters"),
+		diagnostics.NewFailureWithRemediation("cluster.not-applicable", "bootwright cluster keyring does not apply to edge, an OpenShiftCluster; it applies to managed CephClusters only", "", "bootwright cluster info --context lab lists the clusters this context selects and their kinds"),
+		diagnostics.NewFailureWithRemediation("access.unavailable", "this context holds no keyring for CephClient vm-disks of CephCluster storage", "", "bootwright apply --context lab --stage clusters"),
 		secretstore.Failure("store.implementation", "this context's secret store is local-keyring-v3, which this Bootwright build cannot open"),
 	} {
 		code, out, errOut, _ := runKeyring(nil, failure)
@@ -78,8 +78,8 @@ func TestKeyringExactBytes(t *testing.T) {
 func TestKeyringUnprovedWarning(t *testing.T) {
 	code, out, errOut, _ := runKeyring(keyringResult(true), nil)
 	wantWarning := "  warning  access.unproved\n" +
-		"    the keyring of StorageClient vm-disks of StorageCluster storage was kept from an apply that\n" +
-		"    never proved it, so the access it grants was not proved\n"
+		"    the keyring of CephClient vm-disks of CephCluster storage was kept from an apply that never\n" +
+		"    proved it, so the access it grants was not proved\n"
 	if code != 0 || out != keyringFixture || errOut != wantWarning {
 		t.Fatalf("an unproved keyring exited %d with %q and standard error %q, want its bytes and one warning", code, out, errOut)
 	}

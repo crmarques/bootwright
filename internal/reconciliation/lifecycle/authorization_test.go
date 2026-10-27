@@ -89,9 +89,9 @@ func TestAPlanMarksTheStepsAnAuthorizationAcknowledges(t *testing.T) {
 	if !slices.Equal(consumes["artifacts"], []string{"data-loss"}) || len(consumes["network"]) != 0 {
 		t.Fatalf("the preview marked %v", consumes)
 	}
-	_, err = h.service.Apply(context.Background(), ApplyRequest{ContextName: "lab", Stages: []string{"substrates", "infra-components"}})
+	_, err = h.service.Apply(context.Background(), ApplyRequest{ContextName: "lab", Stages: []string{"substrates", "infrastructure-services"}})
 	reported := diagnostics.Of(err)
-	if len(reported) != 1 || reported[0].Remediation != "repeat it with the authorization: bootwright apply --context lab --stage infra-components,substrates --authorize data-loss" {
+	if len(reported) != 1 || reported[0].Remediation != "repeat it with the authorization: bootwright apply --context lab --stage infrastructure-services,substrates --authorize data-loss" {
 		t.Fatalf("the staged refusal = %+v (%v)", reported, err)
 	}
 	if len(h.presenter.presented) != 1 || !slices.EqualFunc(h.presenter.presented[0].Steps, preview.Steps, func(x, y PlanStep) bool {

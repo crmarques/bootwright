@@ -41,8 +41,8 @@ func (a contextToolArea) Entries(context.Context) ([]BundleEntry, error) {
 func TestContextPreflightSelectsLatestOnlyFromItsOwnBinding(t *testing.T) {
 	objects := []api.Object{
 		api.NewObject(api.Environment, "example", api.Value{}, api.MapValue().WithPath(api.StringValue("controller"), "controller", "machineRef")),
-		api.NewObject(api.Machine, "controller", api.Value{}, api.MapValue().With("capabilities", api.StringList("container-runtime")).WithPath(api.BoolValue(true), "os", "provided").WithPath(api.BoolValue(true), "access", "local").WithPath(api.MapValue(), "proxy", "direct")),
-		api.NewObject(api.ContainerCluster, "cluster", api.Value{}, api.MapValue().WithPath(api.StringValue("openshift"), "distribution", "type").WithPath(api.StringValue("4.21.15"), "distribution", "release", "version")),
+		api.NewObject(api.Machine, "controller", api.Value{}, api.MapValue().WithPath(api.BoolValue(true), "os", "provided").WithPath(api.BoolValue(true), "access", "local").WithPath(api.MapValue(), "proxy", "direct")),
+		api.NewObject(api.OpenShiftCluster, "cluster", api.Value{}, api.MapValue().WithPath(api.StringValue("openshift"), "distribution", "type").WithPath(api.StringValue("4.21.15"), "distribution", "release", "version")),
 	}
 	catalog := api.NewCatalog(objects)
 	tools := &contextToolCatalog{}

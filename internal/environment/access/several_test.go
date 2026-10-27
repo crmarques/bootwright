@@ -19,7 +19,7 @@ func severalCatalog() api.Catalog {
 		storageCluster("dup", "managed", node("d1", "same.lab.test", "machine-d1"), node("d2", "same.lab.test", "machine-d2")),
 		storageCluster("outside", "external"),
 		storageCluster("outside2", "external"),
-		api.NewObject(api.ContainerCluster, "ocp", api.Value{}, api.MapValue(field("type", text("openshift")))),
+		api.NewObject(api.OpenShiftCluster, "ocp", api.Value{}, api.MapValue(field("type", text("openshift")))),
 	})
 }
 
@@ -73,26 +73,26 @@ func TestClusterExecRefusesOnceNamingEveryOffender(t *testing.T) {
 		excludes     []string
 	}{
 		{name: "every unknown cluster in one diagnostic", names: []string{"zed", "alpha", "missing"}, code: "access.target",
-			contains: []string{"ContainerClusters or StorageClusters named missing, zed"}, excludes: []string{"alpha"}},
+			contains: []string{"OpenShiftClusters or CephClusters named missing, zed"}, excludes: []string{"alpha"}},
 		{name: "unknown cluster precedes an external one", names: []string{"outside", "missing"}, code: "access.target", contains: []string{"named missing"}},
 		{name: "first external cluster in canonical order", names: []string{"outside2", "alpha", "outside"}, code: "cluster.not-applicable",
 			contains: []string{"does not apply to outside,"}},
 		{name: "external precedes OpenShift", names: []string{"ocp", "outside"}, code: "cluster.not-applicable", contains: []string{"outside"}},
 		{name: "OpenShift refuses a list", names: []string{"alpha", "ocp"}, code: "access.unavailable", contains: []string{"for ocp,"}},
 		{name: "every unknown node in one diagnostic", names: []string{"alpha", "beta"}, nodes: []string{"nope", "a1", "zilch"}, code: "access.target",
-			contains: []string{"none of StorageClusters alpha, beta declares a node named nope, zilch or one with that FQDN"}},
+			contains: []string{"none of CephClusters alpha, beta declares a node named nope, zilch or one with that FQDN"}},
 		{name: "unknown nodes of one cluster", names: []string{"alpha"}, nodes: []string{"x9", "x8"}, code: "access.target",
-			contains: []string{"StorageCluster alpha declares no node named x8, x9 and none with that FQDN"}},
+			contains: []string{"CephCluster alpha declares no node named x8, x9 and none with that FQDN"}},
 		{name: "a cluster declaring none of the nodes", names: []string{"alpha", "beta"}, nodes: []string{"a1", "a2"}, code: "access.target",
-			contains: []string{"StorageCluster beta declares none of the nodes a1, a2"}, excludes: []string{"alpha declares"}},
+			contains: []string{"CephCluster beta declares none of the nodes a1, a2"}, excludes: []string{"alpha declares"}},
 		{name: "every idle cluster in one diagnostic", names: []string{"alpha", "beta", "empty"}, nodes: []string{"a1"}, code: "access.target",
-			contains: []string{"StorageClusters beta, empty declare none of the nodes a1"}},
+			contains: []string{"CephClusters beta, empty declare none of the nodes a1"}},
 		{name: "an unknown node precedes an idle cluster", names: []string{"alpha", "beta"}, nodes: []string{"a1", "nope"}, code: "access.target",
 			contains: []string{"declares a node named nope"}},
 		{name: "a shared FQDN selects none", names: []string{"alpha", "dup"}, nodes: []string{"same.lab.test"}, code: "access.target",
-			contains: []string{"FQDN same.lab.test names several nodes of StorageCluster dup"}},
+			contains: []string{"FQDN same.lab.test names several nodes of CephCluster dup"}},
 		{name: "a cluster with no node and no selector", names: []string{"alpha", "empty"}, code: "access.target",
-			contains: []string{"StorageCluster empty declares no node"}},
+			contains: []string{"CephCluster empty declares no node"}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -125,9 +125,9 @@ func TestClusterExecSingleRefusalsKeepTheirMessages(t *testing.T) {
 		message      string
 	}{
 		{name: "unknown cluster", names: []string{"missing"},
-			message: "the context lab selects no ContainerCluster or StorageCluster named missing"},
+			message: "the context lab selects no OpenShiftCluster or CephCluster named missing"},
 		{name: "unknown node", names: []string{"alpha"}, nodes: []string{"rhel-09"},
-			message: "StorageCluster alpha declares no node named rhel-09 and none with that FQDN"},
+			message: "CephCluster alpha declares no node named rhel-09 and none with that FQDN"},
 		{name: "no cluster name", message: "no cluster name was supplied"},
 	}
 	for _, tt := range tests {

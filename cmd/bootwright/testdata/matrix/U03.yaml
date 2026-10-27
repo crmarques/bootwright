@@ -7,7 +7,7 @@ edits:
   with: "    size: 3\n"
 expect:
 - code: api.invariant
-  kind: StoragePool
+  kind: CephPool
   name: rbd-data
   field: $.spec.replicated.size
   message: host-domain replication needs an OSD-bearing host beyond the effective replica size to recover a lost host's replicas

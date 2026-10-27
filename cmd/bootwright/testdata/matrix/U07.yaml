@@ -3,12 +3,12 @@ base: libvirt-3-nodes-ceph
 phase: admission
 edits:
 - file: storage/cluster.yaml
-  replace: "        transport: verified-tunnel\n"
-  with: "        transport: native\n"
+  replace: "      transport: verifiedTunnel\n"
+  with: "      transport: native\n"
 expect:
 - code: api.invariant
-  kind: StorageCluster
+  kind: CephCluster
   name: ceph-lab
-  field: $.spec.ceph.cephadm.clusterSSH.transport
+  field: $.spec.cephadm.clusterSSH.transport
   message: the native cluster SSH transport is reserved, and no build realizes it
-  remediation: set spec.ceph.cephadm.clusterSSH.transport to verified-tunnel, or omit it
+  remediation: set spec.cephadm.clusterSSH.transport to verifiedTunnel, or omit it

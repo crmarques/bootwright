@@ -1,8 +1,13 @@
   bootwright / render effective
-      Show normalized effective desired state
+      Show normalized effective desired state. --origins lists, instead of the YAML, where each
+      effective field's value came from: authored, defaults.<Kind> (the Environment's kind
+      defaults), built-in (a schema default) or derived (normalization).
 
   Usage
     bootwright render effective [flags]
+
+  Command flags
+      --origins  Mark where each effective field's value came from
 
   Common flags
       --ascii       Use ASCII status markers

@@ -37,7 +37,7 @@ func TestLastInstanceWaitsForEverySameClusterStageConsumer(t *testing.T) {
 			definitions := []reconciliation.BlockDefinition{
 				{ID: "tail", Stage: reconciliation.StageAddOns, Kind: instance.Kind, Implementation: instance.Implementation, Request: data, Requires: requires, Dependencies: storage[:1]},
 				{ID: "synthetic-peer", Stage: reconciliation.StageAddOns, Kind: "Synthetic", Requires: requires},
-				{ID: "another-cluster", Stage: reconciliation.StageAddOns, Kind: "Synthetic", Requires: []reconciliation.ObjectRef{{Kind: "ContainerCluster", Object: "another"}}},
+				{ID: "another-cluster", Stage: reconciliation.StageAddOns, Kind: "Synthetic", Requires: []reconciliation.ObjectRef{{Kind: "OpenShiftCluster", Object: "another"}}},
 				{ID: "another-stage", Stage: reconciliation.StageClusters, Kind: "Synthetic", Requires: requires},
 			}
 			if reverse {

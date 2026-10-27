@@ -1,5 +1,5 @@
 {
-  "digest": "a323d4b65f5e5386306f7f787a8dcb672440302700f944a02a5bb5564abfbbff",
+  "digest": "0e6cfee8903cf4dd1ee5785ab4d961c224836b9f3b99c12d75ad7d21c09de323",
   "request": {
     "base": "cp.icr.io/cp/ibm-ceph/ceph-9-rhel9",
     "cluster": "example",

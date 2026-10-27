@@ -14,7 +14,7 @@ import (
 func packageTestConfig(name string) api.Value {
 	v := config().Without("pools")
 	if name == "fdf" {
-		v = v.With("storageExportRef", api.StringValue("export")).WithPath(api.StringValue("redhat-operators"), "subscription", "source")
+		v = v.With("cephConsumerRef", api.StringValue("export")).WithPath(api.StringValue("redhat-operators"), "subscription", "source")
 	}
 	if name == "acm" {
 		v = v.With("mce", api.MapValue(api.FieldValue{Name: "channel", Value: api.StringValue("stable")}, api.FieldValue{Name: "startingCSV", Value: api.StringValue("engine.v1")}))
@@ -42,7 +42,7 @@ func TestHubPackageRenderGoldens(t *testing.T) {
 		}},
 		{"gitops-public", "gitops", func(v api.Value) api.Value { return v.With("bootstrap", bootstrapConfig()) }},
 		{"gitops-private", "gitops", func(v api.Value) api.Value {
-			return v.With("bootstrap", bootstrapConfig().With("credentials", api.StringValue("repository-login")))
+			return v.With("bootstrap", bootstrapConfig().With("credentialsRef", api.StringValue("repository-login")))
 		}},
 		{"gitops-access", "gitops", func(v api.Value) api.Value {
 			return v.With("bootstrap", bootstrapConfig().With("access", api.MapValue(api.FieldValue{Name: "clusterRole", Value: api.StringValue("bootstrap-writer")})))

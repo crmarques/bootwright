@@ -15,12 +15,12 @@ import (
 	"github.com/crmarques/bootwright/internal/diagnostics"
 	"github.com/crmarques/bootwright/internal/reconciliation"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
-	"github.com/crmarques/bootwright/internal/storage"
+	"github.com/crmarques/bootwright/internal/storage/cephcluster"
 )
 
 func replicationCatalog(mode string) api.Catalog {
 	objects := poolRequestCatalog(3, 3).Objects()
-	cluster, _ := api.NewCatalog(objects).Find(api.StorageCluster, "example")
+	cluster, _ := api.NewCatalog(objects).Find(api.CephCluster, "example")
 	nodes := []api.Value{}
 	for _, object := range slices.Clone(objects) {
 		if object.Kind() != api.Machine {
@@ -32,9 +32,9 @@ func replicationCatalog(mode string) api.Catalog {
 		objects = append(objects, api.NewObject(api.Machine, name, api.Value{}, spec))
 		nodes = append(nodes, requestMap("name", name, "machineRef", name, "labels", api.StringList("mon", "storage")))
 	}
-	services := append(cluster.Spec().Get("ceph", "services").Items(), requestMap("service_type", "rbd-mirror", "placement", requestMap("label", "mon", "count", 1)))
-	peer := cluster.Spec().WithPath(api.ListValue(nodes...), "ceph", "topology", "nodes").WithPath(api.StringValue("peer-node-1"), "ceph", "cephadm", "bootstrap", "node").WithPath(api.StringList("198.51.100.0/24"), "ceph", "networks", "publicCIDRs").WithPath(api.ListValue(services...), "ceph", "services")
-	objects = append(objects, api.NewObject(api.StorageCluster, "secondary", api.Value{}, peer))
+	services := append(cluster.Spec().Get("services").Items(), requestMap("service_type", "rbd-mirror", "placement", requestMap("label", "mon", "count", 1)))
+	peer := cluster.Spec().WithPath(api.ListValue(nodes...), "topology", "nodes").WithPath(api.StringValue("peer-node-1"), "cephadm", "bootstrap", "nodeRef").WithPath(api.StringList("198.51.100.0/24"), "networks", "publicCIDRs").WithPath(api.ListValue(services...), "services")
+	objects = append(objects, api.NewObject(api.CephCluster, "secondary", api.Value{}, peer))
 	left := replicatedPool("primary-volumes", "nativeName", "volumes", "mirroring", requestMap("mode", mode))
 	right := replicatedPool("secondary-volumes", "nativeName", "volumes", "mirroring", requestMap("mode", mode))
 	right = right.WithSpec(right.Spec().With("clusterRef", api.StringValue("secondary")))
@@ -44,7 +44,7 @@ func replicationCatalog(mode string) api.Catalog {
 	if mode == "image" {
 		spec = spec.With("imageRefs", api.StringList("disk"))
 	}
-	return api.NewCatalog(append(objects, left, right, image, api.NewObject(api.StorageReplication, "replica", api.Value{}, spec)))
+	return api.NewCatalog(append(objects, left, right, image, api.NewObject(api.CephReplication, "replica", api.Value{}, spec)))
 }
 func replicationPlan(t *testing.T, catalog api.Catalog) (ReplicationRequest, reconciliation.Block) {
 	t.Helper()
@@ -79,13 +79,13 @@ func TestReplicationPlansBothClustersAndNativeNames(t *testing.T) {
 					t.Errorf("missing dependency %s", name)
 				}
 			}
-			for _, ref := range []reconciliation.ObjectRef{{Kind: string(api.StoragePool), Object: "primary-volumes"}, {Kind: string(api.StoragePool), Object: "secondary-volumes"}, {Kind: string(api.StorageRBDImage), Object: "disk"}} {
+			for _, ref := range []reconciliation.ObjectRef{{Kind: string(api.CephPool), Object: "primary-volumes"}, {Kind: string(api.CephPool), Object: "secondary-volumes"}, {Kind: string(api.CephRBDImage), Object: "disk"}} {
 				if !slices.Contains(block.Requires, ref) {
 					t.Errorf("missing requirement %+v", ref)
 				}
 			}
-			image, _ := catalog.Find(api.StorageRBDImage, "disk")
-			p, err := New(api.StorageRBDImage, nil).Plan(context.Background(), lifecycle.PlanInput{State: compilation.NewState(catalog, catalog, nil), Context: lifecycle.ContextIdentity{Name: "synthetic"}, Controller: "controller"})
+			image, _ := catalog.Find(api.CephRBDImage, "disk")
+			p, err := New(api.CephRBDImage, nil).Plan(context.Background(), lifecycle.PlanInput{State: compilation.NewState(catalog, catalog, nil), Context: lifecycle.ContextIdentity{Name: "synthetic"}, Controller: "controller"})
 			if err != nil || len(p.Definitions) != 1 || p.Definitions[0].Requires[0].Object != image.Spec().Get("poolRef").Text() {
 				t.Fatalf("native alias replaced graph identity: %+v %v", p, err)
 			}
@@ -108,8 +108,8 @@ func TestReplicationAdmissionRefusesForeignOrAmbiguousTopology(t *testing.T) {
 	for name, change := range changes {
 		t.Run(name, func(t *testing.T) {
 			catalog := replicationCatalog("image")
-			object, _ := catalog.Find(api.StorageReplication, "replica")
-			if issues := storage.Validate(change(object), catalog); len(issues) == 0 {
+			object, _ := catalog.Find(api.CephReplication, "replica")
+			if issues := cephcluster.Validate(change(object), catalog); len(issues) == 0 {
 				t.Fatal("invalid relationship admitted")
 			}
 		})
@@ -127,8 +127,8 @@ func TestReplicationAdmissionRefusesForeignOrAmbiguousTopology(t *testing.T) {
 				case kind == "external" && o.Name() == "secondary":
 					objects[i] = o.WithSpec(o.Spec().With("management", api.StringValue("external")))
 				case kind == "overlap" && o.Name() == "secondary":
-					primary, _ := catalog.Find(api.StorageCluster, "example")
-					objects[i] = o.WithSpec(o.Spec().WithPath(primary.Spec().Get("ceph", "topology", "nodes"), "ceph", "topology", "nodes"))
+					primary, _ := catalog.Find(api.CephCluster, "example")
+					objects[i] = o.WithSpec(o.Spec().WithPath(primary.Spec().Get("topology", "nodes"), "topology", "nodes"))
 				case kind == "journaling" && o.Name() == "disk":
 					objects[i] = o.WithSpec(o.Spec().With("features", api.StringList(defaultFeatures...)))
 				}
@@ -137,19 +137,19 @@ func TestReplicationAdmissionRefusesForeignOrAmbiguousTopology(t *testing.T) {
 				objects = append(objects, imageOf("peer-disk", "secondary-volumes").WithSpec(requestMap("clusterRef", "secondary", "poolRef", "secondary-volumes", "sizeBytes", 1048576)))
 			}
 			if kind == "bound" {
-				image, _ := catalog.Find(api.StorageRBDImage, "disk")
+				image, _ := catalog.Find(api.CephRBDImage, "disk")
 				for i := 1; i <= 3; i++ {
-					objects = append(objects, api.NewObject(api.StorageRBDImage, fmt.Sprintf("disk-%d", i), api.Value{}, image.Spec()))
+					objects = append(objects, api.NewObject(api.CephRBDImage, fmt.Sprintf("disk-%d", i), api.Value{}, image.Spec()))
 				}
 				for i, o := range objects {
-					if o.Kind() == api.StorageReplication {
+					if o.Kind() == api.CephReplication {
 						objects[i] = o.WithSpec(o.Spec().With("imageRefs", api.StringList("disk", "disk-1", "disk-2", "disk-3")))
 					}
 				}
 			}
 			changed := api.NewCatalog(objects)
-			object, _ := changed.Find(api.StorageReplication, "replica")
-			if issues := storage.Validate(object, changed); len(issues) == 0 {
+			object, _ := changed.Find(api.CephReplication, "replica")
+			if issues := cephcluster.Validate(object, changed); len(issues) == 0 {
 				t.Fatal("invalid relationship admitted")
 			}
 		})
@@ -161,7 +161,7 @@ func replicationExecution(t *testing.T) (ReplicationRequest, lifecycle.Execution
 	r, block := replicationPlan(t, catalog)
 	e := lifecycle.Execution{Block: block, ApplyOperation: "apply-original", Operation: "apply-retry", Context: "synthetic"}
 	for _, name := range []string{"example", "secondary"} {
-		cluster, _ := catalog.Find(api.StorageCluster, name)
+		cluster, _ := catalog.Find(api.CephCluster, name)
 		base, err := baseRequest(catalog, cluster, "synthetic")
 		if err != nil {
 			t.Fatal(err)

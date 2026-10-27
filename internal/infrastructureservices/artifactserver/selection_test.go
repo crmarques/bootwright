@@ -22,7 +22,6 @@ func number(name string, value string) api.FieldValue { return field(name, api.I
 
 func controller() api.Object {
 	return api.NewObject(api.Machine, "controller", api.Value{}, api.MapValue(
-		field("capabilities", api.StringList("container-runtime")),
 		field("os", api.MapValue(field("provided", api.BoolValue(true)))),
 		field("proxy", api.MapValue(field("direct", api.MapValue()))),
 		field("network", api.MapValue(field("addresses", api.ListValue(
@@ -262,20 +261,20 @@ func TestEgressFollowsThePlacementMachineProxyChoice(t *testing.T) {
 // This capability reports only the artifact servers it cannot realize. Objects
 // of kinds no capability claims are the engine's refusal, not this one's.
 func TestUnsupportedArtifactServersAreListedInCanonicalOrder(t *testing.T) {
-	cluster := api.NewObject(api.ContainerCluster, "sno", api.Value{}, api.MapValue())
+	cluster := api.NewObject(api.OpenShiftCluster, "sno", api.Value{}, api.MapValue())
 	managedProxy := api.NewObject(api.Proxy, "lab-proxy", api.Value{}, api.MapValue(text("management", "managed")))
 	external := api.NewObject(api.ArtifactServer, "published", api.Value{}, api.MapValue(
-		text("management", "external"), text("retention", "install-only"),
+		text("management", "external"), text("retention", "installOnly"),
 	))
 	installOnly := api.NewObject(api.ArtifactServer, "temp", api.Value{}, api.MapValue(
-		text("management", "managed"), text("retention", "install-only"),
+		text("management", "managed"), text("retention", "installOnly"),
 	))
 	found := lifecycle.Identities(Refusals(catalogOf(controller(), cluster, managedProxy, external, installOnly, artifactServer())))
 	if !slices.Equal(found, []string{"ArtifactServer/temp"}) {
 		t.Fatalf("unsupported = %v", found)
 	}
 	want := []lifecycle.Refusal{{
-		Kind: "ArtifactServer", Name: "temp", Reason: "this executable serves no managed artifact server with install-only retention",
+		Kind: "ArtifactServer", Name: "temp", Reason: "this executable serves no managed artifact server with installOnly retention",
 		Remediation: "declare spec.retention: persistent on ArtifactServer/temp, or omit it",
 	}}
 	if refused := Refusals(catalogOf(controller(), installOnly)); !slices.Equal(refused, want) {

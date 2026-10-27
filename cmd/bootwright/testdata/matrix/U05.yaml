@@ -5,26 +5,25 @@ add:
 - path: storage/metadata-ec.yaml
   document: |
     apiVersion: bootwright.io/v1alpha1
-    kind: StoragePool
+    kind: CephPool
     metadata:
       name: metadata-ec
     spec:
       clusterRef: ceph-lab
-      type: erasure
-      role: cephfs-metadata
+      role: cephfsMetadata
       erasure:
         dataChunks: 2
         codingChunks: 1
 expect:
 - code: api.invariant
-  kind: StoragePool
+  kind: CephPool
   name: metadata-ec
   field: $.spec.role
   message: pool role does not permit erasure protection
-  remediation: "use role rbd, cephfs-data or rgw for an erasure-coded pool, or set type: replicated"
+  remediation: "use role rbd, cephfsData or rgw for an erasure-coded pool, or replace spec.erasure with spec.replicated"
 - code: api.invariant
-  kind: StoragePool
+  kind: CephPool
   name: metadata-ec
-  field: $.spec.type
+  field: $.spec.erasure
   message: CephFS metadata pools require replicated protection
-  remediation: "set type: replicated for this cephfs-metadata pool"
+  remediation: remove spec.erasure and declare spec.replicated for this cephfsMetadata pool

@@ -125,7 +125,7 @@ func interfaceNetworks(pool api.MetalLBPool, f addons.ClusterFacts, field string
 			}
 		}
 		if !found {
-			add("api.invariant", field, fmt.Sprintf("interface %s of pool %s is not declared on node %s of ContainerCluster/%s", iface, pool.Name, machine, f.Name), fmt.Sprintf("declare %s on every node of %s, or omit l2.interface", iface, f.Name))
+			add("api.invariant", field, fmt.Sprintf("interface %s of pool %s is not declared on node %s of OpenShiftCluster/%s", iface, pool.Name, machine, f.Name), fmt.Sprintf("declare %s on every node of %s, or omit l2.interface", iface, f.Name))
 		}
 	}
 	for _, node := range f.NodeNetworks {
@@ -154,7 +154,7 @@ func interfaceNetworks(pool api.MetalLBPool, f addons.ClusterFacts, field string
 			}
 		}
 		if !found {
-			add("api.invariant", field, fmt.Sprintf("interface %s of pool %s is not declared on node %s of ContainerCluster/%s", iface, pool.Name, node.Machine, f.Name), fmt.Sprintf("declare %s on every node of %s, or omit l2.interface", iface, f.Name))
+			add("api.invariant", field, fmt.Sprintf("interface %s of pool %s is not declared on node %s of OpenShiftCluster/%s", iface, pool.Name, node.Machine, f.Name), fmt.Sprintf("declare %s on every node of %s, or omit l2.interface", iface, f.Name))
 		} else if !addressed {
 			add("api.invariant", field, fmt.Sprintf("interface %s of pool %s carries no %s address on node %s", iface, pool.Name, f.Family, node.Machine), fmt.Sprintf("assign %s an address in the pool's subnet on every node through network.addresses", iface))
 		}
@@ -171,10 +171,10 @@ func interfaceNetworks(pool api.MetalLBPool, f addons.ClusterFacts, field string
 		}
 	}
 	if !f.Gateway.RoutingViaHost {
-		add("api.invariant", field, fmt.Sprintf("pool %s announces on %s, which needs gatewayConfig.routingViaHost: true on ContainerCluster/%s", pool.Name, iface, f.Name), fmt.Sprintf("set spec.networking.ovnKubernetesConfig.gatewayConfig.routingViaHost: true on %s, or omit l2.interface", f.Name))
+		add("api.invariant", field, fmt.Sprintf("pool %s announces on %s, which needs gatewayConfig.routingViaHost: true on OpenShiftCluster/%s", pool.Name, iface, f.Name), fmt.Sprintf("set spec.networking.ovnKubernetesConfig.gatewayConfig.routingViaHost: true on %s, or omit l2.interface", f.Name))
 	}
 	if f.Gateway.IPForwarding != "Global" {
-		add("api.invariant", field, fmt.Sprintf("pool %s announces on %s, which needs gatewayConfig.ipForwarding: Global on ContainerCluster/%s", pool.Name, iface, f.Name), fmt.Sprintf("set spec.networking.ovnKubernetesConfig.gatewayConfig.ipForwarding: Global on %s, or omit l2.interface", f.Name))
+		add("api.invariant", field, fmt.Sprintf("pool %s announces on %s, which needs gatewayConfig.ipForwarding: Global on OpenShiftCluster/%s", pool.Name, iface, f.Name), fmt.Sprintf("set spec.networking.ovnKubernetesConfig.gatewayConfig.ipForwarding: Global on %s, or omit l2.interface", f.Name))
 	}
 	return networks
 }
@@ -212,7 +212,7 @@ func checkPoolConflicts(pool api.MetalLBPool, f addons.ClusterFacts, field, entr
 	for _, group := range forbidden {
 		for _, n := range group.prefixes {
 			if overlaps(r, interval{first: n.Masked().Addr(), last: lastAddress(n)}) {
-				add("api.invariant", field, fmt.Sprintf("address %s of pool %s overlaps %s, the %s of ContainerCluster/%s", entry, pool.Name, n, group.kind, f.Name), "use addresses outside "+n.String())
+				add("api.invariant", field, fmt.Sprintf("address %s of pool %s overlaps %s, the %s of OpenShiftCluster/%s", entry, pool.Name, n, group.kind, f.Name), "use addresses outside "+n.String())
 			}
 		}
 	}
@@ -246,11 +246,11 @@ func admitPoolEntries(pool api.MetalLBPool, f addons.ClusterFacts, base string, 
 		}
 		r.pool = pool.Name
 		if f.Family != "ipv4" && f.Family != "ipv6" {
-			add("api.invariant", field, "ContainerCluster/"+f.Name+" has no admitted address family", "declare the cluster networks before selecting pools")
+			add("api.invariant", field, "OpenShiftCluster/"+f.Name+" has no admitted address family", "declare the cluster networks before selecting pools")
 			continue
 		}
 		if r.first.Is4() != (f.Family == "ipv4") {
-			add("api.invariant", field, fmt.Sprintf("address %s of pool %s is not of the %s family of ContainerCluster/%s", entry, pool.Name, f.Family, f.Name), fmt.Sprintf("use %s addresses for the pools of %s", f.Family, f.Name))
+			add("api.invariant", field, fmt.Sprintf("address %s of pool %s is not of the %s family of OpenShiftCluster/%s", entry, pool.Name, f.Family, f.Name), fmt.Sprintf("use %s addresses for the pools of %s", f.Family, f.Name))
 			continue
 		}
 		var network netip.Prefix
@@ -270,7 +270,7 @@ func admitPoolEntries(pool api.MetalLBPool, f addons.ClusterFacts, base string, 
 				for _, n := range networks {
 					cidrs = append(cidrs, n.String())
 				}
-				add("api.invariant", field, fmt.Sprintf("address %s of pool %s lies outside every machine network of ContainerCluster/%s", entry, pool.Name, f.Name), "use addresses inside "+strings.Join(cidrs, ", ")+", or name the interface whose subnet holds them under l2.interface")
+				add("api.invariant", field, fmt.Sprintf("address %s of pool %s lies outside every machine network of OpenShiftCluster/%s", entry, pool.Name, f.Name), "use addresses inside "+strings.Join(cidrs, ", ")+", or name the interface whose subnet holds them under l2.interface")
 			}
 		} else {
 			if poolNetwork.IsValid() && poolNetwork != network {

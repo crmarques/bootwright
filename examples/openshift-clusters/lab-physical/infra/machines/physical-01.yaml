@@ -1,0 +1,39 @@
+apiVersion: bootwright.io/v1alpha1
+kind: Machine
+metadata:
+  name: physical-01
+
+spec:
+  substrate:
+    providerRef: lab-metal
+
+    baremetal:
+      bmc:
+        address: https://bmc-01.example.test/redfish/v1/Systems/1
+
+      nics:
+        - nicRef: eno1
+          macAddress: 52:54:00:9a:1b:01
+
+  os:
+    provided: false
+
+  network:
+    configRef: lab-metal
+    attachmentRef: lab-metal
+    installAddressRef: ip
+
+    addresses:
+      - name: fqdn
+        address: physical-01.lab.example.test
+
+      - name: ip
+        address: 198.51.100.21/24
+        interface: eno1
+
+  hardware:
+    nics:
+      - name: eno1
+
+    rootDevice:
+      deviceName: /dev/sda

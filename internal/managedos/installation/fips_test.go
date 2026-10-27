@@ -88,7 +88,7 @@ func TestFIPSProfileAppendsTheKernelArgumentOnce(t *testing.T) {
 
 func TestFIPSGuestAgentRepublishesTheECDSAHostKey(t *testing.T) {
 	request, _ := onlyRequest(t, labCatalog(fipsProfile()))
-	if request.Target.HostKeyType != "ecdsa-p256" {
+	if request.Target.HostKeyType != "ecdsaP256" {
 		t.Fatalf("host key type = %q", request.Target.HostKeyType)
 	}
 	want := []string{
@@ -144,7 +144,7 @@ func TestAGuestHostKeyTypeWithNoGeneratedPathRefuses(t *testing.T) {
 func TestFIPSRefusesAnEd25519FleetKeyBeforeRegistration(t *testing.T) {
 	want := []lifecycle.Refusal{{Kind: "Machine", Name: "rhel-01",
 		Reason:      "a FIPS-mode installation refuses Ed25519 keys, and the fleet key Secret/bootwright-machine-key generates one",
-		Remediation: "declare spec.source.generated.keyType as ecdsa-p256, ecdsa-p384, ecdsa-p521 or rsa on Secret/bootwright-machine-key",
+		Remediation: "declare spec.source.generated.keyType as ecdsaP256, ecdsaP384, ecdsaP521 or rsa on Secret/bootwright-machine-key",
 	}}
 	generated := func(fields ...api.FieldValue) api.Value {
 		return api.MapValue(field("generated", api.MapValue(fields...)))
@@ -157,7 +157,7 @@ func TestFIPSRefusesAnEd25519FleetKeyBeforeRegistration(t *testing.T) {
 		{"raw default", fleetSecret(generated()), true},
 		{"normalized default", normalizedFleetSecret(t, generated()), true},
 		{"ed25519", fleetSecret(generated(text("keyType", "ed25519"))), true},
-		{"ecdsa-p256", fleetSecret(generated(text("keyType", "ecdsa-p256"))), false},
+		{"ecdsaP256", fleetSecret(generated(text("keyType", "ecdsaP256"))), false},
 		{"rsa", fleetSecret(generated(text("keyType", "rsa"))), false},
 		{"context store", fleetSecret(api.MapValue(field("contextStore", api.MapValue()))), false},
 	} {
@@ -195,7 +195,7 @@ func TestFIPSApplyRefusesABoundEd25519OrShortRSAFleetKey(t *testing.T) {
 			t.Fatalf("%s: refusal = %#v (%v)", row.line, reported, err)
 		}
 		if reported[0].Remediation != "take this context back with bootwright destroy --context lab-b, then replace Secret/bootwright-machine-key with an ECDSA key or an RSA key of at least 2048 bits, "+
-			"for example a generated keyType ecdsa-p256 or rsa, or disable spec.customizations.security.fips on MachineInstallProfile/rhel-9-8, "+
+			"for example a generated keyType ecdsaP256 or rsa, or disable spec.customizations.security.fips on MachineInstallProfile/rhel-9-8, "+
 			"and run bootwright apply --context lab-b; an apply that continues reads the key version this context bound" {
 			t.Fatalf("remediation = %q", reported[0].Remediation)
 		}

@@ -20,7 +20,7 @@ import (
 func TestFIPSProjectionAndBoundEd25519RefuseBeforeNativeExecution(t *testing.T) {
 	objects := singleNodeCatalog().Objects()
 	for i, object := range objects {
-		if object.Kind() == api.ContainerCluster {
+		if object.Kind() == api.OpenShiftCluster {
 			objects[i] = object.WithSpec(object.Spec().WithPath(api.BoolValue(true), "security", "fips", "enabled"))
 		}
 	}

@@ -49,9 +49,9 @@ func openshiftDistribution() api.Value {
 func agentNodes() []api.Object {
 	return []api.Object{
 		api.NewObject(api.Machine, "node", api.Value{}, api.MapValue()),
-		api.NewObject(api.ContainerCluster, "hub", api.Value{}, api.MapValue(
+		api.NewObject(api.OpenShiftCluster, "hub", api.Value{}, api.MapValue(
 			field("distribution", openshiftDistribution()),
-			field("install", api.MapValue(text("method", "agent"))),
+			field("install", api.MapValue(field("agent", api.MapValue()))),
 			field("nodes", api.ListValue(api.MapValue(text("machineRef", "node")))),
 		)),
 	}
@@ -67,11 +67,11 @@ func probedVirtualIP() []api.Object {
 	))
 	endpoints := api.MapValue()
 	for _, slot := range []string{"api", "api-int", "ingress"} {
-		endpoints = endpoints.With(slot, api.MapValue(text("address", "198.51.100.10"), field("source", api.MapValue(text("type", "openshift")))))
+		endpoints = endpoints.With(slot, api.MapValue(text("address", "198.51.100.10"), field("source", api.MapValue(text("type", "installer")))))
 	}
-	return []api.Object{provider, api.NewObject(api.ContainerCluster, "hub", api.Value{}, api.MapValue(
+	return []api.Object{provider, api.NewObject(api.OpenShiftCluster, "hub", api.Value{}, api.MapValue(
 		field("distribution", openshiftDistribution()),
-		field("install", api.MapValue(text("method", "agent"), field("platform", api.MapValue(text("type", "baremetal"))), field("endpoints", endpoints))),
+		field("install", api.MapValue(field("agent", api.MapValue()), field("platform", api.MapValue(field("baremetal", api.MapValue()))), field("endpoints", endpoints))),
 		field("nodes", api.ListValue(api.MapValue(), api.MapValue(), api.MapValue())),
 	))}
 }
@@ -97,12 +97,11 @@ func stageRequest(t *testing.T, block reconciliation.Block) Request {
 // selections are the graphs that select a native closure, by what selects it.
 func selections() map[string][]api.Object {
 	return map[string][]api.Object{
-		"a declared libvirt capability":    {environment(), machine("container-runtime", "libvirt")},
-		"a provider hosted here":           {environment(), machine("container-runtime"), hostedProvider()},
-		"a Machine on a libvirt provider":  append([]api.Object{environment(), machine("container-runtime")}, guestOnLibvirt()...),
-		"an installer-media tooling alone": append([]api.Object{environment(), machine("container-runtime")}, installerMedia()...),
-		"agent node network configuration": append([]api.Object{environment(), machine("container-runtime")}, agentNodes()...),
-		"a probed virtual IP":              append([]api.Object{environment(), machine("container-runtime")}, probedVirtualIP()...),
+		"a provider hosted here":           {environment(), machine(), hostedProvider()},
+		"a Machine on a libvirt provider":  append([]api.Object{environment(), machine()}, guestOnLibvirt()...),
+		"an installer-media tooling alone": append([]api.Object{environment(), machine()}, installerMedia()...),
+		"agent node network configuration": append([]api.Object{environment(), machine()}, agentNodes()...),
+		"a probed virtual IP":              append([]api.Object{environment(), machine()}, probedVirtualIP()...),
 	}
 }
 
@@ -111,7 +110,7 @@ func selections() map[string][]api.Object {
 // from.
 func TestARequestAndStageNativeOfAgree(t *testing.T) {
 	cases := selections()
-	cases["only target clients"] = []api.Object{environment(), machine("container-runtime"), cluster()}
+	cases["only target clients"] = []api.Object{environment(), machine(), cluster()}
 	for name, objects := range cases {
 		t.Run(name, func(t *testing.T) {
 			catalog := stateOf(objects...).Effective()
@@ -145,7 +144,7 @@ func TestTheFrozenRequestCarriesNMStateAndIPUtils(t *testing.T) {
 		{"a probed virtual IP", probedVirtualIP(), false, true, "iputils"},
 	} {
 		t.Run(test.name, func(t *testing.T) {
-			state := stateOf(append([]api.Object{environment(), machine("container-runtime")}, test.objects...)...)
+			state := stateOf(append([]api.Object{environment(), machine()}, test.objects...)...)
 			block := planBlock(t, unwired(), state, reconciliation.Apply)
 			request := stageRequest(t, block)
 			if request.NMState != test.nmstate || request.IPUtils != test.iputils || request.native().NMState != test.nmstate || request.native().IPUtils != test.iputils {
@@ -195,7 +194,7 @@ func TestTheRoleCarriesNoNativePlan(t *testing.T) {
 	tools := []prerequisites.ToolDefinition{toolDefinition("helm", "v3.17.0")}
 	installer := &fakeInstaller{}
 	capability := stage(&fakeTools{resolved: tools, present: true}, newDnf(), &fakeSetup{}, installer)
-	block := planBlock(t, capability, stateOf(environment(), machine("container-runtime", "libvirt"), hostedProvider(), cluster()), reconciliation.Apply)
+	block := planBlock(t, capability, stateOf(environment(), machine(), hostedProvider(), cluster()), reconciliation.Apply)
 	if _, err := capability.Apply(context.Background(), newRecorder(&fakeArea{}).execution(t, block, hostState())); err != nil {
 		t.Fatal(err)
 	}

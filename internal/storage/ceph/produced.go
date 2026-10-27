@@ -20,7 +20,7 @@ const (
 	dashboardAlphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_."
 )
 
-func DashboardBlock(cluster string) string { return "ceph-cluster-" + cluster }
+func DashboardBlock(cluster string) string { return ClusterBlockID(cluster) }
 
 type clientCredential struct {
 	Caps   map[string]string `json:"caps"`
@@ -87,9 +87,9 @@ func clientCaps(c Client) (map[string]string, bool) {
 		return nil, false
 	}
 	profile := "rbd"
-	if c.Access == "read-only" {
+	if c.Access == "readOnly" {
 		profile = "rbd-read-only"
-	} else if c.Access != "read-write" {
+	} else if c.Access != "readWrite" {
 		return nil, false
 	}
 	grants := []string{"profile " + profile + " pool=" + c.Pool}
@@ -100,7 +100,7 @@ func clientCaps(c Client) (map[string]string, bool) {
 }
 
 func cephFSClientCaps(c Client) (map[string]string, bool) {
-	grant := map[string]string{"read-only": "r", "read-write": "rw"}[c.Access]
+	grant := map[string]string{"readOnly": "r", "readWrite": "rw"}[c.Access]
 	if grant == "" || len(c.DataPools) != 0 {
 		return nil, false
 	}

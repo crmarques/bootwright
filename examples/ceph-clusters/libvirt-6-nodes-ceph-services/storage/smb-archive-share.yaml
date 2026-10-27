@@ -1,0 +1,20 @@
+apiVersion: bootwright.io/v1alpha1
+kind: CephSMBResource
+metadata:
+  name: smb-archive
+
+spec:
+  clusterRef: ceph-lab
+  smbClusterRef: files-smb
+  subvolumeRef: smb-archive
+
+  native:
+    resource_type: ceph.smb.share
+    share_id: archive
+    readonly: false
+
+    cephfs:
+      volume: files
+      subvolumegroup: ec
+      subvolume: smb-archive
+      path: /

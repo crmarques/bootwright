@@ -133,7 +133,7 @@ Drivers may project only qualified API-declared capabilities:
 
 - OLM namespace, OperatorGroup, CatalogSource, Subscription and typed resources;
 - package-owned Kubernetes/OpenShift manifest sets and manifest-only steps;
-- registered typed domain effects, such as `StorageExport` attachment; and
+- registered typed domain effects, such as `CephConsumer` attachment; and
 - readiness observations of named resources and conditions.
 
 Packages cannot supply playbooks, roles, collection plugins, Go plugins,
@@ -257,9 +257,9 @@ A playbook target sets exactly one selection arm and an optional limit:
 
 | Field | Shape | Rule |
 | --- | --- | --- |
-| `boundCluster` | `{}` | Machines of the binding's `ContainerCluster`. |
-| `fromInput` | `{input: <name>}` | A declared `resourceKind` input of kind `StorageExport`, `StorageCluster`, `ContainerCluster`, or `Machine`. A `StorageExport` input also declares `storageExportAttachment`. |
-| `static` | `{clusters?: [names], machines?: [names]}` | At least one list is non-empty. Cluster names resolve to `ContainerCluster` or `StorageCluster`; machine names resolve to SSH-accessible `Machine` objects. |
+| `boundCluster` | `{}` | Machines of the binding's `OpenShiftCluster`. |
+| `fromInput` | `{input: <name>}` | A declared `resourceKind` input of kind `CephConsumer`, `CephCluster`, `OpenShiftCluster`, or `Machine`. A `CephConsumer` input also declares `cephConsumerAttachment`. |
+| `static` | `{clusters?: [names], machines?: [names]}` | At least one list is non-empty. Cluster names resolve to `OpenShiftCluster` or `CephCluster`; machine names resolve to SSH-accessible `Machine` objects. |
 | `limit` | string | `firstReachable` by default, or `all`. |
 
 The target is forbidden on a manifest-only step. No target selects the

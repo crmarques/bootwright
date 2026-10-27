@@ -7,6 +7,19 @@ identity. [Kind defaults](environment.md#kind-defaults) apply before service
 defaults and reference validation. [The compiler boundary](../api.md#compiler-boundary)
 applies throughout: admission performs no connection, readiness check or effect.
 
+Every service kind names its objects under the [one name rule](../api.md#object-names).
+
+## Kinds
+
+| Kind | Declares |
+| --- | --- |
+| `Proxy` | One HTTP(S) proxy service its consumers select, managed or external. |
+| `DNSServer` | One DNS service its consumers select, managed or external. |
+| `NTPServer` | One time service its consumers select, managed or external. |
+| `ArtifactServer` | One artifact server that publishes installer media and package trees; Bootwright manages it. |
+| `Registry` | One container image registry its consumers mirror from, managed or external. |
+| `LoadBalancer` | One load balancer in front of cluster endpoints, managed or external. |
+
 ## Management and placement
 
 Every service has a flat `spec` with required `management: managed|external`.
@@ -24,17 +37,10 @@ ownership of the external service.
 | `spec.image.local` | string | With `image` | Digest-pinned image reference, used first when set. |
 | `spec.image.public` | string | With `image` | Digest-pinned image reference, used when `local` is absent. |
 
-A managed service plans one lifecycle block whose identity is its name behind
-a fixed prefix, and a block identity is at most 63 bytes. Validate therefore
-refuses a longer managed name at `metadata.name`, naming the limit; an
-external service plans no block and has no such limit.
-
-| Kind | Block identity | Name limit |
-| --- | --- | --- |
-| `ArtifactServer` | `artifact-server-<name>` | 47 |
-| `Proxy` | `proxy-<name>` | 57 |
-| `DNSServer` | `dns-<name>` | 59 |
-| `NTPServer` | `ntp-<name>` | 59 |
+A managed service plans one lifecycle block, `artifact-server-<name>`,
+`proxy-<name>`, `dns-<name>` or `ntp-<name>`, whose identity
+[hashes a tail that overflows](../state-reconciliation.md#durable-identities-and-private-paths)
+63 bytes; an external service plans no block.
 
 An image block sets at least one reference. For every managed kind the image
 is `local`, else `public`, else the executable's compiled default. Each
@@ -45,8 +51,9 @@ can supply it through the corresponding kind entry.
 Image declarations neither select an executable adapter nor claim anything
 about the image's release.
 
-Every managed service runs as a container, so each requires its placement
-Machine's `container-runtime` capability. That Machine also has effective
+Every managed service runs as a container, so its placement Machine is a
+container-runtime host by that placement, with no role declared on the Machine
+([substrate arm](machines.md#substrate-arm)). That Machine also has effective
 `os.provided: true`, because a managed service runs only where the operating
 system is ready; validate refuses any other placement at `spec.machineRef`.
 An external service forbids managed placement, implementation, image and
@@ -72,16 +79,21 @@ The four managed kinds use these deployment defaults:
 
 | Kind | Required implementation | `bindAddress` default | `port` default |
 | --- | --- | --- | --- |
-| `Proxy` | `squid` | `0.0.0.0` | `3128` |
-| `DNSServer` | `dnsmasq` | `0.0.0.0` | `53` |
-| `NTPServer` | `chrony` | `0.0.0.0` | `123` |
-| `Registry` | `mirror-registry` | `0.0.0.0` | `5000` |
+| `Proxy` | `squid` | derived | `3128` |
+| `DNSServer` | `dnsmasq` | derived | `53` |
+| `NTPServer` | `chrony` | derived | `123` |
+| `Registry` | `mirror-registry` | derived | `5000` |
 
-A wildcard default binds every address, so it collides with any other listener
-on that port, such as another resolver on the host; the apply then refuses
-before starting the service and names the socket under
-[host reservations](../infrastructure-services.md#host-reservations), and the
-examples declare an explicit bindAddress.
+An omitted `bindAddress` of a managed service, `ArtifactServer` included, is
+derived: when every endpoint names one IP address on the placement Machine, the
+service binds that address; when it declares no endpoint, or its endpoints name
+several addresses or a DNS name, it binds the wildcard `0.0.0.0`. The examples
+author none. A wildcard binds every address, so it collides with any other
+listener on that port, such as another resolver on the host; the apply then
+refuses before starting the service and names the socket under
+[host reservations](../infrastructure-services.md#host-reservations). An
+authored `bindAddress` overrides the derivation and keeps the endpoint
+comparison below.
 
 `bindAddress` is an IP literal. A port is in `1..65535`; DNSServer permits
 only `53` and NTPServer only `123`, because their consumers configure a
@@ -135,10 +147,10 @@ A managed ArtifactServer accepts these fields after `management`:
 | Field | Type | Required | Default or rule |
 | --- | --- | --- | --- |
 | `machineRef` | string | yes | Global placement Machine. |
-| `bindAddress` | string | no | IP literal; defaults `0.0.0.0`. |
-| `retention` | string | no | `persistent` by default, or `install-only`. |
+| `bindAddress` | string | no | IP literal; derived as the [deployment defaults](#proxy-dns-ntp-and-registry-deployment) state. |
+| `retention` | string | no | `persistent` by default, or `installOnly`. |
 | `tls` | object | conditional | Required when any effective listener uses HTTPS; forbidden for HTTP-only listeners. |
-| `tls.secretRef` | string | with TLS | `tlsCertificate` Secret supplying certificate and key. A [generated](secrets.md#generated-source) Secret's `ipAddresses` or `dnsNames` name the address of every HTTPS endpoint, or that endpoint refuses at `$.spec.endpoints[i]` naming the Secret and the address. Effect material: the server serves it. |
+| `tls.secretRef` | string | with TLS | `tlsCertificate` Secret supplying certificate and key. A [generated](secrets.md#generated-source) Secret derives its `ipAddresses` and `dnsNames` from these HTTPS endpoints; an authored list names the address of every HTTPS endpoint, or that endpoint refuses at `$.spec.endpoints[i]` naming the Secret and the address. Effect material: the server serves it. |
 | `tls.minVersion` | string | no | `TLSv1.2` by default, or `TLSv1.3`. |
 | `listeners` | array | no | Non-empty; defaults to `[{name: https, protocol: https, port: 8443}]`. |
 | `listeners[].name` | string | yes | Unique listener name. |
@@ -180,17 +192,15 @@ Each bind-address entry emits required IP `address` then optional `name`. Its
 when more than one entry exists and is unique when supplied. A cluster
 endpoint selects it through `source.loadBalancerRef` and optional
 `source.bindAddressRef`. Omission of the local reference is valid only for a
-single bind address. [Container endpoints](container-clusters.md#endpoints)
+single bind address. [Container endpoints](openshift-clusters.md#endpoints)
 own address, topology and VIP constraints.
 
 No capability realizes a managed LoadBalancer or a managed Registry. Both are
-admitted, and a managed one refuses at plan as an unclaimed managed service
-([stages](../state-reconciliation.md#stages-and-the-pause-boundary)); declare
-`management: external` to use one.
-
-Not yet met: validate admits an external ArtifactServer that no consumer reads,
-and a managed Registry or LoadBalancer although nothing realizes it; tracked as
-[B827](../milestones/backlog.md#b827).
+admitted with an [`api.unrealized`](../api.md#admitted-but-unrealized) warning,
+and a managed one refuses at plan as an unclaimed managed service whose remedy
+names `management: external`
+([unclaimed objects](../state-reconciliation.md#stages-and-the-pause-boundary));
+declare `management: external` to use one.
 
 ## Consumer selections
 
@@ -211,7 +221,7 @@ name, a `.domain` or `*.domain` suffix, an IP address or a CIDR block, each
 name or address optionally with `:port` and an IPv6 address bracketed before
 one, in at most 1024 bytes. Validate refuses another at `noProxy[<i>]` of
 whichever consumer declares the choice: a Machine, a MachineInstallProfile or a
-ContainerCluster installation.
+OpenShiftCluster installation.
 
 An external Proxy forbids `endpointRef`. A managed Proxy requires an explicit
 endpoint or exactly one declared endpoint, in which case normalization
@@ -248,7 +258,7 @@ A registry selection contains required scalar `registryRef` followed by
 optional scalar `endpointRef`. External Registry selections forbid an
 endpoint reference. Managed selections require an explicit endpoint or exactly
 one declared endpoint, whose name normalization materializes. The cluster's
-[registry policy](container-clusters.md#registry-policy) owns mirror use and
+[registry policy](openshift-clusters.md#registry-policy) owns mirror use and
 image-source mapping.
 
 ## Selection and bootstrap
@@ -264,7 +274,7 @@ create a service, or install its runtime.
 Reference resolution is not a readiness edge. An installation that selects a
 managed DNSServer, NTPServer or Proxy waits for it, as a container
 installation does for its Proxy
-([installation](../container-clusters.md#installation)); one that selects an
+([installation](../openshift-clusters.md#installation)); one that selects an
 external service uses its declared `address` or connection and gains no
 readiness edge, because no block of this product realizes it. The runtime edges between a
 service, its host and its consumers belong to

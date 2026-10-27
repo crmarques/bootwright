@@ -33,7 +33,7 @@ func rowsDefinitions() []reconciliation.BlockDefinition {
 
 func clusterBlock(id string, stage reconciliation.Stage, dependency string) reconciliation.BlockDefinition {
 	block := stagedDefinition(id, stage, dependency)
-	block.Kind, block.Object, block.Implementation = string(api.ContainerCluster), "sno", clusterImplementation
+	block.Kind, block.Object, block.Implementation = string(api.OpenShiftCluster), "sno", clusterImplementation
 	return block
 }
 
@@ -56,9 +56,9 @@ func (b boundCapabilities) Resolve(kind, implementation string) (Capability, boo
 }
 
 // rowsHarness applies a selected input declaring a managed ArtifactServer for
-// each artifact server block and the ContainerClusters sno and edge, which a
+// each artifact server block and the OpenShiftClusters sno and edge, which a
 // capability claims, and reads status over the same input with a
-// StorageCluster added, which none claims, and a managed ArtifactServer
+// CephCluster added, which none claims, and a managed ArtifactServer
 // mirror, which no operation names, so that apply never refuses either.
 type rowsHarness struct {
 	*harness
@@ -72,8 +72,8 @@ func newRowsHarness(t *testing.T, definitions []reconciliation.BlockDefinition) 
 		api.NewObject(api.Environment, "lab", api.Value{}, api.MapValue(
 			api.FieldValue{Name: "controller", Value: api.MapValue(api.FieldValue{Name: "machineRef", Value: api.StringValue("controller")})},
 		)),
-		api.NewObject(api.ContainerCluster, "sno", api.Value{}, api.MapValue()),
-		api.NewObject(api.ContainerCluster, "edge", api.Value{}, api.MapValue()),
+		api.NewObject(api.OpenShiftCluster, "sno", api.Value{}, api.MapValue()),
+		api.NewObject(api.OpenShiftCluster, "edge", api.Value{}, api.MapValue()),
 	}
 	for _, block := range definitions {
 		if block.Kind == string(api.ArtifactServer) {
@@ -85,7 +85,7 @@ func newRowsHarness(t *testing.T, definitions []reconciliation.BlockDefinition) 
 	}
 	applied := api.NewCatalog(objects)
 	declared := api.NewCatalog(append(objects,
-		api.NewObject(api.StorageCluster, "ceph", api.Value{}, api.MapValue()),
+		api.NewObject(api.CephCluster, "ceph", api.Value{}, api.MapValue()),
 		api.NewObject(api.ArtifactServer, "mirror", api.Value{}, api.MapValue(
 			api.FieldValue{Name: "management", Value: api.StringValue("managed")},
 			api.FieldValue{Name: "machineRef", Value: api.StringValue("controller")},
@@ -99,7 +99,7 @@ func newRowsHarness(t *testing.T, definitions []reconciliation.BlockDefinition) 
 	h.service.capabilities = boundCapabilities{
 		bindings: []CapabilityBinding{
 			{Kind: string(api.ArtifactServer), Implementation: "artifact-server-nginx-v1"},
-			{Kind: string(api.ContainerCluster), Implementation: clusterImplementation},
+			{Kind: string(api.OpenShiftCluster), Implementation: clusterImplementation},
 		},
 		capabilities: []Capability{h.capability, plannedCapability{Capability: h.capability}},
 	}
@@ -108,13 +108,13 @@ func newRowsHarness(t *testing.T, definitions []reconciliation.BlockDefinition) 
 
 // rows reads every cluster and shared service row status reports over the
 // declared input while the capabilities refuse the objects named, and refuse
-// the ContainerCluster edge and the ArtifactServer mirror whatever else they
+// the OpenShiftCluster edge and the ArtifactServer mirror whatever else they
 // refuse.
 func (r *rowsHarness) rows(t *testing.T, refused ...Refusal) map[string]RealizationStatus {
 	t.Helper()
 	r.service.compiler = r.declared
 	r.capability.unsupported = append([]Refusal{
-		{Kind: string(api.ContainerCluster), Name: "edge", Reason: "its nodes select an install profile"},
+		{Kind: string(api.OpenShiftCluster), Name: "edge", Reason: "its nodes select an install profile"},
 		{Kind: string(api.ArtifactServer), Name: "mirror", Reason: "its listener selects a client certificate"},
 	}, refused...)
 	defer func() { r.service.compiler, r.capability.unsupported = r.applied, nil }()
@@ -191,7 +191,7 @@ func TestStatusRowsReadTheOperationsVerb(t *testing.T) {
 		{
 			name:      "a completed apply whose cluster its capability now refuses",
 			arrange:   func(t *testing.T, h *rowsHarness) { completeApply(t, h.harness) },
-			refused:   refuse(api.ContainerCluster, "sno"),
+			refused:   refuse(api.OpenShiftCluster, "sno"),
 			artifacts: RealizationDone, cluster: RealizationDone,
 		},
 		{
@@ -230,7 +230,7 @@ func TestStatusRowsReadTheOperationsVerb(t *testing.T) {
 		{
 			name: "an apply paused after the cluster media, before its install",
 			arrange: func(t *testing.T, h *rowsHarness) {
-				applyChained(t, h.harness, nil, string(reconciliation.StageInfraComponents), string(reconciliation.StageMachines))
+				applyChained(t, h.harness, nil, string(reconciliation.StageInfrastructureServices), string(reconciliation.StageMachines))
 				requireReached(t, h.harness, reconciliation.OperationPaused, map[string]reconciliation.BlockState{
 					"artifacts": reconciliation.BlockDone, "media-sno": reconciliation.BlockDone, "install-sno": reconciliation.BlockPending,
 				})
@@ -321,7 +321,7 @@ func TestStatusRowsReadTheOperationsVerb(t *testing.T) {
 					t.Fatalf("the superseding removal = %+v (%v), want one naming only the artifact server", status.Lifecycle, err)
 				}
 			},
-			refused:   refuse(api.ContainerCluster, "sno"),
+			refused:   refuse(api.OpenShiftCluster, "sno"),
 			artifacts: RealizationFailed, cluster: RealizationPending,
 		},
 	} {
@@ -329,8 +329,8 @@ func TestStatusRowsReadTheOperationsVerb(t *testing.T) {
 			h := newRowsHarness(t, rowsDefinitions())
 			row.arrange(t, h)
 			want := map[string]RealizationStatus{
-				"ArtifactServer/artifacts": row.artifacts, "ContainerCluster/sno": row.cluster,
-				"ContainerCluster/edge": RealizationUnsupported, "StorageCluster/ceph": RealizationUnsupported,
+				"ArtifactServer/artifacts": row.artifacts, "OpenShiftCluster/sno": row.cluster,
+				"OpenShiftCluster/edge": RealizationUnsupported, "CephCluster/ceph": RealizationUnsupported,
 				"ArtifactServer/mirror": RealizationUnsupported,
 			}
 			if got := h.rows(t, row.refused...); !maps.Equal(got, want) {
@@ -392,7 +392,7 @@ func TestStatusRowsAfterAReplacingRemoval(t *testing.T) {
 				"other": reconciliation.BlockFailed, "media-sno": reconciliation.BlockPending, "artifacts": reconciliation.BlockPending,
 			}),
 			want: map[string]RealizationStatus{
-				"ContainerCluster/sno": RealizationPending, "ArtifactServer/other": RealizationFailed, "ArtifactServer/artifacts": RealizationDone,
+				"OpenShiftCluster/sno": RealizationPending, "ArtifactServer/other": RealizationFailed, "ArtifactServer/artifacts": RealizationDone,
 			},
 		},
 		{
@@ -400,7 +400,7 @@ func TestStatusRowsAfterAReplacingRemoval(t *testing.T) {
 			definitions: append(rowsDefinitions(), definition("other")),
 			arrange:     twoAttempts(secondFailedMedia),
 			want: map[string]RealizationStatus{
-				"ContainerCluster/sno": RealizationFailed, "ArtifactServer/other": RealizationFailed, "ArtifactServer/artifacts": RealizationDone,
+				"OpenShiftCluster/sno": RealizationFailed, "ArtifactServer/other": RealizationFailed, "ArtifactServer/artifacts": RealizationDone,
 			},
 		},
 		{
@@ -415,7 +415,7 @@ func TestStatusRowsAfterAReplacingRemoval(t *testing.T) {
 				registerReplacement(t, h.harness, replacementID)
 			},
 			want: map[string]RealizationStatus{
-				"ContainerCluster/sno": RealizationDone, "ArtifactServer/other": RealizationFailed, "ArtifactServer/artifacts": RealizationDone,
+				"OpenShiftCluster/sno": RealizationDone, "ArtifactServer/other": RealizationFailed, "ArtifactServer/artifacts": RealizationDone,
 			},
 		},
 		{
@@ -426,7 +426,7 @@ func TestStatusRowsAfterAReplacingRemoval(t *testing.T) {
 				registerReplacement(t, h.harness, replacementID)
 			},
 			want: map[string]RealizationStatus{
-				"ContainerCluster/sno": RealizationFailed, "ArtifactServer/other": RealizationFailed, "ArtifactServer/artifacts": RealizationDone,
+				"OpenShiftCluster/sno": RealizationFailed, "ArtifactServer/other": RealizationFailed, "ArtifactServer/artifacts": RealizationDone,
 			},
 		},
 		{
@@ -447,7 +447,7 @@ func TestStatusRowsAfterAReplacingRemoval(t *testing.T) {
 				}
 			},
 			want: map[string]RealizationStatus{
-				"ContainerCluster/sno": RealizationFailed, "ArtifactServer/other": RealizationUnknown, "ArtifactServer/artifacts": RealizationUnknown,
+				"OpenShiftCluster/sno": RealizationFailed, "ArtifactServer/other": RealizationUnknown, "ArtifactServer/artifacts": RealizationUnknown,
 			},
 		},
 	} {
@@ -457,7 +457,7 @@ func TestStatusRowsAfterAReplacingRemoval(t *testing.T) {
 			row.arrange(t, h)
 			want := maps.Clone(row.want)
 			maps.Copy(want, map[string]RealizationStatus{
-				"ContainerCluster/edge": RealizationUnsupported, "StorageCluster/ceph": RealizationUnsupported, "ArtifactServer/mirror": RealizationUnsupported,
+				"OpenShiftCluster/edge": RealizationUnsupported, "CephCluster/ceph": RealizationUnsupported, "ArtifactServer/mirror": RealizationUnsupported,
 			})
 			if got := h.rows(t); !maps.Equal(got, want) {
 				t.Fatalf("rows = %v, want %v", got, want)

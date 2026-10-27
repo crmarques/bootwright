@@ -18,20 +18,20 @@ import (
 
 func TestCoreConfigIsFrozenAcrossClusterChildrenAndChangedIntent(t *testing.T) {
 	catalog := poolRequestCatalog(3, 3)
-	cluster, _ := catalog.Find(api.StorageCluster, "example")
+	cluster, _ := catalog.Find(api.CephCluster, "example")
 	config := requestMap("osd", requestMap("osd_memory_target_autotune", "false", "osd_memory_target", "2147483648"),
 		"global", requestMap("osd_pool_default_size", "2", "osd_pool_default_min_size", "2"))
-	changed := cluster.WithSpec(cluster.Spec().WithPath(config, "ceph", "config"))
+	changed := cluster.WithSpec(cluster.Spec().WithPath(config, "config"))
 	objects := catalog.Objects()
 	for i, object := range objects {
 		if object.Identity() == changed.Identity() {
 			objects[i] = changed
 		}
 	}
-	pool := api.NewObject(api.StoragePool, "volumes", api.Value{}, requestMap("clusterRef", "example", "type", "replicated", "role", "rbd", "replicated", requestMap("size", 2, "minSize", 2)))
+	pool := api.NewObject(api.CephPool, "volumes", api.Value{}, requestMap("clusterRef", "example", "role", "rbd", "replicated", requestMap("size", 2, "minSize", 2)))
 	objects = append(objects, pool)
 	catalog = api.NewCatalog(objects)
-	client := api.NewObject(api.StorageClient, "consumer", api.Value{}, requestMap("clusterRef", "example", "poolRef", "volumes", "access", "read-write"))
+	client := api.NewObject(api.CephClient, "consumer", api.Value{}, requestMap("clusterRef", "example", "poolRef", "volumes", "access", "readWrite"))
 	for _, object := range []api.Object{changed, pool, client} {
 		r, err := New(object.Kind(), nil).request(catalog, object, "synthetic")
 		if err != nil || r.Config["osd"]["osd_memory_target"] != "2147483648" || r.Config["osd"]["osd_memory_target_autotune"] != "false" ||
@@ -51,11 +51,11 @@ func TestCoreConfigIsFrozenAcrossClusterChildrenAndChangedIntent(t *testing.T) {
 		if _, err := DecodeRequest(old); err == nil {
 			t.Fatal("old frozen request silently migrated")
 		}
-		if !changed.Spec().Get("ceph", "config").Equal(config) {
+		if !changed.Spec().Get("config").Equal(config) {
 			t.Fatal("request mutation changed authored config")
 		}
 	}
-	bad := changed.WithSpec(changed.Spec().WithPath(api.StringValue("true"), "ceph", "config", "osd", "osd_memory_target_autotune"))
+	bad := changed.WithSpec(changed.Spec().WithPath(api.StringValue("true"), "config", "osd", "osd_memory_target_autotune"))
 	if _, err := baseRequest(catalog, bad, "synthetic"); err == nil {
 		t.Fatal("compiler bypassed config admission")
 	}
@@ -83,12 +83,12 @@ func requestMap(pairs ...any) api.Value {
 }
 
 func TestClusterSSHTransportIsFrozenForClusterAndChildren(t *testing.T) {
-	for _, transport := range []string{"", "native", "verified-tunnel", "unknown"} {
+	for _, transport := range []string{"", "native", "verifiedTunnel", "unknown"} {
 		t.Run(transport, func(t *testing.T) {
 			catalog := poolRequestCatalog(3, 3)
-			cluster, _ := catalog.Find(api.StorageCluster, "example")
+			cluster, _ := catalog.Find(api.CephCluster, "example")
 			if transport != "" {
-				cluster = cluster.WithSpec(cluster.Spec().WithPath(api.StringValue(transport), "ceph", "cephadm", "clusterSSH", "transport"))
+				cluster = cluster.WithSpec(cluster.Spec().WithPath(api.StringValue(transport), "cephadm", "clusterSSH", "transport"))
 			}
 			objects := catalog.Objects()
 			for i := range objects {
@@ -96,10 +96,10 @@ func TestClusterSSHTransportIsFrozenForClusterAndChildren(t *testing.T) {
 					objects[i] = cluster
 				}
 			}
-			pool := api.NewObject(api.StoragePool, "volumes", api.Value{}, requestMap("clusterRef", "example", "type", "replicated", "role", "rbd", "replicated", requestMap("size", 2, "minSize", 2)))
+			pool := api.NewObject(api.CephPool, "volumes", api.Value{}, requestMap("clusterRef", "example", "role", "rbd", "replicated", requestMap("size", 2, "minSize", 2)))
 			objects = append(objects, pool)
 			catalog = api.NewCatalog(objects)
-			client := api.NewObject(api.StorageClient, "consumer", api.Value{}, requestMap("clusterRef", "example", "poolRef", "volumes", "access", "read-write"))
+			client := api.NewObject(api.CephClient, "consumer", api.Value{}, requestMap("clusterRef", "example", "poolRef", "volumes", "access", "readWrite"))
 			for _, object := range []api.Object{cluster, pool, client} {
 				r, err := New(object.Kind(), nil).request(catalog, object, "synthetic")
 				if transport == "unknown" {
@@ -110,7 +110,7 @@ func TestClusterSSHTransportIsFrozenForClusterAndChildren(t *testing.T) {
 				}
 				want := transport
 				if want == "" {
-					want = "verified-tunnel"
+					want = "verifiedTunnel"
 				}
 				if err != nil || r.ClusterSSHTransport != want {
 					t.Fatalf("%s transport=%s err=%v", object.Identity(), r.ClusterSSHTransport, err)
@@ -140,7 +140,7 @@ func poolRequestCatalog(hostCount, osdHosts int) api.Catalog {
 		}
 		nodes = append(nodes, requestMap("name", name, "machineRef", name, "labels", api.StringList(labels...)))
 		objects = append(objects, api.NewObject(api.Machine, name, api.Value{}, requestMap(
-			"substrate", requestMap("providerRef", "hypervisor", "profileRef", "guest"),
+			"substrate", requestMap("providerRef", "hypervisor", "libvirt", requestMap("profileRef", "guest")),
 			"os", requestMap("provided", false, "installProfileRef", "rhel"),
 			"network", requestMap("addresses", api.ListValue(requestMap("name", "ip", "address", fmt.Sprintf("192.0.2.%d", i)))),
 			"access", requestMap("ssh", requestMap("addressRef", "ip", "user", "operator", "auth", requestMap("privateKeyRef", "fleet-key"))),
@@ -149,11 +149,10 @@ func poolRequestCatalog(hostCount, osdHosts int) api.Catalog {
 	objects = append(objects,
 		api.NewObject(api.InfraProvider, "hypervisor", api.Value{}, requestMap("libvirt", requestMap("machineProfiles", api.ListValue(requestMap("name", "guest", "dataDisks", api.ListValue(requestMap("name", "data", "sizeGiB", 1))))))),
 		api.NewObject(api.Entitlement, "ibm", api.Value{}, requestMap("license", requestMap("accept", true), "registry", requestMap("url", PinnedRegistry, "credentialsRef", "registry"))),
-		api.NewObject(api.StorageCluster, "example", api.Value{}, requestMap("ceph", requestMap(
-			"distribution", "ibm", "release", "9.9.1.2", "packageVersion", "20.2.1-405.el9cp", "entitlementRef", "ibm",
+		api.NewObject(api.CephCluster, "example", api.Value{}, requestMap(
+			"distribution", requestMap("ibm", requestMap("callHome", "enabled")), "release", "9.9.1.2", "packageVersion", "20.2.1-405.el9cp", "entitlementRef", "ibm",
 			"image", requestMap("base", PinnedRepository, "version", PinnedTag),
-			"ibm", requestMap("callHome", "enabled"),
-			"cephadm", requestMap("ansible", requestMap("packageVersion", "5.0.3-1"), "clusterSSH", requestMap("user", "operator", "keyRef", "cluster-key"), "bootstrap", requestMap("node", "node-1")),
+			"cephadm", requestMap("ansible", requestMap("packageVersion", "5.0.3-1"), "clusterSSH", requestMap("user", "operator", "keyRef", "cluster-key"), "bootstrap", requestMap("nodeRef", "node-1")),
 			"networks", requestMap("publicCIDRs", api.StringList("192.0.2.0/24")),
 			"topology", requestMap("nodes", api.ListValue(nodes...)),
 			"services", api.ListValue(
@@ -161,7 +160,7 @@ func poolRequestCatalog(hostCount, osdHosts int) api.Catalog {
 				requestMap("service_type", "mgr", "placement", requestMap("label", "mon", "count", 2)),
 				requestMap("service_type", "osd", "service_id", "data", "placement", requestMap("label", "storage"), "spec", requestMap("data_devices", requestMap("paths", api.StringList("/dev/vdb")))),
 			),
-		))),
+		)),
 	)
 	return api.NewCatalog(objects)
 }
@@ -188,11 +187,11 @@ func TestCorePoolUsesProviderReplicationCapacityAndDefaults(t *testing.T) {
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			catalog := poolRequestCatalog(test.hosts, test.osdHosts)
-			spec := requestMap("clusterRef", "example", "type", "replicated", "role", "rbd")
+			spec := requestMap("clusterRef", "example", "role", "rbd")
 			if test.replicated.Present() {
 				spec = spec.With("replicated", test.replicated)
 			}
-			pool := api.NewObject(api.StoragePool, "volumes", api.Value{}, spec)
+			pool := api.NewObject(api.CephPool, "volumes", api.Value{}, spec)
 			request, err := poolRequest(catalog, pool, "synthetic")
 			if test.refusal != "" {
 				issues := diagnostics.Of(err)
@@ -212,11 +211,11 @@ func TestDisabledCallHomePlansAndChangesOnlyItsOwnField(t *testing.T) {
 	type planner func(context.Context, lifecycle.PlanInput) (lifecycle.CapabilityPlan, error)
 	plan := func(callHome string) (Request, map[string][]byte, []byte) {
 		catalog := pinnedCatalog(t, func(spec api.Value) api.Value {
-			return spec.WithPath(api.StringValue(callHome), "ceph", "ibm", "callHome")
+			return spec.WithPath(api.StringValue(callHome), "distribution", "ibm", "callHome")
 		})
 		input := lifecycle.PlanInput{Verb: reconciliation.Apply, Context: lifecycle.ContextIdentity{Name: "synthetic"}, State: compilation.NewState(catalog, catalog, nil), Controller: "controller"}
 		blocks := map[string][]byte{}
-		for name, plan := range map[string]planner{"cluster": New(api.StorageCluster, nil).Plan, "host": NewHost(nil).Plan, "image": NewImage(nil).Plan} {
+		for name, plan := range map[string]planner{"cluster": New(api.CephCluster, nil).Plan, "host": NewHost(nil).Plan, "image": NewImage(nil).Plan} {
 			planned, err := plan(context.Background(), input)
 			if err != nil || len(planned.Definitions) == 0 {
 				t.Fatalf("%s did not plan with callHome %s: %+v %v", name, callHome, planned, err)
@@ -225,7 +224,7 @@ func TestDisabledCallHomePlansAndChangesOnlyItsOwnField(t *testing.T) {
 				blocks[name+"/"+definition.ID] = definition.Request
 			}
 		}
-		object, _ := catalog.Find(api.StorageCluster, "example")
+		object, _ := catalog.Find(api.CephCluster, "example")
 		cluster, err := baseRequest(catalog, object, "synthetic")
 		if err != nil {
 			t.Fatal(err)
@@ -276,12 +275,12 @@ func TestAnImageBaseThatIsOnlyTheRegistryHostRefusesAtPlanning(t *testing.T) {
 			switch object.Kind() {
 			case api.Entitlement:
 				objects[i] = object.WithSpec(object.Spec().WithPath(api.StringValue("registry.example.test"), "registry", "url"))
-			case api.StorageCluster:
-				objects[i] = object.WithSpec(object.Spec().WithPath(api.StringValue(base), "ceph", "image", "base"))
+			case api.CephCluster:
+				objects[i] = object.WithSpec(object.Spec().WithPath(api.StringValue(base), "image", "base"))
 			}
 		}
 		catalog := api.NewCatalog(objects)
-		cluster, _ := catalog.Find(api.StorageCluster, "example")
+		cluster, _ := catalog.Find(api.CephCluster, "example")
 		_, err := baseRequest(catalog, cluster, "synthetic")
 		if !refused {
 			if err != nil {
@@ -311,19 +310,19 @@ func withRegistryTrust(catalog api.Catalog) api.Catalog {
 
 func TestDeclaredRegistryTrustBundlePlansOnceConsumed(t *testing.T) {
 	catalog := withRegistryTrust(pinnedCatalog(t, nil))
-	r, err := baseRequest(catalog, catalog.OfKind(api.StorageCluster)[0], "synthetic")
+	r, err := baseRequest(catalog, catalog.OfKind(api.CephCluster)[0], "synthetic")
 	if err != nil || r.RegistryTrustBundleRef != "registry-ca" {
 		t.Fatalf("base request: %q %v", r.RegistryTrustBundleRef, err)
 	}
 	state := compilation.NewState(catalog, catalog, nil)
 	runner := &recordingRunner{}
-	for _, kind := range []api.Kind{api.StorageCluster, api.StoragePool, api.StorageClient} {
+	for _, kind := range []api.Kind{api.CephCluster, api.CephPool, api.CephClient} {
 		if got := New(kind, runner).Unsupported(state); len(got) != 0 {
 			t.Fatalf("%s: refuses %+v", kind, got)
 		}
 	}
 	input := lifecycle.PlanInput{Verb: reconciliation.Apply, Context: lifecycle.ContextIdentity{Name: "synthetic"}, State: state, Controller: "controller"}
-	plan, err := New(api.StorageCluster, runner).Plan(context.Background(), input)
+	plan, err := New(api.CephCluster, runner).Plan(context.Background(), input)
 	if err != nil || len(plan.Definitions) == 0 || slices.Contains(plan.Secrets, "registry-ca") {
 		t.Fatalf("core plan: %v %v", plan.Secrets, err)
 	}
@@ -334,20 +333,20 @@ func TestDeclaredRegistryTrustBundlePlansOnceConsumed(t *testing.T) {
 
 func TestDeclaredPackageRepositoryTrustBundlePlansOnceConsumed(t *testing.T) {
 	catalog := pinnedCatalog(t, func(spec api.Value) api.Value {
-		return spec.WithPath(api.StringValue("https://packages.example.test/ceph"), "ceph", "packageRepository").WithPath(api.StringValue("https://packages.example.test/keys/ibm.asc"), "ceph", "packageRepositoryKey").WithPath(api.StringValue("repository-ca"), "ceph", "packageRepositoryTrustBundleRef")
+		return spec.WithPath(api.StringValue("https://packages.example.test/ceph"), "packageRepository").WithPath(api.StringValue("https://packages.example.test/keys/ibm.asc"), "packageRepositoryKey").WithPath(api.StringValue("repository-ca"), "packageRepositoryTrustBundleRef")
 	})
-	if _, err := baseRequest(catalog, catalog.OfKind(api.StorageCluster)[0], "synthetic"); err != nil {
+	if _, err := baseRequest(catalog, catalog.OfKind(api.CephCluster)[0], "synthetic"); err != nil {
 		t.Fatalf("base request: %v", diagnostics.Of(err))
 	}
 	state := compilation.NewState(catalog, catalog, nil)
 	runner := &recordingRunner{}
-	for _, kind := range []api.Kind{api.StorageCluster, api.StoragePool, api.StorageClient} {
+	for _, kind := range []api.Kind{api.CephCluster, api.CephPool, api.CephClient} {
 		if got := New(kind, runner).Unsupported(state); len(got) != 0 {
 			t.Fatalf("%s: refuses %+v", kind, got)
 		}
 	}
 	input := lifecycle.PlanInput{Verb: reconciliation.Apply, Context: lifecycle.ContextIdentity{Name: "synthetic"}, State: state, Controller: "controller"}
-	if plan, err := New(api.StorageCluster, runner).Plan(context.Background(), input); err != nil || len(plan.Definitions) == 0 || slices.Contains(plan.Secrets, "repository-ca") {
+	if plan, err := New(api.CephCluster, runner).Plan(context.Background(), input); err != nil || len(plan.Definitions) == 0 || slices.Contains(plan.Secrets, "repository-ca") {
 		t.Fatalf("core plan: %v %v", plan.Secrets, diagnostics.Of(err))
 	}
 	if plan, err := NewImage(runner).Plan(context.Background(), input); err != nil || slices.Contains(plan.Secrets, "repository-ca") {

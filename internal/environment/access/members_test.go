@@ -6,8 +6,8 @@ import (
 )
 
 func storageMembers(object api.Object) (environment.Membership, bool) {
-	if object.Kind() != api.StorageCluster {
+	if object.Kind() != api.CephCluster {
 		return environment.Membership{}, false
 	}
-	return environment.MembersOf("$.spec.ceph.topology.nodes", object.Spec().Get("ceph", "topology", "nodes")), true
+	return environment.MembersOf("$.spec.topology.nodes", object.Spec().Get("topology", "nodes")), true
 }

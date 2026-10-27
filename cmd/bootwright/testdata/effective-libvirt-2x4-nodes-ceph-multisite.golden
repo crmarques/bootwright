@@ -22,7 +22,7 @@ kind: Entitlement
 metadata:
   name: ibm-ceph
 spec:
-  type: ibm-storage-ceph
+  type: ibmStorageCeph
   registry:
     url: cp.icr.io
     credentialsRef: ibm-registry
@@ -34,10 +34,13 @@ kind: Machine
 metadata:
   name: client
 spec:
-  capabilities: []
   substrate:
     providerRef: lab-libvirt
-    profileRef: client
+    libvirt:
+      profileRef: client
+  hardware:
+    rootDevice:
+      deviceName: /dev/vda
   os:
     provided: false
     installProfileRef: rhel-9-8
@@ -45,8 +48,6 @@ spec:
       ntp:
         - serverRef: lab-ntp
           endpointRef: ip
-      rootDeviceHints:
-        deviceName: /dev/vda
   proxy:
     direct: {}
   network:
@@ -73,9 +74,6 @@ kind: Machine
 metadata:
   name: controller
 spec:
-  capabilities:
-    - container-runtime
-    - libvirt
   os:
     provided: true
   proxy:
@@ -95,11 +93,13 @@ kind: Machine
 metadata:
   name: primary-01
 spec:
-  capabilities:
-    - ceph-node
   substrate:
     providerRef: lab-libvirt
-    profileRef: core
+    libvirt:
+      profileRef: core
+  hardware:
+    rootDevice:
+      deviceName: /dev/vda
   os:
     provided: false
     installProfileRef: rhel-9-8
@@ -107,8 +107,6 @@ spec:
       ntp:
         - serverRef: lab-ntp
           endpointRef: ip
-      rootDeviceHints:
-        deviceName: /dev/vda
   proxy:
     direct: {}
   network:
@@ -135,11 +133,13 @@ kind: Machine
 metadata:
   name: primary-02
 spec:
-  capabilities:
-    - ceph-node
   substrate:
     providerRef: lab-libvirt
-    profileRef: core
+    libvirt:
+      profileRef: core
+  hardware:
+    rootDevice:
+      deviceName: /dev/vda
   os:
     provided: false
     installProfileRef: rhel-9-8
@@ -147,8 +147,6 @@ spec:
       ntp:
         - serverRef: lab-ntp
           endpointRef: ip
-      rootDeviceHints:
-        deviceName: /dev/vda
   proxy:
     direct: {}
   network:
@@ -175,11 +173,13 @@ kind: Machine
 metadata:
   name: primary-03
 spec:
-  capabilities:
-    - ceph-node
   substrate:
     providerRef: lab-libvirt
-    profileRef: gateway
+    libvirt:
+      profileRef: gateway
+  hardware:
+    rootDevice:
+      deviceName: /dev/vda
   os:
     provided: false
     installProfileRef: rhel-9-8
@@ -187,8 +187,6 @@ spec:
       ntp:
         - serverRef: lab-ntp
           endpointRef: ip
-      rootDeviceHints:
-        deviceName: /dev/vda
   proxy:
     direct: {}
   network:
@@ -215,11 +213,13 @@ kind: Machine
 metadata:
   name: primary-04
 spec:
-  capabilities:
-    - ceph-node
   substrate:
     providerRef: lab-libvirt
-    profileRef: mirror
+    libvirt:
+      profileRef: mirror
+  hardware:
+    rootDevice:
+      deviceName: /dev/vda
   os:
     provided: false
     installProfileRef: rhel-9-8
@@ -227,8 +227,6 @@ spec:
       ntp:
         - serverRef: lab-ntp
           endpointRef: ip
-      rootDeviceHints:
-        deviceName: /dev/vda
   proxy:
     direct: {}
   network:
@@ -255,11 +253,13 @@ kind: Machine
 metadata:
   name: secondary-01
 spec:
-  capabilities:
-    - ceph-node
   substrate:
     providerRef: lab-libvirt
-    profileRef: core
+    libvirt:
+      profileRef: core
+  hardware:
+    rootDevice:
+      deviceName: /dev/vda
   os:
     provided: false
     installProfileRef: rhel-9-8
@@ -267,8 +267,6 @@ spec:
       ntp:
         - serverRef: lab-ntp
           endpointRef: ip
-      rootDeviceHints:
-        deviceName: /dev/vda
   proxy:
     direct: {}
   network:
@@ -295,11 +293,13 @@ kind: Machine
 metadata:
   name: secondary-02
 spec:
-  capabilities:
-    - ceph-node
   substrate:
     providerRef: lab-libvirt
-    profileRef: core
+    libvirt:
+      profileRef: core
+  hardware:
+    rootDevice:
+      deviceName: /dev/vda
   os:
     provided: false
     installProfileRef: rhel-9-8
@@ -307,8 +307,6 @@ spec:
       ntp:
         - serverRef: lab-ntp
           endpointRef: ip
-      rootDeviceHints:
-        deviceName: /dev/vda
   proxy:
     direct: {}
   network:
@@ -335,11 +333,13 @@ kind: Machine
 metadata:
   name: secondary-03
 spec:
-  capabilities:
-    - ceph-node
   substrate:
     providerRef: lab-libvirt
-    profileRef: gateway
+    libvirt:
+      profileRef: gateway
+  hardware:
+    rootDevice:
+      deviceName: /dev/vda
   os:
     provided: false
     installProfileRef: rhel-9-8
@@ -347,8 +347,6 @@ spec:
       ntp:
         - serverRef: lab-ntp
           endpointRef: ip
-      rootDeviceHints:
-        deviceName: /dev/vda
   proxy:
     direct: {}
   network:
@@ -375,11 +373,13 @@ kind: Machine
 metadata:
   name: secondary-04
 spec:
-  capabilities:
-    - ceph-node
   substrate:
     providerRef: lab-libvirt
-    profileRef: mirror
+    libvirt:
+      profileRef: mirror
+  hardware:
+    rootDevice:
+      deviceName: /dev/vda
   os:
     provided: false
     installProfileRef: rhel-9-8
@@ -387,8 +387,6 @@ spec:
       ntp:
         - serverRef: lab-ntp
           endpointRef: ip
-      rootDeviceHints:
-        deviceName: /dev/vda
   proxy:
     direct: {}
   network:
@@ -556,10 +554,7 @@ spec:
       cpu: 1
       memoryMiB: 4096
       diskGiB: 10
-    bmcEmulationDefaults:
-      enabled: true
-      protocol: redfish
-      emulator: sushy-tools
+    bmcEmulation:
       bindAddress: 127.0.0.1
       certificateRef: lab-bmc-tls
       port: 8000
@@ -686,249 +681,242 @@ spec:
       addressRef: ip
 ---
 apiVersion: bootwright.io/v1alpha1
-kind: StorageCluster
+kind: CephCluster
 metadata:
   name: primary
 spec:
-  type: ceph
   management: managed
-  ceph:
-    distribution: ibm
-    release: 9.9.2.0
-    packageVersion: 20.2.2-349.el9cp
-    image:
-      base: cp.icr.io/cp/ibm-ceph/ceph-9-rhel10
-      version: v9.9.2-26947
+  distribution:
     ibm:
       callHome: enabled
       packages:
         source: vendor
-    entitlementRef: ibm-ceph
-    cephadm:
+  release: 9.9.2.0
+  packageVersion: 20.2.2-349.el9cp
+  image:
+    base: cp.icr.io/cp/ibm-ceph/ceph-9-rhel10
+    version: v9.9.2-26947
+  entitlementRef: ibm-ceph
+  cephadm:
+    addressRef: ip
+    ansible:
+      packageVersion: 5.0.3-1.el9cp
+    clusterSSH:
+      user: bootwright
+      keyRef: primary-cluster-key
+      transport: verifiedTunnel
+    bootstrap:
+      nodeRef: primary-01
       addressRef: ip
-      ansible:
-        packageVersion: 5.0.3-1.el9cp
-      clusterSSH:
-        user: bootwright
-        keyRef: primary-cluster-key
-        transport: verified-tunnel
-      bootstrap:
-        node: primary-01
-        addressRef: ip
-    networks:
-      publicCIDRs:
-        - 198.51.100.0/24
-    config:
-      global:
-        osd_pool_default_min_size: "2"
-        osd_pool_default_size: "2"
-      osd:
-        osd_memory_target: "4294967296"
-        osd_memory_target_autotune: "false"
-    services:
-      - service_type: mon
-        placement:
-          label: mon
-          count: 3
-      - service_type: mgr
-        placement:
-          label: core
-          count: 2
-      - service_type: osd
-        service_id: data
-        placement:
-          label: osd
-        spec:
-          data_devices:
-            paths:
-              - /dev/sda
-      - service_type: mds
-        service_id: primary-files
-        placement:
-          label: core
-          count: 2
-      - service_type: rgw
-        service_id: primary-objects
-        placement:
-          label: gateway
-          count: 1
-        spec:
-          rgw_frontend_port: 80
-          rgw_realm: primary
-          rgw_zone: primary
-          rgw_zonegroup: primary
-      - service_type: rbd-mirror
-        placement:
-          label: mirror
-          count: 1
-    topology:
-      nodes:
-        - name: primary-01
-          fqdn: primary-01.lab.example.test
-          machineRef: primary-01
-          labels:
-            - osd
-            - mon
-            - core
-        - name: primary-02
-          fqdn: primary-02.lab.example.test
-          machineRef: primary-02
-          labels:
-            - osd
-            - mon
-            - core
-        - name: primary-03
-          fqdn: primary-03.lab.example.test
-          machineRef: primary-03
-          labels:
-            - osd
-            - mon
-            - gateway
-        - name: primary-04
-          fqdn: primary-04.lab.example.test
-          machineRef: primary-04
-          labels:
-            - osd
-            - mirror
+  networks:
+    publicCIDRs:
+      - 198.51.100.0/24
+  config:
+    global:
+      osd_pool_default_min_size: "2"
+      osd_pool_default_size: "2"
+    osd:
+      osd_memory_target: "4294967296"
+      osd_memory_target_autotune: "false"
+  services:
+    - service_type: mon
+      placement:
+        label: mon
+        count: 3
+    - service_type: mgr
+      placement:
+        label: core
+        count: 2
+    - service_type: osd
+      service_id: data
+      placement:
+        label: osd
+      spec:
+        data_devices:
+          paths:
+            - /dev/sda
+    - service_type: mds
+      service_id: primary-files
+      placement:
+        label: core
+        count: 2
+    - service_type: rgw
+      service_id: primary-objects
+      placement:
+        label: gateway
+        count: 1
+      spec:
+        rgw_frontend_port: 80
+        rgw_realm: primary
+        rgw_zone: primary
+        rgw_zonegroup: primary
+    - service_type: rbd-mirror
+      placement:
+        label: mirror
+        count: 1
+  topology:
+    nodes:
+      - name: primary-01
+        fqdn: primary-01.lab.example.test
+        machineRef: primary-01
+        labels:
+          - osd
+          - mon
+          - core
+      - name: primary-02
+        fqdn: primary-02.lab.example.test
+        machineRef: primary-02
+        labels:
+          - osd
+          - mon
+          - core
+      - name: primary-03
+        fqdn: primary-03.lab.example.test
+        machineRef: primary-03
+        labels:
+          - osd
+          - mon
+          - gateway
+      - name: primary-04
+        fqdn: primary-04.lab.example.test
+        machineRef: primary-04
+        labels:
+          - osd
+          - mirror
 ---
 apiVersion: bootwright.io/v1alpha1
-kind: StorageCluster
+kind: CephCluster
 metadata:
   name: secondary
 spec:
-  type: ceph
   management: managed
-  ceph:
-    distribution: ibm
-    release: 9.9.2.0
-    packageVersion: 20.2.2-349.el9cp
-    image:
-      base: cp.icr.io/cp/ibm-ceph/ceph-9-rhel10
-      version: v9.9.2-26947
+  distribution:
     ibm:
       callHome: enabled
       packages:
         source: vendor
-    entitlementRef: ibm-ceph
-    cephadm:
+  release: 9.9.2.0
+  packageVersion: 20.2.2-349.el9cp
+  image:
+    base: cp.icr.io/cp/ibm-ceph/ceph-9-rhel10
+    version: v9.9.2-26947
+  entitlementRef: ibm-ceph
+  cephadm:
+    addressRef: ip
+    ansible:
+      packageVersion: 5.0.3-1.el9cp
+    clusterSSH:
+      user: bootwright
+      keyRef: secondary-cluster-key
+      transport: verifiedTunnel
+    bootstrap:
+      nodeRef: secondary-01
       addressRef: ip
-      ansible:
-        packageVersion: 5.0.3-1.el9cp
-      clusterSSH:
-        user: bootwright
-        keyRef: secondary-cluster-key
-        transport: verified-tunnel
-      bootstrap:
-        node: secondary-01
-        addressRef: ip
-    networks:
-      publicCIDRs:
-        - 192.0.2.0/24
-    config:
-      global:
-        osd_pool_default_min_size: "2"
-        osd_pool_default_size: "2"
-      osd:
-        osd_memory_target: "4294967296"
-        osd_memory_target_autotune: "false"
-    services:
-      - service_type: mon
-        placement:
-          label: mon
-          count: 3
-      - service_type: mgr
-        placement:
-          label: core
-          count: 2
-      - service_type: osd
-        service_id: data
-        placement:
-          label: osd
-        spec:
-          data_devices:
-            paths:
-              - /dev/sda
-      - service_type: mds
-        service_id: secondary-files
-        placement:
-          label: core
-          count: 2
-      - service_type: rgw
-        service_id: secondary-objects
-        placement:
-          label: gateway
-          count: 1
-        spec:
-          rgw_frontend_port: 80
-          rgw_realm: secondary
-          rgw_zone: secondary
-          rgw_zonegroup: secondary
-      - service_type: rbd-mirror
-        placement:
-          label: mirror
-          count: 1
-    topology:
-      nodes:
-        - name: secondary-01
-          fqdn: secondary-01.lab.example.test
-          machineRef: secondary-01
-          labels:
-            - osd
-            - mon
-            - core
-        - name: secondary-02
-          fqdn: secondary-02.lab.example.test
-          machineRef: secondary-02
-          labels:
-            - osd
-            - mon
-            - core
-        - name: secondary-03
-          fqdn: secondary-03.lab.example.test
-          machineRef: secondary-03
-          labels:
-            - osd
-            - mon
-            - gateway
-        - name: secondary-04
-          fqdn: secondary-04.lab.example.test
-          machineRef: secondary-04
-          labels:
-            - osd
-            - mirror
+  networks:
+    publicCIDRs:
+      - 192.0.2.0/24
+  config:
+    global:
+      osd_pool_default_min_size: "2"
+      osd_pool_default_size: "2"
+    osd:
+      osd_memory_target: "4294967296"
+      osd_memory_target_autotune: "false"
+  services:
+    - service_type: mon
+      placement:
+        label: mon
+        count: 3
+    - service_type: mgr
+      placement:
+        label: core
+        count: 2
+    - service_type: osd
+      service_id: data
+      placement:
+        label: osd
+      spec:
+        data_devices:
+          paths:
+            - /dev/sda
+    - service_type: mds
+      service_id: secondary-files
+      placement:
+        label: core
+        count: 2
+    - service_type: rgw
+      service_id: secondary-objects
+      placement:
+        label: gateway
+        count: 1
+      spec:
+        rgw_frontend_port: 80
+        rgw_realm: secondary
+        rgw_zone: secondary
+        rgw_zonegroup: secondary
+    - service_type: rbd-mirror
+      placement:
+        label: mirror
+        count: 1
+  topology:
+    nodes:
+      - name: secondary-01
+        fqdn: secondary-01.lab.example.test
+        machineRef: secondary-01
+        labels:
+          - osd
+          - mon
+          - core
+      - name: secondary-02
+        fqdn: secondary-02.lab.example.test
+        machineRef: secondary-02
+        labels:
+          - osd
+          - mon
+          - core
+      - name: secondary-03
+        fqdn: secondary-03.lab.example.test
+        machineRef: secondary-03
+        labels:
+          - osd
+          - mon
+          - gateway
+      - name: secondary-04
+        fqdn: secondary-04.lab.example.test
+        machineRef: secondary-04
+        labels:
+          - osd
+          - mirror
 ---
 apiVersion: bootwright.io/v1alpha1
-kind: StoragePool
+kind: CephPool
 metadata:
   name: primary-data
 spec:
   clusterRef: primary
-  type: replicated
-  role: cephfs-data
+  role: cephfsData
   replicated:
     size: 3
     minSize: 2
 ---
 apiVersion: bootwright.io/v1alpha1
-kind: StoragePool
+kind: CephPool
 metadata:
   name: primary-metadata
 spec:
   clusterRef: primary
-  type: replicated
-  role: cephfs-metadata
+  role: cephfsMetadata
   replicated:
     size: 3
     minSize: 2
 ---
 apiVersion: bootwright.io/v1alpha1
-kind: StoragePool
+kind: CephPool
 metadata:
   name: primary-volumes
 spec:
   clusterRef: primary
   nativeName: volumes
-  type: replicated
   role: rbd
   replicated:
     size: 3
@@ -937,37 +925,34 @@ spec:
     mode: image
 ---
 apiVersion: bootwright.io/v1alpha1
-kind: StoragePool
+kind: CephPool
 metadata:
   name: secondary-data
 spec:
   clusterRef: secondary
-  type: replicated
-  role: cephfs-data
+  role: cephfsData
   replicated:
     size: 3
     minSize: 2
 ---
 apiVersion: bootwright.io/v1alpha1
-kind: StoragePool
+kind: CephPool
 metadata:
   name: secondary-metadata
 spec:
   clusterRef: secondary
-  type: replicated
-  role: cephfs-metadata
+  role: cephfsMetadata
   replicated:
     size: 3
     minSize: 2
 ---
 apiVersion: bootwright.io/v1alpha1
-kind: StoragePool
+kind: CephPool
 metadata:
   name: secondary-volumes
 spec:
   clusterRef: secondary
   nativeName: volumes
-  type: replicated
   role: rbd
   replicated:
     size: 3
@@ -976,7 +961,7 @@ spec:
     mode: image
 ---
 apiVersion: bootwright.io/v1alpha1
-kind: StorageRBDImage
+kind: CephRBDImage
 metadata:
   name: replicated-disk
 spec:
@@ -992,7 +977,7 @@ spec:
     - journaling
 ---
 apiVersion: bootwright.io/v1alpha1
-kind: StorageFilesystem
+kind: CephFilesystem
 metadata:
   name: primary-files
 spec:
@@ -1008,7 +993,7 @@ spec:
     standbyCountWanted: 1
 ---
 apiVersion: bootwright.io/v1alpha1
-kind: StorageFilesystem
+kind: CephFilesystem
 metadata:
   name: secondary-files
 spec:
@@ -1024,7 +1009,7 @@ spec:
     standbyCountWanted: 1
 ---
 apiVersion: bootwright.io/v1alpha1
-kind: StorageObjectGateway
+kind: CephObjectGateway
 metadata:
   name: primary-objects
 spec:
@@ -1037,7 +1022,7 @@ spec:
     fqdn: primary-s3.lab.example.test
 ---
 apiVersion: bootwright.io/v1alpha1
-kind: StorageObjectGateway
+kind: CephObjectGateway
 metadata:
   name: secondary-objects
 spec:
@@ -1050,7 +1035,7 @@ spec:
     fqdn: secondary-s3.lab.example.test
 ---
 apiVersion: bootwright.io/v1alpha1
-kind: StorageReplication
+kind: CephReplication
 metadata:
   name: volumes-to-secondary
 spec:

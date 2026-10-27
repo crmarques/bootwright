@@ -38,7 +38,7 @@ func TestTheOperationAreaAdmitsEveryRetainedOperation(t *testing.T) {
 	store, record := lifecycleFixture(t)
 	block := func(id string) reconciliation.BlockDefinition {
 		return reconciliation.BlockDefinition{
-			ID: id, Description: "serve " + id, Stage: reconciliation.StageInfraComponents,
+			ID: id, Description: "serve " + id, Stage: reconciliation.StageInfrastructureServices,
 			Kind: "ArtifactServer", Object: id, Implementation: "artifact-server-nginx-v1",
 			ContentDigest: strings.Repeat("a", 64), Request: json.RawMessage(`{"name":"` + id + `"}`),
 		}
@@ -247,7 +247,7 @@ func TestTheOperationAreaKeepsTheReservedBytesForTheLastRemoval(t *testing.T) {
 	ctx := context.Background()
 	store, record := lifecycleFixture(t)
 	plan, err := reconciliation.NewPlan(reconciliation.Apply, []reconciliation.BlockDefinition{{
-		ID: "alpha", Description: "serve alpha", Stage: reconciliation.StageInfraComponents,
+		ID: "alpha", Description: "serve alpha", Stage: reconciliation.StageInfrastructureServices,
 		Kind: "ArtifactServer", Object: "alpha", Implementation: "artifact-server-nginx-v1",
 		ContentDigest: strings.Repeat("a", 64), Request: json.RawMessage(`{"name":"alpha"}`),
 	}})

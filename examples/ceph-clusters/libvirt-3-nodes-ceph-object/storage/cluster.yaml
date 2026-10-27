@@ -1,0 +1,121 @@
+# Example authored IBM Storage Ceph 9.9.2.0 at its build tag; apply resolves this tag through the Entitlement and freezes its digest.
+apiVersion: bootwright.io/v1alpha1
+kind: CephCluster
+metadata:
+  name: ceph-lab
+
+spec:
+  management: managed
+
+  distribution:
+    ibm:
+      callHome: enabled
+
+      packages:
+        source: vendor
+
+  release: 9.9.2.0
+  packageVersion: 20.2.2-349.el9cp
+
+  image:
+    base: cp.icr.io/cp/ibm-ceph/ceph-9-rhel10
+    version: v9.9.2-26947
+
+  entitlementRef: ibm-ceph
+
+  cephadm:
+    addressRef: ip
+
+    ansible:
+      packageVersion: 5.0.3-1.el9cp
+
+    clusterSSH:
+      user: bootwright
+      keyRef: ceph-cluster-key
+      transport: verifiedTunnel
+
+    bootstrap:
+      nodeRef: rhel-01
+      addressRef: ip
+
+  networks:
+    publicCIDRs:
+      - 198.51.100.0/24
+
+  config:
+    global:
+      osd_pool_default_size: '2'
+      osd_pool_default_min_size: '2'
+
+    osd:
+      osd_memory_target_autotune: 'false'
+      osd_memory_target: '2147483648'
+
+  services:
+    - service_type: mon
+
+      placement:
+        count: 3
+        label: ceph-core
+
+    - service_type: mgr
+
+      placement:
+        count: 2
+        label: ceph-core
+
+    - service_type: osd
+      service_id: data
+
+      placement:
+        label: ceph-core
+
+      spec:
+        data_devices:
+          paths:
+            - /dev/sda
+
+    - service_type: rgw
+      service_id: objects
+
+      placement:
+        count: 2
+        label: ceph-core
+
+      spec:
+        rgw_frontend_port: 443
+        ssl: true
+        certificate_source: inline
+
+  serviceBindings:
+    - serviceRef: rgw.objects
+
+      secrets:
+        - path: /spec/ssl_cert
+          secretRef: rgw-objects-tls
+
+        - path: /spec/ssl_key
+          secretRef: rgw-objects-tls
+
+  topology:
+    nodes:
+      - name: rhel-01
+        fqdn: rhel-01.lab.example.test
+        machineRef: rhel-01
+
+        labels:
+          - ceph-core
+
+      - name: rhel-02
+        fqdn: rhel-02.lab.example.test
+        machineRef: rhel-02
+
+        labels:
+          - ceph-core
+
+      - name: rhel-03
+        fqdn: rhel-03.lab.example.test
+        machineRef: rhel-03
+
+        labels:
+          - ceph-core

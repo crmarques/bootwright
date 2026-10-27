@@ -293,8 +293,8 @@ func TestARefusedConfirmationRepeatsTheExactInvocation(t *testing.T) {
 		remedy                        string
 	}{
 		{name: "an apply's stage selection and authorization", action: "apply", object: "lab",
-			args:   []string{"apply", "--stage", "infra-components", "--authorize", "data-loss"},
-			remedy: "review the plan, then repeat bootwright apply --context lab --authorize data-loss=<digest bootwright plan prints> --stage infra-components with --yes"},
+			args:   []string{"apply", "--stage", "infrastructure-services", "--authorize", "data-loss"},
+			remedy: "review the plan, then repeat bootwright apply --context lab --authorize data-loss=<digest bootwright plan prints> --stage infrastructure-services with --yes"},
 		{name: "a destroy's authorization", action: "destroy", object: "lab",
 			args:   []string{"--context", "lab", "destroy", "--authorize", "data-loss"},
 			remedy: "review the plan, then repeat bootwright destroy --context lab --authorize data-loss=<digest bootwright plan prints> with --yes"},

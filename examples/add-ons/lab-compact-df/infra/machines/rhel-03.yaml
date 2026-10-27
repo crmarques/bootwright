@@ -6,16 +6,18 @@ metadata:
 spec:
   substrate:
     providerRef: lab-libvirt
-    profileRef: rhel
+    libvirt:
+      profileRef: rhel
+
+  hardware:
+    rootDevice:
+      deviceName: /dev/vda
 
   os:
     provided: false
     installProfileRef: rhel-9-8
 
     install:
-      rootDeviceHints:
-        deviceName: /dev/vda
-
       ntp:
         - serverRef: lab-ntp
           endpointRef: ip
@@ -32,6 +34,3 @@ spec:
       - name: ip
         address: 198.51.100.33/24
         interface: enp1s0
-
-  capabilities:
-    - ceph-node

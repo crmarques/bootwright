@@ -13,7 +13,7 @@ func controllerRouteCatalog(choice api.Value, proxy api.Value) (api.Object, api.
 	declared := api.NewObject(api.Environment, "lab", api.Value{}, api.MapValue().WithPath(api.StringValue("controller"), "controller", "machineRef"))
 	controller := api.NewObject(api.Machine, "controller", api.Value{}, api.MapValue().
 		WithPath(api.BoolValue(true), "os", "provided").WithPath(api.BoolValue(true), "access", "local").
-		With("capabilities", api.StringList("container-runtime")).With("proxy", choice))
+		With("proxy", choice))
 	objects := []api.Object{declared, controller}
 	if proxy.Present() {
 		objects = append(objects, api.NewObject(api.Proxy, "egress", api.Value{}, proxy))

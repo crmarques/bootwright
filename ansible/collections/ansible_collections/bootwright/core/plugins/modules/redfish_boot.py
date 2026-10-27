@@ -87,21 +87,21 @@ options:
       - How an insert makes the controller trust the server it fetches the image
         from. Applies only to insert.
       - C(established) changes nothing on the controller.
-      - C(import-certificate) adds the first certificate of I(certificate) to the
+      - C(importCertificate) adds the first certificate of I(certificate) to the
         device's certificate collection unless it is there and turns
         VerifyCertificate on, with no fallback to any other trust.
       - Without that collection, a qualified discovered SecurityService imports
         the terminal issuer from the full chain into an unused FileTransfer
         slot and reads it back. Its transfer verification must already be on.
-      - C(disable-verification) turns VerifyCertificate off when it reads on.
+      - C(disableVerification) turns VerifyCertificate off when it reads on.
     type: str
     default: established
-    choices: [established, import-certificate, disable-verification]
+    choices: [established, importCertificate, disableVerification]
   certificate:
     description:
       - The artifact server's PEM certificate chain. Device collections use the
         first certificate; a qualified SecurityService uses the terminal issuer.
-      - Required by insert under C(import-certificate) and by eject with
+      - Required by insert under C(importCertificate) and by eject with
         I(remove_certificate).
     type: str
     default: ""
@@ -122,7 +122,7 @@ options:
       - Whether the image URL carries private material. Under C(established)
         the insert requires a published manager HttpsTransferCertVerification
         to read true; only without that switch does the device's
-        VerifyCertificate decide. C(disable-verification) is refused.
+        VerifyCertificate decide. C(disableVerification) is refused.
     type: bool
     default: false
 author:
@@ -217,16 +217,16 @@ def drive(client, operation, attempts, image="", target="Cd", trust=redfish_cont
     module drives, and a read goes through redfish_system_read. An insert
     carries the virtual-media trust and an eject what it settles; by default
     neither asks the controller for anything more. An insert carrying private
-    material is never made under disable-verification.
+    material is never made under disableVerification.
     """
     if operation not in DRIVES:
         raise redfish_control.ControllerError("%s is not an operation this module drives" % operation)
     if operation == "insert" and not image:
         raise redfish_control.ControllerError("insert needs an image")
     if operation == "insert" and trust == redfish_control.TRUST_IMPORT and not certificate:
-        raise redfish_control.ControllerError("insert under import-certificate needs the server's certificate")
+        raise redfish_control.ControllerError("insert under importCertificate needs the server's certificate")
     if operation == "insert" and private_delivery and trust == redfish_control.TRUST_DISABLED:
-        raise redfish_control.ControllerError("an insert carrying private material refuses disable-verification")
+        raise redfish_control.ControllerError("an insert carrying private material refuses disableVerification")
     if operation == "eject" and remove_certificate and not certificate:
         raise redfish_control.ControllerError("an eject removing a certificate needs that certificate")
     if operation == "boot":

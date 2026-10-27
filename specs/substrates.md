@@ -40,8 +40,8 @@ machine port dispatcher, and an arm it has no machine port for fails closed
 before anything is published, inserted or booted. A substrate added later
 supplies those entry points, one row in the dispatcher's table, the matching
 arm choice in the argument specs of `machine_power` and `machine_power_read`
-and its answers to the capability facts Go consumers ask the substrate, and no
-consumer, such as the [cluster installation](container-clusters.md#installation) or the
+and its answers to the facts Go consumers ask the substrate lifecycle capability, and no
+consumer, such as the [cluster installation](openshift-clusters.md#installation) or the
 [managed-OS installation](managed-os.md#installation), changes
 ([roles](architecture.md#roles)).
 
@@ -86,7 +86,7 @@ A stored certificate's names are proved only when a fresh apply binds it.
 
 ### Refusal table
 
-Each row is one refusal of the provider host capability, and
+Each row is one refusal of the provider host lifecycle capability, and
 `TestSubstrateRefusalTableMatchesUnsupported` holds its `Unsupported` to it.
 Its reason and remedy are the diagnostic's message and remediation, in which
 `<provider>` is the refused provider or the refused Machine's provider and
@@ -96,7 +96,7 @@ Its reason and remedy are the diagnostic's message and remediation, in which
 | --- | --- | --- | --- |
 | A provider on an unrealized substrate | an `InfraProvider` whose arm is `vsphere` or `kubevirt` | `this executable realizes no provider on the substrate it declares` | `remove <provider> and the Machines it hosts from the selected Environment, or declare them on a baremetal or libvirt provider` |
 | A Machine on an unrealized substrate | a Machine with `os.provided: false` whose `spec.substrate.providerRef` names such a provider | `its provider <provider> is on a substrate this executable does not realize` | `host <machine> on a baremetal or libvirt provider, declare its operating system provided, or remove it from the selected Environment` |
-| An emulated BMC no endpoint can name | a libvirt provider's `spec.libvirt.bmcEmulationDefaults.bindAddress` that is not one unicast host address | `an emulated BMC listens on one unicast address its controller endpoints can name, and this provider's bindAddress is not one` | `set spec.libvirt.bmcEmulationDefaults.bindAddress on <provider> to one unicast host address` |
+| An emulated BMC no endpoint can name | a libvirt provider's `spec.libvirt.bmcEmulation.bindAddress` that is not one unicast host address | `an emulated BMC listens on one unicast address its Machines' BMC endpoints can name, and this provider's bindAddress is not one` | `set spec.libvirt.bmcEmulation.bindAddress on <provider> to one unicast host address` |
 | A provider with more managed attachments than its reservation holds | a libvirt provider with more than 20 `networkAttachments[]` entries of `management: managed` | `a libvirt provider's host reservation claims three keys for each managed attachment beside the two of its media pool and its firewall readiness unit, within the 64 keys one reservation holds, so it declares at most 20 managed attachments` | `declare at most 20 attachments with management: managed in spec.networkAttachments of <provider>, or make the others external` |
 | A provider using more external bridges than its use reservation holds | a libvirt provider whose `networkAttachments[]` entries of `management: external` name more than 64 distinct bridges | `a libvirt provider's bridge-use reservation claims one shared key for each bridge its external attachments use, within the 64 keys one reservation holds, so they use at most 64 bridges` | `name at most 64 distinct bridges in the external attachments of spec.networkAttachments of <provider>` |
 
@@ -571,9 +571,9 @@ capacity against every declared libvirt guest placed there, including guests
 outside the selection, and the reserve the provider authors in
 `libvirt.capacityReserve`. It refuses before registration when the guests and
 the reserve do not fit or a fact is unknown, under the checks, credits and
-reserve rules [managed Ceph's gate](storage.md#plan-and-prerequisites) states.
+reserve rules [managed Ceph's gate](ceph.md#plan-and-prerequisites) states.
 Pure planning probes nothing, a continuation whose Machine blocks are all done
-is not gated, and [container-cluster preflight](container-clusters.md#preflight)
+is not gated, and [container-cluster preflight](openshift-clusters.md#preflight)
 and storage preflight report the same checks.
 
 ## Physical machine realization
@@ -586,7 +586,7 @@ firmware setting and powers nothing on or off. What it establishes is the
 identity every later effect depends on, proved once, in one place, rather than
 re-derived by each consumer.
 
-**Target proof.** The Machine's `hardware.management.bmc.address` names one
+**Target proof.** The Machine's `substrate.baremetal.bmc.address` names one
 exact ComputerSystem. The block reads that resource with the bound credential
 and records its reported `UUID`, `SerialNumber`, `Manufacturer` and `Model`;
 then reads the system's complete `EthernetInterfaces` collection and requires
@@ -732,9 +732,8 @@ stopped machine's claim binds on a WaitForFirstConsumer class. The root disk
 is the first `virtio` disk, presented as `/dev/vda`, with `bootOrder: 1`. Each
 NMState `ethernet` interface becomes one interface with the `bridge` binding
 and a pinned `macAddress` derived from the context, Machine and interface
-names, never authored (the
-[Machine API](api/machines.md#os-lifecycle-and-substrate-invariants) refuses an authored
-one), on the network its attachment's `networkRef`
+names, never authored (the KubeVirt
+[substrate arm](api/machines.md#substrate-arm) has no MAC field), on the network its attachment's `networkRef`
 names: for a `Localnet` ClusterUserDefinedNetwork the derived
 NetworkAttachmentDefinition of the same name in the provider's namespace, and
 for a NetworkAttachmentDefinition of type `bridge` that object in the
@@ -902,7 +901,7 @@ installer has proved it ran: on either arm it selects the disk, and it powers
 the machine on only when its consumer asks. The
 [managed-OS installation](managed-os.md#installation) boots the media for an
 installer that powers off and, once it has, ejects the media and boots the
-disk. The [cluster installation](container-clusters.md#installation) boots the
+disk. The [cluster installation](openshift-clusters.md#installation) boots the
 media for an installer that reboots, and points each node at its disk when it
 releases the media.
 
@@ -914,7 +913,7 @@ whose credential answers it, then cross the same adapter boundary a lifecycle bl
 the context's shared lock. They register no operation and publish no ownership, because a power
 state is not desired state. On the libvirt and bare-metal arms, where the
 endpoint comes from is the only difference: a Machine that authors
-`hardware.management.bmc` is reached at that address from the controller, and
+`substrate.baremetal.bmc` is reached at that address from the controller, and
 a Machine whose provider emulates a BMC is reached at its allocated port from
 the provider host, and only while the context owns the realization that BMC
 belongs to. On the KubeVirt and vSphere arms a power command goes through the
@@ -948,12 +947,12 @@ authored physical `caBundle` contract to accept a non-CA serving leaf; B446
 and B73 retain that rehearsal gate.
 
 The BMC-to-artifact-server leg follows `bmc.virtualMedia.tls.trust`, which the
-realized target freezes. `import-certificate`, the default, adds the artifact
+realized target freezes. `importCertificate`, the default, adds the artifact
 server's certificate to the virtual-media device's certificate collection
 unless that certificate is already there and turns the device's certificate
 verification on, before the consumer's insert. Without that collection, the
 qualified SecurityService path below imports the server chain's terminal
-issuer. `disable-verification` turns
+issuer. `disableVerification` turns
 that verification off before the insert when it reads on. `established` changes
 nothing on the device. A manager the system names that links a security
 service publishing `HttpsTransferCertVerification` publishes the switch that
@@ -961,17 +960,17 @@ decides whether the BMC verifies the server it fetches from (D121, which
 amends D104): when any manager publishes it, every published switch decides
 alone and the device's `VerifyCertificate` is not consulted. Only a BMC
 whose managers publish no such switch is decided by the device flag, where an
-absent flag reads as off. `import-certificate` then skips the device flag and
-writes only the certificate, and `disable-verification` refuses before any
+absent flag reads as off. `importCertificate` then skips the device flag and
+writes only the certificate, and `disableVerification` refuses before any
 write, naming the manager's switch, because the device flag decides nothing
 there. When the insert carries private material, as a physical installation's
-does, `established` and `import-certificate` first read, and write nothing,
+does, `established` and `importCertificate` first read, and write nothing,
 that deciding setting, which must read `true`. Anything else refuses the insert
 before any write, naming the setting, an unreadable security service included
 because it never supplies proof, and the operator imports the artifact server's
 CA into the BMC out of band when automatic import is unavailable, and
 turns its verification on out of band. Private
-material is never inserted under `disable-verification`. The B447 tests
+material is never inserted under `disableVerification`. The B447 tests
 `test_private_delivery_accepts_the_manager_switch_with_a_false_readonly_device`,
 `test_private_delivery_refuses_a_manager_that_does_not_verify`,
 `test_private_import_cannot_bypass_a_manager_whose_verification_is_off`,
@@ -985,14 +984,14 @@ media is released and proved empty. Each is set once, before the first attach
 and never inside its retry, and nothing falls back from one mode to another: a
 device that cannot import fails, naming the exceptions an operator may declare
 instead. The consumer's eject, once the device is proved empty, settles what
-the insert needed: it turns verification back on after `disable-verification`
+the insert needed: it turns verification back on after `disableVerification`
 unless the Machine declares otherwise, and deletes the imported certificate
-after `import-certificate` when the Machine asks. Settling converges to that
+after `importCertificate` when the Machine asks. Settling converges to that
 target rather than undoing the attempt's own writes, so the eject after an
 interrupted attempt settles what it left. On the emulated arm `established`
 means that no per-boot setting is made, not that the fetch is verified: the
 emulator is configured to fetch media without verifying the server
-([container clusters](container-clusters.md#boot-media) records the one
+([container clusters](openshift-clusters.md#boot-media) records the one
 exception this allows).
 
 **SecurityService media trust.** A manager-discovered security service can
@@ -1081,7 +1080,7 @@ binding is allowlisted and frozen: authored data can never select which of
 them runs. An input is a value or the path of a material file, never secret
 bytes, because the validation is not hidden from output and echoes a value it
 refuses. A private image URL travels as the path of a mode-0600 file in the runner's
-controller-local scratch, so argument validation never echoes its capability.
+controller-local scratch, so argument validation never echoes its capability URL.
 The state entry point returns normalized power and media classifications beside
 the native observation its existing consumers use; an unreadable probe remains
 unknown. A requested physical TPM proof accepts only an enabled TPM 2.0 in the
@@ -1105,7 +1104,7 @@ read in full, remedied by running the refusing apply's continuation once
 the machine reports the declared hardware in full or, to correct the
 declaration instead, by taking the context back with
 `bootwright destroy --context <context>`, correcting
-`spec.hardware.management.bmc.address` or `spec.hardware.nics`, importing that
+`spec.substrate.baremetal.bmc.address` or `spec.substrate.baremetal.nics`, importing that
 input with `bootwright context update --name <context> --input-dir <directory>`
 and running `bootwright apply --context <context>`; `identity-mismatch`, a
 physical machine answering as another system than its pin, remedied by the same

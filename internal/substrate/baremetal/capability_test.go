@@ -45,16 +45,14 @@ func catalogOf() api.Catalog {
 	return api.NewCatalog([]api.Object{
 		obj(api.Environment, "env", m("controller", m("machineRef", "controller"))),
 		obj(api.Machine, "controller", m("os", m("provided", true), "access", m("local", true))),
-		obj(api.InfraProvider, "floor", m("baremetal", m("boot", m("method", "redfishVirtualMedia")))),
+		obj(api.InfraProvider, "floor", m("baremetal", m())),
 		obj(api.Machine, "server", m(
-			"substrate", m("providerRef", "floor"),
-			"os", m("provided", false, "installProfileRef", "rhel", "install",
-				m("hostKeyRef", "server-host-key", "rootDeviceHints", m("deviceName", "/dev/sda"))),
-			"hardware", m(
-				"nics", list(m("name", "eno2", "macAddress", "AA:BB:CC:DD:EE:02"),
-					m("name", "eno1", "macAddress", "aa:bb:cc:dd:ee:01")),
-				"management", m("bmc", m("address", "https://bmc.example.test/redfish/v1/Systems/1",
-					"credentialsRef", "server-bmc"))))),
+			"substrate", m("providerRef", "floor", "baremetal", m(
+				"bmc", m("address", "https://bmc.example.test/redfish/v1/Systems/1", "credentialsRef", "server-bmc"),
+				"nics", list(m("nicRef", "eno2", "macAddress", "AA:BB:CC:DD:EE:02"),
+					m("nicRef", "eno1", "macAddress", "aa:bb:cc:dd:ee:01")))),
+			"os", m("provided", false, "installProfileRef", "rhel", "install", m("hostKeyRef", "server-host-key")),
+			"hardware", m("nics", list(m("name", "eno2"), m("name", "eno1")), "rootDevice", m("deviceName", "/dev/sda")))),
 	})
 }
 
@@ -64,7 +62,7 @@ func catalogWithControllerTLS(tls api.Value) api.Catalog {
 	objects := catalogOf().Objects()
 	for index, object := range objects {
 		if object.Kind() == api.Machine && object.Name() == "server" {
-			objects[index] = object.WithSpec(object.Spec().WithPath(tls, "hardware", "management", "bmc", "tls"))
+			objects[index] = object.WithSpec(object.Spec().WithPath(tls, "substrate", "baremetal", "bmc", "tls"))
 		}
 	}
 	return api.NewCatalog(objects)

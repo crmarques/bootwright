@@ -214,7 +214,7 @@ def test_a_frozen_ipv6_address_with_an_ipv4_answer_beside_it_refuses():
 # Each slot frozen at its own address: the request freezes one address per name
 # (Endpoint in internal/containercluster/agentinstall/requests.go), and an
 # authored api-int slot keeps its own address rather than api's
-# (specs/api/container-clusters.md, endpoint slots).
+# (specs/api/openshift-clusters.md, endpoint slots).
 DISTINCT = [
     {"address": "198.51.100.22", "name": "api-int.sno.lab.example.test"},
     {"address": "198.51.100.20", "name": "api.sno.lab.example.test"},

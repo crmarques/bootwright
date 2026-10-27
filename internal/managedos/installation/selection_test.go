@@ -97,7 +97,6 @@ func TestRequirementsNameEveryServiceTheGuestUses(t *testing.T) {
 // what the API contract says it does.
 func TestAMachineNTPOverrideReplacesTheProfileList(t *testing.T) {
 	override := guest(field("os", guest().Spec().Get("os").With("install", api.MapValue(
-		field("rootDeviceHints", api.MapValue(text("deviceName", "/dev/vda"))),
 		field("ntp", api.ListValue()),
 	))))
 	request, needs := onlyRequest(t, labCatalog(override))
@@ -254,7 +253,7 @@ func TestAPhysicalInstallationWithoutANamedRootDeviceRefuses(t *testing.T) {
 			_, _, err := Requests(catalog, "controller", testContext)
 			expectRefusal(t, err, "lifecycle.unsupported")
 			remediation := diagnostics.Of(err)[0].Remediation
-			if !strings.Contains(remediation, "spec.os.install.rootDeviceHints.deviceName on Machine/metal-01") ||
+			if !strings.Contains(remediation, "spec.hardware.rootDevice.deviceName on Machine/metal-01") ||
 				!strings.Contains(remediation, "wwn-only selection is not yet supported") {
 				t.Fatalf("remediation = %q", remediation)
 			}
@@ -270,7 +269,7 @@ func TestAPhysicalInstallationWithoutANamedRootDeviceRefuses(t *testing.T) {
 func TestAPrivateInstallationRefusesDisabledVerification(t *testing.T) {
 	metal := server(api.MapValue(text("deviceName", "/dev/disk/by-id/wwn-0x5000c500a1b2c3d4")))
 	metal = metal.WithSpec(metal.Spec().WithPath(api.StringValue(substrate.TrustDisableVerification),
-		"hardware", "management", "bmc", "virtualMedia", "tls", "trust"))
+		"substrate", "baremetal", "bmc", "virtualMedia", "tls", "trust"))
 	catalog := labCatalog(metalProvider(), metal)
 	if unsupported := lifecycle.Identities(Refusals(catalog)); !slices.Equal(unsupported, []string{"Machine/metal-01"}) {
 		t.Fatalf("unsupported = %v", unsupported)
@@ -278,10 +277,10 @@ func TestAPrivateInstallationRefusesDisabledVerification(t *testing.T) {
 	_, _, err := Requests(catalog, "controller", testContext)
 	expectRefusal(t, err, "lifecycle.unsupported")
 	reported := diagnostics.Of(err)[0]
-	if reported.Message != "a Machine that delivers private material through its installation cannot let its controller fetch without verifying the artifact server" {
+	if reported.Message != "a Machine that delivers private material through its installation cannot let its BMC fetch without verifying the artifact server" {
 		t.Fatalf("message = %q", reported.Message)
 	}
-	if reported.Remediation != "declare hardware.management.bmc.virtualMedia.tls.trust: import-certificate on Machine/metal-01, or established when its controller already trusts the server" {
+	if reported.Remediation != "declare substrate.baremetal.bmc.virtualMedia.tls.trust: importCertificate on Machine/metal-01, or established when its BMC already trusts the server" {
 		t.Fatalf("remediation = %q", reported.Remediation)
 	}
 }
@@ -340,17 +339,17 @@ func TestImportCertificateNeedsAnHttpsImageAndItsCertificate(t *testing.T) {
 // verifying its certificate, refuses before registration with the one reason
 // and remedy, and Unsupported agrees with the request builder.
 func TestAPrivateInstallationRefusesAnUnverifiedController(t *testing.T) {
-	const reason = "a Machine whose installation delivers private material hands its controller the private installer image URL, " +
-		"so the controller must be reached over https with its certificate verified"
-	const remedy = "address the controller of Machine/metal-01 with an https:// spec.hardware.management.bmc.address and remove the tls.verify opt-out " +
+	const reason = "a Machine whose installation delivers private material hands its BMC the private installer image URL, " +
+		"so the BMC must be reached over https with its certificate verified"
+	const remedy = "address the BMC of Machine/metal-01 with an https:// spec.substrate.baremetal.bmc.address and remove the tls.verify opt-out " +
 		"on Machine/metal-01 or in spec.baremetal.defaults.bmc of InfraProvider/lab-metal; " +
 		"name the authority that issued its certificate in tls.trustBundleRef when the system trust store does not hold it"
 	for name, change := range map[string]func(api.Value) api.Value{
 		"an http controller": func(spec api.Value) api.Value {
-			return spec.WithPath(api.StringValue("http://bmc-01.lab.example.test/redfish/v1/Systems/1"), "hardware", "management", "bmc", "address")
+			return spec.WithPath(api.StringValue("http://bmc-01.lab.example.test/redfish/v1/Systems/1"), "substrate", "baremetal", "bmc", "address")
 		},
 		"verification disabled": func(spec api.Value) api.Value {
-			return spec.WithPath(api.BoolValue(false), "hardware", "management", "bmc", "tls", "verify")
+			return spec.WithPath(api.BoolValue(false), "substrate", "baremetal", "bmc", "tls", "verify")
 		},
 	} {
 		t.Run(name, func(t *testing.T) {
@@ -458,7 +457,7 @@ func TestAVerifiedPhysicalInstallationDerivesAPrivateRequest(t *testing.T) {
 func TestAnInstallationRefusesARootDeviceHintItCannotCarry(t *testing.T) {
 	onGuest := func(hints api.Value) api.Object {
 		declared := guest()
-		return declared.WithSpec(declared.Spec().WithPath(hints, "os", "install", "rootDeviceHints"))
+		return declared.WithSpec(declared.Spec().WithPath(hints, "hardware", "rootDevice"))
 	}
 	for name, test := range map[string]struct {
 		overrides   []api.Object
@@ -467,24 +466,24 @@ func TestAnInstallationRefusesARootDeviceHintItCannotCarry(t *testing.T) {
 	}{
 		"a physical model": {
 			[]api.Object{metalProvider(), server(api.MapValue(text("deviceName", "/dev/disk/by-id/wwn-0x5000c500a1b2c3d4"), text("model", "PERC H755")))},
-			"Machine/metal-01", "remove spec.os.install.rootDeviceHints.model from Machine/metal-01",
+			"Machine/metal-01", "remove spec.hardware.rootDevice.model from Machine/metal-01",
 		},
 		"a physical wwn": {
 			[]api.Object{metalProvider(), server(api.MapValue(text("deviceName", "/dev/disk/by-id/wwn-0x5000c500a1b2c3d4"), text("wwn", "0x5000c500a1b2c3d4")))},
-			"Machine/metal-01", "remove spec.os.install.rootDeviceHints.wwn from Machine/metal-01",
+			"Machine/metal-01", "remove spec.substrate.baremetal.rootDevice.wwn from Machine/metal-01",
 		},
 		"a guest's rotational": {
 			[]api.Object{onGuest(api.MapValue(text("deviceName", "/dev/vda"), field("rotational", api.BoolValue(false))))},
-			"Machine/rhel-01", "remove spec.os.install.rootDeviceHints.rotational from Machine/rhel-01",
+			"Machine/rhel-01", "remove spec.hardware.rootDevice.rotational from Machine/rhel-01",
 		},
 		"a guest's model alone": {
 			[]api.Object{onGuest(api.MapValue(text("model", "QEMU HARDDISK")))},
-			"Machine/rhel-01", "remove spec.os.install.rootDeviceHints.model from Machine/rhel-01",
+			"Machine/rhel-01", "remove spec.hardware.rootDevice.model from Machine/rhel-01",
 		},
-		"a guest's wwn and size": {
-			[]api.Object{onGuest(api.MapValue(text("wwn", "0x5000c500a1b2c3d4"), number("minSizeGigabytes", "40")))},
+		"a guest's vendor and size": {
+			[]api.Object{onGuest(api.MapValue(text("vendor", "QEMU"), number("minSizeGigabytes", "40")))},
 			"Machine/rhel-01",
-			"remove spec.os.install.rootDeviceHints.minSizeGigabytes, spec.os.install.rootDeviceHints.wwn from Machine/rhel-01",
+			"remove spec.hardware.rootDevice.minSizeGigabytes, spec.hardware.rootDevice.vendor from Machine/rhel-01",
 		},
 	} {
 		t.Run(name, func(t *testing.T) {
@@ -707,7 +706,7 @@ func TestTheDeliveredHostKeyTypeIsItsGeneratedKeyType(t *testing.T) {
 		want   string
 	}{
 		{"rsa", api.MapValue(field("generated", api.MapValue(text("keyType", "rsa")))), "rsa"},
-		{"ecdsa-p256", api.MapValue(field("generated", api.MapValue(text("keyType", "ecdsa-p256")))), "ecdsa-p256"},
+		{"ecdsaP256", api.MapValue(field("generated", api.MapValue(text("keyType", "ecdsaP256")))), "ecdsaP256"},
 		{"defaulted", api.MapValue(field("generated", api.MapValue())), "ed25519"},
 	} {
 		t.Run(row.name, func(t *testing.T) {

@@ -10,7 +10,7 @@ const (
 func storageSMBResourceSchema() *Shape {
 	secrets := nonemptyArray(array(record(required("path", nonempty()), required("secretRef", secret("opaque", "token")))))
 	secrets.NameKey = "path"
-	return record(required("clusterRef", ref(StorageCluster)), field("smbClusterRef", ref(StorageSMBResource)), field("filesystemRef", ref(StorageFilesystem)), field("subvolumeRef", ref(StorageSubvolume)), field("resourceRefs", set(ref(StorageSMBResource))), field("secrets", secrets), required("native", native()))
+	return record(required("clusterRef", ref(CephCluster)), field("smbClusterRef", ref(CephSMBResource)), field("filesystemRef", ref(CephFilesystem)), field("subvolumeRef", ref(CephSubvolume)), field("resourceRefs", set(ref(CephSMBResource))), field("secrets", secrets), required("native", native()))
 }
 
 func StorageSMBResourceNativeSchema(resourceType string) *Shape {
@@ -24,7 +24,7 @@ func StorageSMBResourceNativeSchema(resourceType string) *Shape {
 	case SMBShare:
 		cephfs := record(field("volume", nonempty()), field("path", nonempty()), field("subvolumegroup", nonempty()), field("subvolume", nonempty()), field("provider", enumeration("samba-vfs", "samba-vfs/classic", "samba-vfs/new", "samba-vfs/proxied", "kcephfs")))
 		login := record(required("name", nonempty()), field("category", enumeration("user", "group")), field("access", enumeration("read", "read-write", "admin", "none", "r", "rw")))
-		return record(required("resource_type", enumeration(SMBShare)), required("cluster_id", nonempty()), required("share_id", nonempty()), field("intent", intent()), field("name", nonempty()), field("readonly", boolean()), field("browseable", boolean()), field("cephfs", cephfs), field("restrict_access", boolean()), field("login_control", array(login)))
+		return record(required("resource_type", enumeration(SMBShare)), field("cluster_id", nonempty()), required("share_id", nonempty()), field("intent", intent()), field("name", nonempty()), field("readonly", boolean()), field("browseable", boolean()), field("cephfs", cephfs), field("restrict_access", boolean()), field("login_control", array(login)))
 	case SMBJoinAuth:
 		return record(required("resource_type", enumeration(SMBJoinAuth)), required("auth_id", nonempty()), field("intent", intent()), required("auth", record(required("username", nonempty()))))
 	case SMBUsersGroups:

@@ -10,7 +10,7 @@ import (
 const consumerDigest = "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
 
 func consumerHost(provided bool, addresses ...api.Value) api.Object {
-	return obj(api.Machine, "host", m("capabilities", api.StringList("container-runtime"), "os", m("provided", provided), "network", m("addresses", list(addresses...))))
+	return obj(api.Machine, "host", m("os", m("provided", provided), "network", m("addresses", list(addresses...))))
 }
 
 func consumerAddresses() []api.Value {
@@ -176,7 +176,7 @@ func TestAManagedServiceRunsOnlyWhereItsMachineProvidesTheOS(t *testing.T) {
 			if issues := admit(service, consumerHost(true, consumerAddresses()...)); len(issues) != 0 {
 				t.Fatalf("placement on a Machine that provides its OS was refused: %v", issues)
 			}
-			undeclared := obj(api.Machine, "host", m("capabilities", api.StringList("container-runtime"), "network", m("addresses", list(consumerAddresses()...))))
+			undeclared := obj(api.Machine, "host", m("network", m("addresses", list(consumerAddresses()...))))
 			if found := refusalsAt(admit(service, undeclared), "$.spec.machineRef"); len(found) != 0 {
 				t.Fatalf("a Machine the schema refuses for its missing os.provided got a second diagnostic: %v", found)
 			}
@@ -228,7 +228,6 @@ func TestServiceAdmissionRemediesAreExact(t *testing.T) {
 		{"empty image", "$.spec.image", "spec.image.local", Validate(managedService(api.Proxy, proxy.With("image", m())), api.NewCatalog([]api.Object{host}))},
 		{"DNS port", "$.spec.port", "set spec.port to 53 or omit it", ValidatePartial(obj(api.DNSServer, "", m("port", api.IntegerValue("5353"))), api.Catalog{})},
 		{"NTP port", "$.spec.port", "spec.port", ValidatePartial(obj(api.NTPServer, "", m("port", api.IntegerValue("1123"))), api.Catalog{})},
-		{"capability", "$.spec.machineRef", "container-runtime", admit(managedService(api.Proxy, proxy), obj(api.Machine, "host", m("os", m("provided", true), "network", m("addresses", list(consumerAddresses()...)))))},
 		{"OS", "$.spec.machineRef", "spec.machineRef", admit(managedService(api.Proxy, proxy), unprovided)},
 		{"unknown address", "$.spec.endpoints[0].addressRef", "spec.network.addresses", admit(managedService(api.Proxy, consumerSpec(api.Proxy, m("name", "egress", "addressRef", "missing"))), host)},
 		{"DNS name", "$.spec.endpoints[0].addressRef", "addressRef", admit(managedService(api.DNSServer, consumerSpec(api.DNSServer, m("name", "resolver", "addressRef", "fqdn"))), host)},

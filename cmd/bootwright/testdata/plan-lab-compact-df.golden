@@ -1,7 +1,7 @@
 [
   {
     "id": "artifact-server-lab-artifacts",
-    "stage": "infra-components",
+    "stage": "infrastructure-services",
     "dependencies": [],
     "impacts": [
       "create-container-unit bootwright-lab-compact-df-artifacts-lab-artifacts",
@@ -43,7 +43,7 @@
   },
   {
     "id": "dns-lab-dns",
-    "stage": "infra-components",
+    "stage": "infrastructure-services",
     "dependencies": [],
     "impacts": [
       "create-container-unit bootwright-lab-compact-df-dns-lab-dns",
@@ -53,7 +53,7 @@
   },
   {
     "id": "ntp-lab-ntp",
-    "stage": "infra-components",
+    "stage": "infrastructure-services",
     "dependencies": [],
     "impacts": [
       "create-container-unit bootwright-lab-compact-df-ntp-lab-ntp",
@@ -63,7 +63,7 @@
   },
   {
     "id": "proxy-lab-proxy",
-    "stage": "infra-components",
+    "stage": "infrastructure-services",
     "dependencies": [],
     "impacts": [
       "create-container-unit bootwright-lab-compact-df-proxy-lab-proxy",
@@ -537,7 +537,7 @@
     ]
   },
   {
-    "id": "ceph-export-compact-storage",
+    "id": "ceph-consumer-compact-storage",
     "stage": "clusters",
     "dependencies": [
       "ceph-cluster-ceph-lab",
@@ -562,7 +562,7 @@
       "dns-lab-dns"
     ],
     "impacts": [
-      "create per-export Ceph principals for compact-storage",
+      "create per-consumer Ceph principals for compact-storage",
       "grants consumer administrators every path of filesystem files",
       "grants consumer administrators every RGW user, bucket and key in the realm of object gateway objects",
       "is not isolated from other exports that share its cluster, filesystem or gateway"
@@ -596,7 +596,7 @@
     "id": "addon-fdf-compact",
     "stage": "add-ons",
     "dependencies": [
-      "ceph-export-compact-storage",
+      "ceph-consumer-compact-storage",
       "cluster-install-compact",
       "cluster-media-compact"
     ],
@@ -614,12 +614,12 @@
       },
       "producedInputs": [
         {
-          "kind": "ContainerCluster",
+          "kind": "OpenShiftCluster",
           "object": "compact",
           "output": "kubeconfig"
         },
         {
-          "kind": "StorageExport",
+          "kind": "CephConsumer",
           "object": "compact-storage",
           "output": "external-details"
         }
@@ -853,12 +853,12 @@
           {
             "kind": "place",
             "place": {
-              "desiredDigest": "61cf4e71d2b2a6bd80fc7ba651219b470aaa995ab4c91bb856709f475ac1c4db",
+              "desiredDigest": "da5dcd77a9d3b9553a358f8145fed72232dbaeaf3655e9732611c8571afe818f",
               "keys": null,
               "name": "rook-ceph-external-cluster-details",
               "namespace": "openshift-storage",
               "produced": {
-                "kind": "StorageExport",
+                "kind": "CephConsumer",
                 "object": "compact-storage",
                 "output": "external-details"
               },
@@ -904,7 +904,7 @@
         "kind": "openshift-clients",
         "version": "4.21.15"
       },
-      "version": "addon-instance-request-v1"
+      "version": "addon-instance-request-v2"
     }
   }
 ]

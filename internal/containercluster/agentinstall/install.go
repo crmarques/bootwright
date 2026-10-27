@@ -361,7 +361,7 @@ func refusedContinuation(contextName string, request InstallRequest) error {
 	for _, node := range request.Nodes {
 		if node.Physical {
 			if reason, _ := privateControllerRefusal(node.Machine, node.Controller); reason != "" {
-				return refusal("lifecycle.state", "Machine/"+node.Machine+" of ContainerCluster/"+request.Identity.Cluster+": "+reason,
+				return refusal("lifecycle.state", "Machine/"+node.Machine+" of OpenShiftCluster/"+request.Identity.Cluster+": "+reason,
 					"run bootwright destroy --context "+contextName+" to end this operation, then correct the node's transport trust and plan it again")
 			}
 		}

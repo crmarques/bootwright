@@ -6,7 +6,7 @@ import (
 )
 
 func TestPackageRepositoryTrustBundleMustBeACABundleSecret(t *testing.T) {
-	ceph, _ := Schema(StorageCluster).Field("ceph")
+	ceph := Field{Shape: Schema(CephCluster)}
 	index := slices.IndexFunc(ceph.Shape.Fields, func(f Field) bool { return f.Name == "packageRepositoryTrustBundleRef" })
 	if index < 1 || ceph.Shape.Fields[index-1].Name != "packageRepository" {
 		t.Fatal("ceph.packageRepositoryTrustBundleRef must follow ceph.packageRepository")
@@ -23,7 +23,7 @@ func TestPackageRepositoryTrustBundleMustBeACABundleSecret(t *testing.T) {
 func TestPackageRepositoryKeyURL(t *testing.T) {
 	lexicalRows(t, "package-repository-key", []string{"https://mirror.example.test/keys/ibm.asc", "https://mirror.example.test:8443/ibm.asc"},
 		[]string{"http://mirror.example.test/key", "https://user:secret@mirror.example.test/key", "https://mirror.example.test/key?token=x", "https://mirror.example.test/key#fragment", "https://mirror.example.test/%2e%2e/key", "https://mirror.example.test/key\n"})
-	ceph, _ := Schema(StorageCluster).Field("ceph")
+	ceph := Field{Shape: Schema(CephCluster)}
 	index := slices.IndexFunc(ceph.Shape.Fields, func(f Field) bool { return f.Name == "packageRepositoryKey" })
 	if index < 0 {
 		t.Fatal("missing publisher key")

@@ -1,0 +1,30 @@
+apiVersion: bootwright.io/v1alpha1
+kind: Machine
+metadata:
+  name: features-01
+
+spec:
+  substrate:
+    providerRef: lab-libvirt
+    libvirt:
+      profileRef: master
+
+  hardware:
+    rootDevice:
+      deviceName: /dev/vda
+
+  os:
+    provided: false
+
+  network:
+    configRef: lab-guests
+    attachmentRef: lab-guests
+    installAddressRef: ip
+
+    addresses:
+      - name: fqdn
+        address: features-01.lab.example.test
+
+      - name: ip
+        address: 198.51.100.21/24
+        interface: enp1s0

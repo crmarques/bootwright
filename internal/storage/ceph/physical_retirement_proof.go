@@ -41,7 +41,7 @@ func physicalPolicy(e lifecycle.Execution) (PhysicalRetirementRequest, error) {
 	if err != nil {
 		return r, err
 	}
-	if e.ApplyOperation == "" || e.Block.Kind != string(api.StorageCluster) || e.Block.Object != r.Cluster || e.Block.Implementation != PhysicalRetirementImplementation || e.Block.ID != PhysicalRetirementBlockID(r.Cluster) || !hex64(e.Block.RequestDigest) {
+	if e.ApplyOperation == "" || e.Block.Kind != string(api.CephCluster) || e.Block.Object != r.Cluster || e.Block.Implementation != PhysicalRetirementImplementation || e.Block.ID != PhysicalRetirementBlockID(r.Cluster) || !hex64(e.Block.RequestDigest) {
 		return r, physicalPolicyFailure()
 	}
 	return r, nil
@@ -168,7 +168,7 @@ func originalPhysicalDevices(e lifecycle.Execution, cluster string, host Host) (
 		if !ok || target.Machine != host.Machine {
 			continue
 		}
-		if !matchingRemovalPair(pair) || proof.Kind != string(api.StorageCluster) || request.Cluster.Cluster != cluster || target.Name != host.Name || !target.Physical || !slices.Equal(target.Devices, host.Devices) {
+		if !matchingRemovalPair(pair) || proof.Kind != string(api.CephCluster) || request.Cluster.Cluster != cluster || target.Name != host.Name || !target.Physical || !slices.Equal(target.Devices, host.Devices) {
 			return physicalDiskBinding{}, physicalPolicyFailure()
 		}
 		if proof.State != reconciliation.BlockDone {
@@ -277,7 +277,7 @@ func originalCoreUnstarted(e lifecycle.Execution, cluster string) (bool, error) 
 		if err != nil {
 			return false, err
 		}
-		if found || proof.Kind != string(api.StorageCluster) || proof.Object != cluster || proof.Implementation != Implementation || proof.Verb != reconciliation.Apply ||
+		if found || proof.Kind != string(api.CephCluster) || proof.Object != cluster || proof.Implementation != Implementation || proof.Verb != reconciliation.Apply ||
 			proof.Block.Kind != proof.Kind || proof.Block.Object != proof.Object || proof.Block.Implementation != proof.Implementation || !hex64(proof.Block.RequestDigest) || request.Cluster != cluster || request.Action != "cluster" {
 			return false, physicalPolicyFailure()
 		}
@@ -301,7 +301,7 @@ func authorizePhysicalRetirement(e lifecycle.Execution, r Request) error {
 		if err != nil {
 			return err
 		}
-		if found != nil || policy.Cluster != r.Cluster || proof.Kind != string(api.StorageCluster) || proof.Verb != reconciliation.Apply || proof.State != reconciliation.BlockDone ||
+		if found != nil || policy.Cluster != r.Cluster || proof.Kind != string(api.CephCluster) || proof.Verb != reconciliation.Apply || proof.State != reconciliation.BlockDone ||
 			proof.Block.Kind != proof.Kind || proof.Block.Object != proof.Object || proof.Block.Implementation != proof.Implementation ||
 			proof.Block.ID != PhysicalRetirementBlockID(r.Cluster) || evidence.Version != PhysicalRetirementImplementation || evidence.Cluster != r.Cluster ||
 			!hex64(proof.Block.RequestDigest) || evidence.Request != proof.Block.RequestDigest || !evidence.Prepared || evidence.Retired || len(evidence.Receipts) != 0 ||
@@ -336,7 +336,7 @@ func authorizePhysicalRetirement(e lifecycle.Execution, r Request) error {
 func physicalHostRelease(e lifecycle.Execution, frozen HostRequest) (json.RawMessage, error) {
 	request := Request{Action: "host-preparation", Cluster: frozen.Cluster.Cluster, Hosts: frozen.Cluster.Hosts, FSID: FSIDFor(e.ApplyOperation, frozen.Cluster.Cluster)}
 	target, found := frozen.target()
-	if !found || !target.Physical || frozen.Cluster.Owner != "" || frozen.Cluster.FSID != "" || e.ApplyOperation == "" || e.Block.Kind != string(api.StorageCluster) ||
+	if !found || !target.Physical || frozen.Cluster.Owner != "" || frozen.Cluster.FSID != "" || e.ApplyOperation == "" || e.Block.Kind != string(api.CephCluster) ||
 		e.Block.Object != request.Cluster || e.Block.Implementation != HostImplementation || e.Block.ID != HostBlockID(request.Cluster, target.Machine) {
 		return nil, physicalPolicyFailure()
 	}

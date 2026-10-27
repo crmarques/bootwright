@@ -1,0 +1,14 @@
+apiVersion: bootwright.io/v1alpha1
+kind: CephPool
+metadata:
+  name: cephfs-ec
+
+spec:
+  clusterRef: ceph-lab
+  role: cephfsData
+
+  erasure:
+    dataChunks: 2
+    codingChunks: 2
+    plugin: isa
+    technique: reed_sol_van

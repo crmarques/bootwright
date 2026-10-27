@@ -178,11 +178,16 @@ func validateBinding(binding api.Object, c api.Catalog) []api.Issue {
 			}
 		}
 	}
-
+	cluster := binding.Spec().Get("clusterRef").Text()
+	for i, ref := range binding.Spec().Get("afterRefs").Strings() {
+		if other, found := c.Find(api.ClusterAddonBinding, ref); found && other.Spec().Get("clusterRef").Text() != cluster {
+			issues = append(issues, addonIssue("api.invariant", indexed("spec.afterRefs", i), "spec.afterRefs names ClusterAddonBinding/"+ref+", which binds OpenShiftCluster/"+other.Spec().Get("clusterRef").Text()+", not OpenShiftCluster/"+cluster, "name a binding of OpenShiftCluster/"+cluster+", or remove "+ref+" from spec.afterRefs"))
+		}
+	}
 	return boundedIssues(issues)
 }
 
-type Attachment struct{ ClusterRef, ExportRef string }
+type Attachment struct{ ClusterRef, ConsumerRef string }
 
 // StorageAttachments returns only relationships declared by selected typed
 // storage inputs and their effects. It does not interpret arbitrary strings.
@@ -190,8 +195,8 @@ func StorageAttachments(c api.Catalog) []Attachment {
 	seen := map[Attachment]bool{}
 	profiles, definitions := uniqueObjects(c.OfKind(api.ClusterAddonProfile)), uniqueObjects(c.OfKind(api.ClusterAddon))
 	for _, binding := range c.OfKind(api.ClusterAddonBinding) {
-		if ref := binding.Spec().Get("packages", "fdf", "storageExportRef"); ref.Type() == api.String && ref.Text() != "" {
-			seen[Attachment{ClusterRef: binding.Spec().Get("clusterRef").Text(), ExportRef: ref.Text()}] = true
+		if ref := binding.Spec().Get("packages", "fdf", "cephConsumerRef"); ref.Type() == api.String && ref.Text() != "" {
+			seen[Attachment{ClusterRef: binding.Spec().Get("clusterRef").Text(), ConsumerRef: ref.Text()}] = true
 		}
 		// Validation owns selection diagnostics; this projection grants no effects.
 		selected, _, _ := expandIndexed(binding, c, profiles, definitions)
@@ -208,12 +213,12 @@ func StorageAttachments(c api.Catalog) []Attachment {
 			suppliedInputs := uniqueNamedValues(config.Get("inputs"), "name")
 			for _, input := range addon.Spec().Get("inputs").Items() {
 				_, unique := declaredInputs[input.Get("name").Text()]
-				if !unique || input.Get("resourceKind").Text() != string(api.StorageExport) || input.Has("secretType") || !hasEffect(input, "storageExportAttachment") {
+				if !unique || input.Get("resourceKind").Text() != string(api.CephConsumer) || input.Has("secretType") || !hasEffect(input, "cephConsumerAttachment") {
 					continue
 				}
 				value, supplied := suppliedInputs[input.Get("name").Text()]
 				if supplied && value.Get("value").Type() == api.String && value.Get("value").Text() != "" {
-					seen[Attachment{ClusterRef: binding.Spec().Get("clusterRef").Text(), ExportRef: value.Get("value").Text()}] = true
+					seen[Attachment{ClusterRef: binding.Spec().Get("clusterRef").Text(), ConsumerRef: value.Get("value").Text()}] = true
 				}
 			}
 		}
@@ -226,7 +231,7 @@ func StorageAttachments(c api.Catalog) []Attachment {
 		if result := strings.Compare(a.ClusterRef, b.ClusterRef); result != 0 {
 			return result
 		}
-		return strings.Compare(a.ExportRef, b.ExportRef)
+		return strings.Compare(a.ConsumerRef, b.ConsumerRef)
 	})
 	return out
 }

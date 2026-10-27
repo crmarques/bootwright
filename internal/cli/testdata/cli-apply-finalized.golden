@@ -8,7 +8,7 @@
   Substrates
     [DONE] realize the libvirt host of lab-libvirt on controller
   Machines
-    [DONE] realize the virtual machine rhel-01 and its controller
+    [DONE] realize the virtual machine rhel-01 and its emulated BMC
     [DONE] install the operating system of rhel-01
 operation: op-6f1c2a9e0b7d4c3f8a5e2d1b0c9f8e7a
 verb: apply

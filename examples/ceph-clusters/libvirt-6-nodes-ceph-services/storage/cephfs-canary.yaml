@@ -1,0 +1,13 @@
+apiVersion: bootwright.io/v1alpha1
+kind: CephSubvolume
+metadata:
+  name: cephfs-canary
+
+spec:
+  clusterRef: ceph-lab
+  filesystemRef: files
+  group: ec
+  sizeBytes: 1073741824
+  uid: 2000
+  gid: 2000
+  mode: '750'

@@ -13,7 +13,7 @@ implemented or authorized.
 | Boundaries, package shapes, Go/Ansible split, dependencies, fitness checks | [architecture](architecture.md) |
 | Where a command's code lives | `internal/cli/catalog.go`, `cmd/bootwright/wiring_<domain>.go` and each package's `contracts.go` ([finding code](architecture.md#go-package-structure)) |
 | Desired-state grammar, compilation, defaults | [api](api.md); input discovery and ceilings: [input](api/input.md) |
-| One kind's fields | [environment](api/environment.md), [secrets](api/secrets.md), [machines](api/machines.md), [infrastructure services](api/infrastructure-services.md), [container clusters](api/container-clusters.md), [storage](api/storage.md), [add-ons](api/addons.md), [custom playbooks](api/custom-playbooks.md) |
+| One kind's fields | [environment](api/environment.md), [secrets](api/secrets.md), [machines](api/machines.md), [infrastructure services](api/infrastructure-services.md), [container clusters](api/openshift-clusters.md), [storage](api/ceph.md#kinds), [add-ons](api/addons.md), [custom playbooks](api/custom-playbooks.md) |
 | Command behavior and journeys | [cli](cli.md); flags: [commands](cli/commands.md); streams, JSON, diagnostics: [output](cli/output.md) |
 | Host prerequisites, setup, the controller stage | [controller](controller.md) |
 | Contexts, frozen input, storage, locking, deletion | [contexts](contexts.md); controller record format: [controller record](contexts/controller-record.md) |
@@ -22,9 +22,9 @@ implemented or authorized.
 | Managed services, host reservations, publication | [infrastructure services](infrastructure-services.md) |
 | Provider hosts, machines, emulated BMCs, identity and power | [substrates](substrates.md) |
 | Media store and operating-system installation | [managed OS](managed-os.md) |
-| Container cluster installation | [container clusters](container-clusters.md) |
-| OpenShift provider coverage and acceptance profiles | [cluster coverage](container-cluster-coverage.md) |
-| Ceph lifecycle, native input, resources and release qualification | [storage](storage.md), [native input](storage-native-api.md), [resources](storage-resources.md), [coverage](storage-coverage.md) |
+| Container cluster installation | [container clusters](openshift-clusters.md) |
+| OpenShift provider coverage and acceptance profiles | [cluster coverage](openshift-coverage.md) |
+| Ceph lifecycle, native input, resources and release qualification | [storage](ceph.md), [native input](ceph-native-api.md), [resources](ceph-resources.md), [coverage](ceph-coverage.md) |
 | Trust, sensitive material, processes, network, supply chain | [security](security.md) |
 | The add-on boundary and lifecycle | [add-ons](add-ons.md) |
 | Built-in add-on packages and acceptance profiles | [add-on coverage](add-on-coverage.md) |

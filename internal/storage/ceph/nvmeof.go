@@ -14,7 +14,7 @@ import (
 	api "github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/reconciliation"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
-	"github.com/crmarques/bootwright/internal/storage"
+	"github.com/crmarques/bootwright/internal/storage/cephcluster"
 )
 
 type NVMeOFEndpoint struct {
@@ -66,7 +66,7 @@ func nvmeofSpecOf(spec api.Value) any {
 
 func nvmeofUnits(cluster api.Object) ([]ServiceUnit, error) {
 	units := []ServiceUnit{}
-	for _, service := range cluster.Spec().Get("ceph", "services").Items() {
+	for _, service := range cluster.Spec().Get("services").Items() {
 		if service.Get("service_type").Text() != "nvmeof" {
 			continue
 		}
@@ -75,7 +75,7 @@ func nvmeofUnits(cluster api.Object) ([]ServiceUnit, error) {
 			return nil, err
 		}
 		unit := ServiceUnit{ID: service.Get("service_id").Text(), Type: "nvmeof", Documents: []json.RawMessage{document}}
-		for _, binding := range gatewayBindings(cluster, storage.NativeServiceName(service)) {
+		for _, binding := range gatewayBindings(cluster, cephcluster.NativeServiceName(service)) {
 			unit.Bindings = append(unit.Bindings, ServiceBinding(binding))
 		}
 		units = append(units, unit)
@@ -90,9 +90,9 @@ func projectNVMeOFPools(catalog api.Catalog, cluster api.Object, requests []Requ
 		if unit == nil || unit.Type != "nvmeof" {
 			continue
 		}
-		service, _ := storage.NativeService(cluster, "nvmeof."+unit.ID)
-		pool, _ := catalog.Find(api.StoragePool, service.Get("spec", "pool").Text())
-		service = service.WithPath(api.StringValue(storage.PoolName(pool)), "spec", "pool")
+		service, _ := cephcluster.NativeService(cluster, "nvmeof."+unit.ID)
+		pool, _ := catalog.Find(api.CephPool, service.Get("spec", "pool").Text())
+		service = service.WithPath(api.StringValue(cephcluster.PoolName(pool)), "spec", "pool")
 		document, err := unitDocumentOf(cluster, service, nvmeofSpecOf)
 		if err != nil {
 			return err
@@ -103,27 +103,24 @@ func projectNVMeOFPools(catalog api.Catalog, cluster api.Object, requests []Requ
 }
 
 func nvmeofDependencies(cluster api.Object, unit ServiceUnit) []string {
-	service, _ := storage.NativeService(cluster, "nvmeof."+unit.ID)
-	return []string{"ceph-pool-" + service.Get("spec", "pool").Text()}
+	service, _ := cephcluster.NativeService(cluster, "nvmeof."+unit.ID)
+	return []string{reconciliation.BlockIdentity("ceph-pool-", service.Get("spec", "pool").Text())}
 }
 
 func nvmeofRequest(catalog api.Catalog, object api.Object, contextName string) (Request, error) {
 	spec := object.Spec()
-	if !reconciliation.ValidSegment("ceph-nvmeof-" + object.Name()) {
-		return Request{}, failure("api.invariant", "the NVMe-oF subsystem name cannot identify its lifecycle block", "use at most 51 characters")
-	}
-	cluster, _ := catalog.Find(api.StorageCluster, spec.Get("clusterRef").Text())
+	cluster, _ := catalog.Find(api.CephCluster, spec.Get("clusterRef").Text())
 	request, err := baseRequest(catalog, cluster, contextName)
 	if err != nil {
 		return Request{}, err
 	}
-	service, found := storage.NativeService(cluster, spec.Get("serviceRef").Text())
+	service, found := cephcluster.NativeService(cluster, spec.Get("serviceRef").Text())
 	if !found {
 		return Request{}, failure("api.invariant", "NVMe-oF requires a declared gateway service", "set spec.serviceRef to the qualified native service name")
 	}
 	native := service.Get("spec")
-	configPool, _ := catalog.Find(api.StoragePool, native.Get("pool").Text())
-	frozen := &NVMeOFSubsystem{Name: object.Name(), Service: service.Get("service_id").Text(), Group: native.Get("group").Text(), Pool: storage.PoolName(configPool),
+	configPool, _ := catalog.Find(api.CephPool, native.Get("pool").Text())
+	frozen := &NVMeOFSubsystem{Name: object.Name(), Service: service.Get("service_id").Text(), Group: native.Get("group").Text(), Pool: cephcluster.PoolName(configPool),
 		MTLS: "enable_auth", NQN: spec.Get("nqn").Text(), Hosts: []string{}, Gateways: []NVMeOFEndpoint{}, Listeners: []NVMeOFEndpoint{}, Namespaces: []NVMeOFNamespace{}}
 	if !native.Get("enable_auth").Bool() {
 		frozen.MTLS = "enable_mtls"
@@ -145,9 +142,9 @@ func nvmeofRequest(catalog api.Catalog, object api.Object, contextName string) (
 	}
 	for _, listener := range spec.Get("listeners").Items() {
 		host := listener.Get("host").Text()
-		for _, node := range cluster.Spec().Get("ceph", "topology", "nodes").Items() {
+		for _, node := range cluster.Spec().Get("topology", "nodes").Items() {
 			if node.Get("name").Text() == host {
-				host = storage.NativeHostname(node)
+				host = cephcluster.NativeHostname(node)
 				break
 			}
 		}
@@ -164,7 +161,7 @@ func nvmeofRequest(catalog api.Catalog, object api.Object, contextName string) (
 		}
 		address, parseErr := netip.ParseAddr(addressText)
 		if parseErr != nil {
-			return Request{}, failure("api.invariant", "NVMe-oF listener requires an IP address", "set spec.ceph.topology.nodes[].addr on the StorageCluster to the listener host's registered IP address")
+			return Request{}, failure("api.invariant", "NVMe-oF listener requires an IP address", "set spec.topology.nodes[].addr on the CephCluster to the listener host's registered IP address")
 		}
 		frozen.Listeners = append(frozen.Listeners, NVMeOFEndpoint{Host: host, Address: address.String(), Port: port})
 	}
@@ -173,7 +170,7 @@ func nvmeofRequest(catalog api.Catalog, object api.Object, contextName string) (
 	}
 	slices.Sort(frozen.Hosts)
 	for _, namespace := range spec.Get("namespaces").Items() {
-		image, _ := catalog.Find(api.StorageRBDImage, namespace.Get("imageRef").Text())
+		image, _ := catalog.Find(api.CephRBDImage, namespace.Get("imageRef").Text())
 		backing, err := rbdImageRequest(catalog, image, contextName)
 		if err != nil {
 			return Request{}, err
@@ -220,7 +217,7 @@ func nvmeofDeadline(r Request, operation string) (time.Duration, error) {
 	observation := 660 + nvmeofPhaseBudget(r, false) + 20
 	apply := 660 + nvmeofPhaseBudget(r, true) + 20 + observation + 900 + 60
 	if time.Duration(apply)*time.Second > lifecycle.MaxDeadline {
-		return 0, failure("lifecycle.unsupported", fmt.Sprintf("StorageNVMeoFSubsystem %s needs a bounded apply deadline of %s, past the 6h0m0s adapter limit", r.NVMeOF.Name, time.Duration(apply)*time.Second), "declare fewer namespaces or initiator hosts in this subsystem")
+		return 0, failure("lifecycle.unsupported", fmt.Sprintf("CephNVMeoFSubsystem %s needs a bounded apply deadline of %s, past the 6h0m0s adapter limit", r.NVMeOF.Name, time.Duration(apply)*time.Second), "declare fewer namespaces or initiator hosts in this subsystem")
 	}
 	if operation == "apply" {
 		return time.Duration(apply) * time.Second, nil

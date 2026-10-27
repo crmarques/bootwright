@@ -11,7 +11,9 @@ import (
 
 // Every admitted root-device hint reaches the realized target with the type it
 // was declared with, on a Machine its substrate creates and on a physical one
-// alike. A hint declared as zero or false is present, so a consumer never reads
+// alike; the hints only a physical disk can carry (wwn, hctl, serialNumber) are
+// declared in the bare-metal arm and never reach a Machine its substrate
+// creates. A hint declared as zero or false is present, so a consumer never reads
 // it as one never declared, and a size no integer type holds keeps its text.
 func TestTheRootDeviceHintsAreReadAsDeclared(t *testing.T) {
 	rotational, fixed := true, false
@@ -45,22 +47,40 @@ func TestTheRootDeviceHintsAreReadAsDeclared(t *testing.T) {
 		for _, machine := range []string{"guest", "server"} {
 			t.Run(name+" on "+machine, func(t *testing.T) {
 				objects := targetCatalog().Objects()
+				declared, physical, want := m(), m(), test.want
+				for _, hint := range test.declared.Fields() {
+					if slices.Contains([]string{"hctl", "serialNumber", "wwn"}, hint.Name) {
+						physical = physical.With(hint.Name, hint.Value)
+					} else {
+						declared = declared.With(hint.Name, hint.Value)
+					}
+				}
+				if machine == "guest" {
+					physical, want.HCTL, want.SerialNumber, want.WWN = m(), "", "", ""
+				}
 				for index, object := range objects {
 					if object.Kind() == api.Machine && object.Name() == machine {
-						objects[index] = object.WithSpec(object.Spec().WithPath(test.declared, "os", "install", "rootDeviceHints"))
+						spec := object.Spec().WithPath(declared, "hardware", "rootDevice")
+						if machine == "server" {
+							spec = spec.WithPath(physical, "substrate", "baremetal", "rootDevice")
+						}
+						objects[index] = object.WithSpec(spec)
 					}
 				}
 				catalog := api.NewCatalog(objects)
-				declared, _ := catalog.Find(api.Machine, machine)
-				target, err := TargetFor(catalog, declared, "lab", "controller")
+				subject, _ := catalog.Find(api.Machine, machine)
+				target, err := TargetFor(catalog, subject, "lab", "controller")
 				if err != nil {
 					t.Fatalf("deriving: %v", diagnostics.Of(err))
 				}
-				if !reflect.DeepEqual(target.RootDeviceHints, test.want) {
-					t.Fatalf("hints = %+v, want %+v", target.RootDeviceHints, test.want)
+				if !reflect.DeepEqual(target.RootDeviceHints, want) {
+					t.Fatalf("hints = %+v, want %+v", target.RootDeviceHints, want)
 				}
-				if names := target.RootDeviceHints.Names(); !slices.Equal(names, test.names) {
-					t.Fatalf("names = %v, want %v", names, test.names)
+				if names := target.RootDeviceHints.Names(); !slices.Equal(names, want.Names()) {
+					t.Fatalf("names = %v, want %v", names, want.Names())
+				}
+				if machine == "server" && !slices.Equal(want.Names(), test.names) {
+					t.Fatalf("names = %v, want %v", want.Names(), test.names)
 				}
 			})
 		}

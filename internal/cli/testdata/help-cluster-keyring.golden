@@ -1,12 +1,12 @@
   bootwright / cluster keyring
-      Export the raw sensitive Ceph keyring bytes of one StorageClient to standard output.
-      Applicable to managed Ceph StorageClusters only.
+      Export the raw sensitive Ceph keyring bytes of one CephClient to standard output.
+      Applicable to managed CephClusters only.
 
   Usage
     bootwright cluster keyring [flags]
 
   Command flags
-      --client  Select the exact StorageClient name (required)
+      --client  Select the exact CephClient name (required)
       --name    Select the exact object name (required)
 
   Common flags

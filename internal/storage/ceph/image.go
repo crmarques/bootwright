@@ -15,7 +15,7 @@ import (
 	"github.com/crmarques/bootwright/internal/reconciliation"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
 	"github.com/crmarques/bootwright/internal/secrets"
-	"github.com/crmarques/bootwright/internal/storage"
+	"github.com/crmarques/bootwright/internal/storage/cephcluster"
 )
 
 const ImageImplementation = "storage-ceph-image-v1"
@@ -62,14 +62,14 @@ func DecodeImageRequest(data []byte) (ImageRequest, error) {
 	if err != nil {
 		return ImageRequest{}, err
 	}
-	if r.Cluster == "" || r.Controller == "" || r.RegistryRef == "" || !strings.HasPrefix(r.Base, r.Registry+"/") || !storage.NativeVersion(r.Release) || r.Base == "" || !validSelection(r.Base, r.Tag, r.Image) || !validAuxiliary(r) {
+	if r.Cluster == "" || r.Controller == "" || r.RegistryRef == "" || !strings.HasPrefix(r.Base, r.Registry+"/") || !cephcluster.NativeVersion(r.Release) || r.Base == "" || !validSelection(r.Base, r.Tag, r.Image) || !validAuxiliary(r) {
 		return ImageRequest{}, failure("lifecycle.state", "the frozen Ceph image request has inconsistent coordinates", "")
 	}
 	return r, nil
 }
 
 func validSelection(base, tag, image string) bool {
-	return storage.NativeVersion(tag) && image == base+":"+tag || tag == "" && strings.HasPrefix(image, base+"@") && ValidImageDigest(strings.TrimPrefix(image, base+"@"))
+	return cephcluster.NativeVersion(tag) && image == base+":"+tag || tag == "" && strings.HasPrefix(image, base+"@") && ValidImageDigest(strings.TrimPrefix(image, base+"@"))
 }
 
 func validAuxiliary(r ImageRequest) bool {
@@ -92,7 +92,7 @@ func ImageContentDigest() string {
 	return hex.EncodeToString(d[:])
 }
 
-func ImageBlockID(cluster string) string { return "ceph-image-" + cluster }
+func ImageBlockID(cluster string) string { return reconciliation.BlockIdentity("ceph-image-", cluster) }
 
 type ImageEvidence struct {
 	Absent        bool                `json:"absent,omitempty"`
@@ -193,12 +193,12 @@ func (c ImageCapability) Plan(ctx context.Context, input lifecycle.PlanInput) (l
 		return plan, failure("lifecycle.state", "Ceph planning requires compiled state", "")
 	}
 	catalog := input.State.Effective()
-	for _, object := range catalog.OfKind(api.StorageCluster) {
+	for _, object := range catalog.OfKind(api.CephCluster) {
 		r, err := baseRequest(catalog, object, input.Context.Name)
 		if err != nil {
 			return plan, err
 		}
-		base, tag := object.Spec().Get("ceph", "image", "base").Text(), object.Spec().Get("ceph", "image", "version").Text()
+		base, tag := object.Spec().Get("image", "base").Text(), object.Spec().Get("image", "version").Text()
 		if ValidImageDigest(tag) {
 			tag = ""
 		}
@@ -212,7 +212,7 @@ func (c ImageCapability) Plan(ctx context.Context, input lifecycle.PlanInput) (l
 		}
 		description, impacts := imageDescription(input.Verb, r.Cluster, r.Image)
 		plan.Definitions = append(plan.Definitions, reconciliation.BlockDefinition{ID: ImageBlockID(r.Cluster), Description: description, Stage: reconciliation.StageClusters, Impacts: impacts, Consumes: []string{},
-			Kind: string(api.StorageCluster), Object: r.Cluster, Implementation: ImageImplementation, ContentDigest: ImageContentDigest(), Request: canonical})
+			Kind: string(api.CephCluster), Object: r.Cluster, Implementation: ImageImplementation, ContentDigest: ImageContentDigest(), Request: canonical})
 		plan.Secrets = append(plan.Secrets, r.RegistryRef)
 		if r.RegistryTrustBundleRef != "" {
 			plan.Secrets = append(plan.Secrets, r.RegistryTrustBundleRef)
@@ -270,7 +270,7 @@ func (c ImageCapability) run(ctx context.Context, e lifecycle.Execution, operati
 	if err != nil {
 		return lifecycle.RunResult{}, r, err
 	}
-	if e.Block.Kind != string(api.StorageCluster) || e.Block.Object != r.Cluster {
+	if e.Block.Kind != string(api.CephCluster) || e.Block.Object != r.Cluster {
 		return lifecycle.RunResult{}, r, failure("lifecycle.state", "Ceph image request does not match its frozen resource identity", "")
 	}
 	if c.runner == nil {
@@ -379,7 +379,7 @@ func provedResolution(proofs []lifecycle.BlockEvidence, cluster string) (ImageRe
 	var request ImageRequest
 	var resolved ImageEvidence
 	for _, proof := range proofs {
-		if proof.Kind != string(api.StorageCluster) || proof.Object != cluster || proof.Implementation != ImageImplementation || proof.Verb != reconciliation.Apply || proof.State != reconciliation.BlockDone ||
+		if proof.Kind != string(api.CephCluster) || proof.Object != cluster || proof.Implementation != ImageImplementation || proof.Verb != reconciliation.Apply || proof.State != reconciliation.BlockDone ||
 			proof.Block.Kind != proof.Kind || proof.Block.Object != proof.Object || proof.Block.Implementation != proof.Implementation {
 			continue
 		}
@@ -443,19 +443,19 @@ func auxiliarySetMismatch() error {
 
 func auxiliaryImage(name, base, version, registryURL string) (AuxiliaryImage, error) {
 	if base != registryURL && !strings.HasPrefix(base, registryURL+"/") {
-		return AuxiliaryImage{}, failure("lifecycle.unsupported", "the auxiliary image "+name+" is not beneath the Entitlement registry "+registryURL, "set spec.ceph.images."+name+".base to a repository beneath the Entitlement registry.url")
+		return AuxiliaryImage{}, failure("lifecycle.unsupported", "the auxiliary image "+name+" is not beneath the Entitlement registry "+registryURL, "set spec.images."+name+".base to a repository beneath the Entitlement registry.url")
 	}
 	if ValidImageDigest(version) {
 		return AuxiliaryImage{Name: name, Base: base, Image: base + "@" + version}, nil
 	}
-	if !storage.NativeVersion(version) {
-		return AuxiliaryImage{}, failure("lifecycle.unsupported", "the auxiliary image "+name+" names neither a tag nor a sha256 digest", "set spec.ceph.images."+name+".version to a tag or a sha256 digest")
+	if !cephcluster.NativeVersion(version) {
+		return AuxiliaryImage{}, failure("lifecycle.unsupported", "the auxiliary image "+name+" names neither a tag nor a sha256 digest", "set spec.images."+name+".version to a tag or a sha256 digest")
 	}
 	return AuxiliaryImage{Name: name, Base: base, Image: base + ":" + version, Tag: version}, nil
 }
 
 func authoredAuxiliary(c api.Catalog, cluster api.Object) ([]AuxiliaryImage, error) {
-	spec := cluster.Spec().Get("ceph")
+	spec := cluster.Spec()
 	ent, _ := c.Find(api.Entitlement, spec.Get("entitlementRef").Text())
 	registryURL := ent.Spec().Get("registry", "url").Text()
 	var out []AuxiliaryImage

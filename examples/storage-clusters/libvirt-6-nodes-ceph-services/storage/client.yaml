@@ -1,9 +1,0 @@
-apiVersion: bootwright.io/v1alpha1
-kind: StorageClient
-metadata:
-  name: cephfs-canary
-
-spec:
-  clusterRef: ceph-lab
-  subvolumeRef: cephfs-canary
-  access: read-write

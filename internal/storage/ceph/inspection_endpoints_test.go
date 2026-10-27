@@ -34,14 +34,14 @@ func (f *endpointFixture) service(t *testing.T, unit ServiceUnit) reconciliation
 	t.Helper()
 	r := runtimeRequest()
 	r.Action, r.Service = "service", &unit
-	block := f.block(t, string(api.StorageCluster), "example", r)
+	block := f.block(t, string(api.CephCluster), "example", r)
 	f.blocks = append(f.blocks, block)
 	return block
 }
 
 func (f *endpointFixture) gateway(t *testing.T, object string, r Request) reconciliation.Block {
 	t.Helper()
-	block := f.block(t, string(api.StorageObjectGateway), object, r)
+	block := f.block(t, string(api.CephObjectGateway), object, r)
 	f.blocks = append(f.blocks, block)
 	return block
 }
@@ -206,8 +206,8 @@ func TestClusterInfoEndpoints(t *testing.T) {
 			spec = withCorePair(spec)
 			rgw := httpRGWService("objects").WithPath(api.IntegerValue("8080"), "spec", "rgw_frontend_port")
 			ingress := rgwIngress().WithPath(api.IntegerValue("8443"), "spec", "frontend_port")
-			spec = spec.WithPath(api.ListValue(append(spec.Get("ceph", "services").Items(), rgw, ingress)...), "ceph", "services")
-			return spec.WithPath(api.ListValue(tlsBinding("ingress.rgw.objects", "gateway-tls")), "ceph", "serviceBindings")
+			spec = spec.WithPath(api.ListValue(append(spec.Get("services").Items(), rgw, ingress)...), "services")
+			return spec.WithPath(api.ListValue(tlsBinding("ingress.rgw.objects", "gateway-tls")), "serviceBindings")
 		}, objectGateway("objects", "endpoint", requestMap("fqdn", "s3.example.test")))
 		request := gatewayOf(t, gatewayBlock(t, catalog))
 		f := &endpointFixture{}
@@ -241,7 +241,7 @@ func TestClusterInfoEndpoints(t *testing.T) {
 		foreign := plainGatewayRequest(t)
 		foreign.Cluster = "other"
 		f.gateway(t, "foreign", foreign)
-		f.blocks = append(f.blocks, reconciliation.Block{BlockDefinition: reconciliation.BlockDefinition{ID: "x", Kind: string(api.StorageObjectGateway), Object: "broken", Implementation: Implementation, Request: []byte("{")}})
+		f.blocks = append(f.blocks, reconciliation.Block{BlockDefinition: reconciliation.BlockDefinition{ID: "x", Kind: string(api.CephObjectGateway), Object: "broken", Implementation: Implementation, Request: []byte("{")}})
 		f.gateway(t, "plain", plainGatewayRequest(t))
 		if names := EndpointGateways("example", f.blocks); !slices.Equal(names, []string{"plain"}) {
 			t.Fatalf("gateways %v", names)
@@ -257,7 +257,7 @@ func TestClusterInfoEndpoints(t *testing.T) {
 			r := runtimeRequest()
 			r.Cluster = "other"
 			r.Action, r.Service = "service", &unit
-			block := f.block(t, string(api.StorageCluster), "other", r)
+			block := f.block(t, string(api.CephCluster), "other", r)
 			f.blocks = append(f.blocks, block)
 			f.prove(t, block, reached(digest))
 		}

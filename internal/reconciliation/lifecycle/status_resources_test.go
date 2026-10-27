@@ -64,29 +64,29 @@ type storageRowsHarness struct {
 func newStorageRowsHarness(t *testing.T) *storageRowsHarness {
 	t.Helper()
 	h := newPlannedHarness(t, []reconciliation.BlockDefinition{
-		storageBlock("pool-rbd", api.StoragePool, "rbd"),
-		storageBlock("client-app", api.StorageClient, "app"),
-		storageBlock("cluster-ceph", api.StorageCluster, "ceph"),
+		storageBlock("pool-rbd", api.CephPool, "rbd"),
+		storageBlock("client-app", api.CephClient, "app"),
+		storageBlock("cluster-ceph", api.CephCluster, "ceph"),
 	})
 	objects := []api.Object{
 		api.NewObject(api.Environment, "lab", api.Value{}, api.MapValue(
 			api.FieldValue{Name: "controller", Value: api.MapValue(api.FieldValue{Name: "machineRef", Value: api.StringValue("controller")})},
 		)),
-		storageObject(api.StorageCluster, "ceph", api.FieldValue{Name: "management", Value: api.StringValue("managed")}),
-		storageObject(api.StorageCluster, "archive", api.FieldValue{Name: "management", Value: api.StringValue("external")}),
-		storageObject(api.StoragePool, "rbd", clusterRef("ceph")),
-		storageObject(api.StoragePool, "meta", clusterRef("ceph")),
-		storageObject(api.StorageClient, "app", clusterRef("ceph")),
-		storageObject(api.StoragePool, "cold", clusterRef("archive")),
+		storageObject(api.CephCluster, "ceph", api.FieldValue{Name: "management", Value: api.StringValue("managed")}),
+		storageObject(api.CephCluster, "archive", api.FieldValue{Name: "management", Value: api.StringValue("external")}),
+		storageObject(api.CephPool, "rbd", clusterRef("ceph")),
+		storageObject(api.CephPool, "meta", clusterRef("ceph")),
+		storageObject(api.CephClient, "app", clusterRef("ceph")),
+		storageObject(api.CephPool, "cold", clusterRef("archive")),
 	}
 	applied := api.NewCatalog(objects)
-	declared := api.NewCatalog(append(objects, storageObject(api.StorageObjectGateway, "objects", clusterRef("ceph"))))
+	declared := api.NewCatalog(append(objects, storageObject(api.CephObjectGateway, "objects", clusterRef("ceph"))))
 	h.service.compiler = testCompiler{state: compilation.NewState(applied, applied, nil)}
 	h.service.capabilities = boundCapabilities{
 		bindings: []CapabilityBinding{
-			{Kind: string(api.StorageCluster), Implementation: storageImplementation},
-			{Kind: string(api.StoragePool), Implementation: storageImplementation},
-			{Kind: string(api.StorageClient), Implementation: storageImplementation},
+			{Kind: string(api.CephCluster), Implementation: storageImplementation},
+			{Kind: string(api.CephPool), Implementation: storageImplementation},
+			{Kind: string(api.CephClient), Implementation: storageImplementation},
 		},
 		capabilities: []Capability{h.capability, plannedCapability{Capability: h.capability}, plannedCapability{Capability: h.capability}},
 	}
@@ -132,7 +132,7 @@ func storageRows(t *testing.T, status *StatusResult) map[string][]ResourceSummar
 	rows := map[string][]ResourceSummary{}
 	for _, cluster := range status.StorageClusters {
 		if cluster.Resources == nil {
-			t.Fatalf("the StorageCluster %s has nil resources", cluster.Name)
+			t.Fatalf("the CephCluster %s has nil resources", cluster.Name)
 		}
 		rows[cluster.Name] = cluster.Resources
 	}
@@ -148,8 +148,8 @@ func TestStatusStorageResourceRows(t *testing.T) {
 	want := map[string][]ResourceSummary{
 		"archive": {},
 		"ceph": {
-			row(api.StoragePool, "meta", RealizationPending), row(api.StoragePool, "rbd", RealizationPending),
-			row(api.StorageClient, "app", RealizationPending), row(api.StorageObjectGateway, "objects", RealizationUnsupported),
+			row(api.CephPool, "meta", RealizationPending), row(api.CephPool, "rbd", RealizationPending),
+			row(api.CephClient, "app", RealizationPending), row(api.CephObjectGateway, "objects", RealizationUnsupported),
 		},
 	}
 	if got := storageRows(t, status); !reflect.DeepEqual(got, want) {
@@ -168,7 +168,7 @@ func TestStatusStorageResourceRows(t *testing.T) {
 		t.Fatalf("frozen blocks = %+v", found.Frozen)
 	}
 	for _, block := range found.Frozen {
-		if !slices.Contains([]string{"StoragePool/rbd", "StorageClient/app", "StorageCluster/ceph"}, block.Kind+"/"+block.Object) ||
+		if !slices.Contains([]string{"CephPool/rbd", "CephClient/app", "CephCluster/ceph"}, block.Kind+"/"+block.Object) ||
 			string(block.Request) != `{"name":"`+block.ID+`"}` {
 			t.Fatalf("frozen block = %+v", block)
 		}

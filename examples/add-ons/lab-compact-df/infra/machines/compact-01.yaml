@@ -4,19 +4,17 @@ metadata:
   name: compact-01
 
 spec:
-  capabilities:
-    - openshift-node
-
   substrate:
     providerRef: lab-libvirt
-    profileRef: compact
+    libvirt:
+      profileRef: compact
+
+  hardware:
+    rootDevice:
+      deviceName: /dev/vda
 
   os:
     provided: false
-
-    install:
-      rootDeviceHints:
-        deviceName: /dev/vda
 
   network:
     configRef: lab-guests

@@ -195,7 +195,7 @@ func TestPlanDigestsMatchTheirGolden(t *testing.T) {
 			ContentDigest: strings.Repeat("b", 64), Request: json.RawMessage(`{"machine":"node-01","release":"9.6"}`),
 		},
 		{
-			ID: "server-lab", Description: "serve artifacts for lab", Stage: StageInfraComponents,
+			ID: "server-lab", Description: "serve artifacts for lab", Stage: StageInfrastructureServices,
 			Impacts: []string{"create-container-unit lab"},
 			Groups:  []Group{{ID: "start-service", Description: "start the service", Machines: []string{"controller"}}},
 			Kind:    "ArtifactServer", Object: "lab", Implementation: "artifact-server-nginx-v1",

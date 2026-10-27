@@ -1,6 +1,6 @@
 implementation: storage-ceph-host-v1
-content-digest: a3abfd47845c35f38f64b81d7c9b4064d28a72af865157a03dd8bdc7004585bb
-request-version: ceph-host-v7
+content-digest: b36780e2eda619d5bb11d1cb5f3d5581460c1c8c7ce27d99c798072f4d1f5d23
+request-version: ceph-host-v8
 automation-formats: bootwright.native-plan-v1, ceph-crypto-policy-v1, ceph-device-identities-v2, ceph-host-route-v3, ceph-package-artifacts-v1, ceph-package-complete-v1, ceph-package-decision-v1, ceph-physical-device-binding-v1, ceph-runtime-profile-v3
 mark-formats: none
 proof-ids: .bootwright-tree-identity, marker:-attempt-%d.json, marker:-pulled.json, marker:auth.json, marker:auxiliary-, marker:cache-directory-intent.json, marker:cache-directory.json, marker:cache-pending.json, marker:cache-ready.json, marker:complete.json, marker:decision.json, marker:device-identities.json, marker:physical-device-binding.json, marker:policy.json, marker:pull-attempt-%d.json, marker:pulled.json, marker:route.json, marker:runtime-profile.json, marker:scope.json, marker:synthetic.json, marker:verified.json

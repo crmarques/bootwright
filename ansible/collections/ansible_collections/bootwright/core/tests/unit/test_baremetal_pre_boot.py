@@ -50,7 +50,7 @@ SERIAL = "CZJ2440ABC"
 TEMPLATE = "{{ 6 * 7 }}"
 MACS = ["aa:bb:cc:dd:ee:02", "aa:bb:cc:dd:ee:01"]
 DECLARED = {"interfaces": [{"macAddress": MACS[0], "name": "enp2s0"}, {"macAddress": MACS[1], "name": "enp1s0"}]}
-REMEDY = ("correct spec.hardware.management.bmc.address, or destroy and apply this context so the machine is "
+REMEDY = ("correct spec.substrate.baremetal.bmc.address, or destroy and apply this context so the machine is "
           "proved again")
 
 

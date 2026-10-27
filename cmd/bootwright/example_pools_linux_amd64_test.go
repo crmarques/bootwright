@@ -45,12 +45,12 @@ func TestExamplePoolsPlansSixHostsAndOwnedECImages(t *testing.T) {
 		}
 	}
 	for _, name := range []string{"ec42-data", "ec22-data"} {
-		pool := requireObject(t, catalog, api.StoragePool, name)
-		if pool.Spec().Get("type").Text() != "erasure" {
+		pool := requireObject(t, catalog, api.CephPool, name)
+		if !pool.Spec().Has("erasure") || pool.Spec().Has("replicated") {
 			t.Fatalf("%s is not erasure coded", name)
 		}
 	}
-	image := requireObject(t, catalog, api.StorageRBDImage, "ec42-disk")
+	image := requireObject(t, catalog, api.CephRBDImage, "ec42-disk")
 	if image.Spec().Get("poolRef").Text() != "rbd-headers" || image.Spec().Get("dataPoolRef").Text() != "ec42-data" {
 		t.Fatal("EC image lost separate replicated headers")
 	}

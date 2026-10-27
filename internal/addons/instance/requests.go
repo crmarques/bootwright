@@ -81,7 +81,7 @@ func (r Request) validate() error {
 	if r.Tool.Kind != "openshift-clients" || r.Tool.Compatibility != "openshift" || r.Tool.Version == "" {
 		return fmt.Errorf("invalid add-on instance client")
 	}
-	if len(r.ProducedInputs) < 1 || r.ProducedInputs[0] != (lifecycle.ProducedInput{Kind: "ContainerCluster", Object: r.Cluster, Output: "kubeconfig"}) {
+	if len(r.ProducedInputs) < 1 || r.ProducedInputs[0] != (lifecycle.ProducedInput{Kind: "OpenShiftCluster", Object: r.Cluster, Output: "kubeconfig"}) {
 		return fmt.Errorf("add-on instance must name its cluster kubeconfig")
 	}
 	if !slices.IsSorted(r.Secrets) || len(slices.Compact(slices.Clone(r.Secrets))) != len(r.Secrets) {

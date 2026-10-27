@@ -17,8 +17,6 @@ kind: Machine
 metadata:
   name: controller
 spec:
-  capabilities:
-    - container-runtime
   os:
     provided: true
   proxy:

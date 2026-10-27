@@ -39,8 +39,8 @@ func TestSubstrateRefusalTableMatchesUnsupported(t *testing.T) {
 		field("substrate", api.MapValue(text("providerRef", "vc"))),
 		field("os", api.MapValue(field("provided", api.BoolValue(false)))),
 	))
-	defaults := provider().Spec().Get("libvirt", "bmcEmulationDefaults").With("bindAddress", api.StringValue("0.0.0.0"))
-	wildcard := provider(field("libvirt", provider().Spec().Get("libvirt").With("bmcEmulationDefaults", defaults)))
+	defaults := provider().Spec().Get("libvirt", "bmcEmulation").With("bindAddress", api.StringValue("0.0.0.0"))
+	wildcard := provider(field("libvirt", provider().Spec().Get("libvirt").With("bmcEmulation", defaults)))
 	cases := map[string]refusalCase{
 		"A provider on an unrealized substrate": {catalogOf(controller(), vsphere), "InfraProvider/vc",
 			map[string]string{"<provider>": "InfraProvider/vc"}},

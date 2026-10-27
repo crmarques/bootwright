@@ -53,7 +53,7 @@ func catalog() api.Catalog {
 	node := object(api.Machine, "node", m(
 		"os", m("provided", true),
 		"network", addresses("192.0.2.30/24")))
-	cluster := object(api.ContainerCluster, "ocp", m("nodes", list(m("name", "master-0", "machineRef", "node"))))
+	cluster := object(api.OpenShiftCluster, "ocp", m("nodes", list(m("name", "master-0", "machineRef", "node"))))
 	return api.NewCatalog([]api.Object{guest, host, node, cluster})
 }
 
@@ -164,8 +164,8 @@ func TestLifecycleFollowsTheEvidenceRatherThanTheDeclaration(t *testing.T) {
 // clusters an operator can select instead.
 func TestAnUnknownClusterRefusesNamingTheSelectableClusters(t *testing.T) {
 	withStorage := api.NewCatalog(append(catalog().Objects(),
-		object(api.StorageCluster, "ceph", m("ceph", m("topology", m("nodes", list(m("name", "host", "machineRef", "host"))))))))
-	noClusters := api.NewCatalog(slices.DeleteFunc(catalog().Objects(), func(o api.Object) bool { return o.Kind() == api.ContainerCluster }))
+		object(api.CephCluster, "ceph", m("topology", m("nodes", list(m("name", "host", "machineRef", "host")))))))
+	noClusters := api.NewCatalog(slices.DeleteFunc(catalog().Objects(), func(o api.Object) bool { return o.Kind() == api.OpenShiftCluster }))
 	for _, test := range []struct {
 		name        string
 		catalog     api.Catalog
@@ -173,14 +173,14 @@ func TestAnUnknownClusterRefusesNamingTheSelectableClusters(t *testing.T) {
 		message     string
 		remediation string
 	}{
-		{"unknown", withStorage, []string{"absent"}, "the selected context declares no ContainerCluster or StorageCluster named absent",
+		{"unknown", withStorage, []string{"absent"}, "the selected context declares no OpenShiftCluster or CephCluster named absent",
 			"select one of ceph, ocp with --clusters, or omit --clusters"},
-		{"one of several", withStorage, []string{"ocp", "absent"}, "the selected context declares no ContainerCluster or StorageCluster named absent",
+		{"one of several", withStorage, []string{"ocp", "absent"}, "the selected context declares no OpenShiftCluster or CephCluster named absent",
 			"select one of ceph, ocp with --clusters, or omit --clusters"},
 		{"several unknown", catalog(), []string{"zeta", " absent ", "absent", "ocp"},
-			"the selected context declares no ContainerCluster or StorageCluster named absent, zeta",
+			"the selected context declares no OpenShiftCluster or CephCluster named absent, zeta",
 			"select one of ocp with --clusters, or omit --clusters"},
-		{"no cluster to select", noClusters, []string{"ocp"}, "the selected context declares no ContainerCluster or StorageCluster named ocp",
+		{"no cluster to select", noClusters, []string{"ocp"}, "the selected context declares no OpenShiftCluster or CephCluster named ocp",
 			"the selected context declares no cluster; omit --clusters"},
 	} {
 		t.Run(test.name, func(t *testing.T) {

@@ -12,7 +12,7 @@ import (
 // no longer declares, refuses by naming its version and the build to destroy
 // it with.
 func TestAnEarlierRequestWithARemovedFieldRefusesByItsVersion(t *testing.T) {
-	block := planBlock(t, unwired(), stateOf(environment(), machine("container-runtime", "libvirt"), cluster()), reconciliation.Apply)
+	block := planBlock(t, unwired(), stateOf(libvirtGraph(cluster())...), reconciliation.Apply)
 	earlier, err := DecodeRequest(block.Request)
 	if err != nil {
 		t.Fatal(err)

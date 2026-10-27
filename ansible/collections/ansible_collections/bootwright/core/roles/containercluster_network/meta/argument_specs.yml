@@ -29,7 +29,7 @@ argument_specs:
           version:
             type: str
             required: true
-            choices: [cluster-network-request-v1]
+            choices: [cluster-network-request-v2]
 
       bootwright_cluster_network_material:
         type: dict
@@ -71,7 +71,7 @@ argument_specs:
           version:
             type: str
             required: true
-            choices: [cluster-network-request-v1]
+            choices: [cluster-network-request-v2]
 
       bootwright_cluster_network_material:
         type: dict

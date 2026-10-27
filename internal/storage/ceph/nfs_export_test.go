@@ -27,27 +27,27 @@ func exportNative(pairs ...any) api.Value {
 }
 
 func subvolumeExport(native api.Value) api.Object {
-	return childOf(api.StorageNFSExport, "docs", "serviceID", "shares", "subvolumeRef", "docs", "native", native)
+	return childOf(api.CephNFSExport, "docs", "serviceID", "shares", "subvolumeRef", "docs", "native", native)
 }
 
 func filesystemExport(native api.Value) api.Object {
-	return childOf(api.StorageNFSExport, "docs", "serviceID", "shares", "filesystemRef", "files", "native", native)
+	return childOf(api.CephNFSExport, "docs", "serviceID", "shares", "filesystemRef", "files", "native", native)
 }
 
 func withShares(spec api.Value) api.Value {
 	spec = withMDS(spec)
 	shares := requestMap("service_type", "nfs", "service_id", "shares", "placement", requestMap("label", "mon", "count", 1))
-	return spec.WithPath(api.ListValue(append(spec.Get("ceph", "services").Items(), shares)...), "ceph", "services")
+	return spec.WithPath(api.ListValue(append(spec.Get("services").Items(), shares)...), "services")
 }
 
 func exportCatalog(hosts int, change func(api.Value) api.Value, export api.Object) api.Catalog {
 	fs := filesystemOf("subvolumeGroups", api.ListValue(requestMap("name", "csi")))
-	return planCatalog(hosts, hosts, change, cephfsPool("fs-meta", "cephfs-metadata"), cephfsPool("fs-data", "cephfs-data"), fs, subvolumeOf("group", "csi"), export)
+	return planCatalog(hosts, hosts, change, cephfsPool("fs-meta", "cephfsMetadata"), cephfsPool("fs-data", "cephfsData"), fs, subvolumeOf("group", "csi"), export)
 }
 
 func plannedExport(t *testing.T, catalog api.Catalog) Request {
 	t.Helper()
-	r, err := planned(t, catalog, api.StorageNFSExport, "docs")
+	r, err := planned(t, catalog, api.CephNFSExport, "docs")
 	if err != nil {
 		t.Fatal(diagnostics.Of(err))
 	}
@@ -57,7 +57,7 @@ func plannedExport(t *testing.T, catalog api.Catalog) Request {
 func exportPlan(t *testing.T, catalog api.Catalog) reconciliation.BlockDefinition {
 	t.Helper()
 	input := lifecycle.PlanInput{Verb: reconciliation.Apply, Context: lifecycle.ContextIdentity{Name: "synthetic"}, State: compilation.NewState(catalog, catalog, nil), Controller: "controller"}
-	plan, err := New(api.StorageNFSExport, nil).Plan(context.Background(), input)
+	plan, err := New(api.CephNFSExport, nil).Plan(context.Background(), input)
 	if err != nil || len(plan.Definitions) != 1 {
 		t.Fatalf("the export planned %+v (%v)", plan.Definitions, diagnostics.Of(err))
 	}
@@ -69,18 +69,18 @@ func TestNFSExportBlockDependsOnUnitAndBacking(t *testing.T) {
 		export  api.Object
 		backing reconciliation.ObjectRef
 	}{
-		{subvolumeExport(exportNative()), reconciliation.ObjectRef{Kind: string(api.StorageSubvolume), Object: "docs"}},
-		{filesystemExport(exportNative("path", "/")), reconciliation.ObjectRef{Kind: string(api.StorageFilesystem), Object: "files"}},
+		{subvolumeExport(exportNative()), reconciliation.ObjectRef{Kind: string(api.CephSubvolume), Object: "docs"}},
+		{filesystemExport(exportNative("path", "/")), reconciliation.ObjectRef{Kind: string(api.CephFilesystem), Object: "files"}},
 	} {
 		block := exportPlan(t, exportCatalog(3, withShares, tt.export))
-		if block.ID != "ceph-nfs-export-docs" || block.ID != NFSExportBlockID("docs") || block.Kind != string(api.StorageNFSExport) || block.Object != "docs" || block.Stage != reconciliation.StageClusters ||
+		if block.ID != "ceph-nfs-export-docs" || block.ID != NFSExportBlockID("docs") || block.Kind != string(api.CephNFSExport) || block.Object != "docs" || block.Stage != reconciliation.StageClusters ||
 			!slices.Equal(block.Exclusive, []string{"ceph/example"}) || block.Description != "realize Ceph NFS export docs" {
 			t.Fatalf("the export block is %+v", block)
 		}
 		if !slices.Equal(block.Dependencies, []string{"ceph-cluster-example", "ceph-image-example", "ceph-service-example-nfs-shares"}) || !slices.Equal(block.Requires, []reconciliation.ObjectRef{tt.backing}) {
 			t.Fatalf("the export block depends on %v and requires %v", block.Dependencies, block.Requires)
 		}
-		removal, err := New(api.StorageNFSExport, nil).Removal(context.Background(), reconciliation.Block{BlockDefinition: block})
+		removal, err := New(api.CephNFSExport, nil).Removal(context.Background(), reconciliation.Block{BlockDefinition: block})
 		if err != nil || removal.Description != "remove Ceph NFS export docs" {
 			t.Fatalf("the export removal is %+v (%v)", removal, err)
 		}
@@ -93,13 +93,13 @@ func rgwExportNative() api.Value {
 
 func objectExportCatalog(native api.Value) api.Catalog {
 	return planCatalog(3, 3, func(spec api.Value) api.Value { return withShares(withPairAndHTTPRGW(spec)) }, objectGateway("objects"), objectUserObject("app-writer"),
-		childOf(api.StorageNFSExport, "docs", "serviceID", "shares", "objectUserRef", "app-writer", "native", native))
+		childOf(api.CephNFSExport, "docs", "serviceID", "shares", "objectUserRef", "app-writer", "native", native))
 }
 
 func TestNFSExportOfAnObjectUserRequiresTheUserAndFreezesItsGatewayZone(t *testing.T) {
 	block := exportPlan(t, objectExportCatalog(rgwExportNative()))
 	if !slices.Equal(block.Dependencies, []string{"ceph-cluster-example", "ceph-image-example", "ceph-service-example-nfs-shares"}) ||
-		!slices.Equal(block.Requires, []reconciliation.ObjectRef{{Kind: string(api.StorageObjectUser), Object: "app-writer"}}) {
+		!slices.Equal(block.Requires, []reconciliation.ObjectRef{{Kind: string(api.CephObjectUser), Object: "app-writer"}}) {
 		t.Fatalf("the object export block depends on %v and requires %v", block.Dependencies, block.Requires)
 	}
 	matchesGolden(t, "request-nfs-export-object", block.Request, false)
@@ -194,7 +194,7 @@ func TestNFSExportDeadline(t *testing.T) {
 func exportExecution(t *testing.T, r Request) lifecycle.Execution {
 	t.Helper()
 	e := executionFor(t, r)
-	e.Block.ID, e.Block.Kind, e.Block.Object = NFSExportBlockID("docs"), string(api.StorageNFSExport), "docs"
+	e.Block.ID, e.Block.Kind, e.Block.Object = NFSExportBlockID("docs"), string(api.CephNFSExport), "docs"
 	return e
 }
 
@@ -216,23 +216,23 @@ func refusedIdentity(t *testing.T, kind api.Kind, e lifecycle.Execution, name st
 
 func TestNFSExportIdentity(t *testing.T) {
 	r := plannedExport(t, exportCatalog(3, withShares, subvolumeExport(exportNative())))
-	if got, err := New(api.StorageNFSExport, nil).identity(context.Background(), exportExecution(t, r)); err != nil || got.NFSExport == nil || got.Owner != "apply-original" {
+	if got, err := New(api.CephNFSExport, nil).identity(context.Background(), exportExecution(t, r)); err != nil || got.NFSExport == nil || got.Owner != "apply-original" {
 		t.Fatalf("the planned export block was refused: %+v (%v)", got.NFSExport, diagnostics.Of(err))
 	}
 	other := exportExecution(t, r)
 	other.Block.Object = "other"
-	refusedIdentity(t, api.StorageNFSExport, other, "another object")
+	refusedIdentity(t, api.CephNFSExport, other, "another object")
 	without := r
 	without.NFSExport = nil
-	refusedIdentity(t, api.StorageNFSExport, exportExecution(t, without), "no member")
+	refusedIdentity(t, api.CephNFSExport, exportExecution(t, without), "no member")
 	subvolume := r
 	subvolume.Action, subvolume.Subvolume = "subvolume", &Subvolume{Filesystem: "files", Group: "csi", Mode: "755", Name: "docs", Pool: "fs-data"}
 	e := exportExecution(t, subvolume)
-	e.Block.ID, e.Block.Kind = "ceph-subvolume-docs", string(api.StorageSubvolume)
-	refusedIdentity(t, api.StorageSubvolume, e, "subvolume carrying an export")
-	refusedIdentity(t, api.StorageNFSExport, exportExecution(t, changedExport(r, func(x *NFSExport) { x.Name = "other" })), "another export name")
-	refusedIdentity(t, api.StorageNFSExport, exportExecution(t, changedExport(r, func(x *NFSExport) { x.SubvolumePath = "/volumes/csi/docs/" + subvolumeID })), "frozen subvolume path")
-	refusedIdentity(t, api.StorageSubvolume, exportExecution(t, r), "subvolume capability")
+	e.Block.ID, e.Block.Kind = "ceph-subvolume-docs", string(api.CephSubvolume)
+	refusedIdentity(t, api.CephSubvolume, e, "subvolume carrying an export")
+	refusedIdentity(t, api.CephNFSExport, exportExecution(t, changedExport(r, func(x *NFSExport) { x.Name = "other" })), "another export name")
+	refusedIdentity(t, api.CephNFSExport, exportExecution(t, changedExport(r, func(x *NFSExport) { x.SubvolumePath = "/volumes/csi/docs/" + subvolumeID })), "frozen subvolume path")
+	refusedIdentity(t, api.CephSubvolume, exportExecution(t, r), "subvolume capability")
 }
 
 func subvolumeProofOn(t *testing.T, filesystem string, proof lifecycle.BlockEvidence) lifecycle.BlockEvidence {
@@ -254,25 +254,25 @@ func TestNFSExportPrepareBindsTheProvedSubvolumePath(t *testing.T) {
 	exact := "/volumes/csi/docs/" + subvolumeID
 	e := exportExecution(t, r)
 	e.ApplyProved = append(e.ApplyProved, subvolumeProof(t, "docs", "csi", exact))
-	prepared, err := New(api.StorageNFSExport, nil).prepare(context.Background(), e)
+	prepared, err := New(api.CephNFSExport, nil).prepare(context.Background(), e)
 	if err != nil || prepared.NFSExport.SubvolumePath != exact || r.NFSExport.SubvolumePath != "" {
 		t.Fatalf("the export bound %+v (%v)", prepared.NFSExport, diagnostics.Of(err))
 	}
 	e = exportExecution(t, r)
 	e.ApplyProved = append(e.ApplyProved, subvolumeProof(t, "docs", "other", "/volumes/other/docs/"+subvolumeID))
-	_, err = New(api.StorageNFSExport, nil).prepare(context.Background(), e)
-	refusedWith(t, err, "lifecycle.state", "the creation proof of StorageSubvolume docs names another filesystem or group than StorageNFSExport docs froze", "restore the original apply evidence")
+	_, err = New(api.CephNFSExport, nil).prepare(context.Background(), e)
+	refusedWith(t, err, "lifecycle.state", "the creation proof of CephSubvolume docs names another filesystem or group than CephNFSExport docs froze", "restore the original apply evidence")
 	e = exportExecution(t, r)
 	e.ApplyProved = append(e.ApplyProved, subvolumeProofOn(t, "other", subvolumeProof(t, "docs", "csi", exact)))
 	if _, filesystem, group, err := ProvedSubvolume(e.ApplyProved, "docs"); err != nil || filesystem != "other" || group != "csi" {
 		t.Fatalf("the foreign-filesystem proof names %q %q (%v)", filesystem, group, diagnostics.Of(err))
 	}
-	_, err = New(api.StorageNFSExport, nil).prepare(context.Background(), e)
-	refusedWith(t, err, "lifecycle.state", "the creation proof of StorageSubvolume docs names another filesystem or group than StorageNFSExport docs froze", "restore the original apply evidence")
-	_, err = New(api.StorageNFSExport, nil).prepare(context.Background(), exportExecution(t, r))
-	refusedWith(t, err, "lifecycle.state", "StorageSubvolume docs lacks its applied creation proof", "apply StorageSubvolume docs first; a consumer binds the path its creation reported and never constructs one")
+	_, err = New(api.CephNFSExport, nil).prepare(context.Background(), e)
+	refusedWith(t, err, "lifecycle.state", "the creation proof of CephSubvolume docs names another filesystem or group than CephNFSExport docs froze", "restore the original apply evidence")
+	_, err = New(api.CephNFSExport, nil).prepare(context.Background(), exportExecution(t, r))
+	refusedWith(t, err, "lifecycle.state", "CephSubvolume docs lacks its applied creation proof", "apply CephSubvolume docs first; a consumer binds the path its creation reported and never constructs one")
 	fs := plannedExport(t, exportCatalog(3, withShares, filesystemExport(exportNative("path", "/"))))
-	if prepared, err := New(api.StorageNFSExport, nil).prepare(context.Background(), exportExecution(t, fs)); err != nil || prepared.NFSExport.SubvolumePath != "" {
+	if prepared, err := New(api.CephNFSExport, nil).prepare(context.Background(), exportExecution(t, fs)); err != nil || prepared.NFSExport.SubvolumePath != "" {
 		t.Fatalf("the filesystem export prepared %+v (%v)", prepared.NFSExport, diagnostics.Of(err))
 	}
 }
@@ -322,18 +322,15 @@ func TestNFSExportEvidence(t *testing.T) {
 func TestNFSExportPlanPropagatesBackingRefusals(t *testing.T) {
 	withoutMDS := func(spec api.Value) api.Value {
 		shares := requestMap("service_type", "nfs", "service_id", "shares", "placement", requestMap("label", "mon", "count", 1))
-		return withCorePair(spec).WithPath(api.ListValue(append(spec.Get("ceph", "services").Items(), shares)...), "ceph", "services")
+		return withCorePair(spec).WithPath(api.ListValue(append(spec.Get("services").Items(), shares)...), "services")
 	}
-	_, err := planned(t, exportCatalog(3, withoutMDS, subvolumeExport(exportNative())), api.StorageNFSExport, "docs")
-	refusedWith(t, err, "api.invariant", "StorageCluster example projects no MDS service mds.files for StorageFilesystem files", "declare the mds service entry with service_id files in spec.ceph.services")
-	_, err = planned(t, exportCatalog(3, withMDS, subvolumeExport(exportNative())), api.StorageNFSExport, "docs")
-	refusedWith(t, err, "api.invariant", "StorageNFSExport docs's spec.serviceID resolves to no declared nfs service of StorageCluster example",
-		"add a spec.ceph.services entry with service_type nfs and this service_id to StorageCluster example, or set spec.serviceID to the service_id of a declared nfs service")
-	long := strings.Repeat("d", 48)
-	export := childOf(api.StorageNFSExport, long, "serviceID", "shares", "subvolumeRef", "docs", "native", exportNative())
-	_, err = planned(t, exportCatalog(3, withShares, export), api.StorageNFSExport, long)
-	refusedWith(t, err, "api.invariant", "StorageNFSExport "+long+" has a name too long to identify its block, whose identity holds at most 63 characters", "rename the StorageNFSExport to at most 47 characters")
-	if _, err := planned(t, exportCatalog(3, withShares, childOf(api.StorageNFSExport, long[:47], "serviceID", "shares", "subvolumeRef", "docs", "native", exportNative())), api.StorageNFSExport, long[:47]); err != nil {
-		t.Fatalf("a 47-character export name was refused: %v", diagnostics.Of(err))
+	_, err := planned(t, exportCatalog(3, withoutMDS, subvolumeExport(exportNative())), api.CephNFSExport, "docs")
+	refusedWith(t, err, "api.invariant", "CephCluster example projects no MDS service mds.files for CephFilesystem files", "declare the mds service entry with service_id files in spec.services")
+	_, err = planned(t, exportCatalog(3, withMDS, subvolumeExport(exportNative())), api.CephNFSExport, "docs")
+	refusedWith(t, err, "api.invariant", "CephNFSExport docs's spec.serviceID resolves to no declared nfs service of CephCluster example",
+		"add a spec.services entry with service_type nfs and this service_id to CephCluster example, or set spec.serviceID to the service_id of a declared nfs service")
+	long := strings.Repeat("d", 63)
+	if _, err := planned(t, exportCatalog(3, withShares, childOf(api.CephNFSExport, long, "serviceID", "shares", "subvolumeRef", "docs", "native", exportNative())), api.CephNFSExport, long); err != nil {
+		t.Fatalf("a 63-character export name was refused: %v", diagnostics.Of(err))
 	}
 }

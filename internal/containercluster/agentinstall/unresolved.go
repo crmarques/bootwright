@@ -24,7 +24,7 @@ func (MediaCapability) Unresolved(verb reconciliation.Verb, block reconciliation
 	if effect != reconciliation.EffectUnknown {
 		return lifecycle.Unresolved{}, false
 	}
-	return lifecycle.Drifted(verb, "the agent media of ContainerCluster "+block.Object, lifecycle.PlacedOn(request.Placement), refused)
+	return lifecycle.Drifted(verb, "the agent media of OpenShiftCluster "+block.Object, lifecycle.PlacedOn(request.Placement), refused)
 }
 
 // Unresolved says why an observation of this cluster's installation proved
@@ -44,5 +44,5 @@ func (InstallCapability) Unresolved(verb reconciliation.Verb, block reconciliati
 	if effect != reconciliation.EffectUnknown {
 		return lifecycle.Unresolved{}, false
 	}
-	return lifecycle.Drifted(verb, "the installation of ContainerCluster "+block.Object, lifecycle.PlacedOn(request.Placement), refused)
+	return lifecycle.Drifted(verb, "the installation of OpenShiftCluster "+block.Object, lifecycle.PlacedOn(request.Placement), refused)
 }

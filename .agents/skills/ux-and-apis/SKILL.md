@@ -46,7 +46,9 @@ assertions otherwise.
    ([native fields](../../../specs/api.md#native-and-implementation-shaped-fields)).
 3. Make the field truthful: every admitted value is realized, refused at
    `validate` or plan with a named diagnostic, or reported with the
-   `api.deferred` warning. Never admit a field that plan preserves but ignores.
+   `api.deferred` warning; one that plan refuses until an item realizes it is
+   a row of the [admitted but unrealized](../../../specs/api.md#admitted-but-unrealized)
+   table. Never admit a field that plan preserves but ignores.
 4. Change the type in `api/v1alpha1`, the kind page and its semantic owner
    together, and decide whether adding the field moves any frozen request.
 5. Update the effective-output goldens golden-first, and every tracked example

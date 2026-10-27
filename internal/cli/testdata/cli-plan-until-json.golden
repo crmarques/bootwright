@@ -1,0 +1,68 @@
+{
+  "schemaVersion": "v1alpha1",
+  "command": "plan",
+  "ok": true,
+  "exitCode": 0,
+  "result": {
+    "context": {
+      "name": "lab",
+      "mode": ""
+    },
+    "verb": "apply",
+    "steps": [
+      {
+        "id": "addon-gitops-lab",
+        "description": "install add-on gitops on lab",
+        "kind": "ClusterAddonBinding",
+        "object": "lab.gitops",
+        "stage": "add-ons",
+        "impacts": [
+          "install-addon gitops lab"
+        ],
+        "state": "pending",
+        "selection": "start",
+        "waitsOn": "",
+        "after": [],
+        "wave": 1,
+        "consumes": []
+      },
+      {
+        "id": "addon-logging-lab",
+        "description": "install add-on logging on lab",
+        "kind": "ClusterAddonBinding",
+        "object": "lab.logging",
+        "stage": "add-ons",
+        "impacts": [
+          "install-addon logging lab"
+        ],
+        "state": "pending",
+        "selection": "not-selected",
+        "waitsOn": "",
+        "after": [
+          1
+        ],
+        "wave": 2,
+        "consumes": []
+      }
+    ],
+    "stages": [],
+    "until": "lab.gitops",
+    "waves": 2,
+    "widest": 1,
+    "bound": 1,
+    "startable": 1,
+    "deferred": 1,
+    "continuation": false,
+    "finalizes": false,
+    "stops": [],
+    "stopsAfterOnline": [],
+    "receipt": {
+      "operation": "none",
+      "verb": "plan",
+      "state": "preview",
+      "next": "apply"
+    }
+  },
+  "diagnostics": [],
+  "logs": []
+}

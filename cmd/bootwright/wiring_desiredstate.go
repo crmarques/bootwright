@@ -8,6 +8,7 @@ import (
 	addonpackages "github.com/crmarques/bootwright/internal/addons/packages"
 	"github.com/crmarques/bootwright/internal/cli"
 	"github.com/crmarques/bootwright/internal/containercluster"
+	"github.com/crmarques/bootwright/internal/containercluster/openshift"
 	"github.com/crmarques/bootwright/internal/desiredstate/compilation"
 	"github.com/crmarques/bootwright/internal/desiredstate/customplaybooks"
 	"github.com/crmarques/bootwright/internal/desiredstate/inputfs"
@@ -18,6 +19,7 @@ import (
 	"github.com/crmarques/bootwright/internal/managedos"
 	"github.com/crmarques/bootwright/internal/secrets"
 	"github.com/crmarques/bootwright/internal/storage"
+	"github.com/crmarques/bootwright/internal/storage/cephcluster"
 	"github.com/crmarques/bootwright/internal/substrate"
 	"github.com/crmarques/bootwright/internal/workspace/contexts"
 )
@@ -35,7 +37,10 @@ func wireCompilerWithRegistry(registry addons.Registry) compilation.Compiler {
 	return compilation.NewCompiler(yamlstream.Parser{}, selection.Select, compilation.Rules{Normalize: environment.Normalize, Validate: func(o api.Object, c api.Catalog) []api.Issue {
 		return environment.Validate(o, c, members)
 	}},
-		compilation.Rules{Normalize: secrets.Normalize, ValidateAuthored: secrets.ValidateAuthored, ValidatePartial: secrets.ValidatePartial, Validate: secrets.Validate},
+		compilation.Rules{Normalize: func(o api.Object, c api.Catalog) (api.Object, []api.Issue) {
+			normalized, issues := secrets.Normalize(o, c)
+			return secrets.DeriveCertificateNames(normalized, c, infrastructureservices.CertificateNames, substrate.CertificateNames), issues
+		}, ValidateAuthored: secrets.ValidateAuthored, ValidatePartial: secrets.ValidatePartial, Validate: secrets.Validate},
 		compilation.Rules{Normalize: func(o api.Object, c api.Catalog) (api.Object, []api.Issue) {
 			normalized, issues := addons.Normalize(o, c)
 			normalized, packageIssues := addons.NormalizePackages(normalized, registry)
@@ -44,12 +49,12 @@ func wireCompilerWithRegistry(registry addons.Registry) compilation.Compiler {
 			return addons.ValidateWithRegistry(o, c, registry, addonFacts(c, o.Spec().Get("clusterRef").Text()))
 		}},
 		compilation.Rules{Normalize: customplaybooks.Normalize, ValidateAuthored: customplaybooks.ValidateAuthored, ValidatePartial: customplaybooks.ValidatePartial, Validate: customplaybooks.Validate},
-		compilation.Rules{RetiredField: storage.RetiredField, Normalize: storage.Normalize, ValidateAuthored: storage.ValidateAuthored, ValidatePartial: storage.ValidatePartial, Validate: storage.Validate, Members: storage.MemberMachines},
+		compilation.Rules{RetiredField: cephcluster.RetiredField, Normalize: cephcluster.Normalize, ValidateAuthored: cephcluster.ValidateAuthored, ValidatePartial: cephcluster.ValidatePartial, Validate: cephcluster.Validate, Members: storage.MemberMachines},
 		compilation.Rules{Normalize: machine.Normalize, NormalizationOrigins: machine.NormalizationOrigins, ValidateAuthored: machine.ValidateAuthored, ValidatePartial: machine.ValidatePartial, Validate: machine.Validate},
 		compilation.Rules{Normalize: substrate.Normalize, ValidateAuthored: substrate.ValidateAuthored, ValidatePartial: substrate.ValidatePartial, Validate: substrate.Validate},
 		compilation.Rules{Normalize: managedos.Normalize, ValidateAuthored: managedos.ValidateAuthored, ValidatePartial: managedos.ValidatePartial, Validate: managedos.Validate},
-		compilation.Rules{Normalize: containercluster.Normalize, ValidateAuthored: containercluster.ValidateAuthored, ValidatePartial: containercluster.ValidatePartial, Validate: func(o api.Object, c api.Catalog) []api.Issue {
-			return append(containercluster.Validate(o, c), containercluster.ValidateNetworkProviders(o, c, registry)...)
+		compilation.Rules{Normalize: openshift.Normalize, ValidateAuthored: openshift.ValidateAuthored, ValidatePartial: openshift.ValidatePartial, Validate: func(o api.Object, c api.Catalog) []api.Issue {
+			return append(openshift.Validate(o, c), openshift.ValidateNetworkProviders(o, c, registry)...)
 		}, Members: containercluster.MemberMachines},
 		compilation.Rules{Normalize: infrastructureservices.Normalize, ValidateAuthored: infrastructureservices.ValidateAuthored, ValidatePartial: infrastructureservices.ValidatePartial, Validate: infrastructureservices.Validate})
 }
@@ -59,9 +64,9 @@ func clusterMembers() func(api.Object) (environment.Membership, bool) {
 }
 
 func addonFacts(c api.Catalog, cluster string) addons.ClusterFacts {
-	facts := containercluster.AddonFacts(c, cluster)
-	for _, export := range storage.AddonExportFacts(c) {
-		facts.Exports = append(facts.Exports, addons.ExportFacts{Name: export.Name, Cluster: export.Cluster, Gateway: export.Gateway, TLS: export.TLS})
+	facts := openshift.AddonFacts(c, cluster)
+	for _, export := range cephcluster.AddonExportFacts(c) {
+		facts.Exports = append(facts.Exports, addons.ConsumerFacts{Name: export.Name, Cluster: export.Cluster, Gateway: export.Gateway, TLS: export.TLS})
 	}
 	return facts
 }

@@ -15,12 +15,12 @@
     ○ 3. install the operating system of metal-01 · pending · not selected · data-loss
       install-operating-system metal-01
       power-on metal-01
-    ○ 4. realize the virtual machine rhel-01 and its controller · pending · not selected
+    ○ 4. realize the virtual machine rhel-01 and its emulated BMC · pending · not selected
       create-libvirt-domain rhel-01
     ○ 5. install the operating system of rhel-01 · pending · deferred: waits on machine-rhel-01
       power-on rhel-01
 
-    Stages       infra-components, substrates
+    Stages       infrastructure-services, substrates
     Starts       2 of 5 blocks, 3 deferred
     Concurrency  4 waves, widest 2 steps; this build starts 1 block at a time
     Requires     --authorize data-loss (step 3)

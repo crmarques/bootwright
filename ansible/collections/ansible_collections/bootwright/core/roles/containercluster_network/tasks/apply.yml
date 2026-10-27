@@ -2,7 +2,7 @@
 - name: Validate the frozen cluster network version
   ansible.builtin.assert:
     that:
-      - bootwright_cluster_network_request.version == 'cluster-network-request-v1'
+      - bootwright_cluster_network_request.version == 'cluster-network-request-v2'
     quiet: true
     fail_msg: The frozen cluster network request version is unsupported.
 

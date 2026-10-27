@@ -4,10 +4,6 @@ metadata:
   name: controller
 
 spec:
-  capabilities:
-    - container-runtime
-    - libvirt
-
   os:
     provided: true
 
@@ -16,9 +12,6 @@ spec:
 
   network:
     addresses:
-      - name: fqdn
-        address: controller.lab.example.test
-
       - name: ip
         address: 192.0.2.1
 

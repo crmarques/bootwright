@@ -9,7 +9,7 @@
   },
   "producedInputs": [
     {
-      "kind": "ContainerCluster",
+      "kind": "OpenShiftCluster",
       "object": "cluster",
       "output": "kubeconfig"
     }
@@ -152,5 +152,5 @@
     "kind": "openshift-clients",
     "version": "4.21.1"
   },
-  "version": "addon-instance-request-v1"
+  "version": "addon-instance-request-v2"
 }

@@ -10,7 +10,7 @@
   "cluster": "example",
   "clusterKeyRef": "cluster-key",
   "clusterNetworks": [],
-  "clusterSSHTransport": "verified-tunnel",
+  "clusterSSHTransport": "verifiedTunnel",
   "clusterSSHUser": "operator",
   "config": {
     "global": {
@@ -178,5 +178,5 @@
       }
     }
   ],
-  "version": "ceph-core-v32"
+  "version": "ceph-core-v33"
 }

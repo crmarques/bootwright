@@ -16,7 +16,7 @@ import (
 const testKeyring = "[client.vm-disks]\n\tkey = AQBx57l5Y2FuYXJ5LWNsaWVudC1rZXk9PQ==\n"
 
 func storageClient(name, cluster string) api.Object {
-	return api.NewObject(api.StorageClient, name, api.Value{}, api.MapValue(field("clusterRef", text(cluster)), field("poolRef", text("volumes"))))
+	return api.NewObject(api.CephClient, name, api.Value{}, api.MapValue(field("clusterRef", text(cluster)), field("poolRef", text("volumes"))))
 }
 
 func keyringFixture(t *testing.T) *fixture {
@@ -35,22 +35,22 @@ func refusal(t *testing.T, err error, code, message, remediation string) {
 }
 
 func TestKeyringRefusalOrderReadsNoCustodyBeforeTarget(t *testing.T) {
-	clients := "bootwright cluster info --context lab --name storage lists the StorageClients of storage"
+	clients := "bootwright cluster info --context lab --name storage lists the CephClients of storage"
 	kinds := "bootwright cluster info --context lab lists the clusters this context selects and their kinds"
 	tests := []struct {
 		name, cluster, client, code, message, remediation string
 	}{
 		{"no cluster", " ", "vm-disks", "access.target", "bootwright cluster keyring requires one cluster name",
 			"bootwright cluster info --context lab lists the clusters this context selects"},
-		{"no client", "storage", "", "access.target", "bootwright cluster keyring requires one StorageClient name", clients},
-		{"unknown cluster", "missing", "vm-disks", "access.target", "the context lab selects no StorageCluster named missing",
-			"name a managed Ceph StorageCluster this context selects; bootwright cluster info --context lab lists them"},
+		{"no client", "storage", "", "access.target", "bootwright cluster keyring requires one CephClient name", clients},
+		{"unknown cluster", "missing", "vm-disks", "access.target", "the context lab selects no CephCluster named missing",
+			"name a managed CephCluster this context selects; bootwright cluster info --context lab lists them"},
 		{"container", "edge", "vm-disks", "cluster.not-applicable",
-			"bootwright cluster keyring does not apply to edge, an OpenShift or OKD ContainerCluster; it applies to managed Ceph StorageClusters only", kinds},
+			"bootwright cluster keyring does not apply to edge, an OpenShiftCluster; it applies to managed CephClusters only", kinds},
 		{"external", "archive", "archive-reader", "cluster.not-applicable",
-			"bootwright cluster keyring does not apply to archive, an external Ceph StorageCluster; it applies to managed Ceph StorageClusters only", kinds},
-		{"unknown client", "storage", "missing", "access.target", "the context lab selects no StorageClient named missing", clients},
-		{"another cluster's client", "storage", "archive-reader", "access.target", "the StorageClient archive-reader belongs to StorageCluster archive, not storage", clients},
+			"bootwright cluster keyring does not apply to archive, an external CephCluster; it applies to managed CephClusters only", kinds},
+		{"unknown client", "storage", "missing", "access.target", "the context lab selects no CephClient named missing", clients},
+		{"another cluster's client", "storage", "archive-reader", "access.target", "the CephClient archive-reader belongs to CephCluster archive, not storage", clients},
 	}
 	for _, tt := range tests {
 		f := keyringFixture(t)
@@ -71,12 +71,12 @@ func TestKeyringRefusalOrderReadsNoCustodyBeforeTarget(t *testing.T) {
 	f = keyringFixture(t)
 	delete(f.keyrings, "vm-disks")
 	_, err = f.service("lab").ClientKeyring(context.Background(), KeyringRequest{Name: "storage", Client: "vm-disks"})
-	refusal(t, err, "access.unavailable", "this context holds no keyring for StorageClient vm-disks of StorageCluster storage; an apply keeps it once it creates the client",
+	refusal(t, err, "access.unavailable", "this context holds no keyring for CephClient vm-disks of CephCluster storage; an apply keeps it once it creates the client",
 		"bootwright apply --context lab --stage clusters")
 	f = keyringFixture(t)
 	f.clientErr = fmt.Errorf("decoding: %w", ErrClientMaterial)
 	_, err = f.service("lab").ClientKeyring(context.Background(), KeyringRequest{Name: "storage", Client: "vm-disks"})
-	refusal(t, err, "secret.store.corrupt", "this context's custody holds a keyring entry for StorageClient vm-disks that is not one Ceph credential of client.vm-disks",
+	refusal(t, err, "secret.store.corrupt", "this context's custody holds a keyring entry for CephClient vm-disks that is not one Ceph credential of client.vm-disks",
 		"read it natively with the administrator command that bootwright cluster info --context lab --name storage prints, followed by auth get client.vm-disks")
 	f = keyringFixture(t)
 	f.clientErr = errors.New("the custody store is unreadable")
@@ -101,8 +101,8 @@ func TestKeyringRefusesClientOfAnotherCluster(t *testing.T) {
 	if result != nil {
 		t.Fatalf("result %+v", result)
 	}
-	refusal(t, err, "access.target", "the StorageClient vm-disks belongs to StorageCluster ceph-a, not ceph-b",
-		"bootwright cluster info --context lab --name ceph-b lists the StorageClients of ceph-b")
+	refusal(t, err, "access.target", "the CephClient vm-disks belongs to CephCluster ceph-a, not ceph-b",
+		"bootwright cluster info --context lab --name ceph-b lists the CephClients of ceph-b")
 	f.untouched()
 }
 
@@ -121,12 +121,12 @@ func TestClusterInfoKeyringEntryFollowsTheClientRows(t *testing.T) {
 		rows []Resource
 		want AccessCommand
 	}{
-		{"done", []Resource{{Kind: "StoragePool", Name: "volumes", Status: ResourceDone}, {Kind: "StorageClient", Name: "a", Status: ResourcePending}, {Kind: "StorageClient", Name: "vm-disks", Status: ResourceDone}},
+		{"done", []Resource{{Kind: "CephPool", Name: "volumes", Status: ResourceDone}, {Kind: "CephClient", Name: "a", Status: ResourcePending}, {Kind: "CephClient", Name: "vm-disks", Status: ResourceDone}},
 			AccessCommand{Command: CommandKeyring, Status: StatusReady}},
-		{"pending", []Resource{{Kind: "StorageClient", Name: "vm-disks", Status: ResourcePending}, {Kind: "StorageClient", Name: "b", Status: ResourceFailed}},
-			AccessCommand{Command: CommandKeyring, Status: StatusUnavailable, Reason: "no StorageClient of storage has a completed apply; run bootwright apply --context lab --stage clusters"}},
-		{"none", []Resource{{Kind: "StoragePool", Name: "volumes", Status: ResourceDone}},
-			AccessCommand{Command: CommandKeyring, Status: StatusUnavailable, Reason: "the StorageCluster storage declares no StorageClient"}},
+		{"pending", []Resource{{Kind: "CephClient", Name: "vm-disks", Status: ResourcePending}, {Kind: "CephClient", Name: "b", Status: ResourceFailed}},
+			AccessCommand{Command: CommandKeyring, Status: StatusUnavailable, Reason: "no CephClient of storage has a completed apply; run bootwright apply --context lab --stage clusters"}},
+		{"none", []Resource{{Kind: "CephPool", Name: "volumes", Status: ResourceDone}},
+			AccessCommand{Command: CommandKeyring, Status: StatusUnavailable, Reason: "the CephCluster storage declares no CephClient"}},
 	}
 	for _, tt := range tests {
 		f := keyringFixture(t)
@@ -139,7 +139,7 @@ func TestClusterInfoKeyringEntryFollowsTheClientRows(t *testing.T) {
 			t.Fatalf("%s: keyring = %+v, want %+v", tt.name, got, tt.want)
 		}
 		for _, entry := range append(slices.Clone(result.Clusters), ContainerEntry{Name: result.Storage[0].Name, AccessCommands: result.Storage[0].AccessCommands}) {
-			want := AccessCommand{Command: CommandKeyring, Status: StatusNotApplicable, Reason: "applies to managed Ceph StorageClusters only"}
+			want := AccessCommand{Command: CommandKeyring, Status: StatusNotApplicable, Reason: "applies to managed CephClusters only"}
 			if got := keyringEntry(t, entry.AccessCommands); got != want {
 				t.Fatalf("%s: %s keyring = %+v", tt.name, entry.Name, got)
 			}

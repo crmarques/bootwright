@@ -10,8 +10,8 @@
       a comma-separated list and selects those nodes, by name then by FQDN, in every listed
       cluster that declares them. The command runs on every resolved Machine concurrently, at
       most eight at a time, each output line is prefixed by its Machine, and the exit status is
-      the highest any client returned. External StorageClusters are inapplicable, and sessions
-      on OpenShift/OKD ContainerClusters are not yet available.
+      the highest any client returned. External CephClusters are inapplicable, and sessions on
+      OpenShiftClusters are not yet available.
 
   Usage
     bootwright cluster exec <command>... [flags]

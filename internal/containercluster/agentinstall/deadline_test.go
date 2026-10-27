@@ -444,7 +444,7 @@ func TestTheBootBudgetAndTheDeadlineGrowWithTheNodes(t *testing.T) {
 	if want := "installing 29 nodes needs a run deadline of 6h18m0s, past the 6h0m0s every adapter run is held to"; reported[0].Message != want {
 		t.Errorf("refusal = %q, want %q", reported[0].Message, want)
 	}
-	if want := "declare at most 28 nodes on ContainerCluster/ocp"; reported[0].Remediation != want {
+	if want := "declare at most 28 nodes on OpenShiftCluster/ocp"; reported[0].Remediation != want {
 		t.Errorf("remediation = %q, want %q", reported[0].Remediation, want)
 	}
 }
@@ -457,14 +457,13 @@ func largeCatalog(count int) api.Catalog {
 	for index := range count {
 		machine := fmt.Sprintf("ocp-%02d", index+1)
 		objects = append(objects, guest(machine, fmt.Sprintf("198.51.100.%d/24", 100+index)))
-		nodes = append(nodes, node(fmt.Sprintf("master-%d", index), "master", machine,
+		nodes = append(nodes, node(fmt.Sprintf("master-%d", index), "controlPlane", machine,
 			fmt.Sprintf("master-%d.ocp.lab.example.test", index)))
 	}
 	return api.NewCatalog(append(objects, cluster("ocp",
 		installSelection(
-			endpoints("198.51.100.10", "198.51.100.10", "198.51.100.11", "openshift"),
-			field("platform", api.MapValue(text("type", "baremetal"),
-				field("baremetal", api.MapValue(text("provisioningNetwork", "disabled"))))),
+			endpoints("198.51.100.10", "198.51.100.10", "198.51.100.11", "installer"),
+			field("platform", api.MapValue(field("baremetal", api.MapValue(text("provisioningNetwork", "disabled"))))),
 		), nodes...)))
 }
 
@@ -496,7 +495,7 @@ func TestAClusterWhoseDeadlinePassesTheCeilingRefusesBeforeRegistration(t *testi
 		t.Fatalf("a cluster of %d nodes was planned with a deadline of %s, past the %s ceiling", largest, deadline, lifecycle.MaxDeadline)
 	}
 	refused := largeCatalog(largest + 1)
-	if unsupported := lifecycle.Identities(Refusals(refused)); len(unsupported) != 1 || unsupported[0] != "ContainerCluster/ocp" {
+	if unsupported := lifecycle.Identities(Refusals(refused)); len(unsupported) != 1 || unsupported[0] != "OpenShiftCluster/ocp" {
 		t.Fatalf("unsupported = %v, want the cluster whose deadline passes the ceiling", unsupported)
 	}
 	_, _, _, err := Requests(refused, "controller", testContext)
@@ -513,7 +512,7 @@ func TestAClusterWhoseDeadlinePassesTheCeilingRefusesBeforeRegistration(t *testi
 			t.Errorf("refusal %q does not name %s", reported[0].Message, want)
 		}
 	}
-	if want := fmt.Sprintf("declare at most %d nodes on ContainerCluster/ocp", largest); reported[0].Remediation != want {
+	if want := fmt.Sprintf("declare at most %d nodes on OpenShiftCluster/ocp", largest); reported[0].Remediation != want {
 		t.Errorf("remediation = %q, want %q", reported[0].Remediation, want)
 	}
 }

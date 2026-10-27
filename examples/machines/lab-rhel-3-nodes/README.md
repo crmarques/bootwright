@@ -51,7 +51,7 @@ host's configured repositories. Mutations may request confirmation and sudo.
 ./bin/bootwright plan
 ./bin/bootwright apply --stage controller
 ./bin/bootwright preflight controller --context lab-rhel-3-nodes
-./bin/bootwright apply --stage infra-components
+./bin/bootwright apply --stage infrastructure-services
 ./bin/bootwright apply
 ./bin/bootwright status
 ./bin/bootwright machine list --power-status

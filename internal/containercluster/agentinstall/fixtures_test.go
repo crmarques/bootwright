@@ -2,7 +2,7 @@ package agentinstall
 
 import (
 	api "github.com/crmarques/bootwright/api/v1alpha1"
-	"github.com/crmarques/bootwright/internal/containercluster"
+	"github.com/crmarques/bootwright/internal/containercluster/openshift"
 )
 
 const testContext = "lab"
@@ -27,7 +27,6 @@ func environment() api.Object {
 
 func controller() api.Object {
 	return api.NewObject(api.Machine, "controller", api.Value{}, api.MapValue(
-		field("capabilities", api.StringList("container-runtime", "libvirt")),
 		field("os", api.MapValue(field("provided", api.BoolValue(true)))),
 		field("network", api.MapValue(field("addresses", api.ListValue(
 			api.MapValue(text("name", "fqdn"), text("address", "controller.lab.example.test")),
@@ -86,7 +85,7 @@ func libvirtProvider() api.Object {
 	return api.NewObject(api.InfraProvider, "lab-libvirt", api.Value{}, api.MapValue(
 		field("libvirt", api.MapValue(
 			text("machineRef", "controller"), text("uri", "qemu:///system"),
-			field("bmcEmulationDefaults", api.MapValue(
+			field("bmcEmulation", api.MapValue(
 				text("certificateRef", "lab-bmc-tls"),
 				text("bindAddress", "192.0.2.1"), number("port", "8000"),
 				field("auth", api.MapValue(text("credentialsRef", "lab-bmc-credentials"))),
@@ -114,10 +113,9 @@ func metalProvider() api.Object {
 // substrate realizes its hardware and the cluster installer supplies its OS.
 func guest(name, address string) api.Object {
 	return api.NewObject(api.Machine, name, api.Value{}, api.MapValue(
-		field("capabilities", api.StringList("openshift-node")),
-		field("substrate", api.MapValue(text("providerRef", "lab-libvirt"), text("profileRef", "sno"))),
-		field("os", api.MapValue(field("provided", api.BoolValue(false)),
-			field("install", api.MapValue(field("rootDeviceHints", api.MapValue(text("deviceName", "/dev/vda"))))))),
+		field("substrate", api.MapValue(text("providerRef", "lab-libvirt"), field("libvirt", api.MapValue(text("profileRef", "sno"))))),
+		field("hardware", api.MapValue(field("rootDevice", api.MapValue(text("deviceName", "/dev/vda"))))),
+		field("os", api.MapValue(field("provided", api.BoolValue(false)))),
 		field("network", api.MapValue(
 			text("configRef", "lab-guests"), text("attachmentRef", "lab-guests"), text("installAddressRef", "ip"),
 			field("addresses", api.ListValue(
@@ -132,17 +130,18 @@ func guest(name, address string) api.Object {
 // declares the hardware every later effect is proved against.
 func server(name, address, mac string) api.Object {
 	return api.NewObject(api.Machine, name, api.Value{}, api.MapValue(
-		field("capabilities", api.StringList("openshift-node")),
-		field("substrate", api.MapValue(text("providerRef", "floor"))),
-		field("os", api.MapValue(field("provided", api.BoolValue(false)),
-			field("install", api.MapValue(field("rootDeviceHints", api.MapValue(text("deviceName", "/dev/sda"))))))),
-		field("hardware", api.MapValue(
-			field("nics", api.ListValue(api.MapValue(text("name", "enp1s0"), text("macAddress", mac)))),
-			field("boot", api.MapValue(text("nicRef", "enp1s0"))),
-			field("management", api.MapValue(field("bmc", api.MapValue(
+		field("substrate", api.MapValue(text("providerRef", "floor"), field("baremetal", api.MapValue(
+			field("bmc", api.MapValue(
 				text("address", "https://"+name+"-bmc.lab.example.test/redfish/v1/Systems/1"),
 				text("credentialsRef", "metal-bmc"),
-			)))),
+			)),
+			field("nics", api.ListValue(api.MapValue(text("nicRef", "enp1s0"), text("macAddress", mac)))),
+		)))),
+		field("os", api.MapValue(field("provided", api.BoolValue(false)))),
+		field("hardware", api.MapValue(
+			field("nics", api.ListValue(api.MapValue(text("name", "enp1s0")))),
+			field("boot", api.MapValue(text("nicRef", "enp1s0"))),
+			field("rootDevice", api.MapValue(text("deviceName", "/dev/sda"))),
 		)),
 		field("network", api.MapValue(
 			text("configRef", "lab-guests"), text("installAddressRef", "ip"),
@@ -161,13 +160,13 @@ func node(name, role, machine, fqdn string) api.Value {
 // cluster is one declared cluster in the shape admission leaves behind, with
 // its endpoints already resolved.
 func cluster(name string, install api.Value, nodes ...api.Value) api.Object {
-	object := api.NewObject(api.ContainerCluster, name, api.Value{}, api.MapValue(
+	object := api.NewObject(api.OpenShiftCluster, name, api.Value{}, api.MapValue(
 		field("distribution", api.MapValue(text("type", "openshift"),
 			field("release", api.MapValue(text("version", "4.21.15"))))),
 		field("install", install),
 		field("nodes", api.ListValue(nodes...)),
 	))
-	normalized, _ := containercluster.Normalize(object, api.NewCatalog(base()))
+	normalized, _ := openshift.Normalize(object, api.NewCatalog(base()))
 	return normalized
 }
 
@@ -201,13 +200,13 @@ func base() []api.Object {
 	}
 }
 
-// singleNodeCatalog is the shape examples/container-clusters/lab-sno declares:
+// singleNodeCatalog is the shape examples/openshift-clusters/lab-sno declares:
 // one cluster whose three endpoint slots resolve to its one node.
 func singleNodeCatalog() api.Catalog {
 	objects := append(base(), guest("sno-01", "198.51.100.21/24"))
 	objects = append(objects, cluster("sno",
 		installSelection(endpoints("198.51.100.21", "198.51.100.21", "198.51.100.21", "node")),
-		node("master-0", "master", "sno-01", "master-0.sno.lab.example.test")))
+		node("master-0", "controlPlane", "sno-01", "master-0.sno.lab.example.test")))
 	return api.NewCatalog(objects)
 }
 
@@ -219,19 +218,33 @@ func compactCatalog() api.Catalog {
 		guest("ocp-01", "198.51.100.31/24"), guest("ocp-02", "198.51.100.32/24"), guest("ocp-03", "198.51.100.33/24"))
 	objects = append(objects, cluster("ocp",
 		installSelection(
-			endpoints("198.51.100.10", "198.51.100.10", "198.51.100.11", "openshift"),
-			field("platform", api.MapValue(text("type", "baremetal"),
-				field("baremetal", api.MapValue(text("provisioningNetwork", "disabled"))))),
+			endpoints("198.51.100.10", "198.51.100.10", "198.51.100.11", "installer"),
+			field("platform", api.MapValue(field("baremetal", api.MapValue(text("provisioningNetwork", "disabled"))))),
 		),
-		node("master-0", "master", "ocp-01", "master-0.ocp.lab.example.test"),
-		node("master-1", "master", "ocp-02", "master-1.ocp.lab.example.test"),
-		node("master-2", "master", "ocp-03", "master-2.ocp.lab.example.test")))
+		node("master-0", "controlPlane", "ocp-01", "master-0.ocp.lab.example.test"),
+		node("master-1", "controlPlane", "ocp-02", "master-1.ocp.lab.example.test"),
+		node("master-2", "controlPlane", "ocp-03", "master-2.ocp.lab.example.test")))
 	return api.NewCatalog(objects)
 }
 
-// withHints replaces the root-device hints a Machine declares.
+// withHints replaces the root-device hints a Machine declares: the wwn, SCSI
+// address and serial number go to its bare-metal arm, every other hint to its
+// hardware.
 func withHints(machine api.Object, hints ...api.FieldValue) api.Object {
-	return machine.WithSpec(machine.Spec().WithPath(api.MapValue(hints...), "os", "install", "rootDeviceHints"))
+	declared, physical := api.MapValue(), api.MapValue()
+	for _, hint := range hints {
+		switch hint.Name {
+		case "wwn", "hctl", "serialNumber":
+			physical = physical.With(hint.Name, hint.Value)
+		default:
+			declared = declared.With(hint.Name, hint.Value)
+		}
+	}
+	spec := machine.Spec().WithPath(declared, "hardware", "rootDevice")
+	if len(physical.Fields()) != 0 {
+		spec = spec.WithPath(physical, "substrate", "baremetal", "rootDevice")
+	}
+	return machine.WithSpec(spec)
 }
 
 // virtualHints is every root-device hint admission accepts on a Machine its
@@ -261,7 +274,7 @@ func hintsCatalog() api.Catalog {
 		withHints(guest("ocp-01", "198.51.100.31/24"), virtualHints()...),
 		withHints(guest("ocp-02", "198.51.100.32/24"), number("minSizeGigabytes", "100")),
 		guest("ocp-03", "198.51.100.33/24"))
-	compact, _ := compactCatalog().Find(api.ContainerCluster, "ocp")
+	compact, _ := compactCatalog().Find(api.OpenShiftCluster, "ocp")
 	return api.NewCatalog(append(objects, compact))
 }
 
@@ -291,12 +304,12 @@ func singleNodeOnProvider(mutate func(api.Value) api.Value, extra ...api.Object)
 // portPastTheSpace starts the provider's emulated controller range at the last
 // port, so every Machine after the first it hosts allocates none.
 func portPastTheSpace(spec api.Value) api.Value {
-	return spec.WithPath(api.IntegerValue("65535"), "libvirt", "bmcEmulationDefaults", "port")
+	return spec.WithPath(api.IntegerValue("65535"), "libvirt", "bmcEmulation", "port")
 }
 
 // noControllerCredential drops the provider's emulated controller credential.
 func noControllerCredential(spec api.Value) api.Value {
-	return spec.WithPath(api.MapValue(), "libvirt", "bmcEmulationDefaults", "auth")
+	return spec.WithPath(api.MapValue(), "libvirt", "bmcEmulation", "auth")
 }
 
 // externalCatalog is the compact topology with endpoints something outside the
@@ -311,12 +324,12 @@ func externalCatalog() api.Catalog {
 	declared := cluster("ocp",
 		installSelection(
 			endpoints("198.51.100.20", "198.51.100.20", "198.51.100.21", "external"),
-			field("platform", api.MapValue(text("type", "none"))),
+			field("platform", api.MapValue(field("none", api.MapValue()))),
 			field("additionalTrustBundleRefs", api.StringList("lab-root-ca", "corp-proxy-ca")),
 		),
-		node("master-0", "master", "ocp-01", "master-0.ocp.lab.example.test"),
-		node("master-1", "master", "ocp-02", "master-1.ocp.lab.example.test"),
-		node("master-2", "master", "ocp-03", "master-2.ocp.lab.example.test"))
+		node("master-0", "controlPlane", "ocp-01", "master-0.ocp.lab.example.test"),
+		node("master-1", "controlPlane", "ocp-02", "master-1.ocp.lab.example.test"),
+		node("master-2", "controlPlane", "ocp-03", "master-2.ocp.lab.example.test"))
 	declared = declared.WithSpec(declared.Spec().With("networking", api.MapValue(
 		text("networkType", "OVNKubernetes"),
 		field("clusterNetwork", api.ListValue(api.MapValue(text("cidr", "10.132.0.0/14"), number("hostPrefix", "23")))),
@@ -335,11 +348,11 @@ func physicalCatalog() api.Catalog {
 	objects = append(objects, cluster("metal",
 		installSelection(
 			endpoints("198.51.100.20", "198.51.100.20", "198.51.100.21", "external"),
-			field("platform", api.MapValue(text("type", "baremetal"))),
+			field("platform", api.MapValue(field("baremetal", api.MapValue()))),
 		),
-		node("master-0", "master", "metal-01", "master-0.metal.lab.example.test"),
-		node("master-1", "master", "metal-02", "master-1.metal.lab.example.test"),
-		node("master-2", "master", "metal-03", "master-2.metal.lab.example.test")))
+		node("master-0", "controlPlane", "metal-01", "master-0.metal.lab.example.test"),
+		node("master-1", "controlPlane", "metal-02", "master-1.metal.lab.example.test"),
+		node("master-2", "controlPlane", "metal-03", "master-2.metal.lab.example.test")))
 	return api.NewCatalog(objects)
 }
 

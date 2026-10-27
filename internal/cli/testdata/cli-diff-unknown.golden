@@ -3,7 +3,7 @@ Against:  apply op-3f9a0c12 (done) of input revision rev-1b7e55a0, as its record
 Input:    unchanged since op-3f9a0c12; bootwright apply settles over it and repairs nothing shown here
 Plan:     this executable plans the same blocks
 
-diff applied/StorageClient/rbd-fenced desired/StorageClient/rbd-fenced
+diff applied/CephClient/rbd-fenced desired/CephClient/rbd-fenced
 # plan: same (ceph-client-rbd-fenced); realized: failed
 # its blocks read failed: ceph-client-rbd-fenced
 # remedy: review its durable state with bootwright status --context lab

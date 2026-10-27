@@ -10,7 +10,7 @@ import (
 	"github.com/crmarques/bootwright/internal/machine"
 	"github.com/crmarques/bootwright/internal/reconciliation"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
-	"github.com/crmarques/bootwright/internal/storage"
+	"github.com/crmarques/bootwright/internal/storage/cephcluster"
 )
 
 type ImageInspection struct {
@@ -82,7 +82,7 @@ func Inspect(catalog api.Catalog, cluster api.Object, proofs []lifecycle.BlockEv
 func clusterSpecializations(cluster string, evidence Evidence, proofs []lifecycle.BlockEvidence) []string {
 	ids := slices.Clone(evidence.Specializations)
 	for _, proof := range proofs {
-		if proof.Kind != string(api.StorageCluster) || proof.Object != cluster || proof.Implementation != HostImplementation ||
+		if proof.Kind != string(api.CephCluster) || proof.Object != cluster || proof.Implementation != HostImplementation ||
 			proof.Verb != reconciliation.Apply || proof.State != reconciliation.BlockDone {
 			continue
 		}
@@ -98,9 +98,9 @@ func clusterSpecializations(cluster string, evidence Evidence, proofs []lifecycl
 }
 
 func inspectDashboard(cluster api.Object, evidence Evidence) (DashboardInspection, string) {
-	nodes := cluster.Spec().Get("ceph", "topology", "nodes").Items()
+	nodes := cluster.Spec().Get("topology", "nodes").Items()
 	node := func(native string) (string, bool) {
-		index := slices.IndexFunc(nodes, func(node api.Value) bool { return storage.NativeHostname(node) == native })
+		index := slices.IndexFunc(nodes, func(node api.Value) bool { return cephcluster.NativeHostname(node) == native })
 		if index < 0 {
 			return "", false
 		}
@@ -135,7 +135,7 @@ func appliedProof(proofs []lifecycle.BlockEvidence, cluster, implementation stri
 	var found lifecycle.BlockEvidence
 	count := 0
 	for _, proof := range proofs {
-		if proof.Kind != string(api.StorageCluster) || proof.Object != cluster || proof.Implementation != implementation ||
+		if proof.Kind != string(api.CephCluster) || proof.Object != cluster || proof.Implementation != implementation ||
 			proof.Verb != reconciliation.Apply || proof.State != reconciliation.BlockDone {
 			continue
 		}
@@ -185,10 +185,10 @@ func inspectCluster(cluster string, proofs []lifecycle.BlockEvidence) (Evidence,
 }
 
 func inspectMonitors(catalog api.Catalog, cluster api.Object, names []string, addresses []MonitorAddress) ([]MonitorInspection, string) {
-	nodes := cluster.Spec().Get("ceph", "topology", "nodes").Items()
+	nodes := cluster.Spec().Get("topology", "nodes").Items()
 	monitors := make([]MonitorInspection, 0, len(names))
 	for _, native := range names {
-		index := slices.IndexFunc(nodes, func(node api.Value) bool { return storage.NativeHostname(node) == native })
+		index := slices.IndexFunc(nodes, func(node api.Value) bool { return cephcluster.NativeHostname(node) == native })
 		if index < 0 {
 			return nil, "a monitor in the cluster's bootstrap evidence names no declared node"
 		}
@@ -288,7 +288,7 @@ func endpointDocuments(r Request) (map[string]endpointDocument, bool) {
 func EndpointGateways(cluster string, frozen []reconciliation.Block) []string {
 	names := []string{}
 	for _, block := range frozen {
-		if block.Kind != string(api.StorageObjectGateway) || block.Implementation != Implementation {
+		if block.Kind != string(api.CephObjectGateway) || block.Implementation != Implementation {
 			continue
 		}
 		if r, err := DecodeRequest(block.Request); err == nil && r.Action == "gateway" && r.Gateway != nil && r.Cluster == cluster {
@@ -320,13 +320,13 @@ func InspectEndpoints(cluster string, frozen []reconciliation.Block, proofs []li
 }
 
 func endpointCandidateOf(cluster string, block reconciliation.Block, r Request) (endpointCandidate, bool) {
-	unit := block.Kind == string(api.StorageCluster) && block.Object == cluster && r.Action == "service" && r.Service != nil
+	unit := block.Kind == string(api.CephCluster) && block.Object == cluster && r.Action == "service" && r.Service != nil
 	switch {
 	case unit && r.Service.Type == "mgmt-gateway":
 		return mgmtEndpoint(r)
 	case unit && r.Service.Type == "nfs":
 		return nfsEndpoint(r)
-	case block.Kind == string(api.StorageObjectGateway) && r.Action == "gateway" && r.Gateway != nil && r.Cluster == cluster:
+	case block.Kind == string(api.CephObjectGateway) && r.Action == "gateway" && r.Gateway != nil && r.Cluster == cluster:
 		return gatewayEndpoint(r)
 	}
 	return endpointCandidate{}, false
@@ -487,26 +487,26 @@ func gatewayEndpoint(r Request) (endpointCandidate, bool) {
 }
 
 var scopeRows = map[api.Kind]func(api.Catalog, string, []reconciliation.Block) string{
-	api.StoragePlacementPolicy: frozenScope(api.StoragePlacementPolicy, "policy", policyScopeText),
-	api.StoragePool:            frozenScope(api.StoragePool, "pool", poolScopeText),
-	api.StorageRBDImage:        frozenScope(api.StorageRBDImage, "rbd", rbdScopeText),
-	api.StorageClient:          frozenScope(api.StorageClient, "client", clientScopeText),
-	api.StorageFilesystem:      frozenScope(api.StorageFilesystem, "filesystem", filesystemScopeText),
-	api.StorageSubvolume:       frozenScope(api.StorageSubvolume, "subvolume", subvolumeScopeText),
-	api.StorageObjectGateway:   frozenScope(api.StorageObjectGateway, "gateway", gatewayScopeText),
-	api.StorageObjectUser:      frozenScope(api.StorageObjectUser, "object-user", objectUserScopeText),
-	api.StorageObjectBucket:    frozenScope(api.StorageObjectBucket, "object-bucket", objectBucketScopeText),
-	api.StorageNFSExport:       frozenScope(api.StorageNFSExport, "nfs-export", nfsExportScopeText),
-	api.StorageSMBResource:     smbFrozenScope,
-	api.StorageNVMeoFSubsystem: frozenScope(api.StorageNVMeoFSubsystem, "nvmeof", nvmeofScopeText),
-	api.StorageReplication:     replicationFrozenScope,
-	api.StorageExport:          declaredScope(api.StorageExport, exportScopeText),
+	api.CephPlacementPolicy: frozenScope(api.CephPlacementPolicy, "policy", policyScopeText),
+	api.CephPool:            frozenScope(api.CephPool, "pool", poolScopeText),
+	api.CephRBDImage:        frozenScope(api.CephRBDImage, "rbd", rbdScopeText),
+	api.CephClient:          frozenScope(api.CephClient, "client", clientScopeText),
+	api.CephFilesystem:      frozenScope(api.CephFilesystem, "filesystem", filesystemScopeText),
+	api.CephSubvolume:       frozenScope(api.CephSubvolume, "subvolume", subvolumeScopeText),
+	api.CephObjectGateway:   frozenScope(api.CephObjectGateway, "gateway", gatewayScopeText),
+	api.CephObjectUser:      frozenScope(api.CephObjectUser, "object-user", objectUserScopeText),
+	api.CephObjectBucket:    frozenScope(api.CephObjectBucket, "object-bucket", objectBucketScopeText),
+	api.CephNFSExport:       frozenScope(api.CephNFSExport, "nfs-export", nfsExportScopeText),
+	api.CephSMBResource:     smbFrozenScope,
+	api.CephNVMeoFSubsystem: frozenScope(api.CephNVMeoFSubsystem, "nvmeof", nvmeofScopeText),
+	api.CephReplication:     replicationFrozenScope,
+	api.CephConsumer:        declaredScope(api.CephConsumer, exportScopeText),
 }
 
 func smbFrozenScope(_ api.Catalog, name string, frozen []reconciliation.Block) string {
 	var matched []SMBRequest
 	for _, block := range frozen {
-		if block.Kind != string(api.StorageSMBResource) || block.Object != name || block.Implementation != SMBImplementation {
+		if block.Kind != string(api.CephSMBResource) || block.Object != name || block.Implementation != SMBImplementation {
 			continue
 		}
 		if r, err := DecodeSMBRequest(block.Request); err == nil {
@@ -638,7 +638,7 @@ func clientScopeText(r Request) string {
 	if r.Client == nil {
 		return ""
 	}
-	prefix := "client." + r.Client.Name + " " + r.Client.Access + " on "
+	prefix := "client." + r.Client.Name + " " + map[string]string{"readOnly": "read-only", "readWrite": "read-write"}[r.Client.Access] + " on "
 	if r.Client.Subvolume != "" {
 		group := ""
 		if r.Client.Group != "" {
@@ -709,7 +709,7 @@ func nvmeofScopeText(r Request) string {
 func replicationFrozenScope(_ api.Catalog, name string, frozen []reconciliation.Block) string {
 	var matched []ReplicationRequest
 	for _, block := range frozen {
-		if block.Kind != string(api.StorageReplication) || block.Object != name || block.Implementation != ReplicationImplementation {
+		if block.Kind != string(api.CephReplication) || block.Object != name || block.Implementation != ReplicationImplementation {
 			continue
 		}
 		if r, err := DecodeReplicationRequest(block.Request); err == nil {
@@ -728,8 +728,8 @@ type Administration struct {
 }
 
 func ClusterAdministration(cluster api.Object) Administration {
-	declared := cluster.Spec().Get("ceph")
-	return Administration{Release: declared.Get("release").Text(), Node: declared.Get("cephadm", "bootstrap", "node").Text()}
+	declared := cluster.Spec()
+	return Administration{Release: declared.Get("release").Text(), Node: declared.Get("cephadm", "bootstrap", "nodeRef").Text()}
 }
 
 func (a Administration) Command(contextName, cluster, fsid string) string {

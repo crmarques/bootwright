@@ -21,7 +21,7 @@ func TestStatusSummarizesOnlyManagedServices(t *testing.T) {
 	catalog := api.NewCatalog([]api.Object{
 		object(api.Proxy, "egress", "management", "managed", "machineRef", "services"),
 		object(api.DNSServer, "names", "management", "external"),
-		object(api.ArtifactServer, "media", "management", "managed", "machineRef", "controller", "retention", "install-only"),
+		object(api.ArtifactServer, "media", "management", "managed", "machineRef", "controller", "retention", "installOnly"),
 		object(api.NTPServer, "time", "management", "managed", "machineRef", "services"),
 		object(api.Machine, "services", "management", "managed"),
 	})

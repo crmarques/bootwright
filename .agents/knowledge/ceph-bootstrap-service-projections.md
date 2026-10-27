@@ -22,7 +22,7 @@ retains status metadata that export discards, including creation metadata for
 stored specifications. That distinction must be combined with the exact
 inferred shape and existing bootstrap ownership, daemon and transport proofs;
 neither an absent timestamp nor an unmanaged flag alone proves ownership.
-The [storage contract](../../specs/storage.md#bootstrap-identity-and-continuation)
+The [storage contract](../../specs/ceph.md#bootstrap-identity-and-continuation)
 owns the required admission and effect boundaries.
 
 ## Exercise discovery and continuation together

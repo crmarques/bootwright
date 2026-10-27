@@ -361,7 +361,7 @@ func TestPrivateControllerRulesApplyToEveryPrivateInstallation(t *testing.T) {
 	unverifiedFetch := agent(func(target *substrate.Target) {
 		target.Controller.VirtualMedia.Trust = substrate.TrustDisableVerification
 	})
-	if reason, _ := refusedTarget(guest(), unverifiedFetch, true); reason != "a Machine that delivers private material through its installation cannot let its controller fetch without verifying the artifact server" {
+	if reason, _ := refusedTarget(guest(), unverifiedFetch, true); reason != "a Machine that delivers private material through its installation cannot let its BMC fetch without verifying the artifact server" {
 		t.Fatalf("reason = %q", reason)
 	}
 	if reason, _ := refusedTarget(guest(), unverifiedFetch, false); reason != "" {
@@ -374,7 +374,7 @@ func TestPrivateControllerRulesApplyToEveryPrivateInstallation(t *testing.T) {
 		"unverified": func(target *substrate.Target) { target.Controller.TLSVerify = false },
 	} {
 		reason, _ := refusedTarget(guest(), agent(change), true)
-		if !strings.HasPrefix(reason, "a Machine whose installation delivers private material hands its controller the private installer image URL") {
+		if !strings.HasPrefix(reason, "a Machine whose installation delivers private material hands its BMC the private installer image URL") {
 			t.Fatalf("%s: reason = %q", name, reason)
 		}
 		if reason, _ := refusedTarget(guest(), agent(change), false); reason != "" {

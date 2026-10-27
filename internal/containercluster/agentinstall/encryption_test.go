@@ -10,7 +10,7 @@ func encryptedCatalog(roles []string, tpm bool) api.Catalog {
 	objects := compactCatalog().Objects()
 	for i, object := range objects {
 		switch object.Kind() {
-		case api.ContainerCluster:
+		case api.OpenShiftCluster:
 			nodes := object.Spec().Get("nodes").Items()
 			// Add a worker to exercise native masters/workers/all on one topology.
 			nodes = append(nodes, node("worker-0", "worker", "worker-01", "worker-0.ocp.lab.example.test"))
@@ -29,7 +29,7 @@ func encryptedCatalog(roles []string, tpm bool) api.Catalog {
 }
 
 func TestDiskEncryptionGolden(t *testing.T) {
-	for name, roles := range map[string][]string{"all": {"master", "worker"}, "masters": {"master"}, "workers": {"worker"}} {
+	for name, roles := range map[string][]string{"all": {"controlPlane", "worker"}, "masters": {"controlPlane"}, "workers": {"worker"}} {
 		t.Run(name, func(t *testing.T) {
 			media, install, _ := onlyRequests(t, encryptedCatalog(roles, true))
 			if media.DiskEncryption == nil || media.DiskEncryption.EnableOn != name {
@@ -54,7 +54,7 @@ func TestDiskEncryptionGolden(t *testing.T) {
 }
 
 func TestDiskEncryptionRefusesLibvirtWithoutTPM(t *testing.T) {
-	catalog := encryptedCatalog([]string{"master"}, false)
+	catalog := encryptedCatalog([]string{"controlPlane"}, false)
 	if len(Refusals(catalog)) != 1 {
 		t.Fatal("accepted encryption without TPM")
 	}
@@ -65,8 +65,8 @@ func TestDiskEncryptionRefusesLibvirtWithoutTPM(t *testing.T) {
 
 func TestComputeEncryptionSelectsTheSharedWorkerPool(t *testing.T) {
 	for _, selected := range []string{"worker", "infra"} {
-		cluster := api.NewObject(api.ContainerCluster, "fixture", api.Value{}, api.MapValue(field("security", api.MapValue(field("diskEncryption", api.MapValue(field("roles", api.StringList(selected))))))))
-		if !encryptedRole(cluster, "worker") || !encryptedRole(cluster, "infra") || encryptedRole(cluster, "master") {
+		cluster := api.NewObject(api.OpenShiftCluster, "fixture", api.Value{}, api.MapValue(field("security", api.MapValue(field("diskEncryption", api.MapValue(field("roles", api.StringList(selected))))))))
+		if !encryptedRole(cluster, "worker") || !encryptedRole(cluster, "infra") || encryptedRole(cluster, "controlPlane") {
 			t.Fatalf("%s did not select exactly the shared worker pool", selected)
 		}
 	}

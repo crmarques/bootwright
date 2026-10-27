@@ -29,7 +29,7 @@ func TestTargetToolLimitCountsDistinctRequirements(t *testing.T) {
 				if test.distinct {
 					version = fmt.Sprintf("4.21.%d", index)
 				}
-				objects = append(objects, api.NewObject(api.ContainerCluster, fmt.Sprintf("cluster-%d", index), api.Value{}, api.MapValue().WithPath(api.StringValue("openshift"), "distribution", "type").WithPath(api.StringValue(version), "distribution", "release", "version")))
+				objects = append(objects, api.NewObject(api.OpenShiftCluster, fmt.Sprintf("cluster-%d", index), api.Value{}, api.MapValue().WithPath(api.StringValue("openshift"), "distribution", "type").WithPath(api.StringValue(version), "distribution", "release", "version")))
 			}
 			tools, err := controller.SelectTools(api.NewCatalog(objects))
 			if test.distinct {
@@ -48,7 +48,7 @@ func TestTargetToolLimitCountsDistinctRequirements(t *testing.T) {
 
 func TestTargetToolsFollowExactSelectedReleaseAndGenericLatest(t *testing.T) {
 	objects := selectionObjects()
-	objects = append(objects, api.NewObject(api.ContainerCluster, "cluster", api.Value{}, api.MapValue().WithPath(api.StringValue("openshift"), "distribution", "type").WithPath(api.StringValue("4.21.15"), "distribution", "release", "version")))
+	objects = append(objects, api.NewObject(api.OpenShiftCluster, "cluster", api.Value{}, api.MapValue().WithPath(api.StringValue("openshift"), "distribution", "type").WithPath(api.StringValue("4.21.15"), "distribution", "release", "version")))
 	tools, err := controller.SelectTools(api.NewCatalog(objects))
 	if err != nil || len(tools) != 3 {
 		t.Fatal(tools, err)
@@ -71,7 +71,7 @@ func TestTargetToolsFollowExactSelectedReleaseAndGenericLatest(t *testing.T) {
 
 func TestTargetToolsRefuseImageVersionAssumptions(t *testing.T) {
 	objects := selectionObjects()
-	cluster := api.NewObject(api.ContainerCluster, "cluster", api.Value{}, api.MapValue().WithPath(api.StringValue("openshift"), "distribution", "type").WithPath(api.StringValue("quay.io/example/release@sha256:abc"), "distribution", "release", "image"))
+	cluster := api.NewObject(api.OpenShiftCluster, "cluster", api.Value{}, api.MapValue().WithPath(api.StringValue("openshift"), "distribution", "type").WithPath(api.StringValue("quay.io/example/release@sha256:abc"), "distribution", "release", "image"))
 	if _, err := controller.SelectTools(api.NewCatalog(append(objects, cluster))); err == nil {
 		t.Fatal("unknown payload metadata selected tools")
 	}
@@ -89,7 +89,7 @@ func TestNativeLibvirtAndRemoteCephPreparationDoNotRequestUnrelatedDownloads(t *
 	objects := append(selectionObjects(),
 		api.NewObject(api.InfraProvider, "hypervisor", api.Value{}, api.MapValue().With("libvirt", api.MapValue())),
 		api.NewObject(api.Machine, "guest", api.Value{}, api.MapValue().WithPath(api.StringValue("hypervisor"), "substrate", "providerRef")),
-		api.NewObject(api.StorageCluster, "storage", api.Value{}, api.MapValue().With("type", api.StringValue("ceph")).With("management", api.StringValue("managed")).WithPath(api.StringValue("19.2.1"), "ceph", "release")),
+		api.NewObject(api.CephCluster, "storage", api.Value{}, api.MapValue().With("management", api.StringValue("managed")).WithPath(api.StringValue("19.2.1"), "release")),
 	)
 	// virsh and OpenSSH belong to the native package closure. cephadm executes
 	// on its selected bootstrap host through Ansible's SSH connection.
@@ -112,7 +112,7 @@ func TestReferencedVSphereRequestsOnlyItsGenericClient(t *testing.T) {
 
 func TestVirtualizationProfileRequestsUpstreamLatestIndependentlyOfCSV(t *testing.T) {
 	objects := append(selectionObjects(),
-		api.NewObject(api.ContainerCluster, "cluster", api.Value{}, api.MapValue().WithPath(api.StringValue("openshift"), "distribution", "type").WithPath(api.StringValue("4.20.8"), "distribution", "release", "version")),
+		api.NewObject(api.OpenShiftCluster, "cluster", api.Value{}, api.MapValue().WithPath(api.StringValue("openshift"), "distribution", "type").WithPath(api.StringValue("4.20.8"), "distribution", "release", "version")),
 		api.NewObject(api.ClusterAddon, "virtualization", api.Value{}, api.MapValue().With("provides", api.StringList("kubevirt")).WithPath(api.StringValue("kubevirt-hyperconverged-operator.v4.20.2"), "olm", "subscription", "startingCSV")),
 		api.NewObject(api.ClusterAddonProfile, "platform", api.Value{}, api.MapValue().With("addonRefs", api.StringList("virtualization"))),
 		api.NewObject(api.ClusterAddonBinding, "binding", api.Value{}, api.MapValue().With("clusterRef", api.StringValue("cluster")).With("profileRefs", api.StringList("platform"))),
@@ -160,7 +160,7 @@ func TestEnvironmentDependencyVersionsOverrideOnlyRequiredVariableClients(t *tes
 		t.Fatal("version overrides installed unrelated clients", tools, err)
 	}
 	objects = append(objects,
-		api.NewObject(api.ContainerCluster, "cluster", api.Value{}, api.MapValue().WithPath(api.StringValue("openshift"), "distribution", "type").WithPath(api.StringValue("4.21.15"), "distribution", "release", "version")),
+		api.NewObject(api.OpenShiftCluster, "cluster", api.Value{}, api.MapValue().WithPath(api.StringValue("openshift"), "distribution", "type").WithPath(api.StringValue("4.21.15"), "distribution", "release", "version")),
 		api.NewObject(api.InfraProvider, "vsphere", api.Value{}, api.MapValue().With("vsphere", api.MapValue())),
 		api.NewObject(api.InfraProvider, "kubevirt", api.Value{}, api.MapValue().With("kubevirt", api.MapValue())),
 		api.NewObject(api.Machine, "one", api.Value{}, api.MapValue().WithPath(api.StringValue("vsphere"), "substrate", "providerRef")),
@@ -229,7 +229,7 @@ func TestTargetCLIVersionsCoexistWithOtherDependencyOverrides(t *testing.T) {
 // matching clients, so it must not block the rest of controller setup.
 func TestTargetToolsFollowDeclaredReleaseBesideAPinnedImage(t *testing.T) {
 	objects := selectionObjects()
-	cluster := api.NewObject(api.ContainerCluster, "cluster", api.Value{}, api.MapValue().
+	cluster := api.NewObject(api.OpenShiftCluster, "cluster", api.Value{}, api.MapValue().
 		WithPath(api.StringValue("openshift"), "distribution", "type").
 		WithPath(api.StringValue("4.21.15"), "distribution", "release", "version").
 		WithPath(api.StringValue("quay.io/example/release@sha256:abc"), "distribution", "release", "image"))
@@ -248,7 +248,7 @@ func TestTargetToolsFollowDeclaredReleaseBesideAPinnedImage(t *testing.T) {
 
 func TestTargetToolsUseTheClusterReleaseGrammar(t *testing.T) {
 	for _, version := range []string{"4.21", "4.22.0-rc.1"} {
-		objects := []api.Object{api.NewObject(api.Environment, "example", api.Value{}, api.MapValue()), api.NewObject(api.ContainerCluster, "cluster", api.Value{}, api.MapValue().WithPath(api.StringValue("openshift"), "distribution", "type").WithPath(api.StringValue(version), "distribution", "release", "version"))}
+		objects := []api.Object{api.NewObject(api.Environment, "example", api.Value{}, api.MapValue()), api.NewObject(api.OpenShiftCluster, "cluster", api.Value{}, api.MapValue().WithPath(api.StringValue("openshift"), "distribution", "type").WithPath(api.StringValue(version), "distribution", "release", "version"))}
 		_, err := controller.SelectTools(api.NewCatalog(objects))
 		if (err == nil) != (version == "4.22.0-rc.1") {
 			t.Fatalf("release %s: %v", version, err)
@@ -275,7 +275,7 @@ func TestFIPSAndOrdinaryClustersKeepDistinctInstallerTools(t *testing.T) {
 	objects := selectionObjects()
 	for _, fips := range []bool{false, true} {
 		spec := api.MapValue().WithPath(api.StringValue("openshift"), "distribution", "type").WithPath(api.StringValue("4.21.10"), "distribution", "release", "version").WithPath(api.BoolValue(fips), "security", "fips", "enabled")
-		objects = append(objects, api.NewObject(api.ContainerCluster, fmt.Sprintf("cluster-%t", fips), api.Value{}, spec))
+		objects = append(objects, api.NewObject(api.OpenShiftCluster, fmt.Sprintf("cluster-%t", fips), api.Value{}, spec))
 	}
 	tools, err := controller.SelectTools(api.NewCatalog(objects))
 	if err != nil {

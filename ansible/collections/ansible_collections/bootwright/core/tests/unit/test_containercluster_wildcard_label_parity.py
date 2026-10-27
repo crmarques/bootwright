@@ -1,7 +1,7 @@
 """The wildcard label resolve.yml proves is the one preflight checks.
 
 Preflight container-cluster derives the name beneath the applications wildcard
-in Go (WildcardLabel in internal/containercluster/endpoints.go), and
+in Go (WildcardLabel in internal/containercluster/openshift/endpoints.go), and
 TestWildcardLabelMatchesTheInstallRoleTable there reads the same table this
 module reads, goldens/containercluster_wildcard_labels.json. Each side renders
 its own rule over that table, so a change to either rule fails its side.

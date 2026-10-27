@@ -28,7 +28,7 @@ func haproxyProtocolNFS() []api.Value {
 
 func unitsOf(t *testing.T, services ...api.Value) []ServiceUnit {
 	t.Helper()
-	cluster, _ := delegatedCatalog(services, nil).Find(api.StorageCluster, "example")
+	cluster, _ := delegatedCatalog(services, nil).Find(api.CephCluster, "example")
 	units, err := nfsUnits(cluster)
 	if err != nil {
 		t.Fatal(diagnostics.Of(err))
@@ -63,7 +63,7 @@ func unitRequest(r Request) Request {
 func TestServiceUnitBlocksFollowClusterBlock(t *testing.T) {
 	plan := cephPlan(t, settingsCatalog(t, []api.Value{nfsService("files")}))
 	unit := blockOf(t, plan, "ceph-service-example-nfs-files")
-	if unit.Kind != string(api.StorageCluster) || unit.Object != "example" || unit.Implementation != Implementation || unit.Stage != reconciliation.StageClusters ||
+	if unit.Kind != string(api.CephCluster) || unit.Object != "example" || unit.Implementation != Implementation || unit.Stage != reconciliation.StageClusters ||
 		!slices.Equal(unit.Exclusive, []string{"ceph/example"}) || len(unit.Requires) != 0 ||
 		!slices.Equal(unit.Dependencies, []string{"ceph-cluster-example", "ceph-image-example", "ceph-settings-example"}) ||
 		!slices.Equal(unit.Impacts, []string{"realize Ceph service nfs.files of example"}) {
@@ -80,7 +80,7 @@ func TestServiceUnitBlocksFollowClusterBlock(t *testing.T) {
 	if err != nil || r.Action != "service" || r.Settings != nil || r.Service == nil || r.Service.name() != "nfs.files" || len(r.Service.Documents) != 1 {
 		t.Fatalf("the unit request is %+v (%v)", r, err)
 	}
-	removal, err := New(api.StorageCluster, nil).Removal(context.Background(), unit)
+	removal, err := New(api.CephCluster, nil).Removal(context.Background(), unit)
 	if err != nil || removal.Description != "remove Ceph service nfs.files of example" {
 		t.Fatalf("the unit removal is %+v (%v)", removal, err)
 	}
@@ -89,10 +89,10 @@ func TestServiceUnitBlocksFollowClusterBlock(t *testing.T) {
 func TestServiceUnitDeadlineIndependentOfHostCount(t *testing.T) {
 	for _, hosts := range []int{3, 6} {
 		catalog := planCatalog(hosts, hosts, func(spec api.Value) api.Value {
-			return spec.WithPath(api.ListValue(append(spec.Get("ceph", "services").Items(), nfsService("files"))...), "ceph", "services")
+			return spec.WithPath(api.ListValue(append(spec.Get("services").Items(), nfsService("files"))...), "services")
 		})
-		cluster, _ := catalog.Find(api.StorageCluster, "example")
-		base, err := New(api.StorageCluster, nil).request(catalog, cluster, "synthetic")
+		cluster, _ := catalog.Find(api.CephCluster, "example")
+		base, err := New(api.CephCluster, nil).request(catalog, cluster, "synthetic")
 		if err != nil {
 			t.Fatal(diagnostics.Of(err))
 		}
@@ -181,18 +181,18 @@ func frontedNFS(id, vip string) []api.Value {
 func planError(t *testing.T, catalog api.Catalog) error {
 	t.Helper()
 	input := lifecycle.PlanInput{Verb: reconciliation.Apply, Context: lifecycle.ContextIdentity{Name: "synthetic"}, State: compilation.NewState(catalog, catalog, nil), Controller: "controller"}
-	_, err := New(api.StorageCluster, nil).Plan(context.Background(), input)
+	_, err := New(api.CephCluster, nil).Plan(context.Background(), input)
 	return err
 }
 
 func TestServiceUnitProjectionRefusesUnrealizedOptions(t *testing.T) {
 	nfs, ingress := haproxyProtocolNFS()[0], haproxyProtocolNFS()[1]
 	refusedWith(t, planError(t, delegatedCatalog([]api.Value{nfs.With("placement", requestMap("label", "mon", "count_per_host", 1)), ingress}, nil)), "lifecycle.unsupported",
-		"the native service nfs.files places more than one daemon of a type per host, which Bootwright does not realize", "omit placement.count_per_host on nfs.files in spec.ceph.services")
+		"the native service nfs.files places more than one daemon of a type per host, which Bootwright does not realize", "omit placement.count_per_host on nfs.files in spec.services")
 	refusedWith(t, planError(t, delegatedCatalog([]api.Value{nfs.With("config", requestMap("log_level", "debug")), ingress}, nil)), "lifecycle.unsupported",
-		"the native service nfs.files carries config, extra container or entrypoint arguments or custom configs, which Bootwright does not realize", "remove those options from nfs.files in spec.ceph.services")
+		"the native service nfs.files carries config, extra container or entrypoint arguments or custom configs, which Bootwright does not realize", "remove those options from nfs.files in spec.services")
 	refusedWith(t, planError(t, delegatedCatalog([]api.Value{nfs, ingress.WithPath(api.BoolValue(true), "spec", "ssl")}, nil)), "lifecycle.unsupported",
-		"the native service ingress.nfs.files carries spec.ssl, which Bootwright does not realize for this service", "remove spec.ssl from ingress.nfs.files in spec.ceph.services")
+		"the native service ingress.nfs.files carries spec.ssl, which Bootwright does not realize for this service", "remove spec.ssl from ingress.nfs.files in spec.services")
 	if err := planError(t, delegatedCatalog(haproxyProtocolNFS(), nil)); err != nil {
 		t.Fatalf("the authored unit refuses: %+v", diagnostics.Of(err))
 	}
@@ -200,7 +200,7 @@ func TestServiceUnitProjectionRefusesUnrealizedOptions(t *testing.T) {
 
 func TestServiceUnitIdentity(t *testing.T) {
 	r := unitRequest(coreRequest())
-	if _, err := New(api.StorageCluster, nil).identity(context.Background(), executionFor(t, r)); err != nil {
+	if _, err := New(api.CephCluster, nil).identity(context.Background(), executionFor(t, r)); err != nil {
 		t.Fatalf("a unit block fails its identity: %+v", diagnostics.Of(err))
 	}
 	unset := r
@@ -208,12 +208,12 @@ func TestServiceUnitIdentity(t *testing.T) {
 	carried := coreRequest()
 	carried.Service = r.Service
 	for name, request := range map[string]Request{"service without its member": unset, "cluster with a service member": carried} {
-		_, err := New(api.StorageCluster, nil).identity(context.Background(), executionFor(t, request))
+		_, err := New(api.CephCluster, nil).identity(context.Background(), executionFor(t, request))
 		if d := diagnostics.Of(err); len(d) != 1 || d[0].Code != "lifecycle.state" || d[0].Message != "Ceph request does not match its frozen resource identity" {
 			t.Fatalf("a %s passes its identity: %+v", name, d)
 		}
 	}
-	_, err := New(api.StoragePool, nil).identity(context.Background(), executionFor(t, r))
+	_, err := New(api.CephPool, nil).identity(context.Background(), executionFor(t, r))
 	if d := diagnostics.Of(err); len(d) != 1 || d[0].Code != "lifecycle.state" {
 		t.Fatalf("a pool capability executes a unit request: %+v", d)
 	}
@@ -277,7 +277,7 @@ func rbdMirrorRequestService() api.Value {
 func TestRBDMirrorUnitTypeRegistered(t *testing.T) {
 	plan := cephPlan(t, settingsCatalog(t, []api.Value{rbdMirrorRequestService()}))
 	unit := blockOf(t, plan, "ceph-service-example-rbd-mirror")
-	if unit.Kind != string(api.StorageCluster) || unit.Object != "example" || !slices.Equal(unit.Exclusive, []string{"ceph/example"}) || len(unit.Requires) != 0 ||
+	if unit.Kind != string(api.CephCluster) || unit.Object != "example" || !slices.Equal(unit.Exclusive, []string{"ceph/example"}) || len(unit.Requires) != 0 ||
 		!slices.Equal(unit.Dependencies, []string{"ceph-cluster-example", "ceph-image-example"}) ||
 		!slices.Equal(unit.Impacts, []string{"realize Ceph service rbd-mirror of example"}) {
 		t.Fatalf("the rbd-mirror block is %+v", unit.BlockDefinition)
@@ -315,10 +315,10 @@ func TestRBDMirrorUnitTypeRegistered(t *testing.T) {
 func TestRBDMirrorUnitDeadlineAndIdentity(t *testing.T) {
 	for _, hosts := range []int{3, 6} {
 		catalog := planCatalog(hosts, hosts, func(spec api.Value) api.Value {
-			return spec.WithPath(api.ListValue(append(spec.Get("ceph", "services").Items(), rbdMirrorRequestService())...), "ceph", "services")
+			return spec.WithPath(api.ListValue(append(spec.Get("services").Items(), rbdMirrorRequestService())...), "services")
 		})
-		cluster, _ := catalog.Find(api.StorageCluster, "example")
-		base, err := New(api.StorageCluster, nil).request(catalog, cluster, "synthetic")
+		cluster, _ := catalog.Find(api.CephCluster, "example")
+		base, err := New(api.CephCluster, nil).request(catalog, cluster, "synthetic")
 		if err != nil {
 			t.Fatal(diagnostics.Of(err))
 		}
@@ -331,21 +331,21 @@ func TestRBDMirrorUnitDeadlineAndIdentity(t *testing.T) {
 				t.Fatalf("with %d hosts the rbd-mirror %s deadline is %v (%v), want %v", hosts, operation, got, err, want)
 			}
 		}
-		long := api.NewObject(api.StorageCluster, strings.Repeat("c", 40), api.Value{}, cluster.Spec())
-		_, err = mirrorUnits(long)
-		refusedWith(t, err, "api.invariant", "StorageCluster "+long.Name()+" has a name too long to identify its RBD mirror service block, whose identity holds at most 63 characters",
-			"rename the StorageCluster to at most 39 characters")
-		fits := api.NewObject(api.StorageCluster, strings.Repeat("c", 39), api.Value{}, cluster.Spec())
-		if units, err := mirrorUnits(fits); err != nil || len(units) != 1 || len(ServiceUnitBlockID(fits.Name(), units[0])) != 63 {
+		fits := api.NewObject(api.CephCluster, strings.Repeat("c", 39), api.Value{}, cluster.Spec())
+		if units, err := mirrorUnits(fits); err != nil || len(units) != 1 || ServiceUnitBlockID(fits.Name(), units[0]) != "ceph-service-"+fits.Name()+"-rbd-mirror" {
 			t.Fatalf("a 39-character cluster plans %+v (%+v)", units, diagnostics.Of(err))
+		}
+		long := api.NewObject(api.CephCluster, strings.Repeat("c", 63), api.Value{}, cluster.Spec())
+		if units, err := mirrorUnits(long); err != nil || len(units) != 1 || !reconciliation.ValidSegment(ServiceUnitBlockID(long.Name(), units[0])) {
+			t.Fatalf("a 63-character cluster plans %+v (%+v)", units, diagnostics.Of(err))
 		}
 	}
 }
 
 func reversedNodes(spec api.Value) api.Value {
-	nodes := spec.Get("ceph", "topology", "nodes").Items()
+	nodes := spec.Get("topology", "nodes").Items()
 	slices.Reverse(nodes)
-	return spec.WithPath(api.ListValue(nodes...), "ceph", "topology", "nodes")
+	return spec.WithPath(api.ListValue(nodes...), "topology", "nodes")
 }
 
 func crashUnitOf(t *testing.T, units []Request) Request {
@@ -368,7 +368,7 @@ func TestEveryClusterPlansOneDerivedCrashUnit(t *testing.T) {
 		t.Fatalf("the plan holds crash blocks %v", crash)
 	}
 	unit := blockOf(t, plan, "ceph-service-example-crash")
-	if unit.Kind != string(api.StorageCluster) || unit.Object != "example" || !slices.Equal(unit.Exclusive, []string{"ceph/example"}) || len(unit.Requires) != 0 ||
+	if unit.Kind != string(api.CephCluster) || unit.Object != "example" || !slices.Equal(unit.Exclusive, []string{"ceph/example"}) || len(unit.Requires) != 0 ||
 		!slices.Equal(unit.Dependencies, []string{"ceph-cluster-example", "ceph-image-example"}) || !slices.Equal(unit.Impacts, []string{"realize Ceph service crash of example"}) {
 		t.Fatalf("the crash block is %+v", unit.BlockDefinition)
 	}
@@ -396,7 +396,7 @@ func TestEveryClusterPlansOneDerivedCrashUnit(t *testing.T) {
 	if string(r.Service.Documents[0]) != string(want) {
 		t.Fatalf("the crash document is %s, want %s", r.Service.Documents[0], want)
 	}
-	removal, err := New(api.StorageCluster, nil).Removal(context.Background(), unit)
+	removal, err := New(api.CephCluster, nil).Removal(context.Background(), unit)
 	if err != nil || removal.Description != "remove Ceph service crash of example" {
 		t.Fatalf("the crash removal is %+v (%v)", removal, err)
 	}
@@ -408,7 +408,7 @@ func TestEveryClusterPlansOneDerivedCrashUnit(t *testing.T) {
 
 func TestCrashUnitRequestGolden(t *testing.T) {
 	catalog := poolRequestCatalog(3, 3)
-	cluster, _ := catalog.Find(api.StorageCluster, "example")
+	cluster, _ := catalog.Find(api.CephCluster, "example")
 	reversed := cluster.WithSpec(reversedNodes(cluster.Spec()))
 	objects := catalog.Objects()
 	for i := range objects {
@@ -416,7 +416,7 @@ func TestCrashUnitRequestGolden(t *testing.T) {
 			objects[i] = reversed
 		}
 	}
-	base, err := New(api.StorageCluster, nil).request(api.NewCatalog(objects), reversed, "synthetic")
+	base, err := New(api.CephCluster, nil).request(api.NewCatalog(objects), reversed, "synthetic")
 	if err != nil {
 		t.Fatal(diagnostics.Of(err))
 	}
@@ -437,8 +437,8 @@ func TestCrashUnitRequestGolden(t *testing.T) {
 func TestCrashUnitDeadlineAndIdentity(t *testing.T) {
 	for _, hosts := range []int{3, 6} {
 		catalog := planCatalog(hosts, hosts, nil)
-		cluster, _ := catalog.Find(api.StorageCluster, "example")
-		base, err := New(api.StorageCluster, nil).request(catalog, cluster, "synthetic")
+		cluster, _ := catalog.Find(api.CephCluster, "example")
+		base, err := New(api.CephCluster, nil).request(catalog, cluster, "synthetic")
 		if err != nil {
 			t.Fatal(diagnostics.Of(err))
 		}
@@ -451,13 +451,13 @@ func TestCrashUnitDeadlineAndIdentity(t *testing.T) {
 				t.Fatalf("with %d hosts the crash %s deadline is %v (%v), want %v", hosts, operation, got, err, want)
 			}
 		}
-		long := api.NewObject(api.StorageCluster, strings.Repeat("c", 45), api.Value{}, cluster.Spec())
-		_, err = crashUnits(long)
-		refusedWith(t, err, "api.invariant", "StorageCluster "+long.Name()+" has a name too long to identify its crash service block, whose identity holds at most 63 characters",
-			"rename the StorageCluster to at most 44 characters")
-		fits := api.NewObject(api.StorageCluster, strings.Repeat("c", 44), api.Value{}, cluster.Spec())
-		if units, err := crashUnits(fits); err != nil || len(units) != 1 || len(ServiceUnitBlockID(fits.Name(), units[0])) != 63 {
+		fits := api.NewObject(api.CephCluster, strings.Repeat("c", 44), api.Value{}, cluster.Spec())
+		if units, err := crashUnits(fits); err != nil || len(units) != 1 || ServiceUnitBlockID(fits.Name(), units[0]) != "ceph-service-"+fits.Name()+"-crash" {
 			t.Fatalf("a 44-character cluster plans %+v (%+v)", units, diagnostics.Of(err))
+		}
+		long := api.NewObject(api.CephCluster, strings.Repeat("c", 63), api.Value{}, cluster.Spec())
+		if units, err := crashUnits(long); err != nil || len(units) != 1 || !reconciliation.ValidSegment(ServiceUnitBlockID(long.Name(), units[0])) {
+			t.Fatalf("a 63-character cluster plans %+v (%+v)", units, diagnostics.Of(err))
 		}
 	}
 }

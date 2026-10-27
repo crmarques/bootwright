@@ -176,7 +176,7 @@ func TestNextStepsCarryTheContextAndTheTokensTheirDecisionNeeds(t *testing.T) {
 		steps   []string
 	}{
 		{name: "an idle context", arrange: func(*testing.T, *harness) {}, steps: []string{"bootwright plan --context lab-b", "bootwright apply --context lab-b"}},
-		{name: "a paused apply", arrange: applied(nil, string(reconciliation.StageInfraComponents)), steps: []string{continued, "bootwright destroy --context lab-b"}},
+		{name: "a paused apply", arrange: applied(nil, string(reconciliation.StageInfrastructureServices)), steps: []string{continued, "bootwright destroy --context lab-b"}},
 		{name: "a failed apply", arrange: applied(map[string]Result{"charlie": {Outcome: reconciliation.OutcomeFailed}}), steps: []string{continued, "bootwright destroy --context lab-b"}},
 		{name: "an unknown apply", arrange: applied(map[string]Result{"charlie": {Outcome: reconciliation.OutcomeUnknown}}), steps: []string{continued, "bootwright destroy --context lab-b"}},
 		{

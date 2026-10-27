@@ -19,10 +19,10 @@ func pushedCatalog(masters, workers int, baremetal bool) api.Catalog {
 		if object.Kind() == api.InfraProvider {
 			spec = api.MapValue(field("kubevirt", api.MapValue(text("kubeconfigRef", "host-access"), text("namespace", "guests"))))
 		}
-		if object.Kind() == api.ContainerCluster {
+		if object.Kind() == api.OpenShiftCluster {
 			spec = spec.WithPath(spec.Get("install", "agent").Without("redfishVirtualMedia"), "install", "agent")
 			if !baremetal {
-				spec = spec.WithPath(api.MapValue(text("type", "none")), "install", "platform")
+				spec = spec.WithPath(api.MapValue(field("none", api.MapValue())), "install", "platform")
 				for _, slot := range []string{"api", "api-int", "ingress"} {
 					spec = spec.WithPath(api.StringValue("external"), "install", "endpoints", slot, "source", "type")
 				}
@@ -41,7 +41,7 @@ func TestPushedInstallerProjectionGolden(t *testing.T) {
 		name := fmt.Sprintf("pushed-kubevirt-%d-%d-baremetal-%t", shape.masters, shape.workers, shape.baremetal)
 		t.Run(name, func(t *testing.T) {
 			catalog := pushedCatalog(shape.masters, shape.workers, shape.baremetal)
-			cluster := catalog.OfKind(api.ContainerCluster)[0]
+			cluster := catalog.OfKind(api.OpenShiftCluster)[0]
 			var nodes []nodeProjection
 			for index, declared := range cluster.Spec().Get("nodes").Items() {
 				bound, _ := catalog.Find(api.Machine, declared.Get("machineRef").Text())
@@ -98,7 +98,7 @@ func assertPushedInterfaceWiring(t *testing.T, agent map[string]any) {
 func TestPushedMediaHasNoPublicationOrArtifactDependency(t *testing.T) {
 	catalog := pushedCatalog(3, 0, false)
 	needs := Requirements{}
-	cluster := catalog.OfKind(api.ContainerCluster)[0]
+	cluster := catalog.OfKind(api.OpenShiftCluster)[0]
 	delivery, image, certificate, placement, err := mediaLocation(catalog, cluster, "controller", testContext, &needs)
 	if err != nil {
 		t.Fatal(err)

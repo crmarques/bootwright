@@ -40,7 +40,7 @@ type GitOpsBootstrap struct {
 	TargetRevision       string        `json:"targetRevision"`
 	Path                 string        `json:"path"`
 	DestinationNamespace string        `json:"destinationNamespace"`
-	Credentials          string        `json:"credentials,omitempty"`
+	CredentialsRef       string        `json:"credentialsRef,omitempty"`
 	Access               *GitOpsAccess `json:"access,omitempty"`
 	Sync                 GitOpsSync    `json:"sync"`
 }
@@ -62,6 +62,6 @@ func acmPackageSchema() *Shape {
 
 func gitopsPackageSchema() *Shape {
 	s := record(required("subscription", packageSubscriptionSchema()), defaulted("timeout", duration(), StringValue("20m")))
-	s.Fields = append(s.Fields, field("bootstrap", record(required("repoURL", nonempty()), required("targetRevision", nonempty()), required("path", nonempty()), required("destinationNamespace", name()), field("credentials", secret("usernamePassword")), field("access", record(required("clusterRole", dns()))), field("sync", record(defaulted("automated", boolean(), BoolValue(true)), defaulted("prune", boolean(), BoolValue(false)), defaulted("selfHeal", boolean(), BoolValue(false)))))))
+	s.Fields = append(s.Fields, field("bootstrap", record(required("repoURL", nonempty()), required("targetRevision", nonempty()), required("path", nonempty()), required("destinationNamespace", name()), field("credentialsRef", secret("usernamePassword")), field("access", record(required("clusterRole", dns()))), field("sync", record(defaulted("automated", boolean(), BoolValue(true)), defaulted("prune", boolean(), BoolValue(false)), defaulted("selfHeal", boolean(), BoolValue(false)))))))
 	return s
 }

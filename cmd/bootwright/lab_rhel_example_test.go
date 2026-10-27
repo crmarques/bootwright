@@ -143,7 +143,7 @@ func TestLabRHELExampleSelectsControllerDependenciesFromDesiredState(t *testing.
 	}
 	provider := requireObject(t, effective, api.InfraProvider, "lab-libvirt")
 	libvirt := provider.Spec().Get("libvirt")
-	if libvirt.Get("machineRef").Text() != "controller" || libvirt.Get("bmcEmulationDefaults", "port").Text() != "8000" || libvirt.Get("bmcEmulationDefaults", "bindAddress").Text() != "127.0.0.1" {
+	if libvirt.Get("machineRef").Text() != "controller" || libvirt.Get("bmcEmulation", "port").Text() != "8000" || libvirt.Get("bmcEmulation", "bindAddress").Text() != "127.0.0.1" {
 		t.Fatal("libvirt provider lost its emulated BMC defaults", provider.Spec())
 	}
 	attachment := provider.Spec().Get("networkAttachments").Items()[0].Get("libvirt")
@@ -151,7 +151,7 @@ func TestLabRHELExampleSelectsControllerDependenciesFromDesiredState(t *testing.
 		t.Fatal("the managed attachment lost the network Bootwright defines", attachment)
 	}
 	guest := requireObject(t, effective, api.Machine, "rhel-01")
-	if guest.Spec().Get("network", "attachmentRef").Text() != "lab-guests" || guest.Spec().Has("hardware") {
+	if guest.Spec().Get("network", "attachmentRef").Text() != "lab-guests" || guest.Spec().Has("hardware", "nics") || len(guest.Spec().Get("hardware", "rootDevice").Fields()) != 1 || guest.Spec().Get("hardware", "rootDevice", "deviceName").Text() != "/dev/vda" {
 		t.Fatal("the installed guest acquired hardware it must not author", guest.Spec())
 	}
 	// A Bootwright-installed Machine authors no access; the fleet account and
@@ -360,7 +360,7 @@ func TestLabRHELExampleDestroyPlanDescribesOnlyRemoval(t *testing.T) {
 		"artifact-server-lab-artifacts": "remove the artifact server lab-artifacts from controller",
 		clients.BlockID:                 "retain the shared clients of lab-rhel on controller",
 		"dns-lab-dns":                   "remove the DNS server lab-dns from controller",
-		"machine-rhel-01":               "remove the virtual machine rhel-01 and its controller",
+		"machine-rhel-01":               "remove the virtual machine rhel-01 and its emulated BMC",
 		"ntp-lab-ntp":                   "remove the NTP server lab-ntp from controller",
 		"os-install-rhel-01":            "remove the installer media of rhel-01",
 		"os-package-tree-rhel-9-8":      "remove the shared installation package tree",

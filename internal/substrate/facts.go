@@ -70,8 +70,8 @@ func AddressClaims(provider api.Object) []AddressClaim {
 			claims = append(claims, AddressClaim{Path: "spec.networkAttachments[" + strconv.Itoa(index) + "]." + ArmLibvirt + ".address", Address: network.Prefix})
 		}
 	}
-	return append(claims, AddressClaim{Path: "spec." + ArmLibvirt + ".bmcEmulationDefaults.bindAddress",
-		Address: provider.Spec().Get(ArmLibvirt, "bmcEmulationDefaults", "bindAddress").Text()})
+	return append(claims, AddressClaim{Path: "spec." + ArmLibvirt + ".bmcEmulation.bindAddress",
+		Address: provider.Spec().Get(ArmLibvirt, "bmcEmulation", "bindAddress").Text()})
 }
 
 func SelectedProfile(catalog api.Catalog, machine api.Object) (api.Object, api.Value, bool) {
@@ -81,7 +81,7 @@ func SelectedProfile(catalog api.Catalog, machine api.Object) (api.Object, api.V
 		return provider, api.Value{}, false
 	}
 	for _, profile := range provider.Spec().Get(arm, "machineProfiles").Items() {
-		if profile.Get("name").Text() == machine.Spec().Get("substrate", "profileRef").Text() {
+		if profile.Get("name").Text() == MachineProfileRef(machine) {
 			return provider, profile, true
 		}
 	}
@@ -103,4 +103,48 @@ func ClusterBounds(arms ...string) (fanout int, allowance, margin time.Duration)
 		margin = max(margin, bounds.NodeMargin)
 	}
 	return fanout, allowance, margin
+}
+
+func MachineArm(machine api.Object) string {
+	for _, arm := range Arms() {
+		if machine.Spec().Has("substrate", arm) {
+			return arm
+		}
+	}
+	return ""
+}
+
+func MachineProfileRef(machine api.Object) string {
+	return machine.Spec().Get("substrate", MachineArm(machine), "profileRef").Text()
+}
+
+func MachineProfilePath(machine api.Object) string {
+	arm := MachineArm(machine)
+	if arm == "" {
+		return "spec.substrate"
+	}
+	return "spec.substrate." + arm + ".profileRef"
+}
+
+const BMCPath = "spec.substrate." + ArmBaremetal + ".bmc"
+
+func MachineBMC(machine api.Object) api.Value {
+	return machine.Spec().Get("substrate", ArmBaremetal, "bmc")
+}
+
+func MachineMACs(machine api.Object) api.Value {
+	return machine.Spec().Get("substrate", MachineArm(machine), "nics")
+}
+
+func MachineMAC(machine api.Object, nic string) string {
+	for _, entry := range MachineMACs(machine).Items() {
+		if entry.Get("nicRef").Text() == nic {
+			return entry.Get("macAddress").Text()
+		}
+	}
+	return ""
+}
+
+func MachineInterfaceAttachments(machine api.Object) api.Value {
+	return machine.Spec().Get("substrate", MachineArm(machine), "interfaceAttachments")
 }

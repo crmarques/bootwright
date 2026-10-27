@@ -19,7 +19,7 @@ func staged(id string, stage Stage, dependencies ...string) BlockDefinition {
 func nestedPlan(t *testing.T) Plan {
 	t.Helper()
 	plan, err := NewPlan(Apply, []BlockDefinition{
-		staged("artifacts", StageInfraComponents),
+		staged("artifacts", StageInfrastructureServices),
 		staged("provider-metal", StageSubstrates),
 		staged("host-node", StageMachines, "provider-metal"),
 		staged("host-cluster", StageClusters, "host-node"),
@@ -43,11 +43,11 @@ func ids(blocks []Block) []string {
 }
 
 func TestStageNamesAreClosedAndCanonical(t *testing.T) {
-	selection, err := ParseStages([]string{"clusters", "infra-components", "clusters"})
+	selection, err := ParseStages([]string{"clusters", "infrastructure-services", "clusters"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !slices.Equal(selection.Names(), []string{"infra-components", "clusters"}) {
+	if !slices.Equal(selection.Names(), []string{"infrastructure-services", "clusters"}) {
 		t.Fatalf("selection = %v", selection.Names())
 	}
 	if _, err := ParseStages([]string{"storage"}); err == nil {
@@ -77,7 +77,7 @@ func TestPlanRefusesABlockWithoutARecognizedStage(t *testing.T) {
 // The stage is frozen with the block, so moving a block to another stage is a
 // different plan and cannot be continued as the same operation.
 func TestPlanDigestCoversTheStage(t *testing.T) {
-	first, err := NewPlan(Apply, []BlockDefinition{staged("alpha", StageInfraComponents)})
+	first, err := NewPlan(Apply, []BlockDefinition{staged("alpha", StageInfrastructureServices)})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -93,7 +93,7 @@ func TestPlanDigestCoversTheStage(t *testing.T) {
 	if err != nil || before == after {
 		t.Fatalf("digests = %s and %s (%v)", before, after, err)
 	}
-	if !strings.Contains(string(mustEncode(t, first.Blocks[0])), `"stage":"infra-components"`) {
+	if !strings.Contains(string(mustEncode(t, first.Blocks[0])), `"stage":"infrastructure-services"`) {
 		t.Fatal("the frozen block does not carry its stage")
 	}
 }
@@ -117,17 +117,17 @@ func TestReadyFollowsDependenciesAndStartableFiltersByStage(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := ids(Startable(plan, states, substrates)); !slices.Equal(got, []string{"provider-metal"}) {
+	if got := ids(Startable(plan, states, Selection{Stages: substrates})); !slices.Equal(got, []string{"provider-metal"}) {
 		t.Fatalf("startable = %v", got)
 	}
 	states["provider-metal"] = BlockDone
-	if got := ids(Startable(plan, states, substrates)); len(got) != 0 {
+	if got := ids(Startable(plan, states, Selection{Stages: substrates})); len(got) != 0 {
 		t.Fatalf("the kubevirt substrate started before its add-on: %v", got)
 	}
 	for _, id := range []string{"artifacts", "host-node", "host-cluster", "host-virtualization"} {
 		states[id] = BlockDone
 	}
-	if got := ids(Startable(plan, states, substrates)); !slices.Equal(got, []string{"provider-kubevirt"}) {
+	if got := ids(Startable(plan, states, Selection{Stages: substrates})); !slices.Equal(got, []string{"provider-kubevirt"}) {
 		t.Fatalf("startable after the add-on = %v", got)
 	}
 }
@@ -138,8 +138,8 @@ func TestDeferralsExplainEveryPendingBlock(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	deferrals := Deferrals(plan, map[string]BlockState{}, selection)
-	if deferrals["artifacts"].Reason != DeferredNotSelected || deferrals["artifacts"].Stage != StageInfraComponents {
+	deferrals := Deferrals(plan, map[string]BlockState{}, Selection{Stages: selection})
+	if deferrals["artifacts"].Reason != DeferredNotSelected || deferrals["artifacts"].Stage != StageInfrastructureServices {
 		t.Fatalf("artifacts deferral = %+v", deferrals["artifacts"])
 	}
 	if _, waiting := deferrals["provider-metal"]; waiting {

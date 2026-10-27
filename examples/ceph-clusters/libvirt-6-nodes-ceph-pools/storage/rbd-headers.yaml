@@ -1,0 +1,13 @@
+apiVersion: bootwright.io/v1alpha1
+kind: CephPool
+metadata:
+  name: rbd-headers
+
+spec:
+  clusterRef: ceph-lab
+  role: rbd
+  replicated:
+    size: 3
+    minSize: 2
+  autoscale:
+    mode: 'on'

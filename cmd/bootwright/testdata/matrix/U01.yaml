@@ -3,35 +3,35 @@ base: libvirt-3-nodes-ceph
 phase: admission
 edits:
 - file: storage/cluster.yaml
-  replace: "          machineRef: rhel-03\n\n          labels:\n            - ceph-core\n"
-  with: "          machineRef: rhel-03\n\n          labels:\n            - ceph-core\n\n      stretch:\n        failureDomain: datacenter\n"
+  replace: "        machineRef: rhel-03\n\n        labels:\n          - ceph-core\n"
+  with: "        machineRef: rhel-03\n\n        labels:\n          - ceph-core\n\n    stretch:\n      failureDomain: datacenter\n"
 expect:
 - code: api.invariant
-  kind: StorageCluster
+  kind: CephCluster
   name: ceph-lab
-  field: $.spec.ceph.topology.stretch
+  field: $.spec.topology.stretch
   message: native stretch lifecycle requires the later qualified stretch slice
-  remediation: remove stretch from $.spec.ceph.topology; B486 delivers it
+  remediation: remove stretch from $.spec.topology; B486 delivers it
 - code: api.invariant
-  kind: StoragePlacementPolicy
+  kind: CephPlacementPolicy
   name: ssd-hosts
   field: $.spec.replicated
   message: stretch fixes replicated protection at size four and minimum two
   remediation: "set spec.replicated.size to 4 and spec.replicated.minSize to 2, including inherited policy values"
 - code: api.invariant
-  kind: StoragePool
+  kind: CephPool
   name: cephfs-data
   field: $.spec.replicated
   message: stretch fixes replicated protection at size four and minimum two
   remediation: "set spec.replicated.size to 4 and spec.replicated.minSize to 2, including inherited policy values"
 - code: api.invariant
-  kind: StoragePool
+  kind: CephPool
   name: cephfs-metadata
   field: $.spec.replicated
   message: stretch fixes replicated protection at size four and minimum two
   remediation: "set spec.replicated.size to 4 and spec.replicated.minSize to 2, including inherited policy values"
 - code: api.invariant
-  kind: StoragePool
+  kind: CephPool
   name: rbd-data
   field: $.spec.replicated
   message: stretch fixes replicated protection at size four and minimum two

@@ -18,8 +18,8 @@ func rgwIngress(extra ...any) api.Value {
 func ingressGatewayCatalog(ingress api.Value) api.Catalog {
 	return planCatalog(3, 3, func(spec api.Value) api.Value {
 		spec = withCorePair(spec)
-		spec = spec.WithPath(api.ListValue(append(spec.Get("ceph", "services").Items(), httpRGWService("objects"), ingress)...), "ceph", "services")
-		return spec.WithPath(api.ListValue(tlsBinding("ingress.rgw.objects", "gateway-tls")), "ceph", "serviceBindings")
+		spec = spec.WithPath(api.ListValue(append(spec.Get("services").Items(), httpRGWService("objects"), ingress)...), "services")
+		return spec.WithPath(api.ListValue(tlsBinding("ingress.rgw.objects", "gateway-tls")), "serviceBindings")
 	}, objectGateway("objects", "endpoint", requestMap("fqdn", "s3.example.test")))
 }
 
@@ -31,7 +31,7 @@ func TestGatewayRequestCarriesTheExcludedBindings(t *testing.T) {
 	if !reflect.DeepEqual(g.Bindings, want) || gatewayTLSSecret(g) != "gateway-tls" {
 		t.Fatalf("the gateway froze bindings %+v", g.Bindings)
 	}
-	cluster, err := planned(t, catalog, api.StorageCluster, "example")
+	cluster, err := planned(t, catalog, api.CephCluster, "example")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -45,10 +45,10 @@ func TestGatewayRequestCarriesTheExcludedBindings(t *testing.T) {
 func TestGatewayBindingsSortByServiceThenPath(t *testing.T) {
 	catalog := planCatalog(3, 3, func(spec api.Value) api.Value {
 		spec = withCorePair(spec)
-		spec = spec.WithPath(api.ListValue(append(spec.Get("ceph", "services").Items(), rgwService("objects"), rgwIngress())...), "ceph", "services")
+		spec = spec.WithPath(api.ListValue(append(spec.Get("services").Items(), rgwService("objects"), rgwIngress())...), "services")
 		reversed := requestMap("serviceRef", "rgw.objects", "secrets", api.ListValue(
 			requestMap("path", "/spec/ssl_key", "secretRef", "backend-tls"), requestMap("path", "/spec/ssl_cert", "secretRef", "backend-tls")))
-		return spec.WithPath(api.ListValue(reversed, tlsBinding("ingress.rgw.objects", "gateway-tls")), "ceph", "serviceBindings")
+		return spec.WithPath(api.ListValue(reversed, tlsBinding("ingress.rgw.objects", "gateway-tls")), "serviceBindings")
 	}, objectGateway("objects", "endpoint", requestMap("fqdn", "s3.example.test")))
 	g := gatewayOf(t, gatewayBlock(t, catalog)).Gateway
 	want := []GatewayBinding{{Path: "/spec/ssl_cert", SecretRef: "gateway-tls", ServiceRef: "ingress.rgw.objects"}, {Path: "/spec/ssl_key", SecretRef: "gateway-tls", ServiceRef: "ingress.rgw.objects"},
@@ -92,12 +92,12 @@ func TestGatewayTLSNeedsAnEndpoint(t *testing.T) {
 	catalogWith := func(gateway api.Object) api.Catalog {
 		return planCatalog(3, 3, func(spec api.Value) api.Value {
 			spec = withPairAndRGW(spec)
-			return spec.WithPath(api.ListValue(tlsBinding("rgw.objects", "gateway-tls")), "ceph", "serviceBindings")
+			return spec.WithPath(api.ListValue(tlsBinding("rgw.objects", "gateway-tls")), "serviceBindings")
 		}, gateway)
 	}
-	_, err := kindPlan(api.StorageObjectGateway, catalogWith(objectGateway("objects")))
-	refusedWith(t, err, "api.invariant", "StorageObjectGateway objects terminates TLS at rgw.objects but declares no spec.endpoint, whose FQDN its certificate must name",
-		"declare spec.endpoint on StorageObjectGateway objects: spec.endpoint.fqdn with the name its clients use, or spec.endpoint: {} to derive it from the gateway, cluster and Environment storage domain")
+	_, err := kindPlan(api.CephObjectGateway, catalogWith(objectGateway("objects")))
+	refusedWith(t, err, "api.invariant", "CephObjectGateway objects terminates TLS at rgw.objects but declares no spec.endpoint, whose FQDN its certificate must name",
+		"declare spec.endpoint on CephObjectGateway objects: spec.endpoint.fqdn with the name its clients use, or spec.endpoint: {} to derive it from the gateway, cluster and Environment storage domain")
 	g := gatewayOf(t, gatewayBlock(t, catalogWith(objectGateway("objects", "endpoint", requestMap("fqdn", "s3.example.test"))))).Gateway
 	want := []GatewayBinding{{Path: "/spec/ssl_cert", SecretRef: "gateway-tls", ServiceRef: "rgw.objects"}, {Path: "/spec/ssl_key", SecretRef: "gateway-tls", ServiceRef: "rgw.objects"}}
 	if !reflect.DeepEqual(g.Bindings, want) || g.Endpoint != "s3.example.test" || len(g.Documents) != 1 {

@@ -103,10 +103,10 @@ func (r digestRecipe) pins() []string {
 // restated here.
 func contractRecipes() map[string]digestRecipe {
 	recipes := map[string]digestRecipe{
-		instance.Implementation: digestOf(partImplementation(instance.Implementation), partRequest("addon-instance-request-v1"), partVersion("addon-instance-evidence-v3"),
+		instance.Implementation: digestOf(partImplementation(instance.Implementation), partRequest("addon-instance-request-v2"), partVersion("addon-instance-evidence-v3"),
 			partVersion(clusterobjects.Version), partPin(clusterobjects.OwnerDomain), partPin(clusterobjects.ObjectDomain), partPin(clusterobjects.ExactRule),
 			partPin(clusterobjects.OperatorManagedRule), partPin(clusterobjects.DependentExactRule)),
-		networking.Implementation: digestOf(partImplementation(networking.Implementation), partRequest("cluster-network-request-v1"), partVersion("cluster-network-evidence-v3"),
+		networking.Implementation: digestOf(partImplementation(networking.Implementation), partRequest("cluster-network-request-v2"), partVersion("cluster-network-evidence-v3"),
 			partVersion(clusterobjects.Version)),
 		clients.Implementation: digestOf(partDomain("bootwright.controller.client-stage-v1"), partImplementation(clients.Implementation), partRequest(clients.Version)),
 		libvirt.HostImplementation: digestOf(partDomain("bootwright.substrate.libvirt.host-v1"), partImplementation(libvirt.HostImplementation), partRequest("substrate-host-libvirt-v6"),
@@ -118,12 +118,12 @@ func contractRecipes() map[string]digestRecipe {
 			partPin("identity+exact-addresses+power+system-claim")),
 		installation.TreeImplementation:  digestOf(partImplementation(installation.TreeImplementation), partVersion(installation.TreeEvidenceVersion)),
 		installation.EraseImplementation: {separator: ":", parts: []digestPart{partImplementation(installation.EraseImplementation), partPin("descriptor-diskseq-full-readback-receipt-v1")}},
-		installation.Implementation: digestOf(partDomain("bootwright.managedos.install-anaconda-v1"), partImplementation(installation.Implementation), partRequest("os-install-anaconda-v16"),
+		installation.Implementation: digestOf(partDomain("bootwright.managedos.install-anaconda-v1"), partImplementation(installation.Implementation), partRequest("os-install-anaconda-v17"),
 			partVersion("kickstart-anaconda-v13"), partPin("os"), partPin("private"), partPin("public"), partPin(installation.MarkerPath), partPin(installation.HostKeyPath),
 			partPin(installation.NetworkDocumentPath), partPin(installation.NetworkMarkerPath), partPin(strconv.Itoa(300)), partPin("lorax,xorriso"), partPin("proved-installation-disk-boot,replay-safe-unread-registration")),
 		agentinstall.MediaImplementation: digestOf(partDomain("bootwright.containercluster.media-agent-v1"), partImplementation(agentinstall.MediaImplementation), partRequest("cluster-media-agent-v9"),
 			partPin("clusters"), partPin(agentinstall.ImageFile), partPin("/var/lib/bootwright-clusters"), partPin("openshift-install")),
-		agentinstall.InstallImplementation: digestOf(partDomain("bootwright.containercluster.install-agent-v1"), partImplementation(agentinstall.InstallImplementation), partRequest("cluster-install-agent-v7"),
+		agentinstall.InstallImplementation: digestOf(partDomain("bootwright.containercluster.install-agent-v1"), partImplementation(agentinstall.InstallImplementation), partRequest("cluster-install-agent-v8"),
 			partPin("clusters"), partPin(agentinstall.ImageFile), partPin("/var/lib/bootwright-clusters"), partPin("openshift-install"), partPin("openshift-clients")),
 		artifactserver.Implementation: digestOf(partDomain("bootwright.infrastructureservices.artifact-server-v1"), partImplementation(artifactserver.Implementation), partRequest("artifact-server-nginx-v2"),
 			partPin("registry.access.redhat.com/ubi9/nginx-124@sha256:bff0f204cfef8af0b21a2e683a9d1231da98a429d856ee29ebd0e2691d919b56"),
@@ -138,7 +138,7 @@ func contractRecipes() map[string]digestRecipe {
 			partPin(ceph.PhysicalRetirementImplementation)),
 		ceph.ReplicationImplementation: digestOf(partImplementation(ceph.ReplicationImplementation), partRequest(ceph.ReplicationVersion), partVersion(ceph.ReplicationEvidenceVersion),
 			partPin(ceph.PhysicalRetirementImplementation)),
-		ceph.ExportImplementation: digestOf(partImplementation(ceph.ExportImplementation), partRequest(ceph.ExportVersion), partVersion(ceph.ExportEvidenceVersion)),
+		ceph.ConsumerImplementation: digestOf(partImplementation(ceph.ConsumerImplementation), partRequest(ceph.ConsumerVersion), partVersion(ceph.ConsumerEvidenceVersion)),
 	}
 	for _, definition := range []managedservice.Definition{proxy.Definition(), dnsServerDefinition(), ntpserver.Definition()} {
 		recipes[definition.Implementation] = digestOf(partDomain("bootwright.infrastructureservices.managed-service-v1"), partImplementation(definition.Implementation),
@@ -184,7 +184,7 @@ func requestIdentities() map[string][]string {
 		ceph.SMBImplementation:                {"cluster", "object", "id", "clusterIDs", "scope", "resourceType", "service.name"},
 		ceph.ReplicationImplementation: {"object", "primary.cluster", "primary.poolObject", "primary.scope", "secondary.cluster",
 			"secondary.poolObject", "secondary.scope", "images[].name"},
-		ceph.ExportImplementation: {"cluster", "name", "scope", "principals"},
+		ceph.ConsumerImplementation: {"cluster", "name", "scope", "principals"},
 	}
 	for _, definition := range []managedservice.Definition{proxy.Definition(), dnsServerDefinition(), ntpserver.Definition()} {
 		identities[definition.Implementation] = service

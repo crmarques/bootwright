@@ -1,5 +1,5 @@
 apiVersion: bootwright.io/v1alpha1
-kind: ContainerCluster
+kind: OpenShiftCluster
 metadata:
   name: compact
 
@@ -16,7 +16,6 @@ spec:
     additionalTrustBundleRefs:
       - rgw-issuer
 
-    method: agent
     mode: connected
 
     endpoints:
@@ -24,13 +23,13 @@ spec:
         address: 198.51.100.10
 
         source:
-          type: openshift
+          type: installer
 
       ingress:
         address: 198.51.100.11
 
         source:
-          type: openshift
+          type: installer
 
     agent:
       redfishVirtualMedia:
@@ -49,13 +48,13 @@ spec:
 
   nodes:
     - name: master-0
-      role: master
+      role: controlPlane
       machineRef: compact-01
 
     - name: master-1
-      role: master
+      role: controlPlane
       machineRef: compact-02
 
     - name: master-2
-      role: master
+      role: controlPlane
       machineRef: compact-03

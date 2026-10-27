@@ -1,11 +1,10 @@
 apiVersion: bootwright.io/v1alpha1
-kind: StorageFilesystem
+kind: CephFilesystem
 metadata:
   name: files
 
 spec:
   clusterRef: ceph-lab
-  mdsServiceRef: mds.files
   metadataPoolRef: cephfs-metadata
 
   dataPoolRefs:

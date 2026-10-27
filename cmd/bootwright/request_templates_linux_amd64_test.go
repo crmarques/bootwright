@@ -178,7 +178,7 @@ func TestEveryProvenPathToARequestRefusesItsTemplateDelimiter(t *testing.T) {
 			example: "lab-sno",
 			edits:   []exampleEdit{{"infra/networkconfigs/lab-guests.yaml", "        mtu: 1500\n", "        mtu: 1500\n        __ansible_vault: kept\n"}},
 			edited:  []string{"NetworkConfig/lab-guests"},
-			want:    map[string]string{"ContainerCluster/sno": "agentConfig.hosts[0].networkConfig.interfaces[0]"},
+			want:    map[string]string{"OpenShiftCluster/sno": "agentConfig.hosts[0].networkConfig.interfaces[0]"},
 		},
 		{
 			name:    "an ordinary key of an open NMState document",
@@ -186,7 +186,7 @@ func TestEveryProvenPathToARequestRefusesItsTemplateDelimiter(t *testing.T) {
 			edits:   []exampleEdit{{"infra/networkconfigs/lab-guests.yaml", "        mtu: 1500\n", "        mtu: 1500\n        __ansible_note: kept\n"}},
 			edited:  []string{"NetworkConfig/lab-guests"},
 			want:    map[string]string{},
-			carrier: "ContainerCluster/sno", carried: `"__ansible_note":"kept"`,
+			carrier: "OpenShiftCluster/sno", carried: `"__ansible_note":"kept"`,
 		},
 	} {
 		t.Run(test.name, func(t *testing.T) {

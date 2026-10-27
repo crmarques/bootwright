@@ -17,15 +17,14 @@ func declaredStatus(kind api.Kind, object api.Object, claimed, refused []string)
 }
 
 func storageSummaries(catalog api.Catalog, claimed, refused []string) []ClusterSummary {
-	clusters := clusterSummaries(catalog, api.StorageCluster, claimed, refused)
-	kinds := api.Children(api.StorageCluster)
+	clusters := clusterSummaries(catalog, api.StorageClusterCategory, claimed, refused)
 	for index, cluster := range clusters {
 		clusters[index].Resources = []ResourceSummary{}
-		declared, _ := catalog.Find(api.StorageCluster, cluster.Name)
+		declared, _ := catalog.Find(api.Kind(cluster.Kind), cluster.Name)
 		if management := declared.Spec().Get("management").Text(); management != "" && management != "managed" {
 			continue
 		}
-		for _, kind := range kinds {
+		for _, kind := range api.Children(api.Kind(cluster.Kind)) {
 			var rows []ResourceSummary
 			for _, object := range catalog.OfKind(kind) {
 				if object.Spec().Get("clusterRef").Text() == cluster.Name {
@@ -99,11 +98,19 @@ func (s Service) storageResources(ctx context.Context, view View, result *Storag
 		return err
 	}
 	result.Clusters = realizedStorage(result.Clusters, realized)
-	kinds := api.Children(api.StorageCluster)
 	for _, block := range plan.Blocks {
-		if block.Kind == string(api.StorageCluster) || slices.Contains(kinds, api.Kind(block.Kind)) {
+		if storageFamily(api.Kind(block.Kind)) {
 			result.Frozen = append(result.Frozen, block)
 		}
 	}
 	return nil
+}
+
+func storageFamily(kind api.Kind) bool {
+	for _, root := range api.CategoryKinds(api.StorageClusterCategory) {
+		if kind == root || slices.Contains(api.Children(root), kind) {
+			return true
+		}
+	}
+	return false
 }

@@ -39,7 +39,7 @@ func TestProvedDataDiskRequiresFrozenOwnedVolume(t *testing.T) {
 	}
 	for name, damage := range map[string]func(*reconciliation.Block, *[]byte, *string, *string, *int64){
 		"absent evidence":        func(_ *reconciliation.Block, e *[]byte, _ *string, _ *string, _ *int64) { *e = nil },
-		"foreign kind":           func(b *reconciliation.Block, _ *[]byte, _ *string, _ *string, _ *int64) { b.Kind = "StorageCluster" },
+		"foreign kind":           func(b *reconciliation.Block, _ *[]byte, _ *string, _ *string, _ *int64) { b.Kind = "CephCluster" },
 		"foreign implementation": func(b *reconciliation.Block, _ *[]byte, _ *string, _ *string, _ *int64) { b.Implementation = "foreign" },
 		"different digest": func(b *reconciliation.Block, _ *[]byte, _ *string, _ *string, _ *int64) {
 			b.RequestDigest = "different"

@@ -86,10 +86,10 @@ func withCephNodes(edit func([]api.Value) []api.Value) func(api.Catalog) api.Cat
 	return func(catalog api.Catalog) api.Catalog {
 		objects := catalog.Objects()
 		for i, object := range objects {
-			if object.Kind() == api.StorageCluster && object.Name() == "ceph-lab" {
+			if object.Kind() == api.CephCluster && object.Name() == "ceph-lab" {
 				spec := object.Spec()
-				nodes := edit(spec.Get("ceph", "topology", "nodes").Items())
-				objects[i] = object.WithSpec(spec.WithPath(api.ListValue(nodes...), "ceph", "topology", "nodes"))
+				nodes := edit(spec.Get("topology", "nodes").Items())
+				objects[i] = object.WithSpec(spec.WithPath(api.ListValue(nodes...), "topology", "nodes"))
 			}
 		}
 		return api.NewCatalog(objects)
@@ -154,11 +154,11 @@ func TestClusterSessionsReachTheSelectedCephNode(t *testing.T) {
 
 func TestClusterSessionRefusalsExitTwoFiftyFiveBeforeAnyCredential(t *testing.T) {
 	external := func(catalog api.Catalog) api.Catalog {
-		spec := api.MapValue(api.FieldValue{Name: "type", Value: api.StringValue("ceph")}, api.FieldValue{Name: "management", Value: api.StringValue("external")})
+		spec := api.MapValue(api.FieldValue{Name: "management", Value: api.StringValue("external")})
 		ocp := api.MapValue(api.FieldValue{Name: "type", Value: api.StringValue("openshift")})
 		return api.NewCatalog(append(catalog.Objects(),
-			api.NewObject(api.StorageCluster, "ceph-outside", api.Value{}, spec),
-			api.NewObject(api.ContainerCluster, "ocp", api.Value{}, ocp)))
+			api.NewObject(api.CephCluster, "ceph-outside", api.Value{}, spec),
+			api.NewObject(api.OpenShiftCluster, "ocp", api.Value{}, ocp)))
 	}
 	shared := withCephNodes(func(nodes []api.Value) []api.Value {
 		return withFQDN("rhel-03", "rhel-02.lab.example.test")(nodes)
@@ -172,7 +172,7 @@ func TestClusterSessionRefusalsExitTwoFiftyFiveBeforeAnyCredential(t *testing.T)
 		{name: "unknown node", code: "access.target", args: []string{"--name", "ceph-lab", "--node", "rhel-09"}},
 		{name: "duplicate FQDN", code: "access.target", edit: shared, args: []string{"--name", "ceph-lab", "--node", "rhel-02.lab.example.test"}},
 		{name: "external storage", code: "cluster.not-applicable", edit: external, args: []string{"--name", "ceph-outside"}},
-		{name: "OpenShift ContainerCluster", code: "access.unavailable", edit: external, args: []string{"--name", "ocp"}},
+		{name: "OpenShift OpenShiftCluster", code: "access.unavailable", edit: external, args: []string{"--name", "ocp"}},
 	}
 	for _, tt := range tests {
 		for _, verb := range []string{"rsh", "exec"} {
@@ -196,11 +196,11 @@ func TestClusterSessionRefusalsExitTwoFiftyFiveBeforeAnyCredential(t *testing.T)
 
 func TestClusterExecOnSeveralNodesRunsEachMachineOnceTogether(t *testing.T) {
 	second := func(catalog api.Catalog) api.Catalog {
-		first := requireObject(t, catalog, api.StorageCluster, "ceph-lab")
-		nodes := first.Spec().Get("ceph", "topology", "nodes").Items()
-		spec := api.MapValue(api.FieldValue{Name: "type", Value: api.StringValue("ceph")}, api.FieldValue{Name: "management", Value: api.StringValue("managed")},
-			api.FieldValue{Name: "ceph", Value: api.MapValue(api.FieldValue{Name: "topology", Value: api.MapValue(api.FieldValue{Name: "nodes", Value: api.ListValue(nodes[:1]...)})})})
-		return api.NewCatalog(append(catalog.Objects(), api.NewObject(api.StorageCluster, "ceph-twin", api.Value{}, spec)))
+		first := requireObject(t, catalog, api.CephCluster, "ceph-lab")
+		nodes := first.Spec().Get("topology", "nodes").Items()
+		spec := api.MapValue(api.FieldValue{Name: "management", Value: api.StringValue("managed")},
+			api.FieldValue{Name: "topology", Value: api.MapValue(api.FieldValue{Name: "nodes", Value: api.ListValue(nodes[:1]...)})})
+		return api.NewCatalog(append(catalog.Objects(), api.NewObject(api.CephCluster, "ceph-twin", api.Value{}, spec)))
 	}
 	tests := []struct {
 		name string
@@ -227,7 +227,7 @@ func TestClusterExecOnSeveralNodesRunsEachMachineOnceTogether(t *testing.T) {
 	}
 	rig := newCephSessionRig(t, second)
 	code, out, errOut := rig.run(t, "cluster", "exec", "--context", "lab", "--name", "ceph-twin,ceph-lab", "--node", "rhel-02", "--", "true")
-	if code != 255 || out != "" || !strings.HasPrefix(errOut, "  error  access.target\n    ") || !strings.Contains(errOut, "StorageCluster ceph-twin declares none of the nodes rhel-02") ||
+	if code != 255 || out != "" || !strings.HasPrefix(errOut, "  error  access.target\n    ") || !strings.Contains(errOut, "CephCluster ceph-twin declares none of the nodes rhel-02") ||
 		rig.lender.requested != nil || len(rig.client.sessions) != 0 {
 		t.Fatalf("exit %d, out %q, err %q, lent %v", code, out, errOut, rig.lender.requested)
 	}

@@ -29,8 +29,8 @@ import (
 	"github.com/crmarques/bootwright/internal/reconciliation/operationstore"
 	"github.com/crmarques/bootwright/internal/secrets/custody"
 	"github.com/crmarques/bootwright/internal/secrets/material"
-	"github.com/crmarques/bootwright/internal/storage"
 	"github.com/crmarques/bootwright/internal/storage/ceph"
+	"github.com/crmarques/bootwright/internal/storage/cephcluster"
 	"github.com/crmarques/bootwright/internal/substrate"
 	"github.com/crmarques/bootwright/internal/substrate/baremetal"
 	"github.com/crmarques/bootwright/internal/substrate/capacity"
@@ -178,8 +178,8 @@ func operationPlaybook() map[string]string {
 		ceph.SMBImplementation + "/observe":             "storage/smb_observe.yml",
 		ceph.SMBImplementation + "/destroy":             "storage/smb_destroy.yml",
 	}
-	bindings[ceph.ExportImplementation+"/apply"] = "storage/export_apply.yml"
-	bindings[ceph.ExportImplementation+"/observe"] = "storage/export_observe.yml"
+	bindings[ceph.ConsumerImplementation+"/apply"] = "storage/export_apply.yml"
+	bindings[ceph.ConsumerImplementation+"/observe"] = "storage/export_observe.yml"
 	for prefix, definition := range map[string]managedservice.Definition{
 		"proxy": proxy.Definition(), "dns_server": dnsServerDefinition(), "ntp_server": ntpserver.Definition(),
 	} {
@@ -230,16 +230,16 @@ func buildCapabilitiesWith(clock systemClock, controller controllerDependencies,
 		kind: agentinstall.Kind, implementation: agentinstall.InstallImplementation, family: "cluster-install",
 		capability: agentinstall.NewInstall(runner).WithIdentities(provedIdentities{}),
 	}}
-	for _, kind := range []api.Kind{api.StorageCluster, api.StoragePlacementPolicy, api.StoragePool, api.StorageRBDImage, api.StorageFilesystem, api.StorageSubvolume, api.StorageClient, api.StorageObjectGateway, api.StorageObjectUser, api.StorageObjectBucket, api.StorageNFSExport, api.StorageNVMeoFSubsystem} {
+	for _, kind := range []api.Kind{api.CephCluster, api.CephPlacementPolicy, api.CephPool, api.CephRBDImage, api.CephFilesystem, api.CephSubvolume, api.CephClient, api.CephObjectGateway, api.CephObjectUser, api.CephObjectBucket, api.CephNFSExport, api.CephNVMeoFSubsystem} {
 		resolver = append(resolver, boundCapability{kind: string(kind), implementation: ceph.Implementation, family: "storage-core", capability: ceph.New(kind, runner).WithProofs(cephDependencyProofs{})})
 	}
-	resolver = append(resolver, boundCapability{kind: string(api.StorageCluster), implementation: ceph.ImageImplementation, family: "storage-image", capability: ceph.NewImage(runner)})
-	resolver = append(resolver, boundCapability{kind: string(api.StorageExport), implementation: ceph.ExportImplementation, family: "storage-export", capability: ceph.NewExport(runner).WithProofs(cephDependencyProofs{})})
-	resolver = append(resolver, boundCapability{kind: string(api.StorageCluster), implementation: ceph.HostImplementation, family: "storage-host", capability: ceph.NewHost(runner).WithProofs(cephDependencyProofs{})})
-	resolver = append(resolver, boundCapability{kind: string(api.StorageCluster), implementation: ceph.PhysicalRetirementImplementation, family: ceph.PhysicalRetirementFamily,
+	resolver = append(resolver, boundCapability{kind: string(api.CephCluster), implementation: ceph.ImageImplementation, family: "storage-image", capability: ceph.NewImage(runner)})
+	resolver = append(resolver, boundCapability{kind: string(api.CephConsumer), implementation: ceph.ConsumerImplementation, family: "storage-consumer", capability: ceph.NewConsumer(runner).WithProofs(cephDependencyProofs{})})
+	resolver = append(resolver, boundCapability{kind: string(api.CephCluster), implementation: ceph.HostImplementation, family: "storage-host", capability: ceph.NewHost(runner).WithProofs(cephDependencyProofs{})})
+	resolver = append(resolver, boundCapability{kind: string(api.CephCluster), implementation: ceph.PhysicalRetirementImplementation, family: ceph.PhysicalRetirementFamily,
 		capability: ceph.NewPhysicalRetirement().WithProofs(cephDependencyProofs{}).WithErasureProofs(physicalCephEraseProof).WithUninstalledProofs(installation.PhysicalEraseUnstarted)})
-	resolver = append(resolver, boundCapability{kind: string(api.StorageSMBResource), implementation: ceph.SMBImplementation, family: "storage-smb", capability: ceph.NewSMB(runner).WithProofs(cephDependencyProofs{})})
-	resolver = append(resolver, boundCapability{kind: string(api.StorageReplication), implementation: ceph.ReplicationImplementation, family: "storage-replication", capability: ceph.NewReplication(runner).WithProofs(cephDependencyProofs{})})
+	resolver = append(resolver, boundCapability{kind: string(api.CephSMBResource), implementation: ceph.SMBImplementation, family: "storage-smb", capability: ceph.NewSMB(runner).WithProofs(cephDependencyProofs{})})
+	resolver = append(resolver, boundCapability{kind: string(api.CephReplication), implementation: ceph.ReplicationImplementation, family: "storage-replication", capability: ceph.NewReplication(runner).WithProofs(cephDependencyProofs{})})
 	for _, definition := range []managedservice.Definition{proxy.Definition(), dnsServerDefinition(), ntpserver.Definition()} {
 		resolver = append(resolver, boundCapability{
 			kind: string(definition.Kind), implementation: definition.Implementation, family: "managed-service",
@@ -391,7 +391,7 @@ func dnsServerDefinition() managedservice.Definition {
 }
 
 func attachedGatewayRecords(catalog api.Catalog) ([]managedservice.Record, error) {
-	derived, err := storage.AttachedGatewayRecords(catalog)
+	derived, err := cephcluster.AttachedGatewayRecords(catalog)
 	if err != nil {
 		return nil, err
 	}

@@ -202,8 +202,8 @@ def test_the_managed_os_installation_sets_and_settles_the_frozen_trust(lookups, 
     served = tmp_path / "artifact-ca"
     served.write_text("SERVED CERTIFICATE\n")
     for trust, restore, remove, material, certificate in (
-            ("import-certificate", False, True, {"artifactCertificate": str(served)}, "SERVED CERTIFICATE"),
-            ("disable-verification", True, False, {}, ""),
+            ("importCertificate", False, True, {"artifactCertificate": str(served)}, "SERVED CERTIFICATE"),
+            ("disableVerification", True, False, {}, ""),
             ("established", False, False, {}, "")):
         variables = dict(defaults("managedos_install_anaconda"), **{
             "bootwright_run_scratch": "/run/private",
@@ -234,7 +234,7 @@ def test_cluster_media_calls_carry_each_nodes_frozen_trust(physical):
     variables = {**invocation["vars"],
                  "containercluster_install_agent_node": {"physical": physical, "controller": {
                      "endpoint": "https://bmc.example.test/redfish/v1/Systems/1", "tlsVerify": True,
-                     "virtualMedia": {"trust": "import-certificate", "restoreVerification": False, "removeCertificate": True}}},
+                     "virtualMedia": {"trust": "importCertificate", "restoreVerification": False, "removeCertificate": True}}},
                  "containercluster_install_agent_user": "/run/user", "containercluster_install_agent_password": "/run/password",
                  "containercluster_install_agent_ca": "/run/ca", "bootwright_run_scratch": "/run/private",
                  "containercluster_install_agent_index": 2,
@@ -245,7 +245,7 @@ def test_cluster_media_calls_carry_each_nodes_frozen_trust(physical):
         assert port["ca"] == "/run/ca"
         if operation == "media_insert":
             assert port["private"] is physical
-            assert port["trust"] == "import-certificate" and port["certificate"] == "/run/certificate"
+            assert port["trust"] == "importCertificate" and port["certificate"] == "/run/certificate"
         elif operation == "media_eject":
             assert port["remove_certificate"] is True and port["restore_verification"] is False
             assert port["certificate"] == "/run/certificate"

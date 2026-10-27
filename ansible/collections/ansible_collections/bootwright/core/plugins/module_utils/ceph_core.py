@@ -888,7 +888,7 @@ def execute(request, operation, request_digest, transport, outputs=None, *, now=
     if operation == "apply":
         preparations = (host_round(transport, request["hosts"], "prerequisites") if request["action"] == "cluster"
                         else [transport.call(host, "prerequisites") for host in request["hosts"]])
-        tunnel = request["action"] == "cluster" and request["clusterSSHTransport"] == "verified-tunnel"
+        tunnel = request["action"] == "cluster" and request["clusterSSHTransport"] == "verifiedTunnel"
         state = transport.call(bootstrap, "bootstrap_state") if tunnel else None
         if tunnel:
             stage = ceph_tunnel_staging.prove_recovery_record(request, bootstrap["name"], state, evidence=True)
@@ -1259,7 +1259,7 @@ def dashboard_phase(request, operation, request_digest, bootstrap, transport, ob
 
 def host_request(value):
     """A frozen host block request: its cluster's host scope and one of its hosts."""
-    ceph_native.require(isinstance(value, dict) and set(value) == {"cluster", "host", "version"} and value["version"] == "ceph-host-v7")
+    ceph_native.require(isinstance(value, dict) and set(value) == {"cluster", "host", "version"} and value["version"] == "ceph-host-v8")
     cluster = ceph_native.validate_scope(value["cluster"])
     ceph_native.require("packages" in cluster)
     ceph_native.require(sum(host["name"] == value["host"] for host in cluster["hosts"]) == 1)

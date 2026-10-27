@@ -165,8 +165,12 @@ func contextFileFlag() flagSpec {
 
 func stageFlag() flagSpec {
 	flag := stringFlag("stage", "Select comma-separated stages to start (default: all)")
-	flag.enum, flag.enumList = []string{"controller", "infra-components", "substrates", "machines", "clusters", "add-ons"}, true
+	flag.enum, flag.enumList = []string{"controller", "infrastructure-services", "substrates", "machines", "clusters", "add-ons"}, true
 	return flag
+}
+
+func untilFlag() flagSpec {
+	return stringFlag("until", "Stop after one add-on instance, named <cluster>.<package>, and the blocks it requires")
 }
 
 func authorizationFlag() flagSpec {

@@ -3,11 +3,13 @@ package cli
 import (
 	"bytes"
 	"encoding/base64"
+	"encoding/json"
 	"io"
 	"slices"
 	"strings"
 	"unicode/utf8"
 
+	api "github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/secrets"
 	"github.com/crmarques/bootwright/internal/workspace/contexts"
 	"github.com/spf13/cobra"
@@ -336,6 +338,25 @@ func (r *Runner) writeSelectedVersion() error {
 	}
 	shown := versionPresentation{Version: escapeDisplayLine(buildValue(i.Version, "devel")), Commit: commit, Source: source, Go: escapeDisplayLine(buildValue(i.GoVersion, "unknown")), Target: escapeDisplayLine(buildValue(i.GOOS, "unknown") + "/" + buildValue(i.GOARCH, "unknown")), DependencyBundle: bundle}
 	return writeStructuredResult(r.config.Out, "version", shown, nil, nil, 0)
+}
+
+type schemaPresentation struct {
+	Format string          `json:"format"`
+	Schema json.RawMessage `json:"schema"`
+}
+
+func (schemaPresentation) documentedResult() {}
+
+func (r *Runner) writeSelectedSchema() error {
+	data, err := api.JSONSchema()
+	if err != nil {
+		return err
+	}
+	if !structuredFormat(r.config.Presentation.Format) {
+		_, err = r.config.Out.Write(data)
+		return err
+	}
+	return writeStructuredResult(r.config.Out, "schema", schemaPresentation{Format: "json-schema", Schema: json.RawMessage(bytes.TrimSpace(data))}, nil, nil, 0)
 }
 
 func (r *Runner) writeSelectedCompletion(root *cobra.Command, path string, noDescriptions bool) error {

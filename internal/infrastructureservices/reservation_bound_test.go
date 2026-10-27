@@ -14,7 +14,7 @@ func crowdedHost(n int) api.Object {
 	for i := range addresses {
 		addresses[i] = m("name", fmt.Sprintf("a%02d", i), "address", fmt.Sprintf("198.51.100.%d/24", i+1))
 	}
-	return obj(api.Machine, "host", m("capabilities", api.StringList("container-runtime"), "network", m("addresses", list(addresses...))))
+	return obj(api.Machine, "host", m("network", m("addresses", list(addresses...))))
 }
 
 func validated(t *testing.T, service api.Object, catalog api.Catalog) []api.Issue {

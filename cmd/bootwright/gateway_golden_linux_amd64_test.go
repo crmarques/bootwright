@@ -10,7 +10,7 @@ import (
 
 func TestGatewayEffectiveGolden(t *testing.T) {
 	state, _ := compileAcceptance(t, admissibleExampleSources(t, false))
-	gateway := requireObject(t, state.Effective(), api.StorageObjectGateway, "objects")
+	gateway := requireObject(t, state.Effective(), api.CephObjectGateway, "objects")
 	data, err := effectiveencoding.YAML(context.Background(), api.NewCatalog([]api.Object{gateway}))
 	if err != nil {
 		t.Fatal(err)

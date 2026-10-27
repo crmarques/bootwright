@@ -12,7 +12,7 @@ import (
 )
 
 const trustClusterPrefix = `apiVersion: bootwright.io/v1alpha1
-kind: ContainerCluster
+kind: OpenShiftCluster
 metadata: {name: trust-cluster}
 spec:
   distribution:
@@ -25,7 +25,7 @@ const trustClusterSuffix = `    endpoints:
       ingress: {source: {type: node}}
   nodes:
     - name: master
-      role: master
+      role: controlPlane
       machineRef: trust-node
 `
 
@@ -46,8 +46,7 @@ apiVersion: bootwright.io/v1alpha1
 kind: Machine
 metadata: {name: trust-node}
 spec:
-  capabilities: [openshift-node]
-  substrate: {providerRef: trust-provider, profileRef: standard}
+  substrate: {providerRef: trust-provider, kubevirt: {profileRef: standard}}
   os: {provided: false}
   network:
     inline:
@@ -132,12 +131,12 @@ func TestClusterInstallTrustStaysOnItsConsumer(t *testing.T) {
 		}
 	}
 	state, _ := compileAcceptance(t, inputs)
-	cluster := requireObject(t, state.Effective(), api.ContainerCluster, "trust-cluster")
+	cluster := requireObject(t, state.Effective(), api.OpenShiftCluster, "trust-cluster")
 	trust := cluster.Spec().Get("install", "additionalTrustBundleRefs")
 	if !slices.Equal(trust.Strings(), []string{"ca-second", "ca-first"}) {
 		t.Fatal("cluster trust order changed or service trust was implicitly merged")
 	}
-	authored := requireObject(t, state.Authored(), api.ContainerCluster, "trust-cluster")
+	authored := requireObject(t, state.Authored(), api.OpenShiftCluster, "trust-cluster")
 	if !authored.Spec().Get("install", "additionalTrustBundleRefs").Equal(trust) {
 		t.Fatal("admission replaced authored trust references with materialized trust")
 	}
@@ -162,7 +161,7 @@ func TestClusterInstallTrustStaysOnItsConsumer(t *testing.T) {
 }
 
 func TestClusterInstallTrustDefaultsReplaceWholeLists(t *testing.T) {
-	defaults := serviceEnvironment + "  defaults:\n    ContainerCluster:\n      install:\n        additionalTrustBundleRefs: [ca-second, ca-first]\n"
+	defaults := serviceEnvironment + "  defaults:\n    OpenShiftCluster:\n      install:\n        additionalTrustBundleRefs: [ca-second, ca-first]\n"
 	for _, tc := range []struct {
 		name, environment, authored string
 		expected                    []string
@@ -175,11 +174,11 @@ func TestClusterInstallTrustDefaultsReplaceWholeLists(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			state, _ := compileAcceptance(t, trustInputs(tc.environment, tc.authored))
-			actual := requireObject(t, state.Effective(), api.ContainerCluster, "trust-cluster").Spec().Get("install", "additionalTrustBundleRefs")
+			actual := requireObject(t, state.Effective(), api.OpenShiftCluster, "trust-cluster").Spec().Get("install", "additionalTrustBundleRefs")
 			if actual.Type() != api.Sequence || !slices.Equal(actual.Strings(), tc.expected) {
 				t.Fatalf("unexpected effective trust references: %v", actual.Strings())
 			}
-			authored := requireObject(t, state.Authored(), api.ContainerCluster, "trust-cluster")
+			authored := requireObject(t, state.Authored(), api.OpenShiftCluster, "trust-cluster")
 			if authored.Spec().Has("install", "additionalTrustBundleRefs") != (tc.authored != "") {
 				t.Fatal("defaults changed the authored field's presence")
 			}
@@ -202,7 +201,7 @@ func TestClusterInstallTrustRejectsInvalidSecretSelections(t *testing.T) {
 }
 
 func TestClusterInstallTrustDiagnosticsKeepDefaultOrigins(t *testing.T) {
-	env := serviceEnvironment + "  defaults:\n    ContainerCluster:\n      install:\n        additionalTrustBundleRefs: [missing-ca]\n"
+	env := serviceEnvironment + "  defaults:\n    OpenShiftCluster:\n      install:\n        additionalTrustBundleRefs: [missing-ca]\n"
 	for _, inherited := range []bool{false, true} {
 		t.Run(map[bool]string{false: "authored", true: "inherited"}[inherited], func(t *testing.T) {
 			inputs := trustInputs(serviceEnvironment, "[missing-ca]")
@@ -212,7 +211,7 @@ func TestClusterInstallTrustDiagnosticsKeepDefaultOrigins(t *testing.T) {
 				expectedPath = "/synthetic/environment.yaml"
 			}
 			diagnostic := trustFailure(t, inputs, "api.reference", "$.spec.install.additionalTrustBundleRefs[0]")
-			if diagnostic.Object == nil || diagnostic.Object.Kind != "ContainerCluster" || diagnostic.Object.Name != "trust-cluster" || diagnostic.Source == nil || diagnostic.Source.Path != expectedPath {
+			if diagnostic.Object == nil || diagnostic.Object.Kind != "OpenShiftCluster" || diagnostic.Object.Name != "trust-cluster" || diagnostic.Source == nil || diagnostic.Source.Path != expectedPath {
 				t.Fatalf("trust diagnostic lost recipient or source: %#v", diagnostic)
 			}
 			if strings.Contains(diagnostic.Message, "from Environment defaults") != inherited {
@@ -240,7 +239,7 @@ func TestRetiredEnvironmentTrustHasActionableReplacement(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			diagnostic := trustFailure(t, serviceSources(serviceEnvironment+tc.extra), "api.field", tc.field)
 			guidance := diagnostic.Message + " " + diagnostic.Remediation
-			if !strings.Contains(guidance, "retired") || !strings.Contains(guidance, "ContainerCluster") || !strings.Contains(guidance, "additionalTrustBundleRefs") {
+			if !strings.Contains(guidance, "retired") || !strings.Contains(guidance, "OpenShiftCluster") || !strings.Contains(guidance, "additionalTrustBundleRefs") {
 				t.Fatal("retired Environment trust lacks consumer-owned replacement guidance", guidance)
 			}
 		})
@@ -251,11 +250,11 @@ func TestUnusedClusterInstallTrustDefaultsValidateStructureOnly(t *testing.T) {
 	for _, tc := range []struct{ list, code, field string }{
 		{"[missing-ca]", "", ""},
 		{"[openshift-pull-secret]", "", ""},
-		{"[ca-first, ca-first]", "api.duplicate", "$.spec.defaults.ContainerCluster.install.additionalTrustBundleRefs[1]"},
-		{"null", "api.type", "$.spec.defaults.ContainerCluster.install.additionalTrustBundleRefs"},
+		{"[ca-first, ca-first]", "api.duplicate", "$.spec.defaults.OpenShiftCluster.install.additionalTrustBundleRefs[1]"},
+		{"null", "api.type", "$.spec.defaults.OpenShiftCluster.install.additionalTrustBundleRefs"},
 	} {
 		t.Run(tc.list, func(t *testing.T) {
-			env := serviceEnvironment + "  defaults:\n    ContainerCluster:\n      install:\n        additionalTrustBundleRefs: " + tc.list + "\n"
+			env := serviceEnvironment + "  defaults:\n    OpenShiftCluster:\n      install:\n        additionalTrustBundleRefs: " + tc.list + "\n"
 			secret := "apiVersion: bootwright.io/v1alpha1\nkind: Secret\nmetadata: {name: openshift-pull-secret}\nspec: {type: dockerConfigJson}\n"
 			inputs := serviceSources(env, secret)
 			if tc.code == "" {
@@ -267,16 +266,16 @@ func TestUnusedClusterInstallTrustDefaultsValidateStructureOnly(t *testing.T) {
 	}
 }
 
-// disable-verification is a per-Machine exception, so neither kind default
+// disableVerification is a per-Machine exception, so neither kind default
 // that could hand it to many Machines is admitted: the Machine default names
 // it directly, and the InfraProvider default would pass it to every Machine
 // that provider hosts.
 func TestDisableVerificationIsNeverAKindDefault(t *testing.T) {
 	for _, tc := range []struct{ name, defaults, field, message string }{
-		{"Machine", "    Machine:\n      hardware:\n        management:\n          bmc:\n            virtualMedia:\n              tls: {trust: disable-verification}\n",
-			"$.spec.defaults.Machine.hardware.management.bmc.virtualMedia.tls.trust", "disable-verification is a per-Machine exception and never a kind default"},
-		{"InfraProvider", "    InfraProvider:\n      baremetal:\n        defaults:\n          bmc:\n            virtualMedia:\n              tls: {trust: disable-verification}\n",
-			"$.spec.defaults.InfraProvider.baremetal.defaults.bmc.virtualMedia.tls.trust", "disable-verification is a per-Machine exception and never a provider default"},
+		{"Machine", "    Machine:\n      substrate:\n        baremetal:\n          bmc:\n            virtualMedia:\n              tls: {trust: disableVerification}\n",
+			"$.spec.defaults.Machine.substrate.baremetal.bmc.virtualMedia.tls.trust", "disableVerification is a per-Machine exception and never a kind default"},
+		{"InfraProvider", "    InfraProvider:\n      baremetal:\n        defaults:\n          bmc:\n            virtualMedia:\n              tls: {trust: disableVerification}\n",
+			"$.spec.defaults.InfraProvider.baremetal.defaults.bmc.virtualMedia.tls.trust", "disableVerification is a per-Machine exception and never a provider default"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			diagnostic := trustFailure(t, serviceSources(serviceEnvironment+"  defaults:\n"+tc.defaults), "api.invariant", tc.field)
@@ -294,12 +293,13 @@ func bmcTrustSources() desiredstate.Sources {
 	machine := func(name, address, extra, tls string) string {
 		return "apiVersion: bootwright.io/v1alpha1\nkind: Machine\nmetadata: {name: " + name + "}\nspec:\n  os: {provided: true}\n" + extra +
 			"  network:\n    addresses: [{name: service, address: " + address + "}]\n" +
-			"  hardware:\n    management:\n      bmc:\n        address: https://" + name + "-bmc.example.test/redfish/v1/Systems/1\n" +
+			"  substrate:\n    providerRef: lab-metal\n    baremetal:\n      bmc:\n        address: https://" + name + "-bmc.example.test/redfish/v1/Systems/1\n" +
 			"        credentialsRef: bmc\n" + tls
 	}
-	env := serviceEnvironment + "  defaults:\n    Machine:\n      hardware:\n        management:\n          bmc:\n            tls: {trustBundleRef: bmc-ca}\n"
-	content := env + "\n---\n" + machine("service-host", "192.0.2.10", "  capabilities: [container-runtime]\n  access: {local: true}\n", "") +
+	env := serviceEnvironment + "  defaults:\n    Machine:\n      substrate:\n        baremetal:\n          bmc:\n            tls: {trustBundleRef: bmc-ca}\n"
+	content := env + "\n---\n" + machine("service-host", "192.0.2.10", "  access: {local: true}\n", "") +
 		"\n---\n" + machine("opted-out", "192.0.2.11", "", "        tls: {verify: false}\n") +
+		"\n---\napiVersion: bootwright.io/v1alpha1\nkind: InfraProvider\nmetadata: {name: lab-metal}\nspec:\n  baremetal: {}\n" +
 		"\n---\napiVersion: bootwright.io/v1alpha1\nkind: Secret\nmetadata: {name: bmc-ca}\nspec: {type: caBundle}\n" +
 		"\n---\napiVersion: bootwright.io/v1alpha1\nkind: Secret\nmetadata: {name: bmc}\nspec: {type: usernamePassword}\n"
 	return desiredstate.Sources{Roots: []string{"/synthetic"}, Files: []desiredstate.SourceFile{desiredstate.NewSourceFile("/synthetic/environment.yaml", []byte(content))}}
@@ -310,11 +310,11 @@ func bmcTrustSources() desiredstate.Sources {
 // its effective controller carries no bundle.
 func TestAKindDefaultTrustBundleSkipsAMachineThatOptsOut(t *testing.T) {
 	state, _ := compileAcceptance(t, bmcTrustSources())
-	tls := requireObject(t, state.Effective(), api.Machine, "opted-out").Spec().Get("hardware", "management", "bmc", "tls")
+	tls := requireObject(t, state.Effective(), api.Machine, "opted-out").Spec().Get("substrate", "baremetal", "bmc", "tls")
 	if tls.Has("trustBundleRef") || tls.Get("verify").Bool() {
 		t.Fatalf("the opted-out Machine's effective controller trust = %v", tls)
 	}
-	kept := requireObject(t, state.Effective(), api.Machine, "service-host").Spec().Get("hardware", "management", "bmc", "tls")
+	kept := requireObject(t, state.Effective(), api.Machine, "service-host").Spec().Get("substrate", "baremetal", "bmc", "tls")
 	if kept.Get("trustBundleRef").Text() != "bmc-ca" || !kept.Get("verify").Bool() {
 		t.Fatalf("the verifying Machine's effective controller trust = %v", kept)
 	}

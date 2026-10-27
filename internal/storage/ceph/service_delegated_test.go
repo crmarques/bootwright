@@ -34,9 +34,9 @@ func tlsBinding(ref, secret string) api.Value {
 
 func delegatedCatalog(services, bindings []api.Value, children ...api.Object) api.Catalog {
 	return planCatalog(3, 3, func(spec api.Value) api.Value {
-		spec = spec.WithPath(api.ListValue(append(spec.Get("ceph", "services").Items(), services...)...), "ceph", "services")
+		spec = spec.WithPath(api.ListValue(append(spec.Get("services").Items(), services...)...), "services")
 		if len(bindings) != 0 {
-			spec = spec.WithPath(api.ListValue(bindings...), "ceph", "serviceBindings")
+			spec = spec.WithPath(api.ListValue(bindings...), "serviceBindings")
 		}
 		return spec
 	}, children...)
@@ -44,10 +44,10 @@ func delegatedCatalog(services, bindings []api.Value, children ...api.Object) ap
 
 func gatewayGraph(bindings ...api.Value) api.Catalog {
 	objects := delegatedCatalog([]api.Value{rgwService("objects"), ingressService("rgw.objects")}, bindings,
-		childOf(api.StorageObjectGateway, "objects", "serviceRef", "rgw.objects"), replicatedPool("volumes"),
-		childOf(api.StorageClient, "consumer", "poolRef", "volumes", "access", "read-write")).Objects()
+		childOf(api.CephObjectGateway, "objects", "serviceRef", "rgw.objects"), replicatedPool("volumes"),
+		childOf(api.CephClient, "consumer", "poolRef", "volumes", "access", "readWrite")).Objects()
 	for i, object := range objects {
-		if object.Kind() == api.StorageCluster {
+		if object.Kind() == api.CephCluster {
 			objects[i] = object.WithSpec(withCorePair(object.Spec()))
 		}
 	}
@@ -90,7 +90,7 @@ func TestDelegatedServicesProjectIntoDelegated(t *testing.T) {
 
 func TestClusterRequestRefusesOnlyUnexecutedBindings(t *testing.T) {
 	catalog := gatewayGraph(tlsBinding("rgw.objects", "gateway-tls"), tlsBinding("ingress.rgw.objects", "gateway-tls"))
-	r, err := planned(t, catalog, api.StorageCluster, "example")
+	r, err := planned(t, catalog, api.CephCluster, "example")
 	if err != nil {
 		t.Fatal(diagnostics.Of(err))
 	}
@@ -113,10 +113,10 @@ func TestClusterRequestRefusesOnlyUnexecutedBindings(t *testing.T) {
 	} {
 		t.Run(name, func(t *testing.T) {
 			catalog := delegatedCatalog(append([]api.Value{rgwService("objects")}, c.services...), []api.Value{tlsBinding("rgw.objects", "gateway-tls"), c.binding},
-				childOf(api.StorageObjectGateway, "objects", "serviceRef", "rgw.objects"))
-			_, err := planned(t, catalog, api.StorageCluster, "example")
-			refusedWith(t, err, "lifecycle.unsupported", "Bootwright does not realize the service binding of "+c.ref+"; it realizes only the TLS bindings of an rgw service that a StorageObjectGateway binds and of the ingress that fronts it, the TLS binding of the management gateway, the credential, TLS and CA bundle bindings of its oauth2-proxy, and the credential bindings of the grafana and snmp-gateway services",
-				"remove the spec.ceph.serviceBindings entry for "+c.ref)
+				childOf(api.CephObjectGateway, "objects", "serviceRef", "rgw.objects"))
+			_, err := planned(t, catalog, api.CephCluster, "example")
+			refusedWith(t, err, "lifecycle.unsupported", "Bootwright does not realize the service binding of "+c.ref+"; it realizes only the TLS bindings of an rgw service that a CephObjectGateway binds and of the ingress that fronts it, the TLS binding of the management gateway, the credential, TLS and CA bundle bindings of its oauth2-proxy, and the credential bindings of the grafana and snmp-gateway services",
+				"remove the spec.serviceBindings entry for "+c.ref)
 		})
 	}
 }
@@ -131,7 +131,7 @@ func TestClusterRequestNeverCarriesSecretLeaves(t *testing.T) {
 	for _, object := range []struct {
 		kind api.Kind
 		name string
-	}{{api.StorageCluster, "example"}, {api.StoragePool, "volumes"}, {api.StorageClient, "consumer"}} {
+	}{{api.CephCluster, "example"}, {api.CephPool, "volumes"}, {api.CephClient, "consumer"}} {
 		r, err := planned(t, catalog, object.kind, object.name)
 		if err != nil {
 			t.Fatal(object.kind, diagnostics.Of(err))
@@ -187,36 +187,36 @@ func TestClusterDeadlineUnchangedByDelegatedServices(t *testing.T) {
 func TestDelegatedServiceRefusesUntilItsBlockLands(t *testing.T) {
 	graph := func(services []api.Value, children ...api.Object) *compilation.State {
 		catalog := pinnedCatalog(t, func(spec api.Value) api.Value {
-			return spec.WithPath(api.ListValue(append(spec.Get("ceph", "services").Items(), services...)...), "ceph", "services")
+			return spec.WithPath(api.ListValue(append(spec.Get("services").Items(), services...)...), "services")
 		})
 		catalog = api.NewCatalog(append(catalog.Objects(), children...))
 		return compilation.NewState(catalog, catalog, nil)
 	}
-	if got := New(api.StorageCluster, nil).Unsupported(graph(nil)); len(got) != 0 {
+	if got := New(api.CephCluster, nil).Unsupported(graph(nil)); len(got) != 0 {
 		t.Fatalf("the plain graph refuses %+v", got)
 	}
-	if got := New(api.StorageCluster, nil).Unsupported(graph([]api.Value{nfsService("files")})); len(got) != 0 {
+	if got := New(api.CephCluster, nil).Unsupported(graph([]api.Value{nfsService("files")})); len(got) != 0 {
 		t.Fatalf("a direct nfs service refuses %+v", got)
 	}
-	gateway := childOf(api.StorageObjectGateway, "objects", "serviceRef", "rgw.objects")
-	if got := New(api.StorageCluster, nil).Unsupported(graph([]api.Value{httpRGWService("objects")}, gateway)); len(got) != 0 {
+	gateway := childOf(api.CephObjectGateway, "objects", "serviceRef", "rgw.objects")
+	if got := New(api.CephCluster, nil).Unsupported(graph([]api.Value{httpRGWService("objects")}, gateway)); len(got) != 0 {
 		t.Fatalf("a plain rgw service a gateway binds refuses %+v", got)
 	}
-	if got := New(api.StorageCluster, nil).Unsupported(graph([]api.Value{rgwService("objects")}, gateway)); len(got) != 0 {
+	if got := New(api.CephCluster, nil).Unsupported(graph([]api.Value{rgwService("objects")}, gateway)); len(got) != 0 {
 		t.Fatalf("an ssl rgw service a gateway binds refuses %+v", got)
 	}
-	want := []lifecycle.Refusal{{Kind: string(api.StorageCluster), Name: "example",
-		Reason:      "the ingress service ingress.rgw.objects needs cephadm's container_image_haproxy, and spec.ceph.images.haproxy is not set; Bootwright keeps no default",
-		Remediation: "set spec.ceph.images.haproxy of StorageCluster example to an image beneath its Entitlement registry, or remove ingress.rgw.objects from its spec.ceph.services, together with its spec.ceph.serviceBindings entries"}}
-	if got := New(api.StorageCluster, nil).Unsupported(graph([]api.Value{httpRGWService("objects"), ingressService("rgw.objects")}, gateway)); !reflect.DeepEqual(got, want) {
+	want := []lifecycle.Refusal{{Kind: string(api.CephCluster), Name: "example",
+		Reason:      "the ingress service ingress.rgw.objects needs cephadm's container_image_haproxy, and spec.images.haproxy is not set; Bootwright keeps no default",
+		Remediation: "set spec.images.haproxy of CephCluster example to an image beneath its Entitlement registry, or remove ingress.rgw.objects from its spec.services, together with its spec.serviceBindings entries"}}
+	if got := New(api.CephCluster, nil).Unsupported(graph([]api.Value{httpRGWService("objects"), ingressService("rgw.objects")}, gateway)); !reflect.DeepEqual(got, want) {
 		t.Fatalf("ingress.rgw.objects: refuses %+v, want %+v", got, want)
 	}
 	nfsIngress := requestMap("service_type", "ingress", "service_id", "nfs.files", "placement", requestMap("label", "mon", "count", 2),
 		"spec", requestMap("backend_service", "nfs.files", "virtual_ip", "192.0.2.50/24", "frontend_port", 2049, "monitor_port", 9049, "enable_haproxy_protocol", true))
-	want = []lifecycle.Refusal{{Kind: string(api.StorageCluster), Name: "example",
-		Reason:      "the ingress service ingress.nfs.files needs cephadm's container_image_haproxy, and spec.ceph.images.haproxy is not set; Bootwright keeps no default",
-		Remediation: "set spec.ceph.images.haproxy of StorageCluster example to an image beneath its Entitlement registry, or remove ingress.nfs.files from its spec.ceph.services, together with its spec.ceph.serviceBindings entries"}}
-	if got := New(api.StorageCluster, nil).Unsupported(graph([]api.Value{nfsService("files"), nfsIngress})); !reflect.DeepEqual(got, want) {
+	want = []lifecycle.Refusal{{Kind: string(api.CephCluster), Name: "example",
+		Reason:      "the ingress service ingress.nfs.files needs cephadm's container_image_haproxy, and spec.images.haproxy is not set; Bootwright keeps no default",
+		Remediation: "set spec.images.haproxy of CephCluster example to an image beneath its Entitlement registry, or remove ingress.nfs.files from its spec.services, together with its spec.serviceBindings entries"}}
+	if got := New(api.CephCluster, nil).Unsupported(graph([]api.Value{nfsService("files"), nfsIngress})); !reflect.DeepEqual(got, want) {
 		t.Fatalf("ingress.nfs.files: refuses %+v, want %+v", got, want)
 	}
 }

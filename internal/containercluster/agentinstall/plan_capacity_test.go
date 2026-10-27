@@ -24,11 +24,11 @@ func TestFortyEightPhysicalNodesFitThePlanStateEnvelope(t *testing.T) {
 		objects = append(objects, server(name, fmt.Sprintf("198.51.100.%d/24", 40+index), fmt.Sprintf("02:00:00:00:00:%02x", index)))
 		role := "worker"
 		if index < 3 {
-			role = "master"
+			role = "controlPlane"
 		}
 		nodes = append(nodes, node(name, role, name, name+".metal.lab.example.test"))
 	}
-	declared, _ := physicalCatalog().Find(api.ContainerCluster, "metal")
+	declared, _ := physicalCatalog().Find(api.OpenShiftCluster, "metal")
 	declared = declared.WithSpec(declared.Spec().With("nodes", api.ListValue(nodes...)))
 	objects = append(objects, declared)
 	catalog := api.NewCatalog(objects)
@@ -70,7 +70,7 @@ func TestFortyEightPhysicalNodesFitThePlanStateEnvelope(t *testing.T) {
 		{"cluster-install-metal", installBytes, installImpacts(reconciliation.Apply, install), installGroups(reconciliation.Apply, install)},
 		{"cluster-network-metal", []byte(`{"objects":[]}`), []string{"create-cluster-network"}, []reconciliation.Group{{ID: "apply-network", Description: "apply the cluster network", Machines: install.Machines()}}},
 	} {
-		definitions = append(definitions, reconciliation.BlockDefinition{ID: block.id, Description: "realize the cluster", Kind: "ContainerCluster", Object: "metal", Implementation: InstallImplementation, ContentDigest: InstallContentDigest(), Stage: reconciliation.StageClusters, Request: block.request, Impacts: block.impacts, Groups: block.groups})
+		definitions = append(definitions, reconciliation.BlockDefinition{ID: block.id, Description: "realize the cluster", Kind: "OpenShiftCluster", Object: "metal", Implementation: InstallImplementation, ContentDigest: InstallContentDigest(), Stage: reconciliation.StageClusters, Request: block.request, Impacts: block.impacts, Groups: block.groups})
 	}
 	plan, err := reconciliation.NewPlan(reconciliation.Apply, definitions)
 	if err != nil {

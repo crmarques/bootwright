@@ -17,9 +17,6 @@ kind: Machine
 metadata:
   name: controller
 spec:
-  capabilities:
-    - container-runtime
-    - libvirt
   os:
     provided: true
   proxy:
@@ -39,16 +36,15 @@ kind: Machine
 metadata:
   name: sno-01
 spec:
-  capabilities:
-    - openshift-node
   substrate:
     providerRef: lab-libvirt
-    profileRef: sno
+    libvirt:
+      profileRef: sno
+  hardware:
+    rootDevice:
+      deviceName: /dev/vda
   os:
     provided: false
-    install:
-      rootDeviceHints:
-        deviceName: /dev/vda
   network:
     configRef: lab-guests
     attachmentRef: lab-guests
@@ -105,10 +101,7 @@ spec:
       cpu: 1
       memoryMiB: 2048
       diskGiB: 10
-    bmcEmulationDefaults:
-      enabled: true
-      protocol: redfish
-      emulator: sushy-tools
+    bmcEmulation:
       bindAddress: 127.0.0.1
       certificateRef: lab-bmc-tls
       port: 8000
@@ -202,7 +195,7 @@ spec:
       addressRef: ip
 ---
 apiVersion: bootwright.io/v1alpha1
-kind: ContainerCluster
+kind: OpenShiftCluster
 metadata:
   name: sno
 spec:
@@ -212,10 +205,9 @@ spec:
       version: 4.21.15
       channel: stable-4.21
   install:
-    method: agent
     mode: connected
     platform:
-      type: none
+      none: {}
     proxy:
       direct: {}
     ntp:
@@ -254,7 +246,7 @@ spec:
   nodes:
     - name: master-0
       fqdn: master-0.sno.lab.example.test
-      role: master
+      role: controlPlane
       machineRef: sno-01
 ---
 apiVersion: bootwright.io/v1alpha1

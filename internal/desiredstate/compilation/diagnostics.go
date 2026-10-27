@@ -2,6 +2,7 @@ package compilation
 
 import (
 	"context"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -17,6 +18,7 @@ type diagnosticSink struct {
 	limited     bool
 	undecodable map[string]bool
 	excluded    map[string]string
+	secrets     []string
 }
 
 // Comparable keys retain shared strings rather than re-encoding whole
@@ -77,6 +79,15 @@ func (d *diagnosticSink) retractReferences(start, end int, refused map[string]bo
 	d.items = kept
 }
 
+func (d *diagnosticSink) skippedSecrets(directories []string) {
+	d.secrets = slices.Clone(directories)
+	for _, directory := range directories {
+		d.add(diagnostics.Diagnostic{Severity: "warning", Code: "input.secrets-directory", Source: &diagnostics.SourceLocation{Path: directory},
+			Message:     "discovery skips this secrets directory, so the YAML it holds is never desired-state input",
+			Remediation: "move each Secret or other declaration out of the secrets directory, and keep only raw secret files in it"})
+	}
+}
+
 func (d *diagnosticSink) issue(record *objectRecord, issue api.Issue) bool {
 	if issue.Code == "api.reference" && record != nil && d.namesUndecodable(record.object, issue.Field) {
 		return !d.stopped()
@@ -85,7 +96,7 @@ func (d *diagnosticSink) issue(record *objectRecord, issue api.Issue) bool {
 	if item.Code == "" {
 		item.Code = "api.invariant"
 	}
-	if issue.Code == "api.deferred" || issue.Code == "api.selection" {
+	if issue.Code == "api.deferred" || issue.Code == "api.unrealized" || issue.Code == "api.selection" {
 		item.Severity = "warning"
 	}
 	if record != nil {
@@ -111,6 +122,7 @@ func (d *diagnosticSink) issue(record *objectRecord, issue api.Issue) bool {
 				item.Remediation = "set this field explicitly on the recipient object or declare the default reference target"
 			}
 		}
+		item.Field = record.sourceField(issue.Field)
 	}
 	return d.add(item)
 }
@@ -219,6 +231,8 @@ type objectRecord struct {
 	inheritedEnvironment *objectRecord
 	remappings           []map[string]string
 	derived              map[string]fieldSource
+	inheritedSpec        api.Value
+	builtInSpec          api.Value
 }
 
 func (r *objectRecord) location(field string) (diagnostics.SourceLocation, bool) {

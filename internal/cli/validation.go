@@ -16,6 +16,8 @@ import (
 	"github.com/spf13/pflag"
 )
 
+var untilObject = regexp.MustCompile(`^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$`)
+
 func validateInvocation(command *cobra.Command, path string) string {
 	flags := command.Flags()
 	var spec commandSpec
@@ -116,6 +118,9 @@ func validateSharedFlags(command *cobra.Command, path string) string {
 	}
 	if boolValue(flags, "ssh-ask-sudo-password") && selectedJSON(command) {
 		return "--ssh-ask-sudo-password conflicts with " + structuredLabel(command) + " output"
+	}
+	if flags.Lookup("until") != nil && flags.Changed("until") && !untilObject.MatchString(stringValue(flags, "until")) {
+		return "--until must name an add-on instance as <cluster>.<package>"
 	}
 	for _, name := range []string{"clusters", "machines", "replace", "stage"} {
 		if flags.Lookup(name) == nil {

@@ -17,16 +17,15 @@ kind: Machine
 metadata:
   name: compact-01
 spec:
-  capabilities:
-    - openshift-node
   substrate:
     providerRef: lab-libvirt
-    profileRef: compact
+    libvirt:
+      profileRef: compact
+  hardware:
+    rootDevice:
+      deviceName: /dev/vda
   os:
     provided: false
-    install:
-      rootDeviceHints:
-        deviceName: /dev/vda
   network:
     configRef: lab-guests
     attachmentRef: lab-guests
@@ -43,16 +42,15 @@ kind: Machine
 metadata:
   name: compact-02
 spec:
-  capabilities:
-    - openshift-node
   substrate:
     providerRef: lab-libvirt
-    profileRef: compact
+    libvirt:
+      profileRef: compact
+  hardware:
+    rootDevice:
+      deviceName: /dev/vda
   os:
     provided: false
-    install:
-      rootDeviceHints:
-        deviceName: /dev/vda
   network:
     configRef: lab-guests
     attachmentRef: lab-guests
@@ -69,16 +67,15 @@ kind: Machine
 metadata:
   name: compact-03
 spec:
-  capabilities:
-    - openshift-node
   substrate:
     providerRef: lab-libvirt
-    profileRef: compact
+    libvirt:
+      profileRef: compact
+  hardware:
+    rootDevice:
+      deviceName: /dev/vda
   os:
     provided: false
-    install:
-      rootDeviceHints:
-        deviceName: /dev/vda
   network:
     configRef: lab-guests
     attachmentRef: lab-guests
@@ -95,9 +92,6 @@ kind: Machine
 metadata:
   name: controller
 spec:
-  capabilities:
-    - container-runtime
-    - libvirt
   os:
     provided: true
   proxy:
@@ -157,10 +151,7 @@ spec:
       cpu: 4
       memoryMiB: 8192
       diskGiB: 40
-    bmcEmulationDefaults:
-      enabled: true
-      protocol: redfish
-      emulator: sushy-tools
+    bmcEmulation:
       bindAddress: 127.0.0.1
       certificateRef: lab-bmc-tls
       port: 8000
@@ -254,7 +245,7 @@ spec:
       addressRef: ip
 ---
 apiVersion: bootwright.io/v1alpha1
-kind: ContainerCluster
+kind: OpenShiftCluster
 metadata:
   name: compact
 spec:
@@ -264,10 +255,8 @@ spec:
       version: 4.21.15
       channel: stable-4.21
   install:
-    method: agent
     mode: connected
     platform:
-      type: baremetal
       baremetal:
         provisioningNetwork: disabled
     proxy:
@@ -280,16 +269,16 @@ spec:
         address: 198.51.100.10
         interfaceNetworks: []
         source:
-          type: openshift
+          type: installer
       api-int:
         address: 198.51.100.10
         source:
-          type: openshift
+          type: installer
       ingress:
         address: 198.51.100.11
         interfaceNetworks: []
         source:
-          type: openshift
+          type: installer
     agent:
       redfishVirtualMedia:
         artifactServerEndpoint:
@@ -308,15 +297,15 @@ spec:
   nodes:
     - name: master-0
       fqdn: master-0.compact.lab.example.test
-      role: master
+      role: controlPlane
       machineRef: compact-01
     - name: master-1
       fqdn: master-1.compact.lab.example.test
-      role: master
+      role: controlPlane
       machineRef: compact-02
     - name: master-2
       fqdn: master-2.compact.lab.example.test
-      role: master
+      role: controlPlane
       machineRef: compact-03
 ---
 apiVersion: bootwright.io/v1alpha1
@@ -352,7 +341,7 @@ spec:
         targetRevision: main
         path: clusters/compact
         destinationNamespace: bootstrap-demo
-        credentials: bootstrap-repository
+        credentialsRef: bootstrap-repository
         sync:
           automated: true
           prune: false

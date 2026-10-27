@@ -24,7 +24,7 @@ import (
 )
 
 func (s Service) Apply(ctx context.Context, request ApplyRequest) (*OperationResult, error) {
-	selection, err := reconciliation.ParseStages(request.Stages)
+	selection, err := reconciliation.ParseSelection(request.Stages, request.Until)
 	if err != nil {
 		return nil, err
 	}
@@ -34,7 +34,7 @@ func (s Service) Apply(ctx context.Context, request ApplyRequest) (*OperationRes
 // Destroy removes what an apply recorded as owned. It accepts no stage
 // selection: a removal covers exactly the effects that exist.
 func (s Service) Destroy(ctx context.Context, request DestroyRequest) (*OperationResult, error) {
-	return s.mutate(ctx, reconciliation.Destroy, request.ContextName, nil, request.Authorizations, request.Unregistered, request.SkipConfirmation, request.Unattended, request.SSH.Borrowed())
+	return s.mutate(ctx, reconciliation.Destroy, request.ContextName, reconciliation.Selection{}, request.Authorizations, request.Unregistered, request.SkipConfirmation, request.Unattended, request.SSH.Borrowed())
 }
 
 // transition is the single legal next step the durable state permits. A noop
@@ -65,7 +65,7 @@ type transition struct {
 	rebinds   []string
 	rebound   rebinding
 	states    map[string]reconciliation.BlockState
-	selection reconciliation.StageSelection
+	selection reconciliation.Selection
 	// stops is what a fresh removal's quiescence gate observes on the host:
 	// the objects of its blocks whose capability probes quiescence, in plan
 	// order.
@@ -131,7 +131,7 @@ func (b basis) describe() string {
 	return "operation " + b.operation + " (" + string(b.state) + ")"
 }
 
-func (s Service) mutate(ctx context.Context, verb reconciliation.Verb, contextName string, selection reconciliation.StageSelection, authorizations, unregistered []string, skipConfirmation, unattended, borrowed bool) (*OperationResult, error) {
+func (s Service) mutate(ctx context.Context, verb reconciliation.Verb, contextName string, selection reconciliation.Selection, authorizations, unregistered []string, skipConfirmation, unattended, borrowed bool) (*OperationResult, error) {
 	if err := s.available(ctx); err != nil {
 		return nil, err
 	}
@@ -251,7 +251,7 @@ func (s Service) admitApplyView(ctx context.Context, view View, decided transiti
 		if current != "" && current != reconciliation.BlockPending {
 			recordOwnership(owned, block, reconciliation.Apply, current)
 		}
-		if current != reconciliation.BlockDone && (unproved(current) || decided.selection.Selects(block.Stage)) {
+		if current != reconciliation.BlockDone && (unproved(current) || decided.selection.Admits(block)) {
 			starting = append(starting, block)
 		}
 	}
@@ -268,7 +268,7 @@ func (s Service) admitApplyView(ctx context.Context, view View, decided transiti
 
 // decideShared takes one decision from durable state read under the shared
 // lock, together with the identity of the context it read.
-func (s Service) decideShared(ctx context.Context, name string, verb reconciliation.Verb, selection reconciliation.StageSelection) (transition, ContextIdentity, error) {
+func (s Service) decideShared(ctx context.Context, name string, verb reconciliation.Verb, selection reconciliation.Selection) (transition, ContextIdentity, error) {
 	var decided transition
 	var identity ContextIdentity
 	err := s.workspace.ReadLifecycle(ctx, name, func(view View) error {
@@ -323,7 +323,7 @@ func (s Service) proveShared(ctx context.Context, name string, decided transitio
 // consuming steps by their place in the presented plan and the exact command
 // that passes, which keeps the Machines the invocation names unregistered.
 // An unattended invocation must bind each token to its steps' digest (Q117).
-func authorize(contextName string, verb reconciliation.Verb, selection reconciliation.StageSelection, plan reconciliation.Plan, authorizations, unregistered []string, unattended bool) error {
+func authorize(contextName string, verb reconciliation.Verb, selection reconciliation.Selection, plan reconciliation.Plan, authorizations, unregistered []string, unattended bool) error {
 	consumers := map[string][]string{}
 	required := requiredTokens(plan)
 	digests := map[string]string{}
@@ -376,11 +376,14 @@ func authorize(contextName string, verb reconciliation.Verb, selection reconcili
 	return nil
 }
 
-// invocationFlags are the flags a remedy repeats: stage, authorizations, unregistered.
-func invocationFlags(selection reconciliation.StageSelection, authorizing, unregistered []string) []string {
+// invocationFlags are the flags a remedy repeats: stage, until, authorizations, unregistered.
+func invocationFlags(selection reconciliation.Selection, authorizing, unregistered []string) []string {
 	var flags []string
-	if len(selection) != 0 {
-		flags = append(flags, "--stage", strings.Join(selection.Names(), ","))
+	if len(selection.Stages) != 0 {
+		flags = append(flags, "--stage", strings.Join(selection.Stages.Names(), ","))
+	}
+	if selection.Until != "" {
+		flags = append(flags, "--until", selection.Until)
 	}
 	flags = append(flags, authorizing...)
 	if len(unregistered) != 0 {
@@ -406,13 +409,13 @@ func AuthorizationDigest(plan reconciliation.Plan, token string) string {
 // from the context it read. Changed desired state never turns a continuation
 // into a reconciliation. An operation whose finalization is due is marked
 // before any other decision is taken.
-func (s Service) decide(ctx context.Context, view View, verb reconciliation.Verb, selection reconciliation.StageSelection) (transition, error) {
+func (s Service) decide(ctx context.Context, view View, verb reconciliation.Verb, selection reconciliation.Selection) (transition, error) {
 	decided, err := s.decideFrom(ctx, view, verb, selection)
 	decided.basis.context = view.Identity().Name
 	return decided, err
 }
 
-func (s Service) decideFrom(ctx context.Context, view View, verb reconciliation.Verb, selection reconciliation.StageSelection) (transition, error) {
+func (s Service) decideFrom(ctx context.Context, view View, verb reconciliation.Verb, selection reconciliation.Selection) (transition, error) {
 	store := s.store(view)
 	index, err := store.Index(ctx)
 	if errors.Is(err, operationstore.ErrRetiredIndex) {
@@ -453,7 +456,7 @@ func (s Service) decideFrom(ctx context.Context, view View, verb reconciliation.
 // decideOver is the decision over a current operation whose finalization is
 // not due. A preview also takes it over the record a due finalization would
 // leave, so it decides as the verb does once that finalization is done.
-func (s Service) decideOver(ctx context.Context, view View, store OperationStore, verb reconciliation.Verb, selection reconciliation.StageSelection, operation operationstore.Operation, frozen reconciliation.Plan, states map[string]reconciliation.BlockState, attempts map[string]int) (transition, error) {
+func (s Service) decideOver(ctx context.Context, view View, store OperationStore, verb reconciliation.Verb, selection reconciliation.Selection, operation operationstore.Operation, frozen reconciliation.Plan, states map[string]reconciliation.BlockState, attempts map[string]int) (transition, error) {
 	if verb == reconciliation.Destroy && supersedable(operation) {
 		return s.supersede(ctx, view, store, operation, frozen, states, attempts)
 	}
@@ -466,9 +469,14 @@ func (s Service) decideOver(ctx context.Context, view View, store OperationStore
 			return transition{}, err
 		}
 		if verb == reconciliation.Apply {
-			if err := refuseStageBoundary(name, frozen, states, selection); err != nil {
+			bound, err := bindSelection(name, frozen, selection)
+			if err != nil {
 				return transition{}, err
 			}
+			if err := refuseStageBoundary(name, frozen, states, bound); err != nil {
+				return transition{}, err
+			}
+			selection = bound
 		}
 		decided := transition{verb: verb, operation: operation, plan: frozen, states: states, source: operation.Source, selection: selection}
 		if verb == reconciliation.Destroy && operation.Source != "" {
@@ -707,12 +715,37 @@ func settled(identity ContextIdentity, decided transition, recovered string) *Op
 // While any block is failed, the work is the retries the scheduler would
 // start, so a selection that admits none of the failed blocks refuses whichever
 // one comes first.
-func refuseStageBoundary(contextName string, plan reconciliation.Plan, states map[string]reconciliation.BlockState, selection reconciliation.StageSelection) error {
+func refuseStageBoundary(contextName string, plan reconciliation.Plan, states map[string]reconciliation.BlockState, selection reconciliation.Selection) error {
 	kind, admitted := firstAdmission(plan, states, selection, nil, nil, nil)
 	if len(admitted) != 0 {
 		return nil
 	}
 	tokens := authorizing(plan)
+	if selection.Until != "" {
+		flags := tokens
+		if len(selection.Stages) != 0 {
+			flags = append([]string{"--stage", strings.Join(selection.Stages.Names(), ",")}, tokens...)
+		}
+		unstaged := selection
+		unstaged.Stages = nil
+		if kind == StepStart {
+			if ready := reconciliation.Startable(plan, states, unstaged); len(ready) != 0 {
+				return failure("lifecycle.stage", "the selected stages have nothing to start",
+					"repeat "+widenedApply(contextName, selection, ready[0].Stage, append([]string{"--until", selection.Until}, tokens...)))
+			}
+		}
+		if kind == StepRetry {
+			for _, block := range plan.Blocks {
+				if states[block.ID] == reconciliation.BlockFailed && unstaged.Admits(block) {
+					return failure("lifecycle.stage", "the block this operation must retry is outside the selected stages",
+						"repeat "+widenedApply(contextName, selection, block.Stage, append([]string{"--until", selection.Until}, tokens...)))
+				}
+			}
+		}
+		return failure("lifecycle.stage",
+			"the add-on instance --until names and the blocks it requires have nothing to start under this selection",
+			"repeat "+contextCommand(contextName, string(reconciliation.Apply), flags...)+" without --until")
+	}
 	if kind == StepRetry {
 		failed, _ := plan.Block(heldBehind(plan, states, nil))
 		return failure("lifecycle.stage",
@@ -729,10 +762,27 @@ func refuseStageBoundary(contextName string, plan reconciliation.Plan, states ma
 		"repeat "+widenedApply(contextName, selection, ready[0].Stage, tokens))
 }
 
+func bindSelection(contextName string, plan reconciliation.Plan, selection reconciliation.Selection) (reconciliation.Selection, error) {
+	bound, ok := selection.Bind(plan)
+	if ok {
+		return bound, nil
+	}
+	candidates := reconciliation.UntilCandidates(plan)
+	if len(candidates) == 0 {
+		return selection, failure("lifecycle.stage", "the plan has no add-on instance for --until to name",
+			"repeat "+contextCommand(contextName, string(reconciliation.Apply))+" without --until")
+	}
+	if len(candidates) > 8 {
+		candidates = append(candidates[:8], "and "+strconv.Itoa(len(candidates)-8)+" more")
+	}
+	return selection, failure("lifecycle.stage", "the plan has no add-on instance named by --until",
+		"name one of: "+strings.Join(candidates, ", "))
+}
+
 // widenedApply is the apply whose selection adds the stage a refusal needs, in
 // the canonical order --stage lists them, with the plan's authorizations.
-func widenedApply(contextName string, selection reconciliation.StageSelection, needed reconciliation.Stage, tokens []string) string {
-	stages := slices.Clone(selection)
+func widenedApply(contextName string, selection reconciliation.Selection, needed reconciliation.Stage, tokens []string) string {
+	stages := slices.Clone(selection.Stages)
 	if !slices.Contains(stages, needed) {
 		stages = append(stages, needed)
 	}
@@ -747,7 +797,7 @@ func widenedApply(contextName string, selection reconciliation.StageSelection, n
 // the one both verbs report before registration. It is pure, because a preview
 // takes it too: it compiles the frozen input and plans, and binds, reserves and
 // writes nothing.
-func (s Service) freshApply(ctx context.Context, view View, selection reconciliation.StageSelection) (transition, error) {
+func (s Service) freshApply(ctx context.Context, view View, selection reconciliation.Selection) (transition, error) {
 	state, err := s.compile(ctx, view)
 	if err != nil {
 		return transition{}, err
@@ -761,6 +811,10 @@ func (s Service) freshApply(ctx context.Context, view View, selection reconcilia
 	}
 	if len(plan.Blocks) == 0 {
 		return transition{}, failure("lifecycle.state", "the selected Environment declares nothing this executable would create", "declare a managed infrastructure service, or see "+supportedExample)
+	}
+	selection, err = bindSelection(view.Identity().Name, plan, selection)
+	if err != nil {
+		return transition{}, err
 	}
 	if err := refuseStageBoundary(view.Identity().Name, plan, nil, selection); err != nil {
 		return transition{}, err
@@ -2014,7 +2068,7 @@ func startingBlocks(decided transition) []reconciliation.Block {
 	var starting []reconciliation.Block
 	for _, block := range decided.plan.Blocks {
 		current := decided.states[block.ID]
-		if current != reconciliation.BlockDone && (unproved(current) || decided.selection.Selects(block.Stage)) {
+		if current != reconciliation.BlockDone && (unproved(current) || decided.selection.Admits(block)) {
 			starting = append(starting, block)
 		}
 	}

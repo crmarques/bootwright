@@ -44,7 +44,7 @@ func (f *objectHandoffFixture) ObjectUserCredentials(_ context.Context, contextN
 func TestCompiledObjectUserHandoffUsesPublicGatewayReference(t *testing.T) {
 	state, _ := compileAcceptance(t, contractSources(t, "libvirt-3-nodes-ceph-object+user"))
 	catalog := state.Effective()
-	users := catalog.OfKind(api.StorageObjectUser)
+	users := catalog.OfKind(api.CephObjectUser)
 	if len(users) != 1 {
 		t.Fatal("expected one compiled object user")
 	}
@@ -79,20 +79,20 @@ func TestCompiledObjectUserHandoffUsesPublicGatewayReference(t *testing.T) {
 			for i, object := range objects {
 				name := object.Name()
 				fields := object.Spec().Fields()
-				if scenario == "moved-cluster" && object.Kind() == api.StorageCluster && name == request.Cluster {
+				if scenario == "moved-cluster" && object.Kind() == api.CephCluster && name == request.Cluster {
 					name = selectedCluster
 				}
-				if scenario == "moved-gateway" && object.Kind() == api.StorageObjectGateway && name == gateway {
+				if scenario == "moved-gateway" && object.Kind() == api.CephObjectGateway && name == gateway {
 					name = "moved-gateway"
 				}
 				for j := range fields {
-					if scenario == "moved-zone" && object.Kind() == api.StorageObjectGateway && fields[j].Name == "zone" {
+					if scenario == "moved-zone" && object.Kind() == api.CephObjectGateway && fields[j].Name == "zone" {
 						fields[j].Value = api.StringValue("moved-zone")
 					}
-					if scenario == "moved-gateway" && object.Kind() == api.StorageObjectUser && fields[j].Name == "objectGatewayRef" {
+					if scenario == "moved-gateway" && object.Kind() == api.CephObjectUser && fields[j].Name == "objectGatewayRef" {
 						fields[j].Value = api.StringValue("moved-gateway")
 					}
-					if scenario == "moved-cluster" && (object.Kind() == api.StorageObjectUser || object.Kind() == api.StorageObjectGateway) && fields[j].Name == "clusterRef" {
+					if scenario == "moved-cluster" && (object.Kind() == api.CephObjectUser || object.Kind() == api.CephObjectGateway) && fields[j].Name == "clusterRef" {
 						fields[j].Value = api.StringValue(selectedCluster)
 					}
 				}
@@ -103,7 +103,7 @@ func TestCompiledObjectUserHandoffUsesPublicGatewayReference(t *testing.T) {
 			if scenario == "missing-frozen" {
 				frozen = nil
 			}
-			reader := &readerFake{resources: &lifecycle.StorageResourcesResult{Frozen: frozen}, proofs: map[string][]lifecycle.BlockEvidence{string(api.StorageObjectUser) + "/" + user.Name(): {{Kind: block.Kind, Object: block.Object, Implementation: block.Implementation, Verb: reconciliation.Apply, State: reconciliation.BlockDone, Evidence: evidence}}}}
+			reader := &readerFake{resources: &lifecycle.StorageResourcesResult{Frozen: frozen}, proofs: map[string][]lifecycle.BlockEvidence{string(api.CephObjectUser) + "/" + user.Name(): {{Kind: block.Kind, Object: block.Object, Implementation: block.Implementation, Verb: reconciliation.Apply, State: reconciliation.BlockDone, Evidence: evidence}}}}
 			fixture := &objectHandoffFixture{catalog: current}
 			service := inspection.New(fixture, cephInspection{reconciler: reader}, fixture, fixture, func(context.Context) (string, error) { return "handoff", nil }, fixture)
 			ordinary, err := service.ClusterInfo(context.Background(), inspection.ClusterInfoRequest{Names: []string{selectedCluster}})

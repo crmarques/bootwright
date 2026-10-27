@@ -66,7 +66,7 @@ func TestLabSNOExampleSelectsItsInstallerFromTheDeclaredRelease(t *testing.T) {
 		kind api.Kind
 		name string
 	}{
-		{api.Machine, "controller"}, {api.Machine, "sno-01"}, {api.ContainerCluster, "sno"},
+		{api.Machine, "controller"}, {api.Machine, "sno-01"}, {api.OpenShiftCluster, "sno"},
 		{api.InfraProvider, "lab-libvirt"}, {api.NetworkConfig, "lab-guests"},
 		{api.Proxy, "lab-proxy"}, {api.DNSServer, "lab-dns"},
 		{api.NTPServer, "lab-ntp"}, {api.ArtifactServer, "lab-artifacts"},
@@ -80,15 +80,12 @@ func TestLabSNOExampleSelectsItsInstallerFromTheDeclaredRelease(t *testing.T) {
 	if node.Spec().Has("os", "installProfileRef") || node.Spec().Get("os", "provided").Bool() {
 		t.Fatal("the cluster node is not installer-provisioned", node.Spec().Get("os"))
 	}
-	if !slices.Contains(node.Spec().Get("capabilities").Strings(), "openshift-node") {
-		t.Fatal("the cluster node does not declare the capability its cluster requires")
-	}
 }
 
 func TestLabSNOExampleBMCListenerUsesLoopback(t *testing.T) {
 	state, _ := compileAcceptance(t, snoExampleSources(t))
 	provider := requireObject(t, state.Effective(), api.InfraProvider, "lab-libvirt")
-	if got := provider.Spec().Get("libvirt", "bmcEmulationDefaults", "bindAddress").Text(); got != "127.0.0.1" {
+	if got := provider.Spec().Get("libvirt", "bmcEmulation", "bindAddress").Text(); got != "127.0.0.1" {
 		t.Fatalf("BMC bindAddress = %q; want loopback", got)
 	}
 }
@@ -97,7 +94,7 @@ func TestLabSNOExampleBMCListenerUsesLoopback(t *testing.T) {
 // three endpoint slots from that one address rather than repeating it.
 func TestLabSNOExampleResolvesEveryEndpointFromItsOneNode(t *testing.T) {
 	state, _ := compileAcceptance(t, snoExampleSources(t))
-	cluster := requireObject(t, state.Effective(), api.ContainerCluster, "sno")
+	cluster := requireObject(t, state.Effective(), api.OpenShiftCluster, "sno")
 	for _, slot := range []string{"api", "api-int", "ingress"} {
 		endpoint := cluster.Spec().Get("install", "endpoints", slot)
 		if endpoint.Get("address").Text() != "198.51.100.21" {
@@ -181,10 +178,10 @@ func snoExampleWithHints(t *testing.T, hints string) desiredstate.Sources {
 // that is not rotational.
 func TestLabSNOExampleCarriesEveryRootDeviceHintToItsAgentConfig(t *testing.T) {
 	sources := snoExampleWithHints(t, "deviceName: \"/dev/vda\"\n"+
-		"        model: \"1e3\"\n"+
-		"        vendor: \"0o17\"\n"+
-		"        minSizeGigabytes: 0\n"+
-		"        rotational: false\n")
+		"      model: \"1e3\"\n"+
+		"      vendor: \"0o17\"\n"+
+		"      minSizeGigabytes: 0\n"+
+		"      rotational: false\n")
 	state, _ := compileAcceptance(t, sources)
 	if unsupported := lifecycle.Identities(agentinstall.Refusals(state.Effective())); len(unsupported) != 0 {
 		t.Fatalf("the example declares a cluster this contract cannot install: %v", unsupported)
@@ -207,18 +204,30 @@ func TestLabSNOExampleCarriesEveryRootDeviceHintToItsAgentConfig(t *testing.T) {
 }
 
 // The example's node installs to a disk its libvirt provider creates, which
-// carries no WWN, SCSI address or serial number, so admission refuses each of
-// those hints at its own path, naming the Machine, before anything is planned.
+// carries no WWN, SCSI address or serial number, so the schema admits those
+// hints only in a bare-metal arm, and a bare-metal arm on a libvirt provider's
+// Machine is refused at the arm, naming the Machine, before anything is
+// planned.
 func TestLabSNOExampleRefusesAHintItsCreatedDiskCannotMatch(t *testing.T) {
 	for hint, value := range map[string]string{"hctl": "1:0:0:0", "serialNumber": "0987654321", "wwn": "0x5000c500a1b2c3d4"} {
 		t.Run(hint, func(t *testing.T) {
-			sources := snoExampleWithHints(t, "deviceName: /dev/vda\n        "+hint+": \""+value+"\"\n")
+			const arm = "      profileRef: sno\n"
+			sources := snoExampleSources(t)
+			replaced := 0
+			for index, file := range sources.Files {
+				body := string(file.Bytes())
+				replaced += strings.Count(body, arm)
+				sources.Files[index] = desiredstate.NewSourceFile(file.Path(), []byte(strings.Replace(body, arm, arm+"    baremetal:\n      rootDevice:\n        "+hint+": \""+value+"\"\n", 1)))
+			}
+			if replaced != 1 {
+				t.Fatalf("the example selects %d libvirt profiles, want 1", replaced)
+			}
 			state, _, err := wireCompiler().Compile(context.Background(), sources)
 			if state != nil || err == nil {
 				t.Fatalf("a %s hint on a created disk was admitted", hint)
 			}
 			for _, diagnostic := range diagnostics.Of(err) {
-				if diagnostic.Code == "api.invariant" && diagnostic.Field == "$.spec.os.install.rootDeviceHints."+hint &&
+				if diagnostic.Code == "api.invariant" && diagnostic.Field == "$.spec.substrate.baremetal" &&
 					diagnostic.Object != nil && diagnostic.Object.Kind == string(api.Machine) && diagnostic.Object.Name == "sno-01" {
 					return
 				}
@@ -291,4 +300,23 @@ func TestLabSNOExamplePlansTheWholeGraph(t *testing.T) {
 			t.Fatalf("%s is ordered after %s: %v", pair[0], pair[1], blocks)
 		}
 	}
+}
+
+// A cluster whose derived endpoint names and node FQDNs exceed a DNS name's
+// 253 bytes refuses at validate, at the cluster's name and at each node whose
+// FQDN is derived; a shorter zone compiles.
+func TestADerivedClusterNameLongerThanADNSNameRefuses(t *testing.T) {
+	zone := func(last int) exampleEdit {
+		long := strings.Repeat("a", 59) + "." + strings.Repeat("b", 59) + "." + strings.Repeat("c", 59) + "." + strings.Repeat("d", last) + ".test"
+		return exampleEdit{"environment.yaml", "    base: lab.example.test\n", "    base: lab.example.test\n    containerClusters: " + long + "\n"}
+	}
+	edited := editedExample(t, "lab-sno", zone(59))
+	refusal := requireRefusal(t, edited, "api.invariant", "OpenShiftCluster/sno", "$.metadata.name")
+	if !strings.Contains(refusal.Message, "the endpoint name api-int.sno.") || !strings.Contains(refusal.Message, "253 bytes") {
+		t.Fatalf("the endpoint refusal says %q", refusal.Message)
+	}
+	if node := requireRefusal(t, edited, "api.invariant", "OpenShiftCluster/sno", "$.spec.nodes[0].name"); !strings.Contains(node.Message, "the derived node FQDN master-0.sno.") {
+		t.Fatalf("the node refusal says %q", node.Message)
+	}
+	compileAcceptance(t, editedExample(t, "lab-sno", zone(48)))
 }

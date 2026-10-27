@@ -1,0 +1,55 @@
+apiVersion: bootwright.io/v1alpha1
+kind: OpenShiftCluster
+metadata:
+  name: kubevirt
+
+spec:
+  distribution:
+    type: openshift
+
+    release:
+      version: 4.21.15
+
+  install:
+    mode: connected
+
+    endpoints:
+      api:
+        address: 198.51.100.10
+
+        source:
+          type: external
+
+      api-int:
+        address: 198.51.100.10
+
+        source:
+          type: external
+
+      ingress:
+        address: 198.51.100.11
+
+        source:
+          type: external
+
+    pullSecretRef: openshift-pull-secret
+
+    nodeSSH:
+      keyPairRef: kubevirt-cluster-admin-ssh-key
+
+    ntp:
+      - serverRef: lab-ntp
+        endpointRef: ip
+
+  nodes:
+    - name: master-0
+      role: controlPlane
+      machineRef: kubevirt-01
+
+    - name: master-1
+      role: controlPlane
+      machineRef: kubevirt-02
+
+    - name: master-2
+      role: controlPlane
+      machineRef: kubevirt-03

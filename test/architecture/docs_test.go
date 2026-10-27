@@ -769,7 +769,7 @@ var askRuleNoAsk = map[string]string{
 	"machine list": "read local state", "machine info": "read local inventory",
 	"cluster list": "read local state", "cluster oc": "read context-owned access metadata",
 	"cluster kubectl": "read context-owned access metadata", "version": "none", "help": "none",
-	"completion bash": "none", "completion zsh": "none", "completion fish": "none",
+	"schema": "none", "completion bash": "none", "completion zsh": "none", "completion fish": "none",
 	"completion powershell": "none",
 }
 
@@ -1098,12 +1098,12 @@ func TestDocsVendorSupportViolations(t *testing.T) {
 	if got := vendorSupportViolations(pages); len(got) != 0 {
 		t.Errorf("allowed uses gave %v", got)
 	}
-	pages = append(pages, markdownFile{path: "specs/storage-coverage.md", lines: []string{"Each row is required when", "IBM-supported by the frozen release; a Release Support", "table lists the support", "status of each."}})
+	pages = append(pages, markdownFile{path: "specs/ceph-coverage.md", lines: []string{"Each row is required when", "IBM-supported by the frozen release; a Release Support", "table lists the support", "status of each."}})
 	got := vendorSupportViolations(pages)
 	if len(got) != 3 {
 		t.Fatalf("a reintroduced phrase gave %v, want three violations", got)
 	}
-	variants := []markdownFile{{path: "specs/storage.md", lines: []string{
+	variants := []markdownFile{{path: "specs/ceph.md", lines: []string{
 		"The vendor supported release, the Red Hat-supported path, a provider supported layout,",
 		"and a row supported by IBM, supported by Red Hat or supported by the vendor.",
 		"A path Bootwright supports, a supported flag and supported by the schema are fine.",
@@ -1111,7 +1111,7 @@ func TestDocsVendorSupportViolations(t *testing.T) {
 	if got := vendorSupportViolations(append(slices.Clone(pages[:4]), variants...)); len(got) != 6 {
 		t.Errorf("the vendor-support variants gave %v, want six violations", got)
 	}
-	for _, want := range []string{`specs/storage-coverage.md:2 says "IBM-supported"`, `specs/storage-coverage.md:2 says "Release Support"`, `specs/storage-coverage.md:3 says "support status"`} {
+	for _, want := range []string{`specs/ceph-coverage.md:2 says "IBM-supported"`, `specs/ceph-coverage.md:2 says "Release Support"`, `specs/ceph-coverage.md:3 says "support status"`} {
 		if !slices.ContainsFunc(got, func(violation string) bool { return strings.HasPrefix(violation, want) }) {
 			t.Errorf("no violation starts %q in %v", want, got)
 		}

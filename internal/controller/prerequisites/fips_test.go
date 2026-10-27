@@ -17,7 +17,7 @@ type fipsProbe struct {
 
 func (p *fipsProbe) FIPSMode(context.Context) (bool, error) { p.calls++; return p.enabled, p.err }
 func fipsCatalog() api.Catalog {
-	return api.NewCatalog([]api.Object{api.NewObject(api.ContainerCluster, "fixture", api.Value{}, api.MapValue().WithPath(api.BoolValue(true), "security", "fips", "enabled"))})
+	return api.NewCatalog([]api.Object{api.NewObject(api.OpenShiftCluster, "fixture", api.Value{}, api.MapValue().WithPath(api.BoolValue(true), "security", "fips", "enabled"))})
 }
 func TestSelectedFIPSClusterRequiresPositiveKernelObservation(t *testing.T) {
 	for _, p := range []*fipsProbe{nil, {}, {enabled: true, err: errors.New("unreadable")}, {enabled: true}} {

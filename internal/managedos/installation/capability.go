@@ -476,7 +476,7 @@ func refusedContinuation(contextName string, request Request) error {
 	controller := request.Target.Controller
 	if request.Private != nil && (!strings.HasPrefix(controller.Endpoint, "https://") || !controller.TLSVerify) {
 		return refusal("lifecycle.state", "this operation froze a private publication for "+machine+
-			" whose controller is not reached over a verified connection, which this executable refuses", remediation)
+			" whose BMC is not reached over a verified connection, which this executable refuses", remediation)
 	}
 	return nil
 }

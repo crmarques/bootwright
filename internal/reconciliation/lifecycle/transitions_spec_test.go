@@ -152,8 +152,10 @@ func stateMachineRows() map[string]stateMachineRow {
 			transition: "continue that exact apply under any stage selection, or start a fresh destroy of the blocks it started",
 			cases: map[string]stateMachineCase{
 				"an apply paused at a stage boundary": {
-					arrange: func(t *testing.T, h *harness) { applyChained(t, h, nil, string(reconciliation.StageInfraComponents)) },
-					apply:   "continue", destroy: "fresh destroy",
+					arrange: func(t *testing.T, h *harness) {
+						applyChained(t, h, nil, string(reconciliation.StageInfrastructureServices))
+					},
+					apply: "continue", destroy: "fresh destroy",
 				},
 			},
 		},
@@ -333,7 +335,7 @@ func decisionOver(t *testing.T, h *harness, verb reconciliation.Verb) string {
 	var decided transition
 	err := h.workspace.ReadLifecycle(ctx, testContextName, func(view View) error {
 		var err error
-		decided, err = h.service.decide(ctx, view, verb, nil)
+		decided, err = h.service.decide(ctx, view, verb, reconciliation.Selection{})
 		return err
 	})
 	switch {
@@ -608,17 +610,17 @@ func inDeclaredOrder(t *testing.T, states map[string]bool) []string {
 func blockStep(t *testing.T, state reconciliation.BlockState) string {
 	t.Helper()
 	plan := reconciliation.Plan{Verb: reconciliation.Apply, Blocks: []reconciliation.Block{
-		{BlockDefinition: reconciliation.BlockDefinition{ID: "block", Stage: reconciliation.StageInfraComponents}},
+		{BlockDefinition: reconciliation.BlockDefinition{ID: "block", Stage: reconciliation.StageInfrastructureServices}},
 	}}
 	states := map[string]reconciliation.BlockState{"block": state}
 	var steps []string
 	if unproved(state) {
 		steps = append(steps, "observe")
 	}
-	if len(reconciliation.Startable(plan, states, nil)) == 1 {
+	if len(reconciliation.Startable(plan, states, reconciliation.Selection{})) == 1 {
 		steps = append(steps, "attempt")
 	}
-	if kind, admitted := firstAdmission(plan, states, nil, nil, nil, nil); kind == StepRetry && len(admitted) == 1 {
+	if kind, admitted := firstAdmission(plan, states, reconciliation.Selection{}, nil, nil, nil); kind == StepRetry && len(admitted) == 1 {
 		steps = append(steps, "retry")
 	}
 	switch len(steps) {

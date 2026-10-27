@@ -7,7 +7,7 @@ edits:
   with: "    size: 4\n"
 expect:
 - code: api.invariant
-  kind: StoragePool
+  kind: CephPool
   name: rbd-data
   field: $.spec.replicated.size
   message: host-domain replicas exceed declared OSD-host capacity

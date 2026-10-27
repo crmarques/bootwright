@@ -1,6 +1,6 @@
 # Single-node OpenShift with MetalLB
 
-This self-contained input extends [lab-sno](../../container-clusters/lab-sno/README.md)
+This self-contained input extends [lab-sno](../../openshift-clusters/lab-sno/README.md)
 with one binding selecting `metallb`. Read that runbook's controller, network,
 Secret and capacity prerequisites, and make the same local substitutions.
 All addresses and identities here are synthetic. Operator acceptance remains

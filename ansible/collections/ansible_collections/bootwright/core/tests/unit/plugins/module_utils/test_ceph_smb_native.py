@@ -47,7 +47,7 @@ def scope(transport="native"):
               "devices": [{"path": "/dev/sda", "serial": "drive-scsi" + str(i), "sizeBytes": 1024 ** 3}], "labels": [], "location": {},
               "sshKeyRef": "fleet-key"} for i in range(1, 4)]
     names = [host["name"] for host in hosts]
-    return {"controller": "controller", "version": "ceph-core-v32", "cluster": "example", "owner": OWNER, "fsid": FSID,
+    return {"controller": "controller", "version": "ceph-core-v33", "cluster": "example", "owner": OWNER, "fsid": FSID,
             "image": "registry.example.test/example/ceph@sha256:" + "a" * 64,
             "cephadm": {"path": "/usr/sbin/cephadm", "packageVersion": "synthetic-package"},
             "release": "synthetic-release", "ansiblePackageVersion": "synthetic-ansible", "packageRepository": "https://publisher.example.test/ceph",
@@ -720,7 +720,7 @@ def recorded_scope(value, delegated):
 
 @pytest.mark.parametrize("kind", ["ceph.smb.share", "ceph.smb.join.auth"])
 def test_smb_recovery_scope_binds_every_recorded_member_but_delegated(kind):
-    value = request(kind, transport="verified-tunnel")
+    value = request(kind, transport="verifiedTunnel")
     own = [{"hosts": ["node-1", "node-2"], "name": "smb.files"}]
     rgw = [{"hosts": ["node-3"], "name": "rgw.objects"}]
     record = recorded_scope(value, rgw + own)
@@ -740,7 +740,7 @@ def test_smb_recovery_scope_binds_every_recorded_member_but_delegated(kind):
 
 
 def test_dispatch_routes_smb_phases_to_the_smb_worker(monkeypatch):
-    value = request("ceph.smb.share", transport="verified-tunnel")
+    value = request("ceph.smb.share", transport="verifiedTunnel")
     reached = []
     monkeypatch.setattr(ceph_smb_native, "dispatch", lambda envelope: reached.append(envelope) or {"routed": True})
     envelope = {"request": value, "host": "node-1", "phase": "smb_observe", "private": {}}

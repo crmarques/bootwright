@@ -25,7 +25,7 @@ func declaredPolicy() api.Value {
 }
 
 func objectBucketObject(name string, pairs ...any) api.Object {
-	return childOf(api.StorageObjectBucket, name, append([]any{"objectGatewayRef", "objects", "ownerRef", "app-writer"}, pairs...)...)
+	return childOf(api.CephObjectBucket, name, append([]any{"objectGatewayRef", "objects", "ownerRef", "app-writer"}, pairs...)...)
 }
 
 func bucketCatalog(change func(api.Value) api.Value, gateway, bucket api.Object) api.Catalog {
@@ -35,7 +35,7 @@ func bucketCatalog(change func(api.Value) api.Value, gateway, bucket api.Object)
 func plannedBucketBlock(t *testing.T, catalog api.Catalog) (reconciliation.BlockDefinition, []string) {
 	t.Helper()
 	input := lifecycle.PlanInput{Verb: reconciliation.Apply, Context: lifecycle.ContextIdentity{Name: "synthetic"}, State: compilation.NewState(catalog, catalog, nil), Controller: "controller"}
-	plan, err := New(api.StorageObjectBucket, nil).Plan(context.Background(), input)
+	plan, err := New(api.CephObjectBucket, nil).Plan(context.Background(), input)
 	if err != nil || len(plan.Definitions) != 1 {
 		t.Fatalf("the object bucket planned %+v (%v)", plan.Definitions, diagnostics.Of(err))
 	}
@@ -55,21 +55,21 @@ func plannedBucket(t *testing.T, catalog api.Catalog) ObjectBucket {
 func withTLSRGW(service string) func(api.Value) api.Value {
 	return func(spec api.Value) api.Value {
 		spec = withPairAndRGW(spec)
-		return spec.WithPath(api.ListValue(tlsBinding(service, "gateway-tls")), "ceph", "serviceBindings")
+		return spec.WithPath(api.ListValue(tlsBinding(service, "gateway-tls")), "serviceBindings")
 	}
 }
 
 func TestObjectBucketBlockRequiresItsOwner(t *testing.T) {
 	block, _ := plannedBucketBlock(t, bucketCatalog(withPairAndHTTPRGW, objectGateway("objects"), objectBucketObject("app-data")))
-	if block.ID != "ceph-object-bucket-app-data" || block.ID != ObjectBucketBlockID("app-data") || block.Kind != string(api.StorageObjectBucket) || block.Object != "app-data" ||
+	if block.ID != "ceph-object-bucket-app-data" || block.ID != ObjectBucketBlockID("app-data") || block.Kind != string(api.CephObjectBucket) || block.Object != "app-data" ||
 		block.Stage != reconciliation.StageClusters || !slices.Equal(block.Exclusive, []string{"ceph/example"}) || block.Description != "realize Ceph object bucket app-data" {
 		t.Fatalf("the object bucket block is %+v", block)
 	}
 	if !slices.Equal(block.Dependencies, []string{"ceph-cluster-example", "ceph-image-example"}) ||
-		!slices.Equal(block.Requires, []reconciliation.ObjectRef{{Kind: string(api.StorageObjectUser), Object: "app-writer"}}) {
+		!slices.Equal(block.Requires, []reconciliation.ObjectRef{{Kind: string(api.CephObjectUser), Object: "app-writer"}}) {
 		t.Fatalf("the object bucket block depends on %v and requires %v", block.Dependencies, block.Requires)
 	}
-	removal, err := New(api.StorageObjectBucket, nil).Removal(context.Background(), reconciliation.Block{BlockDefinition: block})
+	removal, err := New(api.CephObjectBucket, nil).Removal(context.Background(), reconciliation.Block{BlockDefinition: block})
 	if err != nil || removal.Description != "remove Ceph object bucket app-data" || !slices.Equal(removal.Consumes, []string{reconciliation.AuthorizationDataLoss}) {
 		t.Fatalf("the object bucket removal is %+v (%v)", removal, err)
 	}
@@ -92,7 +92,7 @@ func TestObjectBucketRequestGolden(t *testing.T) {
 	port := func(spec api.Value) api.Value {
 		spec = withCorePair(spec)
 		service := requestMap("service_type", "rgw", "service_id", "objects", "placement", requestMap("label", "mon", "count", 2), "spec", requestMap("rgw_frontend_port", 8080))
-		return spec.WithPath(api.ListValue(append(spec.Get("ceph", "services").Items(), service)...), "ceph", "services")
+		return spec.WithPath(api.ListValue(append(spec.Get("services").Items(), service)...), "services")
 	}
 	if bucket := plannedBucket(t, bucketCatalog(port, objectGateway("objects"), objectBucketObject("app-data"))); bucket.Port != 8080 || bucket.CertificateRef != "" {
 		t.Fatalf("an authored frontend port froze as %+v", bucket)
@@ -120,8 +120,8 @@ func TestObjectBucketPinsATLSBackendToItsBoundCertificateOnly(t *testing.T) {
 	}
 	ingress := func(spec api.Value) api.Value {
 		spec = withPairAndHTTPRGW(spec)
-		spec = spec.WithPath(api.ListValue(append(spec.Get("ceph", "services").Items(), ingressService("rgw.objects"))...), "ceph", "services")
-		return spec.WithPath(api.ListValue(tlsBinding("ingress.rgw.objects", "gateway-tls")), "ceph", "serviceBindings")
+		spec = spec.WithPath(api.ListValue(append(spec.Get("services").Items(), ingressService("rgw.objects"))...), "services")
+		return spec.WithPath(api.ListValue(tlsBinding("ingress.rgw.objects", "gateway-tls")), "serviceBindings")
 	}
 	if b := plannedBucket(t, bucketCatalog(ingress, gateway, objectBucketObject("app-data"))); b.Port != 80 || b.Endpoint != "" || b.CertificateRef != "" {
 		t.Fatalf("a bucket behind a TLS ingress froze as %+v", b)
@@ -129,31 +129,32 @@ func TestObjectBucketPinsATLSBackendToItsBoundCertificateOnly(t *testing.T) {
 }
 
 func TestObjectBucketPlanRefusals(t *testing.T) {
-	long := strings.Repeat("b", 45)
-	_, err := planned(t, bucketCatalog(withPairAndHTTPRGW, objectGateway("objects"), objectBucketObject(long)), api.StorageObjectBucket, long)
-	refusedWith(t, err, "api.invariant", "StorageObjectBucket "+long+" has a name too long to identify its block, whose identity holds at most 63 characters", "rename the StorageObjectBucket to at most 44 characters")
-	if !reconciliation.ValidSegment(ObjectBucketBlockID(strings.Repeat("b", 44))) {
-		t.Fatal("a 44-character bucket name does not fit its block identity")
+	long := strings.Repeat("b", 63)
+	if _, err := planned(t, bucketCatalog(withPairAndHTTPRGW, objectGateway("objects"), objectBucketObject(long)), api.CephObjectBucket, long); err != nil {
+		t.Fatalf("a 63-character bucket name was refused: %v", diagnostics.Of(err))
+	}
+	if !reconciliation.ValidSegment(ObjectBucketBlockID(long)) {
+		t.Fatal("a 63-character bucket name does not yield a block identity")
 	}
 	float := requestMap("Version", "2012-10-17", "Statement", api.ListValue(requestMap("Condition", requestMap("NumericLessThan", requestMap("s3:max-keys", api.NumberValue("1.5"))))))
-	_, err = planned(t, bucketCatalog(withPairAndHTTPRGW, objectGateway("objects"), objectBucketObject("app-data", "policy", float)), api.StorageObjectBucket, "app-data")
-	refusedWith(t, err, "api.invariant", "StorageObjectBucket app-data declares a policy holding a value that is not a JSON string, integer, boolean, list or mapping",
+	_, err := planned(t, bucketCatalog(withPairAndHTTPRGW, objectGateway("objects"), objectBucketObject("app-data", "policy", float)), api.CephObjectBucket, "app-data")
+	refusedWith(t, err, "api.invariant", "CephObjectBucket app-data declares a policy holding a value that is not a JSON string, integer, boolean, list or mapping",
 		"write spec.policy as the native S3 bucket policy document with only strings, integers, booleans, lists and mappings")
-	const typeMessage = "StorageObjectBucket app-data declares a policy holding a value that is not a JSON string, integer, boolean, list or mapping"
+	const typeMessage = "CephObjectBucket app-data declares a policy holding a value that is not a JSON string, integer, boolean, list or mapping"
 	const typeRemedy = "write spec.policy as the native S3 bucket policy document with only strings, integers, booleans, lists and mappings"
 	for name, value := range map[string]api.Value{"a null": {}, "an integer beyond int64": api.IntegerValue("9223372036854775808"), "an exponent": api.NumberValue("1e3")} {
 		bad := requestMap("Version", "2012-10-17", "Statement", api.ListValue(requestMap("Sid", value)))
-		_, err = planned(t, bucketCatalog(withPairAndHTTPRGW, objectGateway("objects"), objectBucketObject("app-data", "policy", bad)), api.StorageObjectBucket, "app-data")
+		_, err = planned(t, bucketCatalog(withPairAndHTTPRGW, objectGateway("objects"), objectBucketObject("app-data", "policy", bad)), api.CephObjectBucket, "app-data")
 		if d := diagnostics.Of(err); len(d) != 1 || d[0].Message != typeMessage || d[0].Remediation != typeRemedy {
 			t.Fatalf("%s: %+v", name, d)
 		}
 	}
 	large := requestMap("Version", "2012-10-17", "Statement", api.ListValue(requestMap("Sid", strings.Repeat("s", 65536))))
-	_, err = planned(t, bucketCatalog(withPairAndHTTPRGW, objectGateway("objects"), objectBucketObject("app-data", "policy", large)), api.StorageObjectBucket, "app-data")
-	refusedWith(t, err, "api.invariant", "StorageObjectBucket app-data declares a policy larger than 65536 bytes of JSON", "shorten spec.policy to at most 65536 bytes of JSON")
+	_, err = planned(t, bucketCatalog(withPairAndHTTPRGW, objectGateway("objects"), objectBucketObject("app-data", "policy", large)), api.CephObjectBucket, "app-data")
+	refusedWith(t, err, "api.invariant", "CephObjectBucket app-data declares a policy larger than 65536 bytes of JSON", "shorten spec.policy to at most 65536 bytes of JSON")
 	catalog := planCatalog(3, 2, withPairAndHTTPRGW, objectGateway("objects"), objectUserObject("app-writer"), objectBucketObject("app-data"))
 	_, gatewayErr := gatewayRequests(catalog, objectGateway("objects"), "synthetic")
-	_, err = planned(t, catalog, api.StorageObjectBucket, "app-data")
+	_, err = planned(t, catalog, api.CephObjectBucket, "app-data")
 	if gatewayErr == nil || err == nil || !reflect.DeepEqual(diagnostics.Of(err), diagnostics.Of(gatewayErr)) {
 		t.Fatalf("the bucket refused %v; its gateway refused %v", diagnostics.Of(err), diagnostics.Of(gatewayErr))
 	}
@@ -204,8 +205,8 @@ func TestObjectBucketEvidenceNamesOnlyItsBucket(t *testing.T) {
 }
 
 func TestObjectBucketScopeRowNamesItsOwnerAndZone(t *testing.T) {
-	block := frozenScopeBlock(t, api.StorageObjectBucket, "app-data", bucketRuntime())
-	if got := ResourceScope(api.Catalog{}, api.StorageObjectBucket, "app-data", []reconciliation.Block{block}); got != "bucket app-data of user app-writer in zone objects/objects/objects" {
+	block := frozenScopeBlock(t, api.CephObjectBucket, "app-data", bucketRuntime())
+	if got := ResourceScope(api.Catalog{}, api.CephObjectBucket, "app-data", []reconciliation.Block{block}); got != "bucket app-data of user app-writer in zone objects/objects/objects" {
 		t.Fatalf("the object bucket scope row reads %q", got)
 	}
 }
@@ -216,7 +217,7 @@ func TestObjectBucketRunsWithoutOutputsOrProducedMaterial(t *testing.T) {
 	frozen.ObjectBucket = &ObjectBucket{Backend: "rgw.objects", CertificateRef: "gateway-tls", Endpoint: "s3.example.test", Gateway: "objects", Name: "app-data", Owner: "app-writer",
 		Policy: bucketPolicyText, Port: 443, Realm: "objects", Zone: "objects", ZoneGroup: "objects"}
 	e := executionFor(t, frozen)
-	e.Block.ID, e.Block.Kind, e.Block.Object = ObjectBucketBlockID("app-data"), string(api.StorageObjectBucket), "app-data"
+	e.Block.ID, e.Block.Kind, e.Block.Object = ObjectBucketBlockID("app-data"), string(api.CephObjectBucket), "app-data"
 	e = withMaterial(e, frozen)
 	e.Material["gateway-tls"] = secrets.NewMaterial(map[secrets.Part][]byte{secrets.CertificatePart: []byte(gatewayCertificatePEM), secrets.PrivateKeyPart: []byte(gatewayKeyPEM)})
 	runtime := frozen
@@ -224,7 +225,7 @@ func TestObjectBucketRunsWithoutOutputsOrProducedMaterial(t *testing.T) {
 	evidence := readyEvidence(runtime)
 	evidence.Request, evidence.Resource = e.Block.RequestDigest, ResourceEvidence{ID: "app-data"}
 	runner := &recordingRunner{result: lifecycle.RunResult{Evidence: evidenceBytes(t, evidence)}}
-	observation, err := New(api.StorageObjectBucket, runner).Observe(context.Background(), e)
+	observation, err := New(api.CephObjectBucket, runner).Observe(context.Background(), e)
 	if err != nil || observation.Effect != reconciliation.EffectCompleted || len(observation.Produced) != 0 {
 		t.Fatalf("the bucket observation returned %+v (%v)", observation, diagnostics.Of(err))
 	}
@@ -233,12 +234,12 @@ func TestObjectBucketRunsWithoutOutputsOrProducedMaterial(t *testing.T) {
 		t.Fatalf("the bucket observation ran %+v", runner.request)
 	}
 	runner.result.Produced = userProduced(userMaterial)
-	if observation, err := New(api.StorageObjectBucket, runner).Observe(context.Background(), e); err == nil || observation.Effect != reconciliation.EffectUnknown {
+	if observation, err := New(api.CephObjectBucket, runner).Observe(context.Background(), e); err == nil || observation.Effect != reconciliation.EffectUnknown {
 		t.Fatalf("produced material from a bucket was accepted: %+v (%v)", observation, err)
 	}
 	mismatched := e
-	mismatched.Block.Kind = string(api.StorageObjectUser)
-	if _, err := New(api.StorageObjectBucket, runner).Observe(context.Background(), mismatched); err == nil {
+	mismatched.Block.Kind = string(api.CephObjectUser)
+	if _, err := New(api.CephObjectBucket, runner).Observe(context.Background(), mismatched); err == nil {
 		t.Fatal("a bucket request under another kind was accepted")
 	}
 }

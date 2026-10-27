@@ -51,9 +51,9 @@ func node(name, fqdn, machineRef string) api.Value {
 }
 
 func storageCluster(name, management string, nodes ...api.Value) api.Object {
-	return api.NewObject(api.StorageCluster, name, api.Value{}, api.MapValue(
-		field("type", text("ceph")), field("management", text(management)),
-		field("ceph", api.MapValue(field("topology", api.MapValue(field("nodes", api.ListValue(nodes...)))))),
+	return api.NewObject(api.CephCluster, name, api.Value{}, api.MapValue(
+		field("management", text(management)),
+		field("topology", api.MapValue(field("nodes", api.ListValue(nodes...)))),
 	))
 }
 
@@ -61,7 +61,7 @@ func sessionCatalog(nodes ...api.Value) api.Catalog {
 	return api.NewCatalog([]api.Object{
 		storageCluster("ceph", "managed", nodes...),
 		storageCluster("outside", "external"),
-		api.NewObject(api.ContainerCluster, "ocp", api.Value{}, api.MapValue(field("type", text("openshift")))),
+		api.NewObject(api.OpenShiftCluster, "ocp", api.Value{}, api.MapValue(field("type", text("openshift")))),
 	})
 }
 
@@ -120,7 +120,7 @@ func TestClusterSessionRefusalsOpenNothing(t *testing.T) {
 		{name: "unknown cluster", cluster: "missing", code: "access.target", nodes: labNodes()},
 		{name: "no cluster name", code: "access.target", nodes: labNodes()},
 		{name: "external storage", cluster: "outside", code: "cluster.not-applicable", nodes: labNodes()},
-		{name: "OpenShift ContainerCluster", cluster: "ocp", code: "access.unavailable", nodes: labNodes()},
+		{name: "OpenShift OpenShiftCluster", cluster: "ocp", code: "access.unavailable", nodes: labNodes()},
 		{name: "unknown node", cluster: "ceph", node: "rhel-09", code: "access.target", nodes: labNodes()},
 		{name: "role ordinal is no selector", cluster: "ceph", node: "mon-0", code: "access.target", nodes: labNodes()},
 		{name: "duplicate FQDN", cluster: "ceph", node: "s.lab.test", code: "access.target", nodes: shared},

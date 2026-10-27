@@ -128,7 +128,7 @@ func TestFrozenRequestsMatchTheirGoldens(t *testing.T) {
 // TestPhysicalNodesAreFrozenAsOperatorOwnedHardware derives them.
 func TestFrozenPhysicalNodesMatchTheirGolden(t *testing.T) {
 	catalog := physicalCatalog()
-	declared, _ := catalog.Find(api.ContainerCluster, "metal")
+	declared, _ := catalog.Find(api.OpenShiftCluster, "metal")
 	nodes, err := nodeProjections(catalog, declared, testContext, "controller", &Requirements{})
 	if err != nil {
 		t.Fatalf("projecting: %v", diagnostics.Of(err))

@@ -12,7 +12,7 @@ import (
 // domain's membership names, whatever arm declares the nodes.
 func TestAMachineBoundByTwoClusterNodesIsRefusedAtTheMembershipField(t *testing.T) {
 	members := func(object api.Object) (environment.Membership, bool) {
-		if object.Kind() != api.StorageCluster {
+		if object.Kind() != api.CephCluster {
 			return environment.Membership{}, false
 		}
 		return environment.MembersOf("$.spec.array.nodes", object.Spec().Get("array", "nodes")), true
@@ -20,7 +20,7 @@ func TestAMachineBoundByTwoClusterNodesIsRefusedAtTheMembershipField(t *testing.
 	cluster := func(name string) *objectRecord {
 		node := api.MapValue(api.FieldValue{Name: "machineRef", Value: api.StringValue("shared")})
 		spec := api.MapValue(api.FieldValue{Name: "array", Value: api.MapValue(api.FieldValue{Name: "nodes", Value: api.ListValue(node)})})
-		return &objectRecord{object: api.NewObject(api.StorageCluster, name, api.Value{}, spec)}
+		return &objectRecord{object: api.NewObject(api.CephCluster, name, api.Value{}, spec)}
 	}
 	for _, test := range []struct {
 		records []*objectRecord

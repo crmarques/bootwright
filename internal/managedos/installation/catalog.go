@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/crmarques/bootwright/internal/reconciliation"
 	"github.com/crmarques/bootwright/internal/substrate"
 )
 
@@ -16,7 +17,7 @@ const Implementation = "os-install-anaconda-v1"
 // Kind is shared with the substrate; resolution also requires the implementation.
 const Kind = "Machine"
 
-const requestVersion = "os-install-anaconda-v16"
+const requestVersion = "os-install-anaconda-v17"
 
 // installationBudgets are the waits every installation this build plans
 // freezes. The installer takes minutes to write a disk; a physical server adds
@@ -112,7 +113,7 @@ const provedDiskBoot = "proved-installation-disk-boot,replay-safe-unread-registr
 
 // BlockID names the block this capability contributes. A consumer states
 // requirements by API object, never by this identity.
-func BlockID(machine string) string { return "os-install-" + machine }
+func BlockID(machine string) string { return reconciliation.BlockIdentity("os-install-", machine) }
 
 // ContentDigest binds a plan to the exact behavior this build implements, so
 // changing the request shape, the derived Kickstart or the published layout

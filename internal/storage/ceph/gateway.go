@@ -13,7 +13,7 @@ import (
 	api "github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/reconciliation"
 	"github.com/crmarques/bootwright/internal/secrets"
-	"github.com/crmarques/bootwright/internal/storage"
+	"github.com/crmarques/bootwright/internal/storage/cephcluster"
 )
 
 type Gateway struct {
@@ -60,10 +60,12 @@ type rgwIngressSpec struct {
 	VirtualInterfaceNetworks []string `json:"virtual_interface_networks,omitempty"`
 }
 
-func GatewayBlockID(gateway string) string { return "ceph-gateway-" + gateway }
+func GatewayBlockID(gateway string) string {
+	return reconciliation.BlockIdentity("ceph-gateway-", gateway)
+}
 
 func GatewayPoolBlockID(gateway, suffix string) string {
-	return "ceph-gateway-" + gateway + "-pool-" + strings.ReplaceAll(suffix, ".", "-")
+	return reconciliation.BlockIdentity("ceph-gateway-", gateway+"-pool-"+strings.ReplaceAll(suffix, ".", "-"))
 }
 
 func derivedZonePools(gateway api.Object) []string {
@@ -134,10 +136,10 @@ func (c Capability) ProveBinding(ctx context.Context, contextName string, block 
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	if c.kind == api.StorageCluster {
+	if c.kind == api.CephCluster {
 		return proveGatewayUnit(contextName, block, material)
 	}
-	if c.kind != api.StorageObjectGateway {
+	if c.kind != api.CephObjectGateway {
 		return nil
 	}
 	r, err := DecodeRequest(block.Request)
@@ -150,17 +152,17 @@ func (c Capability) ProveBinding(ctx context.Context, contextName string, block 
 	}
 	value, found := material[secret]
 	if !found {
-		return failure("lifecycle.state", "the TLS Secret a StorageObjectGateway binds is not bound to this apply", "")
+		return failure("lifecycle.state", "the TLS Secret a CephObjectGateway binds is not bound to this apply", "")
 	}
 	name, fqdn := r.Gateway.Name, r.Gateway.Endpoint
 	set := secrets.Command(contextName, "set") + " --name " + secret + " --certificate-file <path> --private-key-file <path>"
 	leaf, ok := boundLeaf(value)
 	if !ok {
-		return secrets.Refusal("part", "the certificate of Secret "+secret+" that StorageObjectGateway "+name+" binds cannot be read", contextName, secret, "store a readable certificate and its private key with "+set+", then apply again")
+		return secrets.Refusal("part", "the certificate of Secret "+secret+" that CephObjectGateway "+name+" binds cannot be read", contextName, secret, "store a readable certificate and its private key with "+set+", then apply again")
 	}
 	if leaf.VerifyHostname(fqdn) != nil {
-		return secrets.Refusal("part", "the certificate of Secret "+secret+" does not name "+fqdn+", the endpoint of StorageObjectGateway "+name+" that clients and its readiness proof connect to", contextName, secret,
-			"store a certificate whose subject alternative names include "+fqdn+" (a DNS name or a matching wildcard) with "+set+", or set spec.endpoint.fqdn of StorageObjectGateway "+name+" to a name the certificate holds, then apply again")
+		return secrets.Refusal("part", "the certificate of Secret "+secret+" does not name "+fqdn+", the endpoint of CephObjectGateway "+name+" that clients and its readiness proof connect to", contextName, secret,
+			"store a certificate whose subject alternative names include "+fqdn+" (a DNS name or a matching wildcard) with "+set+", or set spec.endpoint.fqdn of CephObjectGateway "+name+" to a name the certificate holds, then apply again")
 	}
 	return nil
 }
@@ -183,12 +185,12 @@ func proveGatewayUnit(contextName string, block reconciliation.Block, material m
 	secret := r.Service.Bindings[at].SecretRef
 	value, found := material[secret]
 	if !found {
-		return failure("lifecycle.state", "the TLS Secret the management gateway of a StorageCluster binds is not bound to this apply", "")
+		return failure("lifecycle.state", "the TLS Secret the management gateway of a CephCluster binds is not bound to this apply", "")
 	}
 	set := secrets.Command(contextName, "set") + " --name " + secret + " --certificate-file <path> --private-key-file <path>"
 	leaf, ok := boundLeaf(value)
 	if !ok {
-		return secrets.Refusal("part", "the certificate of Secret "+secret+" that the management gateway of StorageCluster "+r.Cluster+" binds cannot be read", contextName, secret, "store a readable certificate and its private key with "+set+", then apply again")
+		return secrets.Refusal("part", "the certificate of Secret "+secret+" that the management gateway of CephCluster "+r.Cluster+" binds cannot be read", contextName, secret, "store a readable certificate and its private key with "+set+", then apply again")
 	}
 	for _, document := range unitDocuments(r) {
 		if document.ServiceType != "mgmt-gateway" {
@@ -197,14 +199,14 @@ func proveGatewayUnit(contextName string, block reconciliation.Block, material m
 		spec, _ := document.Spec.(map[string]any)
 		if vip, _ := spec["virtual_ip"].(string); vip != "" {
 			if leaf.VerifyHostname(vip) != nil {
-				return secrets.Refusal("part", "the certificate of Secret "+secret+" does not name "+vip+", the virtual IP of the management gateway of StorageCluster "+r.Cluster+" that clients and its readiness proof connect to", contextName, secret,
+				return secrets.Refusal("part", "the certificate of Secret "+secret+" does not name "+vip+", the virtual IP of the management gateway of CephCluster "+r.Cluster+" that clients and its readiness proof connect to", contextName, secret,
 					"store a certificate whose subject alternative names include the IP address "+vip+" with "+set+", or set the management gateway's spec.virtual_ip and its ingress's spec.virtual_ip to an address the certificate holds, then apply again")
 			}
 			continue
 		}
 		for _, host := range document.Placement.Hosts {
 			if leaf.VerifyHostname(host) != nil {
-				return secrets.Refusal("part", "the certificate of Secret "+secret+" does not name "+host+", a host of the management gateway of StorageCluster "+r.Cluster+" that clients and its readiness proof connect to", contextName, secret,
+				return secrets.Refusal("part", "the certificate of Secret "+secret+" does not name "+host+", a host of the management gateway of CephCluster "+r.Cluster+" that clients and its readiness proof connect to", contextName, secret,
 					"store a certificate whose subject alternative names include "+host+" (a DNS name or a matching wildcard) with "+set+", or place the management gateway only on hosts the certificate names, then apply again")
 			}
 		}
@@ -225,7 +227,7 @@ func boundLeaf(value secrets.Material) (*x509.Certificate, bool) {
 
 func gatewayBindings(cluster api.Object, services ...string) []GatewayBinding {
 	out := []GatewayBinding{}
-	for _, binding := range cluster.Spec().Get("ceph", "serviceBindings").Items() {
+	for _, binding := range cluster.Spec().Get("serviceBindings").Items() {
 		ref := binding.Get("serviceRef").Text()
 		if !slices.Contains(services, ref) {
 			continue
@@ -244,7 +246,7 @@ func gatewayBindings(cluster api.Object, services ...string) []GatewayBinding {
 }
 
 func frontingIngress(cluster api.Object, backend string) (api.Value, bool) {
-	for _, svc := range cluster.Spec().Get("ceph", "services").Items() {
+	for _, svc := range cluster.Spec().Get("services").Items() {
 		if svc.Get("service_type").Text() == "ingress" && svc.Get("spec", "backend_service").Text() == backend {
 			return svc, true
 		}
@@ -276,27 +278,27 @@ func declaredPlacementPools(gateway api.Object) []string {
 
 func gatewayRequest(c api.Catalog, cluster, gateway api.Object, base Request) (Request, error) {
 	spec := gateway.Spec()
-	svc, found := storage.NativeService(cluster, spec.Get("serviceRef").Text())
+	svc, found := cephcluster.NativeService(cluster, spec.Get("serviceRef").Text())
 	if !found {
-		return Request{}, failure("api.invariant", "StorageObjectGateway "+gateway.Name()+" binds no declared rgw service", "set spec.serviceRef to rgw.<service_id> of a declared rgw service")
+		return Request{}, failure("api.invariant", "CephObjectGateway "+gateway.Name()+" binds no declared rgw service", "set spec.serviceRef to rgw.<service_id> of a declared rgw service")
 	}
 	document, err := unitDocumentOf(cluster, svc, rgwSpecOf(spec))
 	if err != nil {
 		return Request{}, err
 	}
-	documents, bound := []json.RawMessage{document}, []string{storage.NativeServiceName(svc)}
-	if ingress, found := frontingIngress(cluster, storage.NativeServiceName(svc)); found {
+	documents, bound := []json.RawMessage{document}, []string{cephcluster.NativeServiceName(svc)}
+	if ingress, found := frontingIngress(cluster, cephcluster.NativeServiceName(svc)); found {
 		fronting, err := unitDocumentOf(cluster, ingress, rgwIngressSpecOf)
 		if err != nil {
 			return Request{}, err
 		}
-		documents, bound = append(documents, fronting), append(bound, storage.NativeServiceName(ingress))
+		documents, bound = append(documents, fronting), append(bound, cephcluster.NativeServiceName(ingress))
 	}
 	bindings, endpoint := gatewayBindings(cluster, bound...), spec.Get("endpoint", "fqdn").Text()
 	if len(bindings) != 0 && endpoint == "" {
 		name := gateway.Name()
-		return Request{}, failure("api.invariant", "StorageObjectGateway "+name+" terminates TLS at "+bindings[0].ServiceRef+" but declares no spec.endpoint, whose FQDN its certificate must name",
-			"declare spec.endpoint on StorageObjectGateway "+name+": spec.endpoint.fqdn with the name its clients use, or spec.endpoint: {} to derive it from the gateway, cluster and Environment storage domain")
+		return Request{}, failure("api.invariant", "CephObjectGateway "+name+" terminates TLS at "+bindings[0].ServiceRef+" but declares no spec.endpoint, whose FQDN its certificate must name",
+			"declare spec.endpoint on CephObjectGateway "+name+": spec.endpoint.fqdn with the name its clients use, or spec.endpoint: {} to derive it from the gateway, cluster and Environment storage domain")
 	}
 	zonePools := []string{}
 	for _, suffix := range ZonePoolSuffixes {
@@ -317,17 +319,12 @@ func gatewayDeadline(operation string) time.Duration {
 }
 
 func gatewayRequests(c api.Catalog, gateway api.Object, contextName string) ([]Request, error) {
-	cluster, _ := c.Find(api.StorageCluster, gateway.Spec().Get("clusterRef").Text())
+	cluster, _ := c.Find(api.CephCluster, gateway.Spec().Get("clusterRef").Text())
 	base, err := baseRequest(c, cluster, contextName)
 	if err != nil {
 		return nil, err
 	}
 	name, suffixes := gateway.Name(), derivedZonePools(gateway)
-	for _, suffix := range suffixes {
-		if !reconciliation.ValidSegment(GatewayPoolBlockID(name, suffix)) {
-			return nil, failure("api.invariant", "StorageObjectGateway "+name+" has a name too long to identify its derived zone pool blocks, whose identities hold at most 63 characters", "rename the StorageObjectGateway to at most 30 characters")
-		}
-	}
 	size, minSize := zonePoolReplicas(base)
 	osdHosts := 0
 	for _, host := range base.Hosts {
@@ -336,11 +333,11 @@ func gatewayRequests(c api.Catalog, gateway api.Object, contextName string) ([]R
 		}
 	}
 	if size >= osdHosts {
-		remedy := "add OSD-bearing hosts to StorageCluster " + cluster.Name()
+		remedy := "add OSD-bearing hosts to CephCluster " + cluster.Name()
 		if base.Config["global"]["osd_pool_default_size"] != "2" {
-			remedy += ", or set osd_pool_default_size and osd_pool_default_min_size to \"2\" under its spec.ceph.config.global"
+			remedy += ", or set osd_pool_default_size and osd_pool_default_min_size to \"2\" under its spec.config.global"
 		}
-		return nil, failure("api.invariant", fmt.Sprintf("StorageObjectGateway %s derives its zone pools with the cluster's default replica size %d, which needs more than %d OSD-bearing hosts; %d are declared", name, size, size, osdHosts), remedy)
+		return nil, failure("api.invariant", fmt.Sprintf("CephObjectGateway %s derives its zone pools with the cluster's default replica size %d, which needs more than %d OSD-bearing hosts; %d are declared", name, size, size, osdHosts), remedy)
 	}
 	if err := pgBudget(c, cluster, base, defaultRule); err != nil {
 		return nil, err
@@ -350,7 +347,7 @@ func gatewayRequests(c api.Catalog, gateway api.Object, contextName string) ([]R
 	for _, suffix := range suffixes {
 		r := base
 		r.Action = "pool"
-		r.Pool = &Pool{Name: zone + ".rgw." + suffix, Type: "replicated", Role: "rgw", Application: storage.RoleApplication("rgw"), CrushRule: defaultRule,
+		r.Pool = &Pool{Name: zone + ".rgw." + suffix, Type: "replicated", Role: "rgw", Application: cephcluster.RoleApplication("rgw"), CrushRule: defaultRule,
 			Autoscale: PoolAutoscale{Mode: "on"}, PGNum: int(clampPGs(0, 0)), Size: size, MinSize: minSize}
 		requests = append(requests, r)
 	}

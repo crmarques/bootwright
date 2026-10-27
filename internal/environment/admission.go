@@ -104,11 +104,6 @@ func validateController(environment api.Object, catalog api.Catalog, members fun
 	if !controller.Spec().Get("access", "local").Bool() || controller.Spec().Has("access", "ssh") {
 		add("controller must reference the local Machine with access.local: true and no SSH access", "give "+controller.Identity()+" access.local: true and no spec.access.ssh")
 	}
-	if !slices.ContainsFunc(controller.Spec().Get("capabilities").Items(), func(capability api.Value) bool {
-		return capability.Text() == "container-runtime"
-	}) {
-		add("controller Machine must declare the container-runtime capability", "add container-runtime to spec.capabilities on "+controller.Identity())
-	}
 	for _, machine := range catalog.OfKind(api.Machine) {
 		if machine.Name() != name && api.ValidLexical("name", machine.Name()) && machine.Spec().Get("access", "local").Bool() {
 			add("only the controller Machine may declare local access; Machine/"+machine.Name()+" also declares access.local: true", "remove spec.access.local from "+machine.Identity())

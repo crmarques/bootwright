@@ -157,7 +157,7 @@ func goldenPlan(t *testing.T) reconciliation.Plan {
 			ContentDigest: strings.Repeat("b", 64), Request: json.RawMessage(`{"machine":"node-01","release":"9.6"}`),
 		},
 		{
-			ID: "server-lab", Description: "serve artifacts for lab", Stage: reconciliation.StageInfraComponents,
+			ID: "server-lab", Description: "serve artifacts for lab", Stage: reconciliation.StageInfrastructureServices,
 			Impacts: []string{"create-container-unit lab"},
 			Groups:  []reconciliation.Group{{ID: "start-service", Description: "start the service", Machines: []string{"controller"}}},
 			Kind:    "ArtifactServer", Object: "lab", Implementation: "artifact-server-nginx-v1",

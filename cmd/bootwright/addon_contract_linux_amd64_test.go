@@ -13,7 +13,7 @@ import (
 	co "github.com/crmarques/bootwright/internal/addons/clusterobjects"
 	"github.com/crmarques/bootwright/internal/addons/instance"
 	"github.com/crmarques/bootwright/internal/addons/packages"
-	"github.com/crmarques/bootwright/internal/containercluster"
+	"github.com/crmarques/bootwright/internal/containercluster/openshift"
 	"github.com/crmarques/bootwright/internal/desiredstate/compilation"
 	"github.com/crmarques/bootwright/internal/reconciliation"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
@@ -41,7 +41,7 @@ func contractAddonRow() contractRow {
 }
 func contractAddonState(state *compilation.State) *compilation.State {
 	catalog := state.Effective()
-	cluster := catalog.OfKind(api.ContainerCluster)[0].Name()
+	cluster := catalog.OfKind(api.OpenShiftCluster)[0].Name()
 	sub := api.MapValue(api.FieldValue{Name: "channel", Value: api.StringValue("stable")}, api.FieldValue{Name: "source", Value: api.StringValue("catalog")}, api.FieldValue{Name: "sourceNamespace", Value: api.StringValue("openshift-marketplace")}, api.FieldValue{Name: "startingCSV", Value: api.StringValue("fixture.v1.0.0")})
 	binding := api.NewObject(api.ClusterAddonBinding, "fixture-binding", api.Value{}, api.MapValue(api.FieldValue{Name: "clusterRef", Value: api.StringValue(cluster)}, api.FieldValue{Name: "packages", Value: api.MapValue(api.FieldValue{Name: "fixture", Value: api.MapValue(api.FieldValue{Name: "subscription", Value: sub})})}))
 	objects := append(catalog.Objects(), binding)
@@ -68,7 +68,7 @@ func contractInstallFixtureRegistry(t *testing.T, resolver capabilityResolver, _
 	}
 	for i := range resolver {
 		if resolver[i].implementation == instance.Implementation {
-			resolver[i].capability = contractAddonCapability{Capability: resolver[i].capability, planner: instance.New(nil, registry, containercluster.AddonFacts)}
+			resolver[i].capability = contractAddonCapability{Capability: resolver[i].capability, planner: instance.New(nil, registry, openshift.AddonFacts)}
 		}
 	}
 }

@@ -62,7 +62,7 @@ func (d contractDouble) doubleDefinition(request contractDoubleRequest) (reconci
 	}
 	return reconciliation.BlockDefinition{
 		ID: "contract-double-" + request.Context, Description: "hold the contract double's marker for " + request.Context,
-		Stage: reconciliation.StageInfraComponents, Kind: string(api.Machine), Object: request.Controller,
+		Stage: reconciliation.StageInfrastructureServices, Kind: string(api.Machine), Object: request.Controller,
 		Implementation: contractDoubleImplementation, ContentDigest: strings.Repeat("d", 64), Request: canonical,
 		Groups: []reconciliation.Group{{ID: "hold", Description: "hold the double's marker", Machines: []string{request.Controller}}},
 	}, nil

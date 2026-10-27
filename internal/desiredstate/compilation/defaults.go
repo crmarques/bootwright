@@ -26,34 +26,25 @@ func inherit(value, fallback api.Value, shape *api.Shape, path string, root bool
 	}
 	blocked := map[string]bool{}
 	selected := []string{}
-	hasSelection := false
-	if shape.Discriminator != "" && value.Has(shape.Discriminator) {
-		selected = shape.ArmValues[value.Get(shape.Discriminator).Text()]
-		hasSelection = true
-	}
 	for _, arm := range shape.Arms {
-		if value.Has(arm) && !(slices.Contains(shape.InertArms, arm) && unpopulated(value.Get(arm))) {
+		if value.Has(arm) {
 			selected = append(selected, arm)
-			hasSelection = true
 		}
 	}
-	if hasSelection {
+	if len(selected) > 0 {
 		for _, arm := range shape.Arms {
 			if !slices.Contains(selected, arm) {
 				blocked[arm] = true
 			}
 		}
-		if shape.Discriminator != "" && !value.Has(shape.Discriminator) && fallback.Has(shape.Discriminator) {
-			for _, arm := range shape.ArmValues[fallback.Get(shape.Discriminator).Text()] {
-				if !slices.Contains(selected, arm) {
-					blocked[shape.Discriminator] = true
-				}
-			}
-		}
 	}
 	for _, condition := range shape.Suppress {
 		path := strings.Split(condition.Field, ".")
-		if value.Get(path...).Equal(condition.Value) && (!condition.FallbackValue.Present() || fallback.Get(path...).Equal(condition.FallbackValue)) {
+		held := value.Has(path...)
+		if condition.Value.Present() {
+			held = value.Get(path...).Equal(condition.Value)
+		}
+		if held && (!condition.FallbackValue.Present() || fallback.Get(path...).Equal(condition.FallbackValue)) {
 			for _, name := range condition.Fields {
 				fallback = withoutPath(fallback, strings.Split(name, "."))
 			}
@@ -103,7 +94,7 @@ func builtInDefaults(value api.Value, shape *api.Shape) api.Value {
 	if value.Type() == api.Mapping {
 		for _, field := range shape.Fields {
 			child := value.Get(field.Name)
-			if !child.Present() && field.Default.Present() {
+			if !child.Present() && field.Default.Present() && !anotherArm(value, shape, field.Name) {
 				child = field.Default
 			}
 			if child.Present() {
@@ -119,6 +110,13 @@ func builtInDefaults(value api.Value, shape *api.Shape) api.Value {
 		value = api.ListValue(items...)
 	}
 	return value
+}
+
+func anotherArm(value api.Value, shape *api.Shape, name string) bool {
+	if !slices.Contains(shape.Arms, name) {
+		return false
+	}
+	return slices.ContainsFunc(shape.Arms, func(arm string) bool { return arm != name && value.Has(arm) })
 }
 
 type expansionBudget struct{ nodes int }

@@ -29,8 +29,6 @@ func TestControllerRequiresOneProvidedLocalMachine(t *testing.T) {
 		{"wrong kind", serviceEnvironment, "", "apiVersion: bootwright.io/v1alpha1\nkind: NTPServer\nmetadata: {name: service-host}\nspec: {management: external, address: time.example.test}\n", "api.reference", "$.spec.controller.machineRef"},
 		{"SSH Machine", serviceEnvironment, strings.Replace(serviceHost, "access: {local: true}", "access: {ssh: {auth: {operatorIdentity: {}}}}", 1), "", "api.invariant", "$.spec.controller.machineRef"},
 		{"unprovided Machine", serviceEnvironment, strings.Replace(serviceHost, "provided: true", "provided: false", 1), "", "api.invariant", "$.spec.controller.machineRef"},
-		{"missing runtime capability", serviceEnvironment, strings.Replace(serviceHost, "  capabilities: [container-runtime]\n", "", 1), "", "api.invariant", "$.spec.controller.machineRef"},
-		{"empty capabilities", serviceEnvironment, strings.Replace(serviceHost, "[container-runtime]", "[]", 1), "", "api.invariant", "$.spec.controller.machineRef"},
 		{"second local Machine", serviceEnvironment, serviceHost, strings.Replace(serviceHost, "name: service-host", "name: other-local", 1), "api.invariant", "$.spec.controller.machineRef"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -46,7 +44,7 @@ func TestControllerRequiresOneProvidedLocalMachine(t *testing.T) {
 }
 
 func TestControllerCannotBeASelectedClusterNode(t *testing.T) {
-	t.Run("ContainerCluster", func(t *testing.T) {
+	t.Run("OpenShiftCluster", func(t *testing.T) {
 		inputs := trustInputs(serviceEnvironment, "")
 		for i, file := range inputs.Files {
 			if file.Path() == "/synthetic/cluster.yaml" {
@@ -58,34 +56,32 @@ func TestControllerCannotBeASelectedClusterNode(t *testing.T) {
 			t.Fatal("controller conflict omitted its cluster", diagnostic.Message)
 		}
 	})
-	t.Run("StorageCluster", func(t *testing.T) {
+	t.Run("CephCluster", func(t *testing.T) {
 		cluster := `apiVersion: bootwright.io/v1alpha1
-kind: StorageCluster
+kind: CephCluster
 metadata: {name: storage}
 spec:
-  type: ceph
   management: managed
-  ceph:
-    release: 20.2.0
-    cephadm:
-      bootstrap: {node: member, singleHostDefaults: true}
-    topology:
-      nodes:
-        - name: member
-          machineRef: service-host
-          labels: [core]
-    services:
-      - service_type: mon
-        placement: {label: core, count: 1}
-      - service_type: mgr
-        placement: {label: core, count: 1}
-      - service_type: osd
-        service_id: data
-        placement: {label: core}
-        spec:
-          data_devices: {paths: [/dev/sdb, /dev/sdc]}
+  release: 20.2.0
+  cephadm:
+    bootstrap: {nodeRef: member, singleHostDefaults: true}
+  topology:
+    nodes:
+      - name: member
+        machineRef: service-host
+        labels: [core]
+  services:
+    - service_type: mon
+      placement: {label: core, count: 1}
+    - service_type: mgr
+      placement: {label: core, count: 1}
+    - service_type: osd
+      service_id: data
+      placement: {label: core}
+      spec:
+        data_devices: {paths: [/dev/sdb, /dev/sdc]}
 `
-		host := strings.Replace(serviceHost, "[container-runtime]", "[container-runtime, ceph-node]", 1)
+		host := serviceHost
 		diagnostic := trustFailure(t, controllerInputs(serviceEnvironment, host, cluster), "api.invariant", "$.spec.controller.machineRef")
 		if !strings.Contains(diagnostic.Message, "storage") {
 			t.Fatal("controller conflict omitted its storage cluster", diagnostic.Message)
@@ -113,7 +109,7 @@ func TestExcludedClusterControllerMembershipDoesNotAffectSelectedGraph(t *testin
 	cluster = strings.Replace(cluster, "machineRef: trust-node", "machineRef: service-host", 1)
 	inputs.Files = append(inputs.Files, desiredstate.NewSourceFile("/synthetic/excluded-cluster.yaml", []byte(cluster)))
 	state, _ := compileAcceptance(t, inputs)
-	if _, found := state.Effective().Find(api.ContainerCluster, "excluded-cluster"); found {
+	if _, found := state.Effective().Find(api.OpenShiftCluster, "excluded-cluster"); found {
 		t.Fatal("excluded cluster was retained by its controller reference")
 	}
 	requireObject(t, state.Effective(), api.Machine, "service-host")

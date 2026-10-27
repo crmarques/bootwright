@@ -1,0 +1,224 @@
+apiVersion: bootwright.io/v1alpha1
+kind: CephCluster
+metadata:
+  name: ceph-lab
+
+spec:
+  management: managed
+
+  distribution:
+    ibm:
+      callHome: enabled
+
+      packages:
+        source: vendor
+
+  release: 9.9.2.0
+  packageVersion: 20.2.2-349.el9cp
+
+  image:
+    base: cp.icr.io/cp/ibm-ceph/ceph-9-rhel10
+    version: v9.9.2-26947
+
+  entitlementRef: ibm-ceph
+
+  cephadm:
+    addressRef: ip
+
+    ansible:
+      packageVersion: 5.0.3-1.el9cp
+
+    clusterSSH:
+      user: bootwright
+      keyRef: ceph-cluster-key
+      transport: verifiedTunnel
+
+    bootstrap:
+      nodeRef: rhel-01
+      addressRef: ip
+
+  networks:
+    publicCIDRs:
+      - 198.51.100.0/24
+
+  config:
+    osd:
+      osd_memory_target_autotune: 'false'
+      osd_memory_target: '4294967296'
+
+  services:
+    - service_type: mon
+
+      placement:
+        count: 3
+
+        hosts:
+          - rhel-01.lab.example.test
+          - rhel-02.lab.example.test
+          - rhel-03.lab.example.test
+
+    - service_type: mgr
+
+      placement:
+        count: 2
+
+        hosts:
+          - rhel-01.lab.example.test
+          - rhel-02.lab.example.test
+
+    - service_type: osd
+      service_id: data
+
+      placement:
+        label: ceph-core
+
+      spec:
+        data_devices:
+          paths:
+            - /dev/sda
+
+    - service_type: mds
+      service_id: files
+
+      placement:
+        count: 2
+
+        hosts:
+          - rhel-01.lab.example.test
+          - rhel-02.lab.example.test
+
+    - service_type: nfs
+      service_id: shares
+
+      placement:
+        count: 2
+
+        hosts:
+          - rhel-04.lab.example.test
+          - rhel-05.lab.example.test
+          - rhel-06.lab.example.test
+
+      spec:
+        port: 12049
+        enable_haproxy_protocol: true
+
+    - service_type: ingress
+      service_id: nfs.shares
+
+      placement:
+        count: 2
+
+        hosts:
+          - rhel-04.lab.example.test
+          - rhel-05.lab.example.test
+
+      spec:
+        backend_service: nfs.shares
+        virtual_ip: 198.51.100.51/24
+        frontend_port: 2049
+        monitor_port: 9049
+        enable_haproxy_protocol: true
+
+    - service_type: rgw
+      service_id: objects
+
+      placement:
+        count: 2
+
+        hosts:
+          - rhel-03.lab.example.test
+          - rhel-06.lab.example.test
+
+      spec:
+        rgw_frontend_port: 8443
+        ssl: false
+
+    - service_type: ingress
+      service_id: rgw.objects
+
+      placement:
+        count: 2
+
+        hosts:
+          - rhel-04.lab.example.test
+          - rhel-05.lab.example.test
+
+      spec:
+        backend_service: rgw.objects
+        virtual_ip: 198.51.100.50/24
+        frontend_port: 443
+        monitor_port: 9043
+        ssl: true
+        certificate_source: inline
+        first_virtual_router_id: 60
+
+  topology:
+    nodes:
+      - name: rhel-01
+        fqdn: rhel-01.lab.example.test
+        machineRef: rhel-01
+
+        labels:
+          - ceph-core
+
+      - name: rhel-02
+        fqdn: rhel-02.lab.example.test
+        machineRef: rhel-02
+
+        labels:
+          - ceph-core
+
+      - name: rhel-03
+        fqdn: rhel-03.lab.example.test
+        machineRef: rhel-03
+
+        labels:
+          - ceph-core
+
+      - name: rhel-04
+        fqdn: rhel-04.lab.example.test
+        machineRef: rhel-04
+
+        labels:
+          - ceph-core
+
+      - name: rhel-05
+        fqdn: rhel-05.lab.example.test
+        machineRef: rhel-05
+
+        labels:
+          - ceph-core
+
+      - name: rhel-06
+        fqdn: rhel-06.lab.example.test
+        machineRef: rhel-06
+
+        labels:
+          - ceph-core
+
+  images:
+    haproxy:
+      base: cp.icr.io/cp/synthetic/haproxy
+      version: qualification-placeholder
+
+    keepalived:
+      base: cp.icr.io/cp/synthetic/keepalived
+      version: qualification-placeholder
+
+    samba:
+      base: cp.icr.io/cp/synthetic/samba
+      version: qualification-placeholder
+
+    samba_metrics:
+      base: cp.icr.io/cp/synthetic/samba_metrics
+      version: qualification-placeholder
+
+  serviceBindings:
+    - serviceRef: ingress.rgw.objects
+
+      secrets:
+        - path: /spec/ssl_cert
+          secretRef: rgw-objects-tls
+
+        - path: /spec/ssl_key
+          secretRef: rgw-objects-tls

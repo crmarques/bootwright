@@ -5,6 +5,7 @@ import (
 	"go/ast"
 	"go/parser"
 	"go/token"
+	"maps"
 	"path/filepath"
 	"reflect"
 	"slices"
@@ -12,6 +13,7 @@ import (
 	"testing"
 
 	"github.com/crmarques/bootwright/internal/diagnostics"
+	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
 )
 
 // cliResults is every type a command may encode as its JSON result.
@@ -30,6 +32,7 @@ var cliResults = []reflect.Type{
 	reflect.TypeFor[exportResult](),
 	reflect.TypeFor[helpPresentation](),
 	reflect.TypeFor[versionPresentation](),
+	reflect.TypeFor[schemaPresentation](),
 	reflect.TypeFor[planPresentation](),
 	reflect.TypeFor[operationPresentation](),
 
@@ -150,5 +153,25 @@ func checkResultType(t *testing.T, path string, typ reflect.Type, own string, se
 			}
 			checkResultType(t, path+"."+field.Name, field.Type, own, seen)
 		}
+	}
+}
+
+// A presentation group is never a JSON result member (specs/cli/output.md,
+// Multi-machine presentation): a block that ran groups lists the documented
+// block members only.
+func TestAnOperationBlockCarriesNoGroupsMember(t *testing.T) {
+	result := &lifecycle.OperationResult{Verb: "apply", Blocks: []lifecycle.BlockResult{{ID: "media", Description: "serve media", Stage: "infrastructure-services", State: "done", Outcome: "changed", Attempts: 1,
+		Groups: []lifecycle.GroupResult{{BlockID: "media", GroupID: "pull-image", Description: "acquire the pinned server image", Status: "done", Machines: 1}}}}}
+	data, err := json.Marshal(displayOperation(result).Blocks)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var blocks []map[string]json.RawMessage
+	if err := json.Unmarshal(data, &blocks); err != nil || len(blocks) != 1 {
+		t.Fatalf("blocks = %s (%v)", data, err)
+	}
+	members := slices.Sorted(maps.Keys(blocks[0]))
+	if want := []string{"attempts", "description", "id", "outcome", "stage", "state"}; !slices.Equal(members, want) {
+		t.Fatalf("an operation block carries %v, want %v", members, want)
 	}
 }

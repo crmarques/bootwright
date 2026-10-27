@@ -17,25 +17,24 @@ kind: Machine
 metadata:
   name: anysize-01
 spec:
-  capabilities:
-    - openshift-node
   substrate:
     providerRef: lab-libvirt
-    profileRef: master
+    libvirt:
+      profileRef: master
+      interfaceAttachments:
+        - interface: enp1s0
+          attachmentRef: lab-guests
+        - interface: enp2s0
+          attachmentRef: lab-guests
+        - interface: enp3s0
+          attachmentRef: lab-secondary
+  hardware:
+    rootDevice:
+      deviceName: /dev/vda
   os:
     provided: false
-    install:
-      rootDeviceHints:
-        deviceName: /dev/vda
   network:
     configRef: lab-guests
-    interfaceAttachments:
-      - interface: enp1s0
-        attachmentRef: lab-guests
-      - interface: enp2s0
-        attachmentRef: lab-guests
-      - interface: enp3s0
-        attachmentRef: lab-secondary
     installAddressRef: ip
     addresses:
       - name: fqdn
@@ -49,25 +48,24 @@ kind: Machine
 metadata:
   name: anysize-02
 spec:
-  capabilities:
-    - openshift-node
   substrate:
     providerRef: lab-libvirt
-    profileRef: master
+    libvirt:
+      profileRef: master
+      interfaceAttachments:
+        - interface: enp1s0
+          attachmentRef: lab-guests
+        - interface: enp2s0
+          attachmentRef: lab-guests
+        - interface: enp3s0
+          attachmentRef: lab-secondary
+  hardware:
+    rootDevice:
+      deviceName: /dev/vda
   os:
     provided: false
-    install:
-      rootDeviceHints:
-        deviceName: /dev/vda
   network:
     configRef: lab-guests
-    interfaceAttachments:
-      - interface: enp1s0
-        attachmentRef: lab-guests
-      - interface: enp2s0
-        attachmentRef: lab-guests
-      - interface: enp3s0
-        attachmentRef: lab-secondary
     installAddressRef: ip
     addresses:
       - name: fqdn
@@ -81,25 +79,24 @@ kind: Machine
 metadata:
   name: anysize-03
 spec:
-  capabilities:
-    - openshift-node
   substrate:
     providerRef: lab-libvirt
-    profileRef: master
+    libvirt:
+      profileRef: master
+      interfaceAttachments:
+        - interface: enp1s0
+          attachmentRef: lab-guests
+        - interface: enp2s0
+          attachmentRef: lab-guests
+        - interface: enp3s0
+          attachmentRef: lab-secondary
+  hardware:
+    rootDevice:
+      deviceName: /dev/vda
   os:
     provided: false
-    install:
-      rootDeviceHints:
-        deviceName: /dev/vda
   network:
     configRef: lab-guests
-    interfaceAttachments:
-      - interface: enp1s0
-        attachmentRef: lab-guests
-      - interface: enp2s0
-        attachmentRef: lab-guests
-      - interface: enp3s0
-        attachmentRef: lab-secondary
     installAddressRef: ip
     addresses:
       - name: fqdn
@@ -113,25 +110,24 @@ kind: Machine
 metadata:
   name: anysize-04
 spec:
-  capabilities:
-    - openshift-node
   substrate:
     providerRef: lab-libvirt
-    profileRef: compute
+    libvirt:
+      profileRef: compute
+      interfaceAttachments:
+        - interface: enp1s0
+          attachmentRef: lab-guests
+        - interface: enp2s0
+          attachmentRef: lab-guests
+        - interface: enp3s0
+          attachmentRef: lab-secondary
+  hardware:
+    rootDevice:
+      deviceName: /dev/vda
   os:
     provided: false
-    install:
-      rootDeviceHints:
-        deviceName: /dev/vda
   network:
     configRef: lab-guests
-    interfaceAttachments:
-      - interface: enp1s0
-        attachmentRef: lab-guests
-      - interface: enp2s0
-        attachmentRef: lab-guests
-      - interface: enp3s0
-        attachmentRef: lab-secondary
     installAddressRef: ip
     addresses:
       - name: fqdn
@@ -145,25 +141,24 @@ kind: Machine
 metadata:
   name: anysize-05
 spec:
-  capabilities:
-    - openshift-node
   substrate:
     providerRef: lab-libvirt
-    profileRef: compute
+    libvirt:
+      profileRef: compute
+      interfaceAttachments:
+        - interface: enp1s0
+          attachmentRef: lab-guests
+        - interface: enp2s0
+          attachmentRef: lab-guests
+        - interface: enp3s0
+          attachmentRef: lab-secondary
+  hardware:
+    rootDevice:
+      deviceName: /dev/vda
   os:
     provided: false
-    install:
-      rootDeviceHints:
-        deviceName: /dev/vda
   network:
     configRef: lab-guests
-    interfaceAttachments:
-      - interface: enp1s0
-        attachmentRef: lab-guests
-      - interface: enp2s0
-        attachmentRef: lab-guests
-      - interface: enp3s0
-        attachmentRef: lab-secondary
     installAddressRef: ip
     addresses:
       - name: fqdn
@@ -177,25 +172,24 @@ kind: Machine
 metadata:
   name: anysize-06
 spec:
-  capabilities:
-    - openshift-node
   substrate:
     providerRef: lab-libvirt
-    profileRef: compute
+    libvirt:
+      profileRef: compute
+      interfaceAttachments:
+        - interface: enp1s0
+          attachmentRef: lab-guests
+        - interface: enp2s0
+          attachmentRef: lab-guests
+        - interface: enp3s0
+          attachmentRef: lab-secondary
+  hardware:
+    rootDevice:
+      deviceName: /dev/vda
   os:
     provided: false
-    install:
-      rootDeviceHints:
-        deviceName: /dev/vda
   network:
     configRef: lab-guests
-    interfaceAttachments:
-      - interface: enp1s0
-        attachmentRef: lab-guests
-      - interface: enp2s0
-        attachmentRef: lab-guests
-      - interface: enp3s0
-        attachmentRef: lab-secondary
     installAddressRef: ip
     addresses:
       - name: fqdn
@@ -209,25 +203,24 @@ kind: Machine
 metadata:
   name: anysize-07
 spec:
-  capabilities:
-    - openshift-node
   substrate:
     providerRef: lab-libvirt
-    profileRef: compute
+    libvirt:
+      profileRef: compute
+      interfaceAttachments:
+        - interface: enp1s0
+          attachmentRef: lab-guests
+        - interface: enp2s0
+          attachmentRef: lab-guests
+        - interface: enp3s0
+          attachmentRef: lab-secondary
+  hardware:
+    rootDevice:
+      deviceName: /dev/vda
   os:
     provided: false
-    install:
-      rootDeviceHints:
-        deviceName: /dev/vda
   network:
     configRef: lab-guests
-    interfaceAttachments:
-      - interface: enp1s0
-        attachmentRef: lab-guests
-      - interface: enp2s0
-        attachmentRef: lab-guests
-      - interface: enp3s0
-        attachmentRef: lab-secondary
     installAddressRef: ip
     addresses:
       - name: fqdn
@@ -241,25 +234,24 @@ kind: Machine
 metadata:
   name: anysize-08
 spec:
-  capabilities:
-    - openshift-node
   substrate:
     providerRef: lab-libvirt
-    profileRef: compute
+    libvirt:
+      profileRef: compute
+      interfaceAttachments:
+        - interface: enp1s0
+          attachmentRef: lab-guests
+        - interface: enp2s0
+          attachmentRef: lab-guests
+        - interface: enp3s0
+          attachmentRef: lab-secondary
+  hardware:
+    rootDevice:
+      deviceName: /dev/vda
   os:
     provided: false
-    install:
-      rootDeviceHints:
-        deviceName: /dev/vda
   network:
     configRef: lab-guests
-    interfaceAttachments:
-      - interface: enp1s0
-        attachmentRef: lab-guests
-      - interface: enp2s0
-        attachmentRef: lab-guests
-      - interface: enp3s0
-        attachmentRef: lab-secondary
     installAddressRef: ip
     addresses:
       - name: fqdn
@@ -273,25 +265,24 @@ kind: Machine
 metadata:
   name: anysize-09
 spec:
-  capabilities:
-    - openshift-node
   substrate:
     providerRef: lab-libvirt
-    profileRef: compute
+    libvirt:
+      profileRef: compute
+      interfaceAttachments:
+        - interface: enp1s0
+          attachmentRef: lab-guests
+        - interface: enp2s0
+          attachmentRef: lab-guests
+        - interface: enp3s0
+          attachmentRef: lab-secondary
+  hardware:
+    rootDevice:
+      deviceName: /dev/vda
   os:
     provided: false
-    install:
-      rootDeviceHints:
-        deviceName: /dev/vda
   network:
     configRef: lab-guests
-    interfaceAttachments:
-      - interface: enp1s0
-        attachmentRef: lab-guests
-      - interface: enp2s0
-        attachmentRef: lab-guests
-      - interface: enp3s0
-        attachmentRef: lab-secondary
     installAddressRef: ip
     addresses:
       - name: fqdn
@@ -305,25 +296,24 @@ kind: Machine
 metadata:
   name: anysize-10
 spec:
-  capabilities:
-    - openshift-node
   substrate:
     providerRef: lab-libvirt
-    profileRef: compute
+    libvirt:
+      profileRef: compute
+      interfaceAttachments:
+        - interface: enp1s0
+          attachmentRef: lab-guests
+        - interface: enp2s0
+          attachmentRef: lab-guests
+        - interface: enp3s0
+          attachmentRef: lab-secondary
+  hardware:
+    rootDevice:
+      deviceName: /dev/vda
   os:
     provided: false
-    install:
-      rootDeviceHints:
-        deviceName: /dev/vda
   network:
     configRef: lab-guests
-    interfaceAttachments:
-      - interface: enp1s0
-        attachmentRef: lab-guests
-      - interface: enp2s0
-        attachmentRef: lab-guests
-      - interface: enp3s0
-        attachmentRef: lab-secondary
     installAddressRef: ip
     addresses:
       - name: fqdn
@@ -337,9 +327,6 @@ kind: Machine
 metadata:
   name: controller
 spec:
-  capabilities:
-    - container-runtime
-    - libvirt
   os:
     provided: true
   proxy:
@@ -426,10 +413,7 @@ spec:
       cpu: 4
       memoryMiB: 8192
       diskGiB: 40
-    bmcEmulationDefaults:
-      enabled: true
-      protocol: redfish
-      emulator: sushy-tools
+    bmcEmulation:
       bindAddress: 127.0.0.1
       certificateRef: lab-bmc-tls
       port: 8000
@@ -534,7 +518,7 @@ spec:
       addressRef: ip
 ---
 apiVersion: bootwright.io/v1alpha1
-kind: ContainerCluster
+kind: OpenShiftCluster
 metadata:
   name: anysize
 spec:
@@ -544,10 +528,8 @@ spec:
       version: 4.21.15
       channel: stable-4.21
   install:
-    method: agent
     mode: connected
     platform:
-      type: baremetal
       baremetal:
         provisioningNetwork: disabled
     proxy:
@@ -560,16 +542,16 @@ spec:
         address: 198.51.100.10
         interfaceNetworks: []
         source:
-          type: openshift
+          type: installer
       api-int:
         address: 198.51.100.10
         source:
-          type: openshift
+          type: installer
       ingress:
         address: 198.51.100.11
         interfaceNetworks: []
         source:
-          type: openshift
+          type: installer
     agent:
       redfishVirtualMedia:
         artifactServerEndpoint:
@@ -588,15 +570,15 @@ spec:
   nodes:
     - name: master-0
       fqdn: master-0.anysize.lab.example.test
-      role: master
+      role: controlPlane
       machineRef: anysize-01
     - name: master-1
       fqdn: master-1.anysize.lab.example.test
-      role: master
+      role: controlPlane
       machineRef: anysize-02
     - name: master-2
       fqdn: master-2.anysize.lab.example.test
-      role: master
+      role: controlPlane
       machineRef: anysize-03
     - name: worker-0
       fqdn: worker-0.anysize.lab.example.test

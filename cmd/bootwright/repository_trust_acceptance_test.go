@@ -29,8 +29,8 @@ func TestPackageRepositoryTrustBundleMustBeACABundleSecret(t *testing.T) {
 		t.Fatal("a usernamePassword Secret was admitted as the package repository trust bundle")
 	}
 	for _, d := range diagnostics.Of(err) {
-		if d.Code == "api.reference" && d.Field == "$.spec.ceph.packageRepositoryTrustBundleRef" && d.Object != nil &&
-			d.Object.Kind == string(api.StorageCluster) && d.Object.Name == "ceph-multidc-01" &&
+		if d.Code == "api.reference" && d.Field == "$.spec.packageRepositoryTrustBundleRef" && d.Object != nil &&
+			d.Object.Kind == string(api.CephCluster) && d.Object.Name == "ceph-multidc-01" &&
 			d.Message == "Secret/ceph-registry-credentials is declared as usernamePassword; this field accepts caBundle" {
 			return
 		}

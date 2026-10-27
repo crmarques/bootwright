@@ -59,18 +59,17 @@ func node(name, fqdn, machineRef string) api.Value {
 }
 
 func container(name, distribution string) api.Object {
-	return api.NewObject(api.ContainerCluster, name, api.Value{}, api.MapValue(
+	return api.NewObject(api.OpenShiftCluster, name, api.Value{}, api.MapValue(
 		field("distribution", api.MapValue(field("type", text(distribution))))))
 }
 
 func storageCluster(name, management string, bootstrap string, nodes ...api.Value) api.Object {
-	ceph := api.MapValue(
+	return api.NewObject(api.CephCluster, name, api.Value{}, api.MapValue(
+		field("management", text(management)),
 		field("release", text("9.9.1.2")),
-		field("cephadm", api.MapValue(field("bootstrap", api.MapValue(field("node", text(bootstrap)))))),
+		field("cephadm", api.MapValue(field("bootstrap", api.MapValue(field("nodeRef", text(bootstrap)))))),
 		field("topology", api.MapValue(field("nodes", api.ListValue(nodes...)))),
-	)
-	return api.NewObject(api.StorageCluster, name, api.Value{}, api.MapValue(
-		field("type", text("ceph")), field("management", text(management)), field("ceph", ceph)))
+	))
 }
 
 func newFixture(t *testing.T) *fixture {
@@ -104,8 +103,8 @@ func (f *fixture) Effective(_ context.Context, contextName string) (api.Catalog,
 
 func (f *fixture) ManagedStorage(_ context.Context, selected string, _ api.Catalog, cluster api.Object) (StorageProof, error) {
 	f.cephCalls++
-	declared := cluster.Spec().Get("ceph")
-	release, node := declared.Get("release").Text(), declared.Get("cephadm", "bootstrap", "node").Text()
+	declared := cluster.Spec()
+	release, node := declared.Get("release").Text(), declared.Get("cephadm", "bootstrap", "nodeRef").Text()
 	proof, found := f.cephFor[cluster.Name()]
 	if !found {
 		return StorageProof{Release: release, AdminNode: node, Reason: "no apply has completed the cluster's bootstrap"}, nil
@@ -124,10 +123,10 @@ func (f *fixture) ObjectUserGateway(user api.Object) string {
 }
 
 func storageMembers(object api.Object) (environment.Membership, bool) {
-	if object.Kind() != api.StorageCluster {
+	if object.Kind() != api.CephCluster {
 		return environment.Membership{}, false
 	}
-	return environment.MembersOf("$.spec.ceph.topology.nodes", object.Spec().Get("ceph", "topology", "nodes")), true
+	return environment.MembersOf("$.spec.topology.nodes", object.Spec().Get("topology", "nodes")), true
 }
 
 func (f *fixture) Resources(_ context.Context, _ string, _ api.Catalog) (map[string][]Resource, error) {
@@ -206,7 +205,7 @@ func TestListClustersReportsEverySelectedClusterInCanonicalOrder(t *testing.T) {
 			t.Fatal(err)
 		}
 		want := []ClusterRef{
-			{"archive", KindStorageCluster}, {"edge", KindContainerCluster}, {"okd-lab", KindContainerCluster}, {"storage", KindStorageCluster},
+			{"archive", string(api.CephCluster)}, {"edge", string(api.OpenShiftCluster)}, {"okd-lab", string(api.OpenShiftCluster)}, {"storage", string(api.CephCluster)},
 		}
 		if result.Context != current || !slices.Equal(result.Clusters, want) {
 			t.Fatalf("list = %+v, want %s %v", result, current, want)
@@ -233,7 +232,7 @@ func TestClusterInfoReportsEachKindFromDesiredStateAndEvidence(t *testing.T) {
 	}
 	order := []string{CommandExec, CommandKeyring, CommandKubeconfig, CommandKubectl, CommandOC, CommandRsh}
 	for _, entry := range result.Clusters {
-		if !slices.Equal(commandNames(entry.AccessCommands), order) || entry.Kind != KindContainerCluster {
+		if !slices.Equal(commandNames(entry.AccessCommands), order) || entry.Kind != string(api.OpenShiftCluster) {
 			t.Fatalf("%s access = %+v", entry.Name, entry.AccessCommands)
 		}
 	}
@@ -372,10 +371,10 @@ func TestSecretsRefusalsSettleTheTargetBeforeAnyEvidenceRead(t *testing.T) {
 		name, code string
 		contains   []string
 	}{
-		{"edge", "cluster.not-applicable", []string{"bootwright cluster kubeconfig", "ContainerCluster"}},
+		{"edge", "cluster.not-applicable", []string{"bootwright cluster kubeconfig", "OpenShiftCluster"}},
 		{"okd-lab", "cluster.not-applicable", []string{"bootwright cluster kubeconfig"}},
-		{"archive", "cluster.not-applicable", []string{"external Ceph StorageCluster", "managed Ceph StorageClusters"}},
-		{"missing", "access.target", []string{"selects no ContainerCluster or StorageCluster named missing"}},
+		{"archive", "cluster.not-applicable", []string{"external CephCluster", "managed CephClusters"}},
+		{"missing", "access.target", []string{"selects no OpenShiftCluster or CephCluster named missing"}},
 		{"", "access.target", []string{"requires one cluster name"}},
 	}
 	for _, tt := range tests {
@@ -493,7 +492,7 @@ func TestSecretsWithoutCustodyFailUnavailableAndReadFailuresPropagate(t *testing
 	delete(f.passwords, "storage")
 	_, err := f.service("lab").ClusterInfo(context.Background(), ClusterInfoRequest{Names: []string{"storage"}, Secrets: true})
 	found := diagnostics.Of(err)
-	if len(found) != 1 || found[0].Code != "access.unavailable" || !strings.Contains(found[0].Message, "StorageCluster storage") ||
+	if len(found) != 1 || found[0].Code != "access.unavailable" || !strings.Contains(found[0].Message, "CephCluster storage") ||
 		found[0].Remediation != "bootwright apply --context lab --stage clusters" || len(f.custody) != 1 {
 		t.Fatalf("missing custody = %v after %v", err, f.custody)
 	}
@@ -549,8 +548,8 @@ func TestClusterInfoNamesEveryUnknownMemberInOneRefusal(t *testing.T) {
 		names   []string
 		message string
 	}{
-		{names: []string{"zed", "storage", "missing"}, message: "the context lab selects no ContainerClusters or StorageClusters named missing, zed"},
-		{names: []string{"missing", "storage"}, message: "the context lab selects no ContainerCluster or StorageCluster named missing"},
+		{names: []string{"zed", "storage", "missing"}, message: "the context lab selects no OpenShiftClusters or CephClusters named missing, zed"},
+		{names: []string{"missing", "storage"}, message: "the context lab selects no OpenShiftCluster or CephCluster named missing"},
 	}
 	for _, tt := range tests {
 		for _, reveal := range []bool{false, true} {

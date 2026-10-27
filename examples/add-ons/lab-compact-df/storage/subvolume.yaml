@@ -1,5 +1,5 @@
 apiVersion: bootwright.io/v1alpha1
-kind: StorageSubvolume
+kind: CephSubvolume
 metadata:
   name: docs
 

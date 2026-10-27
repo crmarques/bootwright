@@ -2,7 +2,7 @@
 
 Which `platform` the agent installer accepts for a topology, how it treats the
 API and ingress virtual addresses, and what an external load balancer needs.
-[Container clusters](../../specs/container-clusters.md) owns the required
+[Container clusters](../../specs/openshift-clusters.md) owns the required
 behavior; this page records native facts for
 [B707](../../specs/milestones/delivered.md#b707),
 [B708](../../specs/milestones/delivered.md#b708) and

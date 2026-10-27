@@ -37,7 +37,7 @@ func TestControllerFirewallPlanPreflightAndDependentAdmission(t *testing.T) {
 	if socket.Block == "" {
 		t.Fatal("no artifact listener projected")
 	}
-	listener := reconciliation.Block{BlockDefinition: reconciliation.BlockDefinition{ID: socket.Block, Stage: reconciliation.StageInfraComponents}}
+	listener := reconciliation.Block{BlockDefinition: reconciliation.BlockDefinition{ID: socket.Block, Stage: reconciliation.StageInfrastructureServices}}
 	consumer := reconciliation.Block{BlockDefinition: reconciliation.BlockDefinition{ID: "consumer", Dependencies: []string{listener.ID}, Stage: reconciliation.StageMachines}}
 	full := reconciliation.Plan{Verb: reconciliation.Apply, Blocks: []reconciliation.Block{listener, consumer}}
 	for _, status := range []string{"open", "closed", "unknown"} {

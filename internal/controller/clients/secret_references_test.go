@@ -9,7 +9,7 @@ import (
 // A controller prerequisites request names tools and host packages, never a
 // Secret, and one this build cannot read is refused rather than reported empty.
 func TestPrerequisitesReportNoSecretReferences(t *testing.T) {
-	block := planBlock(t, unwired(), stateOf(environment(), machine("container-runtime", "libvirt"), cluster()), reconciliation.Apply)
+	block := planBlock(t, unwired(), stateOf(libvirtGraph(cluster())...), reconciliation.Apply)
 	unread := block
 	unread.Request = []byte(`{"version":"other"}`)
 	for name, tc := range map[string]struct {

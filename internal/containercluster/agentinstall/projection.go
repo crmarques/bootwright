@@ -5,7 +5,7 @@ import (
 	"strings"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
-	"github.com/crmarques/bootwright/internal/containercluster"
+	"github.com/crmarques/bootwright/internal/containercluster/openshift"
 	environmentdomain "github.com/crmarques/bootwright/internal/environment"
 	"github.com/crmarques/bootwright/internal/machine"
 	"github.com/crmarques/bootwright/internal/substrate"
@@ -49,7 +49,7 @@ func installConfig(catalog api.Catalog, cluster api.Object, nodes []nodeProjecti
 		"metadata":   map[string]any{"name": cluster.Name()},
 		"controlPlane": map[string]any{
 			"name":     defaultControlPlane,
-			"replicas": roleCount(nodes, "master"),
+			"replicas": roleCount(nodes, "controlPlane"),
 		},
 		"compute": []any{map[string]any{
 			"name":     defaultComputePool,
@@ -91,7 +91,7 @@ func installConfig(catalog api.Catalog, cluster api.Object, nodes []nodeProjecti
 // vSphere platform for one control-plane node and no compute nodes, so a
 // single-node cluster installs on no platform at all.
 func installPlatform(cluster api.Object, nodes []nodeProjection) (map[string]any, error) {
-	declared := cluster.Spec().Get("install", "platform", "type").Text()
+	declared := openshift.Platform(cluster.Spec())
 	if len(nodes) == 1 || declared == "" || declared == "none" {
 		return map[string]any{"none": map[string]any{}}, nil
 	}
@@ -211,13 +211,13 @@ func roleCount(nodes []nodeProjection, role string) int {
 }
 
 // agentConfig projects the host roster the agent installer boots. The
-// rendezvous host is the first master in node-name order, which is the one the
+// rendezvous host is the first controlPlane node in node-name order, which is the one the
 // installer expects to run the bootstrap control plane.
 func agentConfig(cluster api.Object, nodes []nodeProjection, timeSources []string) (map[string]any, error) {
 	rendezvous := ""
 	hosts := make([]any, 0, len(nodes))
 	for _, node := range nodes {
-		if rendezvous == "" && node.role == "master" {
+		if rendezvous == "" && node.role == "controlPlane" {
 			rendezvous = node.address
 		}
 		host := map[string]any{
@@ -232,7 +232,7 @@ func agentConfig(cluster api.Object, nodes []nodeProjection, timeSources []strin
 		hosts = append(hosts, host)
 	}
 	if rendezvous == "" {
-		return nil, refusalAt("api.required", "$.spec.nodes", "the cluster declares no master node to rendezvous on",
+		return nil, refusalAt("api.required", "$.spec.nodes", "the cluster declares no controlPlane node to rendezvous on",
 			"declare one on "+cluster.Identity())
 	}
 	config := map[string]any{
@@ -252,11 +252,12 @@ func agentConfig(cluster api.Object, nodes []nodeProjection, timeSources []strin
 	return config, nil
 }
 
-// installerRole is the pool a node installs through. An infra node installs
+// installerRole is the pool a node installs through: a controlPlane node is
+// the installer's native master. An infra node installs
 // through the worker pool and keeps its authored role for placement intent
 // afterwards, which no installer input expresses.
 func installerRole(role string) string {
-	if role == "master" {
+	if role == "controlPlane" {
 		return "master"
 	}
 	return "worker"
@@ -282,7 +283,7 @@ func networkConfig(catalog api.Catalog, node api.Object, interfaces []substrate.
 		return nil, refusal("api.value", "the cluster node's network configuration does not compose",
 			"correct spec.network on "+node.Identity())
 	}
-	if issues := containercluster.NodeNetworkIssues(node, catalog, composed); len(issues) > 0 {
+	if issues := openshift.NodeNetworkIssues(node, catalog, composed); len(issues) > 0 {
 		return nil, refusal(issues[0].Code, issues[0].Message, issues[0].Remediation)
 	}
 	native, ok := nativeValue(composed).(map[string]any)
@@ -385,7 +386,7 @@ func nativeValue(value api.Value) any {
 
 func endpointNames(catalog api.Catalog, object api.Object) []Endpoint {
 	var names []Endpoint
-	for _, endpoint := range containercluster.ResolutionNames(catalog, object) {
+	for _, endpoint := range openshift.ResolutionNames(catalog, object) {
 		if endpoint.Slot != "ingress-wildcard" {
 			names = append(names, Endpoint{Name: endpoint.Name, Address: endpoint.Address})
 		}

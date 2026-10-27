@@ -66,8 +66,14 @@ func hardwareNIC(name, mac string) api.Value {
 // its install address on iface and the hardware NICs given.
 func metalOn(iface string, nics ...api.Value) api.Object {
 	metal := server(api.MapValue(text("deviceName", "/dev/disk/by-id/wwn-0x5000c500a1b2c3d4")))
+	var names, addresses []api.Value
+	for _, nic := range nics {
+		names = append(names, api.MapValue(text("name", nic.Get("name").Text())))
+		addresses = append(addresses, api.MapValue(text("nicRef", nic.Get("name").Text()), text("macAddress", nic.Get("macAddress").Text())))
+	}
 	return metal.WithSpec(metal.Spec().
-		WithPath(api.ListValue(nics...), "hardware", "nics").
+		WithPath(api.ListValue(names...), "hardware", "nics").
+		WithPath(api.ListValue(addresses...), "substrate", "baremetal", "nics").
 		WithPath(api.StringValue("metal-net"), "network", "configRef").
 		WithPath(api.ListValue(
 			api.MapValue(text("name", "fqdn"), text("address", "metal-01.lab.example.test")),

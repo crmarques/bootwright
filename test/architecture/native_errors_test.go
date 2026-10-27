@@ -111,7 +111,7 @@ func TestNativeErrorOptInsReadTheImplementationOfEachLiteral(t *testing.T) {
 
 var core = invoke{Implementation: Implementation, NativeErrors: true}
 var host = invoke{Implementation: HostImplementation, NativeErrors: true}
-var plain = invoke{Implementation: ExportImplementation, NativeErrors: false}
+var plain = invoke{Implementation: ConsumerImplementation, NativeErrors: false}
 var unnamed = invoke{NativeErrors: true}
 `, 0)
 	if err != nil {

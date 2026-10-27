@@ -1,7 +1,7 @@
 [
   {
     "id": "artifact-server-lab-artifacts",
-    "stage": "infra-components",
+    "stage": "infrastructure-services",
     "dependencies": [],
     "impacts": [
       "create-container-unit bootwright-lab-compact-hub-artifacts-lab-artifacts",
@@ -33,7 +33,7 @@
   },
   {
     "id": "dns-lab-dns",
-    "stage": "infra-components",
+    "stage": "infrastructure-services",
     "dependencies": [],
     "impacts": [
       "create-container-unit bootwright-lab-compact-hub-dns-lab-dns",
@@ -43,7 +43,7 @@
   },
   {
     "id": "ntp-lab-ntp",
-    "stage": "infra-components",
+    "stage": "infrastructure-services",
     "dependencies": [],
     "impacts": [
       "create-container-unit bootwright-lab-compact-hub-ntp-lab-ntp",
@@ -53,7 +53,7 @@
   },
   {
     "id": "proxy-lab-proxy",
-    "stage": "infra-components",
+    "stage": "infrastructure-services",
     "dependencies": [],
     "impacts": [
       "create-container-unit bootwright-lab-compact-hub-proxy-lab-proxy",
@@ -166,7 +166,7 @@
       },
       "producedInputs": [
         {
-          "kind": "ContainerCluster",
+          "kind": "OpenShiftCluster",
           "object": "compact",
           "output": "kubeconfig"
         }
@@ -344,7 +344,7 @@
         "kind": "openshift-clients",
         "version": "4.21.15"
       },
-      "version": "addon-instance-request-v1"
+      "version": "addon-instance-request-v2"
     }
   },
   {
@@ -369,7 +369,7 @@
       },
       "producedInputs": [
         {
-          "kind": "ContainerCluster",
+          "kind": "OpenShiftCluster",
           "object": "compact",
           "output": "kubeconfig"
         }
@@ -586,7 +586,7 @@
         "kind": "openshift-clients",
         "version": "4.21.15"
       },
-      "version": "addon-instance-request-v1"
+      "version": "addon-instance-request-v2"
     }
   }
 ]

@@ -4,10 +4,6 @@ metadata:
   name: storage-witness-01
 
 spec:
-  capabilities:
-    - ceph-node
-    - ceph-arbiter
-
   placement:
     site: site-c
 

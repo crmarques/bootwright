@@ -16,7 +16,9 @@ func validationCommand() commandSpec {
 }
 
 func effectiveStateCommand() commandSpec {
-	return available(commandSpec{path: "render effective", short: "Show normalized effective desired state"})
+	return available(commandSpec{path: "render effective", short: "Show normalized effective desired state",
+		long:  "Show normalized effective desired state. --origins lists, instead of the YAML, where each effective field's value came from: authored, defaults.<Kind> (the Environment's kind defaults), built-in (a schema default) or derived (normalization).",
+		flags: []flagSpec{boolFlag("origins", "Mark where each effective field's value came from")}})
 }
 
 type DesiredStateService interface {
@@ -45,6 +47,7 @@ func (s Services) invokeDesiredState(ctx context.Context, path string, values *r
 	case "render effective":
 		result, err := invokeResult(ctx, values, compilation.EffectiveRequest{
 			ContextName: values.text("context"),
+			Origins:     values.boolean("origins"),
 		}, s.DesiredState.RenderEffective)
 		return commandResult{effective: result}, err
 	default:

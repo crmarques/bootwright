@@ -84,7 +84,7 @@ func TestMachinePlanRequiresItsProviderByObject(t *testing.T) {
 func TestAMachineOnAnSSHHostClaimsItsBMCSocketThere(t *testing.T) {
 	arm := provider().Spec().Get("libvirt")
 	remote := provider(field("libvirt", arm.With("machineRef", api.StringValue("hypervisor")).
-		With("bmcEmulationDefaults", arm.Get("bmcEmulationDefaults").With("bindAddress", api.StringValue("192.0.2.5")))))
+		With("bmcEmulation", arm.Get("bmcEmulation").With("bindAddress", api.StringValue("192.0.2.5")))))
 	catalog := catalogOf(controller(), remoteHost(), remote, networkConfig(), guest("rhel-01"))
 	plan, err := NewMachine(nil).Plan(context.Background(), lifecycle.PlanInput{
 		Verb: reconciliation.Apply, State: compilation.NewState(catalog, catalog, nil),
@@ -133,7 +133,7 @@ func TestAProviderOnAnSSHHostClaimsItsKeysThere(t *testing.T) {
 func TestAnEmulatedBMCBoundToABridgeRequiresTheProviderThatCreatesIt(t *testing.T) {
 	bound := func(address string) api.Object {
 		arm := provider().Spec().Get("libvirt")
-		return provider(field("libvirt", arm.With("bmcEmulationDefaults", arm.Get("bmcEmulationDefaults").With("bindAddress", api.StringValue(address)))))
+		return provider(field("libvirt", arm.With("bmcEmulation", arm.Get("bmcEmulation").With("bindAddress", api.StringValue(address)))))
 	}
 	other := func(host, management, address string) api.Object {
 		attachment := api.MapValue(text("bridge", "virbr-storage"), text("management", management))

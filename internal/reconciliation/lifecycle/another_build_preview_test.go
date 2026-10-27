@@ -14,8 +14,8 @@ import (
 func anotherBuildPreview(t *testing.T) *harness {
 	t.Helper()
 	h := newPlannedHarness(t, []reconciliation.BlockDefinition{
-		stagedDefinition("alpha", reconciliation.StageInfraComponents),
-		stagedDefinition("bravo", reconciliation.StageInfraComponents, "alpha"),
+		stagedDefinition("alpha", reconciliation.StageInfrastructureServices),
+		stagedDefinition("bravo", reconciliation.StageInfrastructureServices, "alpha"),
 		stagedDefinition("charlie", reconciliation.StageClusters, "bravo"),
 		stagedDefinition("delta", reconciliation.StageClusters, "bravo"),
 	})
@@ -56,7 +56,7 @@ func TestAContinuationUnderAnotherBuildNamesTheStepsThisBuildRuns(t *testing.T) 
 			steps  []int
 		}{
 			{"every stage", nil, []int{2, 3, 4}},
-			{"a stage selection", []string{"infra-components"}, []int{2}},
+			{"a stage selection", []string{"infrastructure-services"}, []int{2}},
 		} {
 			t.Run(build.name+" "+test.name, func(t *testing.T) {
 				h := anotherBuildPreview(t)

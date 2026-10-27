@@ -38,14 +38,14 @@ func TestClusterInfoResourcesRows(t *testing.T) {
 		name  string
 		scope string
 	}{
-		{api.StoragePlacementPolicy, "ssd-hosts", "rule ssd-hosts, failure domain host, device class ssd"},
-		{api.StoragePool, "cephfs-data", "replicated size 2/min 2, application cephfs"},
-		{api.StoragePool, "cephfs-metadata", "replicated size 2/min 2, application cephfs"},
-		{api.StoragePool, "rbd-data", "replicated size 2/min 2, application rbd"},
-		{api.StorageRBDImage, "rbd-disk", "image rbd-data/rbd-disk, 1073741824 bytes"},
-		{api.StorageClient, "rbd-canary", "client.rbd-canary read-write on pool rbd-data"},
-		{api.StorageFilesystem, "files", "filesystem files, metadata cephfs-metadata, data cephfs-data"},
-		{api.StorageSubvolume, "docs", "subvolume files/apps/docs"},
+		{api.CephPlacementPolicy, "ssd-hosts", "rule ssd-hosts, failure domain host, device class ssd"},
+		{api.CephPool, "cephfs-data", "replicated size 2/min 2, application cephfs"},
+		{api.CephPool, "cephfs-metadata", "replicated size 2/min 2, application cephfs"},
+		{api.CephPool, "rbd-data", "replicated size 2/min 2, application rbd"},
+		{api.CephRBDImage, "rbd-disk", "image rbd-data/rbd-disk, 1073741824 bytes"},
+		{api.CephClient, "rbd-canary", "client.rbd-canary read-write on pool rbd-data"},
+		{api.CephFilesystem, "files", "filesystem files, metadata cephfs-metadata, data cephfs-data"},
+		{api.CephSubvolume, "docs", "subvolume files/apps/docs"},
 	} {
 		if got := ceph.ResourceScope(state.Effective(), row.kind, row.name, plan.Blocks); got != row.scope {
 			t.Errorf("%s/%s scope = %q, want %q", row.kind, row.name, got, row.scope)

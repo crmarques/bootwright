@@ -475,7 +475,7 @@ and every connection target are checked against the same authorization so
 rebinding or alternate-address retries cannot expand scope.
 
 The BMC-to-artifact-server virtual-media leg imports the server's certificate
-by default. Its one insecure exception, `disable-verification`, is explicit,
+by default. Its one insecure exception, `disableVerification`, is explicit,
 declared on one Machine and visible in that Machine's effective state. It is
 never inherited, never a provider default and never an Environment kind
 default, and a Machine whose installation delivers private material refuses it
@@ -484,7 +484,7 @@ virtual Machine, whose controller uses verified HTTPS but fetches media
 without verifying the artifact server. Every consumer booting through one has
 its artifact server placed on that controller's provider host, so the
 unverified fetch never leaves that host: the
-[container-cluster boot media](container-clusters.md#boot-media) and the
+[container-cluster boot media](openshift-clusters.md#boot-media) and the
 [managed-OS installation](managed-os.md#refusal-table) each refuse before
 registration otherwise. A
 controller's own transport verifies against its declared CA bundle alone, or
@@ -497,7 +497,7 @@ host answers plain HTTP, and the installer's own client of it, through which
 `agent wait-for` watches the cluster, authenticates with that token. The
 install block sends the same token once more, in the one bounded read of the
 registered hosts after a stalled wait, which reaches only an address its frozen
-request declares ([container clusters](container-clusters.md#installation)).
+request declares ([container clusters](openshift-clusters.md#installation)).
 This is no credential discovery: the token is the installer's own, read from
 the member of the installer's asset state that the installer reads it from, in
 the installation's root-owned work area. It is never an argument, a result,
@@ -517,7 +517,7 @@ exception is endpoint-scoped and refuses wherever the transfer carries a
 cluster's private material. A pushed image leaves the controller only to those
 verified endpoints, and its destination's access control is recorded as inside
 the trust boundary of what it embeds
-([container clusters](container-clusters.md#boot-media)).
+([container clusters](openshift-clusters.md#boot-media)).
 
 Not yet met: no KubeVirt or vSphere connection exists; tracked as
 [B87](milestones/m1.md#b87) and [B99](milestones/m1.md#b99).
@@ -587,7 +587,7 @@ procedure and ports by source.
 | Emulated BMC | Controller/provider-host clients | Verified HTTPS with basic authentication and the provider's bound serving certificate | Root container with host networking, SELinux label disabled and access to the libvirt socket | Lab examples bind loopback; other binds require a trusted network |
 
 Private URL capabilities travel over verified TLS, subject only to the
-[emulated-controller boot-media exception](container-clusters.md#boot-media).
+[emulated-controller boot-media exception](openshift-clusters.md#boot-media).
 Public package trees carry no credentials.
 Preflight and plan report each declared controller listener's runtime firewall
 admission. Closed or unknown required sockets refuse before listener or
@@ -808,4 +808,4 @@ require qualified real-system tests, recorded in the
 | Rejected operations perform no effect. | `TestCancellationBeforeAnyEffectRegistersNothing`, `TestDeclinedConfirmationRegistersNothing`, `TestUnsupportedObjectsRefuseBeforeRegistration`, `TestInvalidAdmissionAndUnavailableRoutesDoNotWrite`, `TestADestroyOverAnIncompleteApplyWithAContradictedBlockRefuses`, `TestARepeatedApplyOverACompletedApplyWithABlockNotDoneRefuses`, `TestATransitionRefusesWhenItsFrozenPlanChangedBeforeMutation`, `TestATransitionRefusesWhenTheOperationRecordChangedBeforeMutation`, `TestAContinuationRefusesWhenABlockWasRetriedBeforeMutation`, `TestAFrozenPlanThatIsNotItsOperationsRefuses`, `TestARepeatedMaterialRefusesBeforeAnyJobExists`, `TestAnUnsafeMaterialNameOrValueRefusesBeforeAnyJobExists`, `TestAFrozenPlacementOffTheControllerRefusesEveryVerb` | none |
 | A failed security check cannot be bypassed by confirmation, retry or adapter behavior. | `TestMissingSafeguardsCannotBeReplacedByConfirmationFlags`, `TestOrphanAcknowledgementClaimsNothingAndReplacesNoOtherSafeguard`, `TestDestroyOverAnInterruptedApplyIsStillGated` | none |
 | Package content cannot select code, and configuration selects code only through the declared catalog, channel and CSV; neither can carry Secret bytes into a request, adopt a foreign object or force a field conflict, and a placed Secret's value reaches no record or output. | `TestDeclaredSecretPlacementLendsOnlyMappedPartsGolden`; the collection's cluster object adapter tests | [B751](milestones/delivered.md#b751), [B753](milestones/m4.md#b753) |
-| A storage export's keys and external-cluster details reach only custody and the consuming cluster's owned Secret, never a request, record, evidence, log, diagnostic, argument or output; no gateway private key leaves the Ceph side; an export never adopts or alters an entity it did not mint. | none yet | [B86](milestones/m4.md#b86), [B760](milestones/m4.md#b760) |
+| A Ceph consumer's keys and external-cluster details reach only custody and the consuming cluster's owned Secret, never a request, record, evidence, log, diagnostic, argument or output; no gateway private key leaves the Ceph side; an export never adopts or alters an entity it did not mint. | none yet | [B86](milestones/m4.md#b86), [B760](milestones/m4.md#b760) |

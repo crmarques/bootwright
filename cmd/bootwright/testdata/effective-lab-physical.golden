@@ -17,8 +17,6 @@ kind: Machine
 metadata:
   name: controller
 spec:
-  capabilities:
-    - container-runtime
   os:
     provided: true
   proxy:
@@ -38,15 +36,9 @@ kind: Machine
 metadata:
   name: physical-01
 spec:
-  capabilities:
-    - openshift-node
   substrate:
     providerRef: lab-metal
-  hardware:
-    nics:
-      - name: eno1
-        macAddress: 52:54:00:9a:1b:01
-    management:
+    baremetal:
       bmc:
         address: https://bmc-01.example.test/redfish/v1/Systems/1
         protocol: redfish
@@ -56,13 +48,18 @@ spec:
           trustBundleRef: lab-bmc-ca
         virtualMedia:
           tls:
-            trust: import-certificate
+            trust: importCertificate
             removeCertificateAfterBoot: false
+      nics:
+        - nicRef: eno1
+          macAddress: 52:54:00:9a:1b:01
+  hardware:
+    nics:
+      - name: eno1
+    rootDevice:
+      deviceName: /dev/sda
   os:
     provided: false
-    install:
-      rootDeviceHints:
-        deviceName: /dev/sda
   network:
     configRef: lab-metal
     attachmentRef: lab-metal
@@ -82,15 +79,9 @@ kind: Machine
 metadata:
   name: physical-02
 spec:
-  capabilities:
-    - openshift-node
   substrate:
     providerRef: lab-metal
-  hardware:
-    nics:
-      - name: eno1
-        macAddress: 52:54:00:9a:1b:02
-    management:
+    baremetal:
       bmc:
         address: https://bmc-02.example.test/redfish/v1/Systems/1
         protocol: redfish
@@ -100,13 +91,18 @@ spec:
           trustBundleRef: lab-bmc-ca
         virtualMedia:
           tls:
-            trust: import-certificate
+            trust: importCertificate
             removeCertificateAfterBoot: false
+      nics:
+        - nicRef: eno1
+          macAddress: 52:54:00:9a:1b:02
+  hardware:
+    nics:
+      - name: eno1
+    rootDevice:
+      deviceName: /dev/sda
   os:
     provided: false
-    install:
-      rootDeviceHints:
-        deviceName: /dev/sda
   network:
     configRef: lab-metal
     attachmentRef: lab-metal
@@ -126,15 +122,9 @@ kind: Machine
 metadata:
   name: physical-03
 spec:
-  capabilities:
-    - openshift-node
   substrate:
     providerRef: lab-metal
-  hardware:
-    nics:
-      - name: eno1
-        macAddress: 52:54:00:9a:1b:03
-    management:
+    baremetal:
       bmc:
         address: https://bmc-03.example.test/redfish/v1/Systems/1
         protocol: redfish
@@ -144,13 +134,18 @@ spec:
           trustBundleRef: lab-bmc-ca
         virtualMedia:
           tls:
-            trust: import-certificate
+            trust: importCertificate
             removeCertificateAfterBoot: false
+      nics:
+        - nicRef: eno1
+          macAddress: 52:54:00:9a:1b:03
+  hardware:
+    nics:
+      - name: eno1
+    rootDevice:
+      deviceName: /dev/sda
   os:
     provided: false
-    install:
-      rootDeviceHints:
-        deviceName: /dev/sda
   network:
     configRef: lab-metal
     attachmentRef: lab-metal
@@ -170,15 +165,9 @@ kind: Machine
 metadata:
   name: physical-04
 spec:
-  capabilities:
-    - openshift-node
   substrate:
     providerRef: lab-metal
-  hardware:
-    nics:
-      - name: eno1
-        macAddress: 52:54:00:9a:1b:04
-    management:
+    baremetal:
       bmc:
         address: https://bmc-04.example.test/redfish/v1/Systems/1
         protocol: redfish
@@ -188,13 +177,18 @@ spec:
           trustBundleRef: lab-bmc-ca
         virtualMedia:
           tls:
-            trust: import-certificate
+            trust: importCertificate
             removeCertificateAfterBoot: false
+      nics:
+        - nicRef: eno1
+          macAddress: 52:54:00:9a:1b:04
+  hardware:
+    nics:
+      - name: eno1
+    rootDevice:
+      deviceName: /dev/sda
   os:
     provided: false
-    install:
-      rootDeviceHints:
-        deviceName: /dev/sda
   network:
     configRef: lab-metal
     attachmentRef: lab-metal
@@ -214,15 +208,9 @@ kind: Machine
 metadata:
   name: physical-05
 spec:
-  capabilities:
-    - openshift-node
   substrate:
     providerRef: lab-metal
-  hardware:
-    nics:
-      - name: eno1
-        macAddress: 52:54:00:9a:1b:05
-    management:
+    baremetal:
       bmc:
         address: https://bmc-05.example.test/redfish/v1/Systems/1
         protocol: redfish
@@ -232,13 +220,18 @@ spec:
           trustBundleRef: lab-bmc-ca
         virtualMedia:
           tls:
-            trust: import-certificate
+            trust: importCertificate
             removeCertificateAfterBoot: false
+      nics:
+        - nicRef: eno1
+          macAddress: 52:54:00:9a:1b:05
+  hardware:
+    nics:
+      - name: eno1
+    rootDevice:
+      deviceName: /dev/sda
   os:
     provided: false
-    install:
-      rootDeviceHints:
-        deviceName: /dev/sda
   network:
     configRef: lab-metal
     attachmentRef: lab-metal
@@ -292,8 +285,6 @@ metadata:
   name: lab-metal
 spec:
   baremetal:
-    boot:
-      method: redfishVirtualMedia
     defaults:
       bmc:
         credentialsRef: lab-bmc-credentials
@@ -302,7 +293,7 @@ spec:
           trustBundleRef: lab-bmc-ca
         virtualMedia:
           tls:
-            trust: import-certificate
+            trust: importCertificate
             removeCertificateAfterBoot: false
   networkAttachments:
     - name: lab-metal
@@ -382,7 +373,7 @@ spec:
       addressRef: ip
 ---
 apiVersion: bootwright.io/v1alpha1
-kind: ContainerCluster
+kind: OpenShiftCluster
 metadata:
   name: physical
 spec:
@@ -392,10 +383,8 @@ spec:
       version: 4.21.15
       channel: stable-4.21
   install:
-    method: agent
     mode: connected
     platform:
-      type: baremetal
       baremetal:
         provisioningNetwork: disabled
     proxy:
@@ -408,16 +397,16 @@ spec:
         address: 198.51.100.10
         interfaceNetworks: []
         source:
-          type: openshift
+          type: installer
       api-int:
         address: 198.51.100.10
         source:
-          type: openshift
+          type: installer
       ingress:
         address: 198.51.100.11
         interfaceNetworks: []
         source:
-          type: openshift
+          type: installer
     agent:
       redfishVirtualMedia:
         artifactServerEndpoint:
@@ -436,15 +425,15 @@ spec:
   nodes:
     - name: master-0
       fqdn: master-0.physical.lab.example.test
-      role: master
+      role: controlPlane
       machineRef: physical-01
     - name: master-1
       fqdn: master-1.physical.lab.example.test
-      role: master
+      role: controlPlane
       machineRef: physical-02
     - name: master-2
       fqdn: master-2.physical.lab.example.test
-      role: master
+      role: controlPlane
       machineRef: physical-03
     - name: worker-0
       fqdn: worker-0.physical.lab.example.test

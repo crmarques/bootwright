@@ -123,7 +123,7 @@ func appendTreePlan(plan *lifecycle.CapabilityPlan, catalog api.Catalog, input l
 		return refusal("lifecycle.state", "package tree publication requires one Environment", "")
 	}
 	plan.Definitions = append(plan.Definitions, reconciliation.BlockDefinition{
-		ID: "os-package-tree-" + request.Identity.Profile, Description: treeDescription(input.Verb), Stage: reconciliation.StageMachines,
+		ID: reconciliation.BlockIdentity("os-package-tree-", request.Identity.Profile), Description: treeDescription(input.Verb), Stage: reconciliation.StageMachines,
 		Requires:  []reconciliation.ObjectRef{{Kind: "ArtifactServer", Object: server}, {Kind: "Environment", Object: environments[0].Name()}},
 		Exclusive: []string{"path:" + request.Publication.Path}, Kind: TreeKind, Object: request.Identity.Profile,
 		Implementation: TreeImplementation, ContentDigest: TreeContentDigest(), Request: canonical,

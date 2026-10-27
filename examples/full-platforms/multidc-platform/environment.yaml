@@ -20,7 +20,7 @@ spec:
     keyRef: bootwright-machine-key
 
   defaults:
-    ContainerCluster:
+    OpenShiftCluster:
       install:
         pullSecretRef: openshift-pull-secret
 

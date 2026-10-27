@@ -10,6 +10,7 @@ import (
 	"strings"
 	"testing"
 
+	api "github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/desiredstate"
 	"github.com/crmarques/bootwright/internal/desiredstate/compilation"
 	"github.com/crmarques/bootwright/internal/desiredstate/yamlstream"
@@ -699,5 +700,19 @@ func TestBindingsListsIdentitiesWithoutMaterial(t *testing.T) {
 	access.session = nil
 	if listed, err := service.Bindings(context.Background(), BindingsRequest{ContextName: "fixture"}); err != nil || len(listed) != 0 {
 		t.Fatalf("an uninitialized store lists %v (%v)", listed, err)
+	}
+}
+
+func TestARenamedKeyTypeKeepsTheStoredFingerprint(t *testing.T) {
+	hostKey := func(keyType string) secrets.Declaration {
+		object := api.NewObject(api.Secret, "host-key", api.Value{}, api.MapValue(api.FieldValue{Name: "type", Value: api.StringValue("sshKeyPair")},
+			api.FieldValue{Name: "source", Value: api.MapValue(api.FieldValue{Name: "generated", Value: api.MapValue(api.FieldValue{Name: "keyType", Value: api.StringValue(keyType)})})}))
+		return declarationOf(object, diagnostics.SourceLocation{Path: "secrets.yaml"})
+	}
+	for renamed, stored := range map[string]string{"ecdsaP256": "ecdsa-p256", "ecdsaP384": "ecdsa-p384", "ecdsaP521": "ecdsa-p521", "ed25519": "ed25519"} {
+		declaration, earlier := hostKey(renamed), hostKey(stored)
+		if declaration.Generation.KeyType != stored || declaration.Fingerprint != earlier.Fingerprint || declaration.LegacyFingerprint != earlier.LegacyFingerprint {
+			t.Errorf("keyType %s is stored as %q with fingerprint %s, want %q and %s", renamed, declaration.Generation.KeyType, declaration.Fingerprint, stored, earlier.Fingerprint)
+		}
 	}
 }

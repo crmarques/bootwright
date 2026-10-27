@@ -26,10 +26,6 @@ metadata:
   name: acceptance-hypervisor
 
 spec:
-  capabilities:
-    - container-runtime
-    - libvirt
-
   os:
     provided: true
 
@@ -56,9 +52,8 @@ metadata:
 spec:
   libvirt:
     machineRef: acceptance-hypervisor
-    uri: qemu:///system
 
-    bmcEmulationDefaults:
+    bmcEmulation:
       bindAddress: 192.0.2.60
       certificateRef: acceptance-bmc-tls
       auth:
@@ -123,7 +118,8 @@ metadata:
 spec:
   substrate:
     providerRef: acceptance-vsphere
-    profileRef: clone
+    vsphere:
+      profileRef: clone
 
   os:
     provided: false
@@ -202,7 +198,7 @@ metadata:
   name: acceptance-redhat-ceph
 
 spec:
-  type: redhat-ceph
+  type: redhatCeph
 
   rhsm:
     management: external
@@ -212,22 +208,20 @@ spec:
 
 ---
 apiVersion: bootwright.io/v1alpha1
-kind: StorageCluster
+kind: CephCluster
 metadata:
   name: acceptance-external-storage
 
 spec:
-  type: ceph
   management: external
 
 ---
 apiVersion: bootwright.io/v1alpha1
-kind: StorageExport
+kind: CephConsumer
 metadata:
   name: acceptance-external-export
 
 spec:
-  type: dataFoundation
   clusterRef: acceptance-external-storage
 
   externalDetails:
@@ -249,25 +243,24 @@ metadata:
   name: acceptance-sno-node
 
 spec:
-  capabilities:
-    - openshift-node
-
   substrate:
     providerRef: kubevirt-ocp-multidc-01
-    profileRef: general
+
+    kubevirt:
+      profileRef: general
+
+      interfaceAttachments:
+        - interface: primary
+          attachmentRef: hub-vm-machine
+
+        - interface: ceph-public
+          attachmentRef: hub-vm-ceph-public
 
   os:
     provided: false
 
   network:
     configRef: hub-vm-network
-
-    interfaceAttachments:
-      - interface: primary
-        attachmentRef: hub-vm-machine
-
-      - interface: ceph-public
-        attachmentRef: hub-vm-ceph-public
 
     addresses:
       - name: primary
@@ -280,7 +273,7 @@ spec:
 
 ---
 apiVersion: bootwright.io/v1alpha1
-kind: ContainerCluster
+kind: OpenShiftCluster
 metadata:
   name: acceptance-sno
 
@@ -302,7 +295,7 @@ spec:
 
   nodes:
     - name: master
-      role: master
+      role: controlPlane
       machineRef: acceptance-sno-node
 
 ---
@@ -331,18 +324,18 @@ spec:
 
 ---
 apiVersion: bootwright.io/v1alpha1
-kind: StorageClient
+kind: CephClient
 metadata:
   name: acceptance-rbd-client
 
 spec:
   clusterRef: ceph-multidc-01
   poolRef: odf-hub-multidc-01-rbd
-  access: read-only
+  access: readOnly
 
 ---
 apiVersion: bootwright.io/v1alpha1
-kind: StorageRBDImage
+kind: CephRBDImage
 metadata:
   name: acceptance-rbd-image
 
@@ -356,7 +349,7 @@ spec:
 
 ---
 apiVersion: bootwright.io/v1alpha1
-kind: StorageNVMeoFSubsystem
+kind: CephNVMeoFSubsystem
 metadata:
   name: acceptance-nvmeof
 
@@ -378,7 +371,7 @@ spec:
 
 ---
 apiVersion: bootwright.io/v1alpha1
-kind: StorageSubvolume
+kind: CephSubvolume
 metadata:
   name: acceptance-subvolume
 
@@ -398,7 +391,7 @@ spec:
 
 ---
 apiVersion: bootwright.io/v1alpha1
-kind: StorageSMBResource
+kind: CephSMBResource
 metadata:
   name: acceptance-smb-users
 
@@ -419,7 +412,7 @@ spec:
 
 ---
 apiVersion: bootwright.io/v1alpha1
-kind: StorageSMBResource
+kind: CephSMBResource
 metadata:
   name: acceptance-smb
 

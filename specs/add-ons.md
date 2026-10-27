@@ -2,7 +2,7 @@
 
 An add-on is one reusable `olm` or `manifestSet` declaration, a
 `ClusterAddon`; a built-in package is a registry entry compiled into the
-executable. A `ClusterAddonBinding` attaches either to a `ContainerCluster`
+executable. A `ClusterAddonBinding` attaches either to an `OpenShiftCluster`
 that the context builds. [The add-on API](api/addons.md) owns admission of
 `ClusterAddon`, `ClusterAddonProfile` and `ClusterAddonBinding`; this page owns
 the boundary those declarations cross and the lifecycle of the built-in
@@ -79,13 +79,13 @@ one, so Argo CD starts only after the objects of those blocks are complete. A
 block of another stage that reaches the cluster's API is not among them and is
 not waited for.
 
-A package's configuration may name a `StorageExport` it consumes. The
-export, its storage cluster and their chain join the consuming cluster's
+A package's configuration may name a `CephConsumer` it consumes. The
+consumer, its storage cluster and their chain join the consuming cluster's
 [selection closure](api/environment.md#cluster-selection), the
-instance requires the export's block, and one export is consumed by at
-most one package instance across the input. The export's external-cluster
+instance requires the consumer's block, and one consumer is consumed by at
+most one package instance across the input. The consumer's external-cluster
 details reach the cluster only as an [owned Secret](#owned-secrets) placed
-from the export block's produced material.
+from the consumer block's produced material.
 
 An authored `ClusterAddon` is admitted declaration data. A binding that
 selects one, directly or through a profile, is refused at `plan` and `apply`
@@ -94,7 +94,7 @@ custom-package lifecycle of [B90](milestones/m4.md#b90). `ClusterAddon` and
 `ClusterAddonProfile` are definitions that perform nothing by themselves; a
 binding's selection is what has effects.
 
-The [cluster network block](container-clusters.md#post-installation-network-configuration)
+The [cluster network block](openshift-clusters.md#post-installation-network-configuration)
 requires the instance that provides `nmstate`
 ([B735](milestones/m4.md#b735)), and the MetalLB package carries its own
 address pools and advertisements as its configuration
@@ -129,16 +129,16 @@ block in the `add-ons` stage:
 
 | Member | Value |
 | --- | --- |
-| Identity | `addon-<package>-<cluster>`; a package name has at most nine bytes, so every cluster whose installation block identity is valid yields a valid instance identity |
+| Identity | `addon-<package>-<cluster>`, [hashing an identity over 63 bytes](state-reconciliation.md#durable-identities-and-private-paths) |
 | Kind and object | `ClusterAddonBinding`, `<cluster>.<package>` |
 | Implementation | `addon-instance-v1`, for every package |
-| Requirements | the cluster's blocks; every instance on the same cluster that provides a capability the package requires; the installation block's `kubeconfig` as a [produced input](state-reconciliation.md#produced-material-custody); the objects the package's configuration references that another block realizes, with their produced material when a Secret placement takes it; and, for a [last package](#built-in-packages-and-selection), every other block of the `add-ons` stage that requires the same cluster's installation block: every other instance on that cluster and, when the cluster has one, its [cluster network block](container-clusters.md#post-installation-network-configuration) |
+| Requirements | the cluster's blocks; every instance on the same cluster that provides a capability the package requires; every instance that a binding named by its binding's [`spec.afterRefs`](api/addons.md#clusteraddonbinding) selects; the installation block's `kubeconfig` as a [produced input](state-reconciliation.md#produced-material-custody); the objects the package's configuration references that another block realizes, with their produced material when a Secret placement takes it; and, for a [last package](#built-in-packages-and-selection), every other block of the `add-ons` stage that requires the same cluster's installation block: every other instance on that cluster and, when the cluster has one, its [cluster network block](openshift-clusters.md#post-installation-network-configuration) |
 | Apply description and impact | `install add-on <package> on <cluster>`; `install-addon <package> <cluster>` |
 | Removal description and impact | `retire add-on <package> with <cluster>`, saying its objects leave with the cluster's disks or stay on a cluster that keeps running; no impact |
 
-Dependency edges order instances; the order of the instance function
+Dependency edges, derived and [authored](api/addons.md#clusteraddonbinding), order instances, and an apply can [stop after one instance](state-reconciliation.md#stopping-after-an-add-on-instance); the order of the instance function
 (dependency order, then binding name, then package name) only breaks ties. The
-request, version `addon-instance-request-v1`, freezes the cluster, binding and
+request, version `addon-instance-request-v2`, freezes the cluster, binding and
 package, the controller placement, the `oc` of the cluster's exact release, one
 readiness budget in seconds, the rendered program, the names of the Secrets it
 places and its produced inputs by producer kind, object and output, never
@@ -173,7 +173,7 @@ Bodies are canonical JSON and never hold a `Secret` object, Secret bytes,
 
 The program is the one Kubernetes object port. A block that is not an add-on
 instance, such as the
-[cluster network block](container-clusters.md#post-installation-network-configuration),
+[cluster network block](openshift-clusters.md#post-installation-network-configuration),
 freezes the same program section, version `cluster-objects-v1`, in its own
 request and runs it through the same adapter. The section carries every
 approval policy and Secret placement source the built-in packages use, so a
@@ -372,7 +372,7 @@ key. The instance names it as a
 attempt is lent the entry, and the digest, comparison and observation
 rules above apply unchanged; an unproved entry is never placed. A produced
 placement source is one of a closed set the program version names, today
-only a `StorageExport`'s `external-details`. Planning refuses any other
+only a `CephConsumer`'s `external-details`. Planning refuses any other
 producer kind or output, in particular every `kubeconfig` and `dashboard`
 output, naming the placement.
 
@@ -404,9 +404,9 @@ is answered, from its frozen request. A virtual cluster's objects leave with
 its nodes' disks; a physical cluster keeps running after its context is
 destroyed, with its add-on objects and placed Secrets, unmanaged, which the
 removal's description states and its impacts omit. A surviving cluster that
-consumes a `StorageExport` is named by that export's removal, which refuses
+consumes a `CephConsumer` is named by that consumer's removal, which refuses
 while the cluster survives
-([retirement condition](storage-resources.md#storageexport)), not by this one. An
+([retirement condition](ceph-resources.md#cephconsumer)), not by this one. An
 effect outside the cluster is never an add-on effect but a block of the domain
 that owns it, with its own inverse. Removing one instance from a running
 cluster is parked as [B769](milestones/backlog.md#b769).

@@ -1,0 +1,40 @@
+apiVersion: bootwright.io/v1alpha1
+kind: Machine
+metadata:
+  name: rhel-03
+
+spec:
+  substrate:
+    providerRef: lab-libvirt
+    libvirt:
+      profileRef: mon
+
+  hardware:
+    rootDevice:
+      deviceName: /dev/vda
+
+  os:
+    provided: false
+    installProfileRef: rhel-9-8
+
+    install:
+      ntp:
+        - serverRef: lab-ntp
+          endpointRef: ip
+
+  network:
+    configRef: lab-guests
+    attachmentRef: lab-guests
+    installAddressRef: ip
+
+    addresses:
+      - name: fqdn
+        address: rhel-03.lab.example.test
+
+      - name: ip
+        address: 198.51.100.13/24
+        interface: nic0
+
+      - name: cluster-ip
+        address: 203.0.113.13/24
+        interface: nic1

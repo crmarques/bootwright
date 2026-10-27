@@ -13,7 +13,7 @@ import (
 
 func TestFDFTrustAndCatalogAdmission(t *testing.T) {
 	v := packageTestConfig("fdf")
-	f := addons.ClusterFacts{Name: "cluster", Exports: []addons.ExportFacts{{Name: "export", Gateway: true, TLS: true}}}
+	f := addons.ClusterFacts{Name: "cluster", Exports: []addons.ConsumerFacts{{Name: "export", Gateway: true, TLS: true}}}
 	for _, tc := range []struct {
 		name   string
 		trust  addons.TrustFacts
@@ -35,7 +35,7 @@ func TestFDFTrustAndCatalogAdmission(t *testing.T) {
 		t.Fatal(issues)
 	}
 	f.Trust = addons.TrustFacts{}
-	f.Exports = []addons.ExportFacts{{Name: "export", Gateway: true}}
+	f.Exports = []addons.ConsumerFacts{{Name: "export", Gateway: true}}
 	if issues := admitFDF(addons.Instance{Config: v}, f); len(issues) != 0 {
 		t.Fatal(issues)
 	}
@@ -48,7 +48,7 @@ func TestFDFRenderGoldens(t *testing.T) {
 			name += "-gateway"
 		}
 		t.Run(name, func(t *testing.T) {
-			i := addons.Instance{Config: packageTestConfig("fdf"), Facts: addons.ClusterFacts{Exports: []addons.ExportFacts{{Name: "export", Gateway: gateway}}}}
+			i := addons.Instance{Config: packageTestConfig("fdf"), Facts: addons.ClusterFacts{Exports: []addons.ConsumerFacts{{Name: "export", Gateway: gateway}}}}
 			r, err := renderFDF(i)
 			if err != nil {
 				t.Fatal(err)
@@ -80,7 +80,7 @@ func TestFDFRenderGoldens(t *testing.T) {
 			if _, err := co.ThawVersion(data, co.Options{Namespace: "openshift-storage"}); err != nil {
 				t.Fatal(err)
 			}
-			if len(r.Requires) != 1 || r.Requires[0].Kind != "StorageExport" || r.Requires[0].Object != "export" {
+			if len(r.Requires) != 1 || r.Requires[0].Kind != "CephConsumer" || r.Requires[0].Object != "export" {
 				t.Fatal(r.Requires)
 			}
 		})

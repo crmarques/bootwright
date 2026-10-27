@@ -1,0 +1,20 @@
+apiVersion: bootwright.io/v1alpha1
+kind: CephFilesystem
+metadata:
+  name: files
+
+spec:
+  clusterRef: ceph-lab
+  metadataPoolRef: cephfs-metadata
+
+  dataPoolRefs:
+    - cephfs-data
+
+  mds:
+    activeCount: 1
+    standbyCountWanted: 1
+    standbyReplay: false
+
+  subvolumeGroups:
+    - name: apps
+      mode: '750'

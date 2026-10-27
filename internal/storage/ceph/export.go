@@ -14,21 +14,21 @@ import (
 	"github.com/crmarques/bootwright/internal/reconciliation"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
 	"github.com/crmarques/bootwright/internal/secrets"
-	"github.com/crmarques/bootwright/internal/storage"
+	"github.com/crmarques/bootwright/internal/storage/cephcluster"
 )
 
-const ExportImplementation = "ceph-export-v1"
-const ExportVersion = "ceph-export-request-v1"
-const ExportEvidenceVersion = "ceph-export-evidence-v1"
-const ExportOutput = "external-details"
+const ConsumerImplementation = "ceph-export-v1"
+const ConsumerVersion = "ceph-export-request-v2"
+const ConsumerEvidenceVersion = "ceph-export-evidence-v1"
+const ConsumerOutput = "external-details"
 
-func ExportBlockID(name string) string { return "ceph-export-" + name }
-func ExportContentDigest() string {
-	sum := sha256.Sum256([]byte(ExportImplementation + "\x00" + ExportVersion + "\x00" + ExportEvidenceVersion))
+func ConsumerBlockID(name string) string { return reconciliation.BlockIdentity("ceph-consumer-", name) }
+func ConsumerContentDigest() string {
+	sum := sha256.Sum256([]byte(ConsumerImplementation + "\x00" + ConsumerVersion + "\x00" + ConsumerEvidenceVersion))
 	return hex.EncodeToString(sum[:])
 }
 
-type ExportGateway struct {
+type ConsumerGateway struct {
 	Addresses      []string `json:"addresses"`
 	CertificateRef string   `json:"certificateRef"`
 	FQDN           string   `json:"fqdn"`
@@ -40,12 +40,12 @@ type ExportGateway struct {
 	Zone           string   `json:"zone"`
 	ZoneGroup      string   `json:"zoneGroup"`
 }
-type ExportRequest struct {
+type ConsumerRequest struct {
 	Cluster         string                       `json:"cluster"`
 	Controller      string                       `json:"controller"`
 	DefaultDataPool string                       `json:"defaultDataPool"`
 	Filesystem      string                       `json:"filesystem"`
-	Gateway         *ExportGateway               `json:"gateway,omitempty"`
+	Gateway         *ConsumerGateway             `json:"gateway,omitempty"`
 	KeyType         string                       `json:"keyType"`
 	Machines        []string                     `json:"machines"`
 	MonitoringHosts []string                     `json:"monitoringHosts"`
@@ -59,56 +59,58 @@ type ExportRequest struct {
 	Version         string                       `json:"version"`
 }
 
-func (r ExportRequest) Canonical() ([]byte, error) { return reconciliation.Freeze(r, "Ceph export") }
+func (r ConsumerRequest) Canonical() ([]byte, error) {
+	return reconciliation.Freeze(r, "Ceph consumer")
+}
 
-func (r ExportRequest) SecretReferences() []string {
+func (r ConsumerRequest) SecretReferences() []string {
 	if r.Gateway == nil {
 		return nil
 	}
 	return lifecycle.SecretNames(r.Gateway.CertificateRef)
 }
-func DecodeExportRequest(data []byte) (ExportRequest, error) {
-	r, err := reconciliation.ThawVersion[ExportRequest](data, "Ceph export", ExportVersion)
+func DecodeConsumerRequest(data []byte) (ConsumerRequest, error) {
+	r, err := reconciliation.ThawVersion[ConsumerRequest](data, "Ceph consumer", ConsumerVersion)
 	if err != nil {
 		return r, err
 	}
-	if r.Cluster == "" || r.Controller == "" || !reconciliation.ValidSegment(ExportBlockID(r.Name)) || r.Filesystem == "" || r.Pool == "" || r.DefaultDataPool == "" || !strictlySorted(r.Machines) || len(r.Scope) != 0 || (r.KeyType != "aes" && r.KeyType != "aes256k") {
-		return r, failure("lifecycle.state", "the frozen Ceph export request is inconsistent", "")
+	if r.Cluster == "" || r.Controller == "" || !reconciliation.ValidSegment(r.Name) || r.Filesystem == "" || r.Pool == "" || r.DefaultDataPool == "" || !strictlySorted(r.Machines) || len(r.Scope) != 0 || (r.KeyType != "aes" && r.KeyType != "aes256k") {
+		return r, failure("lifecycle.state", "the frozen Ceph consumer request is inconsistent", "")
 	}
 	if len(r.Monitors) == 0 || len(r.Monitors) > 64 || !strictlySorted(r.MonitoringHosts) || r.MonitoringPort != 9283 {
-		return r, failure("lifecycle.state", "Ceph export monitoring coordinates are inconsistent", "")
+		return r, failure("lifecycle.state", "Ceph consumer monitoring coordinates are inconsistent", "")
 	}
 	for name, address := range r.Monitors {
 		if name == "" {
-			return r, failure("lifecycle.state", "Ceph export monitor has no name", "")
+			return r, failure("lifecycle.state", "Ceph consumer monitor has no name", "")
 		}
 		if _, err := netip.ParseAddr(address); err != nil {
-			return r, failure("lifecycle.state", "Ceph export monitor address is invalid", "")
+			return r, failure("lifecycle.state", "Ceph consumer monitor address is invalid", "")
 		}
 	}
 	for _, address := range r.MonitoringHosts {
 		if _, err := netip.ParseAddr(address); err != nil {
-			return r, failure("lifecycle.state", "Ceph export manager address is invalid", "")
+			return r, failure("lifecycle.state", "Ceph consumer manager address is invalid", "")
 		}
 	}
 	if g := r.Gateway; g != nil {
 		if g.Name == "" || g.FQDN == "" || g.Realm == "" || g.Zone == "" || g.ZoneGroup == "" || g.IndexPool == "" || g.Port < 1 || g.Port > 65535 || g.TLS != (g.CertificateRef != "") || !strictlySorted(g.Addresses) {
-			return r, failure("lifecycle.state", "Ceph export gateway coordinates are inconsistent", "")
+			return r, failure("lifecycle.state", "Ceph consumer gateway coordinates are inconsistent", "")
 		}
 		for _, addr := range g.Addresses {
 			if _, err := netip.ParseAddr(addr); err != nil {
-				return r, failure("lifecycle.state", "Ceph export gateway address is invalid", "")
+				return r, failure("lifecycle.state", "Ceph consumer gateway address is invalid", "")
 			}
 		}
 	}
 	expected, _ := json.Marshal(exportCaps(r))
 	actual, _ := json.Marshal(r.Principals)
 	if string(expected) != string(actual) {
-		return r, failure("lifecycle.state", "the frozen Ceph export principal capabilities are inconsistent", "")
+		return r, failure("lifecycle.state", "the frozen Ceph consumer principal capabilities are inconsistent", "")
 	}
 	return r, nil
 }
-func exportCaps(r ExportRequest) map[string]map[string]string {
+func exportCaps(r ConsumerRequest) map[string]map[string]string {
 	health := "profile rbd-read-only"
 	if g := r.Gateway; g != nil {
 		health += ", allow rwx pool=" + g.Zone + ".rgw.meta, allow r pool=.rgw.root, allow rw pool=" + g.Zone + ".rgw.control, allow rx pool=" + g.Zone + ".rgw.log, allow x pool=" + g.IndexPool
@@ -122,55 +124,55 @@ func exportCaps(r ExportRequest) map[string]map[string]string {
 	}
 }
 
-type ExportCapability struct {
+type ConsumerCapability struct {
 	runner Runner
 	proofs DependencyProofs
 }
 
-var _ lifecycle.ProducedOutputProvider = ExportCapability{}
+var _ lifecycle.ProducedOutputProvider = ConsumerCapability{}
 
-func (c ExportCapability) ProducedOutputs(block reconciliation.Block) ([]string, error) {
-	r, err := DecodeExportRequest(block.Request)
+func (c ConsumerCapability) ProducedOutputs(block reconciliation.Block) ([]string, error) {
+	r, err := DecodeConsumerRequest(block.Request)
 	if err != nil {
 		return nil, err
 	}
-	if block.Kind != string(api.StorageExport) || block.Object != r.Name || block.ID != ExportBlockID(r.Name) || block.Implementation != ExportImplementation {
-		return nil, failure("lifecycle.state", "Ceph export output does not match its frozen block identity", "")
+	if block.Kind != string(api.CephConsumer) || block.Object != r.Name || block.ID != ConsumerBlockID(r.Name) || block.Implementation != ConsumerImplementation {
+		return nil, failure("lifecycle.state", "Ceph consumer output does not match its frozen block identity", "")
 	}
-	return []string{ExportOutput}, nil
+	return []string{ConsumerOutput}, nil
 }
 
-func NewExport(runner Runner) ExportCapability { return ExportCapability{runner: runner} }
-func (c ExportCapability) WithProofs(proofs DependencyProofs) ExportCapability {
+func NewConsumer(runner Runner) ConsumerCapability { return ConsumerCapability{runner: runner} }
+func (c ConsumerCapability) WithProofs(proofs DependencyProofs) ConsumerCapability {
 	c.proofs = proofs
 	return c
 }
-func (c ExportCapability) Plan(ctx context.Context, input lifecycle.PlanInput) (lifecycle.CapabilityPlan, error) {
+func (c ConsumerCapability) Plan(ctx context.Context, input lifecycle.PlanInput) (lifecycle.CapabilityPlan, error) {
 	plan := lifecycle.CapabilityPlan{Definitions: []reconciliation.BlockDefinition{}}
 	if err := ctx.Err(); err != nil {
 		return plan, err
 	}
 	if input.State == nil {
-		return plan, failure("lifecycle.state", "Ceph export planning requires compiled state", "")
+		return plan, failure("lifecycle.state", "Ceph consumer planning requires compiled state", "")
 	}
 	catalog := input.State.Effective()
-	for _, obj := range catalog.OfKind(api.StorageExport) {
-		cluster, _ := catalog.Find(api.StorageCluster, obj.Spec().Get("clusterRef").Text())
+	for _, obj := range catalog.OfKind(api.CephConsumer) {
+		cluster, _ := catalog.Find(api.CephCluster, obj.Spec().Get("clusterRef").Text())
 		base, err := baseRequest(catalog, cluster, input.Context.Name)
 		if err != nil {
 			return plan, err
 		}
 		refs := obj.Spec().Get("dataFoundation")
-		fs, _ := catalog.Find(api.StorageFilesystem, refs.Get("filesystemRef").Text())
+		fs, _ := catalog.Find(api.CephFilesystem, refs.Get("filesystemRef").Text())
 		data := filesystemDataPools(fs.Spec())
 		if len(data) == 0 {
-			return plan, failure("lifecycle.state", "Ceph export has no filesystem default data pool", "")
+			return plan, failure("lifecycle.state", "Ceph consumer has no filesystem default data pool", "")
 		}
-		r := ExportRequest{Cluster: cluster.Name(), Controller: input.Controller, DefaultDataPool: nativePoolRef(catalog, data[0]), Filesystem: fs.Name(), KeyType: refs.Get("cephxKeyType").Text(), Machines: requestMachines(base), Name: obj.Name(), PhysicalHosts: physicalHosts(base.Hosts), Pool: nativePoolRef(catalog, refs.Get("rbdPoolRef").Text()), Version: ExportVersion}
+		r := ConsumerRequest{Cluster: cluster.Name(), Controller: input.Controller, DefaultDataPool: nativePoolRef(catalog, data[0]), Filesystem: fs.Name(), KeyType: refs.Get("cephxKeyType").Text(), Machines: requestMachines(base), Name: obj.Name(), PhysicalHosts: physicalHosts(base.Hosts), Pool: nativePoolRef(catalog, refs.Get("rbdPoolRef").Text()), Version: ConsumerVersion}
 		if err := exportMonitoring(catalog, cluster, &r); err != nil {
 			return plan, err
 		}
-		requires := []reconciliation.ObjectRef{{Kind: string(api.StorageCluster), Object: r.Cluster}, {Kind: string(api.StoragePool), Object: refs.Get("rbdPoolRef").Text()}, {Kind: string(api.StorageFilesystem), Object: r.Filesystem}}
+		requires := []reconciliation.ObjectRef{{Kind: string(api.CephCluster), Object: r.Cluster}, {Kind: string(api.CephPool), Object: refs.Get("rbdPoolRef").Text()}, {Kind: string(api.CephFilesystem), Object: r.Filesystem}}
 		units, err := monitoringUnits(cluster)
 		if err != nil {
 			return plan, err
@@ -180,12 +182,12 @@ func (c ExportCapability) Plan(ctx context.Context, input lifecycle.PlanInput) (
 			dependencies = append(dependencies, ServiceUnitBlockID(r.Cluster, unit))
 		}
 		if name := refs.Get("objectGatewayRef").Text(); name != "" {
-			gateway, _ := catalog.Find(api.StorageObjectGateway, name)
+			gateway, _ := catalog.Find(api.CephObjectGateway, name)
 			r.Gateway, err = exportGateway(catalog, cluster, gateway, base)
 			if err != nil {
 				return plan, err
 			}
-			requires = append(requires, reconciliation.ObjectRef{Kind: string(api.StorageObjectGateway), Object: name})
+			requires = append(requires, reconciliation.ObjectRef{Kind: string(api.CephObjectGateway), Object: name})
 			for _, dns := range catalog.OfKind(api.DNSServer) {
 				requires = append(requires, reconciliation.ObjectRef{Kind: string(api.DNSServer), Object: dns.Name()})
 			}
@@ -198,16 +200,16 @@ func (c ExportCapability) Plan(ctx context.Context, input lifecycle.PlanInput) (
 		if err != nil {
 			return plan, err
 		}
-		if _, err = DecodeExportRequest(canonical); err != nil {
+		if _, err = DecodeConsumerRequest(canonical); err != nil {
 			return plan, err
 		}
-		impacts := append([]string{"create per-export Ceph principals for " + obj.Name()}, exportGrant(r.Filesystem, refs.Get("objectGatewayRef").Text())...)
+		impacts := append([]string{"create per-consumer Ceph principals for " + obj.Name()}, exportGrant(r.Filesystem, refs.Get("objectGatewayRef").Text())...)
 		consumes := []string{}
 		if input.Verb == reconciliation.Destroy {
-			impacts = []string{"retire Ceph export " + obj.Name() + " with its owned hosts"}
+			impacts = []string{"retire Ceph consumer " + obj.Name() + " with its owned hosts"}
 			consumes = []string{reconciliation.AuthorizationDataLoss}
 		}
-		plan.Definitions = append(plan.Definitions, reconciliation.BlockDefinition{ID: ExportBlockID(obj.Name()), Description: impacts[0], Stage: reconciliation.StageClusters, Kind: string(api.StorageExport), Object: obj.Name(), Implementation: ExportImplementation, ContentDigest: ExportContentDigest(), Request: canonical, Requires: requires, Dependencies: dependencies, Exclusive: []string{"ceph/" + r.Cluster}, Impacts: impacts, Consumes: consumes})
+		plan.Definitions = append(plan.Definitions, reconciliation.BlockDefinition{ID: ConsumerBlockID(obj.Name()), Description: impacts[0], Stage: reconciliation.StageClusters, Kind: string(api.CephConsumer), Object: obj.Name(), Implementation: ConsumerImplementation, ContentDigest: ConsumerContentDigest(), Request: canonical, Requires: requires, Dependencies: dependencies, Exclusive: []string{"ceph/" + r.Cluster}, Impacts: impacts, Consumes: consumes})
 		for _, host := range base.Hosts {
 			plan.Secrets = append(plan.Secrets, host.SSHKeyRef)
 			if host.HostKeyRef != "" {
@@ -219,20 +221,20 @@ func (c ExportCapability) Plan(ctx context.Context, input lifecycle.PlanInput) (
 	plan.Secrets = slices.Compact(plan.Secrets)
 	return plan, nil
 }
-func (c ExportCapability) identity(ctx context.Context, e lifecycle.Execution) (ExportRequest, error) {
+func (c ConsumerCapability) identity(ctx context.Context, e lifecycle.Execution) (ConsumerRequest, error) {
 	if err := ctx.Err(); err != nil {
-		return ExportRequest{}, err
+		return ConsumerRequest{}, err
 	}
-	r, err := DecodeExportRequest(e.Block.Request)
+	r, err := DecodeConsumerRequest(e.Block.Request)
 	if err != nil {
 		return r, err
 	}
-	if e.ApplyOperation == "" || e.Block.Kind != string(api.StorageExport) || e.Block.Object != r.Name || e.Block.ID != ExportBlockID(r.Name) || e.Block.Implementation != ExportImplementation {
-		return r, failure("lifecycle.state", "Ceph export does not match its original apply identity", "")
+	if e.ApplyOperation == "" || e.Block.Kind != string(api.CephConsumer) || e.Block.Object != r.Name || e.Block.ID != ConsumerBlockID(r.Name) || e.Block.Implementation != ConsumerImplementation {
+		return r, failure("lifecycle.state", "Ceph consumer does not match its original apply identity", "")
 	}
 	return r, nil
 }
-func (c ExportCapability) runExport(ctx context.Context, e lifecycle.Execution, operation string) (lifecycle.RunResult, ExportRequest, error) {
+func (c ConsumerCapability) runExport(ctx context.Context, e lifecycle.Execution, operation string) (lifecycle.RunResult, ConsumerRequest, error) {
 	r, err := c.identity(ctx, e)
 	if err != nil {
 		return lifecycle.RunResult{}, r, err
@@ -245,7 +247,7 @@ func (c ExportCapability) runExport(ctx context.Context, e lifecycle.Execution, 
 		return lifecycle.RunResult{}, r, err
 	}
 	if !slices.Equal(r.Machines, scope.Machines) {
-		return lifecycle.RunResult{}, r, failure("lifecycle.state", "Ceph export host set differs from its proved cluster", "")
+		return lifecycle.RunResult{}, r, failure("lifecycle.state", "Ceph consumer host set differs from its proved cluster", "")
 	}
 	if err = bindPhysicalHosts(scope.Scope.Hosts, e, c.proofs); err != nil {
 		return lifecycle.RunResult{}, r, err
@@ -267,7 +269,7 @@ func (c ExportCapability) runExport(ctx context.Context, e lifecycle.Execution, 
 		return lifecycle.RunResult{}, r, err
 	}
 	if c.runner == nil {
-		return lifecycle.RunResult{}, r, failure("lifecycle.state", "the Ceph export adapter is not configured", "")
+		return lifecycle.RunResult{}, r, failure("lifecycle.state", "the Ceph consumer adapter is not configured", "")
 	}
 	deadline := 600 * time.Second
 	if operation == "apply" {
@@ -278,17 +280,17 @@ func (c ExportCapability) runExport(ctx context.Context, e lifecycle.Execution, 
 		refusals["gateway-dns"] = failure("lifecycle.unknown", "object gateway FQDN "+r.Gateway.FQDN+" does not resolve to its declared terminating addresses", "correct DNS resolution on the bootstrap host before continuing")
 	}
 	for _, reason := range []string{"export-foreign-principal", "export-key-type", "export-prerequisite", "export-identity"} {
-		refusals[reason] = failure("lifecycle.unknown", "Ceph export refused: "+reason, "inspect the export prerequisites and its owned identities before continuing")
+		refusals[reason] = failure("lifecycle.unknown", "Ceph consumer refused: "+reason, "inspect the consumer prerequisites and its owned identities before continuing")
 	}
-	result, err := c.runner.Run(ctx, lifecycle.RunFor(execution, lifecycle.Invocation{Implementation: ExportImplementation, Operation: operation, Variable: "bootwright_ceph_export", Canonical: canonical, Placement: machine.Placement{Connection: machine.ConnectionLocal, Machine: r.Controller}, Materials: files, Outputs: []lifecycle.OutputFile{{Name: ExportOutput, Variable: "externalDetails"}}, Refusals: refusals, NativeErrors: true, Deadline: deadline}))
+	result, err := c.runner.Run(ctx, lifecycle.RunFor(execution, lifecycle.Invocation{Implementation: ConsumerImplementation, Operation: operation, Variable: "bootwright_ceph_export", Canonical: canonical, Placement: machine.Placement{Connection: machine.ConnectionLocal, Machine: r.Controller}, Materials: files, Outputs: []lifecycle.OutputFile{{Name: ConsumerOutput, Variable: "externalDetails"}}, Refusals: refusals, NativeErrors: true, Deadline: deadline}))
 	return result, r, err
 }
 
-func (c ExportCapability) ProveBinding(ctx context.Context, contextName string, block reconciliation.Block, material map[string]secrets.Material) error {
+func (c ConsumerCapability) ProveBinding(ctx context.Context, contextName string, block reconciliation.Block, material map[string]secrets.Material) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	r, err := DecodeExportRequest(block.Request)
+	r, err := DecodeConsumerRequest(block.Request)
 	if err != nil {
 		return err
 	}
@@ -297,16 +299,16 @@ func (c ExportCapability) ProveBinding(ctx context.Context, contextName string, 
 	}
 	leaf, ok := boundLeaf(material[r.Gateway.CertificateRef])
 	if !ok || leaf.VerifyHostname(r.Gateway.FQDN) != nil {
-		return failure("secret.part", "the export gateway certificate does not prove its endpoint "+r.Gateway.FQDN, "bind a certificate naming the gateway endpoint before applying")
+		return failure("secret.part", "the consumer gateway certificate does not prove its endpoint "+r.Gateway.FQDN, "bind a certificate naming the gateway endpoint before applying")
 	}
 	return nil
 }
 
-func exportMonitoring(catalog api.Catalog, cluster api.Object, r *ExportRequest) error {
+func exportMonitoring(catalog api.Catalog, cluster api.Object, r *ConsumerRequest) error {
 	r.Monitors = map[string]string{}
 	r.MonitoringHosts = []string{}
 	r.MonitoringPort = 9283
-	for _, service := range cluster.Spec().Get("ceph", "services").Items() {
+	for _, service := range cluster.Spec().Get("services").Items() {
 		typ := service.Get("service_type").Text()
 		if typ != "mon" && typ != "mgr" {
 			continue
@@ -315,8 +317,8 @@ func exportMonitoring(catalog api.Catalog, cluster api.Object, r *ExportRequest)
 		if err != nil {
 			return err
 		}
-		for _, node := range cluster.Spec().Get("ceph", "topology", "nodes").Items() {
-			name := storage.NativeHostname(node)
+		for _, node := range cluster.Spec().Get("topology", "nodes").Items() {
+			name := cephcluster.NativeHostname(node)
 			if !slices.Contains(hosts, name) {
 				continue
 			}
@@ -327,7 +329,7 @@ func exportMonitoring(catalog api.Catalog, cluster api.Object, r *ExportRequest)
 				if err != nil {
 					continue
 				}
-				for _, rawNet := range cluster.Spec().Get("ceph", "networks", "publicCIDRs").Strings() {
+				for _, rawNet := range cluster.Spec().Get("networks", "publicCIDRs").Strings() {
 					network, err := netip.ParsePrefix(rawNet)
 					if err == nil && network.Contains(addr) {
 						candidates = append(candidates, addr.Unmap().String())
@@ -338,7 +340,7 @@ func exportMonitoring(catalog api.Catalog, cluster api.Object, r *ExportRequest)
 			slices.Sort(candidates)
 			candidates = slices.Compact(candidates)
 			if len(candidates) != 1 {
-				return failure("api.invariant", "Ceph export requires one unambiguous public address per monitor and manager host", "declare one address in the Ceph public networks on each selected host")
+				return failure("api.invariant", "Ceph consumer requires one unambiguous public address per monitor and manager host", "declare one address in the Ceph public networks on each selected host")
 			}
 			if typ == "mon" {
 				r.Monitors[name] = candidates[0]
@@ -352,24 +354,24 @@ func exportMonitoring(catalog api.Catalog, cluster api.Object, r *ExportRequest)
 	return nil
 }
 
-func exportGateway(catalog api.Catalog, cluster, gateway api.Object, base Request) (*ExportGateway, error) {
+func exportGateway(catalog api.Catalog, cluster, gateway api.Object, base Request) (*ConsumerGateway, error) {
 	gr, err := gatewayRequest(catalog, cluster, gateway, base)
 	if err != nil {
 		return nil, err
 	}
 	g := gr.Gateway
-	addresses, err := storage.GatewayDNSAddresses(catalog, gateway)
+	addresses, err := cephcluster.GatewayDNSAddresses(catalog, gateway)
 	if err != nil {
 		return nil, failure("api.invariant", err.Error(), "correct the gateway placement and public addresses before planning")
 	}
-	service, _ := storage.NativeService(cluster, gateway.Spec().Get("serviceRef").Text())
+	service, _ := cephcluster.NativeService(cluster, gateway.Spec().Get("serviceRef").Text())
 	tls := service.Get("spec", "ssl").Bool()
 	port := int(positiveOr(service.Get("spec", "rgw_frontend_port"), 80))
 	portDeclared := service.Has("spec", "rgw_frontend_port")
 	certificate := ""
-	terminating := storage.NativeServiceName(service)
-	if ingress, found := frontingIngress(cluster, storage.NativeServiceName(service)); found {
-		terminating = storage.NativeServiceName(ingress)
+	terminating := cephcluster.NativeServiceName(service)
+	if ingress, found := frontingIngress(cluster, cephcluster.NativeServiceName(service)); found {
+		terminating = cephcluster.NativeServiceName(ingress)
 		tls = ingress.Get("spec", "ssl").Bool()
 		port = int(positiveOr(ingress.Get("spec", "frontend_port"), 80))
 		portDeclared = ingress.Has("spec", "frontend_port")
@@ -384,5 +386,5 @@ func exportGateway(catalog api.Catalog, cluster, gateway api.Object, base Reques
 			}
 		}
 	}
-	return &ExportGateway{Addresses: addresses, CertificateRef: certificate, FQDN: g.Endpoint, IndexPool: g.IndexPool, Name: g.Name, Port: port, Realm: g.Realm, TLS: tls, Zone: g.Zone, ZoneGroup: g.ZoneGroup}, nil
+	return &ConsumerGateway{Addresses: addresses, CertificateRef: certificate, FQDN: g.Endpoint, IndexPool: g.IndexPool, Name: g.Name, Port: port, Realm: g.Realm, TLS: tls, Zone: g.Zone, ZoneGroup: g.ZoneGroup}, nil
 }

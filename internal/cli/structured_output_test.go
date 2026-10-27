@@ -11,6 +11,7 @@ import (
 	"strings"
 	"testing"
 
+	api "github.com/crmarques/bootwright/api/v1alpha1"
 	containeraccess "github.com/crmarques/bootwright/internal/containercluster/access"
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
 	"github.com/crmarques/bootwright/internal/diagnostics"
@@ -453,5 +454,25 @@ func TestStructuredExportsCarryControlBytesExactly(t *testing.T) {
 				t.Fatalf("%q %s: kubeconfig bytes changed to %q: %s", content, format, got, out)
 			}
 		}
+	}
+}
+
+// schema writes the advisory JSON Schema document itself in text mode and
+// places it in result.schema beside result.format in JSON mode, calling no
+// service.
+func TestSchemaWritesTheAdvisoryExport(t *testing.T) {
+	code, out, errOut, record := runRecorded([]string{"schema", "--format", "json-schema"})
+	var document map[string]any
+	if code != 0 || errOut != "" || record.calls != 0 || json.Unmarshal([]byte(out), &document) != nil || document["$schema"] != api.JSONSchemaDialect {
+		t.Fatalf("schema: code %d stderr %q calls %d stdout %.200s", code, errOut, record.calls, out)
+	}
+	code, out, _, _ = runRecorded([]string{"schema", "--format", "json-schema", "-o", "json"})
+	result, _ := structuredDocument(t, out)["result"].(map[string]any)
+	schema, _ := result["schema"].(map[string]any)
+	if code != 0 || result["format"] != "json-schema" || schema["$schema"] != api.JSONSchemaDialect {
+		t.Fatalf("schema -o json: code %d stdout %.300s", code, out)
+	}
+	if code, _, _, _ := runRecorded([]string{"schema"}); code != 2 {
+		t.Fatalf("schema without --format exited %d, want the usage refusal", code)
 	}
 }

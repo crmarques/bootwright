@@ -64,7 +64,7 @@ the lab and restore it afterward. Configure
 [source-scoped firewall access](../../../docs/operator-guide.md#network-exposure)
 for guests; a service answering locally does not prove guest reachability.
 
-On a FIPS-mode controller choose `rsa` or `ecdsa-p256` for
+On a FIPS-mode controller choose `rsa` or `ecdsaP256` for
 `bootwright-machine-key`; see the
 [FIPS guidance](../../../docs/operator-guide.md#a-fips-mode-controller).
 
@@ -135,7 +135,7 @@ applying the lab.
 ./bin/bootwright plan
 ./bin/bootwright apply --stage controller
 ./bin/bootwright preflight controller --context lab-rhel
-./bin/bootwright apply --stage infra-components
+./bin/bootwright apply --stage infrastructure-services
 ```
 
 `context init` selects the new context and freezes the input copy.

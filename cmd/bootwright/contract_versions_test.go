@@ -62,7 +62,7 @@ func contractVersions() []contractVersion {
 		{ceph.PhysicalRetirementImplementation, ceph.PhysicalRetirementContentDigest(), reflect.TypeFor[ceph.PhysicalRetirementRequest](), reflect.TypeFor[ceph.PhysicalRetirementEvidence]()},
 		{ceph.SMBImplementation, ceph.SMBContentDigest(), reflect.TypeFor[ceph.SMBRequest](), reflect.TypeFor[ceph.SMBEvidence]()},
 		{ceph.ReplicationImplementation, ceph.ReplicationContentDigest(), reflect.TypeFor[ceph.ReplicationRequest](), reflect.TypeFor[ceph.ReplicationEvidence]()},
-		{ceph.ExportImplementation, ceph.ExportContentDigest(), reflect.TypeFor[ceph.ExportRequest](), reflect.TypeFor[ceph.ExportEvidence]()},
+		{ceph.ConsumerImplementation, ceph.ConsumerContentDigest(), reflect.TypeFor[ceph.ConsumerRequest](), reflect.TypeFor[ceph.ConsumerEvidence]()},
 	}
 	for _, definition := range []managedservice.Definition{proxy.Definition(), dnsServerDefinition(), ntpserver.Definition()} {
 		versions = append(versions, contractVersion{definition.Implementation, definition.ContentDigest(),
@@ -143,10 +143,10 @@ func validated(reason string) automationFormat {
 func automationFormats() map[string]automationFormat {
 	host, core := persistedBy(ceph.HostImplementation), persistedBy(ceph.Implementation)
 	formats := map[string]automationFormat{
-		"addon-instance-request-v1":  {class: formatMirrored},
-		"ceph-export-request-v1":     {class: formatMirrored},
+		"addon-instance-request-v2":  {class: formatMirrored},
+		"ceph-export-request-v2":     {class: formatMirrored},
 		"ceph-export-evidence-v1":    {class: formatMirrored},
-		"cluster-network-request-v1": {class: formatMirrored},
+		"cluster-network-request-v2": {class: formatMirrored},
 		"cluster-objects-v2":         {class: formatMirrored},
 		// The host block writes them; the core block's workers read them back
 		// for the manager account, the cephadm cache and the OSD identities.
@@ -188,7 +188,7 @@ func automationFormats() map[string]automationFormat {
 		// The core block's cache phase publishes cephadm on each host under it.
 		"ceph-host-cache-v1": core,
 		// The client and dashboard credential custody records, by kind.
-		"-custody-v1": persistedBy(ceph.Implementation, ceph.ExportImplementation),
+		"-custody-v1": persistedBy(ceph.Implementation, ceph.ConsumerImplementation),
 
 		// The namespace of the ownership metadata a libvirt network, pool or
 		// domain carries.
@@ -205,9 +205,9 @@ func automationFormats() map[string]automationFormat {
 		"bootwright-contained-public-label-probe-v1": transient("the bytes the label probe writes in its own scratch and reads back"),
 		"ceph-packages-v2":                           transient("the guest package transaction policy ceph_packages.transaction_request builds and the shared resolver reads within one run"),
 
-		"ceph-host-v7":                 {class: formatMirrored},
+		"ceph-host-v8":                 {class: formatMirrored},
 		"ceph-host-evidence-v3":        {class: formatMirrored},
-		"ceph-core-v32":                {class: formatMirrored},
+		"ceph-core-v33":                {class: formatMirrored},
 		"ceph-core-evidence-v11":       {class: formatMirrored},
 		"ceph-packages-v3":             {class: formatMirrored},
 		"ceph-image-v4":                {class: formatMirrored},
@@ -221,10 +221,10 @@ func automationFormats() map[string]automationFormat {
 		"machine-libvirt-v8":        {class: formatMirrored},
 		"machine-baremetal-v2":      {class: formatMirrored},
 		"os-package-tree-v1":        {class: formatMirrored},
-		"os-install-anaconda-v16":   {class: formatMirrored},
-		"physical-erase-v1":         {class: formatMirrored},
+		"os-install-anaconda-v17":   {class: formatMirrored},
+		"physical-erase-v2":         {class: formatMirrored},
 		"cluster-media-agent-v9":    {class: formatMirrored},
-		"cluster-install-agent-v7":  {class: formatMirrored},
+		"cluster-install-agent-v8":  {class: formatMirrored},
 		"artifact-server-nginx-v2":  {class: formatMirrored},
 		"managed-service-v4":        {class: formatMirrored},
 		// Power is no plan block: each run binds its request to the power
@@ -260,15 +260,15 @@ func automationIdentities() map[string]automationFormat {
 		"bootwright.cluster-objects.owner-v1":     fixedBy(kindMark, "the domain an applied object's owner annotation is derived under", addon, network),
 		"bootwright.io/owner":                     fixedBy(kindMark, "the annotation key of an applied object's owner mark", addon, network),
 		"bootwright-":                             fixedBy(kindPlace, "the prefix of the server-side apply field manager and of the install's wildcard DNS label", addon, network, install),
-		"bootwright-owner":                        fixedBy(kindMark, "the key of the owner mark on a Ceph resource", core, ceph.ExportImplementation, ceph.SMBImplementation, ceph.ReplicationImplementation),
+		"bootwright-owner":                        fixedBy(kindMark, "the key of the owner mark on a Ceph resource", core, ceph.ConsumerImplementation, ceph.SMBImplementation, ceph.ReplicationImplementation),
 		"bootwright:":                             fixedBy(kindMark, "the comment prefix that marks the cluster's authorized SSH key line as this owner's", core),
 		".bootwright-registry-":                   fixedBy(kindMark, "the anchor naming the registry credential this owner placed", core),
-		"bootwright-managed-export":               fixedBy(kindMark, "the argument the published handoff ConfigMap names the export by", ceph.ExportImplementation),
+		"bootwright-managed-export":               fixedBy(kindMark, "the argument the published handoff ConfigMap names the export by", ceph.ConsumerImplementation),
 		"bootwright-bound:":                       fixedBy(kindProof, "the placeholder a stored service spec holds where a bound secret goes", core),
 		"bootwright-bound:/spec/ssl_cert":         fixedBy(kindProof, "the placeholder a stored gateway spec holds for its bound certificate", core),
 		"bootwright-bound:/spec/ssl_key":          fixedBy(kindProof, "the placeholder a stored gateway spec holds for its bound key", core),
-		"bootwright.storage-export.principal-v1":  fixedBy(kindPlace, "the domain the export's principal name is derived under", ceph.ExportImplementation),
-		"/var/lib/bootwright/ceph":                fixedBy(kindPlace, "the root of the cluster's tunnel, custody and native records on each host, which the export, SMB and replication workers read and write under", core, ceph.ExportImplementation, ceph.SMBImplementation, ceph.ReplicationImplementation),
+		"bootwright.storage-export.principal-v1":  fixedBy(kindPlace, "the domain the export's principal name is derived under", ceph.ConsumerImplementation),
+		"/var/lib/bootwright/ceph":                fixedBy(kindPlace, "the root of the cluster's tunnel, custody and native records on each host, which the export, SMB and replication workers read and write under", core, ceph.ConsumerImplementation, ceph.SMBImplementation, ceph.ReplicationImplementation),
 		"/var/lib/bootwright/ceph-host":           fixedBy(kindPlace, "the root of the host's runtime profile", host, core),
 		"/var/lib/bootwright/ceph-packages":       fixedBy(kindPlace, "the root of the host's package records", host),
 		"/run/bootwright-ceph-ssh":                fixedBy(kindPlace, "the tunnel's mount point inside the cluster's containers", core),

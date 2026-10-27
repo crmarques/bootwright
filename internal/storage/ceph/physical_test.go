@@ -19,14 +19,14 @@ func physicalCatalog() (api.Catalog, api.Object) {
 		if object.Kind() == api.InfraProvider {
 			objects[i] = object.WithSpec(requestMap("baremetal", requestMap()))
 		}
-		if object.Kind() != api.StorageCluster {
+		if object.Kind() != api.CephCluster {
 			continue
 		}
-		services := object.Spec().Get("ceph", "services").Items()[:2]
+		services := object.Spec().Get("services").Items()[:2]
 		for n := 1; n <= 3; n++ {
 			services = append(services, requestMap("service_type", "osd", "service_id", fmt.Sprintf("data-%d", n), "placement", requestMap("hosts", api.StringList(fmt.Sprintf("node-%d", n))), "spec", requestMap("data_devices", requestMap("paths", api.StringList(fmt.Sprintf("/dev/disk/by-id/wwn-0x500000000000000%d", n))))))
 		}
-		cluster = object.WithSpec(object.Spec().WithPath(api.ListValue(services...), "ceph", "services"))
+		cluster = object.WithSpec(object.Spec().WithPath(api.ListValue(services...), "services"))
 		objects[i] = cluster
 	}
 	return api.NewCatalog(objects), cluster
@@ -44,16 +44,16 @@ func TestPhysicalCephPlansOnlyExplicitWWNIntent(t *testing.T) {
 		}
 	}
 	for _, path := range []string{"/dev/sda", "/dev/disk/by-id/wwn-0x5000000000000001-part1", "/dev/disk/by-id/wwn-0x500000000000000A"} {
-		services := cluster.Spec().Get("ceph", "services").Items()
+		services := cluster.Spec().Get("services").Items()
 		services[2] = services[2].WithPath(api.StringList(path), "spec", "data_devices", "paths")
-		changed := cluster.WithSpec(cluster.Spec().WithPath(api.ListValue(services...), "ceph", "services"))
+		changed := cluster.WithSpec(cluster.Spec().WithPath(api.ListValue(services...), "services"))
 		if _, err := baseRequest(catalog, changed, "synthetic"); err == nil {
 			t.Fatal("unsafe physical selector admitted", path)
 		}
 	}
-	services := cluster.Spec().Get("ceph", "services").Items()
+	services := cluster.Spec().Get("services").Items()
 	services[3] = services[3].WithPath(services[2].Get("spec", "data_devices", "paths"), "spec", "data_devices", "paths")
-	if _, err := baseRequest(catalog, cluster.WithSpec(cluster.Spec().WithPath(api.ListValue(services...), "ceph", "services")), "synthetic"); err == nil {
+	if _, err := baseRequest(catalog, cluster.WithSpec(cluster.Spec().WithPath(api.ListValue(services...), "services")), "synthetic"); err == nil {
 		t.Fatal("shared physical WWN admitted")
 	}
 }
@@ -112,7 +112,7 @@ func TestPhysicalCephCannotUseVirtualHostRetirement(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	block := reconciliation.Block{BlockDefinition: reconciliation.BlockDefinition{Kind: string(api.StorageCluster), Object: "example", Request: data}}
+	block := reconciliation.Block{BlockDefinition: reconciliation.BlockDefinition{Kind: string(api.CephCluster), Object: "example", Request: data}}
 	q, err := (Capability{}).Quiescent(context.Background(), lifecycle.Probe{Block: block, RetiredWithHosts: true})
 	if err != nil || q.State != lifecycle.Unproved || !strings.Contains(q.Reason, "B491") {
 		t.Fatalf("physical claim release counted as retirement: %+v %v", q, err)

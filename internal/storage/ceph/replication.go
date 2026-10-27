@@ -15,7 +15,7 @@ import (
 	"github.com/crmarques/bootwright/internal/reconciliation"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
 	"github.com/crmarques/bootwright/internal/secrets"
-	"github.com/crmarques/bootwright/internal/storage"
+	"github.com/crmarques/bootwright/internal/storage/cephcluster"
 )
 
 const ReplicationVersion = "ceph-replication-v1"
@@ -26,7 +26,9 @@ func ReplicationContentDigest() string {
 	sum := sha256.Sum256([]byte(ReplicationImplementation + "\x00" + ReplicationVersion + "\x00" + ReplicationEvidenceVersion + "\x00" + PhysicalRetirementImplementation))
 	return hex.EncodeToString(sum[:])
 }
-func ReplicationBlockID(name string) string { return "ceph-replication-" + name }
+func ReplicationBlockID(name string) string {
+	return reconciliation.BlockIdentity("ceph-replication-", name)
+}
 
 type ReplicationEndpoint struct {
 	Cluster    string          `json:"cluster"`
@@ -53,7 +55,7 @@ func DecodeReplicationRequest(data []byte) (ReplicationRequest, error) {
 	if err != nil {
 		return r, err
 	}
-	if r.Controller == "" || !reconciliation.ValidSegment(ReplicationBlockID(r.Object)) || r.Primary.Cluster == "" || r.Secondary.Cluster == "" || r.Primary.Cluster == r.Secondary.Cluster || r.Mode != "image" && r.Mode != "pool" || len(r.Images) < 1 || len(r.Images) > 3 {
+	if r.Controller == "" || !reconciliation.ValidSegment(r.Object) || r.Primary.Cluster == "" || r.Secondary.Cluster == "" || r.Primary.Cluster == r.Secondary.Cluster || r.Mode != "image" && r.Mode != "pool" || len(r.Images) < 1 || len(r.Images) > 3 {
 		return r, failure("lifecycle.state", "the frozen Ceph replication request is inconsistent", "")
 	}
 	for _, end := range []ReplicationEndpoint{r.Primary, r.Secondary} {
@@ -95,11 +97,8 @@ func (c ReplicationCapability) Plan(ctx context.Context, input lifecycle.PlanInp
 		return plan, failure("lifecycle.state", "replication planning requires compiled state", "")
 	}
 	catalog := input.State.Effective()
-	for _, object := range catalog.OfKind(api.StorageReplication) {
-		if !reconciliation.ValidSegment(ReplicationBlockID(object.Name())) {
-			return plan, failure("api.invariant", "StorageReplication name does not fit its 63-character block identity", "shorten metadata.name to at most 46 characters")
-		}
-		if issues := storage.Validate(object, catalog); len(issues) != 0 {
+	for _, object := range catalog.OfKind(api.CephReplication) {
+		if issues := cephcluster.Validate(object, catalog); len(issues) != 0 {
 			return plan, failure("api.invariant", issues[0].Message, issues[0].Remediation)
 		}
 		r := ReplicationRequest{Version: ReplicationVersion, Controller: input.Controller, Object: object.Name(), Images: []RBDImage{}}
@@ -107,7 +106,7 @@ func (c ReplicationCapability) Plan(ctx context.Context, input lifecycle.PlanInp
 		dependencies := []string{}
 		exclusive := []string{}
 		for i, fields := range [][2]string{{"clusterRef", "poolRef"}, {"peerClusterRef", "peerPoolRef"}} {
-			pool, _ := catalog.Find(api.StoragePool, object.Spec().Get(fields[1]).Text())
+			pool, _ := catalog.Find(api.CephPool, object.Spec().Get(fields[1]).Text())
 			base, err := poolRequest(catalog, pool, input.Context.Name)
 			if err != nil {
 				return plan, err
@@ -119,7 +118,7 @@ func (c ReplicationCapability) Plan(ctx context.Context, input lifecycle.PlanInp
 			} else {
 				r.Secondary = endpoint
 			}
-			requirements = append(requirements, reconciliation.ObjectRef{Kind: string(api.StoragePool), Object: pool.Name()})
+			requirements = append(requirements, reconciliation.ObjectRef{Kind: string(api.CephPool), Object: pool.Name()})
 			dependencies = append(dependencies, ClusterBlockID(base.Cluster), ImageBlockID(base.Cluster))
 			exclusive = append(exclusive, "ceph/"+base.Cluster)
 			for _, host := range base.Hosts {
@@ -129,13 +128,13 @@ func (c ReplicationCapability) Plan(ctx context.Context, input lifecycle.PlanInp
 				}
 			}
 		}
-		for _, image := range storage.ReplicationImages(catalog, object) {
+		for _, image := range cephcluster.ReplicationImages(catalog, object) {
 			request, err := rbdImageRequest(catalog, image, input.Context.Name)
 			if err != nil {
 				return plan, err
 			}
 			r.Images = append(r.Images, *request.RBD)
-			requirements = append(requirements, reconciliation.ObjectRef{Kind: string(api.StorageRBDImage), Object: image.Name()})
+			requirements = append(requirements, reconciliation.ObjectRef{Kind: string(api.CephRBDImage), Object: image.Name()})
 		}
 		dependencies = append(dependencies, ServiceUnitBlockID(r.Secondary.Cluster, ServiceUnit{Type: "rbd-mirror"}))
 		slices.Sort(dependencies)
@@ -148,7 +147,7 @@ func (c ReplicationCapability) Plan(ctx context.Context, input lifecycle.PlanInp
 			return plan, err
 		}
 		removal := replicationRemoval(input.Verb, r)
-		plan.Definitions = append(plan.Definitions, reconciliation.BlockDefinition{ID: ReplicationBlockID(r.Object), Kind: string(api.StorageReplication), Object: r.Object, Implementation: ReplicationImplementation, ContentDigest: ReplicationContentDigest(), Request: canonical, Stage: reconciliation.StageClusters, Requires: requirements, Dependencies: dependencies, Exclusive: exclusive, Description: removal.Description, Impacts: removal.Impacts, Consumes: removal.Consumes})
+		plan.Definitions = append(plan.Definitions, reconciliation.BlockDefinition{ID: ReplicationBlockID(r.Object), Kind: string(api.CephReplication), Object: r.Object, Implementation: ReplicationImplementation, ContentDigest: ReplicationContentDigest(), Request: canonical, Stage: reconciliation.StageClusters, Requires: requirements, Dependencies: dependencies, Exclusive: exclusive, Description: removal.Description, Impacts: removal.Impacts, Consumes: removal.Consumes})
 	}
 	slices.Sort(plan.Secrets)
 	plan.Secrets = slices.Compact(plan.Secrets)
@@ -180,7 +179,7 @@ func (ReplicationCapability) identity(ctx context.Context, e lifecycle.Execution
 	if err != nil {
 		return r, err
 	}
-	if e.Block.Kind != string(api.StorageReplication) || e.Block.Object != r.Object || e.Block.ID != ReplicationBlockID(r.Object) || e.ApplyOperation == "" {
+	if e.Block.Kind != string(api.CephReplication) || e.Block.Object != r.Object || e.Block.ID != ReplicationBlockID(r.Object) || e.ApplyOperation == "" {
 		return r, failure("lifecycle.state", "replication requires its frozen resource and original apply identity", "")
 	}
 	return r, nil

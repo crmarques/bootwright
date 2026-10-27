@@ -62,11 +62,11 @@ type ClusterFacts struct {
 	Reserved                                          []AddressHolder
 	Gateway                                           OVNGateway
 	SecondaryNetworks                                 []SecondaryNetwork
-	Exports                                           []ExportFacts
+	Exports                                           []ConsumerFacts
 	Trust                                             TrustFacts
 }
 
-type ExportFacts struct {
+type ConsumerFacts struct {
 	Name, Cluster string
 	Gateway, TLS  bool
 }

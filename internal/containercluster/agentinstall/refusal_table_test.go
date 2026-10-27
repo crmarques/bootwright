@@ -15,7 +15,7 @@ import (
 
 // refusalSpec owns this capability's refusal table, read from this package's
 // directory.
-const refusalSpec = "../../../specs/container-clusters.md"
+const refusalSpec = "../../../specs/openshift-clusters.md"
 
 // refusalCase is a selected graph that one row of the refusal table refuses:
 // the object its one refusal names, and the value of each placeholder the
@@ -27,21 +27,21 @@ type refusalCase struct {
 	values  map[string]string
 }
 
-// TestContainerClusterRefusalTableMatchesUnsupported holds both capabilities'
+// TestOpenShiftClusterRefusalTableMatchesUnsupported holds both capabilities'
 // Unsupported to the container-cluster refusal table: every row refuses its
 // graph with exactly its reason and remedy, and a row added or removed on
 // either side fails here.
-func TestContainerClusterRefusalTableMatchesUnsupported(t *testing.T) {
+func TestOpenShiftClusterRefusalTableMatchesUnsupported(t *testing.T) {
 	sno := func(mutate func(api.Value) api.Value) api.Catalog {
 		declared := cluster("sno",
 			installSelection(endpoints("198.51.100.21", "198.51.100.21", "198.51.100.21", "node")),
-			node("master-0", "master", "sno-01", "master-0.sno.lab.example.test"))
+			node("master-0", "controlPlane", "sno-01", "master-0.sno.lab.example.test"))
 		return api.NewCatalog(append(base(), guest("sno-01", "198.51.100.21/24"), declared.WithSpec(mutate(declared.Spec()))))
 	}
 	onSNO := func(machine api.Object, extra ...api.Object) api.Catalog {
 		return api.NewCatalog(append(append(base(), extra...), machine, cluster("sno",
 			installSelection(endpoints("198.51.100.21", "198.51.100.21", "198.51.100.21", "node")),
-			node("master-0", "master", "sno-01", "master-0.sno.lab.example.test"))))
+			node("master-0", "controlPlane", "sno-01", "master-0.sno.lab.example.test"))))
 	}
 	installed := guest("sno-01", "198.51.100.21/24")
 	installed = installed.WithSpec(installed.Spec().WithPath(api.StringValue("rhel-9-8"), "os", "installProfileRef"))
@@ -54,27 +54,27 @@ func TestContainerClusterRefusalTableMatchesUnsupported(t *testing.T) {
 		cluster("ocp",
 			installSelection(
 				endpoints("198.51.100.10", "198.51.100.10", "198.51.100.11", "external"),
-				field("platform", api.MapValue(text("type", "vsphere"))),
+				field("platform", api.MapValue(field("vsphere", api.MapValue()))),
 			),
-			node("master-0", "master", "ocp-01", "master-0.ocp.lab.example.test"),
-			node("master-1", "master", "ocp-02", "master-1.ocp.lab.example.test"),
-			node("master-2", "master", "ocp-03", "master-2.ocp.lab.example.test"))))
-	onSNOCluster := map[string]string{"<cluster>": "ContainerCluster/sno"}
-	onNode := map[string]string{"<cluster>": "ContainerCluster/sno", "<machine>": "Machine/sno-01"}
+			node("master-0", "controlPlane", "ocp-01", "master-0.ocp.lab.example.test"),
+			node("master-1", "controlPlane", "ocp-02", "master-1.ocp.lab.example.test"),
+			node("master-2", "controlPlane", "ocp-03", "master-2.ocp.lab.example.test"))))
+	onSNOCluster := map[string]string{"<cluster>": "OpenShiftCluster/sno"}
+	onNode := map[string]string{"<cluster>": "OpenShiftCluster/sno", "<machine>": "Machine/sno-01"}
 
 	networkCase := func(change func(api.Value) api.Value) refusalCase {
 		n := guest("sno-01", "198.51.100.21/24")
 		configuration := networkConfiguration().Spec()
 		configuration = configuration.With("nmstate", change(configuration.Get("nmstate")))
 		n = n.WithSpec(n.Spec().With("network", n.Spec().Get("network").Without("configRef").With("inline", configuration)))
-		return refusalCase{onSNO(n), "ContainerCluster/sno", map[string]string{"<machine>": "Machine/sno-01", "<interface>": "extra"}}
+		return refusalCase{onSNO(n), "OpenShiftCluster/sno", map[string]string{"<machine>": "Machine/sno-01", "<interface>": "extra"}}
 	}
 	endpointCase := func(slot, name string, value api.Value, port string) refusalCase {
-		values := map[string]string{"<cluster>": "ContainerCluster/sno", "<slot>": slot, "<port>": port,
+		values := map[string]string{"<cluster>": "OpenShiftCluster/sno", "<slot>": slot, "<port>": port,
 			"<field>": "$.spec.install.endpoints." + slot + "." + name}
 		return refusalCase{sno(func(spec api.Value) api.Value {
 			return spec.WithPath(value, "install", "endpoints", slot, name)
-		}), "ContainerCluster/sno", values}
+		}), "OpenShiftCluster/sno", values}
 	}
 	cases := map[string]refusalCase{
 		"An agent OVN section": networkCase(func(v api.Value) api.Value { return v.With("ovn", api.MapValue()) }),
@@ -92,59 +92,59 @@ func TestContainerClusterRefusalTableMatchesUnsupported(t *testing.T) {
 		}),
 
 		"A boot-image server off the controller": {
-			api.NewCatalog(append(append(base(), hypervisor()...), onRemote(guest("sno-01", "198.51.100.21/24")), servedBy("far-artifacts", cluster("sno", installSelection(endpoints("198.51.100.21", "198.51.100.21", "198.51.100.21", "node")), node("master-0", "master", "sno-01", "master-0.sno.lab.example.test"))))),
-			"ContainerCluster/sno", map[string]string{"<server>": "ArtifactServer/far-artifacts"},
+			api.NewCatalog(append(append(base(), hypervisor()...), onRemote(guest("sno-01", "198.51.100.21/24")), servedBy("far-artifacts", cluster("sno", installSelection(endpoints("198.51.100.21", "198.51.100.21", "198.51.100.21", "node")), node("master-0", "controlPlane", "sno-01", "master-0.sno.lab.example.test"))))),
+			"OpenShiftCluster/sno", map[string]string{"<server>": "ArtifactServer/far-artifacts"},
 		},
 		"An OKD cluster": {sno(func(spec api.Value) api.Value {
 			return spec.WithPath(api.StringValue("okd"), "distribution", "type")
-		}), "ContainerCluster/sno", onSNOCluster},
+		}), "OpenShiftCluster/sno", onSNOCluster},
 		"A release pinned by image alone": {sno(func(spec api.Value) api.Value {
 			return spec.With("distribution", api.MapValue(text("type", "openshift"),
 				field("release", api.MapValue(text("image", "quay.io/openshift/release:4.21.15")))))
-		}), "ContainerCluster/sno", onSNOCluster},
+		}), "OpenShiftCluster/sno", onSNOCluster},
 		"A disconnected cluster": {sno(func(spec api.Value) api.Value {
 			return spec.WithPath(api.StringValue("disconnected"), "install", "mode")
-		}), "ContainerCluster/sno", onSNOCluster},
+		}), "OpenShiftCluster/sno", onSNOCluster},
 
 		"Serving certificates": {sno(func(spec api.Value) api.Value {
 			return spec.WithPath(api.MapValue(text("defaultCertificateRef", "ingress-tls")), "install", "servingCertificates", "ingress")
-		}), "ContainerCluster/sno", onSNOCluster},
+		}), "OpenShiftCluster/sno", onSNOCluster},
 
 		"An endpoint port the installer does not serve":   endpointCase("ingress", "port", api.IntegerValue("80"), "443"),
 		"An endpoint scheme the installer does not serve": endpointCase("api", "scheme", api.StringValue("http"), ""),
 		"An endpoint prefix length":                       endpointCase("api-int", "prefixLength", api.IntegerValue("24"), ""),
 		"Endpoint interface networks":                     endpointCase("api", "interfaceNetworks", api.StringList("198.51.100.0/24"), ""),
 
-		"Several nodes on another platform": {multiNode, "ContainerCluster/ocp", map[string]string{"<cluster>": "ContainerCluster/ocp"}},
-		"More nodes than the run ceiling fits": {largeCatalog(29), "ContainerCluster/ocp",
-			map[string]string{"<cluster>": "ContainerCluster/ocp", "<nodes>": "29", "<deadline>": "6h18m0s"}},
-		"A node with an install profile":    {onSNO(installed), "ContainerCluster/sno", onNode},
-		"A node on an unrealized substrate": {onSNO(unrealized, vsphere), "ContainerCluster/sno", onSNOCluster},
-		"A KubeVirt node on a nested host":  {onSNO(unrealized, nestedKubevirt), "ContainerCluster/sno", map[string]string{"<provider>": "InfraProvider/vc"}},
+		"Several nodes on another platform": {multiNode, "OpenShiftCluster/ocp", map[string]string{"<cluster>": "OpenShiftCluster/ocp"}},
+		"More nodes than the run ceiling fits": {largeCatalog(29), "OpenShiftCluster/ocp",
+			map[string]string{"<cluster>": "OpenShiftCluster/ocp", "<nodes>": "29", "<deadline>": "6h18m0s"}},
+		"A node with an install profile":    {onSNO(installed), "OpenShiftCluster/sno", onNode},
+		"A node on an unrealized substrate": {onSNO(unrealized, vsphere), "OpenShiftCluster/sno", onSNOCluster},
+		"A KubeVirt node on a nested host":  {onSNO(unrealized, nestedKubevirt), "OpenShiftCluster/sno", map[string]string{"<provider>": "InfraProvider/vc"}},
 		"A node whose emulated controller port does not allocate": {
-			singleNodeOnProvider(portPastTheSpace, guest("sno-00", "198.51.100.20/24")), "ContainerCluster/sno", map[string]string{"<provider>": "InfraProvider/lab-libvirt", "<node>": "master-0", "<machine>": "Machine/sno-01"},
+			singleNodeOnProvider(portPastTheSpace, guest("sno-00", "198.51.100.20/24")), "OpenShiftCluster/sno", map[string]string{"<provider>": "InfraProvider/lab-libvirt", "<node>": "master-0", "<machine>": "Machine/sno-01"},
 		},
 		"A node's provider with no emulated controller credential": {
-			singleNodeOnProvider(noControllerCredential), "ContainerCluster/sno", map[string]string{"<provider>": "InfraProvider/lab-libvirt", "<node>": "master-0", "<machine>": "Machine/sno-01"},
+			singleNodeOnProvider(noControllerCredential), "OpenShiftCluster/sno", map[string]string{"<provider>": "InfraProvider/lab-libvirt", "<node>": "master-0", "<machine>": "Machine/sno-01"},
 		},
 		"A physical node with an HTTP controller": {physicalWithController(func(v api.Value) api.Value {
 			return v.With("address", api.StringValue("http://bmc.example.test/redfish/v1/Systems/1"))
-		}), "ContainerCluster/metal", map[string]string{"<machine>": "Machine/metal-01"}},
-		"A physical node with unverified controller TLS": {physicalWithController(func(v api.Value) api.Value { return v.WithPath(api.BoolValue(false), "tls", "verify") }), "ContainerCluster/metal", map[string]string{"<machine>": "Machine/metal-01"}},
+		}), "OpenShiftCluster/metal", map[string]string{"<machine>": "Machine/metal-01"}},
+		"A physical node with unverified BMC TLS": {physicalWithController(func(v api.Value) api.Value { return v.WithPath(api.BoolValue(false), "tls", "verify") }), "OpenShiftCluster/metal", map[string]string{"<machine>": "Machine/metal-01"}},
 		"A physical node with unverified media TLS": {physicalWithController(func(v api.Value) api.Value {
-			return v.WithPath(api.StringValue("disable-verification"), "virtualMedia", "tls", "trust")
-		}), "ContainerCluster/metal", map[string]string{"<machine>": "Machine/metal-01"}},
-		"A root device the installer cannot name": {singleNodeWith(text("deviceName", "/dev/mapper/root")), "ContainerCluster/sno", onNode},
+			return v.WithPath(api.StringValue("disableVerification"), "virtualMedia", "tls", "trust")
+		}), "OpenShiftCluster/metal", map[string]string{"<machine>": "Machine/metal-01"}},
+		"A root device the installer cannot name": {singleNodeWith(text("deviceName", "/dev/mapper/root")), "OpenShiftCluster/sno", onNode},
 		"A root device size the frozen input cannot carry": {
-			singleNodeWith(text("deviceName", "/dev/vda"), number("minSizeGigabytes", "9007199254740992")), "ContainerCluster/sno", onNode,
+			singleNodeWith(text("deviceName", "/dev/vda"), number("minSizeGigabytes", "9007199254740992")), "OpenShiftCluster/sno", onNode,
 		},
 		"A node off the artifact server's host": {
 			api.NewCatalog(append(append(base(), hypervisor()...), onRemote(guest("sno-01", "198.51.100.21/24")), cluster("sno",
 				installSelection(endpoints("198.51.100.21", "198.51.100.21", "198.51.100.21", "node")),
-				node("master-0", "master", "sno-01", "master-0.sno.lab.example.test")))),
-			"ContainerCluster/sno",
+				node("master-0", "controlPlane", "sno-01", "master-0.sno.lab.example.test")))),
+			"OpenShiftCluster/sno",
 			map[string]string{
-				"<cluster>": "ContainerCluster/sno", "<machine>": "Machine/sno-01", "<provider host>": "Machine/hv-01",
+				"<cluster>": "OpenShiftCluster/sno", "<machine>": "Machine/sno-01", "<provider host>": "Machine/hv-01",
 				"<server>": "ArtifactServer/lab-artifacts", "<server host>": "Machine/controller", "<provider>": "InfraProvider/far-libvirt",
 			},
 		},

@@ -26,7 +26,7 @@ func (f guestFunc) CheckGuest(ctx context.Context, name string, object api.Objec
 }
 func testService() Service {
 	node := api.MapValue(api.FieldValue{Name: "machineRef", Value: api.StringValue("guest")})
-	cluster := api.NewObject(api.StorageCluster, "storage", api.Value{}, api.MapValue(api.FieldValue{Name: "ceph", Value: api.MapValue(api.FieldValue{Name: "topology", Value: api.MapValue(api.FieldValue{Name: "nodes", Value: api.ListValue(node)})})}))
+	cluster := api.NewObject(api.CephCluster, "storage", api.Value{}, api.MapValue(api.FieldValue{Name: "topology", Value: api.MapValue(api.FieldValue{Name: "nodes", Value: api.ListValue(node)})}))
 	host := api.NewObject(api.Machine, "guest", api.Value{}, api.MapValue())
 	return Service{Graph: graphStub{api.NewCatalog([]api.Object{cluster, host})}, Ownership: ownedStub{}, Project: func(api.Catalog, string) ([]Allocation, error) {
 		return []Allocation{{Machine: "guest", Host: "controller", Pool: "/pool", Quantities: Quantities{CPU: 1, Memory: 1, Disk: 1}}}, nil
@@ -90,7 +90,7 @@ func TestUnprovedGuestRemainsUnknownWithoutProbe(t *testing.T) {
 func TestProvidedGuestWithPendingOwnershipUsesActualChecks(t *testing.T) {
 	s := testService()
 	s.Ownership = ownedStub{"Machine/guest": {Verb: machine.VerbApply, State: machine.BlockPending}}
-	cluster, _ := s.Graph.(graphStub).catalog.Find(api.StorageCluster, "storage")
+	cluster, _ := s.Graph.(graphStub).catalog.Find(api.CephCluster, "storage")
 	host := api.NewObject(api.Machine, "guest", api.Value{}, api.MapValue(api.FieldValue{Name: "os", Value: api.MapValue(api.FieldValue{Name: "provided", Value: api.BoolValue(true)})}))
 	s.Graph = graphStub{api.NewCatalog([]api.Object{cluster, host})}
 	called := false

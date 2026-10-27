@@ -101,7 +101,7 @@ func TestFrozenRequestGolden(t *testing.T) {
 			r.Pool = &Pool{Name: "volumes", Type: "replicated", Role: "rbd", Application: "rbd", Size: 2, MinSize: 2, PGNum: 32, CrushRule: "replicated_rule", Autoscale: PoolAutoscale{Mode: "on"}}
 		}
 		if action == "client" {
-			r.Client = &Client{Access: "read-only", DataPools: []string{"archive", "ec-data"}, Name: "consumer", Pool: "volumes"}
+			r.Client = &Client{Access: "readOnly", DataPools: []string{"archive", "ec-data"}, Name: "consumer", Pool: "volumes"}
 		}
 		if action == "rbd" {
 			r.RBD = &RBDImage{Name: "disk", Pool: "volumes", SizeBytes: 10737418240, Features: []string{"layering", "exclusive-lock", "object-map", "fast-diff", "deep-flatten"}, DataPool: ""}
@@ -136,8 +136,8 @@ func TestFrozenRequestGolden(t *testing.T) {
 	}
 	r.Action, r.Subvolume, r.Settings, r.Service, r.Auxiliary, r.Delegated = "client", nil, nil, nil, nil, nil
 	for name, client := range map[string]*Client{
-		"client-filesystem": {Access: "read-only", DataPools: []string{}, Filesystem: "files", Name: "reader"},
-		"client-subvolume":  {Access: "read-write", DataPools: []string{}, Filesystem: "files", Group: "csi", Name: "writer", Subvolume: "docs"},
+		"client-filesystem": {Access: "readOnly", DataPools: []string{}, Filesystem: "files", Name: "reader"},
+		"client-subvolume":  {Access: "readWrite", DataPools: []string{}, Filesystem: "files", Group: "csi", Name: "writer", Subvolume: "docs"},
 	} {
 		r.Client = client
 		data, err := r.Canonical()

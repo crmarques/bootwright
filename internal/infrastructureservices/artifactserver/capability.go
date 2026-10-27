@@ -55,7 +55,7 @@ func (c Capability) Plan(ctx context.Context, input lifecycle.PlanInput) (lifecy
 		definition := reconciliation.BlockDefinition{
 			ID:             request.Identity.Block,
 			Description:    description(input.Verb, request),
-			Stage:          reconciliation.StageInfraComponents,
+			Stage:          reconciliation.StageInfrastructureServices,
 			Requires:       managedservice.BridgeRequirements(catalog, request.Placement.Machine, probedAddresses(request)),
 			Impacts:        impacts(input.Verb, request),
 			Groups:         groups(input.Verb, request),

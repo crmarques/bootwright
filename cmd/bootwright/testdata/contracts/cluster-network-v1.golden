@@ -1,6 +1,6 @@
 implementation: cluster-network-v1
-content-digest: 22b0c5e94a22737fdeb15928666467a794fc4e36d723c782fdeadb4157809fa3
-request-version: cluster-network-request-v1
+content-digest: ea8c5853ee8543fd9b85cc3ada3bac1ef2973802543e47b258357ca063041c43
+request-version: cluster-network-request-v2
 automation-formats: none
 mark-formats: bootwright.cluster-objects.owner-v1, bootwright.io/owner
 proof-ids: none

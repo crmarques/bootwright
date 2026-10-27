@@ -11,7 +11,7 @@ import (
 )
 
 func containerPreflightCommand() commandSpec {
-	return available(commandSpec{path: "preflight container-cluster", short: "Check ContainerCluster readiness", flags: []flagSpec{clustersFlag(), dryRunFlag()}})
+	return available(commandSpec{path: "preflight container-cluster", short: "Check OpenShiftCluster readiness", flags: []flagSpec{clustersFlag(), dryRunFlag()}})
 }
 
 func installerRenderCommand() commandSpec {
@@ -20,9 +20,9 @@ func installerRenderCommand() commandSpec {
 
 func containerAccessCommands() []commandSpec {
 	return []commandSpec{
-		accessCommand(commandSpec{path: "cluster oc", short: "Print an oc access descriptor; do not launch a client or connect", flags: []flagSpec{nameFlag()}, payload: true}, " Applicable to OpenShift/OKD ContainerClusters only."),
-		accessCommand(commandSpec{path: "cluster kubectl", short: "Print a kubectl access descriptor; do not launch a client or connect", flags: []flagSpec{nameFlag()}, payload: true}, " Applicable to OpenShift/OKD ContainerClusters only."),
-		available(commandSpec{path: "cluster kubeconfig", short: "Export raw sensitive kubeconfig bytes to standard output", flags: []flagSpec{nameFlag()}, long: "Export raw sensitive kubeconfig bytes to standard output. Applicable to OpenShift/OKD ContainerClusters only."}),
+		accessCommand(commandSpec{path: "cluster oc", short: "Print an oc access descriptor; do not launch a client or connect", flags: []flagSpec{nameFlag()}, payload: true}, " Applicable to OpenShiftClusters only."),
+		accessCommand(commandSpec{path: "cluster kubectl", short: "Print a kubectl access descriptor; do not launch a client or connect", flags: []flagSpec{nameFlag()}, payload: true}, " Applicable to OpenShiftClusters only."),
+		available(commandSpec{path: "cluster kubeconfig", short: "Export raw sensitive kubeconfig bytes to standard output", flags: []flagSpec{nameFlag()}, long: "Export raw sensitive kubeconfig bytes to standard output. Applicable to OpenShiftClusters only."}),
 	}
 }
 

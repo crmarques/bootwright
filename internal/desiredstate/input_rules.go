@@ -6,7 +6,9 @@ import (
 	"strings"
 )
 
-var skippedDirectoryNames = []string{"vendor", "node_modules", "playbooks", "roles", "collections", "manifests", "secrets"}
+const SecretsDirectory = "secrets"
+
+var skippedDirectoryNames = []string{"vendor", "node_modules", "playbooks", "roles", "collections", "manifests", SecretsDirectory}
 
 func LimitMessage(resource string, ceiling int) string {
 	return resource + " exceeds its inclusive ceiling of " + strconv.Itoa(ceiling)

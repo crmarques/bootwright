@@ -13,15 +13,15 @@ import (
 	"github.com/crmarques/bootwright/internal/diagnostics"
 	"github.com/crmarques/bootwright/internal/reconciliation"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
-	"github.com/crmarques/bootwright/internal/storage"
+	"github.com/crmarques/bootwright/internal/storage/cephcluster"
 )
 
 func nvmeCatalog() api.Catalog {
 	return planCatalog(3, 3, func(spec api.Value) api.Value {
 		service := requestMap("service_type", "nvmeof", "service_id", "config.primary", "placement", requestMap("hosts", api.StringList("node-1", "node-2")), "spec", requestMap("pool", "config", "group", "primary", "enable_auth", false))
-		spec = spec.WithPath(api.ListValue(append(spec.Get("ceph", "services").Items(), service)...), "ceph", "services")
-		return spec.WithPath(requestMap("base", PinnedRegistry+"/cp/ibm-ceph/nvmeof-synthetic", "version", "synthetic"), "ceph", "images", "nvmeof")
-	}, replicatedPool("config"), replicatedPool("volumes"), imageOf("disk", "volumes"), childOf(api.StorageNVMeoFSubsystem, "subsystem",
+		spec = spec.WithPath(api.ListValue(append(spec.Get("services").Items(), service)...), "services")
+		return spec.WithPath(requestMap("base", PinnedRegistry+"/cp/ibm-ceph/nvmeof-synthetic", "version", "synthetic"), "images", "nvmeof")
+	}, replicatedPool("config"), replicatedPool("volumes"), imageOf("disk", "volumes"), childOf(api.CephNVMeoFSubsystem, "subsystem",
 		"serviceRef", "nvmeof.config.primary", "nqn", "nqn.2026-01.test.example:subsystem",
 		"hosts", api.StringList("nqn.2026-01.test.example:initiator"),
 		"listeners", api.ListValue(requestMap("host", "node-2"), requestMap("host", "node-1")),
@@ -30,7 +30,7 @@ func nvmeCatalog() api.Catalog {
 
 func TestNVMeOFRequestAndDependencies(t *testing.T) {
 	catalog := nvmeCatalog()
-	r, err := planned(t, catalog, api.StorageNVMeoFSubsystem, "subsystem")
+	r, err := planned(t, catalog, api.CephNVMeoFSubsystem, "subsystem")
 	if err != nil {
 		t.Fatal(diagnostics.Of(err))
 	}
@@ -43,12 +43,12 @@ func TestNVMeOFRequestAndDependencies(t *testing.T) {
 	}
 	matchesGolden(t, "request-nvmeof", data, false)
 	input := lifecycle.PlanInput{Verb: reconciliation.Apply, Context: lifecycle.ContextIdentity{Name: "synthetic"}, State: compilation.NewState(catalog, catalog, nil), Controller: "controller"}
-	plan, err := New(api.StorageNVMeoFSubsystem, nil).Plan(context.Background(), input)
+	plan, err := New(api.CephNVMeoFSubsystem, nil).Plan(context.Background(), input)
 	if err != nil || len(plan.Definitions) != 1 {
 		t.Fatalf("plan %+v %v", plan, err)
 	}
 	block := plan.Definitions[0]
-	if !slices.Contains(block.Dependencies, ServiceUnitBlockID("example", ServiceUnit{Type: "nvmeof", ID: "config.primary"})) || !slices.Equal(block.Requires, []reconciliation.ObjectRef{{Kind: string(api.StorageRBDImage), Object: "disk"}}) {
+	if !slices.Contains(block.Dependencies, ServiceUnitBlockID("example", ServiceUnit{Type: "nvmeof", ID: "config.primary"})) || !slices.Equal(block.Requires, []reconciliation.ObjectRef{{Kind: string(api.CephRBDImage), Object: "disk"}}) {
 		t.Fatalf("dependencies %+v", block)
 	}
 	r.Owner = "attempt"
@@ -63,21 +63,21 @@ func TestNVMeOFRequestAndDependencies(t *testing.T) {
 	}
 }
 
-func TestNVMeOFGatewayAdmissionMatchesBlockIdentity(t *testing.T) {
-	cluster, _ := nvmeCatalog().Find(api.StorageCluster, "example")
+func TestNVMeOFGatewayIdentityHashesALongCluster(t *testing.T) {
+	cluster, _ := nvmeCatalog().Find(api.CephCluster, "example")
 	serviceID := strings.Repeat("native.", 10) + "gateway"
-	services := cluster.Spec().Get("ceph", "services").Items()
+	services := cluster.Spec().Get("services").Items()
 	services[len(services)-1] = services[len(services)-1].With("service_id", api.StringValue(serviceID))
-	for _, length := range []int{26, 27} {
-		candidate := api.NewObject(api.StorageCluster, strings.Repeat("c", length), cluster.Labels(), cluster.Spec().WithPath(api.ListValue(services...), "ceph", "services"))
-		issues := storage.ValidatePartial(candidate, api.Catalog{})
+	for _, length := range []int{26, 27, 63} {
+		candidate := api.NewObject(api.CephCluster, strings.Repeat("c", length), cluster.Labels(), cluster.Spec().WithPath(api.ListValue(services...), "services"))
+		issues := cephcluster.ValidatePartial(candidate, api.Catalog{})
 		units, err := nvmeofUnits(candidate)
-		if err != nil || len(units) != 1 {
-			t.Fatalf("gateway units %+v %v", units, err)
+		if err != nil || len(units) != 1 || len(issues) != 0 {
+			t.Fatalf("gateway units %+v %v issues %+v", units, err, issues)
 		}
 		id := ServiceUnitBlockID(candidate.Name(), units[0])
-		if len(id) != length+37 || reconciliation.ValidSegment(id) != (length == 26) || (len(issues) == 0) != (length == 26) {
-			t.Fatalf("gateway name length %d: ID %q issues %+v", length, id, issues)
+		if !reconciliation.ValidSegment(id) || (length == 26) != (len(id) == length+37) {
+			t.Fatalf("gateway name length %d: ID %q", length, id)
 		}
 		if units[0].ID != serviceID || !bytes.Contains(units[0].Documents[0], []byte(`"service_id":"`+serviceID+`"`)) {
 			t.Fatalf("native service ID changed: %+v", units[0])
@@ -85,31 +85,25 @@ func TestNVMeOFGatewayAdmissionMatchesBlockIdentity(t *testing.T) {
 	}
 }
 
-func TestNVMeOFSubsystemAdmissionMatchesPlannedIdentity(t *testing.T) {
-	for _, length := range []int{51, 52} {
+func TestNVMeOFSubsystemPlansALongName(t *testing.T) {
+	for _, length := range []int{51, 63} {
 		objects := nvmeCatalog().Objects()
 		var subsystem api.Object
 		for i, object := range objects {
-			if object.Kind() == api.StorageNVMeoFSubsystem {
+			if object.Kind() == api.CephNVMeoFSubsystem {
 				subsystem = api.NewObject(object.Kind(), strings.Repeat("s", length), object.Labels(), object.Spec())
 				objects[i] = subsystem
 			}
 		}
 		catalog := api.NewCatalog(objects)
-		issues := storage.Validate(subsystem, catalog)
+		issues := cephcluster.Validate(subsystem, catalog)
 		input := lifecycle.PlanInput{Verb: reconciliation.Apply, Context: lifecycle.ContextIdentity{Name: "synthetic"}, State: compilation.NewState(catalog, catalog, nil), Controller: "controller"}
-		plan, err := New(api.StorageNVMeoFSubsystem, nil).Plan(context.Background(), input)
-		if length == 52 {
-			if len(issues) != 1 || issues[0].Field != "$.metadata.name" || err == nil {
-				t.Fatalf("oversized subsystem admitted: issues %+v plan error %v", issues, err)
-			}
-			continue
-		}
+		plan, err := New(api.CephNVMeoFSubsystem, nil).Plan(context.Background(), input)
 		if len(issues) != 0 || err != nil || len(plan.Definitions) != 1 {
-			t.Fatalf("boundary subsystem issues %+v plan %+v error %v", issues, plan, err)
+			t.Fatalf("a %d-character subsystem: issues %+v plan %+v error %v", length, issues, plan, err)
 		}
-		if id := plan.Definitions[0].ID; len(id) != 63 || !reconciliation.ValidSegment(id) {
-			t.Fatalf("boundary subsystem ID %q", id)
+		if id := plan.Definitions[0].ID; len(id) != 63 || !reconciliation.ValidSegment(id) || (length == 51) != (id == "ceph-nvmeof-"+subsystem.Name()) {
+			t.Fatalf("a %d-character subsystem planned the identity %q", length, id)
 		}
 	}
 }
@@ -137,8 +131,8 @@ func TestNVMeOFEvidenceRequiresOriginalSubsystemIdentity(t *testing.T) {
 }
 
 func TestNVMeOFExplicitSingleDaemonPerHost(t *testing.T) {
-	cluster, _ := nvmeCatalog().Find(api.StorageCluster, "example")
-	for _, svc := range cluster.Spec().Get("ceph", "services").Items() {
+	cluster, _ := nvmeCatalog().Find(api.CephCluster, "example")
+	for _, svc := range cluster.Spec().Get("services").Items() {
 		if svc.Get("service_type").Text() != "nvmeof" {
 			continue
 		}
@@ -154,7 +148,7 @@ func TestNVMeOFExplicitSingleDaemonPerHost(t *testing.T) {
 }
 
 func TestNVMeOFExecutionBoundRefusesOversizedRequest(t *testing.T) {
-	r, err := planned(t, nvmeCatalog(), api.StorageNVMeoFSubsystem, "subsystem")
+	r, err := planned(t, nvmeCatalog(), api.CephNVMeoFSubsystem, "subsystem")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -167,7 +161,7 @@ func TestNVMeOFExecutionBoundRefusesOversizedRequest(t *testing.T) {
 }
 
 func TestNVMeOFExecutionBound(t *testing.T) {
-	r, err := planned(t, nvmeCatalog(), api.StorageNVMeoFSubsystem, "subsystem")
+	r, err := planned(t, nvmeCatalog(), api.CephNVMeoFSubsystem, "subsystem")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -190,7 +184,7 @@ func TestNVMeOFExecutionBound(t *testing.T) {
 }
 
 func TestNVMeOFExecutionCeilingBoundary(t *testing.T) {
-	r, err := planned(t, nvmeCatalog(), api.StorageNVMeoFSubsystem, "subsystem")
+	r, err := planned(t, nvmeCatalog(), api.CephNVMeoFSubsystem, "subsystem")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -209,15 +203,15 @@ func TestNVMeOFExecutionCeilingBoundary(t *testing.T) {
 }
 
 func TestNVMeOFRetirementNeverContactsDestroyedHosts(t *testing.T) {
-	r, err := planned(t, nvmeCatalog(), api.StorageNVMeoFSubsystem, "subsystem")
+	r, err := planned(t, nvmeCatalog(), api.CephNVMeoFSubsystem, "subsystem")
 	if err != nil {
 		t.Fatal(err)
 	}
 	e := executionFor(t, r)
-	e.Block.ID, e.Block.Kind, e.Block.Object = "ceph-nvmeof-subsystem", string(api.StorageNVMeoFSubsystem), "subsystem"
+	e.Block.ID, e.Block.Kind, e.Block.Object = "ceph-nvmeof-subsystem", string(api.CephNVMeoFSubsystem), "subsystem"
 	e.Operation, e.RetiredWithHosts, e.ApplyProved = "destroy-later", true, nil
 	runner := &recordingRunner{}
-	capability := New(api.StorageNVMeoFSubsystem, runner)
+	capability := New(api.CephNVMeoFSubsystem, runner)
 	if _, err := capability.Destroy(context.Background(), e); err != nil {
 		t.Fatal(err)
 	}
@@ -230,7 +224,7 @@ func TestNVMeOFRetirementNeverContactsDestroyedHosts(t *testing.T) {
 }
 
 func TestNVMeOFServiceObservationBudget(t *testing.T) {
-	cluster, _ := nvmeCatalog().Find(api.StorageCluster, "example")
+	cluster, _ := nvmeCatalog().Find(api.CephCluster, "example")
 	units, err := nvmeofUnits(cluster)
 	if err != nil {
 		t.Fatal(err)
@@ -246,14 +240,14 @@ func TestNVMeOFServiceObservationBudget(t *testing.T) {
 func TestNVMeOFNativePoolNamesKeepLogicalDependencies(t *testing.T) {
 	objects := nvmeCatalog().Objects()
 	for i, object := range objects {
-		if object.Kind() == api.StoragePool {
+		if object.Kind() == api.CephPool {
 			objects[i] = object.WithSpec(object.Spec().With("nativeName", api.StringValue("native-"+object.Name())))
 		}
 	}
 	catalog := api.NewCatalog(objects)
 	input := lifecycle.PlanInput{Verb: reconciliation.Apply, Context: lifecycle.ContextIdentity{Name: "synthetic"}, State: compilation.NewState(catalog, catalog, nil), Controller: "controller"}
 	found := map[string]bool{}
-	for _, kind := range []api.Kind{api.StorageCluster, api.StorageRBDImage, api.StorageNVMeoFSubsystem} {
+	for _, kind := range []api.Kind{api.CephCluster, api.CephRBDImage, api.CephNVMeoFSubsystem} {
 		plan, err := New(kind, nil).Plan(context.Background(), input)
 		if err != nil {
 			t.Fatal(diagnostics.Of(err))
@@ -279,12 +273,12 @@ func TestNVMeOFNativePoolNamesKeepLogicalDependencies(t *testing.T) {
 				if request.NVMeOF.Pool != "native-config" || request.NVMeOF.Namespaces[0].Image.Pool != "native-volumes" {
 					t.Errorf("native subsystem pools %+v", request.NVMeOF)
 				}
-				if !slices.Equal(block.Requires, []reconciliation.ObjectRef{{Kind: string(api.StorageRBDImage), Object: "disk"}}) {
+				if !slices.Equal(block.Requires, []reconciliation.ObjectRef{{Kind: string(api.CephRBDImage), Object: "disk"}}) {
 					t.Errorf("subsystem references %v", block.Requires)
 				}
 			case request.RBD != nil:
 				found["image"] = true
-				if request.RBD.Pool != "native-volumes" || !slices.Contains(block.Requires, reconciliation.ObjectRef{Kind: string(api.StoragePool), Object: "volumes"}) {
+				if request.RBD.Pool != "native-volumes" || !slices.Contains(block.Requires, reconciliation.ObjectRef{Kind: string(api.CephPool), Object: "volumes"}) {
 					t.Errorf("image pool/reference %+v %v", request.RBD, block.Requires)
 				}
 			}

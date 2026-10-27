@@ -26,8 +26,8 @@ func TestObservabilityAndHostProfilesProductionPlans(t *testing.T) {
 			if len(plan.Blocks) == 0 {
 				t.Fatal("empty production plan")
 			}
-			cluster := requireObject(t, state.Effective(), api.StorageCluster, "ceph-lab")
-			if cluster.Spec().Get("ceph", "config", "osd", "osd_memory_target").Text() != "4294967296" {
+			cluster := requireObject(t, state.Effective(), api.CephCluster, "ceph-lab")
+			if cluster.Spec().Get("config", "osd", "osd_memory_target").Text() != "4294967296" {
 				t.Fatal("missing 4 GiB OSD budget")
 			}
 		})

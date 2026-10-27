@@ -1,6 +1,7 @@
 package reconciliation
 
 import (
+	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
 	"strconv"
@@ -16,6 +17,24 @@ const (
 	numberDigits        = 6
 	minAttemptOrRestart = 1
 )
+
+const (
+	MaxBlockPrefix  = 46
+	blockHashDigits = 16
+)
+
+func BlockIdentity(prefix, tail string) string {
+	identity := prefix + tail
+	if len(identity) <= maxIdentifier {
+		return identity
+	}
+	sum := sha256.Sum256([]byte(identity))
+	token := hex.EncodeToString(sum[:])[:blockHashDigits]
+	if head := strings.TrimRight(identity[:maxIdentifier-blockHashDigits-1], "-"); head != "" {
+		return head + "-" + token
+	}
+	return token
+}
 
 // Entropy is the operating-system randomness capability. It is a function so
 // the domain declares no stream vocabulary of its own.

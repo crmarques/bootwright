@@ -6,31 +6,31 @@ import (
 )
 
 func TestStorageWireShapesAreClosedAndVariantsAreExplicit(t *testing.T) {
-	for _, kind := range []Kind{StorageCluster, StoragePlacementPolicy, StoragePool, StorageRBDImage, StorageClient, StorageFilesystem, StorageSubvolume, StorageObjectGateway, StorageNFSExport, StorageSMBResource, StorageExport} {
+	for _, kind := range []Kind{CephCluster, CephPlacementPolicy, CephPool, CephRBDImage, CephClient, CephFilesystem, CephSubvolume, CephObjectGateway, CephNFSExport, CephSMBResource, CephConsumer} {
 		schema := Schema(kind)
 		if schema == nil || schema.Type != Mapping || schema.Open {
 			t.Fatalf("%s is not a registered closed object", kind)
 		}
-		if kind != StorageCluster {
-			if field, ok := schema.Field("clusterRef"); !ok || !field.Required || len(field.Shape.Reference) != 1 || field.Shape.Reference[0] != StorageCluster {
+		if kind != CephCluster {
+			if field, ok := schema.Field("clusterRef"); !ok || !field.Required || len(field.Shape.Reference) != 1 || field.Shape.Reference[0] != CephCluster {
 				t.Fatalf("%s does not require its owning storage cluster", kind)
 			}
 		}
 		checkStorageShape(t, schema)
 	}
-	fs, _ := Schema(StorageFilesystem).Field("dataPoolRefs")
+	fs, _ := Schema(CephFilesystem).Field("dataPoolRefs")
 	if len(fs.Shape.Element.Alternatives) != 2 {
 		t.Fatal("filesystem data pools must accept both scalar and named forms")
 	}
-	pool := Schema(StoragePool)
-	if pool.Discriminator != "type" {
-		t.Fatal("pool protection discriminator missing")
+	pool := Schema(CephPool)
+	if replicated, _ := pool.Field("replicated"); !slices.Equal(pool.Arms, []string{"replicated", "erasure"}) || !replicated.Default.Present() {
+		t.Fatal("pool protection must be the replicated or erasure presence arm, replicated by default")
 	}
 	erasure, _ := pool.Field("erasure")
 	if erasure.Shape.Open {
 		t.Fatal("erasure options must stay closed")
 	}
-	gateway := Schema(StorageObjectGateway)
+	gateway := Schema(CephObjectGateway)
 	for _, bound := range []string{"serviceRef", "realm", "zoneGroup", "zone"} {
 		if f, ok := gateway.Field(bound); !ok || !f.Required {
 			t.Fatalf("object gateway must require %s", bound)
@@ -48,7 +48,7 @@ func TestStorageWireShapesAreClosedAndVariantsAreExplicit(t *testing.T) {
 }
 
 func TestCephAuxiliaryImagesAreClosedWithoutTheCephImageKey(t *testing.T) {
-	ceph, _ := Schema(StorageCluster).Field("ceph")
+	ceph := Field{Shape: Schema(CephCluster)}
 	images, found := ceph.Shape.Field("images")
 	if !found || images.Shape.Open || images.Shape.Element != nil || len(images.Shape.Fields) != 15 {
 		t.Fatal("ceph.images must be a closed record of the auxiliary image names")
@@ -59,23 +59,23 @@ func TestCephAuxiliaryImagesAreClosedWithoutTheCephImageKey(t *testing.T) {
 }
 
 func TestNFSExportSchemaShape(t *testing.T) {
-	schema := Schema(StorageNFSExport)
+	schema := Schema(CephNFSExport)
 	names := []string{}
 	for _, field := range schema.Fields {
 		names = append(names, field.Name)
 	}
 	if !slices.Equal(names, []string{"clusterRef", "serviceID", "filesystemRef", "subvolumeRef", "objectUserRef", "native"}) {
-		t.Fatalf("StorageNFSExport fields = %v", names)
+		t.Fatalf("CephNFSExport fields = %v", names)
 	}
 	for name, required := range map[string]bool{"serviceID": true, "native": true, "filesystemRef": false, "subvolumeRef": false, "objectUserRef": false} {
 		if field, _ := schema.Field(name); field.Required != required {
-			t.Fatalf("StorageNFSExport %s required = %t", name, field.Required)
+			t.Fatalf("CephNFSExport %s required = %t", name, field.Required)
 		}
 	}
 	if native, _ := schema.Field("native"); !native.Shape.Open || !native.Shape.Atomic {
 		t.Fatal("native must be an open atomic mapping checked by admission")
 	}
-	for name, kind := range map[string]Kind{"filesystemRef": StorageFilesystem, "subvolumeRef": StorageSubvolume, "objectUserRef": StorageObjectUser} {
+	for name, kind := range map[string]Kind{"filesystemRef": CephFilesystem, "subvolumeRef": CephSubvolume, "objectUserRef": CephObjectUser} {
 		if field, _ := schema.Field(name); !slices.Equal(field.Shape.Reference, []Kind{kind}) {
 			t.Fatalf("%s must reference %s", name, kind)
 		}
@@ -101,13 +101,13 @@ func TestNFSExportSchemaShape(t *testing.T) {
 }
 
 func TestSMBResourceSchemaShape(t *testing.T) {
-	schema := Schema(StorageSMBResource)
+	schema := Schema(CephSMBResource)
 	names := []string{}
 	for _, field := range schema.Fields {
 		names = append(names, field.Name)
 	}
 	if !slices.Equal(names, []string{"clusterRef", "smbClusterRef", "filesystemRef", "subvolumeRef", "resourceRefs", "secrets", "native"}) {
-		t.Fatalf("StorageSMBResource fields = %v", names)
+		t.Fatalf("CephSMBResource fields = %v", names)
 	}
 	if native, _ := schema.Field("native"); !native.Required || !native.Shape.Open || !native.Shape.Atomic {
 		t.Fatal("native must be a required open atomic mapping checked by admission")
@@ -152,15 +152,15 @@ func TestSMBResourceSchemaShape(t *testing.T) {
 }
 
 func TestNativeCoreSchemaAndBindingsUseOneClosedAuthoringPath(t *testing.T) {
-	ceph, _ := Schema(StorageCluster).Field("ceph")
+	ceph := Field{Shape: Schema(CephCluster)}
 	for _, retired := range []string{"monitoring", "mgmtGateway"} {
 		if _, ok := ceph.Shape.Field(retired); ok {
 			t.Fatalf("retired daemon helper %s still admitted", retired)
 		}
 	}
 	services, ok := ceph.Shape.Field("services")
-	if !ok || !services.Required || services.Shape.MinLength != 1 || services.Shape.Element.Open {
-		t.Fatal("native service declarations must be required and closed")
+	if !ok || services.Shape.MinLength != 1 || services.Shape.Element.Open {
+		t.Fatal("native service declarations must be non-empty and closed")
 	}
 	for _, native := range []string{"service_type", "service_id", "placement", "networks", "config", "spec", "extra_container_args", "custom_configs"} {
 		if _, ok := services.Shape.Element.Field(native); !ok {
@@ -215,8 +215,8 @@ func TestNativeCoreSchemaAndBindingsUseOneClosedAuthoringPath(t *testing.T) {
 	if StorageNativeServiceSpecSchema("container") != nil {
 		t.Fatal("future family schema must be qualified by its owning slice")
 	}
-	client := Schema(StorageClient)
-	for name, kind := range map[string]Kind{"poolRef": StoragePool, "filesystemRef": StorageFilesystem, "subvolumeRef": StorageSubvolume} {
+	client := Schema(CephClient)
+	for name, kind := range map[string]Kind{"poolRef": CephPool, "filesystemRef": CephFilesystem, "subvolumeRef": CephSubvolume} {
 		if scope, ok := client.Field(name); !ok || scope.Required || scope.Shape.Reference[0] != kind {
 			t.Fatalf("client scope %s must be an optional reference to %s", name, kind)
 		}
@@ -228,13 +228,13 @@ func TestNativeCoreSchemaAndBindingsUseOneClosedAuthoringPath(t *testing.T) {
 	}
 }
 func TestRBDImageSchemaIsClosedWithExactBounds(t *testing.T) {
-	schema := Schema(StorageRBDImage)
+	schema := Schema(CephRBDImage)
 	if schema == nil || schema.Open {
-		t.Fatal("StorageRBDImage must be a closed object")
+		t.Fatal("CephRBDImage must be a closed object")
 	}
 	for _, name := range []string{"clusterRef", "poolRef", "sizeBytes"} {
 		if field, ok := schema.Field(name); !ok || !field.Required {
-			t.Fatalf("StorageRBDImage must require %s", name)
+			t.Fatalf("CephRBDImage must require %s", name)
 		}
 	}
 	size, _ := schema.Field("sizeBytes")
@@ -246,11 +246,11 @@ func TestRBDImageSchemaIsClosedWithExactBounds(t *testing.T) {
 		t.Fatal("features must be an optional unique set of the six admitted names in librbd bit order")
 	}
 	dataPool, ok := schema.Field("dataPoolRef")
-	if !ok || dataPool.Required || !slices.Equal(dataPool.Shape.Reference, []Kind{StoragePool}) {
-		t.Fatal("dataPoolRef must be an optional StoragePool reference")
+	if !ok || dataPool.Required || !slices.Equal(dataPool.Shape.Reference, []Kind{CephPool}) {
+		t.Fatal("dataPoolRef must be an optional CephPool reference")
 	}
 	if len(schema.Fields) != 5 {
-		t.Fatalf("StorageRBDImage admits %d fields, want 5", len(schema.Fields))
+		t.Fatalf("CephRBDImage admits %d fields, want 5", len(schema.Fields))
 	}
 }
 
@@ -273,16 +273,16 @@ func checkStorageShape(t *testing.T, shape *Shape) {
 }
 
 func TestFilesystemSchemaBindsItsMDSServiceAndRetiresDaemonHelpers(t *testing.T) {
-	schema := Schema(StorageFilesystem)
+	schema := Schema(CephFilesystem)
 	names := []string{}
 	for _, field := range schema.Fields {
 		names = append(names, field.Name)
 	}
 	if !slices.Equal(names, []string{"clusterRef", "mdsServiceRef", "metadataPoolRef", "dataPoolRefs", "mds", "subvolumeGroups"}) {
-		t.Fatalf("StorageFilesystem fields = %v", names)
+		t.Fatalf("CephFilesystem fields = %v", names)
 	}
-	if ref, _ := schema.Field("mdsServiceRef"); !ref.Required || ref.Shape.Type != String {
-		t.Fatal("mdsServiceRef must be a required string")
+	if ref, _ := schema.Field("mdsServiceRef"); ref.Required || ref.Shape.Type != String {
+		t.Fatal("mdsServiceRef must be an optional string, derived as mds.<name>")
 	}
 	mds, _ := schema.Field("mds")
 	bounds := map[string][2]string{}
@@ -306,20 +306,20 @@ func TestFilesystemSchemaBindsItsMDSServiceAndRetiresDaemonHelpers(t *testing.T)
 }
 
 func TestSubvolumeSchemaIsClosedWithExactBounds(t *testing.T) {
-	schema := Schema(StorageSubvolume)
+	schema := Schema(CephSubvolume)
 	if schema == nil || schema.Open {
-		t.Fatal("StorageSubvolume must be a closed object")
+		t.Fatal("CephSubvolume must be a closed object")
 	}
 	names := []string{}
 	for _, field := range schema.Fields {
 		names = append(names, field.Name)
 	}
 	if !slices.Equal(names, []string{"clusterRef", "filesystemRef", "group", "sizeBytes", "poolLayoutRef", "uid", "gid", "mode"}) {
-		t.Fatalf("StorageSubvolume fields = %v", names)
+		t.Fatalf("CephSubvolume fields = %v", names)
 	}
 	for name, required := range map[string]bool{"clusterRef": true, "filesystemRef": true, "group": false, "sizeBytes": false, "poolLayoutRef": false, "uid": false, "gid": false, "mode": false} {
 		if field, _ := schema.Field(name); field.Required != required {
-			t.Fatalf("StorageSubvolume %s required = %t", name, field.Required)
+			t.Fatalf("CephSubvolume %s required = %t", name, field.Required)
 		}
 	}
 	for name, bounds := range map[string][2]string{"sizeBytes": {"1", "9223372036854775807"}, "uid": {"0", "2147483647"}, "gid": {"0", "2147483647"}} {
@@ -327,7 +327,7 @@ func TestSubvolumeSchemaIsClosedWithExactBounds(t *testing.T) {
 			t.Fatalf("%s bounds = %q..%q", name, field.Shape.Minimum, field.Shape.Maximum)
 		}
 	}
-	for name, kind := range map[string]Kind{"clusterRef": StorageCluster, "filesystemRef": StorageFilesystem, "poolLayoutRef": StoragePool} {
+	for name, kind := range map[string]Kind{"clusterRef": CephCluster, "filesystemRef": CephFilesystem, "poolLayoutRef": CephPool} {
 		if field, _ := schema.Field(name); !slices.Equal(field.Shape.Reference, []Kind{kind}) {
 			t.Fatalf("%s must reference %s", name, kind)
 		}
@@ -384,7 +384,7 @@ func TestB479ServiceSchemasAreClosed(t *testing.T) {
 			}
 		}
 	}
-	ceph, _ := Schema(StorageCluster).Field("ceph")
+	ceph := Field{Shape: Schema(CephCluster)}
 	cephadm, _ := ceph.Shape.Field("cephadm")
 	if _, ok := cephadm.Shape.Field("workarounds"); ok {
 		t.Fatal("the retired cephadm workaround list is still admitted")
@@ -392,16 +392,16 @@ func TestB479ServiceSchemasAreClosed(t *testing.T) {
 }
 
 func TestNVMeoFSubsystemSchemaShape(t *testing.T) {
-	schema := Schema(StorageNVMeoFSubsystem)
+	schema := Schema(CephNVMeoFSubsystem)
 	names := []string{}
 	for _, field := range schema.Fields {
 		names = append(names, field.Name)
 		if !field.Required {
-			t.Fatalf("StorageNVMeoFSubsystem %s must be required", field.Name)
+			t.Fatalf("CephNVMeoFSubsystem %s must be required", field.Name)
 		}
 	}
 	if !slices.Equal(names, []string{"clusterRef", "serviceRef", "nqn", "listeners", "hosts", "namespaces"}) || schema.Open {
-		t.Fatalf("StorageNVMeoFSubsystem fields = %v", names)
+		t.Fatalf("CephNVMeoFSubsystem fields = %v", names)
 	}
 	checkStorageShape(t, schema)
 	listeners, _ := schema.Field("listeners")
@@ -413,12 +413,12 @@ func TestNVMeoFSubsystemSchemaShape(t *testing.T) {
 	nsid, _ := namespaces.Shape.Element.Field("nsid")
 	image, _ := namespaces.Shape.Element.Field("imageRef")
 	port, _ := listeners.Shape.Element.Field("trsvcid")
-	if nsid.Shape.Minimum != "1" || nsid.Shape.Maximum != "4294967294" || !slices.Equal(image.Shape.Reference, []Kind{StorageRBDImage}) || port.Required || port.Shape.Maximum != "65535" {
-		t.Fatal("a namespace ID is an NVMe namespace ID backed by a StorageRBDImage, and trsvcid is an optional port")
+	if nsid.Shape.Minimum != "1" || nsid.Shape.Maximum != "4294967294" || !slices.Equal(image.Shape.Reference, []Kind{CephRBDImage}) || port.Required || port.Shape.Maximum != "65535" {
+		t.Fatal("a namespace ID is an NVMe namespace ID backed by a CephRBDImage, and trsvcid is an optional port")
 	}
 	for _, refused := range []string{"maxNamespaces", "serialNumber", "enableHA", "dhchapKey", "psk", "loadBalancingGroup"} {
 		if _, ok := schema.Field(refused); ok {
-			t.Fatalf("StorageNVMeoFSubsystem admits %s", refused)
+			t.Fatalf("CephNVMeoFSubsystem admits %s", refused)
 		}
 	}
 }

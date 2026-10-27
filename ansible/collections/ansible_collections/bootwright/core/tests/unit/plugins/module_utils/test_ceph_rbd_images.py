@@ -37,7 +37,7 @@ def cluster(count=3):
               "devices": [{"path": "/dev/vdb", "serial": "disk" + str(i), "sizeBytes": GIB}], "labels": [], "location": {},
               "sshKeyRef": "fleet-key"} for i in range(1, count + 1)]
     names = [h["name"] for h in hosts]
-    return {"controller": "controller", "version": "ceph-core-v32", "action": "cluster", "cluster": "example", "owner": OWNER, "fsid": FSID,
+    return {"controller": "controller", "version": "ceph-core-v33", "action": "cluster", "cluster": "example", "owner": OWNER, "fsid": FSID,
             "image": "registry.example.test/ceph@sha256:" + "a" * 64,
             "cephadm": {"path": "/usr/sbin/cephadm", "packageVersion": "20.2.1-405.el9cp"},
             "release": "synthetic-release", "ansiblePackageVersion": "synthetic-ansible",
@@ -65,7 +65,7 @@ def pool_value():
 
 
 def client_value():
-    return {"name": "canary", "pool": "volumes", "access": "read-write", "dataPools": [], "filesystem": "", "group": "", "subvolume": ""}
+    return {"name": "canary", "pool": "volumes", "access": "readWrite", "dataPools": [], "filesystem": "", "group": "", "subvolume": ""}
 
 
 def policy_value():
@@ -378,10 +378,10 @@ def test_rbd_request_validation_mirrors_admission(change):
 
 
 def tunnel_worker(world, image, refuse_at=None):
-    """verified-tunnel: every native call must run inside the bootstrap hold, which proves the markers' ceph.conf and admin
+    """verifiedTunnel: every native call must run inside the bootstrap hold, which proves the markers' ceph.conf and admin
     keyring still match the original bootstrap material; this hold records entries and can refuse ownership at entry N."""
     native, marks = worker(world, image)
-    native.request["clusterSSHTransport"] = "verified-tunnel"
+    native.request["clusterSSHTransport"] = "verifiedTunnel"
     state = {"inside": False, "entries": []}
     run = world.run
 

@@ -1,0 +1,16 @@
+apiVersion: bootwright.io/v1alpha1
+kind: CephNVMeoFSubsystem
+metadata:
+  name: application
+spec:
+  clusterRef: ceph-lab
+  serviceRef: nvmeof.nvme-config.primary
+  nqn: nqn.2026-01.test.example:application
+  listeners:
+    - host: rhel-04
+    - host: rhel-05
+  namespaces:
+    - nsid: 1
+      imageRef: rbd-disk
+  hosts:
+    - nqn.2026-01.test.example:initiator

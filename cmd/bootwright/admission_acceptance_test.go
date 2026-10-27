@@ -109,7 +109,7 @@ func expandedExampleSources(t *testing.T) desiredstate.Sources {
 // admission refuses until their later slices (storage family refusals): the
 // admissible projection cannot carry one, and no other kind may be missing
 // from it.
-var refusedKinds = []api.Kind{api.StorageExport}
+var refusedKinds = []api.Kind{api.CephConsumer}
 
 const (
 	admissibleCephSources = "acceptance-ceph.yaml"
@@ -128,7 +128,7 @@ func mustReplaceOnce(t *testing.T, path, body, old, replacement string) string {
 // admissibleExampleSources is the reference as admission accepts it today:
 // the Ceph sources and their FDF package consumers dropped (hubs retain an
 // NMState fixture), agent bridge networking projected onto its existing VLAN, a
-// non-stretch StorageCluster with its policy and pool substituted from
+// non-stretch CephCluster with its policy and pool substituted from
 // testdata, external cluster endpoints projected onto platform none, and the
 // extras without the refused families. The public example is
 // untouched; its own refusals are pinned by referenceRefusals.
@@ -145,8 +145,8 @@ func admissibleExampleSources(t *testing.T, withExtras bool) desiredstate.Source
 		case strings.HasPrefix(file.Path(), ceph):
 			dropped++
 			continue
-		case strings.Contains(body, "kind: ContainerCluster\n") && strings.Contains(body, "    platform:\n      type: baremetal\n"):
-			body = mustReplaceOnce(t, file.Path(), body, "    platform:\n      type: baremetal\n\n      baremetal:\n        provisioningNetwork: disabled\n", "    platform:\n      type: none\n")
+		case strings.Contains(body, "kind: OpenShiftCluster\n") && strings.Contains(body, "    platform:\n      baremetal:\n"):
+			body = mustReplaceOnce(t, file.Path(), body, "    platform:\n      baremetal:\n        provisioningNetwork: disabled\n", "    platform:\n      none: {}\n")
 		case strings.Contains(file.Path(), "ocp-bare-metal-network.yaml"):
 			start := strings.Index(body, "\n      - name: br-ceph-public\n")
 			end := strings.Index(body, "\n    dns-resolver:\n")
@@ -252,18 +252,21 @@ func TestActualCLIRefusesFutureReferenceFeatures(t *testing.T) {
 // that claims none or a bullet outside the table fails.
 func TestReferenceReadmeListsExactlyTheReferenceRefusals(t *testing.T) {
 	stretch := func(d diagnosticTuple) bool {
-		return d.field == "$.spec.ceph.mgrModules" || d.field == "$.spec.ceph.topology.stretch"
+		return d.field == "$.spec.mgrModules" || d.field == "$.spec.topology.stretch"
 	}
-	global := func(d diagnosticTuple) bool { return strings.HasPrefix(d.field, "$.spec.ceph.config.global.") }
+	global := func(d diagnosticTuple) bool { return strings.HasPrefix(d.field, "$.spec.config.global.") }
 	bullets := map[string]func(diagnosticTuple) bool{
-		"External endpoint sources on the two baremetal ContainerClusters.": func(d diagnosticTuple) bool {
-			return d.kind == "ContainerCluster" && strings.HasPrefix(d.field, "$.spec.install.endpoints.")
+		"External endpoint sources on the two baremetal OpenShiftClusters.": func(d diagnosticTuple) bool {
+			return d.kind == "OpenShiftCluster" && strings.HasPrefix(d.field, "$.spec.install.endpoints.")
 		},
 		"Stretch topology and manager-module intent.":                                                              stretch,
 		"Unqualified global Ceph options, including missing members of the currently qualified pool-default pair.": global,
-		"A FIPS Ceph node without a managed FIPS installation profile.":                                            func(d diagnosticTuple) bool { return d.field == "$.spec.ceph.topology.nodes[6].machineRef" },
-		"Agent-install bridge interfaces on the two physical ContainerClusters.": func(d diagnosticTuple) bool {
-			return d.kind == "ContainerCluster" && strings.HasPrefix(d.field, "$.spec.nodes[")
+		"A FIPS Ceph node without a managed FIPS installation profile.":                                            func(d diagnosticTuple) bool { return d.field == "$.spec.topology.nodes[6].machineRef" },
+		"Agent-install bridge interfaces on the two physical OpenShiftClusters.": func(d diagnosticTuple) bool {
+			return d.kind == "OpenShiftCluster" && strings.HasPrefix(d.field, "$.spec.nodes[")
+		},
+		"Unrealized-declaration warnings for the KubeVirt providers and the authored add-on profile selections.": func(d diagnosticTuple) bool {
+			return d.code == "api.unrealized"
 		},
 	}
 	data, err := os.ReadFile(filepath.Join(examplePath(t, "multidc-platform"), "README.md"))
@@ -314,7 +317,7 @@ func (d diagnosticTuple) String() string {
 
 const (
 	laterServiceRefusal = "$.spec"
-	storageClusterKind  = string(api.StorageCluster)
+	storageClusterKind  = string(api.CephCluster)
 	multidcCluster      = "ceph-multidc-01"
 )
 
@@ -327,27 +330,29 @@ func referenceRefusals() []diagnosticTuple {
 		return diagnosticTuple{"api.invariant", storageClusterKind, multidcCluster, field}
 	}
 	result := []diagnosticTuple{
-		{"api.invariant", "ContainerCluster", "ocp-multidc-01", "$.spec.install.endpoints.api.source.type"},
-		{"api.invariant", "ContainerCluster", "ocp-multidc-01", "$.spec.install.endpoints.api-int.source.type"},
-		{"api.invariant", "ContainerCluster", "ocp-multidc-01", "$.spec.install.endpoints.ingress.source.type"},
-		{"api.invariant", "ContainerCluster", "ocp-multidc-02", "$.spec.install.endpoints.api.source.type"},
-		{"api.invariant", "ContainerCluster", "ocp-multidc-02", "$.spec.install.endpoints.api-int.source.type"},
-		{"api.invariant", "ContainerCluster", "ocp-multidc-02", "$.spec.install.endpoints.ingress.source.type"},
+		{"api.invariant", "OpenShiftCluster", "ocp-multidc-01", "$.spec.install.endpoints.api.source.type"},
+		{"api.invariant", "OpenShiftCluster", "ocp-multidc-01", "$.spec.install.endpoints.api-int.source.type"},
+		{"api.invariant", "OpenShiftCluster", "ocp-multidc-01", "$.spec.install.endpoints.ingress.source.type"},
+		{"api.invariant", "OpenShiftCluster", "ocp-multidc-02", "$.spec.install.endpoints.api.source.type"},
+		{"api.invariant", "OpenShiftCluster", "ocp-multidc-02", "$.spec.install.endpoints.api-int.source.type"},
+		{"api.invariant", "OpenShiftCluster", "ocp-multidc-02", "$.spec.install.endpoints.ingress.source.type"},
 
-		cluster("$.spec.ceph.config.global.mon_osd_down_out_subtree_limit"),
-		cluster("$.spec.ceph.config.global.osd_pool_default_pg_autoscale_mode"),
-		{"api.required", storageClusterKind, multidcCluster, "$.spec.ceph.config.global.osd_pool_default_min_size"},
-		{"api.required", storageClusterKind, multidcCluster, "$.spec.ceph.config.global.osd_pool_default_size"},
-		cluster("$.spec.ceph.mgrModules"),
-		cluster("$.spec.ceph.topology.stretch"),
-		cluster("$.spec.ceph.topology.nodes[6].machineRef"),
+		cluster("$.spec.config.global.mon_osd_down_out_subtree_limit"),
+		cluster("$.spec.config.global.osd_pool_default_pg_autoscale_mode"),
+		{"api.required", storageClusterKind, multidcCluster, "$.spec.config.global.osd_pool_default_min_size"},
+		{"api.required", storageClusterKind, multidcCluster, "$.spec.config.global.osd_pool_default_size"},
+		cluster("$.spec.mgrModules"),
+		cluster("$.spec.topology.stretch"),
+		cluster("$.spec.topology.nodes[6].machineRef"),
 	}
 	for _, name := range []string{"ocp-multidc-01", "ocp-multidc-02"} {
 		for index := 0; index < 3; index++ {
 			for count := 0; count < 2; count++ {
-				result = append(result, diagnosticTuple{"api.invariant", "ContainerCluster", name, fmt.Sprintf("$.spec.nodes[%d].machineRef", index)})
+				result = append(result, diagnosticTuple{"api.invariant", "OpenShiftCluster", name, fmt.Sprintf("$.spec.nodes[%d].machineRef", index)})
 			}
 		}
+		result = append(result, diagnosticTuple{"api.unrealized", "ClusterAddonBinding", name + "-addons", "$.spec.profileRefs"},
+			diagnosticTuple{"api.unrealized", "InfraProvider", "kubevirt-" + name, "$.spec.kubevirt"})
 	}
 	return result
 }
@@ -358,9 +363,14 @@ func referenceRefusals() []diagnosticTuple {
 // every CustomPlaybook raises because it cannot execute.
 func expandedRefusals() []diagnosticTuple {
 	return append(referenceRefusals(),
-		diagnosticTuple{"api.invariant", "StorageExport", "acceptance-external-export", laterServiceRefusal},
-		diagnosticTuple{"api.invariant", "StorageNVMeoFSubsystem", "acceptance-nvmeof", "$.spec.serviceRef"},
+		diagnosticTuple{"api.invariant", "CephConsumer", "acceptance-external-export", laterServiceRefusal},
+		diagnosticTuple{"api.invariant", "CephNVMeoFSubsystem", "acceptance-nvmeof", "$.spec.serviceRef"},
 		diagnosticTuple{"api.deferred", "CustomPlaybook", "acceptance-playbook", laterServiceRefusal},
+		diagnosticTuple{"api.unrealized", "InfraProvider", "acceptance-vsphere", "$.spec.vsphere"},
+		diagnosticTuple{"api.unrealized", "MachineInstallProfile", "acceptance-clone", "$.spec.installer.templateClone"},
+		diagnosticTuple{"api.unrealized", "LoadBalancer", "acceptance-load-balancer", "$.spec.management"},
+		diagnosticTuple{"api.unrealized", "Registry", "acceptance-registry", "$.spec.management"},
+		diagnosticTuple{"api.unrealized", "OpenShiftCluster", "acceptance-sno", "$.spec.distribution.type"},
 	)
 }
 
@@ -433,7 +443,7 @@ func TestActualAdmissibleProjectionAdmitsEveryKindButTheRefusedFamilies(t *testi
 		t.Fatalf("kind catalog changed: %d; cover the new kind in the reference or the extras", len(kinds))
 	}
 	for _, kind := range kinds {
-		covered := len(state.Effective().OfKind(kind)) != 0 || kind == api.StorageReplication && len(replication.Effective().OfKind(kind)) != 0
+		covered := len(state.Effective().OfKind(kind)) != 0 || kind == api.CephReplication && len(replication.Effective().OfKind(kind)) != 0
 		switch refused := slices.Contains(refusedKinds, kind); {
 		case refused && covered:
 			t.Errorf("kind %s is admitted now: remove it from refusedKinds and cover it", kind)
@@ -444,8 +454,14 @@ func TestActualAdmissibleProjectionAdmitsEveryKindButTheRefusedFamilies(t *testi
 	if report.Counts != (compilation.Counts{FilesSeen: 91, ObjectsDecoded: 126}) {
 		t.Errorf("projection counts: %#v", report.Counts)
 	}
-	if len(report.Diagnostics) != 1 || report.Diagnostics[0].Code != "api.deferred" || report.Diagnostics[0].Object == nil || report.Diagnostics[0].Object.Name != "acceptance-playbook" {
-		t.Errorf("the projection raised a diagnostic besides the reserved playbook's: %+v", report.Diagnostics)
+	var warned []diagnostics.Diagnostic
+	for _, d := range report.Diagnostics {
+		if d.Code != "api.unrealized" {
+			warned = append(warned, d)
+		}
+	}
+	if len(warned) != 1 || warned[0].Code != "api.deferred" || warned[0].Object == nil || warned[0].Object.Name != "acceptance-playbook" {
+		t.Errorf("the projection raised a diagnostic besides the reserved playbook's and the unrealized warnings: %+v", report.Diagnostics)
 	}
 	installed := requireObject(t, state.Effective(), api.Machine, "storage-a-01")
 	if installed.Spec().Get("access", "ssh", "user").Text() != "bootwright" || installed.Spec().Get("access", "ssh", "auth", "privateKeyRef").Text() != "bootwright-machine-key" {
@@ -463,10 +479,10 @@ func TestActualAdmissibleProjectionNormalizesAndDefaultsItsExtras(t *testing.T) 
 		t.Fatal("reserved playbook declaration changed")
 	}
 	libvirt := requireObject(t, state.Effective(), api.InfraProvider, "acceptance-libvirt")
-	if libvirt.Spec().Get("libvirt", "bmcEmulationDefaults", "port").Text() != "8000" || libvirt.Spec().Get("libvirt", "bmcEmulationDefaults", "emulator").Text() != "sushy-tools" {
+	if libvirt.Spec().Get("libvirt", "bmcEmulation", "port").Text() != "8000" || libvirt.Spec().Get("libvirt", "uri").Text() != "qemu:///system" {
 		t.Fatal("libvirt emulated BMC defaults missing")
 	}
-	if libvirt.Spec().Get("libvirt", "bmcEmulationDefaults", "bindAddress").Text() != "192.0.2.60" {
+	if libvirt.Spec().Get("libvirt", "bmcEmulation", "bindAddress").Text() != "192.0.2.60" {
 		t.Fatal("the emulated BMC's authored listener address changed")
 	}
 	vsphere := requireObject(t, state.Effective(), api.InfraProvider, "acceptance-vsphere")
@@ -489,11 +505,11 @@ func TestActualAdmissibleProjectionNormalizesAndDefaultsItsExtras(t *testing.T) 
 	if requireObject(t, state.Effective(), api.Entitlement, "acceptance-redhat-ceph").Spec().Get("rhsm").Has("connectToInsights") {
 		t.Fatal("external RHSM acquired managed intent")
 	}
-	if requireObject(t, state.Effective(), api.StorageCluster, "acceptance-external-storage").Spec().Has("ceph") {
+	if requireObject(t, state.Effective(), api.CephCluster, "acceptance-external-storage").Spec().Has("ceph") {
 		t.Fatal("external storage acquired managed configuration")
 	}
-	sno := requireObject(t, state.Effective(), api.ContainerCluster, "acceptance-sno")
-	if sno.Spec().Get("install", "endpoints", "api", "address").Text() != "192.0.2.220" || sno.Spec().Get("install", "platform", "type").Text() != "none" {
+	sno := requireObject(t, state.Effective(), api.OpenShiftCluster, "acceptance-sno")
+	if sno.Spec().Get("install", "endpoints", "api", "address").Text() != "192.0.2.220" || !sno.Spec().Has("install", "platform", "none") {
 		t.Fatal("single-node endpoint/platform derivation missing")
 	}
 }
@@ -581,7 +597,7 @@ func TestActualCompilerDefaultPrecedencePreservesExplicitValues(t *testing.T) {
 	if playbook.Spec().Get("enabled").Bool() || playbook.Spec().Get("order").Text() != "0" || playbook.Spec().Get("tags").Len() != 0 {
 		t.Fatal("explicit false, zero, or empty collection changed")
 	}
-	if len(state.Effective().OfKind(api.Secret)) != 0 || len(state.Effective().OfKind(api.ContainerCluster)) != 0 {
+	if len(state.Effective().OfKind(api.Secret)) != 0 || len(state.Effective().OfKind(api.OpenShiftCluster)) != 0 {
 		t.Fatal("unused defaults created objects or retention edges")
 	}
 }
@@ -673,12 +689,11 @@ spec:
     machineRef: missing
 `,
 		`apiVersion: bootwright.io/v1alpha1
-kind: StorageExport
+kind: CephConsumer
 metadata:
   name: export
 
 spec:
-  type: dataFoundation
   clusterRef: missing
 
   externalDetails:
@@ -689,10 +704,10 @@ spec:
 	}
 	f.Add([]byte(environment+`
   defaults:
-    ContainerCluster:
+    OpenShiftCluster:
       install:
         platform:
-          type: none
+          none: {}
           baremetal: {}
 `), true)
 	f.Fuzz(func(t *testing.T, body []byte, completeStream bool) {

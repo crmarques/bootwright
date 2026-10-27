@@ -48,7 +48,7 @@ func catalog() api.Catalog {
 		"access", m("ssh", m("addressRef", "ssh", "user", "root", "knownHostsRef", "host-key",
 			"auth", m("privateKeyRef", "host-identity")))))
 	provider := object(api.InfraProvider, "lab", m("libvirt", m("machineRef", "host", "uri", "qemu:///system",
-		"bmcEmulationDefaults", m("certificateRef", "lab-bmc-tls", "bindAddress", "192.0.2.10", "port", api.IntegerValue("8000"),
+		"bmcEmulation", m("certificateRef", "lab-bmc-tls", "bindAddress", "192.0.2.10", "port", api.IntegerValue("8000"),
 			"auth", m("credentialsRef", "bmc")))))
 	guests := object(api.NetworkConfig, "guests", m("nmstate", m("interfaces",
 		list(m("name", "enp1s0", "type", "ethernet")))))
@@ -56,9 +56,9 @@ func catalog() api.Catalog {
 		"os", m("provided", false, "installProfileRef", "rhel"),
 		"network", addresses("192.0.2.20/24").With("configRef", api.StringValue("guests"))))
 	physical := object(api.Machine, "metal", m("os", m("provided", true), "network", addresses("192.0.2.30/24"),
-		"hardware", m("nics", list(m("name", "eno1", "macAddress", "52:54:00:9A:1B:01")),
-			"management", m("bmc", m("address", "https://bmc.example.test/redfish/v1/Systems/1",
-				"credentialsRef", "metal-bmc")))))
+		"hardware", m("nics", list(m("name", "eno1"))),
+		"substrate", m("baremetal", m("bmc", m("address", "https://bmc.example.test/redfish/v1/Systems/1",
+			"credentialsRef", "metal-bmc"), "nics", list(m("nicRef", "eno1", "macAddress", "52:54:00:9A:1B:01"))))))
 	return api.NewCatalog([]api.Object{environment, controller, host, provider, guests, guest, physical})
 }
 
@@ -173,7 +173,7 @@ func TestPowerFollowsTheMachineBlockNotTheInstallation(t *testing.T) {
 			reported := diagnostics.Of(err)
 			if len(reported) != 1 || reported[0].Code != "access.unavailable" ||
 				reported[0].Message != "this Machine's emulated management controller is not realized" ||
-				reported[0].Remediation != "bootwright apply --context lab realizes Machine/guest and its controller" {
+				reported[0].Remediation != "bootwright apply --context lab realizes Machine/guest and its emulated BMC" {
 				t.Fatalf("refusal = %+v", reported)
 			}
 		})
@@ -200,8 +200,12 @@ func TestAnUnresolvableTargetOrVerbRefuses(t *testing.T) {
 	if remedy := diagnostics.Of(err)[0].Remediation; remedy != "list the Machines this context selects with bootwright machine list --context lab" {
 		t.Fatalf("unknown Machine remedy = %q", remedy)
 	}
-	if _, _, err := requestFor(catalog(), "lab", "controller", Start, false, realized()); code(t, err) != "access.unavailable" {
+	_, _, err = requestFor(catalog(), "lab", "controller", Start, false, realized())
+	if code(t, err) != "access.unavailable" {
 		t.Fatalf("a Machine with no controller at all: %v", err)
+	}
+	if remedy := diagnostics.Of(err)[0].Remediation; remedy != "declare spec.substrate.baremetal.bmc on Machine/controller, or place it on a provider that emulates a management controller" {
+		t.Fatalf("a Machine with no controller remedy = %q", remedy)
 	}
 	if _, _, err := requestFor(catalog(), "lab", "guest", "suspend", false, realized()); code(t, err) != "lifecycle.state" {
 		t.Fatalf("unsupported verb: %v", err)

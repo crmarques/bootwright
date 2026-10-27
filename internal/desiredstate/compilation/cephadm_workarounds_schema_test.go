@@ -8,8 +8,8 @@ import (
 func TestCephadmWorkaroundsRetiredOnDecode(t *testing.T) {
 	const message = "the cephadm workaround list was retired; Bootwright realizes no cephadm workaround"
 	for _, row := range []struct{ name, input, field, remedy string }{
-		{"cluster", environmentYAML + "---\napiVersion: bootwright.io/v1alpha1\nkind: StorageCluster\nmetadata: {name: storage}\nspec:\n  type: ceph\n  ceph:\n    cephadm:\n      workarounds: [mgmt-gateway-spec-dependency-recording]\n", "$.spec.ceph.cephadm.workarounds", "remove workarounds from $.spec.ceph.cephadm"},
-		{"default", environmentYAML + "  defaults:\n    StorageCluster:\n      ceph:\n        cephadm:\n          workarounds: []\n", "$.spec.defaults.StorageCluster.ceph.cephadm.workarounds", "remove workarounds from $.spec.defaults.StorageCluster.ceph.cephadm"},
+		{"cluster", environmentYAML + "---\napiVersion: bootwright.io/v1alpha1\nkind: CephCluster\nmetadata: {name: storage}\nspec:\n  cephadm:\n    workarounds: [mgmt-gateway-spec-dependency-recording]\n", "$.spec.cephadm.workarounds", "remove workarounds from $.spec.cephadm"},
+		{"default", environmentYAML + "  defaults:\n    CephCluster:\n      cephadm:\n        workarounds: []\n", "$.spec.defaults.CephCluster.cephadm.workarounds", "remove workarounds from $.spec.defaults.CephCluster.cephadm"},
 	} {
 		t.Run(row.name, func(t *testing.T) {
 			state, report, err := regressionCompiler().Compile(context.Background(), sources(row.input))

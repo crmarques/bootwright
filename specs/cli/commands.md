@@ -105,20 +105,20 @@ The three `media` commands follow the host-wide
 | --- | --- | --- | --- |
 | `bootwright validate` | repeatable `-f, --file <file-or-dir>` | validation summary with admission counts, exclusions and advisories | read the supplied input, or the selected context's input when `-f` is omitted; no write |
 | `bootwright preflight controller` | none | [baseline or explicit-context controller readiness](../controller.md#the-setup-flow), including the acquisition route it resolved | bounded local observation; no state publication |
-| `bootwright preflight infra` | `--clusters <list>` default all; `--dry-run` false; `--trust-on-first-use=<bool>` default `true` | infrastructure readiness checks | observe unless `--dry-run`, which is local-only |
+| `bootwright preflight infra` | `--clusters <list>` default all; `--dry-run` false; `--trust-on-first-use=<bool>` default `true` | readiness checks of the infrastructure-services stage's kinds (Proxy, DNSServer, NTPServer, ArtifactServer, Registry and LoadBalancer) and of the substrates (InfraProvider and its Machines) | observe unless `--dry-run`, which is local-only |
 | `bootwright preflight clusters` | same flags as `preflight infra` | all selected cluster readiness checks | observe unless `--dry-run` |
-| `bootwright preflight container-cluster` | `--clusters`, `--dry-run`, with ContainerCluster-only selection | container-cluster readiness checks | observe unless `--dry-run` |
-| `bootwright preflight storage-cluster` | same flags as `preflight infra`, with StorageCluster-only selection | storage-cluster readiness checks | observe unless `--dry-run` |
-| `bootwright preflight add-ons` | `--clusters <list>` default all ContainerClusters | add-on prerequisite checks | bounded observation |
+| `bootwright preflight container-cluster` | `--clusters`, `--dry-run`, with OpenShiftCluster-only selection | container-cluster readiness checks | observe unless `--dry-run` |
+| `bootwright preflight storage-cluster` | same flags as `preflight infra`, with CephCluster-only selection | storage-cluster readiness checks | observe unless `--dry-run` |
+| `bootwright preflight add-ons` | `--clusters <list>` default all OpenShiftClusters | add-on prerequisite checks | bounded observation |
 | `bootwright preflight all` | `--dry-run` false; `--trust-on-first-use=<bool>` default `true` | all controller, infrastructure, cluster, storage, and add-on checks | observe unless `--dry-run` |
-| `bootwright plan` | `--stage <list>` default all stages | next legal full-context plan or exact continuation point, with the steps each block waits for, how wide the plan is and how many blocks this build starts at a time, and the blocks a stage selection would start | none |
+| `bootwright plan` | `--stage <list>` default all stages; `--until <cluster>.<package>` | next legal full-context plan or exact continuation point, with the steps each block waits for, how wide the plan is and how many blocks this build starts at a time, and the blocks a stage or `--until` selection would start | none |
 | `bootwright status` | none | controller setup readiness, lifecycle state, and next safe commands; it checks neither Secret material nor media, which `secret check` and `media list` report | read local state |
 | `bootwright diff` | `--observe` false | each object's desired state beside what the context's apply realized, from its records or, with `--observe`, read live, as a [comparison](../cli.md#desired-and-realized-state-comparison) | read local state; with `--observe`, a bounded read-only observation of each block the context's apply realized, on the host that block froze, after the store-internal [cache-only rebuild](../controller.md#the-controller-runtime) of this build's runtime when its directory is missing |
 | `bootwright render` | `--input-dir <file-or-dir>`; `--output-dir <dir>`; `--clusters <list>` default all; `--sensitive` false | whole external-tool artifact manifest, or render help when neither path flag is supplied | local artifact writes only |
-| `bootwright render effective` | none | normalized effective desired state and object counts | none |
-| `bootwright render installer` | `--clusters <list>` default all ContainerClusters; `--sensitive` false | installer artifact manifest | local placeholder files and optional sensitive files |
-| `bootwright render storage` | `--clusters <list>` default all StorageClusters | storage artifact manifest | local native files or scripts only; never execution |
-| `bootwright apply` | repeatable `--authorize <token>[=<digest>][,<token>...]`; `--stage <list>` default all stages; `--yes` false | completed full apply, a pause at the selected stage boundary, exact continued state, or a settled result when the declared state is already realized | complete planned mutation, or none when it settles, beyond completing an operation's interrupted finalization (its record, releases and evidence) |
+| `bootwright render effective` | `--origins` false | normalized effective desired state and object counts; with `--origins`, the [origin of each effective field](../cli.md#effective-field-origins) instead of the YAML | none |
+| `bootwright render installer` | `--clusters <list>` default all OpenShiftClusters; `--sensitive` false | installer artifact manifest | local placeholder files and optional sensitive files |
+| `bootwright render storage` | `--clusters <list>` default all CephClusters | storage artifact manifest | local native files or scripts only; never execution |
+| `bootwright apply` | repeatable `--authorize <token>[=<digest>][,<token>...]`; `--stage <list>` default all stages; `--until <cluster>.<package>`; `--yes` false | completed full apply, a pause at the selected stage boundary or after the named add-on instance, exact continued state, or a settled result when the declared state is already realized | complete planned mutation, or none when it settles, beyond completing an operation's interrupted finalization (its record, releases and evidence) |
 | `bootwright destroy` | repeatable `--authorize <token>[=<digest>][,<token>...]`; repeatable `--unregistered <machine>[,<machine>...]`; `--yes` false | completed full destroy, exact continued state, or a settled result when the context owns nothing | complete planned removal, or none when it settles, beyond completing an operation's interrupted finalization (its record, releases and evidence) or releasing what an interrupted registration left, and the [housekeeping](../state-reconciliation.md#context-mutation-evidence) of the operation claims that hold nothing; over an apply that did not complete, it first proves the outcome of every effect it takes back |
 
 Not yet met: `preflight infra`, `preflight clusters`, `preflight all`,
@@ -152,8 +152,9 @@ available.
 | `bootwright cluster oc` | required `--name <cluster>` and non-empty `<command>...` | bounded `oc` handoff descriptor | read context-owned access metadata only |
 | `bootwright cluster kubectl` | required `--name <cluster>` and non-empty `<command>...` | bounded `kubectl` handoff descriptor | read context-owned access metadata only |
 | `bootwright cluster kubeconfig` | required `--name <cluster>` | kubeconfig through the explicit sensitive-output boundary | read and reveal one context-owned credential artifact |
-| `bootwright cluster keyring` | required `--name <cluster>`; required `--client <client>` | the Ceph keyring of one StorageClient through the explicit sensitive-output boundary | read and reveal one context-owned credential artifact |
+| `bootwright cluster keyring` | required `--name <cluster>`; required `--client <client>` | the Ceph keyring of one CephClient through the explicit sensitive-output boundary | read and reveal one context-owned credential artifact |
 | `bootwright version` | none | version, commit, source state, Go runtime and target, and embedded dependency-bundle identity | none |
+| `bootwright schema` | required `--format json-schema` | the advisory [JSON Schema export](../cli.md#schema-export) of every registered kind | none |
 | `bootwright help [command ...]` | no local flags | help for the exact resolved command, human or structured | none |
 | `bootwright completion bash` | `--no-descriptions` false | Bash completion script | none |
 | `bootwright completion zsh` | `--no-descriptions` false | Zsh completion script | none |
@@ -162,7 +163,7 @@ available.
 
 ### Cluster command applicability
 
-`--name` selects from the shared ContainerCluster/StorageCluster name namespace
+`--name` selects from the shared OpenShiftCluster/CephCluster name namespace
 in the selected context; that of `cluster info` and `cluster exec` is a
 comma-separated list under the [list rules](../cli.md#parsing-and-input-conventions). The following table owns applicability. Target
 resolution, readiness and diagnostics of `cluster kubeconfig` live in the
@@ -173,23 +174,23 @@ those of `cluster rsh` and `cluster exec` in the
 --secrets` on a managed Ceph cluster in the
 [storage dashboard access](../cli.md#storage-dashboard-access); those of
 `cluster oc` and `cluster kubectl` are
-[deferred](../deferred/cli-access-and-rendering.md#containercluster-access-handoffs-and-sessions).
+[deferred](../deferred/cli-access-and-rendering.md#openshiftcluster-access-handoffs-and-sessions).
 
 | Command | Applicable targets |
 | --- | --- |
-| `cluster list`, `cluster info` | All selected ContainerClusters and StorageClusters, including external storage clusters. |
-| `cluster rsh`, `cluster exec` | OpenShift/OKD ContainerClusters and managed Ceph StorageClusters with declared nodes. External StorageClusters have no declared node roster and are inapplicable. |
-| `cluster oc`, `cluster kubectl`, `cluster kubeconfig` | OpenShift/OKD ContainerClusters only. |
-| `cluster keyring` | Managed Ceph StorageClusters only. |
+| `cluster list`, `cluster info` | All selected OpenShiftClusters and CephClusters, including external storage clusters. |
+| `cluster rsh`, `cluster exec` | OpenShiftClusters and managed CephClusters with declared nodes. External CephClusters have no declared node roster and are inapplicable. |
+| `cluster oc`, `cluster kubectl`, `cluster kubeconfig` | OpenShiftClusters only. |
+| `cluster keyring` | Managed CephClusters only. |
 
 Applicability does not establish implementation availability, access readiness,
 identity, or ownership. Missing access material on an applicable target is an
 access failure, not a change in applicability. A session on an OpenShift/OKD
-ContainerCluster is applicable and refuses `access.unavailable`: only managed
+OpenShiftCluster is applicable and refuses `access.unavailable`: only managed
 Ceph sessions are specified.
 
 Not yet met: `cluster oc` and `cluster kubectl` hand off nothing and sessions on
-an OpenShift/OKD ContainerCluster do not open; tracked as
+an OpenShiftCluster do not open; tracked as
 [B101](../milestones/backlog.md#b101).
 
 ### Help content
@@ -357,12 +358,19 @@ flag acknowledges, and when deletion refuses, follow
 [permanent deletion](../contexts.md#permanent-deletion). A deletion that
 abandons objects warns once on standard error with `context.orphaned`.
 
-`--stage` accepts only `controller`, `infra-components`, `substrates`,
+`--stage` accepts only `controller`, `infrastructure-services`, `substrates`,
 `machines`, `clusters`, and `add-ons`, and only on `plan` and `apply`. Its
 members follow the [comma-list rules](../cli.md#parsing-and-input-conventions);
 a supplied value that resolves to no member and an unrecognized member are both
 usage errors. Omission selects every stage. What a selection gates is owned by
 [state reconciliation](../state-reconciliation.md#stages-and-the-pause-boundary).
+
+`--until` is accepted only on `plan` and `apply`. Its value names one add-on
+instance as `<cluster>.<package>`, two lowercase DNS labels, the `object` that
+`plan --output json` reports for the instance; any other form is a usage
+error. It composes with `--stage`: a block starts only when both admit it.
+What it gates, and its refusals, are owned by
+[state reconciliation](../state-reconciliation.md#stopping-after-an-add-on-instance).
 
 `--authorize` accepts only `data-loss`, `data-loss=<digest>` with the 16
 lowercase hexadecimal digits a plan prints for the steps it authorizes, and
@@ -476,7 +484,7 @@ require an explicitly supplied `--name` naming exactly one cluster after list
 normalization, and a list of several is `cli.usage`; the default-all selection
 applies only when sensitive values are not requested. The two are mutually
 exclusive, so one invocation reveals one credential, and `--object-user` names
-one StorageObjectUser by its API name.
+one CephObjectUser by its API name.
 
 The [Secrets contract](../secrets.md#acquisition-and-commands) owns the exact
 type/source flag matrix, whole-version validation, generation and reveal parts.

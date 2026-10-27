@@ -1,5 +1,5 @@
   bootwright / preflight container-cluster
-      Check ContainerCluster readiness
+      Check OpenShiftCluster readiness
 
   Usage
     bootwright preflight container-cluster [flags]

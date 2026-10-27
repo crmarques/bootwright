@@ -44,7 +44,7 @@ ENDPOINT = "https://bmc.example.test/redfish/v1/Systems/1"
 UUID = "4c4c4544-0042-3510-8052-b4c04f4d4e31"
 SERIAL = "CZJ2440ABC"
 TEMPLATE = "{{ 6 * 7 }}"
-REMEDY = ("Correct spec.hardware.management.bmc.address, or destroy and apply this context so the machine is "
+REMEDY = ("Correct spec.substrate.baremetal.bmc.address, or destroy and apply this context so the machine is "
           "proved again.")
 
 

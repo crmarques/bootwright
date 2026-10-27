@@ -461,12 +461,12 @@ func physicalProofs(request *lifecycle.RunRequest, resolved target) {
 	name := resolved.frozen.Identity.Object
 	request.Refusals[controllerHost] = refusedOn(name, "the management controller at "+resolved.frozen.Controller.Endpoint+
 		" answers with the system UUID or a MAC address of the host that runs Bootwright, so no power request was sent",
-		"correct spec.hardware.management.bmc.address on Machine/"+name+" so it names that machine's own controller")
+		"correct spec.substrate.baremetal.bmc.address on Machine/"+name+" so it names that machine's own BMC")
 	if len(resolved.expected) != 0 {
 		request.MaterialValues["expectedMACsBase64"] = encode(strings.Join(resolved.expected, ","))
 		request.Refusals[hardwareMismatch] = refusedOn(name, "the machine answering at "+resolved.frozen.Controller.Endpoint+
 			" does not report exactly the hardware addresses Machine/"+name+" declares in a complete inventory, so no power request was sent",
-			"correct spec.hardware.management.bmc.address or spec.hardware.nics on Machine/"+name+", or apply the context so its bare-metal block proves it")
+			"correct spec.substrate.baremetal.bmc.address or spec.substrate.baremetal.nics on Machine/"+name+", or apply the context so its bare-metal block proves it")
 	}
 }
 
@@ -486,7 +486,7 @@ const identityMismatch = "identity-mismatch"
 // run's retained output alone, which the remedy points at.
 func identityRefusal(frozen Request, output string) error {
 	identity := string(api.Machine) + "/" + frozen.Identity.Object
-	remediation := "correct spec.hardware.management.bmc.address on " + identity + ", or run bootwright destroy --context " +
+	remediation := "correct spec.substrate.baremetal.bmc.address on " + identity + ", or run bootwright destroy --context " +
 		frozen.Identity.Context + " and bootwright apply --context " + frozen.Identity.Context + " so the machine is proved again"
 	if output != "" {
 		remediation += "; " + output + " for both identities"

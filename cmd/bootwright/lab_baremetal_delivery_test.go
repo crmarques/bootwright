@@ -139,14 +139,14 @@ func rewritten(t *testing.T, old, replacement string) desiredstate.Sources {
 	return sources
 }
 
-// A delivered-key installation hands its controller the private installer
+// A delivered-key installation hands its BMC the private installer
 // image URL, so the example with its verification removed, or its controller
 // addressed over plain http, refuses before registration naming the Machine
 // with the one reason and remedy the managed-OS refusal table gives.
 func TestLabBaremetalExampleRefusesAnUnverifiedController(t *testing.T) {
-	const reason = "a Machine whose installation delivers private material hands its controller the private installer image URL, " +
-		"so the controller must be reached over https with its certificate verified"
-	const remedy = "address the controller of Machine/metal-01 with an https:// spec.hardware.management.bmc.address and remove the tls.verify opt-out " +
+	const reason = "a Machine whose installation delivers private material hands its BMC the private installer image URL, " +
+		"so the BMC must be reached over https with its certificate verified"
+	const remedy = "address the BMC of Machine/metal-01 with an https:// spec.substrate.baremetal.bmc.address and remove the tls.verify opt-out " +
 		"on Machine/metal-01 or in spec.baremetal.defaults.bmc of InfraProvider/lab-metal; " +
 		"name the authority that issued its certificate in tls.trustBundleRef when the system trust store does not hold it"
 	for name, sources := range map[string]func(*testing.T) desiredstate.Sources{
@@ -185,7 +185,7 @@ func TestLabBaremetalExampleRefusesAnUnverifiedController(t *testing.T) {
 // that receives the key.
 func TestLabBaremetalExampleRefusesItsInstallation(t *testing.T) {
 	const address = "        address: https://bmc-01.metal.example.test/redfish/v1/Systems/1\n"
-	sources := rewritten(t, address, address+"        virtualMedia:\n          tls:\n            trust: disable-verification\n")
+	sources := rewritten(t, address, address+"        virtualMedia:\n          tls:\n            trust: disableVerification\n")
 	if len(sources.Files) != baremetalExampleFiles {
 		t.Fatalf("example discovery: got %d files, want %d", len(sources.Files), baremetalExampleFiles)
 	}
@@ -196,7 +196,7 @@ func TestLabBaremetalExampleRefusesItsInstallation(t *testing.T) {
 	capability, _ := buildCapabilities(systemClock{}, exampleControllerPorts(t), exampleMediaRecords{}).Resolve(installation.Kind, installation.Implementation)
 	unsupported := capability.(lifecycle.UnsupportedReporter).Unsupported(state)
 	if len(unsupported) != 1 || unsupported[0].Name != "metal-01" ||
-		unsupported[0].Reason != "a Machine that delivers private material through its installation cannot let its controller fetch without verifying the artifact server" {
+		unsupported[0].Reason != "a Machine that delivers private material through its installation cannot let its BMC fetch without verifying the artifact server" {
 		t.Fatalf("unsupported = %+v", unsupported)
 	}
 }

@@ -5,7 +5,8 @@ metadata:
 spec:
   substrate:
     providerRef: lab-libvirt
-    profileRef: rhel
+    libvirt:
+      profileRef: rhel
   os:
     provided: false
   network:

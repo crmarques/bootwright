@@ -40,7 +40,7 @@ func fixture(t *testing.T, managed bool) Service {
 	t.Helper()
 	node := object(api.Machine, "node", m("network", m("inline", m("dns", api.ListValue(m("serverRef", "dns", "endpointRef", "ip"))))))
 	objects := []api.Object{object(api.Environment, "env", m("domains", m("containerClusters", "example.test"))), node,
-		object(api.ContainerCluster, "sno", m("nodes", api.ListValue(m("machineRef", "node")), "install", m("endpoints", m("api", m("address", "192.0.2.10"), "api-int", m("address", "192.0.2.10"), "ingress", m("address", "192.0.2.10")))))}
+		object(api.OpenShiftCluster, "sno", m("nodes", api.ListValue(m("machineRef", "node")), "install", m("endpoints", m("api", m("address", "192.0.2.10"), "api-int", m("address", "192.0.2.10"), "ingress", m("address", "192.0.2.10")))))}
 	if managed {
 		objects = append(objects, object(api.DNSServer, "dns", m("management", "managed", "bindAddress", "192.0.2.53", "endpoints", api.ListValue(m("name", "ip", "address", "192.0.2.53")))))
 	}
@@ -110,7 +110,7 @@ func TestResolutionChecksTheNamesTheInstallationProvesAndNeverTheApex(t *testing
 			s := fixture(t, true)
 			endpoints := m("api", m("address", "192.0.2.10"), "api-int", m("address", "192.0.2.10"), "ingress", m("address", "192.0.2.10"))
 			s.Graph = graph{api.NewCatalog([]api.Object{object(api.Environment, "env", m("domains", m("containerClusters", "example.test"))),
-				object(api.ContainerCluster, row.cluster, m("install", m("endpoints", endpoints)))})}
+				object(api.OpenShiftCluster, row.cluster, m("install", m("endpoints", endpoints)))})}
 			resolved := []string{}
 			s.Resolver = ResolverFunc(func(_ context.Context, argv []string) ([]byte, error) {
 				resolved = append(resolved, argv[2])
@@ -147,7 +147,7 @@ func TestManagedDNSIsPendingBeforeItsBlockCompletes(t *testing.T) {
 		t.Fatalf("%+v %v", report, err)
 	}
 	for _, check := range report.Checks {
-		if !strings.Contains(check.Next, "--stage infra-components") {
+		if !strings.Contains(check.Next, "--stage infrastructure-services") {
 			t.Fatal(check)
 		}
 	}

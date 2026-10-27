@@ -21,12 +21,12 @@ func ecData() api.Object {
 }
 
 func imageOf(name, pool string, pairs ...any) api.Object {
-	return childOf(api.StorageRBDImage, name, append([]any{"poolRef", pool, "sizeBytes", 10737418240}, pairs...)...)
+	return childOf(api.CephRBDImage, name, append([]any{"poolRef", pool, "sizeBytes", 10737418240}, pairs...)...)
 }
 
 func plannedImage(t *testing.T, children ...api.Object) Request {
 	t.Helper()
-	r, err := planned(t, planCatalog(6, 6, nil, children...), api.StorageRBDImage, "disk")
+	r, err := planned(t, planCatalog(6, 6, nil, children...), api.CephRBDImage, "disk")
 	if err != nil {
 		t.Fatal(diagnostics.Of(err))
 	}
@@ -67,10 +67,10 @@ func TestRBDImageExplicitEmptyFeaturesFreezeEmpty(t *testing.T) {
 }
 
 func TestClientOnPoolWithDataPoolImagePlans(t *testing.T) {
-	client := childOf(api.StorageClient, "consumer", "poolRef", "volumes", "access", "read-write")
+	client := childOf(api.CephClient, "consumer", "poolRef", "volumes", "access", "readWrite")
 	plannedClient := func(catalog api.Catalog) []string {
 		t.Helper()
-		r, err := planned(t, catalog, api.StorageClient, "consumer")
+		r, err := planned(t, catalog, api.CephClient, "consumer")
 		if err != nil || r.Client == nil {
 			t.Fatalf("the client did not plan: %v", diagnostics.Of(err))
 		}
@@ -96,14 +96,14 @@ func TestClientOnPoolWithDataPoolImagePlans(t *testing.T) {
 }
 
 func TestRBDImageOnErasurePoolRefusesAtPlan(t *testing.T) {
-	_, err := planned(t, planCatalog(6, 6, nil, ecData(), imageOf("disk", "ec-data")), api.StorageRBDImage, "disk")
-	refusedWith(t, err, "lifecycle.unsupported", "StorageRBDImage disk names erasure-coded pool ec-data; an RBD image keeps its header and metadata in a replicated pool", "point spec.poolRef at a replicated rbd pool and name the erasure-coded pool in spec.dataPoolRef")
+	_, err := planned(t, planCatalog(6, 6, nil, ecData(), imageOf("disk", "ec-data")), api.CephRBDImage, "disk")
+	refusedWith(t, err, "lifecycle.unsupported", "CephRBDImage disk names erasure-coded pool ec-data; an RBD image keeps its header and metadata in a replicated pool", "point spec.poolRef at a replicated rbd pool and name the erasure-coded pool in spec.dataPoolRef")
 }
 
 func TestRBDImagePoolRefusalsPropagate(t *testing.T) {
 	catalog := planCatalog(6, 6, nil, replicatedPool("volumes"), replicatedPool("archive", "mirroring", requestMap("mode", "image")), imageOf("disk", "volumes", "dataPoolRef", "archive"))
-	_, err := planned(t, catalog, api.StorageRBDImage, "disk")
-	refusedWith(t, err, "lifecycle.unsupported", "StoragePool archive declares mirroring without a StorageReplication owner", "declare a StorageReplication that names this pool, or remove spec.mirroring")
+	_, err := planned(t, catalog, api.CephRBDImage, "disk")
+	refusedWith(t, err, "lifecycle.unsupported", "CephPool archive declares mirroring without a CephReplication owner", "declare a CephReplication that names this pool, or remove spec.mirroring")
 	r := plannedImage(t, replicatedPool("volumes"), ecData(), imageOf("disk", "volumes", "dataPoolRef", "ec-data"))
 	if r.RBD.DataPool != "ec-data" {
 		t.Fatalf("an erasure-coded data pool froze as %q", r.RBD.DataPool)
@@ -113,13 +113,13 @@ func TestRBDImagePoolRefusalsPropagate(t *testing.T) {
 func TestRBDImageBlockIDAndRequires(t *testing.T) {
 	catalog := planCatalog(6, 6, nil, replicatedPool("volumes"), ecData(), imageOf("disk", "volumes", "dataPoolRef", "ec-data"))
 	input := lifecycle.PlanInput{Verb: reconciliation.Apply, Context: lifecycle.ContextIdentity{Name: "synthetic"}, State: compilation.NewState(catalog, catalog, nil), Controller: "controller"}
-	plan, err := New(api.StorageRBDImage, nil).Plan(context.Background(), input)
+	plan, err := New(api.CephRBDImage, nil).Plan(context.Background(), input)
 	if err != nil || len(plan.Definitions) != 1 {
 		t.Fatalf("the image planned %+v (%v)", plan.Definitions, diagnostics.Of(err))
 	}
 	block := plan.Definitions[0]
-	requires := []reconciliation.ObjectRef{{Kind: string(api.StoragePool), Object: "volumes"}, {Kind: string(api.StoragePool), Object: "ec-data"}}
-	if block.ID != "ceph-rbd-disk" || block.Kind != string(api.StorageRBDImage) || block.Object != "disk" || !slices.Equal(block.Requires, requires) {
+	requires := []reconciliation.ObjectRef{{Kind: string(api.CephPool), Object: "volumes"}, {Kind: string(api.CephPool), Object: "ec-data"}}
+	if block.ID != "ceph-rbd-disk" || block.Kind != string(api.CephRBDImage) || block.Object != "disk" || !slices.Equal(block.Requires, requires) {
 		t.Fatalf("the image block is %+v", block)
 	}
 	if !slices.Equal(block.Dependencies, []string{ClusterBlockID("example"), ImageBlockID("example")}) {
@@ -143,9 +143,9 @@ func rbdRequest() Request {
 }
 
 func TestRBDImageExecutionMatchesItsFrozenIdentity(t *testing.T) {
-	capability := New(api.StorageRBDImage, nil)
+	capability := New(api.CephRBDImage, nil)
 	e := executionFor(t, rbdRequest())
-	e.Block.ID, e.Block.Kind, e.Block.Object = "ceph-rbd-disk", string(api.StorageRBDImage), "disk"
+	e.Block.ID, e.Block.Kind, e.Block.Object = "ceph-rbd-disk", string(api.CephRBDImage), "disk"
 	prepared, err := capability.prepare(context.Background(), e)
 	if err != nil || prepared.Action != "rbd" || prepared.RBD == nil || prepared.RBD.Name != "disk" || prepared.Owner != "apply-original" {
 		t.Fatalf("a planned image block did not match its frozen identity: %+v %v", prepared.RBD, err)
@@ -171,9 +171,9 @@ func TestRBDImageInverseOrdersImageBeforePool(t *testing.T) {
 	if order["ceph-rbd-disk"] > order["ceph-pool-images"] || order["ceph-rbd-disk"] > order["ceph-pool-archive"] {
 		t.Fatalf("the image does not precede its pools in removal: %v", order)
 	}
-	capability := New(api.StorageRBDImage, &recordingRunner{})
+	capability := New(api.CephRBDImage, &recordingRunner{})
 	e := executionFor(t, rbdRequest())
-	e.Block.ID, e.Block.Kind, e.Block.Object = "ceph-rbd-disk", string(api.StorageRBDImage), "disk"
+	e.Block.ID, e.Block.Kind, e.Block.Object = "ceph-rbd-disk", string(api.CephRBDImage), "disk"
 	if q, err := capability.Quiescent(context.Background(), lifecycle.Probe{Block: e.Block, RetiredWithHosts: true}); err != nil || q.State != lifecycle.Quiescent || q.Reason != retiredReason {
 		t.Fatalf("a retired image is not quiescent with its hosts: %+v %v", q, err)
 	}

@@ -191,7 +191,7 @@ func (s Service) status(ctx context.Context, view View) (*StatusResult, error) {
 			Files: report.Counts.FilesSeen, Objects: report.Counts.ObjectsDecoded,
 		}
 		claimed, refused := s.capabilityKinds(), Identities(s.unsupportedRefusals(state))
-		result.Clusters = clusterSummaries(catalog, api.ContainerCluster, claimed, refused)
+		result.Clusters = clusterSummaries(catalog, api.ContainerClusterCategory, claimed, refused)
 		result.StorageClusters = storageSummaries(catalog, claimed, refused)
 		result.Shared = refusedServices(serviceSummaries(catalog, claimed, s.options.EffectBearing), refused)
 		result.Secrets = SecretSummary{Declared: len(catalog.OfKind(api.Secret))}
@@ -462,10 +462,10 @@ func setupChecks(view View, operated bool) []SetupCheck {
 // clusterSummaries reports the cluster roots of one kind as their declarations
 // leave them: unsupported when no capability claims the kind or its capability
 // refuses the object, and otherwise pending until a block proves otherwise.
-func clusterSummaries(catalog api.Catalog, kind api.Kind, claimed, refused []string) []ClusterSummary {
+func clusterSummaries(catalog api.Catalog, category api.Category, claimed, refused []string) []ClusterSummary {
 	out := []ClusterSummary{}
-	for _, object := range catalog.OfKind(kind) {
-		out = append(out, ClusterSummary{Name: object.Name(), Kind: string(kind), Status: declaredStatus(kind, object, claimed, refused)})
+	for _, object := range catalog.OfCategory(category) {
+		out = append(out, ClusterSummary{Name: object.Name(), Kind: string(object.Kind()), Status: declaredStatus(object.Kind(), object, claimed, refused)})
 	}
 	slices.SortFunc(out, func(x, y ClusterSummary) int { return strings.Compare(x.Name, y.Name) })
 	return out
@@ -708,15 +708,7 @@ func realizedServices(services []ServiceSummary, realized map[string]Realization
 // build stamped with a commit and no version is devel, as that command calls
 // it. A record naming neither names no build.
 func buildIdentity(executable operationstore.Executable) string {
-	switch {
-	case executable.Version == "" && executable.Commit == "":
-		return ""
-	case executable.Version == "":
-		return "devel (" + executable.Commit + ")"
-	case executable.Commit == "":
-		return executable.Version
-	}
-	return executable.Version + " (" + executable.Commit + ")"
+	return operationstore.BuildIdentity(executable)
 }
 
 type UnfinishedOperation struct {

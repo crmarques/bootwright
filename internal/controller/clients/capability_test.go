@@ -23,17 +23,18 @@ func field(name string, value api.Value) api.FieldValue {
 
 func text(name, value string) api.FieldValue { return field(name, api.StringValue(value)) }
 
-func machine(capabilities ...string) api.Object {
-	items := make([]api.Value, 0, len(capabilities))
-	for _, capability := range capabilities {
-		items = append(items, api.StringValue(capability))
-	}
+func machine() api.Object {
 	return api.NewObject(api.Machine, "controller", api.Value{}, api.MapValue(
-		field("capabilities", api.ListValue(items...)),
 		field("os", api.MapValue(field("provided", api.BoolValue(true)))),
 		field("proxy", api.MapValue(field("direct", api.MapValue()))),
 		field("access", api.MapValue(field("local", api.BoolValue(true)))),
 	))
+}
+
+// libvirtGraph is the controller selecting the libvirt client alone: a Machine
+// on a libvirt provider another host runs, so the controller hosts no guests.
+func libvirtGraph(extra ...api.Object) []api.Object {
+	return append(append([]api.Object{environment(), machine()}, guestOnLibvirt()...), extra...)
 }
 
 func environment(extra ...api.FieldValue) api.Object {
@@ -42,7 +43,7 @@ func environment(extra ...api.FieldValue) api.Object {
 }
 
 func cluster() api.Object {
-	return api.NewObject(api.ContainerCluster, "hub", api.Value{}, api.MapValue(
+	return api.NewObject(api.OpenShiftCluster, "hub", api.Value{}, api.MapValue(
 		field("distribution", api.MapValue(
 			text("type", "openshift"),
 			field("release", api.MapValue(text("version", "4.19.3"))),
@@ -387,7 +388,7 @@ func hostState(sources ...prerequisites.DependencySource) prerequisites.HostStat
 // A context that adds nothing to the host gets no block at all, so a plan
 // without controller prerequisites gains no dependency on one.
 func TestPlanContributesNoBlockWithoutSelectedClients(t *testing.T) {
-	contribution, err := unwired().Plan(context.Background(), planInput(stateOf(environment(), machine("container-runtime")), reconciliation.Apply))
+	contribution, err := unwired().Plan(context.Background(), planInput(stateOf(environment(), machine()), reconciliation.Apply))
 	if err != nil || len(contribution.Definitions) != 0 {
 		t.Fatalf("contribution = %+v (%v)", contribution, err)
 	}
@@ -398,7 +399,7 @@ func TestPlanContributesNoBlockWithoutSelectedClients(t *testing.T) {
 func TestPlanFreezesTheSelectedClientClosure(t *testing.T) {
 	dnf := newDnf()
 	capability := stage(&fakeTools{}, dnf, &fakeSetup{}, &fakeInstaller{})
-	state := stateOf(environment(), machine("container-runtime", "libvirt"), cluster())
+	state := stateOf(libvirtGraph(cluster())...)
 	block := planBlock(t, capability, state, reconciliation.Apply)
 	if block.ID != BlockID || block.Stage != reconciliation.StageController || block.Kind != Kind || block.Object != "lab" {
 		t.Fatalf("block identity = %+v", block.BlockDefinition)
@@ -428,7 +429,7 @@ func TestPlanFreezesTheSelectedClientClosure(t *testing.T) {
 // The plan is pure: the same state must freeze the identical request, because
 // the digest is what a continuation re-proves.
 func TestPlanIsDeterministic(t *testing.T) {
-	state := stateOf(environment(), machine("container-runtime", "libvirt"), cluster())
+	state := stateOf(libvirtGraph(cluster())...)
 	first := planBlock(t, unwired(), state, reconciliation.Apply)
 	second := planBlock(t, unwired(), state, reconciliation.Apply)
 	if first.RequestDigest != second.RequestDigest {
@@ -451,10 +452,9 @@ func TestTheStageInstallsMissingClosuresThroughHostDnf(t *testing.T) {
 		present []string
 		want    []string
 	}{
-		"a declared libvirt capability":   {objects: []api.Object{environment(), machine("container-runtime", "libvirt")}, want: []string{"libvirt-client"}},
-		"a provider hosted here":          {objects: []api.Object{environment(), machine("container-runtime"), hostedProvider()}, present: []string{"qemu-img", "swtpm"}, want: hypervisor},
-		"installer-media tooling alone":   {objects: append([]api.Object{environment(), machine("container-runtime")}, installerMedia()...), want: []string{"lorax", "xorriso"}},
-		"a Machine on a libvirt provider": {objects: append([]api.Object{environment(), machine("container-runtime")}, guestOnLibvirt()...), want: []string{"libvirt-client"}},
+		"a provider hosted here":          {objects: []api.Object{environment(), machine(), hostedProvider()}, present: []string{"qemu-img", "swtpm"}, want: hypervisor},
+		"installer-media tooling alone":   {objects: append([]api.Object{environment(), machine()}, installerMedia()...), want: []string{"lorax", "xorriso"}},
+		"a Machine on a libvirt provider": {objects: append([]api.Object{environment(), machine()}, guestOnLibvirt()...), want: []string{"libvirt-client"}},
 	} {
 		t.Run(name, func(t *testing.T) {
 			dnf, setup, installer := newDnf(test.present...), &fakeSetup{}, &fakeInstaller{}
@@ -508,7 +508,7 @@ func TestApplyProvesAPreparedHostWithoutPublisherAccess(t *testing.T) {
 	tools := &fakeTools{selected: []prerequisites.ToolDefinition{toolDefinition("helm", "v3.17.0")}, complete: true, present: true}
 	dnf, setup, installer := newDnf("libvirt-client"), &fakeSetup{}, &fakeInstaller{}
 	capability := stage(tools, dnf, setup, installer)
-	block := planBlock(t, capability, stateOf(environment(), machine("container-runtime", "libvirt"), cluster()), reconciliation.Apply)
+	block := planBlock(t, capability, stateOf(libvirtGraph(cluster())...), reconciliation.Apply)
 	recorder := newRecorder(&fakeArea{sealed: true})
 	recorder.published[prerequisites.ToolsDigest(tools.selected)] = true
 	result, err := capability.Apply(context.Background(), recorder.execution(t, block, hostState()))
@@ -534,7 +534,7 @@ func TestEverySuccessfulStageNamesItsAreaAndRetiresTheRest(t *testing.T) {
 	digest := prerequisites.ToolsDigest(selected)
 	settled := &fakeTools{selected: selected, complete: true, present: true}
 	capability := stage(settled, newDnf("libvirt-client"), &fakeSetup{}, &fakeInstaller{})
-	block := planBlock(t, capability, stateOf(environment(), machine("container-runtime", "libvirt"), cluster()), reconciliation.Apply)
+	block := planBlock(t, capability, stateOf(libvirtGraph(cluster())...), reconciliation.Apply)
 	recorder := newRecorder(&fakeArea{sealed: true})
 	recorder.published[digest] = true
 	if result, err := capability.Apply(context.Background(), recorder.execution(t, block, hostState())); err != nil || result.Outcome != reconciliation.OutcomeUnchanged {
@@ -545,7 +545,7 @@ func TestEverySuccessfulStageNamesItsAreaAndRetiresTheRest(t *testing.T) {
 	}
 	published := &fakeTools{resolved: selected, present: true}
 	capability = stage(published, newDnf(), &fakeSetup{}, &fakeInstaller{})
-	block = planBlock(t, capability, stateOf(environment(), machine("container-runtime"), cluster()), reconciliation.Apply)
+	block = planBlock(t, capability, stateOf(environment(), machine(), cluster()), reconciliation.Apply)
 	recorder = newRecorder(&fakeArea{})
 	if result, err := capability.Apply(context.Background(), recorder.execution(t, block, hostState())); err != nil || result.Outcome != reconciliation.OutcomeChanged {
 		t.Fatalf("publishing result = %+v (%v)", result, err)
@@ -563,7 +563,7 @@ func TestARetirementFailureKeepsTheStageOutcomeHonest(t *testing.T) {
 	refusal := diagnostics.NewFailure("context.state", "retiring controller tool area could not be removed", "")
 	settled := &fakeTools{selected: selected, complete: true, present: true}
 	capability := stage(settled, newDnf(), &fakeSetup{}, &fakeInstaller{})
-	block := planBlock(t, capability, stateOf(environment(), machine("container-runtime"), cluster()), reconciliation.Apply)
+	block := planBlock(t, capability, stateOf(environment(), machine(), cluster()), reconciliation.Apply)
 	recorder := newRecorder(&fakeArea{sealed: true})
 	recorder.published[prerequisites.ToolsDigest(selected)] = true
 	recorder.retireErr = refusal
@@ -586,7 +586,7 @@ func TestApplyRetainsIntentBeforeItPublishes(t *testing.T) {
 	tools := &fakeTools{resolved: resolved, present: true}
 	installer := &fakeInstaller{}
 	capability := stage(tools, newDnf(), &fakeSetup{}, installer)
-	block := planBlock(t, capability, stateOf(environment(), machine("container-runtime"), cluster()), reconciliation.Apply)
+	block := planBlock(t, capability, stateOf(environment(), machine(), cluster()), reconciliation.Apply)
 	area := &fakeArea{}
 	recorder := newRecorder(area)
 	result, err := capability.Apply(context.Background(), recorder.execution(t, block, hostState()))
@@ -617,7 +617,7 @@ func TestApplyInstallsHostPackagesBeforeItPublishesTools(t *testing.T) {
 	resolved := []prerequisites.ToolDefinition{toolDefinition("helm", "v3.17.0")}
 	dnf := newDnf()
 	capability := stage(&fakeTools{resolved: resolved, present: true}, dnf, &fakeSetup{}, &fakeInstaller{})
-	block := planBlock(t, capability, stateOf(environment(), machine("container-runtime", "libvirt"), cluster()), reconciliation.Apply)
+	block := planBlock(t, capability, stateOf(libvirtGraph(cluster())...), reconciliation.Apply)
 	recorder := newRecorder(&fakeArea{})
 	result, err := capability.Apply(context.Background(), recorder.execution(t, block, hostState()))
 	if err != nil || result.Outcome != reconciliation.OutcomeChanged {
@@ -651,7 +651,7 @@ func TestAHostPackageFailureIsFailedBeforeTheInstallAndUnknownAfter(t *testing.T
 	} {
 		t.Run(name, func(t *testing.T) {
 			capability := stage(&fakeTools{complete: true}, test.dnf, test.setup, &fakeInstaller{})
-			block := planBlock(t, capability, stateOf(environment(), machine("container-runtime", "libvirt")), reconciliation.Apply)
+			block := planBlock(t, capability, stateOf(libvirtGraph()...), reconciliation.Apply)
 			execution := newRecorder(&fakeArea{}).execution(t, block, hostState())
 			execution.Stage.Setup.Context = prerequisites.SetupContext{Name: "lab"}
 			result, err := capability.Apply(context.Background(), execution)
@@ -673,7 +673,7 @@ func TestAHostPackageFailureIsFailedBeforeTheInstallAndUnknownAfter(t *testing.T
 func TestALockedRereadSkipsWhatIsAlreadyInstalled(t *testing.T) {
 	dnf := newDnf()
 	capability := stage(&fakeTools{complete: true}, dnf, &fakeSetup{}, &fakeInstaller{})
-	block := planBlock(t, capability, stateOf(environment(), machine("container-runtime", "libvirt")), reconciliation.Apply)
+	block := planBlock(t, capability, stateOf(libvirtGraph()...), reconciliation.Apply)
 	execution := newRecorder(&fakeArea{}).execution(t, block, hostState())
 	execution.Stage.Prepare = func(context.Context, prerequisites.StagePreparation) error {
 		dnf.installed["libvirt-client"] = true
@@ -695,7 +695,7 @@ func TestALockedRereadSkipsWhatIsAlreadyInstalled(t *testing.T) {
 func TestDnfReceivesTheFrozenRoute(t *testing.T) {
 	dnf := newDnf("libvirt-client")
 	capability := stage(&fakeTools{complete: true}, dnf, &fakeSetup{}, &fakeInstaller{})
-	block := planBlock(t, capability, stateOf(environment(), machine("container-runtime", "libvirt")), reconciliation.Apply)
+	block := planBlock(t, capability, stateOf(libvirtGraph()...), reconciliation.Apply)
 	if _, err := capability.Apply(context.Background(), newRecorder(&fakeArea{}).execution(t, block, hostState())); err != nil {
 		t.Fatal(err)
 	}
@@ -714,7 +714,7 @@ func TestADeclaredLibvirtReleaseRefuses(t *testing.T) {
 	declared := environment(field("dependencyVersions", api.MapValue(text("libvirt", "10.0.0"))))
 	dnf := newDnf()
 	capability := stage(&fakeTools{complete: true}, dnf, &fakeSetup{}, &fakeInstaller{})
-	block := planBlock(t, capability, stateOf(declared, machine("container-runtime", "libvirt")), reconciliation.Apply)
+	block := planBlock(t, capability, stateOf(append([]api.Object{declared}, libvirtGraph()[1:]...)...), reconciliation.Apply)
 	result, err := capability.Apply(context.Background(), newRecorder(&fakeArea{}).execution(t, block, hostState()))
 	reported := diagnostics.Of(err)
 	if result.Outcome != reconciliation.OutcomeFailed || len(reported) != 1 || reported[0].Code != "controller.unsupported" || reported[0].Remediation != "remove spec.dependencyVersions.libvirt from lab" || len(dnf.calls) != 0 {
@@ -738,7 +738,7 @@ func TestObserveResolvesFromPresenceAlone(t *testing.T) {
 		dnf := newDnf()
 		dnf.installed["libvirt-client"] = expected.packages
 		capability := stage(tools, dnf, &fakeSetup{}, &fakeInstaller{})
-		block := planBlock(t, capability, stateOf(environment(), machine("container-runtime", "libvirt"), cluster()), reconciliation.Apply)
+		block := planBlock(t, capability, stateOf(libvirtGraph(cluster())...), reconciliation.Apply)
 		recorder := newRecorder(&fakeArea{sealed: true})
 		recorder.published[prerequisites.ToolsDigest(selected)] = true
 		observation, err := capability.Observe(context.Background(), recorder.execution(t, block, hostState()))
@@ -755,7 +755,7 @@ func TestObservePublishesNothing(t *testing.T) {
 	tools := &fakeTools{complete: true, selected: []prerequisites.ToolDefinition{toolDefinition("helm", "v3.17.0")}}
 	dnf, setup := newDnf(), &fakeSetup{}
 	capability := stage(tools, dnf, setup, &fakeInstaller{})
-	block := planBlock(t, capability, stateOf(environment(), machine("container-runtime", "libvirt"), cluster()), reconciliation.Apply)
+	block := planBlock(t, capability, stateOf(libvirtGraph(cluster())...), reconciliation.Apply)
 	recorder := newRecorder(&fakeArea{sealed: true})
 	if _, err := capability.Observe(context.Background(), recorder.execution(t, block, hostState())); err != nil {
 		t.Fatalf("observe: %v", err)
@@ -770,7 +770,7 @@ func TestDestroyRetainsSharedClients(t *testing.T) {
 	installer := &fakeInstaller{}
 	dnf := newDnf()
 	capability := stage(&fakeTools{}, dnf, &fakeSetup{}, installer)
-	block := planBlock(t, capability, stateOf(environment(), machine("container-runtime", "libvirt"), cluster()), reconciliation.Destroy)
+	block := planBlock(t, capability, stateOf(libvirtGraph(cluster())...), reconciliation.Destroy)
 	recorder := newRecorder(&fakeArea{})
 	result, err := capability.Destroy(context.Background(), recorder.execution(t, block, hostState()))
 	if err != nil || result.Outcome != reconciliation.OutcomeUnchanged {
@@ -793,7 +793,7 @@ func TestARemovalObservationReadsWhatTheRemovalProves(t *testing.T) {
 	tools := &fakeTools{selected: []prerequisites.ToolDefinition{toolDefinition("helm", "v3.17.0")}, complete: true, present: true}
 	dnf, installer := newDnf(), &fakeInstaller{}
 	capability := stage(tools, dnf, &fakeSetup{}, installer)
-	block := planBlock(t, capability, stateOf(environment(), machine("container-runtime"), cluster()), reconciliation.Destroy)
+	block := planBlock(t, capability, stateOf(environment(), machine(), cluster()), reconciliation.Destroy)
 	recorder := newRecorder(&fakeArea{sealed: true})
 	removed, err := capability.Destroy(context.Background(), recorder.execution(t, block, hostState()))
 	if err != nil {
@@ -863,7 +863,7 @@ func TestStageFailuresNameTheStageThatSettlesThem(t *testing.T) {
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			capability := stage(test.tools, newDnf(), &fakeSetup{}, &fakeInstaller{})
-			block := planBlock(t, capability, stateOf(environment(), machine("container-runtime"), cluster()), reconciliation.Apply)
+			block := planBlock(t, capability, stateOf(environment(), machine(), cluster()), reconciliation.Apply)
 			execution := newRecorder(&fakeArea{}).execution(t, block, hostState())
 			execution.Stage.Setup.Context = prerequisites.SetupContext{Name: "lab", Revision: "rev-" + strings.Repeat("2", 32)}
 			reported := diagnostics.Of(test.call(capability, execution))
@@ -881,7 +881,7 @@ func TestStageFailuresNameTheStageThatSettlesThem(t *testing.T) {
 func TestStageFailuresKeepTheirCodesAndNameTheStage(t *testing.T) {
 	installer := &fakeInstaller{outcome: "unknown", err: &prerequisites.ScopedFailure{Code: "controller.unknown", Message: "the Ansible operation has no complete result", Correction: "Preserve the controller state and restore the qualified controller execution environment"}}
 	capability := stage(&fakeTools{resolved: []prerequisites.ToolDefinition{toolDefinition("helm", "v3.17.0")}}, newDnf(), &fakeSetup{}, installer)
-	block := planBlock(t, capability, stateOf(environment(), machine("container-runtime"), cluster()), reconciliation.Apply)
+	block := planBlock(t, capability, stateOf(environment(), machine(), cluster()), reconciliation.Apply)
 	execution := newRecorder(&fakeArea{}).execution(t, block, hostState())
 	execution.Stage.Setup.Context = prerequisites.SetupContext{Name: "lab", Revision: "rev-" + strings.Repeat("2", 32)}
 	result, err := capability.Apply(context.Background(), execution)
@@ -903,7 +903,7 @@ func TestDecodeRefusesAnotherRequestVersion(t *testing.T) {
 // A request whose host packages are not exactly what its closures select is
 // refused, so a frozen block can never ask dnf for anything else.
 func TestDecodeRefusesPackagesItsClosuresDoNotSelect(t *testing.T) {
-	block := planBlock(t, unwired(), stateOf(environment(), machine("container-runtime", "libvirt")), reconciliation.Apply)
+	block := planBlock(t, unwired(), stateOf(libvirtGraph()...), reconciliation.Apply)
 	request := stageRequest(t, block)
 	for name, packages := range map[string][]string{"another package": {"nmstate"}, "none": {}, "one more": {"libvirt-client", "lorax"}} {
 		request.Packages = packages
@@ -956,7 +956,7 @@ func TestLocateToolAnswersOnlyFromTheClosureTheStageProved(t *testing.T) {
 	closure := []prerequisites.ToolDefinition{release("openshift-clients", "4.19.3", "c", "oc", "kubectl"), release("openshift-install", "4.19.3", "e", "openshift-install")}
 	newer := release("openshift-install", "4.22.3", "0", "openshift-install")
 	installer := controller.InstalledTool{Kind: "openshift-install", Compatibility: "openshift", Version: "4.19.3", Executable: "openshift-install"}
-	block := planBlock(t, unwired(), stateOf(environment(), machine("container-runtime"), cluster()), reconciliation.Apply)
+	block := planBlock(t, unwired(), stateOf(environment(), machine(), cluster()), reconciliation.Apply)
 	proof := func(edit func(*Evidence)) lifecycle.BlockEvidence {
 		evidence := newEvidence(block.RequestDigest, prerequisites.ToolsDigest(closure), false, closure, nil)
 		if edit != nil {
@@ -1035,7 +1035,7 @@ func TestAnInterruptedPublicationNeedsAReplayToSeal(t *testing.T) {
 	selected := []prerequisites.ToolDefinition{toolDefinition("helm", "v3.17.0")}
 	tools := &fakeTools{selected: selected, complete: true, present: true}
 	capability := stage(tools, newDnf(), &fakeSetup{}, &fakeInstaller{})
-	block := planBlock(t, capability, stateOf(environment(), machine("container-runtime"), cluster()), reconciliation.Apply)
+	block := planBlock(t, capability, stateOf(environment(), machine(), cluster()), reconciliation.Apply)
 	recorder := newRecorder(&fakeArea{})
 	digest := prerequisites.ToolsDigest(selected)
 	recorder.published[digest] = true
@@ -1055,7 +1055,7 @@ func TestAReplayThatInstallsAHostPackageSealsTheInterruptedPublication(t *testin
 	tools := &fakeTools{selected: selected, complete: true, present: true}
 	dnf := newDnf()
 	capability := stage(tools, dnf, &fakeSetup{}, &fakeInstaller{})
-	block := planBlock(t, capability, stateOf(environment(), machine("container-runtime", "libvirt"), cluster()), reconciliation.Apply)
+	block := planBlock(t, capability, stateOf(libvirtGraph(cluster())...), reconciliation.Apply)
 	recorder := newRecorder(&fakeArea{})
 	digest := prerequisites.ToolsDigest(selected)
 	recorder.published[digest] = true
@@ -1071,7 +1071,7 @@ func TestAReplayThatInstallsAHostPackageSealsTheInterruptedPublication(t *testin
 func TestASealFailureAfterAReplayedHostPackageInstallIsUnknown(t *testing.T) {
 	selected := []prerequisites.ToolDefinition{toolDefinition("helm", "v3.17.0")}
 	capability := stage(&fakeTools{selected: selected, complete: true, present: true}, newDnf(), &fakeSetup{}, &fakeInstaller{})
-	block := planBlock(t, capability, stateOf(environment(), machine("container-runtime", "libvirt"), cluster()), reconciliation.Apply)
+	block := planBlock(t, capability, stateOf(libvirtGraph(cluster())...), reconciliation.Apply)
 	recorder := newRecorder(&fakeArea{})
 	recorder.published[prerequisites.ToolsDigest(selected)] = true
 	recorder.sealErr = refuse("controller.state", "seal refused", "retry")
@@ -1086,7 +1086,7 @@ func TestInterruptedStageUsesItsPreparedSourcesBeforeAnyContextBinding(t *testin
 	newer := toolDefinition("helm", "v4.2.4")
 	tools := &fakeTools{selected: selected, complete: true, present: true}
 	capability := stage(tools, newDnf(), &fakeSetup{}, &fakeInstaller{})
-	block := planBlock(t, capability, stateOf(environment(), machine("container-runtime"), cluster()), reconciliation.Apply)
+	block := planBlock(t, capability, stateOf(environment(), machine(), cluster()), reconciliation.Apply)
 	recorder := newRecorder(&fakeArea{sealed: true})
 	recorder.published[prerequisites.ToolsDigest(selected)] = true
 	execution := recorder.execution(t, block, prerequisites.HostState{ToolSources: []prerequisites.DependencySource{selected[0].Source, newer.Source}})
@@ -1107,7 +1107,7 @@ func TestFreshStageKeepsTheReleaseInItsContextBinding(t *testing.T) {
 	newer := toolDefinition("helm", "v4.2.4")
 	tools := &fakeTools{selected: selected, complete: true, present: true}
 	capability := stage(tools, newDnf(), &fakeSetup{}, &fakeInstaller{})
-	block := planBlock(t, capability, stateOf(environment(), machine("container-runtime"), cluster()), reconciliation.Apply)
+	block := planBlock(t, capability, stateOf(environment(), machine(), cluster()), reconciliation.Apply)
 	request, err := DecodeRequest(block.Request)
 	if err != nil {
 		t.Fatal(err)

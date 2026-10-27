@@ -10,7 +10,7 @@ import (
 func TestEraseAdmissionRetainsOmissionAndRequiresExplicitRootIdentity(t *testing.T) {
 	machine, _ := fixture()
 	machine = machine.WithSpec(machine.Spec().WithPath(api.StringValue("rhel"), "os", "installProfileRef"))
-	machine = machine.WithSpec(machine.Spec().WithPath(api.BoolValue(true), "hardware", "management", "bmc", "tls", "verify").WithPath(api.StringValue("established"), "hardware", "management", "bmc", "virtualMedia", "tls", "trust"))
+	machine = machine.WithSpec(machine.Spec().WithPath(api.BoolValue(true), "substrate", "baremetal", "bmc", "tls", "verify").WithPath(api.StringValue("established"), "substrate", "baremetal", "bmc", "virtualMedia", "tls", "trust"))
 	if issues := validateErase(machine, substrate.ArmBaremetal); len(issues) != 0 {
 		t.Fatal(issues)
 	}

@@ -20,7 +20,7 @@ func validateClusterNames(flags *pflag.FlagSet, path string) string {
 	if path == "cluster info" {
 		switch user := stringValue(flags, "object-user"); {
 		case flags.Changed("object-user") && !api.ValidLexical("name", user):
-			return "--object-user must name one StorageObjectUser"
+			return "--object-user must name one CephObjectUser"
 		case user != "" && boolValue(flags, "secrets"):
 			return "--secrets and --object-user each reveal one credential; use one of them"
 		case user != "":

@@ -8,16 +8,28 @@ This page defines `InfraProvider`, `Machine`, `MachineImage`,
 Apply [Environment kind defaults](environment.md#kind-defaults) before the
 field-specific inheritance and normalization rules below.
 
+Every kind on this page names its objects under the [one name rule](../api.md#object-names).
+
 Unless a field below declares a narrower namespace, a scalar `*Ref` is a plain
 `metadata.name` reference in the global namespace of its target kind. Local
-references are deliberately scalar too: `profileRef` resolves inside one
-provider, NIC and address refs inside one machine, listener and endpoint refs
+references are deliberately scalar too: a substrate arm's `profileRef`
+resolves inside one provider, NIC and address refs inside one machine, listener and endpoint refs
 inside one service, and attachment refs inside one provider. Loading order
 never chooses among duplicates.
 
 A field that references a Secret names its
 [class](../secrets.md#immutable-binding-and-contexts), effect material or
 access credential.
+
+## Kinds
+
+| Kind | Declares |
+| --- | --- |
+| `InfraProvider` | One substrate provider, bare metal, a libvirt host, vSphere or KubeVirt, with its network attachments and machine profiles. |
+| `Machine` | One host, physical or virtual, with its substrate arm, hardware, operating-system lifecycle, network and access. |
+| `MachineImage` | One operating-system installation image a profile installs from. |
+| `MachineInstallProfile` | One managed operating-system installation recipe: its installer, package source, customizations and services. |
+| `NetworkConfig` | One reusable host network configuration that Machines reference. |
 
 ## InfraProvider
 
@@ -27,11 +39,10 @@ spec contains exactly one substrate arm alongside optional
 accepted. Missing, multiple, or unknown arms fail validation, as do missing
 required fields inside the selected arm.
 
-An `InfraProvider` name is at most 48 bytes, because a libvirt provider's host
-block `substrate-host-<name>` is a
-[block identity](../state-reconciliation.md#durable-identities-and-private-paths)
-of at most 63 bytes; a longer name refuses at `metadata.name`, whichever arm
-the provider selects, naming that limit.
+An `InfraProvider` name follows the [one name rule](../api.md#object-names);
+a libvirt provider's host block `substrate-host-<name>`
+[hashes a tail that overflows](../state-reconciliation.md#durable-identities-and-private-paths)
+its 63-byte identity.
 
 | Field | Type | Required | Rule |
 | --- | --- | --- | --- |
@@ -45,13 +56,12 @@ the provider selects, naming that limit.
 
 | Field | Type | Required | Default | Rule |
 | --- | --- | --- | --- | --- |
-| `spec.baremetal.boot.method` | string | no | `redfishVirtualMedia` | `redfishVirtualMedia`; the default materializes. Another value fails validation rather than naming a boot path no implementation performs. |
 | `spec.baremetal.defaults.bmc.credentialsRef` | string | no | — | Default `usernamePassword` `Secret` reference for a Machine that omits its own BMC credentials. Access credential. |
 | `spec.baremetal.defaults.bmc.tls.verify` | boolean | no | `true` | Default for a machine BMC whose own `tls.verify` is absent. |
 | `spec.baremetal.defaults.bmc.tls.trustBundleRef` | string | no | — | Default `caBundle` `Secret` reference for a machine BMC that keeps verification; refused beside `tls.verify: false`. Access credential. |
-| `spec.baremetal.defaults.bmc.virtualMedia.tls.trust` | string | no | `import-certificate` | `import-certificate` or `established`. `disable-verification` is refused here: it is a per-Machine exception and never a provider default. |
-| `spec.baremetal.defaults.bmc.virtualMedia.tls.restoreVerificationAfterBoot` | boolean | no | — | Refused: it is valid only with `disable-verification`, which a provider never defaults. |
-| `spec.baremetal.defaults.bmc.virtualMedia.tls.removeCertificateAfterBoot` | boolean | no | `false` | Valid only with `import-certificate`. |
+| `spec.baremetal.defaults.bmc.virtualMedia.tls.trust` | string | no | `importCertificate` | `importCertificate` or `established`. `disableVerification` is refused here: it is a per-Machine exception and never a provider default. |
+| `spec.baremetal.defaults.bmc.virtualMedia.tls.restoreVerificationAfterBoot` | boolean | no | — | Refused: it is valid only with `disableVerification`, which a provider never defaults. |
+| `spec.baremetal.defaults.bmc.virtualMedia.tls.removeCertificateAfterBoot` | boolean | no | `false` | Valid only with `importCertificate`. |
 
 Normalization inherits a configured provider `credentialsRef` or `tls.verify`
 only when the machine still omits that value. It copies the complete provider `virtualMedia`
@@ -78,18 +88,18 @@ certificate that is not a CA cannot be anchored by one and keeps
 
 | Field | Type | Required | Default | Rule |
 | --- | --- | --- | --- | --- |
-| `spec.libvirt.machineRef` | string | yes | — | Global `Machine` reference; the machine has the Machine capability `libvirt`. |
-| `spec.libvirt.uri` | string | yes | — | `qemu:///system`. Effects run on `machineRef` and the emulated BMC mounts only that host's libvirt socket, so no other URI, remote or command transport is admitted. |
-| `spec.libvirt.bmcEmulationDefaults.enabled` | boolean | no | `true` | Current contract accepts only the enabled form. |
-| `spec.libvirt.bmcEmulationDefaults.protocol` | string | no | `redfish` | `redfish`. |
-| `spec.libvirt.bmcEmulationDefaults.emulator` | string | no | `sushy-tools` | `sushy-tools`. |
-| `spec.libvirt.bmcEmulationDefaults.bindAddress` | string | yes | — | Listener address; one unicast IP address, so that every hosted Machine's BMC endpoint names it: not unspecified, multicast or `255.255.255.255`, and not an IPv6 link-local, zoned or IPv4-mapped address. Loopback is admitted, and an IPv6 address normalizes to the spelling Go's `netip` prints. |
-| `spec.libvirt.bmcEmulationDefaults.port` | integer | no | `8000` | `1..65535`; the first port of the contiguous range the provider's emulated BMCs listen on. |
-| `spec.libvirt.bmcEmulationDefaults.auth.credentialsRef` | string | yes | — | `usernamePassword` `Secret`; required while emulation is enabled. Effect material: the emulator is given its password file. |
-| `spec.libvirt.bmcEmulationDefaults.certificateRef` | string | yes | — | Generated or stored `tlsCertificate` serving the emulated HTTPS BMC; its SANs cover `bindAddress`, and admission refuses a generated one whose `ipAddresses` do not. Consumers pin its public certificate. Only emulator apply receives its private key. Effect material. |
+| `spec.libvirt.machineRef` | string | yes | — | Global `Machine` reference; the libvirt host, which therefore receives the hypervisor runtime ([controller](../controller.md#host-packages)). |
+| `spec.libvirt.uri` | string | no | `qemu:///system` | `qemu:///system`, the native libvirt URI; the default materializes. Effects run on `machineRef` and the emulated BMC mounts only that host's libvirt socket, so no other URI, remote or command transport is admitted. |
+| `spec.libvirt.bmcEmulation.bindAddress` | string | yes | — | Listener address; one unicast IP address, so that every hosted Machine's BMC endpoint names it: not unspecified, multicast or `255.255.255.255`, and not an IPv6 link-local, zoned or IPv4-mapped address. Loopback is admitted, and an IPv6 address normalizes to the spelling Go's `netip` prints. |
+| `spec.libvirt.bmcEmulation.port` | integer | no | `8000` | `1..65535`; the first port of the contiguous range the provider's emulated BMCs listen on. |
+| `spec.libvirt.bmcEmulation.auth.credentialsRef` | string | yes | — | `usernamePassword` `Secret`. Effect material: the emulator is given its password file. |
+| `spec.libvirt.bmcEmulation.certificateRef` | string | yes | — | Generated or stored `tlsCertificate` serving the emulated HTTPS BMC; its SANs cover `bindAddress`: a generated one derives its `ipAddresses` from it ([generated source](secrets.md#generated-source)), and admission refuses one whose authored `ipAddresses` do not. Consumers pin its public certificate. Only emulator apply receives its private key. Effect material. |
 | `spec.libvirt.machineProfiles` | array | no | `[]` | Provider-local set keyed by `name`; common profile shape below. |
 
-`bmcEmulationDefaults` is required and its defaults materialize. Only a
+`bmcEmulation` is required and its defaults materialize. Every emulated BMC
+runs, speaks Redfish and is sushy-tools, so the block names none of the three;
+a bare-metal Machine always boots its installer from Redfish virtual media, so
+the bare-metal arm names no boot method. Only a
 Machine on the provider whose `os.provided` is `false` is realized and counted:
 each such Machine has its own emulated BMC, listening at `port` plus its
 position in the canonical name order of those Machines, so a provider realizing
@@ -122,8 +132,9 @@ before registration by [substrate selection](../substrates.md#selection-and-refu
 and [managed-OS installation](../managed-os.md#installation). Their field
 detail is recorded in [refused machine arms](../deferred/machine-arms.md),
 which [B87](../milestones/m1.md#b87) and [B99](../milestones/m1.md#b99) revive.
-A Machine's [`network.interfaceAttachments`](#network-configuration) is read by
-libvirt and KubeVirt Machines.
+A Machine's per-interface attachments, `substrate.libvirt.interfaceAttachments`
+and `substrate.kubevirt.interfaceAttachments` ([substrate arm](#substrate-arm)),
+are read by libvirt and KubeVirt Machines.
 
 ### Machine profiles and network attachments
 
@@ -182,29 +193,27 @@ therefore refuses while another context's attachment uses its bridge
 machines, OS-ready hosts, Bootwright-installed hosts, and hosts whose OS a
 downstream installer supplies.
 
-A `Machine` name is at most 52 bytes, because the longest block a Machine
-contributes, its installation's `os-install-<name>`, is a
-[block identity](../state-reconciliation.md#durable-identities-and-private-paths)
-of at most 63 bytes. A longer name refuses at `metadata.name`, naming that
-limit, on every Machine whatever its lifecycle, because a Machine may change
-lifecycle. A name outside the label grammar has only the compiler's own
-refusal.
+A `Machine` name follows the [one name rule](../api.md#object-names) whatever
+its lifecycle; each block a Machine contributes, such as `os-install-<name>`,
+[hashes a tail that overflows](../state-reconciliation.md#durable-identities-and-private-paths)
+its 63-byte identity. A name outside the label grammar has only the compiler's
+own refusal.
 
 | Field | Type | Required | Default | Rule |
 | --- | --- | --- | --- | --- |
-| `spec.capabilities` | array of strings | no | `[]` | Unique Machine capability values from `openshift-node`, `ceph-node`, `ceph-arbiter`, `container-runtime`, and `libvirt`; `ceph-arbiter` requires `ceph-node`. |
 | `spec.placement.site` | string | conditional | — | `Environment.spec.sites[].name`; required only where a consumer needs site placement. |
 | `spec.substrate.providerRef` | string | conditional | — | Global `InfraProvider`; required whenever `os.provided: false`. |
-| `spec.substrate.profileRef` | string | conditional | — | Provider-local `machineProfiles[].name`; required for a virtual install machine and forbidden for bare metal. |
+| `spec.substrate.baremetal` | object | conditional | — | The bare-metal [substrate arm](#substrate-arm): `bmc`, `nics` and `rootDevice`; required for a bare-metal install machine. |
+| `spec.substrate.libvirt` | object | conditional | — | The libvirt [substrate arm](#substrate-arm): `profileRef` and `interfaceAttachments`. |
+| `spec.substrate.kubevirt` | object | conditional | — | The KubeVirt [substrate arm](#substrate-arm): `profileRef` and `interfaceAttachments`. |
+| `spec.substrate.vsphere` | object | conditional | — | The vSphere [substrate arm](#substrate-arm): `profileRef` and `nics`. |
 | `spec.hardware.nics` | array | conditional | `[]` | Set keyed by `name`; required for a bare-metal install machine. |
-| `spec.hardware.nics[].name` | string | yes | — | Machine-local NIC name. |
-| `spec.hardware.nics[].macAddress` | string | conditional | — | EUI-48; required on every bare-metal install NIC; refused on a libvirt or KubeVirt provider's Machine, whose MACs the provider derives. |
-| `spec.hardware.management.bmc` | object | conditional | — | Required for bare-metal install; refused on a libvirt provider's Machine, whose management controller is its emulated BMC; exact shape below. |
+| `spec.hardware.nics[].name` | string | yes | — | Machine-local NIC name; the only NIC field, on every substrate. |
+| `spec.hardware.rootDevice` | object | no | — | Substrate-neutral root-device hints below; admitted on every substrate, with or without `installProfileRef`. |
 | `spec.os.provided` | boolean | yes | — | Selects the OS lifecycle with `installProfileRef`. |
 | `spec.os.installProfileRef` | string | conditional | — | Global `MachineInstallProfile`; valid only when `provided: false`. |
 | `spec.os.install.ntp` | array of selections | no | install-profile selections | NTPServer selections for a Bootwright-installed Machine; `[]` clears profile selections. |
 | `spec.hardware.eraseOnRemoval` | object | no | retain | Opt-in `method: logicalOverwrite` with explicit `targets`, each requiring `deviceName`, `wwn`, `serialNumber`, and exact `sizeBytes`; see [physical erase](../state-reconciliation.md#opt-in-physical-logical-overwrite). |
-| `spec.os.install.rootDeviceHints` | object | conditional | — | Exact root-device fields below; bare-metal install requires `deviceName` or `wwn`. |
 | `spec.os.install.hostKeyRef` | string | conditional | — | `sshKeyPair` `Secret` whose pair the installation delivers as this machine's SSH host key; required for a bare-metal Bootwright-installed Machine and forbidden on every other Machine. Unique across Machines and no other credential. Effect material. |
 | `spec.proxy` | choice object | no | profile choice or direct access | Lifecycle-dependent atomic Machine-owned selection below; emits immediately after `os`. |
 | `spec.network` | object | no | contacts normalized below | Network selection, named contacts/static assignments, attachments, and bindings below. |
@@ -227,13 +236,15 @@ one lifecycle:
   substrate is prepared, but a downstream installer supplies the OS. Access
   may remain absent.
 
-Every non-provided machine has `substrate.providerRef`. Bare metal forbids
-`profileRef`. Libvirt, vSphere, and KubeVirt require a profile when the OS is
-not provided. A selected profile resolves only in its provider.
+Every non-provided machine has `substrate.providerRef`. Libvirt, vSphere, and
+KubeVirt Machines require their arm's `profileRef` when the OS is not provided;
+bare metal has no profile field. A selected profile resolves only in its
+provider.
 
-A bare-metal non-provided machine has at least one NIC; every NIC has a MAC;
-BMC address and credentials are present; and root device hints contain
-`deviceName` or `wwn`. Its BMC address, like every
+A bare-metal non-provided machine has at least one NIC; every NIC has a MAC in
+`substrate.baremetal.nics`; `substrate.baremetal.bmc` address and credentials
+are present; and `hardware.rootDevice.deviceName` or
+`substrate.baremetal.rootDevice.wwn` is present. Its BMC address, like every
 authored one, selects one exact `/redfish/v1/Systems/<id>` ComputerSystem in
 the [one spelling](#bmc-and-root-device-shape) the realized target sends. These
 declarations identify an install target but do not authorize a destructive
@@ -248,8 +259,8 @@ rather than discovered. Two Machines never name one key: a host key identifies
 exactly one machine, and sharing it would make either of them satisfy the
 other's proof. The key is also no other credential: not the fleet
 `Environment.spec.remoteMachinesAccessKey.keyRef`, any Machine's access
-`privateKeyRef`, any `StorageCluster` `ceph.cephadm.clusterSSH.keyRef` or any
-`ContainerCluster` `install.nodeSSH` `keyPairRef`, `publicKeyRef` or
+`privateKeyRef`, any `CephCluster` `cephadm.clusterSSH.keyRef` or any
+`OpenShiftCluster` `install.nodeSSH` `keyPairRef`, `publicKeyRef` or
 `privateKeyRef`, since whoever holds that credential could answer as this
 machine, and whoever reads this machine's host key could log in wherever its
 public half is authorized. Each collision is refused on the Machine, naming
@@ -260,31 +271,63 @@ NIC names and canonical MACs are unique in a machine, and authored MACs are
 unique across the complete graph. Effective normalization writes MACs as
 lowercase colon-separated EUI-48 values.
 
-A libvirt provider's Machine authors neither a MAC nor `management.bmc`, since
-realization would ignore both: the provider derives every interface's MAC from
-the context, Machine and interface names, and realizes the Machine's management
-controller as its emulated BMC
-([substrates](../substrates.md#machine-realization)). Each
-`hardware.nics[].macAddress` refuses with `api.invariant` at its own path, and
-an authored BMC refuses once at `hardware.management.bmc`, however
-complete, and no other BMC rule applies to it. NIC names alone stay admitted,
-and such a Machine's MACs take no part in the graph-wide uniqueness check.
+A libvirt or KubeVirt arm has no MAC, BMC or physical root-device field,
+because realization would ignore each: the provider derives every interface's
+MAC from the context, Machine and interface names, and a libvirt provider
+realizes the Machine's management controller as its emulated BMC
+([substrates](../substrates.md#machine-realization),
+[KubeVirt machine realization](../substrates.md#kubevirt-machine-realization)).
+Such a Machine's NIC names stay admitted, and it takes no part in the
+graph-wide MAC uniqueness check. `network.interfaceBinding` exists to inject a
+physical NIC's MAC into the installed OS; a virtual Machine receives no
+inferred bindings and no binding feeds its derived MAC, so an authored
+`network.interfaceBinding` on a libvirt or KubeVirt Machine refuses with
+`api.invariant` at its path.
 
-A KubeVirt provider's Machine follows the same MAC rule
-([KubeVirt machine realization](../substrates.md#kubevirt-machine-realization),
-[B87](../milestones/m1.md#b87), D183 and Q79): the arm derives each interface's
-MAC from the context, Machine and interface names, so each
-`hardware.nics[].macAddress` refuses with `api.invariant` at its own path and
-NIC names alone stay admitted. `network.interfaceBinding` exists to inject a
-physical NIC's MAC into the installed OS; a virtual Machine receives no inferred
-bindings and no binding feeds its derived MAC, so a libvirt or KubeVirt Machine
-authors none. Admission still resolves an authored binding against the declared
-NIC names; refusing it outright follows the narrow Machine arm
-([B814](../milestones/backlog.md#b814)).
+### Substrate arm
+
+`spec.substrate` holds `providerRef` and at most one arm, named like the arm of
+the `InfraProvider` that `providerRef` names, or `baremetal` on a Machine with
+no provider. An arm holds only the facts its
+substrate reads; NIC names and substrate-neutral root-device hints stay in
+`spec.hardware`.
+
+| Arm | Field | Type | Rule |
+| --- | --- | --- | --- |
+| `baremetal` | `bmc` | object | The management controller; exact shape [below](#bmc-and-root-device-shape). |
+| `baremetal` | `nics` | array | Set of `{nicRef, macAddress}` keyed by `nicRef`; `nicRef` names a `hardware.nics[].name`, at most one entry per NIC; `macAddress` is EUI-48. |
+| `baremetal` | `rootDevice` | object | Physical-disk hints `wwn`, `hctl` and `serialNumber`, each a non-empty string. |
+| `libvirt`, `kubevirt` | `profileRef` | string | Provider-local `machineProfiles[].name`. |
+| `libvirt`, `kubevirt` | `interfaceAttachments` | array | Set of `{interface, attachmentRef}` keyed by `interface`, as [network configuration](#network-configuration) states. |
+| `vsphere` | `profileRef` | string | Provider-local `machineProfiles[].name`. |
+| `vsphere` | `nics` | array | As on bare metal; each authored MAC lies in the manual assignment range `00:50:56:00:00:00` through `00:50:56:3f:ff:ff` ([refused machine arms](../deferred/machine-arms.md#machine-fields)). |
+
+A `libvirt`, `kubevirt` or `vsphere` arm requires `providerRef`; without it the
+arm refuses with `api.invariant` at `$.spec.substrate.<arm>`. A `baremetal` arm
+stands without `providerRef` on an OS-ready Machine no provider realizes, such
+as a bastion: it is operator-owned hardware, the arm keeps every rule above, and
+power reaches the Machine through the `bmc` it authors from the controller host
+([substrates](../substrates.md)). An arm other than the provider's refuses with
+`api.invariant` at the same path, naming the provider and its arm. The arm is
+omitted only where it would be empty: an OS-ready Machine of a virtual provider
+that names no profile, or an installer-provisioned or OS-ready bare-metal
+Machine that declares no controller, MAC or physical hint. The retired
+`substrate.profileRef`, `hardware.management`, `hardware.nics[].macAddress`,
+`os.install.rootDeviceHints` and `network.interfaceAttachments` refuse with
+`api.field`, naming their replacements ([retired
+fields](../api.md#retired-fields)).
+
+Machine roles are not declared: a Machine is an OpenShift node because an
+`OpenShiftCluster` names it in `spec.nodes[].machineRef`, a Ceph node or the
+arbiter because a `CephCluster` names it in its topology, a container-runtime
+host because it is the Environment's controller or a managed service's
+`machineRef`, and a libvirt host because an `InfraProvider`'s
+`libvirt.machineRef` names it ([controller](../controller.md#host-packages)).
+The retired `spec.capabilities` refuses with `api.field`.
 
 ### BMC and root-device shape
 
-`hardware.management.bmc` contains only:
+`substrate.baremetal.bmc` contains only:
 
 | Field | Type | Required | Default | Rule |
 | --- | --- | --- | --- | --- |
@@ -293,14 +336,14 @@ NIC names; refusing it outright follows the narrow Machine arm
 | `credentialsRef` | string | resolved with the BMC block | configured provider default | `usernamePassword` `Secret`; machine-local values take precedence. Access credential. |
 | `tls.verify` | boolean | no | `true` | Whether the controller-to-BMC TLS leg is verified: against `tls.trustBundleRef` alone when it is set, and against the system trust store otherwise. |
 | `tls.trustBundleRef` | string | no | configured provider default | `caBundle` `Secret`; the one anchor of the controller-to-BMC leg. Refused beside `tls.verify: false`. Access credential. |
-| `virtualMedia.tls.trust` | string | no | `import-certificate` | How the BMC is made to trust the artifact server it fetches media from. `import-certificate` uses the device certificate collection or the qualified discovered SecurityService [media trust contract](../substrates.md#identity-and-power-operations); `established` changes nothing, because the BMC already trusts the server; `disable-verification` turns the device's verification off before the insert and is the per-Machine exception below. |
-| `virtualMedia.tls.restoreVerificationAfterBoot` | boolean | no | `true` | Only with `disable-verification`; the eject turns verification back on. |
-| `virtualMedia.tls.removeCertificateAfterBoot` | boolean | no | `false` | Only with `import-certificate`; the eject deletes the imported certificate. |
+| `virtualMedia.tls.trust` | string | no | `importCertificate` | How the BMC is made to trust the artifact server it fetches media from. `importCertificate` uses the device certificate collection or the qualified discovered SecurityService [media trust contract](../substrates.md#identity-and-power-operations); `established` changes nothing, because the BMC already trusts the server; `disableVerification` turns the device's verification off before the insert and is the per-Machine exception below. |
+| `virtualMedia.tls.restoreVerificationAfterBoot` | boolean | no | `true` | Only with `disableVerification`; the eject turns verification back on. |
+| `virtualMedia.tls.removeCertificateAfterBoot` | boolean | no | `false` | Only with `importCertificate`; the eject deletes the imported certificate. |
 
 For private media delivery, a manager's published
 `HttpsTransferCertVerification` is authoritative and must read `true`; only
 without that switch does the device's `VerifyCertificate` decide. An
-authoritative manager switch refuses `disable-verification` before any write.
+authoritative manager switch refuses `disableVerification` before any write.
 
 `address` is what a destructive operation is aimed at, so it has one spelling:
 admission accepts only that spelling, and nothing rewrites it before the
@@ -320,7 +363,7 @@ and every `redfish+` or `redfish-virtualmedia+` scheme are refused.
 
 If `virtualMedia.tls` is authored, it sets at least one option. The two TLS
 legs stay independent; no BMC verification opt-out changes artifact-server
-trust. `disable-verification` is an explicit per-Machine exception, admitted
+trust. `disableVerification` is an explicit per-Machine exception, admitted
 only where a Machine authors it and visible in its effective state: a
 provider default of it is refused at
 `$.spec.baremetal.defaults.bmc.virtualMedia.tls.trust`, and an Environment
@@ -332,33 +375,37 @@ installation's insert first reads whether the BMC verifies the artifact
 server and refuses unless it does
 ([identity and power operations](../substrates.md#identity-and-power-operations)).
 
-`os.install.rootDeviceHints` admits only `deviceName`, `hctl`, `model`,
-`vendor`, `serialNumber`, `minSizeGigabytes`, `wwn`, and boolean `rotational`.
+`hardware.rootDevice` admits only `deviceName`, `model`, `vendor`,
+`minSizeGigabytes` and boolean `rotational`, on every substrate and with or
+without `installProfileRef`; `substrate.baremetal.rootDevice` admits `wwn`,
+`hctl` and `serialNumber`, which only a physical disk carries, since the disks a
+virtual substrate creates carry no WWN, SCSI address or serial number
+([substrates](../substrates.md#machine-realization)).
 `deviceName` is a device path: a clean absolute path beneath `/dev/` built
 only from ASCII letters, digits, `.`, `_`, `-`, `/`, `:` and `+`, so
 whitespace, control characters, quotes, other shell metacharacters and `.` or
 `..` segments are refused, because the path reaches installer directives and
 shell words verbatim. `minSizeGigabytes` is non-negative. For a bare-metal
-install, `deviceName` or `wwn` is mandatory, and a Bootwright-installed Machine
-narrows `deviceName` to its by-id form below; predicate-only hints are not an
-adequate destructive target selector. On a Machine whose provider is `libvirt`,
-each of `wwn`, `hctl` and `serialNumber` refuses with `api.invariant` at its own
-path, because the disks that substrate creates carry no WWN, SCSI address or
-serial number ([substrates](../substrates.md#machine-realization)), so such a
-hint could match none of them; `deviceName`, `minSizeGigabytes`, `model`,
-`vendor` and `rotational` stay admitted there, and a bare-metal Machine keeps
-every hint. Which hints an installation carries,
+install, `hardware.rootDevice.deviceName` or `substrate.baremetal.rootDevice.wwn`
+is mandatory, and a Bootwright-installed Machine narrows `deviceName` to its
+by-id form below; predicate-only hints are not an adequate destructive target
+selector. Which hints an installation carries,
 and which it refuses, is the rule of the consumer that installs the Machine:
 [managed OS](../managed-os.md#installation) or the
-[cluster installer](../container-clusters.md#selection-and-refusal).
+[cluster installer](../openshift-clusters.md#selection-and-refusal).
+Nothing installs an OS-ready Machine: there `deviceName` and `wwn` name the
+root disk that a Ceph OSD selection must not name, compared with each explicit
+OSD device path, `wwn` as its `/dev/disk/by-id/wwn-0x` path without regard to
+case or a `0x` prefix, and every other hint warns `api.deferred` at its path,
+since it selects no disk.
 
 A bare-metal Bootwright-installed Machine names its root disk by a durable
 identity: `deviceName` is `/dev/disk/by-id/wwn-0x` followed by 16 or 32
 lowercase hexadecimal digits, the form
-[managed physical hosts](../storage.md#devices-and-destructive-ownership) use
+[managed physical hosts](../ceph.md#devices-and-destructive-ownership) use
 for OSD paths. The installation erases that disk, and a kernel name such as
 `/dev/sda` moves with probe order, firmware and hot-added disks, so it refuses
-at `os.install.rootDeviceHints.deviceName`, naming the by-id form. The
+at `hardware.rootDevice.deviceName`, naming the by-id form. The
 installation's `%pre` resolves the name and stops before any storage directive
 unless it is a whole block device
 ([physical installation](../managed-os.md#physical-installation)).
@@ -372,10 +419,9 @@ unless it is a whole block device
 | `configRef` | string | union | — | Global `NetworkConfig`. |
 | `inline` | `NetworkConfig.spec` object | union | — | Inline one-off alternative with the same NMState, CIDR, and DNS selection constraints. |
 | `attachmentRef` | string | conditional | `configRef` name | Provider-local `networkAttachments[].name`; applies one attachment to every effective physical interface. Required with a configured network on a libvirt Machine unless the default applies; optional on bare metal, where it selects nothing. |
-| `interfaceAttachments` | array | no | — | Set of `{interface, attachmentRef}` keyed by `interface`; mutually exclusive with `attachmentRef`. `interface` is a Linux interface name, 1 to 15 bytes of letters, digits, `_`, `.`, `+` or `-`. It maps every available ethernet interface exactly once to one of its provider's attachments, on libvirt as on KubeVirt; without it every interface uses `attachmentRef`. |
 | `installAddressRef` | string | when a consumer requires a static install IP | unique eligible address below | Machine-local `addresses[].name`; selects an interface-assigned IP inside a consumed machine network. |
 | `addresses` | array | no | `[]`, plus derived `fqdn` contact | Set keyed by `name`; exact entry shape below. |
-| `interfaceBinding` | array | conditional | exact NIC-name matches for bare-metal install | Set of `{nicRef, interfaceName}`; the field name is singular `interfaceBinding`. Bare-metal only in practice: a libvirt or KubeVirt Machine authors none, since the provider derives its MACs. `interfaceName` is a Linux interface name, 1 to 15 bytes of letters, digits, `_`, `.`, `+` or `-`. |
+| `interfaceBinding` | array | conditional | exact NIC-name matches for bare-metal install | Set of `{nicRef, interfaceName}`; the field name is singular `interfaceBinding`. Bare-metal only: refused on a libvirt or KubeVirt Machine, whose provider derives its MACs. `interfaceName` is a Linux interface name, 1 to 15 bytes of letters, digits, `_`, `.`, `+` or `-`. |
 | `overrides` | arbitrary map | no | `{}` | Valid only with `configRef`; merged into the selected native NMState template. |
 
 A configured network selects exactly one of `configRef` and `inline`.
@@ -513,7 +559,7 @@ without adding a proxy field to those downstream Machines.
 
 Machine and install-profile choices receive no derived `noProxy` entries: the
 entries are the authored ones, unlike
-[container installation](../container-clusters.md#installation-features), which
+[container installation](../openshift-clusters.md#installation-features), which
 states its derived set. A Machine choice carries controller acquisition and
 installed-system repository traffic, and the installation's own artifact
 endpoints are reached directly.
@@ -632,7 +678,7 @@ optional. Validation is lexical only.
 | `spec.os.architecture` | string | yes | `x86_64`. |
 | `spec.installer.anaconda` | object | union | Anaconda arm below. |
 | `spec.installer.templateClone` | object | union | A [refused arm](#refused-arms). |
-| `spec.subscription.entitlementRef` | string | no | Global `Entitlement` of type `redhat-rhel`; registers the installed system with the hosted subscription service and unregisters it on destroy ([managed OS](../managed-os.md#registration)). |
+| `spec.subscription.entitlementRef` | string | no | Global `Entitlement` of type `redhatRhel`; registers the installed system with the hosted subscription service and unregisters it on destroy ([managed OS](../managed-os.md#registration)). |
 | `spec.proxy` | choice object | no | External Proxy choice; omission uses direct access. |
 | `spec.ntp` | array of selections | no | NTPServer selections; omission leaves the native OS default. |
 | `spec.customizations` | object | no | Closed customization groups below. |
@@ -660,7 +706,7 @@ The optional package-source arms are exact:
   with required `id` and HTTP(S) `baseURL`. Each `baseURL` holds no fragment
   and no quote, and each `id` follows the
   [configured-repository ID rule](#customizations).
-- `fromSubscription` has required `entitlementRef` to a `redhat-rhel`
+- `fromSubscription` has required `entitlementRef` to a `redhatRhel`
   `Entitlement`. It cannot be combined with top-level `subscription` because it
   already registers during installation.
 - `hostedTree` has required `fromMedia` naming a DVD image of the media store

@@ -39,7 +39,7 @@ def host_request(request_value):
          "publicationPath": "/var/lib/bootwright-services/example/public/os/rhel/tree", "url": "https://192.0.2.10:8443/os/rhel/tree",
          "certificateRef": "serving-tls"}
         for host in cluster["hosts"]]}
-    return {"version": "ceph-host-v7", "cluster": cluster, "host": "node-2"}
+    return {"version": "ceph-host-v8", "cluster": cluster, "host": "node-2"}
 
 
 request_value = host_fixtures.request_value
@@ -284,7 +284,7 @@ def test_the_package_worker_names_only_its_closed_tokens_and_their_site():
 
 @pytest.mark.parametrize("change", [
     {"action": "cluster"}, {"pool": copy.deepcopy(POOL)},
-    {"client": {"name": "consumer", "pool": "volumes", "access": "read-only"}},
+    {"client": {"name": "consumer", "pool": "volumes", "access": "readOnly"}},
 ])
 def test_host_request_admits_only_the_cluster_scope(host_request, change):
     assert ceph_core.host_request(copy.deepcopy(host_request)) == host_request

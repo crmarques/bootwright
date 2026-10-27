@@ -25,7 +25,7 @@ read error propagates.
 
 Custody has no presence read that avoids decrypting the entry: `Holds` runs in
 a lent mutation area and `ReadProduced` returns the material. Inspection must
-read no credential bytes, so a ContainerCluster's kubeconfig readiness is
+read no credential bytes, so an OpenShiftCluster's kubeconfig readiness is
 derived from the proved completion of its install block, the event that fills
 custody, and not from custody itself. A copy a removal kept unproved is
 therefore not reported ready until a presence read exists.

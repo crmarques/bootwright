@@ -1,0 +1,138 @@
+apiVersion: bootwright.io/v1alpha1
+kind: CephCluster
+metadata:
+  name: primary
+
+spec:
+  management: managed
+
+  distribution:
+    ibm:
+      callHome: enabled
+
+      packages:
+        source: vendor
+
+  release: 9.9.2.0
+  packageVersion: 20.2.2-349.el9cp
+
+  image:
+    base: cp.icr.io/cp/ibm-ceph/ceph-9-rhel10
+    version: v9.9.2-26947
+
+  entitlementRef: ibm-ceph
+
+  cephadm:
+    addressRef: ip
+
+    ansible:
+      packageVersion: 5.0.3-1.el9cp
+
+    clusterSSH:
+      user: bootwright
+      keyRef: primary-cluster-key
+      transport: verifiedTunnel
+
+    bootstrap:
+      nodeRef: primary-01
+      addressRef: ip
+
+  networks:
+    publicCIDRs:
+      - 198.51.100.0/24
+
+  config:
+    global:
+      osd_pool_default_size: '2'
+      osd_pool_default_min_size: '2'
+
+    osd:
+      osd_memory_target_autotune: 'false'
+      osd_memory_target: '4294967296'
+
+  services:
+    - service_type: mon
+
+      placement:
+        count: 3
+        label: mon
+
+    - service_type: mgr
+
+      placement:
+        count: 2
+        label: core
+
+    - service_type: osd
+      service_id: data
+
+      placement:
+        label: osd
+
+      spec:
+        data_devices:
+          paths:
+            - /dev/sda
+
+    - service_type: mds
+      service_id: primary-files
+
+      placement:
+        count: 2
+        label: core
+
+    - service_type: rgw
+      service_id: primary-objects
+
+      placement:
+        count: 1
+        label: gateway
+
+      spec:
+        rgw_realm: primary
+        rgw_zonegroup: primary
+        rgw_zone: primary
+        rgw_frontend_port: 80
+
+    - service_type: rbd-mirror
+
+      placement:
+        count: 1
+        label: mirror
+
+  topology:
+    nodes:
+      - name: primary-01
+        fqdn: primary-01.lab.example.test
+        machineRef: primary-01
+
+        labels:
+          - osd
+          - mon
+          - core
+
+      - name: primary-02
+        fqdn: primary-02.lab.example.test
+        machineRef: primary-02
+
+        labels:
+          - osd
+          - mon
+          - core
+
+      - name: primary-03
+        fqdn: primary-03.lab.example.test
+        machineRef: primary-03
+
+        labels:
+          - osd
+          - mon
+          - gateway
+
+      - name: primary-04
+        fqdn: primary-04.lab.example.test
+        machineRef: primary-04
+
+        labels:
+          - osd
+          - mirror

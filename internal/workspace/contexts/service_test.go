@@ -50,7 +50,6 @@ metadata: {name: controller}
 spec:
   os: {provided: true}
   access: {local: true}
-  capabilities: [container-runtime]
 `
 
 type repository struct {

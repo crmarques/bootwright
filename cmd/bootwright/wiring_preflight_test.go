@@ -33,7 +33,7 @@ func TestStorageCapacityAdmissionSkipsTransitionsThatAllocateNoGuest(t *testing.
 	owned := map[string]lifecycle.ObjectOwnership{}
 	cases := map[string][]reconciliation.Block{
 		"a controller-stage block":         {block(reconciliation.StageController, "ArtifactServer", "mirror")},
-		"Machines done, only Ceph remains": {block(reconciliation.StageClusters, "StorageCluster", "lab-ceph")},
+		"Machines done, only Ceph remains": {block(reconciliation.StageClusters, "CephCluster", "lab-ceph")},
 		"a Machine no allocation projects": {block(reconciliation.StageMachines, libvirt.MachineKind, "absent")},
 		"nothing left to start":            {},
 	}
@@ -42,7 +42,7 @@ func TestStorageCapacityAdmissionSkipsTransitionsThatAllocateNoGuest(t *testing.
 			t.Fatalf("%s: admission = %v", name, diagnostics.Of(err))
 		}
 	}
-	starting := []reconciliation.Block{block(reconciliation.StageClusters, "StorageCluster", "lab-ceph"), block(reconciliation.StageMachines, libvirt.MachineKind, allocations[0].Machine)}
+	starting := []reconciliation.Block{block(reconciliation.StageClusters, "CephCluster", "lab-ceph"), block(reconciliation.StageMachines, libvirt.MachineKind, allocations[0].Machine)}
 	err = libvirtCapacityAdmission(nil)(context.Background(), "lab", catalog, owned, starting)
 	var failure *diagnostics.Failure
 	if !errors.As(err, &failure) || len(failure.Diagnostics) == 0 {
@@ -64,7 +64,7 @@ func (f capacityCheckFunc) Check(ctx context.Context, a []capacity.Allocation, d
 func TestContainerOnlyApplyProvesAllDeclaredLibvirtGuestsBeforeAdmission(t *testing.T) {
 	state, _ := compileAcceptance(t, exampleDirectory(t, "lab-sno"))
 	catalog := state.Effective()
-	if len(catalog.OfKind(api.StorageCluster)) != 0 {
+	if len(catalog.OfKind(api.CephCluster)) != 0 {
 		t.Fatal("test must have no storage cluster")
 	}
 	allocations, err := libvirt.CapacityAllocations(catalog, "lab")

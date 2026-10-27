@@ -16,12 +16,12 @@ import (
 )
 
 func withMDS(spec api.Value) api.Value {
-	services := append(spec.Get("ceph", "services").Items(), mdsRequestService("files"))
-	return withCorePair(spec.WithPath(api.ListValue(services...), "ceph", "services"))
+	services := append(spec.Get("services").Items(), mdsRequestService("files"))
+	return withCorePair(spec.WithPath(api.ListValue(services...), "services"))
 }
 
 func cephfsPool(name, role string, pairs ...any) api.Object {
-	return childOf(api.StoragePool, name, append([]any{"type", "replicated", "role", role, "replicated", requestMap("size", 2, "minSize", 2)}, pairs...)...)
+	return childOf(api.CephPool, name, append([]any{"role", role, "replicated", requestMap("size", 2, "minSize", 2)}, pairs...)...)
 }
 
 func filesystemOf(pairs ...any) api.Object {
@@ -29,16 +29,16 @@ func filesystemOf(pairs ...any) api.Object {
 	if !slices.Contains(pairs, any("dataPoolRefs")) {
 		base = append(base, "dataPoolRefs", api.StringList("fs-data"))
 	}
-	return childOf(api.StorageFilesystem, "files", append(base, pairs...)...)
+	return childOf(api.CephFilesystem, "files", append(base, pairs...)...)
 }
 
 func filesystemCatalog(change func(api.Value) api.Value, children ...api.Object) api.Catalog {
-	return planCatalog(3, 3, change, append([]api.Object{cephfsPool("fs-meta", "cephfs-metadata"), cephfsPool("fs-data", "cephfs-data")}, children...)...)
+	return planCatalog(3, 3, change, append([]api.Object{cephfsPool("fs-meta", "cephfsMetadata"), cephfsPool("fs-data", "cephfsData")}, children...)...)
 }
 
 func plannedFilesystem(t *testing.T, catalog api.Catalog) Request {
 	t.Helper()
-	r, err := planned(t, catalog, api.StorageFilesystem, "files")
+	r, err := planned(t, catalog, api.CephFilesystem, "files")
 	if err != nil {
 		t.Fatal(diagnostics.Of(err))
 	}
@@ -67,7 +67,7 @@ func TestFilesystemFreezesDeclaredValuesAndOrders(t *testing.T) {
 	groups := api.ListValue(requestMap("name", "zeta", "mode", "0770", "uid", 1000, "gid", 2000, "sizeBytes", 1073741824, "poolLayoutRef", "fs-extra"), requestMap("name", "alpha", "mode", "700"))
 	refs := api.ListValue(api.StringValue("fs-extra"), requestMap("name", "fs-data", "default", true))
 	fs := filesystemOf("dataPoolRefs", refs, "mds", requestMap("activeCount", 2, "standbyReplay", true, "standbyCountWanted", 1), "subvolumeGroups", groups)
-	f := plannedFilesystem(t, filesystemCatalog(withMDS, cephfsPool("fs-extra", "cephfs-data"), fs)).Filesystem
+	f := plannedFilesystem(t, filesystemCatalog(withMDS, cephfsPool("fs-extra", "cephfsData"), fs)).Filesystem
 	if f.ActiveCount != 2 || !f.StandbyReplay || f.StandbyCountWanted != 1 || !slices.Equal(f.DataPools, []string{"fs-data", "fs-extra"}) || f.DefaultDataPool != "fs-data" {
 		t.Fatalf("declared mds settings or data pools froze as %+v", f)
 	}
@@ -78,14 +78,14 @@ func TestFilesystemFreezesDeclaredValuesAndOrders(t *testing.T) {
 }
 
 func TestCephFSPoolRequestCarriesDerivedFilesystem(t *testing.T) {
-	catalog := filesystemCatalog(withMDS, replicatedPool("volumes"), cephfsPool("spare", "cephfs-data"), filesystemOf())
+	catalog := filesystemCatalog(withMDS, replicatedPool("volumes"), cephfsPool("spare", "cephfsData"), filesystemOf())
 	for pool, want := range map[string]string{"fs-meta": "files", "fs-data": "files", "volumes": "", "spare": ""} {
-		r, err := planned(t, catalog, api.StoragePool, pool)
+		r, err := planned(t, catalog, api.CephPool, pool)
 		if err != nil || r.Pool.Filesystem != want {
 			t.Fatalf("pool %s froze filesystem %q (%v), want %q", pool, r.Pool.Filesystem, diagnostics.Of(err), want)
 		}
 	}
-	data, err := planned(t, filesystemCatalog(withMDS), api.StoragePool, "fs-meta")
+	data, err := planned(t, filesystemCatalog(withMDS), api.CephPool, "fs-meta")
 	if err != nil || data.Pool.Filesystem != "" {
 		t.Fatalf("a metadata pool without a filesystem froze %q", data.Pool.Filesystem)
 	}
@@ -97,17 +97,17 @@ func TestCephFSPoolRequestCarriesDerivedFilesystem(t *testing.T) {
 
 func TestFilesystemRequiresAllPools(t *testing.T) {
 	refs := api.ListValue(requestMap("name", "fs-data", "default", true), api.StringValue("fs-extra"))
-	catalog := filesystemCatalog(withMDS, cephfsPool("fs-extra", "cephfs-data"), filesystemOf("dataPoolRefs", refs))
+	catalog := filesystemCatalog(withMDS, cephfsPool("fs-extra", "cephfsData"), filesystemOf("dataPoolRefs", refs))
 	input := lifecycle.PlanInput{Verb: reconciliation.Apply, Context: lifecycle.ContextIdentity{Name: "synthetic"}, State: compilation.NewState(catalog, catalog, nil), Controller: "controller"}
-	plan, err := New(api.StorageFilesystem, nil).Plan(context.Background(), input)
+	plan, err := New(api.CephFilesystem, nil).Plan(context.Background(), input)
 	if err != nil || len(plan.Definitions) != 1 {
 		t.Fatalf("the filesystem planned %+v (%v)", plan.Definitions, diagnostics.Of(err))
 	}
 	block := plan.Definitions[0]
 	pool := func(name string) reconciliation.ObjectRef {
-		return reconciliation.ObjectRef{Kind: string(api.StoragePool), Object: name}
+		return reconciliation.ObjectRef{Kind: string(api.CephPool), Object: name}
 	}
-	if block.ID != "ceph-filesystem-files" || block.Kind != string(api.StorageFilesystem) || block.Object != "files" || !slices.Equal(block.Requires, []reconciliation.ObjectRef{pool("fs-meta"), pool("fs-data"), pool("fs-extra")}) {
+	if block.ID != "ceph-filesystem-files" || block.Kind != string(api.CephFilesystem) || block.Object != "files" || !slices.Equal(block.Requires, []reconciliation.ObjectRef{pool("fs-meta"), pool("fs-data"), pool("fs-extra")}) {
 		t.Fatalf("the filesystem block is %+v", block)
 	}
 	if !slices.Equal(block.Dependencies, []string{ClusterBlockID("example"), ImageBlockID("example")}) {
@@ -118,10 +118,10 @@ func TestFilesystemRequiresAllPools(t *testing.T) {
 func filesystemPlan(t *testing.T) reconciliation.Plan {
 	t.Helper()
 	change := func(spec api.Value) api.Value {
-		return spec.WithPath(api.ListValue(append(spec.Get("ceph", "services").Items(), mdsRequestService("files"))...), "ceph", "services")
+		return spec.WithPath(api.ListValue(append(spec.Get("services").Items(), mdsRequestService("files"))...), "services")
 	}
 	refs := api.ListValue(requestMap("name", "fs-data", "default", true), api.StringValue("fs-extra"))
-	return plannedCephPlanWith(t, change, cephfsPool("fs-meta", "cephfs-metadata"), cephfsPool("fs-data", "cephfs-data"), cephfsPool("fs-extra", "cephfs-data"), filesystemOf("dataPoolRefs", refs))
+	return plannedCephPlanWith(t, change, cephfsPool("fs-meta", "cephfsMetadata"), cephfsPool("fs-data", "cephfsData"), cephfsPool("fs-extra", "cephfsData"), filesystemOf("dataPoolRefs", refs))
 }
 
 func frozenFilesystem(groups ...FilesystemGroup) Request {
@@ -155,9 +155,9 @@ func TestFilesystemInverseBeforePools(t *testing.T) {
 			t.Fatalf("the filesystem does not precede pool %s in removal: %v", pool, order)
 		}
 	}
-	capability := New(api.StorageFilesystem, &recordingRunner{})
+	capability := New(api.CephFilesystem, &recordingRunner{})
 	e := executionFor(t, frozenFilesystem())
-	e.Block.ID, e.Block.Kind, e.Block.Object = "ceph-filesystem-files", string(api.StorageFilesystem), "files"
+	e.Block.ID, e.Block.Kind, e.Block.Object = "ceph-filesystem-files", string(api.CephFilesystem), "files"
 	if q, err := capability.Quiescent(context.Background(), lifecycle.Probe{Block: e.Block, RetiredWithHosts: true}); err != nil || q.State != lifecycle.Quiescent || q.Reason != retiredReason {
 		t.Fatalf("a retired filesystem is not quiescent with its hosts: %+v %v", q, err)
 	}
@@ -170,9 +170,9 @@ func TestFilesystemInverseBeforePools(t *testing.T) {
 }
 
 func TestFilesystemExecutionMatchesItsFrozenIdentity(t *testing.T) {
-	capability := New(api.StorageFilesystem, nil)
+	capability := New(api.CephFilesystem, nil)
 	e := executionFor(t, frozenFilesystem())
-	e.Block.ID, e.Block.Kind, e.Block.Object = "ceph-filesystem-files", string(api.StorageFilesystem), "files"
+	e.Block.ID, e.Block.Kind, e.Block.Object = "ceph-filesystem-files", string(api.CephFilesystem), "files"
 	prepared, err := capability.prepare(context.Background(), e)
 	if err != nil || prepared.Action != "filesystem" || prepared.Filesystem == nil || prepared.Filesystem.Name != "files" || prepared.Owner != "apply-original" {
 		t.Fatalf("a planned filesystem block did not match its frozen identity: %+v %v", prepared.Filesystem, err)
@@ -181,28 +181,28 @@ func TestFilesystemExecutionMatchesItsFrozenIdentity(t *testing.T) {
 	if _, err := capability.prepare(context.Background(), e); len(diagnostics.Of(err)) != 1 || diagnostics.Of(err)[0].Code != "lifecycle.state" {
 		t.Fatalf("a filesystem block named after its pool matched the filesystem identity: %v", err)
 	}
-	e.Block.Object, e.Block.Kind = "files", string(api.StoragePool)
-	if _, err := New(api.StoragePool, nil).prepare(context.Background(), e); len(diagnostics.Of(err)) != 1 || diagnostics.Of(err)[0].Code != "lifecycle.state" {
+	e.Block.Object, e.Block.Kind = "files", string(api.CephPool)
+	if _, err := New(api.CephPool, nil).prepare(context.Background(), e); len(diagnostics.Of(err)) != 1 || diagnostics.Of(err)[0].Code != "lifecycle.state" {
 		t.Fatalf("a pool capability accepted a frozen filesystem request: %v", err)
 	}
 }
 
 func TestFilesystemPlanRefusesErasureDefaultAndPropagatesPoolRefusals(t *testing.T) {
-	ec := childOf(api.StoragePool, "fs-data", "type", "erasure", "role", "cephfs-data", "erasure", requestMap("dataChunks", 4, "codingChunks", 2))
-	catalog := planCatalog(6, 6, withMDS, cephfsPool("fs-meta", "cephfs-metadata"), ec, filesystemOf())
-	_, err := planned(t, catalog, api.StorageFilesystem, "files")
-	refusedWith(t, err, "lifecycle.unsupported", "StorageFilesystem files names erasure-coded pool fs-data as its default data pool; ceph fs new refuses it unless forced, and Bootwright never forces it", "mark a replicated cephfs-data pool default in spec.dataPoolRefs and attach erasure-coded pools as additional data pools")
+	ec := childOf(api.CephPool, "fs-data", "role", "cephfsData", "erasure", requestMap("dataChunks", 4, "codingChunks", 2))
+	catalog := planCatalog(6, 6, withMDS, cephfsPool("fs-meta", "cephfsMetadata"), ec, filesystemOf())
+	_, err := planned(t, catalog, api.CephFilesystem, "files")
+	refusedWith(t, err, "lifecycle.unsupported", "CephFilesystem files names erasure-coded pool fs-data as its default data pool; ceph fs new refuses it unless forced, and Bootwright never forces it", "mark a replicated cephfsData pool default in spec.dataPoolRefs and attach erasure-coded pools as additional data pools")
 	refs := api.ListValue(requestMap("name", "fs-data", "default", true), api.StringValue("fs-ec"))
-	ec = childOf(api.StoragePool, "fs-ec", "type", "erasure", "role", "cephfs-data", "erasure", requestMap("dataChunks", 4, "codingChunks", 2))
-	if r, err := planned(t, planCatalog(6, 6, withMDS, cephfsPool("fs-meta", "cephfs-metadata"), cephfsPool("fs-data", "cephfs-data"), ec, filesystemOf("dataPoolRefs", refs)), api.StorageFilesystem, "files"); err != nil || !slices.Equal(r.Filesystem.DataPools, []string{"fs-data", "fs-ec"}) {
+	ec = childOf(api.CephPool, "fs-ec", "role", "cephfsData", "erasure", requestMap("dataChunks", 4, "codingChunks", 2))
+	if r, err := planned(t, planCatalog(6, 6, withMDS, cephfsPool("fs-meta", "cephfsMetadata"), cephfsPool("fs-data", "cephfsData"), ec, filesystemOf("dataPoolRefs", refs)), api.CephFilesystem, "files"); err != nil || !slices.Equal(r.Filesystem.DataPools, []string{"fs-data", "fs-ec"}) {
 		t.Fatalf("an erasure-coded extra data pool did not plan: %+v %v", r.Filesystem, diagnostics.Of(err))
 	}
 	refs = api.ListValue(requestMap("name", "fs-data", "default", true), api.StringValue("fs-extra"))
-	mirrored := cephfsPool("fs-extra", "cephfs-data", "mirroring", requestMap("mode", "image"))
-	_, err = planned(t, filesystemCatalog(withMDS, mirrored, filesystemOf("dataPoolRefs", refs)), api.StorageFilesystem, "files")
-	refusedWith(t, err, "lifecycle.unsupported", "StoragePool fs-extra declares mirroring without a StorageReplication owner", "declare a StorageReplication that names this pool, or remove spec.mirroring")
-	_, err = planned(t, filesystemCatalog(withCorePair, filesystemOf()), api.StorageFilesystem, "files")
-	refusedWith(t, err, "api.invariant", "StorageCluster example projects no MDS service mds.files for StorageFilesystem files", "declare the mds service entry with service_id files in spec.ceph.services")
+	mirrored := cephfsPool("fs-extra", "cephfsData", "mirroring", requestMap("mode", "image"))
+	_, err = planned(t, filesystemCatalog(withMDS, mirrored, filesystemOf("dataPoolRefs", refs)), api.CephFilesystem, "files")
+	refusedWith(t, err, "lifecycle.unsupported", "CephPool fs-extra declares mirroring without a CephReplication owner", "declare a CephReplication that names this pool, or remove spec.mirroring")
+	_, err = planned(t, filesystemCatalog(withCorePair, filesystemOf()), api.CephFilesystem, "files")
+	refusedWith(t, err, "api.invariant", "CephCluster example projects no MDS service mds.files for CephFilesystem files", "declare the mds service entry with service_id files in spec.services")
 }
 
 func TestFilesystemDeadlineCountsPoolsGroupsAndWaits(t *testing.T) {

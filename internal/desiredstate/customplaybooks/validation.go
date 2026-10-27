@@ -44,7 +44,7 @@ func Validate(o api.Object, c api.Catalog) []api.Issue {
 	if enabled(o) {
 		issues = append(issues, validateOrdering(o, c)...)
 	}
-	if len(issues) == 0 {
+	if len(issues) == 0 && !enabled(o) {
 		issues = append(issues, issue("api.deferred", "spec", "CustomPlaybook is a reserved declaration and cannot execute."))
 	}
 	if len(issues) > 999 {

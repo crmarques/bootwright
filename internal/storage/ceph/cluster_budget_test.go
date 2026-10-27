@@ -27,7 +27,7 @@ func TestSixHostClusterBudgetAdmitsHostSpecificOSDServices(t *testing.T) {
 func TestClusterBudgetPlansThreeThroughSixHostsWithOneServiceSubmission(t *testing.T) {
 	for hosts := 3; hosts <= 6; hosts++ {
 		catalog := planCatalog(hosts, hosts, nil)
-		request, err := planned(t, catalog, api.StorageCluster, "example")
+		request, err := planned(t, catalog, api.CephCluster, "example")
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -47,15 +47,15 @@ func TestClusterBudgetPlansThreeThroughSixHostsWithOneServiceSubmission(t *testi
 
 func TestSeventhHostRefusesClusterAndDependentResources(t *testing.T) {
 	catalog := pinnedCatalog(t, func(spec api.Value) api.Value {
-		nodes := spec.Get("ceph", "topology", "nodes").Items()
+		nodes := spec.Get("topology", "nodes").Items()
 		for len(nodes) < 7 {
 			nodes = append(nodes, nodes[0])
 		}
-		return spec.WithPath(api.ListValue(nodes...), "ceph", "topology", "nodes")
+		return spec.WithPath(api.ListValue(nodes...), "topology", "nodes")
 	})
-	catalog = api.NewCatalog(append(catalog.Objects(), childOf(api.StoragePlacementPolicy, "policy", "replicated", requestMap("size", 2))))
+	catalog = api.NewCatalog(append(catalog.Objects(), childOf(api.CephPlacementPolicy, "policy", "replicated", requestMap("size", 2))))
 	state := compilation.NewState(catalog, catalog, nil)
-	for kind, name := range map[api.Kind]string{api.StorageCluster: "example", api.StoragePlacementPolicy: "policy", api.StoragePool: "volumes", api.StorageClient: "consumer"} {
+	for kind, name := range map[api.Kind]string{api.CephCluster: "example", api.CephPlacementPolicy: "policy", api.CephPool: "volumes", api.CephClient: "consumer"} {
 		refusals := New(kind, nil).Unsupported(state)
 		reason, remedy := clusterHostBudget("example", 7)
 		if len(refusals) != 1 || refusals[0].Name != name || refusals[0].Reason != reason || refusals[0].Remediation != remedy {

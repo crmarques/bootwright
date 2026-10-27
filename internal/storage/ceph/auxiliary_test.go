@@ -56,7 +56,7 @@ func auxiliaryBlock(t *testing.T, r ImageRequest) reconciliation.Block {
 	if err != nil {
 		t.Fatal(err)
 	}
-	definition := reconciliation.BlockDefinition{ID: ImageBlockID(r.Cluster), Kind: string(api.StorageCluster), Object: r.Cluster, Implementation: ImageImplementation, ContentDigest: ImageContentDigest(), Request: canonical}
+	definition := reconciliation.BlockDefinition{ID: ImageBlockID(r.Cluster), Kind: string(api.CephCluster), Object: r.Cluster, Implementation: ImageImplementation, ContentDigest: ImageContentDigest(), Request: canonical}
 	digest, err := reconciliation.RequestDigest(definition)
 	if err != nil {
 		t.Fatal(err)
@@ -152,10 +152,10 @@ func TestAuxiliaryReferencesStayInsideTheEntitlementNamespace(t *testing.T) {
 	}
 	for _, base := range []string{"quay.io/ceph/haproxy", "cp.icr.io/cpx/haproxy"} {
 		_, err := auxiliaryImage("haproxy", base, "synthetic-2", registryURL)
-		refusedWith(t, err, "lifecycle.unsupported", "the auxiliary image haproxy is not beneath the Entitlement registry cp.icr.io/cp", "set spec.ceph.images.haproxy.base to a repository beneath the Entitlement registry.url")
+		refusedWith(t, err, "lifecycle.unsupported", "the auxiliary image haproxy is not beneath the Entitlement registry cp.icr.io/cp", "set spec.images.haproxy.base to a repository beneath the Entitlement registry.url")
 	}
 	_, err = auxiliaryImage("haproxy", "cp.icr.io/cp/ibm-ceph/haproxy-synthetic", "", registryURL)
-	refusedWith(t, err, "lifecycle.unsupported", "the auxiliary image haproxy names neither a tag nor a sha256 digest", "set spec.ceph.images.haproxy.version to a tag or a sha256 digest")
+	refusedWith(t, err, "lifecycle.unsupported", "the auxiliary image haproxy names neither a tag nor a sha256 digest", "set spec.images.haproxy.version to a tag or a sha256 digest")
 
 	valid := auxiliaryImageRequest(PinnedRepository+":"+PinnedTag, syntheticAuxiliary())
 	data, err := valid.Canonical()
@@ -207,7 +207,7 @@ func auxiliaryService(serviceType, id string, spec api.Value) api.Value {
 func auxiliaryGraph(t *testing.T, services []api.Value, children ...api.Object) *compilation.State {
 	t.Helper()
 	catalog := pinnedCatalog(t, func(spec api.Value) api.Value {
-		return spec.WithPath(api.ListValue(append(spec.Get("ceph", "services").Items(), services...)...), "ceph", "services")
+		return spec.WithPath(api.ListValue(append(spec.Get("services").Items(), services...)...), "services")
 	})
 	catalog = api.NewCatalog(append(catalog.Objects(), children...))
 	return compilation.NewState(catalog, catalog, nil)
@@ -216,10 +216,10 @@ func auxiliaryGraph(t *testing.T, services []api.Value, children ...api.Object) 
 func withImages(t *testing.T, state *compilation.State, images ...string) *compilation.State {
 	t.Helper()
 	catalog := state.Effective()
-	cluster, _ := catalog.Find(api.StorageCluster, "example")
+	cluster, _ := catalog.Find(api.CephCluster, "example")
 	spec := cluster.Spec()
 	for _, name := range images {
-		spec = spec.WithPath(requestMap("base", PinnedRegistry+"/synthetic/"+name, "version", "synthetic-1"), "ceph", "images", name)
+		spec = spec.WithPath(requestMap("base", PinnedRegistry+"/synthetic/"+name, "version", "synthetic-1"), "images", name)
 	}
 	objects := catalog.Objects()
 	for i := range objects {
@@ -233,7 +233,7 @@ func withImages(t *testing.T, state *compilation.State, images ...string) *compi
 
 func refusedEverywhere(t *testing.T, state *compilation.State, reason, remedy string) {
 	t.Helper()
-	for kind, name := range map[api.Kind]string{api.StorageCluster: "example", api.StoragePool: "volumes", api.StorageClient: "consumer"} {
+	for kind, name := range map[api.Kind]string{api.CephCluster: "example", api.CephPool: "volumes", api.CephClient: "consumer"} {
 		want := []lifecycle.Refusal{{Kind: string(kind), Name: name, Reason: reason, Remediation: remedy}}
 		if got := New(kind, nil).Unsupported(state); !reflect.DeepEqual(got, want) {
 			t.Fatalf("%s refuses %+v, want %+v", kind, got, want)
@@ -243,19 +243,19 @@ func refusedEverywhere(t *testing.T, state *compilation.State, reason, remedy st
 
 func unauthoredRefusal(t *testing.T, state *compilation.State, family, service, name string) {
 	t.Helper()
-	refusedEverywhere(t, state, "the "+family+" service "+service+" needs cephadm's container_image_"+name+", and spec.ceph.images."+name+" is not set; Bootwright keeps no default",
-		"set spec.ceph.images."+name+" of StorageCluster example to an image beneath its Entitlement registry, or remove "+service+" from its spec.ceph.services, together with its spec.ceph.serviceBindings entries")
+	refusedEverywhere(t, state, "the "+family+" service "+service+" needs cephadm's container_image_"+name+", and spec.images."+name+" is not set; Bootwright keeps no default",
+		"set spec.images."+name+" of CephCluster example to an image beneath its Entitlement registry, or remove "+service+" from its spec.services, together with its spec.serviceBindings entries")
 }
 
 func unneededRefusal(t *testing.T, state *compilation.State, name string) {
 	t.Helper()
-	refusedEverywhere(t, state, "spec.ceph.images."+name+" is set, but no declared service or StorageSMBResource of StorageCluster example needs cephadm's container_image_"+name,
-		"remove spec.ceph.images."+name+" from StorageCluster example")
+	refusedEverywhere(t, state, "spec.images."+name+" is set, but no declared service or CephSMBResource of CephCluster example needs cephadm's container_image_"+name,
+		"remove spec.images."+name+" from CephCluster example")
 }
 
 func notRefused(t *testing.T, state *compilation.State, what string) {
 	t.Helper()
-	for _, kind := range []api.Kind{api.StorageCluster, api.StoragePool, api.StorageClient} {
+	for _, kind := range []api.Kind{api.CephCluster, api.CephPool, api.CephClient} {
 		if got := New(kind, nil).Unsupported(state); len(got) != 0 {
 			t.Fatalf("%s: %s refuses %+v", what, kind, got)
 		}
@@ -264,7 +264,7 @@ func notRefused(t *testing.T, state *compilation.State, what string) {
 
 func objectsGateway(t *testing.T, ingress api.Value) *compilation.State {
 	t.Helper()
-	return auxiliaryGraph(t, []api.Value{rgwService("objects"), ingress}, childOf(api.StorageObjectGateway, "objects", "serviceRef", "rgw.objects"))
+	return auxiliaryGraph(t, []api.Value{rgwService("objects"), ingress}, childOf(api.CephObjectGateway, "objects", "serviceRef", "rgw.objects"))
 }
 
 func TestDeclaredFamilyWithoutItsAuxiliaryImageRefusesNamingTheField(t *testing.T) {
@@ -303,7 +303,7 @@ func TestAuthoredImageOfAnUndeclaredFamilyRefuses(t *testing.T) {
 	unneededRefusal(t, withImages(t, keepaliveOnly, "haproxy", "keepalived"), "haproxy")
 	unneededRefusal(t, withImages(t, plain, "samba", "samba_metrics"), "samba")
 	withSMB := api.NewCatalog(append(plain.Effective().Objects(), smbJoin()))
-	notRefused(t, withImages(t, compilation.NewState(withSMB, withSMB, nil), "samba", "samba_metrics"), "samba images a StorageSMBResource needs")
+	notRefused(t, withImages(t, compilation.NewState(withSMB, withSMB, nil), "samba", "samba_metrics"), "samba images a CephSMBResource needs")
 	unneededRefusal(t, withImages(t, compilation.NewState(withSMB, withSMB, nil), "samba", "samba_metrics", "loki"), "loki")
 }
 
@@ -329,7 +329,7 @@ func plannedAuxiliary(t *testing.T, state *compilation.State) map[string]reconci
 	if err != nil {
 		t.Fatal(diagnostics.Of(err))
 	}
-	core, err := New(api.StorageCluster, nil).Plan(context.Background(), input)
+	core, err := New(api.CephCluster, nil).Plan(context.Background(), input)
 	if err != nil {
 		t.Fatal(diagnostics.Of(err))
 	}
@@ -346,9 +346,9 @@ func plannedAuxiliary(t *testing.T, state *compilation.State) map[string]reconci
 func TestAuthoredAuxiliaryImageReachesTheFrozenImageRequest(t *testing.T) {
 	haproxy, keepalived := PinnedRegistry+"/synthetic/haproxy", PinnedRegistry+"/synthetic/keepalived"
 	state := objectsGateway(t, ingressService("rgw.objects"))
-	cluster, _ := state.Effective().Find(api.StorageCluster, "example")
-	spec := cluster.Spec().WithPath(requestMap("base", keepalived, "version", keepalivedChild), "ceph", "images", "keepalived").
-		WithPath(requestMap("base", haproxy, "version", "synthetic-1"), "ceph", "images", "haproxy")
+	cluster, _ := state.Effective().Find(api.CephCluster, "example")
+	spec := cluster.Spec().WithPath(requestMap("base", keepalived, "version", keepalivedChild), "images", "keepalived").
+		WithPath(requestMap("base", haproxy, "version", "synthetic-1"), "images", "haproxy")
 	objects := state.Effective().Objects()
 	for i := range objects {
 		if objects[i].Identity() == cluster.Identity() {
@@ -428,7 +428,7 @@ func TestPrepareFillsTheAuxiliaryDigestsFromTheOriginalResolution(t *testing.T) 
 	e := executionFor(t, r)
 	e.ApplyProved = []lifecycle.BlockEvidence{auxiliaryProof(t, r.Image, images, haproxyChild, keepalivedChild)}
 	frozen := bytes.Clone(e.Block.Request)
-	prepared, err := New(api.StorageCluster, nil).prepare(context.Background(), e)
+	prepared, err := New(api.CephCluster, nil).prepare(context.Background(), e)
 	if err != nil || prepared.Image != PinnedRepository+"@"+resolvedDigest || !reflect.DeepEqual(prepared.Auxiliary, want) || !bytes.Equal(e.Block.Request, frozen) {
 		t.Fatalf("prepared %q %+v %v", prepared.Image, prepared.Auxiliary, diagnostics.Of(err))
 	}
@@ -453,12 +453,12 @@ func TestPrepareFillsTheAuxiliaryDigestsFromTheOriginalResolution(t *testing.T) 
 	} {
 		t.Run(name, func(t *testing.T) {
 			e.ApplyProved = []lifecycle.BlockEvidence{proof}
-			_, err := New(api.StorageCluster, nil).prepare(context.Background(), e)
+			_, err := New(api.CephCluster, nil).prepare(context.Background(), e)
 			refusedWith(t, err, "lifecycle.state", "the Ceph image resolution proof was resolved for another authored auxiliary image set", "")
 		})
 	}
 	plain := executionFor(t, coreRequest())
-	if prepared, err := New(api.StorageCluster, nil).prepare(context.Background(), plain); err != nil || prepared.Auxiliary != nil {
+	if prepared, err := New(api.CephCluster, nil).prepare(context.Background(), plain); err != nil || prepared.Auxiliary != nil {
 		t.Fatalf("a cluster without an auxiliary set prepared %+v %v", prepared.Auxiliary, err)
 	}
 }
@@ -505,10 +505,10 @@ func TestAuxiliaryResolutionMustProveEachChild(t *testing.T) {
 }
 
 func TestAuxiliaryImageKeysAreTheClosedNameTable(t *testing.T) {
-	ceph, _ := api.Schema(api.StorageCluster).Field("ceph")
+	ceph := api.Field{Shape: api.Schema(api.CephCluster)}
 	images, found := ceph.Shape.Field("images")
 	if !found || images.Required || images.Shape.Type != api.Mapping || images.Shape.Open || images.Shape.Element != nil {
-		t.Fatalf("spec.ceph.images is not a closed optional record: %+v", images)
+		t.Fatalf("spec.images is not a closed optional record: %+v", images)
 	}
 	var names []string
 	for _, entry := range images.Shape.Fields {
@@ -517,10 +517,10 @@ func TestAuxiliaryImageKeysAreTheClosedNameTable(t *testing.T) {
 		if entry.Required || shape.Type != api.Mapping || shape.Open || len(shape.Fields) != 2 ||
 			shape.Fields[0].Name != "base" || shape.Fields[0].Required || shape.Fields[0].Shape.Rule != "registry-base" ||
 			shape.Fields[1].Name != "version" || shape.Fields[1].Required || shape.Fields[1].Shape.Rule != "native-version" {
-			t.Fatalf("spec.ceph.images.%s is not a closed record of base and version", entry.Name)
+			t.Fatalf("spec.images.%s is not a closed record of base and version", entry.Name)
 		}
 	}
 	if !slices.Equal(names, AuxiliaryNames) {
-		t.Fatalf("spec.ceph.images admits %v, the plan %v", names, AuxiliaryNames)
+		t.Fatalf("spec.images admits %v, the plan %v", names, AuxiliaryNames)
 	}
 }

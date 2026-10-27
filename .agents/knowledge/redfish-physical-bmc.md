@@ -190,13 +190,13 @@ attach and settled after a proved eject, follow. The current
 [media trust contract](../../specs/substrates.md#identity-and-power-operations)
 also owns the qualified SecurityService path when the device has no collection.
 
-- `import-certificate` reads the collection in full (at most 8 members, failing
+- `importCertificate` reads the collection in full (at most 8 members, failing
   closed beyond that), posts the server's certificate unless its DER is
   already there, turns `VerifyCertificate` on unless it reads `true`, and reads
   the member back. Where a manager publishes `HttpsTransferCertVerification`
   (D121), the import writes no device flag, and a private insert still needs
   every published switch on.
-- `disable-verification` writes `VerifyCertificate` `false` only when it reads
+- `disableVerification` writes `VerifyCertificate` `false` only when it reads
   `true`; a refused write fails, because verification stays on. Where a manager
   publishes `HttpsTransferCertVerification` it refuses before any write,
   naming that switch (D121, [B447](../../specs/milestones/delivered.md#x47--verified-emulated-controller-trust-and-bounds)).
@@ -209,7 +209,7 @@ also owns the qualified SecurityService path when the device has no collection.
   certificate.
 
 At the original capture neither CD view linked `Certificates`, so the then
-device-only `import-certificate` refused before any write; `disable-verification`
+device-only `importCertificate` refused before any write; `disableVerification`
 used to write nothing, because `VerifyCertificate` already reads `false` and
 the manager's switch is what decides, so an operator who declared it was told
 nothing while the insert proceeded under whatever the switch held. It now

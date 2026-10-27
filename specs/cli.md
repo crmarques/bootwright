@@ -160,7 +160,7 @@ preserve these command-specific compatibility rules:
   as omission, but reject a nonblank comma-only value;
 - `machine list --clusters` treats an empty or whitespace-only value as
   omission and a comma-only value as an empty result, and a member naming no
-  ContainerCluster or StorageCluster the context selects fails
+  OpenShiftCluster or CephCluster the context selects fails
   `access.target`, naming every such member and the clusters it can select;
   and
 - `machine trust --machines` treats an empty or comma-only value as omission,
@@ -489,7 +489,38 @@ dry-run and host-key detail, are [deferred](deferred/cli-access-and-rendering.md
 `render effective` is the read-only exception: text mode emits canonical
 effective YAML, and either structured mode places the complete canonical effective-state
 array in `result.effectiveState`, alongside admission `counts`; neither mode
-writes an artifact. Rendering contacts no host, management controller, cluster,
+writes an artifact.
+
+#### Effective field origins
+
+`render effective --origins` marks where each leaf of every effective object's
+`spec` came from: `authored` (the object's own document, including a value
+normalization only respelled), `defaults.<Kind>` (the Environment's
+[kind defaults](api/environment.md#kind-defaults)), `built-in` (a schema
+default) or `derived` (normalization, from the object's own fields or other
+objects). A leaf is a scalar, an empty map or an empty list, named by its
+field path with authored list positions. Text mode prints, instead of the
+YAML, each object's identity followed by one indented `<field>: <origin>` line
+per leaf in document order; either structured mode keeps `effectiveState` and
+adds `result.origins`, one `{object, field, origin}` entry per leaf in the same
+order (`TestRenderEffectiveOriginsMarkEachLeaf`).
+
+#### Schema export
+
+`bootwright schema --format json-schema` writes one advisory JSON Schema
+(draft 2020-12) document: a `oneOf` over every registered kind, each stating
+the envelope, field types, closed field sets, enum values and numeric bounds of
+its `spec`, with Environment kind defaults as partial specs (the `Environment`
+entry without `defaults`). A required field is stated only inside a list
+element or open-map value, which kind defaults copy whole; a record field a
+kind default can supply is not required in the authored document
+(`TestTheAdvisoryJSONSchemaAdmitsAFieldAKindDefaultSupplies`).
+It reads no context and contacts nothing. `validate` stays the authority:
+lexical grammars, references, unions and cross-field rules are not in the
+export, and every tracked example validates alike under both
+(`TestEveryExampleValidatesAlikeUnderTheAdvisoryJSONSchema`). Text mode writes
+the schema document; either structured mode places it in `result.schema` beside
+`result.format`. Rendering contacts no host, management controller, cluster,
 or provider, launches no managed
 operation, and creates no ownership evidence. Generated native scripts are
 artifacts only and are never executed by render.
@@ -530,10 +561,6 @@ attests only that the context's own records are complete. When it first
 completed an interrupted finalization or a `destroy` first released what an
 interrupted registration left, the line says it did only that, so a table of
 completed blocks is never read as work this invocation performed.
-
-Not yet met: the settled apply's line says the context already holds the state
-it declares and names no comparison with the hosts; tracked as
-[B824](milestones/backlog.md#b824).
 
 `apply` and `destroy` present the frozen plan, which marks each step that
 consumes an authorization and closes with the tokens it requires, then check
@@ -840,11 +867,11 @@ report each selected cluster under the
 [cluster discovery contract](cli/output.md#cluster-discovery). Access to a
 cluster is one of four contracts: the
 [administrator access export](#administrator-access-export) of a
-ContainerCluster, the [cluster sessions](#cluster-sessions) of a managed Ceph
+OpenShiftCluster, the [cluster sessions](#cluster-sessions) of a managed Ceph
 cluster, that cluster's [storage dashboard access](#storage-dashboard-access),
 and the [client keyring export](#client-keyring-export) of one of its
-StorageClients.
-The `oc` and `kubectl` handoffs and the sessions on a ContainerCluster are
+CephClients.
+The `oc` and `kubectl` handoffs and the sessions on an OpenShiftCluster are
 [deferred](deferred/cli-access-and-rendering.md) to the parked item
 [B101](milestones/backlog.md#b101).
 
@@ -931,24 +958,24 @@ discarded rather than left where nothing names it.
 ### Administrator access export
 
 `cluster kubeconfig --name <cluster>` reveals the administrator kubeconfig a
-[completed installation](container-clusters.md#installation) left in
+[completed installation](openshift-clusters.md#installation) left in
 the context's [custody](secrets.md#produced-material), or the copy a removal
 kept there unproved from an installation whose completion was never proved. It resolves the explicit
 `--context`, or the current context, once; compiles that context's effective
 state; and resolves `--name` in the selected graph's shared
-ContainerCluster/StorageCluster name namespace. It never searches outside the
-selected graph and never selects another cluster. Every ContainerCluster is
-OpenShift or OKD, so every selected ContainerCluster is applicable. The checks
+OpenShiftCluster/CephCluster name namespace. It never searches outside the
+selected graph and never selects another cluster. Every OpenShiftCluster is
+OpenShift or OKD, so every selected OpenShiftCluster is applicable. The checks
 run in this order, each before the next:
 
 | Condition | Diagnostic, exit `1` | Next action |
 | --- | --- | --- |
-| No selected ContainerCluster or StorageCluster has the name, including one the cluster lists exclude | `access.target`, naming the context and the name | name a ContainerCluster the context selects; `bootwright cluster info --context <context>` lists them |
-| The name is a managed or external Ceph StorageCluster | `cluster.not-applicable`, naming `bootwright cluster kubeconfig`, the cluster, its kind and the applicable targets, OpenShift and OKD ContainerClusters | `bootwright cluster info --context <context>` lists the clusters the context selects and their kinds |
-| The context's custody holds no kubeconfig for the ContainerCluster | `access.unavailable`, naming the cluster | `bootwright apply --context <context>` |
+| No selected OpenShiftCluster or CephCluster has the name, including one the cluster lists exclude | `access.target`, naming the context and the name | name an OpenShiftCluster the context selects; `bootwright cluster info --context <context>` lists them |
+| The name is a managed or external CephCluster | `cluster.not-applicable`, naming `bootwright cluster kubeconfig`, the cluster, its kind and the applicable targets, OpenShiftClusters | `bootwright cluster info --context <context>` lists the clusters the context selects and their kinds |
+| The context's custody holds no kubeconfig for the OpenShiftCluster | `access.unavailable`, naming the cluster | `bootwright apply --context <context>` |
 
 The target and its applicability are settled from the compiled graph before
-any custody read, so a name that selects nothing, or selects a StorageCluster,
+any custody read, so a name that selects nothing, or selects a CephCluster,
 reads no credential bytes. A store this build cannot open refuses with its own
 [`secret.store.*` diagnostic](secrets.md#local-keyring-v4). The discovery
 action is `cluster info`. In default text mode, successful standard output is
@@ -1113,7 +1140,7 @@ starting returned no status and writes no warning.
 `cluster exec` opens one or, as [below](#several-clusters-and-nodes), several.
 They resolve the explicit `--context`, or the current context, once;
 compile that context's effective state; and resolve `--name` in the selected
-graph's shared ContainerCluster/StorageCluster name namespace, never searching
+graph's shared OpenShiftCluster/CephCluster name namespace, never searching
 outside it. The node's `machineRef` then opens the session exactly as
 [`machine rsh` and `machine exec`](#machine-ssh-sessions) do: the identity,
 credential and host-key proof come from that Machine's desired state, the
@@ -1121,7 +1148,7 @@ argument vector reaches the client verbatim, and the client's exit status is the
 result. `cluster rsh` accepts no command tail.
 
 `--node` resolves only within the cluster's declared node roster,
-`StorageCluster.spec.ceph.topology.nodes`. Canonical node order is ascending
+`CephCluster.spec.topology.nodes`. Canonical node order is ascending
 bytewise order of node `name`, independent of declaration or map order.
 Omission selects the first node in that order. An explicitly empty value is a
 usage error under the scalar input rules. A supplied value selects the node
@@ -1136,9 +1163,9 @@ The checks run in this order, each before the next, and every refusal exits
 
 | Condition | Diagnostic | Next action |
 | --- | --- | --- |
-| No selected ContainerCluster or StorageCluster has the name, including one the cluster lists exclude | `access.target`, naming the context and the name | name a cluster the context selects; `bootwright cluster info --context <context>` lists them |
-| The name is an external Ceph StorageCluster, which declares no node roster | `cluster.not-applicable`, naming the command, the cluster, its kind and the applicable target, a managed Ceph StorageCluster | `bootwright cluster info --context <context>` lists the clusters the context selects and their kinds |
-| The name is an OpenShift or OKD ContainerCluster | `access.unavailable`, naming the cluster and saying sessions are not available for its kind | none; the cluster is reached through `cluster kubeconfig` |
+| No selected OpenShiftCluster or CephCluster has the name, including one the cluster lists exclude | `access.target`, naming the context and the name | name a cluster the context selects; `bootwright cluster info --context <context>` lists them |
+| The name is an external CephCluster, which declares no node roster | `cluster.not-applicable`, naming the command, the cluster, its kind and the applicable target, a managed CephCluster | `bootwright cluster info --context <context>` lists the clusters the context selects and their kinds |
+| The name is an OpenShiftCluster | `access.unavailable`, naming the cluster and saying sessions are not available for its kind | none; the cluster is reached through `cluster kubeconfig` |
 | `--node` matches no node, or its FQDN match is shared by several nodes | `access.target`, naming the requested selector and the cluster | choose one declared node name; `bootwright cluster info --context <context> --name <cluster>` lists the nodes |
 
 The Machine behind the selected node then resolves as a `machine rsh` or
@@ -1147,8 +1174,8 @@ before the session opens reads no credential bytes, and the payload tail of
 `cluster exec` never selects the node or retargets the session. Help describes
 a session, not a descriptor.
 
-Sessions on OpenShift and OKD ContainerClusters are
-[deferred](deferred/cli-access-and-rendering.md#containercluster-access-handoffs-and-sessions)
+Sessions on OpenShiftClusters are
+[deferred](deferred/cli-access-and-rendering.md#openshiftcluster-access-handoffs-and-sessions)
 to the parked item [B101](milestones/backlog.md#b101).
 
 #### Several clusters and nodes
@@ -1177,9 +1204,9 @@ below applies across every listed cluster before the next one runs:
 
 | Condition | Diagnostic | Next action |
 | --- | --- | --- |
-| Listed names no selected ContainerCluster or StorageCluster has | one `access.target` naming the context and every such name | as above |
-| A listed name is an external Ceph StorageCluster | `cluster.not-applicable` for the first such cluster | as above |
-| A listed name is an OpenShift or OKD ContainerCluster | `access.unavailable` for the first such cluster | none |
+| Listed names no selected OpenShiftCluster or CephCluster has | one `access.target` naming the context and every such name | as above |
+| A listed name is an external CephCluster | `cluster.not-applicable` for the first such cluster | as above |
+| A listed name is an OpenShiftCluster | `access.unavailable` for the first such cluster | none |
 | A `--node` member matches no node of any listed cluster | one `access.target` naming every such member; with one listed cluster, worded as above | choose declared node names; `bootwright cluster info --context <context>` lists the nodes, and with one listed cluster the remedy above |
 | A listed cluster declares none of the `--node` members | one `access.target` naming every such cluster and the members | name only nodes each listed cluster declares, or run the command per cluster |
 
@@ -1195,7 +1222,7 @@ invocation.
 
 A managed Ceph cluster's apply enables the Ceph dashboard and leaves its
 administrator password in the context's
-[custody](storage.md#secret-custody) as the produced output `dashboard` of the
+[custody](ceph.md#secret-custody) as the produced output `dashboard` of the
 cluster's block. `cluster info` reports the dashboard's access information in
 the [managed Ceph entry](cli/output.md#cluster-discovery) without any secret:
 its status, user, URLs and certificate SHA-256 fingerprint.
@@ -1213,9 +1240,9 @@ run in this order, each before the next:
 
 | Condition | Diagnostic, exit `1` | Next action |
 | --- | --- | --- |
-| No selected ContainerCluster or StorageCluster has the name | `access.target`, naming the context and the name | `bootwright cluster info --context <context>` lists the clusters the context selects |
-| The name is an external Ceph StorageCluster | `cluster.not-applicable`, naming the cluster, its kind and the applicable target, a managed Ceph StorageCluster | as above |
-| The name is a ContainerCluster | `cluster.not-applicable`, naming `bootwright cluster kubeconfig` | as above |
+| No selected OpenShiftCluster or CephCluster has the name | `access.target`, naming the context and the name | `bootwright cluster info --context <context>` lists the clusters the context selects |
+| The name is an external CephCluster | `cluster.not-applicable`, naming the cluster, its kind and the applicable target, a managed CephCluster | as above |
+| The name is an OpenShiftCluster | `cluster.not-applicable`, naming `bootwright cluster kubeconfig` | as above |
 | The context's custody holds no dashboard password for the cluster | `access.unavailable`, naming the cluster | `bootwright apply --context <context> --stage clusters` |
 
 The target and its applicability are settled from the compiled graph before
@@ -1229,7 +1256,7 @@ the `passwordValue` field, and is never copied to a diagnostic, log, evidence
 record, plan or second stream.
 
 `cluster info --object-user <name> --name <cluster>` reveals the S3 keys of
-that one declared StorageObjectUser of the cluster, and nothing else: no
+that one declared CephObjectUser of the cluster, and nothing else: no
 dashboard password and no other user's keys (D183, Q116). The result's
 `objectUsers` holds its one entry, with `name`, `gateway`, `accessKey` and
 `secretKey`; `--secrets` and ordinary inspection omit this member and read no
@@ -1258,24 +1285,24 @@ Use a protected client credential file; never put key values in arguments.
 ### Client keyring export
 
 `cluster keyring --name <cluster> --client <client>` reveals the Ceph keyring
-of one StorageClient that an apply left in the context's
+of one CephClient that an apply left in the context's
 [custody](secrets.md#produced-material) as the produced output `client` of the
 client's block. It resolves the explicit `--context`, or the current context,
 once; compiles that context's effective state; and resolves `--name` in the
-selected graph's shared ContainerCluster/StorageCluster name namespace and
-`--client` among the selected StorageClients. It reveals one client of one
+selected graph's shared OpenShiftCluster/CephCluster name namespace and
+`--client` among the selected CephClients. It reveals one client of one
 cluster, never searches outside the selected graph and never selects another
 cluster or client. The checks run in this order, each before the next:
 
 | Condition | Diagnostic, exit `1` | Next action |
 | --- | --- | --- |
 | `--name` is empty | `access.target`, saying the command requires one cluster name | `bootwright cluster info --context <context>` lists the clusters the context selects |
-| `--client` is empty | `access.target`, saying the command requires one StorageClient name | `bootwright cluster info --context <context> --name <cluster>` lists the StorageClients of the cluster |
-| No selected ContainerCluster or StorageCluster has the name | `access.target`, naming the context and the name | name a managed Ceph StorageCluster the context selects; `bootwright cluster info --context <context>` lists them |
-| The name is a ContainerCluster | `cluster.not-applicable`, naming `bootwright cluster keyring`, the cluster, its kind and the applicable targets, managed Ceph StorageClusters | `bootwright cluster info --context <context>` lists the clusters the context selects and their kinds |
-| The name is an external Ceph StorageCluster | `cluster.not-applicable`, as above | as above |
-| No selected StorageClient has the client name | `access.target`, naming the context and the client | `bootwright cluster info --context <context> --name <cluster>` lists the StorageClients of the cluster |
-| The StorageClient's `spec.clusterRef` names another cluster | `access.target`, naming the client, the cluster it belongs to and the named cluster | as above |
+| `--client` is empty | `access.target`, saying the command requires one CephClient name | `bootwright cluster info --context <context> --name <cluster>` lists the CephClients of the cluster |
+| No selected OpenShiftCluster or CephCluster has the name | `access.target`, naming the context and the name | name a managed CephCluster the context selects; `bootwright cluster info --context <context>` lists them |
+| The name is an OpenShiftCluster | `cluster.not-applicable`, naming `bootwright cluster keyring`, the cluster, its kind and the applicable targets, managed CephClusters | `bootwright cluster info --context <context>` lists the clusters the context selects and their kinds |
+| The name is an external CephCluster | `cluster.not-applicable`, as above | as above |
+| No selected CephClient has the client name | `access.target`, naming the context and the client | `bootwright cluster info --context <context> --name <cluster>` lists the CephClients of the cluster |
+| The CephClient's `spec.clusterRef` names another cluster | `access.target`, naming the client, the cluster it belongs to and the named cluster | as above |
 | The context's custody holds no keyring for the client | `access.unavailable`, naming the client and the cluster | `bootwright apply --context <context> --stage clusters` |
 | The custodied entry is not exactly one credential of `client.<client>` | `secret.store.corrupt`, naming the client | read it natively with the administrator command `cluster info --context <context> --name <cluster>` prints, followed by `auth get client.<client>` |
 

@@ -1,7 +1,7 @@
 # Deferred CLI access, rendering and preflight
 
 The parked item [B101](../milestones/backlog.md#b101) revives this page's
-ContainerCluster access detail, the items [B52](../milestones/m7.md#b52) and
+OpenShiftCluster access detail, the items [B52](../milestones/m7.md#b52) and
 [B55](../milestones/m7.md#b55) its rendering detail, and the first slice that
 implements an Environment preflight family its preflight detail. None of it is
 a contract until that slice moves it back into the [CLI](../cli.md), the
@@ -11,7 +11,7 @@ and the sessions of a managed Ceph cluster are not deferred: the
 [cluster discovery contract](../cli/output.md#cluster-discovery) and the
 [cluster sessions](../cli.md#cluster-sessions) own them.
 
-## ContainerCluster access handoffs and sessions
+## OpenShiftCluster access handoffs and sessions
 
 `cluster oc` and `cluster kubectl` resolve their target and applicability under
 the [administrator access export](../cli.md#administrator-access-export), then
@@ -47,10 +47,10 @@ text; sensitive argument values have no supported transport. They preserve the
 payload argument vector but never inherit ambient kubeconfig, plugins,
 credentials, proxy settings, cache, or executable lookup.
 
-`cluster rsh` and `cluster exec` on an OpenShift or OKD ContainerCluster open a
+`cluster rsh` and `cluster exec` on an OpenShiftCluster open a
 session under the same contract as those of a managed Ceph cluster, as
 [cluster sessions](../cli.md#cluster-sessions) states, with this node
-selection. They resolve `--node` only within `ContainerCluster.spec.nodes`,
+selection. They resolve `--node` only within `OpenShiftCluster.spec.nodes`,
 whose canonical order is ascending bytewise order of node `name`. Omission
 selects the first node in that order. For a supplied value, use the first
 matching tier:

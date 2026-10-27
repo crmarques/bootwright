@@ -21,7 +21,7 @@ kind: Entitlement
 metadata:
   name: ibm-ceph
 spec:
-  type: ibm-storage-ceph
+  type: ibmStorageCeph
   registry:
     url: mirror.lab.example.test
     credentialsRef: ibm-registry
@@ -34,9 +34,6 @@ kind: Machine
 metadata:
   name: controller
 spec:
-  capabilities:
-    - container-runtime
-    - libvirt
   os:
     provided: true
   proxy:
@@ -56,11 +53,13 @@ kind: Machine
 metadata:
   name: rhel-01
 spec:
-  capabilities:
-    - ceph-node
   substrate:
     providerRef: lab-libvirt
-    profileRef: rhel
+    libvirt:
+      profileRef: rhel
+  hardware:
+    rootDevice:
+      deviceName: /dev/vda
   os:
     provided: false
     installProfileRef: rhel-9-8
@@ -68,8 +67,6 @@ spec:
       ntp:
         - serverRef: lab-ntp
           endpointRef: ip
-      rootDeviceHints:
-        deviceName: /dev/vda
   proxy:
     direct: {}
   network:
@@ -96,11 +93,13 @@ kind: Machine
 metadata:
   name: rhel-02
 spec:
-  capabilities:
-    - ceph-node
   substrate:
     providerRef: lab-libvirt
-    profileRef: rhel
+    libvirt:
+      profileRef: rhel
+  hardware:
+    rootDevice:
+      deviceName: /dev/vda
   os:
     provided: false
     installProfileRef: rhel-9-8
@@ -108,8 +107,6 @@ spec:
       ntp:
         - serverRef: lab-ntp
           endpointRef: ip
-      rootDeviceHints:
-        deviceName: /dev/vda
   proxy:
     direct: {}
   network:
@@ -136,11 +133,13 @@ kind: Machine
 metadata:
   name: rhel-03
 spec:
-  capabilities:
-    - ceph-node
   substrate:
     providerRef: lab-libvirt
-    profileRef: rhel
+    libvirt:
+      profileRef: rhel
+  hardware:
+    rootDevice:
+      deviceName: /dev/vda
   os:
     provided: false
     installProfileRef: rhel-9-8
@@ -148,8 +147,6 @@ spec:
       ntp:
         - serverRef: lab-ntp
           endpointRef: ip
-      rootDeviceHints:
-        deviceName: /dev/vda
   proxy:
     direct: {}
   network:
@@ -269,10 +266,7 @@ spec:
       cpu: 1
       memoryMiB: 4096
       diskGiB: 10
-    bmcEmulationDefaults:
-      enabled: true
-      protocol: redfish
-      emulator: sushy-tools
+    bmcEmulation:
       bindAddress: 127.0.0.1
       certificateRef: lab-bmc-tls
       port: 8000
@@ -356,139 +350,137 @@ spec:
       addressRef: ip
 ---
 apiVersion: bootwright.io/v1alpha1
-kind: StorageCluster
+kind: CephCluster
 metadata:
   name: ceph-lab
 spec:
-  type: ceph
   management: managed
-  ceph:
-    distribution: ibm
-    release: 9.9.2.0
-    packageVersion: 20.2.2-349.el9cp
-    packageRepository: https://mirror.lab.example.test/packages/ceph/9/rhel9/x86_64
-    packageRepositoryTrustBundleRef: mirror-ca
-    packageRepositoryKey: https://mirror.lab.example.test/keys/RPM-GPG-KEY-IBM-CEPH
-    image:
-      base: mirror.lab.example.test/ceph/core
-      version: sha256:1111111111111111111111111111111111111111111111111111111111111111
-    images:
-      alertmanager:
-        base: mirror.lab.example.test/ceph/alertmanager
-        version: sha256:2222222222222222222222222222222222222222222222222222222222222222
-      grafana:
-        base: mirror.lab.example.test/ceph/grafana
-        version: sha256:3333333333333333333333333333333333333333333333333333333333333333
-      haproxy:
-        base: mirror.lab.example.test/ceph/haproxy
-        version: sha256:4444444444444444444444444444444444444444444444444444444444444444
-      keepalived:
-        base: mirror.lab.example.test/ceph/keepalived
-        version: sha256:5555555555555555555555555555555555555555555555555555555555555555
-      node_exporter:
-        base: mirror.lab.example.test/ceph/node_exporter
-        version: sha256:6666666666666666666666666666666666666666666666666666666666666666
-      prometheus:
-        base: mirror.lab.example.test/ceph/prometheus
-        version: sha256:7777777777777777777777777777777777777777777777777777777777777777
+  distribution:
     ibm:
       callHome: enabled
       packages:
         source: vendor
-    entitlementRef: ibm-ceph
-    cephadm:
+  release: 9.9.2.0
+  packageVersion: 20.2.2-349.el9cp
+  packageRepository: https://mirror.lab.example.test/packages/ceph/9/rhel9/x86_64
+  packageRepositoryTrustBundleRef: mirror-ca
+  packageRepositoryKey: https://mirror.lab.example.test/keys/RPM-GPG-KEY-IBM-CEPH
+  image:
+    base: mirror.lab.example.test/ceph/core
+    version: sha256:1111111111111111111111111111111111111111111111111111111111111111
+  images:
+    alertmanager:
+      base: mirror.lab.example.test/ceph/alertmanager
+      version: sha256:2222222222222222222222222222222222222222222222222222222222222222
+    grafana:
+      base: mirror.lab.example.test/ceph/grafana
+      version: sha256:3333333333333333333333333333333333333333333333333333333333333333
+    haproxy:
+      base: mirror.lab.example.test/ceph/haproxy
+      version: sha256:4444444444444444444444444444444444444444444444444444444444444444
+    keepalived:
+      base: mirror.lab.example.test/ceph/keepalived
+      version: sha256:5555555555555555555555555555555555555555555555555555555555555555
+    node_exporter:
+      base: mirror.lab.example.test/ceph/node_exporter
+      version: sha256:6666666666666666666666666666666666666666666666666666666666666666
+    prometheus:
+      base: mirror.lab.example.test/ceph/prometheus
+      version: sha256:7777777777777777777777777777777777777777777777777777777777777777
+  entitlementRef: ibm-ceph
+  cephadm:
+    addressRef: ip
+    ansible:
+      packageVersion: 5.0.3-1.el9cp
+    clusterSSH:
+      user: bootwright
+      keyRef: ceph-cluster-key
+      transport: verifiedTunnel
+    bootstrap:
+      nodeRef: rhel-01
       addressRef: ip
-      ansible:
-        packageVersion: 5.0.3-1.el9cp
-      clusterSSH:
-        user: bootwright
-        keyRef: ceph-cluster-key
-        transport: verified-tunnel
-      bootstrap:
-        node: rhel-01
-        addressRef: ip
-    networks:
-      publicCIDRs:
-        - 198.51.100.0/24
-    config:
-      global:
-        osd_pool_default_min_size: "2"
-        osd_pool_default_size: "2"
-      osd:
-        osd_memory_target: "5368709120"
-        osd_memory_target_autotune: "false"
-    services:
-      - service_type: mon
-        placement:
-          label: ceph-core
-          count: 3
-      - service_type: mgr
-        placement:
-          label: ceph-core
-          count: 2
-      - service_type: osd
-        service_id: data
-        placement:
-          label: ceph-core
-        spec:
-          data_devices:
-            paths:
-              - /dev/sda
-      - service_type: prometheus
-        placement:
-          hosts:
-            - rhel-01.lab.example.test
-      - service_type: alertmanager
-        placement:
-          hosts:
-            - rhel-02.lab.example.test
-      - service_type: grafana
-        placement:
-          hosts:
-            - rhel-03.lab.example.test
-      - service_type: node-exporter
-        placement:
-          label: ceph-core
-          count: 3
-      - service_type: rgw
-        service_id: objects
-        placement:
-          hosts:
-            - rhel-01.lab.example.test
-            - rhel-02.lab.example.test
-        spec:
-          rgw_frontend_port: 8081
-      - service_type: ingress
-        service_id: rgw.objects
-        placement:
-          hosts:
-            - rhel-01.lab.example.test
-            - rhel-02.lab.example.test
-        spec:
-          backend_service: rgw.objects
-          frontend_port: 8082
-          monitor_port: 9049
-          virtual_ip: 198.51.100.51/24
-    topology:
-      nodes:
-        - name: rhel-01
-          fqdn: rhel-01.lab.example.test
-          machineRef: rhel-01
-          labels:
-            - ceph-core
-        - name: rhel-02
-          fqdn: rhel-02.lab.example.test
-          machineRef: rhel-02
-          labels:
-            - ceph-core
-        - name: rhel-03
-          fqdn: rhel-03.lab.example.test
-          machineRef: rhel-03
-          labels:
-            - ceph-core
+  networks:
+    publicCIDRs:
+      - 198.51.100.0/24
+  config:
+    global:
+      osd_pool_default_min_size: "2"
+      osd_pool_default_size: "2"
+    osd:
+      osd_memory_target: "5368709120"
+      osd_memory_target_autotune: "false"
+  services:
+    - service_type: mon
+      placement:
+        label: ceph-core
+        count: 3
+    - service_type: mgr
+      placement:
+        label: ceph-core
+        count: 2
+    - service_type: osd
+      service_id: data
+      placement:
+        label: ceph-core
+      spec:
+        data_devices:
+          paths:
+            - /dev/sda
+    - service_type: prometheus
+      placement:
+        hosts:
+          - rhel-01.lab.example.test
+    - service_type: alertmanager
+      placement:
+        hosts:
+          - rhel-02.lab.example.test
+    - service_type: grafana
+      placement:
+        hosts:
+          - rhel-03.lab.example.test
+    - service_type: node-exporter
+      placement:
+        label: ceph-core
+        count: 3
+    - service_type: rgw
+      service_id: objects
+      placement:
+        hosts:
+          - rhel-01.lab.example.test
+          - rhel-02.lab.example.test
+      spec:
+        rgw_frontend_port: 8081
+    - service_type: ingress
+      service_id: rgw.objects
+      placement:
+        hosts:
+          - rhel-01.lab.example.test
+          - rhel-02.lab.example.test
+      spec:
+        backend_service: rgw.objects
+        frontend_port: 8082
+        monitor_port: 9049
+        virtual_ip: 198.51.100.51/24
+  topology:
+    nodes:
+      - name: rhel-01
+        fqdn: rhel-01.lab.example.test
+        machineRef: rhel-01
+        labels:
+          - ceph-core
+      - name: rhel-02
+        fqdn: rhel-02.lab.example.test
+        machineRef: rhel-02
+        labels:
+          - ceph-core
+      - name: rhel-03
+        fqdn: rhel-03.lab.example.test
+        machineRef: rhel-03
+        labels:
+          - ceph-core
 ---
 apiVersion: bootwright.io/v1alpha1
-kind: StoragePlacementPolicy
+kind: CephPlacementPolicy
 metadata:
   name: ssd-hosts
 spec:
@@ -500,12 +492,11 @@ spec:
     minSize: 2
 ---
 apiVersion: bootwright.io/v1alpha1
-kind: StoragePool
+kind: CephPool
 metadata:
   name: rbd-data
 spec:
   clusterRef: ceph-lab
-  type: replicated
   role: rbd
   replicated:
     size: 2
@@ -514,7 +505,7 @@ spec:
     mode: on
 ---
 apiVersion: bootwright.io/v1alpha1
-kind: StorageRBDImage
+kind: CephRBDImage
 metadata:
   name: rbd-disk
 spec:
@@ -523,16 +514,16 @@ spec:
   sizeBytes: 1073741824
 ---
 apiVersion: bootwright.io/v1alpha1
-kind: StorageClient
+kind: CephClient
 metadata:
   name: rbd-canary
 spec:
   clusterRef: ceph-lab
   poolRef: rbd-data
-  access: read-write
+  access: readWrite
 ---
 apiVersion: bootwright.io/v1alpha1
-kind: StorageObjectGateway
+kind: CephObjectGateway
 metadata:
   name: objects
 spec:

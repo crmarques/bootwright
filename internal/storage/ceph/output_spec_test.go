@@ -48,7 +48,7 @@ func scopeRowPattern(t *testing.T, kind string) *regexp.Regexp {
 }
 
 // TestEndpointsRowNamesTheBootstrapHostProbe holds the output contract's
-// endpoints row to the gateway proof storage.md owns: the apply's worker probes
+// endpoints row to the gateway proof ceph.md owns: the apply's worker probes
 // a management or object gateway from the bootstrap host, and no controller
 // connect stands behind a ready gateway or its certificate fingerprint.
 func TestEndpointsRowNamesTheBootstrapHostProbe(t *testing.T) {
@@ -85,10 +85,10 @@ func TestScopeTableSpellsEveryRenderedClientAndImageScope(t *testing.T) {
 		kind    string
 		request Request
 	}{
-		{"StorageClient", Request{Client: &Client{Name: "consumer", Access: "read-write", Pool: "volumes"}}},
-		{"StorageClient", Request{Client: &Client{Name: "consumer", Access: "read-write", Pool: "volumes", DataPools: []string{"archive", "ec-data"}}}},
-		{"StorageRBDImage", Request{RBD: &RBDImage{Name: "disk", Pool: "volumes", SizeBytes: 1024}}},
-		{"StorageRBDImage", Request{RBD: &RBDImage{Name: "disk", Pool: "volumes", SizeBytes: 1024, DataPool: "ec-data"}}},
+		{"CephClient", Request{Client: &Client{Name: "consumer", Access: "readWrite", Pool: "volumes"}}},
+		{"CephClient", Request{Client: &Client{Name: "consumer", Access: "readWrite", Pool: "volumes", DataPools: []string{"archive", "ec-data"}}}},
+		{"CephRBDImage", Request{RBD: &RBDImage{Name: "disk", Pool: "volumes", SizeBytes: 1024}}},
+		{"CephRBDImage", Request{RBD: &RBDImage{Name: "disk", Pool: "volumes", SizeBytes: 1024, DataPool: "ec-data"}}},
 	}
 	for _, c := range cases {
 		var scope string
@@ -103,7 +103,7 @@ func TestScopeTableSpellsEveryRenderedClientAndImageScope(t *testing.T) {
 	}
 }
 
-// TestScopeTableSpellsTheExportGrant holds the StorageExport scope row to the
+// TestScopeTableSpellsTheExportGrant holds the CephConsumer scope row to the
 // grant clauses that plan and the resource rows render.
 func TestScopeTableSpellsTheExportGrant(t *testing.T) {
 	data, err := os.ReadFile(outputSpec)
@@ -112,16 +112,16 @@ func TestScopeTableSpellsTheExportGrant(t *testing.T) {
 	}
 	var row string
 	for line := range strings.SplitSeq(string(data), "\n") {
-		if strings.HasPrefix(line, "| StorageExport |") {
+		if strings.HasPrefix(line, "| CephConsumer |") {
 			row = line
 		}
 	}
 	if row == "" {
-		t.Fatalf("%s names no StorageExport scope row", outputSpec)
+		t.Fatalf("%s names no CephConsumer scope row", outputSpec)
 	}
 	for _, clause := range exportGrant("<filesystemRef>", "<objectGatewayRef>") {
 		if !strings.Contains(row, "`; "+clause+"`") {
-			t.Errorf("the StorageExport scope row does not spell the grant %q", clause)
+			t.Errorf("the CephConsumer scope row does not spell the grant %q", clause)
 		}
 	}
 }

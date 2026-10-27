@@ -35,8 +35,8 @@ func inspectedCluster() (api.Catalog, api.Object) {
 		return api.MapValue(fields...)
 	}
 	nodes := api.ListValue(node("rhel-02", "rhel-02.lab.test", "m2"), node("rhel-01", "rhel-01.lab.test", "m1"), node("rhel-03", "", "m3"))
-	cluster := api.NewObject(api.StorageCluster, "storage", api.Value{}, api.MapValue(
-		api.FieldValue{Name: "ceph", Value: api.MapValue(api.FieldValue{Name: "topology", Value: api.MapValue(api.FieldValue{Name: "nodes", Value: nodes})})}))
+	cluster := api.NewObject(api.CephCluster, "storage", api.Value{}, api.MapValue(
+		api.FieldValue{Name: "topology", Value: api.MapValue(api.FieldValue{Name: "nodes", Value: nodes})}))
 	return api.NewCatalog([]api.Object{cluster, inspectedMachine("m1", "192.0.2.11"), inspectedMachine("m2", "192.0.2.12"), inspectedMachine("m3", "192.0.2.13")}), cluster
 }
 
@@ -73,7 +73,7 @@ func inspectedImageEvidence(t *testing.T, edit func(*ImageEvidence)) json.RawMes
 }
 
 func inspectedProof(implementation string, verb reconciliation.Verb, state reconciliation.BlockState, evidence json.RawMessage) lifecycle.BlockEvidence {
-	return lifecycle.BlockEvidence{Kind: string(api.StorageCluster), Object: "storage", Implementation: implementation, Verb: verb, State: state, Evidence: evidence}
+	return lifecycle.BlockEvidence{Kind: string(api.CephCluster), Object: "storage", Implementation: implementation, Verb: verb, State: state, Evidence: evidence}
 }
 
 func provedPair(t *testing.T) []lifecycle.BlockEvidence {

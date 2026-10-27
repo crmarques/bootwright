@@ -107,7 +107,7 @@
         "virtualMedia": {
           "removeCertificate": false,
           "restoreVerification": false,
-          "trust": "import-certificate"
+          "trust": "importCertificate"
         }
       },
       "hardware": {
@@ -135,9 +135,9 @@
       "size": 0
     },
     "user": "bootwright",
-    "version": "os-install-anaconda-v16"
+    "version": "os-install-anaconda-v17"
   },
-  "installDigest": "2cf162f7ed81c15221f46e9e1e4c33d7fae133efd7ddfbbfc8e0604ae8e5b78b",
+  "installDigest": "4e9510e4b9219f97db51172e0f5dba3535704f54d6aa4ddf4f8e0d626e84f5c8",
   "network": "network --bootproto=static --device=enp1s0 --ip=198.51.100.41 --netmask=255.255.255.0 --hostname=metal-01.lab.example.test --onboot=on --activate --gateway=198.51.100.1 --nameserver=192.0.2.1\n",
   "targets": [
     {
@@ -147,5 +147,5 @@
       "wwn": "wwn-example"
     }
   ],
-  "version": "physical-erase-v1"
+  "version": "physical-erase-v2"
 }

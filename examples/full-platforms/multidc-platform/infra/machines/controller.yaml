@@ -4,9 +4,6 @@ metadata:
   name: controller
 
 spec:
-  capabilities:
-    - container-runtime
-
   os:
     provided: true
 

@@ -17,7 +17,7 @@ import (
 	"github.com/crmarques/bootwright/internal/reconciliation"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
 	"github.com/crmarques/bootwright/internal/secrets"
-	"github.com/crmarques/bootwright/internal/storage"
+	"github.com/crmarques/bootwright/internal/storage/cephcluster"
 )
 
 const monitoringSentinel = "monitoring-sentinel-never-frozen"
@@ -46,9 +46,9 @@ func monitoringBindings() []api.Value {
 
 func monitoringCluster(t *testing.T, services, bindings []api.Value) api.Object {
 	t.Helper()
-	cluster, found := delegatedCatalog(services, bindings).Find(api.StorageCluster, "example")
+	cluster, found := delegatedCatalog(services, bindings).Find(api.CephCluster, "example")
 	if !found {
-		t.Fatal("the catalog has no StorageCluster example")
+		t.Fatal("the catalog has no CephCluster example")
 	}
 	return cluster
 }
@@ -145,7 +145,7 @@ func TestMonitoringProjectionRefusesUnrealizedMembers(t *testing.T) {
 	prometheus := auxiliaryService("prometheus", "", admitted.With("targets", api.ListValue(api.StringValue("192.0.2.90:9100"))))
 	_, err := monitoringUnits(monitoringCluster(t, []api.Value{prometheus}, nil))
 	refusedWith(t, err, "lifecycle.unsupported", "the native service prometheus carries spec.targets, which Bootwright does not realize for this service",
-		"remove spec.targets from prometheus in spec.ceph.services")
+		"remove spec.targets from prometheus in spec.services")
 }
 
 func monitoringFacts() []string {
@@ -158,7 +158,7 @@ func TestMonitoringUnitFollowsClusterAndImageBlocks(t *testing.T) {
 	services := []api.Value{auxiliaryService("prometheus", "", api.Value{}), auxiliaryService("alertmanager", "", api.Value{}), auxiliaryService("grafana", "", api.Value{})}
 	plan := cephPlan(t, settingsCatalog(t, services))
 	unit := blockOf(t, plan, "ceph-service-example-monitoring")
-	if unit.Kind != string(api.StorageCluster) || unit.Object != "example" || unit.Implementation != Implementation || unit.Stage != reconciliation.StageClusters ||
+	if unit.Kind != string(api.CephCluster) || unit.Object != "example" || unit.Implementation != Implementation || unit.Stage != reconciliation.StageClusters ||
 		!slices.Equal(unit.Exclusive, []string{"ceph/example"}) || len(unit.Requires) != 0 ||
 		!slices.Equal(unit.Dependencies, []string{"ceph-cluster-example", "ceph-image-example"}) ||
 		unit.Description != "realize Ceph service monitoring of example" || !slices.Equal(unit.Impacts, monitoringFacts()) {
@@ -172,7 +172,7 @@ func TestMonitoringUnitFollowsClusterAndImageBlocks(t *testing.T) {
 	if err != nil || len(core.Services) != 3 || len(core.Delegated) != 4 || core.Service != nil {
 		t.Fatalf("the cluster block carries %+v (%v)", core, err)
 	}
-	removal, err := New(api.StorageCluster, nil).Removal(context.Background(), unit)
+	removal, err := New(api.CephCluster, nil).Removal(context.Background(), unit)
 	if err != nil || removal.Description != "remove Ceph service monitoring of example" || !slices.Equal(removal.Impacts, []string{"remove Ceph service monitoring of example"}) {
 		t.Fatalf("the monitoring removal is %+v (%v)", removal, err)
 	}
@@ -180,7 +180,7 @@ func TestMonitoringUnitFollowsClusterAndImageBlocks(t *testing.T) {
 	if !slices.Equal(destroy.Impacts, []string{"remove Ceph service monitoring of example"}) {
 		t.Fatalf("the destroy plan lists %v", destroy.Impacts)
 	}
-	cluster, _ := settingsCatalog(t, services).Find(api.StorageCluster, "example")
+	cluster, _ := settingsCatalog(t, services).Find(api.CephCluster, "example")
 	r := monitoringRequest(t)
 	r.Cluster = "example"
 	if got := unitDependencies(r, cluster); !slices.Equal(got, []string{"ceph-cluster-example", "ceph-image-example", "ceph-settings-example"}) {
@@ -191,7 +191,7 @@ func TestMonitoringUnitFollowsClusterAndImageBlocks(t *testing.T) {
 func destroyDefinition(t *testing.T, catalog api.Catalog, id string) reconciliation.BlockDefinition {
 	t.Helper()
 	input := lifecycle.PlanInput{Verb: reconciliation.Destroy, Context: lifecycle.ContextIdentity{Name: "synthetic"}, State: compilation.NewState(catalog, catalog, nil), Controller: "controller"}
-	plan, err := New(api.StorageCluster, nil).Plan(context.Background(), input)
+	plan, err := New(api.CephCluster, nil).Plan(context.Background(), input)
 	if err != nil {
 		t.Fatal(diagnostics.Of(err))
 	}
@@ -204,26 +204,27 @@ func destroyDefinition(t *testing.T, catalog api.Catalog, id string) reconciliat
 	return reconciliation.BlockDefinition{}
 }
 
-func TestMonitoringBlockIdentityFitsItsCluster(t *testing.T) {
+func TestMonitoringBlockIdentityHashesALongCluster(t *testing.T) {
 	cluster := monitoringCluster(t, []api.Value{auxiliaryService("prometheus", "", api.Value{})}, nil)
-	long := api.NewObject(api.StorageCluster, strings.Repeat("c", 40), api.Value{}, cluster.Spec())
-	_, err := monitoringUnits(long)
-	refusedWith(t, err, "api.invariant", "StorageCluster "+long.Name()+" has a name too long to identify its monitoring service block, whose identity holds at most 63 characters",
-		"rename the StorageCluster to at most 39 characters")
-	fits := api.NewObject(api.StorageCluster, strings.Repeat("c", 39), api.Value{}, cluster.Spec())
+	fits := api.NewObject(api.CephCluster, strings.Repeat("c", 39), api.Value{}, cluster.Spec())
 	units, err := monitoringUnits(fits)
-	if err != nil || len(units) != 1 || len(ServiceUnitBlockID(fits.Name(), units[0])) != 63 {
+	if err != nil || len(units) != 1 || ServiceUnitBlockID(fits.Name(), units[0]) != "ceph-service-"+fits.Name()+"-monitoring" {
 		t.Fatalf("a 39-character cluster plans %+v (%+v)", units, diagnostics.Of(err))
+	}
+	long := api.NewObject(api.CephCluster, strings.Repeat("c", 63), api.Value{}, cluster.Spec())
+	units, err = monitoringUnits(long)
+	if err != nil || len(units) != 1 || !reconciliation.ValidSegment(ServiceUnitBlockID(long.Name(), units[0])) {
+		t.Fatalf("a 63-character cluster plans %+v (%+v)", units, diagnostics.Of(err))
 	}
 }
 
 func TestMonitoringUnitDeadline(t *testing.T) {
 	for _, hosts := range []int{3, 6} {
 		catalog := planCatalog(hosts, hosts, func(spec api.Value) api.Value {
-			return spec.WithPath(api.ListValue(append(spec.Get("ceph", "services").Items(), auxiliaryService("prometheus", "", api.Value{}))...), "ceph", "services")
+			return spec.WithPath(api.ListValue(append(spec.Get("services").Items(), auxiliaryService("prometheus", "", api.Value{}))...), "services")
 		})
-		cluster, _ := catalog.Find(api.StorageCluster, "example")
-		base, err := New(api.StorageCluster, nil).request(catalog, cluster, "synthetic")
+		cluster, _ := catalog.Find(api.CephCluster, "example")
+		base, err := New(api.CephCluster, nil).request(catalog, cluster, "synthetic")
 		if err != nil {
 			t.Fatal(diagnostics.Of(err))
 		}
@@ -243,7 +244,7 @@ func TestMonitoringLeavesFollowTheBindingRegistry(t *testing.T) {
 	cluster := monitoringCluster(t, monitoringServices(), nil)
 	for key, leaf := range monitoringLeaves {
 		service, path, _ := strings.Cut(key, " ")
-		slot, found := storage.NativeBindingSlot(cluster, service, path)
+		slot, found := cephcluster.NativeBindingSlot(cluster, service, path)
 		if !found || slot.Part != leaf.Part || leaf.Variable == "" || leaf.File == "" {
 			t.Errorf("the leaf %s is %+v, the binding registry %+v (%v)", key, leaf, slot, found)
 		}
@@ -254,7 +255,7 @@ func TestMonitoringCredentialBindingsPlan(t *testing.T) {
 	grafana := auxiliaryService("grafana", "", requestMap("anonymous_access", false))
 	snmp := auxiliaryService("snmp-gateway", "", requestMap("snmp_version", "V3", "snmp_destination", "192.0.2.80:162", "engine_id", "8000c53f00000000", "privacy_protocol", "AES"))
 	catalog := delegatedCatalog([]api.Value{grafana, snmp}, monitoringBindings())
-	r, err := planned(t, catalog, api.StorageCluster, "example")
+	r, err := planned(t, catalog, api.CephCluster, "example")
 	if err != nil {
 		t.Fatal(diagnostics.Of(err))
 	}
@@ -263,7 +264,7 @@ func TestMonitoringCredentialBindingsPlan(t *testing.T) {
 		t.Fatalf("the core request carries a binding: %v", err)
 	}
 	input := lifecycle.PlanInput{Verb: reconciliation.Apply, Context: lifecycle.ContextIdentity{Name: "synthetic"}, State: compilation.NewState(catalog, catalog, nil), Controller: "controller"}
-	plan, err := New(api.StorageCluster, nil).Plan(context.Background(), input)
+	plan, err := New(api.CephCluster, nil).Plan(context.Background(), input)
 	if err != nil {
 		t.Fatal(diagnostics.Of(err))
 	}
@@ -292,7 +293,7 @@ func TestNoBoundMaterialInPlanRequestEvidence(t *testing.T) {
 	grafana := auxiliaryService("grafana", "", requestMap("anonymous_access", false))
 	catalog := delegatedCatalog([]api.Value{grafana}, []api.Value{grafanaPasswordBinding()})
 	input := lifecycle.PlanInput{Verb: reconciliation.Apply, Context: lifecycle.ContextIdentity{Name: "synthetic"}, State: compilation.NewState(catalog, catalog, nil), Controller: "controller"}
-	plan, err := New(api.StorageCluster, nil).Plan(context.Background(), input)
+	plan, err := New(api.CephCluster, nil).Plan(context.Background(), input)
 	if err != nil {
 		t.Fatal(diagnostics.Of(err))
 	}
@@ -308,7 +309,7 @@ func TestNoBoundMaterialInPlanRequestEvidence(t *testing.T) {
 	want := lifecycle.MaterialFile{Name: "grafana-admin-password", Secret: "grafana-admin", Part: secrets.ValuePart, Variable: "grafanaAdminPassword"}
 	for _, operation := range []string{"apply", "observe", "destroy"} {
 		runner := &recordingRunner{}
-		if _, err := New(api.StorageCluster, runner).WithProofs(dependencyProofs{}).run(context.Background(), monitoringExecution(t, r), operation, r); err != nil {
+		if _, err := New(api.CephCluster, runner).WithProofs(dependencyProofs{}).run(context.Background(), monitoringExecution(t, r), operation, r); err != nil {
 			t.Fatalf("%s: %+v", operation, diagnostics.Of(err))
 		}
 		call := runner.request
@@ -323,16 +324,16 @@ func TestNoBoundMaterialInPlanRequestEvidence(t *testing.T) {
 	}
 	missing := monitoringExecution(t, r)
 	delete(missing.Material, "grafana-admin")
-	_, err = New(api.StorageCluster, &recordingRunner{}).WithProofs(dependencyProofs{}).run(context.Background(), missing, "apply", r)
+	_, err = New(api.CephCluster, &recordingRunner{}).WithProofs(dependencyProofs{}).run(context.Background(), missing, "apply", r)
 	refusedWith(t, err, "lifecycle.state", "a required Ceph credential component is not bound", "")
 	foreign := r
 	foreign.Service = &ServiceUnit{Bindings: []ServiceBinding{{Path: "/spec/ssl_cert", SecretRef: "grafana-admin", ServiceRef: "grafana"}}, Documents: unit.Documents, Type: "monitoring"}
-	_, err = New(api.StorageCluster, &recordingRunner{}).WithProofs(dependencyProofs{}).run(context.Background(), monitoringExecution(t, foreign), "apply", foreign)
+	_, err = New(api.CephCluster, &recordingRunner{}).WithProofs(dependencyProofs{}).run(context.Background(), monitoringExecution(t, foreign), "apply", foreign)
 	refusedWith(t, err, "lifecycle.state", "a Ceph service unit binds a credential leaf this build does not realize", "")
 }
 
 func TestUnrealizedMonitoringServicesKeepTheCoreRefusal(t *testing.T) {
-	r, err := planned(t, delegatedCatalog([]api.Value{auxiliaryService("prometheus", "", api.Value{})}, nil), api.StorageCluster, "example")
+	r, err := planned(t, delegatedCatalog([]api.Value{auxiliaryService("prometheus", "", api.Value{})}, nil), api.CephCluster, "example")
 	if err != nil {
 		t.Fatal(diagnostics.Of(err))
 	}
@@ -372,21 +373,21 @@ func TestCephExporterPlansItsMonitoringUnit(t *testing.T) {
 		t.Fatalf("the ceph-exporter unit request is %+v (%v)", r, err)
 	}
 	state := compilation.NewState(settingsCatalog(t, services), settingsCatalog(t, services), nil)
-	if got := New(api.StorageCluster, nil).Unsupported(state); len(got) != 0 {
+	if got := New(api.CephCluster, nil).Unsupported(state); len(got) != 0 {
 		t.Fatalf("a ceph-exporter cluster refuses %+v", got)
 	}
 }
 
 func authoredDigestCatalog(t *testing.T, catalog api.Catalog, names ...string) (api.Catalog, map[string]string) {
 	t.Helper()
-	cluster, found := catalog.Find(api.StorageCluster, "example")
+	cluster, found := catalog.Find(api.CephCluster, "example")
 	if !found {
-		t.Fatal("the catalog has no StorageCluster example")
+		t.Fatal("the catalog has no CephCluster example")
 	}
 	spec, want := cluster.Spec(), map[string]string{}
 	for i, name := range names {
 		base, digest := PinnedRegistry+"/synthetic/"+name, "sha256:"+strings.Repeat(string("0123456789abcdef"[i+1]), 64)
-		spec = spec.WithPath(requestMap("base", base, "version", digest), "ceph", "images", name)
+		spec = spec.WithPath(requestMap("base", base, "version", digest), "images", name)
 		want[name] = base + "@" + digest
 	}
 	objects := catalog.Objects()

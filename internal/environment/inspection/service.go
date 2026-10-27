@@ -50,10 +50,10 @@ func (s Service) ListClusters(ctx context.Context, request ListClustersRequest) 
 	containers, storages := selectClusters(catalog, nil)
 	result := &ListResult{Context: selected, Clusters: make([]ClusterRef, 0, len(containers)+len(storages))}
 	for _, cluster := range containers {
-		result.Clusters = append(result.Clusters, ClusterRef{Name: cluster.Name(), Kind: KindContainerCluster})
+		result.Clusters = append(result.Clusters, ClusterRef{Name: cluster.Name(), Kind: string(cluster.Kind())})
 	}
 	for _, cluster := range storages {
-		result.Clusters = append(result.Clusters, ClusterRef{Name: cluster.Name(), Kind: KindStorageCluster})
+		result.Clusters = append(result.Clusters, ClusterRef{Name: cluster.Name(), Kind: string(cluster.Kind())})
 	}
 	slices.SortStableFunc(result.Clusters, func(a, b ClusterRef) int { return strings.Compare(a.Name, b.Name) })
 	return result, nil
@@ -123,7 +123,7 @@ func (s Service) revealDashboard(ctx context.Context, selected string, entry Sto
 	}
 	if !found {
 		return failure("access.unavailable",
-			"this context holds no dashboard administrator password for StorageCluster "+name+"; an apply keeps it once it enables the dashboard",
+			"this context holds no dashboard administrator password for CephCluster "+name+"; an apply keeps it once it enables the dashboard",
 			"bootwright apply --context "+selected+" --stage clusters")
 	}
 	dashboard := entry.Ceph.Dashboard
@@ -181,26 +181,28 @@ func unknownClusters(selected string, names []string, containers, storages []api
 	if len(unknown) == 0 {
 		return nil
 	}
-	subject, remedy := "no ContainerCluster or StorageCluster named ", "name a cluster the context selects; "
+	subject, remedy := "no OpenShiftCluster or CephCluster named ", "name a cluster the context selects; "
 	if len(unknown) > 1 {
-		subject, remedy = "no ContainerClusters or StorageClusters named ", "name clusters the context selects; "
+		subject, remedy = "no OpenShiftClusters or CephClusters named ", "name clusters the context selects; "
 	}
 	return failure("access.target", "the context "+selected+" selects "+subject+strings.Join(unknown, ", "),
 		remedy+"bootwright cluster info --context "+selected+" lists them")
 }
 
 func selectClusters(catalog api.Catalog, names []string) ([]api.Object, []api.Object) {
-	pick := func(kind api.Kind) []api.Object {
+	pick := func(category api.Category) []api.Object {
 		var picked []api.Object
-		for _, object := range catalog.OfKind(kind) {
-			if len(names) == 0 || slices.Contains(names, object.Name()) {
-				picked = append(picked, object)
+		for _, kind := range api.CategoryKinds(category) {
+			for _, object := range catalog.OfKind(kind) {
+				if len(names) == 0 || slices.Contains(names, object.Name()) {
+					picked = append(picked, object)
+				}
 			}
 		}
 		slices.SortStableFunc(picked, func(a, b api.Object) int { return strings.Compare(a.Name(), b.Name()) })
 		return picked
 	}
-	return pick(api.ContainerCluster), pick(api.StorageCluster)
+	return pick(api.ContainerClusterCategory), pick(api.StorageClusterCategory)
 }
 
 func external(cluster api.Object) bool {
@@ -222,16 +224,16 @@ func secretsTarget(selected string, names []string, containers, storages []api.O
 		return failure("access.target", "bootwright cluster info --secrets requires one cluster name", discovery+" lists the clusters this context selects")
 	case len(containers) != 0:
 		return failure("cluster.not-applicable",
-			"bootwright cluster info --secrets does not apply to "+name+", an OpenShift or OKD ContainerCluster; its administrator kubeconfig is exported by bootwright cluster kubeconfig",
+			"bootwright cluster info --secrets does not apply to "+name+", an OpenShiftCluster; its administrator kubeconfig is exported by bootwright cluster kubeconfig",
 			"bootwright cluster kubeconfig --context "+selected+" --name "+name+" exports it; "+discovery+" lists the clusters this context selects and their kinds")
 	case len(storages) != 0 && external(storages[0]):
 		return failure("cluster.not-applicable",
-			"bootwright cluster info --secrets does not apply to "+name+", an external Ceph StorageCluster; it applies to managed Ceph StorageClusters",
+			"bootwright cluster info --secrets does not apply to "+name+", an external CephCluster; it applies to managed CephClusters",
 			discovery+" lists the clusters this context selects and their kinds")
 	case len(storages) != 0:
 		return nil
 	}
-	return failure("access.target", "the context "+selected+" selects no ContainerCluster or StorageCluster named "+name, discovery+" lists them")
+	return failure("access.target", "the context "+selected+" selects no OpenShiftCluster or CephCluster named "+name, discovery+" lists them")
 }
 
 func (s Service) containerEntry(ctx context.Context, selected string, cluster api.Object) (ContainerEntry, error) {
@@ -239,7 +241,7 @@ func (s Service) containerEntry(ctx context.Context, selected string, cluster ap
 	if err != nil {
 		return ContainerEntry{}, err
 	}
-	sessions := "sessions on an OpenShift or OKD ContainerCluster are not yet implemented; the cluster is reached through bootwright cluster kubeconfig"
+	sessions := "sessions on an OpenShiftCluster are not yet implemented; the cluster is reached through bootwright cluster kubeconfig"
 	handoff := "this handoff is not yet implemented; the cluster is reached through bootwright cluster kubeconfig"
 	kubeconfig := AccessCommand{Command: CommandKubeconfig, Status: StatusReady}
 	if !installed {
@@ -247,7 +249,7 @@ func (s Service) containerEntry(ctx context.Context, selected string, cluster ap
 		kubeconfig.Reason = "this context holds no administrator kubeconfig for " + cluster.Name() +
 			" until an apply proves its installation complete; run bootwright apply --context " + selected
 	}
-	return ContainerEntry{Name: cluster.Name(), Kind: KindContainerCluster, AccessCommands: []AccessCommand{
+	return ContainerEntry{Name: cluster.Name(), Kind: string(cluster.Kind()), AccessCommands: []AccessCommand{
 		{Command: CommandExec, Status: StatusNotImplemented, Reason: sessions},
 		{Command: CommandKeyring, Status: StatusNotApplicable, Reason: managedCephOnly},
 		kubeconfig,
@@ -265,10 +267,10 @@ func (s Service) resources(ctx context.Context, selected string, catalog api.Cat
 }
 
 func (s Service) storageEntry(ctx context.Context, selected string, catalog api.Catalog, cluster api.Object, resources []Resource) (StorageEntry, error) {
-	containerOnly := "applies to OpenShift and OKD ContainerClusters only"
+	containerOnly := "applies to OpenShiftClusters only"
 	if external(cluster) {
-		roster := "the external StorageCluster " + cluster.Name() + " declares no node roster; sessions apply to managed Ceph StorageClusters"
-		return StorageEntry{Name: cluster.Name(), Kind: KindStorageCluster, AccessCommands: []AccessCommand{
+		roster := "the external CephCluster " + cluster.Name() + " declares no node roster; sessions apply to managed CephClusters"
+		return StorageEntry{Name: cluster.Name(), Kind: string(cluster.Kind()), AccessCommands: []AccessCommand{
 			{Command: CommandExec, Status: StatusNotApplicable, Reason: roster},
 			{Command: CommandKeyring, Status: StatusNotApplicable, Reason: managedCephOnly},
 			{Command: CommandKubeconfig, Status: StatusNotApplicable, Reason: containerOnly},
@@ -287,7 +289,7 @@ func (s Service) storageEntry(ctx context.Context, selected string, catalog api.
 	if err != nil {
 		return StorageEntry{}, err
 	}
-	return StorageEntry{Name: cluster.Name(), Kind: KindStorageCluster, Ceph: &ceph, AccessCommands: []AccessCommand{
+	return StorageEntry{Name: cluster.Name(), Kind: string(cluster.Kind()), Ceph: &ceph, AccessCommands: []AccessCommand{
 		exec,
 		keyringAccess(selected, cluster.Name(), resources),
 		{Command: CommandKubeconfig, Status: StatusNotApplicable, Reason: containerOnly},
@@ -297,18 +299,18 @@ func (s Service) storageEntry(ctx context.Context, selected string, catalog api.
 	}}, nil
 }
 
-const managedCephOnly = "applies to managed Ceph StorageClusters only"
+const managedCephOnly = "applies to managed CephClusters only"
 
 func keyringAccess(selected, cluster string, resources []Resource) AccessCommand {
-	access := AccessCommand{Command: CommandKeyring, Status: StatusUnavailable, Reason: "the StorageCluster " + cluster + " declares no StorageClient"}
+	access := AccessCommand{Command: CommandKeyring, Status: StatusUnavailable, Reason: "the CephCluster " + cluster + " declares no CephClient"}
 	for _, resource := range resources {
-		if resource.Kind != string(api.StorageClient) {
+		if kind, _ := api.RoleKind(api.StorageClusterCategory, api.ClientRole); resource.Kind != string(kind) {
 			continue
 		}
 		if resource.Status == ResourceDone {
 			return AccessCommand{Command: CommandKeyring, Status: StatusReady}
 		}
-		access.Reason = "no StorageClient of " + cluster + " has a completed apply; run bootwright apply --context " + selected + " --stage clusters"
+		access.Reason = "no CephClient of " + cluster + " has a completed apply; run bootwright apply --context " + selected + " --stage clusters"
 	}
 	return access
 }
@@ -320,7 +322,7 @@ func (s Service) sessionAccess(ctx context.Context, selected string, cluster api
 		nodes = slices.Clone(membership.Nodes)
 	}
 	if len(nodes) == 0 {
-		return AccessCommand{Status: StatusUnavailable, Reason: "the StorageCluster " + cluster.Name() + " declares no node to open a session on"}, nil
+		return AccessCommand{Status: StatusUnavailable, Reason: "the CephCluster " + cluster.Name() + " declares no node to open a session on"}, nil
 	}
 	slices.SortStableFunc(nodes, func(a, b environment.Member) int { return strings.Compare(a.Name, b.Name) })
 	node, host := nodes[0].Name, nodes[0].Machine

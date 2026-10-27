@@ -54,7 +54,7 @@ func TestRetiredServiceAndTrustSnapshotCanBeReplacedWithoutLosingSecrets(t *test
 		{"render", "effective", "--context", "alpha", "--output", "json"},
 	} {
 		out, stderr := contextRun(t, services, 1, args...)
-		if stderr != "" || !strings.Contains(out, "api.field") || !strings.Contains(out, "retired") || !strings.Contains(out, "controller.proxy") || !strings.Contains(out, "Machine.spec.proxy") || !strings.Contains(out, "ContainerCluster.spec.install.additionalTrustBundleRefs") {
+		if stderr != "" || !strings.Contains(out, "api.field") || !strings.Contains(out, "retired") || !strings.Contains(out, "controller.proxy") || !strings.Contains(out, "Machine.spec.proxy") || !strings.Contains(out, "OpenShiftCluster.spec.install.additionalTrustBundleRefs") {
 			t.Fatalf("retired input did not explain its replacement: %s %s", out, stderr)
 		}
 		if !sameFingerprints(before, stateFingerprint(t, root)) {
@@ -62,7 +62,7 @@ func TestRetiredServiceAndTrustSnapshotCanBeReplacedWithoutLosingSecrets(t *test
 		}
 	}
 
-	addSecretInput(t, input, "environment.yaml", syntheticEnvironment+"  defaults:\n    ContainerCluster:\n      install:\n        additionalTrustBundleRefs: [install-ca]\n")
+	addSecretInput(t, input, "environment.yaml", syntheticEnvironment+"  defaults:\n    OpenShiftCluster:\n      install:\n        additionalTrustBundleRefs: [install-ca]\n")
 	addSecretInput(t, input, "controller.yaml", strings.Replace(serviceHost, "spec:\n", "spec:\n  proxy: {proxyRef: egress}\n", 1))
 	addSecretInput(t, input, "proxy.yaml", "apiVersion: bootwright.io/v1alpha1\nkind: Proxy\nmetadata: {name: egress}\nspec:\n  management: external\n  connection: {httpProxy: 'http://proxy.example.test:3128'}\n")
 	contextRun(t, services, 0, "context", "update", "--name", "alpha", "--input-dir", input, "--yes")

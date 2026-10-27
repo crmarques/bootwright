@@ -33,8 +33,7 @@ func coincidentArmWords() map[string]string {
 	return map[string]string{
 		`internal/addons/packages.go: "kubevirt" (substrate.ArmKubeVirt)`:                            "the virtualization add-on package's reader",
 		`internal/containercluster/agentinstall/projection.go: "baremetal" (substrate.ArmBaremetal)`: "the installer's platform type",
-		`internal/containercluster/virtual_ips.go: "baremetal" (substrate.ArmBaremetal)`:             "the installer's platform type",
-		`internal/controller/selection.go: "libvirt" (substrate.ArmLibvirt)`:                         "the libvirt Machine capability token",
+		`internal/containercluster/openshift/virtual_ips.go: "baremetal" (substrate.ArmBaremetal)`:   "the installer's platform type",
 		`internal/controller/bundlelocal/tools.go: "kubevirt" (substrate.ArmKubeVirt)`:               "virtctl's compatibility tag",
 		`internal/controller/tools.go: "kubevirt" (substrate.ArmKubeVirt)`:                           "virtctl's compatibility tag and the add-on capability that needs it",
 		`internal/controller/versions.go: "libvirt" (substrate.ArmLibvirt)`:                          "the libvirt package's version key",
@@ -222,7 +221,7 @@ func pushed(arm string) bool { return arm == substrate.ArmKubeVirt || arm == "ma
 	}) {
 		t.Fatalf("allowlisted violations = %q", got)
 	}
-	fixture.path = "internal/containercluster/pushed_admission.go"
+	fixture.path = "internal/containercluster/openshift/pushed_admission.go"
 	if got := implementationIdentityViolations(rule, []sourceFile{fixture}, nil); len(got) != 0 {
 		t.Fatalf("an admission file is refused: %q", got)
 	}

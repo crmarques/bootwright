@@ -3,11 +3,11 @@ base: libvirt-3-nodes-ceph
 phase: admission
 edits:
 - file: storage/cluster.yaml
-  replace: "        spec:\n          data_devices:\n"
-  with: "        spec:\n          crush_device_class: hdd\n          data_devices:\n"
+  replace: "      spec:\n        data_devices:\n"
+  with: "      spec:\n        crush_device_class: hdd\n        data_devices:\n"
 - file: storage/cluster.yaml
-  replace: "      - service_type: mds\n"
-  with: "      - service_type: osd\n        service_id: fast\n\n        placement:\n          hosts: [rhel-01.lab.example.test]\n\n        spec:\n          crush_device_class: ssd\n          data_devices:\n            paths: [/dev/sdb]\n\n      - service_type: mds\n"
+  replace: "    - service_type: mds\n"
+  with: "    - service_type: osd\n      service_id: fast\n\n      placement:\n        hosts: [rhel-01.lab.example.test]\n\n      spec:\n        crush_device_class: ssd\n        data_devices:\n          paths: [/dev/sdb]\n\n    - service_type: mds\n"
 - file: storage/pool.yaml
   replace: "  clusterRef: ceph-lab\n"
   with: "  clusterRef: ceph-lab\n  placementPolicyRef: ssd-hosts\n"
@@ -16,13 +16,13 @@ edits:
   with: ""
 expect:
 - code: api.invariant
-  kind: StoragePlacementPolicy
+  kind: CephPlacementPolicy
   name: ssd-hosts
   field: $.spec.replicated.size
   message: declared OSD services allow device class ssd on at most 1 OSD hosts
   remediation: declare OSD services that permit device class ssd on at least 2 hosts, or lower replicated.size
 - code: api.invariant
-  kind: StoragePool
+  kind: CephPool
   name: rbd-data
   field: $.spec.replicated.size
   message: declared OSD services allow device class ssd on at most 1 OSD hosts

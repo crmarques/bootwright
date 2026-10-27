@@ -232,15 +232,15 @@ func TestPreviousEvidenceSkipsNullAndRunningRecords(t *testing.T) {
 type multiKindLendingResolver struct{ testResolver }
 
 func (r multiKindLendingResolver) Resolve(kind, implementation string) (Capability, bool) {
-	if kind == "StorageExport" && implementation == r.Bindings()[0].Implementation {
+	if kind == "CephConsumer" && implementation == r.Bindings()[0].Implementation {
 		return r.capability, true
 	}
 	return r.testResolver.Resolve(kind, implementation)
 }
 func TestProducedInputsLendAcrossProducerKinds(t *testing.T) {
 	h, c := lendingHarness(t)
-	h.capability.definitions[1].Kind = "StorageExport"
-	c.references["consumer"][1].Kind = "StorageExport"
+	h.capability.definitions[1].Kind = "CephConsumer"
+	c.references["consumer"][1].Kind = "CephConsumer"
 	h.service.capabilities = multiKindLendingResolver{testResolver{capability: c}}
 	if _, err := apply(h); err != nil {
 		t.Fatal(err)

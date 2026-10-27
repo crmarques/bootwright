@@ -17,8 +17,8 @@ import (
 // depends on bravo, so each block but the last has exactly one dependent.
 func chainedDefinitions() []reconciliation.BlockDefinition {
 	return []reconciliation.BlockDefinition{
-		stagedDefinition("alpha", reconciliation.StageInfraComponents),
-		stagedDefinition("bravo", reconciliation.StageInfraComponents, "alpha"),
+		stagedDefinition("alpha", reconciliation.StageInfrastructureServices),
+		stagedDefinition("bravo", reconciliation.StageInfrastructureServices, "alpha"),
 		stagedDefinition("charlie", reconciliation.StageClusters, "bravo"),
 	}
 }
@@ -147,7 +147,7 @@ func TestADestroyOverAnIncompleteApplyWithAContradictedBlockRefuses(t *testing.T
 			entries:   []string{"alpha (no block record, yet an attempt of it is recorded)"},
 		},
 		"a paused apply that lost a done block's record": {
-			arrange:   func(t *testing.T, h *harness) { applyChained(t, h, nil, "infra-components") },
+			arrange:   func(t *testing.T, h *harness) { applyChained(t, h, nil, "infrastructure-services") },
 			lost:      "blocks/bravo/state.json",
 			operation: reconciliation.OperationPaused,
 			states:    map[string]reconciliation.BlockState{"alpha": "done", "bravo": "pending", "charlie": "pending"},

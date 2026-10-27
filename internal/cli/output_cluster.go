@@ -6,6 +6,7 @@ import (
 	"slices"
 	"strings"
 
+	api "github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/environment/inspection"
 	"github.com/crmarques/bootwright/internal/secrets"
 )
@@ -139,7 +140,7 @@ func validClusterList(result *inspection.ListResult) bool {
 		return false
 	}
 	return !slices.ContainsFunc(result.Clusters, func(row inspection.ClusterRef) bool {
-		return row.Name == "" || row.Kind != inspection.KindContainerCluster && row.Kind != inspection.KindStorageCluster
+		return row.Name == "" || !api.IsClusterKind(api.Kind(row.Kind))
 	})
 }
 
@@ -148,16 +149,21 @@ func validClusterInfo(result *inspection.InfoResult) bool {
 		return false
 	}
 	for _, cluster := range result.Clusters {
-		if cluster.Name == "" || cluster.Kind != inspection.KindContainerCluster || !validAccessCommands(cluster.AccessCommands) {
+		if cluster.Name == "" || !inCategory(cluster.Kind, api.ContainerClusterCategory) || !validAccessCommands(cluster.AccessCommands) {
 			return false
 		}
 	}
 	for _, cluster := range result.Storage {
-		if cluster.Name == "" || cluster.Kind != inspection.KindStorageCluster || !validAccessCommands(cluster.AccessCommands) || !validManagedCeph(cluster.Ceph) {
+		if cluster.Name == "" || !inCategory(cluster.Kind, api.StorageClusterCategory) || !validAccessCommands(cluster.AccessCommands) || !validManagedCeph(cluster.Ceph) {
 			return false
 		}
 	}
 	return true
+}
+
+func inCategory(kind string, category api.Category) bool {
+	found, ok := api.CategoryOf(api.Kind(kind))
+	return ok && found == category
 }
 
 func validManagedCeph(ceph *inspection.ManagedCeph) bool {
@@ -249,7 +255,7 @@ func dashboardWarnings(result *inspection.InfoResult) []diagnostic {
 	var warnings []diagnostic
 	for _, cluster := range result.Storage {
 		if cluster.Ceph != nil && cluster.Ceph.Dashboard != nil && cluster.Ceph.Dashboard.Warn {
-			warnings = append(warnings, diagnostic{Severity: "warning", Code: "access.unproved", Message: "the dashboard administrator password of StorageCluster " +
+			warnings = append(warnings, diagnostic{Severity: "warning", Code: "access.unproved", Message: "the dashboard administrator password of CephCluster " +
 				cluster.Name + " was kept from an apply that never proved the dashboard reachable, so the access it grants was not proved"})
 		}
 	}

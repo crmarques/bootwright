@@ -24,17 +24,17 @@ func TestAHostKeyIsNoOtherCredential(t *testing.T) {
 	}{
 		"the fleet key":                          {[]api.Object{environment}, "Environment/env's spec.remoteMachinesAccessKey.keyRef", api.Environment},
 		"a Machine's access key":                 {[]api.Object{provided}, "Machine/provided's spec.access.ssh.auth.privateKeyRef", ""},
-		"a storage cluster's key":                {[]api.Object{object(api.StorageCluster, "ceph", m("ceph", m("cephadm", m("clusterSSH", m("keyRef", key)))))}, "StorageCluster/ceph's spec.ceph.cephadm.clusterSSH.keyRef", ""},
-		"a container cluster's key":              {[]api.Object{object(api.ContainerCluster, "ocp", m("install", m("nodeSSH", m("keyPairRef", key))))}, "ContainerCluster/ocp's spec.install.nodeSSH.keyPairRef", ""},
-		"a container cluster's node private key": {[]api.Object{object(api.ContainerCluster, "ocp", m("install", m("nodeSSH", m("privateKeyRef", key))))}, "ContainerCluster/ocp's spec.install.nodeSSH.privateKeyRef", ""},
-		"a container cluster's node public key":  {[]api.Object{object(api.ContainerCluster, "ocp", m("install", m("nodeSSH", m("publicKeyRef", key, "privateKeyRef", "cluster-private"))))}, "ContainerCluster/ocp's spec.install.nodeSSH.publicKeyRef", ""},
+		"a storage cluster's key":                {[]api.Object{object(api.CephCluster, "ceph", m("cephadm", m("clusterSSH", m("keyRef", key))))}, "CephCluster/ceph's spec.cephadm.clusterSSH.keyRef", ""},
+		"a container cluster's key":              {[]api.Object{object(api.OpenShiftCluster, "ocp", m("install", m("nodeSSH", m("keyPairRef", key))))}, "OpenShiftCluster/ocp's spec.install.nodeSSH.keyPairRef", ""},
+		"a container cluster's node private key": {[]api.Object{object(api.OpenShiftCluster, "ocp", m("install", m("nodeSSH", m("privateKeyRef", key))))}, "OpenShiftCluster/ocp's spec.install.nodeSSH.privateKeyRef", ""},
+		"a container cluster's node public key":  {[]api.Object{object(api.OpenShiftCluster, "ocp", m("install", m("nodeSSH", m("publicKeyRef", key, "privateKeyRef", "cluster-private"))))}, "OpenShiftCluster/ocp's spec.install.nodeSSH.publicKeyRef", ""},
 		"a container cluster naming the key as both split halves": {
-			[]api.Object{object(api.ContainerCluster, "ocp", m("install", m("nodeSSH", m("publicKeyRef", key, "privateKeyRef", key))))},
-			"ContainerCluster/ocp's spec.install.nodeSSH.publicKeyRef", "",
+			[]api.Object{object(api.OpenShiftCluster, "ocp", m("install", m("nodeSSH", m("publicKeyRef", key, "privateKeyRef", key))))},
+			"OpenShiftCluster/ocp's spec.install.nodeSSH.publicKeyRef", "",
 		},
 		"a container cluster naming the key in both fields": {
-			[]api.Object{object(api.ContainerCluster, "ocp", m("install", m("nodeSSH", m("keyPairRef", key, "privateKeyRef", key))))},
-			"ContainerCluster/ocp's spec.install.nodeSSH.keyPairRef", "",
+			[]api.Object{object(api.OpenShiftCluster, "ocp", m("install", m("nodeSSH", m("keyPairRef", key, "privateKeyRef", key))))},
+			"OpenShiftCluster/ocp's spec.install.nodeSSH.keyPairRef", "",
 		},
 		"the fleet key beside another installed Machine": {
 			[]api.Object{environment, object(api.Machine, "peer", m("os", m("provided", false, "installProfileRef", "rhel"), "access", m("ssh", m("auth", m("privateKeyRef", key)))))},

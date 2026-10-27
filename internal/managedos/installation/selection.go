@@ -83,7 +83,7 @@ func refusedFIPS(catalog api.Catalog, machine, profile api.Object, derived subst
 			keyType := host.Spec().Get("source", "generated", "keyType").Text()
 			if keyType == "" || keyType == "ed25519" {
 				return "a FIPS-mode installation refuses Ed25519 keys, and the delivered host key " + host.Identity() + " generates one",
-					"declare spec.source.generated.keyType as ecdsa-p256, ecdsa-p384, ecdsa-p521 or rsa on " + host.Identity()
+					"declare spec.source.generated.keyType as ecdsaP256, ecdsaP384, ecdsaP521 or rsa on " + host.Identity()
 			}
 		}
 	}
@@ -95,7 +95,7 @@ func refusedFIPS(catalog api.Catalog, machine, profile api.Object, derived subst
 		return "", ""
 	}
 	return "a FIPS-mode installation refuses Ed25519 keys, and the fleet key " + fleet.Identity() + " generates one",
-		"declare spec.source.generated.keyType as ecdsa-p256, ecdsa-p384, ecdsa-p521 or rsa on " + fleet.Identity()
+		"declare spec.source.generated.keyType as ecdsaP256, ecdsaP384, ecdsaP521 or rsa on " + fleet.Identity()
 }
 
 // Refusals refuses every installation this contract cannot realize. A target,
@@ -561,7 +561,7 @@ func refusedTarget(machine api.Object, target substrate.Target, private bool) (r
 	// A wwn alone is not yet derived into a device the installer can name.
 	if target.Physical && !durableRootDevice(target.RootDeviceHints.DeviceName) {
 		return "a physical installation erases only a root disk named by its /dev/disk/by-id/wwn-0x path, and the Machine names none",
-			"set spec.os.install.rootDeviceHints.deviceName on " + machine.Identity() +
+			"set spec.hardware.rootDevice.deviceName on " + machine.Identity() +
 				" to the disk's /dev/disk/by-id/wwn-0x path, 16 or 32 lowercase hexadecimal digits; a kernel name such as /dev/sda is refused, and a wwn-only selection is not yet supported"
 	}
 	// The Kickstart selects its disk by name alone, so any other hint would be
@@ -569,7 +569,7 @@ func refusedTarget(machine api.Object, target substrate.Target, private bool) (r
 	var uncarried []string
 	for _, name := range target.RootDeviceHints.Names() {
 		if name != "deviceName" {
-			uncarried = append(uncarried, "spec.os.install.rootDeviceHints."+name)
+			uncarried = append(uncarried, substrate.RootDeviceHintPath(name))
 		}
 	}
 	if len(uncarried) != 0 {
@@ -581,8 +581,8 @@ func refusedTarget(machine api.Object, target substrate.Target, private bool) (r
 	// private material, so the exception is refused for every private
 	// installation.
 	if private && target.Controller.VirtualMedia.Trust == substrate.TrustDisableVerification {
-		return "a Machine that delivers private material through its installation cannot let its controller fetch without verifying the artifact server",
-			"declare hardware.management.bmc.virtualMedia.tls.trust: import-certificate on " + machine.Identity() + ", or established when its controller already trusts the server"
+		return "a Machine that delivers private material through its installation cannot let its BMC fetch without verifying the artifact server",
+			"declare substrate.baremetal.bmc.virtualMedia.tls.trust: importCertificate on " + machine.Identity() + ", or established when its BMC already trusts the server"
 	}
 	// The controller is handed the tokenized URL of the private installer
 	// image, so whoever answers or reads the controller leg holds the token.
@@ -590,8 +590,8 @@ func refusedTarget(machine api.Object, target substrate.Target, private bool) (r
 	// whole test.
 	if private &&
 		(!strings.HasPrefix(target.Controller.Endpoint, "https://") || !target.Controller.TLSVerify) {
-		return "a Machine whose installation delivers private material hands its controller the private installer image URL, so the controller must be reached over https with its certificate verified",
-			"address the controller of " + machine.Identity() + " with an https:// spec.hardware.management.bmc.address and remove the tls.verify opt-out on " +
+		return "a Machine whose installation delivers private material hands its BMC the private installer image URL, so the BMC must be reached over https with its certificate verified",
+			"address the BMC of " + machine.Identity() + " with an https:// spec.substrate.baremetal.bmc.address and remove the tls.verify opt-out on " +
 				machine.Identity() + " or in spec.baremetal.defaults.bmc of InfraProvider/" + target.Provider +
 				"; name the authority that issued its certificate in tls.trustBundleRef when the system trust store does not hold it"
 	}
@@ -622,7 +622,7 @@ func hostKeyType(catalog api.Catalog, machine api.Object, reference string) (str
 	keyType := generated.Get("keyType").Text()
 	if _, known := deliveredHostKeys[keyType]; !known {
 		return "", refusal("api.value", "Secret/"+reference+" generates no SSH host key type an installation can deliver",
-			"declare spec.source.generated.keyType as ed25519, rsa, ecdsa-p256, ecdsa-p384 or ecdsa-p521 on Secret/"+reference)
+			"declare spec.source.generated.keyType as ed25519, rsa, ecdsaP256, ecdsaP384 or ecdsaP521 on Secret/"+reference)
 	}
 	return keyType, nil
 }
@@ -638,7 +638,7 @@ func mediaTrustRefusal(machine api.Object, request Request) error {
 	if strings.HasPrefix(request.installerImage().URL, "https://") && request.TLSCertificateRef != "" {
 		return nil
 	}
-	return refusal("lifecycle.state", "importing the artifact server's certificate into the controller of "+machine.Identity()+" needs an https installer image and the certificate its server presents",
+	return refusal("lifecycle.state", "importing the artifact server's certificate into the BMC of "+machine.Identity()+" needs an https installer image and the certificate its server presents",
 		"select an https artifactServerEndpoint on a server declaring spec.tls.secretRef")
 }
 

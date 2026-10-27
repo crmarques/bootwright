@@ -7,10 +7,6 @@ func ValidatePartial(o api.Object, c api.Catalog) []api.Issue {
 	if o.Kind() != api.InfraProvider {
 		return issues
 	}
-	bmc := o.Spec().Get("libvirt", "bmcEmulationDefaults")
-	if bmc.Has("enabled") && !bmc.Get("enabled").Bool() {
-		issues = add(issues, issue("$.spec.libvirt.bmcEmulationDefaults.enabled", "libvirt BMC emulation must be enabled"))
-	}
 	for _, attachment := range o.Spec().Get("networkAttachments").Items() {
 		issues = add(issues, validateLibvirtAttachment(attachment.Get("libvirt"), "$.spec.networkAttachments[].libvirt")...)
 	}

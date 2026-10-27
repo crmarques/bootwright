@@ -1,11 +1,11 @@
 #!/usr/bin/python
-"""Observe one realized virtual machine and its controller, changing nothing."""
+"""Observe one realized virtual machine and its emulated BMC, changing nothing."""
 
 from __future__ import annotations
 
 DOCUMENTATION = r"""
 module: libvirt_domain_inspect
-short_description: Observe one Bootwright virtual machine and its controller
+short_description: Observe one Bootwright virtual machine and its emulated BMC
 version_added: "0.1.0"
 description:
   - Reports whether the domain is defined, whether it carries this context's

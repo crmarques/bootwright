@@ -7,7 +7,7 @@ import (
 	"strings"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
-	"github.com/crmarques/bootwright/internal/containercluster"
+	"github.com/crmarques/bootwright/internal/containercluster/openshift"
 	"github.com/crmarques/bootwright/internal/diagnostics"
 	"github.com/crmarques/bootwright/internal/infrastructureservices/artifactserver"
 	"github.com/crmarques/bootwright/internal/infrastructureservices/managedservice"
@@ -38,7 +38,7 @@ type Requirements struct {
 // refuses before registration saying why and what to change.
 func Refusals(catalog api.Catalog) []lifecycle.Refusal {
 	var found []lifecycle.Refusal
-	for _, cluster := range catalog.OfKind(api.ContainerCluster) {
+	for _, cluster := range catalog.OfKind(api.OpenShiftCluster) {
 		if field, reason, remediation := refusedCluster(catalog, cluster); reason != "" {
 			refused := lifecycle.RefusalOf(cluster, reason, remediation)
 			refused.Field = field
@@ -134,7 +134,7 @@ func unsupportedReason(catalog api.Catalog, cluster api.Object) (reason, remedia
 			return "this executable does not install " + strings.Join(path, "."), ""
 		}
 	}
-	if spec.Get("nodes").Len() > 1 && !multiNodePlatform(spec.Get("install", "platform", "type").Text()) {
+	if spec.Get("nodes").Len() > 1 && !multiNodePlatform(openshift.Platform(spec)) {
 		return "this executable installs no multi-node cluster on the declared platform", ""
 	}
 	if reason, remediation := pastTheCeiling(catalog, cluster); reason != "" {
@@ -155,7 +155,7 @@ func unsupportedReason(catalog api.Catalog, cluster api.Object) (reason, remedia
 				"remove spec.os.installProfileRef from " + bound.Identity() + " or drop it from " + cluster.Identity()
 		}
 		if native, errors := machine.ComposeNetwork(bound, catalog); len(errors) == 0 {
-			if issues := containercluster.NodeNetworkIssues(bound, catalog, native); len(issues) > 0 {
+			if issues := openshift.NodeNetworkIssues(bound, catalog, native); len(issues) > 0 {
 				return issues[0].Message, issues[0].Remediation
 			}
 		}
@@ -183,8 +183,8 @@ func unsupportedReason(catalog api.Catalog, cluster api.Object) (reason, remedia
 		// is the image's only protection unless that fetch never leaves the
 		// host. The server is therefore placed on that same host.
 		if !target.Physical && served && target.PlacementMachine.Name() != serverHost.Name() {
-			return "an emulated controller fetches the boot image without verifying its server, so the server is placed on the provider host that controller runs on",
-				bound.Identity() + " is booted through a controller on " + target.PlacementMachine.Identity() + " and " +
+			return "an emulated BMC fetches the boot image without verifying its server, so the server is placed on the provider host that BMC runs on",
+				bound.Identity() + " is booted through a BMC on " + target.PlacementMachine.Identity() + " and " +
 					server.Identity() + " is placed on " + serverHost.Identity() + "; place " +
 					string(api.InfraProvider) + "/" + target.Provider + " and " + server.Identity() + " on the same Machine"
 		}
@@ -259,7 +259,7 @@ func Requests(catalog api.Catalog, controllerMachine, contextName string) ([]Med
 	var media []MediaRequest
 	var installs []InstallRequest
 	var requirements []Requirements
-	clusters := slices.Clone(catalog.OfKind(api.ContainerCluster))
+	clusters := slices.Clone(catalog.OfKind(api.OpenShiftCluster))
 	slices.SortFunc(clusters, func(x, y api.Object) int { return strings.Compare(x.Name(), y.Name()) })
 	for _, cluster := range clusters {
 		mediaRequest, installRequest, needs, err := requestFor(catalog, cluster, controllerMachine, contextName)
@@ -440,14 +440,14 @@ func installerRootDeviceHints(bound api.Object, hints substrate.RootDeviceHints)
 	remainder := strings.TrimPrefix(strings.TrimPrefix(hints.DeviceName, "/dev/"), "disk/by-path/")
 	if strings.Contains(remainder, "/") {
 		return nil, "the agent installer names a root device only as /dev/<name> or /dev/disk/by-path/<name>",
-			"set spec.os.install.rootDeviceHints.deviceName on " + bound.Identity() + " to such a path"
+			"set spec.hardware.rootDevice.deviceName on " + bound.Identity() + " to such a path"
 	}
 	rendered = map[string]any{}
 	if hints.MinSizeGigabytes != "" {
 		size, err := strconv.ParseInt(hints.MinSizeGigabytes, 10, 64)
 		if err != nil || size > maxInstallerRootDeviceGigabytes {
 			return nil, "a node's minSizeGigabytes is larger than the frozen installer input carries exactly",
-				"declare spec.os.install.rootDeviceHints.minSizeGigabytes on " + bound.Identity() + " as at most " +
+				"declare spec.hardware.rootDevice.minSizeGigabytes on " + bound.Identity() + " as at most " +
 					strconv.FormatInt(maxInstallerRootDeviceGigabytes, 10)
 		}
 		rendered["minSizeGigabytes"] = size

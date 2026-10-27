@@ -10,7 +10,7 @@ import (
 func mirrorCatalog(credentialType string, trust bool) api.Catalog {
 	objects := singleNodeCatalog().Objects()
 	for i, object := range objects {
-		if object.Kind() == api.ContainerCluster {
+		if object.Kind() == api.OpenShiftCluster {
 			sources := api.ListValue(api.MapValue(text("source", "quay.io/example/release"), field("mirrors", api.StringList("mirror.example.test/release")), text("sourcePolicy", "NeverContactSource")))
 			spec := object.Spec().WithPath(api.MapValue(field("mirror", api.MapValue(text("registryRef", "mirror"))), field("imageDigestSources", sources)), "install", "registries")
 			if trust {

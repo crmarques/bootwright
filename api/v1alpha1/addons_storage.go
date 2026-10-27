@@ -2,7 +2,7 @@ package v1alpha1
 
 type FDFConfig struct {
 	Subscription        PackageSubscription `json:"subscription"`
-	StorageExportRef    string              `json:"storageExportRef"`
+	CephConsumerRef     string              `json:"cephConsumerRef"`
 	DefaultStorageClass bool                `json:"defaultStorageClass"`
 	Timeout             string              `json:"timeout"`
 }
@@ -14,6 +14,6 @@ func fdfPackageSchema() *Shape {
 			sub.Fields[i].Required = true
 		}
 	}
-	s := record(required("subscription", sub), required("storageExportRef", ref(StorageExport)), defaulted("defaultStorageClass", boolean(), BoolValue(false)), defaulted("timeout", duration(), StringValue("1h")))
+	s := record(required("subscription", sub), required("cephConsumerRef", ref(CephConsumer)), defaulted("defaultStorageClass", boolean(), BoolValue(false)), defaulted("timeout", duration(), StringValue("1h")))
 	return s
 }

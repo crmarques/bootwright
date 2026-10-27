@@ -20,7 +20,7 @@ func smbSecretValue(e lifecycle.Execution, object string, b SMBBinding) error {
 		return failure("lifecycle.state", "a required Ceph credential component is not bound", "")
 	}
 	if len(value) == 0 || len(value) > maxSMBSecret || !utf8.Valid(value) || bytes.ContainsAny(value, "\x00\r\n") {
-		return failure("lifecycle.unsupported", "the Secret "+b.SecretRef+" that StorageSMBResource "+object+" binds at "+b.Path+" is not one line of 1 to 1024 bytes of UTF-8 text",
+		return failure("lifecycle.unsupported", "the Secret "+b.SecretRef+" that CephSMBResource "+object+" binds at "+b.Path+" is not one line of 1 to 1024 bytes of UTF-8 text",
 			"store the password in Secret "+b.SecretRef+" as one line of 1 to 1024 bytes with bootwright secret set, then apply again")
 	}
 	return nil

@@ -12,7 +12,7 @@ import (
 	api "github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/reconciliation"
 	"github.com/crmarques/bootwright/internal/secrets"
-	"github.com/crmarques/bootwright/internal/storage"
+	"github.com/crmarques/bootwright/internal/storage/cephcluster"
 )
 
 type ServiceBinding struct {
@@ -59,19 +59,21 @@ func noUnitDependencies(api.Object, ServiceUnit) []string { return nil }
 func noUnitImpacts(api.Object, ServiceUnit) []string { return nil }
 
 func ServiceUnitBlockID(cluster string, u ServiceUnit) string {
-	id := "ceph-service-" + cluster + "-" + u.Type
+	tail := cluster + "-" + u.Type
 	if u.ID != "" {
 		suffix := u.ID
 		if u.Type == "nvmeof" {
 			sum := sha256.Sum256([]byte(u.ID))
 			suffix = hex.EncodeToString(sum[:])[:16]
 		}
-		id += "-" + suffix
+		tail += "-" + suffix
 	}
-	return id
+	return reconciliation.BlockIdentity("ceph-service-", tail)
 }
 
-func SettingsBlockID(cluster string) string { return "ceph-settings-" + cluster }
+func SettingsBlockID(cluster string) string {
+	return reconciliation.BlockIdentity("ceph-settings-", cluster)
+}
 
 func serviceUnitRequests(base Request, cluster api.Object) ([]Request, error) {
 	out := []Request{}
@@ -215,10 +217,10 @@ var unitSpecMembers = map[string][]string{
 }
 
 func unitDocumentOf(cluster api.Object, svc api.Value, spec func(api.Value) any) (json.RawMessage, error) {
-	name := storage.NativeServiceName(svc)
+	name := cephcluster.NativeServiceName(svc)
 	if svc.Has("placement", "count_per_host") && !(svc.Get("service_type").Text() == "nvmeof" && svc.Get("placement", "count_per_host").Equal(api.IntegerValue("1"))) {
 		return nil, failure("lifecycle.unsupported", "the native service "+name+" places more than one daemon of a type per host, which Bootwright does not realize",
-			"omit placement.count_per_host on "+name+" in spec.ceph.services")
+			"omit placement.count_per_host on "+name+" in spec.services")
 	}
 	mounts := proxyCAMount(svc)
 	carried := func(option string) bool {
@@ -226,7 +228,7 @@ func unitDocumentOf(cluster api.Object, svc api.Value, spec func(api.Value) any)
 	}
 	if slices.ContainsFunc([]string{"config", "extra_container_args", "extra_entrypoint_args", "custom_configs"}, carried) || svc.Get("unmanaged").Bool() || svc.Get("preview_only").Bool() {
 		return nil, failure("lifecycle.unsupported", "the native service "+name+" carries config, extra container or entrypoint arguments or custom configs, which Bootwright does not realize",
-			"remove those options from "+name+" in spec.ceph.services")
+			"remove those options from "+name+" in spec.services")
 	}
 	t := svc.Get("service_type").Text()
 	members := unitSpecMembers[t]
@@ -236,7 +238,7 @@ func unitDocumentOf(cluster api.Object, svc api.Value, spec func(api.Value) any)
 	for _, member := range svc.Get("spec").Fields() {
 		if !slices.Contains(members, member.Name) {
 			return nil, failure("lifecycle.unsupported", "the native service "+name+" carries spec."+member.Name+", which Bootwright does not realize for this service",
-				"remove spec."+member.Name+" from "+name+" in spec.ceph.services")
+				"remove spec."+member.Name+" from "+name+" in spec.services")
 		}
 	}
 	hosts, err := serviceHosts(cluster, svc)
@@ -250,16 +252,16 @@ func unitDocumentOf(cluster api.Object, svc api.Value, spec func(api.Value) any)
 
 func proxyCAMount(svc api.Value) []customConfig {
 	entries := svc.Get("custom_configs").Items()
-	if svc.Get("service_type").Text() != "oauth2-proxy" || len(entries) != 1 || entries[0].Get("mount_path").Text() != storage.OAuth2ProxyCABundlePath || entries[0].Has("content") {
+	if svc.Get("service_type").Text() != "oauth2-proxy" || len(entries) != 1 || entries[0].Get("mount_path").Text() != cephcluster.OAuth2ProxyCABundlePath || entries[0].Has("content") {
 		return nil
 	}
-	return []customConfig{{MountPath: storage.OAuth2ProxyCABundlePath}}
+	return []customConfig{{MountPath: cephcluster.OAuth2ProxyCABundlePath}}
 }
 
 func nfsUnits(cluster api.Object) ([]ServiceUnit, error) {
-	services := cluster.Spec().Get("ceph", "services").Items()
+	services := cluster.Spec().Get("services").Items()
 	slices.SortStableFunc(services, func(a, b api.Value) int {
-		return strings.Compare(storage.NativeServiceName(a), storage.NativeServiceName(b))
+		return strings.Compare(cephcluster.NativeServiceName(a), cephcluster.NativeServiceName(b))
 	})
 	units := []ServiceUnit{}
 	for _, svc := range services {
@@ -268,7 +270,7 @@ func nfsUnits(cluster api.Object) ([]ServiceUnit, error) {
 		}
 		unit := ServiceUnit{Documents: []json.RawMessage{}, ID: svc.Get("service_id").Text(), Type: "nfs"}
 		for _, ingress := range services {
-			if ingress.Get("service_type").Text() != "ingress" || ingress.Get("spec", "backend_service").Text() != storage.NativeServiceName(svc) {
+			if ingress.Get("service_type").Text() != "ingress" || ingress.Get("spec", "backend_service").Text() != cephcluster.NativeServiceName(svc) {
 				continue
 			}
 			document, err := unitDocumentOf(cluster, ingress, nfsIngressSpecOf)
@@ -436,7 +438,7 @@ func unitLeaf(serviceType, path string) (monitoringLeaf, bool) {
 }
 
 func unitBinding(cluster api.Object, binding api.Value) bool {
-	svc, found := storage.NativeService(cluster, binding.Get("serviceRef").Text())
+	svc, found := cephcluster.NativeService(cluster, binding.Get("serviceRef").Text())
 	t := svc.Get("service_type").Text()
 	if !found || !slices.Contains([]string{"grafana", "snmp-gateway", "mgmt-gateway", "oauth2-proxy"}, t) || binding.Get("secrets").Len() == 0 {
 		return false
@@ -450,24 +452,20 @@ func unitBinding(cluster api.Object, binding api.Value) bool {
 }
 
 func unrealizedBinding(ref string) error {
-	return failure("lifecycle.unsupported", "Bootwright does not realize the service binding of "+ref+"; it realizes only the TLS bindings of an rgw service that a StorageObjectGateway binds and of the ingress that fronts it, the TLS binding of the management gateway, the credential, TLS and CA bundle bindings of its oauth2-proxy, and the credential bindings of the grafana and snmp-gateway services",
-		"remove the spec.ceph.serviceBindings entry for "+ref)
+	return failure("lifecycle.unsupported", "Bootwright does not realize the service binding of "+ref+"; it realizes only the TLS bindings of an rgw service that a CephObjectGateway binds and of the ingress that fronts it, the TLS binding of the management gateway, the credential, TLS and CA bundle bindings of its oauth2-proxy, and the credential bindings of the grafana and snmp-gateway services",
+		"remove the spec.serviceBindings entry for "+ref)
 }
 
 func monitoringUnits(cluster api.Object) ([]ServiceUnit, error) {
-	services := slices.DeleteFunc(cluster.Spec().Get("ceph", "services").Items(), func(svc api.Value) bool {
+	services := slices.DeleteFunc(cluster.Spec().Get("services").Items(), func(svc api.Value) bool {
 		return !slices.Contains(MonitoringTypes, svc.Get("service_type").Text())
 	})
 	if len(services) == 0 {
 		return []ServiceUnit{}, nil
 	}
 	unit := ServiceUnit{Documents: []json.RawMessage{}, Type: "monitoring"}
-	if !reconciliation.ValidSegment(ServiceUnitBlockID(cluster.Name(), unit)) {
-		return nil, failure("api.invariant", "StorageCluster "+cluster.Name()+" has a name too long to identify its monitoring service block, whose identity holds at most 63 characters",
-			"rename the StorageCluster to at most 39 characters")
-	}
 	slices.SortStableFunc(services, func(a, b api.Value) int {
-		return strings.Compare(storage.NativeServiceName(a), storage.NativeServiceName(b))
+		return strings.Compare(cephcluster.NativeServiceName(a), cephcluster.NativeServiceName(b))
 	})
 	names := []string{}
 	for _, svc := range services {
@@ -476,13 +474,13 @@ func monitoringUnits(cluster api.Object) ([]ServiceUnit, error) {
 			return nil, err
 		}
 		unit.Documents = append(unit.Documents, document)
-		names = append(names, storage.NativeServiceName(svc))
+		names = append(names, cephcluster.NativeServiceName(svc))
 		if slices.Contains([]string{"alloy", "promtail"}, svc.Get("service_type").Text()) {
 			unit.Config = map[string]map[string]string{"global": {"log_to_file": "true", "mon_cluster_log_to_file": "true"}}
 		}
 	}
 	for _, binding := range gatewayBindings(cluster, names...) {
-		svc, _ := storage.NativeService(cluster, binding.ServiceRef)
+		svc, _ := cephcluster.NativeService(cluster, binding.ServiceRef)
 		if _, known := monitoringLeaves[svc.Get("service_type").Text()+" "+binding.Path]; !known {
 			return nil, unrealizedBinding(binding.ServiceRef)
 		}
@@ -494,17 +492,13 @@ func monitoringUnits(cluster api.Object) ([]ServiceUnit, error) {
 var MirrorTypes = []string{"rbd-mirror"}
 
 func mirrorUnits(cluster api.Object) ([]ServiceUnit, error) {
-	services := slices.DeleteFunc(cluster.Spec().Get("ceph", "services").Items(), func(svc api.Value) bool {
+	services := slices.DeleteFunc(cluster.Spec().Get("services").Items(), func(svc api.Value) bool {
 		return !slices.Contains(MirrorTypes, svc.Get("service_type").Text())
 	})
 	if len(services) == 0 {
 		return []ServiceUnit{}, nil
 	}
 	unit := ServiceUnit{Documents: []json.RawMessage{}, Type: "rbd-mirror"}
-	if !reconciliation.ValidSegment(ServiceUnitBlockID(cluster.Name(), unit)) {
-		return nil, failure("api.invariant", "StorageCluster "+cluster.Name()+" has a name too long to identify its RBD mirror service block, whose identity holds at most 63 characters",
-			"rename the StorageCluster to at most 39 characters")
-	}
 	for _, svc := range services {
 		document, err := unitDocumentOf(cluster, svc, func(api.Value) any { return nil })
 		if err != nil {
@@ -517,10 +511,6 @@ func mirrorUnits(cluster api.Object) ([]ServiceUnit, error) {
 
 func crashUnits(cluster api.Object) ([]ServiceUnit, error) {
 	unit := ServiceUnit{Documents: []json.RawMessage{}, Type: "crash"}
-	if !reconciliation.ValidSegment(ServiceUnitBlockID(cluster.Name(), unit)) {
-		return nil, failure("api.invariant", "StorageCluster "+cluster.Name()+" has a name too long to identify its crash service block, whose identity holds at most 63 characters",
-			"rename the StorageCluster to at most 44 characters")
-	}
 	document, err := json.Marshal(unitDocument{Placement: nativePlacement{Hosts: clusterHosts(cluster)}, ServiceType: "crash"})
 	if err != nil {
 		return nil, err
@@ -531,8 +521,8 @@ func crashUnits(cluster api.Object) ([]ServiceUnit, error) {
 
 func clusterHosts(cluster api.Object) []string {
 	hosts := []string{}
-	for _, node := range cluster.Spec().Get("ceph", "topology", "nodes").Items() {
-		hosts = append(hosts, storage.NativeHostname(node))
+	for _, node := range cluster.Spec().Get("topology", "nodes").Items() {
+		hosts = append(hosts, cephcluster.NativeHostname(node))
 	}
 	slices.Sort(hosts)
 	return hosts
@@ -550,7 +540,7 @@ func monitoringImpacts(cluster api.Object, unit ServiceUnit) []string {
 	if anonymous {
 		impacts = append(impacts, "Grafana grants anonymous viewer access")
 	}
-	if !slices.ContainsFunc(cluster.Spec().Get("ceph", "services").Items(), func(svc api.Value) bool { return svc.Get("service_type").Text() == "mgmt-gateway" }) {
+	if !slices.ContainsFunc(cluster.Spec().Get("services").Items(), func(svc api.Value) bool { return svc.Get("service_type").Text() == "mgmt-gateway" }) {
 		impacts = append(impacts, "monitoring endpoints are unauthenticated without a management gateway")
 	}
 	if declared["prometheus"] {
@@ -595,7 +585,7 @@ type gatewayIngressSpec struct {
 }
 
 func canonicalVIP(text string) string {
-	if address, ok := storage.ParseVirtualIP(text, false); ok {
+	if address, ok := cephcluster.ParseVirtualIP(text, false); ok {
 		return address.Addr().String()
 	}
 	return text
@@ -620,19 +610,15 @@ func gatewayIngressSpecOf(spec api.Value) any {
 }
 
 func gatewayUnits(cluster api.Object) ([]ServiceUnit, error) {
-	services := slices.DeleteFunc(cluster.Spec().Get("ceph", "services").Items(), func(svc api.Value) bool {
+	services := slices.DeleteFunc(cluster.Spec().Get("services").Items(), func(svc api.Value) bool {
 		return !slices.Contains(GatewayTypes, svc.Get("service_type").Text()) && (svc.Get("service_type").Text() != "ingress" || svc.Get("spec", "backend_service").Text() != "mgmt-gateway")
 	})
 	if !slices.ContainsFunc(services, func(svc api.Value) bool { return svc.Get("service_type").Text() == "mgmt-gateway" }) {
 		return []ServiceUnit{}, nil
 	}
 	unit := ServiceUnit{Documents: []json.RawMessage{}, Type: "mgmt-gateway"}
-	if !reconciliation.ValidSegment(ServiceUnitBlockID(cluster.Name(), unit)) {
-		return nil, failure("api.invariant", "StorageCluster "+cluster.Name()+" has a name too long to identify its management gateway service block, whose identity holds at most 63 characters",
-			"rename the StorageCluster to at most 37 characters")
-	}
 	slices.SortStableFunc(services, func(a, b api.Value) int {
-		return strings.Compare(storage.NativeServiceName(a), storage.NativeServiceName(b))
+		return strings.Compare(cephcluster.NativeServiceName(a), cephcluster.NativeServiceName(b))
 	})
 	names := []string{}
 	for _, svc := range services {
@@ -645,10 +631,10 @@ func gatewayUnits(cluster api.Object) ([]ServiceUnit, error) {
 			return nil, err
 		}
 		unit.Documents = append(unit.Documents, document)
-		names = append(names, storage.NativeServiceName(svc))
+		names = append(names, cephcluster.NativeServiceName(svc))
 	}
 	for _, binding := range gatewayBindings(cluster, names...) {
-		svc, _ := storage.NativeService(cluster, binding.ServiceRef)
+		svc, _ := cephcluster.NativeService(cluster, binding.ServiceRef)
 		if _, known := gatewayLeaves[svc.Get("service_type").Text()+" "+binding.Path]; !known {
 			return nil, unrealizedBinding(binding.ServiceRef)
 		}

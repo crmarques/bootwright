@@ -29,7 +29,6 @@ func withRoutes(config api.Object, routes ...api.Value) api.Object {
 // libvirt, so a provider placed on it emulates its guests' controllers there.
 func hypervisorHost() api.Object {
 	return api.NewObject(api.Machine, "hv-01", api.Value{}, api.MapValue(
-		field("capabilities", api.StringList("libvirt")),
 		field("os", api.MapValue(field("provided", api.BoolValue(true)))),
 		field("network", api.MapValue(field("addresses", api.ListValue(
 			api.MapValue(text("name", "fqdn"), text("address", "hv-01.lab.example.test")),
@@ -222,7 +221,7 @@ func TestADefaultRouteTheLineDoesNotCarryInstalls(t *testing.T) {
 func TestOnlyTheFirstRefusalAMachineMeetsIsReported(t *testing.T) {
 	hinted := guest()
 	hinted = hinted.WithSpec(hinted.Spec().WithPath(
-		api.MapValue(text("deviceName", "/dev/vda"), field("rotational", api.BoolValue(false))), "os", "install", "rootDeviceHints"))
+		api.MapValue(text("deviceName", "/dev/vda"), field("rotational", api.BoolValue(false))), "hardware", "rootDevice"))
 	kernelNamed := networkWith(declaredInterface("enp1s0", "ethernet"), declaredInterface("eth0", "ethernet"))
 	kernel, kernelRemedy := kernelReason("eth0")
 	mirrored := installProfile()
@@ -235,7 +234,7 @@ func TestOnlyTheFirstRefusalAMachineMeetsIsReported(t *testing.T) {
 	}{
 		"a target before its network": {labCatalog(hinted, kernelNamed),
 			"a managed-OS installation selects its root disk by deviceName alone and cannot carry the other root-device hints the Machine declares",
-			"remove spec.os.install.rootDeviceHints.rotational from Machine/rhel-01"},
+			"remove spec.hardware.rootDevice.rotational from Machine/rhel-01"},
 		"a network before its profile": {labCatalog(kernelNamed, mirrored), kernel, kernelRemedy},
 		"a profile before its servers": {labCatalog(mirrored, servicesHost(), onServices),
 			"the install profile selects spec.installer.anaconda.packageSource.mirror, which carries secret bytes or effects this executable does not prove",
@@ -328,7 +327,7 @@ func TestRequestRefusalsNameTheFieldThatDeclaresIt(t *testing.T) {
 // tooling list it once named must leave its input, and every frozen plan,
 // unchanged.
 func TestTheContentDigestIsPinned(t *testing.T) {
-	if digest := ContentDigest(); digest != "c78416b961a8eafd0035ddcc4d4f45446882a6ef7a0fb0953946fda9d17710d8" {
+	if digest := ContentDigest(); digest != "d339c0f634e1b4ff050fbd829222f74946c12819fe485eaf79ec60a8c39cdb8c" {
 		t.Fatalf("content digest = %s", digest)
 	}
 }

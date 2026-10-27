@@ -60,7 +60,7 @@ func observeAllowlist() map[observeTaskKey]observeAllowance {
 		"storage_ceph_image":             "ceph_image_protocol",
 		"storage_ceph_smb":               "ceph_smb_protocol",
 		"storage_ceph_replication":       "ceph_replication_protocol",
-		"storage_ceph_export":            "ceph_export_protocol",
+		"storage_ceph_consumer":          "ceph_export_protocol",
 		"substrate_baremetal_machine":    "substrate_physical_protocol",
 		"substrate_libvirt_host":         "substrate_host_protocol",
 		"substrate_libvirt_machine":      "substrate_libvirt_machine_protocol",
@@ -70,11 +70,11 @@ func observeAllowlist() map[observeTaskKey]observeAllowance {
 	for _, role := range []string{
 		"addons_instance", "containercluster_network", "containercluster_install_agent", "containercluster_media_agent", "managedos_install_anaconda",
 		"managedos_package_tree", "storage_ceph_core", "storage_ceph_host", "storage_ceph_image",
-		"storage_ceph_smb", "storage_ceph_replication", "storage_ceph_export", "substrate_baremetal_machine", "substrate_libvirt_host", "substrate_libvirt_machine",
+		"storage_ceph_smb", "storage_ceph_replication", "storage_ceph_consumer", "substrate_baremetal_machine", "substrate_libvirt_host", "substrate_libvirt_machine",
 	} {
 		add(role, "observe.yml", "ansible.builtin.assert", "validates the frozen request in memory", read)
 	}
-	for _, role := range []string{"storage_ceph_core", "storage_ceph_host", "storage_ceph_image", "storage_ceph_smb", "storage_ceph_replication", "storage_ceph_export"} {
+	for _, role := range []string{"storage_ceph_core", "storage_ceph_host", "storage_ceph_image", "storage_ceph_smb", "storage_ceph_replication", "storage_ceph_consumer"} {
 		add(role, "observe.yml", "ansible.builtin.fail", "refuses an unproved observation without touching the host", read)
 	}
 	add("cluster_objects", "observe.yml", "ansible.builtin.assert", "validates the frozen shared program version", read)
@@ -140,7 +140,7 @@ func addObserveReads(add func(string, string, string, string, func(map[string]an
 	add("storage_ceph_image", "observe.yml", observeCollection+"ceph_image_resolve", "re-validates the frozen resolution offline", observeOperation)
 	add("storage_ceph_smb", "observe.yml", observeCollection+"ceph_smb", "runs the adapter's read-only observe operation", observeOperation)
 	add("storage_ceph_replication", "observe.yml", observeCollection+"ceph_replication", "reads both endpoints without native effects or marker writes", observeOperation)
-	add("storage_ceph_export", "observe.yml", observeCollection+"ceph_export", "reads original export custody and native identities without credential generation or writes", observeOperation)
+	add("storage_ceph_consumer", "observe.yml", observeCollection+"ceph_export", "reads original export custody and native identities without credential generation or writes", observeOperation)
 	add("substrate_baremetal_machine", "observe.yml", observeCollection+"redfish_system_inspect", "reads the machine from its controller", read)
 	add("substrate_baremetal_machine", "identity_read.yml", observeCollection+"ssh_key_policy", "reads the host's effective crypto policy", read)
 	add("substrate_baremetal_machine", "identity_read.yml", "ansible.builtin.set_fact", "names the answers in memory", read)

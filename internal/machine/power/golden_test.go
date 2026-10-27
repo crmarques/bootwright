@@ -160,13 +160,13 @@ func goldenCatalog(tls map[string]api.Value) api.Catalog {
 	objects := catalog().Objects()
 	for index, name := range []string{"rack", "zero"} {
 		objects = append(objects, object(api.Machine, name, m("os", m("provided", true), "network", addresses(fmt.Sprintf("192.0.2.%d/24", 31+index)),
-			"hardware", m("nics", list(m("name", "eno1", "macAddress", fmt.Sprintf("52:54:00:9a:1c:%02d", index))),
-				"management", m("bmc", m("address", "https://"+name+".example.test/redfish/v1/Systems/7",
-					"credentialsRef", name+"-bmc"))))))
+			"hardware", m("nics", list(m("name", "eno1"))),
+			"substrate", m("baremetal", m("bmc", m("address", "https://"+name+".example.test/redfish/v1/Systems/7",
+				"credentialsRef", name+"-bmc"), "nics", list(m("nicRef", "eno1", "macAddress", fmt.Sprintf("52:54:00:9a:1c:%02d", index))))))))
 	}
 	for index, candidate := range objects {
 		if value, ok := tls[candidate.Name()]; ok && candidate.Kind() == api.Machine {
-			objects[index] = candidate.WithSpec(candidate.Spec().WithPath(value, "hardware", "management", "bmc", "tls"))
+			objects[index] = candidate.WithSpec(candidate.Spec().WithPath(value, "substrate", "baremetal", "bmc", "tls"))
 		}
 	}
 	return api.NewCatalog(objects)

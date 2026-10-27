@@ -18,7 +18,7 @@ import (
 )
 
 func consumerClient() api.Object {
-	return childOf(api.StorageClient, "consumer", "poolRef", "volumes", "access", "read-write")
+	return childOf(api.CephClient, "consumer", "poolRef", "volumes", "access", "readWrite")
 }
 
 func dataPoolCatalog(extra ...api.Object) api.Catalog {
@@ -30,7 +30,7 @@ func dataPoolCatalog(extra ...api.Object) api.Catalog {
 func clientPlan(t *testing.T, catalog api.Catalog) reconciliation.BlockDefinition {
 	t.Helper()
 	input := lifecycle.PlanInput{Verb: reconciliation.Apply, Context: lifecycle.ContextIdentity{Name: "synthetic"}, State: compilation.NewState(catalog, catalog, nil), Controller: "controller"}
-	plan, err := New(api.StorageClient, nil).Plan(context.Background(), input)
+	plan, err := New(api.CephClient, nil).Plan(context.Background(), input)
 	if err != nil || len(plan.Definitions) != 1 {
 		t.Fatalf("the client planned %+v (%v)", plan.Definitions, diagnostics.Of(err))
 	}
@@ -51,7 +51,7 @@ func TestRBDClientCapsIncludeImageDataPools(t *testing.T) {
 		t.Fatalf("the client caps are %v", caps)
 	}
 	pool := func(name string) reconciliation.ObjectRef {
-		return reconciliation.ObjectRef{Kind: string(api.StoragePool), Object: name}
+		return reconciliation.ObjectRef{Kind: string(api.CephPool), Object: name}
 	}
 	if want := []reconciliation.ObjectRef{pool("volumes"), pool("archive"), pool("ec-data")}; !slices.Equal(definition.Requires, want) {
 		t.Fatalf("the client requires %v, want %v", definition.Requires, want)
@@ -64,11 +64,11 @@ func TestClientCapsNameEveryDataPoolOfEveryImageOnThePool(t *testing.T) {
 		ok     bool
 		want   map[string]string
 	}{
-		{Client{Access: "read-write", DataPools: []string{}, Name: "consumer", Pool: "volumes"}, true,
+		{Client{Access: "readWrite", DataPools: []string{}, Name: "consumer", Pool: "volumes"}, true,
 			map[string]string{"mon": "profile rbd", "mgr": "profile rbd pool=volumes", "osd": "profile rbd pool=volumes"}},
-		{Client{Access: "read-write", DataPools: []string{"archive", "ec-data"}, Name: "consumer", Pool: "volumes"}, true,
+		{Client{Access: "readWrite", DataPools: []string{"archive", "ec-data"}, Name: "consumer", Pool: "volumes"}, true,
 			map[string]string{"mon": "profile rbd", "mgr": "profile rbd pool=volumes", "osd": "profile rbd pool=volumes, profile rbd pool=archive, profile rbd pool=ec-data"}},
-		{Client{Access: "read-only", DataPools: []string{"archive"}, Name: "consumer", Pool: "volumes"}, true,
+		{Client{Access: "readOnly", DataPools: []string{"archive"}, Name: "consumer", Pool: "volumes"}, true,
 			map[string]string{"mon": "profile rbd", "mgr": "profile rbd-read-only pool=volumes", "osd": "profile rbd-read-only pool=volumes, profile rbd-read-only pool=archive"}},
 		{Client{Access: "rw", DataPools: []string{}, Name: "consumer", Pool: "volumes"}, false, nil},
 	} {
@@ -92,7 +92,7 @@ func clientProduced(t *testing.T, entity string, caps map[string]string) []lifec
 func TestProducedClientRejectsWiderCaps(t *testing.T) {
 	r := coreRequest()
 	r.Action = "client"
-	r.Client = &Client{Access: "read-write", DataPools: []string{"archive", "ec-data"}, Name: "consumer", Pool: "volumes"}
+	r.Client = &Client{Access: "readWrite", DataPools: []string{"archive", "ec-data"}, Name: "consumer", Pool: "volumes"}
 	derived := map[string]string{"mon": "profile rbd", "mgr": "profile rbd pool=volumes", "osd": "profile rbd pool=volumes, profile rbd pool=archive, profile rbd pool=ec-data"}
 	good := clientProduced(t, "client.consumer", derived)
 	defer lifecycle.ClearProduced(good)
@@ -134,8 +134,8 @@ func TestProducedClientRejectsWiderCaps(t *testing.T) {
 func TestClientPropagatesDataPoolPlanRefusals(t *testing.T) {
 	catalog := planCatalog(6, 6, nil, replicatedPool("volumes"), replicatedPool("archive", "mirroring", requestMap("mode", "image")), consumerClient(),
 		imageOf("disk", "volumes", "dataPoolRef", "archive"))
-	_, err := planned(t, catalog, api.StorageClient, "consumer")
-	refusedWith(t, err, "lifecycle.unsupported", "StoragePool archive declares mirroring without a StorageReplication owner", "declare a StorageReplication that names this pool, or remove spec.mirroring")
+	_, err := planned(t, catalog, api.CephClient, "consumer")
+	refusedWith(t, err, "lifecycle.unsupported", "CephPool archive declares mirroring without a CephReplication owner", "declare a CephReplication that names this pool, or remove spec.mirroring")
 }
 
 func TestUnchangedRequestContinuesAfterImpactText(t *testing.T) {
@@ -154,9 +154,9 @@ func TestUnchangedRequestContinuesAfterImpactText(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	frozen := []reconciliation.Block{frozenScopeBlock(t, api.StorageClient, "consumer", r)}
+	frozen := []reconciliation.Block{frozenScopeBlock(t, api.CephClient, "consumer", r)}
 	later := dataPoolCatalog(imageOf("late", "volumes", "dataPoolRef", "other"))
-	if got := ResourceScope(later, api.StorageClient, "consumer", frozen); got != "client.consumer read-write on pool volumes, data pools archive ec-data" {
+	if got := ResourceScope(later, api.CephClient, "consumer", frozen); got != "client.consumer read-write on pool volumes, data pools archive ec-data" {
 		t.Fatalf("the frozen client scope rendered %q", got)
 	}
 }

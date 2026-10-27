@@ -29,14 +29,14 @@
     "clusters": [
       {
         "name": "ocp-01",
-        "kind": "ContainerCluster",
+        "kind": "OpenShiftCluster",
         "status": "pending"
       }
     ],
     "storageClusters": [
       {
         "name": "ceph-01",
-        "kind": "StorageCluster",
+        "kind": "CephCluster",
         "status": "unsupported",
         "resources": []
       }
@@ -76,7 +76,7 @@
         },
         {
           "id": "machine-rhel-01",
-          "description": "remove the virtual machine rhel-01 and its controller",
+          "description": "remove the virtual machine rhel-01 and its emulated BMC",
           "stage": "machines",
           "state": "done",
           "attempts": 1
@@ -91,7 +91,7 @@
         {
           "id": "artifact-server-lab-artifacts",
           "description": "remove the artifact server lab-artifacts from controller",
-          "stage": "infra-components",
+          "stage": "infrastructure-services",
           "state": "done",
           "attempts": 1
         }

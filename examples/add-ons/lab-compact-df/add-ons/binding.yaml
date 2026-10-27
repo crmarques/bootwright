@@ -8,7 +8,7 @@ spec:
 
   packages:
     fdf:
-      storageExportRef: compact-storage
+      cephConsumerRef: compact-storage
 
       subscription:
         channel: stable-4.20

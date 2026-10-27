@@ -4471,7 +4471,7 @@ prints them, `unproved` with a reason when unreachable, and `--secrets --name`
 reveals the password, warning on an unproved copy.
 
 **Outcome, B516:** the
-[three-node example](../../examples/storage-clusters/libvirt-3-nodes-ceph/README.md) pins
+[three-node example](../../examples/ceph-clusters/libvirt-3-nodes-ceph/README.md) pins
 `image.version: v9.9.1-25074`, and its README is the staged-apply procedure
 (context, registry Secret, the four stages, validation through `cluster info`'s
 ceph prefix, the RBD client-data test, the dashboard login, the changed-intent
@@ -4647,7 +4647,7 @@ entries (`unsupported-release`, `package-license`, `package-platform`,
 `dashboard-verify` and `client-quiescence-unqualified`) still fail it. A
 refusal inside the package worker outside its closed set is published as
 `packages` with the original token in the detail. The owning
-contract is in [storage](../storage.md#bootstrap-identity-and-continuation).
+contract is in [storage](../ceph.md#bootstrap-identity-and-continuation).
 
 **Guard tests:** `TestAHostRefusalReachesTheOperatorWithItsRemedy`,
 `TestAPackageRefusalReachesTheOperatorWithWhatToCheck`,
@@ -4700,7 +4700,7 @@ probe's sysctl match refused. A bind now needs `ro`, and `z` until the
 container has run, with only those recorded defaults beside them, and sysctls
 are proved from the recorded create command, which must name exactly the
 requested ones. The owning contract is in
-[storage coverage](../storage-coverage.md).
+[storage coverage](../ceph-coverage.md).
 
 **Guard tests:** the collection's
 `tests/unit/plugins/module_utils/test_ceph_host_runtime.py`, whose engine
@@ -4846,7 +4846,7 @@ source now follows a root-owned link through the same ownership proof, under
 a bound of eight, and may carry a package's hard links; a private source, an
 account source and a link anyone else owns still refuse, and a private source
 is still the only name of its inode. The owning contract is in
-[storage native API](../storage-native-api.md).
+[storage native API](../ceph-native-api.md).
 
 **Guard tests:** the collection's
 `tests/unit/plugins/module_utils/test_ceph_tunnel_native.py`:
@@ -4906,8 +4906,8 @@ read-only `observe`, `host_state` and `bootstrap_state` paths a manager or
 seed daemon between containers is reported pending and named, where every
 action-time proof still requires it running. No ContentDigest input or
 request/evidence version moved, so the owner's live operation continued under
-the rebuilt binary. The contracts are in [storage](../storage.md) and
-[storage native API](../storage-native-api.md); the facts are in
+the rebuilt binary. The contracts are in [storage](../ceph.md) and
+[storage native API](../ceph-native-api.md); the facts are in
 [the live-host knowledge page](../../.agents/knowledge/ibm-ceph-live-host-facts.md).
 
 **Guard tests:** in the collection's unit tests,
@@ -6595,8 +6595,8 @@ retained locally.
 consumers without a version allowlist or compatibility catalog. Native refusal
 causes remain bounded and redacted. Independent artifact authenticity,
 credential confinement, transport trust, ownership, authorization and frozen
-continuation remain required. The [storage API](../api/storage.md) and
-[storage lifecycle](../storage.md#bootstrap-identity-and-continuation) own the
+continuation remain required. The [storage API](../api/ceph.md) and
+[storage lifecycle](../ceph.md#bootstrap-identity-and-continuation) own the
 contracts; this record adds no new admission rule or effect.
 
 **Implementation and finding coverage:**
@@ -6666,7 +6666,7 @@ No later implementation or publication is authorized by this completion.
 
 #### B615
 
-**Outcome:** satisfy the [operator-selected version contract](../api/storage.md)
+**Outcome:** satisfy the [operator-selected version contract](../api/ceph.md)
 through native installation and execution. Added on 2026-10-16 at the owner's
 request (D157); mandatory for [M2b](m2.md#m2b), delivered as
 [X99](#x99--operator-selected-ceph-artifacts-and-m2b-completion).
@@ -6704,7 +6704,7 @@ cause and selected coordinate without substituting a known version. Keep
 structural validation, safe argument transport, secret redaction, publisher
 and transport trust, ownership, authorization and continuation semantics.
 
-The [storage API](../api/storage.md) defines the selection fields and native
+The [storage API](../api/ceph.md) defines the selection fields and native
 consumers. Core v6, image v2 and package decision v2 freeze them; core v6 also
 binds the dashboard's bounded port-repair records. Older
 operations require their original applying executable for safe retirement. No IBM table
@@ -6768,7 +6768,7 @@ the rule. This slice delivers:
 - One general OpenShift control-plane roster of 1, 3, 4 and 5 masters for every
   release minor, so 4.22 and later plan and the installer judges the release
   (D162 clause (c)). No per-minor record exists yet.
-- The [runbook](../../examples/storage-clusters/libvirt-3-nodes-ceph/README.md)
+- The [runbook](../../examples/ceph-clusters/libvirt-3-nodes-ceph/README.md)
   for the owner's first runs of IBM Storage Ceph 9.9.0.3, 9.9.1.2 and 9.9.2.0.
 
 **Decision D162 and its provenance:** the owner asked on 2026-10-18 for this
@@ -6791,7 +6791,7 @@ records no component version pairing or compatibility rule.
   `enabled`. The other value refuses `call-home-unqualified` at the claim, after
   host preparation, so a correction needs `bootwright destroy`, `context
   update` and a fresh apply. The refusal's remedy and the
-  [storage API](../api/storage.md) say so. An earlier refusal is
+  [storage API](../api/ceph.md) say so. An earlier refusal is
   [B631](backlog.md#b631).
 - A host parser that lacks a bootstrap option refuses `native-option-undeclared`
   before the attempt record, with the same destroy-first remedy.
@@ -7257,7 +7257,7 @@ under neither refuses at resolution before any host effect, naming the registry
 and the anchor (the bundle Secret or the host trust store) and never a
 location, verify message or credential. The bundle travels as a protected
 request member and material, bounded in size and projected to its certificate
-blocks. [Storage](../storage.md#bootstrap-identity-and-continuation) and the
+blocks. [Storage](../ceph.md#bootstrap-identity-and-continuation) and the
 [Secrets API](../api/secrets.md) own the behavior.
 
 **Guard tests:** the Go plan and request tests
@@ -7314,7 +7314,7 @@ the key type and the guest's FIPS switch as the remedy; a policy that cannot
 be evaluated refuses `ssh-policy-unavailable`. The three refusals are
 `lifecycle.unsupported`, so they leave their block failed. A destroy opens no
 session and never evaluates the policy. [Security](../security.md#network-remote-systems-and-privilege)
-and [storage](../storage.md#bootstrap-identity-and-continuation) own the
+and [storage](../ceph.md#bootstrap-identity-and-continuation) own the
 behavior.
 
 **Guard tests:** `test_ceph_transport_uses_the_reduced_policy_config_not_dev_null`,
@@ -7384,7 +7384,7 @@ after `image`, omitted when none, and the full text gains a `Specializations`
 line after `Platform`, `none` when empty; the compact and unavailable entries
 show nothing. The line is the sorted union of the cluster apply proof's ids and
 those of every decodable ceph-host apply proof of the cluster.
-[Storage](../storage.md#bootstrap-identity-and-continuation) and the
+[Storage](../ceph.md#bootstrap-identity-and-continuation) and the
 [output contract](../cli/output.md) own the behavior.
 
 **Guard tests:** the Go `TestEvidenceSpecializationsMemberIsOptionalAndClosed`,
@@ -7441,7 +7441,7 @@ the context binding the recovery or the preflight proved. The controller stage
 installs `nmstate` for agent media whose cluster nodes reference a declared
 Machine, and `preflight controller --context` reports an `nmstate` check. The
 [controller spec](../controller.md) and the
-[container cluster spec](../container-clusters.md) own the behavior.
+[container cluster spec](../openshift-clusters.md) own the behavior.
 
 **Guard tests:** `TestExactClusterReleaseGrammar`,
 `TestReleaseVersionRequiresAPatchAndAcceptsPublisherPrereleases`,
@@ -7505,8 +7505,8 @@ results; M3b's [B61](m3.md#b61) operator acceptance remains unrun.
 name beyond the longest lifecycle block prefix's budget refuses at admission,
 the inert endpoint and channel fields are declared as such, and every
 admission refusal names the field to correct and, where one exists, an exact
-remedy. The [container cluster spec](../container-clusters.md) and its
-[API](../api/container-clusters.md) own the behavior.
+remedy. The [container cluster spec](../openshift-clusters.md) and its
+[API](../api/openshift-clusters.md) own the behavior.
 
 **Guard tests:** `TestCatalogImageNormalizationChangesOnlyDigest`,
 `TestReleaseImageNormalizationChangesOnlyDigest`,
@@ -7545,7 +7545,7 @@ from a Secret through the media consumer's injected port, refusing key options
 and unsafe comments; calls the owners of the cluster zone, endpoint names,
 label grammar and substrate arms; reads normalized network defaults; and
 refuses a composed node resolver list that conflicts with the selected name
-servers. The [container cluster spec](../container-clusters.md) and the
+servers. The [container cluster spec](../openshift-clusters.md) and the
 [Secrets API](../api/secrets.md) own the behavior.
 
 **Guard tests:** `TestPlanningRefusalsNameClusterAndSelectedField` and
@@ -7628,7 +7628,7 @@ applications apex, which a `*.apps` wildcard does not answer. One owner in
 `internal/containercluster` names them for preflight, the projection and the
 install role, with a table shared with the role's Jinja rule. A settled apply
 restores a latched required-log fault only after re-proving its records and
-that the context's input is unchanged. The [container cluster spec](../container-clusters.md#preflight)
+that the context's input is unchanged. The [container cluster spec](../openshift-clusters.md#preflight)
 and [state reconciliation](../state-reconciliation.md) own the behavior.
 
 **Guard tests:** `test_a_grown_installer_file_cut_in_each_section_is_restored`
@@ -7667,7 +7667,7 @@ verification commands and results; the compact operator gate
 
 **Outcome:** the platform of a multi-node cluster follows who owns its
 endpoints, and an address a cluster declares for an endpoint belongs to no
-other holder Bootwright knows. The [container cluster spec](../container-clusters.md)
+other holder Bootwright knows. The [container cluster spec](../openshift-clusters.md)
 owns the behavior.
 
 **Guard tests:** `TestInstallerEndpointPlatformOwnership`,
@@ -7731,7 +7731,7 @@ this cluster's image, or the image found no network configuration for the
 hardware address it booted with) and says a repeated apply leaves such a node
 as it is. Replays skip nodes already running this cluster's image and check
 rendezvous port 8090 only when this attempt booted it. The
-[container cluster spec](../container-clusters.md) and
+[container cluster spec](../openshift-clusters.md) and
 [infrastructure services](../infrastructure-services.md#private-consumer-publication)
 own the behavior.
 
@@ -7839,7 +7839,7 @@ validation IDs. The unregistered-node hint claims the cluster reached ready
 only after a stall; after the installer's own timeout or a spent budget it
 says only that installing starts once every declared node reports known, and a
 read that names no node leaves the classification's own hint. The
-[container cluster spec](../container-clusters.md) owns the behavior; the
+[container cluster spec](../openshift-clusters.md) owns the behavior; the
 [knowledge page](../../.agents/knowledge/openshift-agent-install-waits.md)
 distinguishes recorded installer assets from modeled host responses.
 
@@ -7880,8 +7880,8 @@ and a live compact rehearsal, and neither operator gate is claimed here.
 
 **Outcome:** installations of one context run one at a time while media builds
 overlap, and the compact example's three-master journey is qualified in-tree.
-The [container cluster spec](../container-clusters.md) and the
-[lab-compact example](../../examples/container-clusters/lab-compact/README.md)
+The [container cluster spec](../openshift-clusters.md) and the
+[lab-compact example](../../examples/openshift-clusters/lab-compact/README.md)
 own the behavior.
 
 **Guard tests:** `TestTwoClusterPlanSerializesInstallationsOnlyGolden` and
@@ -7906,7 +7906,7 @@ policy.
 
 #### B713
 
-The [lab-compact example](../../examples/container-clusters/lab-compact/README.md)
+The [lab-compact example](../../examples/openshift-clusters/lab-compact/README.md)
 declares three 6-vCPU, 16-GiB, 120-GiB masters, managed NAT networking,
 installer-owned VIPs and a 4/8/40 capacity reserve. Its runbook carries B66's
 staged, interrupted, killed-wait, stalled-node, settled and removal drills,
@@ -8071,7 +8071,7 @@ permutation. [Cluster facts](../api/addons.md) owns the package boundary.
 Gateway and secondary-network extensions remain B758, whose prerequisites
 and live proof are still open.
 
-**Guard tests:** `internal/containercluster/addon_facts_test.go`
+**Guard tests:** `internal/containercluster/openshift/addon_facts_test.go`
 (endpoint sources, node composition, claim parity, determinism and network
 settings), and package pool admission tests.
 
@@ -8088,10 +8088,10 @@ An authored `spec.ceph.services` entry with `service_type: iscsi` refuses at
 its `service_type` during full and partial validation before any effect. The
 diagnostic directs block-access consumers toward NVMe-oF without echoing
 authored service identifiers or credentials. The owning contract is
-[native service admission](../storage-native-api.md).
+[native service admission](../ceph-native-api.md).
 
-**Guard tests:** `internal/storage/native_test.go` covers full admission,
-partial admission and protected diagnostic output; `internal/storage/partial_test.go`
+**Guard tests:** `internal/storage/cephcluster/native_test.go` covers full admission,
+partial admission and protected diagnostic output; `internal/storage/cephcluster/partial_test.go`
 covers Environment-default admission. These are offline refusal gates.
 
 ### X47 — Verified emulated controller trust and bounds
@@ -8185,7 +8185,7 @@ The remaining X52 items stay on [M2](m2.md#planned-slices).
 
 B315 shares intrinsic invariants between partial and complete admission;
 `TestPartialValidationIssuesAlsoRefuseTheCompleteObject` in
-`internal/storage/partial_test.go` guards parity. Its implementation was
+`internal/storage/cephcluster/partial_test.go` guards parity. Its implementation was
 already present; this delivery records the previously unrecorded exit.
 
 B317 removes the generic invariant remedy. Each call now supplies its own
@@ -8194,7 +8194,7 @@ and exact field with registry or RHSM actions. Admission conditions, issue
 ordering and frozen requests are unchanged. The regression tests
 `TestStorageContradictionsNameCorrectiveActions` and
 `TestCephEntitlementDiagnosticsNameProductAndField` in
-`internal/storage/remediation_test.go` failed before the fix and pass after it;
+`internal/storage/cephcluster/remediation_test.go` failed before the fix and pass after it;
 existing exact-remedy assertions cover pool, image and cross-cluster cases.
 The delivering commits record exact in-tree commands and results. Neither
 item requires an operator-run acceptance row.
@@ -8643,7 +8643,7 @@ cluster and Desired state. Delivered on 2026-10-26 as lane G of the
 [audit remediation](backlog.md#lane-order-and-progress) under D182, with
 D183's answers to Q72 to Q75; the lane also partly delivered
 [B808](backlog.md#b808), and moved B810's package split and coverage-page
-renames into [B814](backlog.md#b814).
+renames into [B814](#x171--audit-lane-i-api-shape-and-grammar).
 
 Implementation selection is enforced: two implementations of one family
 claiming one object refuse before registration, a fitness test keeps arm and
@@ -8711,6 +8711,144 @@ placeholder `bootwright plan` fills.
 **Guard tests:** the lifecycle, status, diff, handoff, reservation, receipt,
 libvirt host and authorization tests named in the delivering commit, each
 proved by a seeded mismatch; the commit records the gates.
+
+### X171 — Audit lane I: API shape and grammar
+
+**Items:** B814, B821, B824, B827, B828, B837 and B333 (2026-10-26 spec audit
+steps P1-G, P2-C, L2, L5 and L6, D183's Q118 and the 2026-10-05 audit).
+**Kind:** enabling (B827 defect, B837 product). **Owners:** Desired state, CLI,
+Add-ons, Storage, Infrastructure services and Architecture. Delivered on
+2026-10-27 as lane I of the
+[audit remediation](backlog.md#lane-order-and-progress) under D182, with D183's
+answers to Q77 to Q88, Q105 to Q107, Q110 to Q115 and Q118 and D185's names;
+the lane also partly delivered [B826](backlog.md#b826) and parked B848 to B856.
+B810's package split and coverage-page renames, which X169 moved into B814, are
+delivered here.
+
+**Names.** `ContainerCluster` is `OpenShiftCluster` (OKD stays
+`distribution.type: okd`), `StorageCluster` and its thirteen children are
+`CephCluster` and the `Ceph*` kinds, and `StorageExport` is `CephConsumer`, with
+`fdf.cephConsumerRef` and the ClusterAddon effect `cephConsumerAttachment`;
+Ceph host marks and principal names are unchanged. `CephCluster` drops `type`
+and its `spec.ceph` level is flattened into `spec`, `CephPool` protection is a
+presence union, node roles are `controlPlane` (projected to the installer's
+native `master`), endpoint sources are `installer`, `install.agent` is a
+defaulted arm and `install.platform` a presence union. The coverage, API and
+domain pages are renamed ([OpenShift coverage](../openshift-coverage.md),
+[Ceph coverage](../ceph-coverage.md), the OpenShift cluster and Ceph API and
+domain pages, [Ceph resources](../ceph-resources.md), the Ceph native API and
+the deferred Ceph API page), the example directories follow, and `lab-kubevirt` is `lab-kubevirt-external`. The Go
+packages split into a neutral core and `openshift` or `cephcluster`. Every
+retired kind, field and value is data in `api/v1alpha1` that the unknown-field,
+unknown-kind and enum diagnostics read to name the replacement, also under
+`spec.defaults`, and [api.md](../api.md#retired-fields) holds its tables to that
+data.
+
+**Shapes.** A cluster family registry maps the categories `containerCluster` and
+`storageCluster` to their kinds and child roles; selection, normalization
+order, status, inspection, cluster access and the CLI iterate it and name no
+family kind, every cluster kind shares one name namespace, and a frozen
+operation holding a retired kind refuses continuation naming its registering
+build. A Machine gains `spec.substrate.<arm>` for the facts only one substrate
+reads (BMC, MACs by `nicRef`, `wwn`/`hctl`/`serialNumber`, `profileRef`,
+`interfaceAttachments`) and loses `spec.capabilities`: node, arbiter,
+container-runtime and libvirt prerequisites follow from membership and
+placement. A Machine no provider realizes authors a provider-less bare-metal
+arm for its BMC, so an operator-owned bastion or witness is still powered. The
+[union rule](../api.md#unions) decides between a presence arm and an enum and
+holds every registered schema; the Ceph `distribution` became a presence union
+`oss | redhat | ibm` under Q81. A managed service's omitted `bindAddress` is the
+one address its endpoints name (B333's outcome, so the wildcard default and its
+colliding socket are gone for a single-address service), a generated
+certificate derives its names from the endpoints it serves, and a filesystem's
+`mdsServiceRef`, an SMB share's `cluster_id` and an SMB cluster's `resourceRefs`
+are derived; the examples drop the values equal to their derivations. Plan-time
+`lifecycle.unsupported` is the default refusal point
+([compiler boundary](../api.md#compiler-boundary)), and `api.unrealized` warns at
+`validate`, `plan` and `apply` for each row of a code-checked
+[table](../api.md#admitted-but-unrealized); five of its rows had no item and
+became B853 to B856.
+
+**Identities and limits.** A block identity of at most 63 bytes is unchanged;
+a longer one hashes its whole identity (prefix and tail together), so the
+planner and every named builder agree at any length, and no per-kind name limit
+remains: every `metadata.name` is a DNS label of at most 63 bytes
+([object names](../api.md#object-names)). Identities longer than 63 bytes
+moved, before 1.x. Two objects whose names spell one block identity refuse naming
+both. A derived node FQDN or endpoint name longer than 253 bytes, or with a
+label over 63, refuses at the field that composed it.
+
+**Grammar.** Every Bootwright-owned enum value is lowerCamel, and each old
+spelling refuses `api.value` naming its replacement; native spellings keep
+theirs. A generated ECDSA key keeps its stored key-type spelling in the
+declaration fingerprint, so a stored key stays current and is never
+regenerated. The stage token `infra-components` is `infrastructure-services`,
+and an operation frozen with a stage this build does not run refuses at the
+operation-store read naming its registering build. Every reference field is
+typed and ends in `Ref` or `Refs`, `Entitlement` permits only the arms of its
+type, a diagnostic names authored list positions, a skipped `secrets` directory
+holding YAML warns, the libvirt provider's single-value fields and
+`nodeNetworking` are gone, and an external ArtifactServer and an unclaimed
+managed Registry or LoadBalancer refuse with their remedy. A BMC is called a
+BMC in messages and goldens, a kinds docs-check holds each registered kind to
+its catalog and page rows, and the settled apply line names `diff --observe`.
+`render effective --origins` classifies each effective leaf as authored,
+`defaults.<Kind>`, built-in or derived
+([origins](../cli.md#effective-field-origins)); `bootwright schema --format
+json-schema` exports an advisory schema, with `validate` still the authority
+([schema export](../cli.md#schema-export)).
+
+**Pages and ordering.** Each Ceph kind's field record lives on one page
+([Ceph API](../api/ceph.md#kinds)), a non-IBM distribution refuses at plan as a
+row of the refusal table in [ceph.md](../ceph.md), and the restated attempt
+record and version-5 text are links (B821). The nmstate example notes that it
+targets B90 (B828). `ClusterAddonBinding.spec.afterRefs` authors ordering
+between bindings of one cluster, with refusals for an unknown name, another
+cluster's binding and a cycle, and `plan` and `apply` accept `--until
+<cluster>.<package>`, which stops after that add-on instance and its
+prerequisites and pauses the operation for a later `apply`
+([stopping after an add-on instance](../state-reconciliation.md#stopping-after-an-add-on-instance)).
+
+**Contracts moved.** `addon-instance-request-v2` and `cluster-network-request-v2`
+(the produced input kind), `ceph-export-request-v2` (the consumer type name),
+`ceph-core-v33` and `ceph-host-v8` (transport, client access and pool role),
+`os-install-anaconda-v17`, `cluster-install-agent-v8` and `physical-erase-v2`
+(trust values). Slice 3 moved the `RequestDigest` values even where the request
+bytes did not, because the block Kind is hashed; custody produced-output entries
+are keyed by block ID and were not migrated, and no converter exists (D142).
+
+**Review.** An independent review found one blocking issue, the identity split
+between the Ceph planner and its named builders, and four major issues (a
+JSON-schema export requiring fields a kind default supplies, its 17 MB export,
+a dropped subvolume-group mode grammar and undocumented `plan --until` output),
+with a safety minor (root-device hints on OS-ready Machines, and a root disk
+named only by WWN escaping the OSD root exclusion); all were fixed. One minor was
+rejected: a generated certificate whose derived names later gain an HTTPS
+endpoint already reads stale, because its declaration fingerprint moves, and
+the existing `secret generate` remedy applies. The parked findings are B848 to
+B852; B857 holds the operator-task check.
+
+**Limitations.** The audit 5.7 operator-task paper check of the chosen shapes
+was not run; it is [B857](backlog.md#b857). The optional move of media
+acquisition to a `contexts/` subpage (B821) was not done. B826's shared
+unresolved-reference diagnostic for nested, endpoint and native-service
+references remains; its Not yet met line in [api.md](../api.md#references) stays.
+The openshift-clusters.md and openshift-coverage.md prose that calls a BMC a
+controller is B851.
+
+**Host impact.** Every moved request version, the stage token and the kind
+strings refuse an operation frozen by an earlier build, so a live operation
+finishes or is destroyed with the build that registered it. The automation
+digest moved: the host needs `make build` and `bootwright setup`. Inputs migrate
+to the new kinds and fields, among them the sibling chart
+`bootwright-template-inputs/environment-ha` and the gitignored wip example
+fixtures; each retired path refuses naming its replacement.
+
+**Guard tests:** the retired-table, union, family-kind, Kinds-table, Ref-suffix,
+lowerCamel-enum, unrealized-table, block-identity and builder-identity tests,
+the example identity and JSON-schema equivalence tests, and the refusal-table,
+stage-token and retired-kind continuation tests named in the delivering commit,
+each proved by a seeded mismatch; the commit records the gates.
 
 ## M3 independent in-tree completion
 

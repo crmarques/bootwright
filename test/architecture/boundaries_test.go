@@ -73,6 +73,7 @@ func packageRoles() map[string]packageRole {
 		"internal/addons/clusterobjects/driver":    applicationRole,
 		"internal/addons/instance":                 applicationRole,
 		"internal/containercluster":                domainRole,
+		"internal/containercluster/openshift":      domainRole,
 		"internal/controller":                      domainRole,
 		"internal/desiredstate":                    domainRole,
 		"internal/environment":                     domainRole,
@@ -80,6 +81,7 @@ func packageRoles() map[string]packageRole {
 		"internal/managedos":                       domainRole,
 		"internal/secrets":                         domainRole,
 		"internal/storage":                         domainRole,
+		"internal/storage/cephcluster":             domainRole,
 		"internal/substrate/capacity":              applicationRole,
 		"internal/trust":                           domainRole,
 		// A port's shared contract suite, imported only by tests.

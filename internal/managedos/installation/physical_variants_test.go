@@ -16,18 +16,18 @@ import (
 
 func physicalVariantCatalog(profile api.Object, hostType string) api.Catalog {
 	source := api.MapValue(field("generated", api.MapValue(text("keyType", hostType))))
-	objects := labCatalog(metalProvider(), server(api.MapValue(text("deviceName", "/dev/disk/by-id/wwn-0x5000c500a1b2c3d4"))), sshKeySecret(source), profile, rhelEntitlement(), fleetSecret(api.MapValue(field("generated", api.MapValue(text("keyType", "ecdsa-p256")))))).Objects()
+	objects := labCatalog(metalProvider(), server(api.MapValue(text("deviceName", "/dev/disk/by-id/wwn-0x5000c500a1b2c3d4"))), sshKeySecret(source), profile, rhelEntitlement(), fleetSecret(api.MapValue(field("generated", api.MapValue(text("keyType", "ecdsaP256")))))).Objects()
 	return api.NewCatalog(slices.DeleteFunc(objects, func(object api.Object) bool { return object.Kind() == api.Machine && object.Name() == "rhel-01" }))
 }
 
 func TestPhysicalHostVariantsKeepPrivateTargetAndRootProofs(t *testing.T) {
 	for _, profile := range []api.Object{fipsProfile(), encryptingProfile(), registeringProfile()} {
-		catalog := physicalVariantCatalog(profile, "ecdsa-p256")
+		catalog := physicalVariantCatalog(profile, "ecdsaP256")
 		if refused := Refusals(catalog); len(refused) != 0 {
 			t.Fatalf("physical variant refused: %+v", refused)
 		}
 		request, _ := onlyRequest(t, catalog)
-		if !request.Target.Physical || request.Target.Channel != substrate.ChannelDeliveredKey || request.Private == nil || request.Image != nil || request.Target.HostKeyRef != "metal-01-host-key" || request.Target.HostKeyType != "ecdsa-p256" {
+		if !request.Target.Physical || request.Target.Channel != substrate.ChannelDeliveredKey || request.Private == nil || request.Image != nil || request.Target.HostKeyRef != "metal-01-host-key" || request.Target.HostKeyType != "ecdsaP256" {
 			t.Fatal("physical target/private identity lost")
 		}
 		if !strings.Contains(request.Kickstart, "ignoredisk --only-use=disk/by-id/wwn-0x5000c500a1b2c3d4") || !strings.Contains(request.Kickstart, "clearpart --all --initlabel --drives=disk/by-id/wwn-0x5000c500a1b2c3d4") || !strings.Contains(request.Kickstart, "52:54:00:9a:1b:01") || !strings.Contains(request.Kickstart, "is not a whole disk") {
@@ -73,7 +73,7 @@ func TestPhysicalFIPSRefusesBoundIncompatibleHostKeyBeforeRunner(t *testing.T) {
 }
 
 func TestPhysicalVariantRequestRetainsApplyDataLossAuthorization(t *testing.T) {
-	catalog := physicalVariantCatalog(encryptingProfile(), "ecdsa-p256")
+	catalog := physicalVariantCatalog(encryptingProfile(), "ecdsaP256")
 	input := planInput(reconciliation.Apply)
 	input.State = compilation.NewState(catalog, catalog, nil)
 	plan, err := New(nil).WithMedia(labMedia()).Plan(context.Background(), input)
@@ -92,7 +92,7 @@ func TestPhysicalVariantRequestRetainsApplyDataLossAuthorization(t *testing.T) {
 func TestPhysicalHostVariantsRequestGolden(t *testing.T) {
 	profile := registeringProfile()
 	profile = profile.WithSpec(profile.Spec().WithPath(encryptionSecurity(true), "customizations", "security"))
-	request, _ := onlyRequest(t, physicalVariantCatalog(profile, "ecdsa-p256"))
+	request, _ := onlyRequest(t, physicalVariantCatalog(profile, "ecdsaP256"))
 	if !request.fips() || request.Registration == nil || request.DiskEncryption == nil {
 		t.Fatal("combined physical variant lost a requested arm")
 	}

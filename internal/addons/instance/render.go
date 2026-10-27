@@ -59,7 +59,7 @@ func Render(selected addons.SelectedInstance, facts addons.ClusterFacts, control
 		return Request{}, nil, fmt.Errorf("program of package %s for %s: %w", p.Name, instance.Cluster, err)
 	}
 	secrets := []string{}
-	produced := []lifecycle.ProducedInput{{Kind: "ContainerCluster", Object: instance.Cluster, Output: "kubeconfig"}}
+	produced := []lifecycle.ProducedInput{{Kind: "OpenShiftCluster", Object: instance.Cluster, Output: "kubeconfig"}}
 	for _, step := range program.Steps {
 		if step.Place != nil {
 			if p := step.Place.Produced; p != nil {
@@ -75,7 +75,7 @@ func Render(selected addons.SelectedInstance, facts addons.ClusterFacts, control
 	slices.Sort(secrets)
 	secrets = slices.Compact(secrets)
 	request := Request{Binding: instance.Binding, BudgetSeconds: int64(budget / time.Second), Cluster: instance.Cluster, Package: p.Name, Placement: machine.Placement{Connection: machine.ConnectionLocal, Machine: controller}, ProducedInputs: produced, Program: data, Secrets: secrets, Tool: Tool{Compatibility: "openshift", Kind: "openshift-clients", Version: facts.Release}, Version: requestVersion}
-	requires := []reconciliation.ObjectRef{{Kind: "ContainerCluster", Object: instance.Cluster}}
+	requires := []reconciliation.ObjectRef{{Kind: "OpenShiftCluster", Object: instance.Cluster}}
 	for _, provider := range selected.Providers {
 		if provider.Package != "" {
 			requires = append(requires, reconciliation.ObjectRef{Kind: Kind, Object: Object(instance.Cluster, provider.Package)})

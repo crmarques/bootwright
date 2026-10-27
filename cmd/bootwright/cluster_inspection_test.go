@@ -53,13 +53,13 @@ func TestClusterListAndInfoReadOnlyLocalStateForAnExplicitOrCurrentContext(t *te
 	services, _, _ := snoContext(t)
 	for _, args := range [][]string{{"--context", "lab-sno"}, {}} {
 		out, stderr := contextRun(t, services, 0, append([]string{"cluster", "list"}, args...)...)
-		if stderr != "" || out != "  NAME   KIND\n  ceph   StorageCluster\n  sno    ContainerCluster\n" {
+		if stderr != "" || out != "  NAME   KIND\n  ceph   CephCluster\n  sno    OpenShiftCluster\n" {
 			t.Fatalf("%v listed %q with standard error %q", args, out, stderr)
 		}
 		out, stderr = contextRun(t, services, 0, append([]string{"cluster", "list", "--output", "json"}, args...)...)
 		listed := decodeInspected(t, out)
 		if stderr != "" || listed.Command != "cluster list" || listed.Result.Context != "lab-sno" || len(listed.Result.Clusters) != 2 ||
-			listed.Result.Clusters[0].Name != "ceph" || listed.Result.Clusters[0].Kind != "StorageCluster" || listed.Result.Clusters[1].Name != "sno" || listed.Result.Clusters[1].Kind != "ContainerCluster" {
+			listed.Result.Clusters[0].Name != "ceph" || listed.Result.Clusters[0].Kind != "CephCluster" || listed.Result.Clusters[1].Name != "sno" || listed.Result.Clusters[1].Kind != "OpenShiftCluster" {
 			t.Fatalf("%v listed %s with standard error %q", args, out, stderr)
 		}
 	}
@@ -99,7 +99,7 @@ func TestClusterInfoRefusesAnUnselectedNameAndNonApplicableSecretsWithoutReading
 		}
 		singleDiagnostic(t, stderr, code)
 	}
-	for name, mention := range map[string]string{"sno": "bootwright cluster kubeconfig", "ceph": "external Ceph StorageCluster"} {
+	for name, mention := range map[string]string{"sno": "bootwright cluster kubeconfig", "ceph": "external CephCluster"} {
 		out, stderr := contextRun(t, services, 1, "cluster", "info", "--secrets", "--name", name)
 		singleDiagnostic(t, stderr, "cluster.not-applicable")
 		if out != "" || !strings.Contains(stderr, mention) || strings.Contains(stderr, "apiVersion") || strings.Contains(stderr, "api.sno.lab.example.test") {
@@ -143,21 +143,21 @@ func TestInspectionWiringMapsEvidenceReadersToProofs(t *testing.T) {
 	done := func(implementation string, kind api.Kind, object string) lifecycle.BlockEvidence {
 		return lifecycle.BlockEvidence{Kind: string(kind), Object: object, Implementation: implementation, Verb: reconciliation.Apply, State: reconciliation.BlockDone}
 	}
-	pending := done(agentinstall.InstallImplementation, api.ContainerCluster, "sno")
+	pending := done(agentinstall.InstallImplementation, api.OpenShiftCluster, "sno")
 	pending.State = reconciliation.BlockPending
-	other := done("cluster-media-agent-v1", api.ContainerCluster, "sno")
+	other := done("cluster-media-agent-v1", api.OpenShiftCluster, "sno")
 	for name, tt := range map[string]struct {
 		proofs []lifecycle.BlockEvidence
 		want   bool
 	}{
-		"install done":     {[]lifecycle.BlockEvidence{other, done(agentinstall.InstallImplementation, api.ContainerCluster, "sno")}, true},
+		"install done":     {[]lifecycle.BlockEvidence{other, done(agentinstall.InstallImplementation, api.OpenShiftCluster, "sno")}, true},
 		"install pending":  {[]lifecycle.BlockEvidence{other, pending}, false},
 		"only the media":   {[]lifecycle.BlockEvidence{other}, false},
 		"no operation yet": {nil, false},
 	} {
-		reader := &readerFake{proofs: map[string][]lifecycle.BlockEvidence{"ContainerCluster/sno": tt.proofs}}
+		reader := &readerFake{proofs: map[string][]lifecycle.BlockEvidence{"OpenShiftCluster/sno": tt.proofs}}
 		got, err := installProofs{reconciler: reader}.Installed(ctx, "lab", "sno")
-		if err != nil || got != tt.want || !slices.Equal(reader.reads, []string{"ContainerCluster/sno"}) {
+		if err != nil || got != tt.want || !slices.Equal(reader.reads, []string{"OpenShiftCluster/sno"}) {
 			t.Fatalf("%s: installed = %t (%v) after reads %v", name, got, err, reader.reads)
 		}
 	}
@@ -191,8 +191,8 @@ func inspectedStorageCluster() (api.Catalog, api.Object) {
 			api.FieldValue{Name: "network", Value: api.MapValue(api.FieldValue{Name: "addresses", Value: addresses})}))
 	}
 	node := api.MapValue(api.FieldValue{Name: "name", Value: api.StringValue("rhel-01")}, api.FieldValue{Name: "fqdn", Value: api.StringValue("rhel-01.lab.test")}, api.FieldValue{Name: "machineRef", Value: api.StringValue("m1")})
-	cluster := api.NewObject(api.StorageCluster, "storage", api.Value{}, api.MapValue(
-		api.FieldValue{Name: "ceph", Value: api.MapValue(api.FieldValue{Name: "topology", Value: api.MapValue(api.FieldValue{Name: "nodes", Value: api.ListValue(node)})})}))
+	cluster := api.NewObject(api.CephCluster, "storage", api.Value{}, api.MapValue(
+		api.FieldValue{Name: "topology", Value: api.MapValue(api.FieldValue{Name: "nodes", Value: api.ListValue(node)})}))
 	return api.NewCatalog([]api.Object{cluster, machineObject("m1", "192.0.2.11")}), cluster
 }
 
@@ -216,8 +216,8 @@ func inspectedClusterProofs(t *testing.T) []lifecycle.BlockEvidence {
 		t.Fatal(err)
 	}
 	return []lifecycle.BlockEvidence{
-		{Kind: "StorageCluster", Object: "storage", Implementation: ceph.ImageImplementation, Verb: reconciliation.Apply, State: reconciliation.BlockDone, Evidence: image},
-		{Kind: "StorageCluster", Object: "storage", Implementation: ceph.Implementation, Verb: reconciliation.Apply, State: reconciliation.BlockDone, Evidence: bootstrap},
+		{Kind: "CephCluster", Object: "storage", Implementation: ceph.ImageImplementation, Verb: reconciliation.Apply, State: reconciliation.BlockDone, Evidence: image},
+		{Kind: "CephCluster", Object: "storage", Implementation: ceph.Implementation, Verb: reconciliation.Apply, State: reconciliation.BlockDone, Evidence: bootstrap},
 	}
 }
 
@@ -225,11 +225,11 @@ func TestCephInspectionReportsAReasonWithoutProofsAndTheFSIDWithThem(t *testing.
 	catalog, cluster := inspectedStorageCluster()
 	reader := &readerFake{}
 	proof, err := (cephInspection{reconciler: reader}).ManagedStorage(context.Background(), "lab", catalog, cluster)
-	if err != nil || proof.Reason == "" || proof.FSID != "" || !slices.Equal(reader.reads, []string{"StorageCluster/storage"}) {
+	if err != nil || proof.Reason == "" || proof.FSID != "" || !slices.Equal(reader.reads, []string{"CephCluster/storage"}) {
 		t.Fatalf("proof without evidence = %+v (%v) after reads %v", proof, err, reader.reads)
 	}
 	digest := inspectedDigest
-	reader.proofs = map[string][]lifecycle.BlockEvidence{"StorageCluster/storage": inspectedClusterProofs(t)}
+	reader.proofs = map[string][]lifecycle.BlockEvidence{"CephCluster/storage": inspectedClusterProofs(t)}
 	proof, err = (cephInspection{reconciler: reader}).ManagedStorage(context.Background(), "lab", catalog, cluster)
 	if err != nil || proof.Reason != "" || proof.FSID != "6b8f1c2e-4d7a-5e3f-9a1b-0c2d4e6f8a1b" || proof.Image.Digest != digest || proof.Image.Platform != "linux/amd64" ||
 		len(proof.Monitors) != 1 || proof.Monitors[0].Host != "rhel-01" || proof.Monitors[0].FQDN != "rhel-01.lab.test" || proof.Monitors[0].Address != "198.51.100.11" ||
@@ -340,9 +340,9 @@ func TestCephInspectionReadsEndpointEvidence(t *testing.T) {
 	}
 	mgmtDocument := json.RawMessage(`{"placement":{"hosts":["rhel-01.lab.test"]},"service_type":"mgmt-gateway","spec":{"port":9443,"virtual_ip":"192.0.2.60"}}`)
 	rgwDocument := json.RawMessage(`{"placement":{"hosts":["rhel-01.lab.test"]},"service_id":"objects","service_type":"rgw","spec":{"rgw_realm":"lab","rgw_zone":"lab","rgw_zonegroup":"lab","ssl":true}}`)
-	mgmt := frozen("StorageCluster", "storage", ceph.Request{Action: "service", Cluster: "storage", Service: &ceph.ServiceUnit{Type: "mgmt-gateway", Documents: []json.RawMessage{mgmtDocument}}}, "a")
-	objects := frozen("StorageObjectGateway", "objects", ceph.Request{Action: "gateway", Cluster: "storage", Gateway: &ceph.Gateway{Name: "objects", Endpoint: "s3.lab.test", Documents: []json.RawMessage{rgwDocument}}}, "b")
-	foreign := frozen("StorageObjectGateway", "foreign", ceph.Request{Action: "gateway", Cluster: "other", Gateway: &ceph.Gateway{Name: "foreign", Documents: []json.RawMessage{rgwDocument}}}, "c")
+	mgmt := frozen("CephCluster", "storage", ceph.Request{Action: "service", Cluster: "storage", Service: &ceph.ServiceUnit{Type: "mgmt-gateway", Documents: []json.RawMessage{mgmtDocument}}}, "a")
+	objects := frozen("CephObjectGateway", "objects", ceph.Request{Action: "gateway", Cluster: "storage", Gateway: &ceph.Gateway{Name: "objects", Endpoint: "s3.lab.test", Documents: []json.RawMessage{rgwDocument}}}, "b")
+	foreign := frozen("CephObjectGateway", "foreign", ceph.Request{Action: "gateway", Cluster: "other", Gateway: &ceph.Gateway{Name: "foreign", Documents: []json.RawMessage{rgwDocument}}}, "c")
 	proved := func(block reconciliation.Block, action string) lifecycle.BlockEvidence {
 		data, err := json.Marshal(ceph.Evidence{Version: ceph.EvidenceVersion, Request: block.RequestDigest, Action: action, Owner: "apply", FSID: "6b8f1c2e-4d7a-5e3f-9a1b-0c2d4e6f8a1b", Owned: true, Exists: true, Ready: true,
 			Health: "HEALTH_OK", Hosts: []string{}, Monitors: []string{}, MGRStandbys: []string{}, MonAddrs: []ceph.MonitorAddress{}, OSDs: []ceph.OSDEvidence{}, Daemons: []ceph.UnitDaemon{},
@@ -354,9 +354,9 @@ func TestCephInspectionReadsEndpointEvidence(t *testing.T) {
 	}
 	reader := &readerFake{
 		proofs: map[string][]lifecycle.BlockEvidence{
-			"StorageCluster/storage":       append(inspectedClusterProofs(t), proved(mgmt, "service")),
-			"StorageObjectGateway/objects": {proved(objects, "gateway")},
-			"StorageObjectGateway/foreign": {proved(foreign, "gateway")},
+			"CephCluster/storage":       append(inspectedClusterProofs(t), proved(mgmt, "service")),
+			"CephObjectGateway/objects": {proved(objects, "gateway")},
+			"CephObjectGateway/foreign": {proved(foreign, "gateway")},
 		},
 		resources: &lifecycle.StorageResourcesResult{Frozen: []reconciliation.Block{mgmt, objects, foreign}},
 	}
@@ -365,10 +365,10 @@ func TestCephInspectionReadsEndpointEvidence(t *testing.T) {
 		{Service: "mgmt-gateway", URLs: []string{"https://192.0.2.60:9443/"}, CertificateSHA256: strings.Repeat("d", 64), Issuer: inspection.IssuerCephadm, Status: inspection.EndpointReady},
 		{Service: "rgw.objects", URLs: []string{"https://s3.lab.test:443/"}, CertificateSHA256: strings.Repeat("d", 64), Issuer: inspection.IssuerCephadm, Status: inspection.EndpointReady},
 	}
-	if err != nil || !reflect.DeepEqual(proof.Endpoints, want) || !slices.Equal(reader.reads, []string{"StorageCluster/storage", "resources/lab", "StorageObjectGateway/objects"}) {
+	if err != nil || !reflect.DeepEqual(proof.Endpoints, want) || !slices.Equal(reader.reads, []string{"CephCluster/storage", "resources/lab", "CephObjectGateway/objects"}) {
 		t.Fatalf("endpoints = %+v (%v) after reads %v, want %+v", proof.Endpoints, err, reader.reads, want)
 	}
-	bare := &readerFake{proofs: map[string][]lifecycle.BlockEvidence{"StorageCluster/storage": inspectedClusterProofs(t)}}
+	bare := &readerFake{proofs: map[string][]lifecycle.BlockEvidence{"CephCluster/storage": inspectedClusterProofs(t)}}
 	proof, err = (cephInspection{reconciler: bare}).ManagedStorage(context.Background(), "lab", catalog, cluster)
 	if err != nil || proof.Endpoints == nil || len(proof.Endpoints) != 0 || proof.FSID == "" {
 		t.Fatalf("a missing resources result gave %#v (%v)", proof.Endpoints, err)
@@ -381,11 +381,11 @@ func inspectedResourceRows(t *testing.T) {
 		return api.FieldValue{Name: name, Value: api.StringValue(value)}
 	}
 	catalog := api.NewCatalog([]api.Object{
-		api.NewObject(api.StorageCluster, "ceph", api.Value{}, api.MapValue(text("management", "managed"))),
-		api.NewObject(api.StorageCluster, "archive", api.Value{}, api.MapValue(text("management", "external"))),
-		api.NewObject(api.StoragePool, "rbd-data", api.Value{}, api.MapValue(text("clusterRef", "ceph"))),
-		api.NewObject(api.StorageObjectGateway, "objects", api.Value{}, api.MapValue(text("clusterRef", "ceph"), text("realm", "lab"), text("zoneGroup", "lab"), text("zone", "lab-a"))),
-		api.NewObject(api.StorageExport, "foundation", api.Value{}, api.MapValue(text("clusterRef", "ceph"))),
+		api.NewObject(api.CephCluster, "ceph", api.Value{}, api.MapValue(text("management", "managed"))),
+		api.NewObject(api.CephCluster, "archive", api.Value{}, api.MapValue(text("management", "external"))),
+		api.NewObject(api.CephPool, "rbd-data", api.Value{}, api.MapValue(text("clusterRef", "ceph"))),
+		api.NewObject(api.CephObjectGateway, "objects", api.Value{}, api.MapValue(text("clusterRef", "ceph"), text("realm", "lab"), text("zoneGroup", "lab"), text("zone", "lab-a"))),
+		api.NewObject(api.CephConsumer, "foundation", api.Value{}, api.MapValue(text("clusterRef", "ceph"))),
 	})
 	request, err := ceph.Request{Version: ceph.Version, Action: "pool", Pool: &ceph.Pool{Name: "rbd-data", Size: 2, MinSize: 2, Application: "rbd"}}.Canonical()
 	if err != nil {
@@ -393,20 +393,20 @@ func inspectedResourceRows(t *testing.T) {
 	}
 	reader := &readerFake{resources: &lifecycle.StorageResourcesResult{
 		Clusters: []lifecycle.ClusterSummary{
-			{Name: "archive", Kind: "StorageCluster", Status: lifecycle.RealizationPending, Resources: []lifecycle.ResourceSummary{}},
-			{Name: "ceph", Kind: "StorageCluster", Status: lifecycle.RealizationDone, Resources: []lifecycle.ResourceSummary{
-				{Kind: "StoragePool", Name: "rbd-data", Status: lifecycle.RealizationDone},
-				{Kind: "StorageObjectGateway", Name: "objects", Status: lifecycle.RealizationPending},
-				{Kind: "StorageExport", Name: "foundation", Status: lifecycle.RealizationUnsupported},
+			{Name: "archive", Kind: "CephCluster", Status: lifecycle.RealizationPending, Resources: []lifecycle.ResourceSummary{}},
+			{Name: "ceph", Kind: "CephCluster", Status: lifecycle.RealizationDone, Resources: []lifecycle.ResourceSummary{
+				{Kind: "CephPool", Name: "rbd-data", Status: lifecycle.RealizationDone},
+				{Kind: "CephObjectGateway", Name: "objects", Status: lifecycle.RealizationPending},
+				{Kind: "CephConsumer", Name: "foundation", Status: lifecycle.RealizationUnsupported},
 			}},
 		},
-		Frozen: []reconciliation.Block{{BlockDefinition: reconciliation.BlockDefinition{Kind: "StoragePool", Object: "rbd-data", Implementation: ceph.Implementation, Request: request}}},
+		Frozen: []reconciliation.Block{{BlockDefinition: reconciliation.BlockDefinition{Kind: "CephPool", Object: "rbd-data", Implementation: ceph.Implementation, Request: request}}},
 	}}
 	rows, err := (cephInspection{reconciler: reader}).Resources(context.Background(), "lab", catalog)
 	want := map[string][]inspection.Resource{"ceph": {
-		{Kind: "StoragePool", Name: "rbd-data", Status: "done", Scope: "replicated size 2/min 2, application rbd"},
-		{Kind: "StorageObjectGateway", Name: "objects", Status: "pending"},
-		{Kind: "StorageExport", Name: "foundation", Status: "unsupported", Scope: "export"},
+		{Kind: "CephPool", Name: "rbd-data", Status: "done", Scope: "replicated size 2/min 2, application rbd"},
+		{Kind: "CephObjectGateway", Name: "objects", Status: "pending"},
+		{Kind: "CephConsumer", Name: "foundation", Status: "unsupported", Scope: "export"},
 	}}
 	if err != nil || !reflect.DeepEqual(rows, want) || !slices.Equal(reader.reads, []string{"resources/lab"}) {
 		t.Fatalf("resources = %+v (%v) after reads %v, want %+v", rows, err, reader.reads, want)

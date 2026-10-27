@@ -40,7 +40,7 @@ type scheduler struct {
 	operation operationstore.Operation
 	plan      reconciliation.Plan
 	material  map[string]secrets.Material
-	selection reconciliation.StageSelection
+	selection reconciliation.Selection
 	bound     int
 	// logging is the invocation's required logging boundary. Once it latches
 	// a fault, nothing further is admitted.
@@ -79,7 +79,7 @@ type scheduler struct {
 // converge runs the operation's blocks until nothing more may start, and
 // reports whether it stopped at a stage or operator-stop boundary and what any
 // block that did not complete reported.
-func (s Service) converge(ctx context.Context, tx Transaction, store OperationStore, approved approved, logging *logBoundary, operation operationstore.Operation, plan reconciliation.Plan, states map[string]reconciliation.BlockState, material map[string]secrets.Material, selection reconciliation.StageSelection) (bool, error) {
+func (s Service) converge(ctx context.Context, tx Transaction, store OperationStore, approved approved, logging *logBoundary, operation operationstore.Operation, plan reconciliation.Plan, states map[string]reconciliation.BlockState, material map[string]secrets.Material, selection reconciliation.Selection) (bool, error) {
 	return s.newScheduler(tx, store, approved, logging, operation, plan, states, material, selection).converge(ctx)
 }
 
@@ -88,7 +88,7 @@ func (s Service) converge(ctx context.Context, tx Transaction, store OperationSt
 // removal says a fresh removal resolves an apply's blocks, by the check of the
 // block of removalPlan that takes each one back.
 func (s Service) observe(ctx context.Context, tx Transaction, store OperationStore, approved approved, logging *logBoundary, operation operationstore.Operation, plan reconciliation.Plan, states map[string]reconciliation.BlockState, material map[string]secrets.Material, removal bool, removalPlan reconciliation.Plan) error {
-	run := s.newScheduler(tx, store, approved, logging, operation, plan, states, material, reconciliation.StageSelection{})
+	run := s.newScheduler(tx, store, approved, logging, operation, plan, states, material, reconciliation.Selection{})
 	run.observeOnly = true
 	run.removal, run.removalPlan = removal, removalPlan
 	_, err := run.converge(ctx)
@@ -105,7 +105,7 @@ func (s Service) Concurrency() int {
 	return s.options.Concurrency
 }
 
-func (s Service) newScheduler(tx Transaction, store OperationStore, approved approved, logging *logBoundary, operation operationstore.Operation, plan reconciliation.Plan, states map[string]reconciliation.BlockState, material map[string]secrets.Material, selection reconciliation.StageSelection) *scheduler {
+func (s Service) newScheduler(tx Transaction, store OperationStore, approved approved, logging *logBoundary, operation operationstore.Operation, plan reconciliation.Plan, states map[string]reconciliation.BlockState, material map[string]secrets.Material, selection reconciliation.Selection) *scheduler {
 	return &scheduler{
 		service: s, tx: tx, store: store, approved: approved, operation: operation,
 		plan: plan, material: material, selection: selection, bound: s.Concurrency(), logging: logging,
@@ -213,7 +213,7 @@ func (c *scheduler) nextPreStop() (reconciliation.Block, int, bool) {
 // is selected. The scheduler, the refusal of a selection that admits nothing and
 // the stage preview all derive from it, so the preview marks exactly what the
 // next apply admits.
-func firstAdmission(plan reconciliation.Plan, states map[string]reconciliation.BlockState, selection reconciliation.StageSelection, observed, worked, running map[string]bool) (string, []int) {
+func firstAdmission(plan reconciliation.Plan, states map[string]reconciliation.BlockState, selection reconciliation.Selection, observed, worked, running map[string]bool) (string, []int) {
 	admitted := []int{}
 	if slices.ContainsFunc(plan.Blocks, func(block reconciliation.Block) bool { return unproved(states[block.ID]) }) {
 		for index, block := range plan.Blocks {
@@ -232,7 +232,7 @@ func firstAdmission(plan reconciliation.Plan, states map[string]reconciliation.B
 			case states[block.ID] != reconciliation.BlockFailed, running[block.ID]:
 			case worked[block.ID]:
 				failedAgain = true
-			case selection.Selects(block.Stage):
+			case selection.Admits(block):
 				admitted = append(admitted, index)
 			}
 		}
@@ -284,7 +284,7 @@ func (c *scheduler) start(ctx context.Context, block reconciliation.Block, posit
 		c.held[key] = block.ID
 	}
 	command := c.observingCommand()
-	retry := observing && !c.observeOnly && c.selection.Selects(block.Stage)
+	retry := observing && !c.observeOnly && c.selection.Admits(block)
 	go func() {
 		var state reconciliation.BlockState
 		var err error

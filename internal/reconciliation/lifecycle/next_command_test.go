@@ -29,7 +29,7 @@ func TestEveryIncompleteResultNamesTheCommandItsRecordsCallFor(t *testing.T) {
 			name: "a paused apply", state: "paused", next: "bootwright apply --context lab",
 			run: func(t *testing.T) (*OperationResult, error) {
 				h := newPlannedHarness(t, nestedDefinitions())
-				return h.service.Apply(ctx, ApplyRequest{ContextName: testContextName, Stages: []string{"infra-components"}, SkipConfirmation: true})
+				return h.service.Apply(ctx, ApplyRequest{ContextName: testContextName, Stages: []string{"infrastructure-services"}, SkipConfirmation: true})
 			},
 		},
 		{

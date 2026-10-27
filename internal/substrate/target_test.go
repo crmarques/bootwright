@@ -14,25 +14,23 @@ import (
 func targetCatalog() api.Catalog {
 	environment := obj(api.Environment, "env", m("controller", m("machineRef", "controller")))
 	controller := obj(api.Machine, "controller", m("os", m("provided", true)))
-	host := obj(api.Machine, "host", m("capabilities", api.StringList("libvirt"), "os", m("provided", true)))
+	host := obj(api.Machine, "host", m("os", m("provided", true)))
 	libvirt := obj(api.InfraProvider, "lab", m("libvirt", m("machineRef", "host", "uri", "qemu:///system",
-		"bmcEmulationDefaults", m("certificateRef", "emulated-bmc-tls", "bindAddress", "192.0.2.1", "port", api.IntegerValue("8000"),
+		"bmcEmulation", m("certificateRef", "emulated-bmc-tls", "bindAddress", "192.0.2.1", "port", api.IntegerValue("8000"),
 			"auth", m("credentialsRef", "emulated-bmc")))))
 	guests := obj(api.NetworkConfig, "guests", m("nmstate", m("interfaces",
 		list(m("name", "enp1s0", "type", "ethernet")))))
-	guest := obj(api.Machine, "guest", m("substrate", m("providerRef", "lab"),
+	guest := obj(api.Machine, "guest", m("substrate", m("providerRef", "lab", "libvirt", m("profileRef", "small")),
 		"network", m("configRef", "guests"),
 		"os", m("provided", false, "installProfileRef", "rhel")))
 	metal := obj(api.InfraProvider, "floor", m("baremetal", m("defaults", m("bmc", m("credentialsRef", "shared")))))
-	server := obj(api.Machine, "server", m("substrate", m("providerRef", "floor"),
-		"os", m("provided", false, "installProfileRef", "rhel", "install",
-			m("hostKeyRef", "server-host-key", "rootDeviceHints", m("deviceName", "/dev/sda"))),
-		"hardware", m("nics", list(m("name", "eno1", "macAddress", "AA:BB:CC:DD:EE:01"),
-			m("name", "eno2", "macAddress", "aa:bb:cc:dd:ee:02")),
-			"management", m("bmc", m("address", "https://bmc.example.test/redfish/v1/Systems/1",
-				"credentialsRef", "server-bmc", "tls", m("verify", false))))))
+	server := obj(api.Machine, "server", m("substrate", m("providerRef", "floor", "baremetal", m(
+		"bmc", m("address", "https://bmc.example.test/redfish/v1/Systems/1", "credentialsRef", "server-bmc", "tls", m("verify", false)),
+		"nics", list(m("nicRef", "eno1", "macAddress", "AA:BB:CC:DD:EE:01"), m("nicRef", "eno2", "macAddress", "aa:bb:cc:dd:ee:02")))),
+		"os", m("provided", false, "installProfileRef", "rhel", "install", m("hostKeyRef", "server-host-key")),
+		"hardware", m("nics", list(m("name", "eno1"), m("name", "eno2")), "rootDevice", m("deviceName", "/dev/sda"))))
 	standalone := obj(api.Machine, "bastion", m("os", m("provided", true),
-		"hardware", m("management", m("bmc", m("address", "https://bastion-bmc.example.test/redfish/v1/Systems/self",
+		"substrate", m("baremetal", m("bmc", m("address", "https://bastion-bmc.example.test/redfish/v1/Systems/self",
 			"credentialsRef", "bastion-bmc")))))
 	return api.NewCatalog([]api.Object{environment, controller, host, libvirt, guests, guest, metal, server, standalone})
 }
@@ -91,7 +89,7 @@ func TestAnIPv6EmulatedControllerEndpointBracketsItsAddress(t *testing.T) {
 	objects := targetCatalog().Objects()
 	for index, object := range objects {
 		if object.Kind() == api.InfraProvider && object.Name() == "lab" {
-			objects[index] = object.WithSpec(object.Spec().WithPath(api.StringValue("fd00::1"), "libvirt", "bmcEmulationDefaults", "bindAddress"))
+			objects[index] = object.WithSpec(object.Spec().WithPath(api.StringValue("fd00::1"), "libvirt", "bmcEmulation", "bindAddress"))
 		}
 	}
 	catalog := api.NewCatalog(objects)
@@ -296,16 +294,16 @@ func TestAnUnrealizedSubstrateRefuses(t *testing.T) {
 // at derivation, because the proof before an erasure has nothing to compare.
 func TestAPhysicalMachineWithoutDeclaredHardwareRefuses(t *testing.T) {
 	metal := obj(api.InfraProvider, "floor", m("baremetal", m()))
-	machine := obj(api.Machine, "bare", m("substrate", m("providerRef", "floor"),
-		"os", m("provided", false, "installProfileRef", "rhel"),
-		"hardware", m("management", m("bmc", m("address", "https://b.example.test/redfish/v1/Systems/1",
-			"credentialsRef", "bmc")))))
+	machine := obj(api.Machine, "bare", m("substrate", m("providerRef", "floor", "baremetal", m("bmc", m("address", "https://b.example.test/redfish/v1/Systems/1",
+		"credentialsRef", "bmc"))),
+		"os", m("provided", false, "installProfileRef", "rhel")))
 	catalog := api.NewCatalog([]api.Object{
 		obj(api.Environment, "env", m("controller", m("machineRef", "controller"))),
 		obj(api.Machine, "controller", m("os", m("provided", true))), metal, machine,
 	})
-	if _, err := TargetFor(catalog, machine, "lab", "controller"); err == nil {
-		t.Fatal("a physical machine with no declared NIC was accepted")
+	_, err := TargetFor(catalog, machine, "lab", "controller")
+	if reported := diagnostics.Of(err); err == nil || len(reported) != 1 || reported[0].Message != "the Machine declares no hardware NIC to prove it by" {
+		t.Fatalf("a physical machine with no declared NIC: %v", reported)
 	}
 }
 
@@ -319,7 +317,7 @@ func TestTargetCarriesTheControllerTrustBundle(t *testing.T) {
 	for index, object := range objects {
 		if bundle, ok := bundled[object.Name()]; ok && object.Kind() == api.Machine {
 			objects[index] = object.WithSpec(object.Spec().WithPath(m("verify", true, "trustBundleRef", bundle),
-				"hardware", "management", "bmc", "tls"))
+				"substrate", "baremetal", "bmc", "tls"))
 		}
 	}
 	bundled["guest"] = "emulated-bmc-tls"

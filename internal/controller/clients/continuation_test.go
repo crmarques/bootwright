@@ -30,7 +30,7 @@ func TestAnUnknownInstallationNamesItsContinuation(t *testing.T) {
 	} {
 		dnf := &forgetfulDnf{fakeDnf: newDnf()}
 		capability := New(&fakeTools{complete: true, present: true}, dnf.open, &fakeSetup{}, &fakeInstaller{})
-		block := planBlock(t, capability, stateOf(environment(), machine("container-runtime", "libvirt")), reconciliation.Apply)
+		block := planBlock(t, capability, stateOf(libvirtGraph()...), reconciliation.Apply)
 		execution := newRecorder(&fakeArea{}).execution(t, block, hostState())
 		execution.Continuation = test.continuation
 		result, err := capability.Apply(context.Background(), execution)

@@ -62,7 +62,7 @@ func TestInstallProfileNormalizationAndCustomization(t *testing.T) {
 func TestCloneRestrictionsAndProviderBinding(t *testing.T) {
 	profile := obj(api.MachineInstallProfile, "clone", m("os", m("family", "rhel", "version", "9", "architecture", "x86_64"), "installer", m("templateClone", m("seed", m("cloudInit", m("growRootFilesystem", true)))), "customizations", m("services", m("enabled", api.StringList("sshd")))))
 	provider := obj(api.InfraProvider, "virtual", m("vsphere", m("machineProfiles", list(m("name", "template", "template", "Templates/rhel")))))
-	machine := obj(api.Machine, "node", m("os", m("provided", false, "installProfileRef", "clone"), "substrate", m("providerRef", "virtual", "profileRef", "template")))
+	machine := obj(api.Machine, "node", m("os", m("provided", false, "installProfileRef", "clone"), "substrate", m("providerRef", "virtual", "vsphere", m("profileRef", "template"))))
 	c := api.NewCatalog([]api.Object{provider, machine})
 	if issues := Validate(profile, c); len(issues) > 0 {
 		t.Fatal(issues)
@@ -103,7 +103,7 @@ func TestCustomizationContradictions(t *testing.T) {
 	}
 }
 func TestRHSMManagedExternalAndSatellite(t *testing.T) {
-	for _, kind := range []string{"redhat-rhel", "redhat-ceph"} {
+	for _, kind := range []string{"redhatRhel", "redhatCeph"} {
 		t.Run(kind, func(t *testing.T) {
 			o := obj(api.Entitlement, "subscription", m("type", kind, "rhsm", m("organizationRef", "organization", "activationKeyRef", "activation", "satellite", m("hostname", "satellite.example.test"))))
 			o = NormalizeRHSM(o)
@@ -115,7 +115,7 @@ func TestRHSMManagedExternalAndSatellite(t *testing.T) {
 			}
 		})
 	}
-	external := obj(api.Entitlement, "external", m("type", "redhat-rhel", "rhsm", m("management", "external")))
+	external := obj(api.Entitlement, "external", m("type", "redhatRhel", "rhsm", m("management", "external")))
 	normalized := NormalizeRHSM(external)
 	if !normalized.Spec().Equal(external.Spec()) {
 		t.Fatal("external RHSM acquired managed defaults")
@@ -129,7 +129,7 @@ func TestRHSMManagedExternalAndSatellite(t *testing.T) {
 			t.Fatalf("external accepted %s", key)
 		}
 	}
-	if issues := ValidateRHSM(obj(api.Entitlement, "missing", m("type", "redhat-rhel", "rhsm", m())), true); len(issues) != 2 {
+	if issues := ValidateRHSM(obj(api.Entitlement, "missing", m("type", "redhatRhel", "rhsm", m())), true); len(issues) != 2 {
 		t.Fatal(issues)
 	}
 }
@@ -210,7 +210,7 @@ func TestHostedTreeAcceptsOnlyStoreMedia(t *testing.T) {
 func TestAnInstalledConsumerNeedsTheVirtualMediaEndpoint(t *testing.T) {
 	const field = "$.spec.installer.anaconda.redfishVirtualMedia.artifactServerEndpoint"
 	provider := obj(api.InfraProvider, "virtual", m("libvirt", m("machineProfiles", list(m("name", "small")))))
-	virtual := obj(api.Machine, "virtual-node", m("os", m("provided", false, "installProfileRef", "install"), "substrate", m("providerRef", "virtual", "profileRef", "small")))
+	virtual := obj(api.Machine, "virtual-node", m("os", m("provided", false, "installProfileRef", "install"), "substrate", m("providerRef", "virtual", "libvirt", m("profileRef", "small"))))
 	loose := obj(api.Machine, "loose-node", m("os", m("provided", false, "installProfileRef", "install")))
 	for name, objects := range map[string][]api.Object{
 		"a libvirt consumer":        {provider, virtual},
@@ -341,7 +341,7 @@ func TestEveryManagedOSAdmissionRefusalNamesItsRemedy(t *testing.T) {
 	}
 	clone := obj(api.MachineInstallProfile, "install", m("os", m("family", "rhel", "version", "9", "architecture", "x86_64"), "installer", m("templateClone", m())))
 	provider := obj(api.InfraProvider, "virtual", m("libvirt", m("machineProfiles", list(m("name", "small")))))
-	consumer := obj(api.Machine, "node", m("os", m("provided", false, "installProfileRef", "install"), "substrate", m("providerRef", "virtual", "profileRef", "small")))
+	consumer := obj(api.Machine, "node", m("os", m("provided", false, "installProfileRef", "install"), "substrate", m("providerRef", "virtual", "libvirt", m("profileRef", "small"))))
 	consumed := api.NewCatalog([]api.Object{provider, consumer})
 	served, servedCatalog := hostedTreeProfile("local-media:dvd.iso")
 	cycle := []api.Object{consumer}
@@ -353,7 +353,7 @@ func TestEveryManagedOSAdmissionRefusalNamesItsRemedy(t *testing.T) {
 	}
 	sameName := obj(api.MachineInstallProfile, "node", served.Spec())
 	rhel := func(rhsm api.Value) api.Object {
-		return obj(api.Entitlement, "rhel", m("type", "redhat-rhel", "rhsm", rhsm))
+		return obj(api.Entitlement, "rhel", m("type", "redhatRhel", "rhsm", rhsm))
 	}
 	registered := func(value api.Value) api.Object {
 		return profile(func(s api.Value) api.Value {
@@ -370,7 +370,7 @@ func TestEveryManagedOSAdmissionRefusalNamesItsRemedy(t *testing.T) {
 		"two registrations": {Validate(profile(func(s api.Value) api.Value {
 			return s.With("subscription", m("entitlementRef", "rhel")).WithPath(m("entitlementRef", "rhel"), "installer", "anaconda", "packageSource", "fromSubscription")
 		}), api.Catalog{}), "$.spec.subscription"},
-		"a non-RHEL entitlement":            {Validate(profile(func(s api.Value) api.Value { return s.With("subscription", m("entitlementRef", "ceph")) }), api.NewCatalog([]api.Object{obj(api.Entitlement, "ceph", m("type", "redhat-ceph"))})), "$.spec.subscription.entitlementRef"},
+		"a non-RHEL entitlement":            {Validate(profile(func(s api.Value) api.Value { return s.With("subscription", m("entitlementRef", "ceph")) }), api.NewCatalog([]api.Object{obj(api.Entitlement, "ceph", m("type", "redhatCeph"))})), "$.spec.subscription.entitlementRef"},
 		"empty subscription repositories":   {Validate(registered(m()), api.Catalog{}), "$.spec.customizations.repositories.subscription"},
 		"unregistered repositories":         {Validate(custom(m("repositories", m("subscription", m("enable", api.StringList("repo"))))), api.Catalog{}), "$.spec.customizations.repositories.subscription"},
 		"an enabled wildcard":               {Validate(registered(m("enable", api.StringList("*"))), api.Catalog{}), "$.spec.customizations.repositories.subscription.enable"},
@@ -387,7 +387,7 @@ func TestEveryManagedOSAdmissionRefusalNamesItsRemedy(t *testing.T) {
 		"encryption without a TPM":          {Validate(custom(m("security", m("diskEncryption", m()))), consumed), "$.spec.customizations.security.diskEncryption"},
 		"a shared served directory":         {Validate(sameName, api.NewCatalog(append(servedCatalog.Objects(), sameName, obj(api.Machine, "node", m("os", m("provided", false, "installProfileRef", "node")))))), "$.spec.installer.anaconda.packageSource.hostedTree.artifactServerEndpoint.serverRef"},
 		"boot media off the store":          {Validate(obj(api.MachineImage, "image", m("bootMedia", "https://images.example.test/rhel.iso")), api.Catalog{}), "$.spec.bootMedia"},
-		"no RHSM intent":                    {Validate(obj(api.Entitlement, "rhel", m("type", "redhat-rhel")), api.Catalog{}), "$.spec.rhsm"},
+		"no RHSM intent":                    {Validate(obj(api.Entitlement, "rhel", m("type", "redhatRhel")), api.Catalog{}), "$.spec.rhsm"},
 		"external RHSM detail":              {Validate(rhel(m("management", "external", "organizationRef", "organization")), api.Catalog{}), "$.spec.rhsm.organizationRef"},
 		"managed RHSM without keys":         {Validate(rhel(m("management", "managed")), api.Catalog{}), "$.spec.rhsm.activationKeyRef"},
 		"a clone customization":             {ValidateAuthored(clone.WithSpec(clone.Spec().With("customizations", m("packages", m()))), api.Catalog{}), "$.spec.customizations.packages"},

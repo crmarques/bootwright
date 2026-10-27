@@ -1,8 +1,10 @@
   bootwright / apply
       Realize the complete selected Environment, or continue the exact operation an
       interruption left behind. The plan is always complete; --stage only gates which blocks
-      this invocation starts, and the operation pauses at that boundary. Review the plan before
-      confirming; --yes skips ordinary confirmation.
+      this invocation starts, and the operation pauses at that boundary. --until
+      <cluster>.<package> starts only that add-on instance and the blocks it requires, then
+      pauses; a later apply continues the rest. Review the plan before confirming; --yes skips
+      ordinary confirmation.
 
   Usage
     bootwright apply [flags]
@@ -13,7 +15,9 @@
                    rotated access credential at its current version (rebind=<secret>) (values:
                    data-loss)
       --stage      Select comma-separated stages to start (default: all) (values: controller,
-                   infra-components, substrates, machines, clusters, add-ons)
+                   infrastructure-services, substrates, machines, clusters, add-ons)
+      --until      Stop after one add-on instance, named <cluster>.<package>, and the blocks it
+                   requires
       --yes        Confirm the command's ordinary confirmation
 
   Common flags

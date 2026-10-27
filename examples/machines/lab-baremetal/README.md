@@ -49,18 +49,18 @@ hardware identities and credentials in operator-owned files outside Git.
 
 | Input | Required changes |
 | --- | --- |
-| [Controller](infra/machines/controller.yaml) and [services](infra/components) | Replace `192.0.2.1` with an existing controller IP and update the FQDN and service bind addresses. |
+| [Controller](infra/machines/controller.yaml) and [services](infra/components) | Replace `192.0.2.1` with an existing controller IP and update the service bind addresses; the controller's FQDN derives from the base domain. |
 | [Serving certificate](secret-descriptors/artifact-server-tls.yaml) | Match all HTTPS endpoint IP/DNS names to the customized addresses. |
 | [Physical Machine](infra/machines/metal-01.yaml) | Set the full Redfish system URL, actual NIC name/MAC, install IP and root-device hint; `/dev/sda` is only an example. |
 | [NetworkConfig](infra/networkconfigs/lab-metal.yaml) | Set the actual installer subnet, gateway, interface and route; this provider does not create a physical network. |
-| [Environment](environment.yaml) and DNS/NTP | Replace the base domain and Machine FQDNs consistently; replace or remove upstream `192.0.2.53` and `192.0.2.123`. |
+| [Environment](environment.yaml) and DNS/NTP | Replace the base domain, from which every Machine FQDN derives; replace or remove upstream `192.0.2.53` and `192.0.2.123`. |
 | [BMC provider](infra/providers/lab-metal.yaml) | Keep certificate verification; `lab-bmc-ca` must contain the BMC's issuing CA chain. |
 
 The full declared NIC address set is compared with Redfish inventory before
 media insertion. `metal-01-host-key` is generated before installation and
 delivered privately, so completion proves the installed key against a known
 value. `bootwright-machine-key` separately provides fleet login credentials.
-On a FIPS-mode controller set both SSH descriptors to `rsa` or `ecdsa-p256`;
+On a FIPS-mode controller set both SSH descriptors to `rsa` or `ecdsaP256`;
 see [FIPS guidance](../../../docs/operator-guide.md#a-fips-mode-controller).
 
 Check service socket owners:
@@ -109,14 +109,14 @@ subscription:
 
 Merge these fields into the existing install profile, preserving its packages,
 services, networking and installer source. Declare `luks-recovery` as an opaque
-or token Secret, and `rhel-rhsm` as a managed `redhat-rhel` Entitlement with
+or token Secret, and `rhel-rhsm` as a managed `redhatRhel` Entitlement with
 organization and activation-key Secret references. Supply those values through
 protected files or standard input before the first apply freezes them. Keep the
-recovery value unchanged for the lifetime of the disk. Select `ecdsa-p256` or
+recovery value unchanged for the lifetime of the disk. Select `ecdsaP256` or
 `rsa` in both the fleet and delivered host-key descriptors: FIPS refuses an
 Ed25519 key before publishing the installer. OSPP is not selected.
 
-Keep the root disk's by-id WWN path in `rootDeviceHints.deviceName`, the
+Keep the root disk's by-id WWN path in `hardware.rootDevice.deviceName`, the
 declared physical MAC inventory, verified BMC TLS and the delivered host key.
 Check the TPM 2.0 is enabled and available to the installer and arrange
 console recovery before installation. Bootwright never clears a physical TPM;
@@ -188,7 +188,7 @@ Check all Secrets and prepare the services:
 ./bin/bootwright plan
 ./bin/bootwright apply --stage controller --authorize data-loss
 ./bin/bootwright preflight controller --context lab-baremetal
-./bin/bootwright apply --stage infra-components --authorize data-loss
+./bin/bootwright apply --stage infrastructure-services --authorize data-loss
 ```
 
 From a host on the BMC network, check the customized artifact endpoint:
@@ -306,6 +306,6 @@ in-tree tests.
 Physical erase on destroy is outside this contract. This example installs
 over one ethernet interface; a bonded or VLAN install interface is projected as
 [managed OS](../../../specs/managed-os.md#installation) states. Default
-virtual-media trust uses `import-certificate`; its firmware compatibility still
+virtual-media trust uses `importCertificate`; its firmware compatibility still
 requires hardware qualification. This example also omits encrypted disks and
 Satellite package sources.

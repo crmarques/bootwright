@@ -14,16 +14,16 @@
 
   Clusters
   State       Cluster
-  [PENDING]   ContainerCluster/ocp-01
+  [PENDING]   OpenShiftCluster/ocp-01
 
   Storage clusters
   State       Cluster
-  [SKIPPED]   StorageCluster/ceph-01
+  [SKIPPED]   CephCluster/ceph-01
 
   Storage resources
-  State       Resource                   Cluster
-  [SKIPPED]   StoragePool/rbd            ceph-01
-  [SKIPPED]   StorageClient/rbd-client   ceph-01
+  State       Resource                Cluster
+  [SKIPPED]   CephPool/rbd            ceph-01
+  [SKIPPED]   CephClient/rbd-client   ceph-01
 
   Shared services
   State       Service                        Machine
@@ -47,7 +47,7 @@
   Substrates
     [DONE] realize the libvirt host of lab-libvirt on controller
   Machines
-    [FAIL] realize the virtual machine rhel-01 and its controller
+    [FAIL] realize the virtual machine rhel-01 and its emulated BMC
     [PENDING] install the operating system of rhel-01
 
       Registered by  1.4.0 (9f2c1ab)

@@ -6,7 +6,6 @@ metadata:
 spec:
   management: managed
   machineRef: controller
-  bindAddress: 192.0.2.1
   retention: persistent
 
   tls:

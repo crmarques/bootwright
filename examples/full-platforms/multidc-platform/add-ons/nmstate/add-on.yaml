@@ -1,3 +1,7 @@
+# An authored add-on targeting the custom-package lifecycle of B90
+# (specs/milestones/m4.md#b90): it validates, but a binding that selects it
+# refuses until B90 lands, and its subscription defaults are not the package
+# Subscription rules.
 apiVersion: bootwright.io/v1alpha1
 kind: ClusterAddon
 metadata:

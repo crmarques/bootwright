@@ -1,0 +1,63 @@
+apiVersion: bootwright.io/v1alpha1
+kind: Machine
+metadata:
+  name: metal-02
+
+spec:
+  substrate:
+    providerRef: lab-metal
+
+    baremetal:
+      bmc:
+        address: https://bmc-02.metal.example.test/redfish/v1/Systems/1
+
+      nics:
+        - nicRef: eno1
+          macAddress: 52:54:00:9a:1b:02
+
+  os:
+    provided: false
+    installProfileRef: rhel-9-8
+
+    install:
+      # The key this machine's installation delivers, so completion is proved
+      # against a key known before the machine is ever contacted.
+      hostKeyRef: metal-02-host-key
+
+      ntp:
+        - serverRef: lab-ntp
+          endpointRef: ip
+
+  hardware:
+    eraseOnRemoval:
+      method: logicalOverwrite
+
+      targets:
+        - deviceName: /dev/disk/by-id/wwn-0x6000000000000002
+          wwn: '0x6000000000000002'
+          serialNumber: SYNTHETIC-ROOT-02
+          sizeBytes: 53687091200
+
+        - deviceName: /dev/disk/by-id/wwn-0x5000000000000002
+          wwn: '0x5000000000000002'
+          serialNumber: SYNTHETIC-CEPH-02
+          sizeBytes: 107374182400
+
+    nics:
+      - name: eno1
+
+    rootDevice:
+      deviceName: /dev/disk/by-id/wwn-0x6000000000000002
+
+  network:
+    configRef: lab-metal
+    attachmentRef: lab-metal
+    installAddressRef: ip
+
+    addresses:
+      - name: fqdn
+        address: metal-02.metal.example.test
+
+      - name: ip
+        address: 198.51.100.12/24
+        interface: eno1

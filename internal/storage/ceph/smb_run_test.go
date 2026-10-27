@@ -184,7 +184,7 @@ func TestSMBPrepareRefusesAnotherMachineSet(t *testing.T) {
 			changed.Machines = machines
 			runner := &recordingRunner{}
 			got, err := NewSMB(runner).Apply(context.Background(), smbExecution(t, changed, "pw"))
-			refusedWith(t, err, "lifecycle.state", "StorageSMBResource smb-docs froze another Machine set than the creation proof of StorageCluster example", "restore the original apply evidence")
+			refusedWith(t, err, "lifecycle.state", "CephSMBResource smb-docs froze another Machine set than the creation proof of CephCluster example", "restore the original apply evidence")
 			if got.Outcome != reconciliation.OutcomeFailed || runner.calls != 0 {
 				t.Fatalf("apply = %+v, calls %d", got, runner.calls)
 			}

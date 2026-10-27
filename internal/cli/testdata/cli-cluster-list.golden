@@ -1,5 +1,5 @@
   NAME      KIND
-  archive   StorageCluster
-  edge      ContainerCluster
-  okd-lab   ContainerCluster
-  storage   StorageCluster
+  archive   CephCluster
+  edge      OpenShiftCluster
+  okd-lab   OpenShiftCluster
+  storage   CephCluster

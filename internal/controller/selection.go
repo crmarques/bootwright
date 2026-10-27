@@ -8,7 +8,7 @@ import (
 	"strings"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
-	"github.com/crmarques/bootwright/internal/containercluster"
+	"github.com/crmarques/bootwright/internal/containercluster/openshift"
 	"github.com/crmarques/bootwright/internal/diagnostics"
 	"github.com/crmarques/bootwright/internal/infrastructureservices"
 	"github.com/crmarques/bootwright/internal/substrate"
@@ -120,10 +120,6 @@ func Select(catalog api.Catalog) (Selection, error) {
 		shape := shapes[0]
 		return Selection{}, refuseSelection(shape.Object, "controller.unsupported", shape.Field, shape.Reason, shape.Remediation)
 	}
-	containerRuntime, err := selectCapabilities(machine)
-	if err != nil {
-		return Selection{}, err
-	}
 	route, err := selectRoute(machine, catalog)
 	if err != nil {
 		return Selection{}, err
@@ -134,7 +130,7 @@ func Select(catalog api.Catalog) (Selection, error) {
 	}
 	return Selection{
 		environmentName: environment.Name(), machineName: machine.Name(),
-		containerRuntime: containerRuntime, libvirtClient: requiresLibvirtClient(catalog, machine),
+		containerRuntime: true, libvirtClient: requiresLibvirtClient(catalog, machine),
 		hypervisor: requiresHypervisor(catalog, machine), installerMedia: requiresInstallerMedia(catalog, machine),
 		route: route, versions: versions, nmstate: requiresNMState(catalog), iputils: requiresIPUtils(catalog, machine.Name()),
 	}, nil
@@ -178,7 +174,7 @@ func requiresInstallerMedia(catalog api.Catalog, controllerMachine api.Object) b
 // hosted here selects it too: its host block proves the client with the
 // hypervisor closure, and the daemon packages need not pull the client in.
 func requiresLibvirtClient(catalog api.Catalog, controllerMachine api.Object) bool {
-	if slices.Contains(controllerMachine.Spec().Get("capabilities").Strings(), "libvirt") || requiresHypervisor(catalog, controllerMachine) {
+	if requiresHypervisor(catalog, controllerMachine) {
 		return true
 	}
 	for _, machine := range catalog.OfKind(api.Machine) {
@@ -188,40 +184,6 @@ func requiresLibvirtClient(catalog api.Catalog, controllerMachine api.Object) bo
 		}
 	}
 	return false
-}
-
-// selectCapabilities reads the controller's capabilities. A capability this
-// executable does not prepare is one of its unsupported shapes, which Select
-// refuses before it gets here.
-func selectCapabilities(machine api.Object) (bool, error) {
-	capabilities := machine.Spec().Get("capabilities")
-	addRuntime := "add container-runtime to spec.capabilities on " + machine.Identity()
-	if !capabilities.Present() {
-		return false, refuseSelection(machine, "api.invariant", "$.spec.capabilities", "controller requires the container-runtime capability", addRuntime)
-	}
-	if capabilities.Type() != api.Sequence {
-		return false, refuseSelection(machine, "api.value", "$.spec.capabilities", "controller capabilities must be a sequence",
-			"write spec.capabilities on "+machine.Identity()+" as a list of capability names")
-	}
-	containerRuntime := false
-	seen := map[string]bool{}
-	for index, capability := range capabilities.Items() {
-		field := fmt.Sprintf("$.spec.capabilities[%d]", index)
-		if capability.Type() != api.String {
-			return false, refuseSelection(machine, "api.value", field, "controller capability must be a string",
-				"write "+strings.TrimPrefix(field, "$.")+" on "+machine.Identity()+" as a capability name")
-		}
-		if seen[capability.Text()] {
-			return false, refuseSelection(machine, "api.value", field, "controller capabilities must be unique",
-				"remove the repeated "+strings.TrimPrefix(field, "$.")+" from "+machine.Identity())
-		}
-		seen[capability.Text()] = true
-		containerRuntime = containerRuntime || capability.Text() == "container-runtime"
-	}
-	if !containerRuntime {
-		return false, refuseSelection(machine, "api.invariant", "$.spec.capabilities", "controller requires the container-runtime capability", addRuntime)
-	}
-	return containerRuntime, nil
 }
 
 // selectRoute builds the controller Machine's route and proves it in the one
@@ -338,15 +300,6 @@ func Unsupported(catalog api.Catalog) []UnsupportedShape {
 
 func unsupported(machine api.Object, catalog api.Catalog) []UnsupportedShape {
 	shapes := []UnsupportedShape{}
-	for index, capability := range machine.Spec().Get("capabilities").Items() {
-		if capability.Type() != api.String || capability.Text() == "container-runtime" || capability.Text() == "libvirt" {
-			continue
-		}
-		field := fmt.Sprintf("spec.capabilities[%d]", index)
-		shapes = append(shapes, UnsupportedShape{Object: machine, Field: "$." + field,
-			Reason:      "this executable's controller stage prepares only the container-runtime and libvirt capabilities, and " + machine.Identity() + " declares another at " + field,
-			Remediation: "remove " + field + " from " + machine.Identity()})
-	}
 	if bypass := machine.Spec().Get("proxy", "noProxy"); bypass.Type() == api.Sequence && bypass.Len() > maxProxyBypassEntries {
 		shapes = append(shapes, UnsupportedShape{Object: machine, Field: "$.spec.proxy.noProxy",
 			Reason:      "this executable's controller route carries at most " + strconv.Itoa(maxProxyBypassEntries) + " bypass entries, and " + machine.Identity() + " declares more in spec.proxy.noProxy",
@@ -403,8 +356,8 @@ func refuseSelection(object api.Object, code, field, message, remediation string
 }
 
 func requiresNMState(catalog api.Catalog) bool {
-	for _, cluster := range catalog.OfKind(api.ContainerCluster) {
-		if cluster.Spec().Get("install", "method").Text() != "agent" {
+	for _, cluster := range catalog.OfKind(api.OpenShiftCluster) {
+		if !cluster.Spec().Has("install", "agent") {
 			continue
 		}
 		for _, node := range cluster.Spec().Get("nodes").Items() {
@@ -417,11 +370,11 @@ func requiresNMState(catalog api.Catalog) bool {
 }
 
 func requiresIPUtils(catalog api.Catalog, controllerMachine string) bool {
-	for _, cluster := range catalog.OfKind(api.ContainerCluster) {
-		if cluster.Spec().Get("install", "method").Text() != "agent" {
+	for _, cluster := range catalog.OfKind(api.OpenShiftCluster) {
+		if !cluster.Spec().Has("install", "agent") {
 			continue
 		}
-		for _, vip := range containercluster.VirtualIPs(catalog, cluster, controllerMachine) {
+		for _, vip := range openshift.VirtualIPs(catalog, cluster, controllerMachine) {
 			address, err := netip.ParseAddr(vip.Address)
 			if err == nil && address.Is4() && vip.Bridge != "" {
 				return true

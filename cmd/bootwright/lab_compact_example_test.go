@@ -47,8 +47,8 @@ func TestLabCompactExamplePlansThreeMastersAndInstallerVIPsGolden(t *testing.T) 
 	if err != nil || !slices.Contains(prerequisites.StageRequirements(prerequisites.StageNativeOf(selection)), "iputils") {
 		t.Fatal("the compact preboot probe has no controller tooling", err)
 	}
-	cluster := requireObject(t, state.Effective(), api.ContainerCluster, "compact")
-	if cluster.Spec().Get("install", "platform", "type").Text() != "baremetal" || cluster.Spec().Get("nodes").Len() != 3 {
+	cluster := requireObject(t, state.Effective(), api.OpenShiftCluster, "compact")
+	if !cluster.Spec().Has("install", "platform", "baremetal") || cluster.Spec().Get("nodes").Len() != 3 {
 		t.Fatal("compact platform or node count changed", cluster.Spec())
 	}
 	plan := compactExamplePlan(t)

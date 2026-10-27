@@ -2,7 +2,7 @@
 
 Observed in September 2026 while carrying every root-device hint to the agent
 installer (X19, item B4).
-[Container clusters](../../specs/container-clusters.md#installer-inputs)
+[Container clusters](../../specs/openshift-clusters.md#installer-inputs)
 owns what the installer inputs carry; this page records why the role writes
 `install-config.yaml` and `agent-config.yaml` through the collection's
 `to_installer_yaml` filter rather than through `to_nice_yaml` or

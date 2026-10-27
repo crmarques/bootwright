@@ -14,7 +14,7 @@ import (
 // reveals that one user's keys and nothing else (D183, Q116).
 func TestObjectUserCredentialsRequireTheirOwnSelector(t *testing.T) {
 	f := newFixture(t)
-	objects := append(f.catalog.Objects(), api.NewObject(api.StorageObjectUser, "documents", api.Value{}, api.MapValue(field("clusterRef", text("storage")), field("objectGatewayRef", text("objects")))), api.NewObject(api.StorageObjectGateway, "objects", api.Value{}, api.MapValue(field("clusterRef", text("storage")))))
+	objects := append(f.catalog.Objects(), api.NewObject(api.CephObjectUser, "documents", api.Value{}, api.MapValue(field("clusterRef", text("storage")), field("objectGatewayRef", text("objects")))), api.NewObject(api.CephObjectGateway, "objects", api.Value{}, api.MapValue(field("clusterRef", text("storage")))))
 	f.catalog = api.NewCatalog(objects)
 	f.objectUsers = map[string]Custodied{"documents": {Material: secrets.NewMaterial(map[secrets.Part][]byte{secrets.UsernamePart: []byte("ACCESS"), secrets.PasswordPart: []byte("PRIVATE")})}}
 	result, err := f.service("lab").ClusterInfo(context.Background(), ClusterInfoRequest{Names: []string{"storage"}})
@@ -35,7 +35,7 @@ func TestObjectUserCredentialsRequireTheirOwnSelector(t *testing.T) {
 
 func TestObjectUserHandoffRefusesUnprovedCustodyAndClearsOtherSecrets(t *testing.T) {
 	f := newFixture(t)
-	f.catalog = api.NewCatalog(append(f.catalog.Objects(), api.NewObject(api.StorageObjectUser, "documents", api.Value{}, api.MapValue(field("clusterRef", text("storage")), field("objectGatewayRef", text("objects")))), api.NewObject(api.StorageObjectGateway, "objects", api.Value{}, api.MapValue(field("clusterRef", text("storage"))))))
+	f.catalog = api.NewCatalog(append(f.catalog.Objects(), api.NewObject(api.CephObjectUser, "documents", api.Value{}, api.MapValue(field("clusterRef", text("storage")), field("objectGatewayRef", text("objects")))), api.NewObject(api.CephObjectGateway, "objects", api.Value{}, api.MapValue(field("clusterRef", text("storage"))))))
 	f.objectUsers = map[string]Custodied{"documents": {Unproved: true, Material: secrets.NewMaterial(map[secrets.Part][]byte{secrets.UsernamePart: []byte("ACCESS"), secrets.PasswordPart: []byte("PRIVATE")})}}
 	if result, err := f.service("lab").ClusterInfo(context.Background(), ClusterInfoRequest{Names: []string{"storage"}, ObjectUser: "documents"}); err == nil || result != nil {
 		t.Fatal("unproved credentials were revealed")
@@ -53,7 +53,7 @@ func TestObjectUserHandoffRefusesUnprovedCustodyAndClearsOtherSecrets(t *testing
 }
 
 func handoffUser(name, cluster, gateway string) api.Object {
-	return api.NewObject(api.StorageObjectUser, name, api.Value{}, api.MapValue(field("clusterRef", text(cluster)), field("objectGatewayRef", text(gateway))))
+	return api.NewObject(api.CephObjectUser, name, api.Value{}, api.MapValue(field("clusterRef", text(cluster)), field("objectGatewayRef", text(gateway))))
 }
 
 func handoffMaterial() secrets.Material {
@@ -93,7 +93,7 @@ func TestObjectUserHandoffRefusesChangedScopeBeforeCustody(t *testing.T) {
 			}
 			objects := append(f.catalog.Objects(), handoffUser("documents", "storage", "objects"))
 			if scenario != "missing-gateway" {
-				objects = append(objects, api.NewObject(api.StorageObjectGateway, "objects", api.Value{}, api.MapValue(field("clusterRef", text(gatewayCluster)))))
+				objects = append(objects, api.NewObject(api.CephObjectGateway, "objects", api.Value{}, api.MapValue(field("clusterRef", text(gatewayCluster)))))
 			}
 			f.catalog = api.NewCatalog(objects)
 			f.objectUnproved = scenario == "unproved-original-scope"
@@ -111,7 +111,7 @@ func TestObjectUserHandoffReadsOnlyTheSelectedUser(t *testing.T) {
 	for _, scenario := range []string{"missing", "unproved", "malformed", "undeclared"} {
 		t.Run(scenario, func(t *testing.T) {
 			f := newFixture(t)
-			f.catalog = api.NewCatalog(append(f.catalog.Objects(), handoffUser("z-last", "storage", "objects"), handoffUser("a-first", "storage", "objects"), api.NewObject(api.StorageObjectGateway, "objects", api.Value{}, api.MapValue(field("clusterRef", text("storage"))))))
+			f.catalog = api.NewCatalog(append(f.catalog.Objects(), handoffUser("z-last", "storage", "objects"), handoffUser("a-first", "storage", "objects"), api.NewObject(api.CephObjectGateway, "objects", api.Value{}, api.MapValue(field("clusterRef", text("storage"))))))
 			first, last := handoffMaterial(), handoffMaterial()
 			f.objectUsers = map[string]Custodied{"a-first": {Material: first}}
 			if scenario == "unproved" {

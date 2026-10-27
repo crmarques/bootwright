@@ -31,7 +31,6 @@ metadata:
 spec:
   os: {provided: true}
   access: {local: true}
-  capabilities: [container-runtime]
 ---
 apiVersion: bootwright.io/v1alpha1
 kind: Machine
@@ -39,7 +38,6 @@ metadata:
   name: services
 spec:
   os: {provided: true}
-  capabilities: [container-runtime]
   network:
     addresses:
       - {name: ip, address: 192.0.2.10/24}

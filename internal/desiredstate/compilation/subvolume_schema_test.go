@@ -8,7 +8,7 @@ import (
 
 func subvolumeFindingsAt(t *testing.T, spec, field string) []string {
 	t.Helper()
-	onProbe, _ := strictYAMLCompile(t, "apiVersion: bootwright.io/v1alpha1\nkind: StorageSubvolume\nmetadata:\n  name: probe\nspec:\n  clusterRef: missing\n  filesystemRef: missing\n"+spec)
+	onProbe, _ := strictYAMLCompile(t, "apiVersion: bootwright.io/v1alpha1\nkind: CephSubvolume\nmetadata:\n  name: probe\nspec:\n  clusterRef: missing\n  filesystemRef: missing\n"+spec)
 	found := []string{}
 	for _, finding := range onProbe {
 		if strings.HasSuffix(finding, " "+field) {

@@ -64,7 +64,7 @@ func finalization(ctx context.Context, view View, store OperationStore, verb rec
 // rewrites only the operation record's state, to the one its block records
 // give; no decision after the mark reads the evidence, reservations or Secret
 // bindings it also completes.
-func (s Service) afterFinalization(ctx context.Context, view View, verb reconciliation.Verb, selection reconciliation.StageSelection, marked transition) (transition, error) {
+func (s Service) afterFinalization(ctx context.Context, view View, verb reconciliation.Verb, selection reconciliation.Selection, marked transition) (transition, error) {
 	next, err := finalState(marked.plan, marked.states)
 	if err != nil {
 		return transition{}, err
@@ -129,7 +129,7 @@ func joinBindings(set []string, bindings ...string) []string {
 // again from what the context holds once it is done, so the invocation goes on
 // exactly as it would over an operation that had finalized on its own. A
 // finalization that leaves another behind refuses rather than repeating.
-func (s Service) finalizeFirst(ctx context.Context, name string, verb reconciliation.Verb, selection reconciliation.StageSelection, marked transition) (transition, ContextIdentity, error) {
+func (s Service) finalizeFirst(ctx context.Context, name string, verb reconciliation.Verb, selection reconciliation.Selection, marked transition) (transition, ContextIdentity, error) {
 	if err := s.finalize(ctx, name, marked); err != nil {
 		return transition{}, ContextIdentity{}, err
 	}

@@ -66,10 +66,10 @@ one optional port. Nothing below admits anything.
   state-machine row, its `stateMachineRows` case and the code in one commit;
   `TestTransitionTablesMatchSpec` then holds the row and the code together.
 
-## Recipe: one more StoragePool over a completed apply
+## Recipe: one more CephPool over a completed apply
 
 The worked case is the smallest useful one: a completed apply realized a Ceph
-cluster and its pools, and the operator adds one `StoragePool`.
+cluster and its pools, and the operator adds one `CephPool`.
 
 1. **Decision and slice.** Record a decision and name a slice. The change
    narrows a safety refusal, which the
@@ -133,7 +133,7 @@ Each rule is an acceptance clause for any scenario slice.
    (`internal/storage/ceph/evidence.go`). Every admitted transition keeps that
    id stable today. A scenario that registers a second apply over realized
    state first moves identity to a lineage id
-   ([bootstrap identity](../storage.md#bootstrap-identity-and-continuation)).
+   ([bootstrap identity](../ceph.md#bootstrap-identity-and-continuation)).
 2. **Requests embed only what gates them.** Pool and client requests embed
    the cluster request (`internal/storage/ceph/requests.go`). Adding one pool
    moves no sibling's digest, but editing the cluster moves every pool's. Part

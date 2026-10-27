@@ -16,9 +16,10 @@ func (f SourceFile) Bytes() []byte { return append([]byte(nil), f.data...) }
 func (f SourceFile) Size() int { return len(f.data) }
 
 type Sources struct {
-	Files   []SourceFile
-	Markers []SourceFile
-	Roots   []string
+	Files          []SourceFile
+	Markers        []SourceFile
+	Roots          []string
+	SkippedSecrets []string
 }
 
 const (

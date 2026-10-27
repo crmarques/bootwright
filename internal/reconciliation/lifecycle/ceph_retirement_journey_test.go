@@ -225,10 +225,10 @@ func fleetCephBlock(id string, kind api.Kind, object string, request json.RawMes
 func fleetGatewayBlocks(t *testing.T) []reconciliation.BlockDefinition {
 	t.Helper()
 	return []reconciliation.BlockDefinition{
-		fleetCephBlock(ceph.GatewayPoolBlockID("objects", "meta"), api.StorageObjectGateway, "objects", fleetRequest(t, func(r *ceph.Request) {
+		fleetCephBlock(ceph.GatewayPoolBlockID("objects", "meta"), api.CephObjectGateway, "objects", fleetRequest(t, func(r *ceph.Request) {
 			r.Action, r.Pool = "pool", &ceph.Pool{Application: "rgw", Autoscale: ceph.PoolAutoscale{Mode: "on"}, CrushRule: "replicated_rule", MinSize: 2, Name: "objects.rgw.meta", PGNum: 32, Role: "rgw", Size: 3, Type: "replicated"}
 		}), "ceph-cluster-example"),
-		fleetCephBlock(ceph.GatewayBlockID("objects"), api.StorageObjectGateway, "objects", fleetRequest(t, func(r *ceph.Request) {
+		fleetCephBlock(ceph.GatewayBlockID("objects"), api.CephObjectGateway, "objects", fleetRequest(t, func(r *ceph.Request) {
 			r.Action, r.Delegated = "gateway", []ceph.DelegatedService{{Name: "rgw.objects", Hosts: fleetHosts}}
 			r.Gateway = &ceph.Gateway{Name: "objects", Realm: "objects", ZoneGroup: "objects", Zone: "objects", IndexPool: "objects.rgw.buckets.index", DataPool: "objects.rgw.buckets.data",
 				DataExtraPool: "objects.rgw.buckets.non-ec", ZonePools: []string{"objects.rgw.meta"}, Documents: []json.RawMessage{
@@ -257,13 +257,13 @@ func fleetEngine(t *testing.T, machines *fleetMachines, runner ceph.Runner, gate
 	}
 	definitions = append(definitions,
 		reconciliation.BlockDefinition{ID: ceph.ImageBlockID("example"), Description: "resolve the pinned Ceph image of example", Stage: reconciliation.StageClusters, Impacts: []string{"resolve-image"},
-			Consumes: []string{}, Kind: string(api.StorageCluster), Object: "example", Implementation: ceph.ImageImplementation, ContentDigest: ceph.ImageContentDigest(), Request: image},
-		cephBlock("ceph-cluster-example", api.StorageCluster, "example", fleetRequest(t, nil), append([]string{ceph.ImageBlockID("example")}, machineBlocks...)...),
-		cephBlock("ceph-pool-volumes", api.StoragePool, "volumes", fleetRequest(t, func(r *ceph.Request) {
+			Consumes: []string{}, Kind: string(api.CephCluster), Object: "example", Implementation: ceph.ImageImplementation, ContentDigest: ceph.ImageContentDigest(), Request: image},
+		cephBlock("ceph-cluster-example", api.CephCluster, "example", fleetRequest(t, nil), append([]string{ceph.ImageBlockID("example")}, machineBlocks...)...),
+		cephBlock("ceph-pool-volumes", api.CephPool, "volumes", fleetRequest(t, func(r *ceph.Request) {
 			r.Action, r.Pool = "pool", &ceph.Pool{CrushRule: "replicated_rule", MinSize: 2, Name: "volumes", PGNum: 32, Size: 3}
 		}), "ceph-cluster-example"),
-		cephBlock("ceph-client-consumer", api.StorageClient, "consumer", fleetRequest(t, func(r *ceph.Request) {
-			r.Action, r.Client = "client", &ceph.Client{Access: "read-write", Name: "consumer", Pool: "volumes"}
+		cephBlock("ceph-client-consumer", api.CephClient, "consumer", fleetRequest(t, func(r *ceph.Request) {
+			r.Action, r.Client = "client", &ceph.Client{Access: "readWrite", Name: "consumer", Pool: "volumes"}
 		}), ceph.ImageBlockID("example"), "ceph-pool-volumes"),
 	)
 	definitions = append(definitions, gateways...)
@@ -274,11 +274,11 @@ func fleetEngine(t *testing.T, machines *fleetMachines, runner ceph.Runner, gate
 	slices.Sort(secretNames)
 	journey := lifecycle.NewBoundJourney(t, []lifecycle.BoundCapability{
 		{Binding: lifecycle.CapabilityBinding{Kind: string(api.Machine), Implementation: fleetMachineImplementation}, Capability: machines},
-		{Binding: lifecycle.CapabilityBinding{Kind: string(api.StorageCluster), Implementation: ceph.ImageImplementation}, Capability: ceph.NewImage(runner)},
-		{Binding: lifecycle.CapabilityBinding{Kind: string(api.StorageCluster), Implementation: ceph.Implementation}, Capability: ceph.New(api.StorageCluster, runner).WithProofs(fleetProofs{})},
-		{Binding: lifecycle.CapabilityBinding{Kind: string(api.StoragePool), Implementation: ceph.Implementation}, Capability: ceph.New(api.StoragePool, runner).WithProofs(fleetProofs{})},
-		{Binding: lifecycle.CapabilityBinding{Kind: string(api.StorageClient), Implementation: ceph.Implementation}, Capability: ceph.New(api.StorageClient, runner).WithProofs(fleetProofs{})},
-		{Binding: lifecycle.CapabilityBinding{Kind: string(api.StorageObjectGateway), Implementation: ceph.Implementation}, Capability: ceph.New(api.StorageObjectGateway, runner).WithProofs(fleetProofs{})},
+		{Binding: lifecycle.CapabilityBinding{Kind: string(api.CephCluster), Implementation: ceph.ImageImplementation}, Capability: ceph.NewImage(runner)},
+		{Binding: lifecycle.CapabilityBinding{Kind: string(api.CephCluster), Implementation: ceph.Implementation}, Capability: ceph.New(api.CephCluster, runner).WithProofs(fleetProofs{})},
+		{Binding: lifecycle.CapabilityBinding{Kind: string(api.CephPool), Implementation: ceph.Implementation}, Capability: ceph.New(api.CephPool, runner).WithProofs(fleetProofs{})},
+		{Binding: lifecycle.CapabilityBinding{Kind: string(api.CephClient), Implementation: ceph.Implementation}, Capability: ceph.New(api.CephClient, runner).WithProofs(fleetProofs{})},
+		{Binding: lifecycle.CapabilityBinding{Kind: string(api.CephObjectGateway), Implementation: ceph.Implementation}, Capability: ceph.New(api.CephObjectGateway, runner).WithProofs(fleetProofs{})},
 	}, lifecycle.CapabilityPlan{Definitions: definitions, Secrets: secretNames})
 	holdFleetSecrets(journey)
 	return journey

@@ -26,8 +26,8 @@ func (ImageCapability) SecretReferences(block reconciliation.Block) ([]string, e
 	return request.SecretReferences(), nil
 }
 
-func (ExportCapability) SecretReferences(block reconciliation.Block) ([]string, error) {
-	request, err := DecodeExportRequest(block.Request)
+func (ConsumerCapability) SecretReferences(block reconciliation.Block) ([]string, error) {
+	request, err := DecodeConsumerRequest(block.Request)
 	if err != nil {
 		return nil, err
 	}

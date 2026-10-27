@@ -4,7 +4,7 @@ import (
 	"slices"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
-	"github.com/crmarques/bootwright/internal/storage"
+	"github.com/crmarques/bootwright/internal/storage/cephcluster"
 )
 
 type Settings struct {
@@ -12,13 +12,13 @@ type Settings struct {
 }
 
 func settingsModules() []string {
-	modules := append(storage.DerivableManagerModules(), SMBManagerModule)
+	modules := append(cephcluster.DerivableManagerModules(), SMBManagerModule)
 	slices.Sort(modules)
 	return slices.Compact(modules)
 }
 
 func settingsRequest(c api.Catalog, r Request, cluster api.Object) (Request, bool) {
-	modules := storage.DerivedManagerModules(cluster.Spec().Get("ceph"))
+	modules := cephcluster.DerivedManagerModules(cluster.Spec())
 	if len(clusterSMBResources(c, cluster.Name())) != 0 {
 		modules = append(modules, SMBManagerModule)
 	}

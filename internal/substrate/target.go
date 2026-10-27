@@ -53,8 +53,8 @@ const (
 // The virtual-media trust a controller's fetch of published media uses. It is
 // the BMC-to-artifact-server leg and is independent of the controller's own.
 const (
-	TrustDisableVerification = "disable-verification"
-	TrustImportCertificate   = "import-certificate"
+	TrustDisableVerification = "disableVerification"
+	TrustImportCertificate   = "importCertificate"
 	TrustEstablished         = "established"
 )
 
@@ -192,20 +192,20 @@ func authoredTarget(catalog api.Catalog, machine api.Object, controllerMachine s
 // the one reader of that block, so an authored controller means the same thing
 // to every consumer whether or not a provider also offers one.
 func authoredController(machine api.Object) (Controller, error) {
-	bmc := machine.Spec().Get("hardware", "management", "bmc")
+	bmc := MachineBMC(machine)
 	if !bmc.Present() {
 		return Controller{}, refusal("api.required", "the Machine declares no management controller",
-			"set spec.hardware.management.bmc on "+machine.Identity())
+			"set "+BMCPath+" on "+machine.Identity())
 	}
 	endpoint, ok := NormalizeControllerEndpoint(bmc.Get("address").Text())
 	if !ok {
 		return Controller{}, refusal("api.value", "the Machine's controller address does not select one exact ComputerSystem",
-			"set spec.hardware.management.bmc.address to an absolute /redfish/v1/Systems/<id> URL on "+machine.Identity())
+			"set "+BMCPath+".address to an absolute /redfish/v1/Systems/<id> URL on "+machine.Identity())
 	}
 	credentials := bmc.Get("credentialsRef").Text()
 	if credentials == "" {
 		return Controller{}, refusal("api.required", "the Machine's management controller declares no credential",
-			"set spec.hardware.management.bmc.credentialsRef on "+machine.Identity())
+			"set "+BMCPath+".credentialsRef on "+machine.Identity())
 	}
 	return Controller{
 		Endpoint: endpoint, CredentialsRef: credentials,
@@ -222,24 +222,24 @@ func virtualTarget(catalog api.Catalog, provider, machine api.Object, contextNam
 	port, ok := ControllerPort(catalog, provider, machine.Name())
 	if !ok {
 		return Target{}, refusal("api.value", "the Machine's emulated controller port does not allocate",
-			"correct spec.libvirt.bmcEmulationDefaults.port on "+provider.Identity())
+			"correct spec.libvirt.bmcEmulation.port on "+provider.Identity())
 	}
-	credentials := provider.Spec().Get("libvirt", "bmcEmulationDefaults", "auth", "credentialsRef").Text()
+	credentials := provider.Spec().Get("libvirt", "bmcEmulation", "auth", "credentialsRef").Text()
 	if credentials == "" {
 		return Target{}, refusal("api.required", "the provider declares no emulated controller credential",
-			"set spec.libvirt.bmcEmulationDefaults.auth.credentialsRef on "+provider.Identity())
+			"set spec.libvirt.bmcEmulation.auth.credentialsRef on "+provider.Identity())
 	}
-	certificate := provider.Spec().Get("libvirt", "bmcEmulationDefaults", "certificateRef").Text()
+	certificate := provider.Spec().Get("libvirt", "bmcEmulation", "certificateRef").Text()
 	if certificate == "" {
 		return Target{}, refusal("api.required", "the provider declares no emulated controller serving certificate",
-			"set spec.libvirt.bmcEmulationDefaults.certificateRef on "+provider.Identity())
+			"set spec.libvirt.bmcEmulation.certificateRef on "+provider.Identity())
 	}
 	host, ok := catalog.Find(api.Machine, provider.Spec().Get("libvirt", "machineRef").Text())
 	if !ok {
 		return Target{}, refusal("api.reference", "the provider's host Machine is not in the selected graph",
 			"declare it or correct spec.libvirt.machineRef on "+provider.Identity())
 	}
-	address := provider.Spec().Get("libvirt", "bmcEmulationDefaults", "bindAddress").Text()
+	address := provider.Spec().Get("libvirt", "bmcEmulation", "bindAddress").Text()
 	target.Controller = Controller{
 		Endpoint:       ControllerEndpoint(address, port, DomainUUID(contextName, machine.Name())),
 		CredentialsRef: credentials,
@@ -319,10 +319,10 @@ func virtualMediaTrust(tls api.Value) VirtualMedia {
 func declaredInterfaces(machine api.Object) ([]Interface, error) {
 	var interfaces []Interface
 	for _, nic := range machine.Spec().Get("hardware", "nics").Items() {
-		address := nic.Get("macAddress").Text()
+		address := MachineMAC(machine, nic.Get("name").Text())
 		if address == "" {
 			return nil, refusal("api.required", "a declared NIC carries no hardware address",
-				"set every hardware.nics[].macAddress on "+machine.Identity())
+				"set a spec.substrate.baremetal.nics[] entry with the macAddress of every hardware NIC on "+machine.Identity())
 		}
 		interfaces = append(interfaces, Interface{Name: nic.Get("name").Text(), MACAddress: strings.ToLower(address)})
 	}

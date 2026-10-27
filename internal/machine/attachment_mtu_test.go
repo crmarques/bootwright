@@ -24,7 +24,7 @@ func TestLibvirtInterfaceAttachmentsCoverNICsAndBoundGuestMTU(t *testing.T) {
 		"bond oversized": {entries, native.With("interfaces", list(append(native.Get("interfaces").Items(), m("name", "bond0", "type", "bond", "mtu", api.IntegerValue("9000"), "link-aggregation", m("port", api.StringList("eth0", "eth1"))))...)), "above its attachment"},
 	} {
 		t.Run(name, func(t *testing.T) {
-			machine := object(api.Machine, "node", m("network", m("interfaceAttachments", test.entries)))
+			machine := object(api.Machine, "node", m("substrate", m("providerRef", "hypervisor", "libvirt", m("interfaceAttachments", test.entries))))
 			issues := validateAttachments(machine, provider, test.native)
 			if test.want == "" && len(issues) != 0 {
 				t.Fatal(issues)

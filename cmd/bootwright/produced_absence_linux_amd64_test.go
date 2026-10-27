@@ -137,9 +137,9 @@ func TestNoProducedMaterialInOrdinaryOutput(t *testing.T) {
 		return map[string]string{"kind": kind, "name": name, "status": "pending"}
 	}
 	want := []map[string]string{
-		pending("StoragePlacementPolicy", "ssd-hosts"), pending("StoragePool", "cephfs-data"), pending("StoragePool", "cephfs-metadata"),
-		pending("StoragePool", "rbd-data"), pending("StorageRBDImage", "rbd-disk"), pending("StorageClient", "rbd-canary"),
-		pending("StorageFilesystem", "files"), pending("StorageSubvolume", "docs"),
+		pending("CephPlacementPolicy", "ssd-hosts"), pending("CephPool", "cephfs-data"), pending("CephPool", "cephfs-metadata"),
+		pending("CephPool", "rbd-data"), pending("CephRBDImage", "rbd-disk"), pending("CephClient", "rbd-canary"),
+		pending("CephFilesystem", "files"), pending("CephSubvolume", "docs"),
 	}
 	if got := envelope.Result.Storage[0].Resources; !reflect.DeepEqual(got, want) {
 		t.Fatalf("resources = %v, want %v", got, want)

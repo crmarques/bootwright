@@ -41,15 +41,15 @@ func executionFor(t *testing.T, r Request) lifecycle.Execution {
 	if err != nil {
 		t.Fatal(err)
 	}
-	return lifecycle.Execution{ApplyOperation: "apply-original", Operation: "apply-original", Context: "example", Block: reconciliation.Block{BlockDefinition: reconciliation.BlockDefinition{ID: "ceph-cluster-example", Kind: string(api.StorageCluster), Object: "example", Request: data}, RequestDigest: strings.Repeat("b", 64)},
+	return lifecycle.Execution{ApplyOperation: "apply-original", Operation: "apply-original", Context: "example", Block: reconciliation.Block{BlockDefinition: reconciliation.BlockDefinition{ID: "ceph-cluster-example", Kind: string(api.CephCluster), Object: "example", Request: data}, RequestDigest: strings.Repeat("b", 64)},
 		ApplyProved: []lifecycle.BlockEvidence{imageProof(t, r.Cluster, r.Image, resolvedDigest)}}
 }
 
 func pinnedCatalog(t *testing.T, change func(api.Value) api.Value) api.Catalog {
 	t.Helper()
 	catalog := packageCatalog()
-	cluster, _ := catalog.Find(api.StorageCluster, "example")
-	spec := cluster.Spec().WithPath(api.StringValue(PinnedTransport), "ceph", "cephadm", "clusterSSH", "transport")
+	cluster, _ := catalog.Find(api.CephCluster, "example")
+	spec := cluster.Spec().WithPath(api.StringValue(PinnedTransport), "cephadm", "clusterSSH", "transport")
 	if change != nil {
 		spec = change(spec)
 	}
@@ -60,8 +60,8 @@ func pinnedCatalog(t *testing.T, change func(api.Value) api.Value) api.Catalog {
 		}
 	}
 	objects = append(objects,
-		api.NewObject(api.StoragePool, "volumes", api.Value{}, requestMap("clusterRef", "example", "type", "replicated", "role", "rbd", "replicated", requestMap("size", 2, "minSize", 2))),
-		api.NewObject(api.StorageClient, "consumer", api.Value{}, requestMap("clusterRef", "example", "poolRef", "volumes", "access", "read-write")))
+		api.NewObject(api.CephPool, "volumes", api.Value{}, requestMap("clusterRef", "example", "role", "rbd", "replicated", requestMap("size", 2, "minSize", 2))),
+		api.NewObject(api.CephClient, "consumer", api.Value{}, requestMap("clusterRef", "example", "poolRef", "volumes", "access", "readWrite")))
 	return api.NewCatalog(objects)
 }
 
@@ -70,18 +70,18 @@ func TestUnsupportedReleaseOrTransportRefusesBeforeRegistration(t *testing.T) {
 		return func(spec api.Value) api.Value { return spec.WithPath(api.StringValue(value), path...) }
 	}
 	refused := map[string]func(api.Value) api.Value{
-		"native transport": set("native", "ceph", "cephadm", "clusterSSH", "transport"),
+		"native transport": set("native", "cephadm", "clusterSSH", "transport"),
 		"omitted transport": func(spec api.Value) api.Value {
-			return spec.WithPath(requestMap("user", "operator", "keyRef", "cluster-key"), "ceph", "cephadm", "clusterSSH")
+			return spec.WithPath(requestMap("user", "operator", "keyRef", "cluster-key"), "cephadm", "clusterSSH")
 		},
-		"empty release":     set("", "ceph", "release"),
-		"control character": set("bad\nversion", "ceph", "packageVersion"),
+		"empty release":     set("", "release"),
+		"control character": set("bad\nversion", "packageVersion"),
 	}
 	for name, change := range refused {
 		t.Run(name, func(t *testing.T) {
 			catalog := pinnedCatalog(t, change)
 			state := compilation.NewState(catalog, catalog, nil)
-			for _, kind := range []api.Kind{api.StorageCluster, api.StoragePool, api.StorageClient} {
+			for _, kind := range []api.Kind{api.CephCluster, api.CephPool, api.CephClient} {
 				runner := &recordingRunner{}
 				refusals := New(kind, runner).Unsupported(state)
 				if len(refusals) != 1 || refusals[0].Reason != unsupportedReason || refusals[0].Remediation != unsupportedRemedy || runner.calls != 0 {
@@ -97,9 +97,9 @@ func TestUnsupportedReleaseOrTransportRefusesBeforeRegistration(t *testing.T) {
 	}
 	for name, version := range map[string]string{"pinned tag": PinnedTag, "digest": resolvedDigest} {
 		t.Run(name, func(t *testing.T) {
-			catalog := pinnedCatalog(t, set(version, "ceph", "image", "version"))
+			catalog := pinnedCatalog(t, set(version, "image", "version"))
 			state := compilation.NewState(catalog, catalog, nil)
-			for _, kind := range []api.Kind{api.StorageCluster, api.StoragePool, api.StorageClient} {
+			for _, kind := range []api.Kind{api.CephCluster, api.CephPool, api.CephClient} {
 				if refusals := New(kind, nil).Unsupported(state); len(refusals) != 0 {
 					t.Fatalf("%s: pinned input refused: %+v", kind, refusals)
 				}
@@ -121,7 +121,7 @@ func TestUnsupportedReleaseOrTransportRefusesBeforeRegistration(t *testing.T) {
 }
 
 func TestIdentityUsesOriginalApplyAcrossRetryRemovalAndRename(t *testing.T) {
-	capability := New(api.StorageCluster, nil)
+	capability := New(api.CephCluster, nil)
 	first := executionFor(t, coreRequest())
 	a, err := capability.prepare(context.Background(), first)
 	if err != nil {
@@ -158,7 +158,7 @@ func TestIdentityUsesOriginalApplyAcrossRetryRemovalAndRename(t *testing.T) {
 }
 
 func TestRemovalRequiresOnlineHostsAndDataLoss(t *testing.T) {
-	capability := New(api.StorageCluster, nil)
+	capability := New(api.CephCluster, nil)
 	e := executionFor(t, coreRequest())
 	removal, err := capability.Removal(context.Background(), e.Block)
 	if err != nil {
@@ -170,7 +170,7 @@ func TestRemovalRequiresOnlineHostsAndDataLoss(t *testing.T) {
 }
 
 func TestMissingPrincipalNeverProvesOldSessionsQuiescent(t *testing.T) {
-	for _, kind := range []api.Kind{api.StorageCluster, api.StoragePool, api.StorageClient} {
+	for _, kind := range []api.Kind{api.CephCluster, api.CephPool, api.CephClient} {
 		runner := &recordingRunner{}
 		q, err := New(kind, runner).Quiescent(context.Background(), lifecycle.Probe{})
 		if err != nil || q.State != lifecycle.Unproved || q.Reason != survivingReason || runner.calls != 0 {
@@ -181,9 +181,9 @@ func TestMissingPrincipalNeverProvesOldSessionsQuiescent(t *testing.T) {
 
 func policyPlanInput(t *testing.T) lifecycle.PlanInput {
 	t.Helper()
-	objects := []api.Object{childOf(api.StoragePlacementPolicy, "fast", "ruleName", "fast-hosts", "crushDeviceClass", "ssd", "replicated", requestMap("size", 2, "minSize", 2))}
+	objects := []api.Object{childOf(api.CephPlacementPolicy, "fast", "ruleName", "fast-hosts", "crushDeviceClass", "ssd", "replicated", requestMap("size", 2, "minSize", 2))}
 	for _, object := range pinnedCatalog(t, nil).Objects() {
-		if object.Kind() == api.StoragePool {
+		if object.Kind() == api.CephPool {
 			object = object.WithSpec(object.Spec().With("placementPolicyRef", api.StringValue("fast")))
 		}
 		objects = append(objects, object)
@@ -193,7 +193,7 @@ func policyPlanInput(t *testing.T) lifecycle.PlanInput {
 }
 
 func TestPolicyExecutionMatchesItsFrozenIdentity(t *testing.T) {
-	capability := New(api.StoragePlacementPolicy, nil)
+	capability := New(api.CephPlacementPolicy, nil)
 	plan, err := capability.Plan(context.Background(), policyPlanInput(t))
 	if err != nil || len(plan.Definitions) != 1 {
 		t.Fatalf("the policy planned %+v (%v)", plan.Definitions, err)
@@ -218,7 +218,7 @@ func TestPolicyBlockRequiresClusterAndPoolRequiresPolicy(t *testing.T) {
 	input := policyPlanInput(t)
 	definitions := map[string]reconciliation.BlockDefinition{}
 	all := []reconciliation.BlockDefinition{}
-	for _, capability := range []lifecycle.Capability{NewImage(nil), NewHost(nil), New(api.StorageCluster, nil), New(api.StoragePlacementPolicy, nil), New(api.StoragePool, nil), New(api.StorageClient, nil)} {
+	for _, capability := range []lifecycle.Capability{NewImage(nil), NewHost(nil), New(api.CephCluster, nil), New(api.CephPlacementPolicy, nil), New(api.CephPool, nil), New(api.CephClient, nil)} {
 		plan, err := capability.Plan(context.Background(), input)
 		if err != nil {
 			t.Fatal(err)
@@ -229,10 +229,10 @@ func TestPolicyBlockRequiresClusterAndPoolRequiresPolicy(t *testing.T) {
 		all = append(all, plan.Definitions...)
 	}
 	policy, pool := definitions["ceph-policy-fast"], definitions["ceph-pool-volumes"]
-	if policy.Kind != string(api.StoragePlacementPolicy) || policy.Object != "fast" || len(policy.Requires) != 0 || !slices.Equal(policy.Dependencies, []string{ClusterBlockID("example")}) {
+	if policy.Kind != string(api.CephPlacementPolicy) || policy.Object != "fast" || len(policy.Requires) != 0 || !slices.Equal(policy.Dependencies, []string{ClusterBlockID("example")}) {
 		t.Fatalf("the policy block is %+v", policy)
 	}
-	if !slices.Equal(pool.Requires, []reconciliation.ObjectRef{{Kind: string(api.StoragePlacementPolicy), Object: "fast"}}) || !slices.Equal(pool.Dependencies, []string{ClusterBlockID("example"), ImageBlockID("example")}) {
+	if !slices.Equal(pool.Requires, []reconciliation.ObjectRef{{Kind: string(api.CephPlacementPolicy), Object: "fast"}}) || !slices.Equal(pool.Dependencies, []string{ClusterBlockID("example"), ImageBlockID("example")}) {
 		t.Fatalf("the pool block requires %+v and depends on %v", pool.Requires, pool.Dependencies)
 	}
 	for _, kind := range []string{"Machine", "MachineInstallProfile"} {

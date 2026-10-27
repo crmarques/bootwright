@@ -1,0 +1,20 @@
+apiVersion: bootwright.io/v1alpha1
+kind: CephSMBResource
+metadata:
+  name: smb-documents
+
+spec:
+  clusterRef: ceph-lab
+  smbClusterRef: files-smb
+  subvolumeRef: smb-documents
+
+  native:
+    resource_type: ceph.smb.share
+    share_id: documents
+    readonly: false
+
+    cephfs:
+      volume: files
+      subvolumegroup: apps
+      subvolume: smb-documents
+      path: /

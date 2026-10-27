@@ -22,11 +22,11 @@ func httpRGWService(id string) api.Value {
 func withHTTPRGW(ids ...string) func(api.Value) api.Value {
 	return func(spec api.Value) api.Value {
 		spec = withCorePair(spec)
-		services := spec.Get("ceph", "services").Items()
+		services := spec.Get("services").Items()
 		for _, id := range ids {
 			services = append(services, httpRGWService(id))
 		}
-		return spec.WithPath(api.ListValue(services...), "ceph", "services")
+		return spec.WithPath(api.ListValue(services...), "services")
 	}
 }
 
@@ -70,7 +70,7 @@ func TestGatewayRequestGolden(t *testing.T) {
 		!reflect.DeepEqual(document.Spec, map[string]string{"rgw_realm": "objects", "rgw_zone": "objects", "rgw_zonegroup": "objects"}) {
 		t.Fatalf("the rgw document %s (%v)", g.Documents[0], err)
 	}
-	renamed := childOf(api.StorageObjectGateway, "objects", "serviceRef", "rgw.objects", "realm", "r1", "zoneGroup", "g1", "zone", "z1",
+	renamed := childOf(api.CephObjectGateway, "objects", "serviceRef", "rgw.objects", "realm", "r1", "zoneGroup", "g1", "zone", "z1",
 		"pools", requestMap("indexPoolRef", "index"), "endpoint", requestMap("fqdn", "s3.example.test"))
 	g = gatewayOf(t, gatewayBlock(t, planCatalog(3, 3, withPairAndHTTPRGW, renamed, rgwPool("index")))).Gateway
 	if g.IndexPool != "index" || g.DataPool != "z1.rgw.buckets.data" || !slices.Contains(g.ZonePools, "index") || slices.Contains(g.ZonePools, "z1.rgw.buckets.index") ||
@@ -86,16 +86,16 @@ func TestGatewayBlockDependsOnDerivedPoolsAndCluster(t *testing.T) {
 	d := gatewayBlock(t, planCatalog(3, 3, withPairAndHTTPRGW, objectGateway("objects")))
 	want := []string{"ceph-cluster-example", "ceph-gateway-objects-pool-buckets-data", "ceph-gateway-objects-pool-buckets-index", "ceph-gateway-objects-pool-buckets-non-ec",
 		"ceph-gateway-objects-pool-control", "ceph-gateway-objects-pool-dedup", "ceph-gateway-objects-pool-log", "ceph-gateway-objects-pool-meta", "ceph-gateway-objects-pool-otp", "ceph-image-example"}
-	if d.Kind != string(api.StorageObjectGateway) || d.Object != "objects" || d.Stage != reconciliation.StageClusters || !reflect.DeepEqual(d.Exclusive, []string{"ceph/example"}) ||
+	if d.Kind != string(api.CephObjectGateway) || d.Object != "objects" || d.Stage != reconciliation.StageClusters || !reflect.DeepEqual(d.Exclusive, []string{"ceph/example"}) ||
 		len(d.Requires) != 0 || !reflect.DeepEqual(d.Dependencies, want) || d.Description != "realize Ceph object gateway objects" || d.ID != GatewayBlockID("objects") {
 		t.Fatalf("the gateway block %+v", d)
 	}
 	d = gatewayBlock(t, planCatalog(3, 3, withPairAndHTTPRGW, objectGateway("objects", "pools", requestMap("indexPoolRef", "index")), rgwPool("index")))
 	if slices.Contains(d.Dependencies, "ceph-gateway-objects-pool-buckets-index") || len(d.Dependencies) != len(want)-1 ||
-		!reflect.DeepEqual(d.Requires, []reconciliation.ObjectRef{{Kind: string(api.StoragePool), Object: "index"}}) {
+		!reflect.DeepEqual(d.Requires, []reconciliation.ObjectRef{{Kind: string(api.CephPool), Object: "index"}}) {
 		t.Fatalf("the gateway block with a declared index pool %+v", d)
 	}
-	removal, err := New(api.StorageObjectGateway, nil).Removal(context.Background(), reconciliation.Block{BlockDefinition: d})
+	removal, err := New(api.CephObjectGateway, nil).Removal(context.Background(), reconciliation.Block{BlockDefinition: d})
 	if err != nil || removal.Description != "remove Ceph object gateway objects" {
 		t.Fatalf("the gateway removal %+v (%v)", removal, err)
 	}
@@ -132,7 +132,7 @@ func gatewayExecution(t *testing.T, d reconciliation.BlockDefinition, change fun
 func TestGatewayIdentity(t *testing.T) {
 	definitions := gatewayBlocks(t, planCatalog(3, 3, withPairAndHTTPRGW, objectGateway("objects")))
 	d := definitions[len(definitions)-1]
-	capability := New(api.StorageObjectGateway, nil)
+	capability := New(api.CephObjectGateway, nil)
 	r, err := capability.identity(context.Background(), gatewayExecution(t, d, nil))
 	if err != nil || r.Gateway == nil || r.Owner != "apply-original" || r.FSID != FSIDFor("apply-original", "example") {
 		t.Fatalf("the gateway block identity %+v (%v)", r, err)
@@ -153,7 +153,7 @@ func TestGatewayIdentity(t *testing.T) {
 			refusedWith(t, err, "lifecycle.state", "Ceph request does not match its frozen resource identity", "")
 		})
 	}
-	_, err = New(api.StoragePool, nil).identity(context.Background(), gatewayExecution(t, d, nil))
+	_, err = New(api.CephPool, nil).identity(context.Background(), gatewayExecution(t, d, nil))
 	refusedWith(t, err, "lifecycle.state", "Ceph request does not match its frozen resource identity", "")
 }
 
@@ -225,14 +225,14 @@ func TestPGBudgetCountsTheSharedRGWRootOnce(t *testing.T) {
 	catalogFor := func(n int) api.Catalog {
 		children := []api.Object{replicatedPool("volumes", "autoscale", requestMap("pgNumMin", n))}
 		for _, name := range []string{"first", "second"} {
-			children = append(children, childOf(api.StorageObjectGateway, name, "serviceRef", "rgw."+name, "realm", name, "zoneGroup", name, "zone", name))
+			children = append(children, childOf(api.CephObjectGateway, name, "serviceRef", "rgw."+name, "realm", name, "zoneGroup", name, "zone", name))
 		}
 		return planCatalog(6, 6, withHTTPRGW("first", "second"), children...)
 	}
-	if _, err := kindPlan(api.StorageObjectGateway, catalogFor(205)); err != nil {
+	if _, err := kindPlan(api.CephObjectGateway, catalogFor(205)); err != nil {
 		t.Fatalf("two gateways at 1500 placement groups did not plan: %v", diagnostics.Of(err))
 	}
-	_, err := kindPlan(api.StorageObjectGateway, catalogFor(206))
+	_, err := kindPlan(api.CephObjectGateway, catalogFor(206))
 	refusedWith(t, err, "api.invariant", "pool placement groups for CRUSH rule replicated_rule exceed the per-OSD bound (1502 > 250 × 6)", remedy)
 }
 
@@ -241,7 +241,7 @@ func TestGatewayFreezesTheBoundRGWServiceSpec(t *testing.T) {
 		"rgw_frontend_port", 8443, "rgw_frontend_type", "beast", "rgw_exit_timeout_secs", 90, "only_bind_port_on_networks", true, "ssl", true))
 	withService := func(spec api.Value) api.Value {
 		spec = withCorePair(spec)
-		return spec.WithPath(api.ListValue(append(spec.Get("ceph", "services").Items(), service)...), "ceph", "services")
+		return spec.WithPath(api.ListValue(append(spec.Get("services").Items(), service)...), "services")
 	}
 	g := gatewayOf(t, gatewayBlock(t, planCatalog(3, 3, withService, objectGateway("objects")))).Gateway
 	var document struct {

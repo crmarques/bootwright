@@ -51,7 +51,7 @@ func TestProgramGolden(t *testing.T) {
 		}
 	}
 	// A network consumer owns its request version and embeds exactly the same section.
-	request, err := reconciliation.Freeze(map[string]any{"kind": "ContainerCluster", "program": json.RawMessage(data), "version": "network-v1"}, "network")
+	request, err := reconciliation.Freeze(map[string]any{"kind": "OpenShiftCluster", "program": json.RawMessage(data), "version": "network-v1"}, "network")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -98,7 +98,7 @@ func TestProgramRefusesClosedAndDeferredArms(t *testing.T) {
 			}
 		})
 	}
-	for _, source := range []ProducedRef{{Kind: "StorageExport", Object: "export", Output: "external-details"}, {Kind: "ContainerCluster", Object: "cluster", Output: "kubeconfig"}, {Kind: "StorageCluster", Object: "storage", Output: "dashboard"}} {
+	for _, source := range []ProducedRef{{Kind: "CephConsumer", Object: "export", Output: "external-details"}, {Kind: "OpenShiftCluster", Object: "cluster", Output: "kubeconfig"}, {Kind: "CephCluster", Object: "storage", Output: "dashboard"}} {
 		p := programFixture(t)
 		entry, err := NewPlacementEntry(SecretPlacement{Produced: &source, ProducedKey: "config", Namespace: "operators", Name: "credentials", Type: "Opaque"})
 		if err != nil {

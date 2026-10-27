@@ -1,7 +1,7 @@
 # OpenShift agent host networking
 
 How a node's network configuration travels from the agent configuration to the
-live image and the installed host. [Container clusters](../../specs/container-clusters.md)
+live image and the installed host. [Container clusters](../../specs/openshift-clusters.md)
 owns the required behavior; this page records native facts for
 [B718](../../specs/milestones/m3.md#b718) (bonds, VLANs and addressless NICs),
 [B706](../../specs/milestones/m3.md#b706) (the controller's `nmstatectl`) and

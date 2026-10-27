@@ -9,7 +9,7 @@
         "virtualMedia": {
           "removeCertificate": false,
           "restoreVerification": false,
-          "trust": "import-certificate"
+          "trust": "importCertificate"
         }
       },
       "controllerKind": "physical",
@@ -36,7 +36,7 @@
         "virtualMedia": {
           "removeCertificate": false,
           "restoreVerification": false,
-          "trust": "import-certificate"
+          "trust": "importCertificate"
         }
       },
       "controllerKind": "physical",
@@ -63,7 +63,7 @@
         "virtualMedia": {
           "removeCertificate": false,
           "restoreVerification": false,
-          "trust": "import-certificate"
+          "trust": "importCertificate"
         }
       },
       "controllerKind": "physical",

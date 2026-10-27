@@ -20,15 +20,12 @@ func controllerEnvironment() api.Object {
 	))
 }
 
-func controllerMachine(provided, local, runtime bool) api.Object {
+func controllerMachine(provided, local bool) api.Object {
 	spec := []api.FieldValue{
 		field("os", api.MapValue(field("provided", api.BoolValue(provided)))),
 	}
 	if local {
 		spec = append(spec, field("access", api.MapValue(field("local", api.BoolValue(true)))))
-	}
-	if runtime {
-		spec = append(spec, field("capabilities", api.ListValue(api.StringValue("container-runtime"))))
 	}
 	return api.NewObject(api.Machine, "ctl", api.Value{}, api.MapValue(spec...))
 }
@@ -64,7 +61,7 @@ func TestEveryEnvironmentRefusalNamesItsStep(t *testing.T) {
 	media := func(bootMedia string) api.Object {
 		return api.NewObject(api.MachineImage, "media", api.Value{}, api.MapValue(text("bootMedia", bootMedia)))
 	}
-	cluster := api.NewObject(api.ContainerCluster, "apps", api.Value{}, api.MapValue(
+	cluster := api.NewObject(api.OpenShiftCluster, "apps", api.Value{}, api.MapValue(
 		field("nodes", api.ListValue(api.MapValue(text("machineRef", "ctl")))),
 	))
 	other := api.NewObject(api.Machine, "other", api.Value{}, api.MapValue(
@@ -77,21 +74,18 @@ func TestEveryEnvironmentRefusalNamesItsStep(t *testing.T) {
 		others                      []api.Object
 		field, message, remediation string
 	}{
-		{"not OS-ready", env, []api.Object{controllerMachine(false, true, true)}, controllerField,
+		{"not OS-ready", env, []api.Object{controllerMachine(false, true)}, controllerField,
 			"controller must reference an OS-ready Machine with os.provided: true",
 			"set spec.os.provided to true on Machine/ctl, or set spec.controller.machineRef to an OS-ready Machine"},
-		{"not local", env, []api.Object{controllerMachine(true, false, true)}, controllerField,
+		{"not local", env, []api.Object{controllerMachine(true, false)}, controllerField,
 			"controller must reference the local Machine with access.local: true and no SSH access",
 			"give Machine/ctl access.local: true and no spec.access.ssh"},
-		{"no container runtime", env, []api.Object{controllerMachine(true, true, false)}, controllerField,
-			"controller Machine must declare the container-runtime capability",
-			"add container-runtime to spec.capabilities on Machine/ctl"},
-		{"another local Machine", env, []api.Object{controllerMachine(true, true, true), other}, controllerField,
+		{"another local Machine", env, []api.Object{controllerMachine(true, true), other}, controllerField,
 			"only the controller Machine may declare local access; Machine/other also declares access.local: true",
 			"remove spec.access.local from Machine/other"},
-		{"cluster node", env, []api.Object{controllerMachine(true, true, true), cluster}, controllerField,
-			"controller must remain outside cluster node membership; it is a node of ContainerCluster/apps",
-			"remove Machine/ctl from the nodes of ContainerCluster/apps, or set spec.controller.machineRef to a Machine outside cluster membership"},
+		{"cluster node", env, []api.Object{controllerMachine(true, true), cluster}, controllerField,
+			"controller must remain outside cluster node membership; it is a node of OpenShiftCluster/apps",
+			"remove Machine/ctl from the nodes of OpenShiftCluster/apps, or set spec.controller.machineRef to a Machine outside cluster membership"},
 		{"rescue on another RHEL version", rescueEnvironment("10.1", api.Value{}), []api.Object{media("local-media:rhel-10.1-x86_64-boot.iso")}, "$.spec.lifecycle.rescue",
 			"no rescue journey exists yet, so no lifecycle can use a rescue declaration",
 			"remove spec.lifecycle.rescue from Environment/lab"},

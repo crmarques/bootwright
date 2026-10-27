@@ -1,10 +1,10 @@
   ○ cluster | edge
     Topology
-      Type  ContainerCluster
+      Type  OpenShiftCluster
     Access
       cluster exec  not-implemented
-      sessions on an OpenShift or OKD ContainerCluster are not yet implemented; the cluster is
-      reached through bootwright cluster kubeconfig
+      sessions on an OpenShiftCluster are not yet implemented; the cluster is reached through
+      bootwright cluster kubeconfig
       cluster keyring  not-applicable
       cluster kubeconfig  ready
       bootwright cluster kubeconfig --context lab --name edge
@@ -15,16 +15,16 @@
       this handoff is not yet implemented; the cluster is reached through bootwright cluster
       kubeconfig
       cluster rsh  not-implemented
-      sessions on an OpenShift or OKD ContainerCluster are not yet implemented; the cluster is
-      reached through bootwright cluster kubeconfig
+      sessions on an OpenShiftCluster are not yet implemented; the cluster is reached through
+      bootwright cluster kubeconfig
 
   ○ cluster | okd-lab
     Topology
-      Type  ContainerCluster
+      Type  OpenShiftCluster
     Access
       cluster exec  not-implemented
-      sessions on an OpenShift or OKD ContainerCluster are not yet implemented; the cluster is
-      reached through bootwright cluster kubeconfig
+      sessions on an OpenShiftCluster are not yet implemented; the cluster is reached through
+      bootwright cluster kubeconfig
       cluster keyring  not-applicable
       cluster kubeconfig  unavailable
       this context holds no administrator kubeconfig for okd-lab until an apply proves its
@@ -36,12 +36,12 @@
       this handoff is not yet implemented; the cluster is reached through bootwright cluster
       kubeconfig
       cluster rsh  not-implemented
-      sessions on an OpenShift or OKD ContainerCluster are not yet implemented; the cluster is
-      reached through bootwright cluster kubeconfig
+      sessions on an OpenShiftCluster are not yet implemented; the cluster is reached through
+      bootwright cluster kubeconfig
 
   ○ cluster | archive
     Topology
-      Type  StorageCluster
+      Type  CephCluster
     Access
       cluster exec  not-applicable
       cluster keyring  not-applicable
@@ -52,7 +52,7 @@
 
   ○ cluster | storage · unavailable
     Topology
-      Type        StorageCluster
+      Type        CephCluster
       Management  managed
       Release     9.9.1.2
     Access
@@ -60,7 +60,7 @@
       the Machine rhel-01, which runs node rhel-01, has no proved host key; bootwright apply
       --context lab --stage machines records it
       cluster keyring  unavailable
-      the StorageCluster storage declares no StorageClient
+      the CephCluster storage declares no CephClient
       cluster kubeconfig  not-applicable
       cluster kubectl  not-applicable
       cluster oc  not-applicable
@@ -73,4 +73,4 @@
               bootstrap
       Next    bootwright apply --context lab --stage clusters
     Resources
-      StoragePool/rbd-data  pending
+      CephPool/rbd-data  pending

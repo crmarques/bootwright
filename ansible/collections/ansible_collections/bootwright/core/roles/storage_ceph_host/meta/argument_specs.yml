@@ -15,7 +15,7 @@ argument_specs:
           version:
             type: str
             required: true
-            choices: [ceph-host-v7]
+            choices: [ceph-host-v8]
       bootwright_ceph_host_digest:
         type: str
         required: true

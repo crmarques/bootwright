@@ -13,29 +13,44 @@ type Field struct {
 }
 
 type Shape struct {
-	Type          ValueType
-	Fields        []Field
-	Element       *Shape
-	Alternatives  []*Shape
-	Open          bool
-	KindDefaults  bool
-	Atomic        bool
-	Rule          string
-	Enums         []string
-	Minimum       string
-	Maximum       string
-	MinLength     int
-	Unique        bool
-	NameKey       string
-	Reference     []Kind
-	SecretTypes   []string
-	Discriminator string
-	Arms          []string
-	AllowEmpty    bool
-	InertArms     []string
-	ArmValues     map[string][]string
-	Suppress      []Suppression
+	Type         ValueType
+	Fields       []Field
+	Element      *Shape
+	Alternatives []*Shape
+	Open         bool
+	KindDefaults bool
+	Atomic       bool
+	Rule         string
+	Enums        []string
+	Minimum      string
+	Maximum      string
+	MinLength    int
+	Unique       bool
+	NameKey      string
+	Reference    []Kind
+	Category     Category
+	Nested       ReferenceClass
+	SecretTypes  []string
+	Arms         []string
+	AllowEmpty   bool
+	Suppress     []Suppression
+	Permits      []Permission
 }
+
+type Permission struct {
+	Field string
+	Value string
+	Arms  []string
+}
+
+type ReferenceClass string
+
+const (
+	NestedReference        ReferenceClass = "nested"
+	EndpointReference      ReferenceClass = "endpoint"
+	NativeServiceReference ReferenceClass = "nativeService"
+	ExternalReference      ReferenceClass = "external"
+)
 
 type Suppression struct {
 	Field         string
@@ -75,6 +90,14 @@ func defaulted(name string, s *Shape, value Value) Field {
 	return Field{Name: name, Shape: s, Default: value}
 }
 func ref(kind ...Kind) *Shape { return &Shape{Type: String, MinLength: 1, Reference: kind} }
+func nestedRef() *Shape       { return &Shape{Type: String, MinLength: 1, Nested: NestedReference} }
+func endpointRef() *Shape     { return &Shape{Type: String, MinLength: 1, Nested: EndpointReference} }
+func serviceRef() *Shape      { return &Shape{Type: String, MinLength: 1, Nested: NativeServiceReference} }
+func externalRef() *Shape     { return &Shape{Type: String, MinLength: 1, Nested: ExternalReference} }
+func external(s *Shape) *Shape {
+	s.Nested = ExternalReference
+	return s
+}
 func secret(types ...string) *Shape {
 	return &Shape{Type: String, MinLength: 1, Reference: []Kind{Secret}, SecretTypes: types}
 }
@@ -126,9 +149,10 @@ var children = sync.OnceValue(func() map[Kind][]Kind {
 		if shape == nil {
 			continue
 		}
-		if field, ok := shape.Field("clusterRef"); ok && field.Required && len(field.Shape.Reference) == 1 {
-			parent := field.Shape.Reference[0]
-			found[parent] = append(found[parent], kind)
+		if field, ok := shape.Field("clusterRef"); ok && field.Required {
+			for _, parent := range field.Shape.Reference {
+				found[parent] = append(found[parent], kind)
+			}
 		}
 	}
 	return found

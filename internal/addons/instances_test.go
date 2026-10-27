@@ -192,3 +192,71 @@ func TestRegistryDynamicReaderExamplesAndDuplicateOLMPackage(t *testing.T) {
 		t.Fatal("duplicate OLM package admitted")
 	}
 }
+
+func orderingBinding(name, cluster string, packages api.Value, after ...string) api.Object {
+	spec := m("clusterRef", s(cluster), "packages", packages)
+	if len(after) > 0 {
+		spec = spec.With("afterRefs", api.StringList(after...))
+	}
+	return obj(api.ClusterAddonBinding, name, spec)
+}
+
+func TestAuthoredAfterRefsOrderInstancesBesideDerivedEdges(t *testing.T) {
+	r, err := NewRegistry([]Package{fixture("alpha"), fixture("beta"), fixture("gamma")})
+	if err != nil {
+		t.Fatal(err)
+	}
+	first := orderingBinding("a-first", "cluster", m("beta", m()), "b-second")
+	second := orderingBinding("b-second", "cluster", m("alpha", m(), "gamma", m()))
+	selected, issues := Instances(api.NewCatalog([]api.Object{first, second}), r)
+	if len(issues) > 0 {
+		t.Fatal(issues)
+	}
+	names := []string{}
+	for _, i := range selected {
+		names = append(names, i.Package.Name)
+	}
+	if !reflect.DeepEqual(names, []string{"alpha", "gamma", "beta"}) {
+		t.Fatal(names)
+	}
+	providers := selected[2].Providers
+	if !reflect.DeepEqual(providers, []Provider{{Binding: "b-second", Package: "alpha"}, {Binding: "b-second", Package: "gamma"}}) {
+		t.Fatal(providers)
+	}
+}
+
+func TestAuthoredAfterRefsRefuseCyclesAndOtherClusters(t *testing.T) {
+	last := fixture("last")
+	last.Last = true
+	r, err := NewRegistry([]Package{fixture("alpha"), fixture("beta"), last})
+	if err != nil {
+		t.Fatal(err)
+	}
+	self := orderingBinding("one", "cluster", m("alpha", m()), "one")
+	_, issues := Instances(api.NewCatalog([]api.Object{self}), r)
+	if len(issues) != 1 || issues[0].Binding != "one" || issues[0].Issue.Field != "$.spec.afterRefs[0]" || issues[0].Issue.Message != "spec.afterRefs of the bindings of OpenShiftCluster/cluster form a cycle through ClusterAddonBinding/one" {
+		t.Fatal(issues)
+	}
+	one := orderingBinding("one", "cluster", m("alpha", m()), "two")
+	two := orderingBinding("two", "cluster", m("beta", m()), "one")
+	_, issues = Instances(api.NewCatalog([]api.Object{two, one}), r)
+	if len(issues) != 1 || issues[0].Binding != "one" || issues[0].Issue.Code != "api.invariant" || !strings.Contains(issues[0].Issue.Message, "through ClusterAddonBinding/one, ClusterAddonBinding/two") {
+		t.Fatal(issues)
+	}
+	before := orderingBinding("one", "cluster", m("alpha", m()), "two")
+	closing := orderingBinding("two", "cluster", m("last", m()))
+	_, issues = Instances(api.NewCatalog([]api.Object{before, closing}), r)
+	if len(issues) != 1 || issues[0].Binding != "one" || issues[0].Issue.Field != "$.spec.afterRefs[0]" || issues[0].Issue.Message != "ordering of the packages and add-ons selected for OpenShiftCluster/cluster forms a cycle through package alpha, package last once spec.afterRefs applies" {
+		t.Fatal(issues)
+	}
+	elsewhere := orderingBinding("two", "other", m("beta", m()))
+	crossing, _ := NormalizePackages(orderingBinding("one", "cluster", m("alpha", m()), "two"), r)
+	catalog := api.NewCatalog([]api.Object{crossing, elsewhere})
+	if _, issues := Instances(catalog, r); len(issues) != 0 {
+		t.Fatal(issues)
+	}
+	refused := ValidateWithRegistry(crossing, catalog, r, ClusterFacts{Name: "cluster"})
+	if len(refused) != 1 || refused[0].Code != "api.invariant" || refused[0].Field != "$.spec.afterRefs[0]" || refused[0].Message != "spec.afterRefs names ClusterAddonBinding/two, which binds OpenShiftCluster/other, not OpenShiftCluster/cluster" || refused[0].Remediation == "" {
+		t.Fatal(refused)
+	}
+}

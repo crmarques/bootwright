@@ -5,13 +5,17 @@ metadata:
 spec:
   substrate:
     providerRef: lab-metal
+    baremetal:
+      bmc:
+        address: https://bmc-erase.metal.example.test/redfish/v1/Systems/1
+      nics:
+        - nicRef: eno1
+          macAddress: 52:54:00:9a:1b:02
   os:
     provided: false
     installProfileRef: rhel-9-8
     install:
       hostKeyRef: metal-erase-host-key
-      rootDeviceHints:
-        deviceName: /dev/disk/by-id/wwn-0x5000c500a1b2c3e1
       ntp:
         - serverRef: lab-ntp
           endpointRef: ip
@@ -25,10 +29,8 @@ spec:
           sizeBytes: 107374182400
     nics:
       - name: eno1
-        macAddress: 52:54:00:9a:1b:02
-    management:
-      bmc:
-        address: https://bmc-erase.metal.example.test/redfish/v1/Systems/1
+    rootDevice:
+      deviceName: /dev/disk/by-id/wwn-0x5000c500a1b2c3e1
   network:
     configRef: lab-metal
     attachmentRef: lab-metal

@@ -32,7 +32,7 @@ type refusalCase struct {
 // its reason and remedy, and a row added or removed on either side fails here.
 func TestArtifactServerRefusalTableMatchesUnsupported(t *testing.T) {
 	cases := map[string]refusalCase{
-		"Install-only retention": {catalogOf(controller(), artifactServer(text("retention", "install-only"))),
+		"Install-only retention": {catalogOf(controller(), artifactServer(text("retention", "installOnly"))),
 			"ArtifactServer/lab-artifacts", map[string]string{"<server>": "ArtifactServer/lab-artifacts"}},
 	}
 	socketRow := "Artifact sockets beyond the host reservation"

@@ -12,11 +12,11 @@ import (
 	"github.com/crmarques/bootwright/internal/machine"
 	"github.com/crmarques/bootwright/internal/reconciliation"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
-	"github.com/crmarques/bootwright/internal/storage"
+	"github.com/crmarques/bootwright/internal/storage/cephcluster"
 	"github.com/crmarques/bootwright/internal/substrate"
 )
 
-const Version = "ceph-core-v32"
+const Version = "ceph-core-v33"
 const Implementation = "storage-ceph-core-v3"
 
 type Device struct {
@@ -293,10 +293,15 @@ func FSIDFor(operation, cluster string) string {
 	return x[:8] + "-" + x[8:12] + "-" + x[12:16] + "-" + x[16:20] + "-" + x[20:]
 }
 
+const (
+	distributionReason = "core Ceph realizes only the IBM Storage Ceph distribution"
+	distributionRemedy = "select spec.distribution.ibm"
+)
+
 func baseRequest(c api.Catalog, cluster api.Object, contextName string) (Request, error) {
-	spec := cluster.Spec().Get("ceph")
-	if spec.Get("distribution").Text() != "ibm" {
-		return Request{}, failure("lifecycle.unsupported", "core Ceph realizes only the IBM Storage Ceph distribution", "set ceph.distribution to ibm")
+	spec := cluster.Spec()
+	if api.CephDistribution(spec) != "ibm" {
+		return Request{}, failure("lifecycle.unsupported", distributionReason, distributionRemedy)
 	}
 	base, imageVersion := spec.Get("image", "base").Text(), spec.Get("image", "version").Text()
 	reference := base + ":" + imageVersion
@@ -317,7 +322,7 @@ func baseRequest(c api.Catalog, cluster api.Object, contextName string) (Request
 	r := Request{Version: Version, Action: "cluster", Cluster: cluster.Name(), Image: reference,
 		Cephadm: Tool{Path: "/usr/sbin/cephadm", PackageVersion: spec.Get("packageVersion").Text()}, Release: spec.Get("release").Text(), AnsiblePackageVersion: spec.Get("cephadm", "ansible", "packageVersion").Text(), NFSGaneshaPackageVersion: spec.Get("nfsGanesha", "packageVersion").Text(),
 		ClusterSSHUser: spec.Get("cephadm", "clusterSSH", "user").Text(), ClusterKeyRef: spec.Get("cephadm", "clusterSSH", "keyRef").Text(),
-		RegistryRef: ent.Spec().Get("registry", "credentialsRef").Text(), RegistryTrustBundleRef: ent.Spec().Get("registry", "trustBundleRef").Text(), Registry: registry, CallHome: spec.Get("ibm", "callHome").Text(),
+		RegistryRef: ent.Spec().Get("registry", "credentialsRef").Text(), RegistryTrustBundleRef: ent.Spec().Get("registry", "trustBundleRef").Text(), Registry: registry, CallHome: spec.Get("distribution", "ibm", "callHome").Text(),
 		PublicNetworks: spec.Get("networks", "publicCIDRs").Strings(), ClusterNetworks: spec.Get("networks", "clusterCIDRs").Strings(), Hosts: []Host{}, Services: []json.RawMessage{}}
 	authored, err := authoredAuxiliary(c, cluster)
 	if err != nil {
@@ -336,8 +341,8 @@ func baseRequest(c api.Catalog, cluster api.Object, contextName string) (Request
 	if r.ClusterSSHTransport == "" {
 		r.ClusterSSHTransport = PinnedTransport
 	}
-	if r.ClusterSSHTransport != "native" && r.ClusterSSHTransport != "verified-tunnel" {
-		return Request{}, failure("api.invariant", "unknown Ceph SSH transport", "select native or verified-tunnel; each transport requires artifact qualification")
+	if r.ClusterSSHTransport != "native" && r.ClusterSSHTransport != "verifiedTunnel" {
+		return Request{}, failure("api.invariant", "unknown Ceph SSH transport", "select native or verifiedTunnel; each transport requires artifact qualification")
 	}
 	if r.ClusterSSHUser == "" || r.ClusterKeyRef == "" || r.RegistryRef == "" || spec.Has("topology", "stretch") || spec.Get("security", "cephx", "keyType").Present() && spec.Get("security", "cephx", "keyType").Text() != "aes" {
 		return Request{}, failure("lifecycle.unsupported", "the requested Ceph trust or topology profile is not implemented by the core adapter", "declare the cluster SSH key, registry entitlement and a non-stretch CephX core profile")
@@ -348,7 +353,7 @@ func baseRequest(c api.Catalog, cluster api.Object, contextName string) (Request
 	if len(r.PublicNetworks) == 0 {
 		return Request{}, failure("api.required", "core Ceph requires an explicit public network", "declare ceph.networks.publicCIDRs")
 	}
-	config, configIssues := storage.CoreCephConfig(spec)
+	config, configIssues := cephcluster.CoreCephConfig(spec)
 	if len(configIssues) != 0 {
 		issue := configIssues[0]
 		return Request{}, failure(issue.Code, issue.Message, issue.Remediation)
@@ -387,7 +392,7 @@ func baseRequest(c api.Catalog, cluster api.Object, contextName string) (Request
 }
 
 func bindHosts(r *Request, c api.Catalog, cluster api.Object, contextName string) error {
-	spec := cluster.Spec().Get("ceph")
+	spec := cluster.Spec()
 	if reason, remedy, gap := replicationNetworkGap(c, cluster); gap {
 		return failure("api.invariant", reason, remedy)
 	}
@@ -407,7 +412,7 @@ func bindHosts(r *Request, c api.Catalog, cluster api.Object, contextName string
 		if len(r.Hosts) > 0 && ssh.PrivateKeyRef != r.Hosts[0].SSHKeyRef {
 			return failure("lifecycle.unsupported", "core Ceph currently requires one fleet SSH key for its guests", "declare a shared fleet identity distinct from the native cluster identity")
 		}
-		name := storage.NativeHostname(node)
+		name := cephcluster.NativeHostname(node)
 		fqdn := ""
 		for _, a := range m.Spec().Get("network", "addresses").Items() {
 			if a.Get("name").Text() == "fqdn" {
@@ -440,7 +445,7 @@ func bindHosts(r *Request, c api.Catalog, cluster api.Object, contextName string
 		}
 		r.Hosts = append(r.Hosts, h)
 		addressRef := spec.Get("cephadm", "addressRef").Text()
-		if node.Get("name").Text() == spec.Get("cephadm", "bootstrap", "node").Text() {
+		if node.Get("name").Text() == spec.Get("cephadm", "bootstrap", "nodeRef").Text() {
 			if v := spec.Get("cephadm", "bootstrap", "addressRef").Text(); v != "" {
 				addressRef = v
 			}
@@ -478,18 +483,18 @@ func bindHosts(r *Request, c api.Catalog, cluster api.Object, contextName string
 }
 
 func replicationNetworkGap(c api.Catalog, cluster api.Object) (string, string, bool) {
-	cidrs := cluster.Spec().Get("ceph", "networks", "clusterCIDRs").Strings()
+	cidrs := cluster.Spec().Get("networks", "clusterCIDRs").Strings()
 	if len(cidrs) == 0 {
 		return "", "", false
 	}
 	listed := strings.Join(cidrs, ", ")
-	for _, node := range cluster.Spec().Get("ceph", "topology", "nodes").Items() {
+	for _, node := range cluster.Spec().Get("topology", "nodes").Items() {
 		m, found := c.Find(api.Machine, node.Get("machineRef").Text())
 		if !found || insideAnyNetwork(machine.IPAddresses(m), cidrs) {
 			continue
 		}
-		return "Ceph host " + storage.NativeHostname(node) + " (Machine " + m.Name() + ") has no address inside the replication networks " + listed,
-			"add an address inside one of " + listed + " to the network of " + m.Name() + ", or remove spec.ceph.networks.clusterCIDRs", true
+		return "Ceph host " + cephcluster.NativeHostname(node) + " (Machine " + m.Name() + ") has no address inside the replication networks " + listed,
+			"add an address inside one of " + listed + " to the network of " + m.Name() + ", or remove spec.networks.clusterCIDRs", true
 	}
 	return "", "", false
 }
@@ -574,9 +579,9 @@ func checkDevices(r Request, names []string, cluster api.Object, service api.Val
 	}
 	for _, n := range names {
 		native := ""
-		for _, node := range cluster.Spec().Get("ceph", "topology", "nodes").Items() {
+		for _, node := range cluster.Spec().Get("topology", "nodes").Items() {
 			if node.Get("name").Text() == n {
-				native = storage.NativeHostname(node)
+				native = cephcluster.NativeHostname(node)
 			}
 		}
 		for _, path := range paths {
@@ -644,7 +649,7 @@ func securityPolicy(c api.Catalog, spec api.Value, keyRef string) (*Security, er
 		if found && key.Spec().Has("source", "generated") {
 			kind := key.Spec().Get("source", "generated", "keyType").Text()
 			if kind == "" || kind == "ed25519" {
-				return nil, failure("api.value", "FIPS Ceph refuses an Ed25519 cluster SSH key", "set the cluster key Secret's source.generated.keyType to ecdsa-p256 or rsa")
+				return nil, failure("api.value", "FIPS Ceph refuses an Ed25519 cluster SSH key", "set the cluster key Secret's source.generated.keyType to ecdsaP256 or rsa")
 			}
 		}
 	}
@@ -667,7 +672,7 @@ func virtualDevices(c api.Catalog, m api.Object, contextName string) ([]Device, 
 }
 
 func validateHostEndpoints(r Request) error {
-	if r.ClusterSSHTransport != "verified-tunnel" {
+	if r.ClusterSSHTransport != "verifiedTunnel" {
 		return nil
 	}
 	seen := map[string]bool{}

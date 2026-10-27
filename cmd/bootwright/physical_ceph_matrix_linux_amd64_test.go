@@ -48,13 +48,13 @@ func TestPhysicalCephMatrixPreservesCanonicalPlans(t *testing.T) {
 				t.Fatal(err)
 			}
 			physicalHosts := map[string]bool{}
-			for _, cluster := range original.Effective().OfKind(api.StorageCluster) {
+			for _, cluster := range original.Effective().OfKind(api.CephCluster) {
 				block, found := plan.Block(ceph.ClusterBlockID(cluster.Name()))
 				if !found {
 					t.Fatal("missing physical cluster", cluster.Name())
 				}
 				request, err := ceph.DecodeRequest(block.Request)
-				if err != nil || len(request.Hosts) != len(cluster.Spec().Get("ceph", "topology", "nodes").Items()) {
+				if err != nil || len(request.Hosts) != len(cluster.Spec().Get("topology", "nodes").Items()) {
 					t.Fatalf("physical host projection: %+v %v", request, err)
 				}
 				for _, host := range request.Hosts {
@@ -91,7 +91,7 @@ func TestPhysicalCephMatrixPreservesCanonicalPlans(t *testing.T) {
 				}
 			}
 			for _, object := range original.Authored().Objects() {
-				if strings.HasPrefix(string(object.Kind()), "Storage") && object.Kind() != api.StorageCluster {
+				if strings.HasPrefix(string(object.Kind()), "Ceph") && object.Kind() != api.CephCluster {
 					if got := requireObject(t, physical.Authored(), object.Kind(), object.Name()); !got.Spec().Equal(object.Spec()) {
 						t.Fatal("physical adaptation changed storage resource intent", object.Identity())
 					}
@@ -119,8 +119,8 @@ func physicalMatrixState(t *testing.T, name string, original *compilation.State)
 	}
 	hosts := map[string]int{}
 	paths := map[string]map[string]string{}
-	for _, cluster := range original.Effective().OfKind(api.StorageCluster) {
-		for _, node := range cluster.Spec().Get("ceph", "topology", "nodes").Items() {
+	for _, cluster := range original.Effective().OfKind(api.CephCluster) {
+		for _, node := range cluster.Spec().Get("topology", "nodes").Items() {
 			host := node.Get("machineRef").Text()
 			hosts[host] = len(hosts) + 1
 			paths[host] = map[string]string{}
@@ -147,26 +147,27 @@ func physicalMatrixState(t *testing.T, name string, original *compilation.State)
 			number, virtual := hosts[object.Name()], requests[object.Name()]
 			key := "physical-" + object.Name() + "-host-key"
 			secret := requireObject(t, base.Authored(), api.Secret, "metal-01-host-key")
-			objects = append(objects, api.NewObject(api.Secret, key, api.Value{}, secret.Spec().WithPath(api.StringValue("ecdsa-p256"), "source", "generated", "keyType")))
+			objects = append(objects, api.NewObject(api.Secret, key, api.Value{}, secret.Spec().WithPath(api.StringValue("ecdsaP256"), "source", "generated", "keyType")))
 			spec = spec.With("substrate", api.MapValue(api.FieldValue{Name: "providerRef", Value: api.StringValue(provider.Name())}))
 			root := fmt.Sprintf("/dev/disk/by-id/wwn-0x6%015x", number)
-			spec = spec.WithPath(api.StringValue(key), "os", "install", "hostKeyRef").WithPath(api.StringValue(root), "os", "install", "rootDeviceHints", "deviceName")
-			nics := []api.Value{}
+			spec = spec.WithPath(api.StringValue(key), "os", "install", "hostKeyRef").WithPath(api.StringValue(root), "hardware", "rootDevice", "deviceName")
+			nics, macs := []api.Value{}, []api.Value{}
 			for _, nic := range virtual.Interfaces {
-				nics = append(nics, api.MapValue(api.FieldValue{Name: "name", Value: api.StringValue(nic.Name)}, api.FieldValue{Name: "macAddress", Value: api.StringValue(nic.MACAddress)}))
+				nics = append(nics, api.MapValue(api.FieldValue{Name: "name", Value: api.StringValue(nic.Name)}))
+				macs = append(macs, api.MapValue(api.FieldValue{Name: "nicRef", Value: api.StringValue(nic.Name)}, api.FieldValue{Name: "macAddress", Value: api.StringValue(nic.MACAddress)}))
 			}
 			targets := []api.Value{physicalMatrixTarget(root, fmt.Sprintf("0x6%015x", number), number*16, int64(virtual.Disks[0].SizeGiB)<<30)}
 			for _, disk := range virtual.Disks[1:] {
 				path := paths[object.Name()]["/dev/"+disk.Target]
 				targets = append(targets, physicalMatrixTarget(path, strings.TrimPrefix(path, "/dev/disk/by-id/wwn-"), number*16+len(targets), int64(disk.SizeGiB)<<30))
 			}
-			spec = spec.WithPath(api.ListValue(nics...), "hardware", "nics").WithPath(api.StringValue(fmt.Sprintf("https://bmc-%02d.physical.example.test/redfish/v1/Systems/1", number)), "hardware", "management", "bmc", "address")
+			spec = spec.WithPath(api.ListValue(nics...), "hardware", "nics").WithPath(api.StringValue(fmt.Sprintf("https://bmc-%02d.physical.example.test/redfish/v1/Systems/1", number)), "substrate", "baremetal", "bmc", "address").WithPath(api.ListValue(macs...), "substrate", "baremetal", "nics")
 			spec = spec.WithPath(api.MapValue(api.FieldValue{Name: "method", Value: api.StringValue("logicalOverwrite")}, api.FieldValue{Name: "targets", Value: api.ListValue(targets...)}), "hardware", "eraseOnRemoval")
 		}
-		if object.Kind() == api.StorageCluster {
-			nodes := spec.Get("ceph", "topology", "nodes").Items()
+		if object.Kind() == api.CephCluster {
+			nodes := spec.Get("topology", "nodes").Items()
 			services := []api.Value{}
-			for _, service := range spec.Get("ceph", "services").Items() {
+			for _, service := range spec.Get("services").Items() {
 				if service.Get("service_type").Text() != "osd" {
 					services = append(services, service)
 					continue
@@ -196,7 +197,7 @@ func physicalMatrixState(t *testing.T, name string, original *compilation.State)
 					services = append(services, converted)
 				}
 			}
-			spec = spec.WithPath(api.ListValue(services...), "ceph", "services")
+			spec = spec.WithPath(api.ListValue(services...), "services")
 		}
 		objects[index] = object.WithSpec(spec)
 	}

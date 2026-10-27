@@ -74,7 +74,7 @@ func stagedToolHarness(t *testing.T) (*harness, toolLocator) {
 	t.Helper()
 	h := newPlannedHarness(t, []reconciliation.BlockDefinition{
 		stagedDefinition("controller-prerequisites", reconciliation.StageController),
-		stagedDefinition("artifacts", reconciliation.StageInfraComponents),
+		stagedDefinition("artifacts", reconciliation.StageInfrastructureServices),
 	})
 	locator := toolLocator{testCapability: h.capability, answers: &sync.Map{}}
 	h.service.capabilities = testResolver{capability: locator}
@@ -159,7 +159,7 @@ func TestALookupWithoutAnAnsweringControllerStageRefuses(t *testing.T) {
 			harness: func(t *testing.T) *harness {
 				return newPlannedHarness(t, []reconciliation.BlockDefinition{
 					stagedDefinition("controller-prerequisites", reconciliation.StageController),
-					stagedDefinition("artifacts", reconciliation.StageInfraComponents),
+					stagedDefinition("artifacts", reconciliation.StageInfrastructureServices),
 				})
 			},
 			code:        "lifecycle.state",

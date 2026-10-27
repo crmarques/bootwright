@@ -141,7 +141,7 @@ func TestLabBaremetalAdmissionRefusesANewlineInTheRootDevice(t *testing.T) {
 				t.Fatal("a root device carrying a line break was admitted")
 			}
 			for _, diagnostic := range diagnostics.Of(err) {
-				if diagnostic.Code == "api.value" && diagnostic.Field == "$.spec.os.install.rootDeviceHints.deviceName" &&
+				if diagnostic.Code == "api.value" && diagnostic.Field == "$.spec.hardware.rootDevice.deviceName" &&
 					diagnostic.Object != nil && diagnostic.Object.Kind == string(api.Machine) && diagnostic.Object.Name == "metal-01" {
 					return
 				}

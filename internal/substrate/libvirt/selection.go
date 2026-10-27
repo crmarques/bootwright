@@ -24,10 +24,10 @@ func Refusals(catalog api.Catalog) []lifecycle.Refusal {
 		found = append(found, lifecycle.RefusalOf(unrealized.Object, unrealized.Reason, unrealized.Remediation))
 	}
 	for _, provider := range substrate.ProvidersOn(catalog, substrate.ArmLibvirt) {
-		if address := provider.Spec().Get("libvirt", "bmcEmulationDefaults", "bindAddress").Text(); !substrate.NameableListener(address) {
+		if address := provider.Spec().Get("libvirt", "bmcEmulation", "bindAddress").Text(); !substrate.NameableListener(address) {
 			found = append(found, lifecycle.RefusalOf(provider,
-				"an emulated BMC listens on one unicast address its controller endpoints can name, and this provider's bindAddress is not one",
-				"set spec.libvirt.bmcEmulationDefaults.bindAddress on "+provider.Identity()+" to one unicast host address"))
+				"an emulated BMC listens on one unicast address its Machines' BMC endpoints can name, and this provider's bindAddress is not one",
+				"set spec.libvirt.bmcEmulation.bindAddress on "+provider.Identity()+" to one unicast host address"))
 		}
 		if substrate.ManagedAttachments(provider) > substrate.MaxManagedAttachments {
 			found = append(found, lifecycle.RefusalOf(provider,
@@ -154,9 +154,9 @@ func MachineRequests(catalog api.Catalog, controllerMachine, contextName string)
 		if err != nil {
 			return nil, err
 		}
-		base, ok := provider.Spec().Get("libvirt", "bmcEmulationDefaults", "port").Int64()
+		base, ok := provider.Spec().Get("libvirt", "bmcEmulation", "port").Int64()
 		if !ok || base < 1 {
-			return nil, refusal("api.value", "the provider declares no emulated controller port", "set spec.libvirt.bmcEmulationDefaults.port on "+provider.Identity())
+			return nil, refusal("api.value", "the provider declares no emulated controller port", "set spec.libvirt.bmcEmulation.port on "+provider.Identity())
 		}
 		for ordinal, machine := range substrate.HostedMachines(catalog, provider.Name()) {
 			request, err := machineRequestFor(catalog, provider, machine, placement, egress, contextName, int(base)+ordinal)
@@ -176,11 +176,11 @@ func machineRequestFor(catalog api.Catalog, provider, machine api.Object, placem
 		return MachineRequest{}, refusal("lifecycle.state", "the Machine name is not a safe host identifier", "rename "+machine.Identity())
 	}
 	if port > 65535 {
-		return MachineRequest{}, refusal("api.value", "the provider's emulated controller range leaves the port space", "lower spec.libvirt.bmcEmulationDefaults.port on "+provider.Identity())
+		return MachineRequest{}, refusal("api.value", "the provider's emulated controller range leaves the port space", "lower spec.libvirt.bmcEmulation.port on "+provider.Identity())
 	}
-	profile, found := findNamed(provider.Spec().Get("libvirt", "machineProfiles"), "name", machine.Spec().Get("substrate", "profileRef").Text())
+	profile, found := findNamed(provider.Spec().Get("libvirt", "machineProfiles"), "name", substrate.MachineProfileRef(machine))
 	if !found {
-		return MachineRequest{}, refusal("api.reference", "the Machine's profile does not resolve on its provider", "correct spec.substrate.profileRef on "+machine.Identity())
+		return MachineRequest{}, refusal("api.reference", "the Machine's profile does not resolve on its provider", "correct spec.substrate.libvirt.profileRef on "+machine.Identity())
 	}
 	disks, err := disksFor(profile, machine.Identity(), contextName, name)
 	if err != nil {
@@ -195,15 +195,15 @@ func machineRequestFor(catalog api.Catalog, provider, machine api.Object, placem
 	if vcpu < 1 || memory < 1 {
 		return MachineRequest{}, refusal("api.value", "the Machine's profile declares no vCPU count or memory", "set cpu and memoryMiB on the profile of "+machine.Identity())
 	}
-	credentials := provider.Spec().Get("libvirt", "bmcEmulationDefaults", "auth", "credentialsRef").Text()
+	credentials := provider.Spec().Get("libvirt", "bmcEmulation", "auth", "credentialsRef").Text()
 	if credentials == "" {
-		return MachineRequest{}, refusal("api.required", "the provider declares no emulated controller credential", "set spec.libvirt.bmcEmulationDefaults.auth.credentialsRef on "+provider.Identity())
+		return MachineRequest{}, refusal("api.required", "the provider declares no emulated controller credential", "set spec.libvirt.bmcEmulation.auth.credentialsRef on "+provider.Identity())
 	}
-	certificate := provider.Spec().Get("libvirt", "bmcEmulationDefaults", "certificateRef").Text()
+	certificate := provider.Spec().Get("libvirt", "bmcEmulation", "certificateRef").Text()
 	if certificate == "" {
-		return MachineRequest{}, refusal("api.required", "the provider declares no emulated controller serving certificate", "set spec.libvirt.bmcEmulationDefaults.certificateRef on "+provider.Identity())
+		return MachineRequest{}, refusal("api.required", "the provider declares no emulated controller serving certificate", "set spec.libvirt.bmcEmulation.certificateRef on "+provider.Identity())
 	}
-	address := provider.Spec().Get("libvirt", "bmcEmulationDefaults", "bindAddress").Text()
+	address := provider.Spec().Get("libvirt", "bmcEmulation", "bindAddress").Text()
 	uuid := substrate.DomainUUID(contextName, name)
 	return MachineRequest{
 		Controller: Controller{
@@ -267,16 +267,16 @@ func interfacesFor(catalog api.Catalog, provider, machine api.Object, contextNam
 	interfaces := make([]Interface, 0, len(names))
 	for _, name := range names {
 		reference := network.Get("attachmentRef").Text()
-		if network.Has("interfaceAttachments") {
-			entry, found := findNamed(network.Get("interfaceAttachments"), "interface", name)
+		if attachments := substrate.MachineInterfaceAttachments(machine); attachments.Present() {
+			entry, found := findNamed(attachments, "interface", name)
 			if !found {
-				return nil, refusal("api.reference", "the Machine's per-interface attachment map does not cover "+name, "correct spec.network.interfaceAttachments on "+machine.Identity())
+				return nil, refusal("api.reference", "the Machine's per-interface attachment map does not cover "+name, "correct spec.substrate.libvirt.interfaceAttachments on "+machine.Identity())
 			}
 			reference = entry.Get("attachmentRef").Text()
 		}
 		attachment, found := findNamed(provider.Spec().Get("networkAttachments"), "name", reference)
 		if !found || !attachment.Has("libvirt") {
-			return nil, refusal("api.reference", "the Machine's attachment does not resolve on its provider", "correct spec.network.attachmentRef or spec.network.interfaceAttachments on "+machine.Identity())
+			return nil, refusal("api.reference", "the Machine's attachment does not resolve on its provider", "correct spec.network.attachmentRef or spec.substrate.libvirt.interfaceAttachments on "+machine.Identity())
 		}
 		arm := attachment.Get("libvirt")
 		defined := ""

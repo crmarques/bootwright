@@ -13,26 +13,12 @@ import (
 // contexts on one host never name the same network, domain, pool or unit.
 const Prefix = "bootwright"
 
-// BootRedfishVirtualMedia is the one boot path this contract performs on a
-// physical machine: its installer is presented to the machine's own management
-// controller as virtual media.
-const BootRedfishVirtualMedia = "redfishVirtualMedia"
-
 // ImagePrefix is libvirt's own image tree, so a disk this product creates
 // carries the labels the hypervisor expects.
 const ImagePrefix = "/var/lib/libvirt/images/bootwright"
 
 // MaxDataDisks is how many data disks a libvirt domain presents after its root.
 const MaxDataDisks = 7
-
-// ProviderNameLimit keeps a provider's host block, substrate-host-<name>,
-// inside the 63-byte block identity a plan admits.
-const ProviderNameLimit = 48
-
-// MachineNameLimit keeps the longest block a Machine contributes,
-// os-install-<name>, inside the 63-byte block identity a plan admits. It holds
-// for every Machine, because a Machine may change lifecycle.
-const MachineNameLimit = 52
 
 // MaxManagedAttachments bounds a libvirt provider's managed attachments. Its
 // host reservation claims a path and a pool key and, for each managed
@@ -127,7 +113,7 @@ func HostedMachines(catalog api.Catalog, provider string) []api.Object {
 // provider's base port and that Machine's position in the provider's own order,
 // which is the allocation the API contract fixes.
 func ControllerPort(catalog api.Catalog, provider api.Object, machine string) (int, bool) {
-	base, ok := provider.Spec().Get("libvirt", "bmcEmulationDefaults", "port").Int64()
+	base, ok := provider.Spec().Get("libvirt", "bmcEmulation", "port").Int64()
 	if !ok || base < 1 {
 		return 0, false
 	}

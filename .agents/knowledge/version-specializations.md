@@ -6,7 +6,7 @@ cases deliberately kept general. The rule is owned by
 (D162): one general flow per component, and a small specialization only
 where the general flow is known to fail on an artifact that lacks or has a
 provable capability. Rows are tested scope, never approved versions
-([release qualification](../../specs/storage-coverage.md#release-qualification)).
+([release qualification](../../specs/ceph-coverage.md#release-qualification)).
 The catalog records no version pairing or compatibility rule between
 components, and choosing versions is the operator's responsibility (D163).
 A registry and this page are kept equal by `TestDocsVersionSpecializationCatalogMatchesRegistries` in
@@ -64,7 +64,7 @@ context and apply again. On this model `disabled` is the native default: `initia
 `configure_call_home` and `accept_call_home` do not apply, and the worker proves
 that `call_home_agent` is not enabled. `enabled` refuses `call-home-unqualified`
 because Bootwright does not model the contact identity that enabling needs. The
-[storage API](../../specs/api/storage.md) owns the realization.
+[storage API](../../specs/api/ceph.md) owns the realization.
 
 #### ceph-set-user-without-pre-steps
 
@@ -97,7 +97,7 @@ label.
 
 | id | registry | component | rule | read from | code | test |
 | --- | --- | --- | --- | --- | --- | --- |
-| `openshift-general-topology` | none | openshift-installer | master counts 1, 3, 4, 5 for every minor without a specialization; the installer judges the release | `openshift/installer` agent control plane, release-4.21 [installconfig.go lines 217-232](https://github.com/openshift/installer/blob/release-4.21/pkg/asset/agent/installconfig.go#L217-L232), [lines 234-263](https://github.com/openshift/installer/blob/release-4.21/pkg/asset/agent/installconfig.go#L234-L263); release-4.22 [lines 220-305](https://github.com/openshift/installer/blob/release-4.22/pkg/asset/agent/installconfig.go#L220-L305); release-4.23 [lines 220-305](https://github.com/openshift/installer/blob/release-4.23/pkg/asset/agent/installconfig.go#L220-L305) | `internal/containercluster/topology.go` `generalTopology`, consulted by `validateTopology` | `internal/containercluster/admission_test.go` `TestTopologyAppliesTheGeneralRuleToEveryReleaseMinor`, `TestTopologyAdmitsOnlyTheControlPlaneCountsItsReleaseAccepts`, `TestTopologyTableMatchesSpec`, `TestEveryExampleReleaseHasATopologyRow` |
+| `openshift-general-topology` | none | openshift-installer | master counts 1, 3, 4, 5 for every minor without a specialization; the installer judges the release | `openshift/installer` agent control plane, release-4.21 [installconfig.go lines 217-232](https://github.com/openshift/installer/blob/release-4.21/pkg/asset/agent/installconfig.go#L217-L232), [lines 234-263](https://github.com/openshift/installer/blob/release-4.21/pkg/asset/agent/installconfig.go#L234-L263); release-4.22 [lines 220-305](https://github.com/openshift/installer/blob/release-4.22/pkg/asset/agent/installconfig.go#L220-L305); release-4.23 [lines 220-305](https://github.com/openshift/installer/blob/release-4.23/pkg/asset/agent/installconfig.go#L220-L305) | `internal/containercluster/openshift/topology.go` `generalTopology`, consulted by `validateTopology` | `internal/containercluster/openshift/admission_test.go` `TestTopologyAppliesTheGeneralRuleToEveryReleaseMinor`, `TestTopologyAdmitsOnlyTheControlPlaneCountsItsReleaseAccepts`, `TestTopologyTableMatchesSpec`, `TestEveryExampleReleaseHasATopologyRow` |
 
 ## Seams
 
@@ -107,7 +107,7 @@ version. A refusal seam is one whose variants change which intents the adapter
 admits; what such a variant may refuse is owned by
 [architecture](../../specs/architecture.md#implementations-and-version-variation),
 and the `refusal` column below marks each one. The Call Home case is owned by
-D162 clause (b) and the [storage API](../../specs/api/storage.md).
+D162 clause (b) and the [storage API](../../specs/api/ceph.md).
 
 | seam | variants | general | refusal | call sites |
 | --- | --- | --- | --- | --- |
@@ -137,22 +137,22 @@ page that owns its reasoning.
 | Output-shape unions (`config-key get` newline, `orch ls` sentinel, Podman inspect shapes) | [Tool output shapes](ibm-ceph-live-host-facts.md#tool-output-shapes) |
 | MGR restarts, readiness budgets and health ceilings | [Timing and health](ibm-ceph-live-host-facts.md#timing-and-health) |
 | Dashboard endpoint and port publication | [Dashboard ports](ceph-dashboard-port-publication.md) |
-| Whether a build's cephadm knows the `loki`, `alloy` or `promtail` service type: normalization runs the selected image's own `ServiceSpec`, and an unknown type surfaces as `nativeError` before any write | [Resources, readiness and access](../../specs/storage.md#resources-readiness-and-access) |
+| Whether a build's cephadm knows the `loki`, `alloy` or `promtail` service type: normalization runs the selected image's own `ServiceSpec`, and an unknown type surfaces as `nativeError` before any write | [Resources, readiness and access](../../specs/ceph.md#resources-readiness-and-access) |
 | Auxiliary image selection is not a version specialization; its contract belongs to B479 | [B479](../../specs/milestones/m2.md#b479) |
-| The default package repository `rhel9`, a source default | [Storage API](../../specs/api/storage.md) |
+| The default package repository `rhel9`, a source default | [Storage API](../../specs/api/ceph.md) |
 | The selected image's OpenSSH default host-key list and its crypto policy's `+`, `^` and `-` `HostKeyAlgorithms` forms, evaluated generally by the tunnel's per-host intersection | [Network, remote systems, and privilege](../../specs/security.md#network-remote-systems-and-privilege) |
-| Native transport stays refused; no specialization lifts it | [Release qualification](../../specs/storage-coverage.md#release-qualification) |
-| The zone pools and placement shape a build's `zone get` reports: a subset of the planned derived and declared pools is accepted, a pool outside them refuses, `placement_pools` reads as a list or a mapping | [StorageObjectGateway field record](../../specs/storage-resources.md#storageobjectgateway-field-record) |
-| A build's `orch ls --export` keeps a gateway service's inline `ssl_cert` and `ssl_key` or omits both: either is accepted when the stored leaves equal the bound ones, and the served leaf's SHA-256 is the postcondition | [Resources, readiness and access](../../specs/storage.md#resources-readiness-and-access) |
-| The NFS export and CephFS StorageClient readback: `fs subvolume getpath` prints the path with or without one trailing newline, `nfs export info` reads `{}` for an absent pseudo path, and the filtered readback projection, never the apply's answer alone, is the postcondition | [Resources, readiness and access](../../specs/storage.md#resources-readiness-and-access) |
-| The S3 key pair `radosgw-admin user create` generates (20 characters of `0-9A-Z` and 40 of `A-Za-z0-9` at `v20.2.1`) and the members `user info` adds: Bootwright retains any key of 1 to 128 visible ASCII characters other than `&`, `<` and `>` and proves only the members it froze, so no build's key format or user shape is pinned | [StorageObjectUser field record](../../specs/storage-resources.md#storageobjectuser-field-record) |
-| The bucket ID and the other members `bucket stats` prints, and RGW's S3 error documents: Bootwright records any bucket ID of 1 to 256 characters of `A-Za-z0-9_.:-`, proves only the bucket's name, tenant, owner, zone group and recorded ID, and reads only an error's `Code` and `Message`, so no build's ID format or stats shape is pinned | [StorageObjectBucket field record](../../specs/storage-resources.md#storageobjectbucket-field-record) |
-| Whether a build's NFS manager reads an RGW export's S3 keys on update or requires the stored pair: at `v20.2.1` an add reads the user's first key itself and an update must carry the stored pair unchanged; the worker sends the user's one key pair, which equals the stored one, on an update only, and either rule accepts that | [StorageNFSExport field record](../../specs/storage-resources.md#storagenfsexport) |
-| Whether a build's cephadm opens daemon ports in firewalld: upstream opens each daemon's TCP endpoints in the default zone and never VRRP; the ingress check reads the zone's runtime state before effects instead | [Resources, readiness and access](../../specs/storage.md#resources-readiness-and-access) |
-| The SMB resource readback: a build's `smb show` answers one named resource itself or in a `resources` list, may emit or omit unset optional leaves, may spell placement hosts as names or host objects and may add leaves Bootwright does not author; every admitted leaf after the manager's defaults, every refused leaf unset and every password masked is the postcondition | [Resources, readiness and access](../../specs/storage.md#resources-readiness-and-access) |
-| A build's `orch ls --export` keeps a monitoring service's bound credential leaves (grafana `initial_admin_password`, snmp-gateway `credentials`) or omits them: either is accepted when the stored leaves equal the bound ones at apply | [Resources, readiness and access](../../specs/storage.md#resources-readiness-and-access) |
-| Whether a build's cephadm renders oauth2-proxy with `ssl_insecure_skip_verify` or mounts its `custom_configs`: the deployed container's arguments, environment, mounted `--config` file and CA mount, read on its host after the apply, are the postcondition | [Resources, readiness and access](../../specs/storage.md#resources-readiness-and-access) |
-| A build infers the management gateway's `certificate_source` (`inline` with bound leaves, `cephadm-signed` without) and may keep or omit the leaves in `orch ls --export`: normalization runs the selected image's own `ServiceSpec`, and the served leaf's SHA-256 is the postcondition | [Resources, readiness and access](../../specs/storage.md#resources-readiness-and-access) |
+| Native transport stays refused; no specialization lifts it | [Release qualification](../../specs/ceph-coverage.md#release-qualification) |
+| The zone pools and placement shape a build's `zone get` reports: a subset of the planned derived and declared pools is accepted, a pool outside them refuses, `placement_pools` reads as a list or a mapping | [CephObjectGateway field record](../../specs/ceph-resources.md#cephobjectgateway-field-record) |
+| A build's `orch ls --export` keeps a gateway service's inline `ssl_cert` and `ssl_key` or omits both: either is accepted when the stored leaves equal the bound ones, and the served leaf's SHA-256 is the postcondition | [Resources, readiness and access](../../specs/ceph.md#resources-readiness-and-access) |
+| The NFS export and CephFS CephClient readback: `fs subvolume getpath` prints the path with or without one trailing newline, `nfs export info` reads `{}` for an absent pseudo path, and the filtered readback projection, never the apply's answer alone, is the postcondition | [Resources, readiness and access](../../specs/ceph.md#resources-readiness-and-access) |
+| The S3 key pair `radosgw-admin user create` generates (20 characters of `0-9A-Z` and 40 of `A-Za-z0-9` at `v20.2.1`) and the members `user info` adds: Bootwright retains any key of 1 to 128 visible ASCII characters other than `&`, `<` and `>` and proves only the members it froze, so no build's key format or user shape is pinned | [CephObjectUser field record](../../specs/ceph-resources.md#cephobjectuser-field-record) |
+| The bucket ID and the other members `bucket stats` prints, and RGW's S3 error documents: Bootwright records any bucket ID of 1 to 256 characters of `A-Za-z0-9_.:-`, proves only the bucket's name, tenant, owner, zone group and recorded ID, and reads only an error's `Code` and `Message`, so no build's ID format or stats shape is pinned | [CephObjectBucket field record](../../specs/ceph-resources.md#cephobjectbucket-field-record) |
+| Whether a build's NFS manager reads an RGW export's S3 keys on update or requires the stored pair: at `v20.2.1` an add reads the user's first key itself and an update must carry the stored pair unchanged; the worker sends the user's one key pair, which equals the stored one, on an update only, and either rule accepts that | [CephNFSExport field record](../../specs/ceph-resources.md#cephnfsexport) |
+| Whether a build's cephadm opens daemon ports in firewalld: upstream opens each daemon's TCP endpoints in the default zone and never VRRP; the ingress check reads the zone's runtime state before effects instead | [Resources, readiness and access](../../specs/ceph.md#resources-readiness-and-access) |
+| The SMB resource readback: a build's `smb show` answers one named resource itself or in a `resources` list, may emit or omit unset optional leaves, may spell placement hosts as names or host objects and may add leaves Bootwright does not author; every admitted leaf after the manager's defaults, every refused leaf unset and every password masked is the postcondition | [Resources, readiness and access](../../specs/ceph.md#resources-readiness-and-access) |
+| A build's `orch ls --export` keeps a monitoring service's bound credential leaves (grafana `initial_admin_password`, snmp-gateway `credentials`) or omits them: either is accepted when the stored leaves equal the bound ones at apply | [Resources, readiness and access](../../specs/ceph.md#resources-readiness-and-access) |
+| Whether a build's cephadm renders oauth2-proxy with `ssl_insecure_skip_verify` or mounts its `custom_configs`: the deployed container's arguments, environment, mounted `--config` file and CA mount, read on its host after the apply, are the postcondition | [Resources, readiness and access](../../specs/ceph.md#resources-readiness-and-access) |
+| A build infers the management gateway's `certificate_source` (`inline` with bound leaves, `cephadm-signed` without) and may keep or omit the leaves in `orch ls --export`: normalization runs the selected image's own `ServiceSpec`, and the served leaf's SHA-256 is the postcondition | [Resources, readiness and access](../../specs/ceph.md#resources-readiness-and-access) |
 | `imageDigestSources[].sourcePolicy` is rendered exactly when authored and the installer judges the release | [B724](../../specs/milestones/m3.md#b724) |
 | Disk encryption renders only `none`, `all`, `masters` and `workers`, the selectors the installer's validation accepts in the 4.20 to 4.23 branches read (RV R6:C13); the installer judges the release | [B720](../../specs/milestones/m3.md#b720) |
 

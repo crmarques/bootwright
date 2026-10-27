@@ -1,99 +1,97 @@
 apiVersion: bootwright.io/v1alpha1
-kind: StorageCluster
+kind: CephCluster
 metadata:
   name: ceph-lab
 spec:
-  type: ceph
   management: managed
-  ceph:
-    distribution: ibm
-    release: 9.9.2.0
-    packageVersion: 20.2.2-349.el9cp
-    image:
-      base: cp.icr.io/cp/ibm-ceph/ceph-9-rhel10
-      version: v9.9.2-26947
-    images:
-      keepalived:
-        base: cp.icr.io/cp/synthetic/keepalived
-        version: sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+  distribution:
     ibm:
       callHome: enabled
       packages:
         source: vendor
-    entitlementRef: ibm-ceph
-    cephadm:
+  release: 9.9.2.0
+  packageVersion: 20.2.2-349.el9cp
+  image:
+    base: cp.icr.io/cp/ibm-ceph/ceph-9-rhel10
+    version: v9.9.2-26947
+  images:
+    keepalived:
+      base: cp.icr.io/cp/synthetic/keepalived
+      version: sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+  entitlementRef: ibm-ceph
+  cephadm:
+    addressRef: ip
+    ansible:
+      packageVersion: 5.0.3-1.el9cp
+    clusterSSH:
+      user: bootwright
+      keyRef: ceph-cluster-key
+      transport: verifiedTunnel
+    bootstrap:
+      nodeRef: rhel-01
       addressRef: ip
-      ansible:
-        packageVersion: 5.0.3-1.el9cp
-      clusterSSH:
-        user: bootwright
-        keyRef: ceph-cluster-key
-        transport: verified-tunnel
-      bootstrap:
-        node: rhel-01
-        addressRef: ip
-    networks:
-      publicCIDRs:
-        - 198.51.100.0/24
-    config:
-      global:
-        osd_pool_default_min_size: "2"
-        osd_pool_default_size: "2"
-      osd:
-        osd_memory_target: "2147483648"
-        osd_memory_target_autotune: "false"
-    services:
-      - service_type: mon
-        placement:
-          label: ceph-core
-          count: 3
-      - service_type: mgr
-        placement:
-          label: ceph-core
-          count: 2
-      - service_type: osd
-        service_id: data
-        placement:
-          label: ceph-core
-        spec:
-          data_devices:
-            paths:
-              - /dev/sda
-      - service_type: mds
-        service_id: files
-        placement:
-          label: ceph-core
-          count: 2
-      - service_type: nfs
-        service_id: shares
-        placement:
-          label: ceph-core
-          count: 1
-        spec:
-          virtual_ip: 198.51.100.51
-      - service_type: ingress
-        service_id: nfs.shares
-        placement:
-          label: ceph-core
-          count: 2
-        spec:
-          backend_service: nfs.shares
-          keepalive_only: true
-          virtual_ip: 198.51.100.51/24
-    topology:
-      nodes:
-        - name: rhel-01
-          fqdn: rhel-01.lab.example.test
-          machineRef: rhel-01
-          labels:
-            - ceph-core
-        - name: rhel-02
-          fqdn: rhel-02.lab.example.test
-          machineRef: rhel-02
-          labels:
-            - ceph-core
-        - name: rhel-03
-          fqdn: rhel-03.lab.example.test
-          machineRef: rhel-03
-          labels:
-            - ceph-core
+  networks:
+    publicCIDRs:
+      - 198.51.100.0/24
+  config:
+    global:
+      osd_pool_default_min_size: "2"
+      osd_pool_default_size: "2"
+    osd:
+      osd_memory_target: "2147483648"
+      osd_memory_target_autotune: "false"
+  services:
+    - service_type: mon
+      placement:
+        label: ceph-core
+        count: 3
+    - service_type: mgr
+      placement:
+        label: ceph-core
+        count: 2
+    - service_type: osd
+      service_id: data
+      placement:
+        label: ceph-core
+      spec:
+        data_devices:
+          paths:
+            - /dev/sda
+    - service_type: mds
+      service_id: files
+      placement:
+        label: ceph-core
+        count: 2
+    - service_type: nfs
+      service_id: shares
+      placement:
+        label: ceph-core
+        count: 1
+      spec:
+        virtual_ip: 198.51.100.51
+    - service_type: ingress
+      service_id: nfs.shares
+      placement:
+        label: ceph-core
+        count: 2
+      spec:
+        backend_service: nfs.shares
+        keepalive_only: true
+        virtual_ip: 198.51.100.51/24
+  topology:
+    nodes:
+      - name: rhel-01
+        fqdn: rhel-01.lab.example.test
+        machineRef: rhel-01
+        labels:
+          - ceph-core
+      - name: rhel-02
+        fqdn: rhel-02.lab.example.test
+        machineRef: rhel-02
+        labels:
+          - ceph-core
+      - name: rhel-03
+        fqdn: rhel-03.lab.example.test
+        machineRef: rhel-03
+        labels:
+          - ceph-core

@@ -10,7 +10,7 @@ import (
 )
 
 func topologyHost(name string) api.Object {
-	return obj(api.Machine, name, m("capabilities", api.StringList("libvirt")))
+	return obj(api.Machine, name, m())
 }
 
 func topologyProfile(disks ...api.Value) api.Value {
@@ -19,7 +19,7 @@ func topologyProfile(disks ...api.Value) api.Value {
 
 func topologyProvider(name, host, port string, profile api.Value, attachments ...api.Value) api.Object {
 	arm := m("machineRef", host, "uri", "qemu:///system",
-		"bmcEmulationDefaults", m("port", api.IntegerValue(port), "bindAddress", "192.0.2.1", "auth", m("credentialsRef", "bmc")),
+		"bmcEmulation", m("port", api.IntegerValue(port), "bindAddress", "192.0.2.1", "auth", m("credentialsRef", "bmc")),
 		"machineProfiles", list(profile))
 	return obj(api.InfraProvider, name, m("libvirt", arm, "networkAttachments", list(attachments...)))
 }
@@ -217,7 +217,7 @@ func TestTheEmulatedBMCRangeCountsOnlyRealizedMachines(t *testing.T) {
 	if issues := Validate(last, api.NewCatalog([]api.Object{last, host, machine("one", "last", false), machine("two", "last", true)})); len(issues) != 0 {
 		t.Fatalf("an OS-ready Machine was counted into the port range: %v", issues)
 	}
-	issues := issuesAt(Validate(last, api.NewCatalog([]api.Object{last, host, machine("one", "last", false), machine("two", "last", false)})), "$.spec.libvirt.bmcEmulationDefaults.port")
+	issues := issuesAt(Validate(last, api.NewCatalog([]api.Object{last, host, machine("one", "last", false), machine("two", "last", false)})), "$.spec.libvirt.bmcEmulation.port")
 	if len(issues) != 1 || issues[0].Message != "the emulated BMC port range must end at or below 65535" {
 		t.Fatalf("two realized Machines from port 65535: %v", issues)
 	}
@@ -231,24 +231,13 @@ func TestTheEmulatedBMCRangeCountsOnlyRealizedMachines(t *testing.T) {
 	}
 }
 
-func TestAnInfraProviderNameFitsItsHostBlock(t *testing.T) {
+func TestAnInfraProviderNameHasNoBlockDerivedLimit(t *testing.T) {
 	host := topologyHost("host")
-	validate := func(name string) []api.Issue {
+	for _, name := range []string{strings.Repeat("a", 63), strings.Repeat("a", 70)} {
 		provider := topologyProvider(name, "host", "8000", topologyProfile())
-		return Validate(provider, api.NewCatalog([]api.Object{provider, host}))
-	}
-	if issues := validate(strings.Repeat("a", ProviderNameLimit)); len(issues) != 0 {
-		t.Fatalf("a %d-byte name was refused: %v", ProviderNameLimit, issues)
-	}
-	name := strings.Repeat("a", ProviderNameLimit+1)
-	issues := validate(name)
-	if len(issues) != 1 || issues[0].Code != "api.value" || issues[0].Field != "$.metadata.name" ||
-		!strings.Contains(issues[0].Message, "at most 48 bytes, because its host block substrate-host-<name> is a 63-byte identity") ||
-		issues[0].Remediation != "rename InfraProvider/"+name+" to at most 48 bytes, with every providerRef that names it" {
-		t.Fatalf("a %d-byte name: %v", ProviderNameLimit+1, issues)
-	}
-	if issues := validate(strings.Repeat("a", 70)); len(issues) != 0 {
-		t.Fatalf("a name outside the label grammar got a per-kind diagnostic beside the compiler's: %v", issues)
+		if issues := Validate(provider, api.NewCatalog([]api.Object{provider, host})); len(issues) != 0 {
+			t.Fatalf("a %d-byte provider name got a per-kind diagnostic: %v", len(name), issues)
+		}
 	}
 }
 
@@ -259,8 +248,6 @@ func TestMachineSpecStatesTheTopologyBounds(t *testing.T) {
 	}
 	for _, phrase := range []string{
 		fmt.Sprintf("A libvirt profile declares at most %d data disks", MaxDataDisks),
-		fmt.Sprintf("An `InfraProvider` name is at most %d bytes", ProviderNameLimit),
-		fmt.Sprintf("A `Machine` name is at most %d bytes", MachineNameLimit),
 	} {
 		if count := strings.Count(string(spec), phrase); count != 1 {
 			t.Errorf("specs/api/machines.md states %q %d times, want once", phrase, count)

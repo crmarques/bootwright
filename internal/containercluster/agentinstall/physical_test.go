@@ -11,7 +11,7 @@ func physicalWithController(change func(api.Value) api.Value) api.Catalog {
 	objects := physicalCatalog().Objects()
 	for i, object := range objects {
 		if object.Kind() == api.Machine && object.Name() == "metal-01" {
-			objects[i] = object.WithSpec(object.Spec().WithPath(change(object.Spec().Get("hardware", "management", "bmc")), "hardware", "management", "bmc"))
+			objects[i] = object.WithSpec(object.Spec().WithPath(change(object.Spec().Get("substrate", "baremetal", "bmc")), "substrate", "baremetal", "bmc"))
 		}
 	}
 	return api.NewCatalog(objects)
@@ -28,12 +28,12 @@ func TestPhysicalPrivateDeliveryRequiresVerifiedTLSOnBothLegs(t *testing.T) {
 		}, "HTTPS"},
 		"unverified controller": {func(v api.Value) api.Value { return v.WithPath(api.BoolValue(false), "tls", "verify") }, "verifies"},
 		"unverified fetch": {func(v api.Value) api.Value {
-			return v.WithPath(api.StringValue("disable-verification"), "virtualMedia", "tls", "trust")
+			return v.WithPath(api.StringValue("disableVerification"), "virtualMedia", "tls", "trust")
 		}, "verification"},
 	} {
 		t.Run(name, func(t *testing.T) {
 			catalog := physicalWithController(test.change)
-			cluster, _ := catalog.Find(api.ContainerCluster, "metal")
+			cluster, _ := catalog.Find(api.OpenShiftCluster, "metal")
 			_, reason, remedy := refusedCluster(catalog, cluster)
 			if test.want == "" {
 				if reason != "" {

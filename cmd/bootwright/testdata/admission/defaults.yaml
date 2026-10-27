@@ -29,7 +29,7 @@ spec:
       tags:
         - inherited
 
-    ContainerCluster:
+    OpenShiftCluster:
       install:
         pullSecretRef: unused-reference
 
@@ -69,9 +69,6 @@ metadata:
   name: local
 
 spec:
-  capabilities:
-    - container-runtime
-
   os:
     provided: true
 

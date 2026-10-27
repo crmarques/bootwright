@@ -19,12 +19,12 @@ func TestProducedPlacementLentOnlyForApplyAndNeverSerialized(t *testing.T) {
 			calls := []lifecycle.ProducedInput{}
 			execution := lifecycle.Execution{ApplyOperation: "operation", ApplyRegistered: "2026-01-01T00:00:00Z", LocateTool: func(context.Context, controller.InstalledTool) (string, error) { return "/oc", nil }, LendProduced: func(_ context.Context, ref lifecycle.ProducedInput) (secrets.Material, error) {
 				calls = append(calls, ref)
-				if missing && ref.Kind == "StorageExport" {
-					return secrets.Material{}, errors.New("export block ceph-export-export is unproved")
+				if missing && ref.Kind == "CephConsumer" {
+					return secrets.Material{}, errors.New("export block ceph-consumer-export is unproved")
 				}
 				return secrets.NewMaterial(map[secrets.Part][]byte{secrets.ValuePart: []byte("private-entry")}), nil
 			}}
-			_, err := Run(context.Background(), runner, execution, op, Config{ProducedInput: lifecycle.ProducedInput{Kind: "ContainerCluster", Object: "cluster", Output: "kubeconfig"}, Placements: []co.SecretPlacement{{Produced: &co.ProducedRef{Kind: "StorageExport", Object: "export", Output: "external-details"}, ProducedKey: "external_cluster_details", Name: "external", Namespace: "storage", Type: "Opaque"}}})
+			_, err := Run(context.Background(), runner, execution, op, Config{ProducedInput: lifecycle.ProducedInput{Kind: "OpenShiftCluster", Object: "cluster", Output: "kubeconfig"}, Placements: []co.SecretPlacement{{Produced: &co.ProducedRef{Kind: "CephConsumer", Object: "export", Output: "external-details"}, ProducedKey: "external_cluster_details", Name: "external", Namespace: "storage", Type: "Opaque"}}})
 			if op == "apply" && missing {
 				if err == nil || len(runner.request.Materials) > 0 {
 					t.Fatal("unproved export reached runner", err)

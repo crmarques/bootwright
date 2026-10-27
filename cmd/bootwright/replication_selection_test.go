@@ -35,7 +35,7 @@ func TestSelectingOneReplicationEndPassesAdmission(t *testing.T) {
 			for _, object := range state.Effective().Objects() {
 				kept = append(kept, object.Identity())
 			}
-			for _, identity := range []string{"StorageCluster/primary", "StorageCluster/secondary", "StorageReplication/volumes-to-secondary", "StoragePool/primary-volumes", "StoragePool/secondary-volumes"} {
+			for _, identity := range []string{"CephCluster/primary", "CephCluster/secondary", "CephReplication/volumes-to-secondary", "CephPool/primary-volumes", "CephPool/secondary-volumes"} {
 				if !slices.Contains(kept, identity) {
 					t.Errorf("selecting %s dropped %s", end, identity)
 				}

@@ -1,7 +1,7 @@
 # OpenShift agent install waits and host registration
 
 What `openshift-install agent wait-for` waits on, when the installation starts,
-and what stalls it. [Container clusters](../../specs/container-clusters.md) owns
+and what stalls it. [Container clusters](../../specs/openshift-clusters.md) owns
 the required behavior. This page records native facts for the M3 items that
 size and bound an installation:
 [B711](../../specs/milestones/delivered.md#b711),

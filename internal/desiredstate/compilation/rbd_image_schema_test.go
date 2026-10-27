@@ -7,7 +7,7 @@ import (
 )
 
 func rbdImageProbe(spec string) string {
-	return "apiVersion: bootwright.io/v1alpha1\nkind: StorageRBDImage\nmetadata:\n  name: probe\nspec:\n  clusterRef: missing\n  poolRef: missing\n" + spec
+	return "apiVersion: bootwright.io/v1alpha1\nkind: CephRBDImage\nmetadata:\n  name: probe\nspec:\n  clusterRef: missing\n  poolRef: missing\n" + spec
 }
 
 func probeFindingsAt(t *testing.T, spec, field string) []string {

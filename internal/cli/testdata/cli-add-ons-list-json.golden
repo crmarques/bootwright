@@ -27,8 +27,8 @@
         "olmPackage": "odf-operator",
         "defaultSource": "",
         "configuration": [
+          "cephConsumerRef",
           "defaultStorageClass",
-          "storageExportRef",
           "subscription",
           "timeout"
         ]

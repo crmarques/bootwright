@@ -9,10 +9,10 @@
   add-ons             Check add-on prerequisites (unavailable)
   all                 Check all prerequisites (unavailable)
   clusters            Check selected cluster readiness (unavailable)
-  container-cluster   Check ContainerCluster readiness
+  container-cluster   Check OpenShiftCluster readiness
   controller          Check controller prerequisites
   infra               Check infrastructure readiness (unavailable)
-  storage-cluster     Check StorageCluster readiness
+  storage-cluster     Check CephCluster readiness
 
   Common flags
       --ascii       Use ASCII status markers

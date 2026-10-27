@@ -25,5 +25,5 @@ func dependencyVersions() *Shape {
 }
 
 func artifactEndpoint() *Shape {
-	return record(required("serverRef", ref(ArtifactServer)), required("endpointRef", nonempty()))
+	return record(required("serverRef", ref(ArtifactServer)), required("endpointRef", endpointRef()))
 }

@@ -19,7 +19,7 @@ import (
 	"github.com/crmarques/bootwright/internal/reconciliation"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
 	"github.com/crmarques/bootwright/internal/secrets"
-	"github.com/crmarques/bootwright/internal/storage"
+	"github.com/crmarques/bootwright/internal/storage/cephcluster"
 )
 
 const gatewaySentinel = "mgmt-gateway-sentinel-never-frozen"
@@ -44,9 +44,9 @@ func vipGateway(vip string) []api.Value {
 func gatewayCatalog(t *testing.T, services, bindings []api.Value, extra ...api.Object) api.Catalog {
 	t.Helper()
 	return api.NewCatalog(append(pinnedCatalog(t, func(spec api.Value) api.Value {
-		spec = spec.WithPath(api.ListValue(append(spec.Get("ceph", "services").Items(), services...)...), "ceph", "services")
+		spec = spec.WithPath(api.ListValue(append(spec.Get("services").Items(), services...)...), "services")
 		if len(bindings) != 0 {
-			spec = spec.WithPath(api.ListValue(bindings...), "ceph", "serviceBindings")
+			spec = spec.WithPath(api.ListValue(bindings...), "serviceBindings")
 		}
 		return spec
 	}).Objects(), extra...))
@@ -54,9 +54,9 @@ func gatewayCatalog(t *testing.T, services, bindings []api.Value, extra ...api.O
 
 func gatewayUnitOf(t *testing.T, catalog api.Catalog) ServiceUnit {
 	t.Helper()
-	cluster, found := catalog.Find(api.StorageCluster, "example")
+	cluster, found := catalog.Find(api.CephCluster, "example")
 	if !found {
-		t.Fatal("the catalog has no StorageCluster example")
+		t.Fatal("the catalog has no CephCluster example")
 	}
 	units, err := gatewayUnits(cluster)
 	if err != nil || len(units) != 1 {
@@ -80,17 +80,17 @@ func requestBlock(t *testing.T, r Request) reconciliation.Block {
 	if err != nil {
 		t.Fatal(diagnostics.Of(err))
 	}
-	return reconciliation.Block{BlockDefinition: reconciliation.BlockDefinition{ID: "ceph-service-example-mgmt-gateway", Kind: string(api.StorageCluster), Object: "example", Implementation: Implementation, Request: data}}
+	return reconciliation.Block{BlockDefinition: reconciliation.BlockDefinition{ID: "ceph-service-example-mgmt-gateway", Kind: string(api.CephCluster), Object: "example", Implementation: Implementation, Request: data}}
 }
 
 func TestGatewayCertificateMustCoverVirtualIP(t *testing.T) {
-	ctx, capability := context.Background(), New(api.StorageCluster, nil)
+	ctx, capability := context.Background(), New(api.CephCluster, nil)
 	services := append(vipGateway("192.0.2.60"), auxiliaryService("prometheus", "", api.Value{}))
 	catalog := gatewayCatalog(t, services, []api.Value{tlsBinding("mgmt-gateway", "mgmt-tls")})
 	block := gatewayUnitBlock(t, catalog)
 	for _, leaf := range [][]byte{leafPEM(t, []string{"node-1"}), leafPEM(t, nil, net.ParseIP("192.0.2.61"))} {
 		err := capability.ProveBinding(ctx, "example", block, mgmtMaterial(leaf))
-		refusedWith(t, err, "secret.part", "the certificate of Secret mgmt-tls does not name 192.0.2.60, the virtual IP of the management gateway of StorageCluster example that clients and its readiness proof connect to",
+		refusedWith(t, err, "secret.part", "the certificate of Secret mgmt-tls does not name 192.0.2.60, the virtual IP of the management gateway of CephCluster example that clients and its readiness proof connect to",
 			"store a certificate whose subject alternative names include the IP address 192.0.2.60 with "+gatewaySet+", or set the management gateway's spec.virtual_ip and its ingress's spec.virtual_ip to an address the certificate holds, then apply again")
 		if strings.Contains(diagnostics.Of(err)[0].Message+diagnostics.Of(err)[0].Remediation, gatewaySentinel) {
 			t.Fatal("the refusal carries bound material")
@@ -100,9 +100,9 @@ func TestGatewayCertificateMustCoverVirtualIP(t *testing.T) {
 		t.Fatalf("a certificate naming the virtual IP refuses %+v", diagnostics.Of(err))
 	}
 	err := capability.ProveBinding(ctx, "example", block, mgmtMaterial([]byte("-----BEGIN CERTIFICATE-----\nAAAA\n-----END CERTIFICATE-----\n")))
-	refusedWith(t, err, "secret.part", "the certificate of Secret mgmt-tls that the management gateway of StorageCluster example binds cannot be read", "store a readable certificate and its private key with "+gatewaySet+", then apply again")
+	refusedWith(t, err, "secret.part", "the certificate of Secret mgmt-tls that the management gateway of CephCluster example binds cannot be read", "store a readable certificate and its private key with "+gatewaySet+", then apply again")
 	err = capability.ProveBinding(ctx, "example", block, map[string]secrets.Material{})
-	refusedWith(t, err, "lifecycle.state", "the TLS Secret the management gateway of a StorageCluster binds is not bound to this apply", "")
+	refusedWith(t, err, "lifecycle.state", "the TLS Secret the management gateway of a CephCluster binds is not bound to this apply", "")
 	plan := cephPlan(t, catalog)
 	for _, id := range []string{"ceph-service-example-monitoring", "ceph-cluster-example"} {
 		if err := capability.ProveBinding(ctx, "example", blockOf(t, plan, id), nil); err != nil {
@@ -111,7 +111,7 @@ func TestGatewayCertificateMustCoverVirtualIP(t *testing.T) {
 	}
 	object := reconciliation.Block{BlockDefinition: gatewayBlock(t, directTLSCatalog())}
 	if err := capability.ProveBinding(ctx, "example", object, nil); err != nil {
-		t.Fatalf("an object gateway block under the StorageCluster capability reads material: %v", err)
+		t.Fatalf("an object gateway block under the CephCluster capability reads material: %v", err)
 	}
 	unbound := gatewayUnitBlock(t, gatewayCatalog(t, vipGateway("192.0.2.60"), nil))
 	if err := capability.ProveBinding(ctx, "example", unbound, nil); err != nil {
@@ -124,12 +124,12 @@ func hostGateway(hosts ...string) api.Value {
 }
 
 func TestGatewayCertificateMustCoverHostFQDNs(t *testing.T) {
-	ctx, capability := context.Background(), New(api.StorageCluster, nil)
+	ctx, capability := context.Background(), New(api.CephCluster, nil)
 	catalog := gatewayCatalog(t, []api.Value{hostGateway("node-1", "node-2", "node-3")}, []api.Value{tlsBinding("mgmt-gateway", "mgmt-tls")})
 	block := gatewayUnitBlock(t, catalog)
 	unnamed := func(err error, host string) {
 		t.Helper()
-		refusedWith(t, err, "secret.part", "the certificate of Secret mgmt-tls does not name "+host+", a host of the management gateway of StorageCluster example that clients and its readiness proof connect to",
+		refusedWith(t, err, "secret.part", "the certificate of Secret mgmt-tls does not name "+host+", a host of the management gateway of CephCluster example that clients and its readiness proof connect to",
 			"store a certificate whose subject alternative names include "+host+" (a DNS name or a matching wildcard) with "+gatewaySet+", or place the management gateway only on hosts the certificate names, then apply again")
 	}
 	unnamed(capability.ProveBinding(ctx, "example", block, mgmtMaterial(leafPEM(t, []string{"node-1", "node-2"}))), "node-3")
@@ -138,13 +138,13 @@ func TestGatewayCertificateMustCoverHostFQDNs(t *testing.T) {
 		t.Fatalf("a certificate naming every host refuses %+v", diagnostics.Of(err))
 	}
 	qualified := planCatalog(3, 3, func(spec api.Value) api.Value {
-		nodes := spec.Get("ceph", "topology", "nodes").Items()
+		nodes := spec.Get("topology", "nodes").Items()
 		for i, node := range nodes {
 			nodes[i] = node.With("fqdn", api.StringValue(node.Get("name").Text()+".ceph.example.test"))
 		}
-		spec = spec.WithPath(api.ListValue(nodes...), "ceph", "topology", "nodes")
-		spec = spec.WithPath(api.ListValue(append(spec.Get("ceph", "services").Items(), mgmtGateway(requestMap("port", 9443)))...), "ceph", "services")
-		return spec.WithPath(api.ListValue(tlsBinding("mgmt-gateway", "mgmt-tls")), "ceph", "serviceBindings")
+		spec = spec.WithPath(api.ListValue(nodes...), "topology", "nodes")
+		spec = spec.WithPath(api.ListValue(append(spec.Get("services").Items(), mgmtGateway(requestMap("port", 9443)))...), "services")
+		return spec.WithPath(api.ListValue(tlsBinding("mgmt-gateway", "mgmt-tls")), "serviceBindings")
 	})
 	unit := gatewayUnitOf(t, qualified)
 	r := runtimeRequest()
@@ -172,7 +172,7 @@ func TestGatewayUnitDependsOnMonitoringUnit(t *testing.T) {
 	} {
 		t.Run(name, func(t *testing.T) {
 			unit := gatewayUnitBlock(t, gatewayCatalog(t, c.services, c.bindings))
-			if unit.Kind != string(api.StorageCluster) || unit.Object != "example" || unit.Implementation != Implementation || unit.Stage != reconciliation.StageClusters ||
+			if unit.Kind != string(api.CephCluster) || unit.Object != "example" || unit.Implementation != Implementation || unit.Stage != reconciliation.StageClusters ||
 				!slices.Equal(unit.Exclusive, []string{"ceph/example"}) || len(unit.Requires) != 0 || !slices.Equal(unit.Dependencies, c.dependencies) ||
 				unit.Description != "realize Ceph service mgmt-gateway of example" || !slices.Equal(unit.Impacts, c.impacts) {
 				t.Fatalf("the gateway block is %s %s %v %v %q %q", unit.Kind, unit.Object, unit.Exclusive, unit.Dependencies, unit.Description, unit.Impacts)
@@ -183,8 +183,8 @@ func TestGatewayUnitDependsOnMonitoringUnit(t *testing.T) {
 
 func TestOAuth2ProxyNoLongerRefusesR16(t *testing.T) {
 	catalog := withAuthoredImages(delegatedCatalog(ssoServices(), ssoBindings(), replicatedPool("volumes")), "keepalived", "nginx", "oauth2_proxy")
-	for _, kind := range []api.Kind{api.StorageCluster, api.StoragePool} {
-		name := map[api.Kind]string{api.StorageCluster: "example", api.StoragePool: "volumes"}[kind]
+	for _, kind := range []api.Kind{api.CephCluster, api.CephPool} {
+		name := map[api.Kind]string{api.CephCluster: "example", api.CephPool: "volumes"}[kind]
 		if _, err := planned(t, catalog, kind, name); err != nil {
 			t.Fatalf("%s %s refuses %+v", kind, name, diagnostics.Of(err))
 		}
@@ -214,7 +214,7 @@ func TestOAuth2ProxyNoLongerRefusesR16(t *testing.T) {
 func ssoProxy(extra ...any) api.Value {
 	spec := requestMap(append([]any{"client_id", "ceph", "oidc_issuer_url", "https://idp.example.test/realms/ceph", "provider_display_name", "SSO"}, extra...)...)
 	return requestMap("service_type", "oauth2-proxy", "placement", requestMap("label", "mon", "count", 1), "spec", spec,
-		"custom_configs", api.ListValue(requestMap("mount_path", storage.OAuth2ProxyCABundlePath)))
+		"custom_configs", api.ListValue(requestMap("mount_path", cephcluster.OAuth2ProxyCABundlePath)))
 }
 
 func ssoServices(extra ...any) []api.Value {
@@ -230,12 +230,12 @@ func ssoBindings() []api.Value {
 func withAuthoredImages(catalog api.Catalog, images ...string) api.Catalog {
 	objects := catalog.Objects()
 	for i, object := range objects {
-		if object.Kind() != api.StorageCluster {
+		if object.Kind() != api.CephCluster {
 			continue
 		}
 		spec := object.Spec()
 		for _, name := range images {
-			spec = spec.WithPath(requestMap("base", PinnedRegistry+"/synthetic/"+name, "version", "synthetic-1"), "ceph", "images", name)
+			spec = spec.WithPath(requestMap("base", PinnedRegistry+"/synthetic/"+name, "version", "synthetic-1"), "images", name)
 		}
 		objects[i] = object.WithSpec(spec)
 	}
@@ -301,15 +301,15 @@ func TestSSOGatewayWithoutTheOAuth2ProxyImageRefusesNamingTheField(t *testing.T)
 
 func TestSSOUnitRealizesOnlyItsRecordMembers(t *testing.T) {
 	for _, member := range []string{"scope", "email_domains"} {
-		cluster, _ := delegatedCatalog(ssoServices(member, api.StringList("x")), ssoBindings()).Find(api.StorageCluster, "example")
+		cluster, _ := delegatedCatalog(ssoServices(member, api.StringList("x")), ssoBindings()).Find(api.CephCluster, "example")
 		_, err := gatewayUnits(cluster)
 		refusedWith(t, err, "lifecycle.unsupported", "the native service oauth2-proxy carries spec."+member+", which Bootwright does not realize for this service",
-			"remove spec."+member+" from oauth2-proxy in spec.ceph.services")
+			"remove spec."+member+" from oauth2-proxy in spec.services")
 	}
-	cluster, _ := delegatedCatalog(append(ssoServices()[:2], ssoProxy().With("custom_configs", api.ListValue(requestMap("mount_path", "/etc/other.pem")))), nil).Find(api.StorageCluster, "example")
+	cluster, _ := delegatedCatalog(append(ssoServices()[:2], ssoProxy().With("custom_configs", api.ListValue(requestMap("mount_path", "/etc/other.pem")))), nil).Find(api.CephCluster, "example")
 	_, err := gatewayUnits(cluster)
 	refusedWith(t, err, "lifecycle.unsupported", "the native service oauth2-proxy carries config, extra container or entrypoint arguments or custom configs, which Bootwright does not realize",
-		"remove those options from oauth2-proxy in spec.ceph.services")
+		"remove those options from oauth2-proxy in spec.services")
 }
 
 func ssoReadyEvidence(r Request) Evidence {
@@ -373,14 +373,14 @@ func canonicalMembers(t *testing.T, members map[string]json.RawMessage) []byte {
 }
 
 func TestGatewayProofIgnoresTheOAuth2ProxyBindings(t *testing.T) {
-	ctx, capability := context.Background(), New(api.StorageCluster, nil)
+	ctx, capability := context.Background(), New(api.CephCluster, nil)
 	block := gatewayUnitBlock(t, gatewayCatalog(t, ssoServices(), ssoBindings()))
 	ca := map[string]secrets.Material{"sso-ca": secrets.NewMaterial(map[secrets.Part][]byte{secrets.CertificatePart: leafPEM(t, []string{"idp.example.test"})})}
 	if err := capability.ProveBinding(ctx, "example", block, ca); err != nil {
 		t.Fatalf("a gateway whose own certificate cephadm signs reads the oauth2-proxy bindings: %+v", diagnostics.Of(err))
 	}
 	bound := gatewayUnitBlock(t, gatewayCatalog(t, ssoServices(), append(ssoBindings(), tlsBinding("mgmt-gateway", "mgmt-tls"))))
-	refusedWith(t, capability.ProveBinding(ctx, "example", bound, ca), "lifecycle.state", "the TLS Secret the management gateway of a StorageCluster binds is not bound to this apply", "")
+	refusedWith(t, capability.ProveBinding(ctx, "example", bound, ca), "lifecycle.state", "the TLS Secret the management gateway of a CephCluster binds is not bound to this apply", "")
 }
 
 func mgmtGatewayRequest(t *testing.T) Request {
@@ -448,37 +448,38 @@ func TestGatewayProjectionRefusesUnrealizedMembers(t *testing.T) {
 		t.Fatalf("the gateway unit renders:\n%s", strings.Join(documentsOf(unit), "\n"))
 	}
 	cluster := func(services ...api.Value) api.Object {
-		object, _ := delegatedCatalog(services, nil).Find(api.StorageCluster, "example")
+		object, _ := delegatedCatalog(services, nil).Find(api.CephCluster, "example")
 		return object
 	}
 	_, err := gatewayUnits(cluster(mgmtGateway(admitted.With("ssl_session_cache", api.StringValue("shared:SSL:10m"))), mgmtIngress("192.0.2.60")))
 	refusedWith(t, err, "lifecycle.unsupported", "the native service mgmt-gateway carries spec.ssl_session_cache, which Bootwright does not realize for this service",
-		"remove spec.ssl_session_cache from mgmt-gateway in spec.ceph.services")
+		"remove spec.ssl_session_cache from mgmt-gateway in spec.services")
 	_, err = gatewayUnits(cluster(mgmtGateway(admitted), mgmtIngress("192.0.2.60", "frontend_port", 8443)))
 	refusedWith(t, err, "lifecycle.unsupported", "the native service ingress.mgmt carries spec.frontend_port, which Bootwright does not realize for this service",
-		"remove spec.frontend_port from ingress.mgmt in spec.ceph.services")
+		"remove spec.frontend_port from ingress.mgmt in spec.services")
 }
 
-func TestGatewayBlockIdentityFitsItsCluster(t *testing.T) {
-	cluster, _ := delegatedCatalog(vipGateway("192.0.2.60"), nil).Find(api.StorageCluster, "example")
-	long := api.NewObject(api.StorageCluster, strings.Repeat("c", 38), api.Value{}, cluster.Spec())
-	_, err := gatewayUnits(long)
-	refusedWith(t, err, "api.invariant", "StorageCluster "+long.Name()+" has a name too long to identify its management gateway service block, whose identity holds at most 63 characters",
-		"rename the StorageCluster to at most 37 characters")
-	fits := api.NewObject(api.StorageCluster, strings.Repeat("c", 37), api.Value{}, cluster.Spec())
+func TestGatewayBlockIdentityHashesALongCluster(t *testing.T) {
+	cluster, _ := delegatedCatalog(vipGateway("192.0.2.60"), nil).Find(api.CephCluster, "example")
+	fits := api.NewObject(api.CephCluster, strings.Repeat("c", 37), api.Value{}, cluster.Spec())
 	units, err := gatewayUnits(fits)
-	if err != nil || len(units) != 1 || len(ServiceUnitBlockID(fits.Name(), units[0])) != 63 {
+	if err != nil || len(units) != 1 || ServiceUnitBlockID(fits.Name(), units[0]) != "ceph-service-"+fits.Name()+"-mgmt-gateway" {
 		t.Fatalf("a 37-character cluster plans %+v (%v)", units, err)
+	}
+	long := api.NewObject(api.CephCluster, strings.Repeat("c", 63), api.Value{}, cluster.Spec())
+	units, err = gatewayUnits(long)
+	if err != nil || len(units) != 1 || !reconciliation.ValidSegment(ServiceUnitBlockID(long.Name(), units[0])) {
+		t.Fatalf("a 63-character cluster plans %+v (%v)", units, err)
 	}
 }
 
 func TestGatewayUnitDeadline(t *testing.T) {
 	for _, hosts := range []int{3, 6} {
 		catalog := planCatalog(hosts, hosts, func(spec api.Value) api.Value {
-			return spec.WithPath(api.ListValue(append(spec.Get("ceph", "services").Items(), vipGateway("192.0.2.60")...)...), "ceph", "services")
+			return spec.WithPath(api.ListValue(append(spec.Get("services").Items(), vipGateway("192.0.2.60")...)...), "services")
 		})
-		cluster, _ := catalog.Find(api.StorageCluster, "example")
-		base, err := New(api.StorageCluster, nil).request(catalog, cluster, "synthetic")
+		cluster, _ := catalog.Find(api.CephCluster, "example")
+		base, err := New(api.CephCluster, nil).request(catalog, cluster, "synthetic")
 		if err != nil {
 			t.Fatal(diagnostics.Of(err))
 		}
@@ -506,7 +507,7 @@ func TestGatewayUnitLendsCertificateToEveryOperationAndKeyToApply(t *testing.T) 
 		e := withMaterial(executionFor(t, r), r)
 		maps.Copy(e.Material, mgmtMaterial([]byte(gatewaySentinel)))
 		runner := &recordingRunner{}
-		if _, err := New(api.StorageCluster, runner).WithProofs(dependencyProofs{}).run(context.Background(), e, operation, r); err != nil {
+		if _, err := New(api.CephCluster, runner).WithProofs(dependencyProofs{}).run(context.Background(), e, operation, r); err != nil {
 			t.Fatalf("%s: %+v", operation, diagnostics.Of(err))
 		}
 		call := runner.request
@@ -527,7 +528,7 @@ func TestGatewayUnitLendsCertificateToEveryOperationAndKeyToApply(t *testing.T) 
 	grafana := monitoringUnit(t, []api.Value{auxiliaryService("grafana", "", requestMap("anonymous_access", false))}, []api.Value{grafanaPasswordBinding()})
 	monitoring.Action, monitoring.Service = "service", &grafana
 	runner := &recordingRunner{}
-	if _, err := New(api.StorageCluster, runner).WithProofs(dependencyProofs{}).run(context.Background(), monitoringExecution(t, monitoring), "observe", monitoring); err != nil {
+	if _, err := New(api.CephCluster, runner).WithProofs(dependencyProofs{}).run(context.Background(), monitoringExecution(t, monitoring), "observe", monitoring); err != nil {
 		t.Fatal(diagnostics.Of(err))
 	}
 	if slices.ContainsFunc(runner.request.Materials, func(m lifecycle.MaterialFile) bool { return m.Secret == "grafana-admin" }) {
@@ -572,10 +573,10 @@ func TestGatewayUnitEndpointEvidence(t *testing.T) {
 }
 
 func TestGatewayLeavesFollowTheBindingRegistry(t *testing.T) {
-	cluster, _ := delegatedCatalog(ssoServices(), nil).Find(api.StorageCluster, "example")
+	cluster, _ := delegatedCatalog(ssoServices(), nil).Find(api.CephCluster, "example")
 	for key, leaf := range gatewayLeaves {
 		serviceType, path, _ := strings.Cut(key, " ")
-		slot, found := storage.NativeBindingSlot(cluster, serviceType, path)
+		slot, found := cephcluster.NativeBindingSlot(cluster, serviceType, path)
 		if !found || slot.Part != leaf.Part {
 			t.Fatalf("%s lends part %s, the registry holds %+v", key, leaf.Part, slot)
 		}

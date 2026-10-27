@@ -17,7 +17,7 @@ import (
 )
 
 const HostImplementation = "storage-ceph-host-v1"
-const HostVersion = "ceph-host-v7"
+const HostVersion = "ceph-host-v8"
 const HostEvidenceVersion = "ceph-host-evidence-v3"
 const SharedLabel = "system_u:object_r:container_file_t:s0"
 const maxHostEvidence = 16384
@@ -116,7 +116,7 @@ func HostContentDigest() string {
 }
 
 func HostBlockID(cluster, machineName string) string {
-	return "ceph-host-" + cluster + "-" + machineName
+	return reconciliation.BlockIdentity("ceph-host-", cluster+"-"+machineName)
 }
 
 type HostDevice struct {
@@ -252,7 +252,7 @@ func (c HostCapability) Plan(ctx context.Context, input lifecycle.PlanInput) (li
 		return plan, failure("lifecycle.state", "Ceph planning requires compiled state", "")
 	}
 	catalog := input.State.Effective()
-	for _, object := range catalog.OfKind(api.StorageCluster) {
+	for _, object := range catalog.OfKind(api.CephCluster) {
 		cluster, err := baseRequest(catalog, object, input.Context.Name)
 		if err != nil {
 			return plan, err
@@ -290,7 +290,7 @@ func (c HostCapability) Plan(ctx context.Context, input lifecycle.PlanInput) (li
 			}
 			plan.Definitions = append(plan.Definitions, reconciliation.BlockDefinition{ID: HostBlockID(cluster.Cluster, host.Machine), Description: description, Stage: reconciliation.StageClusters,
 				Requires: requires, Dependencies: dependencies, Exclusive: []string{"ceph-host/" + host.Machine}, Impacts: impacts, Consumes: []string{},
-				Kind: string(api.StorageCluster), Object: cluster.Cluster, Implementation: HostImplementation, ContentDigest: HostContentDigest(), Request: canonical})
+				Kind: string(api.CephCluster), Object: cluster.Cluster, Implementation: HostImplementation, ContentDigest: HostContentDigest(), Request: canonical})
 			if cluster.Security != nil && cluster.Security.FIPS {
 				plan.Secrets = append(plan.Secrets, cluster.ClusterKeyRef)
 			}
@@ -331,7 +331,7 @@ func (c HostCapability) prepare(ctx context.Context, e lifecycle.Execution) (Hos
 	if err != nil {
 		return HostRequest{}, err
 	}
-	if e.Block.Kind != string(api.StorageCluster) || e.Block.Object != r.Cluster.Cluster {
+	if e.Block.Kind != string(api.CephCluster) || e.Block.Object != r.Cluster.Cluster {
 		return HostRequest{}, failure("lifecycle.state", "Ceph host request does not match its frozen resource identity", "")
 	}
 	if r.Cluster.Owner != "" || r.Cluster.FSID != "" || e.ApplyOperation == "" {
@@ -583,7 +583,7 @@ func (HostCapability) Quiescent(ctx context.Context, _ lifecycle.Probe) (lifecyc
 func ProvedHost(proofs []lifecycle.BlockEvidence, cluster, machineName, image string) (HostEvidence, error) {
 	var found *HostEvidence
 	for _, proof := range proofs {
-		if proof.Kind != string(api.StorageCluster) || proof.Object != cluster || proof.Implementation != HostImplementation || proof.Verb != reconciliation.Apply || proof.State != reconciliation.BlockDone ||
+		if proof.Kind != string(api.CephCluster) || proof.Object != cluster || proof.Implementation != HostImplementation || proof.Verb != reconciliation.Apply || proof.State != reconciliation.BlockDone ||
 			proof.Block.Kind != proof.Kind || proof.Block.Object != proof.Object || proof.Block.Implementation != proof.Implementation {
 			continue
 		}

@@ -24,11 +24,11 @@ func TestTheDataDiskBoundIsTheDomainsTargets(t *testing.T) {
 	}
 }
 
-func TestTheProviderNameLimitIsTheHostBlockIdentity(t *testing.T) {
-	if block := HostBlockID(strings.Repeat("a", substrate.ProviderNameLimit)); !reconciliation.ValidSegment(block) {
-		t.Fatalf("the host block %q of a provider name at the limit is not a block identity", block)
+func TestEveryProviderNameYieldsAHostBlockIdentity(t *testing.T) {
+	if got, want := HostBlockID(strings.Repeat("a", 48)), "substrate-host-"+strings.Repeat("a", 48); got != want {
+		t.Fatalf("the 63-byte host block moved to %q", got)
 	}
-	if block := HostBlockID(strings.Repeat("a", substrate.ProviderNameLimit+1)); reconciliation.ValidSegment(block) {
-		t.Fatalf("the host block %q of a provider name past the limit is still a block identity, so the limit is too low", block)
+	if block := HostBlockID(strings.Repeat("a", 63)); !reconciliation.ValidSegment(block) || block == HostBlockID(strings.Repeat("a", 62)+"b") {
+		t.Fatalf("a 63-byte provider name yields %q, not a distinct block identity", block)
 	}
 }

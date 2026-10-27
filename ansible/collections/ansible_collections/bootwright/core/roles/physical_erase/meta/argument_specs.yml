@@ -10,7 +10,7 @@ argument_specs:
           version:
             type: str
             required: true
-            choices: [physical-erase-v1]
+            choices: [physical-erase-v2]
           deadlineSeconds:
             type: int
             required: true

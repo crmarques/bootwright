@@ -139,7 +139,7 @@ endpoint, on every substrate, because the installer image is always booted
 through it. A profile selecting
 `initialPassword`, `mirror` or `templateClone` refuses before
 registration. These shapes carry secret bytes or effects this contract does not
-prove. A profile selecting `subscription` with a `managed` `redhat-rhel`
+prove. A profile selecting `subscription` with a `managed` `redhatRhel`
 Entitlement is admitted on virtual and physical Machines, as
 [Registration](#registration) states. A profile selecting `fromSubscription` refuses too, because it
 registers inside the installer, where a failed registration cannot be retried
@@ -155,12 +155,12 @@ A credentialed Proxy reaches nothing when no repository is configured, and is
 accepted then. Every refusal names the Machine that selects the installation, with the
 reason and remedy the [refusal table](#refusal-table) states. A Machine whose
 installation delivers private material refuses
-`disable-verification` virtual-media trust before registration, ahead of its
+`disableVerification` virtual-media trust before registration, ahead of its
 [unverified-BMC-leg refusal](#physical-installation), because a BMC that
 fetches the installer without verifying the artifact server boots whatever
 image answers, and that installer is what receives the private material; its
-remedy is `import-certificate`, or `established` when the BMC already
-trusts the server. `import-certificate` needs the installer image served over
+remedy is `importCertificate`, or `established` when the BMC already
+trusts the server. `importCertificate` needs the installer image served over
 https and the certificate its server presents, and refuses naming the Machine
 without either. The trust is set by the installation's insert and settled by
 its ejects after the installer's power-off
@@ -207,7 +207,7 @@ refused at admission, at the Machine's
 [install address](api/machines.md#network-configuration)); a locked root
 account; the `bootwright` account
 with the public half of `remoteMachinesAccessKey` authorized and passwordless
-sudo; the root disk `rootDeviceHints.deviceName` names cleared and partitioned, or
+sudo; the root disk `hardware.rootDevice.deviceName` names cleared and partitioned, or
 automatic partitioning when a Machine its substrate created names none, or,
 for a profile selecting `diskEncryption`, partitioned by the `%include` of the
 storage file its `%pre` writes ([Root-disk encryption](#root-disk-encryption));
@@ -298,7 +298,7 @@ composed order. The pins are frozen in the request as `installerArguments` and
 passed, joined by spaces, as the one `mkksiso --cmdline` value. A libvirt
 Machine's address is the one its realization gives the domain interface
 ([substrates](substrates.md#machine-realization)); a physical Machine's is the
-`macAddress` of the hardware NIC the interface's
+`spec.substrate.baremetal.nics` `macAddress` of the hardware NIC the interface's
 `spec.network.interfaceBinding` binds, else of the NIC of its own name, the set
 the `%pre` target proof also requires. Anaconda writes each pin to the
 installed system as `/etc/systemd/network/10-anaconda-ifname-<name>.link`, so
@@ -1027,7 +1027,7 @@ passphrase.
 
 ### Registration
 
-A profile selecting `spec.subscription` with a `managed` `redhat-rhel`
+A profile selecting `spec.subscription` with a `managed` `redhatRhel`
 Entitlement registers the installed system with the hosted subscription
 service inside its `os-install-<machine>` block.
 
@@ -1297,7 +1297,7 @@ media takes back nothing from the machine. The separate opt-in
 [physical erase](#physical-removal) consumes `data-loss` on removal. The
 authorization acknowledges already-planned loss; it selects no target and
 relaxes no proof. Installation erasure is confined to the disk
-`rootDeviceHints.deviceName` names, and on a physical Machine that name is a
+`hardware.rootDevice.deviceName` names, and on a physical Machine that name is a
 durable identity: `/dev/disk/by-id/wwn-0x` followed by 16 or 32 lowercase
 hexadecimal digits, as the
 [root-device rule](api/machines.md#bmc-and-root-device-shape) states, because a
@@ -1341,7 +1341,7 @@ rather than frozen in the plan, and the Kickstart fetches the key once,
 verifying the artifact server's certificate against the bound public
 certificate rather than disabling verification. The insert
 carries the token URL, so the controller-to-BMC leg is `https` and verified,
-and the BMC-to-artifact leg refuses `disable-verification`. The first byte of
+and the BMC-to-artifact leg refuses `disableVerification`. The first byte of
 the image, `identity` and `identity.pub` is fetched through the listener before
 the insert, with the token redacted from any refusal, so a key the installer
 could not fetch fails before the disk is cleared. The private subtree is
@@ -1405,7 +1405,8 @@ derives, then the profile rows, then the publication rows, each group in
 table order, and only the first row a Machine meets is reported. Its reason and remedy are the diagnostic's
 message and remediation, in which `<machine>` is that Machine, `<profile>` the
 `MachineInstallProfile` it selects and `<hints>` every root-device hint it
-declares other than `deviceName`, as `spec.os.install.rootDeviceHints.<hint>`
+declares other than `deviceName`, as `spec.hardware.rootDevice.<hint>`, or
+`spec.substrate.baremetal.rootDevice.<hint>` for `hctl`, `serialNumber` and `wwn`,
 in name order, separated by `, `. `<name>` is the first `ethernet` interface,
 in composed order, the row describes; `<bond>` is the install interface when it is a bond, else the bond
 its VLAN is over; `<declared mode>` is `mode <value>` for a scalar
@@ -1430,13 +1431,13 @@ the length of that many bytes in base64url without padding.
 
 | Refusal | Path | Reason | Remedy |
 | --- | --- | --- | --- |
-| A physical Machine naming no root device | on a Machine on a `baremetal` provider, no `spec.os.install.rootDeviceHints.deviceName` that is `/dev/disk/by-id/wwn-0x` followed by 16 or 32 lowercase hexadecimal digits, a kernel name such as `/dev/sda`, another by-id path and a `wwn` alone included | `a physical installation erases only a root disk named by its /dev/disk/by-id/wwn-0x path, and the Machine names none` | `set spec.os.install.rootDeviceHints.deviceName on <machine> to the disk's /dev/disk/by-id/wwn-0x path, 16 or 32 lowercase hexadecimal digits; a kernel name such as /dev/sda is refused, and a wwn-only selection is not yet supported` |
-| A root-device hint other than deviceName | any `spec.os.install.rootDeviceHints` field but `deviceName` | `a managed-OS installation selects its root disk by deviceName alone and cannot carry the other root-device hints the Machine declares` | `remove <hints> from <machine>` |
-| An unverified fetch of private material | `spec.hardware.management.bmc.virtualMedia.tls.trust: disable-verification` on a Machine whose installation delivers private material (a delivered host key or an encrypted root disk's recovery passphrase) | `a Machine that delivers private material through its installation cannot let its controller fetch without verifying the artifact server` | `declare hardware.management.bmc.virtualMedia.tls.trust: import-certificate on <machine>, or established when its controller already trusts the server` |
-| An unverified controller leg for private delivery | a Machine whose installation delivers private material (a delivered host key or an encrypted root disk's recovery passphrase), with a non-https `spec.hardware.management.bmc.address` or `tls.verify: false` | `a Machine whose installation delivers private material hands its controller the private installer image URL, so the controller must be reached over https with its certificate verified` | `address the controller of <machine> with an https:// spec.hardware.management.bmc.address and remove the tls.verify opt-out on <machine> or in spec.baremetal.defaults.bmc of <provider>; name the authority that issued its certificate in tls.trustBundleRef when the system trust store does not hold it` |
+| A physical Machine naming no root device | on a Machine on a `baremetal` provider, no `spec.hardware.rootDevice.deviceName` that is `/dev/disk/by-id/wwn-0x` followed by 16 or 32 lowercase hexadecimal digits, a kernel name such as `/dev/sda`, another by-id path and a `wwn` alone included | `a physical installation erases only a root disk named by its /dev/disk/by-id/wwn-0x path, and the Machine names none` | `set spec.hardware.rootDevice.deviceName on <machine> to the disk's /dev/disk/by-id/wwn-0x path, 16 or 32 lowercase hexadecimal digits; a kernel name such as /dev/sda is refused, and a wwn-only selection is not yet supported` |
+| A root-device hint other than deviceName | any `spec.hardware.rootDevice` field but `deviceName`, or any `spec.substrate.baremetal.rootDevice` field | `a managed-OS installation selects its root disk by deviceName alone and cannot carry the other root-device hints the Machine declares` | `remove <hints> from <machine>` |
+| An unverified fetch of private material | `spec.substrate.baremetal.bmc.virtualMedia.tls.trust: disableVerification` on a Machine whose installation delivers private material (a delivered host key or an encrypted root disk's recovery passphrase) | `a Machine that delivers private material through its installation cannot let its BMC fetch without verifying the artifact server` | `declare substrate.baremetal.bmc.virtualMedia.tls.trust: importCertificate on <machine>, or established when its BMC already trusts the server` |
+| An unverified BMC leg for private delivery | a Machine whose installation delivers private material (a delivered host key or an encrypted root disk's recovery passphrase), with a non-https `spec.substrate.baremetal.bmc.address` or `tls.verify: false` | `a Machine whose installation delivers private material hands its BMC the private installer image URL, so the BMC must be reached over https with its certificate verified` | `address the BMC of <machine> with an https:// spec.substrate.baremetal.bmc.address and remove the tls.verify opt-out on <machine> or in spec.baremetal.defaults.bmc of <provider>; name the authority that issued its certificate in tls.trustBundleRef when the system trust store does not hold it` |
 | A DHCP-only install | an effective `spec.network.installAddressRef` naming no `spec.network.addresses` entry with an `interface` and an IPv4 address with its prefix; admission refuses it first, so no validated graph reaches this row | `a managed-OS installation configures one static IPv4 install address, and the Machine selects none; DHCP installation is not supported` | `assign an IPv4 address with its prefix to the install interface in spec.network.addresses of <machine> and select it with spec.network.installAddressRef` |
 | A kernel-style interface name | any available composed `ethernet` interface whose `name` matches `^eth[0-9]+$`, on any substrate | `a managed-OS installation names each ethernet interface after its hardware address, and a kernel-style name such as <name> can collide with the names the kernel assigns` | `rename interface <name> in the network of <machine> to a name outside the kernel's ethN scheme, such as its predictable name` |
-| An ethernet interface without a hardware address | on a `baremetal` provider, an available composed `ethernet` interface that resolves, through its `spec.network.interfaceBinding` `nicRef` or else the `spec.hardware.nics` entry of its own name, to no NIC, or to one whose `macAddress` differs from its authored `mac-address` | `a managed-OS installation names each ethernet interface after its hardware address, and interface <name> of <machine> resolves to no declared hardware NIC, or to one whose address differs from its mac-address` | `bind interface <name> to its hardware NIC in spec.network.interfaceBinding of <machine>, or mark it absent in its network` |
+| An ethernet interface without a hardware address | on a `baremetal` provider, an available composed `ethernet` interface that resolves, through its `spec.network.interfaceBinding` `nicRef` or else the `spec.substrate.baremetal.nics` entry of its own name, to no NIC, or to one whose `macAddress` differs from its authored `mac-address` | `a managed-OS installation names each ethernet interface after its hardware address, and interface <name> of <machine> resolves to no declared hardware NIC, or to one whose address differs from its mac-address` | `bind interface <name> to its hardware NIC in spec.network.interfaceBinding of <machine>, or mark it absent in its network` |
 | An install interface of another type | an install interface, named by the selected install address, that is a composed interface whose `type` is not `ethernet`, `bond` or `vlan`, such as a `linux-bridge`; admission refuses it first, so no validated graph reaches this row | `the installer configures only an ethernet, bond or VLAN install interface, and the install interface <interface> of <machine> is of type <type>` | `assign the install address of <machine> to an ethernet, bond or VLAN interface` |
 | A bond install interface without its ports | the install interface, or the base of a `vlan` install interface, is a `bond` whose `link-aggregation.port` is absent or empty, or names a port that is not an available composed `ethernet` interface, or one whose `controller` names another interface | `the installer configures a bonded install interface from its named ports, and bond <bond> of <machine> names no port, or a port that is not an available ethernet interface aggregated by it` | `list the ethernet interfaces bond <bond> aggregates in its link-aggregation.port in the network of <machine>` |
 | A bond install interface without a carried mode | that bond's `link-aggregation.mode` absent or not one of `balance-rr`, `active-backup`, `balance-xor`, `broadcast`, `802.3ad`, `balance-tlb`, `balance-alb` | `the installer configures a bond only by its full mode name, and bond <bond> of <machine> declares <declared mode>` | `set link-aggregation.mode of <bond> to one of balance-rr, active-backup, balance-xor, broadcast, 802.3ad, balance-tlb or balance-alb in the network of <machine>` |
@@ -1450,8 +1451,8 @@ the length of that many bytes in base64url without padding.
 | Packages from a subscription | a profile's `spec.installer.anaconda.packageSource.fromSubscription` | `the install profile selects spec.installer.anaconda.packageSource.fromSubscription, which registers inside the installer, where a failed registration cannot be retried without installing again` | `remove spec.installer.anaconda.packageSource.fromSubscription from <profile>, to install from its boot media or from spec.installer.anaconda.packageSource.hostedTree` |
 | An initial password | a profile's `spec.customizations.ssh.initialPassword` | `the install profile selects spec.customizations.ssh.initialPassword, which carries secret bytes or effects this executable does not prove` | `remove spec.customizations.ssh.initialPassword from <profile>` |
 | Password authentication | a profile's `spec.customizations.ssh.passwordAuthentication: true` | `the install profile enables spec.customizations.ssh.passwordAuthentication, but no password can be set while spec.customizations.ssh.initialPassword is refused` | `set spec.customizations.ssh.passwordAuthentication to false on <profile>` |
-| An Ed25519 delivered host key under FIPS | a FIPS profile on a delivered-key Machine whose host-key Secret generates Ed25519, the default included | `a FIPS-mode installation refuses Ed25519 keys, and the delivered host key <secret> generates one` | `declare spec.source.generated.keyType as ecdsa-p256, ecdsa-p384, ecdsa-p521 or rsa on <secret>` |
-| An Ed25519 fleet key under FIPS | a profile's `spec.customizations.security.fips.enabled: true` while the Environment's `spec.remoteMachinesAccessKey.keyRef` names a Secret whose `spec.source.generated.keyType` is `ed25519`, the default included | `a FIPS-mode installation refuses Ed25519 keys, and the fleet key <secret> generates one` | `declare spec.source.generated.keyType as ecdsa-p256, ecdsa-p384, ecdsa-p521 or rsa on <secret>` |
+| An Ed25519 delivered host key under FIPS | a FIPS profile on a delivered-key Machine whose host-key Secret generates Ed25519, the default included | `a FIPS-mode installation refuses Ed25519 keys, and the delivered host key <secret> generates one` | `declare spec.source.generated.keyType as ecdsaP256, ecdsaP384, ecdsaP521 or rsa on <secret>` |
+| An Ed25519 fleet key under FIPS | a profile's `spec.customizations.security.fips.enabled: true` while the Environment's `spec.remoteMachinesAccessKey.keyRef` names a Secret whose `spec.source.generated.keyType` is `ed25519`, the default included | `a FIPS-mode installation refuses Ed25519 keys, and the fleet key <secret> generates one` | `declare spec.source.generated.keyType as ecdsaP256, ecdsaP384, ecdsaP521 or rsa on <secret>` |
 | A hostname artifact endpoint under disk encryption | a profile selecting `spec.customizations.security.diskEncryption` whose `spec.installer.anaconda.redfishVirtualMedia.artifactServerEndpoint` resolves to a URL whose host is not an IP literal | `the installer fetches the recovery passphrase before it configures name resolution, so the artifact server endpoint of <profile> must be addressed by IP` | `select an artifact server endpoint whose address is an IP literal in spec.installer.anaconda.redfishVirtualMedia.artifactServerEndpoint on <profile>` |
 | A generated recovery passphrase too long | a profile selecting `spec.customizations.security.diskEncryption` whose `recoveryPassphraseRef` names a `token` Secret generating more than 192 bytes | `the recovery passphrase is limited to 256 characters, and <recovery secret> generates <bytes> bytes, which encode to <length> characters` | `set spec.source.generated.bytes to at most 192 on <recovery secret>` |
 | Subscription repositories with external registration | a profile's `spec.customizations.repositories.subscription` with a `spec.subscription` Entitlement whose `spec.rhsm.management` is `external` | `subscription repositories are enabled on a registration this executable performs, and <entitlement> sets spec.rhsm.management to external` | `remove spec.customizations.repositories.subscription from <profile>, or set spec.rhsm.management to managed on <entitlement>` |
@@ -1461,7 +1462,7 @@ the length of that many bytes in base64url without padding.
 | A credentialed proxy | a Machine's effective `spec.proxy` naming a Proxy with `spec.connection.auth` or `spec.connection.trustBundleRef`, while its profile configures a repository | `the installed system's repositories would reach <proxy> through a credential or private trust anchor, which an installation cannot carry` | `select direct: {} or an external Proxy without spec.connection.auth and spec.connection.trustBundleRef in spec.proxy of <machine> or of <profile>` |
 | An installer image server off the controller | the `spec.machineRef` of the server a profile's `spec.installer.anaconda.redfishVirtualMedia.artifactServerEndpoint` selects, other than the controller Machine | `a managed-OS installation builds and publishes its installer image on the controller, and <server> is placed on <server host>` | `place <server> on the controller Machine, or select a server placed there in spec.installer.anaconda.redfishVirtualMedia.artifactServerEndpoint on <profile>` |
 | A package tree server off the controller | the `spec.machineRef` of the server a profile's `spec.installer.anaconda.packageSource.hostedTree.artifactServerEndpoint` selects, other than the controller Machine | `a managed-OS installation extracts and publishes its package tree on the controller, and <server> is placed on <server host>` | `place <server> on the controller Machine, or select a server placed there in spec.installer.anaconda.packageSource.hostedTree.artifactServerEndpoint on <profile>` |
-| A Machine off the artifact server's host | a virtual Machine whose provider's `spec.libvirt.machineRef` is not the image server's `spec.machineRef` | `an emulated controller fetches the installer image without verifying its server, so the provider host it runs on is the Machine the artifact server is placed on` | `<machine> is booted through a controller on <provider host> and <server> is placed on <server host>; place <provider> on <server host>` |
+| A Machine off the artifact server's host | a virtual Machine whose provider's `spec.libvirt.machineRef` is not the image server's `spec.machineRef` | `an emulated BMC fetches the installer image without verifying its server, so the provider host it runs on is the Machine the artifact server is placed on` | `<machine> is booted through a BMC on <provider host> and <server> is placed on <server host>; place <provider> on <server host>` |
 
 ## Adapter boundary
 

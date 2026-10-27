@@ -13,12 +13,12 @@ import (
 )
 
 func TestNativeServiceRefusalsPointAtTheAuthoredService(t *testing.T) {
-	const authored = "      - service_type: mds\n        service_id: odf-cephfs\n"
+	const authored = "    - service_type: mds\n      service_id: odf-cephfs\n"
 	sources := exampleSources(t)
 	var edited []byte
 	for i, file := range sources.Files {
 		if filepath.Base(filepath.Dir(file.Path())) == "ceph" && filepath.Base(file.Path()) == "cluster.yaml" && strings.Count(string(file.Bytes()), authored) == 1 {
-			edited = []byte(strings.Replace(string(file.Bytes()), authored, "      - service_type: jaeger-agent\n\n        placement:\n          label: mon\n\n"+authored, 1))
+			edited = []byte(strings.Replace(string(file.Bytes()), authored, "    - service_type: jaeger-agent\n\n      placement:\n        label: mon\n\n"+authored, 1))
 			sources.Files[i] = desiredstate.NewSourceFile(file.Path(), edited)
 		}
 	}
@@ -28,12 +28,12 @@ func TestNativeServiceRefusalsPointAtTheAuthoredService(t *testing.T) {
 	_, _, err := wireCompiler().Compile(context.Background(), sources)
 	found := []diagnostics.Diagnostic{}
 	for _, d := range diagnostics.Of(err) {
-		if d.Object != nil && d.Object.Kind == "StorageCluster" && strings.HasSuffix(d.Field, ".service_type") {
+		if d.Object != nil && d.Object.Kind == "CephCluster" && strings.HasSuffix(d.Field, ".service_type") {
 			found = append(found, d)
 		}
 	}
 	line := authoredStorageLine(t, edited, "- service_type: jaeger-agent")
-	if len(found) != 1 || found[0].Field != "$.spec.ceph.services[6].service_type" || found[0].Message != "Bootwright does not realize tracing services" || found[0].Source == nil || found[0].Source.Line != line || filepath.Base(found[0].Source.Path) != "cluster.yaml" {
+	if len(found) != 1 || found[0].Field != "$.spec.services[6].service_type" || found[0].Message != "Bootwright does not realize tracing services" || found[0].Source == nil || found[0].Source.Line != line || filepath.Base(found[0].Source.Path) != "cluster.yaml" {
 		t.Fatalf("service refusals: %+v want line %d", found, line)
 	}
 }
@@ -47,7 +47,7 @@ func TestMultidcExampleMigratesWithoutLegacyFields(t *testing.T) {
 		t.Fatal(err, out.String())
 	}
 	for _, d := range result.Diagnostics {
-		if d.Object != nil && d.Object.Kind == "StorageFilesystem" || d.Source != nil && filepath.Base(d.Source.Path) == "odf-cephfs.yaml" {
+		if d.Object != nil && d.Object.Kind == "CephFilesystem" || d.Source != nil && filepath.Base(d.Source.Path) == "odf-cephfs.yaml" {
 			t.Fatalf("the reference filesystem is refused: %+v", d)
 		}
 	}
@@ -57,12 +57,12 @@ func TestMultidcExampleMigratesWithoutLegacyFields(t *testing.T) {
 		switch {
 		case filepath.Base(file.Path()) == "odf-cephfs.yaml":
 			filesystems++
-			if _, mds, _ := strings.Cut(text, "\n  mds:\n"); strings.Contains(mds, "placement:") || !strings.Contains(text, "\n  mdsServiceRef: mds.odf-cephfs\n") {
+			if _, mds, _ := strings.Cut(text, "\n  mds:\n"); strings.Contains(mds, "placement:") || strings.Contains(text, "mdsServiceRef") {
 				t.Fatalf("the reference filesystem keeps a legacy MDS field:\n%s", text)
 			}
 		case filepath.Base(filepath.Dir(file.Path())) == "ceph" && filepath.Base(file.Path()) == "cluster.yaml":
 			services = strings.Count(text, "- service_type: mds\n")
-			if strings.Count(text, "- service_type: mds\n        service_id: odf-cephfs\n") != 1 {
+			if strings.Count(text, "- service_type: mds\n      service_id: odf-cephfs\n") != 1 {
 				t.Fatal("the reference cluster does not declare mds.odf-cephfs")
 			}
 		}
@@ -73,12 +73,12 @@ func TestMultidcExampleMigratesWithoutLegacyFields(t *testing.T) {
 }
 
 func TestReferenceStretchSitesMustBeEnvironmentSites(t *testing.T) {
-	const authored = "          - site-b\n\n        tiebreaker:\n          node: node-07\n          site: site-c\n"
+	const authored = "        - site-b\n\n      tiebreaker:\n        node: node-07\n        site: site-c\n"
 	for _, test := range []struct {
 		field, replacement, changedLine string
 	}{
-		{"$.spec.ceph.topology.stretch.dataSites[1]", strings.Replace(authored, "site-b", "site-z", 1), "- site-z"},
-		{"$.spec.ceph.topology.stretch.tiebreaker.site", strings.Replace(authored, "site-c", "site-z", 1), "site: site-z"},
+		{"$.spec.topology.stretch.dataSites[1]", strings.Replace(authored, "site-b", "site-z", 1), "- site-z"},
+		{"$.spec.topology.stretch.tiebreaker.site", strings.Replace(authored, "site-c", "site-z", 1), "site: site-z"},
 	} {
 		t.Run(test.field, func(t *testing.T) {
 			sources := exampleSources(t)

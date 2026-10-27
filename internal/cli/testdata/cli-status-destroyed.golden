@@ -14,11 +14,11 @@
 
   Clusters
   State       Cluster
-  [PENDING]   ContainerCluster/ocp-01
+  [PENDING]   OpenShiftCluster/ocp-01
 
   Storage clusters
   State       Cluster
-  [SKIPPED]   StorageCluster/ceph-01
+  [SKIPPED]   CephCluster/ceph-01
 
   Shared services
   State       Service                        Machine
@@ -37,7 +37,7 @@
 
   Machines
     [DONE] remove the installer media of rhel-01
-    [DONE] remove the virtual machine rhel-01 and its controller
+    [DONE] remove the virtual machine rhel-01 and its emulated BMC
   Substrates
     [DONE] remove the networks and virtual-media pool of lab-libvirt from controller
   Infrastructure

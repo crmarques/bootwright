@@ -26,4 +26,4 @@ spec:
         targetRevision: main
         path: clusters/compact
         destinationNamespace: bootstrap-demo
-        credentials: bootstrap-repository
+        credentialsRef: bootstrap-repository

@@ -1,0 +1,16 @@
+apiVersion: bootwright.io/v1alpha1
+kind: CephFilesystem
+metadata:
+  name: primary-files
+
+spec:
+  clusterRef: primary
+  metadataPoolRef: primary-metadata
+
+  dataPoolRefs:
+    - primary-data
+
+  mds:
+    activeCount: 1
+    standbyCountWanted: 1
+    standbyReplay: false

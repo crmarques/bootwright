@@ -1,7 +1,7 @@
 # IBM Ceph native cleanup qualification
 
 M2b source review found that a successful native cluster-removal command is
-not complete cleanup evidence. [Storage](../../specs/storage.md#removal-and-concurrency)
+not complete cleanup evidence. [Storage](../../specs/ceph.md#removal-and-concurrency)
 owns the required behavior; [B491](../../specs/milestones/m2.md#b491) owns its
 implementation and qualification.
 

@@ -91,7 +91,7 @@ func readProduced(t *testing.T, services cli.Services, contextName, block, name 
 }
 
 // snoContext initializes a context over the lab-sno example beside an external
-// Ceph StorageCluster, the shape the cluster access commands resolve names in.
+// CephCluster, the shape the cluster access commands resolve names in.
 func snoContext(t *testing.T) (cli.Services, *contextfs.Store, string) {
 	t.Helper()
 	services, repository, _, root := contextFixture(t)
@@ -113,7 +113,7 @@ func snoContext(t *testing.T) (cli.Services, *contextfs.Store, string) {
 	if err := os.MkdirAll(filepath.Join(input, "storage"), 0700); err != nil {
 		t.Fatal(err)
 	}
-	addSecretInput(t, filepath.Join(input, "storage"), "ceph.yaml", "apiVersion: bootwright.io/v1alpha1\nkind: StorageCluster\nmetadata:\n  name: ceph\nspec:\n  type: ceph\n  management: external\n")
+	addSecretInput(t, filepath.Join(input, "storage"), "ceph.yaml", "apiVersion: bootwright.io/v1alpha1\nkind: CephCluster\nmetadata:\n  name: ceph\nspec:\n  management: external\n")
 	contextRun(t, services, 0, "context", "init", "--name", "lab-sno", "--input-dir", input)
 	return services, repository, root
 }
@@ -127,7 +127,7 @@ func singleDiagnostic(t *testing.T, stderr, code string) {
 
 // The complete journey: an apply's proved completion leaves the kubeconfig in
 // custody, cluster kubeconfig reveals exactly those bytes for an explicit or
-// the current context, refuses a StorageCluster and an unknown name before any
+// the current context, refuses a CephCluster and an unknown name before any
 // custody read, and once a completed removal withdraws the entry it reports
 // the access unavailable, naming the apply that restores it.
 func TestClusterKubeconfigJourney(t *testing.T) {

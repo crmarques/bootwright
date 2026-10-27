@@ -66,7 +66,7 @@ index resolution does not prove direct blob access: the
 can select and verify a platform manifest without fetching its config blob.
 The manifest and blob paths therefore need separate boundary coverage.
 
-The [storage contract](../../specs/storage.md#bootstrap-identity-and-continuation)
+The [storage contract](../../specs/ceph.md#bootstrap-identity-and-continuation)
 defines the broker's single delivery hop and credential separation. A signed
 Location is private capability data, even though registry credentials do not
 travel with it. Keep it inside the broker and normalize delivery metadata and
@@ -177,7 +177,7 @@ launcher arguments. Test production launchers under `python -I` without an
 ambient collection, native error redaction, and malformed bytes reaching the
 parent independently of child validation.
 
-[Storage](../../specs/storage.md) owns these credential and diagnostic
+[Storage](../../specs/ceph.md) owns these credential and diagnostic
 boundaries. [Continuation after a fix](continuation-after-a-fix.md) explains why
 an automation correction can use a new build without setup when the runtime
 lock is unchanged. The image pull's budget is per preparation run: each run

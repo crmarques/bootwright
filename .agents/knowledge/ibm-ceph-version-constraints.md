@@ -2,7 +2,7 @@
 
 Use this page to route version-specific investigation and later compatibility
 work. It records public artifact findings and existing corrections, not a
-release allowlist. [Storage](../../specs/storage.md#frozen-release-and-trust)
+release allowlist. [Storage](../../specs/ceph.md#frozen-release-and-trust)
 owns release and trust requirements; [B472](../../specs/milestones/m2.md#b472)
 owns remaining adapter and feature qualification. A finding that needs a
 different native mechanic becomes a row of the
@@ -12,8 +12,8 @@ evidence inventory.
 
 ## Current authored example
 
-The [three-node declaration](../../examples/storage-clusters/libvirt-3-nodes-ceph/storage/cluster.yaml)
-and its [runbook](../../examples/storage-clusters/libvirt-3-nodes-ceph/README.md)
+The [three-node declaration](../../examples/ceph-clusters/libvirt-3-nodes-ceph/storage/cluster.yaml)
+and its [runbook](../../examples/ceph-clusters/libvirt-3-nodes-ceph/README.md)
 are the owners of these selections as of 2026-10-18:
 
 | Coordinate | Authored value |
@@ -85,7 +85,7 @@ cannot bypass this earlier precondition. This source fact does not establish
 the inventory or cause of any live failure.
 
 With `--skip-ssh`, this precondition conflicts with the deliberately empty
-inventory of [verified-tunnel staging](../../specs/storage-native-api.md#verified-native-orchestration-transport).
+inventory of [verifiedTunnel staging](../../specs/ceph-native-api.md#verified-native-orchestration-transport).
 The native error occurs after the output configuration, administrator keyring
 and seed MON/MGR exist, but before `apply_call_home_settings` and the final
 Call Home acceptance flag are initialized. When the verified host

@@ -4,10 +4,6 @@ metadata:
   name: controller
 
 spec:
-  capabilities:
-    - container-runtime
-    - libvirt
-
   os:
     provided: true
 

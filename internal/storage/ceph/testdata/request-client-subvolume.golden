@@ -8,7 +8,7 @@
     "path": "/usr/sbin/cephadm"
   },
   "client": {
-    "access": "read-write",
+    "access": "readWrite",
     "dataPools": [],
     "filesystem": "files",
     "group": "csi",
@@ -150,5 +150,5 @@
       "service_type": "mgr"
     }
   ],
-  "version": "ceph-core-v32"
+  "version": "ceph-core-v33"
 }

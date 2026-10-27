@@ -93,7 +93,7 @@ func (c Capability) HostObject(block reconciliation.Block) (reconciliation.Objec
 	if err != nil {
 		return reconciliation.ObjectRef{}, err
 	}
-	return reconciliation.ObjectRef{Kind: "ContainerCluster", Object: request.Cluster}, nil
+	return reconciliation.ObjectRef{Kind: "OpenShiftCluster", Object: request.Cluster}, nil
 }
 func (c Capability) StageTail(block reconciliation.BlockDefinition) (reconciliation.ObjectRef, bool, error) {
 	request, err := DecodeRequest(block.Request)
@@ -101,7 +101,7 @@ func (c Capability) StageTail(block reconciliation.BlockDefinition) (reconciliat
 		return reconciliation.ObjectRef{}, false, err
 	}
 	pkg, ok := c.registry.Find(request.Package)
-	return reconciliation.ObjectRef{Kind: "ContainerCluster", Object: request.Cluster}, ok && pkg.Last, nil
+	return reconciliation.ObjectRef{Kind: "OpenShiftCluster", Object: request.Cluster}, ok && pkg.Last, nil
 }
 func (c Capability) Removal(ctx context.Context, block reconciliation.Block) (lifecycle.Removal, error) {
 	if err := ctx.Err(); err != nil {

@@ -1,0 +1,17 @@
+apiVersion: bootwright.io/v1alpha1
+kind: CephPool
+metadata:
+  name: ec22-data
+
+spec:
+  clusterRef: ceph-lab
+  role: rbd
+  erasure:
+    dataChunks: 2
+    codingChunks: 2
+    plugin: isa
+    crushDeviceClass: hdd
+  autoscale:
+    mode: 'on'
+    pgNumMin: 8
+    pgNumMax: 64

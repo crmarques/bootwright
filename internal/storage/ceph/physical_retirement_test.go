@@ -39,7 +39,7 @@ func physicalRetirementFixture(t *testing.T) (PhysicalRetirementCapability, life
 		request.Hosts[i].EraseWWNs = []string{request.Hosts[i].Devices[0].WWN}
 	}
 	data, _ := request.Canonical()
-	block := retirementBlock(t, PhysicalRetirementBlockID(cluster.Cluster), string(api.StorageCluster), cluster.Cluster, PhysicalRetirementImplementation, data)
+	block := retirementBlock(t, PhysicalRetirementBlockID(cluster.Cluster), string(api.CephCluster), cluster.Cluster, PhysicalRetirementImplementation, data)
 	execution := lifecycle.Execution{ApplyOperation: "apply-original", Operation: "remove-original", Block: block}
 	identity := PhysicalIdentity{UUID: "11111111-1111-4111-8111-111111111111", MACs: []string{"02:00:00:00:00:01"}}
 	proofs := map[string]PhysicalErasure{}
@@ -53,7 +53,7 @@ func physicalRetirementFixture(t *testing.T) (PhysicalRetirementCapability, life
 	for _, host := range cluster.Hosts {
 		hostRequest := HostRequest{Version: HostVersion, Cluster: scopeOf(cluster), Host: host.Name}
 		data, _ := hostRequest.canonical()
-		hostBlock := retirementBlock(t, HostBlockID(cluster.Cluster, host.Machine), string(api.StorageCluster), cluster.Cluster, HostImplementation, data)
+		hostBlock := retirementBlock(t, HostBlockID(cluster.Cluster, host.Machine), string(api.CephCluster), cluster.Cluster, HostImplementation, data)
 		hostExecution := execution
 		hostExecution.Block = hostBlock
 		evidence := preparedEvidence(t, hostExecution, hostRequest, func(value *HostEvidence) {
@@ -105,10 +105,10 @@ func TestPhysicalCephRetirementRecordsPendingDispositionWithoutNativeEffects(t *
 	}
 	execution.ApplyProved = append(execution.ApplyProved, retirementRecord(execution.Block, reconciliation.Apply, prepared.Evidence))
 	canonical, _ := cluster.Canonical()
-	core := retirementBlock(t, ClusterBlockID(cluster.Cluster), string(api.StorageCluster), cluster.Cluster, Implementation, canonical)
+	core := retirementBlock(t, ClusterBlockID(cluster.Cluster), string(api.CephCluster), cluster.Cluster, Implementation, canonical)
 	execution.Block, execution.RetiredWithHosts = core, true
 	runner := &recordingRunner{}
-	storage := New(api.StorageCluster, runner).WithProofs(capability.proofs)
+	storage := New(api.CephCluster, runner).WithProofs(capability.proofs)
 	result, err := storage.Destroy(context.Background(), execution)
 	var pending Retirement
 	if err != nil || json.Unmarshal(result.Evidence, &pending) != nil || !pending.PendingErase || runner.calls != 0 {
@@ -214,7 +214,7 @@ func TestPhysicalRetirementIntentOnlyRequiresPositiveUnstartedCore(t *testing.T)
 			execution.RemovalProved = slices.DeleteFunc(execution.RemovalProved, func(pair lifecycle.RemovalEvidence) bool { return pair.Applied.Implementation == HostImplementation })
 			if state != "" {
 				data, _ := cluster.Canonical()
-				block := retirementBlock(t, ClusterBlockID(cluster.Cluster), string(api.StorageCluster), cluster.Cluster, Implementation, data)
+				block := retirementBlock(t, ClusterBlockID(cluster.Cluster), string(api.CephCluster), cluster.Cluster, Implementation, data)
 				proof := retirementRecord(block, reconciliation.Apply, nil)
 				proof.State = state
 				execution.OriginalRemovalDependents = []lifecycle.BlockEvidence{proof}
@@ -326,7 +326,7 @@ func TestPhysicalPolicyCleanupGoldenRequiresPositiveCoreAndInstallationNoEffectP
 			})
 			if state != "" {
 				data, _ := cluster.Canonical()
-				block := retirementBlock(t, ClusterBlockID(cluster.Cluster), string(api.StorageCluster), cluster.Cluster, Implementation, data)
+				block := retirementBlock(t, ClusterBlockID(cluster.Cluster), string(api.CephCluster), cluster.Cluster, Implementation, data)
 				proof := retirementRecord(block, reconciliation.Apply, nil)
 				proof.State = state
 				execution.OriginalRemovalDependents = []lifecycle.BlockEvidence{proof}

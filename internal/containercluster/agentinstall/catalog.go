@@ -6,11 +6,12 @@ import (
 	"strings"
 	"time"
 
+	"github.com/crmarques/bootwright/internal/reconciliation"
 	"github.com/crmarques/bootwright/internal/substrate"
 )
 
 // Kind is the API kind these capabilities realize.
-const Kind = "ContainerCluster"
+const Kind = "OpenShiftCluster"
 
 // The frozen identities of the two capabilities. A plan records one per block,
 // and a continuation refuses when the executable no longer offers it. They are
@@ -24,7 +25,7 @@ const (
 
 const (
 	mediaRequestVersion   = "cluster-media-agent-v9"
-	installRequestVersion = "cluster-install-agent-v7"
+	installRequestVersion = "cluster-install-agent-v8"
 )
 
 // mediaMargin is what a media run's deadline allows beyond its build budget:
@@ -75,8 +76,12 @@ const (
 // MediaBlockID and InstallBlockID name the blocks these capabilities
 // contribute. A consumer states requirements by API object, never by these
 // identities.
-func MediaBlockID(cluster string) string   { return "cluster-media-" + cluster }
-func InstallBlockID(cluster string) string { return "cluster-install-" + cluster }
+func MediaBlockID(cluster string) string {
+	return reconciliation.BlockIdentity("cluster-media-", cluster)
+}
+func InstallBlockID(cluster string) string {
+	return reconciliation.BlockIdentity("cluster-install-", cluster)
+}
 
 // KubeconfigOutput names the administrator access an installation block
 // offers for custody once it proves the installation complete, and the key

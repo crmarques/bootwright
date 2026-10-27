@@ -27,11 +27,6 @@ func TestUnsupportedControllerShapesRefuseBeforeRegistration(t *testing.T) {
 		reason, remedy string
 	}{
 		{
-			name: "an extra capability", old: "    - libvirt\n", new: "    - libvirt\n    - ceph-node\n",
-			reason: "this executable's controller stage prepares only the container-runtime and libvirt capabilities, and Machine/controller declares another at spec.capabilities[2]",
-			remedy: "remove spec.capabilities[2] from Machine/controller",
-		},
-		{
 			name: "a managed Proxy", old: "    direct: {}\n", new: "    proxyRef: lab-proxy\n",
 			reason: "this executable's controller stage acquires only directly or through an external Proxy that is already ready, and Machine/controller selects the managed Proxy/lab-proxy",
 			remedy: "select direct: {} or an external Proxy in spec.proxy on Machine/controller",

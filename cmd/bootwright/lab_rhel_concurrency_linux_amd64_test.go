@@ -75,7 +75,7 @@ func TestThreeNodeRHELExampleSharesOnePublicationAndAdmitsIndependentWork(t *tes
 	readyIDs := func(selection reconciliation.StageSelection) []string {
 		ids := []string{}
 		claims := map[string]string{}
-		for _, block := range reconciliation.Startable(plan, states, selection) {
+		for _, block := range reconciliation.Startable(plan, states, reconciliation.Selection{Stages: selection}) {
 			for _, key := range block.Exclusive {
 				if other := claims[key]; other != "" {
 					t.Fatalf("ready siblings %s and %s share exclusive resource %s", other, block.ID, key)
@@ -87,12 +87,12 @@ func TestThreeNodeRHELExampleSharesOnePublicationAndAdmitsIndependentWork(t *tes
 		slices.Sort(ids)
 		return ids
 	}
-	infra, _ := reconciliation.ParseStages([]string{"infra-components"})
+	infra, _ := reconciliation.ParseStages([]string{"infrastructure-services"})
 	if got := readyIDs(infra); !slices.Equal(got, []string{"artifact-server-lab-artifacts", "dns-lab-dns", "ntp-lab-ntp", "proxy-lab-proxy"}) {
 		t.Fatal("infrastructure siblings cannot start together:", got)
 	}
 	for _, block := range plan.Blocks {
-		if block.Stage == reconciliation.StageInfraComponents || block.Stage == reconciliation.StageSubstrates {
+		if block.Stage == reconciliation.StageInfrastructureServices || block.Stage == reconciliation.StageSubstrates {
 			states[block.ID] = reconciliation.BlockDone
 		}
 	}

@@ -2,7 +2,7 @@
 
 How an agent ISO boots on a VMware virtual machine and what the vSphere platform
 asks of the installation. [Substrates](../../specs/substrates.md) and
-[container clusters](../../specs/container-clusters.md) own the required
+[container clusters](../../specs/openshift-clusters.md) own the required
 behavior; this page records native facts for
 [B99](../../specs/milestones/m1.md#b99) (the vSphere Machine arm),
 [B733](../../specs/milestones/m3.md#b733) (OpenShift on vSphere) and

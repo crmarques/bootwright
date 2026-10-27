@@ -13,7 +13,7 @@ func addonSchema() *Shape {
 		field("secretType", enumeration("opaque", "token", "usernamePassword", "dockerConfigJson", "caBundle", "tlsCertificate", "sshKeyPair")),
 		defaulted("required", boolean(), BoolValue(true)),
 		field("effects", array(choice(
-			field("storageExportAttachment", record()),
+			field("cephConsumerAttachment", record()),
 			field("globalPullSecretMerge", record(required("registry", nonempty()), required("username", nonempty()))),
 		))),
 	))
@@ -70,7 +70,7 @@ func addonStepSchema() *Shape {
 	target := choice(
 		field("boundCluster", record()),
 		field("fromInput", record(required("input", nonempty()))),
-		field("static", record(field("clusters", array(ref(ContainerCluster, StorageCluster))), field("machines", array(ref(Machine))))),
+		field("static", record(field("clusters", array(clusters(ContainerClusterCategory, StorageClusterCategory))), field("machines", array(ref(Machine))))),
 		field("limit", enumeration("firstReachable", "all")),
 	)
 	target.Arms = []string{"boundCluster", "fromInput", "static"}
@@ -93,7 +93,7 @@ func addonProfileSchema() *Shape {
 func addonBindingSchema() *Shape {
 	configs := array(record(required("addonRef", ref(ClusterAddon)), field("inputs", named(record(required("name", nonempty()), required("value", nonempty()))))))
 	configs.NameKey = "addonRef"
-	return record(required("clusterRef", ref(ContainerCluster)), field("profileRefs", array(ref(ClusterAddonProfile))), field("addonRefs", array(ref(ClusterAddon))), field("addonConfigs", configs), field("packages", addonPackagesSchema()))
+	return record(required("clusterRef", clusters(ContainerClusterCategory)), field("profileRefs", array(ref(ClusterAddonProfile))), field("addonRefs", array(ref(ClusterAddon))), field("addonConfigs", configs), field("packages", addonPackagesSchema()), field("afterRefs", set(ref(ClusterAddonBinding))))
 }
 
 type PackageSubscription struct {

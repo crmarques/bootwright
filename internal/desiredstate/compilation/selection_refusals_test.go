@@ -16,18 +16,18 @@ type selectionRefusal struct {
 }
 
 func selectionRefusals() []selectionRefusal {
-	clusters := "apiVersion: bootwright.io/v1alpha1\nkind: ContainerCluster\nmetadata: {name: b}\nspec: {}\n---\napiVersion: bootwright.io/v1alpha1\nkind: ContainerCluster\nmetadata: {name: a}\nspec: {}\n"
+	clusters := "apiVersion: bootwright.io/v1alpha1\nkind: OpenShiftCluster\nmetadata: {name: b}\nspec: {}\n---\napiVersion: bootwright.io/v1alpha1\nkind: OpenShiftCluster\nmetadata: {name: a}\nspec: {}\n"
 	// The add-on is retained only through cluster a's binding, so its static
 	// target is a cluster-retained reference to the excluded cluster b.
 	excludedReferrer := "---\napiVersion: bootwright.io/v1alpha1\nkind: ClusterAddonBinding\nmetadata: {name: a-addons}\nspec: {clusterRef: a, addonRefs: [tune]}\n" +
 		"---\napiVersion: bootwright.io/v1alpha1\nkind: ClusterAddon\nmetadata: {name: tune}\nspec:\n  manifestSet: {manifests: [{path: manifests/a.yaml}]}\n  steps:\n  - name: configure\n    gates: apply\n    playbook: configure.yaml\n    target: {static: {clusters: [b]}}\n"
 	return []selectionRefusal{
 		{"unresolved cluster", environmentYAML + "  containerClusters: [missing]\n", clusters,
-			"$.spec.containerClusters[0]", "api.reference", "no ContainerCluster named missing is declared", "select one of: a, b", 9, 0},
+			"$.spec.containerClusters[0]", "api.reference", "no OpenShiftCluster named missing is declared", "select one of: a, b", 9, 0},
 		{"cluster entry that is not a name", environmentYAML + "  containerClusters: [" + refusalSentinel + ".]\n", "",
-			"$.spec.containerClusters[0]", "api.reference", "cluster selection entry is not a cluster name", "declare the ContainerCluster or remove the entry", 9, 1},
+			"$.spec.containerClusters[0]", "api.reference", "cluster selection entry is not a cluster name", "declare the OpenShiftCluster or remove the entry", 9, 1},
 		{"reference to an excluded root", environmentYAML + "  containerClusters: [a]\n", clusters + excludedReferrer,
-			"$.spec.steps[0].target.static.clusters[0]", "api.reference", "ContainerCluster/b is excluded by the Environment's cluster selection", "add b to Environment spec.containerClusters, or correct the reference", 25, 0},
+			"$.spec.steps[0].target.static.clusters[0]", "api.reference", "OpenShiftCluster/b is excluded by the Environment's cluster selection", "add b to Environment spec.containerClusters, or correct the reference", 25, 0},
 		{"empty cluster list", environmentYAML + "  containerClusters: []\n", "",
 			"$.spec.containerClusters", "api.value", "list must contain at least one entry", "add at least one entry, or omit the field", 9, 1},
 	}

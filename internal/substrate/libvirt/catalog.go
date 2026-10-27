@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"strings"
 
+	"github.com/crmarques/bootwright/internal/reconciliation"
 	"github.com/crmarques/bootwright/internal/substrate"
 )
 
@@ -61,9 +62,11 @@ const (
 
 // HostBlockID and MachineBlockID name the blocks each capability contributes.
 // A consumer states requirements by API object, never by these identities.
-func HostBlockID(provider string) string { return "substrate-host-" + provider }
+func HostBlockID(provider string) string {
+	return reconciliation.BlockIdentity("substrate-host-", provider)
+}
 
-func MachineBlockID(machine string) string { return "machine-" + machine }
+func MachineBlockID(machine string) string { return reconciliation.BlockIdentity("machine-", machine) }
 
 // HostContentDigest and MachineContentDigest bind a plan to the exact behavior
 // this build implements, so changing the request shape, the pinned emulator or

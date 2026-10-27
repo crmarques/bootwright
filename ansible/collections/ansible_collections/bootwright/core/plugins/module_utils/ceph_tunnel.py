@@ -87,8 +87,8 @@ def crypto_policy(value):
 
 def targets(request):
     """A native address selects exactly one original installation endpoint."""
-    require(isinstance(request, dict) and request.get("version") == "ceph-core-v32")
-    require(request.get("clusterSSHTransport") == "verified-tunnel")
+    require(isinstance(request, dict) and request.get("version") == "ceph-core-v33")
+    require(request.get("clusterSSHTransport") == "verifiedTunnel")
     require(named(request.get("owner")) and named(request.get("clusterSSHUser")))
     try:
         require(str(uuid.UUID(request["fsid"])) == request["fsid"])
@@ -316,7 +316,7 @@ def unique_object(pairs):
 def validate_manifest(value):
     require(isinstance(value, dict) and set(value) == {"version", "owner", "fsid", "nativeUser", "hosts", "cryptoPolicy", "identityPublicKey", "files"})
     require(value["version"] == "ceph-tunnel-v3")
-    request = {"version": "ceph-core-v32", "clusterSSHTransport": "verified-tunnel",
+    request = {"version": "ceph-core-v33", "clusterSSHTransport": "verifiedTunnel",
                "owner": value["owner"], "fsid": value["fsid"], "clusterSSHUser": value["nativeUser"], "hosts": value["hosts"]}
     require(targets(request) == value["hosts"])
     require(all(set(host) == {"name", "address", "port"} for host in value["hosts"]))

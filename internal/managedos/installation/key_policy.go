@@ -54,7 +54,7 @@ func fipsKey(contextName string, request Request, publicLine, reference, purpose
 	fields := strings.Fields(publicLine)
 	machine, secret := "Machine/"+request.Identity.Object, "Secret/"+reference
 	remedy := "take this context back with bootwright destroy --context " + contextName + ", then replace " + secret +
-		" with an ECDSA key or an RSA key of at least 2048 bits, for example a generated keyType ecdsa-p256 or rsa, or disable spec.customizations.security.fips on MachineInstallProfile/" +
+		" with an ECDSA key or an RSA key of at least 2048 bits, for example a generated keyType ecdsaP256 or rsa, or disable spec.customizations.security.fips on MachineInstallProfile/" +
 		request.Identity.Profile + ", and run bootwright apply --context " + contextName + "; an apply that continues reads the key version this context bound"
 	switch fields[0] {
 	case "ecdsa-sha2-nistp256", "ecdsa-sha2-nistp384", "ecdsa-sha2-nistp521":

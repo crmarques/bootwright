@@ -59,7 +59,7 @@ func TestAddonSemanticFailures(t *testing.T) {
 		{"manifest segment", base.With("manifestSet", m("manifests", manifests("payload/a.yaml")))},
 		{"manifest suffix", base.With("manifestSet", m("manifests", manifests("manifests/a.json")))},
 		{"capability readiness", base.With("provides", api.StringList("customCapability"))},
-		{"storage effect kind", base.With("inputs", l(m("name", s("input"), "resourceKind", s("Machine"), "effects", l(m("storageExportAttachment", m())))))},
+		{"storage effect kind", base.With("inputs", l(m("name", s("input"), "resourceKind", s("Machine"), "effects", l(m("cephConsumerAttachment", m())))))},
 		{"storage effect capability", base.With("inputs", l(storageInput("export")))},
 		{"pull-secret type", base.With("inputs", l(m("name", s("credential"), "secretType", s("opaque"), "effects", l(m("globalPullSecretMerge", m("registry", s("registry.example.test"), "username", s("reader")))))))},
 		{"empty step", base.With("steps", l(m("name", s("empty"), "gates", s("apply"))))},
@@ -175,13 +175,13 @@ func TestIterativeProfileDAG(t *testing.T) {
 func TestTypedBindingInputsAndStorageAttachments(t *testing.T) {
 	input := storageInput("arbitrary-label")
 	addon := manifestAddon("storage").WithSpec(manifestAddon("storage").Spec().With("provides", api.StringList("dataFoundation")).With("inputs", l(input, m("name", s("optional"), "secretType", s("token"), "required", api.BoolValue(false)))))
-	export := obj(api.StorageExport, "export", m())
+	export := obj(api.CephConsumer, "export", m())
 	binding := obj(api.ClusterAddonBinding, "binding", m("clusterRef", s("cluster"), "addonRefs", api.StringList("storage"), "addonConfigs", l(m("addonRef", s("storage"), "inputs", l(m("name", s("arbitrary-label"), "value", s("export")))))))
 	catalog := api.NewCatalog([]api.Object{addon, export, binding})
 	if issues := Validate(binding, catalog); len(issues) != 0 {
 		t.Fatal(issues)
 	}
-	if got := StorageAttachments(catalog); !reflect.DeepEqual(got, []Attachment{{ClusterRef: "cluster", ExportRef: "export"}}) {
+	if got := StorageAttachments(catalog); !reflect.DeepEqual(got, []Attachment{{ClusterRef: "cluster", ConsumerRef: "export"}}) {
 		t.Fatalf("attachments = %v", got)
 	}
 	for _, altered := range []api.Object{
@@ -256,7 +256,7 @@ func TestPartialDefaultsNeedOnlyPresentPrerequisites(t *testing.T) {
 		m("steps", l(m("target", m("static", m())))),
 		m("steps", l(m("follows", s("operatorReady")))),
 		m("manifestSet", m("manifests", l(m()))),
-		m("inputs", l(m("name", s("input"), "effects", l(m("storageExportAttachment", m()))))),
+		m("inputs", l(m("name", s("input"), "effects", l(m("cephConsumerAttachment", m()))))),
 	} {
 		o := obj(api.ClusterAddon, "", spec)
 		if issues := ValidatePartial(o, api.NewCatalog(nil)); len(issues) != 0 {
@@ -267,7 +267,7 @@ func TestPartialDefaultsNeedOnlyPresentPrerequisites(t *testing.T) {
 		m("steps", l(m("playbook", s("../escape.yaml")))),
 		m("steps", l(m("source", m("git", m())))),
 		m("provides", api.StringList("capability"), "readiness", m("checks", l())),
-		m("inputs", l(m("name", s("input"), "resourceKind", s("Machine"), "effects", l(m("storageExportAttachment", m()))))),
+		m("inputs", l(m("name", s("input"), "resourceKind", s("Machine"), "effects", l(m("cephConsumerAttachment", m()))))),
 	} {
 		issues := ValidatePartial(obj(api.ClusterAddon, "", spec), api.NewCatalog(nil))
 		if len(issues) == 0 {
@@ -304,7 +304,7 @@ func manifestAddon(name string) api.Object {
 }
 
 func storageInput(name string) api.Value {
-	return m("name", s(name), "resourceKind", s("StorageExport"), "effects", l(m("storageExportAttachment", m())))
+	return m("name", s(name), "resourceKind", s("CephConsumer"), "effects", l(m("cephConsumerAttachment", m())))
 }
 
 func names(objects []api.Object) []string {

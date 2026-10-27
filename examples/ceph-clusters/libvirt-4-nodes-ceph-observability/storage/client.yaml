@@ -1,0 +1,9 @@
+apiVersion: bootwright.io/v1alpha1
+kind: CephClient
+metadata:
+  name: rbd-canary
+
+spec:
+  clusterRef: ceph-lab
+  poolRef: rbd-data
+  access: readWrite

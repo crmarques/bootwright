@@ -10,11 +10,11 @@ import (
 // compared as Go's hostname verification compares an IP. A stored one, a
 // missing or mistyped Secret, and an unnameable address are another rule's.
 func TestAGeneratedBMCCertificateNamesItsBindAddress(t *testing.T) {
-	const field = "$.spec.libvirt.bmcEmulationDefaults.certificateRef"
-	host := obj(api.Machine, "host", m("capabilities", api.StringList("libvirt")))
+	const field = "$.spec.libvirt.bmcEmulation.certificateRef"
+	host := obj(api.Machine, "host", m())
 	provider := func(address string) api.Object {
 		o, _ := Normalize(obj(api.InfraProvider, "lab", m("libvirt", m("machineRef", "host", "uri", "qemu:///system",
-			"bmcEmulationDefaults", m("port", api.IntegerValue("8000"), "bindAddress", address, "certificateRef", "bmc-tls", "auth", m("credentialsRef", "bmc"))))), api.Catalog{})
+			"bmcEmulation", m("port", api.IntegerValue("8000"), "bindAddress", address, "certificateRef", "bmc-tls", "auth", m("credentialsRef", "bmc"))))), api.Catalog{})
 		return o
 	}
 	generated := func(ips ...string) api.Object {
@@ -49,7 +49,7 @@ func TestAGeneratedBMCCertificateNamesItsBindAddress(t *testing.T) {
 				}
 				return
 			}
-			address := o.Spec().Get("libvirt", "bmcEmulationDefaults", "bindAddress").Text()
+			address := o.Spec().Get("libvirt", "bmcEmulation", "bindAddress").Text()
 			want := api.Issue{Code: "api.invariant", Field: field,
 				Message: "the emulated BMC serves HTTPS at " + address + ", which the generated certificate of Secret/bmc-tls does not name",
 				Remediation: "add " + address + " to spec.source.generated.ipAddresses of Secret/bmc-tls, import the change with bootwright context update --name <context> --input-dir <dir>, " +
@@ -61,7 +61,7 @@ func TestAGeneratedBMCCertificateNamesItsBindAddress(t *testing.T) {
 	}
 	unnameable := provider("0.0.0.0")
 	issues := Validate(unnameable, api.NewCatalog([]api.Object{unnameable, host, generated("192.0.2.1")}))
-	if len(issues) != 1 || issues[0].Field != "$.spec.libvirt.bmcEmulationDefaults.bindAddress" {
+	if len(issues) != 1 || issues[0].Field != "$.spec.libvirt.bmcEmulation.bindAddress" {
 		t.Fatalf("an unnameable address was judged beside its own refusal: %+v", issues)
 	}
 }

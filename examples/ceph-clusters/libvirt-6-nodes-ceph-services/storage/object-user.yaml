@@ -1,0 +1,9 @@
+apiVersion: bootwright.io/v1alpha1
+kind: CephObjectUser
+metadata:
+  name: services-canary
+
+spec:
+  clusterRef: ceph-lab
+  objectGatewayRef: objects
+  displayName: Services qualification

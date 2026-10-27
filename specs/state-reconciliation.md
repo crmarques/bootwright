@@ -9,13 +9,15 @@ One complete validated Environment selection rooted in one environment
 directory is one lifecycle unit. [API selection](api.md#environment-directory-and-selected-state)
 owns graph membership. Operations cover the entire unit; a public request
 cannot narrow it to kinds, clusters, machines, or ranges. A
-[stage selection](#stages-and-the-pause-boundary) is the one exception, and it
-narrows nothing: the plan stays complete and frozen, and the selection only
-gates which of its blocks this invocation may start.
+[stage selection](#stages-and-the-pause-boundary), with its
+[stop after an add-on instance](#stopping-after-an-add-on-instance), is the one
+exception, and it narrows nothing: the plan stays complete and frozen, and the
+selection only gates which of its blocks this invocation may start.
 
 Supported operation modes are:
 
-- a fresh full-context `apply`, optionally stopping at a stage boundary;
+- a fresh full-context `apply`, optionally stopping at a stage boundary or
+  after a named add-on instance;
 - continuation of a paused, interrupted or failed `apply`, or of an
   interrupted `destroy`, against its exact frozen plan; and
 - a `destroy` of everything the apply [owns](#continuation-and-removal),
@@ -331,7 +333,23 @@ and never wraps or reuses an earlier path.
 Context names and operation and block IDs are canonical lowercase ASCII
 segments matching `[a-z0-9](?:[-a-z0-9]{0,61}[a-z0-9])?`. They contain no
 separator, dot segment, whitespace, encoding escape, or user-facing
-description. Each is validated before lookup or path construction and never
+description.
+
+A block ID is a fixed prefix of at most 46 bytes, such as `os-install-` or
+`ceph-service-`, followed by the tail its objects contribute, such as a Machine
+name or `<cluster>-crash`. When prefix and tail fit 63 bytes the ID is exactly
+their concatenation, so an ID of at most 63 bytes never moves. A longer one
+keeps the first 46 bytes of that concatenation, which hold the whole prefix,
+without a trailing hyphen, then a hyphen and the first 16 hex digits of the
+SHA-256 of the whole concatenation. The ID depends only on the concatenated
+bytes, so a planner that builds `ceph-` plus `cluster-<name>` and a builder
+that builds `ceph-cluster-` plus `<name>` name the same block at every length;
+two names that share a long head name different blocks, and
+no [object name limit](api.md#object-names) depends on a prefix or on the
+services a cluster declares. A short name can spell a long name's hashed ID;
+the plan then refuses with `lifecycle.state`, naming both objects and the
+block, and the remedy renames one of them. A native name keeps its own limit on its own
+field; no block ID becomes a native host, service or Kubernetes object name. Each is validated before lookup or path construction and never
 comes from an Ansible role, play, task, host alias, or vendor response.
 
 A context is identified by its name alone, under the
@@ -873,53 +891,53 @@ one a row's field path names on its object while a block realizes the target.
 | `os-install` `Machine` | `ArtifactServer` | the install profile's and the Machine's artifact endpoints |
 | `os-install` `Machine` | `DNSServer` | the `dns` selections of the Machine's network configuration |
 | `os-install` `Machine` | `NTPServer` | `spec.os.install.ntp[].serverRef` |
-| `os-install` `Machine` | `StorageCluster` from `storage-physical-retirement` | a storage cluster whose retirement must release this physical Machine first |
+| `os-install` `Machine` | `CephCluster` from `storage-physical-retirement` | a storage cluster whose retirement must release this physical Machine first |
 | `physical-erase` `Machine` | `Machine` from `substrate-machine` | the Machine itself |
 | `physical-erase` `Machine` | `ArtifactServer` | the erase image's artifact endpoint |
 | `physical-erase` `Machine` | `DNSServer` | the `dns` selections of the Machine's network configuration |
 | `physical-erase` `Machine` | `NTPServer` | `spec.os.install.ntp[].serverRef` |
-| `physical-erase` `Machine` | `StorageCluster` from `storage-physical-retirement` | a storage cluster whose retirement must release this physical Machine first |
+| `physical-erase` `Machine` | `CephCluster` from `storage-physical-retirement` | a storage cluster whose retirement must release this physical Machine first |
 | `os-package-tree` `MachineInstallProfile` | `ArtifactServer` | `spec.installer.anaconda.packageSource.hostedTree.artifactServerEndpoint.serverRef`, `spec.installer.anaconda.redfishVirtualMedia.artifactServerEndpoint.serverRef` |
 | `os-package-tree` `MachineInstallProfile` | `Environment` | the selected Environment, whose controller stage prepares the host |
 | `managed-service` `ArtifactServer` | `InfraProvider` | the provider whose libvirt bridge carries the placement Machine's service address |
 | `managed-service` `DNSServer` | `InfraProvider` | the provider whose libvirt bridge carries the placement Machine's service address |
 | `managed-service` `NTPServer` | `InfraProvider` | the provider whose libvirt bridge carries the placement Machine's service address |
 | `managed-service` `Proxy` | `InfraProvider` | the provider whose libvirt bridge carries the placement Machine's service address |
-| `cluster-media` `ContainerCluster` | `ArtifactServer` | `spec.install.agent.redfishVirtualMedia.artifactServerEndpoint.serverRef` |
-| `cluster-media` `ContainerCluster` | `Proxy` | `spec.install.proxy.proxyRef` |
-| `cluster-install` `ContainerCluster` | `Machine` | `spec.nodes[].machineRef` |
-| `cluster-install` `ContainerCluster` | `DNSServer` | the `dns` selections of each node's network configuration |
-| `cluster-install` `ContainerCluster` | `NTPServer` | `spec.install.ntp[].serverRef` |
-| `cluster-install` `ContainerCluster` | `Proxy` | `spec.install.proxy.proxyRef` |
-| `cluster-network` `ContainerClusterNetwork` | `ContainerCluster` | the cluster whose secondary networks it configures |
-| `cluster-network` `ContainerClusterNetwork` | `ClusterAddonBinding` | the add-on instance on that cluster that provides `nmstate` |
-| `addon-instance` `ClusterAddonBinding` | `ContainerCluster` | the binding's `spec.clusterRef` |
+| `cluster-media` `OpenShiftCluster` | `ArtifactServer` | `spec.install.agent.redfishVirtualMedia.artifactServerEndpoint.serverRef` |
+| `cluster-media` `OpenShiftCluster` | `Proxy` | `spec.install.proxy.proxyRef` |
+| `cluster-install` `OpenShiftCluster` | `Machine` | `spec.nodes[].machineRef` |
+| `cluster-install` `OpenShiftCluster` | `DNSServer` | the `dns` selections of each node's network configuration |
+| `cluster-install` `OpenShiftCluster` | `NTPServer` | `spec.install.ntp[].serverRef` |
+| `cluster-install` `OpenShiftCluster` | `Proxy` | `spec.install.proxy.proxyRef` |
+| `cluster-network` `OpenShiftClusterNetwork` | `OpenShiftCluster` | the cluster whose secondary networks it configures |
+| `cluster-network` `OpenShiftClusterNetwork` | `ClusterAddonBinding` | the add-on instance on that cluster that provides `nmstate` |
+| `addon-instance` `ClusterAddonBinding` | `OpenShiftCluster` | the binding's `spec.clusterRef` |
 | `addon-instance` `ClusterAddonBinding` | `ClusterAddonBinding` | each instance on the same cluster providing a capability the package requires |
-| `addon-instance` `ClusterAddonBinding` | `StorageExport` | the package's `storageExportRef` |
-| `storage-core` `StorageCluster` | `Machine` | `spec.ceph.topology.nodes[].machineRef` |
-| `storage-core` `StoragePool` | `StoragePlacementPolicy` | `spec.placementPolicyRef` |
-| `storage-core` `StorageRBDImage` | `StoragePool` | `spec.poolRef`, `spec.dataPoolRef` |
-| `storage-core` `StorageFilesystem` | `StoragePool` | `spec.metadataPoolRef`, `spec.dataPoolRefs[]` |
-| `storage-core` `StorageSubvolume` | `StorageFilesystem` | `spec.filesystemRef` |
-| `storage-core` `StorageClient` | `StoragePool` | `spec.poolRef` |
-| `storage-core` `StorageClient` | `StorageSubvolume` | `spec.subvolumeRef` |
-| `storage-core` `StorageNFSExport` | `StorageSubvolume` | `spec.subvolumeRef` |
-| `storage-core` `StorageNFSExport` | `StorageObjectUser` | `spec.objectUserRef` |
-| `storage-core` `StorageNVMeoFSubsystem` | `StorageRBDImage` | `spec.namespaces[].imageRef` |
-| `storage-core` `StorageObjectUser` | `StorageObjectGateway` | `spec.objectGatewayRef` |
-| `storage-core` `StorageObjectBucket` | `StorageObjectUser` | `spec.ownerRef` |
-| `storage-export` `StorageExport` | `StorageCluster` | `spec.clusterRef` |
-| `storage-export` `StorageExport` | `StoragePool` | `spec.dataFoundation.rbdPoolRef` |
-| `storage-export` `StorageExport` | `StorageFilesystem` | `spec.dataFoundation.filesystemRef` |
-| `storage-export` `StorageExport` | `StorageObjectGateway` | `spec.dataFoundation.objectGatewayRef` |
-| `storage-export` `StorageExport` | `DNSServer` | every DNSServer of the selection, when the export names an object gateway |
-| `storage-host` `StorageCluster` | `Machine` | `spec.ceph.topology.nodes[].machineRef` |
-| `storage-host` `StorageCluster` | `MachineInstallProfile` | each node Machine's `spec.os.installProfileRef` |
-| `storage-physical-retirement` `StorageCluster` | `Machine` from `substrate-machine` | `spec.ceph.topology.nodes[].machineRef` |
-| `storage-replication` `StorageReplication` | `StoragePool` | `spec.poolRef`, `spec.peerPoolRef` |
-| `storage-replication` `StorageReplication` | `StorageRBDImage` | `spec.imageRefs[]` |
-| `storage-smb` `StorageSMBResource` | `StorageSMBResource` | `spec.smbClusterRef`, `spec.resourceRefs[]` |
-| `storage-smb` `StorageSMBResource` | `StorageSubvolume` | `spec.subvolumeRef` |
+| `addon-instance` `ClusterAddonBinding` | `CephConsumer` | the package's `cephConsumerRef` |
+| `storage-core` `CephCluster` | `Machine` | `spec.topology.nodes[].machineRef` |
+| `storage-core` `CephPool` | `CephPlacementPolicy` | `spec.placementPolicyRef` |
+| `storage-core` `CephRBDImage` | `CephPool` | `spec.poolRef`, `spec.dataPoolRef` |
+| `storage-core` `CephFilesystem` | `CephPool` | `spec.metadataPoolRef`, `spec.dataPoolRefs[]` |
+| `storage-core` `CephSubvolume` | `CephFilesystem` | `spec.filesystemRef` |
+| `storage-core` `CephClient` | `CephPool` | `spec.poolRef` |
+| `storage-core` `CephClient` | `CephSubvolume` | `spec.subvolumeRef` |
+| `storage-core` `CephNFSExport` | `CephSubvolume` | `spec.subvolumeRef` |
+| `storage-core` `CephNFSExport` | `CephObjectUser` | `spec.objectUserRef` |
+| `storage-core` `CephNVMeoFSubsystem` | `CephRBDImage` | `spec.namespaces[].imageRef` |
+| `storage-core` `CephObjectUser` | `CephObjectGateway` | `spec.objectGatewayRef` |
+| `storage-core` `CephObjectBucket` | `CephObjectUser` | `spec.ownerRef` |
+| `storage-consumer` `CephConsumer` | `CephCluster` | `spec.clusterRef` |
+| `storage-consumer` `CephConsumer` | `CephPool` | `spec.dataFoundation.rbdPoolRef` |
+| `storage-consumer` `CephConsumer` | `CephFilesystem` | `spec.dataFoundation.filesystemRef` |
+| `storage-consumer` `CephConsumer` | `CephObjectGateway` | `spec.dataFoundation.objectGatewayRef` |
+| `storage-consumer` `CephConsumer` | `DNSServer` | every DNSServer of the selection, when the export names an object gateway |
+| `storage-host` `CephCluster` | `Machine` | `spec.topology.nodes[].machineRef` |
+| `storage-host` `CephCluster` | `MachineInstallProfile` | each node Machine's `spec.os.installProfileRef` |
+| `storage-physical-retirement` `CephCluster` | `Machine` from `substrate-machine` | `spec.topology.nodes[].machineRef` |
+| `storage-replication` `CephReplication` | `CephPool` | `spec.poolRef`, `spec.peerPoolRef` |
+| `storage-replication` `CephReplication` | `CephRBDImage` | `spec.imageRefs[]` |
+| `storage-smb` `CephSMBResource` | `CephSMBResource` | `spec.smbClusterRef`, `spec.resourceRefs[]` |
+| `storage-smb` `CephSMBResource` | `CephSubvolume` | `spec.subvolumeRef` |
 
 ### Stages and the pause boundary
 
@@ -928,8 +946,8 @@ digest. A stage names the kind of platform work its block performs:
 
 | Stage | Blocks |
 | --- | --- |
-| `controller` | The [context prerequisites](controller.md) this Environment adds to its controller host: the target clients its graph selects; the libvirt client a declared `libvirt` capability, a libvirt provider hosted on the controller or any Machine a libvirt provider hosts selects, [and nothing else](controller.md#the-controller-stage); the hypervisor closure a hosted provider selects; the installer-media tooling an artifact server on the controller selects; the `nmstate` package an agent-installed ContainerCluster node that references a declared Machine selects; and the `iputils` package an agent-installed multi-node baremetal ContainerCluster selects for an OpenShift-sourced IPv4 virtual IP in a managed libvirt network of a provider hosted on the controller. |
-| `infra-components` | Managed shared services: proxying, name resolution, time, artifact serving, registries and load balancing. |
+| `controller` | The [context prerequisites](controller.md) this Environment adds to its controller host: the target clients its graph selects; the libvirt client a libvirt provider hosted on the controller or any Machine a libvirt provider hosts selects, [and nothing else](controller.md#the-controller-stage); the hypervisor closure a hosted provider selects; the installer-media tooling an artifact server on the controller selects; the `nmstate` package an agent-installed OpenShiftCluster node that references a declared Machine selects; and the `iputils` package an agent-installed multi-node baremetal OpenShiftCluster selects for an OpenShift-sourced IPv4 virtual IP in a managed libvirt network of a provider hosted on the controller. |
+| `infrastructure-services` | Managed shared services: proxying, name resolution, time, artifact serving, registries and load balancing. |
 | `substrates` | [Provider host realization](substrates.md#provider-host-realization) for a declared `InfraProvider`: its virtualization runtime, managed networks and virtual-media pool. |
 | `machines` | [Machine realization](substrates.md#machine-realization) with its management controller, the [claim and proof](substrates.md#physical-machine-realization) of a physical machine, [shared package-tree publication](managed-os.md#shared-package-tree-publication), and [managed operating-system installation](managed-os.md#installation). |
 | `clusters` | Container and storage cluster installation. |
@@ -1007,6 +1025,33 @@ successful, resumable stop, not an interruption: it needs no recovery, it
 allocates no new identity, and the next `apply` continues the same operation
 under whatever selection it is given. Cancellation is never a pause.
 
+#### Stopping after an add-on instance
+
+`apply --until <cluster>.<package>` adds one more gate to the selection: a
+block is startable only when it is also the named add-on instance or a block
+that instance depends on, directly or through other blocks. The name is the
+object of exactly one block of the `add-ons` stage in the plan the apply works
+on, fresh or frozen, whose object has the `<cluster>.<package>` form; another
+`add-ons` block, such as a cluster's network block named by the cluster alone,
+is no candidate; it is resolved for each invocation and never recorded, so
+the operation holds no selection. When that instance and its prerequisites are
+done the operation pauses as above, and a later `apply`, with or without
+another `--until`, continues the same operation. `--until` composes with
+`--stage`, and `plan --until` previews the same selection.
+
+Before any effect, an apply refuses with `lifecycle.stage`:
+
+| Fault | Message | Remedy |
+| --- | --- | --- |
+| The plan has no add-on instance | `the plan has no add-on instance for --until to name` | `repeat bootwright apply --context <context> without --until` |
+| No add-on instance carries the name | `the plan has no add-on instance named by --until` | `name one of: <objects>` (at most eight, then `and <n> more`) |
+| The selected stages admit none of the ready blocks the instance requires | `the selected stages have nothing to start` | the apply with `--stage` widened by the first such block's stage, keeping `--until` and the plan's authorizations |
+| A failed block the instance requires lies outside the selected stages | `the block this operation must retry is outside the selected stages` | the apply with `--stage` widened by the first such block's stage, keeping `--until` and the plan's authorizations |
+| The instance and every block it requires are done, or every block to retry lies outside them | `the add-on instance --until names and the blocks it requires have nothing to start under this selection` | `repeat bootwright apply --context <context> [--stage <list>] [--authorize <tokens>] without --until` |
+
+A destroy accepts neither selection: `plan --until` over a due destroy refuses
+as `plan --stage` does.
+
 Selection never weakens a safety rule. An unproved effect is resolved before
 anything else whatever stages are selected, because resolution is a read-only
 observation; several unproved effects may be observed together, and nothing
@@ -1058,8 +1103,9 @@ reason and remedy is the diagnostic's message and remediation, in which
 <!-- unclaimed objects -->
 | Refusal | Path | Reason | Remedy |
 | --- | --- | --- | --- |
-| An unclaimed effect-bearing kind | an InfraProvider, ContainerCluster, storage or add-on object of a kind no capability claims | `no capability of this executable realizes the <kind> kind` | `remove <object> from the selected Environment, or use an example within the supported shape such as examples/machines/lab-rhel` |
-| An unclaimed managed service | a `management: managed` Proxy, DNSServer, NTPServer, ArtifactServer, Registry or LoadBalancer of a kind no capability claims | `no capability of this executable manages the <kind> kind` | `remove <object> from the selected Environment, or use an example within the supported shape such as examples/machines/lab-rhel` |
+| An unclaimed effect-bearing kind | an InfraProvider, OpenShiftCluster, storage or add-on object of a kind no capability claims | `no capability of this executable realizes the <kind> kind` | `remove <object> from the selected Environment, or use an example within the supported shape such as examples/machines/lab-rhel` |
+| An unclaimed managed service | a `management: managed` Proxy, DNSServer, NTPServer or ArtifactServer of a kind no capability claims | `no capability of this executable manages the <kind> kind` | `remove <object> from the selected Environment, or use an example within the supported shape such as examples/machines/lab-rhel` |
+| An unclaimed managed Registry or LoadBalancer | a `management: managed` Registry or LoadBalancer, which no capability claims | `no capability of this executable manages the <kind> kind` | `declare spec.management: external on <object> to use a <kind> the operator runs, or remove it from the selected Environment` |
 | A Machine to install with no capability | a Machine with `spec.os.provided: false` while no capability claims Machine | `no capability of this executable realizes a Machine whose operating system is not provided` | `remove <object> from the selected Environment, or use an example within the supported shape such as examples/machines/lab-rhel` |
 | An enabled CustomPlaybook | a CustomPlaybook with `spec.enabled: true` while no capability claims CustomPlaybook | `no capability of this executable runs an enabled CustomPlaybook` | `remove <object> from the selected Environment, or use an example within the supported shape such as examples/machines/lab-rhel` |
 
@@ -2086,7 +2132,7 @@ Lost-reply adoption is the one case where a record and a shape together prove
 an object: a Ceph placement rule, profile, pool, image, filesystem, subvolume
 or export whose create lost its reply is adopted only beside the attempt record
 written before the create and only at exactly the frozen shape
-([storage resources](storage.md#resources-readiness-and-access)). That
+([storage resources](ceph.md#resources-readiness-and-access)). That
 proof holds only because Bootwright is the one writer of such objects under the
 cluster's exclusive reservation; a writer outside Bootwright on a managed
 cluster is outside the guarantee, and adoption never authorizes a removal.
@@ -2096,7 +2142,7 @@ cluster is outside the guarantee, and adoption never authorizes a removal.
 The engine supports the online ordering below. Candidate Ceph capabilities
 refuse removal while any host survives it
 ([B491](milestones/m2.md#b491)); their
-[target contract](storage.md) owns the consumer-quiescence and cleanup proofs.
+[target contract](ceph.md) owns the consumer-quiescence and cleanup proofs.
 
 A storage effect whose every host Machine is a Bootwright-owned virtual
 Machine destroyed by the same removal is retired with them, provided no
@@ -2168,7 +2214,7 @@ Stopping is never a side effect of removal. The operator uses
 means. `data-loss` acknowledges destruction; quiescence independently proves
 nothing is using the data. A native daemon list alone proves neither consumer
 quiescence nor the removal of OSD data, credentials and SSH authorization.
-The [storage contract](storage.md) owns those additional proofs.
+The [storage contract](ceph.md) owns those additional proofs.
 
 ### Physical disk safety
 
@@ -2209,7 +2255,7 @@ system. Offline erase follows its separate safety contract below
 `Machine.spec.hardware.eraseOnRemoval` is an explicit removal policy. Its only
 method is `logicalOverwrite`; omission retains disks. Each target supplies
 `deviceName`, `wwn`, `serialNumber` and exact `sizeBytes`. The approved
-`rootDeviceHints.deviceName` must be listed; data disks are individually listed.
+`hardware.rootDevice.deviceName` must be listed; data disks are individually listed.
 The initial execution bound is 16 whole disks, each at most 64 TiB with a
 4096-byte aligned logical size. These are implementation bounds, not hardware
 sanitize capabilities. All addressable bytes are overwritten with zero and

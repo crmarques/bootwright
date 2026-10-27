@@ -1,6 +1,6 @@
 NAME  PROVIDES  REQUIRES  OLM PACKAGE  DEFAULT SOURCE  CONFIGURATION
 acm  none  none  advanced-cluster-management  redhat-operators  hub,mce,subscription,timeout
-fdf  dataFoundation  none  odf-operator  none  defaultStorageClass,storageExportRef,subscription,timeout
+fdf  dataFoundation  none  odf-operator  none  cephConsumerRef,defaultStorageClass,subscription,timeout
 gitops  none  none  openshift-gitops-operator  redhat-operators  bootstrap,subscription,timeout
 metallb  metallb  none  metallb-operator  redhat-operators  pools,subscription,timeout
 nmstate  nmstate  none  kubernetes-nmstate-operator  redhat-operators  subscription,timeout

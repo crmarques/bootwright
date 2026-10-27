@@ -188,8 +188,8 @@ func TestBooleanSpellings(t *testing.T) {
 }
 
 func TestStageSelectionIsAClosedCommaList(t *testing.T) {
-	command := parsedCommand(t, []string{"apply", "--stage", " clusters , infra-components ,, clusters "})
-	if got := stringValue(command.Flags(), "stage"); got != "clusters,infra-components" {
+	command := parsedCommand(t, []string{"apply", "--stage", " clusters , infrastructure-services ,, clusters "})
+	if got := stringValue(command.Flags(), "stage"); got != "clusters,infrastructure-services" {
 		t.Fatalf("normalized stages = %q", got)
 	}
 	command = parsedCommand(t, []string{"plan", "--stage", "machines"})
@@ -216,5 +216,24 @@ func TestOmittedStageSelectionDispatches(t *testing.T) {
 	code, _, _, record := runRecorded([]string{"apply"})
 	if code != 1 || record.calls != 1 {
 		t.Fatalf("an omitted stage selection did not dispatch: code=%d calls=%d", code, record.calls)
+	}
+}
+
+func TestUntilNamesOneAddOnInstance(t *testing.T) {
+	command := parsedCommand(t, []string{"apply", "--until", "compact.gitops"})
+	if got := stringValue(command.Flags(), "until"); got != "compact.gitops" {
+		t.Fatalf("until = %q", got)
+	}
+	for _, args := range [][]string{
+		{"apply", "--until", "gitops"},
+		{"apply", "--until="},
+		{"plan", "--until", "Compact.gitops"},
+		{"plan", "--until", "compact.gitops.extra"},
+		{"destroy", "--until", "compact.gitops"},
+	} {
+		code, _, _, record := runRecorded(args)
+		if code != 2 || record.calls != 0 {
+			t.Errorf("invalid --until dispatched: %v", args)
+		}
 	}
 }

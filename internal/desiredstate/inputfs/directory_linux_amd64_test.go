@@ -125,3 +125,36 @@ func TestDirectoryRootCannotBeSubstitutedAfterHandleVerification(t *testing.T) {
 		t.Fatal("replacement root supplied candidate files")
 	}
 }
+
+// A skipped secrets directory that holds YAML at any depth is reported by its
+// path, listed but never opened beyond its directories: a FIFO there is never
+// opened, and one holding no YAML, or one this account cannot list, reports
+// nothing and refuses nothing.
+func TestASkippedSecretsDirectoryHoldingYAMLIsReportedUnread(t *testing.T) {
+	root := t.TempDir()
+	writeFixture(t, root, "environment.yaml", "descriptor")
+	writeFixture(t, root, "secrets/deep/inner/descriptor.yaml", "never read")
+	writeFixture(t, root, "raw/secrets/key.pem", "raw material")
+	writeFixture(t, root, "locked/secrets/descriptor.yaml", "never read")
+	if err := os.MkdirAll(filepath.Join(root, "fifo/secrets"), 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := syscall.Mkfifo(filepath.Join(root, "fifo/secrets/blocked.yaml"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(filepath.Join(root, "locked/secrets"), 0); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(filepath.Join(root, "locked/secrets"), 0700) })
+	got, err := (Reader{}).Read(context.Background(), []string{root})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []string{filepath.Join(root, "secrets")}
+	if syscall.Geteuid() == 0 {
+		want = append([]string{filepath.Join(root, "locked/secrets")}, want...)
+	}
+	if !reflect.DeepEqual(got.SkippedSecrets, want) || len(got.Files) != 1 {
+		t.Fatalf("skipped secrets directories = %v and %d files, want %v and the Environment", got.SkippedSecrets, len(got.Files), want)
+	}
+}

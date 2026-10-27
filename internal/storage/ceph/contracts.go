@@ -11,7 +11,7 @@ import (
 	"github.com/crmarques/bootwright/internal/diagnostics"
 	"github.com/crmarques/bootwright/internal/reconciliation"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
-	"github.com/crmarques/bootwright/internal/storage"
+	"github.com/crmarques/bootwright/internal/storage/cephcluster"
 	"github.com/crmarques/bootwright/internal/trust"
 )
 
@@ -20,7 +20,7 @@ type Runner interface {
 }
 
 const (
-	PinnedTransport = "verified-tunnel"
+	PinnedTransport = "verifiedTunnel"
 	PinnedPlatform  = "linux/amd64"
 )
 
@@ -59,7 +59,7 @@ var ZonePoolSuffixes = []string{"meta", "control", "dedup", "log", "otp", "bucke
 var zonePlacementSuffixes = map[string]string{"indexPoolRef": "buckets.index", "dataExtraPoolRef": "buckets.non-ec", "dataPoolRef": "buckets.data"}
 
 func Supported(release, packageVersion, ansibleVersion, base, version, transport string) bool {
-	return storage.NativeVersion(release) && storage.NativeVersion(packageVersion) && storage.NativeVersion(ansibleVersion) && base != "" && storage.NativeVersion(version) && transport == PinnedTransport
+	return cephcluster.NativeVersion(release) && cephcluster.NativeVersion(packageVersion) && cephcluster.NativeVersion(ansibleVersion) && base != "" && cephcluster.NativeVersion(version) && transport == PinnedTransport
 }
 
 type DependencyProofs interface {
@@ -71,7 +71,7 @@ type DependencyProofs interface {
 }
 
 const unsupportedReason = "the selected Ceph coordinates or cluster SSH transport are incomplete or unsafe"
-const unsupportedRemedy = "declare bounded version strings, an image repository and verified-tunnel transport; native transport is refused and host-key verification cannot be disabled"
+const unsupportedRemedy = "declare bounded version strings, an image repository and verifiedTunnel transport; native transport is refused and host-key verification cannot be disabled"
 
 func failure(code, message, remediation string) error {
 	return diagnostics.NewFailureWithRemediation(code, message, "", remediation)

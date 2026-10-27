@@ -45,7 +45,7 @@
       },
       "object": {
         "apiVersion": "bootwright.io/v1alpha1",
-        "kind": "ContainerCluster",
+        "kind": "OpenShiftCluster",
         "name": "ocp-02"
       },
       "field": "$.metadata.name",

@@ -19,9 +19,6 @@ kind: Machine
 metadata:
   name: controller
 spec:
-  capabilities:
-    - container-runtime
-    - libvirt
   os:
     provided: true
   proxy:
@@ -41,10 +38,13 @@ kind: Machine
 metadata:
   name: rhel-01
 spec:
-  capabilities: []
   substrate:
     providerRef: lab-libvirt
-    profileRef: rhel
+    libvirt:
+      profileRef: rhel
+  hardware:
+    rootDevice:
+      deviceName: /dev/vda
   os:
     provided: false
     installProfileRef: rhel-9-8
@@ -52,8 +52,6 @@ spec:
       ntp:
         - serverRef: lab-ntp
           endpointRef: ip
-      rootDeviceHints:
-        deviceName: /dev/vda
   proxy:
     direct: {}
   network:
@@ -80,10 +78,13 @@ kind: Machine
 metadata:
   name: rhel-02
 spec:
-  capabilities: []
   substrate:
     providerRef: lab-libvirt
-    profileRef: rhel
+    libvirt:
+      profileRef: rhel
+  hardware:
+    rootDevice:
+      deviceName: /dev/vda
   os:
     provided: false
     installProfileRef: rhel-9-8
@@ -91,8 +92,6 @@ spec:
       ntp:
         - serverRef: lab-ntp
           endpointRef: ip
-      rootDeviceHints:
-        deviceName: /dev/vda
   proxy:
     direct: {}
   network:
@@ -119,10 +118,13 @@ kind: Machine
 metadata:
   name: rhel-03
 spec:
-  capabilities: []
   substrate:
     providerRef: lab-libvirt
-    profileRef: rhel
+    libvirt:
+      profileRef: rhel
+  hardware:
+    rootDevice:
+      deviceName: /dev/vda
   os:
     provided: false
     installProfileRef: rhel-9-8
@@ -130,8 +132,6 @@ spec:
       ntp:
         - serverRef: lab-ntp
           endpointRef: ip
-      rootDeviceHints:
-        deviceName: /dev/vda
   proxy:
     direct: {}
   network:
@@ -255,10 +255,7 @@ spec:
       cpu: 1
       memoryMiB: 2048
       diskGiB: 10
-    bmcEmulationDefaults:
-      enabled: true
-      protocol: redfish
-      emulator: sushy-tools
+    bmcEmulation:
       bindAddress: 127.0.0.1
       certificateRef: lab-bmc-tls
       port: 8000

@@ -11,7 +11,7 @@ import (
 // dispatch switch agree. A command added to the public tree without its
 // dispatch arm fails here instead of reaching an operator as an internal error.
 func TestEveryCatalogCommandHasApplicationDispatch(t *testing.T) {
-	presentation := map[string]bool{"version": true, "help": true}
+	presentation := map[string]bool{"version": true, "schema": true, "help": true}
 	for _, spec := range commandCatalog() {
 		if presentation[spec.path] || strings.HasPrefix(spec.path, "completion ") {
 			continue

@@ -1,9 +1,6 @@
 package infrastructureservices_test
 
 import (
-	"os"
-	"regexp"
-	"strconv"
 	"strings"
 	"testing"
 
@@ -23,19 +20,17 @@ var managedBlocks = map[api.Kind]func(string) string{
 	api.NTPServer:      ntpserver.Definition().BlockID,
 }
 
-func TestEachManagedServiceNameLimitIsItsBlockIdentity(t *testing.T) {
+var managedPrefixes = map[api.Kind]string{api.ArtifactServer: "artifact-server-", api.Proxy: "proxy-", api.DNSServer: "dns-", api.NTPServer: "ntp-"}
+
+func TestEveryManagedServiceNameYieldsItsBlockIdentity(t *testing.T) {
 	for kind, block := range managedBlocks {
-		limit, found := infrastructureservices.NameLimit(kind)
-		if !found {
-			t.Fatalf("%s has no name limit", kind)
+		short := strings.Repeat("a", 63-len(managedPrefixes[kind]))
+		if got := block(short); got != managedPrefixes[kind]+short {
+			t.Fatalf("the 63-byte %s identity moved to %q", kind, got)
 		}
-		if !reconciliation.ValidSegment(block(strings.Repeat("a", limit))) || reconciliation.ValidSegment(block(strings.Repeat("a", limit+1))) {
-			t.Fatalf("the %s name limit %d is not the longest name its block identity admits", kind, limit)
-		}
-	}
-	for _, kind := range []api.Kind{api.Registry, api.LoadBalancer} {
-		if _, found := infrastructureservices.NameLimit(kind); found {
-			t.Fatalf("%s plans no block yet has a name limit", kind)
+		long := strings.Repeat("a", 63)
+		if got := block(long); !reconciliation.ValidSegment(got) || !strings.HasPrefix(got, managedPrefixes[kind]) || got == block(long[:62]+"b") {
+			t.Fatalf("a 63-byte %s name yields %q, not a distinct block identity", kind, got)
 		}
 	}
 }
@@ -59,40 +54,10 @@ func nameIssues(o api.Object) []api.Issue {
 	return found
 }
 
-func TestAManagedServiceNameOverItsLimitRefusesAtMetadataName(t *testing.T) {
-	prefixes := map[api.Kind]string{api.ArtifactServer: "artifact-server-", api.Proxy: "proxy-", api.DNSServer: "dns-", api.NTPServer: "ntp-"}
+func TestAManagedServiceNameHasNoBlockDerivedLimit(t *testing.T) {
 	for kind := range managedBlocks {
-		limit, _ := infrastructureservices.NameLimit(kind)
-		if issues := nameIssues(managedOf(kind, strings.Repeat("a", limit))); len(issues) != 0 {
-			t.Fatalf("a %s name of exactly %d bytes was refused: %+v", kind, limit, issues)
-		}
-		name := strings.Repeat("a", limit+1)
-		issues := nameIssues(managedOf(kind, name))
-		if len(issues) != 1 || issues[0].Code != "api.value" || !strings.Contains(issues[0].Message, strconv.Itoa(limit)) ||
-			!strings.Contains(issues[0].Message, prefixes[kind]+"<name>") ||
-			!strings.Contains(issues[0].Remediation, "rename "+string(kind)+"/"+name+" to at most "+strconv.Itoa(limit)+" bytes") {
-			t.Fatalf("a %s name of %d bytes = %+v", kind, limit+1, issues)
-		}
-		external := api.NewObject(kind, strings.Repeat("a", 63), api.Value{}, api.MapValue().With("management", api.StringValue("external")))
-		if issues := nameIssues(external); len(issues) != 0 {
-			t.Fatalf("an external %s plans no block yet its name was refused: %+v", kind, issues)
-		}
-	}
-}
-
-func TestTheAPIPageStatesEachManagedServiceNameLimit(t *testing.T) {
-	data, err := os.ReadFile("../../specs/api/infrastructure-services.md")
-	if err != nil {
-		t.Fatal(err)
-	}
-	for kind := range managedBlocks {
-		limit, _ := infrastructureservices.NameLimit(kind)
-		row := regexp.MustCompile("(?m)^\\| `" + string(kind) + "` \\| `[a-z-]+<name>` \\| ([0-9]+) \\|$").FindSubmatch(data)
-		if row == nil {
-			t.Fatalf("the API page states no name limit row for %s", kind)
-		}
-		if string(row[1]) != strconv.Itoa(limit) {
-			t.Fatalf("the API page states a %s name limit of %s, the admission %d", kind, row[1], limit)
+		if issues := nameIssues(managedOf(kind, strings.Repeat("a", 63))); len(issues) != 0 {
+			t.Fatalf("a 63-byte managed %s name was refused: %+v", kind, issues)
 		}
 	}
 }

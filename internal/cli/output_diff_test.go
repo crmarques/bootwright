@@ -31,7 +31,7 @@ func TestDiffEscapesHostileNamesAndReasons(t *testing.T) {
 	result.Plan.Rebuilt = []string{hostile}
 	result.Plan.Reason = hostile
 	result.Objects[1].Name = hostile
-	tabbed := api.NewObject(api.StoragePool, "rbd-data", api.Value{}, api.MapValue(
+	tabbed := api.NewObject(api.CephPool, "rbd-data", api.Value{}, api.MapValue(
 		api.FieldValue{Name: "clusterRef", Value: api.StringValue("ceph\tlab")},
 	))
 	result.Objects[1].Desired = &tabbed
@@ -75,7 +75,7 @@ func TestDiffEscapesHostileNamesAndReasons(t *testing.T) {
 	var textPatch []string
 	lines := strings.Split(strings.TrimSuffix(text, "\n"), "\n")
 	for index, line := range lines {
-		if strings.HasPrefix(line, "--- applied/StoragePool/evil") {
+		if strings.HasPrefix(line, "--- applied/CephPool/evil") {
 			for _, patchLine := range lines[index:] {
 				if patchLine == "" {
 					break
@@ -118,15 +118,15 @@ func TestDiffDecidesDifferenceFromEncodedBytes(t *testing.T) {
 }
 
 func TestDiffTreatsObjectsWithEqualEncodingsAsUnchangedWhateverTheirValueOrder(t *testing.T) {
-	first := api.NewObject(api.StorageClient, "c", api.Value{}, api.MapValue(
-		api.FieldValue{Name: "access", Value: api.StringValue("read-write")},
+	first := api.NewObject(api.CephClient, "c", api.Value{}, api.MapValue(
+		api.FieldValue{Name: "access", Value: api.StringValue("readWrite")},
 		api.FieldValue{Name: "clusterRef", Value: api.StringValue("ceph-lab")},
 		api.FieldValue{Name: "poolRef", Value: api.StringValue("rbd-data")},
 	))
 	second := diffClient("c")
 	result := diffNone()
 	result.Objects = []lifecycle.ObjectDiff{{
-		Kind: api.StorageClient, Name: "c", Desired: &first,
+		Kind: api.CephClient, Name: "c", Desired: &first,
 		Real: lifecycle.RealSide{Source: "applied", State: "present", Object: second},
 	}}
 	if text := writeDiffText(t, result); !strings.Contains(text, "No differences: 1 object compared.\n") {
@@ -149,7 +149,7 @@ func TestDiffNamesWhatAnObservedComparisonReadAndDidNotCompare(t *testing.T) {
 	for _, want := range []string{
 		"Against:  what apply op-3f9a0c12 (done) realized, read live: 2 blocks observed, 1 unknown, 3 not projected\n",
 		"Build:    this executable plans 1 block of op-3f9a0c12 differently from the build that froze it; --observe does not read it\n",
-		"diff real/StorageClient/rbd-reader desired/StorageClient/rbd-reader\n# plan: same (ceph-client-rbd-reader); realized: done\n# not compared: spec.clusterRef, spec.role\n# ceph-pool-rbd-data: pool listed without its size\n",
+		"diff real/CephClient/rbd-reader desired/CephClient/rbd-reader\n# plan: same (ceph-client-rbd-reader); realized: done\n# not compared: spec.clusterRef, spec.role\n# ceph-pool-rbd-data: pool listed without its size\n",
 		"1 object differs: 1 changed, 0 added, 0 removed, 0 unknown; 1 unchanged; 1 compared as applied\n",
 	} {
 		if !strings.Contains(text, want) {
@@ -216,7 +216,7 @@ func TestDiffSummaryNamesOneObjectInTheSingular(t *testing.T) {
 func TestDiffShowsAPresentSideWithoutADocumentAsUnknown(t *testing.T) {
 	result := diffNone()
 	result.Objects = []lifecycle.ObjectDiff{{
-		Kind: api.StorageClient, Name: "c", Desired: diffClient("c"),
+		Kind: api.CephClient, Name: "c", Desired: diffClient("c"),
 		Real: lifecycle.RealSide{Source: "applied", State: "present"},
 	}}
 	text := writeDiffText(t, result)

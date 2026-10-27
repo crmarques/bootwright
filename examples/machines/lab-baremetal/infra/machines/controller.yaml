@@ -4,9 +4,6 @@ metadata:
   name: controller
 
 spec:
-  capabilities:
-    - container-runtime
-
   os:
     provided: true
 
@@ -15,9 +12,6 @@ spec:
 
   network:
     addresses:
-      - name: fqdn
-        address: controller.metal.example.test
-
       - name: ip
         address: 192.0.2.1
 

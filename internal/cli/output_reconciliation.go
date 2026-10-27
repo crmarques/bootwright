@@ -156,8 +156,13 @@ func writeLifecycleSteps(text *display, result lifecycle.PlanResult) {
 	text.lifecycleSteps(result)
 	var closing []field
 	if len(result.Stages) != 0 {
-		closing = append(closing, field{Label: "Stages", Value: strings.Join(result.Stages, ", ")},
-			field{Label: "Starts", Value: startSummary(result)})
+		closing = append(closing, field{Label: "Stages", Value: strings.Join(result.Stages, ", ")})
+	}
+	if result.Until != "" {
+		closing = append(closing, field{Label: "Until", Value: result.Until})
+	}
+	if len(result.Stages) != 0 || result.Until != "" {
+		closing = append(closing, field{Label: "Starts", Value: startSummary(result)})
 	}
 	if summary := concurrencySummary(result); summary != "" {
 		closing = append(closing, field{Label: "Concurrency", Value: summary})
@@ -354,7 +359,7 @@ func settledNote(verb, recovered string) string {
 	if verb == "destroy" {
 		return "Nothing to remove: this context owns no realized state."
 	}
-	return "Nothing to do: this context already holds the state it declares."
+	return "Nothing to do; bootwright diff --observe compares the records with the hosts."
 }
 
 // writeReceipt emits the stable machine-readable tail. Its labels, order and

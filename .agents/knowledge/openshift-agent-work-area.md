@@ -15,7 +15,7 @@ pass and a completed installation would have ended `unknown`. In-tree fakes had
 supplied the file and hidden the failure. The identity is now a
 domain-separated digest of the kubeconfig's administrator client certificate,
 which a signer minted with the image signs and only this build's cluster
-accepts ([container clusters](../../specs/container-clusters.md#installation)).
+accepts ([container clusters](../../specs/openshift-clusters.md#installation)).
 
 Lesson: a fake of a native tool's output must be copied from the tool's source
 or from an observed run, never from what the consumer expects to read.
@@ -64,7 +64,7 @@ applies, not only against the shape.
 Since X21 (B10) the context's custody keeps a copy of the kubeconfig that the
 install block takes once it proves the installation complete, or once a
 resolution of an apply reads it complete, and `cluster kubeconfig` reveals that
-copy ([container clusters](../../specs/container-clusters.md#installation)).
+copy ([container clusters](../../specs/openshift-clusters.md#installation)).
 That copy did not remove either hazard above: every read of the cluster, each
 state read and a retried apply's settled decision included, still read the
 installer's own file, so its growth past the 64 KiB bound and a

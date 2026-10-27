@@ -73,10 +73,10 @@ func TestDisconnectedProfileMissingAuxiliaryClosureRefusesBeforePlanning(t *test
 	sources := exampleDirectory(t, "libvirt-3-nodes-ceph-disconnected")
 	for i, file := range sources.Files {
 		body := string(file.Bytes())
-		if !strings.Contains(body, "    images:\n") {
+		if !strings.Contains(body, "\n  images:\n") {
 			continue
 		}
-		start, end := strings.Index(body, "    images:\n"), strings.Index(body, "    ibm:\n")
+		start, end := strings.Index(body, "\n  images:\n"), strings.Index(body, "\n  entitlementRef:")
 		sources.Files[i] = desiredstate.NewSourceFile(file.Path(), []byte(body[:start]+body[end:]))
 	}
 	state, _, err := wireCompiler().Compile(context.Background(), sources)
@@ -87,8 +87,8 @@ func TestDisconnectedProfileMissingAuxiliaryClosureRefusesBeforePlanning(t *test
 	if len(refused) == 0 {
 		t.Fatal("missing image closure admitted")
 	}
-	cluster, ok := state.Effective().Find(api.StorageCluster, "ceph-lab")
-	if !ok || cluster.Spec().Has("ceph", "images") {
+	cluster, ok := state.Effective().Find(api.CephCluster, "ceph-lab")
+	if !ok || cluster.Spec().Has("images") {
 		t.Fatal("fixture did not remove the closure")
 	}
 }

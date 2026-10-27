@@ -6,7 +6,7 @@ import (
 	api "github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/canonicaljson"
 	"github.com/crmarques/bootwright/internal/reconciliation"
-	"github.com/crmarques/bootwright/internal/storage"
+	"github.com/crmarques/bootwright/internal/storage/cephcluster"
 )
 
 const maxBucketPolicy = 65536
@@ -25,14 +25,13 @@ type ObjectBucket struct {
 	ZoneGroup      string `json:"zoneGroup"`
 }
 
-func ObjectBucketBlockID(name string) string { return "ceph-object-bucket-" + name }
+func ObjectBucketBlockID(name string) string {
+	return reconciliation.BlockIdentity("ceph-object-bucket-", name)
+}
 
 func objectBucketRequest(c api.Catalog, bucket api.Object, contextName string) (Request, error) {
 	name, spec := bucket.Name(), bucket.Spec()
-	if !reconciliation.ValidSegment(ObjectBucketBlockID(name)) {
-		return Request{}, failure("api.invariant", "StorageObjectBucket "+name+" has a name too long to identify its block, whose identity holds at most 63 characters", "rename the StorageObjectBucket to at most 44 characters")
-	}
-	gateway, _ := c.Find(api.StorageObjectGateway, spec.Get("objectGatewayRef").Text())
+	gateway, _ := c.Find(api.CephObjectGateway, spec.Get("objectGatewayRef").Text())
 	requests, err := gatewayRequests(c, gateway, contextName)
 	if err != nil {
 		return Request{}, err
@@ -43,9 +42,9 @@ func objectBucketRequest(c api.Catalog, bucket api.Object, contextName string) (
 	if err != nil {
 		return Request{}, err
 	}
-	cluster, _ := c.Find(api.StorageCluster, gateway.Spec().Get("clusterRef").Text())
-	backend, _ := storage.NativeService(cluster, gateway.Spec().Get("serviceRef").Text())
-	frozen := ObjectBucket{Backend: storage.NativeServiceName(backend), Gateway: g.Name, Name: name, Owner: spec.Get("ownerRef").Text(), Policy: policy, Port: 80,
+	cluster, _ := c.Find(api.CephCluster, gateway.Spec().Get("clusterRef").Text())
+	backend, _ := cephcluster.NativeService(cluster, gateway.Spec().Get("serviceRef").Text())
+	frozen := ObjectBucket{Backend: cephcluster.NativeServiceName(backend), Gateway: g.Name, Name: name, Owner: spec.Get("ownerRef").Text(), Policy: policy, Port: 80,
 		Realm: g.Realm, Zone: g.Zone, ZoneGroup: g.ZoneGroup}
 	if backend.Get("spec", "ssl").Bool() {
 		frozen.Port, frozen.Endpoint = 443, g.Endpoint
@@ -71,11 +70,11 @@ func bucketPolicy(bucket api.Object) (string, error) {
 	name := bucket.Name()
 	value, ok := smbValue(declared)
 	if _, mapped := value.(map[string]any); !ok || !mapped {
-		return "", failure("api.invariant", "StorageObjectBucket "+name+" declares a policy holding a value that is not a JSON string, integer, boolean, list or mapping", "write spec.policy as the native S3 bucket policy document with only strings, integers, booleans, lists and mappings")
+		return "", failure("api.invariant", "CephObjectBucket "+name+" declares a policy holding a value that is not a JSON string, integer, boolean, list or mapping", "write spec.policy as the native S3 bucket policy document with only strings, integers, booleans, lists and mappings")
 	}
 	encoded, err := canonicaljson.Encode(value, canonicaljson.Bare)
 	if err != nil || len(encoded) > maxBucketPolicy {
-		return "", failure("api.invariant", "StorageObjectBucket "+name+" declares a policy larger than 65536 bytes of JSON", "shorten spec.policy to at most 65536 bytes of JSON")
+		return "", failure("api.invariant", "CephObjectBucket "+name+" declares a policy larger than 65536 bytes of JSON", "shorten spec.policy to at most 65536 bytes of JSON")
 	}
 	return string(encoded), nil
 }

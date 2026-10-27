@@ -8,7 +8,7 @@ import (
 	"strings"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
-	"github.com/crmarques/bootwright/internal/storage"
+	"github.com/crmarques/bootwright/internal/storage/cephcluster"
 )
 
 const (
@@ -21,9 +21,9 @@ var maxInt64 = big.NewInt(9223372036854775807)
 
 func policyRequest(c api.Catalog, policy api.Object, contextName string) (Request, error) {
 	s := policy.Spec()
-	cluster, _ := c.Find(api.StorageCluster, s.Get("clusterRef").Text())
+	cluster, _ := c.Find(api.CephCluster, s.Get("clusterRef").Text())
 	rule := s.Get("ruleName").Text()
-	if stretch := cluster.Spec().Get("ceph", "topology", "stretch"); stretch.Present() {
+	if stretch := cluster.Spec().Get("topology", "stretch"); stretch.Present() {
 		owned := stretch.Get("ruleName").Text()
 		if owned == "" {
 			owned = "stretch-rule"
@@ -45,7 +45,7 @@ func policyRequest(c api.Catalog, policy api.Object, contextName string) (Reques
 }
 
 func poolRequest(c api.Catalog, pool api.Object, contextName string) (Request, error) {
-	cluster, _ := c.Find(api.StorageCluster, pool.Spec().Get("clusterRef").Text())
+	cluster, _ := c.Find(api.CephCluster, pool.Spec().Get("clusterRef").Text())
 	r, err := baseRequest(c, cluster, contextName)
 	if err != nil {
 		return Request{}, err
@@ -68,23 +68,23 @@ func poolRequest(c api.Catalog, pool api.Object, contextName string) (Request, e
 func poolScope(c api.Catalog, pool api.Object) error {
 	s, name := pool.Spec(), pool.Name()
 	if s.Get("role").Text() == "" {
-		return failure("lifecycle.unsupported", "StoragePool "+name+" has no role, so no consumer enables its application and the cluster would report POOL_APP_NOT_ENABLED", "set spec.role of StoragePool "+name+" to rbd, cephfs-metadata, cephfs-data or rgw")
+		return failure("lifecycle.unsupported", "CephPool "+name+" has no role, so no consumer enables its application and the cluster would report POOL_APP_NOT_ENABLED", "set spec.role of CephPool "+name+" to rbd, cephfsMetadata, cephfsData or rgw")
 	}
-	if s.Has("mirroring") && !storage.ReplicationOwnsPool(c, pool.Name()) {
-		return failure("lifecycle.unsupported", "StoragePool "+name+" declares mirroring without a StorageReplication owner", "declare a StorageReplication that names this pool, or remove spec.mirroring")
+	if s.Has("mirroring") && !cephcluster.ReplicationOwnsPool(c, pool.Name()) {
+		return failure("lifecycle.unsupported", "CephPool "+name+" declares mirroring without a CephReplication owner", "declare a CephReplication that names this pool, or remove spec.mirroring")
 	}
 	if s.Get("autoscale", "mode").Text() == "warn" {
-		return failure("lifecycle.unsupported", "StoragePool "+name+" selects autoscale mode warn, whose placement-group health warnings the core readiness never tolerates", "set spec.autoscale.mode to on or off, or omit it (on); Bootwright does not support warn yet")
+		return failure("lifecycle.unsupported", "CephPool "+name+" selects autoscale mode warn, whose placement-group health warnings the core readiness never tolerates", "set spec.autoscale.mode to on or off, or omit it (on); Bootwright does not support warn yet")
 	}
 	if s.Get("erasure", "parameters").Len() != 0 {
-		return failure("lifecycle.unsupported", "StoragePool "+name+" declares spec.erasure.parameters; arbitrary native erasure-code parameters are not admitted", "remove spec.erasure.parameters and use the typed erasure fields")
+		return failure("lifecycle.unsupported", "CephPool "+name+" declares spec.erasure.parameters; arbitrary native erasure-code parameters are not admitted", "remove spec.erasure.parameters and use the typed erasure fields")
 	}
 	if root := s.Get("erasure", "crushRoot").Text(); root != "" && root != "default" {
-		return failure("lifecycle.unsupported", "StoragePool "+name+" selects CRUSH root "+root+"; only the bootstrap root default is realized", "omit spec.erasure.crushRoot or set it to default; Bootwright does not support other CRUSH roots yet")
+		return failure("lifecycle.unsupported", "CephPool "+name+" selects CRUSH root "+root+"; only the bootstrap root default is realized", "omit spec.erasure.crushRoot or set it to default; Bootwright does not support other CRUSH roots yet")
 	}
 	target := new(big.Int)
 	if text := s.Get("autoscale", "targetSizeBytes").Text(); text != "" {
-		target, _ = storage.TargetSizeBytes(text)
+		target, _ = cephcluster.TargetSizeBytes(text)
 	}
 	for _, bound := range []struct {
 		field string
@@ -98,7 +98,7 @@ func poolScope(c api.Catalog, pool api.Object) error {
 		{"spec.compression.maxBlobSize", bigOf(s.Get("compression", "maxBlobSize")), maxInt64},
 	} {
 		if bound.value != nil && bound.value.Cmp(bound.limit) > 0 {
-			return failure("api.invariant", "StoragePool "+name+" sets "+bound.field+" above "+bound.limit.String()+", which the native option cannot hold", "lower "+bound.field+" to at most "+bound.limit.String())
+			return failure("api.invariant", "CephPool "+name+" sets "+bound.field+" above "+bound.limit.String()+", which the native option cannot hold", "lower "+bound.field+" to at most "+bound.limit.String())
 		}
 	}
 	return nil
@@ -108,11 +108,11 @@ func poolOf(c api.Catalog, pool api.Object, r Request) (*Pool, error) {
 	s := pool.Spec()
 	target := int64(0)
 	if text := s.Get("autoscale", "targetSizeBytes").Text(); text != "" {
-		if n, ok := storage.TargetSizeBytes(text); ok {
+		if n, ok := cephcluster.TargetSizeBytes(text); ok {
 			target = n.Int64()
 		}
 	}
-	p := &Pool{Name: storage.PoolName(pool), Type: s.Get("type").Text(), Role: s.Get("role").Text(), Application: storage.RoleApplication(s.Get("role").Text()), CrushRule: defaultRule,
+	p := &Pool{Name: cephcluster.PoolName(pool), Type: cephcluster.PoolProtection(s), Role: s.Get("role").Text(), Application: cephcluster.RoleApplication(s.Get("role").Text()), CrushRule: defaultRule,
 		Autoscale: PoolAutoscale{Bulk: s.Get("autoscale", "bulk").Bool(), MaxPGs: int(positiveOr(s.Get("autoscale", "pgNumMax"), 0)), MinPGs: int(positiveOr(s.Get("autoscale", "pgNumMin"), 0)),
 			Mode: s.Get("autoscale", "mode").Text(), TargetBytes: target, TargetRatio: ratio(s.Get("autoscale", "targetSizeRatio"))},
 		Compression: PoolCompression{Algorithm: s.Get("compression", "algorithm").Text(), MaxBlob: positiveOr(s.Get("compression", "maxBlobSize"), 0), MinBlob: positiveOr(s.Get("compression", "minBlobSize"), 0),
@@ -134,7 +134,7 @@ func poolOf(c api.Catalog, pool api.Object, r Request) (*Pool, error) {
 	}
 	size, minSize := positiveOr(s.Get("replicated", "size"), 0), positiveOr(s.Get("replicated", "minSize"), 0)
 	if ref := s.Get("placementPolicyRef").Text(); ref != "" {
-		policy, _ := c.Find(api.StoragePlacementPolicy, ref)
+		policy, _ := c.Find(api.CephPlacementPolicy, ref)
 		p.CrushRule = policy.Spec().Get("ruleName").Text()
 		if size == 0 {
 			size = positiveOr(policy.Spec().Get("replicated", "size"), 0)
@@ -184,21 +184,21 @@ func erasureOf(p *Pool, e api.Value) {
 		Root: "default", StripeUnit: int(positiveOr(e.Get("stripeUnit"), 4096)), Technique: "reed_sol_van"}
 	p.CrushRule = p.Name
 	p.Size, p.MinSize = k+m, k+min(1, m-1)
-	p.Overwrites = p.Role == "rbd" || p.Role == "cephfs-data"
+	p.Overwrites = p.Role == "rbd" || p.Role == "cephfsData"
 }
 
 func placementOf(c api.Catalog, pool api.Object) (rule, class string, width, pgs int64, ok bool) {
 	s := pool.Spec()
 	pgs = clampPGs(positiveOr(s.Get("autoscale", "pgNumMin"), 0), positiveOr(s.Get("autoscale", "pgNumMax"), 0))
-	if s.Get("role").Text() == "cephfs-metadata" && pgs < 16 {
+	if s.Get("role").Text() == "cephfsMetadata" && pgs < 16 {
 		pgs = 16
 	}
-	if s.Get("type").Text() == "erasure" {
-		return storage.PoolName(pool), s.Get("erasure", "crushDeviceClass").Text(), positiveOr(s.Get("erasure", "dataChunks"), 0) + positiveOr(s.Get("erasure", "codingChunks"), 0), pgs, true
+	if cephcluster.PoolProtection(s) == "erasure" {
+		return cephcluster.PoolName(pool), s.Get("erasure", "crushDeviceClass").Text(), positiveOr(s.Get("erasure", "dataChunks"), 0) + positiveOr(s.Get("erasure", "codingChunks"), 0), pgs, true
 	}
 	rule, width = defaultRule, positiveOr(s.Get("replicated", "size"), 0)
 	if ref := s.Get("placementPolicyRef").Text(); ref != "" {
-		policy, found := c.Find(api.StoragePlacementPolicy, ref)
+		policy, found := c.Find(api.CephPlacementPolicy, ref)
 		if !found {
 			return "", "", 0, 0, false
 		}
@@ -215,7 +215,7 @@ func placementOf(c api.Catalog, pool api.Object) (rule, class string, width, pgs
 
 func pgBudget(c api.Catalog, cluster api.Object, r Request, rule string) error {
 	total, class := int64(0), ""
-	for _, pool := range c.OfKind(api.StoragePool) {
+	for _, pool := range c.OfKind(api.CephPool) {
 		if pool.Spec().Get("clusterRef").Text() != cluster.Name() {
 			continue
 		}
@@ -232,7 +232,7 @@ func pgBudget(c api.Catalog, cluster api.Object, r Request, rule string) error {
 		size, _ := zonePoolReplicas(r)
 		total += int64(size)
 		root := int64(0)
-		for _, gateway := range c.OfKind(api.StorageObjectGateway) {
+		for _, gateway := range c.OfKind(api.CephObjectGateway) {
 			if gateway.Spec().Get("clusterRef").Text() == cluster.Name() {
 				total += int64(len(derivedZonePools(gateway))) * clampPGs(0, 0) * int64(size)
 				root = clampPGs(0, 0) * int64(size)
@@ -293,13 +293,13 @@ func clientRequest(c api.Catalog, client api.Object, contextName string) (Reques
 	var err error
 	switch {
 	case spec.Has("subvolumeRef"):
-		subvolume, _ := c.Find(api.StorageSubvolume, spec.Get("subvolumeRef").Text())
+		subvolume, _ := c.Find(api.CephSubvolume, spec.Get("subvolumeRef").Text())
 		if r, err = subvolumeRequest(c, subvolume, contextName); err != nil {
 			return Request{}, err
 		}
 		frozen.Filesystem, frozen.Group, frozen.Subvolume = r.Subvolume.Filesystem, r.Subvolume.Group, r.Subvolume.Name
 	case spec.Has("filesystemRef"):
-		fs, _ := c.Find(api.StorageFilesystem, spec.Get("filesystemRef").Text())
+		fs, _ := c.Find(api.CephFilesystem, spec.Get("filesystemRef").Text())
 		if r, err = filesystemRequest(c, fs, contextName); err != nil {
 			return Request{}, err
 		}
@@ -312,13 +312,13 @@ func clientRequest(c api.Catalog, client api.Object, contextName string) (Reques
 }
 
 func poolClientRequest(c api.Catalog, client api.Object, contextName string) (Request, error) {
-	pool, _ := c.Find(api.StoragePool, client.Spec().Get("poolRef").Text())
+	pool, _ := c.Find(api.CephPool, client.Spec().Get("poolRef").Text())
 	r, err := poolRequest(c, pool, contextName)
 	if err != nil {
 		return Request{}, err
 	}
 	if r.Pool.Type == "erasure" {
-		return Request{}, failure("lifecycle.unsupported", "StorageClient "+client.Name()+" names erasure-coded pool "+pool.Name()+"; RBD image headers and the client's pool-scoped caps need a replicated RBD pool", "point spec.poolRef at a replicated rbd pool and name the erasure-coded pool in the spec.dataPoolRef of the StorageRBDImages on it; the client's caps then include that data pool")
+		return Request{}, failure("lifecycle.unsupported", "CephClient "+client.Name()+" names erasure-coded pool "+pool.Name()+"; RBD image headers and the client's pool-scoped caps need a replicated RBD pool", "point spec.poolRef at a replicated rbd pool and name the erasure-coded pool in the spec.dataPoolRef of the CephRBDImages on it; the client's caps then include that data pool")
 	}
 	dataPools, err := clientDataPools(c, client.Spec().Get("clusterRef").Text(), pool.Name(), contextName)
 	if err != nil {
@@ -326,13 +326,13 @@ func poolClientRequest(c api.Catalog, client api.Object, contextName string) (Re
 	}
 	r.Action = "client"
 	r.Pool = nil
-	r.Client = &Client{Access: client.Spec().Get("access").Text(), DataPools: dataPools, Name: client.Name(), Pool: storage.PoolName(pool)}
+	r.Client = &Client{Access: client.Spec().Get("access").Text(), DataPools: dataPools, Name: client.Name(), Pool: cephcluster.PoolName(pool)}
 	return r, nil
 }
 
 func clientDataPools(c api.Catalog, cluster, pool, contextName string) ([]string, error) {
 	pools := []string{}
-	for _, image := range c.OfKind(api.StorageRBDImage) {
+	for _, image := range c.OfKind(api.CephRBDImage) {
 		spec := image.Spec()
 		data := spec.Get("dataPoolRef").Text()
 		if spec.Get("clusterRef").Text() != cluster || spec.Get("poolRef").Text() != pool || data == "" || slices.Contains(pools, data) {
@@ -342,11 +342,11 @@ func clientDataPools(c api.Catalog, cluster, pool, contextName string) ([]string
 	}
 	slices.Sort(pools)
 	for i, name := range pools {
-		data, _ := c.Find(api.StoragePool, name)
+		data, _ := c.Find(api.CephPool, name)
 		if _, err := poolRequest(c, data, contextName); err != nil {
 			return nil, err
 		}
-		pools[i] = storage.PoolName(data)
+		pools[i] = cephcluster.PoolName(data)
 	}
 	slices.Sort(pools)
 	return pools, nil
@@ -354,17 +354,17 @@ func clientDataPools(c api.Catalog, cluster, pool, contextName string) ([]string
 
 func rbdImageRequest(c api.Catalog, image api.Object, contextName string) (Request, error) {
 	spec := image.Spec()
-	pool, _ := c.Find(api.StoragePool, spec.Get("poolRef").Text())
+	pool, _ := c.Find(api.CephPool, spec.Get("poolRef").Text())
 	r, err := poolRequest(c, pool, contextName)
 	if err != nil {
 		return Request{}, err
 	}
 	if r.Pool.Type != "replicated" {
-		return Request{}, failure("lifecycle.unsupported", "StorageRBDImage "+image.Name()+" names erasure-coded pool "+pool.Name()+"; an RBD image keeps its header and metadata in a replicated pool", "point spec.poolRef at a replicated rbd pool and name the erasure-coded pool in spec.dataPoolRef")
+		return Request{}, failure("lifecycle.unsupported", "CephRBDImage "+image.Name()+" names erasure-coded pool "+pool.Name()+"; an RBD image keeps its header and metadata in a replicated pool", "point spec.poolRef at a replicated rbd pool and name the erasure-coded pool in spec.dataPoolRef")
 	}
 	dataPool := spec.Get("dataPoolRef").Text()
 	if dataPool != "" {
-		data, _ := c.Find(api.StoragePool, dataPool)
+		data, _ := c.Find(api.CephPool, dataPool)
 		if _, err := poolRequest(c, data, contextName); err != nil {
 			return Request{}, err
 		}
@@ -372,7 +372,7 @@ func rbdImageRequest(c api.Catalog, image api.Object, contextName string) (Reque
 	size, _ := spec.Get("sizeBytes").Int64()
 	r.Action = "rbd"
 	r.Pool = nil
-	r.RBD = &RBDImage{DataPool: nativePoolRef(c, dataPool), Features: storage.RBDImageFeatures(spec), Name: image.Name(), Pool: storage.PoolName(pool), SizeBytes: size}
+	r.RBD = &RBDImage{DataPool: nativePoolRef(c, dataPool), Features: cephcluster.RBDImageFeatures(spec), Name: image.Name(), Pool: cephcluster.PoolName(pool), SizeBytes: size}
 	return r, nil
 }
 
@@ -395,13 +395,13 @@ func filesystemDataPools(spec api.Value) []string {
 
 func filesystemOwner(c api.Catalog, pool api.Object) string {
 	s, owner := pool.Spec(), ""
-	for _, fs := range c.OfKind(api.StorageFilesystem) {
+	for _, fs := range c.OfKind(api.CephFilesystem) {
 		spec := fs.Spec()
 		if spec.Get("clusterRef").Text() != s.Get("clusterRef").Text() || owner != "" && owner < fs.Name() {
 			continue
 		}
-		if s.Get("role").Text() == "cephfs-metadata" && spec.Get("metadataPoolRef").Text() == pool.Name() ||
-			s.Get("role").Text() == "cephfs-data" && slices.Contains(filesystemDataPools(spec), pool.Name()) {
+		if s.Get("role").Text() == "cephfsMetadata" && spec.Get("metadataPoolRef").Text() == pool.Name() ||
+			s.Get("role").Text() == "cephfsData" && slices.Contains(filesystemDataPools(spec), pool.Name()) {
 			owner = fs.Name()
 		}
 	}
@@ -413,21 +413,21 @@ func filesystemRequest(c api.Catalog, fs api.Object, contextName string) (Reques
 	data := filesystemDataPools(spec)
 	var r Request
 	for i, name := range append([]string{spec.Get("metadataPoolRef").Text()}, data...) {
-		pool, _ := c.Find(api.StoragePool, name)
+		pool, _ := c.Find(api.CephPool, name)
 		request, err := poolRequest(c, pool, contextName)
 		if err != nil {
 			return Request{}, err
 		}
 		if i == 1 && request.Pool.Type != "replicated" {
-			return Request{}, failure("lifecycle.unsupported", "StorageFilesystem "+fs.Name()+" names erasure-coded pool "+name+" as its default data pool; ceph fs new refuses it unless forced, and Bootwright never forces it", "mark a replicated cephfs-data pool default in spec.dataPoolRefs and attach erasure-coded pools as additional data pools")
+			return Request{}, failure("lifecycle.unsupported", "CephFilesystem "+fs.Name()+" names erasure-coded pool "+name+" as its default data pool; ceph fs new refuses it unless forced, and Bootwright never forces it", "mark a replicated cephfsData pool default in spec.dataPoolRefs and attach erasure-coded pools as additional data pools")
 		}
 		if i == 0 {
 			r = request
 		}
 	}
-	cluster, _ := c.Find(api.StorageCluster, r.Cluster)
-	if _, projected := storage.NativeService(cluster, "mds."+fs.Name()); !projected {
-		return Request{}, failure("api.invariant", "StorageCluster "+r.Cluster+" projects no MDS service mds."+fs.Name()+" for StorageFilesystem "+fs.Name(), "declare the mds service entry with service_id "+fs.Name()+" in spec.ceph.services")
+	cluster, _ := c.Find(api.CephCluster, r.Cluster)
+	if _, projected := cephcluster.NativeService(cluster, "mds."+fs.Name()); !projected {
+		return Request{}, failure("api.invariant", "CephCluster "+r.Cluster+" projects no MDS service mds."+fs.Name()+" for CephFilesystem "+fs.Name(), "declare the mds service entry with service_id "+fs.Name()+" in spec.services")
 	}
 	mds := spec.Get("mds")
 	r.Action = "filesystem"
@@ -461,7 +461,7 @@ func filesystemGroups(c api.Catalog, spec api.Value, defaultPool string) []Files
 
 func subvolumeRequest(c api.Catalog, subvolume api.Object, contextName string) (Request, error) {
 	spec := subvolume.Spec()
-	fs, _ := c.Find(api.StorageFilesystem, spec.Get("filesystemRef").Text())
+	fs, _ := c.Find(api.CephFilesystem, spec.Get("filesystemRef").Text())
 	r, err := filesystemRequest(c, fs, contextName)
 	if err != nil {
 		return Request{}, err
@@ -495,8 +495,8 @@ func subvolumeRequest(c api.Catalog, subvolume api.Object, contextName string) (
 }
 
 func nativePoolRef(c api.Catalog, ref string) string {
-	if pool, found := c.Find(api.StoragePool, ref); found {
-		return storage.PoolName(pool)
+	if pool, found := c.Find(api.CephPool, ref); found {
+		return cephcluster.PoolName(pool)
 	}
 	return ref
 }

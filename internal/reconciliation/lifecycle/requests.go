@@ -10,6 +10,7 @@ import (
 type PlanRequest struct {
 	ContextName string
 	Stages      []string
+	Until       string
 }
 
 type StatusRequest struct {
@@ -65,6 +66,7 @@ type RealSide struct {
 type ApplyRequest struct {
 	ContextName      string
 	Stages           []string
+	Until            string
 	Authorizations   []string
 	SkipConfirmation bool
 	Unattended       bool
@@ -142,6 +144,7 @@ type PlanResult struct {
 	Verb    string
 	Steps   []PlanStep
 	Stages  []string
+	Until   string
 	// Waves is how many rounds the plan's own shape needs, and Widest is how
 	// many of its steps share the fullest one. Together they say how much of
 	// the work the graph lets run at once, which is what an operator reads to
@@ -293,7 +296,7 @@ type RealizationStatus string
 const (
 	// RealizationUnsupported is an object this executable does not realize: no
 	// capability claims its kind, its capability refuses it, or it is a managed
-	// service retained install-only.
+	// service retained installOnly.
 	RealizationUnsupported RealizationStatus = "unsupported"
 	// RealizationPending is an object this context has not realized: nothing
 	// names it, its blocks have not started, or a removal took it back or

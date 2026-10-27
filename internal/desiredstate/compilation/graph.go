@@ -31,7 +31,7 @@ func (g GraphSelector) Select(catalog api.Catalog) Selection {
 	}
 	attachments := []environment.Attachment{}
 	for _, attachment := range g.attachments(catalog) {
-		attachments = append(attachments, environment.Attachment{ClusterRef: attachment.ClusterRef, ExportRef: attachment.ExportRef})
+		attachments = append(attachments, environment.Attachment{ClusterRef: attachment.ClusterRef, ConsumerRef: attachment.ConsumerRef})
 	}
 	selection := g.environment(catalog, attachments)
 	result := Selection{Catalog: selection.Catalog, ExcludedContainerClusters: slices.Clone(selection.ExcludedContainerClusters), ExcludedStorageClusters: slices.Clone(selection.ExcludedStorageClusters), Excluded: maps.Clone(selection.Excluded)}

@@ -4,6 +4,8 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"strings"
+
+	"github.com/crmarques/bootwright/internal/reconciliation"
 )
 
 // Implementation is the frozen identity of this capability. A plan records it,
@@ -19,7 +21,7 @@ const requestVersion = "machine-baremetal-v2"
 
 // BlockID names the block this capability contributes. A Machine has exactly
 // one provider, so the machine families of two substrates never collide.
-func BlockID(machine string) string { return "machine-" + machine }
+func BlockID(machine string) string { return reconciliation.BlockIdentity("machine-", machine) }
 
 // ContentDigest binds a plan to the exact behavior this build implements. It
 // covers the request shape and the proof this block performs, so widening what

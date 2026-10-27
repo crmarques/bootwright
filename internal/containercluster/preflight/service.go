@@ -8,7 +8,7 @@ import (
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/availability"
-	"github.com/crmarques/bootwright/internal/containercluster"
+	"github.com/crmarques/bootwright/internal/containercluster/openshift"
 	"github.com/crmarques/bootwright/internal/diagnostics"
 	"github.com/crmarques/bootwright/internal/environment"
 	"github.com/crmarques/bootwright/internal/machine"
@@ -45,13 +45,13 @@ func (s Service) Check(ctx context.Context, request PreflightRequest) (*Report, 
 	if err != nil {
 		return nil, err
 	}
-	clusters := catalog.OfKind(api.ContainerCluster)
+	clusters := catalog.OfKind(api.OpenShiftCluster)
 	names := slices.Clone(request.Clusters)
 	slices.Sort(names)
 	names = slices.Compact(names)
 	for _, name := range names {
 		if !slices.ContainsFunc(clusters, func(o api.Object) bool { return o.Name() == name }) {
-			return nil, diagnostics.NewFailureWithRemediation("access.target", "the context selects no ContainerCluster named "+name, "", "run bootwright cluster list --context "+selected)
+			return nil, diagnostics.NewFailureWithRemediation("access.target", "the context selects no OpenShiftCluster named "+name, "", "run bootwright cluster list --context "+selected)
 		}
 	}
 	blocks := map[string]string{}
@@ -71,7 +71,7 @@ func (s Service) Check(ctx context.Context, request PreflightRequest) (*Report, 
 			nodes[node.Get("machineRef").Text()] = true
 		}
 		dns, pending := clusterDNS(catalog, cluster, blocks, s.DNSBlock)
-		for _, endpoint := range containercluster.ResolutionNames(catalog, cluster) {
+		for _, endpoint := range openshift.ResolutionNames(catalog, cluster) {
 			result.Checks = append(result.Checks, s.resolve(ctx, request, selected, endpoint.Name, endpoint.Address, endpoint.Slot, dns, pending))
 		}
 	}
@@ -119,7 +119,7 @@ func (s Service) resolve(ctx context.Context, request PreflightRequest, contextN
 	case pending:
 		check.Status = capacity.Pending
 		check.Reason = "the managed DNSServer serving " + name + " is not done"
-		check.Next = "run bootwright apply --context " + contextName + " --stage infra-components, then " + next
+		check.Next = "run bootwright apply --context " + contextName + " --stage infrastructure-services, then " + next
 	case s.Resolver == nil:
 		check.Reason = "the controller resolver is unavailable"
 	default:

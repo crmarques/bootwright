@@ -122,7 +122,7 @@
       "virtualMedia": {
         "removeCertificate": false,
         "restoreVerification": false,
-        "trust": "import-certificate"
+        "trust": "importCertificate"
       }
     },
     "hardware": {
@@ -135,7 +135,7 @@
       "rootDevice": "/dev/disk/by-id/wwn-0x5000c500a1b2c3d4"
     },
     "hostKeyRef": "metal-01-host-key",
-    "hostKeyType": "ecdsa-p256",
+    "hostKeyType": "ecdsaP256",
     "physical": true,
     "substrate": "baremetal"
   },
@@ -150,5 +150,5 @@
     "size": 0
   },
   "user": "bootwright",
-  "version": "os-install-anaconda-v16"
+  "version": "os-install-anaconda-v17"
 }

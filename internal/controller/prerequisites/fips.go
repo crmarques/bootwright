@@ -8,7 +8,7 @@ import (
 
 // RequiresClusterFIPS reads cluster intent and makes no claim about Bootwright cryptography.
 func RequiresClusterFIPS(catalog api.Catalog) bool {
-	for _, cluster := range catalog.OfKind(api.ContainerCluster) {
+	for _, cluster := range catalog.OfKind(api.OpenShiftCluster) {
 		if cluster.Spec().Get("security", "fips", "enabled").Bool() {
 			return true
 		}

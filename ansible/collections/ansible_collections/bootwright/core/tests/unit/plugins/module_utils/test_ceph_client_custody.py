@@ -57,14 +57,14 @@ FS_DUMP = {"epoch": 9, "feature_flags": {"enable_multiple": True, "ever_enabled_
 def scoped_client(arm):
     """The frozen client of one arm: a list names an RBD pool's derived data pools, a word names a CephFS arm."""
     if arm == "filesystem":
-        return {"name": "consumer", "pool": "", "access": "read-write", "dataPools": [], "filesystem": "files", "group": "", "subvolume": ""}
+        return {"name": "consumer", "pool": "", "access": "readWrite", "dataPools": [], "filesystem": "files", "group": "", "subvolume": ""}
     if arm == "subvolume":
-        return {"name": "consumer", "pool": "", "access": "read-write", "dataPools": [], "filesystem": "files", "group": "csi", "subvolume": "docs",
+        return {"name": "consumer", "pool": "", "access": "readWrite", "dataPools": [], "filesystem": "files", "group": "csi", "subvolume": "docs",
                 "subvolumePath": SUBVOLUME_PATH}
     if arm == "subvolume-nogroup":
-        return {"name": "consumer", "pool": "", "access": "read-write", "dataPools": [], "filesystem": "files", "group": "", "subvolume": "docs",
+        return {"name": "consumer", "pool": "", "access": "readWrite", "dataPools": [], "filesystem": "files", "group": "", "subvolume": "docs",
                 "subvolumePath": NOGROUP_PATH}
-    return {"name": "consumer", "pool": "volumes", "access": "read-write", "dataPools": list(arm), "filesystem": "", "group": "", "subvolume": ""}
+    return {"name": "consumer", "pool": "volumes", "access": "readWrite", "dataPools": list(arm), "filesystem": "", "group": "", "subvolume": ""}
 
 
 @pytest.fixture
@@ -75,14 +75,14 @@ def client(tmp_path, monkeypatch, request):
               "user": "operator", "port": 22, "devices": [{"path": "/dev/vdb", "serial": "disk" + str(i), "sizeBytes": 1024 ** 3}],
               "labels": [], "location": {}, "sshKeyRef": "fleet-key"} for i in range(1, 4)]
     names = [host["name"] for host in hosts]
-    request = {"controller": "controller", "version": "ceph-core-v32", "action": "client", "cluster": "example", "owner": "apply-example",
+    request = {"controller": "controller", "version": "ceph-core-v33", "action": "client", "cluster": "example", "owner": "apply-example",
                "fsid": "4c0a4300-aa43-458c-86d7-ac2256d1fc00", "image": "registry.example.test/ceph@sha256:" + "a" * 64,
                "cephadm": {"path": "/usr/sbin/cephadm", "packageVersion": "20.2.1-405.el9cp"},
                "release": "9.1", "ansiblePackageVersion": "3.2.0",
                "packageRepository": "https://public.dhe.ibm.com/ibmdl/export/pub/storage/ceph/9/rhel9/x86_64",
                "packageRepositoryKey": "https://public.dhe.ibm.com/keys/ibm.asc",
                "bootstrap": "node-1", "monIP": "192.0.2.1", "clusterSSHUser": "operator",
-               "clusterSSHTransport": "verified-tunnel", "clusterKeyRef": "cluster-key", "registryRef": "registry-key",
+               "clusterSSHTransport": "verifiedTunnel", "clusterKeyRef": "cluster-key", "registryRef": "registry-key",
                "registry": "registry.example.test", "callHome": "enabled", "publicNetworks": ["192.0.2.0/24"], "clusterNetworks": [], "hosts": hosts,
                "services": [{"service_type": "mon", "placement": {"hosts": names}},
                             {"service_type": "mgr", "placement": {"hosts": names, "count": 2}},
@@ -622,13 +622,13 @@ def test_cephfs_client_refuses_an_unproved_scope_before_any_key(client, change, 
 
 
 @pytest.mark.parametrize("client, access, caps", [
-    ([], "read-write", {"mon": "profile rbd", "mgr": "profile rbd pool=volumes", "osd": "profile rbd pool=volumes"}),
-    ("filesystem", "read-write", {"mds": "allow rw fsname=files", "mon": "allow r fsname=files", "osd": "allow rw tag cephfs data=files"}),
-    ("filesystem", "read-only", {"mds": "allow r fsname=files", "mon": "allow r fsname=files", "osd": "allow r tag cephfs data=files"}),
-    ("subvolume", "read-write",
+    ([], "readWrite", {"mon": "profile rbd", "mgr": "profile rbd pool=volumes", "osd": "profile rbd pool=volumes"}),
+    ("filesystem", "readWrite", {"mds": "allow rw fsname=files", "mon": "allow r fsname=files", "osd": "allow rw tag cephfs data=files"}),
+    ("filesystem", "readOnly", {"mds": "allow r fsname=files", "mon": "allow r fsname=files", "osd": "allow r tag cephfs data=files"}),
+    ("subvolume", "readWrite",
      {"mds": "allow rw fsname=files path=" + SUBVOLUME_PATH, "mon": "allow r fsname=files", "osd": "allow rw tag cephfs data=files"}),
-    ("subvolume", "read-only", {"mds": "allow r fsname=files path=" + SUBVOLUME_PATH, "mon": "allow r fsname=files", "osd": "allow r tag cephfs data=files"}),
-    ("subvolume-nogroup", "read-write",
+    ("subvolume", "readOnly", {"mds": "allow r fsname=files path=" + SUBVOLUME_PATH, "mon": "allow r fsname=files", "osd": "allow r tag cephfs data=files"}),
+    ("subvolume-nogroup", "readWrite",
      {"mds": "allow rw fsname=files path=" + NOGROUP_PATH, "mon": "allow r fsname=files", "osd": "allow rw tag cephfs data=files"}),
 ], indirect=["client"])
 def test_client_caps_per_arm(client, access, caps):

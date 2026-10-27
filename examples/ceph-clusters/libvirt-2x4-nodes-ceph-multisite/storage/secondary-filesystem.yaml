@@ -1,0 +1,16 @@
+apiVersion: bootwright.io/v1alpha1
+kind: CephFilesystem
+metadata:
+  name: secondary-files
+
+spec:
+  clusterRef: secondary
+  metadataPoolRef: secondary-metadata
+
+  dataPoolRefs:
+    - secondary-data
+
+  mds:
+    activeCount: 1
+    standbyCountWanted: 1
+    standbyReplay: false

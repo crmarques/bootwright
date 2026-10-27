@@ -64,13 +64,13 @@ func management(kind string) api.FieldValue {
 }
 
 // A lab-sno-shaped graph beside an OKD cluster and both kinds of Ceph
-// StorageCluster, in one declaration order.
+// CephCluster, in one declaration order.
 func graph() []api.Object {
 	return []api.Object{
-		object(api.ContainerCluster, "sno", distribution("openshift")),
-		object(api.ContainerCluster, "okd", distribution("okd")),
-		object(api.StorageCluster, "ceph", api.FieldValue{Name: "type", Value: api.StringValue("ceph")}, management("managed")),
-		object(api.StorageCluster, "remote", api.FieldValue{Name: "type", Value: api.StringValue("ceph")}, management("external")),
+		object(api.OpenShiftCluster, "sno", distribution("openshift")),
+		object(api.OpenShiftCluster, "okd", distribution("okd")),
+		object(api.CephCluster, "ceph", management("managed")),
+		object(api.CephCluster, "remote", management("external")),
 		object(api.Machine, "sno-node"),
 	}
 }
@@ -167,7 +167,7 @@ func TestAnUnknownOrExcludedClusterIsAnAccessTarget(t *testing.T) {
 		if code(t, err) != "access.target" || len(reader.reads) != 0 {
 			t.Fatalf("%q: %v after %d custody reads", name, err, len(reader.reads))
 		}
-		if remedy := diagnostics.Of(err)[0].Remediation; remedy != "name a ContainerCluster this context selects; bootwright cluster info --context lab lists them" {
+		if remedy := diagnostics.Of(err)[0].Remediation; remedy != "name an OpenShiftCluster this context selects; bootwright cluster info --context lab lists them" {
 			t.Fatalf("%q: remediation %q", name, remedy)
 		}
 	}
@@ -189,7 +189,7 @@ func TestManagedAndExternalStorageClustersAreNotApplicableAndReadNoCustody(t *te
 			t.Fatalf("%s: %v after %d custody reads", name, err, len(reader.reads))
 		}
 		found := diagnostics.Of(err)[0]
-		want := "bootwright cluster kubeconfig does not apply to " + name + ", a " + kind + " Ceph StorageCluster; it applies to OpenShift and OKD ContainerClusters only"
+		want := "bootwright cluster kubeconfig does not apply to " + name + ", a " + kind + " CephCluster; it applies to OpenShiftClusters only"
 		if found.Message != want || found.Remediation != "bootwright cluster info --context lab lists the clusters this context selects and their kinds" {
 			t.Fatalf("%s: %+v", name, found)
 		}

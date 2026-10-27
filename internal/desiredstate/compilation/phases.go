@@ -128,7 +128,9 @@ func (r *run) validateAuthored() bool {
 			}
 		}
 		validateSourcePaths(record, r.sources, r.ds)
+		record.inheritedSpec = record.object.Spec()
 		record.object = record.object.WithSpec(builtInDefaults(record.object.Spec(), api.Schema(record.object.Kind())))
+		record.builtInSpec = record.object.Spec()
 		if !budget.admit(record, r.ds) {
 			return false
 		}
@@ -173,14 +175,18 @@ func (r *run) closeGraph() {
 // provider is normalized before its consumers and the result never depends on
 // source order or on a peer's normalized state.
 func normalizationOrder() []api.Kind {
-	return []api.Kind{
-		api.Environment, api.Entitlement, api.Secret, api.NetworkConfig, api.MachineImage,
+	kinds := []api.Kind{
+		api.Environment, api.Entitlement, api.NetworkConfig, api.MachineImage,
 		api.MachineInstallProfile, api.InfraProvider, api.Machine, api.Proxy, api.DNSServer,
-		api.NTPServer, api.ArtifactServer, api.Registry, api.LoadBalancer, api.ContainerCluster,
-		api.StorageCluster, api.StoragePlacementPolicy, api.StoragePool, api.StorageRBDImage, api.StorageClient, api.StorageFilesystem, api.StorageSubvolume,
-		api.StorageObjectGateway, api.StorageObjectUser, api.StorageObjectBucket, api.StorageNFSExport, api.StorageSMBResource, api.StorageNVMeoFSubsystem, api.StorageReplication, api.StorageExport, api.ClusterAddon,
-		api.ClusterAddonProfile, api.ClusterAddonBinding, api.CustomPlaybook,
+		api.NTPServer, api.ArtifactServer, api.Registry, api.LoadBalancer, api.Secret,
 	}
+	tail := []api.Kind{api.ClusterAddon, api.ClusterAddonProfile, api.ClusterAddonBinding, api.CustomPlaybook}
+	for _, kind := range api.FamilyKinds() {
+		if !slices.Contains(tail, kind) {
+			kinds = append(kinds, kind)
+		}
+	}
+	return append(kinds, tail...)
 }
 
 // normalize applies each kind's normalizer in dependency order, recording where
@@ -281,14 +287,29 @@ func (r *run) validateEffective(catalog api.Catalog) bool {
 			}
 			for _, issue := range rules.Validate(record.object, catalog) {
 				if issue.Code == "" || issue.Code == "api.invariant" {
-					refused[issue.Field] = true
+					refused[record.sourceField(issue.Field)] = true
 				}
 				r.ds.issue(record, issue)
 			}
 		}
 		r.ds.retractReferences(start, end, refused)
+		for _, declaration := range api.UnrealizedDeclarations() {
+			if declaration.DeclaredBy(record.object) {
+				r.ds.issue(record, unrealizedIssue(declaration, record.object))
+			}
+		}
 	}
 	return true
+}
+
+// unrealizedIssue: specs/api.md, Admitted but unrealized.
+func unrealizedIssue(declaration api.Unrealized, object api.Object) api.Issue {
+	message := object.Identity() + " declares " + declaration.Declaration() + ", which this build admits but does not realize, so plan refuses it with lifecycle.unsupported"
+	remediation := "remove " + strings.TrimPrefix(declaration.Path, "$.") + " from " + object.Identity() + " to plan with this build"
+	if declaration.Item != "" {
+		message += "; tracked as " + declaration.Item
+	}
+	return api.Issue{Code: "api.unrealized", Field: declaration.Path, Message: message, Remediation: remediation}
 }
 
 // complete builds the immutable model and the report its warnings belong to.
@@ -298,15 +319,19 @@ func (r *run) complete(catalog api.Catalog) (*State, *Report) {
 			continue
 		}
 		r.report.Diagnostics = append(r.report.Diagnostics, d)
-		if d.Code == "api.deferred" {
+		if d.Code == "api.deferred" || d.Code == "api.unrealized" {
 			r.report.Advisories = append(r.report.Advisories, d)
 		}
 	}
 	authored := []api.Object{}
 	origins := map[string]diagnostics.SourceLocation{}
+	fields := map[string]func() []FieldOrigin{}
 	for _, record := range r.records {
 		authored = append(authored, record.authored)
 		origins[record.object.Identity()] = diagnostics.SourceLocation{Path: record.path, Document: record.document}
+		fields[record.object.Identity()] = record.fieldOrigins
 	}
-	return NewState(api.NewCatalog(authored), catalog, origins), r.report
+	state := NewState(api.NewCatalog(authored), catalog, origins)
+	state.fields = fields
+	return state, r.report
 }

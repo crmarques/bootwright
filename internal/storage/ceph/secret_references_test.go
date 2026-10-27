@@ -31,7 +31,7 @@ func TestCephBlocksReportTheSecretsTheirRequestsReference(t *testing.T) {
 	catalog := smbCatalog(t, subvolumeOf(), smbUsers(), smbJoin(), smbFiles(requestMap("label", "mon", "count", 2)), smbDocs())
 	base := sambaBase(t, catalog)
 	export := managedExportPlan(t, true)
-	securedExport, err := DecodeExportRequest(export.Request)
+	securedExport, err := DecodeConsumerRequest(export.Request)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -43,13 +43,13 @@ func TestCephBlocksReportTheSecretsTheirRequestsReference(t *testing.T) {
 		block      reconciliation.Block
 		want       []string
 	}{
-		"cluster":                           {New("StorageCluster", nil).SecretReferences, frozenCeph(t, core), []string{"cluster-key", "fleet-key", "node-1-host-key", "node-2-host-key", "node-3-host-key", "registry"}},
-		"packages":                          {New("StorageCluster", nil).SecretReferences, frozenCeph(t, packageRequest(t)), []string{"cluster-key", "fleet-key", "registry", "serving-tls"}},
-		"bindings":                          {New("StorageCluster", nil).SecretReferences, frozenCeph(t, bound), []string{"bucket-tls", "cluster-key", "fleet-key", "gateway-tls", "ingress-tls", "node-1-host-key", "node-2-host-key", "node-3-host-key", "registry"}},
+		"cluster":                           {New("CephCluster", nil).SecretReferences, frozenCeph(t, core), []string{"cluster-key", "fleet-key", "node-1-host-key", "node-2-host-key", "node-3-host-key", "registry"}},
+		"packages":                          {New("CephCluster", nil).SecretReferences, frozenCeph(t, packageRequest(t)), []string{"cluster-key", "fleet-key", "registry", "serving-tls"}},
+		"bindings":                          {New("CephCluster", nil).SecretReferences, frozenCeph(t, bound), []string{"bucket-tls", "cluster-key", "fleet-key", "gateway-tls", "ingress-tls", "node-1-host-key", "node-2-host-key", "node-3-host-key", "registry"}},
 		"host":                              {NewHost(nil).SecretReferences, hostCall.Block, []string{"cluster-key", "fleet-key", "node-1-host-key", "node-2-host-key", "node-3-host-key", "registry", "serving-tls"}},
 		"image":                             {NewImage(nil).SecretReferences, imageBlock(t, "example", PinnedRepository+":"+PinnedTag), []string{"registry"}},
-		"export":                            {NewExport(nil).SecretReferences, reconciliation.Block{BlockDefinition: export}, nil},
-		"export with a gateway certificate": {NewExport(nil).SecretReferences, frozenCeph(t, securedExport), []string{"gateway-tls"}},
+		"export":                            {NewConsumer(nil).SecretReferences, reconciliation.Block{BlockDefinition: export}, nil},
+		"export with a gateway certificate": {NewConsumer(nil).SecretReferences, frozenCeph(t, securedExport), []string{"gateway-tls"}},
 		"SMB users":                         {NewSMB(nil).SecretReferences, frozenCeph(t, builtSMB(t, catalog, base, "smb-users")), []string{"alice-password", "bob-password"}},
 		"SMB share":                         {NewSMB(nil).SecretReferences, frozenCeph(t, builtSMB(t, catalog, base, "smb-docs")), nil},
 		"replication":                       {NewReplication(nil).SecretReferences, replication, nil},

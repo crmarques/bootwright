@@ -18,7 +18,7 @@ func TestExampleNVMeOFPlansOwnedImageAndGateway(t *testing.T) {
 	guests := func(catalog api.Catalog) int {
 		count := 0
 		for _, machine := range catalog.OfKind(api.Machine) {
-			if machine.Spec().Get("substrate", "profileRef").Text() != "" {
+			if machine.Spec().Get("substrate", "libvirt", "profileRef").Text() != "" {
 				count++
 			}
 		}

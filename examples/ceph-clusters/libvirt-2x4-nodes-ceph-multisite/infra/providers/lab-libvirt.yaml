@@ -1,0 +1,78 @@
+apiVersion: bootwright.io/v1alpha1
+kind: InfraProvider
+metadata:
+  name: lab-libvirt
+
+spec:
+  libvirt:
+    machineRef: controller
+
+    capacityReserve:
+      cpu: 1
+      memoryMiB: 4096
+      diskGiB: 10
+
+    bmcEmulation:
+      bindAddress: 127.0.0.1
+      port: 8000
+      certificateRef: lab-bmc-tls
+
+      auth:
+        credentialsRef: lab-bmc-credentials
+
+    machineProfiles:
+      - name: core
+        cpu: 4
+        memoryMiB: 16384
+        diskGiB: 60
+        tpm: {}
+
+        dataDisks:
+          - name: ceph-data
+            sizeGiB: 60
+            media: ssd
+
+      - name: gateway
+        cpu: 4
+        memoryMiB: 11264
+        diskGiB: 60
+        tpm: {}
+
+        dataDisks:
+          - name: ceph-data
+            sizeGiB: 60
+            media: ssd
+
+      - name: mirror
+        cpu: 4
+        memoryMiB: 8192
+        diskGiB: 60
+        tpm: {}
+
+        dataDisks:
+          - name: ceph-data
+            sizeGiB: 60
+            media: ssd
+
+      - name: client
+        cpu: 2
+        memoryMiB: 4096
+        diskGiB: 40
+        tpm: {}
+
+  networkAttachments:
+    - name: primary
+
+      libvirt:
+        bridge: virbr-primary
+        management: managed
+        address: 198.51.100.1/24
+        forward: nat
+
+    - name: secondary
+
+      libvirt:
+        bridge: virbr-secondary
+        management: managed
+        address: 192.0.2.1/24
+        forward: nat

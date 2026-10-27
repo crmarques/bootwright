@@ -18,7 +18,7 @@ type fipsWiringHost struct {
 func (h fipsWiringHost) FIPSMode(context.Context) (bool, error) { return h.enabled, nil }
 
 func TestFIPSHostRefusesBeforePlanEffectsAndApplyClaims(t *testing.T) {
-	catalog := api.NewCatalog([]api.Object{api.NewObject(api.ContainerCluster, "fixture", api.Value{}, api.MapValue().WithPath(api.BoolValue(true), "security", "fips", "enabled"))})
+	catalog := api.NewCatalog([]api.Object{api.NewObject(api.OpenShiftCluster, "fixture", api.Value{}, api.MapValue().WithPath(api.BoolValue(true), "security", "fips", "enabled"))})
 	for _, enabled := range []bool{false, true} {
 		host := fipsWiringHost{enabled: enabled}
 		planCalls, applyCalls := 0, 0

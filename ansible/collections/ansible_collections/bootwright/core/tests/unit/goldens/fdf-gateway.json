@@ -94,12 +94,12 @@
     {
       "kind": "place",
       "place": {
-        "desiredDigest": "b76daf90dd5156e92d4b4ad5f2479533af41d71e6a772c8d5daf0bf1709fea31",
+        "desiredDigest": "969cbb2e8d815781fb22cb9d271cf20bd6d233d8c4123bc14bc0a3c0fbab58b7",
         "keys": null,
         "name": "rook-ceph-external-cluster-details",
         "namespace": "openshift-storage",
         "produced": {
-          "kind": "StorageExport",
+          "kind": "CephConsumer",
           "object": "export",
           "output": "external-details"
         },

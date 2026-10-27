@@ -12,31 +12,22 @@ import (
 func selectionObjects() []api.Object {
 	return []api.Object{
 		api.NewObject(api.Environment, "example", api.Value{}, api.MapValue().WithPath(api.StringValue("controller"), "controller", "machineRef")),
-		api.NewObject(api.Machine, "controller", api.Value{}, api.MapValue().WithPath(api.BoolValue(true), "os", "provided").WithPath(api.BoolValue(true), "access", "local").With("capabilities", api.StringList("container-runtime")).WithPath(api.MapValue(), "proxy", "direct")),
+		api.NewObject(api.Machine, "controller", api.Value{}, api.MapValue().WithPath(api.BoolValue(true), "os", "provided").WithPath(api.BoolValue(true), "access", "local").WithPath(api.MapValue(), "proxy", "direct")),
 	}
 }
 
-func TestExplicitControllerRequiresDeclaredContainerRuntime(t *testing.T) {
-	for _, capabilities := range []api.Value{api.Value{}, api.ListValue(), api.StringList("unsupported"), api.StringList("libvirt"), api.StringList("container-runtime", "container-runtime"), api.StringList("container-runtime", "libvirt", "libvirt")} {
-		objects := selectionObjects()
-		objects[1] = objects[1].WithSpec(objects[1].Spec().With("capabilities", capabilities))
-		if _, err := controller.Select(api.NewCatalog(objects)); len(diagnostics.Of(err)) != 1 {
-			t.Fatal("invalid controller capabilities accepted", capabilities)
-		}
-	}
+func TestAnExplicitControllerAlwaysSelectsTheContainerRuntime(t *testing.T) {
 	selected, err := controller.Select(api.NewCatalog(selectionObjects()))
 	if err != nil || !selected.ContainerRuntime() || selected.MachineName() != "controller" || !selected.Route().Direct() {
 		t.Fatal(selected, err)
 	}
 }
 
-func TestLibvirtClientFollowsControllerCapabilityAndReferencedProvider(t *testing.T) {
-	for _, selectedBy := range []string{"capability", "provider", "unused-provider"} {
+func TestLibvirtClientFollowsTheReferencedProvider(t *testing.T) {
+	for _, selectedBy := range []string{"provider", "unused-provider"} {
 		t.Run(selectedBy, func(t *testing.T) {
 			objects := selectionObjects()
 			switch selectedBy {
-			case "capability":
-				objects[1] = objects[1].WithSpec(objects[1].Spec().With("capabilities", api.StringList("libvirt", "container-runtime")))
 			case "provider", "unused-provider":
 				objects = append(objects, api.NewObject(api.InfraProvider, "hypervisor", api.Value{}, api.MapValue().With("libvirt", api.MapValue())))
 				if selectedBy == "provider" {
@@ -159,14 +150,6 @@ func TestEverySelectionRefusalNamesItsRemedy(t *testing.T) {
 		func(objects []api.Object) []api.Object { return objects[1:] },
 		func(objects []api.Object) []api.Object {
 			objects[1] = objects[1].WithSpec(objects[1].Spec().WithPath(api.BoolValue(false), "os", "provided"))
-			return objects
-		},
-		func(objects []api.Object) []api.Object {
-			objects[1] = objects[1].WithSpec(objects[1].Spec().With("capabilities", api.StringList("container-runtime", "ceph-node")))
-			return objects
-		},
-		func(objects []api.Object) []api.Object {
-			objects[1] = objects[1].WithSpec(objects[1].Spec().With("capabilities", api.StringList("libvirt")))
 			return objects
 		},
 		func(objects []api.Object) []api.Object {

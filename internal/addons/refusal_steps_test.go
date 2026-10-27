@@ -41,7 +41,7 @@ func TestUndecodableSelectionsAreTheirOwnOnlyRefusal(t *testing.T) {
 				"addonConfigs", l(m("addonRef", s("broken"))))),
 		},
 		{
-			name: "a StorageExport input target", undecodable: "StorageExport/export",
+			name: "a CephConsumer input target", undecodable: "CephConsumer/export",
 			objects: []api.Object{storageAddon},
 			owner: obj(api.ClusterAddonBinding, "binding", m("clusterRef", s("cluster"), "addonRefs", api.StringList("storage"),
 				"addonConfigs", l(m("addonRef", s("storage"), "inputs", l(m("name", s("export"), "value", s("export"))))))),
@@ -114,7 +114,7 @@ func TestAddonRefusalsNameANextStep(t *testing.T) {
 			[]api.Object{tokenAddon, obj(api.Secret, "credential", m("type", s("token")))}},
 		{"an add-on bound twice", "$.spec.addonRefs[0]", "bind a to cluster through one ClusterAddonBinding only",
 			binding(m("addonRefs", api.StringList("a"))), []api.Object{manifestAddon("a"), obj(api.ClusterAddonBinding, "before", m("clusterRef", s("cluster"), "addonRefs", api.StringList("a")))}},
-		{"a capability nothing provides", "$.spec.addonRefs[0]", "select a package or add-on that provides capability for ContainerCluster/cluster, or remove ClusterAddon/consumer from the selection",
+		{"a capability nothing provides", "$.spec.addonRefs[0]", "select a package or add-on that provides capability for OpenShiftCluster/cluster, or remove ClusterAddon/consumer from the selection",
 			binding(m("addonRefs", api.StringList("consumer"))), []api.Object{requiring("consumer", "capability")}},
 		{"a capability cycle", "$.spec.addonRefs[1]", "remove one requires entry among ClusterAddon/consumer, ClusterAddon/provider to break the cycle",
 			binding(m("addonRefs", api.StringList("provider", "consumer"))), []api.Object{provider, consumer}},

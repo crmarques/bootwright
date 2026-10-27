@@ -10,7 +10,7 @@ import (
 	"github.com/crmarques/bootwright/internal/secrets"
 )
 
-func Normalize(o api.Object, _ api.Catalog) (api.Object, []api.Issue) {
+func Normalize(o api.Object, c api.Catalog) (api.Object, []api.Issue) {
 	if !IsService(o.Kind()) {
 		return o, nil
 	}
@@ -19,7 +19,7 @@ func Normalize(o api.Object, _ api.Catalog) (api.Object, []api.Issue) {
 		return o.WithSpec(value), nil
 	}
 	if o.Kind() != api.LoadBalancer {
-		value = value.Default("bindAddress", api.StringValue("0.0.0.0"))
+		value = value.Default("bindAddress", api.StringValue(derivedBind(value, c)))
 	}
 	ports := map[api.Kind]string{api.Proxy: "3128", api.DNSServer: "53", api.NTPServer: "123", api.Registry: "5000"}
 	if port := ports[o.Kind()]; port != "" {
@@ -34,6 +34,24 @@ func Normalize(o api.Object, _ api.Catalog) (api.Object, []api.Issue) {
 		}
 	}
 	return o.WithSpec(value), nil
+}
+
+// derivedBind is the one IP every endpoint names on the placement Machine, else
+// the wildcard (specs/api/infrastructure-services.md).
+func derivedBind(value api.Value, c api.Catalog) string {
+	machine, found := c.Find(api.Machine, value.Get("machineRef").Text())
+	bound := ""
+	for _, endpoint := range value.Get("endpoints").Items() {
+		address, err := netip.ParseAddr(machineAddress(machine, endpoint.Get("addressRef").Text()))
+		if !found || err != nil || bound != "" && bound != address.String() {
+			return "0.0.0.0"
+		}
+		bound = address.String()
+	}
+	if bound == "" {
+		return "0.0.0.0"
+	}
+	return bound
 }
 
 func normalizeServiceIPs(value api.Value) api.Value {
@@ -83,41 +101,6 @@ func canonicalIP(value api.Value) api.Value {
 	return value
 }
 
-// blockIdentityBytes bounds the lifecycle block identity a managed service
-// plans, which the plan admits only as a safe segment of at most 63 bytes.
-const blockIdentityBytes = 63
-
-// serviceBlockPrefixes is the prefix each managed service capability writes
-// before the service name to form its block identity. This package cannot
-// import those capabilities, so a test holds this copy to their own.
-var serviceBlockPrefixes = map[api.Kind]string{api.ArtifactServer: "artifact-server-", api.Proxy: "proxy-", api.DNSServer: "dns-", api.NTPServer: "ntp-"}
-
-// NameLimit is the longest name a managed service of kind may carry, so its
-// block identity stays within the plan's bound, and whether a capability
-// plans a block for that kind at all.
-func NameLimit(kind api.Kind) (int, bool) {
-	prefix, found := serviceBlockPrefixes[kind]
-	if !found {
-		return 0, false
-	}
-	return blockIdentityBytes - len(prefix), true
-}
-
-// validateNameLimit refuses a managed service name whose block identity the
-// plan would refuse later as an object-less state failure. A name the API
-// grammar already refuses is that grammar's refusal alone.
-func validateNameLimit(o api.Object) []api.Issue {
-	limit, found := NameLimit(o.Kind())
-	if !found || !api.ValidLexical("name", o.Name()) || len(o.Name()) <= limit {
-		return nil
-	}
-	return []api.Issue{{
-		Code: "api.value", Field: "$.metadata.name",
-		Message:     fmt.Sprintf("a managed %s name is at most %d bytes, because its block %s<name> is a 63-byte identity", o.Kind(), limit, serviceBlockPrefixes[o.Kind()]),
-		Remediation: fmt.Sprintf("rename %s to at most %d bytes, with every reference to it", o.Identity(), limit),
-	}}
-}
-
 func ValidateAuthored(o api.Object, _ api.Catalog) []api.Issue {
 	return validateIntrinsic(o, true)
 }
@@ -131,7 +114,6 @@ func Validate(o api.Object, c api.Catalog) []api.Issue {
 	if value.Get("management").Text() != "managed" {
 		return issues
 	}
-	issues = add(issues, validateNameLimit(o)...)
 	issues = add(issues, validateWildcardProbes(o.Kind(), value)...)
 	machine, placed := c.Find(api.Machine, value.Get("machineRef").Text())
 	if placed {
@@ -193,6 +175,23 @@ func validateCertificateCoverage(value api.Value, machine api.Object, c api.Cata
 	return issues
 }
 
+func CertificateNames(c api.Catalog, secret string) []string {
+	var names []string
+	for _, server := range c.OfKind(api.ArtifactServer) {
+		value := server.Spec()
+		machine, placed := c.Find(api.Machine, value.Get("machineRef").Text())
+		if !placed || value.Get("tls", "secretRef").Text() != secret {
+			continue
+		}
+		for _, endpoint := range value.Get("endpoints").Items() {
+			if listenerProtocol(value, endpoint.Get("listenerRef").Text()) == "https" {
+				names = append(names, machineAddress(machine, endpoint.Get("addressRef").Text()))
+			}
+		}
+	}
+	return names
+}
+
 // listenerProtocol is the protocol of the one listener named so, or nothing.
 func listenerProtocol(value api.Value, name string) string {
 	if !hasNamed(value.Get("listeners"), name) {
@@ -210,10 +209,6 @@ func listenerProtocol(value api.Value, name string) string {
 // run and to the addresses its consumers can reach there.
 func validatePlacement(kind api.Kind, value api.Value, machine api.Object) []api.Issue {
 	issues := []api.Issue{}
-	if !slices.Contains(machine.Spec().Get("capabilities").Strings(), "container-runtime") {
-		issues = add(issues, issue("$.spec.machineRef", "service placement requires a Machine with container-runtime capability",
-			"add container-runtime to spec.capabilities of "+machine.Identity()+", or place the service on a Machine that has it"))
-	}
 	if provided := machine.Spec().Get("os", "provided"); provided.Type() == api.Boolean && !provided.Bool() {
 		issues = add(issues, issue("$.spec.machineRef", machine.Identity()+" does not provide its operating system (os.provided: false), and a managed service runs only on a Machine whose OS is ready",
 			"set spec.machineRef to a Machine with os.provided: true"))
@@ -346,6 +341,10 @@ func validateIntrinsic(o api.Object, partial bool) []api.Issue {
 		case api.Registry:
 			require("url")
 		case api.ArtifactServer:
+			if !partial {
+				issues = add(issues, issue("$.spec.management", "no consumer accepts an external ArtifactServer, because each one publishes into the server it selects",
+					"set spec.management: managed with a spec.machineRef, or remove "+o.Identity()))
+			}
 			require("endpoints")
 			if value.Has("endpoints") && value.Get("endpoints").Len() == 0 {
 				issues = add(issues, issue("$.spec.endpoints", "external ArtifactServer requires at least one endpoint", "add a spec.endpoints entry with a url"))

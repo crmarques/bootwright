@@ -20,33 +20,35 @@ type Capability struct {
 
 func New(kind api.Kind, runner Runner) Capability { return Capability{kind: kind, runner: runner} }
 
-func ClusterBlockID(cluster string) string { return "ceph-cluster-" + cluster }
+func ClusterBlockID(cluster string) string {
+	return reconciliation.BlockIdentity("ceph-cluster-", cluster)
+}
 
 func (c Capability) WithProofs(proofs DependencyProofs) Capability { c.proofs = proofs; return c }
 
 func (c Capability) request(catalog api.Catalog, object api.Object, contextName string) (Request, error) {
 	switch c.kind {
-	case api.StorageCluster:
+	case api.CephCluster:
 		return baseRequest(catalog, object, contextName)
-	case api.StoragePlacementPolicy:
+	case api.CephPlacementPolicy:
 		return policyRequest(catalog, object, contextName)
-	case api.StoragePool:
+	case api.CephPool:
 		return poolRequest(catalog, object, contextName)
-	case api.StorageClient:
+	case api.CephClient:
 		return clientRequest(catalog, object, contextName)
-	case api.StorageRBDImage:
+	case api.CephRBDImage:
 		return rbdImageRequest(catalog, object, contextName)
-	case api.StorageFilesystem:
+	case api.CephFilesystem:
 		return filesystemRequest(catalog, object, contextName)
-	case api.StorageSubvolume:
+	case api.CephSubvolume:
 		return subvolumeRequest(catalog, object, contextName)
-	case api.StorageNVMeoFSubsystem:
+	case api.CephNVMeoFSubsystem:
 		return nvmeofRequest(catalog, object, contextName)
-	case api.StorageNFSExport:
+	case api.CephNFSExport:
 		return nfsExportRequest(catalog, object, contextName)
-	case api.StorageObjectUser:
+	case api.CephObjectUser:
 		return objectUserRequest(catalog, object, contextName)
-	case api.StorageObjectBucket:
+	case api.CephObjectBucket:
 		return objectBucketRequest(catalog, object, contextName)
 	}
 	return Request{}, failure("lifecycle.unsupported", "the requested kind has no core Ceph adapter", "")
@@ -74,10 +76,10 @@ func (c Capability) Plan(ctx context.Context, input lifecycle.PlanInput) (lifecy
 			}
 			if r.Action == "client" || r.Action == "rbd" || r.Action == "filesystem" {
 				for i, ref := range definition.Requires {
-					if ref.Kind != string(api.StoragePool) {
+					if ref.Kind != string(api.CephPool) {
 						continue
 					}
-					for _, pool := range catalog.OfKind(api.StoragePool) {
+					for _, pool := range catalog.OfKind(api.CephPool) {
 						if pool.Spec().Get("clusterRef").Text() == r.Cluster && nativePoolRef(catalog, pool.Name()) == ref.Object {
 							definition.Requires[i].Object = pool.Name()
 						}
@@ -119,7 +121,7 @@ func (c Capability) Plan(ctx context.Context, input lifecycle.PlanInput) (lifecy
 }
 
 func (c Capability) objectRequests(catalog api.Catalog, object api.Object, contextName string) ([]Request, error) {
-	if c.kind == api.StorageObjectGateway {
+	if c.kind == api.CephObjectGateway {
 		return gatewayRequests(catalog, object, contextName)
 	}
 	request, err := c.request(catalog, object, contextName)
@@ -127,7 +129,7 @@ func (c Capability) objectRequests(catalog api.Catalog, object api.Object, conte
 		return nil, err
 	}
 	requests := []Request{request}
-	if c.kind == api.StorageCluster {
+	if c.kind == api.CephCluster {
 		if settings, needed := settingsRequest(catalog, request, object); needed {
 			requests = append(requests, settings)
 		}
@@ -162,11 +164,11 @@ func (c Capability) definition(verb reconciliation.Verb, object api.Object, requ
 		impacts = append(impacts, unitTypes[request.Service.Type].impacts(object, *request.Service)...)
 	}
 	requires, dependencies := placement(object, request)
-	id := "ceph-" + request.Action + "-" + object.Name()
+	id := reconciliation.BlockIdentity("ceph-", request.Action+"-"+object.Name())
 	if request.Service != nil {
 		id = ServiceUnitBlockID(request.Cluster, *request.Service)
 	}
-	if c.kind == api.StorageObjectGateway && request.Action == "pool" && request.Pool != nil {
+	if c.kind == api.CephObjectGateway && request.Action == "pool" && request.Pool != nil {
 		suffix, _ := zonePoolSuffix(request.Pool.Name)
 		id = GatewayPoolBlockID(object.Name(), suffix)
 	}
@@ -194,47 +196,47 @@ func placement(object api.Object, request Request) ([]reconciliation.ObjectRef, 
 			dependencies = unitDependencies(request, object)
 		}
 	case "pool":
-		if ref := object.Spec().Get("placementPolicyRef").Text(); ref != "" && object.Kind() == api.StoragePool {
-			requires = append(requires, reconciliation.ObjectRef{Kind: string(api.StoragePlacementPolicy), Object: ref})
+		if ref := object.Spec().Get("placementPolicyRef").Text(); ref != "" && object.Kind() == api.CephPool {
+			requires = append(requires, reconciliation.ObjectRef{Kind: string(api.CephPlacementPolicy), Object: ref})
 		}
 	case "client":
 		requires = append(requires, clientRequires(*request.Client)...)
 	case "rbd":
-		requires = append(requires, reconciliation.ObjectRef{Kind: string(api.StoragePool), Object: request.RBD.Pool})
+		requires = append(requires, reconciliation.ObjectRef{Kind: string(api.CephPool), Object: request.RBD.Pool})
 		if request.RBD.DataPool != "" {
-			requires = append(requires, reconciliation.ObjectRef{Kind: string(api.StoragePool), Object: request.RBD.DataPool})
+			requires = append(requires, reconciliation.ObjectRef{Kind: string(api.CephPool), Object: request.RBD.DataPool})
 		}
 	case "filesystem":
 		for _, pool := range append([]string{request.Filesystem.MetadataPool}, request.Filesystem.DataPools...) {
-			requires = append(requires, reconciliation.ObjectRef{Kind: string(api.StoragePool), Object: pool})
+			requires = append(requires, reconciliation.ObjectRef{Kind: string(api.CephPool), Object: pool})
 		}
 	case "subvolume":
-		requires = append(requires, reconciliation.ObjectRef{Kind: string(api.StorageFilesystem), Object: request.Subvolume.Filesystem})
+		requires = append(requires, reconciliation.ObjectRef{Kind: string(api.CephFilesystem), Object: request.Subvolume.Filesystem})
 	case "nvmeof":
 		dependencies = append(dependencies, ServiceUnitBlockID(request.Cluster, ServiceUnit{Type: "nvmeof", ID: request.NVMeOF.Service}))
 		for _, namespace := range request.NVMeOF.Namespaces {
-			requires = append(requires, reconciliation.ObjectRef{Kind: string(api.StorageRBDImage), Object: namespace.Image.Name})
+			requires = append(requires, reconciliation.ObjectRef{Kind: string(api.CephRBDImage), Object: namespace.Image.Name})
 		}
 	case "nfs-export":
 		dependencies = append(dependencies, ServiceUnitBlockID(request.Cluster, ServiceUnit{Type: "nfs", ID: request.NFSExport.Service}))
-		backing := reconciliation.ObjectRef{Kind: string(api.StorageFilesystem), Object: request.NFSExport.Filesystem}
+		backing := reconciliation.ObjectRef{Kind: string(api.CephFilesystem), Object: request.NFSExport.Filesystem}
 		if request.NFSExport.Subvolume != "" {
-			backing = reconciliation.ObjectRef{Kind: string(api.StorageSubvolume), Object: request.NFSExport.Subvolume}
+			backing = reconciliation.ObjectRef{Kind: string(api.CephSubvolume), Object: request.NFSExport.Subvolume}
 		}
 		if request.NFSExport.ObjectUser != nil {
-			backing = reconciliation.ObjectRef{Kind: string(api.StorageObjectUser), Object: request.NFSExport.ObjectUser.Name}
+			backing = reconciliation.ObjectRef{Kind: string(api.CephObjectUser), Object: request.NFSExport.ObjectUser.Name}
 		}
 		requires = append(requires, backing)
 	case "object-user":
-		requires = append(requires, reconciliation.ObjectRef{Kind: string(api.StorageObjectGateway), Object: request.ObjectUser.Gateway})
+		requires = append(requires, reconciliation.ObjectRef{Kind: string(api.CephObjectGateway), Object: request.ObjectUser.Gateway})
 	case "object-bucket":
-		requires = append(requires, reconciliation.ObjectRef{Kind: string(api.StorageObjectUser), Object: request.ObjectBucket.Owner})
+		requires = append(requires, reconciliation.ObjectRef{Kind: string(api.CephObjectUser), Object: request.ObjectBucket.Owner})
 	case "gateway":
 		for _, suffix := range derivedZonePools(object) {
 			dependencies = append(dependencies, GatewayPoolBlockID(object.Name(), suffix))
 		}
 		for _, pool := range declaredPlacementPools(object) {
-			requires = append(requires, reconciliation.ObjectRef{Kind: string(api.StoragePool), Object: pool})
+			requires = append(requires, reconciliation.ObjectRef{Kind: string(api.CephPool), Object: pool})
 		}
 		if request.Gateway != nil && len(request.Gateway.Documents) > 1 && len(request.Auxiliary) != 0 {
 			dependencies = append(dependencies, SettingsBlockID(request.Cluster))
@@ -252,13 +254,16 @@ func (c Capability) Unsupported(state *compilation.State) []lifecycle.Refusal {
 	var out []lifecycle.Refusal
 	for _, object := range state.Effective().OfKind(c.kind) {
 		cluster := object
-		if c.kind != api.StorageCluster {
-			cluster, _ = state.Effective().Find(api.StorageCluster, object.Spec().Get("clusterRef").Text())
+		if c.kind != api.CephCluster {
+			cluster, _ = state.Effective().Find(api.CephCluster, object.Spec().Get("clusterRef").Text())
 		}
-		ceph := cluster.Spec().Get("ceph")
+		ceph := cluster.Spec()
 		if hosts := len(ceph.Get("topology", "nodes").Items()); hosts > 6 {
 			reason, remedy := clusterHostBudget(cluster.Name(), hosts)
 			out = append(out, lifecycle.RefusalOf(object, reason, remedy))
+		}
+		if distribution := api.CephDistribution(ceph); distribution != "" && distribution != "ibm" {
+			out = append(out, lifecycle.RefusalOf(object, distributionReason, distributionRemedy))
 		}
 		if !Supported(ceph.Get("release").Text(), ceph.Get("packageVersion").Text(), ceph.Get("cephadm", "ansible", "packageVersion").Text(),
 			ceph.Get("image", "base").Text(), ceph.Get("image", "version").Text(), ceph.Get("cephadm", "clusterSSH", "transport").Text()) {
@@ -326,7 +331,7 @@ func (c Capability) identity(ctx context.Context, e lifecycle.Execution) (Reques
 	if err != nil {
 		return Request{}, err
 	}
-	action := map[api.Kind]string{api.StorageCluster: "cluster", api.StoragePlacementPolicy: "policy", api.StoragePool: "pool", api.StorageClient: "client", api.StorageRBDImage: "rbd", api.StorageFilesystem: "filesystem", api.StorageSubvolume: "subvolume", api.StorageObjectGateway: "pool", api.StorageNFSExport: "nfs-export", api.StorageObjectUser: "object-user", api.StorageObjectBucket: "object-bucket", api.StorageNVMeoFSubsystem: "nvmeof"}[c.kind]
+	action := map[api.Kind]string{api.CephCluster: "cluster", api.CephPlacementPolicy: "policy", api.CephPool: "pool", api.CephClient: "client", api.CephRBDImage: "rbd", api.CephFilesystem: "filesystem", api.CephSubvolume: "subvolume", api.CephObjectGateway: "pool", api.CephNFSExport: "nfs-export", api.CephObjectUser: "object-user", api.CephObjectBucket: "object-bucket", api.CephNVMeoFSubsystem: "nvmeof"}[c.kind]
 	object := r.Cluster
 	if r.Action == "policy" && r.Policy != nil {
 		object = r.Policy.Name
@@ -361,13 +366,13 @@ func (c Capability) identity(ctx context.Context, e lifecycle.Execution) (Reques
 	if r.Action == "object-bucket" && r.ObjectBucket != nil {
 		object = r.ObjectBucket.Name
 	}
-	if c.kind == api.StorageObjectGateway {
+	if c.kind == api.CephObjectGateway {
 		object = gatewayPoolObject(e.Block, r)
 		if r.Action == "gateway" && r.Gateway != nil && e.Block.ID == GatewayBlockID(r.Gateway.Name) {
 			action, object = r.Action, r.Gateway.Name
 		}
 	}
-	if c.kind == api.StorageCluster && (r.Action == "settings" || r.Action == "service") {
+	if c.kind == api.CephCluster && (r.Action == "settings" || r.Action == "service") {
 		action = r.Action
 	}
 	if action == "" || r.Action != action || (r.Action == "settings") != (r.Settings != nil) || (r.Action == "service") != (r.Service != nil) || (r.Action == "gateway") != (r.Gateway != nil) ||
@@ -408,7 +413,7 @@ func (c Capability) prepare(ctx context.Context, e lifecycle.Execution) (Request
 			return Request{}, err
 		}
 		if filesystem != r.NFSExport.Filesystem || group != r.NFSExport.Group {
-			return Request{}, failure("lifecycle.state", "the creation proof of StorageSubvolume "+r.NFSExport.Subvolume+" names another filesystem or group than StorageNFSExport "+r.NFSExport.Name+" froze", "restore the original apply evidence")
+			return Request{}, failure("lifecycle.state", "the creation proof of CephSubvolume "+r.NFSExport.Subvolume+" names another filesystem or group than CephNFSExport "+r.NFSExport.Name+" froze", "restore the original apply evidence")
 		}
 		r.NFSExport.SubvolumePath = path
 	}
@@ -418,7 +423,7 @@ func (c Capability) prepare(ctx context.Context, e lifecycle.Execution) (Request
 			return Request{}, err
 		}
 		if filesystem != r.Client.Filesystem || group != r.Client.Group {
-			return Request{}, failure("lifecycle.state", "the creation proof of StorageSubvolume "+r.Client.Subvolume+" names another filesystem or group than StorageClient "+r.Client.Name+" froze", "restore the original apply evidence")
+			return Request{}, failure("lifecycle.state", "the creation proof of CephSubvolume "+r.Client.Subvolume+" names another filesystem or group than CephClient "+r.Client.Name+" froze", "restore the original apply evidence")
 		}
 		client := *r.Client
 		client.SubvolumePath = path
@@ -430,13 +435,13 @@ func (c Capability) prepare(ctx context.Context, e lifecycle.Execution) (Request
 func clientRequires(c Client) []reconciliation.ObjectRef {
 	switch {
 	case c.Subvolume != "":
-		return []reconciliation.ObjectRef{{Kind: string(api.StorageSubvolume), Object: c.Subvolume}}
+		return []reconciliation.ObjectRef{{Kind: string(api.CephSubvolume), Object: c.Subvolume}}
 	case c.Filesystem != "":
-		return []reconciliation.ObjectRef{{Kind: string(api.StorageFilesystem), Object: c.Filesystem}}
+		return []reconciliation.ObjectRef{{Kind: string(api.CephFilesystem), Object: c.Filesystem}}
 	}
-	requires := []reconciliation.ObjectRef{{Kind: string(api.StoragePool), Object: c.Pool}}
+	requires := []reconciliation.ObjectRef{{Kind: string(api.CephPool), Object: c.Pool}}
 	for _, pool := range c.DataPools {
-		requires = append(requires, reconciliation.ObjectRef{Kind: string(api.StoragePool), Object: pool})
+		requires = append(requires, reconciliation.ObjectRef{Kind: string(api.CephPool), Object: pool})
 	}
 	return requires
 }

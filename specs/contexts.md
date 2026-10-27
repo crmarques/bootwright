@@ -956,7 +956,7 @@ again, and never to reuse a context name across controllers that share a
 provider host; every exit that names an acknowledged deletion followed by
 `bootwright context init` of the same name carries the same warning. An
 acknowledged deletion also leaves in place each
-[installer work area](container-clusters.md#boot-media) its clusters'
+[installer work area](openshift-clusters.md#boot-media) its clusters'
 installations keep on their artifact server's placement Machine, which holds
 the material those installations were given, and the rest of the context's
 [native-side retention](secrets.md#native-side-retention) on the hosts it lives

@@ -120,7 +120,7 @@ func TestExternallyAnsweredEndpointsUsePlatformNone(t *testing.T) {
 // directly beneath that refusal.
 func TestPhysicalNodesAreFrozenAsOperatorOwnedHardware(t *testing.T) {
 	catalog := physicalCatalog()
-	declared, _ := catalog.Find(api.ContainerCluster, "metal")
+	declared, _ := catalog.Find(api.OpenShiftCluster, "metal")
 	nodes, err := nodeProjections(catalog, declared, testContext, "controller", &Requirements{})
 	if err != nil {
 		t.Fatalf("projecting: %v", diagnostics.Of(err))
@@ -250,7 +250,7 @@ func siteServicesCatalog() api.Catalog {
 	return api.NewCatalog(append(objects, guest("sno-01", "198.51.100.21/24"), cluster("sno",
 		installSelection(endpoints("198.51.100.21", "198.51.100.21", "198.51.100.21", "node")).
 			With("ntp", api.ListValue(api.MapValue(text("serverRef", "lab-ntp")))),
-		node("master-0", "master", "sno-01", "master-0.sno.lab.example.test"))))
+		node("master-0", "controlPlane", "sno-01", "master-0.sno.lab.example.test"))))
 }
 
 // A site's own name and time services are used at the addresses they declare,
@@ -314,10 +314,10 @@ func TestUnsupportedNamesEveryClusterThisContractCannotInstall(t *testing.T) {
 			objects := append(base(), guest("sno-01", "198.51.100.21/24"))
 			declared := cluster("sno",
 				installSelection(endpoints("198.51.100.21", "198.51.100.21", "198.51.100.21", "node")),
-				node("master-0", "master", "sno-01", "master-0.sno.lab.example.test"))
+				node("master-0", "controlPlane", "sno-01", "master-0.sno.lab.example.test"))
 			objects = append(objects, declared.WithSpec(mutate(declared.Spec())))
 			catalog := api.NewCatalog(objects)
-			if unsupported := lifecycle.Identities(Refusals(catalog)); len(unsupported) != 1 || unsupported[0] != "ContainerCluster/sno" {
+			if unsupported := lifecycle.Identities(Refusals(catalog)); len(unsupported) != 1 || unsupported[0] != "OpenShiftCluster/sno" {
 				t.Fatalf("unsupported = %v", unsupported)
 			}
 			if _, _, _, err := Requests(catalog, "controller", testContext); err == nil {
@@ -348,20 +348,20 @@ func TestUnsupportedNamesEveryClusterWithANodeThisContractCannotBoot(t *testing.
 		"installed node": {
 			api.NewCatalog(append(base(), installed, cluster("sno",
 				installSelection(endpoints("198.51.100.21", "198.51.100.21", "198.51.100.21", "node")),
-				node("master-0", "master", "sno-01", "master-0.sno.lab.example.test")))),
-			"ContainerCluster/sno",
+				node("master-0", "controlPlane", "sno-01", "master-0.sno.lab.example.test")))),
+			"OpenShiftCluster/sno",
 			"a declared node selects an install profile, so two installations would write its disk",
-			"remove spec.os.installProfileRef from Machine/sno-01 or drop it from ContainerCluster/sno",
+			"remove spec.os.installProfileRef from Machine/sno-01 or drop it from OpenShiftCluster/sno",
 		},
 		"controller port past the port space": {
-			singleNodeOnProvider(portPastTheSpace, guest("sno-00", "198.51.100.20/24")), "ContainerCluster/sno",
+			singleNodeOnProvider(portPastTheSpace, guest("sno-00", "198.51.100.20/24")), "OpenShiftCluster/sno",
 			"node master-0 (Machine/sno-01): the Machine's emulated controller port does not allocate",
-			"correct spec.libvirt.bmcEmulationDefaults.port on InfraProvider/lab-libvirt",
+			"correct spec.libvirt.bmcEmulation.port on InfraProvider/lab-libvirt",
 		},
 		"no controller credential": {
-			singleNodeOnProvider(noControllerCredential), "ContainerCluster/sno",
+			singleNodeOnProvider(noControllerCredential), "OpenShiftCluster/sno",
 			"node master-0 (Machine/sno-01): the provider declares no emulated controller credential",
-			"set spec.libvirt.bmcEmulationDefaults.auth.credentialsRef on InfraProvider/lab-libvirt",
+			"set spec.libvirt.bmcEmulation.auth.credentialsRef on InfraProvider/lab-libvirt",
 		},
 	} {
 		t.Run(name, func(t *testing.T) {
@@ -412,13 +412,13 @@ func TestAMultiNodeClusterOnAnotherPlatformRefusesBeforeRegistration(t *testing.
 			objects = append(objects, cluster("ocp",
 				installSelection(
 					endpoints("198.51.100.10", "198.51.100.10", "198.51.100.11", "external"),
-					field("platform", api.MapValue(text("type", platform))),
+					field("platform", api.MapValue(field(platform, api.MapValue()))),
 				),
-				node("master-0", "master", "ocp-01", "master-0.ocp.lab.example.test"),
-				node("master-1", "master", "ocp-02", "master-1.ocp.lab.example.test"),
-				node("master-2", "master", "ocp-03", "master-2.ocp.lab.example.test")))
+				node("master-0", "controlPlane", "ocp-01", "master-0.ocp.lab.example.test"),
+				node("master-1", "controlPlane", "ocp-02", "master-1.ocp.lab.example.test"),
+				node("master-2", "controlPlane", "ocp-03", "master-2.ocp.lab.example.test")))
 			catalog := api.NewCatalog(objects)
-			if unsupported := lifecycle.Identities(Refusals(catalog)); len(unsupported) != 1 || unsupported[0] != "ContainerCluster/ocp" {
+			if unsupported := lifecycle.Identities(Refusals(catalog)); len(unsupported) != 1 || unsupported[0] != "OpenShiftCluster/ocp" {
 				t.Fatalf("unsupported = %v", unsupported)
 			}
 			_, _, _, err := Requests(catalog, "controller", testContext)
@@ -431,9 +431,9 @@ func TestAMultiNodeClusterOnAnotherPlatformRefusesBeforeRegistration(t *testing.
 			single := append(base(), guest("sno-01", "198.51.100.21/24"), cluster("sno",
 				installSelection(
 					endpoints("198.51.100.21", "198.51.100.21", "198.51.100.21", "node"),
-					field("platform", api.MapValue(text("type", platform))),
+					field("platform", api.MapValue(field(platform, api.MapValue()))),
 				),
-				node("master-0", "master", "sno-01", "master-0.sno.lab.example.test")))
+				node("master-0", "controlPlane", "sno-01", "master-0.sno.lab.example.test")))
 			if unsupported := lifecycle.Identities(Refusals(api.NewCatalog(single))); len(unsupported) != 0 {
 				t.Fatalf("a single node on %s is refused: %v", platform, unsupported)
 			}
@@ -450,7 +450,7 @@ func TestAMultiNodeClusterOnAnotherPlatformRefusesBeforeRegistration(t *testing.
 // platforms the projection has no arm for.
 func TestAMultiNodeClusterOnNoPlatformInstallsOnNone(t *testing.T) {
 	for name, declared := range map[string][]api.FieldValue{
-		"none":       {field("platform", api.MapValue(text("type", "none")))},
+		"none":       {field("platform", api.MapValue(field("none", api.MapValue())))},
 		"undeclared": nil,
 	} {
 		t.Run(name, func(t *testing.T) {
@@ -460,9 +460,9 @@ func TestAMultiNodeClusterOnNoPlatformInstallsOnNone(t *testing.T) {
 				installSelection(append([]api.FieldValue{
 					endpoints("198.51.100.10", "198.51.100.10", "198.51.100.11", "external"),
 				}, declared...)...),
-				node("master-0", "master", "ocp-01", "master-0.ocp.lab.example.test"),
-				node("master-1", "master", "ocp-02", "master-1.ocp.lab.example.test"),
-				node("master-2", "master", "ocp-03", "master-2.ocp.lab.example.test")))
+				node("master-0", "controlPlane", "ocp-01", "master-0.ocp.lab.example.test"),
+				node("master-1", "controlPlane", "ocp-02", "master-1.ocp.lab.example.test"),
+				node("master-2", "controlPlane", "ocp-03", "master-2.ocp.lab.example.test")))
 			catalog := api.NewCatalog(objects)
 			if unsupported := lifecycle.Identities(Refusals(catalog)); len(unsupported) != 0 {
 				t.Fatalf("unsupported = %v", unsupported)
@@ -480,7 +480,6 @@ func TestAMultiNodeClusterOnNoPlatformInstallsOnNone(t *testing.T) {
 // server its boot image is fetched from can be placed on different Machines.
 func hypervisor() []api.Object {
 	host := api.NewObject(api.Machine, "hv-01", api.Value{}, api.MapValue(
-		field("capabilities", api.StringList("libvirt")),
 		field("os", api.MapValue(field("provided", api.BoolValue(true)))),
 		field("network", api.MapValue(field("addresses", api.ListValue(
 			api.MapValue(text("name", "ip"), text("address", "192.0.2.2")),
@@ -492,7 +491,7 @@ func hypervisor() []api.Object {
 	))
 	provider := api.NewObject(api.InfraProvider, "far-libvirt", api.Value{}, libvirtProvider().Spec().
 		WithPath(api.StringValue("hv-01"), "libvirt", "machineRef").
-		WithPath(api.StringValue("192.0.2.2"), "libvirt", "bmcEmulationDefaults", "bindAddress"))
+		WithPath(api.StringValue("192.0.2.2"), "libvirt", "bmcEmulation", "bindAddress"))
 	farServer := api.NewObject(api.ArtifactServer, "far-artifacts", api.Value{}, artifactServer().Spec().
 		WithPath(api.StringValue("hv-01"), "machineRef").
 		WithPath(api.StringValue("192.0.2.2"), "bindAddress"))
@@ -510,7 +509,7 @@ func onRemote(machine api.Object) api.Object {
 	return machine.WithSpec(machine.Spec().WithPath(api.StringValue("far-libvirt"), "substrate", "providerRef"))
 }
 
-// An emulated controller fetches the private boot image without verifying the
+// An emulated BMC fetches the private boot image without verifying the
 // server, so the image is safe only while that fetch never leaves the provider
 // host the controller runs on. A node on a provider hosted anywhere but the
 // artifact server's placement Machine refuses before registration, naming the
@@ -524,9 +523,9 @@ func TestANodeOffTheArtifactServersHostRefusesBeforeRegistration(t *testing.T) {
 		"single node": {
 			[]api.Object{onRemote(guest("sno-01", "198.51.100.21/24")), cluster("sno",
 				installSelection(endpoints("198.51.100.21", "198.51.100.21", "198.51.100.21", "node")),
-				node("master-0", "master", "sno-01", "master-0.sno.lab.example.test"))},
-			"ContainerCluster/sno",
-			"Machine/sno-01 is booted through a controller on Machine/hv-01 and ArtifactServer/lab-artifacts is placed on Machine/controller; " +
+				node("master-0", "controlPlane", "sno-01", "master-0.sno.lab.example.test"))},
+			"OpenShiftCluster/sno",
+			"Machine/sno-01 is booted through a BMC on Machine/hv-01 and ArtifactServer/lab-artifacts is placed on Machine/controller; " +
 				"place InfraProvider/far-libvirt and ArtifactServer/lab-artifacts on the same Machine",
 		},
 		"one node of three": {
@@ -534,23 +533,23 @@ func TestANodeOffTheArtifactServersHostRefusesBeforeRegistration(t *testing.T) {
 				guest("ocp-01", "198.51.100.31/24"), guest("ocp-02", "198.51.100.32/24"), onRemote(guest("ocp-03", "198.51.100.33/24")),
 				cluster("ocp",
 					installSelection(
-						endpoints("198.51.100.10", "198.51.100.10", "198.51.100.11", "openshift"),
-						field("platform", api.MapValue(text("type", "baremetal"))),
+						endpoints("198.51.100.10", "198.51.100.10", "198.51.100.11", "installer"),
+						field("platform", api.MapValue(field("baremetal", api.MapValue()))),
 					),
-					node("master-0", "master", "ocp-01", "master-0.ocp.lab.example.test"),
-					node("master-1", "master", "ocp-02", "master-1.ocp.lab.example.test"),
-					node("master-2", "master", "ocp-03", "master-2.ocp.lab.example.test")),
+					node("master-0", "controlPlane", "ocp-01", "master-0.ocp.lab.example.test"),
+					node("master-1", "controlPlane", "ocp-02", "master-1.ocp.lab.example.test"),
+					node("master-2", "controlPlane", "ocp-03", "master-2.ocp.lab.example.test")),
 			},
-			"ContainerCluster/ocp",
-			"Machine/ocp-03 is booted through a controller on Machine/hv-01 and ArtifactServer/lab-artifacts is placed on Machine/controller; " +
+			"OpenShiftCluster/ocp",
+			"Machine/ocp-03 is booted through a BMC on Machine/hv-01 and ArtifactServer/lab-artifacts is placed on Machine/controller; " +
 				"place InfraProvider/far-libvirt and ArtifactServer/lab-artifacts on the same Machine",
 		},
 		"server off the provider host": {
 			[]api.Object{guest("sno-01", "198.51.100.21/24"), servedBy("far-artifacts", cluster("sno",
 				installSelection(endpoints("198.51.100.21", "198.51.100.21", "198.51.100.21", "node")),
-				node("master-0", "master", "sno-01", "master-0.sno.lab.example.test")))},
-			"ContainerCluster/sno",
-			"Machine/sno-01 is booted through a controller on Machine/controller and ArtifactServer/far-artifacts is placed on Machine/hv-01; " +
+				node("master-0", "controlPlane", "sno-01", "master-0.sno.lab.example.test")))},
+			"OpenShiftCluster/sno",
+			"Machine/sno-01 is booted through a BMC on Machine/controller and ArtifactServer/far-artifacts is placed on Machine/hv-01; " +
 				"place InfraProvider/lab-libvirt and ArtifactServer/far-artifacts on the same Machine",
 		},
 	} {
@@ -561,8 +560,8 @@ func TestANodeOffTheArtifactServersHostRefusesBeforeRegistration(t *testing.T) {
 			}
 			_, _, _, err := Requests(catalog, "controller", testContext)
 			reported := diagnostics.Of(err)
-			const reason = "an emulated controller fetches the boot image without verifying its server, " +
-				"so the server is placed on the provider host that controller runs on"
+			const reason = "an emulated BMC fetches the boot image without verifying its server, " +
+				"so the server is placed on the provider host that BMC runs on"
 			if len(reported) != 1 || reported[0].Code != "lifecycle.unsupported" || reported[0].Message != reason {
 				t.Fatalf("refusal = %#v", reported)
 			}
@@ -578,7 +577,7 @@ func TestAnOffControllerServerRefusesBeforeRegistration(t *testing.T) {
 	objects := append(append(base(), hypervisor()...), onRemote(guest("sno-01", "198.51.100.21/24")), servedBy("far-artifacts",
 		cluster("sno",
 			installSelection(endpoints("198.51.100.21", "198.51.100.21", "198.51.100.21", "node")),
-			node("master-0", "master", "sno-01", "master-0.sno.lab.example.test"))))
+			node("master-0", "controlPlane", "sno-01", "master-0.sno.lab.example.test"))))
 	catalog := api.NewCatalog(objects)
 	if unsupported := lifecycle.Identities(Refusals(catalog)); len(unsupported) != 1 {
 		t.Fatalf("unsupported = %v", unsupported)
@@ -609,7 +608,7 @@ func TestAnUnresolvedServerIsRefusedAsTheSelection(t *testing.T) {
 	}
 	objects = append(objects, external, guest("sno-01", "198.51.100.21/24"), cluster("sno",
 		installSelection(endpoints("198.51.100.21", "198.51.100.21", "198.51.100.21", "node")),
-		node("master-0", "master", "sno-01", "master-0.sno.lab.example.test")))
+		node("master-0", "controlPlane", "sno-01", "master-0.sno.lab.example.test")))
 	catalog := api.NewCatalog(objects)
 	if unsupported := lifecycle.Identities(Refusals(catalog)); len(unsupported) != 0 {
 		t.Fatalf("unsupported = %v", unsupported)
@@ -618,7 +617,7 @@ func TestAnUnresolvedServerIsRefusedAsTheSelection(t *testing.T) {
 	reported := diagnostics.Of(err)
 	if len(reported) != 1 || reported[0].Code != "lifecycle.state" ||
 		reported[0].Message != "a consumer publishes only into a managed artifact server" ||
-		reported[0].Remediation != "select a managed server on ContainerCluster/sno" {
+		reported[0].Remediation != "select a managed server on OpenShiftCluster/sno" {
 		t.Fatalf("refusal = %#v", reported)
 	}
 }
@@ -667,7 +666,7 @@ func hostHints(t *testing.T, media MediaRequest) map[string]any {
 // alone keeps that selection rather than rendering none.
 func TestEveryDeclaredRootDeviceHintReachesTheAgentConfig(t *testing.T) {
 	catalog := physicalHintsCatalog()
-	declared, _ := catalog.Find(api.ContainerCluster, "metal")
+	declared, _ := catalog.Find(api.OpenShiftCluster, "metal")
 	nodes, err := nodeProjections(catalog, declared, testContext, "controller", &Requirements{})
 	if err != nil {
 		t.Fatalf("projecting: %v", diagnostics.Of(err))
@@ -715,9 +714,9 @@ func TestEveryHintAVirtualNodeDeclaresReachesTheAgentConfig(t *testing.T) {
 func TestARootDeviceTheAgentInstallerCannotCarryRefuses(t *testing.T) {
 	const (
 		unnamed   = "the agent installer names a root device only as /dev/<name> or /dev/disk/by-path/<name>"
-		rename    = "set spec.os.install.rootDeviceHints.deviceName on Machine/sno-01 to such a path"
+		rename    = "set spec.hardware.rootDevice.deviceName on Machine/sno-01 to such a path"
 		oversized = "a node's minSizeGigabytes is larger than the frozen installer input carries exactly"
-		shrink    = "declare spec.os.install.rootDeviceHints.minSizeGigabytes on Machine/sno-01 as at most 9007199254740991"
+		shrink    = "declare spec.hardware.rootDevice.minSizeGigabytes on Machine/sno-01 as at most 9007199254740991"
 	)
 	for name, test := range map[string]struct {
 		hints       []api.FieldValue
@@ -733,18 +732,18 @@ func TestARootDeviceTheAgentInstallerCannotCarryRefuses(t *testing.T) {
 	} {
 		t.Run(name, func(t *testing.T) {
 			catalog := singleNodeWith(test.hints...)
-			if unsupported := lifecycle.Identities(Refusals(catalog)); !slices.Equal(unsupported, []string{"ContainerCluster/sno"}) {
+			if unsupported := lifecycle.Identities(Refusals(catalog)); !slices.Equal(unsupported, []string{"OpenShiftCluster/sno"}) {
 				t.Fatalf("unsupported = %v", unsupported)
 			}
 			// The refusal plan and apply report before registration carries
 			// the cluster, the reason and the remedy naming the Machine.
-			want := []lifecycle.Refusal{{Kind: "ContainerCluster", Name: "sno", Reason: test.reason, Remediation: test.remediation}}
+			want := []lifecycle.Refusal{{Kind: "OpenShiftCluster", Name: "sno", Reason: test.reason, Remediation: test.remediation}}
 			if refused := Refusals(catalog); !slices.Equal(refused, want) {
 				t.Fatalf("refusals = %+v, want %+v", refused, want)
 			}
 			_, _, _, err := Requests(catalog, "controller", testContext)
 			refusedWith(t, err, test.reason, test.remediation)
-			declared, _ := catalog.Find(api.ContainerCluster, "sno")
+			declared, _ := catalog.Find(api.OpenShiftCluster, "sno")
 			_, err = nodeProjections(catalog, declared, testContext, "controller", &Requirements{})
 			refusedWith(t, err, test.reason, test.remediation)
 		})
@@ -815,7 +814,7 @@ func TestProjectionRefusesUnnormalizedNetworksWithClusterIdentity(t *testing.T) 
 		catalog := singleNodeCatalog()
 		objects := catalog.Objects()
 		for i, object := range objects {
-			if object.Kind() == api.ContainerCluster {
+			if object.Kind() == api.OpenShiftCluster {
 				objects[i] = object.WithSpec(object.Spec().WithPath(api.ListValue(), "networking", field))
 			}
 		}
@@ -866,14 +865,14 @@ func TestPlanningRefusalsNameClusterAndSelectedField(t *testing.T) {
 		catalog := singleNodeCatalog()
 		objects := catalog.Objects()
 		for i, object := range objects {
-			if object.Kind() == api.ContainerCluster {
+			if object.Kind() == api.OpenShiftCluster {
 				objects[i] = object.WithSpec(object.Spec().WithPath(api.MapValue(), path...))
 			}
 		}
 		_, _, _, err := Requests(api.NewCatalog(objects), "controller", testContext)
 		got := diagnostics.Of(err)
 		field := "$.spec." + strings.Join(path, ".")
-		if len(got) != 1 || got[0].Object == nil || got[0].Object.Kind != "ContainerCluster" || got[0].Object.Name != "sno" || got[0].Field != field || !strings.Contains(got[0].Remediation, strings.TrimPrefix(field, "$.")) {
+		if len(got) != 1 || got[0].Object == nil || got[0].Object.Kind != "OpenShiftCluster" || got[0].Object.Name != "sno" || got[0].Field != field || !strings.Contains(got[0].Remediation, strings.TrimPrefix(field, "$.")) {
 			t.Fatalf("%s refusal = %#v", field, got)
 		}
 	}

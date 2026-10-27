@@ -22,7 +22,7 @@ import (
 const smbSentinel = "smb-sentinel-Qv8z31"
 
 func smbObject(name string, pairs ...any) api.Object {
-	return childOf(api.StorageSMBResource, name, pairs...)
+	return childOf(api.CephSMBResource, name, pairs...)
 }
 
 func smbUsers() api.Object {
@@ -52,7 +52,7 @@ func smbDocs(backing ...any) api.Object {
 
 func smbCatalog(t *testing.T, subvolume api.Object, objects ...api.Object) api.Catalog {
 	t.Helper()
-	children := append([]api.Object{cephfsPool("fs-meta", "cephfs-metadata"), cephfsPool("fs-data", "cephfs-data"), filesystemOf(), subvolume}, objects...)
+	children := append([]api.Object{cephfsPool("fs-meta", "cephfsMetadata"), cephfsPool("fs-data", "cephfsData"), filesystemOf(), subvolume}, objects...)
 	return api.NewCatalog(append(pinnedCatalog(t, withMDS).Objects(), children...))
 }
 
@@ -63,7 +63,7 @@ func smbGraph(t *testing.T) api.Catalog {
 
 func smbBase(t *testing.T, catalog api.Catalog) Request {
 	t.Helper()
-	cluster, _ := catalog.Find(api.StorageCluster, "example")
+	cluster, _ := catalog.Find(api.CephCluster, "example")
 	base, err := baseRequest(catalog, cluster, "synthetic")
 	if err != nil {
 		t.Fatal(diagnostics.Of(err))
@@ -73,9 +73,9 @@ func smbBase(t *testing.T, catalog api.Catalog) Request {
 
 func builtSMB(t *testing.T, catalog api.Catalog, base Request, name string) SMBRequest {
 	t.Helper()
-	object, found := catalog.Find(api.StorageSMBResource, name)
+	object, found := catalog.Find(api.CephSMBResource, name)
 	if !found {
-		t.Fatalf("the catalog has no StorageSMBResource %s", name)
+		t.Fatalf("the catalog has no CephSMBResource %s", name)
 	}
 	r, err := smbRequest(catalog, object, base, "controller")
 	if err != nil {
@@ -138,7 +138,7 @@ func coreClusterProof(t *testing.T, r Request, change func(*Evidence)) lifecycle
 	if err != nil {
 		t.Fatal(err)
 	}
-	block := reconciliation.Block{BlockDefinition: reconciliation.BlockDefinition{ID: ClusterBlockID(r.Cluster), Kind: string(api.StorageCluster), Object: r.Cluster, Implementation: Implementation, Request: data}, RequestDigest: "digest"}
+	block := reconciliation.Block{BlockDefinition: reconciliation.BlockDefinition{ID: ClusterBlockID(r.Cluster), Kind: string(api.CephCluster), Object: r.Cluster, Implementation: Implementation, Request: data}, RequestDigest: "digest"}
 	runtime := r
 	runtime.Owner, runtime.FSID = "apply-original", FSIDFor("apply-original", r.Cluster)
 	e := readyEvidence(runtime)
@@ -166,7 +166,7 @@ func smbBlock(t *testing.T, r SMBRequest) reconciliation.Block {
 	if err != nil {
 		t.Fatal(diagnostics.Of(err))
 	}
-	definition := reconciliation.BlockDefinition{ID: SMBBlockID(r.Object), Kind: string(api.StorageSMBResource), Object: r.Object, Implementation: SMBImplementation, ContentDigest: SMBContentDigest(), Request: canonical}
+	definition := reconciliation.BlockDefinition{ID: SMBBlockID(r.Object), Kind: string(api.CephSMBResource), Object: r.Object, Implementation: SMBImplementation, ContentDigest: SMBContentDigest(), Request: canonical}
 	digest, err := reconciliation.RequestDigest(definition)
 	if err != nil {
 		t.Fatal(err)
@@ -275,7 +275,8 @@ func TestSMBRequestDecodeRefusesInconsistentFrozenRequests(t *testing.T) {
 	add("unsorted service hosts", share, func(r *SMBRequest) { slices.Reverse(r.Service.Hosts) })
 	add("reversed images", share, func(r *SMBRequest) { slices.Reverse(r.Images) })
 	add("one image", share, func(r *SMBRequest) { r.Images = r.Images[:1] })
-	add("a long object", users, func(r *SMBRequest) { r.Object = strings.Repeat("a", 55) })
+	add("an object outside the label grammar", users, func(r *SMBRequest) { r.Object = "Bad_Object" })
+	add("an object past the 63-byte label bound", users, func(r *SMBRequest) { r.Object = strings.Repeat("a", 64) })
 	add("a service naming another listed cluster", share, func(r *SMBRequest) { r.ClusterIDs, r.Service.Name = []string{"files", "other"}, "smb.other" })
 	add("a cluster list without its own cluster", share, func(r *SMBRequest) { r.ClusterIDs = []string{"other"} })
 	add("a join auth at another path", join, func(r *SMBRequest) { r.Bindings[0].Path = "/auth/username" })
@@ -316,13 +317,13 @@ func TestSMBBlocksOrderAuthThenClusterThenShare(t *testing.T) {
 }
 
 func TestSMBShareRequiresItsSubvolumeOrFilesystemBlock(t *testing.T) {
-	smbCluster := reconciliation.ObjectRef{Kind: string(api.StorageSMBResource), Object: "smb-files"}
+	smbCluster := reconciliation.ObjectRef{Kind: string(api.CephSMBResource), Object: "smb-files"}
 	for name, test := range map[string]struct {
 		share api.Object
 		want  reconciliation.ObjectRef
 	}{
-		"subvolume":  {smbDocs(), reconciliation.ObjectRef{Kind: string(api.StorageSubvolume), Object: "docs"}},
-		"filesystem": {smbDocs("filesystemRef", "files"), reconciliation.ObjectRef{Kind: string(api.StorageFilesystem), Object: "files"}},
+		"subvolume":  {smbDocs(), reconciliation.ObjectRef{Kind: string(api.CephSubvolume), Object: "docs"}},
+		"filesystem": {smbDocs("filesystemRef", "files"), reconciliation.ObjectRef{Kind: string(api.CephFilesystem), Object: "files"}},
 	} {
 		t.Run(name, func(t *testing.T) {
 			catalog := smbCatalog(t, subvolumeOf(), smbUsers(), smbFiles(requestMap("label", "mon", "count", 2)), test.share)
@@ -349,11 +350,11 @@ func TestSMBBlocksDependOnSettingsBlockByID(t *testing.T) {
 			t.Errorf("%s depends on %v", id, d.Dependencies)
 		}
 		for _, ref := range d.Requires {
-			if ref.Kind == string(api.StorageCluster) {
-				t.Errorf("%s requires StorageCluster %s", id, ref.Object)
+			if ref.Kind == string(api.CephCluster) {
+				t.Errorf("%s requires CephCluster %s", id, ref.Object)
 			}
 		}
-		if d.Stage != reconciliation.StageClusters || !slices.Equal(d.Exclusive, []string{"ceph/example"}) || d.Kind != string(api.StorageSMBResource) || d.Implementation != SMBImplementation || d.ContentDigest != SMBContentDigest() {
+		if d.Stage != reconciliation.StageClusters || !slices.Equal(d.Exclusive, []string{"ceph/example"}) || d.Kind != string(api.CephSMBResource) || d.Implementation != SMBImplementation || d.ContentDigest != SMBContentDigest() {
 			t.Errorf("%s is %+v", id, d)
 		}
 	}
@@ -434,7 +435,7 @@ func TestSMBSecretValueRefusesBeforeTheRun(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			runner := &recordingRunner{}
 			result, err := NewSMB(runner).Apply(context.Background(), smbExecution(t, r, value))
-			refusedWith(t, err, "lifecycle.unsupported", "the Secret join-password that StorageSMBResource smb-join binds at /auth/password is not one line of 1 to 1024 bytes of UTF-8 text",
+			refusedWith(t, err, "lifecycle.unsupported", "the Secret join-password that CephSMBResource smb-join binds at /auth/password is not one line of 1 to 1024 bytes of UTF-8 text",
 				"store the password in Secret join-password as one line of 1 to 1024 bytes with bootwright secret set, then apply again")
 			if runner.calls != 0 || result.Outcome == reconciliation.OutcomeChanged || value != "" && strings.Contains(diagnostics.Of(err)[0].Message, value) {
 				t.Fatalf("the refusal ran the adapter or names the value: %+v calls %d", result, runner.calls)
@@ -481,11 +482,11 @@ func TestSMBRequestsCarryTheFrozenSambaDigests(t *testing.T) {
 		unfrozen := r
 		unfrozen.Images = nil
 		_, _, err = NewSMB(nil).prepare(context.Background(), smbExecution(t, unfrozen, "pw"))
-		refusedWith(t, err, "lifecycle.state", "StorageSMBResource "+name+" froze no samba image", "")
+		refusedWith(t, err, "lifecycle.state", "CephSMBResource "+name+" froze no samba image", "")
 		foreign := r
 		foreign.Images = []SMBImage{want[0], {Name: "samba_metrics", Image: PinnedRegistry + "/synthetic/other:synthetic-1"}}
 		_, _, err = NewSMB(nil).prepare(context.Background(), smbExecution(t, foreign, "pw"))
-		refusedWith(t, err, "lifecycle.state", "StorageSMBResource "+name+" froze a samba image its StorageCluster's settings did not freeze", "restore the original apply evidence")
+		refusedWith(t, err, "lifecycle.state", "CephSMBResource "+name+" froze a samba image its CephCluster's settings did not freeze", "restore the original apply evidence")
 	}
 	for _, name := range []string{"smb-users", "smb-join"} {
 		if r := builtSMB(t, catalog, base, name); len(r.Images) != 0 {
@@ -496,7 +497,7 @@ func TestSMBRequestsCarryTheFrozenSambaDigests(t *testing.T) {
 
 func TestSMBWithoutItsSambaImagesRefusesNamingTheField(t *testing.T) {
 	plain := pinnedCatalog(t, nil)
-	refused := map[api.Kind]string{api.StorageCluster: "example", api.StoragePool: "volumes", api.StorageClient: "consumer"}
+	refused := map[api.Kind]string{api.CephCluster: "example", api.CephPool: "volumes", api.CephClient: "consumer"}
 	state := compilation.NewState(plain, plain, nil)
 	for kind := range refused {
 		if got := New(kind, nil).Unsupported(state); len(got) != 0 {
@@ -505,11 +506,11 @@ func TestSMBWithoutItsSambaImagesRefusesNamingTheField(t *testing.T) {
 	}
 	catalog := api.NewCatalog(append(plain.Objects(), smbJoin(), smbUsers()))
 	state = compilation.NewState(catalog, catalog, nil)
-	cluster, _ := catalog.Find(api.StorageCluster, "example")
+	cluster, _ := catalog.Find(api.CephCluster, "example")
 	author := func(names ...string) *compilation.State {
 		spec := cluster.Spec()
 		for _, name := range names {
-			spec = spec.WithPath(requestMap("base", PinnedRegistry+"/synthetic/"+name, "version", "synthetic-1"), "ceph", "images", name)
+			spec = spec.WithPath(requestMap("base", PinnedRegistry+"/synthetic/"+name, "version", "synthetic-1"), "images", name)
 		}
 		objects := catalog.Objects()
 		for i := range objects {
@@ -525,8 +526,8 @@ func TestSMBWithoutItsSambaImagesRefusesNamingTheField(t *testing.T) {
 			var want []lifecycle.Refusal
 			if missing != "" {
 				want = []lifecycle.Refusal{{Kind: string(kind), Name: name,
-					Reason:      "StorageSMBResource smb-join needs cephadm's container_image_" + missing + ", and spec.ceph.images." + missing + " is not set; Bootwright keeps no default",
-					Remediation: "set spec.ceph.images." + missing + " of StorageCluster example to an image beneath its Entitlement registry, or remove every StorageSMBResource whose spec.clusterRef is example from the selected Environment"}}
+					Reason:      "CephSMBResource smb-join needs cephadm's container_image_" + missing + ", and spec.images." + missing + " is not set; Bootwright keeps no default",
+					Remediation: "set spec.images." + missing + " of CephCluster example to an image beneath its Entitlement registry, or remove every CephSMBResource whose spec.clusterRef is example from the selected Environment"}}
 			}
 			state := author(authored...)
 			if missing == "samba" {
@@ -608,7 +609,7 @@ func TestSMBIdentity(t *testing.T) {
 	r := builtSMB(t, catalog, smbBase(t, catalog), "smb-join")
 	const mismatch = "Ceph SMB request does not match its frozen resource identity"
 	for name, change := range map[string]func(*lifecycle.Execution){
-		"another kind":     func(e *lifecycle.Execution) { e.Block.Kind = string(api.StorageCluster) },
+		"another kind":     func(e *lifecycle.Execution) { e.Block.Kind = string(api.CephCluster) },
 		"another object":   func(e *lifecycle.Execution) { e.Block.Object = "other" },
 		"another block ID": func(e *lifecycle.Execution) { e.Block.ID = "ceph-smb-other" },
 	} {
@@ -636,12 +637,15 @@ func TestSMBIdentity(t *testing.T) {
 	}
 }
 
-func TestSMBPlanRefusesANameTooLongForItsBlock(t *testing.T) {
-	long := smbObject(strings.Repeat("s", 55), "secrets", api.ListValue(requestMap("path", "/auth/password", "secretRef", "join-password")),
+func TestSMBPlanAdmitsALongName(t *testing.T) {
+	name := strings.Repeat("s", 63)
+	long := smbObject(name, "secrets", api.ListValue(requestMap("path", "/auth/password", "secretRef", "join-password")),
 		"native", requestMap("resource_type", api.SMBJoinAuth, "auth_id", "join", "auth", requestMap("username", "Administrator")))
 	catalog := smbCatalog(t, subvolumeOf(), long)
-	_, err := NewSMB(nil).Plan(context.Background(), lifecycle.PlanInput{Verb: reconciliation.Apply, Context: lifecycle.ContextIdentity{Name: "synthetic"}, State: compilation.NewState(catalog, catalog, nil), Controller: "controller"})
-	refusedWith(t, err, "api.invariant", "StorageSMBResource "+strings.Repeat("s", 55)+" has a name too long to identify its block, whose identity holds at most 63 characters", "rename the StorageSMBResource to at most 54 characters")
+	plan, err := NewSMB(nil).Plan(context.Background(), lifecycle.PlanInput{Verb: reconciliation.Apply, Context: lifecycle.ContextIdentity{Name: "synthetic"}, State: compilation.NewState(catalog, catalog, nil), Controller: "controller"})
+	if err != nil || len(plan.Definitions) != 1 || !reconciliation.ValidSegment(plan.Definitions[0].ID) || plan.Definitions[0].ID == SMBBlockID(name[:62]+"t") {
+		t.Fatalf("a 63-character SMB resource planned %+v (%v)", plan.Definitions, diagnostics.Of(err))
+	}
 }
 
 func TestSMBPlanNamesItsSecretsAndSubjects(t *testing.T) {
@@ -729,11 +733,11 @@ func TestSMBClustersAreDelegatedInTheCoreRequest(t *testing.T) {
 	}
 	zeta := smbObject("smb-alpha", "native", requestMap("resource_type", api.SMBCluster, "cluster_id", "zeta", "auth_mode", "user",
 		"user_group_settings", api.ListValue(requestMap("source_type", "resource", "ref", "users")), "placement", requestMap("label", "mon", "count", 1)))
-	children := []api.Object{cephfsPool("fs-meta", "cephfs-metadata"), cephfsPool("fs-data", "cephfs-data"), filesystemOf(), subvolumeOf(), smbUsers(), zeta,
+	children := []api.Object{cephfsPool("fs-meta", "cephfsMetadata"), cephfsPool("fs-data", "cephfsData"), filesystemOf(), subvolumeOf(), smbUsers(), zeta,
 		smbFiles(requestMap("label", "mon", "count", 2))}
 	catalog := api.NewCatalog(append(pinnedCatalog(t, func(spec api.Value) api.Value {
 		spec = withMDS(spec)
-		return spec.WithPath(api.ListValue(append(spec.Get("ceph", "services").Items(), nfsService("shares"))...), "ceph", "services")
+		return spec.WithPath(api.ListValue(append(spec.Get("services").Items(), nfsService("shares"))...), "services")
 	}).Objects(), children...))
 	got = smbBase(t, catalog).Delegated
 	want := []DelegatedService{{Name: "crash", Hosts: hosts}, {Name: "nfs.shares", Hosts: hosts}, {Name: "smb.files", Hosts: hosts}, {Name: "smb.zeta", Hosts: hosts}}
@@ -747,10 +751,10 @@ func TestSMBClustersAreDelegatedInTheCoreRequest(t *testing.T) {
 
 func TestSMBPlansWithSelectedSambaImages(t *testing.T) {
 	plain := smbCatalog(t, subvolumeOf(), smbUsers(), smbJoin(), smbFiles(requestMap("label", "mon", "count", 2)), smbDocs())
-	cluster, _ := plain.Find(api.StorageCluster, "example")
+	cluster, _ := plain.Find(api.CephCluster, "example")
 	spec := cluster.Spec()
 	for _, name := range []string{"samba", "samba_metrics"} {
-		spec = spec.WithPath(requestMap("base", PinnedRegistry+"/synthetic/"+name, "version", "synthetic-1"), "ceph", "images", name)
+		spec = spec.WithPath(requestMap("base", PinnedRegistry+"/synthetic/"+name, "version", "synthetic-1"), "images", name)
 	}
 	objects := plain.Objects()
 	for i := range objects {

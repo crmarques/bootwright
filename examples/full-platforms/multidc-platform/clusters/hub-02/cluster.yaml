@@ -1,5 +1,5 @@
 apiVersion: bootwright.io/v1alpha1
-kind: ContainerCluster
+kind: OpenShiftCluster
 metadata:
   name: hub-multidc-02
 
@@ -20,17 +20,16 @@ spec:
         tpm2: {}
 
       roles:
-        - master
+        - controlPlane
         - worker
         - infra
 
   install:
     additionalTrustBundlePolicy: Always
-    method: agent
     mode: connected
 
     platform:
-      type: none
+      none: {}
 
     endpoints:
       api:
@@ -75,17 +74,17 @@ spec:
 
   nodes:
     - name: master-01
-      role: master
+      role: controlPlane
       machineRef: hub-multidc-02-master-01
       fqdn: master-01.hub-multidc-02.clusters.example.com
 
     - name: master-02
-      role: master
+      role: controlPlane
       machineRef: hub-multidc-02-master-02
       fqdn: master-02.hub-multidc-02.clusters.example.com
 
     - name: master-03
-      role: master
+      role: controlPlane
       machineRef: hub-multidc-02-master-03
       fqdn: master-03.hub-multidc-02.clusters.example.com
 

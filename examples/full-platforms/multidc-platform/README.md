@@ -19,7 +19,7 @@ Start at [Environment](environment.yaml), then follow:
 | Controller and substrate | [Local controller](infra/machines/controller.yaml), [physical provider](infra/providers/physical.yaml), [KubeVirt provider](infra/providers/kubevirt-ocp-01.yaml). |
 | Machine and network | [Physical node](infra/machines/ocp-01/machine-01.yaml), [virtual node](infra/machines/hub-01/machine-01.yaml), [shared NMState network](infra/networkconfigs/ocp-bare-metal-network.yaml). |
 | Container cluster | [Physical OpenShift cluster](clusters/ocp-01/cluster.yaml), [virtual hub cluster](clusters/hub-01/cluster.yaml). |
-| Storage | [Cluster](clusters/ceph/cluster.yaml), [placement policy](clusters/ceph/placement-policy.yaml), [pool](clusters/ceph/pools/odf-hub-multidc-01-rbd.yaml), [export](clusters/ceph/exports/odf-hub-multidc-01.yaml). |
+| Storage | [Cluster](clusters/ceph/cluster.yaml), [placement policy](clusters/ceph/placement-policy.yaml), [pool](clusters/ceph/pools/odf-hub-multidc-01-rbd.yaml), [consumer](clusters/ceph/consumers/odf-hub-multidc-01.yaml). |
 | Add-ons | [Built-in package contract](../../../specs/api/addons.md#package-fdf), [profile](add-ons/profiles/physical-cluster-addons.yaml), [binding](clusters/hub-01/add-on-binding.yaml). |
 
 The native Kubernetes files under `add-ons/virtual-cluster-network/manifests/`
@@ -58,7 +58,7 @@ KubeVirt network references name cluster-scoped CUDNs without namespaces. The
 associated add-on payloads illustrate intended attachment topology; they do not
 establish a currently realized KubeVirt substrate. Physical OpenShift node
 installation also remains refused by the
-[cluster implementation](../../../specs/container-clusters.md#selection-and-refusal).
+[cluster implementation](../../../specs/openshift-clusters.md#selection-and-refusal).
 
 ## Storage and add-ons
 
@@ -76,12 +76,12 @@ cluster's native RGW service through `serviceRef`; its endpoint is the HTTPS
 ingress whose backend is that service. The gateway, RGW and ingress services have a native lifecycle; this
 reference's live qualification remains unrun. Admission also accepts the native observability services and the
 Grafana Secret binding; planning refuses each service that needs an auxiliary
-image until that image can be selected. Managed exports now use the built-in export lifecycle;
-see [storage API](../../../specs/api/storage.md) and
-[native service qualification](../../../specs/storage-native-api.md).
+image until that image can be selected. Managed CephConsumers now use the built-in consumer lifecycle;
+see [storage API](../../../specs/api/ceph.md) and
+[native service qualification](../../../specs/ceph-native-api.md).
 
 The four Data Foundation bindings select the built-in `fdf` package and
-separate managed exports. Each declares an owned catalog, channel and exact
+separate managed CephConsumers. Each declares an owned catalog, channel and exact
 starting CSV; replace the synthetic digest and versions with verified vendor
 choices. Include IBM registry credentials in the cluster installation pull
 secret. Bootwright does not merge the global pull secret. Each cluster selects
@@ -108,18 +108,20 @@ make build
 
 The expected result is failure with explicit diagnostics for:
 
-- External endpoint sources on the two baremetal ContainerClusters.
+- External endpoint sources on the two baremetal OpenShiftClusters.
 - Stretch topology and manager-module intent.
 - Unqualified global Ceph options, including missing members of the currently
   qualified pool-default pair.
 - A FIPS Ceph node without a managed FIPS installation profile.
-- Agent-install bridge interfaces on the two physical ContainerClusters.
+- Agent-install bridge interfaces on the two physical OpenShiftClusters.
+- Unrealized-declaration warnings for the KubeVirt providers and the authored
+  add-on profile selections.
 
 The exact diagnostic set is pinned by `TestActualCLIRefusesFutureReferenceFeatures`
 in [admission acceptance tests](../../../cmd/bootwright/admission_acceptance_test.go).
 Resolving these admission errors alone would not make the graph deployable:
 physical OpenShift, KubeVirt, security choices and add-on realization have
 further lifecycle limits. Keep this graph for schema and dependency review;
-use the [single-node OpenShift](../../container-clusters/lab-sno/README.md) or
-[three-node Ceph](../../storage-clusters/libvirt-3-nodes-ceph/README.md)
+use the [single-node OpenShift](../../openshift-clusters/lab-sno/README.md) or
+[three-node Ceph](../../ceph-clusters/libvirt-3-nodes-ceph/README.md)
 runbooks for the implemented example journeys.

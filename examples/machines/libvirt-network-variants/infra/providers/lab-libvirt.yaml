@@ -11,12 +11,8 @@ spec:
       diskGiB: 10
 
     machineRef: controller
-    uri: qemu:///system
 
-    bmcEmulationDefaults:
-      enabled: true
-      protocol: redfish
-      emulator: sushy-tools
+    bmcEmulation:
       bindAddress: 127.0.0.1
       port: 8000
       certificateRef: lab-bmc-tls

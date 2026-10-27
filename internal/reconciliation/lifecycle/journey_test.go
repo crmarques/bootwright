@@ -1643,7 +1643,7 @@ type harness struct {
 
 func definition(id string) reconciliation.BlockDefinition {
 	return reconciliation.BlockDefinition{
-		ID: id, Description: "serve " + id, Stage: reconciliation.StageInfraComponents,
+		ID: id, Description: "serve " + id, Stage: reconciliation.StageInfrastructureServices,
 		Kind: "ArtifactServer", Object: id,
 		Implementation: "artifact-server-nginx-v1", ContentDigest: strings.Repeat("c", 64),
 		Request: json.RawMessage(`{"name":"` + id + `"}`),
@@ -1921,9 +1921,9 @@ func TestAuthorizationTokenAndBorrowedCredentialsRefuseBeforeAnyRead(t *testing.
 func TestUnsupportedObjectsRefuseBeforeRegistration(t *testing.T) {
 	h := newHarness(t, "artifact-server-lab")
 	cluster := Refusal{
-		Kind: "ContainerCluster", Name: "sno",
+		Kind: "OpenShiftCluster", Name: "sno",
 		Reason:      "a declared node selects an install profile, so two installations would write its disk",
-		Remediation: "remove spec.os.installProfileRef from Machine/sno-01 or drop it from ContainerCluster/sno",
+		Remediation: "remove spec.os.installProfileRef from Machine/sno-01 or drop it from OpenShiftCluster/sno",
 	}
 	h.capability.unsupported = []Refusal{
 		{Kind: "Machine", Name: "guest", Field: "$.spec.os.installProfileRef", Reason: "the install profile selects spec.subscription"},
@@ -1932,12 +1932,12 @@ func TestUnsupportedObjectsRefuseBeforeRegistration(t *testing.T) {
 	_, err := h.service.Apply(context.Background(), ApplyRequest{ContextName: "lab", SkipConfirmation: true})
 	want := []diagnostics.Diagnostic{
 		{
-			Severity: "error", Code: "lifecycle.unsupported", Message: cluster.Reason, Remediation: cluster.Remediation,
-			Object: &diagnostics.ObjectIdentity{APIVersion: api.APIVersion, Kind: "ContainerCluster", Name: "sno"},
-		},
-		{
 			Severity: "error", Code: "lifecycle.unsupported", Message: "the install profile selects spec.subscription", Field: "$.spec.os.installProfileRef", Remediation: "correct Machine/guest",
 			Object: &diagnostics.ObjectIdentity{APIVersion: api.APIVersion, Kind: "Machine", Name: "guest"},
+		},
+		{
+			Severity: "error", Code: "lifecycle.unsupported", Message: cluster.Reason, Remediation: cluster.Remediation,
+			Object: &diagnostics.ObjectIdentity{APIVersion: api.APIVersion, Kind: "OpenShiftCluster", Name: "sno"},
 		},
 	}
 	if reported := diagnostics.Of(err); !reflect.DeepEqual(reported, want) {
@@ -3439,7 +3439,7 @@ func stagedDefinition(id string, stage reconciliation.Stage, dependencies ...str
 // hosting cluster's virtualization add-on has been installed.
 func nestedDefinitions() []reconciliation.BlockDefinition {
 	return []reconciliation.BlockDefinition{
-		stagedDefinition("artifacts", reconciliation.StageInfraComponents),
+		stagedDefinition("artifacts", reconciliation.StageInfrastructureServices),
 		stagedDefinition("provider-metal", reconciliation.StageSubstrates),
 		stagedDefinition("host-node", reconciliation.StageMachines, "provider-metal"),
 		stagedDefinition("host-cluster", reconciliation.StageClusters, "host-node"),
@@ -3452,7 +3452,7 @@ func nestedDefinitions() []reconciliation.BlockDefinition {
 func TestStagedApplyPausesAtTheStageBoundary(t *testing.T) {
 	h := newPlannedHarness(t, nestedDefinitions())
 	result, err := h.service.Apply(context.Background(), ApplyRequest{
-		ContextName: "lab", SkipConfirmation: true, Stages: []string{"infra-components"},
+		ContextName: "lab", SkipConfirmation: true, Stages: []string{"infrastructure-services"},
 	})
 	if err != nil {
 		t.Fatalf("a stage boundary reported a failure: %v", err)
@@ -3508,7 +3508,7 @@ func TestStagedApplyDefersBlocksBehindUnselectedStages(t *testing.T) {
 func TestContinuationAcceptsAWiderStageSetAndCompletes(t *testing.T) {
 	h := newPlannedHarness(t, nestedDefinitions())
 	if _, err := h.service.Apply(context.Background(), ApplyRequest{
-		ContextName: "lab", SkipConfirmation: true, Stages: []string{"infra-components"},
+		ContextName: "lab", SkipConfirmation: true, Stages: []string{"infrastructure-services"},
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -3531,7 +3531,7 @@ func TestContinuationAcceptsAWiderStageSetAndCompletes(t *testing.T) {
 func TestDestroyFromAPausedApplyRemovesOnlyDoneBlocks(t *testing.T) {
 	h := newPlannedHarness(t, nestedDefinitions())
 	if _, err := h.service.Apply(context.Background(), ApplyRequest{
-		ContextName: "lab", SkipConfirmation: true, Stages: []string{"infra-components", "substrates"},
+		ContextName: "lab", SkipConfirmation: true, Stages: []string{"infrastructure-services", "substrates"},
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -4093,14 +4093,14 @@ func TestStageSelectionWithNothingStartableRefuses(t *testing.T) {
 	if len(reported) != 1 || reported[0].Code != "lifecycle.stage" {
 		t.Fatalf("fresh refusal = %+v", reported)
 	}
-	if !strings.Contains(reported[0].Remediation, "infra-components") {
+	if !strings.Contains(reported[0].Remediation, "infrastructure-services") {
 		t.Fatalf("the refusal does not name a stage that would unblock work: %+v", reported[0])
 	}
 	if len(h.workspace.area.files) != 0 || h.workspace.mutations != 0 {
 		t.Fatal("a refused stage selection registered an operation")
 	}
 	if _, err := h.service.Apply(context.Background(), ApplyRequest{
-		ContextName: "lab", SkipConfirmation: true, Stages: []string{"infra-components"},
+		ContextName: "lab", SkipConfirmation: true, Stages: []string{"infrastructure-services"},
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -4116,7 +4116,7 @@ func TestFailedBlockOutsideTheSelectionRefusesRetry(t *testing.T) {
 	h := newPlannedHarness(t, nestedDefinitions())
 	h.capability.outcomes = []Result{{Outcome: reconciliation.OutcomeFailed}}
 	if _, err := h.service.Apply(context.Background(), ApplyRequest{
-		ContextName: "lab", SkipConfirmation: true, Stages: []string{"infra-components"},
+		ContextName: "lab", SkipConfirmation: true, Stages: []string{"infrastructure-services"},
 	}); err == nil {
 		t.Fatal("a failed block reported success")
 	}
@@ -4124,7 +4124,7 @@ func TestFailedBlockOutsideTheSelectionRefusesRetry(t *testing.T) {
 		ContextName: "lab", SkipConfirmation: true, Stages: []string{"substrates"},
 	})
 	reported := diagnostics.Of(err)
-	if len(reported) != 1 || reported[0].Code != "lifecycle.stage" || !strings.Contains(reported[0].Remediation, "infra-components") {
+	if len(reported) != 1 || reported[0].Code != "lifecycle.stage" || !strings.Contains(reported[0].Remediation, "infrastructure-services") {
 		t.Fatalf("retry refusal = %+v", reported)
 	}
 }
@@ -4136,25 +4136,25 @@ func TestFailedBlockOutsideTheSelectionRefusesRetry(t *testing.T) {
 func TestAStageRefusalNamesAnApplyThatPassesAuthorization(t *testing.T) {
 	install := stagedDefinition("install", reconciliation.StageMachines, "artifacts")
 	install.Consumes = []string{reconciliation.AuthorizationDataLoss}
-	definitions := []reconciliation.BlockDefinition{stagedDefinition("artifacts", reconciliation.StageInfraComponents), install}
+	definitions := []reconciliation.BlockDefinition{stagedDefinition("artifacts", reconciliation.StageInfrastructureServices), install}
 	h := newPlannedHarness(t, definitions)
 	authorized := []string{reconciliation.AuthorizationDataLoss}
-	want := "repeat bootwright apply --context lab --stage infra-components,machines --authorize " + shownBinding(t, h, "lab")
+	want := "repeat bootwright apply --context lab --stage infrastructure-services,machines --authorize " + shownBinding(t, h, "lab")
 	_, err := h.service.Apply(context.Background(), ApplyRequest{ContextName: "lab", SkipConfirmation: true, Stages: []string{"machines"}, Authorizations: authorized})
 	if reported := diagnostics.Of(err); len(reported) != 1 || reported[0].Code != "lifecycle.stage" || reported[0].Remediation != want {
 		t.Fatalf("fresh refusal = %+v, want the remedy %q", reported, want)
 	}
 	if _, err := h.service.Apply(context.Background(), ApplyRequest{
-		ContextName: "lab", SkipConfirmation: true, Stages: []string{"infra-components"}, Authorizations: authorized,
+		ContextName: "lab", SkipConfirmation: true, Stages: []string{"infrastructure-services"}, Authorizations: authorized,
 	}); err != nil {
 		t.Fatal(err)
 	}
-	_, err = h.service.Apply(context.Background(), ApplyRequest{ContextName: "lab", SkipConfirmation: true, Stages: []string{"infra-components"}, Authorizations: authorized})
+	_, err = h.service.Apply(context.Background(), ApplyRequest{ContextName: "lab", SkipConfirmation: true, Stages: []string{"infrastructure-services"}, Authorizations: authorized})
 	if reported := diagnostics.Of(err); len(reported) != 1 || reported[0].Code != "lifecycle.stage" || reported[0].Remediation != want {
 		t.Fatalf("continuation refusal = %+v, want the remedy %q", reported, want)
 	}
 	result, err := h.service.Apply(context.Background(), ApplyRequest{
-		ContextName: "lab", SkipConfirmation: true, Stages: []string{"infra-components", "machines"}, Authorizations: authorized,
+		ContextName: "lab", SkipConfirmation: true, Stages: []string{"infrastructure-services", "machines"}, Authorizations: authorized,
 	})
 	if err != nil || result.Receipt.State != string(reconciliation.OperationDone) {
 		t.Fatalf("the named apply = %+v (%v), want it to complete the operation", result, err)
@@ -4170,7 +4170,7 @@ func TestAStageRefusalNamesAnApplyThatPassesAuthorization(t *testing.T) {
 		t.Fatalf("retry refusal = %+v, want the remedy %q", reported, want)
 	}
 	result, err = h.service.Apply(context.Background(), ApplyRequest{
-		ContextName: "lab", SkipConfirmation: true, Stages: []string{"infra-components", "machines"}, Authorizations: authorized,
+		ContextName: "lab", SkipConfirmation: true, Stages: []string{"infrastructure-services", "machines"}, Authorizations: authorized,
 	})
 	if err != nil || result.Receipt.State != string(reconciliation.OperationDone) {
 		t.Fatalf("the named retry = %+v (%v), want it to complete the operation", result, err)
@@ -4183,7 +4183,7 @@ func TestUnknownBlockIsResolvedRegardlessOfStage(t *testing.T) {
 	h := newPlannedHarness(t, nestedDefinitions())
 	h.capability.outcomes = []Result{{Outcome: reconciliation.OutcomeUnknown}}
 	if _, err := h.service.Apply(context.Background(), ApplyRequest{
-		ContextName: "lab", SkipConfirmation: true, Stages: []string{"infra-components"},
+		ContextName: "lab", SkipConfirmation: true, Stages: []string{"infrastructure-services"},
 	}); err == nil {
 		t.Fatal("an unknown effect reported success")
 	}
@@ -4245,7 +4245,7 @@ func TestUnclaimedKindsRefuseBeforeRegistration(t *testing.T) {
 		api.NewObject(api.Proxy, "upstream", api.Value{}, api.MapValue(
 			api.FieldValue{Name: "management", Value: api.StringValue("external")},
 		)),
-		api.NewObject(api.StorageCluster, "ceph", api.Value{}, api.MapValue()),
+		api.NewObject(api.CephCluster, "ceph", api.Value{}, api.MapValue()),
 		api.NewObject(api.LoadBalancer, "lab-balancer", api.Value{}, api.MapValue(api.FieldValue{Name: "management", Value: api.StringValue("managed")})),
 		api.NewObject(api.Machine, "bare", api.Value{}, api.MapValue(
 			api.FieldValue{Name: "os", Value: api.MapValue(api.FieldValue{Name: "provided", Value: api.BoolValue(false)})},
@@ -4268,10 +4268,12 @@ func TestUnclaimedKindsRefuseBeforeRegistration(t *testing.T) {
 		}
 	}
 	want := []diagnostics.Diagnostic{
-		unclaimed("LoadBalancer", "lab-balancer", "no capability of this executable manages the LoadBalancer kind"),
+		unclaimed("CephCluster", "ceph", "no capability of this executable realizes the CephCluster kind"),
+		{Severity: "error", Code: "lifecycle.unsupported", Message: "no capability of this executable manages the LoadBalancer kind",
+			Remediation: "declare spec.management: external on LoadBalancer/lab-balancer to use a LoadBalancer the operator runs, or remove it from the selected Environment",
+			Object:      &diagnostics.ObjectIdentity{APIVersion: api.APIVersion, Kind: "LoadBalancer", Name: "lab-balancer"}},
 		unclaimed("Machine", "bare", "no capability of this executable realizes a Machine whose operating system is not provided"),
 		unclaimed("Proxy", "lab-proxy", "no capability of this executable manages the Proxy kind"),
-		unclaimed("StorageCluster", "ceph", "no capability of this executable realizes the StorageCluster kind"),
 	}
 	if reported := diagnostics.Of(err); !reflect.DeepEqual(reported, want) {
 		t.Fatalf("unclaimed refusal = %+v, want %+v", reported, want)
@@ -4302,7 +4304,7 @@ func TestSelectingALaterStageWaitsForTheControllerBlock(t *testing.T) {
 	}, nestedDefinitions()...)
 	h := newPlannedHarness(t, definitions)
 	_, err := h.service.Apply(context.Background(), ApplyRequest{
-		ContextName: "lab", SkipConfirmation: true, Stages: []string{"infra-components"},
+		ContextName: "lab", SkipConfirmation: true, Stages: []string{"infrastructure-services"},
 	})
 	if diagnostics.Of(err)[0].Code != "lifecycle.stage" || !strings.Contains(diagnostics.Of(err)[0].Remediation, "--stage controller") {
 		t.Fatalf("selection error = %v", err)
@@ -4324,7 +4326,7 @@ func TestPlanWithoutAControllerBlockGainsNoDependency(t *testing.T) {
 		t.Fatalf("steps = %+v", result.Steps)
 	}
 	if _, err := h.service.Apply(context.Background(), ApplyRequest{
-		ContextName: "lab", SkipConfirmation: true, Stages: []string{"infra-components"},
+		ContextName: "lab", SkipConfirmation: true, Stages: []string{"infrastructure-services"},
 	}); err != nil {
 		t.Fatalf("an unrelated selection was refused: %v", err)
 	}
@@ -4427,7 +4429,7 @@ func TestControllerBlockReceivesItsPublicationBoundary(t *testing.T) {
 // all, so one capability's specifics cannot reach another's attempt.
 func TestOnlyTheControllerBlockReceivesThePublicationBoundary(t *testing.T) {
 	h := newPlannedHarness(t, []reconciliation.BlockDefinition{
-		stagedDefinition("artifact-server-lab", reconciliation.StageInfraComponents),
+		stagedDefinition("artifact-server-lab", reconciliation.StageInfrastructureServices),
 	})
 	if _, err := h.service.Apply(context.Background(), ApplyRequest{ContextName: "lab", SkipConfirmation: true}); err != nil {
 		t.Fatal(err)

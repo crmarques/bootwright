@@ -1,7 +1,7 @@
 {
   "filesystem": {
     "plan": [
-      "create per-export Ceph principals for consumer",
+      "create per-consumer Ceph principals for consumer",
       "grants consumer administrators every path of filesystem files",
       "is not isolated from other exports that share its cluster, filesystem or gateway"
     ],
@@ -9,7 +9,7 @@
   },
   "gateway": {
     "plan": [
-      "create per-export Ceph principals for consumer",
+      "create per-consumer Ceph principals for consumer",
       "grants consumer administrators every path of filesystem files",
       "grants consumer administrators every RGW user, bucket and key in the realm of object gateway objects",
       "is not isolated from other exports that share its cluster, filesystem or gateway"

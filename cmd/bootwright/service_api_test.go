@@ -16,7 +16,6 @@ const serviceHost = `apiVersion: bootwright.io/v1alpha1
 kind: Machine
 metadata: {name: service-host}
 spec:
-  capabilities: [container-runtime]
   os: {provided: true}
   access: {local: true}
   network:
@@ -34,17 +33,17 @@ func serviceSources(environment string, objects ...string) desiredstate.Sources 
 func TestServiceDefaultsPreserveManagementAndAtomicChoices(t *testing.T) {
 	t.Run("external skips managed fields", func(t *testing.T) {
 		env := serviceEnvironment + `  defaults:
-    ArtifactServer:
+    DNSServer:
       management: managed
+      implementation: dnsmasq
       machineRef: service-host
-      listeners: [{name: web, protocol: http, port: 8080}]
-      endpoints: [{name: web, listenerRef: web, addressRef: service}]
-      image: {public: example.test/artifacts@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef}
+      endpoints: [{name: dns, addressRef: service}]
+      image: {public: example.test/dns@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef}
 `
-		object := "apiVersion: bootwright.io/v1alpha1\nkind: ArtifactServer\nmetadata: {name: external}\nspec:\n  management: external\n  endpoints: [{name: media, url: 'https://artifacts.example.test'}]\n"
+		object := "apiVersion: bootwright.io/v1alpha1\nkind: DNSServer\nmetadata: {name: external}\nspec:\n  management: external\n  address: 192.0.2.53\n"
 		state, _ := compileAcceptance(t, serviceSources(env, object))
-		spec := requireObject(t, state.Effective(), api.ArtifactServer, "external").Spec()
-		for _, field := range []string{"machineRef", "listeners", "tls", "bindAddress", "retention", "image"} {
+		spec := requireObject(t, state.Effective(), api.DNSServer, "external").Spec()
+		for _, field := range []string{"machineRef", "implementation", "endpoints", "bindAddress", "image"} {
 			if spec.Has(field) {
 				t.Errorf("external service inherited managed field %s", field)
 			}
@@ -132,7 +131,7 @@ func TestRetiredInfrastructureInputExplainsReplacement(t *testing.T) {
 			t.Fatal("retired service kind was accepted")
 		}
 		diagnostics := diagnostics.Of(err)
-		if len(diagnostics) != 1 || diagnostics[0].Code != "api.kind" || !strings.Contains(diagnostics[0].Message, "ArtifactServer") || !strings.Contains(diagnostics[0].Message, "management") {
+		if len(diagnostics) != 1 || diagnostics[0].Code != "api.kind" || !strings.Contains(diagnostics[0].Remediation, "ArtifactServer") || !strings.Contains(diagnostics[0].Remediation, "management") {
 			t.Fatalf("retired kind lacks replacement guidance: %#v", diagnostics)
 		}
 	}
@@ -140,7 +139,7 @@ func TestRetiredInfrastructureInputExplainsReplacement(t *testing.T) {
 
 func TestUnusedProxyDefaultsRejectLocalContradictionsWithoutResolvingReferences(t *testing.T) {
 	for _, owner := range []struct{ kind, prefix, field string }{
-		{"ContainerCluster", "      install:\n        ", "install.proxy"},
+		{"OpenShiftCluster", "      install:\n        ", "install.proxy"},
 		{"MachineInstallProfile", "      ", "proxy"},
 		{"Machine", "      ", "proxy"},
 	} {

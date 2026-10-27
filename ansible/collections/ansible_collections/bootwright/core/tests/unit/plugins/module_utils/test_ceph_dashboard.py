@@ -56,7 +56,7 @@ def dashboard(tmp_path, monkeypatch):
               "devices": [{"path": "/dev/vdb", "serial": "disk" + str(i), "sizeBytes": 1024 ** 3}], "labels": [], "location": {},
               "sshKeyRef": "fleet-key"} for i in range(1, 4)]
     names = [host["name"] for host in hosts]
-    request = {"controller": "controller", "version": "ceph-core-v32", "action": "cluster", "cluster": "example", "owner": "apply-example",
+    request = {"controller": "controller", "version": "ceph-core-v33", "action": "cluster", "cluster": "example", "owner": "apply-example",
                "fsid": "4c0a4300-aa43-458c-86d7-ac2256d1fc00", "image": "registry.example.test/ceph@sha256:" + "a" * 64,
                "cephadm": {"path": "/usr/sbin/cephadm", "packageVersion": "20.2.1-405.el9cp"},
                "release": "9.1", "ansiblePackageVersion": "3.2.0",
@@ -538,7 +538,7 @@ def test_the_dashboard_read_phase_skips_the_release_gate_and_the_dashboard_phase
 
 
 def test_the_tunnel_mount_and_unit_observation_is_reproved_after_the_redeploy(dashboard):
-    dashboard.request["clusterSSHTransport"] = "verified-tunnel"
+    dashboard.request["clusterSSHTransport"] = "verifiedTunnel"
     events = []
     real = dashboard.native.ceph
 
@@ -833,7 +833,7 @@ def test_lost_repair_response_observes_before_mutation_and_resubmits_once_per_ap
 
 @pytest.mark.parametrize("hold", ["transport_hold", "cache_hold"])
 def test_a_hold_refusal_on_a_repair_leaves_no_intent_and_the_next_apply_submits_it(dashboard, hold):
-    dashboard.request["clusterSSHTransport"] = "verified-tunnel"
+    dashboard.request["clusterSSHTransport"] = "verifiedTunnel"
     dashboard.state.ports[MANAGER_ONE] = [8765]
     refused = []
 

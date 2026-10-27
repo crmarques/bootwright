@@ -8,12 +8,12 @@ import (
 )
 
 const (
-	retiredMDSPlacement   = "an entry of its StorageCluster's spec.ceph.services with service_type mds and service_id equal to this StorageFilesystem's name, and set spec.mdsServiceRef to mds.<name>"
-	retiredMDSServiceSpec = "the native fields (networks, extra_container_args, extra_entrypoint_args) of its StorageCluster's spec.ceph.services entry with service_type mds and service_id equal to this StorageFilesystem's name"
+	retiredMDSPlacement   = "an entry of its CephCluster's spec.services with service_type mds and service_id equal to this CephFilesystem's name, and set spec.mdsServiceRef to mds.<name>"
+	retiredMDSServiceSpec = "the native fields (networks, extra_container_args, extra_entrypoint_args) of its CephCluster's spec.services entry with service_type mds and service_id equal to this CephFilesystem's name"
 )
 
 func filesystemProbe(spec string) string {
-	return "apiVersion: bootwright.io/v1alpha1\nkind: StorageFilesystem\nmetadata:\n  name: probe\nspec:\n  clusterRef: missing\n  mdsServiceRef: mds.probe\n  metadataPoolRef: missing\n  dataPoolRefs: [missing]\n" + spec
+	return "apiVersion: bootwright.io/v1alpha1\nkind: CephFilesystem\nmetadata:\n  name: probe\nspec:\n  clusterRef: missing\n  mdsServiceRef: mds.probe\n  metadataPoolRef: missing\n  dataPoolRefs: [missing]\n" + spec
 }
 
 func filesystemFindingsAt(t *testing.T, spec, field string) []string {
@@ -40,10 +40,10 @@ func TestFilesystemRetiredMDSPlacementNamesReplacement(t *testing.T) {
 			t.Fatalf("retired %s lost its replacement: %+v", row.field, sink)
 		}
 	}
-	input := sources(environmentYAML + "  defaults:\n    StorageFilesystem:\n      mds:\n        placement: {count: 2}\n")
+	input := sources(environmentYAML + "  defaults:\n    CephFilesystem:\n      mds:\n        placement: {count: 2}\n")
 	state, report, err := regressionCompiler().Compile(context.Background(), input)
 	sink := requireCompilationFailure(t, state, report, err)
-	const field = "$.spec.defaults.StorageFilesystem.mds.placement"
+	const field = "$.spec.defaults.CephFilesystem.mds.placement"
 	if len(sink) != 1 || sink[0].Field != field || sink[0].Remediation != "replace "+field+" with "+retiredMDSPlacement {
 		t.Fatalf("retired default lost its owner: %+v", sink)
 	}

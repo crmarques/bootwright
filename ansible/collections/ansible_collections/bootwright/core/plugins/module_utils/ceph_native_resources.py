@@ -36,7 +36,7 @@ GROUP_ATTEMPT = "ceph-subvolume-group-attempt-v1"
 SUBVOLUME_ATTEMPT = "ceph-subvolume-attempt-v1"
 # The manager option cephadm registers per auxiliary image, read in section mgr (src/pybind/mgr/cephadm/module.py:499-500).
 IMAGE_KEY = "mgr/cephadm/container_image_"
-# The manager modules a declared family derives: nfs from internal/storage/services.go, smb from internal/storage/ceph/settings.go.
+# The manager modules a declared family derives: nfs from internal/storage/cephcluster/services.go, smb from internal/storage/ceph/settings.go.
 DERIVED_MODULES = (
     "nfs",
     "smb",
@@ -62,7 +62,7 @@ RBD_FEATURES = ("layering", "exclusive-lock", "object-map", "fast-diff", "deep-f
 RBD_OBJECT_MAP_BYTES = 256000000 << 22
 # The plugins whose stored profile profile_matches proves: isa, and jerasure with its two frozen defaults.
 ERASURE_PLUGINS = frozenset(("isa", "jerasure"))
-APPLICATIONS = {"rbd": "rbd", "cephfs-metadata": "cephfs", "cephfs-data": "cephfs", "rgw": "rgw"}
+APPLICATIONS = {"rbd": "rbd", "cephfsMetadata": "cephfs", "cephfsData": "cephfs", "rgw": "rgw"}
 POOL_MEMBERS = frozenset(("application", "autoscale", "compression", "crushRule", "filesystem", "minSize", "name", "overwrites", "pgNum", "quota", "role",
                           "size", "type"))
 ERASURE_MEMBERS = frozenset(("codingChunks", "dataChunks", "deviceClass", "failureDomain", "plugin", "profile", "profileDefaults", "root", "stripeUnit",
@@ -115,7 +115,7 @@ def validate(request, hosts):
 def validate_client(client):
     """The one scope the Go plan froze: an RBD pool with its derived data pools, a filesystem, or a subvolume with the path its creation proved."""
     require(isinstance(client, dict) and CLIENT_MEMBERS <= set(client) <= CLIENT_MEMBERS | {"subvolumePath"})
-    require(named(client["name"]) and client["access"] in ("read-only", "read-write"))
+    require(named(client["name"]) and client["access"] in ("readOnly", "readWrite"))
     data_pools = client["dataPools"]
     require(isinstance(data_pools, list) and all(named(pool) for pool in data_pools))
     if client["pool"] != "":
@@ -231,7 +231,7 @@ def validate_pool(pool, osd_hosts):
     require("object" not in pool or named(pool["object"]) and pool["object"] != pool["name"])
     require(named(pool["name"]) and named(pool["crushRule"]) and isinstance(pool["role"], str) and pool["role"] in APPLICATIONS)
     require(pool["application"] == APPLICATIONS[pool["role"]])
-    require(pool["filesystem"] == "" or pool["role"] in ("cephfs-metadata", "cephfs-data") and named(pool["filesystem"]))
+    require(pool["filesystem"] == "" or pool["role"] in ("cephfsMetadata", "cephfsData") and named(pool["filesystem"]))
     require(type(pool["size"]) is int and type(pool["minSize"]) is int and type(pool["overwrites"]) is bool)
     if erasure:
         validate_erasure(pool, osd_hosts)
@@ -261,7 +261,7 @@ def validate_erasure(pool, osd_hosts):
     require(isinstance(defaults, dict) and set(defaults) <= PROFILE_DEFAULTS)
     require(all(isinstance(value, str) and PROFILE_VALUE.fullmatch(value) is not None for value in defaults.values()))
     require(pool["size"] == row[0] + row[1] and pool["minSize"] == row[0] + min(1, row[1] - 1))
-    require(pool["overwrites"] == (pool["role"] in ("rbd", "cephfs-data")))
+    require(pool["overwrites"] == (pool["role"] in ("rbd", "cephfsData")))
 
 
 def validate_autoscale(pool):
@@ -290,12 +290,12 @@ class ResourceWorker(ceph_native.Worker):
         """The caps `ceph fs authorize` renders for a CephFS scope (doc/cephfs/client-auth.rst); RBD's profiles otherwise."""
         client = self.request["client"]
         if client["filesystem"]:
-            grant = "r" if client["access"] == "read-only" else "rw"
+            grant = "r" if client["access"] == "readOnly" else "rw"
             mds = "allow " + grant + " fsname=" + client["filesystem"]
             if client["subvolume"]:
                 mds += " path=" + client["subvolumePath"]
             return {"mds": mds, "mon": "allow r fsname=" + client["filesystem"], "osd": "allow " + grant + " tag cephfs data=" + client["filesystem"]}
-        profile = "rbd-read-only" if client["access"] == "read-only" else "rbd"
+        profile = "rbd-read-only" if client["access"] == "readOnly" else "rbd"
         osd = ", ".join("profile " + profile + " pool=" + name for name in [client["pool"]] + client["dataPools"])
         return {"mon": "profile rbd", "mgr": "profile " + profile + " pool=" + client["pool"], "osd": osd}
 
@@ -362,7 +362,7 @@ class ResourceWorker(ceph_native.Worker):
             require(completed is None or "rbd" in current.get("application_metadata", {}), "pool-drift")
             if completed is None:
                 self.markers.write(attempt_name, init)
-                proof = self.bootstrap_hold() if self.request["clusterSSHTransport"] == "verified-tunnel" else contextlib.nullcontext()
+                proof = self.bootstrap_hold() if self.request["clusterSSHTransport"] == "verifiedTunnel" else contextlib.nullcontext()
                 with proof:
                     self.command(["/usr/bin/rbd", "--conf", os.path.join(self.markers.path, "ceph.conf"), "--keyring",
                                   os.path.join(self.markers.path, "ceph.client.admin.keyring"), "pool", "init", name], json_result=False)
@@ -912,7 +912,7 @@ class ResourceWorker(ceph_native.Worker):
         if not isinstance(options, dict):
             return False
         settled = set()
-        if pool["role"] == "cephfs-metadata":
+        if pool["role"] == "cephfsMetadata":
             applied = pool["filesystem"] != "" and metadata == {"cephfs": {"metadata": pool["filesystem"]}}
             for option, value in FS_NEW_METADATA_OPTIONS:
                 observed = options.get(option)
@@ -945,7 +945,7 @@ class ResourceWorker(ceph_native.Worker):
         if pool["application"] != "cephfs":
             return True
         value = metadata["cephfs"]
-        key = "data" if pool["role"] == "cephfs-data" else "metadata"
+        key = "data" if pool["role"] == "cephfsData" else "metadata"
         return value == {} or pool["filesystem"] != "" and value == {key: pool["filesystem"]}
 
     def observe_policy(self, evidence, ready):
@@ -967,7 +967,7 @@ class ResourceWorker(ceph_native.Worker):
 
     def rbd_cli(self, *args, json_result=True):
         """One rbd command with the operation's own admin custody, under the bootstrap hold as every native call."""
-        proof = self.bootstrap_hold() if self.request["clusterSSHTransport"] == "verified-tunnel" else contextlib.nullcontext()
+        proof = self.bootstrap_hold() if self.request["clusterSSHTransport"] == "verifiedTunnel" else contextlib.nullcontext()
         with proof:
             return self.command(["/usr/bin/rbd", "--conf", os.path.join(self.markers.path, "ceph.conf"), "--keyring",
                                  os.path.join(self.markers.path, "ceph.client.admin.keyring"), *args], json_result=json_result)

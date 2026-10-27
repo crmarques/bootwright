@@ -73,15 +73,12 @@ the same complete selected state; selection is not a partial operation flag.
 excluded Machine or InfraProvider no excluded root accounts for. `render effective` has no
 success-warning channel.
 
-`validate` also warns deterministically for a skipped `secrets` directory that
-holds a `.yaml` or `.yml` file at any depth, naming the directory. The check
-walks the directory within the filesystem ceilings and reads no file. A reference to a Secret that no
+`validate` also warns deterministically, with `input.secrets-directory`, for a
+skipped `secrets` directory that holds a `.yaml` or `.yml` file at any depth,
+naming the directory. The check lists names within the entry and depth
+ceilings, opens no file, and warns nothing about a directory it cannot list. A reference to a Secret that no
 selected document declares names such a directory in its remedy when one
 exists.
-
-Not yet met: a skipped `secrets` directory holding YAML is silent, and the
-unresolved-Secret remedy does not name it; tracked as
-[B826](../milestones/backlog.md#b826).
 
 Non-YAML files are not desired-state documents. The five payload basenames
 above are exact, case-sensitive path-segment rules. A corresponding co-located

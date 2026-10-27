@@ -168,7 +168,7 @@ func requireOperatorStringScanned(t *testing.T, literals []operatorString, path 
 
 func TestOperatorStringsNameNoDecisionOrQuestionID(t *testing.T) {
 	literals := operatorStrings(t)
-	requireOperatorStringScanned(t, literals, "internal/storage/native_nfs.go")
+	requireOperatorStringScanned(t, literals, "internal/storage/cephcluster/native_nfs.go")
 	requireOperatorStringScanned(t, literals, "ansible/collections/ansible_collections/bootwright/core/plugins/module_utils/ceph_native.py")
 	for _, violation := range operatorStringViolations(literals, decisionTokenPattern, "a decision, question, milestone or slice ID") {
 		t.Error(violation)

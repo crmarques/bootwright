@@ -19,7 +19,7 @@ import (
 // and names the build to destroy the context with, rather than reading as
 // some other plan.
 func TestAPlanAnEarlierBuildFrozeWithNullListsRefuses(t *testing.T) {
-	const earlierDigest = "e6b9211062141ac0a9b1138c193236e374a804192aaa3b76ec7e27cbd6ae9a05"
+	const earlierDigest = "d16cc2fde0e94d06ff8101ceeaca39ead28be6b5d9868b4d51cb5fae93c0c7cc"
 	ctx := context.Background()
 	plan := goldenPlan(t)
 	store, area := newStore(t)

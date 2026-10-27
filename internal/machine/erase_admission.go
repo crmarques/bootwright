@@ -18,17 +18,17 @@ func validateErase(o api.Object, variant string) []api.Issue {
 	if !installed(o) || variant != substrate.ArmBaremetal {
 		return []api.Issue{invariant(path, "eraseOnRemoval requires a Bootwright-installed physical Machine", "remove spec.hardware.eraseOnRemoval to retain its disks")}
 	}
-	bmc := o.Spec().Get("hardware", "management", "bmc")
+	bmc := substrate.MachineBMC(o)
 	trust := bmc.Get("virtualMedia", "tls", "trust").Text()
-	if !bmc.Get("tls", "verify").Bool() || trust != "established" && trust != "import-certificate" {
-		return []api.Issue{invariant(path, "physical erase requires verified BMC TLS and verified private virtual media", "set BMC tls.verify true and virtualMedia.tls.trust to established or import-certificate")}
+	if !bmc.Get("tls", "verify").Bool() || trust != "established" && trust != "importCertificate" {
+		return []api.Issue{invariant(path, "physical erase requires verified BMC TLS and verified private virtual media", "set BMC tls.verify true and virtualMedia.tls.trust to established or importCertificate")}
 	}
 	issues := []api.Issue{}
 	targets := policy.Get("targets").Items()
 	if len(targets) < 1 || len(targets) > 16 {
 		issues = append(issues, invariant(path+".targets", "logical overwrite requires 1 to 16 explicit whole disks", "list each disk once, including the root device"))
 	}
-	root, included := o.Spec().Get("os", "install", "rootDeviceHints", "deviceName").Text(), false
+	root, included := substrate.RootDevicePath(o), false
 	seen := [3]map[string]bool{{}, {}, {}}
 	for index, target := range targets {
 		field := fmt.Sprintf("%s.targets[%d]", path, index)
@@ -50,7 +50,7 @@ func validateErase(o api.Object, variant string) []api.Issue {
 		included = included || root != "" && target.Get("deviceName").Text() == root
 	}
 	if !included {
-		issues = append(issues, invariant(path+".targets", "erase targets must include rootDeviceHints.deviceName", "declare the root device path and include that exact path among the erase targets"))
+		issues = append(issues, invariant(path+".targets", "erase targets must include hardware.rootDevice.deviceName", "declare the root device path and include that exact path among the erase targets"))
 	}
 	return issues
 }

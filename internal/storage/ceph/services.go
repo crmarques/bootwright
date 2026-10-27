@@ -7,11 +7,11 @@ import (
 	"strings"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
-	"github.com/crmarques/bootwright/internal/storage"
+	"github.com/crmarques/bootwright/internal/storage/cephcluster"
 )
 
 func projectServices(r *Request, cluster api.Object) error {
-	spec := cluster.Spec().Get("ceph")
+	spec := cluster.Spec()
 	services := spec.Get("services").Items()
 	rank := func(service api.Value) int {
 		if at := slices.Index([]string{"mon", "mgr", "osd"}, service.Get("service_type").Text()); at >= 0 {
@@ -20,7 +20,7 @@ func projectServices(r *Request, cluster api.Object) error {
 		return 3
 	}
 	slices.SortStableFunc(services, func(left, right api.Value) int {
-		return cmp.Or(cmp.Compare(rank(left), rank(right)), strings.Compare(storage.NativeServiceName(left), storage.NativeServiceName(right)))
+		return cmp.Or(cmp.Compare(rank(left), rank(right)), strings.Compare(cephcluster.NativeServiceName(left), cephcluster.NativeServiceName(right)))
 	})
 	allocated := map[string]bool{}
 	for _, svc := range services {
@@ -30,7 +30,7 @@ func projectServices(r *Request, cluster api.Object) error {
 			if err != nil {
 				return err
 			}
-			r.Delegated = append(r.Delegated, DelegatedService{Name: storage.NativeServiceName(svc), Hosts: hosts})
+			r.Delegated = append(r.Delegated, DelegatedService{Name: cephcluster.NativeServiceName(svc), Hosts: hosts})
 			continue
 		}
 		if !slices.Contains([]string{"mon", "mgr", "osd", "mds"}, t) {
@@ -49,14 +49,14 @@ func projectServices(r *Request, cluster api.Object) error {
 		if svc.Has("extra_container_args") || svc.Has("extra_entrypoint_args") || svc.Has("custom_configs") || svc.Has("config") || svc.Get("unmanaged").Bool() {
 			return failure("lifecycle.unsupported", "core services cannot carry unqualified additional effects", "remove the unqualified service options")
 		}
-		names, _ := storage.ResolveServicePlacement(cluster, svc)
+		names, _ := cephcluster.ResolveServicePlacement(cluster, svc)
 		hosts, err := serviceHosts(cluster, svc)
 		if err != nil {
 			return err
 		}
 		projected := nativeService{ServiceType: t, ServiceID: svc.Get("service_id").Text(), Placement: nativePlacement{Hosts: hosts}}
-		if t == "mgr" && r.ClusterSSHTransport == "verified-tunnel" && !slices.Contains(hosts, r.Bootstrap) {
-			return failure("lifecycle.unsupported", "the verified-tunnel candidate requires bootstrap to be an eligible MGR host", "include the bootstrap host in MGR placement before qualifying this core profile")
+		if t == "mgr" && r.ClusterSSHTransport == "verifiedTunnel" && !slices.Contains(hosts, r.Bootstrap) {
+			return failure("lifecycle.unsupported", "the verifiedTunnel candidate requires bootstrap to be an eligible MGR host", "include the bootstrap host in MGR placement before qualifying this core profile")
 		}
 		if n, ok := svc.Get("placement", "count").Int64(); ok {
 			projected.Placement.Count = &n
@@ -109,15 +109,15 @@ func projectServices(r *Request, cluster api.Object) error {
 var delegatedFamilies = []string{"rgw", "ingress", "nfs", "nvmeof"}
 
 func serviceHosts(cluster api.Object, svc api.Value) ([]string, error) {
-	names, issues := storage.ResolveServicePlacement(cluster, svc)
+	names, issues := cephcluster.ResolveServicePlacement(cluster, svc)
 	if len(issues) != 0 {
 		return nil, failure("api.invariant", "native service placement could not be resolved", "correct the service placement")
 	}
 	hosts := []string{}
 	for _, n := range names {
-		for _, node := range cluster.Spec().Get("ceph", "topology", "nodes").Items() {
+		for _, node := range cluster.Spec().Get("topology", "nodes").Items() {
 			if node.Get("name").Text() == n {
-				hosts = append(hosts, storage.NativeHostname(node))
+				hosts = append(hosts, cephcluster.NativeHostname(node))
 			}
 		}
 	}
@@ -129,7 +129,7 @@ func serviceFamily(cluster api.Object, svc api.Value) string {
 	if t != "ingress" {
 		return t
 	}
-	backend, found := storage.NativeService(cluster, svc.Get("spec", "backend_service").Text())
+	backend, found := cephcluster.NativeService(cluster, svc.Get("spec", "backend_service").Text())
 	if !found {
 		return ""
 	}
@@ -137,34 +137,34 @@ func serviceFamily(cluster api.Object, svc api.Value) string {
 }
 
 func undeployedDelegated(cluster api.Object) (string, string, bool) {
-	services := cluster.Spec().Get("ceph", "services").Items()
+	services := cluster.Spec().Get("services").Items()
 	slices.SortStableFunc(services, func(a, b api.Value) int {
-		return strings.Compare(storage.NativeServiceName(a), storage.NativeServiceName(b))
+		return strings.Compare(cephcluster.NativeServiceName(a), cephcluster.NativeServiceName(b))
 	})
 	for _, svc := range services {
-		name := storage.NativeServiceName(svc)
+		name := cephcluster.NativeServiceName(svc)
 		if svc.Get("service_type").Text() == "ingress" && serviceFamily(cluster, svc) == "" {
 			return "Bootwright does not deploy the native service " + name + " yet",
-				"remove " + name + " from spec.ceph.services, together with its spec.ceph.serviceBindings entries", true
+				"remove " + name + " from spec.services, together with its spec.serviceBindings entries", true
 		}
 	}
 	return "", "", false
 }
 
 func unselectedAuxiliary(cluster api.Object) (string, string, bool) {
-	services := cluster.Spec().Get("ceph", "services").Items()
+	services := cluster.Spec().Get("services").Items()
 	slices.SortStableFunc(services, func(a, b api.Value) int {
-		return strings.Compare(storage.NativeServiceName(a), storage.NativeServiceName(b))
+		return strings.Compare(cephcluster.NativeServiceName(a), cephcluster.NativeServiceName(b))
 	})
-	images := cluster.Spec().Get("ceph", "images")
+	images := cluster.Spec().Get("images")
 	for _, svc := range services {
 		for _, need := range auxiliaryNeeds(svc) {
 			if images.Has(need) {
 				continue
 			}
-			name := storage.NativeServiceName(svc)
-			return "the " + svc.Get("service_type").Text() + " service " + name + " needs cephadm's container_image_" + need + ", and spec.ceph.images." + need + " is not set; Bootwright keeps no default",
-				"set spec.ceph.images." + need + " of StorageCluster " + cluster.Name() + " to an image beneath its Entitlement registry, or remove " + name + " from its spec.ceph.services, together with its spec.ceph.serviceBindings entries", true
+			name := cephcluster.NativeServiceName(svc)
+			return "the " + svc.Get("service_type").Text() + " service " + name + " needs cephadm's container_image_" + need + ", and spec.images." + need + " is not set; Bootwright keeps no default",
+				"set spec.images." + need + " of CephCluster " + cluster.Name() + " to an image beneath its Entitlement registry, or remove " + name + " from its spec.services, together with its spec.serviceBindings entries", true
 		}
 	}
 	return "", "", false
@@ -172,7 +172,7 @@ func unselectedAuxiliary(cluster api.Object) (string, string, bool) {
 
 func unneededAuxiliary(c api.Catalog, cluster api.Object) (string, string, bool) {
 	needed := map[string]bool{}
-	for _, svc := range cluster.Spec().Get("ceph", "services").Items() {
+	for _, svc := range cluster.Spec().Get("services").Items() {
 		for _, need := range auxiliaryNeeds(svc) {
 			needed[need] = true
 		}
@@ -180,18 +180,18 @@ func unneededAuxiliary(c api.Catalog, cluster api.Object) (string, string, bool)
 	if len(clusterSMBResources(c, cluster.Name())) != 0 {
 		needed["samba"], needed["samba_metrics"] = true, true
 	}
-	images := cluster.Spec().Get("ceph", "images")
+	images := cluster.Spec().Get("images")
 	for _, name := range AuxiliaryNames {
 		if images.Has(name) && !needed[name] {
-			return "spec.ceph.images." + name + " is set, but no declared service or StorageSMBResource of StorageCluster " + cluster.Name() + " needs cephadm's container_image_" + name,
-				"remove spec.ceph.images." + name + " from StorageCluster " + cluster.Name(), true
+			return "spec.images." + name + " is set, but no declared service or CephSMBResource of CephCluster " + cluster.Name() + " needs cephadm's container_image_" + name,
+				"remove spec.images." + name + " from CephCluster " + cluster.Name(), true
 		}
 	}
 	return "", "", false
 }
 
 func gatewayExecuted(c api.Catalog, cluster api.Object, ref string) bool {
-	svc, found := storage.NativeService(cluster, ref)
+	svc, found := cephcluster.NativeService(cluster, ref)
 	if !found {
 		return false
 	}
@@ -199,7 +199,7 @@ func gatewayExecuted(c api.Catalog, cluster api.Object, ref string) bool {
 	case "ingress":
 		return serviceFamily(cluster, svc) == "rgw" && gatewayExecuted(c, cluster, svc.Get("spec", "backend_service").Text())
 	case "rgw":
-		for _, gateway := range c.OfKind(api.StorageObjectGateway) {
+		for _, gateway := range c.OfKind(api.CephObjectGateway) {
 			if gateway.Spec().Get("clusterRef").Text() == cluster.Name() && gateway.Spec().Get("serviceRef").Text() == ref {
 				return true
 			}

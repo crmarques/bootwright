@@ -220,7 +220,7 @@ func lifecycleStageTitle(stage string) string {
 	switch stage {
 	case "controller":
 		return "Controller"
-	case "infra-components":
+	case "infrastructure-services":
 		return "Infrastructure"
 	case "substrates":
 		return "Substrates"

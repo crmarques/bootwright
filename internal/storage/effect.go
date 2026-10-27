@@ -7,7 +7,7 @@ import (
 )
 
 func EffectBearing(object api.Object) (string, bool) {
-	if object.Kind() != api.StorageCluster && !slices.Contains(api.Children(api.StorageCluster), object.Kind()) {
+	if object.Kind() != api.CephCluster && !slices.Contains(api.Children(api.CephCluster), object.Kind()) {
 		return "", false
 	}
 	return "no capability of this executable realizes the " + string(object.Kind()) + " kind", true

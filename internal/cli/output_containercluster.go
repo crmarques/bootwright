@@ -32,6 +32,6 @@ func kubeconfigWarnings(result *containeraccess.KubeconfigResult) []diagnostic {
 	if !result.Unproved {
 		return nil
 	}
-	return []diagnostic{{Severity: "warning", Code: "access.unproved", Message: "the administrator kubeconfig of ContainerCluster " + result.Cluster +
+	return []diagnostic{{Severity: "warning", Code: "access.unproved", Message: "the administrator kubeconfig of OpenShiftCluster " + result.Cluster +
 		" was kept from an installation whose completion was never proved, so the access it grants was not proved"}}
 }

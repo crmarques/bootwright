@@ -8,6 +8,15 @@ generation, registration, login and license acceptance need effectful consumers.
 fields permitted by that closed contract; this page owns their type-scoped
 validation and built-in defaults.
 
+`Secret` and `Entitlement` names follow the [one name rule](../api.md#object-names).
+
+## Kinds
+
+| Kind | Declares |
+| --- | --- |
+| `Secret` | One credential, key, certificate or token whose material Bootwright stores, generates or reads; its bytes never appear in desired state. |
+| `Entitlement` | One product entitlement, `redhatRhel`, `redhatCeph` or `ibmStorageCeph`, with the subscription, registry and license arms its type permits. |
+
 ## Secret
 
 `Secret.spec` emits fields in this order:
@@ -107,15 +116,22 @@ Parameters are flat and type-scoped:
 | `issuerRef` | string | `tlsCertificate` | no | omitted | Reference to a generated `caBundle` Secret; custody signs the leaf with its private CA key. External/contextStore issuers and CA issuer chains are refused. Omission keeps self-signing. Effect material: its CA key signs the leaf. |
 | `username` | string | `usernamePassword` | no | `admin` | UTF-8 within the [part byte limit](../secrets.md#acquisition-and-commands); no whitespace, colon, newline or NUL. The password itself is randomly generated material. |
 | `commonName` | string | `tlsCertificate`, `caBundle` | yes | — | Common name for the certificate: non-empty UTF-8 within the [part byte limit](../secrets.md#acquisition-and-commands), without NUL. |
-| `dnsNames` | array of strings | `tlsCertificate`, `caBundle` | no | omitted | DNS subject-alternative names. |
-| `ipAddresses` | array of strings | `tlsCertificate`, `caBundle` | no | omitted | IP subject-alternative names. |
+| `dnsNames` | array of strings | `tlsCertificate`, `caBundle` | no | derived on `tlsCertificate`, else omitted | DNS subject-alternative names. |
+| `ipAddresses` | array of strings | `tlsCertificate`, `caBundle` | no | derived on `tlsCertificate`, else omitted | IP subject-alternative names. |
 | `validityDays` | integer | `tlsCertificate`, `caBundle` | no | `3650` | Inclusive range `1..36500`, counted from generation; the [generated certificate](../secrets.md#acquisition-and-commands) starts 24 hours before it. |
-| `keyType` | string | `sshKeyPair` | no | `ed25519` | `ed25519`, `rsa`, `ecdsa-p256`, `ecdsa-p384`, or `ecdsa-p521`. |
+| `keyType` | string | `sshKeyPair` | no | `ed25519` | `ed25519`, `rsa`, `ecdsaP256`, `ecdsaP384`, or `ecdsaP521`. |
 | `comment` | string | `sshKeyPair` | no | omitted | UTF-8 within the [part byte limit](../secrets.md#acquisition-and-commands); no leading/trailing whitespace, no control character (newline, tab and NUL included), no Unicode line or paragraph separator, no double quote and no backslash, so the key stays on its quoted Kickstart line. |
 | `bytes` | integer | `token` | no | `32` | Token entropy in bytes; inclusive range `16..1024`. |
 
 `opaque` and `dockerConfigJson` cannot use `generated`. A parameter not
-consumed by the selected type is rejected. Normalization materializes the
+consumed by the selected type is rejected. A generated `tlsCertificate` that
+authors neither `dnsNames` nor `ipAddresses` derives both from what its
+consumers serve it at: every address of an HTTPS endpoint of an
+`ArtifactServer` whose `tls.secretRef` names it, and the `bindAddress` of
+each libvirt provider's emulated BMC whose `certificateRef` names it, each list
+sorted and without repeats; an IP goes to `ipAddresses` and a name to
+`dnsNames`. Authoring either list overrides the derivation, and its consumers
+still refuse an address it does not name. Normalization materializes the
 `username`, `validityDays`, and `keyType` defaults on their applicable arms.
 The token-byte default is a generation-time semantic default and may remain
 omitted in effective state. Normalization never fabricates secret bytes.
@@ -139,28 +155,26 @@ bytes. Each such reference states the
 
 | Field | Type | Required | Default | Rule |
 | --- | --- | --- | --- | --- |
-| `type` | string | yes | — | `redhat-rhel`, `redhat-ceph`, or `ibm-storage-ceph`. |
-| `rhsm` | object | conditional | — | Required for both Red Hat types; forbidden for `ibm-storage-ceph`. |
-| `registry` | object | conditional | product registry | Credentials required for `redhat-ceph` and `ibm-storage-ceph`; forbidden for `redhat-rhel`. |
-| `license` | object | conditional | `accept: false` | Only for `ibm-storage-ceph`, where `accept` must be `true`. |
+| `type` | string | yes | — | `redhatRhel`, `redhatCeph`, or `ibmStorageCeph`. |
+| `rhsm` | object | conditional | — | Required for both Red Hat types; forbidden for `ibmStorageCeph`. |
+| `registry` | object | conditional | product registry | Credentials required for `redhatCeph` and `ibmStorageCeph`; forbidden for `redhatRhel`. |
+| `license` | object | conditional | `accept: false` | Only for `ibmStorageCeph`, where `accept` must be `true`. |
 
 Each type's arm set is closed:
 
 | `spec.type` | Permitted arms | Required shape |
 | --- | --- | --- |
-| `redhat-rhel` | `rhsm` | `rhsm`; managed RHSM requires `organizationRef` and `activationKeyRef`. |
-| `redhat-ceph` | `rhsm`, `registry` | `rhsm` plus `registry.credentialsRef`. |
-| `ibm-storage-ceph` | `registry`, `license` | `registry.credentialsRef` plus `license.accept: true`. |
+| `redhatRhel` | `rhsm` | `rhsm`; managed RHSM requires `organizationRef` and `activationKeyRef`. |
+| `redhatCeph` | `rhsm`, `registry` | `rhsm` plus `registry.credentialsRef`. |
+| `ibmStorageCeph` | `registry`, `license` | `registry.credentialsRef` plus `license.accept: true`. |
 
 An authored arm a type does not permit refuses with `api.field`, naming the
-type and the arms it permits.
+type and the arms it permits, and kind defaults never give an Entitlement such
+an arm (`TestEntitlementKindDefaultsSkipTheArmsATypeForbids`).
 
-Not yet met: admission refuses only `rhsm` on `ibm-storage-ceph`, so `registry`
-or `license` on a Red Hat type is admitted and ignored; tracked as
-[B826](../milestones/backlog.md#b826).
 
 IBM Storage Ceph does not itself entitle the RHEL operating system. A
-`redhat-rhel` Entitlement is selected separately by the owning machine-install
+`redhatRhel` Entitlement is selected separately by the owning machine-install
 or storage-cluster field.
 
 ### RHSM
@@ -201,9 +215,9 @@ installation's [refusal table](../managed-os.md#refusal-table).
 
 | Field | Type | Required | Default | Rule |
 | --- | --- | --- | --- | --- |
-| `url` | string | no | `registry.redhat.io` for `redhat-ceph`; `cp.icr.io/cp` for `ibm-storage-ceph` | Scheme-less `host[:port][/namespace]`. |
-| `credentialsRef` | string | conditional | — | Required for `redhat-ceph` and `ibm-storage-ceph`; `usernamePassword` registry credential Secret. Access credential: the registry login, which cephadm also retains [native-side](../secrets.md#native-side-retention). |
-| `trustBundleRef` | string | no | — | `caBundle` Secret. When set, it is the only TLS anchor that Ceph image resolution and the guest pull broker use for this registry, for the Ceph image and every auxiliary image; without it they verify against the host trust store ([storage](../storage.md#bootstrap-identity-and-continuation)). Access credential. |
+| `url` | string | no | `registry.redhat.io` for `redhatCeph`; `cp.icr.io/cp` for `ibmStorageCeph` | Scheme-less `host[:port][/namespace]`. |
+| `credentialsRef` | string | conditional | — | Required for `redhatCeph` and `ibmStorageCeph`; `usernamePassword` registry credential Secret. Access credential: the registry login, which cephadm also retains [native-side](../secrets.md#native-side-retention). |
+| `trustBundleRef` | string | no | — | `caBundle` Secret. When set, it is the only TLS anchor that Ceph image resolution and the guest pull broker use for this registry, for the Ceph image and every auxiliary image; without it they verify against the host trust store ([storage](../ceph.md#bootstrap-identity-and-continuation)). Access credential. |
 
 A registry address contains no scheme, inline credentials, query, fragment,
 whitespace, leading or trailing slash, empty path segment, `.` segment, or

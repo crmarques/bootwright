@@ -46,8 +46,7 @@
           "state": "partial",
           "document": null,
           "notCompared": [
-            "spec.capabilities",
-            "spec.substrate.profileRef",
+            "spec.substrate.libvirt.profileRef",
             "spec.hardware",
             "spec.os",
             "spec.network",
@@ -121,7 +120,7 @@
           "notCompared": [
             "spec.libvirt.uri",
             "spec.libvirt.machineRef",
-            "spec.libvirt.bmcEmulationDefaults",
+            "spec.libvirt.bmcEmulation",
             "spec.libvirt.networkAttachments",
             "spec.libvirt.machineProfiles[rhel].cpu",
             "spec.libvirt.machineProfiles[rhel].memoryMiB"
@@ -163,7 +162,7 @@
         ]
       },
       {
-        "kind": "StorageClient",
+        "kind": "CephClient",
         "name": "rbd-reader",
         "difference": "none",
         "plan": "same",

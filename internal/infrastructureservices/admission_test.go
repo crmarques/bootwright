@@ -1,6 +1,7 @@
 package infrastructureservices
 
 import (
+	"strings"
 	"testing"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
@@ -28,7 +29,7 @@ func obj(kind api.Kind, name string, spec api.Value) api.Object {
 func list(v ...api.Value) api.Value { return api.ListValue(v...) }
 
 func TestManagedServicesAndPlacement(t *testing.T) {
-	machine := obj(api.Machine, "host", m("capabilities", api.StringList("container-runtime"), "network", m("addresses", list(m("name", "fqdn", "address", "host.example.test"), m("name", "ip", "address", "192.0.2.10/24")))))
+	machine := obj(api.Machine, "host", m("network", m("addresses", list(m("name", "fqdn", "address", "host.example.test"), m("name", "ip", "address", "192.0.2.10/24")))))
 	c := api.NewCatalog([]api.Object{machine})
 	endpoints := list(m("name", "ip", "addressRef", "ip"))
 	services := map[api.Kind]api.Value{
@@ -48,12 +49,6 @@ func TestManagedServicesAndPlacement(t *testing.T) {
 			}
 			if normalized.Spec().Equal(service.Spec()) && kind != api.LoadBalancer {
 				t.Fatal("managed service defaults missing")
-			}
-			if kind != api.NTPServer {
-				badHost := machine.WithSpec(machine.Spec().Without("capabilities"))
-				if issues := Validate(normalized, api.NewCatalog([]api.Object{badHost})); len(issues) == 0 {
-					t.Fatal("runtime capability omitted")
-				}
 			}
 		})
 	}
@@ -75,7 +70,12 @@ func TestExternalServicesHaveNoManagedDefaults(t *testing.T) {
 			if !normalized.Spec().Equal(service.Spec()) {
 				t.Fatal("external service acquired managed defaults")
 			}
-			if issues := Validate(normalized, api.Catalog{}); len(issues) != 0 {
+			issues := Validate(normalized, api.Catalog{})
+			if kind == api.ArtifactServer {
+				if len(issues) != 1 || issues[0].Field != "$.spec.management" || !strings.Contains(issues[0].Message, "no consumer accepts an external ArtifactServer") {
+					t.Fatalf("an external ArtifactServer was not refused at its management: %v", issues)
+				}
+			} else if len(issues) != 0 {
 				t.Fatal(issues)
 			}
 			for _, field := range []string{"machineRef", "implementation", "image"} {
@@ -89,7 +89,7 @@ func TestExternalServicesHaveNoManagedDefaults(t *testing.T) {
 }
 
 func TestServiceTransportAndLocalReferences(t *testing.T) {
-	host := obj(api.Machine, "host", m("capabilities", api.StringList("container-runtime"), "network", m("addresses", list(m("name", "fqdn", "address", "host.example.test")))))
+	host := obj(api.Machine, "host", m("network", m("addresses", list(m("name", "fqdn", "address", "host.example.test")))))
 	cases := []struct {
 		name string
 		kind api.Kind

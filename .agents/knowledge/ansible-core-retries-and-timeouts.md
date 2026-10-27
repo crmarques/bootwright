@@ -41,7 +41,7 @@ read ([substrates](../../specs/substrates.md#identity-and-power-operations))
 are guarded this way.
 
 The install role's waits (X16, Z2 cluster budgets) follow all three
-([container clusters](../../specs/container-clusters.md)).
+([container clusters](../../specs/openshift-clusters.md)).
 
 `failed_when: false` decides even a poll that runs out. Re-run on 2026-09-30
 against `localhost` with a `no_log` file task that failed at every attempt:

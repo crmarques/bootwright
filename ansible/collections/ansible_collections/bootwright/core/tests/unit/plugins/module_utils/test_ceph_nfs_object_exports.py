@@ -187,7 +187,7 @@ def test_a_default_realm_of_another_realm_refuses_before_any_write(ready):
     with pytest.raises(ceph_native.NativeFailure, match="^nfs-export-realm-default$") as caught:
         export_worker(cluster, markers).nfs_export()
     assert caught.value.native_error["cause"] == ("the default realm has ID " + cluster.default_realm
-                                                  + ", not realm objects of StorageObjectGateway objects")
+                                                  + ", not realm objects of CephObjectGateway objects")
     assert cluster.mutations == [] and markers.records == before
 
 

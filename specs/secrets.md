@@ -352,7 +352,7 @@ keyring and never exposes prior keyring material;
 
 Produced material is confidential output a lifecycle block's proved effect
 leaves, such as the administrator kubeconfig a
-[completed installation](container-clusters.md#installation) writes, or the
+[completed installation](openshift-clusters.md#installation) writes, or the
 copy of it a removal keeps unproved (D124, below).
 It is keyed by the block that captured it and the output's name, never by a
 Secret declaration. Only the lifecycle holds and withdraws it: the engine
@@ -376,11 +376,11 @@ of the same name. Four outputs are revealed, each by its one command only:
 | Output (block kind) | Only command | Output field | Unproved copy |
 | --- | --- | --- | --- |
 | `kubeconfig` (an installation) | `cluster kubeconfig` under the [explicit sensitive-output boundary](cli.md#administrator-access-export) | the custodied bytes | revealed with one `access.unproved` warning |
-| `client` (a StorageClient) | `cluster keyring` under the [client keyring export](cli.md#client-keyring-export) | the native keyring form | revealed with one `access.unproved` warning |
-| `dashboard` (a managed StorageCluster) | `cluster info --secrets` under the [storage dashboard access](cli.md#storage-dashboard-access) boundary | `passwordValue` of `dashboard` | carries no mark; see the note below |
-| `object-user` (a StorageObjectUser) | `cluster info --object-user <name>`, same boundary | `accessKey` and `secretKey` of the one entry of `objectUsers` | refused `access.unavailable`, with no partial output |
+| `client` (a CephClient) | `cluster keyring` under the [client keyring export](cli.md#client-keyring-export) | the native keyring form | revealed with one `access.unproved` warning |
+| `dashboard` (a managed CephCluster) | `cluster info --secrets` under the [storage dashboard access](cli.md#storage-dashboard-access) boundary | `passwordValue` of `dashboard` | carries no mark; see the note below |
+| `object-user` (a CephObjectUser) | `cluster info --object-user <name>`, same boundary | `accessKey` and `secretKey` of the one entry of `objectUsers` | refused `access.unavailable`, with no partial output |
 
-No other output is revealed: a storage export's `external-details` reach only
+No other output is revealed: a Ceph consumer's `external-details` reach only
 the consuming cluster's [placed Secret](#material-placed-in-a-cluster). The
 `object-user` reveal is authorized (D183, Q100). A dashboard whose evidence
 does not prove it reachable is revealed with `dashboard.status` `unproved` and
@@ -397,9 +397,9 @@ A declared Secret reaches a cluster only as an
 [owned Secret](add-ons.md#owned-secrets) of a block that binds it: the request
 names the target and the mapping of parts to keys, the attempt is lent exactly
 the mapped parts, and no value or value-derived digest reaches a request,
-record, evidence, log, diagnostic or adapter output. A storage export's
+record, evidence, log, diagnostic or adapter output. A Ceph consumer's
 external-cluster details reach their consuming cluster the same way, as an
-owned Secret placed from the export block's produced material, which no
+owned Secret placed from the consumer block's produced material, which no
 command reveals. The placed copy is outside custody once created: it leaves
 with a virtual cluster's disks and stays on a physical cluster that keeps
 running after its context is destroyed. Rotating the declaration never
@@ -407,8 +407,8 @@ changes a placed copy; a fresh apply after a destroy places the version it
 binds. A cluster's administrator kubeconfig is never placed in a cluster:
 planning [refuses every produced placement source](add-ons.md#owned-secrets)
 outside its closed set. The external-cluster details give the consuming
-cluster's administrators the [trust extent](storage-resources.md#storageexport)
-of the export's principals, which is not isolated from other exports of the
+cluster's administrators the [trust extent](ceph-resources.md#cephconsumer)
+of the consumer's principals, which is not isolated from other consumers of the
 same Ceph cluster. A placed copy is readable by every principal its namespace grants; a GitOps
 repository credential, for example, is readable by Argo CD's components in
 their namespace, so a credential placed there should be one scoped to reading
@@ -419,10 +419,10 @@ that repository.
 Native-side retention is confidential material a lifecycle block keeps outside
 the keyring, beside the native effect that minted or consumed it, so that a lost
 reply recovers that material instead of minting it again. A Ceph object user's
-S3 key pair, a storage export's CephX keys and RGW key pair, an RBD mirroring
+S3 key pair, a Ceph consumer's CephX keys and RGW key pair, an RBD mirroring
 bootstrap token, a Ceph cluster's original bootstrap configuration and
 administrator keyring, a physical erase's original-attempt custody and the
-material an installer keeps in its [work area](container-clusters.md#boot-media)
+material an installer keeps in its [work area](openshift-clusters.md#boot-media)
 are retained this way, each where its owning page places it. The Ceph registry
 login, an access credential, is also retained native-side: each Ceph host
 keeps it in cephadm's registry login file `/etc/ceph/podman-auth.json`, which
@@ -442,7 +442,7 @@ abandons the context's objects leaves it on those hosts, and its confirmation
 names it. A context recreated under the same name never adopts retention an
 earlier context left.
 An installer work area an earlier context of the same name left is neither
-rebuilt nor handed over, as its [build receipt](container-clusters.md#boot-media)
+rebuilt nor handed over, as its [build receipt](openshift-clusters.md#boot-media)
 records which context built it.
 
 ## Local keyring v4

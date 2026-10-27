@@ -17,9 +17,6 @@ kind: Machine
 metadata:
   name: controller
 spec:
-  capabilities:
-    - container-runtime
-    - libvirt
   os:
     provided: true
   proxy:
@@ -39,10 +36,10 @@ kind: Machine
 metadata:
   name: rehearsal-01
 spec:
-  capabilities: []
   substrate:
     providerRef: lab-libvirt
-    profileRef: rhel
+    libvirt:
+      profileRef: rhel
   os:
     provided: false
   network:
@@ -71,10 +68,7 @@ spec:
       cpu: 1
       memoryMiB: 2048
       diskGiB: 10
-    bmcEmulationDefaults:
-      enabled: true
-      protocol: redfish
-      emulator: sushy-tools
+    bmcEmulation:
       bindAddress: 127.0.0.1
       certificateRef: lab-bmc-tls
       port: 8000

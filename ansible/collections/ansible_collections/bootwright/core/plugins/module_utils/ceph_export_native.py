@@ -21,7 +21,7 @@ import urllib.parse
 from ansible_collections.bootwright.core.plugins.module_utils import ceph_native, ceph_native_resources, ceph_export_dns
 from ansible_collections.bootwright.core.plugins.module_utils.ceph_native import Custody, Refusal, canonical, require, unique_object
 
-VERSION = "ceph-export-request-v1"
+VERSION = "ceph-export-request-v2"
 EVIDENCE_VERSION = "ceph-export-evidence-v1"
 PHASES = ("export_apply", "export_observe")
 REASONS = ("gateway-dns", "export-foreign-principal", "export-key-type", "export-prerequisite", "export-identity")
@@ -131,7 +131,7 @@ class ExportWorker(ceph_native_resources.ResourceWorker):
         argv = ["/usr/bin/radosgw-admin", "--conf", os.path.join(self.markers.path, "ceph.conf"),
                 "--keyring", os.path.join(self.markers.path, "ceph.client.admin.keyring"), "--format", "json", *args,
                 "--rgw-realm", gateway["realm"], "--rgw-zonegroup", gateway["zoneGroup"], "--rgw-zone", gateway["zone"]]
-        with self.bootstrap_hold() if self.request["clusterSSHTransport"] == "verified-tunnel" else contextlib.nullcontext():
+        with self.bootstrap_hold() if self.request["clusterSSHTransport"] == "verifiedTunnel" else contextlib.nullcontext():
             code, output = self.run(argv, timeout=60)
         require(code == 0, "export-prerequisite")
         try:

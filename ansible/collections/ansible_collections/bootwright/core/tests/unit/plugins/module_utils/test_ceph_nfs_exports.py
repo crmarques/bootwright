@@ -45,7 +45,7 @@ def native():
 
 
 def export_request(subvolume=True, **changes):
-    request = dict(settings.cluster(), clusterSSHTransport="verified-tunnel", action="nfs-export")
+    request = dict(settings.cluster(), clusterSSHTransport="verifiedTunnel", action="nfs-export")
     request["delegated"] = [{"name": "nfs.shares", "hosts": ["node-1"]}]
     nfs = {"filesystem": "files", "group": "csi", "name": "docs", "native": dict(native(), **changes), "service": "shares", "subvolume": "docs",
            "subvolumePath": ROOT}

@@ -9,7 +9,7 @@ import (
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/desiredstate/compilation"
-	"github.com/crmarques/bootwright/internal/storage"
+	"github.com/crmarques/bootwright/internal/storage/cephcluster"
 )
 
 func TestLogAgentPlansOwnedFileLogging(t *testing.T) {
@@ -93,7 +93,7 @@ func loggingState(t *testing.T, services []api.Value, images ...string) *compila
 
 func TestLogCollectionPlansWithSelectedImages(t *testing.T) {
 	state := loggingState(t, []api.Value{auxiliaryService("loki", "", api.Value{}), auxiliaryService("promtail", "", api.Value{})}, "loki", "promtail")
-	if got := New(api.StorageCluster, nil).Unsupported(state); len(got) != 0 {
+	if got := New(api.CephCluster, nil).Unsupported(state); len(got) != 0 {
 		t.Fatalf("log collection with its images refuses %+v", got)
 	}
 	plan := cephPlan(t, state.Effective())
@@ -119,9 +119,9 @@ func TestLogCollectionPlansWithSelectedImages(t *testing.T) {
 func TestLogCollectionWithoutItsImagesRefusesNamingTheField(t *testing.T) {
 	services := []api.Value{auxiliaryService("loki", "", api.Value{}), auxiliaryService("alloy", "", api.Value{})}
 	state := loggingState(t, services)
-	cluster, _ := state.Effective().Find(api.StorageCluster, "example")
-	for _, issue := range storage.Validate(cluster, state.Effective()) {
-		if strings.HasPrefix(issue.Field, "$.spec.ceph.services") || strings.HasPrefix(issue.Field, "$.spec.ceph.images") {
+	cluster, _ := state.Effective().Find(api.CephCluster, "example")
+	for _, issue := range cephcluster.Validate(cluster, state.Effective()) {
+		if strings.HasPrefix(issue.Field, "$.spec.services") || strings.HasPrefix(issue.Field, "$.spec.images") {
 			t.Fatalf("admission refuses log collection: %+v", issue)
 		}
 	}

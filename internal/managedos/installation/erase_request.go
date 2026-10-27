@@ -13,7 +13,7 @@ import (
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
 )
 
-const EraseImplementation = "physical-erase-v1"
+const EraseImplementation = "physical-erase-v2"
 const eraseVariable = "bootwright_physical_erase"
 
 type EraseTarget struct {
@@ -32,7 +32,9 @@ type EraseRequest struct {
 	Version         string        `json:"version"`
 }
 
-func EraseBlockID(machine string) string { return "physical-erase-" + machine }
+func EraseBlockID(machine string) string {
+	return reconciliation.BlockIdentity("physical-erase-", machine)
+}
 
 func EraseContentDigest() string {
 	digest := sha256.Sum256([]byte(EraseImplementation + ":descriptor-diskseq-full-readback-receipt-v1"))
@@ -73,7 +75,7 @@ func eraseRequest(machine api.Object, install Request) (EraseRequest, error) {
 		return request, refusal("api.invariant", "physical erase requires its install network declaration", "declare the Machine install network")
 	}
 	seen := [3]map[string]bool{{}, {}, {}}
-	root := machine.Spec().Get("os", "install", "rootDeviceHints", "deviceName").Text()
+	root := machine.Spec().Get("hardware", "rootDevice", "deviceName").Text()
 	rootIncluded := false
 	for _, value := range policy.Get("targets").Items() {
 		size, err := strconv.ParseInt(value.Get("sizeBytes").Text(), 10, 64)
@@ -94,7 +96,7 @@ func eraseRequest(machine api.Object, install Request) (EraseRequest, error) {
 		request.Targets = append(request.Targets, target)
 	}
 	if !rootIncluded || len(request.Targets) > 16 {
-		return request, refusal("api.invariant", "physical erase requires the approved rootDeviceHints.deviceName among at most 16 explicit targets", "list the root disk and each data disk to erase")
+		return request, refusal("api.invariant", "physical erase requires the approved hardware.rootDevice.deviceName among at most 16 explicit targets", "list the root disk and each data disk to erase")
 	}
 	slices.SortFunc(request.Targets, func(a, b EraseTarget) int { return strings.Compare(a.DeviceName, b.DeviceName) })
 	request.Install.Private = &Publication{Path: install.Private.Path + "-erase", URL: install.Private.URL + "-erase", CertificateRef: install.Private.CertificateRef}

@@ -6,6 +6,8 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+
+	api "github.com/crmarques/bootwright/api/v1alpha1"
 )
 
 const module = "github.com/crmarques/bootwright/"
@@ -30,7 +32,8 @@ func TestTheDNSServerImportsNoStorageOrClusterPackage(t *testing.T) {
 
 // implementationLiterals lists each string literal in a general-flow package
 // that names an implementation: a substrate arm, an implementation identity,
-// or the Ceph implementation's field paths or host layout.
+// the Ceph engine's name or its host layout. Field paths carry no family
+// marker, so familyKindNames catches a family's kinds instead.
 func implementationLiterals(rule identityRule, source sourceFile) []string {
 	var found []string
 	ast.Inspect(source.syntax, func(node ast.Node) bool {
@@ -45,7 +48,7 @@ func implementationLiterals(rule identityRule, source sourceFile) []string {
 		lowered := strings.ToLower(text)
 		_, arm := rule.arms[text]
 		_, identity := rule.values[text]
-		if arm || identity || lowered == "ceph" || strings.Contains(lowered, ".ceph.") || strings.Contains(lowered, "/ceph/") {
+		if arm || identity || lowered == "ceph" || strings.Contains(lowered, "/ceph/") {
 			found = append(found, source.path+": "+strconv.Quote(text)+" names an implementation; read it through the port its owning domain publishes")
 		}
 		return true
@@ -62,30 +65,78 @@ func generalFlow(owner string) bool {
 	return false
 }
 
+// familyKindNames lists each cluster family kind or family-owned child kind a
+// source names, as an API constant or as a string literal equal to its name.
+func familyKindNames(source sourceFile, kinds map[string]bool) []string {
+	alias := ""
+	for _, imported := range source.imports {
+		if imported.path == module+"api/v1alpha1" {
+			alias = imported.alias
+		}
+	}
+	var found []string
+	ast.Inspect(source.syntax, func(node ast.Node) bool {
+		switch node := node.(type) {
+		case *ast.SelectorExpr:
+			if owner, ok := node.X.(*ast.Ident); ok && alias != "" && owner.Name == alias && kinds[node.Sel.Name] {
+				found = append(found, source.path+": "+alias+"."+node.Sel.Name+" names a cluster family kind; iterate the family registry instead")
+			}
+		case *ast.BasicLit:
+			if text, err := strconv.Unquote(node.Value); err == nil && node.Kind == token.STRING && kinds[text] {
+				found = append(found, source.path+": "+strconv.Quote(text)+" names a cluster family kind; iterate the family registry instead")
+			}
+		}
+		return true
+	})
+	return found
+}
+
+func familyKinds() map[string]bool {
+	kinds := map[string]bool{}
+	for _, kind := range api.FamilyKinds() {
+		kinds[string(kind)] = true
+	}
+	return kinds
+}
+
 // Reconciliation, desired state, Environment and the CLI name no substrate
-// arm, implementation identity or Ceph field path, admission files included:
-// they read cluster membership, storage evidence and action labels through
-// what the owning domains publish, so a second implementation edits none of
-// them (specs/architecture.md, Bounded contexts).
+// arm, implementation identity, cluster family kind or family-owned child kind,
+// admission files included: they read cluster membership, storage evidence,
+// action labels and cluster kinds through what the owning domains and the
+// family registry publish, so a second implementation or family kind edits
+// none of them (specs/architecture.md, Bounded contexts).
 func TestGeneralFlowNamesNoImplementation(t *testing.T) {
 	sources := productionSources(t)
 	rule := implementationIdentityRule(sources)
+	kinds := familyKinds()
 	for _, source := range sources {
 		if !generalFlow(source.owner) {
 			continue
 		}
-		for _, violation := range implementationLiterals(rule, source) {
+		for _, violation := range append(implementationLiterals(rule, source), familyKindNames(source, kinds)...) {
 			t.Error(violation)
 		}
 	}
 }
 
-func TestTheGeneralFlowRuleRejectsAnArmACephPathAndAnIdentity(t *testing.T) {
+func TestTheGeneralFlowRuleRejectsFamilyAndChildKindConstantsAndLiterals(t *testing.T) {
 	source := compositionSource(t, "internal/environment", `package environment
 
-func nodes(spec interface{ Get(...string) any }) any { return spec.Get("ceph", "topology", "nodes") }
+import api "github.com/crmarques/bootwright/api/v1alpha1"
 
-const field = "$.spec.ceph.topology.nodes"
+var roots = []api.Kind{api.OpenShiftCluster, api.Machine, api.CephPool, api.ClusterAddonBinding}
+
+const kind, child = "CephCluster", "CephConsumer"
+`)
+	if got := familyKindNames(source, familyKinds()); len(got) != 4 {
+		t.Fatalf("violations = %q", got)
+	}
+}
+
+func TestTheGeneralFlowRuleRejectsAnArmTheCephNameAndAnIdentity(t *testing.T) {
+	source := compositionSource(t, "internal/environment", `package environment
+
+const engine, layout = "ceph", "/var/lib/bootwright/ceph/keys"
 
 var arm, identity = spec.Get("libvirt", "machineRef"), "machine-libvirt-v1"
 `)

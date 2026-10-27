@@ -53,10 +53,10 @@ func (Service) Kubectl(ctx context.Context, _ KubectlRequest) error {
 }
 
 // Kubeconfig reveals the administrator kubeconfig the context's custody holds
-// for one selected ContainerCluster, and says when that copy's access was
+// for one selected OpenShiftCluster, and says when that copy's access was
 // never proved. The target and its applicability are
 // settled from the compiled graph before any custody read, so a name that
-// selects nothing, or selects a StorageCluster, reads no credential bytes.
+// selects nothing, or selects a CephCluster, reads no credential bytes.
 func (s Service) Kubeconfig(ctx context.Context, request KubeconfigRequest) (*KubeconfigResult, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
@@ -83,31 +83,31 @@ func (s Service) Kubeconfig(ctx context.Context, request KubeconfigRequest) (*Ku
 	}
 	if !found {
 		return nil, failure("access.unavailable",
-			"this context holds no administrator kubeconfig for ContainerCluster "+request.Name+"; an apply keeps it once it proves the installation complete",
+			"this context holds no administrator kubeconfig for OpenShiftCluster "+request.Name+"; an apply keeps it once it proves the installation complete",
 			"bootwright apply --context "+name)
 	}
 	return &KubeconfigResult{Context: name, Cluster: request.Name, Material: custodied.Material, Unproved: custodied.Unproved}, nil
 }
 
 // kubeconfigTarget resolves --name in the selected graph's shared cluster
-// namespace. Only a ContainerCluster, which is always OpenShift or OKD, is a
+// namespace. Only an OpenShiftCluster (OpenShift or OKD) is a
 // kubeconfig target.
 func kubeconfigTarget(catalog api.Catalog, contextName, cluster string) error {
 	discovery := "bootwright cluster info --context " + contextName
-	if _, ok := catalog.Find(api.ContainerCluster, cluster); ok {
+	if _, ok := catalog.Find(api.OpenShiftCluster, cluster); ok {
 		return nil
 	}
-	if storage, ok := catalog.Find(api.StorageCluster, cluster); ok {
+	if storage, ok := catalog.Find(api.CephCluster, cluster); ok {
 		management := storage.Spec().Get("management").Text()
 		if management == "" {
 			management = "managed"
 		}
 		return failure("cluster.not-applicable",
-			"bootwright cluster kubeconfig does not apply to "+cluster+", a "+management+" Ceph StorageCluster; it applies to OpenShift and OKD ContainerClusters only",
+			"bootwright cluster kubeconfig does not apply to "+cluster+", a "+management+" CephCluster; it applies to OpenShiftClusters only",
 			discovery+" lists the clusters this context selects and their kinds")
 	}
-	return failure("access.target", "the context "+contextName+" selects no ContainerCluster named "+cluster,
-		"name a ContainerCluster this context selects; "+discovery+" lists them")
+	return failure("access.target", "the context "+contextName+" selects no OpenShiftCluster named "+cluster,
+		"name an OpenShiftCluster this context selects; "+discovery+" lists them")
 }
 
 func failure(code, message, remediation string) error {

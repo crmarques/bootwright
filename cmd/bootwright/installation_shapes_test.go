@@ -39,15 +39,15 @@ func TestInstallationShapesTheInstallationCannotUseRefuseAtValidate(t *testing.T
 		"a DHCP-only install network": {[]exampleEdit{
 			{"infra/networkconfigs/lab-guests.yaml", "dhcp: false", "dhcp: true"},
 			{labMachine, "    installAddressRef: ip\n", ""},
-			{labMachine, "\n      - name: ip\n        address: 198.51.100.11/24\n        interface: enp1s0\n", "\n"},
+			{labMachine, "\n    addresses:\n      - name: ip\n        address: 198.51.100.11/24\n        interface: enp1s0\n", "\n    addresses:\n      - name: fqdn\n        address: rhel-01.lab.example.test\n"},
 		}, "api.invariant", "Machine/rhel-01", "$.spec.network.installAddressRef", "DHCP installation is not supported", "spec.network.addresses"},
 		"an install Machine with no network configuration": {[]exampleEdit{
-			{labMachine, "    configRef: lab-guests\n    attachmentRef: lab-guests\n    installAddressRef: ip\n", ""},
-			{labMachine, "\n      - name: ip\n        address: 198.51.100.11/24\n        interface: enp1s0\n", "\n"},
+			{labMachine, "    configRef: lab-guests\n    # attachmentRef defaults to the configRef name, lab-guests.\n    installAddressRef: ip\n", ""},
+			{labMachine, "\n    addresses:\n      - name: ip\n        address: 198.51.100.11/24\n        interface: enp1s0\n", "\n    addresses:\n      - name: fqdn\n        address: rhel-01.lab.example.test\n"},
 		}, "api.invariant", "Machine/rhel-01", "$.spec.network.installAddressRef", "DHCP installation is not supported",
 			"select a network configuration with spec.network.configRef or declare one in spec.network.inline, then assign an IPv4 address"},
 		"an install address with no network configuration": {[]exampleEdit{
-			{labMachine, "    configRef: lab-guests\n    attachmentRef: lab-guests\n", ""},
+			{labMachine, "    configRef: lab-guests\n    # attachmentRef defaults to the configRef name, lab-guests.\n", ""},
 		}, "api.invariant", "Machine/rhel-01", "$.spec.network.installAddressRef", "DHCP installation is not supported", "spec.network.configRef"},
 		"a profile named like the Machine it installs": {[]exampleEdit{{labProfile, "  name: rhel-9-8\n", "  name: rhel-01\n"}, {labMachine, "installProfileRef: rhel-9-8", "installProfileRef: rhel-01"}},
 			"api.invariant", "MachineInstallProfile/rhel-01", treeServer, "os/rhel-01/", "rename Machine/rhel-01 or MachineInstallProfile/rhel-01"},

@@ -16,9 +16,9 @@ import (
 func clientExecution(t *testing.T) lifecycle.Execution {
 	t.Helper()
 	r := coreRequest()
-	r.Action, r.Client = "client", &Client{Name: "consumer", Pool: "volumes", Access: "read-write"}
+	r.Action, r.Client = "client", &Client{Name: "consumer", Pool: "volumes", Access: "readWrite"}
 	e := executionFor(t, r)
-	e.Block.ID, e.Block.Kind, e.Block.Object = "ceph-client-consumer", string(api.StorageClient), "consumer"
+	e.Block.ID, e.Block.Kind, e.Block.Object = "ceph-client-consumer", string(api.CephClient), "consumer"
 	return e
 }
 
@@ -28,7 +28,7 @@ func retiredExecutions(t *testing.T) map[api.Kind]lifecycle.Execution {
 	cluster.Operation, cluster.RetiredWithHosts = "destroy-later", true
 	client := clientExecution(t)
 	client.Operation, client.RetiredWithHosts = "destroy-later", true
-	return map[api.Kind]lifecycle.Execution{api.StorageCluster: cluster, api.StorageClient: client}
+	return map[api.Kind]lifecycle.Execution{api.CephCluster: cluster, api.CephClient: client}
 }
 
 func TestHostMachinesNameEveryHostMachineOnce(t *testing.T) {
@@ -36,12 +36,12 @@ func TestHostMachinesNameEveryHostMachineOnce(t *testing.T) {
 	r.Hosts = append(r.Hosts, r.Hosts[0])
 	r.Hosts[0].Name = "node-1-alias"
 	e := executionFor(t, r)
-	machines, err := New(api.StorageCluster, nil).HostMachines(e.Block)
+	machines, err := New(api.CephCluster, nil).HostMachines(e.Block)
 	if err != nil || !slices.Equal(machines, []string{"node-1", "node-2", "node-3"}) {
 		t.Fatalf("host machines = %v (%v)", machines, err)
 	}
 	e.Block.Request = json.RawMessage(`{"version":"ceph-core-v0"}`)
-	if machines, err := New(api.StorageCluster, nil).HostMachines(e.Block); err == nil {
+	if machines, err := New(api.CephCluster, nil).HostMachines(e.Block); err == nil {
 		t.Fatalf("an undecodable request named hosts %v", machines)
 	}
 }
@@ -64,7 +64,7 @@ func TestQuiescenceDerivesFromRetirementWithEveryHostOnly(t *testing.T) {
 	} {
 		t.Run(name, func(t *testing.T) {
 			runner := &recordingRunner{}
-			q, err := New(api.StorageCluster, runner).Quiescent(context.Background(), lifecycle.Probe{Block: tc.block, RetiredWithHosts: tc.retired})
+			q, err := New(api.CephCluster, runner).Quiescent(context.Background(), lifecycle.Probe{Block: tc.block, RetiredWithHosts: tc.retired})
 			if err != nil || q.State != tc.state || q.Reason != tc.reason || q.Remedy != tc.remedy || q.Stop != "" || runner.calls != 0 {
 				t.Fatalf("quiescence = %+v (%v), runner calls %d", q, err, runner.calls)
 			}
@@ -118,8 +118,8 @@ func TestRetiredDestroyAndItsObservationRecordRetirementWithoutTheRunner(t *test
 }
 
 func TestRetirementEvidenceIsAcceptedOnlyForARetiredDestroyOfItsOwnScope(t *testing.T) {
-	e := retiredExecutions(t)[api.StorageCluster]
-	capability := New(api.StorageCluster, nil)
+	e := retiredExecutions(t)[api.CephCluster]
+	capability := New(api.CephCluster, nil)
 	result, err := capability.Destroy(context.Background(), e)
 	if err != nil {
 		t.Fatal(err)
@@ -160,15 +160,15 @@ func TestRetirementEvidenceIsAcceptedOnlyForARetiredDestroyOfItsOwnScope(t *test
 
 func TestRetiredDestroyStillRefusesAnotherFrozenIdentity(t *testing.T) {
 	runner := &recordingRunner{}
-	e := retiredExecutions(t)[api.StorageCluster]
+	e := retiredExecutions(t)[api.CephCluster]
 	e.Block.Object = "other"
-	result, err := New(api.StorageCluster, runner).Destroy(context.Background(), e)
+	result, err := New(api.CephCluster, runner).Destroy(context.Background(), e)
 	if d := diagnostics.Of(err); result.Outcome != reconciliation.OutcomeFailed || len(d) != 1 || d[0].Code != "lifecycle.state" || runner.calls != 0 {
 		t.Fatalf("a mismatched retirement = %+v (%v), runner calls %d", result, err, runner.calls)
 	}
-	e = retiredExecutions(t)[api.StorageCluster]
+	e = retiredExecutions(t)[api.CephCluster]
 	e.ApplyOperation = ""
-	if observed, err := New(api.StorageCluster, runner).ObserveRemoval(context.Background(), e); err == nil || observed.Effect != reconciliation.EffectUnknown || runner.calls != 0 {
+	if observed, err := New(api.CephCluster, runner).ObserveRemoval(context.Background(), e); err == nil || observed.Effect != reconciliation.EffectUnknown || runner.calls != 0 {
 		t.Fatalf("a retirement without the original apply = %+v (%v)", observed, err)
 	}
 }

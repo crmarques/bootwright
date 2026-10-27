@@ -37,7 +37,7 @@ func validate(data []byte, request Request, digest string) (Evidence, error) {
 		return Evidence{}, failure("lifecycle.state", "the power evidence names another Machine", "")
 	}
 	command := powerCommand(request.Identity.Context, request)
-	reread := "once its controller answers, read its power state with bootwright machine list --context " + request.Identity.Context +
+	reread := "once its BMC answers, read its power state with bootwright machine list --context " + request.Identity.Context +
 		" --power-status, and repeat " + command + " if it is not " + expected(request.Verb)
 	if !evidence.Postcondition {
 		return Evidence{}, failure("lifecycle.unknown", "the management controller did not prove the power state this operation asked for", reread)

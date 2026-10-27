@@ -46,7 +46,7 @@ MAX_SECRET = 1024
 MAX_DAEMONS = 128
 MAX_LISTED = 1024
 DAEMON_ID = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,250}\Z")
-# The members admission lets a StorageSMBResource author, per type; the manager may print others, which are not compared.
+# The members admission lets a CephSMBResource author, per type; the manager may print others, which are not compared.
 ADMITTED = {
     "ceph.smb.cluster": ("resource_type", "cluster_id", "intent", "auth_mode", "domain_settings", "user_group_settings", "custom_dns", "placement",
                          "clustering", "public_addrs"),
@@ -297,7 +297,7 @@ class SMBWorker(ceph_native_resources.ResourceWorker):
         """The core worker's admin command; an apply alone passes `recover`, which keeps its exit code for its own refusal."""
         if recover is None:
             return super().ceph(*args, data=data, json_result=json_result)
-        proof = self.bootstrap_hold() if self.request["clusterSSHTransport"] == "verified-tunnel" else contextlib.nullcontext()
+        proof = self.bootstrap_hold() if self.request["clusterSSHTransport"] == "verifiedTunnel" else contextlib.nullcontext()
         with proof:
             return self.command(["/usr/bin/ceph", "--conf", os.path.join(self.markers.path, "ceph.conf"),
                                  "--keyring", os.path.join(self.markers.path, "ceph.client.admin.keyring"), "--format", "json", *args],
@@ -366,7 +366,7 @@ class SMBWorker(ceph_native_resources.ResourceWorker):
         return canonical(projection(observed, resource_type)) == canonical(projection(self.smb["native"], resource_type))
 
     def only_declared(self):
-        """Every SMB cluster and smb service on the cluster is one a StorageSMBResource of this cluster declares."""
+        """Every SMB cluster and smb service on the cluster is one a CephSMBResource of this cluster declares."""
         identities = self.smb["clusterIDs"]
         listed = self.manager_retry(self.ceph, "smb", "cluster", "ls")
         require(isinstance(listed, list) and len(listed) <= MAX_LISTED and all(isinstance(item, str) for item in listed), "native-output")

@@ -10,7 +10,7 @@ import (
 )
 
 const libvirtProviderYAML = "\n---\napiVersion: bootwright.io/v1alpha1\nkind: InfraProvider\nmetadata: {name: lab-libvirt}\nspec:\n" +
-	"  libvirt:\n    machineRef: controller\n    uri: qemu:///system\n    bmcEmulationDefaults: {bindAddress: 192.0.2.1, certificateRef: bmc-tls, auth: {credentialsRef: bmc}}\n" +
+	"  libvirt:\n    machineRef: controller\n    uri: qemu:///system\n    bmcEmulation: {bindAddress: 192.0.2.1, certificateRef: bmc-tls, auth: {credentialsRef: bmc}}\n" +
 	"  networkAttachments:\n  - name: guests\n    libvirt: {bridge: %q, management: managed, address: 198.51.100.1/24, forward: nat}\n"
 
 // firewalld reads a trailing `+` as an interface wildcard and a managed

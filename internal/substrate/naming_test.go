@@ -74,7 +74,7 @@ func TestOwnedNamesCarryTheirContext(t *testing.T) {
 func providerWithPort(port string) api.Object {
 	return api.NewObject(api.InfraProvider, "lab", api.Value{}, api.MapValue(
 		field("libvirt", api.MapValue(
-			field("bmcEmulationDefaults", api.MapValue(number("port", port))),
+			field("bmcEmulation", api.MapValue(number("port", port))),
 		)),
 	))
 }

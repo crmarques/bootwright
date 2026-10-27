@@ -282,7 +282,7 @@ func TestAnUnsafeFrozenPhysicalNodeRefusesOnlyItsApply(t *testing.T) {
 	}
 	reported := diagnostics.Of(err)
 	if len(reported) != 1 || reported[0].Code != "lifecycle.state" ||
-		reported[0].Message != "Machine/sno-01 of ContainerCluster/sno: a physical node's private boot image requires a controller connection that verifies its certificate" {
+		reported[0].Message != "Machine/sno-01 of OpenShiftCluster/sno: a physical node's private boot image requires a BMC connection that verifies its certificate" {
 		t.Fatalf("refusal = %#v", reported)
 	}
 	if reported[0].Remediation != "run bootwright destroy --context lab-b to end this operation, then correct the node's transport trust and plan it again" {

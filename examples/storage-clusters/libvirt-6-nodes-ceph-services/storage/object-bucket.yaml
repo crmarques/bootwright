@@ -1,9 +1,0 @@
-apiVersion: bootwright.io/v1alpha1
-kind: StorageObjectBucket
-metadata:
-  name: services-canary-bucket
-
-spec:
-  clusterRef: ceph-lab
-  objectGatewayRef: objects
-  ownerRef: services-canary

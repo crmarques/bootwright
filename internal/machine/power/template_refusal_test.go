@@ -20,7 +20,7 @@ func (s templatedState) RenderEffective(context.Context, compilation.EffectiveRe
 	objects := goldenCatalog(nil).Objects()
 	for index, candidate := range objects {
 		if candidate.Kind() == api.Machine && candidate.Name() == s.machine {
-			objects[index] = candidate.WithSpec(candidate.Spec().WithPath(api.StringValue(s.reference), "hardware", "management", "bmc", "credentialsRef"))
+			objects[index] = candidate.WithSpec(candidate.Spec().WithPath(api.StringValue(s.reference), "substrate", "baremetal", "bmc", "credentialsRef"))
 		}
 	}
 	return &compilation.EffectiveResult{Effective: api.NewCatalog(objects)}, nil

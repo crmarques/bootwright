@@ -1,6 +1,6 @@
   bootwright / cluster list
       List container and storage clusters in canonical name order. Applicable to all selected
-      ContainerClusters and StorageClusters, including external storage clusters.
+      OpenShiftClusters and CephClusters, including external storage clusters.
 
   Usage
     bootwright cluster list [flags]

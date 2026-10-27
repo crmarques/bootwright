@@ -272,7 +272,7 @@ func (MachineCapability) ProvedClaim(contextName string, block reconciliation.Bl
 	if !systemToken.MatchString(system) {
 		return prerequisites.HostReservation{}, false, refusal("lifecycle.state",
 			"the system UUID the management controller at "+request.Controller.Endpoint+" reported cannot name a host claim",
-			"correct spec.hardware.management.bmc.address on Machine/"+request.Identity.Object+" so it names a controller that reports a standard UUID")
+			"correct spec.substrate.baremetal.bmc.address on Machine/"+request.Identity.Object+" so it names a BMC that reports a standard UUID")
 	}
 	return prerequisites.HostReservation{
 		Context: contextName, Kind: "substrate-physical", Service: request.Identity.Object,

@@ -12,11 +12,18 @@ type ValidateRequest struct {
 
 type EffectiveRequest struct {
 	ContextName string
+	Origins     bool
 }
 
 type EffectiveResult struct {
 	Counts    Counts
 	Effective api.Catalog
+	Origins   []ObjectOrigins
+}
+
+type ObjectOrigins struct {
+	Object string
+	Fields []FieldOrigin
 }
 
 type Counts struct {

@@ -1,4 +1,4 @@
-"""Closed staging plans for the unqualified IBM verified-tunnel candidate.
+"""Closed staging plans for the unqualified IBM verifiedTunnel candidate.
 
 These helpers never read files, run commands or promote an artifact. The caller
 owns verified host access, exact native-file descriptors, durable intent and
@@ -47,7 +47,7 @@ def named(value):
 def bindings(request):
     """Validate the staging subset without inferring ownership from native names."""
     require(isinstance(request, dict))
-    require(request.get("version") == "ceph-core-v32" and request.get("clusterSSHTransport") == "verified-tunnel")
+    require(request.get("version") == "ceph-core-v33" and request.get("clusterSSHTransport") == "verifiedTunnel")
     require(named(request.get("owner")) and named(request.get("bootstrap")))
     fsid = request.get("fsid")
     try:

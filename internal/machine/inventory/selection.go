@@ -103,7 +103,7 @@ func lifecycle(evidence machine.OwnershipState) string {
 func selectClusters(catalog api.Catalog, clusters []string) ([]string, bool, error) {
 	selection, filtered := normalize(clusters)
 	selectable := []string{}
-	for _, kind := range []api.Kind{api.ContainerCluster, api.StorageCluster} {
+	for _, kind := range api.ClusterKinds() {
 		for _, cluster := range catalog.OfKind(kind) {
 			selectable = append(selectable, cluster.Name())
 		}
@@ -125,7 +125,7 @@ func selectClusters(catalog api.Catalog, clusters []string) ([]string, bool, err
 		remedy = "select one of " + strings.Join(selectable, ", ") + " with --clusters, or omit --clusters"
 	}
 	return nil, false, failure("access.target",
-		"the selected context declares no ContainerCluster or StorageCluster named "+strings.Join(unknown, ", "), remedy)
+		"the selected context declares no OpenShiftCluster or CephCluster named "+strings.Join(unknown, ", "), remedy)
 }
 
 // normalize applies the list rules a cluster selector follows: an omitted

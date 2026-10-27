@@ -9,5 +9,5 @@
   tasks:
     - name: Execute the Ceph export observe capability
       ansible.builtin.import_role:
-        name: bootwright.core.storage_ceph_export
+        name: bootwright.core.storage_ceph_consumer
         tasks_from: observe

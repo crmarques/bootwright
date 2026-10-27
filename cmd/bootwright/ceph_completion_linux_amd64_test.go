@@ -81,7 +81,7 @@ func cephAcceptedProfile(e cephCompletionEvidence, id, directory string) bool {
 		if !strings.HasPrefix(accepted, "Owner:") || !b484Item.MatchString(accepted) || !ownerAccepted.MatchString(accepted) || strings.Contains(strings.ToLower(accepted), "not ") {
 			continue
 		}
-		if !strings.Contains(row["Example"], "examples/storage-clusters/"+directory+" ") || !strings.Contains(row["Example"], "("+id+")") {
+		if !strings.Contains(row["Example"], "examples/ceph-clusters/"+directory+" ") || !strings.Contains(row["Example"], "("+id+")") {
 			continue
 		}
 		if !strings.Contains(row["Outcome"], id+" matrix qualification:") || strings.Contains(strings.ToLower(row["Outcome"]), "unrun") || strings.Contains(strings.ToLower(row["Outcome"]), "blocked") {
@@ -157,8 +157,8 @@ func completeCephEvidence() cephCompletionEvidence {
 	for n := 1; n <= 7; n++ {
 		id := fmt.Sprintf("P%d", n)
 		directory := "profile-" + id
-		e.profiles = append(e.profiles, map[string]string{"Profile": id, "Example": fmt.Sprintf("[%s/](../examples/storage-clusters/%s/)", directory, directory)})
-		e.ledger = append(e.ledger, map[string]string{"Build": "Commit " + baseline + "; Source clean", "Example": "examples/storage-clusters/" + directory + " (" + id + ") with the lab conventions only", "Outcome": id + " matrix qualification: all required journeys", "Accepted by": "Owner: B484, accepted"})
+		e.profiles = append(e.profiles, map[string]string{"Profile": id, "Example": fmt.Sprintf("[%s/](../examples/ceph-clusters/%s/)", directory, directory)})
+		e.ledger = append(e.ledger, map[string]string{"Build": "Commit " + baseline + "; Source clean", "Example": "examples/ceph-clusters/" + directory + " (" + id + ") with the lab conventions only", "Outcome": id + " matrix qualification: all required journeys", "Accepted by": "Owner: B484, accepted"})
 	}
 	return e
 }
@@ -178,7 +178,7 @@ func TestCephProfileCompletionRejectsIncompleteEvidence(t *testing.T) {
 		"owner declined":       func(e *cephCompletionEvidence) { e.ledger[0]["Accepted by"] = "Owner: B484, not accepted" },
 		"unrun qualification":  func(e *cephCompletionEvidence) { e.ledger[0]["Outcome"] = "P1 matrix qualification: unrun" },
 		"wrong item":           func(e *cephCompletionEvidence) { e.ledger[0]["Accepted by"] = "Owner: B476, accepted" },
-		"wrong profile":        func(e *cephCompletionEvidence) { e.ledger[0]["Example"] = "examples/storage-clusters/another (P1)" },
+		"wrong profile":        func(e *cephCompletionEvidence) { e.ledger[0]["Example"] = "examples/ceph-clusters/another (P1)" },
 		"dirty build":          func(e *cephCompletionEvidence) { e.ledger[0]["Build"] = "Commit " + e.baseline + "; Source dirty" },
 		"non-descendant build": func(e *cephCompletionEvidence) {
 			e.ledger[0]["Build"] = "Commit " + strings.Repeat("b", 40) + "; Source clean"

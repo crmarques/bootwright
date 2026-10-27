@@ -20,14 +20,14 @@ const (
 )
 
 func pool(name, size string) api.Object {
-	return api.NewObject(api.StoragePool, name, api.Value{}, api.MapValue(
+	return api.NewObject(api.CephPool, name, api.Value{}, api.MapValue(
 		api.FieldValue{Name: "clusterRef", Value: api.StringValue("ceph")},
 		api.FieldValue{Name: "replicated", Value: api.MapValue(api.FieldValue{Name: "size", Value: api.IntegerValue(size)})},
 	))
 }
 
 func storageClient(name string) api.Object {
-	return api.NewObject(api.StorageClient, name, api.Value{}, api.MapValue(api.FieldValue{Name: "clusterRef", Value: api.StringValue("ceph")}))
+	return api.NewObject(api.CephClient, name, api.Value{}, api.MapValue(api.FieldValue{Name: "clusterRef", Value: api.StringValue("ceph")}))
 }
 
 // appliedOver completes an apply of the harness's one block, then has its
@@ -54,7 +54,7 @@ func applyRefusedWith(t *testing.T, f diffFixture, message, remedy string) {
 func TestAChangedInputOverACompletedApplyNamesWhatChanged(t *testing.T) {
 	f := appliedOver(t, diffState(pool("a", "3"), storageClient("c")))
 	f.publish("rev-2", "kind: Environment\n# edited\n", diffState(pool("a", "2"), pool("b", "3")))
-	applyRefusedWith(t, f, changedMessage+": it adds StoragePool/b, changes StoragePool/a (spec.replicated.size) and removes StorageClient/c", namedRemedy)
+	applyRefusedWith(t, f, changedMessage+": it adds CephPool/b, changes CephPool/a (spec.replicated.size) and removes CephClient/c", namedRemedy)
 }
 
 func TestANamedChangeIsBoundedToFiveObjects(t *testing.T) {

@@ -37,29 +37,13 @@ func Normalize(o api.Object, _ api.Catalog) (api.Object, []api.Issue) {
 			bmc = NormalizeBMCDefaults(bmc)
 			arm = arm.WithPath(bmc, "defaults", "bmc")
 		}
-		// The boot method materializes whether or not the block was authored,
-		// so effective state always names the path a physical machine is
-		// booted by rather than leaving a consumer to assume one.
-		arm = arm.WithPath(arm.Get("boot").Default("method", api.StringValue(BootRedfishVirtualMedia)), "boot")
 	case "libvirt":
 		// One listener has one spelling, so its endpoint, its socket key and
 		// every comparison with another listener read the text netip prints.
-		if address, err := netip.ParseAddr(arm.Get("bmcEmulationDefaults", "bindAddress").Text()); err == nil {
-			arm = arm.WithPath(api.StringValue(address.String()), "bmcEmulationDefaults", "bindAddress")
+		if address, err := netip.ParseAddr(arm.Get("bmcEmulation", "bindAddress").Text()); err == nil {
+			arm = arm.WithPath(api.StringValue(address.String()), "bmcEmulation", "bindAddress")
 		}
 	case "vsphere":
-		for _, side := range []string{"external", "internal"} {
-			values := arm.Get("nodeNetworking", side, "networkSubnetCidr")
-			if values.Present() {
-				items := values.Items()
-				for i, v := range items {
-					if p, e := netip.ParsePrefix(v.Text()); e == nil {
-						items[i] = api.StringValue(p.Masked().String())
-					}
-				}
-				arm = arm.WithPath(api.ListValue(items...), "nodeNetworking", side, "networkSubnetCidr")
-			}
-		}
 		profiles := arm.Get("machineProfiles").Items()
 		domains := arm.Get("failureDomains").Items()
 		if len(domains) == 1 {
@@ -123,9 +107,9 @@ func NormalizeBMCDefaults(bmc api.Value) api.Value {
 	media := bmc.Get("virtualMedia")
 	tls := media.Get("tls").Default("trust", api.StringValue(TrustImportCertificate))
 	switch tls.Get("trust").Text() {
-	case "disable-verification":
+	case "disableVerification":
 		tls = tls.Default("restoreVerificationAfterBoot", api.BoolValue(true))
-	case "import-certificate":
+	case "importCertificate":
 		tls = tls.Default("removeCertificateAfterBoot", api.BoolValue(false))
 	}
 	return bmc.With("virtualMedia", media.With("tls", tls))
@@ -142,11 +126,11 @@ func ValidateBMCDefaults(bmc api.Value, path string, authored bool) []api.Issue 
 	if trust == "" {
 		trust = TrustImportCertificate
 	}
-	if tls.Has("restoreVerificationAfterBoot") && trust != "disable-verification" {
-		issues = add(issues, issue(path+".virtualMedia.tls.restoreVerificationAfterBoot", "restoring verification requires disable-verification trust"))
+	if tls.Has("restoreVerificationAfterBoot") && trust != "disableVerification" {
+		issues = add(issues, issue(path+".virtualMedia.tls.restoreVerificationAfterBoot", "restoring verification requires disableVerification trust"))
 	}
-	if tls.Has("removeCertificateAfterBoot") && trust != "import-certificate" {
-		issues = add(issues, issue(path+".virtualMedia.tls.removeCertificateAfterBoot", "removing a certificate requires import-certificate trust"))
+	if tls.Has("removeCertificateAfterBoot") && trust != "importCertificate" {
+		issues = add(issues, issue(path+".virtualMedia.tls.removeCertificateAfterBoot", "removing a certificate requires importCertificate trust"))
 	}
 	return issues
 }
@@ -160,7 +144,7 @@ func validateControllerTrust(bmc api.Value, path string) []api.Issue {
 		return nil
 	}
 	return []api.Issue{{Code: "api.invariant", Field: path + ".tls.trustBundleRef",
-		Message:     "a controller trust bundle requires verification, and tls.verify is false here, whether authored or inherited",
+		Message:     "a BMC trust bundle requires verification, and tls.verify is false here, whether authored or inherited",
 		Remediation: "set tls.verify: true where the bundle is declared, or remove tls.trustBundleRef"}}
 }
 
@@ -171,8 +155,8 @@ func validateProviderMediaTrust(bmc api.Value, path string) []api.Issue {
 		return nil
 	}
 	return []api.Issue{{Code: "api.invariant", Field: path + ".virtualMedia.tls.trust",
-		Message:     "disable-verification is a per-Machine exception and never a provider default",
-		Remediation: "declare hardware.management.bmc.virtualMedia.tls.trust: disable-verification on each Machine that needs it"}}
+		Message:     "disableVerification is a per-Machine exception and never a provider default",
+		Remediation: "declare substrate.baremetal.bmc.virtualMedia.tls.trust: disableVerification on each Machine that needs it"}}
 }
 
 func ValidateAuthored(o api.Object, _ api.Catalog) []api.Issue {
@@ -194,11 +178,6 @@ func Validate(o api.Object, c api.Catalog) []api.Issue {
 		return nil
 	}
 	issues := []api.Issue{}
-	if api.ValidLexical("name", o.Name()) && len(o.Name()) > ProviderNameLimit {
-		issues = add(issues, api.Issue{Code: "api.value", Field: "$.metadata.name",
-			Message:     fmt.Sprintf("an InfraProvider name is at most %d bytes, because its host block substrate-host-<name> is a 63-byte identity", ProviderNameLimit),
-			Remediation: fmt.Sprintf("rename %s to at most %d bytes, with every providerRef that names it", o.Identity(), ProviderNameLimit)})
-	}
 	variant := Variant(o)
 	if variant == "" {
 		return issues
@@ -208,21 +187,14 @@ func Validate(o api.Object, c api.Catalog) []api.Issue {
 		issues = add(issues, ValidateBMCDefaults(arm.Get("defaults", "bmc"), "$.spec.baremetal.defaults.bmc", false)...)
 	}
 	if variant == "libvirt" {
-		host, ok := c.Find(api.Machine, arm.Get("machineRef").Text())
-		if ok && !slices.Contains(host.Spec().Get("capabilities").Strings(), "libvirt") {
-			issues = add(issues, issue("$.spec.libvirt.machineRef", "libvirt host requires libvirt capability"))
-		}
-		bmc := arm.Get("bmcEmulationDefaults")
-		if bmc.Has("enabled") && !bmc.Get("enabled").Bool() {
-			issues = add(issues, issue("$.spec.libvirt.bmcEmulationDefaults.enabled", "libvirt BMC emulation must be enabled"))
-		}
+		bmc := arm.Get("bmcEmulation")
 		issues = add(issues, validateEmulatedListener(bmc)...)
 		issues = add(issues, validateEmulatedCertificate(bmc, c)...)
 		issues = add(issues, requirePositiveCapacity(arm, variant, "libvirt")...)
 		issues = add(issues, validateLibvirtDataDisks(o, arm)...)
 		first, last, ranged := bmcPortRange(o, c)
 		if ranged && last > 65535 {
-			issues = add(issues, issue("$.spec.libvirt.bmcEmulationDefaults.port", "the emulated BMC port range must end at or below 65535"))
+			issues = add(issues, issue("$.spec.libvirt.bmcEmulation.port", "the emulated BMC port range must end at or below 65535"))
 		}
 		for _, other := range c.OfKind(api.InfraProvider) {
 			peer := other.Spec().Get("libvirt")
@@ -231,7 +203,7 @@ func Validate(o api.Object, c api.Catalog) []api.Issue {
 			}
 			peerFirst, peerLast, peerRanged := bmcPortRange(other, c)
 			if ranged && peerRanged && first <= peerLast && peerFirst <= last {
-				issues = add(issues, issue("$.spec.libvirt.bmcEmulationDefaults.port", "emulated BMC port ranges of providers on one host must not overlap"))
+				issues = add(issues, issue("$.spec.libvirt.bmcEmulation.port", "emulated BMC port ranges of providers on one host must not overlap"))
 				break
 			}
 		}
@@ -247,9 +219,6 @@ func Validate(o api.Object, c api.Catalog) []api.Issue {
 				issues = add(issues, reference(path+".server", "failure-domain server must name a declared vCenter"))
 			} else if ok && domain.Get("topology", "datacenter").Present() && !slices.Contains(server.Get("datacenters").Strings(), domain.Get("topology", "datacenter").Text()) {
 				issues = add(issues, reference(path+".topology.datacenter", "failure-domain datacenter must be declared on its vCenter"))
-			}
-			if domain.Get("topology", "networks").Len() > 1 && !arm.Has("nodeNetworking") {
-				issues = add(issues, issue("$.spec.vsphere.nodeNetworking", "multiple topology networks require nodeNetworking"))
 			}
 		}
 		issues = add(issues, requirePositiveCapacity(arm, variant, "vSphere")...)
@@ -307,6 +276,19 @@ func NameableListener(address string) bool {
 	return parsed != netip.AddrFrom4([4]byte{255, 255, 255, 255})
 }
 
+// CertificateNames is the address each libvirt provider's emulated BMC serves
+// HTTPS at with the Secret its bmcEmulation.certificateRef names.
+func CertificateNames(c api.Catalog, secret string) []string {
+	var names []string
+	for _, provider := range ProvidersOn(c, ArmLibvirt) {
+		bmc := provider.Spec().Get("libvirt", "bmcEmulation")
+		if bmc.Get("certificateRef").Text() == secret && NameableListener(bmc.Get("bindAddress").Text()) {
+			names = append(names, bmc.Get("bindAddress").Text())
+		}
+	}
+	return names
+}
+
 // validateEmulatedListener judges only an address that is present: the schema
 // already refuses an absent one, and a second diagnostic would say it twice.
 func validateEmulatedListener(bmc api.Value) []api.Issue {
@@ -314,8 +296,8 @@ func validateEmulatedListener(bmc api.Value) []api.Issue {
 	if !address.Present() || NameableListener(address.Text()) {
 		return nil
 	}
-	return []api.Issue{issue("$.spec.libvirt.bmcEmulationDefaults.bindAddress",
-		"the emulated BMC listens on one unicast address its controller endpoints can name: not unspecified, multicast or the IPv4 broadcast address, and not an IPv6 link-local, zoned or IPv4-mapped address")}
+	return []api.Issue{issue("$.spec.libvirt.bmcEmulation.bindAddress",
+		"the emulated BMC listens on one unicast address its Machines' BMC endpoints can name: not unspecified, multicast or the IPv4 broadcast address, and not an IPv6 link-local, zoned or IPv4-mapped address")}
 }
 
 // validateEmulatedCertificate holds a generated serving certificate to the
@@ -331,7 +313,7 @@ func validateEmulatedCertificate(bmc api.Value, c api.Catalog) []api.Issue {
 	if !generated.Present() || secrets.GeneratedCertificateNames(generated, address) {
 		return nil
 	}
-	return []api.Issue{{Code: "api.invariant", Field: "$.spec.libvirt.bmcEmulationDefaults.certificateRef",
+	return []api.Issue{{Code: "api.invariant", Field: "$.spec.libvirt.bmcEmulation.certificateRef",
 		Message: "the emulated BMC serves HTTPS at " + address + ", which the generated certificate of Secret/" + name + " does not name",
 		Remediation: "add " + address + " to spec.source.generated.ipAddresses of Secret/" + name + ", import the change with bootwright context update --name <context> --input-dir <dir>, " +
 			"then run bootwright secret generate --name " + name + " --context <context>"}}
@@ -357,7 +339,7 @@ func requirePositiveCapacity(arm api.Value, variant, label string) []api.Issue {
 // port per hosted Machine in canonical name order, or the base port alone while
 // no Machine selects the provider.
 func bmcPortRange(provider api.Object, c api.Catalog) (int64, int64, bool) {
-	first, ok := provider.Spec().Get("libvirt", "bmcEmulationDefaults", "port").Int64()
+	first, ok := provider.Spec().Get("libvirt", "bmcEmulation", "port").Int64()
 	if !ok {
 		return 0, 0, false
 	}

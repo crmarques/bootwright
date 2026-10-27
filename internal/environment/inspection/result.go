@@ -3,9 +3,6 @@ package inspection
 import "github.com/crmarques/bootwright/internal/secrets"
 
 const (
-	KindContainerCluster = "ContainerCluster"
-	KindStorageCluster   = "StorageCluster"
-
 	StatusNotApplicable  = "not-applicable"
 	StatusNotImplemented = "not-implemented"
 	StatusUnavailable    = "unavailable"

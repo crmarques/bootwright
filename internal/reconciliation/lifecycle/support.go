@@ -56,6 +56,7 @@ func unclaimedRemediation(identity string) string {
 // Bearing is the unclaimed refusal's reason and a listed service's placement.
 type Bearing struct {
 	Reason      string
+	Remedy      string
 	Shared      bool
 	Machine     string
 	InstallOnly bool
@@ -76,7 +77,11 @@ func Unrealizable(catalog api.Catalog, claimed []string, bearing EffectBearing) 
 			continue
 		}
 		if effect, bears := bearing(object); bears {
-			found = append(found, RefusalOf(object, effect.Reason, unclaimedRemediation(object.Identity())))
+			remedy := effect.Remedy
+			if remedy == "" {
+				remedy = unclaimedRemediation(object.Identity())
+			}
+			found = append(found, RefusalOf(object, effect.Reason, remedy))
 		}
 	}
 	return SortRefusals(found)

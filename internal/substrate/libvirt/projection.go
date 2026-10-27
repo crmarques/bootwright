@@ -9,6 +9,7 @@ import (
 	api "github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/reconciliation"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
+	"github.com/crmarques/bootwright/internal/substrate"
 )
 
 const rootDisk = "root"
@@ -67,7 +68,7 @@ func placement(applied api.Catalog, machine string) (string, string) {
 	if !found {
 		return "", ""
 	}
-	return object.Spec().Get("substrate", "providerRef").Text(), object.Spec().Get("substrate", "profileRef").Text()
+	return object.Spec().Get("substrate", "providerRef").Text(), substrate.MachineProfileRef(object)
 }
 
 func machineNotes(name string, observed MachineEvidence) []string {

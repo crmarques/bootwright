@@ -80,7 +80,7 @@ func controllerFor(catalog api.Catalog, object api.Object, contextName, controll
 		if !admitted {
 			return "", Access{}, machine.Placement{}, false, failure("access.unavailable",
 				"this Machine's emulated management controller is not realized",
-				"bootwright apply --context "+contextName+" realizes "+object.Identity()+" and its controller")
+				"bootwright apply --context "+contextName+" realizes "+object.Identity()+" and its emulated BMC")
 		}
 	}
 	access, placement, physical, err := endpointFor(target, controllerMachine)
@@ -90,10 +90,10 @@ func controllerFor(catalog api.Catalog, object api.Object, contextName, controll
 // managedTarget resolves the realized target whose controller manages a
 // Machine, without asking whether that controller exists yet.
 func managedTarget(catalog api.Catalog, object api.Object, contextName, controllerMachine string) (substrate.Target, error) {
-	if object.Spec().Get("substrate", "providerRef").Text() == "" && !object.Spec().Has("hardware", "management", "bmc") {
+	if object.Spec().Get("substrate", "providerRef").Text() == "" && !substrate.MachineBMC(object).Present() {
 		return substrate.Target{}, failure("access.unavailable",
 			"this Machine has no management controller this context can reach",
-			"author spec.hardware.management.bmc on "+object.Identity()+", or place it on a provider that emulates one")
+			"declare "+substrate.BMCPath+" on "+object.Identity()+", or place it on a provider that emulates a management controller")
 	}
 	return substrate.TargetFor(catalog, object, contextName, controllerMachine)
 }

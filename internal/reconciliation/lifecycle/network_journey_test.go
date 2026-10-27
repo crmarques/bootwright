@@ -84,7 +84,7 @@ func networkJourney(t *testing.T) (*lifecycle.CapabilityJourney, *networkAdapter
 	}
 	producer := reconciliation.BlockDefinition{ID: producerRequest.Identity.Block, Description: "install cluster", Stage: reconciliation.StageClusters, Kind: agentinstall.Kind, Object: installedCluster, Implementation: agentinstall.InstallImplementation, ContentDigest: agentinstall.InstallContentDigest(), Request: producerData}
 	field := func(name string, value api.Value) api.FieldValue { return api.FieldValue{Name: name, Value: value} }
-	cluster := api.NewObject(api.ContainerCluster, installedCluster, api.Value{}, api.MapValue(
+	cluster := api.NewObject(api.OpenShiftCluster, installedCluster, api.Value{}, api.MapValue(
 		field("nodes", api.ListValue(api.MapValue(field("name", api.StringValue("sno-01"))))),
 		field("networking", api.MapValue(field("secondaryNetworks", api.ListValue(api.MapValue(
 			field("name", api.StringValue("tenant")), field("uplink", api.MapValue(field("bridge", api.StringValue("br-ex")))), field("namespaceSelector", api.MapValue(field("matchLabels", api.MapValue(field("tenant", api.StringValue("yes"))))))))))),
@@ -97,12 +97,12 @@ func networkJourney(t *testing.T) (*lifecycle.CapabilityJourney, *networkAdapter
 	if err != nil {
 		t.Fatal(err)
 	}
-	request := networking.Request{Version: "cluster-network-request-v1", BudgetSeconds: 1800, Cluster: installedCluster, Placement: producerRequest.Placement, ProducedInputs: []lifecycle.ProducedInput{{Kind: "ContainerCluster", Object: installedCluster, Output: "kubeconfig"}}, Program: programData, Tool: networking.Tool{Kind: "openshift-clients", Compatibility: "openshift", Version: installedRelease}}
+	request := networking.Request{Version: "cluster-network-request-v2", BudgetSeconds: 1800, Cluster: installedCluster, Placement: producerRequest.Placement, ProducedInputs: []lifecycle.ProducedInput{{Kind: "OpenShiftCluster", Object: installedCluster, Output: "kubeconfig"}}, Program: programData, Tool: networking.Tool{Kind: "openshift-clients", Compatibility: "openshift", Version: installedRelease}}
 	data, err := request.Canonical()
 	if err != nil {
 		t.Fatal(err)
 	}
-	definition := reconciliation.BlockDefinition{ID: networking.BlockID(installedCluster), Description: "configure secondary networks", Stage: reconciliation.StageAddOns, Kind: networking.Kind, Object: installedCluster, Implementation: networking.Implementation, ContentDigest: networking.ContentDigest(), Request: data, Requires: []reconciliation.ObjectRef{{Kind: "ContainerCluster", Object: installedCluster}}}
+	definition := reconciliation.BlockDefinition{ID: networking.BlockID(installedCluster), Description: "configure secondary networks", Stage: reconciliation.StageAddOns, Kind: networking.Kind, Object: installedCluster, Implementation: networking.Implementation, ContentDigest: networking.ContentDigest(), Request: data, Requires: []reconciliation.ObjectRef{{Kind: "OpenShiftCluster", Object: installedCluster}}}
 	adapter := &networkAdapter{}
 	journey := lifecycle.NewBoundJourney(t, []lifecycle.BoundCapability{
 		{Binding: lifecycle.CapabilityBinding{Kind: agentinstall.Kind, Implementation: agentinstall.InstallImplementation}, Capability: retainedInstaller{agentinstall.NewInstall(&installer{completed: true})}},

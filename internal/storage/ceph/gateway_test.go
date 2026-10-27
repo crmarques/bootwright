@@ -15,17 +15,17 @@ import (
 )
 
 func withRGW(spec api.Value) api.Value {
-	return spec.WithPath(api.ListValue(append(spec.Get("ceph", "services").Items(), rgwService("objects"))...), "ceph", "services")
+	return spec.WithPath(api.ListValue(append(spec.Get("services").Items(), rgwService("objects"))...), "services")
 }
 
 func withPairAndRGW(spec api.Value) api.Value { return withRGW(withCorePair(spec)) }
 
 func objectGateway(name string, pairs ...any) api.Object {
-	return childOf(api.StorageObjectGateway, name, append([]any{"serviceRef", "rgw.objects", "realm", "objects", "zoneGroup", "objects", "zone", "objects"}, pairs...)...)
+	return childOf(api.CephObjectGateway, name, append([]any{"serviceRef", "rgw.objects", "realm", "objects", "zoneGroup", "objects", "zone", "objects"}, pairs...)...)
 }
 
 func rgwPool(name string) api.Object {
-	return childOf(api.StoragePool, name, "type", "replicated", "role", "rgw", "replicated", requestMap("size", 2, "minSize", 2))
+	return childOf(api.CephPool, name, "role", "rgw", "replicated", requestMap("size", 2, "minSize", 2))
 }
 
 func kindPlan(kind api.Kind, catalog api.Catalog) (lifecycle.CapabilityPlan, error) {
@@ -35,7 +35,7 @@ func kindPlan(kind api.Kind, catalog api.Catalog) (lifecycle.CapabilityPlan, err
 
 func gatewayBlocks(t *testing.T, catalog api.Catalog) []reconciliation.BlockDefinition {
 	t.Helper()
-	plan, err := kindPlan(api.StorageObjectGateway, catalog)
+	plan, err := kindPlan(api.CephObjectGateway, catalog)
 	if err != nil {
 		t.Fatalf("the gateway did not plan: %v", diagnostics.Of(err))
 	}
@@ -77,7 +77,7 @@ func TestGatewayDerivedPoolsAreFrozenSuffixSet(t *testing.T) {
 	}
 	definitions := poolBlocks(blocks)
 	for i, d := range definitions {
-		if !reconciliation.ValidSegment(d.ID) || d.Kind != string(api.StorageObjectGateway) || d.Object != "objects" || len(d.Requires) != 0 || d.Stage != reconciliation.StageClusters ||
+		if !reconciliation.ValidSegment(d.ID) || d.Kind != string(api.CephObjectGateway) || d.Object != "objects" || len(d.Requires) != 0 || d.Stage != reconciliation.StageClusters ||
 			!reflect.DeepEqual(d.Dependencies, []string{"ceph-cluster-example", "ceph-image-example"}) || !reflect.DeepEqual(d.Exclusive, []string{"ceph/example"}) {
 			t.Fatalf("derived block %+v", d)
 		}
@@ -97,17 +97,24 @@ func TestGatewayDerivedPoolsAreFrozenSuffixSet(t *testing.T) {
 			t.Fatalf("default pair froze %+v (%v)", r.Pool, err)
 		}
 	}
-	_, err := kindPlan(api.StorageObjectGateway, planCatalog(3, 3, withRGW, objectGateway("objects")))
-	refusedWith(t, err, "api.invariant", "StorageObjectGateway objects derives its zone pools with the cluster's default replica size 3, which needs more than 3 OSD-bearing hosts; 3 are declared",
-		"add OSD-bearing hosts to StorageCluster example, or set osd_pool_default_size and osd_pool_default_min_size to \"2\" under its spec.ceph.config.global")
-	_, err = kindPlan(api.StorageObjectGateway, planCatalog(3, 2, withPairAndRGW, objectGateway("objects")))
-	refusedWith(t, err, "api.invariant", "StorageObjectGateway objects derives its zone pools with the cluster's default replica size 2, which needs more than 2 OSD-bearing hosts; 2 are declared",
-		"add OSD-bearing hosts to StorageCluster example")
-	long := strings.Repeat("g", 31)
-	_, err = kindPlan(api.StorageObjectGateway, planCatalog(3, 3, withPairAndRGW, objectGateway(long)))
-	refusedWith(t, err, "api.invariant", "StorageObjectGateway "+long+" has a name too long to identify its derived zone pool blocks, whose identities hold at most 63 characters", "rename the StorageObjectGateway to at most 30 characters")
-	if got := gatewayBlocks(t, planCatalog(3, 3, withPairAndRGW, objectGateway(long[:30]))); len(got) != 9 {
-		t.Fatalf("a 30-character gateway planned %v", blockIDs(got))
+	_, err := kindPlan(api.CephObjectGateway, planCatalog(3, 3, withRGW, objectGateway("objects")))
+	refusedWith(t, err, "api.invariant", "CephObjectGateway objects derives its zone pools with the cluster's default replica size 3, which needs more than 3 OSD-bearing hosts; 3 are declared",
+		"add OSD-bearing hosts to CephCluster example, or set osd_pool_default_size and osd_pool_default_min_size to \"2\" under its spec.config.global")
+	_, err = kindPlan(api.CephObjectGateway, planCatalog(3, 2, withPairAndRGW, objectGateway("objects")))
+	refusedWith(t, err, "api.invariant", "CephObjectGateway objects derives its zone pools with the cluster's default replica size 2, which needs more than 2 OSD-bearing hosts; 2 are declared",
+		"add OSD-bearing hosts to CephCluster example")
+	long := strings.Repeat("g", 63)
+	planned := blockIDs(gatewayBlocks(t, planCatalog(3, 3, withPairAndRGW, objectGateway(long))))
+	if len(planned) != 9 || len(slices.Compact(slices.Sorted(slices.Values(planned)))) != 9 {
+		t.Fatalf("a 63-character gateway planned %v", planned)
+	}
+	for _, id := range planned {
+		if !reconciliation.ValidSegment(id) {
+			t.Fatalf("a 63-character gateway planned the identity %q", id)
+		}
+	}
+	if got := blockIDs(gatewayBlocks(t, planCatalog(3, 3, withPairAndRGW, objectGateway(long[:30])))); !slices.Contains(got, "ceph-gateway-"+long[:30]+"-pool-buckets-non-ec") {
+		t.Fatalf("a 30-character gateway moved its 63-character identities: %v", got)
 	}
 }
 
@@ -122,7 +129,7 @@ func TestDeclaredPoolRefReplacesDerivedBlock(t *testing.T) {
 			t.Fatal("a declared index pool is still derived")
 		}
 	}
-	plan, err := kindPlan(api.StoragePool, catalog)
+	plan, err := kindPlan(api.CephPool, catalog)
 	if err != nil || !reflect.DeepEqual(blockIDs(plan.Definitions), []string{"ceph-pool-index"}) {
 		t.Fatalf("the declared pool planned %v (%v)", blockIDs(plan.Definitions), err)
 	}
@@ -144,16 +151,16 @@ func TestPGBudgetCountsDerivedZonePools(t *testing.T) {
 			}
 			return planCatalog(3, 3, withPairAndRGW, children...)
 		}
-		elsewhere := api.NewObject(api.StorageObjectGateway, "elsewhere", api.Value{}, requestMap("clusterRef", "other", "serviceRef", "rgw.objects", "zone", "elsewhere"))
-		if _, err := planned(t, catalogFor(86, elsewhere), api.StoragePool, "volumes"); err != nil {
+		elsewhere := api.NewObject(api.CephObjectGateway, "elsewhere", api.Value{}, requestMap("clusterRef", "other", "serviceRef", "rgw.objects", "zone", "elsewhere"))
+		if _, err := planned(t, catalogFor(86, elsewhere), api.CephPool, "volumes"); err != nil {
 			t.Fatalf("750 placement groups did not plan: %v", diagnostics.Of(err))
 		}
-		if _, err := kindPlan(api.StorageObjectGateway, catalogFor(86)); err != nil {
+		if _, err := kindPlan(api.CephObjectGateway, catalogFor(86)); err != nil {
 			t.Fatalf("the gateway at 750 placement groups did not plan: %v", diagnostics.Of(err))
 		}
-		_, err := planned(t, catalogFor(87), api.StoragePool, "volumes")
+		_, err := planned(t, catalogFor(87), api.CephPool, "volumes")
 		refusedWith(t, err, "api.invariant", "pool placement groups for CRUSH rule replicated_rule exceed the per-OSD bound (752 > 250 × 3)", remedy)
-		_, err = kindPlan(api.StorageObjectGateway, catalogFor(87))
+		_, err = kindPlan(api.CephObjectGateway, catalogFor(87))
 		refusedWith(t, err, "api.invariant", "pool placement groups for CRUSH rule replicated_rule exceed the per-OSD bound (752 > 250 × 3)", remedy)
 	}
 }
@@ -175,7 +182,7 @@ func TestDerivedZonePoolBlockIdentityIsBoundToItsGateway(t *testing.T) {
 		return lifecycle.Execution{ApplyOperation: "apply-original", Operation: "apply-original", Context: "example",
 			Block: reconciliation.Block{BlockDefinition: reconciliation.BlockDefinition{ID: d.ID, Kind: d.Kind, Object: d.Object, Request: data}, RequestDigest: strings.Repeat("b", 64)}}
 	}
-	gateway := New(api.StorageObjectGateway, nil)
+	gateway := New(api.CephObjectGateway, nil)
 	r, err := gateway.identity(context.Background(), execution(definitions[0], nil))
 	if err != nil || r.Owner != "apply-original" || r.FSID != FSIDFor("apply-original", "example") {
 		t.Fatalf("the derived block identity %+v (%v)", r, err)
@@ -194,13 +201,13 @@ func TestDerivedZonePoolBlockIdentityIsBoundToItsGateway(t *testing.T) {
 			refusedWith(t, err, "lifecycle.state", "Ceph request does not match its frozen resource identity", "")
 		})
 	}
-	_, err = New(api.StoragePool, nil).identity(context.Background(), execution(definitions[0], nil))
+	_, err = New(api.CephPool, nil).identity(context.Background(), execution(definitions[0], nil))
 	refusedWith(t, err, "lifecycle.state", "Ceph request does not match its frozen resource identity", "")
-	pools, err := kindPlan(api.StoragePool, planCatalog(3, 3, withPairAndRGW, rgwPool("index")))
+	pools, err := kindPlan(api.CephPool, planCatalog(3, 3, withPairAndRGW, rgwPool("index")))
 	if err != nil || len(pools.Definitions) != 1 {
 		t.Fatalf("the declared pool planned %v (%v)", pools.Definitions, err)
 	}
-	if _, err := New(api.StoragePool, nil).identity(context.Background(), execution(pools.Definitions[0], nil)); err != nil {
+	if _, err := New(api.CephPool, nil).identity(context.Background(), execution(pools.Definitions[0], nil)); err != nil {
 		t.Fatalf("a declared pool block lost its identity: %v", err)
 	}
 }

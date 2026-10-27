@@ -235,8 +235,8 @@ func TestMachineReservationsClaimItsDomainUnitSocketAndDisks(t *testing.T) {
 // the plan, while its listener claims the one unbracketed socket key a managed
 // service on the same address and port claims, so the two conflict.
 func TestAnIPv6ControllerIsBracketedAndClaimsTheSharedSocketKey(t *testing.T) {
-	defaults := provider().Spec().Get("libvirt", "bmcEmulationDefaults").With("bindAddress", api.StringValue("fd00::1"))
-	listener := provider(field("libvirt", provider().Spec().Get("libvirt").With("bmcEmulationDefaults", defaults)))
+	defaults := provider().Spec().Get("libvirt", "bmcEmulation").With("bindAddress", api.StringValue("fd00::1"))
+	listener := provider(field("libvirt", provider().Spec().Get("libvirt").With("bmcEmulation", defaults)))
 	requests, err := MachineRequests(catalogOf(controller(), listener, networkConfig(), guest("rhel-01")), "controller", testContext)
 	if err != nil || len(requests) != 1 {
 		t.Fatalf("requests = %d (%v)", len(requests), err)
@@ -321,7 +321,7 @@ func TestProvidedMachinesAreNeverRealized(t *testing.T) {
 }
 
 func TestSelectionRefusesWhatItCannotDerive(t *testing.T) {
-	noProfile := guest("rhel-01", field("substrate", api.MapValue(text("providerRef", "lab-libvirt"), text("profileRef", "absent"))))
+	noProfile := guest("rhel-01", field("substrate", api.MapValue(text("providerRef", "lab-libvirt"), field("libvirt", api.MapValue(text("profileRef", "absent"))))))
 	noAttachment := guest("rhel-01", field("network", guest("rhel-01").Spec().Get("network").With("attachmentRef", api.StringValue("absent"))))
 	for name, test := range map[string]struct {
 		catalog api.Catalog
@@ -382,18 +382,18 @@ func TestAWildcardControllerAddressRefuses(t *testing.T) {
 		"fd00::1%eth0": false, "ff02::1": false, "224.0.0.1": false, "255.255.255.255": false, "2001:DB8::1": false,
 		"192.0.2.1": true, "127.0.0.1": true, "169.254.1.1": true, "2001:db8::1": true, "::1": true,
 	} {
-		defaults := provider().Spec().Get("libvirt", "bmcEmulationDefaults").With("bindAddress", api.StringValue(address))
-		listener := provider(field("libvirt", provider().Spec().Get("libvirt").With("bmcEmulationDefaults", defaults)))
+		defaults := provider().Spec().Get("libvirt", "bmcEmulation").With("bindAddress", api.StringValue(address))
+		listener := provider(field("libvirt", provider().Spec().Get("libvirt").With("bmcEmulation", defaults)))
 		if unsupported := lifecycle.Identities(Refusals(catalogOf(controller(), listener))); slices.Contains(unsupported, "InfraProvider/lab-libvirt") == nameable {
 			t.Fatalf("%q: nameable = %v, unsupported = %v", address, nameable, unsupported)
 		}
 	}
-	defaults := provider().Spec().Get("libvirt", "bmcEmulationDefaults").With("bindAddress", api.StringValue("0.0.0.0"))
-	listener := provider(field("libvirt", provider().Spec().Get("libvirt").With("bmcEmulationDefaults", defaults)))
+	defaults := provider().Spec().Get("libvirt", "bmcEmulation").With("bindAddress", api.StringValue("0.0.0.0"))
+	listener := provider(field("libvirt", provider().Spec().Get("libvirt").With("bmcEmulation", defaults)))
 	want := []lifecycle.Refusal{{
 		Kind: "InfraProvider", Name: "lab-libvirt",
-		Reason:      "an emulated BMC listens on one unicast address its controller endpoints can name, and this provider's bindAddress is not one",
-		Remediation: "set spec.libvirt.bmcEmulationDefaults.bindAddress on InfraProvider/lab-libvirt to one unicast host address",
+		Reason:      "an emulated BMC listens on one unicast address its Machines' BMC endpoints can name, and this provider's bindAddress is not one",
+		Remediation: "set spec.libvirt.bmcEmulation.bindAddress on InfraProvider/lab-libvirt to one unicast host address",
 	}}
 	if refused := Refusals(catalogOf(controller(), listener)); !slices.Equal(refused, want) {
 		t.Fatalf("refusals = %+v, want %+v", refused, want)

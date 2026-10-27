@@ -126,7 +126,7 @@ func clusterFixture() api.Object {
 	network := func(name, vlan string) api.Value {
 		return mapping(field("name", text(name)), field("topology", text("Localnet")), field("uplink", mapping(field("interface", text("eth1")), field("bridge", text("br-tenant")))), field("vlan", api.IntegerValue(vlan)), field("ipam", mapping(field("mode", text("Disabled")))), field("namespaceSelector", mapping(field("matchLabels", mapping(field("tenant", text(name)))))))
 	}
-	return api.NewObject(api.ContainerCluster, "cluster", mapping(), mapping(field("distribution", mapping(field("release", mapping(field("version", text("4.21.15")))))), field("nodes", api.ListValue(mapping(field("name", text("node-a")), field("machineRef", text("machine-a"))), mapping(field("name", text("node-b")), field("machineRef", text("machine-b"))))), field("networking", mapping(field("secondaryNetworks", api.ListValue(network("tenant-a", "10"), network("tenant-b", "20")))))))
+	return api.NewObject(api.OpenShiftCluster, "cluster", mapping(), mapping(field("distribution", mapping(field("release", mapping(field("version", text("4.21.15")))))), field("nodes", api.ListValue(mapping(field("name", text("node-a")), field("machineRef", text("machine-a"))), mapping(field("name", text("node-b")), field("machineRef", text("machine-b"))))), field("networking", mapping(field("secondaryNetworks", api.ListValue(network("tenant-a", "10"), network("tenant-b", "20")))))))
 }
 func TestNetworkRequestGolden(t *testing.T) {
 	request, err := renderRequest(clusterFixture(), "controller")

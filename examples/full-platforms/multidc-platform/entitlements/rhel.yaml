@@ -4,7 +4,7 @@ metadata:
   name: rhel-satellite
 
 spec:
-  type: redhat-rhel
+  type: redhatRhel
 
   rhsm:
     management: managed

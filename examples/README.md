@@ -12,27 +12,27 @@ validate or import that directory, rather than its category or all of
 | `machines/` | [lab-baremetal-substrate](machines/lab-baremetal-substrate/README.md) | Create an installer-provisioned guest with a CA-issued emulated BMC for a separately owned physical-install rehearsal. |
 | `machines/` | [lab-baremetal](machines/lab-baremetal/README.md) | Install RHEL on one physical server through its Redfish BMC. |
 | `machines/` | [libvirt-network-variants](machines/libvirt-network-variants/README.md) | Install three libvirt guests over bond, VLAN and VLAN-over-bond install interfaces and converge each to its declared network. |
-| `infra-components/` | [lab-services](infra-components/lab-services/README.md) | Run managed proxy, DNS, NTP and artifact services on the controller. |
-| `storage-clusters/` | [physical-3-nodes-ceph](storage-clusters/physical-3-nodes-ceph/README.md) | Managed physical hosts, explicit WWN disk binding and opt-in verified logical overwrite before claim release. |
-| `storage-clusters/` | [libvirt-5-nodes-ceph-nvmeof](storage-clusters/libvirt-5-nodes-ceph-nvmeof/README.md) | Five storage nodes, two NVMe-oF gateways, an owned RBD namespace and explicit host NQN authorization. |
-| `storage-clusters/` | [libvirt-2x4-nodes-ceph-multisite](storage-clusters/libvirt-2x4-nodes-ceph-multisite/README.md) | Two managed four-host clusters with one-way RBD mirroring and local MDS/RGW. |
-| `storage-clusters/` | [libvirt-6-nodes-ceph-pools](storage-clusters/libvirt-6-nodes-ceph-pools/README.md) | P1: six hosts, twelve encrypted SSD/HDD OSDs with SSD DB and a TPM2 variant, replicated and EC pools, owned RBD images and an acceptance runbook. |
-| `storage-clusters/` | [libvirt-3-nodes-ceph](storage-clusters/libvirt-3-nodes-ceph/README.md) | Install three RHEL guests and a core IBM Ceph cluster with an RBD pool and client. |
-| `storage-clusters/` | [libvirt-3-nodes-ceph-block-file](storage-clusters/libvirt-3-nodes-ceph-block-file/README.md) | Install three RHEL guests and an IBM Ceph cluster with a placement policy, an RBD image, a CephFS filesystem with an active and a standby MDS, a subvolume group and a subvolume, with block and file data and MDS failover checks. |
-| `storage-clusters/` | [libvirt-3-nodes-ceph-object](storage-clusters/libvirt-3-nodes-ceph-object/README.md) | Install three RHEL guests and an IBM Ceph cluster with an object gateway: its realm, zone group, zone, zone pools and two RGW daemons that serve its TLS endpoint, with certificate-name and daemon failover checks. |
-| `storage-clusters/` | [libvirt-3-nodes-ceph-nfs](storage-clusters/libvirt-3-nodes-ceph-nfs/README.md) | Install three RHEL guests and an IBM Ceph cluster with a CephFS subvolume served by one NFSv4 export of a direct NFS service, with allowed and denied client checks. |
-| `storage-clusters/` | [libvirt-4-nodes-ceph-observability](storage-clusters/libvirt-4-nodes-ceph-observability/README.md) | P3: four guests with monitoring, management gateway, OAuth2, SNMPv3 and log collection. |
-| `storage-clusters/` | [libvirt-3-nodes-ceph-host-variants](storage-clusters/libvirt-3-nodes-ceph-host-variants/README.md) | P5: bonded VLAN networking, managed RHSM, FIPS, AES CephX and TPM2-encrypted root with recovery. |
-| `storage-clusters/` | [libvirt-3-nodes-ceph-disconnected](storage-clusters/libvirt-3-nodes-ceph-disconnected/README.md) | P6: consume an operator-prepared mirror for every package and image, with monitoring, ingress, isolated networking and an acceptance runbook. |
-| `storage-clusters/` | [libvirt-6-nodes-ceph-services](storage-clusters/libvirt-6-nodes-ceph-services/README.md) | P2: six storage guests and an independent client allocation, CephFS layouts, TLS RGW ingress, multi-active NFS and clustered SMB. |
-| `container-clusters/` | [lab-sno](container-clusters/lab-sno/README.md) | Install single-node OpenShift on a libvirt guest. |
-| `container-clusters/` | [lab-compact](container-clusters/lab-compact/README.md) | Install compact OpenShift on three libvirt masters with installer-owned virtual IPs. |
-| `container-clusters/` | [lab-anysize](container-clusters/lab-anysize/README.md) | Prepare the bonded ten-node OpenShift acceptance topology. |
-| `container-clusters/` | [lab-features](container-clusters/lab-features/README.md) | Prepare TPM2 encryption, proxy and external mirror acceptance. |
-| `container-clusters/` | [lab-features-ipv6](container-clusters/lab-features-ipv6/README.md) | Prepare the IPv6-only installation-feature variant. |
-| `container-clusters/` | [lab-networks](container-clusters/lab-networks/README.md) | Prepare localnet secondary networking and two MetalLB pool paths. |
-| `container-clusters/` | [lab-kubevirt](container-clusters/lab-kubevirt/README.md) | Prepare three OpenShift masters on an existing virtualization host with external endpoints and private pushed media; planning refuses the KubeVirt provider until [B87](../specs/milestones/m1.md#b87). |
-| `container-clusters/` | [lab-physical](container-clusters/lab-physical/README.md) | Prepare five physical OpenShift targets with verified private media delivery. |
+| `infrastructure-services/` | [lab-services](infrastructure-services/lab-services/README.md) | Run managed proxy, DNS, NTP and artifact services on the controller. |
+| `ceph-clusters/` | [physical-3-nodes-ceph](ceph-clusters/physical-3-nodes-ceph/README.md) | Managed physical hosts, explicit WWN disk binding and opt-in verified logical overwrite before claim release. |
+| `ceph-clusters/` | [libvirt-5-nodes-ceph-nvmeof](ceph-clusters/libvirt-5-nodes-ceph-nvmeof/README.md) | Five storage nodes, two NVMe-oF gateways, an owned RBD namespace and explicit host NQN authorization. |
+| `ceph-clusters/` | [libvirt-2x4-nodes-ceph-multisite](ceph-clusters/libvirt-2x4-nodes-ceph-multisite/README.md) | Two managed four-host clusters with one-way RBD mirroring and local MDS/RGW. |
+| `ceph-clusters/` | [libvirt-6-nodes-ceph-pools](ceph-clusters/libvirt-6-nodes-ceph-pools/README.md) | P1: six hosts, twelve encrypted SSD/HDD OSDs with SSD DB and a TPM2 variant, replicated and EC pools, owned RBD images and an acceptance runbook. |
+| `ceph-clusters/` | [libvirt-3-nodes-ceph](ceph-clusters/libvirt-3-nodes-ceph/README.md) | Install three RHEL guests and a core IBM Ceph cluster with an RBD pool and client. |
+| `ceph-clusters/` | [libvirt-3-nodes-ceph-block-file](ceph-clusters/libvirt-3-nodes-ceph-block-file/README.md) | Install three RHEL guests and an IBM Ceph cluster with a placement policy, an RBD image, a CephFS filesystem with an active and a standby MDS, a subvolume group and a subvolume, with block and file data and MDS failover checks. |
+| `ceph-clusters/` | [libvirt-3-nodes-ceph-object](ceph-clusters/libvirt-3-nodes-ceph-object/README.md) | Install three RHEL guests and an IBM Ceph cluster with an object gateway: its realm, zone group, zone, zone pools and two RGW daemons that serve its TLS endpoint, with certificate-name and daemon failover checks. |
+| `ceph-clusters/` | [libvirt-3-nodes-ceph-nfs](ceph-clusters/libvirt-3-nodes-ceph-nfs/README.md) | Install three RHEL guests and an IBM Ceph cluster with a CephFS subvolume served by one NFSv4 export of a direct NFS service, with allowed and denied client checks. |
+| `ceph-clusters/` | [libvirt-4-nodes-ceph-observability](ceph-clusters/libvirt-4-nodes-ceph-observability/README.md) | P3: four guests with monitoring, management gateway, OAuth2, SNMPv3 and log collection. |
+| `ceph-clusters/` | [libvirt-3-nodes-ceph-host-variants](ceph-clusters/libvirt-3-nodes-ceph-host-variants/README.md) | P5: bonded VLAN networking, managed RHSM, FIPS, AES CephX and TPM2-encrypted root with recovery. |
+| `ceph-clusters/` | [libvirt-3-nodes-ceph-disconnected](ceph-clusters/libvirt-3-nodes-ceph-disconnected/README.md) | P6: consume an operator-prepared mirror for every package and image, with monitoring, ingress, isolated networking and an acceptance runbook. |
+| `ceph-clusters/` | [libvirt-6-nodes-ceph-services](ceph-clusters/libvirt-6-nodes-ceph-services/README.md) | P2: six storage guests and an independent client allocation, CephFS layouts, TLS RGW ingress, multi-active NFS and clustered SMB. |
+| `openshift-clusters/` | [lab-sno](openshift-clusters/lab-sno/README.md) | Install single-node OpenShift on a libvirt guest. |
+| `openshift-clusters/` | [lab-compact](openshift-clusters/lab-compact/README.md) | Install compact OpenShift on three libvirt masters with installer-owned virtual IPs. |
+| `openshift-clusters/` | [lab-anysize](openshift-clusters/lab-anysize/README.md) | Prepare the bonded ten-node OpenShift acceptance topology. |
+| `openshift-clusters/` | [lab-features](openshift-clusters/lab-features/README.md) | Prepare TPM2 encryption, proxy and external mirror acceptance. |
+| `openshift-clusters/` | [lab-features-ipv6](openshift-clusters/lab-features-ipv6/README.md) | Prepare the IPv6-only installation-feature variant. |
+| `openshift-clusters/` | [lab-networks](openshift-clusters/lab-networks/README.md) | Prepare localnet secondary networking and two MetalLB pool paths. |
+| `openshift-clusters/` | [lab-kubevirt-external](openshift-clusters/lab-kubevirt-external/README.md) | Prepare three OpenShift control-plane nodes on an existing virtualization host with external endpoints and private pushed media (the coverage variant lab-kubevirt-external); planning refuses the KubeVirt provider until [B87](../specs/milestones/m1.md#b87). |
+| `openshift-clusters/` | [lab-physical](openshift-clusters/lab-physical/README.md) | Prepare five physical OpenShift targets with verified private media delivery. |
 | `add-ons/` | [lab-sno-nmstate](add-ons/lab-sno-nmstate/README.md) | Install the Kubernetes NMState Operator on single-node OpenShift. |
 | `add-ons/` | [lab-sno-metallb](add-ons/lab-sno-metallb/README.md) | Install MetalLB and an eight-address layer 2 pool on single-node OpenShift. |
 | `add-ons/` | [lab-compact-hub](add-ons/lab-compact-hub/README.md) | Install pinned ACM and OpenShift GitOps with a bootstrap Application on a compact cluster. |
@@ -44,8 +44,8 @@ outcome; "Prepare" describes a synthetic preparation profile that claims no live
 run or owner acceptance. The row states the outcome only. Each README states its
 qualification limits, and [milestones](../specs/milestones.md) and the
 [acceptance ledger](../docs/acceptance.md) own delivery and acceptance status.
-The [Ceph profile catalog](../specs/storage-coverage.md#profile-catalog) defines
-the `storage-clusters/` profiles, each with the runbook sections that page
+The [Ceph profile catalog](../specs/ceph-coverage.md#profile-catalog) defines
+the `ceph-clusters/` profiles, each with the runbook sections that page
 requires.
 
 Machine and cluster examples include the infrastructure they need. There is no

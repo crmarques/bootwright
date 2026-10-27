@@ -93,7 +93,7 @@ func TestAuthoredKickstartValuesAreRefusedBeforePlan(t *testing.T) {
 		"an NMState interface holding a directive": {[]exampleEdit{{"infra/networkconfigs/lab-guests.yaml", "- name: enp1s0", `- name: "enp1s0\nnetwork --bootproto=dhcp"`}, withAddressInterface},
 			"api.value", "NetworkConfig/lab-guests", "$.spec.nmstate.interfaces[0].name"},
 		"an address interface holding a directive": {[]exampleEdit{{"infra/networkconfigs/lab-guests.yaml", "- name: enp1s0", `- name: "enp1s0\nnetwork --bootproto=dhcp"`}, withAddressInterface},
-			"api.value", "Machine/rhel-01", "$.spec.network.addresses[1].interface"},
+			"api.value", "Machine/rhel-01", "$.spec.network.addresses[0].interface"},
 	}
 	for name, test := range cases {
 		t.Run(name, func(t *testing.T) {
@@ -153,11 +153,11 @@ func TestALibvirtProviderConnectsOnlyToTheLocalSystemDaemon(t *testing.T) {
 		"qemu:///session",
 	} {
 		t.Run(uri, func(t *testing.T) {
-			edit := exampleEdit{"infra/providers/lab-libvirt.yaml", "uri: qemu:///system", "uri: \"" + uri + "\""}
+			edit := exampleEdit{"infra/providers/lab-libvirt.yaml", "    machineRef: controller\n", "    machineRef: controller\n    uri: \"" + uri + "\"\n"}
 			requireRefusal(t, editedExample(t, "lab-rhel", edit), "api.value", "InfraProvider/lab-libvirt", "$.spec.libvirt.uri")
 		})
 	}
-	compileAcceptance(t, editedExample(t, "lab-rhel", exampleEdit{"infra/providers/lab-libvirt.yaml", "uri: qemu:///system", `uri: "qemu:///system"`}))
+	compileAcceptance(t, editedExample(t, "lab-rhel", exampleEdit{"infra/providers/lab-libvirt.yaml", "    machineRef: controller\n", "    machineRef: controller\n    uri: \"qemu:///system\"\n"}))
 }
 
 // A bare-metal host key that is also the fleet key would let every holder of

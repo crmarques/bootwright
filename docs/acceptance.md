@@ -72,13 +72,13 @@ with `--set DEFAULT`, around the Redfish check.
 ## Ceph matrix row
 
 [B484](../specs/milestones/m2.md#b484)'s owner gate is one row per profile of
-the [profile catalog](../specs/storage-coverage.md#profile-catalog), each on a
+the [profile catalog](../specs/ceph-coverage.md#profile-catalog), each on a
 clean build that descends from B484's acceptance baseline. The run follows
 the profile README's runbook. Copy this template into the ledger and replace
 every `<...>`:
 
 ```text
-| <YYYY-MM-DD> | Commit <sha>; Source clean | Retained locally | examples/storage-clusters/<profile directory> (<profile ID>) with the lab conventions only | Retained locally | <profile ID> matrix qualification: <the families, failover, interruption, replay, changed intent and removal the row accepts> | Retained locally | observation, not acceptance |
+| <YYYY-MM-DD> | Commit <sha>; Source clean | Retained locally | examples/ceph-clusters/<profile directory> (<profile ID>) with the lab conventions only | Retained locally | <profile ID> matrix qualification: <the families, failover, interruption, replay, changed intent and removal the row accepts> | Retained locally | observation, not acceptance |
 ```
 
 The locally retained evidence records the host, the command sequence, each

@@ -123,7 +123,7 @@ var conflictKinds = map[string]api.Kind{
 	"dns":                   api.DNSServer,
 	"ntp":                   api.NTPServer,
 	"artifact-server":       api.ArtifactServer,
-	"cluster-media":         api.ContainerCluster,
+	"cluster-media":         api.OpenShiftCluster,
 }
 
 // ConflictDiagnostic names the holding context, the key it holds, the holder's
@@ -191,11 +191,11 @@ func conflictField(wanted HostReservation, class string) string {
 	case class == "socket" && wanted.Kind == "artifact-server":
 		return ", or change spec.bindAddress or a spec.listeners[].port on " + object
 	case class == "socket" && wanted.Kind == "substrate-machine":
-		return ", or change spec.libvirt.bmcEmulationDefaults.bindAddress or spec.libvirt.bmcEmulationDefaults.port on the InfraProvider of " + object
+		return ", or change spec.libvirt.bmcEmulation.bindAddress or spec.libvirt.bmcEmulation.port on the InfraProvider of " + object
 	case class == "bridge" && wanted.Kind == "substrate-host":
 		return ", or change spec.networkAttachments[].libvirt.bridge on " + object
 	case class == "bmc" && wanted.Kind == "substrate-physical":
-		return ", or change spec.hardware.management.bmc.address on " + object
+		return ", or change spec.substrate.baremetal.bmc.address on " + object
 	case class == "prefix" && wanted.Kind == "substrate-host":
 		return ", or change spec.networkAttachments[].libvirt.address on " + object
 	}

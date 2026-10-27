@@ -4,9 +4,9 @@ How the MetalLB Operator installs, what makes its address pools answer, and
 what it can never serve. The MetalLB package and its pool configuration are
 [B727](../../specs/milestones/m4.md#b727) on M4, with
 [B83](../../specs/milestones/m4.md#b83) and
-[B84](../../specs/milestones/m4.md#b84), never the ContainerCluster's. The
+[B84](../../specs/milestones/m4.md#b84), never the OpenShiftCluster's. The
 cluster's endpoints are owned by
-[container clusters](../../specs/container-clusters.md).
+[container clusters](../../specs/openshift-clusters.md).
 
 Provenance: `R4:C<n>` is a claim id of the M3 research (not the M4 research
 that uses the same labels on the ACM and GitOps pages), `RV` marks a claim the
@@ -84,7 +84,7 @@ check, so it installs on platform `none` (R4:C22, medium confidence).
   applies to every pool (R4:C12).
 - OVN-Kubernetes moves the install interface into `br-ex`, so an advertisement
   that names the install interface does not match. Pools on the machine network
-  therefore omit `interfaces` ([container clusters](../../specs/container-clusters.md),
+  therefore omit `interfaces` ([container clusters](../../specs/openshift-clusters.md),
   node networking; an inference that
   [B729](../../specs/milestones/m3.md#b729) re-verifies).
 - An interface enslaved to an OVS bridge as a localnet uplink carries no host

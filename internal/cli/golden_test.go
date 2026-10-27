@@ -236,14 +236,14 @@ func cliGoldens() []cliGolden {
 	excluded := diagnostic{
 		Severity: "warning", Code: "api.selection", Message: "cluster root is excluded by the Environment selection",
 		Source: &diagnostics.SourceLocation{Path: "clusters/ocp-02/cluster.yaml", Document: 1, Line: 4, Column: 9},
-		Object: &diagnostics.ObjectIdentity{APIVersion: "bootwright.io/v1alpha1", Kind: "ContainerCluster", Name: "ocp-02"},
+		Object: &diagnostics.ObjectIdentity{APIVersion: "bootwright.io/v1alpha1", Kind: "OpenShiftCluster", Name: "ocp-02"},
 		Field:  "$.metadata.name", Remediation: "include the cluster in the matching Environment root selection",
 	}
 	blocks := func(last string) []lifecycle.BlockResult {
 		return []lifecycle.BlockResult{
-			{ID: "artifact-server-lab-artifacts", Description: "serve artifacts for lab-artifacts on controller", Stage: "infra-components", State: "done"},
+			{ID: "artifact-server-lab-artifacts", Description: "serve artifacts for lab-artifacts on controller", Stage: "infrastructure-services", State: "done"},
 			{ID: "substrate-host-lab-libvirt", Description: "realize the libvirt host of lab-libvirt on controller", Stage: "substrates", State: "done"},
-			{ID: "machine-rhel-01", Description: "realize the virtual machine rhel-01 and its controller", Stage: "machines", State: last},
+			{ID: "machine-rhel-01", Description: "realize the virtual machine rhel-01 and its emulated BMC", Stage: "machines", State: last},
 			{ID: "os-install-rhel-01", Description: "install the operating system of rhel-01", Stage: "machines", State: "pending"},
 		}
 	}
@@ -272,7 +272,7 @@ func cliGoldens() []cliGolden {
 		// failed proxy block reads its service failed, the cluster no block
 		// names reads pending, and one binding covers the three Secrets.
 		attempted := slices.Insert(blocks("failed"), 1, lifecycle.BlockResult{
-			ID: "proxy-lab-proxy", Description: "proxy egress for lab-proxy on controller", Stage: "infra-components", State: "failed",
+			ID: "proxy-lab-proxy", Description: "proxy egress for lab-proxy on controller", Stage: "infrastructure-services", State: "failed",
 		})
 		for index, attempts := range []int{1, 1, 1, 2, 0} {
 			attempted[index].Attempts = attempts
@@ -281,10 +281,10 @@ func cliGoldens() []cliGolden {
 			Context:     lifecycle.ContextIdentity{Name: "lab", Revision: revision, Mode: "ready"},
 			SetupChecks: []lifecycle.SetupCheck{{ID: "controller-binding", Status: "ready"}, {ID: "execution-bundle", Status: "ready"}},
 			Desired:     lifecycle.DesiredSummary{Revision: revision, Environment: "lab-rhel", Files: 14, Objects: 14},
-			Clusters:    []lifecycle.ClusterSummary{{Name: "ocp-01", Kind: "ContainerCluster", Status: lifecycle.RealizationPending}},
-			StorageClusters: []lifecycle.ClusterSummary{{Name: "ceph-01", Kind: "StorageCluster", Status: lifecycle.RealizationUnsupported, Resources: []lifecycle.ResourceSummary{
-				{Kind: "StoragePool", Name: "rbd", Status: lifecycle.RealizationUnsupported},
-				{Kind: "StorageClient", Name: "rbd-client", Status: lifecycle.RealizationUnsupported},
+			Clusters:    []lifecycle.ClusterSummary{{Name: "ocp-01", Kind: "OpenShiftCluster", Status: lifecycle.RealizationPending}},
+			StorageClusters: []lifecycle.ClusterSummary{{Name: "ceph-01", Kind: "CephCluster", Status: lifecycle.RealizationUnsupported, Resources: []lifecycle.ResourceSummary{
+				{Kind: "CephPool", Name: "rbd", Status: lifecycle.RealizationUnsupported},
+				{Kind: "CephClient", Name: "rbd-client", Status: lifecycle.RealizationUnsupported},
 			}}},
 			Shared: []lifecycle.ServiceSummary{
 				{Kind: "ArtifactServer", Name: "lab-artifacts", Machine: "controller", Status: lifecycle.RealizationDone},
@@ -351,16 +351,16 @@ func cliGoldens() []cliGolden {
 	destroyed := func() *lifecycle.StatusResult {
 		removed := []lifecycle.BlockResult{
 			{ID: "os-install-rhel-01", Description: "remove the installer media of rhel-01", Stage: "machines", State: "done", Attempts: 1},
-			{ID: "machine-rhel-01", Description: "remove the virtual machine rhel-01 and its controller", Stage: "machines", State: "done", Attempts: 1},
+			{ID: "machine-rhel-01", Description: "remove the virtual machine rhel-01 and its emulated BMC", Stage: "machines", State: "done", Attempts: 1},
 			{ID: "substrate-host-lab-libvirt", Description: "remove the networks and virtual-media pool of lab-libvirt from controller", Stage: "substrates", State: "done", Attempts: 1},
-			{ID: "artifact-server-lab-artifacts", Description: "remove the artifact server lab-artifacts from controller", Stage: "infra-components", State: "done", Attempts: 1},
+			{ID: "artifact-server-lab-artifacts", Description: "remove the artifact server lab-artifacts from controller", Stage: "infrastructure-services", State: "done", Attempts: 1},
 		}
 		return &lifecycle.StatusResult{
 			Context:         lifecycle.ContextIdentity{Name: "lab", Revision: revision, Mode: "ready"},
 			SetupChecks:     []lifecycle.SetupCheck{{ID: "controller-binding", Status: "ready"}, {ID: "execution-bundle", Status: "ready"}},
 			Desired:         lifecycle.DesiredSummary{Revision: revision, Environment: "lab-rhel", Files: 14, Objects: 14},
-			Clusters:        []lifecycle.ClusterSummary{{Name: "ocp-01", Kind: "ContainerCluster", Status: lifecycle.RealizationPending}},
-			StorageClusters: []lifecycle.ClusterSummary{{Name: "ceph-01", Kind: "StorageCluster", Status: lifecycle.RealizationUnsupported}},
+			Clusters:        []lifecycle.ClusterSummary{{Name: "ocp-01", Kind: "OpenShiftCluster", Status: lifecycle.RealizationPending}},
+			StorageClusters: []lifecycle.ClusterSummary{{Name: "ceph-01", Kind: "CephCluster", Status: lifecycle.RealizationUnsupported}},
 			Shared: []lifecycle.ServiceSummary{
 				{Kind: "ArtifactServer", Name: "lab-artifacts", Machine: "controller", Status: lifecycle.RealizationPending},
 				{Kind: "DNSServer", Name: "lab-dns", Machine: "controller", Status: lifecycle.RealizationUnsupported},
@@ -697,27 +697,29 @@ func cliGoldens() []cliGolden {
 		// left, an apply that ran and failed, one that paused, lost an outcome
 		// or stopped running, each naming the command that continues it, and a
 		// refusal that registered nothing.
-		{golden: "cli-plan", args: "plan --stage infra-components,substrates", record: func(r *dispatchRecord) {
+		{golden: "cli-plan", args: "plan --stage infrastructure-services,substrates", record: func(r *dispatchRecord) {
 			r.result.lifecyclePlan = &lifecycle.PlanResult{
 				Context: lifecycle.ContextIdentity{Name: "lab", Revision: revision}, Verb: "apply",
 				Steps: []lifecycle.PlanStep{
-					{ID: "artifact-server-lab-artifacts", Description: "serve artifacts for lab-artifacts on controller", Stage: "infra-components", Impacts: []string{"create-container-unit", "open-listener 192.0.2.1:8443"}, State: "pending", Selection: lifecycle.StepStart, Wave: 1},
+					{ID: "artifact-server-lab-artifacts", Description: "serve artifacts for lab-artifacts on controller", Stage: "infrastructure-services", Impacts: []string{"create-container-unit", "open-listener 192.0.2.1:8443"}, State: "pending", Selection: lifecycle.StepStart, Wave: 1},
 					{ID: "substrate-host-lab-libvirt", Description: "realize the libvirt host of lab-libvirt on controller", Stage: "substrates", Impacts: []string{"create-libvirt-pool lab-libvirt", "create-libvirt-network lab"}, State: "pending", Selection: lifecycle.StepStart, After: []int{1}, Wave: 2},
 					{ID: "os-install-metal-01", Description: "install the operating system of metal-01", Stage: "machines", Impacts: []string{"install-operating-system metal-01", "power-on metal-01"}, State: "pending", Selection: lifecycle.StepNotSelected, After: []int{1}, Wave: 2, Consumes: []string{"data-loss"}},
-					{ID: "machine-rhel-01", Description: "realize the virtual machine rhel-01 and its controller", Stage: "machines", Impacts: []string{"create-libvirt-domain rhel-01"}, State: "pending", Selection: lifecycle.StepNotSelected, After: []int{2}, Wave: 3},
+					{ID: "machine-rhel-01", Description: "realize the virtual machine rhel-01 and its emulated BMC", Stage: "machines", Impacts: []string{"create-libvirt-domain rhel-01"}, State: "pending", Selection: lifecycle.StepNotSelected, After: []int{2}, Wave: 3},
 					{ID: "os-install-rhel-01", Description: "install the operating system of rhel-01", Stage: "machines", Impacts: []string{"power-on rhel-01"}, State: "pending", Selection: lifecycle.StepWaiting, WaitsOn: "machine-rhel-01", After: []int{4}, Wave: 4},
 				},
-				Stages: []string{"infra-components", "substrates"}, Waves: 4, Widest: 2, Bound: 1, Startable: 2, Deferred: 3,
+				Stages: []string{"infrastructure-services", "substrates"}, Waves: 4, Widest: 2, Bound: 1, Startable: 2, Deferred: 3,
 				Receipt: lifecycle.Receipt{Operation: "none", Verb: "plan", State: "preview", Next: "apply"},
 			}
 		}},
+		{golden: "cli-plan-until", args: "plan --until lab.gitops", record: func(r *dispatchRecord) { r.result.lifecyclePlan = untilPlanFixture(revision) }},
+		{golden: "cli-plan-until-json", args: "plan --until lab.gitops --output json", record: func(r *dispatchRecord) { r.result.lifecyclePlan = untilPlanFixture(revision) }},
 		{golden: "cli-plan-firewall", args: "plan", record: func(r *dispatchRecord) { r.result.lifecyclePlan = firewallPlanFixture() }},
 		{golden: "cli-plan-firewall-json", args: "plan --output json", record: func(r *dispatchRecord) { r.result.lifecyclePlan = firewallPlanFixture() }},
 		{golden: "cli-plan-finalization", args: "plan", record: func(r *dispatchRecord) {
 			r.result.lifecyclePlan = &lifecycle.PlanResult{
 				Context: lifecycle.ContextIdentity{Name: "lab", Revision: revision}, Verb: "apply",
 				Steps: []lifecycle.PlanStep{
-					{ID: "artifact-server-lab-artifacts", Description: "serve artifacts for lab-artifacts on controller", Stage: "infra-components", Impacts: []string{"create-container-unit"}, State: "done", Wave: 1},
+					{ID: "artifact-server-lab-artifacts", Description: "serve artifacts for lab-artifacts on controller", Stage: "infrastructure-services", Impacts: []string{"create-container-unit"}, State: "done", Wave: 1},
 					{ID: "substrate-host-lab-libvirt", Description: "realize the libvirt host of lab-libvirt on controller", Stage: "substrates", Impacts: []string{"create-libvirt-pool lab-libvirt"}, State: "done", After: []int{1}, Wave: 2},
 					{ID: "os-installation-rhel-01", Description: "install the operating system of rhel-01", Stage: "machines", Impacts: []string{"install-operating-system rhel-01"}, Consumes: []string{"data-loss"}, State: "done", After: []int{2}, Wave: 3},
 				},
@@ -732,7 +734,7 @@ func cliGoldens() []cliGolden {
 			r.result.lifecyclePlan = &lifecycle.PlanResult{
 				Context: lifecycle.ContextIdentity{Name: "lab", Revision: revision}, Verb: "apply",
 				Steps: []lifecycle.PlanStep{
-					{ID: "artifact-server-lab-artifacts", Description: "serve artifacts for lab-artifacts on controller", Stage: "infra-components", Impacts: []string{"create-container-unit"}, State: "done", Wave: 1},
+					{ID: "artifact-server-lab-artifacts", Description: "serve artifacts for lab-artifacts on controller", Stage: "infrastructure-services", Impacts: []string{"create-container-unit"}, State: "done", Wave: 1},
 					{ID: "substrate-host-lab-libvirt", Description: "realize the libvirt host of lab-libvirt on controller", Stage: "substrates", Impacts: []string{"create-libvirt-pool lab-libvirt"}, State: "failed", After: []int{1}, Wave: 2},
 					{ID: "os-installation-rhel-01", Description: "install the operating system of rhel-01", Stage: "machines", Impacts: []string{"install-operating-system rhel-01"}, State: "pending", After: []int{2}, Wave: 3},
 				},
@@ -771,7 +773,7 @@ func cliGoldens() []cliGolden {
 				"    the apply did not complete\n" +
 				"    Next: continue it with bootwright apply --context lab\n",
 		},
-		{golden: "cli-apply-paused", args: "apply --yes --stage infra-components,substrates", record: func(r *dispatchRecord) { r.result.lifecycleOperation = operation("paused") }},
+		{golden: "cli-apply-paused", args: "apply --yes --stage infrastructure-services,substrates", record: func(r *dispatchRecord) { r.result.lifecycleOperation = operation("paused") }},
 		{
 			golden: "cli-apply-unknown", args: "apply --yes", code: 1,
 			record: func(r *dispatchRecord) {
@@ -822,7 +824,7 @@ func cliGoldens() []cliGolden {
 		// envelope's diagnostics in JSON; a failed validate has no result.
 		{
 			golden: "cli-validate", args: "validate -f inputs", record: func(r *dispatchRecord) { r.report = validation() },
-			stderr: "  warning  ContainerCluster/ocp-02\n" +
+			stderr: "  warning  OpenShiftCluster/ocp-02\n" +
 				"    api.selection\n" +
 				"    clusters/ocp-02/cluster.yaml:4:9\n" +
 				"    cluster root is excluded by the Environment selection\n" +
@@ -947,8 +949,8 @@ func cliGoldens() []cliGolden {
 		{
 			args: "cluster kubeconfig --name ceph", code: 1, record: func(r *dispatchRecord) { r.err = kubeconfigNotApplicable },
 			stderr: "  error  cluster.not-applicable\n" +
-				"    bootwright cluster kubeconfig does not apply to ceph, a managed Ceph StorageCluster; it\n" +
-				"    applies to OpenShift and OKD ContainerClusters only\n" +
+				"    bootwright cluster kubeconfig does not apply to ceph, a managed CephCluster; it applies to\n" +
+				"    OpenShiftClusters only\n" +
 				"    Next: bootwright cluster info --context lab lists the clusters this context selects and\n" +
 				"    their kinds\n",
 		},
@@ -1083,7 +1085,7 @@ var unstoredSecret = &diagnostics.Failure{Diagnostics: []diagnostics.Diagnostic{
 }}}
 
 var kubeconfigNotApplicable = diagnostics.NewFailureWithRemediation("cluster.not-applicable",
-	"bootwright cluster kubeconfig does not apply to ceph, a managed Ceph StorageCluster; it applies to OpenShift and OKD ContainerClusters only", "",
+	"bootwright cluster kubeconfig does not apply to ceph, a managed CephCluster; it applies to OpenShiftClusters only", "",
 	"bootwright cluster info --context lab lists the clusters this context selects and their kinds")
 
 // An explicit sensitive result is the custody's bytes exactly: nothing is
@@ -1106,8 +1108,8 @@ func TestClusterKubeconfigWritesExactlyItsBytesOrOneDiagnostic(t *testing.T) {
 	}
 	for _, failure := range []error{
 		kubeconfigNotApplicable,
-		diagnostics.NewFailureWithRemediation("access.target", "the context lab selects no ContainerCluster named sno", "", "name a ContainerCluster this context selects"),
-		diagnostics.NewFailureWithRemediation("access.unavailable", "this context holds no administrator kubeconfig for ContainerCluster sno", "", "bootwright apply --context lab"),
+		diagnostics.NewFailureWithRemediation("access.target", "the context lab selects no OpenShiftCluster named sno", "", "name an OpenShiftCluster this context selects"),
+		diagnostics.NewFailureWithRemediation("access.unavailable", "this context holds no administrator kubeconfig for OpenShiftCluster sno", "", "bootwright apply --context lab"),
 		secretstore.Failure("store.implementation", "this context's secret store is local-keyring-v3, which this Bootwright build cannot open"),
 	} {
 		code, out, errOut := run(nil, failure)
@@ -1121,7 +1123,7 @@ func TestClusterKubeconfigWritesExactlyItsBytesOrOneDiagnostic(t *testing.T) {
 	}
 	code, out, errOut = run(&containeraccess.KubeconfigResult{Context: "lab", Cluster: "sno", Unproved: true, Material: secrets.NewMaterial(map[secrets.Part][]byte{secrets.ValuePart: []byte(kubeconfigFixture)})}, nil)
 	wantWarning := "  warning  access.unproved\n" +
-		"    the administrator kubeconfig of ContainerCluster sno was kept from an installation whose\n" +
+		"    the administrator kubeconfig of OpenShiftCluster sno was kept from an installation whose\n" +
 		"    completion was never proved, so the access it grants was not proved\n"
 	if code != 0 || out != kubeconfigFixture || errOut != wantWarning {
 		t.Fatalf("an unproved kubeconfig exited %d with %q and standard error %q, want its bytes and one warning", code, out, errOut)
@@ -1347,4 +1349,16 @@ func unfinishedContexts(r *dispatchRecord) {
 
 func rebound(r *dispatchRecord) {
 	r.result.rebind = &prerequisites.RebindResult{Outcome: "rebound", Bindings: 2, Reservations: 5}
+}
+
+func untilPlanFixture(revision string) *lifecycle.PlanResult {
+	return &lifecycle.PlanResult{
+		Context: lifecycle.ContextIdentity{Name: "lab", Revision: revision}, Verb: "apply",
+		Steps: []lifecycle.PlanStep{
+			{ID: "addon-gitops-lab", Description: "install add-on gitops on lab", Kind: "ClusterAddonBinding", Object: "lab.gitops", Stage: "add-ons", Impacts: []string{"install-addon gitops lab"}, State: "pending", Selection: lifecycle.StepStart, Wave: 1},
+			{ID: "addon-logging-lab", Description: "install add-on logging on lab", Kind: "ClusterAddonBinding", Object: "lab.logging", Stage: "add-ons", Impacts: []string{"install-addon logging lab"}, State: "pending", Selection: lifecycle.StepNotSelected, After: []int{1}, Wave: 2},
+		},
+		Until: "lab.gitops", Waves: 2, Widest: 1, Bound: 1, Startable: 1, Deferred: 1,
+		Receipt: lifecycle.Receipt{Operation: "none", Verb: "plan", State: "preview", Next: "apply"},
+	}
 }

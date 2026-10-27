@@ -1,10 +1,10 @@
 # OVN-Kubernetes localnet secondary networks
 
 How a localnet ClusterUserDefinedNetwork (CUDN) reaches an external network
-and what fails when it does not. [Container clusters](../../specs/container-clusters.md)
+and what fails when it does not. [Container clusters](../../specs/openshift-clusters.md)
 owns the required behavior; this page records native facts for
 [B726](../../specs/milestones/m3.md#b726), the secondary networks of a
-ContainerCluster, and
+OpenShiftCluster, and
 [B719](../../specs/milestones/m3.md#b719), which renders the install-time
 settings they depend on.
 

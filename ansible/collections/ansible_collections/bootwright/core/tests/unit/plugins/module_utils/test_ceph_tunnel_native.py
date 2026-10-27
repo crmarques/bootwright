@@ -42,13 +42,13 @@ def cluster_request():
               "user": "operator", "port": 22, "devices": [{"path": "/dev/vdb", "serial": "disk" + str(i), "sizeBytes": 1024 ** 3}],
               "labels": [], "location": {}, "sshKeyRef": "fleet-key"} for i in range(1, 4)]
     names = [host["name"] for host in hosts]
-    return {"controller": "controller", "version": "ceph-core-v32", "action": "cluster", "cluster": "example", "owner": "apply-example",
+    return {"controller": "controller", "version": "ceph-core-v33", "action": "cluster", "cluster": "example", "owner": "apply-example",
             "fsid": "4c0a4300-aa43-458c-86d7-ac2256d1fc00", "image": "registry.example.test/ceph@sha256:" + "a" * 64,
             "cephadm": {"path": "/usr/sbin/cephadm", "packageVersion": "20.2.1-405.el9cp"},
             "release": "synthetic-release", "ansiblePackageVersion": "synthetic-ansible",
             "packageRepository": "https://packages.example.test/native",
             "packageRepositoryKey": "https://packages.example.test/keys/ibm.asc", "bootstrap": "node-1", "monIP": "192.0.2.1", "clusterSSHUser": "operator",
-            "clusterSSHTransport": "verified-tunnel", "clusterKeyRef": "cluster-key", "registryRef": "registry-key",
+            "clusterSSHTransport": "verifiedTunnel", "clusterKeyRef": "cluster-key", "registryRef": "registry-key",
             "registry": "registry.example.test", "callHome": "enabled", "publicNetworks": ["192.0.2.0/24"], "clusterNetworks": [], "hosts": hosts,
             "services": [{"service_type": "mon", "placement": {"hosts": names}},
                          {"service_type": "mgr", "placement": {"hosts": names, "count": 2}},
@@ -275,7 +275,7 @@ def test_supported_transport_is_the_pinned_release_over_verified_tunnel_only(clu
 def test_remote_dispatch_refuses_an_unsupported_release_before_any_effect(cluster_request, phase):
     cluster_request["clusterSSHTransport"] = "native"
     resources = {"pool": copy.deepcopy(POOL),
-                 "client": {"name": "reader", "pool": "volumes", "access": "read-only", "dataPools": [], "filesystem": "", "group": "", "subvolume": ""},
+                 "client": {"name": "reader", "pool": "volumes", "access": "readOnly", "dataPools": [], "filesystem": "", "group": "", "subvolume": ""},
                  "policy": {"deviceClass": "", "failureDomain": "host", "name": "fast", "root": "default", "rule": "fast", "size": 2}}
     if phase in resources:
         cluster_request.update({"action": phase, phase: resources[phase]})

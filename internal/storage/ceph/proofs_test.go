@@ -20,8 +20,8 @@ func subvolumeProof(t *testing.T, name, group, path string) lifecycle.BlockEvide
 	runtime.Action, runtime.Subvolume = "subvolume", frozen.Subvolume
 	e := readyEvidence(runtime)
 	e.Resource = ResourceEvidence{ID: subvolumeID, Path: path}
-	block := reconciliation.Block{BlockDefinition: reconciliation.BlockDefinition{ID: "ceph-subvolume-" + name, Kind: string(api.StorageSubvolume), Object: "docs", Implementation: Implementation, Request: data}, RequestDigest: "digest"}
-	return lifecycle.BlockEvidence{Block: block, Kind: string(api.StorageSubvolume), Object: "docs", Implementation: Implementation, Verb: reconciliation.Apply, State: reconciliation.BlockDone, Evidence: evidenceBytes(t, e)}
+	block := reconciliation.Block{BlockDefinition: reconciliation.BlockDefinition{ID: "ceph-subvolume-" + name, Kind: string(api.CephSubvolume), Object: "docs", Implementation: Implementation, Request: data}, RequestDigest: "digest"}
+	return lifecycle.BlockEvidence{Block: block, Kind: string(api.CephSubvolume), Object: "docs", Implementation: Implementation, Verb: reconciliation.Apply, State: reconciliation.BlockDone, Evidence: evidenceBytes(t, e)}
 }
 
 func provedFails(t *testing.T, proofs []lifecycle.BlockEvidence, message, remedy string) {
@@ -37,9 +37,9 @@ func TestProvedSubvolumeDecodesOnlyOwnerEvidence(t *testing.T) {
 	if err != nil || path != exact || filesystem != "files" || group != "csi" {
 		t.Fatalf("the valid proof returned %q %q %q (%v)", path, filesystem, group, err)
 	}
-	const lacks, lacksRemedy = "StorageSubvolume docs lacks its applied creation proof", "apply StorageSubvolume docs first; a consumer binds the path its creation reported and never constructs one"
+	const lacks, lacksRemedy = "CephSubvolume docs lacks its applied creation proof", "apply CephSubvolume docs first; a consumer binds the path its creation reported and never constructs one"
 	foreignKind := valid
-	foreignKind.Kind, foreignKind.Block.Kind = string(api.StorageFilesystem), string(api.StorageFilesystem)
+	foreignKind.Kind, foreignKind.Block.Kind = string(api.CephFilesystem), string(api.CephFilesystem)
 	other := valid
 	other.Implementation, other.Block.Implementation = ImageImplementation, ImageImplementation
 	destroy := valid
@@ -51,9 +51,9 @@ func TestProvedSubvolumeDecodesOnlyOwnerEvidence(t *testing.T) {
 	}
 	provedFails(t, nil, lacks, lacksRemedy)
 	const restore = "restore the original apply evidence"
-	provedFails(t, []lifecycle.BlockEvidence{subvolumeProof(t, "docs", "csi", "/srv/docs")}, "the creation proof of StorageSubvolume docs does not prove a ready subvolume at its reported path", restore)
-	provedFails(t, []lifecycle.BlockEvidence{valid, valid}, "StorageSubvolume docs has ambiguous creation proofs", restore)
-	provedFails(t, []lifecycle.BlockEvidence{subvolumeProof(t, "notes", "csi", "/volumes/csi/notes/"+subvolumeID)}, "the creation proof of StorageSubvolume docs names another request", restore)
+	provedFails(t, []lifecycle.BlockEvidence{subvolumeProof(t, "docs", "csi", "/srv/docs")}, "the creation proof of CephSubvolume docs does not prove a ready subvolume at its reported path", restore)
+	provedFails(t, []lifecycle.BlockEvidence{valid, valid}, "CephSubvolume docs has ambiguous creation proofs", restore)
+	provedFails(t, []lifecycle.BlockEvidence{subvolumeProof(t, "notes", "csi", "/volumes/csi/notes/"+subvolumeID)}, "the creation proof of CephSubvolume docs names another request", restore)
 }
 
 func settingsProof(t *testing.T) lifecycle.BlockEvidence {
@@ -78,27 +78,27 @@ func TestProvedClusterDecodesOnlyTheCoreClusterEvidence(t *testing.T) {
 		t.Fatalf("the proved scope is %+v", scope)
 	}
 	const restore = "restore the original apply evidence"
-	const lacks, lacksRemedy = "StorageCluster example lacks its applied cluster creation proof", "apply StorageCluster example first; an SMB resource takes its cluster's FSID, bootstrap host and images only from that proof"
+	const lacks, lacksRemedy = "CephCluster example lacks its applied cluster creation proof", "apply CephCluster example first; an SMB resource takes its cluster's FSID, bootstrap host and images only from that proof"
 	fails := func(proofs []lifecycle.BlockEvidence, owner, message, remedy string) {
 		t.Helper()
 		_, err := ProvedCluster(proofs, "example", owner)
 		refusedWith(t, err, "lifecycle.state", message, remedy)
 	}
 	fails([]lifecycle.BlockEvidence{settingsProof(t), unit, image}, "apply-original", lacks, lacksRemedy)
-	fails(append(proofs, coreClusterProof(t, core, nil)), "apply-original", "StorageCluster example has ambiguous cluster creation proofs", restore)
-	fails(proofs, "apply-other", "the creation proof of StorageCluster example belongs to another operation", restore)
+	fails(append(proofs, coreClusterProof(t, core, nil)), "apply-original", "CephCluster example has ambiguous cluster creation proofs", restore)
+	fails(proofs, "apply-other", "the creation proof of CephCluster example belongs to another operation", restore)
 	unready := coreClusterProof(t, core, func(e *Evidence) { e.Ready, e.Partial = false, true })
-	fails([]lifecycle.BlockEvidence{unready, image}, "apply-original", "the creation proof of StorageCluster example does not prove a ready cluster", restore)
+	fails([]lifecycle.BlockEvidence{unready, image}, "apply-original", "the creation proof of CephCluster example does not prove a ready cluster", restore)
 	pool := coreRequest()
 	pool.Action, pool.Pool = "pool", &Pool{Name: "volumes"}
-	fails([]lifecycle.BlockEvidence{coreClusterProof(t, pool, nil), image}, "apply-original", "the creation proof of StorageCluster example names another request", restore)
+	fails([]lifecycle.BlockEvidence{coreClusterProof(t, pool, nil), image}, "apply-original", "the creation proof of CephCluster example names another request", restore)
 	lost := coreRequest()
 	lost.Bootstrap = "node-9"
-	fails([]lifecycle.BlockEvidence{coreClusterProof(t, lost, nil), image}, "apply-original", "the creation proof of StorageCluster example names no bootstrap host among its hosts", restore)
+	fails([]lifecycle.BlockEvidence{coreClusterProof(t, lost, nil), image}, "apply-original", "the creation proof of CephCluster example names no bootstrap host among its hosts", restore)
 	destroyed := coreClusterProof(t, core, nil)
 	destroyed.Verb = reconciliation.Destroy
 	other := coreClusterProof(t, core, nil)
-	other.Kind, other.Block.Kind = string(api.StoragePool), string(api.StoragePool)
+	other.Kind, other.Block.Kind = string(api.CephPool), string(api.CephPool)
 	for _, ignored := range []lifecycle.BlockEvidence{destroyed, other} {
 		fails([]lifecycle.BlockEvidence{ignored, image}, "apply-original", lacks, lacksRemedy)
 	}

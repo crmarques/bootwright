@@ -315,7 +315,7 @@ def test_matching_unbound_or_different_bound_native_private_key_refuses(native, 
 
 @pytest.mark.parametrize("stage", ["unclaimed", "claimed", "prepared", "seed", "configured", "mounted"])
 def test_coordinator_runs_only_missing_proved_transitions(core_request, monkeypatch, stage, tmp_path):
-    core_request["clusterSSHTransport"] = "verified-tunnel"
+    core_request["clusterSSHTransport"] = "verifiedTunnel"
     core_fixtures.package_intent(core_request)
     clock = core_fixtures.ReadinessClock()
     services = copy.deepcopy(core_request["services"])

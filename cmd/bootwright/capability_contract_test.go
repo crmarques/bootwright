@@ -98,7 +98,7 @@ type contractRow struct {
 	// removalKeepsPresence marks a binding whose removal takes back nothing
 	// its presence evidence reports, so a removal's resolution reads the
 	// presence fixture, and that fixture with its postcondition unproved, as
-	// the removal's completion: specs/container-clusters.md, Installation,
+	// the removal's completion: specs/openshift-clusters.md, Installation,
 	// takes back the boot media each node presents, which a completed
 	// installation already presents none of. What such a binding does take
 	// back is held by its own package's tests. It is the converse of retains:
@@ -168,25 +168,25 @@ func contractIdentity(binding lifecycle.CapabilityBinding) lifecycle.CapabilityB
 func contractRows() []contractRow {
 	return []contractRow{
 		contractAddonRow(), contractNetworkRow(),
-		{kind: string(api.StorageCluster), implementation: ceph.Implementation, example: "libvirt-3-nodes-ceph", completedFrom: cephCompletedFrom},
-		{kind: string(api.StoragePlacementPolicy), implementation: ceph.Implementation, example: "libvirt-3-nodes-ceph", completedFrom: cephCompletedFrom},
-		{kind: string(api.StoragePool), implementation: ceph.Implementation, example: "libvirt-3-nodes-ceph", completedFrom: cephCompletedFrom},
-		{kind: string(api.StorageClient), implementation: ceph.Implementation, example: "libvirt-3-nodes-ceph", completedFrom: cephCompletedFrom},
-		{kind: string(api.StorageRBDImage), implementation: ceph.Implementation, example: "libvirt-3-nodes-ceph", completedFrom: cephCompletedFrom},
-		{kind: string(api.StorageFilesystem), implementation: ceph.Implementation, example: "libvirt-3-nodes-ceph", completedFrom: cephCompletedFrom},
-		{kind: string(api.StorageSubvolume), implementation: ceph.Implementation, example: "libvirt-3-nodes-ceph", completedFrom: cephCompletedFrom},
-		{kind: string(api.StorageObjectGateway), implementation: ceph.Implementation, example: "libvirt-3-nodes-ceph-object", completedFrom: cephCompletedFrom},
-		{kind: string(api.StorageObjectUser), implementation: ceph.Implementation, example: "libvirt-3-nodes-ceph-object+user", completedFrom: cephCompletedFrom},
-		{kind: string(api.StorageObjectBucket), implementation: ceph.Implementation, example: "libvirt-3-nodes-ceph-object+bucket", completedFrom: cephCompletedFrom},
-		{kind: string(api.StorageNVMeoFSubsystem), implementation: ceph.Implementation, example: "libvirt-5-nodes-ceph-nvmeof", completedFrom: cephCompletedFrom},
-		{kind: string(api.StorageNFSExport), implementation: ceph.Implementation, example: "libvirt-3-nodes-ceph-nfs", completedFrom: cephCompletedFrom},
-		{kind: string(api.StorageCluster), implementation: ceph.HostImplementation, example: "libvirt-3-nodes-ceph", completedFrom: cephHostCompletedFrom},
-		{kind: string(api.StorageCluster), implementation: ceph.PhysicalRetirementImplementation, example: "physical-3-nodes-ceph", completedFrom: "specs/storage.md: physical retirement verifies original host disk bindings against complete original-policy erase receipts before claim release"},
-		{kind: string(api.StorageReplication), implementation: ceph.ReplicationImplementation, example: "libvirt-2x4-nodes-ceph-multisite", completedFrom: "specs/storage.md, RBD replication: both cluster scopes and credentials require original apply proofs"},
-		{kind: string(api.StorageSMBResource), implementation: ceph.SMBImplementation, example: "libvirt-3-nodes-ceph+smb", completedFrom: cephSMBCompletedFrom},
-		{kind: string(api.StorageExport), implementation: ceph.ExportImplementation, example: "lab-compact-df", completedFrom: "specs/storage-resources.md, StorageExport: produced details require the original apply's proved Ceph cluster scope"},
-		{kind: string(api.StorageCluster), implementation: ceph.ImageImplementation, example: "libvirt-3-nodes-ceph", presence: contractImagePresence, indivisible: true,
-			removalObservesNothing: "specs/storage.md, Frozen release and trust: a resolution retains nothing, so its removal takes back nothing a run could observe",
+		{kind: string(api.CephCluster), implementation: ceph.Implementation, example: "libvirt-3-nodes-ceph", completedFrom: cephCompletedFrom},
+		{kind: string(api.CephPlacementPolicy), implementation: ceph.Implementation, example: "libvirt-3-nodes-ceph", completedFrom: cephCompletedFrom},
+		{kind: string(api.CephPool), implementation: ceph.Implementation, example: "libvirt-3-nodes-ceph", completedFrom: cephCompletedFrom},
+		{kind: string(api.CephClient), implementation: ceph.Implementation, example: "libvirt-3-nodes-ceph", completedFrom: cephCompletedFrom},
+		{kind: string(api.CephRBDImage), implementation: ceph.Implementation, example: "libvirt-3-nodes-ceph", completedFrom: cephCompletedFrom},
+		{kind: string(api.CephFilesystem), implementation: ceph.Implementation, example: "libvirt-3-nodes-ceph", completedFrom: cephCompletedFrom},
+		{kind: string(api.CephSubvolume), implementation: ceph.Implementation, example: "libvirt-3-nodes-ceph", completedFrom: cephCompletedFrom},
+		{kind: string(api.CephObjectGateway), implementation: ceph.Implementation, example: "libvirt-3-nodes-ceph-object", completedFrom: cephCompletedFrom},
+		{kind: string(api.CephObjectUser), implementation: ceph.Implementation, example: "libvirt-3-nodes-ceph-object+user", completedFrom: cephCompletedFrom},
+		{kind: string(api.CephObjectBucket), implementation: ceph.Implementation, example: "libvirt-3-nodes-ceph-object+bucket", completedFrom: cephCompletedFrom},
+		{kind: string(api.CephNVMeoFSubsystem), implementation: ceph.Implementation, example: "libvirt-5-nodes-ceph-nvmeof", completedFrom: cephCompletedFrom},
+		{kind: string(api.CephNFSExport), implementation: ceph.Implementation, example: "libvirt-3-nodes-ceph-nfs", completedFrom: cephCompletedFrom},
+		{kind: string(api.CephCluster), implementation: ceph.HostImplementation, example: "libvirt-3-nodes-ceph", completedFrom: cephHostCompletedFrom},
+		{kind: string(api.CephCluster), implementation: ceph.PhysicalRetirementImplementation, example: "physical-3-nodes-ceph", completedFrom: "specs/ceph.md: physical retirement verifies original host disk bindings against complete original-policy erase receipts before claim release"},
+		{kind: string(api.CephReplication), implementation: ceph.ReplicationImplementation, example: "libvirt-2x4-nodes-ceph-multisite", completedFrom: "specs/ceph.md, RBD replication: both cluster scopes and credentials require original apply proofs"},
+		{kind: string(api.CephSMBResource), implementation: ceph.SMBImplementation, example: "libvirt-3-nodes-ceph+smb", completedFrom: cephSMBCompletedFrom},
+		{kind: string(api.CephConsumer), implementation: ceph.ConsumerImplementation, example: "lab-compact-df", completedFrom: "specs/ceph-resources.md, CephConsumer: produced details require the original apply's proved Ceph cluster scope"},
+		{kind: string(api.CephCluster), implementation: ceph.ImageImplementation, example: "libvirt-3-nodes-ceph", presence: contractImagePresence, indivisible: true,
+			removalObservesNothing: "specs/ceph.md, Frozen release and trust: a resolution retains nothing, so its removal takes back nothing a run could observe",
 			drift:                  map[string]any{"platform": "linux/arm64"}},
 		{kind: clients.Kind, implementation: clients.Implementation, example: "lab-rhel"},
 		{kind: libvirt.MachineKind, implementation: libvirt.MachineImplementation, example: "lab-rhel", probes: true,
@@ -222,9 +222,9 @@ func contractRows() []contractRow {
 	}
 }
 
-const cephHostCompletedFrom = "specs/storage.md, Frozen release and trust: each host preparation pulls exactly the digest the image block froze, under the original apply's owner and FSID"
+const cephHostCompletedFrom = "specs/ceph.md, Frozen release and trust: each host preparation pulls exactly the digest the image block froze, under the original apply's owner and FSID"
 
-const cephSMBCompletedFrom = "specs/storage.md, SMB resources: an SMB request takes its owner, FSID, bootstrap host, cluster scope and resolved samba images from the original apply's core cluster and image proofs"
+const cephSMBCompletedFrom = "specs/ceph.md, SMB resources: an SMB request takes its owner, FSID, bootstrap host, cluster scope and resolved samba images from the original apply's core cluster and image proofs"
 
 // contractOverlays names each example the suite composes from a tracked
 // example and a synthetic overlay under testdata, for a kind no tracked example
@@ -257,7 +257,7 @@ func contractSources(t *testing.T, name string) desiredstate.Sources {
 	return sources
 }
 
-const cephCompletedFrom = "specs/storage.md, Frozen release and trust: the cluster, pool and client requests take their owner, FSID and resolved image from the original apply"
+const cephCompletedFrom = "specs/ceph.md, Frozen release and trust: the cluster, pool and client requests take their owner, FSID and resolved image from the original apply"
 
 func contractImagePresence(t *testing.T, execution lifecycle.Execution) map[string]any {
 	t.Helper()
@@ -418,7 +418,7 @@ func contractExampleOf(t *testing.T, resolver capabilityResolver, name string) c
 		capability, _ := resolver.Resolve(binding.Kind, binding.Implementation)
 		contribution, err := capability.Plan(context.Background(), example.apply)
 		if err != nil {
-			if binding.Implementation == ceph.ExportImplementation && name == "lab-compact-df" {
+			if binding.Implementation == ceph.ConsumerImplementation && name == "lab-compact-df" {
 				t.Fatalf("Ceph export example planning: %v", diagnostics.Of(err))
 			}
 			// A binding may refuse an example it has no row for.

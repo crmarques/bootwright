@@ -1,5 +1,5 @@
 apiVersion: bootwright.io/v1alpha1
-kind: StorageRBDImage
+kind: CephRBDImage
 metadata:
   name: rbd-disk
 

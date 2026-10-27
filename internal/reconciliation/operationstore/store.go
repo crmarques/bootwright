@@ -583,6 +583,11 @@ func (s *Store) ReadPlan(ctx context.Context, id string) (reconciliation.Plan, e
 	if err := decodeUnder(data, MaxPlanBytes, &plan, s.running); err != nil {
 		return reconciliation.Plan{}, err
 	}
+	for _, block := range plan.Blocks {
+		if !reconciliation.ValidStage(block.Stage) {
+			return reconciliation.Plan{}, s.unrecognizedStage(ctx, id, block.Stage)
+		}
+	}
 	// Rebuilding through NewPlan re-runs every structural rule, so a record
 	// that decodes is still refused unless it is a plan this executable could
 	// have produced.
@@ -608,6 +613,24 @@ func (s *Store) ReadPlan(ctx context.Context, id string) (reconciliation.Plan, e
 		return reconciliation.Plan{}, recordError("the frozen plan is not the plan its operation recorded")
 	}
 	return plan, nil
+}
+
+func (s *Store) unrecognizedStage(ctx context.Context, id string, stage reconciliation.Stage) error {
+	operation, _, err := s.readOperation(ctx, id)
+	if err != nil {
+		return err
+	}
+	named := ""
+	if reconciliation.ValidSegment(string(stage)) {
+		named = " " + string(stage)
+	}
+	registered := "the executable its operation.json records"
+	if identity := BuildIdentity(operation.Executable); identity != "" {
+		registered = "bootwright " + identity
+	}
+	return diagnostics.NewFailureWithRemediation("lifecycle.state",
+		"the frozen plan names the stage"+named+", which this executable does not run, so it cannot continue or remove this operation", "",
+		"install "+registered+", which registered this operation, and run bootwright setup to finish or destroy it")
 }
 
 func definitions(plan reconciliation.Plan) []reconciliation.BlockDefinition {

@@ -34,6 +34,10 @@ func validateShape(record *objectRecord, value api.Value, shape *api.Shape, path
 
 func validateString(record *objectRecord, value api.Value, shape *api.Shape, path string, references bool, catalog api.Catalog, sink *diagnosticSink) {
 	if len(shape.Enums) > 0 && !slices.Contains(shape.Enums, value.Text()) {
+		if retired, ok := retiredValue(record, path, value.Text()); ok {
+			sink.issue(record, api.Issue{Code: "api.value", Field: path, Message: string(retired.Kind) + " " + strings.TrimPrefix(retired.Path, "$.spec.") + " value " + retired.Value + " is retired", Remediation: retired.Replacement})
+			return
+		}
 		remediation := "use one of the permitted values"
 		if at := slices.IndexFunc(shape.Enums, func(choice string) bool { return strings.EqualFold(choice, value.Text()) }); at >= 0 {
 			remediation = "use " + shape.Enums[at] + " (values are case-sensitive)"
@@ -50,6 +54,18 @@ func validateString(record *objectRecord, value api.Value, shape *api.Shape, pat
 			validateReference(record, value.Text(), shape, path, catalog, sink)
 		}
 	}
+}
+
+func retiredValue(record *objectRecord, path, value string) (api.RetiredValue, bool) {
+	if record == nil {
+		return api.RetiredValue{}, false
+	}
+	kind := record.object.Kind()
+	if rest, ok := strings.CutPrefix(path, "$.spec.defaults."); ok && kind == api.Environment {
+		owner, tail, _ := strings.Cut(rest, ".")
+		kind, path = api.Kind(owner), "$.spec."+tail
+	}
+	return api.RetiredValueAt(kind, path, value)
 }
 
 func validateReference(record *objectRecord, name string, shape *api.Shape, path string, catalog api.Catalog, sink *diagnosticSink) {
@@ -73,8 +89,12 @@ func validateReference(record *objectRecord, name string, shape *api.Shape, path
 				return
 			}
 		}
+		remediation := "declare " + boundedList(declarations, " or ") + ", add its file to the selection, or correct the reference"
+		if slices.Contains(shape.Reference, api.Secret) && len(sink.secrets) > 0 {
+			remediation += "; discovery skips the secrets directory " + sink.secrets[0] + ", so a descriptor there is never read"
+		}
 		sink.issue(record, api.Issue{Code: "api.reference", Field: path, Message: "no " + boundedList(kinds, " or ") + " named " + name + " is in the selected input",
-			Remediation: "declare " + boundedList(declarations, " or ") + ", add its file to the selection, or correct the reference"})
+			Remediation: remediation})
 	case matches > 1:
 		sink.issue(record, api.Issue{Code: "api.reference", Field: path, Message: name + " is ambiguous: it names " + strconv.Itoa(matches) + " " + boundedList(kinds, " or ") + " objects",
 			Remediation: "give the targets distinct names"})
@@ -139,6 +159,7 @@ func validateMapping(record *objectRecord, value api.Value, shape *api.Shape, pa
 	if len(shape.Arms) > 0 {
 		validateArms(record, value, shape, path, partial, sink)
 	}
+	validatePermittedArms(record, value, shape, path, sink)
 	for _, field := range shape.Fields {
 		if sink.stopped() {
 			break
@@ -155,18 +176,12 @@ func validateMapping(record *objectRecord, value api.Value, shape *api.Shape, pa
 
 func validateArms(record *objectRecord, value api.Value, shape *api.Shape, path string, partial bool, sink *diagnosticSink) {
 	count := 0
-	discriminator := value.Get(shape.Discriminator).Text()
-	allowed, selected := shape.ArmValues[discriminator]
 	for _, arm := range shape.Arms {
-		if value.Has(arm) && !(slices.Contains(shape.InertArms, arm) && unpopulated(value.Get(arm))) {
+		if value.Has(arm) {
 			count++
-			if selected && !slices.Contains(allowed, arm) {
-				sink.issue(record, api.Issue{Code: "api.invariant", Field: path + "." + arm, Message: arm + " does not apply when " + shape.Discriminator + " is " + discriminator,
-					Remediation: "remove " + arm + " or change " + shape.Discriminator})
-			}
 		}
 	}
-	if count > 1 || count == 0 && !partial && !shape.AllowEmpty && shape.Discriminator == "" {
+	if count > 1 || count == 0 && !partial && !shape.AllowEmpty {
 		message, remediation := "set exactly one of "+boundedList(shape.Arms, ", "), "keep one of them and remove the others"
 		if shape.AllowEmpty {
 			message = "set at most one of " + boundedList(shape.Arms, ", ")
@@ -175,6 +190,20 @@ func validateArms(record *objectRecord, value api.Value, shape *api.Shape, path 
 			remediation = "add one of " + boundedList(shape.Arms, ", ")
 		}
 		sink.issue(record, api.Issue{Code: "api.invariant", Field: path, Message: message, Remediation: remediation})
+	}
+}
+
+func validatePermittedArms(record *objectRecord, value api.Value, shape *api.Shape, path string, sink *diagnosticSink) {
+	for _, permit := range shape.Permits {
+		if value.Get(permit.Field).Text() != permit.Value {
+			continue
+		}
+		for _, arm := range api.PermittedArmSet(shape.Permits) {
+			if value.Has(arm) && !slices.Contains(permit.Arms, arm) {
+				sink.issue(record, api.Issue{Code: "api.field", Field: path + "." + arm, Message: permit.Field + " " + permit.Value + " permits only " + boundedList(permit.Arms, " and "),
+					Remediation: "remove " + strings.TrimPrefix(path+"."+arm, "$.")})
+			}
+		}
 	}
 }
 
@@ -226,30 +255,6 @@ func shapeForValue(shape *api.Shape, value api.Value) *api.Shape {
 		}
 	}
 	return shape
-}
-
-func unpopulated(value api.Value) bool {
-	switch value.Type() {
-	case api.Absent:
-		return true
-	case api.Mapping:
-		for _, f := range value.Fields() {
-			if !unpopulated(f.Value) {
-				return false
-			}
-		}
-		return true
-	case api.Integer, api.Number:
-		n, ok := new(big.Rat).SetString(value.Text())
-		return ok && n.Sign() == 0
-	case api.String:
-		return value.Text() == ""
-	case api.Boolean:
-		return !value.Bool()
-	case api.Sequence:
-		return value.Len() == 0
-	}
-	return false
 }
 
 func valueKey(value api.Value) string {

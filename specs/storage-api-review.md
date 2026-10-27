@@ -2,17 +2,17 @@
 
 This page records the [M2a](milestones/m2.md#m2a) API and operator-journey
 review. It records the M2a baseline and approved target.
-[Storage admission](api/storage.md) and `api/v1alpha1/storage.go` own
-accepted input. [Storage](storage.md) owns target lifecycle behavior;
-[coverage](storage-coverage.md) owns provider qualification.
+[Storage admission](api/ceph.md) and `api/v1alpha1/storage.go` own
+accepted input. [Storage](ceph.md) owns target lifecycle behavior;
+[coverage](ceph-coverage.md) owns provider qualification.
 
 **Review state:** current schemas and their validation/normalization paths
 reviewed; the owner approved P1 and P2 in D133. The
-[native service contract](storage-native-api.md) and
-[resource contract](storage-resources.md) own the reconciled target.
-[Storage admission](api/storage.md) and [machines](api/machines.md) state
+[native service contract](ceph-native-api.md) and
+[resource contract](ceph-resources.md) own the reconciled target.
+[Storage admission](api/ceph.md) and [machines](api/machines.md) state
 which fields and kinds are admitted, and the
-[resource contract](storage-resources.md) which kinds are realized; this
+[resource contract](ceph-resources.md) which kinds are realized; this
 review restates neither. Examples are synthetic, partial where marked, and
 deliberately outside the runnable `examples/` tree.
 
@@ -32,12 +32,12 @@ does not mean accepting unqualified features, secret bytes in public input,
 foreign hosts, unsafe container options or unbounded disk discovery.
 
 This review uses IBM 9.9.x and matching upstream Tentacle descriptions.
-The [release qualification](storage-coverage.md#release-qualification) records
+The [release qualification](ceph-coverage.md#release-qualification) records
 tested evidence; it approves no version.
 
 ## Existing API review
 
-The [field detail](deferred/storage-api.md) remains the current field inventory.
+Each kind's field record is linked from the [kinds table](api/ceph.md#kinds).
 The table records decisions and gaps rather than duplicating every field.
 
 | Surface reviewed | Keep or improve, with operator impact | Work owner |
@@ -96,7 +96,7 @@ they must not also be independently declared as managed services/clients.
 
 ## P1: native service documents
 
-**Approved, D133.** [Storage admission](api/storage.md) states which services
+**Approved, D133.** [Storage admission](api/ceph.md) states which services
 are admitted. Replace the collection of daemon-specific helper
 shapes with complete native ServiceSpec documents in the existing
 `StorageCluster.spec.ceph.services` list. Preserve native snake case, nesting,
@@ -192,7 +192,7 @@ filesystem-to-MDS identity and ingress backend names create checked graph
 edges. A native name locates a declared owner; it never authorizes adoption.
 
 Secret leaves are omitted from the public native payload and supplied through
-the [shared binding grammar](storage-native-api.md#secret-bindings).
+the [shared binding grammar](ceph-native-api.md#secret-bindings).
 B474 qualifies its closed leaf registry, Secret types and native
 serialization. Unsupported paths and duplicate authored leaves refuse. Native
 file inclusion is not introduced; an eventual file-loading API needs its own
@@ -220,7 +220,7 @@ because one native service path exposes concrete missing capabilities.
 
 ## P2: declarative resource graph
 
-**Approved, D133.** [Storage admission](api/storage.md) states which of
+**Approved, D133.** [Storage admission](api/ceph.md) states which of
 these kinds are admitted. Keep pools and filesystems as useful declarative
 abstractions. Add independently referenceable resources where the native
 provider offers only imperative creation. Preserve native resource documents
@@ -259,10 +259,10 @@ The pool, filesystem and group are separately declared dependencies. An image
 may additionally reference a qualified EC data pool and explicit features;
 its metadata remains in a suitable replicated pool. A subvolume's group and
 layout resolve within its selected filesystem. Size is an integer number of
-bytes; the [resource target](storage-resources.md) specifies required image
+bytes; the [resource target](ceph-resources.md) specifies required image
 size, optional subvolume quota and explicit-zero behavior. These examples
-illustrate approved shapes; [storage admission](api/storage.md) and the
-[resource target](storage-resources.md) state which are admitted and realized.
+illustrate approved shapes; [storage admission](api/ceph.md) and the
+[resource target](ceph-resources.md) state which are admitted and realized.
 
 Current partial NFS input combines daemon placement and multiple exports:
 
@@ -376,11 +376,11 @@ and its linked family items own current delivery evidence:
 
 | Finding and evidence | Required correction/evidence |
 | --- | --- |
-| `internal/storage/devices.go` counts presence of `all: false` as a selector mode. | False selects no devices and must not conflict with an actual filter; preserve rejection of genuinely empty or conflicting selections. |
-| `internal/storage/pools.go` checks replicated capacity only for explicitly authored `failureDomain: host`. | Resolve the effective qualified failure domain first, then check declared/live capacity; omitted host defaults must not bypass protection checks. |
+| `internal/storage/cephcluster/devices.go` counts presence of `all: false` as a selector mode. | False selects no devices and must not conflict with an actual filter; preserve rejection of genuinely empty or conflicting selections. |
+| `internal/storage/cephcluster/pools.go` checks replicated capacity only for explicitly authored `failureDomain: host`. | Resolve the effective qualified failure domain first, then check declared/live capacity; omitted host defaults must not bypass protection checks. |
 | The same file checks subvolume-group layout only for same-cluster pool identity. | Require an eligible data pool attached to that filesystem, including default/layout and EC compatibility. |
 | The same file skips MDS placement validation when the filesystem's `mds` block is omitted. | Check effective MDS coverage whether authored or derived; under P1, bind the selected native MDS service. |
-| `internal/storage/endpoints.go` ignores omitted monitoring ports and compares only the first VRRP ID. | Resolve release defaults and all consumed listener/VRRP ranges before conflict checks; qualify overlap by interface/network and placement. |
+| `internal/storage/cephcluster/endpoints.go` ignores omitted monitoring ports and compares only the first VRRP ID. | Resolve release defaults and all consumed listener/VRRP ranges before conflict checks; qualify overlap by interface/network and placement. |
 
 Cross-selector data/DB/WAL overlap, aliases and shared-device allocation are
 B475's device-proof work, including legitimate qualified shared DB/WAL cases.

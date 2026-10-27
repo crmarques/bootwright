@@ -2,45 +2,45 @@ base: libvirt-3-nodes-ceph-nfs
 
 edits:
   - file: storage/cluster.yaml
-    replace: "      - service_type: nfs\n        service_id: shares\n\n        placement:\n          count: 1\n          label: ceph-core\n"
-    with: "      - service_type: nfs\n        service_id: shares\n\n        placement:\n          count: 1\n          label: ceph-core\n\n        spec:\n          virtual_ip: 198.51.100.51\n\n      - service_type: ingress\n        service_id: nfs.shares\n\n        placement:\n          count: 2\n          label: ceph-core\n\n        spec:\n          backend_service: nfs.shares\n          virtual_ip: 198.51.100.51/24\n          keepalive_only: true\n"
+    replace: "    - service_type: nfs\n      service_id: shares\n\n      placement:\n        count: 1\n        label: ceph-core\n"
+    with: "    - service_type: nfs\n      service_id: shares\n\n      placement:\n        count: 1\n        label: ceph-core\n\n      spec:\n        virtual_ip: 198.51.100.51\n\n    - service_type: ingress\n      service_id: nfs.shares\n\n      placement:\n        count: 2\n        label: ceph-core\n\n      spec:\n        backend_service: nfs.shares\n        virtual_ip: 198.51.100.51/24\n        keepalive_only: true\n"
 
 select:
   - file: storage/cluster.yaml
-    replace: "\n    ibm:\n"
-    with: "\n    images:\n      keepalived:\n        base: cp.icr.io/cp/synthetic/keepalived\n        version: sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\n\n    ibm:\n"
+    replace: "\n  entitlementRef:"
+    with: "\n  images:\n    keepalived:\n      base: cp.icr.io/cp/synthetic/keepalived\n      version: sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\n\n  entitlementRef:"
 
 images: [keepalived]
 
 planned: [ceph-service-ceph-lab-nfs-shares]
 
 expect:
-  - kind: StorageCluster
+  - kind: CephCluster
     name: ceph-lab
     service: ingress.nfs.shares
     image: keepalived
 
-  - kind: StorageFilesystem
+  - kind: CephFilesystem
     name: files
     service: ingress.nfs.shares
     image: keepalived
 
-  - kind: StorageNFSExport
+  - kind: CephNFSExport
     name: docs
     service: ingress.nfs.shares
     image: keepalived
 
-  - kind: StoragePool
+  - kind: CephPool
     name: cephfs-data
     service: ingress.nfs.shares
     image: keepalived
 
-  - kind: StoragePool
+  - kind: CephPool
     name: cephfs-metadata
     service: ingress.nfs.shares
     image: keepalived
 
-  - kind: StorageSubvolume
+  - kind: CephSubvolume
     name: docs
     service: ingress.nfs.shares
     image: keepalived

@@ -38,7 +38,7 @@ Each row is one refusal of a managed service capability.
 `Unsupported` to every row except the endpoint-address bound, which only a
 Proxy, DNSServer or NTPServer declares, and
 `TestManagedServiceRefusalTableMatchesUnsupported` holds the Proxy, DNSServer
-and NTPServer capabilities' to every row except install-only retention and the
+and NTPServer capabilities' to every row except installOnly retention and the
 artifact socket bound, which only an ArtifactServer declares. Reason and
 remedy are the diagnostic's message and remediation (`lifecycle.unsupported` on
 the refused service), in which `<server>` is the refused service, `<machine>`
@@ -48,7 +48,7 @@ rows never refuse a service placed there.
 
 | Refusal | Path | Reason | Remedy |
 | --- | --- | --- | --- |
-| Install-only retention | `spec.retention: install-only` on a managed `ArtifactServer` | `this executable serves no managed artifact server with install-only retention` | `declare spec.retention: persistent on <server>, or omit it` |
+| Install-only retention | `spec.retention: installOnly` on a managed `ArtifactServer` | `this executable serves no managed artifact server with installOnly retention` | `declare spec.retention: persistent on <server>, or omit it` |
 | Managed Proxy egress | `spec.proxy.proxyRef` of the placement `Machine` names a managed `Proxy` | `this executable acquires a managed service's image only directly or through an external Proxy that is already ready, and <machine>, where <server> runs, selects the managed <proxy> in spec.proxy.proxyRef` | `select direct: {} or an external Proxy in spec.proxy on <machine>, or place <server> on another Machine` |
 | Proxy authentication | `spec.connection.auth.proxyAuthRef` on the external `Proxy` the placement `Machine` selects | `this executable acquires a managed service's image through no authenticated proxy, and <proxy>, which <machine> selects for <server>, sets spec.connection.auth.proxyAuthRef` | `select direct: {} or an external Proxy that needs no authentication in spec.proxy on <machine>` |
 | Private trust | `spec.connection.trustBundleRef` on the external `Proxy` the placement `Machine` selects | `this executable acquires a managed service's image with the host's system trust store alone, and <proxy>, which <machine> selects for <server>, sets spec.connection.trustBundleRef` | `select direct: {} or an external Proxy without spec.connection.trustBundleRef in spec.proxy on <machine>` |
@@ -271,7 +271,7 @@ Image acquisition uses the placement Machine's normalized
 [proxy choice](api/machines.md#machine-proxy) and no ambient proxy variable;
 a managed, authenticated or private-trust Proxy refuses before registration, as
 the [refusal table](#refusal-table) states.
-`retention: install-only` is unsupported and refuses, as the
+`retention: installOnly` is unsupported and refuses, as the
 [refusal table](#refusal-table) states.
 
 **Owned host state.** The capability owns exactly one content root per service,
@@ -494,11 +494,11 @@ fetched; neither outlives the boot that installs it. A managed-OS installation
 that [encrypts its root disk](managed-os.md#root-disk-encryption) delivers the
 same way its recovery passphrase and the installer image whose Kickstart names
 where it is fetched, both withdrawn when its installation completes. A
-[container cluster](container-clusters.md#boot-media) publishes its agent boot
+[container cluster](openshift-clusters.md#boot-media) publishes its agent boot
 image, which embeds the operator's own pull secret in its ignition and is
 retained while the cluster's media block is, because a node may be booted from
 it again. A cluster's per-insert tokens are specified in
-[installation](container-clusters.md#installation). Any further use is
+[installation](openshift-clusters.md#installation). Any further use is
 specified before it is built.
 
 ## Managed network services
@@ -508,7 +508,7 @@ container under the host service manager with host networking, serving one
 declared port on its declared bind address. They differ only in the daemon they
 run, the configuration derived for it, and the answer readiness proves. Their
 plan blocks belong to the
-[`infra-components` stage](state-reconciliation.md#stages-and-the-pause-boundary).
+[`infrastructure-services` stage](state-reconciliation.md#stages-and-the-pause-boundary).
 
 One role realizes all three kinds, keyed by the request's frozen
 implementation identity: it selects the daemon configuration and unit
@@ -541,7 +541,7 @@ removed, and no managed service writes to the
 host's own resolver, proxy or time configuration. A controller that must
 resolve names a managed DNSServer serves, as a container-cluster installation
 polling its cluster does, is routed to that server by the operator;
-[container-cluster preflight](container-clusters.md#preflight) names each
+[container-cluster preflight](openshift-clusters.md#preflight) names each
 record and the route.
 
 **Derived configuration.** A managed service is configured from the selected
@@ -566,7 +566,7 @@ host's clock at local stratum 10, so a service with no declared or reachable
 upstream still answers
 ([knowledge](../.agents/knowledge/managed-network-service-runtime.md)).
 
-A selected `ContainerCluster` contributes the three names its own installation
+A selected `OpenShiftCluster` contributes the three names its own installation
 polls and its consumers reach it at, each answering the address its endpoint
 resolved: its API name, its internal API name, and its applications name, which
 answers for every name beneath it because that is what an ingress wildcard
@@ -578,11 +578,11 @@ because nothing yet says which cluster's ingress an authored name belongs to. Th
 [the container-cluster zone](api/environment.md#domains), so the resolver a
 Machine uses and the installer that polls the cluster agree by construction.
 
-A retained StorageExport with an attached object gateway also contributes its
-endpoint record through [the export DNS contract](storage-resources.md#attached-gateway-dns).
+A retained CephConsumer with an attached object gateway also contributes its
+endpoint record through [the consumer DNS contract](ceph-resources.md#attached-gateway-dns).
 The declaration owns the contribution and this service owns its publication and
 inverse, using the same frozen-record and content ownership as other names. The
-storage domain owns the derivation of that record from the export's attached
+storage domain owns the derivation of that record from the consumer's attached
 gateway, and this service reads no storage field path: composition binds the
 storage derivation to the DNS definition, and the DNS server imports no storage
 or container-cluster package.

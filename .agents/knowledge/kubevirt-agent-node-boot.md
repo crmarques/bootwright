@@ -2,7 +2,7 @@
 
 How an agent ISO boots on a KubeVirt virtual machine and what the platform does
 to the nodes around it. [Substrates](../../specs/substrates.md) and
-[container clusters](../../specs/container-clusters.md) own the required
+[container clusters](../../specs/openshift-clusters.md) own the required
 behavior; this page records native facts for
 [B87](../../specs/milestones/m1.md#b87) (the KubeVirt Machine arm),
 [B88](../../specs/milestones/m3.md#b88) (OpenShift on KubeVirt Machines) and

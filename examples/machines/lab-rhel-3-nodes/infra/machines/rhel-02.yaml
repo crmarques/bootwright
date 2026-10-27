@@ -6,16 +6,18 @@ metadata:
 spec:
   substrate:
     providerRef: lab-libvirt
-    profileRef: rhel
+    libvirt:
+      profileRef: rhel
+
+  hardware:
+    rootDevice:
+      deviceName: /dev/vda
 
   os:
     provided: false
     installProfileRef: rhel-9-8
 
     install:
-      rootDeviceHints:
-        deviceName: /dev/vda
-
       ntp:
         - serverRef: lab-ntp
           endpointRef: ip

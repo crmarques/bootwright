@@ -24,7 +24,6 @@ func environment() api.Object {
 
 func controller() api.Object {
 	return api.NewObject(api.Machine, "controller", api.Value{}, api.MapValue(
-		field("capabilities", api.StringList("container-runtime", "libvirt")),
 		field("os", api.MapValue(field("provided", api.BoolValue(true)))),
 		field("network", api.MapValue(field("addresses", api.ListValue(
 			api.MapValue(text("name", "fqdn"), text("address", "controller.lab.example.test")),
@@ -38,7 +37,7 @@ func provider() api.Object {
 	return api.NewObject(api.InfraProvider, "lab-libvirt", api.Value{}, api.MapValue(
 		field("libvirt", api.MapValue(
 			text("machineRef", "controller"), text("uri", "qemu:///system"),
-			field("bmcEmulationDefaults", api.MapValue(
+			field("bmcEmulation", api.MapValue(
 				text("certificateRef", "lab-bmc-tls"),
 				text("bindAddress", "192.0.2.1"), number("port", "8000"),
 				field("auth", api.MapValue(text("credentialsRef", "lab-bmc-credentials"))),
@@ -78,7 +77,6 @@ func artifactServer(fields ...api.FieldValue) api.Object {
 // populates the whole SSH arm.
 func servicesHost() api.Object {
 	return api.NewObject(api.Machine, "services", api.Value{}, api.MapValue(
-		field("capabilities", api.StringList("container-runtime")),
 		field("os", api.MapValue(field("provided", api.BoolValue(true)))),
 		field("network", api.MapValue(field("addresses", api.ListValue(
 			api.MapValue(text("name", "fqdn"), text("address", "services.lab.example.test")),
@@ -156,10 +154,10 @@ func installProfile(fields ...api.FieldValue) api.Object {
 
 func guest(fields ...api.FieldValue) api.Object {
 	spec := api.MapValue(
-		field("substrate", api.MapValue(text("providerRef", "lab-libvirt"), text("profileRef", "rhel"))),
+		field("substrate", api.MapValue(text("providerRef", "lab-libvirt"), field("libvirt", api.MapValue(text("profileRef", "rhel"))))),
+		field("hardware", api.MapValue(field("rootDevice", api.MapValue(text("deviceName", "/dev/vda"))))),
 		field("os", api.MapValue(
 			field("provided", api.BoolValue(false)), text("installProfileRef", "rhel-9-8"),
-			field("install", api.MapValue(field("rootDeviceHints", api.MapValue(text("deviceName", "/dev/vda"))))),
 		)),
 		field("network", api.MapValue(
 			text("configRef", "lab-guests"), text("attachmentRef", "lab-guests"), text("installAddressRef", "ip"),
@@ -186,19 +184,27 @@ func metalProvider() api.Object {
 // server is one operator-owned Machine on the bare-metal provider, selecting
 // its root device by the hints given.
 func server(hints api.Value) api.Object {
+	declared, physical := splitRootDevice(hints)
+	baremetal := api.MapValue(
+		field("bmc", api.MapValue(
+			text("address", "https://bmc-01.lab.example.test/redfish/v1/Systems/1"),
+			text("credentialsRef", "lab-bmc-credentials"),
+		)),
+		field("nics", api.ListValue(api.MapValue(text("nicRef", "enp1s0"), text("macAddress", "52:54:00:9a:1b:01")))),
+	)
+	if len(physical.Fields()) != 0 {
+		baremetal = baremetal.With("rootDevice", physical)
+	}
 	return api.NewObject(api.Machine, "metal-01", api.Value{}, api.MapValue(
-		field("substrate", api.MapValue(text("providerRef", "lab-metal"))),
+		field("substrate", api.MapValue(text("providerRef", "lab-metal"), field("baremetal", baremetal))),
 		field("os", api.MapValue(
 			field("provided", api.BoolValue(false)), text("installProfileRef", "rhel-9-8"),
-			field("install", api.MapValue(text("hostKeyRef", "metal-01-host-key"), field("rootDeviceHints", hints))),
+			field("install", api.MapValue(text("hostKeyRef", "metal-01-host-key"))),
 		)),
 		field("hardware", api.MapValue(
-			field("nics", api.ListValue(api.MapValue(text("name", "enp1s0"), text("macAddress", "52:54:00:9a:1b:01")))),
+			field("nics", api.ListValue(api.MapValue(text("name", "enp1s0")))),
 			field("boot", api.MapValue(text("nicRef", "enp1s0"))),
-			field("management", api.MapValue(field("bmc", api.MapValue(
-				text("address", "https://bmc-01.lab.example.test/redfish/v1/Systems/1"),
-				text("credentialsRef", "lab-bmc-credentials"),
-			)))),
+			field("rootDevice", declared),
 		)),
 		field("network", api.MapValue(
 			text("configRef", "lab-guests"), text("installAddressRef", "ip"),
@@ -208,6 +214,21 @@ func server(hints api.Value) api.Object {
 			)),
 		)),
 	))
+}
+
+// splitRootDevice separates the root-device selectors the Machine declares in
+// spec.hardware.rootDevice from the three only a bare-metal arm carries.
+func splitRootDevice(hints api.Value) (declared, physical api.Value) {
+	declared, physical = api.MapValue(), api.MapValue()
+	for _, hint := range hints.Fields() {
+		switch hint.Name {
+		case "wwn", "hctl", "serialNumber":
+			physical = physical.With(hint.Name, hint.Value)
+		default:
+			declared = declared.With(hint.Name, hint.Value)
+		}
+	}
+	return declared, physical
 }
 
 func catalogOf(objects ...api.Object) api.Catalog { return api.NewCatalog(objects) }

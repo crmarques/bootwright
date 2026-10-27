@@ -30,7 +30,7 @@ func TestExampleObjectPlansTheGatewayBlocks(t *testing.T) {
 	var ids []string
 	var gateway reconciliation.BlockDefinition
 	for _, definition := range definitions {
-		if definition.Implementation == ceph.Implementation && definition.Kind == string(api.StorageObjectGateway) {
+		if definition.Implementation == ceph.Implementation && definition.Kind == string(api.CephObjectGateway) {
 			ids = append(ids, definition.ID)
 			if definition.ID == ceph.GatewayBlockID("objects") {
 				gateway = definition

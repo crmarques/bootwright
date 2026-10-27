@@ -9,7 +9,7 @@ import (
 )
 
 func storagePreflightCommand() commandSpec {
-	return available(commandSpec{path: "preflight storage-cluster", short: "Check StorageCluster readiness", flags: preflightFlags()})
+	return available(commandSpec{path: "preflight storage-cluster", short: "Check CephCluster readiness", flags: preflightFlags()})
 }
 
 func storageRenderCommand() commandSpec {

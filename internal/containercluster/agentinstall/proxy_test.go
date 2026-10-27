@@ -10,7 +10,7 @@ import (
 func proxyCatalog(managed bool) api.Catalog {
 	objects := singleNodeCatalog().Objects()
 	for i, object := range objects {
-		if object.Kind() == api.ContainerCluster {
+		if object.Kind() == api.OpenShiftCluster {
 			objects[i] = object.WithSpec(object.Spec().WithPath(api.MapValue(text("proxyRef", "egress"), field("noProxy", api.StringList("*.example.test", "[2001:db8::1]"))), "install", "proxy"))
 		}
 	}

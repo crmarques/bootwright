@@ -13,10 +13,10 @@ func TestClusterInfoCarriesResourceRows(t *testing.T) {
 	f := newFixture(t)
 	f.catalog = api.NewCatalog(append(f.catalog.Objects(), storageCluster("backup", "managed", "rhel-01", node("rhel-01", "rhel-01.lab.test", "machine-a"))))
 	ready := []Resource{
-		{Kind: "StoragePool", Name: "rbd-data", Status: ResourceDone, Scope: "replicated size 2/min 2, application rbd"},
-		{Kind: "StorageClient", Name: "rbd-canary", Status: ResourceDone, Scope: "client.rbd-canary read-write on pool rbd-data"},
+		{Kind: "CephPool", Name: "rbd-data", Status: ResourceDone, Scope: "replicated size 2/min 2, application rbd"},
+		{Kind: "CephClient", Name: "rbd-canary", Status: ResourceDone, Scope: "client.rbd-canary read-write on pool rbd-data"},
 	}
-	unavailable := []Resource{{Kind: "StoragePool", Name: "cold", Status: ResourcePending}}
+	unavailable := []Resource{{Kind: "CephPool", Name: "cold", Status: ResourcePending}}
 	f.rows = map[string][]Resource{"storage": ready, "backup": unavailable}
 	result, err := f.service("lab").ClusterInfo(context.Background(), ClusterInfoRequest{})
 	if err != nil {

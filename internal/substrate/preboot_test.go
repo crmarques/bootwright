@@ -50,11 +50,11 @@ func eachPreBootRefusal(t *testing.T, continuation string) {
 			RefusalHardwareMismatch: refusal("the machine answering at "+preBootEndpoint+" does not report exactly the hardware addresses Machine/metal-01 declares, "+
 				"or its inventory could not be read in full, so no media was inserted into it and it was not booted",
 				"once the machine reports the hardware Machine/metal-01 declares in full, run "+next+"; to correct that declaration instead, "+
-					"take this context back with bootwright destroy --context lab-b, correct spec.hardware.management.bmc.address or spec.hardware.nics on Machine/metal-01 "+
+					"take this context back with bootwright destroy --context lab-b, correct spec.substrate.baremetal.bmc.address or spec.substrate.baremetal.nics on Machine/metal-01 "+
 					"and import that input with bootwright context update --name lab-b --input-dir <directory>, then run bootwright apply --context lab-b"),
 			RefusalIdentityMismatch: refusal("the management controller at "+preBootEndpoint+" answers as another system than the one this operation proved "+
 				"for Machine/metal-01, so no media was inserted into it and it was not booted",
-				"take this context back with bootwright destroy --context lab-b, correct spec.hardware.management.bmc.address on Machine/metal-01 "+
+				"take this context back with bootwright destroy --context lab-b, correct spec.substrate.baremetal.bmc.address on Machine/metal-01 "+
 					"if it names another controller and import that input with bootwright context update --name lab-b --input-dir <directory>, "+
 					"then run bootwright apply --context lab-b, so the machine is proved again"),
 			RefusalMachineRunning: running,

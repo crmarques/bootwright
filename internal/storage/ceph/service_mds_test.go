@@ -16,15 +16,15 @@ func mdsRequestService(id string) api.Value {
 func clusterRequestWith(t *testing.T, services func([]api.Value) []api.Value) (Request, error) {
 	t.Helper()
 	catalog := poolRequestCatalog(3, 3)
-	cluster, _ := catalog.Find(api.StorageCluster, "example")
-	changed := cluster.WithSpec(cluster.Spec().WithPath(api.ListValue(services(cluster.Spec().Get("ceph", "services").Items())...), "ceph", "services"))
+	cluster, _ := catalog.Find(api.CephCluster, "example")
+	changed := cluster.WithSpec(cluster.Spec().WithPath(api.ListValue(services(cluster.Spec().Get("services").Items())...), "services"))
 	objects := catalog.Objects()
 	for i := range objects {
 		if objects[i].Identity() == changed.Identity() {
 			objects[i] = changed
 		}
 	}
-	return New(api.StorageCluster, nil).request(api.NewCatalog(objects), changed, "synthetic")
+	return New(api.CephCluster, nil).request(api.NewCatalog(objects), changed, "synthetic")
 }
 
 func TestProjectServicesKeepsMDSIdentityAndHosts(t *testing.T) {
