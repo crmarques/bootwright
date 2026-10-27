@@ -8,6 +8,7 @@ import (
 	"reflect"
 	"slices"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -89,11 +90,14 @@ func (s *store) ReplaceHostKeys(_ context.Context, _ string, data, expected []by
 type observer struct {
 	keys     map[string]trust.HostKey
 	fail     map[string]error
+	mu       sync.Mutex
 	observed []string
 }
 
 func (o *observer) Observe(_ context.Context, address string, _ int) (trust.HostKey, error) {
+	o.mu.Lock()
 	o.observed = append(o.observed, address)
+	o.mu.Unlock()
 	if err, ok := o.fail[address]; ok {
 		return trust.HostKey{}, err
 	}

@@ -70,7 +70,7 @@ quick: fmt-check vet
 	./scripts/quick-test
 
 race:
-	$(GO) test -race ./internal/reconciliation/... ./internal/controller/privilege/... ./cmd/bootwright/...
+	$(GO) test -race ./internal/reconciliation/... ./internal/controller/privilege/... ./internal/trust/... ./cmd/bootwright/...
 
 # Every gate that needs no network once module caches are warm. Vulnerability
 # data and the Ansible tool bootstrap need network, so they are reported unrun.

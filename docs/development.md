@@ -91,7 +91,7 @@ says what a lock change requires.
 | `make modules-check` | Verify both module locks. |
 | `make tidy-check` | Check that both module files are tidy. |
 | `make completion-test` | Source and exercise the Bash integration, and the Zsh, Fish and PowerShell integrations with `BOOTWRIGHT_TEST_ALL_SHELLS=1`. |
-| `make race` | Run the race detector over the concurrent lifecycle, privilege and composition packages. |
+| `make race` | Run the race detector over the concurrent lifecycle, privilege, trust enrollment and composition packages. |
 | `make vulncheck` | Scan for known reachable vulnerabilities. |
 | `make ansible-check` | Run pinned Ansible syntax, lint, collection sanity, unit and safe integration checks; `./scripts/ansible-check --suite <name>` runs one suite locally, and `--suite syntax\|lint\|sanity\|units PATH...` narrows one to collection paths; a narrowed units run whose parallel failures pass on the serial rerun exits 75 (FLAKY). |
 | `make check-offline` | Run every gate that needs no network once caches are warm, and name the gates it left unrun. |

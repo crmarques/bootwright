@@ -278,7 +278,6 @@ Alias cell.
 | [B838](#b838) | new, 2026-10-26 (lane A review) | safety | Storage | U03's replica-safety refusal applies to every Ceph distribution, not only IBM | Widening adds a refusal; needs an owner decision |
 | [B839](#b839) | new, 2026-10-26 (lane B) | safety | Substrate and Workspace | A shared host claim taken while a removal's effect runs refuses | Found closing B803; the window is the removal's effect itself |
 | [B840](#b840) | new, 2026-10-26 (lane B) | safety | Managed OS | `%pre` compares the resolved root disk's WWN and serial with the frozen values | The follow-up the F10-01 choice left after the by-id path rule |
-| [B841](#b841) | new, 2026-10-26 (lane D) | defect | Verification tooling | The enrollment observer test double is safe under `-race` | Pre-existing test defect found by lane D |
 | [B843](#b843) | new, 2026-10-27 (lane J) | safety | Substrate | The libvirt route check and a broader route through a gateway | The "identical or nested" rule refuses a VPN summary route |
 | [B844](#b844) | new, 2026-10-27 (lane J) | safety | Infrastructure services | Contexts reaching one SSH host by different addresses conflict there | Q96's qualifier keys claims by declared address only |
 | [B845](#b845) | new, 2026-10-27 (lane J) | defect | Substrate | Libvirt network evidence accepts an observed MTU | Pre-existing defect found by lane J |
@@ -3420,15 +3419,6 @@ serial with the frozen values, stopping before storage on a mismatch or an
 unreadable value. **Exit evidence:** a `%pre` test per mismatch and unreadable
 case, and the refusal-table rows moved with the admission change.
 
-### B841
-
-**Owner:** Verification tooling. **Kind:** defect. **Requires:** none.
-**Definition:** Specified. `go test -race ./internal/trust/enrollment/` fails
-on main because the observer test double appends without a lock while
-observations run concurrently (found by lane D, 2026-10-26). **Outcome:** the
-double guards its records. **Exit evidence:** the package passes under
-`-race`, and `make race` covers it if it is meant to.
-
 ### B843
 
 **Owner:** Substrate. **Kind:** safety. **Requires:** none.
@@ -3662,7 +3652,8 @@ decision stay open while its other parts land.
 
 ### Lane order and progress
 
-[D182](#d182) runs the lanes in this order, from the harness and the
+The owner's 2026-10-27 request to implement the remaining items, with
+[D188](#d188)'s answers, adds lanes 14 to 24. [D182](#d182) runs the lanes in this order, from the harness and the
 low-level contracts to the operator-facing surface, one at a time. Each lane
 is one branch, `lane-<letter>`, in the worktree
 `../bootwright-worktrees/lane-<letter>`, and lands on main as one commit that
@@ -3683,6 +3674,17 @@ also updates this table.
 | 11 | I API shape and grammar | merged (X171) |
 | 12 | M CLI and examples | merged (X172) |
 | 13 | L Corpus structure and skills | merged (X173) |
+| 14 | N Race coverage (B841) | merged (X174) |
+| 15 | O Store bounds and run scratch (B572, B389) | not started |
+| 16 | Q3 Ceph object and replica refusals (B849, B838) | not started |
+| 17 | S Libvirt host evidence and routes (B845, B843, B840) | not started |
+| 18 | P Removal views and host claims (B846, B839, B844) | not started |
+| 19 | Q1 Unclaimed objects and references (B808, B826) | not started |
+| 20 | Q2 Family accessors and name bounds (B848, B850, B847) | not started |
+| 21 | R Installer material (B829) | not started |
+| 22 | T Context-free commands and preflight (B852, B825) | not started |
+| 23 | U Unrealized fields (B853 to B856) | not started |
+| 24 | N0 Remaining text to owning items (B805, B816, B820, B851) | not started |
 
 To continue, take the first row not `merged`. If its branch exists, resume it:
 each finished item is a `wip` commit whose body names what remains, and the
@@ -3745,7 +3747,7 @@ blocks.
 | Q100 | Is the cluster info --secrets reveal of StorageObjectUser S3 keys (objectUsers) a current, authorized reveal? | (a) Current: secrets.md lists it, and ceph-resources.md and ceph.md link the reveal instead of saying no command reveals the pair.; (b) Not authorized: cli.md marks it Not yet met under B489 and the code stops revealing it. | **Answered by D183: a.** a (calibrator): delivered under B489's in-tree handoff, but D143 clause 7 authorizes only the dashboard password, so the owner confirms. | [B817](delivered.md#x166--audit-lane-d-credentials-and-trust) | answered by [D183](#d183) |
 | Q101 | What does cluster info --secrets emit for a dashboard password whose apply never proved the dashboard reachable? | (a) No warning: dashboard.status unproved and its reason convey it.; (b) A distinct registered warning code such as access.unreachable. | **Answered by D183: a.** a, the smaller change; either way access.unproved keeps only the D124 custody meaning. | [B817](delivered.md#x166--audit-lane-d-credentials-and-trust) | answered by [D183](#d183) |
 | Q102 | Does the decision log stay in backlog.md (with per-decision anchors and status tokens) or move to its own page? | (a) Keep the log in backlog.md#decisions and add #d<n> anchors, status tokens and an order check.; (b) Move the log to specs/milestones/decisions.md, retarget every backlog.md#decisions link and amend milestones.md's D<n> bullet. | **Answered by D183: a.** a: the smallest change; anchors and status tokens need no move. | [B819](delivered.md#x173--audit-lane-l-corpus-structure-and-skills) | answered by [D183](#d183) |
-| Q103 | May a pre-existing defect that blocks the authorized outcome or its gates be fixed inside the slice? | (a) AGENTS.md admits the fix in its own commit after the defect is recorded as an item the Refs line names; other defects are reported.; (b) Keep the unqualified ban; a blocking defect stops the slice until the owner authorizes its item. | **Answered by D183: a.** a, as the report drafts it; its only precedent (D152 clause 13) still awaits the owner's review. | [B822](delivered.md#x173--audit-lane-l-corpus-structure-and-skills) | answered by [D183](#d183) |
+| Q103 | May a pre-existing defect that blocks the authorized outcome or its gates be fixed inside the slice? | (a) AGENTS.md admits the fix in its own commit after the defect is recorded as an item the Refs line names; other defects are reported.; (b) Keep the unqualified ban; a blocking defect stops the slice until the owner authorizes its item. | **Answered by D183: a.** a, as the report drafts it; its only precedent (D152 clause 13) was accepted with D152 by [D154](#d154) ([D188](#d188)). | [B822](delivered.md#x173--audit-lane-l-corpus-structure-and-skills) | answered by [D183](#d183) |
 | Q104 | Does the State reconciliation context keep its display name, given its contract disclaims reconciliation? | (a) Rename the display name (architecture row, H1, index link text), keeping the file path and retargeting inbound anchors.; (b) Keep the name; the disclaimer now applied in state-reconciliation.md is the whole change. | **Answered by D183: b.** b is smallest; a if the owner wants the name fixed before 1.0. | [B823](delivered.md#x172--audit-lane-m-cli-and-examples) | answered by [D183](#d183) |
 | Q105 | Which single casing do Bootwright-owned enum values use, and are Secret type names an exception? | (a) lowerCamel: renames the kebab outliers (container-runtime, import-certificate, install-only, read-only, verified-tunnel).; (b) kebab-case: renames redfishVirtualMedia, loadBalancer, logicalOverwrite, dataFoundation, certManager and the Secret types.; (c) State the rule per page and leave existing values unchanged. | **Answered by D183: a.** The convention with the smaller rename count, likely lowerCamel; native spellings exempt; decide Secret types as an explicit exception. | [B824](delivered.md#x171--audit-lane-i-api-shape-and-grammar) | answered by [D183](#d183) |
 | Q106 | Is the --stage token infra-components renamed to match 'infrastructure services'? | (a) Rename it (for example infrastructure-services) in the CLI, plan goldens, completion, examples and specs.; (b) Keep the token; the glossary entry defines it. | **Answered by D183: a.** a, cheap before 1.0, together with stating what preflight infra checks. | [B824](delivered.md#x171--audit-lane-i-api-shape-and-grammar) | answered by [D183](#d183) |
@@ -3837,9 +3839,6 @@ holding such a clause, the clauses pending and the work they enable.
 
 - [D7](#d7): the 2026-09-29 reading that non-root SSH accounts refuse on
   lifecycle placement hosts (X22).
-- [D20](#d20), [D21](#d21), [D22](#d22): the controller
-  CPython patch rule (X22); the elevated child's start announcement and the
-  `runtime.internal` result of an elevated command with none (X20).
 - [D134](#d134): the 2026-10-11 readings that D134 waives M2's Requires for
   X47, X52, X53 and X54 and excepts M2b from the WIP limit; moot since D165
   returned those slices and D183 counts the WIP limit per program.
@@ -3952,21 +3951,21 @@ an external Ceph cluster is parked as [B107](#b107).
 
 ### D20
 
-**session-pending** (2026-09-29, taken by the session under the owner's instruction to
+**superseded-by D152** (2026-09-29, taken by the session under the owner's instruction to
 proceed with recommendations; pending review): the controller CPython is
 the latest patch of the newest minor the qualified ansible-core supports as
 a controller, and `latest` ignores a newer minor (X22).
 
 ### D21
 
-**session-pending** (2026-09-29, taken by the session under the owner's instruction to
+**delegated** (2026-09-29, taken by the session under the owner's instruction to
 proceed with recommendations; pending review): an elevated child announces
 that it started, and the held `sudo:` lines decide the outcome only when that
 announcement cannot be proved (X20).
 
 ### D22
 
-**session-pending** (2026-09-29, taken likewise; pending review): an elevated command
+**delegated** (2026-09-29, taken likewise; pending review): an elevated command
 that exits without a result reports `runtime.internal` with exit status 1;
 `runtime.interrupted` still wins after an interrupt (X20).
 
@@ -5659,3 +5658,26 @@ answered no open question, so [Q26 to Q61](m4.md#m4a-open-decisions) stay
 open and D173's clauses stay pending. A decision a session took under the
 owner's explicit instruction to proceed carries the status token `delegated`:
 it binds and is not in the review queue; D23 to D26 and D162 carry it.
+
+### D188
+
+**owner** (2026-10-27, the owner's answers while planning the rest of the
+audit remediation): D154 accepted D152 as written, clause 13 included; D20 is
+superseded by D152's clauses 3 and 4, and D21 and D22 are `delegated`. The
+replica-safety refusal (a pool of size N needs N+1 hosts) applies to every
+Ceph distribution ([B838](#b838)). A broader host route through a gateway that
+covers a libvirt managed prefix is admitted with a warning naming the route
+and the in-prefix hosts it shadows; identical, nested-narrower and on-link
+broader routes refuse ([B843](#b843)). SSH-placed claims are also keyed by the
+host's pinned SSH host-key fingerprint (`sshkey/<SHA256>/`), an additive key
+form under controller record version 3 ([B844](#b844)). `schema` and `version`
+drop `--context`, and structured help gains no `examples` or `available`
+([B852](#b852), [B820](#b820)). `installer.templateClone` folds into
+[B99](m1.md#b99); `packageSource.mirror`, `packageSource.fromSubscription`,
+`ssh.initialPassword` and ArtifactServer retention `installOnly` retire with
+their replacements (B853 to B856). `preflight clusters` runs the container-cluster and
+storage-cluster checks together, and `preflight infra` and `preflight all`
+park in one definition item ([B825](#b825)). The lifecycle runner moves only
+its scratch under root-owned `/var/lib/bootwright-staging/runs` on the
+controller and SSH hosts, and the job directory and bound Secret files stay
+under `/run` ([B389](#b389)).

@@ -8926,14 +8926,29 @@ pre-existing defect in its own commit once it is recorded as an item (Q103).
 
 The review found no blocking defect; its five major and eleven minor findings
 were fixed, except two the entries' own text contradicts (B74 stays on the
-libvirt row; D152's token follows D154). D183's Q103 note says D152 clause 13
-still awaits the owner's review while D154 accepts D152 as written, which the
-owner settles.
+libvirt row; D152's token follows D154). D188 settles that D154 accepted D152,
+clause 13 included.
 
 **Guard tests:** the milestone, decision-link, opening-budget, section-budget,
 reachability, history-ratchet and skill-discovery tests and the focus and
 ansible-check tests, each proved by a seeded violation; the delivering commit
 records the gates.
+
+### X174 — Audit lane N: race coverage
+
+**Items:** B841 (found by lane D).
+**Kind:** defect. **Owner:** Verification tooling. Delivered on 2026-10-27 as
+lane N of the [audit remediation](backlog.md#lane-order-and-progress), the
+first lane of the owner's request to implement the remaining items; the same
+commit records D188's answers and the decision-log corrections they make.
+
+The enrollment observer test double guards its records with a lock, so
+`go test -race ./internal/trust/...` passes, and `make race` now covers
+`internal/trust`.
+
+**Guard tests:** `TestPendingWritesAreConfirmedUnlessAnswered` under `-race`,
+which reported the data race before the fix; the delivering commit records
+the gates.
 
 ## M3 independent in-tree completion
 
