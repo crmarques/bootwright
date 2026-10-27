@@ -86,7 +86,10 @@ func nfsExportRequest(c api.Catalog, export api.Object, contextName string) (Req
 	var r Request
 	frozen := NFSExport{Name: name, Service: spec.Get("serviceID").Text()}
 	if ref := spec.Get("objectUserRef").Text(); ref != "" {
-		user, _ := c.Find(api.CephObjectUser, ref)
+		user, exists := c.Find(api.CephObjectUser, ref)
+		if !exists {
+			return Request{}, failure("api.reference", "CephNFSExport "+name+"'s spec.objectUserRef names CephObjectUser "+ref+", which is not declared", "declare CephObjectUser "+ref+", or set spec.objectUserRef to the name of a declared CephObjectUser")
+		}
 		request, err := objectUserRequest(c, user, contextName)
 		if err != nil {
 			return Request{}, err

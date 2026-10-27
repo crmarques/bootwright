@@ -116,7 +116,7 @@ func TestDefaultDataPoolMustBeReplicated(t *testing.T) {
 }
 
 func TestExtraECDataPoolAllowedWithDerivedOverwrites(t *testing.T) {
-	catalog := withFilesystemServices(t, clusterOf(t, 6, true), mdsService("files"))
+	catalog := withFilesystemServices(t, clusterOf(t, 6, "ibm"), mdsService("files"))
 	pool := cephfsDataPool("erasure", "erasure", chunks(4, 2))
 	noIssues(t, admitted(catalog, pool))
 	catalog = replace(catalog, pool)

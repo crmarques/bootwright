@@ -212,7 +212,7 @@ func (a *admission) replication(cluster, policy api.Object) {
 			} else {
 				a.issue("api.invariant", "$.spec.replicated.size", fmt.Sprintf("host-domain replicas exceed the %d OSD hosts whose OSD services declare device class %s", classHosts, class), fmt.Sprintf("declare crush_device_class %s on OSD services of at least %s hosts, or lower replicated.size", class, size))
 			}
-		} else if api.CephDistribution(cluster.Spec()) == "ibm" && !cluster.Spec().Has("topology", "stretch") && size.Cmp(hosts) == 0 {
+		} else if !cluster.Spec().Has("topology", "stretch") && size.Cmp(hosts) == 0 {
 			a.issue("api.invariant", "$.spec.replicated.size", "host-domain replication needs an OSD-bearing host beyond the effective replica size to recover a lost host's replicas", "add OSD-bearing hosts, or explicitly select replicated.size: 2 and minSize: 2 for three OSD-bearing hosts; omitted or zero size retains the default of 3")
 		}
 	}

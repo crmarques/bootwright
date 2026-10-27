@@ -31,7 +31,11 @@ func ObjectBucketBlockID(name string) string {
 
 func objectBucketRequest(c api.Catalog, bucket api.Object, contextName string) (Request, error) {
 	name, spec := bucket.Name(), bucket.Spec()
-	gateway, _ := c.Find(api.CephObjectGateway, spec.Get("objectGatewayRef").Text())
+	ref := spec.Get("objectGatewayRef").Text()
+	gateway, exists := c.Find(api.CephObjectGateway, ref)
+	if !exists {
+		return Request{}, failure("api.reference", "CephObjectBucket "+name+"'s spec.objectGatewayRef names CephObjectGateway "+ref+", which is not declared", "declare CephObjectGateway "+ref+", or set spec.objectGatewayRef to the name of a declared CephObjectGateway")
+	}
 	requests, err := gatewayRequests(c, gateway, contextName)
 	if err != nil {
 		return Request{}, err

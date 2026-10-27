@@ -297,3 +297,14 @@ func TestObjectUserObservationCapturesOnlyItsOutput(t *testing.T) {
 		t.Fatal("a user request under another kind was accepted")
 	}
 }
+
+func TestObjectUserPlanRefusesADanglingGatewayReference(t *testing.T) {
+	user := childOf(api.CephObjectUser, "app-writer", "objectGatewayRef", "missing")
+	catalog := planCatalog(3, 3, withPairAndHTTPRGW, objectGateway("objects"), user)
+	_, err := planned(t, catalog, api.CephObjectUser, "app-writer")
+	got := diagnostics.Of(err)
+	if len(got) != 1 || got[0].Code != "api.reference" || !strings.Contains(got[0].Message, "spec.objectGatewayRef names CephObjectGateway missing, which is not declared") ||
+		!strings.Contains(got[0].Remediation, "declare CephObjectGateway missing") || strings.Contains(got[0].Message, distributionReason) {
+		t.Fatalf("a dangling objectGatewayRef was refused %+v", got)
+	}
+}

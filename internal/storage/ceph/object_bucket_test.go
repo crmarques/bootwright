@@ -252,3 +252,10 @@ func TestObjectBucketPolicyFreezesAsTheTextTheWorkerAdmits(t *testing.T) {
 		t.Fatalf("the policy froze as %s, want %s", got, want)
 	}
 }
+
+func TestObjectBucketRefusesADanglingGatewayReference(t *testing.T) {
+	catalog := planCatalog(3, 3, withPairAndHTTPRGW, objectGateway("objects"), objectUserObject("app-writer"), childOf(api.CephObjectBucket, "app-data", "objectGatewayRef", "missing", "ownerRef", "app-writer"))
+	_, err := planned(t, catalog, api.CephObjectBucket, "app-data")
+	refusedWith(t, err, "api.reference", "CephObjectBucket app-data's spec.objectGatewayRef names CephObjectGateway missing, which is not declared",
+		"declare CephObjectGateway missing, or set spec.objectGatewayRef to the name of a declared CephObjectGateway")
+}

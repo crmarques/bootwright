@@ -8384,7 +8384,7 @@ profiles P1 to P7.
 
 The optional storage-kind check against `lifecycle.Supported` was not built;
 U03 still refuses only `distribution: ibm` clusters; whether it widens is
-[B838](backlog.md#b838). D183 records every answer to Q62 to Q118, moves B659 and B662 to
+[B838](#x175--audit-lane-q3-ceph-object-and-replica-refusals). D183 records every answer to Q62 to Q118, moves B659 and B662 to
 M2 as prerequisites of B485, and adds B837 to lane I.
 
 **Guard tests:** the tests above, each proved by a seeded mismatch; the
@@ -8949,6 +8949,30 @@ The enrollment observer test double guards its records with a lock, so
 **Guard tests:** `TestPendingWritesAreConfirmedUnlessAnswered` under `-race`,
 which reported the data race before the fix; the delivering commit records
 the gates.
+
+### X175 — Audit lane Q3: Ceph object and replica refusals
+
+**Items:** B849 and B838.
+**Kind:** safety. **Owner:** Storage. Delivered on 2026-10-27 as lane Q3 of the
+[audit remediation](backlog.md#lane-order-and-progress) under the owner's
+request to implement the remaining items, with D188's answer to QB; the lane
+parked B859 to B861.
+
+A CephObjectUser whose gateway is not declared, a CephNFSExport whose object
+user is not declared and a CephObjectBucket whose gateway is not declared now
+refuse with `api.reference`, naming the object, the field and the missing
+reference, instead of the distribution refusal. The replica-safety rule (a
+host-domain replicated pool of size N needs N+1 OSD hosts) holds on every Ceph
+distribution, for pools, placement policies and a gateway's derived pools; the
+U03 matrix row still runs on an IBM base, and the unit tests cover oss and
+redhat.
+
+**Guard tests:** `TestObjectUserPlanRefusesADanglingGatewayReference`,
+`TestNFSExportRefusesAUserWithADanglingGatewayReference`,
+`TestObjectBucketRefusesADanglingGatewayReference`,
+`TestReplicationNeedsAnAdditionalOSDHostOnEveryDistribution` and
+`TestGatewayDerivedPoolProtectionNeedsHosts`, each proved by a seeded mismatch;
+the delivering commit records the gates.
 
 ## M3 independent in-tree completion
 

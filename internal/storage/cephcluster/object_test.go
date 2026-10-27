@@ -163,20 +163,27 @@ func TestGatewayDerivedPoolProtectionNeedsHosts(t *testing.T) {
 	for _, row := range []struct {
 		name         string
 		hosts        int
-		ibm, config  bool
+		distribution string
+		config       bool
 		size, remedy string
 	}{
-		{name: "ibm defaults", hosts: 3, ibm: true, size: "3", remedy: defaultsRemedy},
-		{name: "ibm pair", hosts: 3, ibm: true, config: true},
-		{name: "oss three", hosts: 3},
-		{name: "oss two", hosts: 2, size: "3", remedy: defaultsRemedy},
-		{name: "ibm pair two", hosts: 2, ibm: true, config: true, size: "2", remedy: "add OSD-bearing hosts to CephCluster storage"},
+		{name: "ibm defaults", hosts: 3, distribution: "ibm", size: "3", remedy: defaultsRemedy},
+		{name: "ibm pair", hosts: 3, distribution: "ibm", config: true},
+		{name: "oss three", hosts: 3, distribution: "oss", size: "3", remedy: defaultsRemedy},
+		{name: "oss pair", hosts: 3, distribution: "oss", config: true},
+		{name: "redhat defaults", hosts: 3, distribution: "redhat", size: "3", remedy: defaultsRemedy},
+		{name: "redhat pair", hosts: 3, distribution: "redhat", config: true},
+		{name: "redhat pair two", hosts: 2, distribution: "redhat", config: true, size: "2", remedy: "add OSD-bearing hosts to CephCluster storage"},
+		{name: "oss two", hosts: 2, distribution: "oss", size: "3", remedy: defaultsRemedy},
+		{name: "ibm pair two", hosts: 2, distribution: "ibm", config: true, size: "2", remedy: "add OSD-bearing hosts to CephCluster storage"},
 	} {
-		catalog := clusterOf(t, row.hosts, row.ibm)
+		catalog := clusterOf(t, row.hosts, row.distribution)
 		_, catalog = withMDSService(t, catalog, rgwService(qualifiedRGWSpec()))
+		cluster := find(t, catalog, api.CephCluster, "storage")
 		if row.config {
-			cluster := find(t, catalog, api.CephCluster, "storage")
 			catalog = replace(catalog, cluster.WithSpec(cluster.Spec().WithPath(m(pair, "2", "osd_pool_default_min_size", "2"), "config", "global")))
+		} else {
+			catalog = replace(catalog, cluster.WithSpec(cluster.Spec().Without("config")))
 		}
 		issues := Validate(find(t, catalog, api.CephObjectGateway, "objects"), catalog)
 		if row.size == "" {

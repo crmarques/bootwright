@@ -36,6 +36,8 @@ func v(value any) api.Value {
 func object(kind api.Kind, name string, spec api.Value) api.Object {
 	return api.NewObject(kind, name, api.MapValue(), spec)
 }
+func safePair() api.Value { return m("size", 2, "minSize", 2) }
+
 func fixtureCatalog() api.Catalog {
 	objects := []api.Object{object(api.Environment, "environment", m("domains", m("base", "example.test"), "remoteMachinesAccessKey", m("keyRef", "fleet-key"), "sites", []api.Value{m("name", "site-a"), m("name", "site-b")}))}
 	nodes := []api.Value{}
@@ -46,11 +48,11 @@ func fixtureCatalog() api.Catalog {
 		objects = append(objects, object(api.Machine, machine, m("placement", m("site", "site-a"), "hardware", m("rootDevice", m("deviceName", "/dev/vda")), "os", m("provided", true), "network", m("addresses", []api.Value{m("name", "ssh", "address", fmt.Sprintf("192.0.2.%d/24", i))}), "access", m("ssh", m("addressRef", "ssh")))))
 	}
 	objects = append(objects,
-		object(api.CephCluster, "storage", m("release", "19.2.1", "cephadm", m("clusterSSH", m("user", "root"), "bootstrap", m("nodeRef", "node-1")), "networks", m("publicCIDRs", api.StringList("192.0.2.0/24")), "services", coreServices(), "topology", m("nodes", nodes))),
-		object(api.CephPlacementPolicy, "policy", m("clusterRef", "storage", "ruleName", "replicated", "failureDomain", "host")),
+		object(api.CephCluster, "storage", m("release", "19.2.1", "cephadm", m("clusterSSH", m("user", "root"), "bootstrap", m("nodeRef", "node-1")), "networks", m("publicCIDRs", api.StringList("192.0.2.0/24")), "services", coreServices(), "topology", m("nodes", nodes), "config", m("global", m("osd_pool_default_size", "2", "osd_pool_default_min_size", "2")))),
+		object(api.CephPlacementPolicy, "policy", m("clusterRef", "storage", "ruleName", "replicated", "failureDomain", "host", "replicated", safePair())),
 		object(api.CephPool, "metadata", m("clusterRef", "storage", "role", "cephfsMetadata", "placementPolicyRef", "policy")),
-		object(api.CephPool, "data", m("clusterRef", "storage", "role", "cephfsData")),
-		object(api.CephPool, "block", m("clusterRef", "storage", "role", "rbd")),
+		object(api.CephPool, "data", m("clusterRef", "storage", "role", "cephfsData", "replicated", safePair())),
+		object(api.CephPool, "block", m("clusterRef", "storage", "role", "rbd", "replicated", safePair())),
 		object(api.CephFilesystem, "files", m("clusterRef", "storage", "mdsServiceRef", "mds.files", "metadataPoolRef", "metadata", "dataPoolRefs", api.StringList("data"))),
 		object(api.CephObjectGateway, "objects", m("clusterRef", "storage", "serviceRef", "rgw.objects", "realm", "realm", "zoneGroup", "group", "zone", "zone")),
 		object(api.CephNFSExport, "nfs", m("clusterRef", "storage", "serviceID", "files", "filesystemRef", "files", "native", m("pseudo", "/files", "protocols", []api.Value{v(4)}, "fsal", m("name", "CEPH"), "clients", []api.Value{m("addresses", api.StringList("192.0.2.0/24"), "access_type", "RW", "squash", "root_squash")}))),

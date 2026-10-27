@@ -53,7 +53,11 @@ func ObjectUserProved(catalog api.Catalog, user api.Object, proofs []lifecycle.B
 
 func objectUserRequest(c api.Catalog, user api.Object, contextName string) (Request, error) {
 	name, spec := user.Name(), user.Spec()
-	gateway, _ := c.Find(api.CephObjectGateway, spec.Get("objectGatewayRef").Text())
+	ref := spec.Get("objectGatewayRef").Text()
+	gateway, exists := c.Find(api.CephObjectGateway, ref)
+	if !exists {
+		return Request{}, failure("api.reference", "CephObjectUser "+name+"'s spec.objectGatewayRef names CephObjectGateway "+ref+", which is not declared", "declare CephObjectGateway "+ref+", or set spec.objectGatewayRef to the name of a declared CephObjectGateway")
+	}
 	requests, err := gatewayRequests(c, gateway, contextName)
 	if err != nil {
 		return Request{}, err

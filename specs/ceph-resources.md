@@ -285,10 +285,10 @@ placement policy supplies its resolved pair to the pool. These values qualify
 validation but remain native or policy defaults unless an owning normalization
 rule explicitly materializes them.
 
-For ordinary (non-stretch) host-domain replication on an IBM cluster, the
-declared OSD-bearing host count must exceed the effective replica size. This is
-a native replica-safety rule, not a vendor support statement: a replicated pool
-of size N keeps one replica per host, so it needs at least N+1 hosts to
+For ordinary (non-stretch) host-domain replication on every Ceph
+distribution, the declared OSD-bearing host count must exceed the effective
+replica size. This is a native replica-safety rule, not a vendor support
+statement: a replicated pool of size N keeps one replica per host, so it needs at least N+1 hosts to
 re-create a lost host's replicas and return to full size; three replicas need
 four hosts. The three-node development profile therefore explicitly
 selects `size: 2` and `minSize: 2`; omission or zero still selects `3/2` and

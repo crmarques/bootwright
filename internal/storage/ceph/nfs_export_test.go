@@ -334,3 +334,26 @@ func TestNFSExportPlanPropagatesBackingRefusals(t *testing.T) {
 		t.Fatalf("a 63-character export name was refused: %v", diagnostics.Of(err))
 	}
 }
+
+func TestNFSExportRefusesAUserWithADanglingGatewayReference(t *testing.T) {
+	change := func(spec api.Value) api.Value { return withShares(withPairAndHTTPRGW(spec)) }
+	export := func(user string) api.Object {
+		return childOf(api.CephNFSExport, "docs", "serviceID", "shares", "objectUserRef", user, "native", rgwExportNative())
+	}
+	for _, row := range []struct {
+		name    string
+		catalog api.Catalog
+		message string
+		remedy  string
+	}{
+		{"dangling gateway", planCatalog(3, 3, change, objectGateway("objects"), childOf(api.CephObjectUser, "app-writer", "objectGatewayRef", "missing"), export("app-writer")),
+			"CephObjectUser app-writer's spec.objectGatewayRef names CephObjectGateway missing, which is not declared",
+			"declare CephObjectGateway missing, or set spec.objectGatewayRef to the name of a declared CephObjectGateway"},
+		{"dangling user", planCatalog(3, 3, change, objectGateway("objects"), objectUserObject("app-writer"), export("missing")),
+			"CephNFSExport docs's spec.objectUserRef names CephObjectUser missing, which is not declared",
+			"declare CephObjectUser missing, or set spec.objectUserRef to the name of a declared CephObjectUser"},
+	} {
+		_, err := planned(t, row.catalog, api.CephNFSExport, "docs")
+		refusedWith(t, err, "api.reference", row.message, row.remedy)
+	}
+}

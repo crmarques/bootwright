@@ -275,7 +275,6 @@ Alias cell.
 | [B825](#b825) | new, 2026-10-26 (spec audit L3) | product | CLI | CLI diff, settled, remediation, flag spellings and stub catalog match cli specs | Audit roadmap work; implemented only on an explicit lane request |
 | [B826](#b826) | new, 2026-10-26 (spec audit L4) | defect | Desired state | Admission enforces closed Entitlement arms, authored indexes, retired names and reserved-directory warning | Audit roadmap work; implemented only on an explicit lane request |
 | [B829](#b829) | new, 2026-10-26 (spec audit L7) | safety | Secrets | Work-area incarnation check, pipelined material payloads and fixed producer identity | Audit roadmap work; implemented only on an explicit lane request |
-| [B838](#b838) | new, 2026-10-26 (lane A review) | safety | Storage | U03's replica-safety refusal applies to every Ceph distribution, not only IBM | Widening adds a refusal; needs an owner decision |
 | [B839](#b839) | new, 2026-10-26 (lane B) | safety | Substrate and Workspace | A shared host claim taken while a removal's effect runs refuses | Found closing B803; the window is the removal's effect itself |
 | [B840](#b840) | new, 2026-10-26 (lane B) | safety | Managed OS | `%pre` compares the resolved root disk's WWN and serial with the frozen values | The follow-up the F10-01 choice left after the by-id path rule |
 | [B843](#b843) | new, 2026-10-27 (lane J) | safety | Substrate | The libvirt route check and a broader route through a gateway | The "identical or nested" rule refuses a VPN summary route |
@@ -284,7 +283,6 @@ Alias cell.
 | [B846](#b846) | new, 2026-10-27 (lane J) | defect | State reconciliation | `diff --observe` observes a lost block of a completed apply | Lane J's covered set not yet read by diff |
 | [B847](#b847) | new, 2026-10-27 (lane J) | defect | Infrastructure services | A zoned IPv6 SSH address refuses at plan, not at the record write | Found by lane J's review |
 | [B848](#b848) | new, 2026-10-27 (lane I) | enabling | Architecture | Cluster families publish the facts machine, controller and managed-service code reads | Found by the lane I review; each site reads its kind's own spec layout |
-| [B849](#b849) | new, 2026-10-27 (lane I) | defect | Storage | A CephObjectUser naming no gateway is refused for its distribution | Pre-existing defect found by the lane I review |
 | [B850](#b850) | new, 2026-10-27 (lane I) | defect | Desired state | A derived Machine contact `<machine>.<domain>` is checked against DNS name lengths | Found by the lane I review; derived cluster names were bounded in X171 |
 | [B851](#b851) | new, 2026-10-27 (lane I) | defect | Architecture | Spec prose says "controller" for a BMC | Found by the lane I review; B824 swept messages, rows and goldens |
 | [B852](#b852) | new, 2026-10-27 (lane I) | defect | CLI | `schema` and `version` help list a `--context` flag they ignore | Found by the lane I review |
@@ -293,6 +291,9 @@ Alias cell.
 | [B855](#b855) | new, 2026-10-27 (lane I) | product | Managed OS | An install profile's `ssh.initialPassword` is realized or retired | Admitted and refused at plan; no milestone names it |
 | [B856](#b856) | new, 2026-10-27 (lane I) | product | Infrastructure services | An ArtifactServer's `installOnly` retention is realized or retired | Admitted and refused at plan; no milestone names it |
 | [B857](#b857) | new, 2026-10-27 (lane I) | enabling | Desired state | The audit 5.7 operator tasks run on the reshaped API | B814's paper check was not run before X171 |
+| [B859](#b859) | new, 2026-10-27 (lane Q3) | defect | Storage | Pool admission honours the cluster's default replica pair | Pre-existing defect found by lane Q3 |
+| [B860](#b860) | new, 2026-10-27 (lane Q3) | safety | Storage | A bounded device class keeps the additional-host rule | Pre-existing gap found by lane Q3's review |
+| [B861](#b861) | new, 2026-10-27 (lane Q3) | defect | Storage | Ceph request builders refuse each unresolved reference by name | Same defect class as B849, left by lane Q3 |
 
 ### B82
 
@@ -3379,22 +3380,6 @@ transfer free of material, and the media role still writes
 `install-config.yaml` with `copy: content:`; the Ceph outputs present no
 recapture identity.
 
-### B838
-
-**Owner:** Storage. **Kind:** safety. **Requires:** an owner decision on the
-scope. **Definition:** Needs definition. Found in the lane A review of
-2026-10-26. Admission refuses a host-domain replicated pool whose size equals
-the OSD-host count (matrix row U03, `internal/storage/cephcluster/pools.go`) only when the
-cluster's `distribution` is `ibm`, because the rule began as IBM's colocation
-guidance. [D183](#d183) (Q64 a) now justifies it natively: a size-N
-pool needs N+1 OSD hosts to recover a lost host's replicas, which holds for
-every Ceph distribution. Whether the refusal widens to `oss` clusters is open,
-because widening adds a refusal to a plan that admits today. **Outcome:** the
-owner decides the scope; if it widens, the `distribution` condition is removed
-and the U03 row and [storage-coverage](../ceph-coverage.md) text drop the
-IBM qualifier. **Exit evidence:** a refusal test for an `oss` cluster and the
-matrix row.
-
 ### B839
 
 **Owner:** Substrate and Workspace. **Kind:** safety. **Requires:** none.
@@ -3494,18 +3479,6 @@ the category's kinds, so enabling another kind of a category edits none of
 them. **Exit evidence:** `TestGeneralFlowNamesNoImplementation` covers these
 packages and fails on a seeded family kind constant in each; the existing
 machine, controller and managed-service tests pass unchanged.
-
-### B849
-
-**Owner:** Storage. **Kind:** defect. **Requires:** none. **Definition:**
-Specified. Found by the lane I review (X171). `objectUserRequest` in
-`internal/storage/ceph/object_user.go` ignores the failed lookup of
-`spec.objectGatewayRef`, so a CephObjectUser whose gateway reference finds no
-CephObjectGateway is refused with "core Ceph realizes only the IBM Storage Ceph
-distribution", a reason that does not describe it. **Outcome:** the user is
-refused naming the missing gateway and the field that references it.
-**Exit evidence:** a plan test of a CephObjectUser with a dangling
-`objectGatewayRef` that expects that refusal and fails on the distribution one.
 
 ### B850
 
@@ -3618,6 +3591,38 @@ questions and wrong assumptions. **Exit evidence:** the results in a dated
 record under `audits/`, and an item for each shape or remedy the run shows
 misleads.
 
+### B859
+
+**Owner:** Storage. **Kind:** defect. **Requires:** none. **Definition:**
+Specified. Pool admission (`replicatedDefaults` in
+`internal/storage/cephcluster/pools.go`) judges a pool that omits its size
+against 3/2 (2/1 on a single host) and ignores the cluster's
+`osd_pool_default_size` and `osd_pool_default_min_size`, while the gateway's
+derived-pool check honours them (found by lane Q3, 2026-10-27). **Outcome:**
+both checks read the same effective default. **Exit evidence:** an admission
+test of a pool without a size on a cluster whose pair is 2/2.
+
+### B860
+
+**Owner:** Storage. **Kind:** safety. **Requires:** none. **Definition:**
+Specified. In `internal/storage/cephcluster/pools.go` the replica checks form
+an if/else-if chain, so a pool on a bounded device class whose size equals the
+class's host count, below the cluster's, skips the additional-host rule
+against the class hosts (lane Q3's review, 2026-10-27). **Outcome:** the
+additional-host rule also holds per bounded class. **Exit evidence:** a
+refusal test of that case on every distribution.
+
+### B861
+
+**Owner:** Storage. **Kind:** defect. **Requires:** none. **Definition:**
+Specified. Lane Q3 made the CephObjectUser, CephNFSExport user and
+CephObjectBucket builders refuse an unresolved reference with `api.reference`;
+`nfsExportRequest` still discards the lookup of `spec.subvolumeRef` and
+`spec.filesystemRef`, and other builders (`gatewayRequests` among them) discard
+theirs, so a reference that escapes compile-time resolution reads as the
+distribution refusal. **Outcome:** every Ceph request builder refuses an
+unresolved reference by name. **Exit evidence:** a test per builder.
+
 ## Audit remediation (2026-10-26)
 
 The [2026-10-26 spec audit](../../audits/spec/2026-10-26.md) ordered its
@@ -3676,7 +3681,7 @@ also updates this table.
 | 13 | L Corpus structure and skills | merged (X173) |
 | 14 | N Race coverage (B841) | merged (X174) |
 | 15 | O Store bounds and run scratch (B572, B389) | not started |
-| 16 | Q3 Ceph object and replica refusals (B849, B838) | not started |
+| 16 | Q3 Ceph object and replica refusals (B849, B838) | merged (X175) |
 | 17 | S Libvirt host evidence and routes (B845, B843, B840) | not started |
 | 18 | P Removal views and host claims (B846, B839, B844) | not started |
 | 19 | Q1 Unclaimed objects and references (B808, B826) | not started |
@@ -5665,7 +5670,7 @@ it binds and is not in the review queue; D23 to D26 and D162 carry it.
 audit remediation): D154 accepted D152 as written, clause 13 included; D20 is
 superseded by D152's clauses 3 and 4, and D21 and D22 are `delegated`. The
 replica-safety refusal (a pool of size N needs N+1 hosts) applies to every
-Ceph distribution ([B838](#b838)). A broader host route through a gateway that
+Ceph distribution ([B838](delivered.md#x175--audit-lane-q3-ceph-object-and-replica-refusals)). A broader host route through a gateway that
 covers a libvirt managed prefix is admitted with a warning naming the route
 and the in-prefix hosts it shadows; identical, nested-narrower and on-link
 broader routes refuse ([B843](#b843)). SSH-placed claims are also keyed by the

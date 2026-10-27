@@ -134,8 +134,7 @@ func (a *admission) gatewayDerivedPools(cluster api.Object) {
 		}
 	}
 	hosts := big.NewInt(osdHostCount(cluster))
-	ibm := api.CephDistribution(cluster.Spec()) == "ibm" && !cluster.Spec().Has("topology", "stretch")
-	if size.Cmp(hosts) > 0 || ibm && size.Cmp(hosts) == 0 {
+	if size.Cmp(hosts) > 0 || !cluster.Spec().Has("topology", "stretch") && size.Cmp(hosts) == 0 {
 		a.issue("api.invariant", "$.spec.zone", "the zone pools this gateway derives use the cluster's default replica size "+size.String()+", which its "+hosts.String()+" declared OSD-bearing hosts cannot hold under the replicated-pool host rule", remedy)
 	}
 }
