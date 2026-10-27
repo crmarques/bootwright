@@ -43,7 +43,7 @@ func TestContextSuccessJourneysHaveCompleteTextResults(t *testing.T) {
 			record := &dispatchRecord{result: syntheticContextResults()}
 			before := append([]contexts.Summary(nil), record.result.list.Contexts...)
 			var out, errOut bytes.Buffer
-			code := New(Config{Out: &out, ErrOut: &errOut, Services: dispatchSpies(record)}).Run(context.Background(), append(args, "--context", "ignored"))
+			code := New(Config{Out: &out, ErrOut: &errOut, Services: dispatchSpies(record)}).Run(context.Background(), args)
 			if code != 0 || errOut.Len() != 0 || record.calls != 1 || !strings.HasSuffix(out.String(), "\n") {
 				t.Fatalf("code=%d out=%q err=%q record=%#v", code, out.String(), errOut.String(), record)
 			}

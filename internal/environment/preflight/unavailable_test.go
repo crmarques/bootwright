@@ -17,9 +17,6 @@ func TestUnavailableService(t *testing.T) {
 		{"preflight infra", func(ctx context.Context) error {
 			return (Service{}).PreflightInfrastructure(ctx, InfrastructurePreflightRequest{})
 		}},
-		{"preflight clusters", func(ctx context.Context) error {
-			return (Service{}).PreflightClusters(ctx, ClustersPreflightRequest{})
-		}},
 		{"preflight all", func(ctx context.Context) error { return (Service{}).PreflightAll(ctx, AllPreflightRequest{}) }},
 	}
 	for _, tt := range tests {

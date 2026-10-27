@@ -6,6 +6,7 @@ import (
 	"slices"
 
 	environmentaccess "github.com/crmarques/bootwright/internal/environment/access"
+	"github.com/crmarques/bootwright/internal/environment/clusterpreflight"
 	"github.com/crmarques/bootwright/internal/environment/inspection"
 	environmentpreflight "github.com/crmarques/bootwright/internal/environment/preflight"
 	"github.com/crmarques/bootwright/internal/machine"
@@ -16,7 +17,10 @@ func infrastructurePreflightCommand() commandSpec {
 }
 
 func clustersPreflightCommand() commandSpec {
-	return commandSpec{path: "preflight clusters", short: "Check selected cluster readiness", flags: preflightFlags()}
+	return available(commandSpec{path: "preflight clusters", short: "Check selected cluster readiness", flags: preflightFlags(),
+		long: "Check the readiness of the selected OpenShiftClusters and CephClusters: the checks of preflight container-cluster and of preflight storage-cluster, reported together." +
+			" --clusters takes names of either kind, and a cluster of neither kind is refused." +
+			" The SSH and trust-on-first-use options apply to the CephCluster checks; the OpenShiftCluster checks observe the controller and take none."})
 }
 
 func allPreflightCommand() commandSpec {
@@ -61,8 +65,11 @@ func clusterExecCommand() commandSpec {
 
 type EnvironmentPreflightService interface {
 	PreflightInfrastructure(context.Context, environmentpreflight.InfrastructurePreflightRequest) error
-	PreflightClusters(context.Context, environmentpreflight.ClustersPreflightRequest) error
 	PreflightAll(context.Context, environmentpreflight.AllPreflightRequest) error
+}
+
+type ClustersPreflightService interface {
+	Check(context.Context, clusterpreflight.PreflightRequest) (*clusterpreflight.Report, error)
 }
 
 type EnvironmentInspectionService interface {
@@ -89,14 +96,6 @@ func (s Services) invokeEnvironmentPreflight(ctx context.Context, path string, v
 			TrustOnFirstUse: values.boolean("trust-on-first-use"),
 			SSH:             values.ssh(),
 		}, s.EnvironmentPreflight.PreflightInfrastructure)
-	case "preflight clusters":
-		return invokeRequest(ctx, values, environmentpreflight.ClustersPreflightRequest{
-			ContextName:     values.text("context"),
-			Clusters:        values.names("clusters"),
-			DryRun:          values.boolean("dry-run"),
-			TrustOnFirstUse: values.boolean("trust-on-first-use"),
-			SSH:             values.ssh(),
-		}, s.EnvironmentPreflight.PreflightClusters)
 	case "preflight all":
 		return invokeRequest(ctx, values, environmentpreflight.AllPreflightRequest{
 			ContextName:     values.text("context"),
@@ -107,6 +106,20 @@ func (s Services) invokeEnvironmentPreflight(ctx context.Context, path string, v
 	default:
 		return errors.New("command has no application dispatch")
 	}
+}
+
+func (s Services) invokeClustersPreflight(ctx context.Context, path string, values *requestValues, args []string) (commandResult, error) {
+	if s.ClustersPreflight == nil {
+		return commandResult{}, errMissingService
+	}
+	report, err := invokeResult(ctx, values, clusterpreflight.PreflightRequest{
+		ContextName:     values.text("context"),
+		Clusters:        values.names("clusters"),
+		DryRun:          values.boolean("dry-run"),
+		TrustOnFirstUse: values.boolean("trust-on-first-use"),
+		SSH:             values.ssh(),
+	}, s.ClustersPreflight.Check)
+	return commandResult{storagePreflight: report}, err
 }
 
 func (s Services) invokeEnvironmentInspection(ctx context.Context, path string, values *requestValues, args []string) (commandResult, error) {

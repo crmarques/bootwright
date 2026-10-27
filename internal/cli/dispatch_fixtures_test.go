@@ -12,6 +12,7 @@ import (
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
 	"github.com/crmarques/bootwright/internal/desiredstate/compilation"
 	environmentaccess "github.com/crmarques/bootwright/internal/environment/access"
+	"github.com/crmarques/bootwright/internal/environment/clusterpreflight"
 	"github.com/crmarques/bootwright/internal/environment/inspection"
 	environmentpreflight "github.com/crmarques/bootwright/internal/environment/preflight"
 	"github.com/crmarques/bootwright/internal/machine"
@@ -183,10 +184,6 @@ func (s environmentSpy) PreflightInfrastructure(ctx context.Context, request env
 	return s.record.called(ctx, "preflight infra", request)
 }
 
-func (s environmentSpy) PreflightClusters(ctx context.Context, request environmentpreflight.ClustersPreflightRequest) error {
-	return s.record.called(ctx, "preflight clusters", request)
-}
-
 func (s environmentSpy) PreflightAll(ctx context.Context, request environmentpreflight.AllPreflightRequest) error {
 	return s.record.called(ctx, "preflight all", request)
 }
@@ -209,6 +206,12 @@ func (s environmentSpy) ClusterRsh(ctx context.Context, request environmentacces
 
 func (s environmentSpy) ClusterExec(ctx context.Context, request environmentaccess.ClusterExecRequest) (*machine.SessionResult, error) {
 	return s.record.result.session, s.record.called(ctx, "cluster exec", request)
+}
+
+type clustersPreflightSpy struct{ record *dispatchRecord }
+
+func (s clustersPreflightSpy) Check(ctx context.Context, request clusterpreflight.PreflightRequest) (*clusterpreflight.Report, error) {
+	return s.record.result.storagePreflight, s.record.called(ctx, "preflight clusters", request)
 }
 
 type containerPreflightSpy struct{ record *dispatchRecord }
@@ -329,6 +332,7 @@ func dispatchSpies(record *dispatchRecord) Services {
 		DesiredState:          desiredStateSpy{record},
 		Controller:            controllerSpy{record},
 		EnvironmentPreflight:  environmentSpy{record},
+		ClustersPreflight:     clustersPreflightSpy{record},
 		EnvironmentInspection: environmentSpy{record},
 		EnvironmentAccess:     environmentSpy{record},
 		ContainerPreflight:    containerPreflightSpy{record},

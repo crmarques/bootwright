@@ -1,0 +1,5 @@
+Cluster preflight  synthetic
+  passed  api.sno.example.test  resolution.api: api.sno.example.test resolves to 192.0.2.10
+  passed  controller  capacity.memory: available capacity covers declared guests and reserve
+    Required 1024 bytes; available 4096; reserve 1024; deficit 0
+  Summary  2 passed, 0 failed, 0 unknown, 0 pending

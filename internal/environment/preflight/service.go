@@ -24,21 +24,6 @@ func (Service) PreflightInfrastructure(ctx context.Context, _ InfrastructurePref
 	return availability.ErrNotImplemented
 }
 
-type ClustersPreflightRequest struct {
-	ContextName     string
-	Clusters        []string
-	DryRun          bool
-	TrustOnFirstUse bool
-	SSH             machine.SSHOptions
-}
-
-func (Service) PreflightClusters(ctx context.Context, _ ClustersPreflightRequest) error {
-	if err := ctx.Err(); err != nil {
-		return err
-	}
-	return availability.ErrNotImplemented
-}
-
 type AllPreflightRequest struct {
 	ContextName     string
 	DryRun          bool

@@ -5,11 +5,21 @@ The tables define the complete public command tree, operands, flags and defaults
 
 ## Global flags
 
-Every command accepts and parses these inherited long flags so the same flag
-spellings and resolved values can be reused across workflow commands. A command
-resolves a global value only when its use case consumes it. An unused value
-grants no authority, performs no discovery or prompt, and changes no result;
-its syntax and context-independent safety checks still apply.
+Every command accepts and parses the presentation flags below so the same flag
+spellings and resolved values can be reused across workflow commands. `--context`
+and the `--ssh-*` flags are accepted only by the commands whose use case reads
+them; any other command refuses them as flags it does not accept. The
+context-free commands, which refuse `--context`, are `setup`, `controller
+rebind`, `context` (every subcommand), `media` (every subcommand), `add-ons
+list`, `help`, `completion`, `version` and `schema`; only `apply`, `destroy`,
+`machine rsh`, `machine exec`, `cluster rsh`, `cluster exec` and every
+`preflight` check but `preflight controller` accept `--ssh-*`. A command
+resolves a taken global value only when its use case consumes it. An unused
+value grants no authority, performs no discovery or prompt, and changes no
+result; its syntax and context-independent safety checks still apply.
+`TestInheritedFlagScopeIsTheFlagsEachCommandReads` derives the flags each
+command reads from its dispatch and holds these lists, help and completion to
+them.
 
 | Flag | Type and default | Contract |
 | --- | --- | --- |
@@ -19,7 +29,7 @@ its syntax and context-independent safety checks still apply.
 | `--detail compact\|full` | enum; `compact` | Select concise human facts or the available detailed evidence and access templates. Structured results retain every documented field. |
 | `--ascii[=<bool>]` | Boolean; `false` | Use ASCII presentation markers instead of Unicode markers. Raw exports remain byte-exact. |
 | `--width <columns>` | integer; `0` | Use automatic width at `0`, or an explicit bound from `24` through `500`, capped by an injected terminal width when available. Wrapping measures terminal cells. |
-| `--context <name>` | context name; current context | Select the named context for a context-backed command. `setup` and `preflight controller` consume it as the [Controller journeys](../controller.md#the-setup-flow) define, and the [flag relationships](#flag-relationships-and-safeguards) below restrict it. |
+| `--context <name>` | context name; current context | Select the named context for a context-backed command. `preflight controller` consumes it as the [Controller journeys](../controller.md#the-setup-flow) define, and the [flag relationships](#flag-relationships-and-safeguards) below restrict it. |
 | `--ssh-id-file <path>` | path; none | Offer this private key first for an SSH operation; a declared credential remains the fallback. A leading `~` resolves from the invoking account database, not an untrusted `HOME`; the opened file must satisfy the private-file rules in [security](../security.md). |
 | `--ssh-user <name>` | POSIX user name; none | Use one explicitly borrowed account for eligible OS-ready machines. On [`machine rsh` and `machine exec`](../cli.md#machine-ssh-sessions) it reaches any account under the session's credential rules. It does not alter desired state or the managed identity Bootwright installs. |
 | `--ssh-ask-sudo-password[=<bool>]` | Boolean; `false` | Prompt once for the borrowed account's sudo password, hold it only in bounded memory for this invocation, and never place it in arguments, environment, state, output, or logs. It conflicts with JSON or YAML output and non-interactive execution, and is not consumed by `machine rsh` or `machine exec`. |
@@ -35,7 +45,7 @@ route is owned by the
 After surrounding whitespace is trimmed, an SSH user matches
 `^[a-z_][a-z0-9_-]{0,31}$` exactly.
 
-Context-independent validation of inherited flags always checks an explicitly
+Context-independent validation of the inherited flags a command takes always checks an explicitly
 non-empty `--context` against the context-name DNS-label grammar, an explicit
 `--ssh-user` against the trimmed grammar above,
 `--ssh-user-for-provisioned=true` for its required non-empty `--ssh-user`, and
@@ -105,7 +115,7 @@ The three `media` commands follow the host-wide
 | `bootwright validate` | repeatable `-f, --file <file-or-dir>` | validation summary with admission counts, exclusions and advisories | read the supplied input, or the selected context's input when `-f` is omitted; no write |
 | `bootwright preflight controller` | none | [baseline or explicit-context controller readiness](../controller.md#the-setup-flow), including the acquisition route it resolved | bounded local observation; no state publication |
 | `bootwright preflight infra` | `--clusters <list>` default all; `--dry-run` false; `--trust-on-first-use=<bool>` default `true` | readiness checks of the infrastructure-services stage's kinds (Proxy, DNSServer, NTPServer, ArtifactServer, Registry and LoadBalancer) and of the substrates (InfraProvider and its Machines) | observe unless `--dry-run`, which is local-only |
-| `bootwright preflight clusters` | same flags as `preflight infra` | all selected cluster readiness checks | observe unless `--dry-run` |
+| `bootwright preflight clusters` | same flags as `preflight infra` | container and storage cluster checks | observe unless `--dry-run` |
 | `bootwright preflight container-cluster` | `--clusters`, `--dry-run`, with OpenShiftCluster-only selection | container-cluster readiness checks | observe unless `--dry-run` |
 | `bootwright preflight storage-cluster` | same flags as `preflight infra`, with CephCluster-only selection | storage-cluster readiness checks | observe unless `--dry-run` |
 | `bootwright preflight add-ons` | `--clusters <list>` default all OpenShiftClusters | add-on prerequisite checks | bounded observation |
@@ -120,17 +130,17 @@ The three `media` commands follow the host-wide
 | `bootwright apply` | repeatable `--authorize <token>[=<digest>][,<token>...]`; `--stage <list>` default all stages; `--until <cluster>.<package>`; `--yes` false | completed full apply, a pause at the selected stage boundary or after the named add-on instance, exact continued state, or a settled result when the declared state is already realized | complete planned mutation, or none when it settles, beyond completing an operation's interrupted finalization (its record, releases and evidence) |
 | `bootwright destroy` | repeatable `--authorize <token>[=<digest>][,<token>...]`; repeatable `--unregistered <machine>[,<machine>...]`; `--yes` false | completed full destroy, exact continued state, or a settled result when the context owns nothing | complete planned removal, or none when it settles, beyond completing an operation's interrupted finalization (its record, releases and evidence) or releasing what an interrupted registration left, and the [housekeeping](../state-reconciliation.md#context-mutation-evidence) of the operation claims that hold nothing; over an apply that did not complete, it first proves the outcome of every effect it takes back |
 
-Not yet met: `preflight infra`, `preflight clusters`, `preflight all`,
+Not yet met: `preflight infra`, `preflight all`,
 `preflight add-ons`, `render` with a path flag, `render installer` and `render
-storage` run no use case and answer `cli.not-implemented`, so their flag
-contracts are intent; `render installer` is tracked as
+storage` run no use case and answer `cli.not-implemented`; their
+contracts are intent: `render installer` is tracked as
 [B52](../milestones/m7.md#b52), `render storage` as
-[B55](../milestones/m7.md#b55) and the others as
-[B825](../milestones/backlog.md#b825). `render effective`, `preflight
-controller`, `preflight container-cluster` and `preflight storage-cluster` are
-available.
-`TestUnavailableCommandsMatchTheStubWiring` holds this list to the services
-`cmd/bootwright/wiring_stubs.go` binds.
+[B55](../milestones/m7.md#b55), `preflight add-ons` as
+[B770](../milestones/backlog.md#b770) and the others as
+[B858](../milestones/backlog.md#b858). `render effective`, `preflight
+controller`, `preflight clusters`, `preflight container-cluster` and `preflight
+storage-cluster` are available.
+`TestUnavailableCommandsMatchTheStubWiring` holds this list.
 
 ### Resource, access, and general commands
 

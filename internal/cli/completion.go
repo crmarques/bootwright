@@ -166,7 +166,7 @@ func completionResolve(root *cobra.Command, words []string, descriptions bool, c
 func completionFlags(cmd *cobra.Command) []*pflag.Flag {
 	flags := make(map[string]*pflag.Flag)
 	collect := func(flag *pflag.Flag) {
-		if !flag.Hidden && flag.Deprecated == "" {
+		if !flag.Hidden && flag.Deprecated == "" && acceptsFlag(cmd.Annotations, flag.Name) {
 			flags[flag.Name] = flag
 		}
 	}

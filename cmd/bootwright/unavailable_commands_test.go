@@ -15,7 +15,7 @@ import (
 // service backs and the arguments that reach it.
 var stubCommands = map[string]map[string][]string{
 	"AddOnPreflight":       {"preflight add-ons": {"preflight", "add-ons"}},
-	"EnvironmentPreflight": {"preflight infra": {"preflight", "infra"}, "preflight clusters": {"preflight", "clusters"}, "preflight all": {"preflight", "all"}},
+	"EnvironmentPreflight": {"preflight infra": {"preflight", "infra"}, "preflight all": {"preflight", "all"}},
 	"Installer":            {"render installer": {"render", "installer"}},
 	"StorageArtifacts":     {"render storage": {"render", "storage"}},
 	"Artifacts":            {"render": {"render", "--input-dir", "inputs", "--output-dir", "artifacts"}},
@@ -47,7 +47,7 @@ func TestUnavailableCommandsMatchTheStubWiring(t *testing.T) {
 	}
 	slices.Sort(derived)
 	listed := documentedUnavailableCommands(t)
-	if !slices.Equal(derived, listed) || len(derived) != 7 {
+	if !slices.Equal(derived, listed) || len(derived) != 6 {
 		t.Fatalf("wireStubs backs %q; specs/cli/commands.md lists %q", derived, listed)
 	}
 }

@@ -198,8 +198,9 @@ realize says so and may name its backlog item.
 `TestRefusalsNameNoVendorRelease` check the Go sources and the collection's
 plugins.
 A context-backed next action carries `--context <name>` for the context the
-invocation resolved. The context-free commands `setup`, `media`, `version` and `schema`
-take none. No diagnostic carries confidential material.
+invocation resolved. The context-free commands (`setup`, `media`, `version`, `schema` and the
+others [listed with the global flags](commands.md#global-flags)) take none and
+refuse `--context`. No diagnostic carries confidential material.
 
 ## JSON output
 
@@ -326,6 +327,28 @@ bounded read-only command set. Anonymous key observation under
 context does not trust reports its `host.trust` check `unknown` with the
 observed fingerprint and the `machine trust` request that enrolls it, and
 without the flag the check names no fingerprint.
+
+`preflight clusters` runs the checks of `preflight container-cluster` and of
+`preflight storage-cluster` at once and reports them as one storage-preflight
+report with `target` `clusters`. `--clusters` names OpenShiftClusters and
+CephClusters; each name goes to the checks of its kind, those of a kind no name
+selects do not run, and a name of neither kind is the `access.target` refusal
+before any check. The checks of both kinds are listed together in target and
+check order. Two checks are the same when their `target` and `id` both match;
+the same check from both kinds, such as the capacity of a host that holds nodes
+of both, appears once at its worse status, ordered passed, pending, unknown,
+failed, and the container-side check is kept at equal severity. The summary
+counts the merged list, and one diagnostic stands for the whole report:
+`preflight.failed` when any check failed, otherwise `preflight.unknown` when any
+is unknown or pending, naming `preflight clusters` in its remediation. An error
+that stops either set of checks before it reports is the command's only output,
+with no partial report; it also stops the other set, and when both stop, the
+container checks' error is the one reported. `--trust-on-first-use` and the SSH
+overrides reach the CephCluster checks alone: the OpenShiftCluster checks
+observe the controller and take neither, as
+[openshift-clusters](../openshift-clusters.md#preflight) states, so SSH overrides
+with no CephCluster selected, named or declared, are the `cli.usage` refusal
+`preflight container-cluster` gives.
 
 A `setup --dry-run --output json` that the host or the state root refuses
 writes the same fields with `ok` `false` and the refusal in `diagnostics`,

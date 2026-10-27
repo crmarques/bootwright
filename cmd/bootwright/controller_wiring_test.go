@@ -18,19 +18,13 @@ import (
 )
 
 func TestComposedBaselineDryRunReadsNoSetupState(t *testing.T) {
-	for _, flag := range []string{"", "--context="} {
-		ports, stores := &setupPorts{}, &controllerPorts{}
-		services := assembleServices(serviceDependencies{Controller: ports.setupDependencies(stores, stores)})
-		args := []string{"setup", "--dry-run"}
-		if flag != "" {
-			args = append(args, flag)
-		}
-		var out, errOut bytes.Buffer
-		code := runServices(context.Background(), args, &out, &errOut, services)
-		if code != 0 || errOut.Len() != 0 || ports.reads == 0 || ports.effects != 0 || stores.effects != 0 || !strings.Contains(out.String(), "Scope     baseline") ||
-			!strings.Contains(out.String(), "Outcome  planned") || !strings.Contains(out.String(), "  podman\n") {
-			t.Fatal(code, out.String(), errOut.String(), ports, stores)
-		}
+	ports, stores := &setupPorts{}, &controllerPorts{}
+	services := assembleServices(serviceDependencies{Controller: ports.setupDependencies(stores, stores)})
+	var out, errOut bytes.Buffer
+	code := runServices(context.Background(), []string{"setup", "--dry-run"}, &out, &errOut, services)
+	if code != 0 || errOut.Len() != 0 || ports.reads == 0 || ports.effects != 0 || stores.effects != 0 || !strings.Contains(out.String(), "Scope     baseline") ||
+		!strings.Contains(out.String(), "Outcome  planned") || !strings.Contains(out.String(), "  podman\n") {
+		t.Fatal(code, out.String(), errOut.String(), ports, stores)
 	}
 }
 

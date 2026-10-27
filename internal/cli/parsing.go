@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"slices"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -76,6 +77,7 @@ func resolveInvocation(root *cobra.Command, args []string) (invocation, error) {
 	operands := false
 	pathComplete := false
 	helpCommand := false
+	var givenInherited []string
 	failure := func(remaining []string, reason resolutionError) (invocation, error) {
 		arguments := append([]string(nil), forwarded...)
 		for i := len(localFlags) - 1; i >= 0; i-- {
@@ -105,6 +107,9 @@ func resolveInvocation(root *cobra.Command, args []string) (invocation, error) {
 					return failure(args[i:], flagNotAcceptedHere)
 				}
 				return failure(args[i:], unknownFlag)
+			}
+			if root.PersistentFlags().Lookup(flag.Name) != nil {
+				givenInherited = append(givenInherited, flag.Name)
 			}
 			start := len(forwarded)
 			forwarded = append(forwarded, arg)
@@ -146,22 +151,31 @@ func resolveInvocation(root *cobra.Command, args []string) (invocation, error) {
 			return failure(nil, localFlagNotInherited)
 		}
 	}
+	if slices.ContainsFunc(givenInherited, func(name string) bool { return !acceptsFlag(current.Annotations, name) }) {
+		return failure(nil, flagNotAcceptedHere)
+	}
 	command, remaining, err := root.Find(path)
 	if err != nil || len(remaining) != 0 || command != current {
 		return failure(nil, commandResolutionFailed)
 	}
 	result := invocation{command: command, arguments: forwarded}
 	if helpCommand {
-		target := root
-		for _, token := range helpPath {
-			target = exactChild(target, token)
-			if target == nil || target.Hidden {
-				return failure(nil, unknownHelpCommand)
-			}
+		if result.helpTarget = helpTarget(root, helpPath); result.helpTarget == nil {
+			return failure(nil, unknownHelpCommand)
 		}
-		result.helpTarget = target
 	}
 	return result, nil
+}
+
+func helpTarget(root *cobra.Command, path []string) *cobra.Command {
+	target := root
+	for _, token := range path {
+		target = exactChild(target, token)
+		if target == nil || target.Hidden {
+			return nil
+		}
+	}
+	return target
 }
 
 func syntaxJSON(command *cobra.Command, args []string) bool {
@@ -207,7 +221,7 @@ func syntaxFormat(command *cobra.Command, args []string) string {
 func tokenFlag(root, current *cobra.Command, token string) (*pflag.Flag, bool) {
 	if strings.HasPrefix(token, "--") {
 		name, _, attached := strings.Cut(token[2:], "=")
-		if flag := root.PersistentFlags().Lookup(name); flag != nil {
+		if flag := root.PersistentFlags().Lookup(name); flag != nil && acceptsFlag(current.Annotations, name) {
 			return flag, attached
 		}
 		return current.LocalNonPersistentFlags().Lookup(name), attached

@@ -1,0 +1,49 @@
+{
+  "schemaVersion": "v1alpha1",
+  "command": "preflight clusters",
+  "ok": false,
+  "exitCode": 1,
+  "result": {
+    "context": "synthetic",
+    "target": "clusters",
+    "checks": [
+      {
+        "id": "resolution.api",
+        "target": "api.sno.example.test",
+        "status": "pending",
+        "reason": "dry-run would resolve api.sno.example.test to 192.0.2.10",
+        "next": "route zone sno.example.test to DNSServer dns at 192.0.2.53"
+      },
+      {
+        "id": "capacity.memory",
+        "target": "controller",
+        "status": "pending",
+        "reason": "dry-run would check capacity.memory on controller",
+        "capacity": {
+          "resource": "memory",
+          "unit": "bytes",
+          "required": 1024,
+          "available": 4096,
+          "reserve": 1024,
+          "deficit": 0,
+          "observed": true
+        }
+      }
+    ],
+    "summary": {
+      "passed": 0,
+      "failed": 0,
+      "unknown": 0,
+      "pending": 2
+    }
+  },
+  "diagnostics": [
+    {
+      "severity": "error",
+      "code": "preflight.unknown",
+      "message": "cluster readiness is not proved; inspect the failed, unknown and pending checks",
+      "remediation": "resolve the reported prerequisites and repeat preflight clusters"
+    }
+  ],
+  "logs": []
+}

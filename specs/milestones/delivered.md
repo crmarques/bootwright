@@ -8860,7 +8860,7 @@ keeps the State reconciliation name.
 Delivered on 2026-10-27 as lane M of the
 [audit remediation](backlog.md#lane-order-and-progress) under D182, with
 D183's answers to Q104, Q108 and Q109; the lane also partly delivered
-[B825](backlog.md#b825).
+[B825](#x177--audit-lane-t-inherited-flags-and-cluster-preflight).
 
 `diff`'s Input line no longer promises what apply does and names `status` for
 the next step; an opt-in `diff --exit-code` exits 3 when any object differs or
@@ -9005,6 +9005,35 @@ its fix. Old `/var/tmp` scratch directories age out under systemd-tmpfiles.
 repeated-destroy, reopened-log, terminal-record and scratch-parent tests and
 the `lifecycle_scratch` unit tests, each proved by a seeded mismatch; the
 delivering commit records the gates.
+
+### X177 — Audit lane T: inherited flags and cluster preflight
+
+**Items:** B852 and B825.
+**Kind:** product. **Owner:** CLI. Delivered on 2026-10-27 as lane T of the
+[audit remediation](backlog.md#lane-order-and-progress) under the owner's
+request to implement the remaining items, with D188's answers; the lane
+parked B858, B862 and B863.
+
+Every command refuses an inherited flag it does not read, before or after the
+command, with "flag is not accepted by this command", and its help,
+completion and detail hint omit it: `setup`, `controller rebind`, `context`,
+`media`, `add-ons list`, `help`, `completion`, `version` and `schema` refuse
+`--context` (`setup` and `media` accepted and ignored it before), and only
+`apply`, `destroy`, the machine and cluster sessions and the preflight checks
+but `preflight controller` take the `--ssh-*` flags. A test derives every
+command's reads from the catalog.
+
+`preflight clusters` runs the OpenShiftCluster and CephCluster checks together
+and returns one report: names route to their family, an unknown name refuses
+before any check, a check both sides report appears once at its worse status
+(the container side on a tie), one side's error with no report cancels the
+other, and SSH options with no CephCluster selected refuse. `preflight infra`,
+`preflight all` and `render` with a path flag move to B858, and `preflight
+add-ons` stays with [B770](backlog.md#b770).
+
+**Guard tests:** the inherited-scope, context-free, cluster preflight service
+and golden tests, each proved by a seeded mismatch; the delivering commit
+records the gates.
 
 ## M3 independent in-tree completion
 

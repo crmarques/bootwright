@@ -3,6 +3,7 @@ package cli
 import (
 	"fmt"
 	"io"
+	"slices"
 
 	"github.com/crmarques/bootwright/internal/storage/preflight"
 	"github.com/spf13/cobra"
@@ -53,8 +54,11 @@ func writeStoragePreflight(out, errOut io.Writer, command string, report *prefli
 		return writeEnvelope(out, commandEnvelope{SchemaVersion: "v1alpha1", Command: command, OK: exitCode == 0, ExitCode: exitCode, Result: result, Diagnostics: displayDiagnostics(diagnostics), Logs: []string{}})
 	}
 	title := "Storage preflight"
-	if report.Target == "container-cluster" {
+	switch report.Target {
+	case "container-cluster":
 		title = "Container-cluster preflight"
+	case "clusters":
+		title = "Cluster preflight"
 	}
 	if _, err := fmt.Fprintf(out, "%s  %s\n", title, result.Context); err != nil {
 		return err
@@ -85,7 +89,7 @@ func writeStoragePreflight(out, errOut io.Writer, command string, report *prefli
 }
 
 func (r *Runner) writeNegativeReadinessResults(command *cobra.Command, path string, result commandResult, diagnostics []diagnostic) (bool, error) {
-	if (path == "preflight storage-cluster" || path == "preflight container-cluster") && result.storagePreflight != nil {
+	if slices.Contains([]string{"preflight storage-cluster", "preflight container-cluster", "preflight clusters"}, path) && result.storagePreflight != nil {
 		return true, writeStoragePreflight(r.config.Out, r.config.ErrOut, path, result.storagePreflight, diagnostics, 1, selectedJSON(command))
 	}
 	return r.writeNegativeSecretCheck(command, path, result, diagnostics)

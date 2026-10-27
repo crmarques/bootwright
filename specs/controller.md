@@ -280,7 +280,7 @@ no dnf call. The Ceph node's own package path is unchanged.
 ## The setup flow
 
 `setup` selects no context. It ignores the invoking user's current selection,
-resolves no desired state, and consumes no explicit `--context` value. This
+resolves no desired state, and refuses an explicit `--context` as a flag it does not accept. This
 allows preparation before context creation or Environment import, and makes one
 prepared host serve every context created on it. No current directory or user
 profile selects inputs. Its acquisition route is the

@@ -22,8 +22,5 @@
       --progress    Select progress animation (values: auto, always, never) · default auto
       --width       Set presentation width (0: automatic) · default 0
 
-  More detail
-    Use --help --detail full to include SSH overrides.
-
   Examples
     bootwright plan --context lab --stage machines

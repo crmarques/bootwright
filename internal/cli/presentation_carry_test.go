@@ -44,7 +44,7 @@ func TestCarryPresentationPreservesArgumentsAndResolvedColor(t *testing.T) {
 		want []string
 	}{
 		{"default", []string{"context", "list"}, PresentationOptions{NoColor: true}, []string{"context", "list", "--color=never"}},
-		{"prefix", []string{"--context", "demo", "context", "list"}, PresentationOptions{NoColor: true}, []string{"--context", "demo", "context", "list", "--color=never"}},
+		{"prefix", []string{"--context", "demo", "machine", "list"}, PresentationOptions{NoColor: true}, []string{"--context", "demo", "machine", "list", "--color=never"}},
 		{"explicit auto", []string{"--color", "auto", "machine", "list"}, PresentationOptions{NoColor: true}, []string{"--color", "auto", "machine", "list", "--color=never"}},
 		{"final auto", []string{"machine", "--color=always", "list", "--color", "auto"}, PresentationOptions{NoColor: true}, []string{"machine", "--color=always", "list", "--color", "auto", "--color=never"}},
 		{"explicit always", []string{"machine", "list", "--color", "always"}, PresentationOptions{NoColor: true}, []string{"machine", "list", "--color", "always"}},

@@ -101,7 +101,9 @@ func (s Services) invoke(ctx context.Context, path string, flags *pflag.FlagSet,
 		return s.invokeDesiredState(ctx, path, &values, args)
 	case "preflight controller", "setup", "controller rebind":
 		return s.invokeController(ctx, path, &values, args)
-	case "preflight infra", "preflight clusters", "preflight all":
+	case "preflight clusters":
+		return s.invokeClustersPreflight(ctx, path, &values, args)
+	case "preflight infra", "preflight all":
 		return commandResult{}, s.invokeEnvironmentPreflight(ctx, path, &values, args)
 	case "cluster list", "cluster info", "cluster keyring":
 		return s.invokeEnvironmentInspection(ctx, path, &values, args)

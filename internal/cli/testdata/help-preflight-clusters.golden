@@ -1,5 +1,9 @@
   bootwright / preflight clusters
-      Check selected cluster readiness. This command is recognized but not implemented.
+      Check the readiness of the selected OpenShiftClusters and CephClusters: the checks of
+      preflight container-cluster and of preflight storage-cluster, reported together.
+      --clusters takes names of either kind, and a cluster of neither kind is refused. The SSH
+      and trust-on-first-use options apply to the CephCluster checks; the OpenShiftCluster
+      checks observe the controller and take none.
 
   Usage
     bootwright preflight clusters [flags]
@@ -21,3 +25,6 @@
 
   More detail
     Use --help --detail full to include SSH overrides.
+
+  Examples
+    bootwright preflight clusters --context lab --output json

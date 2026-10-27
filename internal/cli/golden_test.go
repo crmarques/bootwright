@@ -588,6 +588,13 @@ func cliGoldens() []cliGolden {
 			r.err = diagnostics.NewFailureWithRemediation("preflight.unknown", "storage readiness is not proved", "", "resolve the reported prerequisites")
 		}},
 
+		{golden: "cli-clusters-preflight", args: "preflight clusters --context synthetic", record: func(r *dispatchRecord) { r.result.storagePreflight = clustersPreflightReport(false) }},
+		{golden: "cli-clusters-preflight-json", args: "preflight clusters --context synthetic --output json", record: func(r *dispatchRecord) { r.result.storagePreflight = clustersPreflightReport(false) }},
+		{golden: "cli-clusters-preflight-pending-json", args: "preflight clusters --context synthetic --dry-run --output json", code: 1, record: func(r *dispatchRecord) {
+			r.result.storagePreflight = clustersPreflightReport(true)
+			r.err = diagnostics.NewFailureWithRemediation("preflight.unknown", "cluster readiness is not proved; inspect the failed, unknown and pending checks", "", "resolve the reported prerequisites and repeat preflight clusters")
+		}},
+
 		// Controller reports: an unpresented dry-run plan in text and JSON, a
 		// presented setup that changed the host, and a context's readiness.
 		{golden: "cli-setup-plan", args: "setup --dry-run", record: func(r *dispatchRecord) { r.result.controller = setupDryRun(platform) }},
@@ -1264,7 +1271,7 @@ func TestEveryAvailableCommandHasAGolden(t *testing.T) {
 	}
 	jsonContracts := []string{
 		"add-ons list",
-		"validate", "preflight storage-cluster", "render effective", "status", "diff",
+		"validate", "preflight storage-cluster", "preflight clusters", "render effective", "status", "diff",
 		"secret check", "secret list", "secret info", "secret encryption status", "machine trust", "setup",
 		"machine list", "machine info", "machine start", "machine stop", "machine restart", "media list", "cluster list", "cluster info",
 	}
@@ -1350,6 +1357,17 @@ func containerPreflightReport(pending bool) *storagepreflight.Report {
 		summary = storagepreflight.Summary{Pending: 1}
 	}
 	return &storagepreflight.Report{Context: "synthetic", Target: "container-cluster", Checks: []storagepreflight.Check{{ID: "resolution.api", Target: "api.sno.example.test", Status: status, Reason: reason, Next: next}}, Summary: summary}
+}
+
+func clustersPreflightReport(pending bool) *storagepreflight.Report {
+	report := &storagepreflight.Report{Context: "synthetic", Target: "clusters"}
+	report.Checks = append(containerPreflightReport(pending).Checks, successfulStoragePreflight().Checks...)
+	report.Summary = storagepreflight.Summary{Passed: 2}
+	if pending {
+		report.Checks[1].Status, report.Checks[1].Reason = "pending", "dry-run would check capacity.memory on controller"
+		report.Summary = storagepreflight.Summary{Pending: 2}
+	}
+	return report
 }
 
 // unfinishedContexts lists one context whose apply has not completed, with

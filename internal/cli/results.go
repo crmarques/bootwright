@@ -44,7 +44,7 @@ func (r *Runner) writeResult(ctx context.Context, command *cobra.Command, path s
 		if result.addOns != nil {
 			return true, writeAddOns(out, path, result.addOns, selectedStructured(command))
 		}
-	case "preflight storage-cluster", "preflight container-cluster":
+	case "preflight storage-cluster", "preflight container-cluster", "preflight clusters":
 		if result.storagePreflight != nil {
 			return true, writeStoragePreflight(out, errOut, path, result.storagePreflight, nil, 0, selectedJSON(command))
 		}

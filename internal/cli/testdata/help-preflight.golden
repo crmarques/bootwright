@@ -8,7 +8,7 @@
   COMMAND             PURPOSE
   add-ons             Check add-on prerequisites (unavailable)
   all                 Check all prerequisites (unavailable)
-  clusters            Check selected cluster readiness (unavailable)
+  clusters            Check selected cluster readiness
   container-cluster   Check OpenShiftCluster readiness
   controller          Check controller prerequisites
   infra               Check infrastructure readiness (unavailable)

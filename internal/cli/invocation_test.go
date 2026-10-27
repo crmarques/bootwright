@@ -103,7 +103,6 @@ func TestOnlyContextFreeAcquisitionConsumesTheInvokingEnvironment(t *testing.T) 
 		{"setup", []string{"--dry-run"}, readsRoute},
 		{"setup", []string{"--yes"}, readsRoute},
 		{"setup", []string{"--dry-run", "--output", "json"}, readsRoute},
-		{"setup", []string{"--context", "lab"}, readsRoute},
 		{"setup", []string{"--download-only", "--dest-dir", "wheels"}, readsRoute},
 		{"setup", []string{"--wheel-mirror", "https://mirror.example/wheels"}, readsRoute},
 		// Preflight reports the host's route only when no context is named; an
@@ -116,7 +115,6 @@ func TestOnlyContextFreeAcquisitionConsumesTheInvokingEnvironment(t *testing.T) 
 		// The media store is host-wide, so only the source decides: a URL is
 		// downloaded, a local file is copied.
 		{"media add", []string{"--name", "image.iso", "--from-url", source, "--sha256", digest}, readsRoute},
-		{"media add", []string{"--name", "image.iso", "--from-url", source, "--sha256", digest, "--context", "lab"}, readsRoute},
 		{"media add", []string{"--name", "image.iso", "--from-url-file", "-", "--sha256", digest}, readsRoute},
 		{"media add", []string{"--name", "image.iso", "--from-url-file", "/run/url", "--sha256", digest}, readsRoute},
 		{"media add", []string{"--name", "image.iso", "--from-file", "/images/image.iso"}, ignoresRoute},

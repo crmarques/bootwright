@@ -33,7 +33,7 @@ and controller setup instructions for the new context:
 bootwright validate --file "$addon_input"
 bootwright context init --name addons-metallb --input-dir "$addon_input"
 bootwright secret generate --context addons-metallb
-bootwright setup --context addons-metallb
+bootwright setup
 bootwright plan --context addons-metallb
 bootwright apply --context addons-metallb
 bootwright diff --context addons-metallb --observe

@@ -11,6 +11,7 @@ import (
 	"github.com/crmarques/bootwright/internal/controller/hostlinux"
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
 	"github.com/crmarques/bootwright/internal/controller/privilege"
+	"github.com/crmarques/bootwright/internal/environment/clusterpreflight"
 	machineaccess "github.com/crmarques/bootwright/internal/machine/access"
 	"github.com/crmarques/bootwright/internal/machine/power"
 	"github.com/crmarques/bootwright/internal/managedos/media"
@@ -156,6 +157,7 @@ func assembleServices(deps serviceDependencies) cli.Services {
 	services.EnvironmentInspection = wireInspection(services.DesiredState, reconciler, secrets.binder, deps.Selection)
 	services.StoragePreflight = wireStoragePreflight(services.DesiredState, reconciler, deps)
 	services.ContainerPreflight = wireContainerPreflight(services.DesiredState, reconciler, deps)
+	services.ClustersPreflight = clusterpreflight.Service{Graph: effectiveGraph{state: services.DesiredState}, Selection: currentSelection(deps.Selection), Container: services.ContainerPreflight, Storage: services.StoragePreflight}
 	return services
 }
 

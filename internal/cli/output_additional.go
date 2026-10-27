@@ -297,7 +297,7 @@ func (r *Runner) writeSelectedHelp(command *cobra.Command) error {
 	}
 	command.Flags().AddFlagSet(command.InheritedFlags())
 	command.Flags().VisitAll(func(flag *pflag.Flag) {
-		if !flag.Hidden {
+		if !flag.Hidden && acceptsFlag(command.Annotations, flag.Name) {
 			description := flag.Usage
 			if usage, ok := controllerContextUsage(path); ok && flag.Name == "context" {
 				description = usage

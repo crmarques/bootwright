@@ -270,7 +270,6 @@ Alias cell.
 | [B808](#b808) | new, 2026-10-26 (spec audit P1-A) | enabling | Architecture | Engine claim check, implementation fitness test and a shared Capability-port contract suite | Audit roadmap work; implemented only on an explicit lane request |
 | [B816](#b816) | new, 2026-10-26 (spec audit P1-I) | safety | State reconciliation and Controller setup | Recovery refusals, partial-removal readings and host probes match the rules | Audit roadmap work; implemented only on an explicit lane request |
 | [B820](#b820) | new, 2026-10-26 (spec audit P2-B) | enabling | Agent guidance and Verification tooling | Section-level index rows and docs gates for budgets, reachability and history links | Audit roadmap work; implemented only on an explicit lane request |
-| [B825](#b825) | new, 2026-10-26 (spec audit L3) | product | CLI | CLI diff, settled, remediation, flag spellings and stub catalog match cli specs | Audit roadmap work; implemented only on an explicit lane request |
 | [B826](#b826) | new, 2026-10-26 (spec audit L4) | defect | Desired state | Admission enforces closed Entitlement arms, authored indexes, retired names and reserved-directory warning | Audit roadmap work; implemented only on an explicit lane request |
 | [B829](#b829) | new, 2026-10-26 (spec audit L7) | safety | Secrets | Work-area incarnation check, pipelined material payloads and fixed producer identity | Audit roadmap work; implemented only on an explicit lane request |
 | [B839](#b839) | new, 2026-10-26 (lane B) | safety | Substrate and Workspace | A shared host claim taken while a removal's effect runs refuses | Found closing B803; the window is the removal's effect itself |
@@ -283,15 +282,17 @@ Alias cell.
 | [B848](#b848) | new, 2026-10-27 (lane I) | enabling | Architecture | Cluster families publish the facts machine, controller and managed-service code reads | Found by the lane I review; each site reads its kind's own spec layout |
 | [B850](#b850) | new, 2026-10-27 (lane I) | defect | Desired state | A derived Machine contact `<machine>.<domain>` is checked against DNS name lengths | Found by the lane I review; derived cluster names were bounded in X171 |
 | [B851](#b851) | new, 2026-10-27 (lane I) | defect | Architecture | Spec prose says "controller" for a BMC | Found by the lane I review; B824 swept messages, rows and goldens |
-| [B852](#b852) | new, 2026-10-27 (lane I) | defect | CLI | `schema` and `version` help list a `--context` flag they ignore | Found by the lane I review |
 | [B853](#b853) | new, 2026-10-27 (lane I) | product | Managed OS | The `templateClone` installer is realized or retired | Admitted and refused at plan; no milestone names it |
 | [B854](#b854) | new, 2026-10-27 (lane I) | product | Managed OS | Anaconda `packageSource.mirror` and `fromSubscription` are realized or retired | Admitted and refused at plan; no milestone names them |
 | [B855](#b855) | new, 2026-10-27 (lane I) | product | Managed OS | An install profile's `ssh.initialPassword` is realized or retired | Admitted and refused at plan; no milestone names it |
 | [B856](#b856) | new, 2026-10-27 (lane I) | product | Infrastructure services | An ArtifactServer's `installOnly` retention is realized or retired | Admitted and refused at plan; no milestone names it |
 | [B857](#b857) | new, 2026-10-27 (lane I) | enabling | Desired state | The audit 5.7 operator tasks run on the reshaped API | B814's paper check was not run before X171 |
+| [B858](#b858) | new, 2026-10-27 (lane T) | product | CLI | `preflight infra`, `preflight all` and `render` with a path flag are defined and run | D188 ran `preflight clusters` as the union of two existing checks; these have no definition |
 | [B859](#b859) | new, 2026-10-27 (lane Q3) | defect | Storage | Pool admission honours the cluster's default replica pair | Pre-existing defect found by lane Q3 |
 | [B860](#b860) | new, 2026-10-27 (lane Q3) | safety | Storage | A bounded device class keeps the additional-host rule | Pre-existing gap found by lane Q3's review |
 | [B861](#b861) | new, 2026-10-27 (lane Q3) | defect | Storage | Ceph request builders refuse each unresolved reference by name | Same defect class as B849, left by lane Q3 |
+| [B862](#b862) | new, 2026-10-27 (lane T) | defect | Verification tooling | The cluster selection cost test holds under `-race` | Pre-existing failure found by lane T |
+| [B863](#b863) | new, 2026-10-27 (lane T) | defect | CLI | `machine rsh` and `machine exec` take only the SSH flags they consume | Found by lane T |
 
 ### B82
 
@@ -3147,55 +3148,6 @@ F17-07's acceptance-row templates, which ride with the first M3b and M4b
 acceptance baselines; the optional structured help fields `examples` and
 `available`.
 
-### B825
-
-**Owner:** CLI. **Kind:** product. **Requires:** owner decisions
-[Q109](#audit-remediation-decisions) and [Q108](#audit-remediation-decisions) for their parts only.
-**Definition:** Specified. Batch L3 of the
-[2026-10-26 spec audit](../../audits/spec/2026-10-26.md); findings F12-07,
-F12-09, F16-01, F16-04, F16-05, F16-06, F16-07, F16-08, F16-11, V2-04. The
-CLI's code matches cli.md, cli/output.md and cli/commands.md, and the catalog
-says which commands run.
-
-**Specs:** [cli.md](../cli.md) narrows the `diff` Input line, states the
-`status` candidate rule and maps receipt tokens to commands.
-[cli/output.md](../cli/output.md) requires remediation on every error
-diagnostic but `cli.usage`. [cli/commands.md](../cli/commands.md) states the
-three flag-spelling rules and lists seven unavailable commands: `preflight
-infra`, `clusters`, `all` and `add-ons`, `render` with a path flag, `render
-installer` ([B52](m7.md#b52)) and `render storage` ([B55](m7.md#b55)); the
-first five are tracked here.
-
-**Work:**
-
-- F12-09: `internal/cli/output_diff.go` builds the Input line as cli.md
-  states, with diff goldens for a non-empty Build line, a lost block record,
-  incomplete controller setup and a completed apply holding a non-done block.
-- F16-06: an emitter test fails when an error diagnostic other than
-  `cli.usage` has no remediation; fix the emitters it finds, among them
-  `cli.not-implemented`.
-- F16-07: `machine trust --machines` becomes `--name` (keeping the empty and
-  comma-only rules) and `machine list --silent` becomes `--short`, with no
-  alias, in the catalog, parsing and help goldens; update cli.md and
-  [contexts.md](../contexts.md) uses; a catalog test asserts the three rules.
-- F16-04: a `status` parity test derives each candidate from the verb's own
-  decision and refusal functions, asserting every `nextSteps` entry passes
-  and every passing candidate appears.
-- F16-01: a docs-check ties the unavailable list to
-  `cmd/bootwright/wiring_stubs.go`. Running the five stub commands here
-  needs a definition of each (`preflight add-ons` is [B770](#b770)).
-
-**Exit evidence:** the Not yet met lines of cli.md (diff Input),
-cli/output.md (remediation) and cli/commands.md (flag renames) are removed;
-the parity, emitter, catalog and stub docs-check tests pass; `make check`.
-
-**Partly delivered** on 2026-10-27 by X172: F12-09, F16-06, F16-07, F16-04
-and F16-01 above, and Q109 (a)'s `diff --exit-code`; Q108 (a) became
-[B842](delivered.md#x172--audit-lane-m-cli-and-examples). **Remains:** running the five stub commands, each once
-defined (`preflight add-ons` is [B770](#b770)). `diff` reads no context mode, so an
-incomplete controller setup has no diff reading; `status` names `setup`, and
-diff's Input line points at it.
-
 ### B826
 
 **Owner:** Desired state. **Kind:** defect. **Requires:** owner decisions
@@ -3452,18 +3404,6 @@ they mean one, and [substrates.md](../substrates.md) is read once more for the
 same. **Exit evidence:** a grep of the pages finds "controller" only for the
 Environment's controller; the glossary's Not yet met line is removed.
 
-### B852
-
-**Owner:** CLI. **Kind:** defect. **Requires:** none. **Definition:** Needs
-definition. Found by the lane I review (X171). `bootwright schema` and
-`bootwright version` need no context, yet their help lists `--context` among
-the common flags (`help-schema` and `help-version` goldens) and the command
-accepts and ignores it. **Outcome:** the owner chooses between omitting the flag
-from a context-free command, which then refuses it as unknown, and keeping it
-accepted with the help saying it is ignored; the help of every context-free
-command follows. **Exit evidence:** the help goldens of those commands and a
-test that no command lists a flag it ignores.
-
 ### B853
 
 **Owner:** Managed OS. **Kind:** product. **Requires:** none. **Definition:**
@@ -3535,6 +3475,23 @@ questions and wrong assumptions. **Exit evidence:** the results in a dated
 record under `audits/`, and an item for each shape or remedy the run shows
 misleads.
 
+### B858
+
+**Owner:** CLI. **Kind:** product. **Requires:** none. **Definition:** Needs
+definition. [`bootwright preflight infra`, `preflight all` and `render` with a
+path flag](../cli/commands.md#inspect-and-lifecycle-commands) are recognized,
+answer `cli.not-implemented` and have no definition beyond a row each.
+[B825](delivered.md#x177--audit-lane-t-inherited-flags-and-cluster-preflight) closed with `preflight clusters` running as the union of
+`preflight container-cluster` and `preflight storage-cluster`
+([D188](#d188)); `preflight add-ons` stays with [B770](#b770).
+**Outcome:** the owner defines the checks of `preflight infra` (the
+infrastructure-services kinds and the substrates), of `preflight all` (every
+family's checks, with their ordering and one combined report) and of `render`
+with a path flag (the artifacts it writes and its refusals), and each runs
+with its refusals, diagnostics and goldens. **Exit evidence:** the three
+removed from the unavailable list and `wireStubs`, the report contracts in
+[cli/output.md](../cli/output.md), and the tests.
+
 ### B859
 
 **Owner:** Storage. **Kind:** defect. **Requires:** none. **Definition:**
@@ -3567,6 +3524,25 @@ theirs, so a reference that escapes compile-time resolution reads as the
 distribution refusal. **Outcome:** every Ceph request builder refuses an
 unresolved reference by name. **Exit evidence:** a test per builder.
 
+### B862
+
+**Owner:** Verification tooling. **Kind:** defect. **Requires:** none.
+**Definition:** Specified. `TestClusterSelectionCostGrowsWithTheInputNotItsSquare`
+in `internal/environment` fails under `-race` on its allocation bound and
+passes without it; `make race` does not run that package (found by lane T,
+2026-10-27). **Outcome:** the test bounds what it means to bound under both
+modes, or skips its allocation bound under the race detector with the reason.
+**Exit evidence:** the package passes under `go test -race`.
+
+### B863
+
+**Owner:** CLI. **Kind:** defect. **Requires:** none. **Definition:**
+Specified. X177 made every command refuse the inherited flags it ignores, with
+SSH flags checked per group; `machine rsh` and `machine exec` still read all
+four `--ssh-*` flags although the spec says two are not consumed there (found
+by lane T). **Outcome:** the two commands refuse the SSH flags they ignore.
+**Exit evidence:** the inherited-scope test holds the per-command SSH lists.
+
 ## Audit remediation (2026-10-26)
 
 The [2026-10-26 spec audit](../../audits/spec/2026-10-26.md) ordered its
@@ -3597,7 +3573,7 @@ decision stay open while its other parts land.
 | J Reconciliation rules | [B816](#b816), B830 (X170) | B800 to B807 | E, G | Q92, Q93, Q94, Q95, Q96, Q117, Q118 |
 | K Language and adapter contracts | B818 (X162), B834 (X162) | none | G | none |
 | L Corpus structure and skills | B815 (X173), B819 (X173), [B820](#b820), B822 (X173) | B801; B822 after B813 and B818 | none | Q89, Q90, Q91, Q102, Q103 |
-| M CLI and examples | [B825](#b825), B833 (X172), B823 (X172), B842 (X172) | none | none | Q104, Q108, Q109 |
+| M CLI and examples | [B825](delivered.md#x177--audit-lane-t-inherited-flags-and-cluster-preflight), B833 (X172), B823 (X172), B842 (X172) | none | none | Q104, Q108, Q109 |
 
 ### Lane order and progress
 
@@ -3631,7 +3607,7 @@ also updates this table.
 | 19 | Q1 Unclaimed objects and references (B808, B826) | not started |
 | 20 | Q2 Family accessors and name bounds (B848, B850, B847) | not started |
 | 21 | R Installer material (B829) | not started |
-| 22 | T Context-free commands and preflight (B852, B825) | not started |
+| 22 | T Context-free commands and preflight (B852, B825) | merged (X177) |
 | 23 | U Unrealized fields (B853 to B856) | not started |
 | 24 | N0 Remaining text to owning items (B805, B816, B820, B851) | not started |
 
@@ -3701,8 +3677,8 @@ blocks.
 | Q105 | Which single casing do Bootwright-owned enum values use, and are Secret type names an exception? | (a) lowerCamel: renames the kebab outliers (container-runtime, import-certificate, install-only, read-only, verified-tunnel).; (b) kebab-case: renames redfishVirtualMedia, loadBalancer, logicalOverwrite, dataFoundation, certManager and the Secret types.; (c) State the rule per page and leave existing values unchanged. | **Answered by D183: a.** The convention with the smaller rename count, likely lowerCamel; native spellings exempt; decide Secret types as an explicit exception. | [B824](delivered.md#x171--audit-lane-i-api-shape-and-grammar) | answered by [D183](#d183) |
 | Q106 | Is the --stage token infra-components renamed to match 'infrastructure services'? | (a) Rename it (for example infrastructure-services) in the CLI, plan goldens, completion, examples and specs.; (b) Keep the token; the glossary entry defines it. | **Answered by D183: a.** a, cheap before 1.0, together with stating what preflight infra checks. | [B824](delivered.md#x171--audit-lane-i-api-shape-and-grammar) | answered by [D183](#d183) |
 | Q107 | Is StorageExport (a per-consumer Data Foundation attachment) renamed, and does its shape change? | (a) Rename to StorageAttachment or StorageConsumer with per-protocol arms, drop spec.type, move external details to StorageCluster's external arm (B107).; (b) Rename the kind and fdf.storageExportRef only; keep spec.type unless api.md's union list is amended.; (c) Keep the name with the clarification now in api/ceph.md. | **Answered by D183: b.** b at least, keeping the D173 decomposition; ask with B814's storage naming questions. | [B824](delivered.md#x171--audit-lane-i-api-shape-and-grammar) | answered by [D183](#d183) |
-| Q108 | Should status add Secret and media readiness hints to nextSteps? | (a) Add read-only rows for missing or stale Secrets and missing media, with remedies before plan or apply, as a separate item.; (b) Keep status as now narrowed; operators use secret check and media list. | **Answered by D183: a.** b now; a only as its own UX item. | [B825](#b825) | answered by [D183](#d183) |
-| Q109 | Accept an opt-in bootwright diff --exit-code (exit 3 on any differing or unknown object, default unchanged)? | (a) Add the flag, its commands.md row, an exit-status row and an amended ok/exitCode rule.; (b) No flag; document a stable JSON summary field as the drift signal. | **Answered by D183: a.** b costs nothing; a is the common convention and needs acceptance as a new public flag under D153 clause 2. | [B825](#b825) | answered by [D183](#d183) |
+| Q108 | Should status add Secret and media readiness hints to nextSteps? | (a) Add read-only rows for missing or stale Secrets and missing media, with remedies before plan or apply, as a separate item.; (b) Keep status as now narrowed; operators use secret check and media list. | **Answered by D183: a.** b now; a only as its own UX item. | [B825](delivered.md#x177--audit-lane-t-inherited-flags-and-cluster-preflight) | answered by [D183](#d183) |
+| Q109 | Accept an opt-in bootwright diff --exit-code (exit 3 on any differing or unknown object, default unchanged)? | (a) Add the flag, its commands.md row, an exit-status row and an amended ok/exitCode rule.; (b) No flag; document a stable JSON summary field as the drift signal. | **Answered by D183: a.** b costs nothing; a is the common convention and needs acceptance as a new public flag under D153 clause 2. | [B825](delivered.md#x177--audit-lane-t-inherited-flags-and-cluster-preflight) | answered by [D183](#d183) |
 | Q110 | Which schema-discovery commands or flags does the CLI gain? | (a) render effective --origins marks each leaf authored, defaults.<Kind>, built-in or derived, with a golden.; (b) a plus bootwright schema --format json-schema as an advisory export.; (c) a and b plus bootwright explain with per-field docs in Go, a second owner of field meaning.; (d) Defer all. | **Answered by D183: a and b.** a first; b optional; c only if the owner wants Go as the single source of field docs. | [B826](#b826) | answered by [D183](#d183) |
 | Q111 | Is a plain enabled boolean allowed for a featureless switch, or do presence blocks replace them? | (a) api.md allows a plain boolean when the feature has no settings and omission equals the stated default (fips, firewall); no schema change.; (b) Presence blocks only: fips: {} and firewall: {} replace the booleans in schema, examples and goldens. | **Answered by D183: a.** a. | [B826](#b826) | answered by [D183](#d183) |
 | Q112 | Which one-value mechanics of the libvirt arm and managed services stop being authored, and is managed-service implementation optional? | (a) libvirt uri becomes optional with a materialized default and bmcEmulationDefaults is renamed; implementation stays required.; (b) As a, and implementation becomes optional with a materialized default while a kind has one implementation. | **Answered by D183: a.** a: explicit implementation selection stays, unless the owner prefers b. | [B827](delivered.md#x171--audit-lane-i-api-shape-and-grammar) | answered by [D183](#d183) |
@@ -5621,12 +5597,12 @@ broader routes refuse ([B843](#b843)). SSH-placed claims are also keyed by the
 host's pinned SSH host-key fingerprint (`sshkey/<SHA256>/`), an additive key
 form under controller record version 3 ([B844](#b844)). `schema` and `version`
 drop `--context`, and structured help gains no `examples` or `available`
-([B852](#b852), [B820](#b820)). `installer.templateClone` folds into
+([B852](delivered.md#x177--audit-lane-t-inherited-flags-and-cluster-preflight), [B820](#b820)). `installer.templateClone` folds into
 [B99](m1.md#b99); `packageSource.mirror`, `packageSource.fromSubscription`,
 `ssh.initialPassword` and ArtifactServer retention `installOnly` retire with
 their replacements (B853 to B856). `preflight clusters` runs the container-cluster and
 storage-cluster checks together, and `preflight infra` and `preflight all`
-park in one definition item ([B825](#b825)). The lifecycle runner moves only
+park in one definition item ([B825](delivered.md#x177--audit-lane-t-inherited-flags-and-cluster-preflight)). The lifecycle runner moves only
 its scratch under root-owned `/var/lib/bootwright-staging/runs` on the
 controller and SSH hosts, and the job directory and bound Secret files stay
 under `/run` ([B389](delivered.md#x176--audit-lane-o-store-bounds-and-run-scratch)).

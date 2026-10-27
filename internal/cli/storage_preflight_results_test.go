@@ -47,3 +47,13 @@ func TestStoragePreflightHumanFailureKeepsChecksAndEscapesText(t *testing.T) {
 		t.Fatalf("%d %q %q", exit, out.String(), errOut.String())
 	}
 }
+
+func TestClustersPreflightHumanFailureKeepsBothKindsOfChecksUnderOneDiagnostic(t *testing.T) {
+	report := clustersPreflightReport(true)
+	record := &dispatchRecord{result: commandResult{storagePreflight: report}, err: diagnostics.NewFailureWithRemediation("preflight.unknown", "cluster readiness is not proved; inspect the failed, unknown and pending checks", "", "resolve the reported prerequisites and repeat preflight clusters")}
+	var out, errOut bytes.Buffer
+	exit := New(Config{Out: &out, ErrOut: &errOut, Services: dispatchSpies(record)}).Run(context.Background(), []string{"preflight", "clusters", "--dry-run"})
+	if exit != 1 || !strings.HasPrefix(out.String(), "Cluster preflight  synthetic\n") || !strings.Contains(out.String(), "resolution.api") || !strings.Contains(out.String(), "capacity.memory") || strings.Count(errOut.String(), "preflight.unknown") != 1 {
+		t.Fatalf("%d %q %q", exit, out.String(), errOut.String())
+	}
+}

@@ -100,7 +100,7 @@ func packageRoles() map[string]packageRole {
 		"containercluster/access", "containercluster/agentinstall",
 		"containercluster/installation", "containercluster/preflight",
 		"controller/clients", "controller/prerequisites", "controller/firewall", "desiredstate/compilation",
-		"environment/access", "environment/inspection", "environment/preflight",
+		"environment/access", "environment/clusterpreflight", "environment/inspection", "environment/preflight",
 		"machine/access", "machine/inventory", "machine/power", "managedos/media", "managedos/installation",
 		"nativeartifacts/rendering", "reconciliation/lifecycle",
 		"secrets/custody", "secrets/encryption", "storage/preflight", "storage/rendering", "storage/ceph",
@@ -177,6 +177,8 @@ func applicationDependencies() map[string][]string {
 		// Container preflight reuses storage's report and capacity port.
 		"internal/containercluster/preflight": {"internal/storage/preflight", "internal/substrate/capacity"},
 		"internal/storage/preflight":          {"internal/substrate/capacity"},
+		// Cluster preflight is the union of the container and storage checks.
+		"internal/environment/clusterpreflight": {"internal/containercluster/preflight", "internal/storage/preflight", "internal/substrate/capacity"},
 		// Cluster access resolves a name in the compiled graph before it reads
 		// the custody the install block filled.
 		"internal/containercluster/access": {"internal/desiredstate/compilation"},

@@ -9,6 +9,7 @@ type Services struct {
 	DesiredState          DesiredStateService
 	Controller            ControllerService
 	EnvironmentPreflight  EnvironmentPreflightService
+	ClustersPreflight     ClustersPreflightService
 	EnvironmentInspection EnvironmentInspectionService
 	EnvironmentAccess     EnvironmentAccessService
 	ContainerPreflight    ContainerPreflightService

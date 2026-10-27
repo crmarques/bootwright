@@ -33,7 +33,7 @@ and controller setup instructions for the new context:
 bootwright validate --file "$addon_input"
 bootwright context init --name addons-nmstate --input-dir "$addon_input"
 bootwright secret generate --context addons-nmstate
-bootwright setup --context addons-nmstate
+bootwright setup
 bootwright plan --context addons-nmstate
 bootwright apply --context addons-nmstate
 bootwright diff --context addons-nmstate --observe

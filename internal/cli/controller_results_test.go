@@ -25,12 +25,18 @@ func controllerReport(outcome string, dryRun bool) *prerequisites.Report {
 }
 
 // Only preflight consumes a context. Setup prepares the prerequisites every
-// context shares, so an explicit --context cannot reach its request and cannot
-// change what it prepares.
+// context shares, so it refuses an explicit --context.
 func TestControllerReportsAndExplicitContextDispatch(t *testing.T) {
 	for _, command := range [][]string{{"setup", "--dry-run"}, {"preflight", "controller"}} {
 		for _, flag := range []string{"", "--context=", "--context=example"} {
 			args := append([]string{}, command...)
+			if flag != "" && command[0] == "setup" {
+				_, out, errOut, record := runRecorded(append(args, flag))
+				if record.calls != 0 || out != "" || !strings.Contains(errOut, "flag is not accepted by this command") {
+					t.Fatal(args, flag, out, errOut)
+				}
+				continue
+			}
 			if flag != "" {
 				args = append(args, flag)
 			}
@@ -127,8 +133,8 @@ func TestControllerConfirmationUsesSetupScope(t *testing.T) {
 
 func TestControllerInvocationPrivilegeAndHelp(t *testing.T) {
 	// Setup selects no context, so every dry run stays below the privilege
-	// boundary even when an ignored --context is supplied.
-	for _, args := range [][]string{{"setup", "--dry-run"}, {"setup", "--dry-run", "--context="}, {"setup", "--dry-run", "--context=example"}} {
+	// boundary.
+	for _, args := range [][]string{{"setup", "--dry-run"}} {
 		if ClassifyInvocation(args).RequiresRoot {
 			t.Fatal("setup dry-run requested privilege", args)
 		}
@@ -147,7 +153,6 @@ func TestControllerInvocationPrivilegeAndHelp(t *testing.T) {
 		args  []string
 		usage string
 	}{
-		{args: []string{"setup", "--help"}, usage: "Ignored: setup selects no context"},
 		{args: []string{"preflight", "controller", "--help"}, usage: "Select explicit Environment requirements (default: baseline)"},
 	} {
 		var out bytes.Buffer
@@ -220,13 +225,9 @@ func TestControllerSetupForwardsConfirmationSuppressionAndNoOp(t *testing.T) {
 	}{
 		{args: []string{"setup"}},
 		{args: []string{"setup", "--yes"}, skip: true},
-		{args: []string{"setup", "--yes", "--context=example"}, skip: true},
 	} {
 		// A verified no-op reports "unchanged"; "ready" is the preflight outcome.
 		report := controllerReport("unchanged", false)
-		if strings.HasSuffix(testCase.args[len(testCase.args)-1], "example") {
-			report.ContextName, report.Machine = "example", "controller"
-		}
 		record := &dispatchRecord{result: commandResult{controller: report}}
 		var out, errOut bytes.Buffer
 		code := New(Config{Out: &out, ErrOut: &errOut, Services: dispatchSpies(record)}).Run(context.Background(), testCase.args)

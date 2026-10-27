@@ -14,6 +14,7 @@ import (
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
 	"github.com/crmarques/bootwright/internal/desiredstate/compilation"
 	environmentaccess "github.com/crmarques/bootwright/internal/environment/access"
+	"github.com/crmarques/bootwright/internal/environment/clusterpreflight"
 	"github.com/crmarques/bootwright/internal/environment/inspection"
 	environmentpreflight "github.com/crmarques/bootwright/internal/environment/preflight"
 	"github.com/crmarques/bootwright/internal/machine"
@@ -62,7 +63,7 @@ func TestDispatchEveryApplicationCommand(t *testing.T) {
 		{"preflight controller", prerequisites.CheckRequest{ContextName: "example"}},
 		{"setup", prerequisites.SetupRequest{DryRun: true, SkipConfirmation: true, WheelMirror: "file:///srv/wheels", DownloadOnly: true, Destination: "/srv/wheels-out"}},
 		{"preflight infra", environmentpreflight.InfrastructurePreflightRequest{ContextName: "example", Clusters: []string{"first", "second"}, DryRun: true, TrustOnFirstUse: true, SSH: ssh}},
-		{"preflight clusters", environmentpreflight.ClustersPreflightRequest{ContextName: "example", Clusters: []string{"first", "second"}, DryRun: true, TrustOnFirstUse: true, SSH: ssh}},
+		{"preflight clusters", clusterpreflight.PreflightRequest{ContextName: "example", Clusters: []string{"first", "second"}, DryRun: true, TrustOnFirstUse: true, SSH: ssh}},
 		{"preflight all", environmentpreflight.AllPreflightRequest{ContextName: "example", DryRun: true, TrustOnFirstUse: true, SSH: ssh}},
 		{"cluster list", inspection.ListClustersRequest{ContextName: "example"}},
 		{"cluster info", inspection.ClusterInfoRequest{ContextName: "example", Names: []string{"demo"}, Secrets: true}},
@@ -124,8 +125,11 @@ func TestEnvironmentCapabilitiesAreIndependent(t *testing.T) {
 		commands []string
 		wire     func(*dispatchRecord) Services
 	}{
-		{"preflight", []string{"preflight infra", "preflight clusters", "preflight all"}, func(record *dispatchRecord) Services {
+		{"preflight", []string{"preflight infra", "preflight all"}, func(record *dispatchRecord) Services {
 			return Services{EnvironmentPreflight: environmentSpy{record}}
+		}},
+		{"clusters preflight", []string{"preflight clusters"}, func(record *dispatchRecord) Services {
+			return Services{ClustersPreflight: clustersPreflightSpy{record}}
 		}},
 		{"inspection", []string{"cluster list", "cluster info", "cluster keyring"}, func(record *dispatchRecord) Services {
 			return Services{EnvironmentInspection: environmentSpy{record}}
