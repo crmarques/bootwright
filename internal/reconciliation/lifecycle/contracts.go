@@ -474,6 +474,12 @@ type recordReader interface {
 // function capability because an operation opens exactly one per invocation.
 type OperationStoreFactory func(operationstore.Area) OperationStore
 
+// InteractiveConfirmer reports whether its input can answer a prompt; one that
+// cannot makes the invocation unattended.
+type InteractiveConfirmer interface {
+	Interactive() bool
+}
+
 type Confirmer interface {
 	Confirm(context.Context, string, string) error
 }

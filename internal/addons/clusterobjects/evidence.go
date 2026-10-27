@@ -16,11 +16,20 @@ const (
 	Unknown   Ownership = "unknown"
 )
 
+type Basis string
+
+const (
+	Created       Basis = "created"
+	UIDMatched    Basis = "uid-matched"
+	MarkRecovered Basis = "mark-recovered"
+)
+
 type Receipt struct {
 	Ref
 	UID           string `json:"uid"`
 	DesiredDigest string `json:"desiredDigest"`
 	Disposition   string `json:"disposition"`
+	Basis         Basis  `json:"basis"`
 }
 
 type InstallPlan struct {

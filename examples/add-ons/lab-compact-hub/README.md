@@ -154,7 +154,7 @@ quiescence it cannot prove. Repeat destroy to continue a partial removal.
 ./bin/bootwright machine stop --context lab-compact-hub --name compact-01 --yes
 ./bin/bootwright machine stop --context lab-compact-hub --name compact-02 --yes
 ./bin/bootwright machine stop --context lab-compact-hub --name compact-03 --yes
-./bin/bootwright destroy --context lab-compact-hub --yes --authorize data-loss
+./bin/bootwright destroy --context lab-compact-hub --authorize data-loss
 ./bin/bootwright status --context lab-compact-hub
 ./bin/bootwright context delete --name lab-compact-hub --purge --yes
 ```

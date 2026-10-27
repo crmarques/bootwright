@@ -31,7 +31,7 @@ func resolutionRemedy(contextName string, verb reconciliation.Verb, frozen recon
 		}
 		return "run the destroy this result's last diagnostic names, which performs it"
 	}
-	continuation := contextCommand(contextName, string(verb), authorizing(requiredTokens(frozen))...)
+	continuation := contextCommand(contextName, string(verb), authorizing(frozen)...)
 	if partial {
 		return "repeat " + continuation + " to converge it, or take back what it owns with " + contextCommand(contextName, string(reconciliation.Destroy))
 	}
@@ -54,11 +54,26 @@ func reviewStatus(contextName string) string {
 	return "review its durable state with " + contextCommand(contextName, "status")
 }
 
-// authorizing is the --authorize flag of each token, in the order given.
-func authorizing(tokens []string) []string {
+// DigestPlaceholder stands for a digest only bootwright plan prints.
+const DigestPlaceholder = "<digest bootwright plan prints>"
+
+// authorizing binds each token the plan consumes to its steps' digest (Q117),
+// for a command that authorizes against exactly this plan.
+func authorizing(plan reconciliation.Plan) []string {
+	return boundFlags(plan, func(token string) string { return AuthorizationDigest(plan, token) })
+}
+
+// authorizingUnfixed binds the tokens to the placeholder, for a removal whose
+// plan is not fixed until it runs, so no stale digest is named.
+func authorizingUnfixed(plan reconciliation.Plan) []string {
+	return boundFlags(plan, func(string) string { return DigestPlaceholder })
+}
+
+func boundFlags(plan reconciliation.Plan, digest func(string) string) []string {
+	tokens := requiredTokens(plan)
 	flags := make([]string, 0, 2*len(tokens))
 	for _, token := range tokens {
-		flags = append(flags, "--authorize", token)
+		flags = append(flags, "--authorize", token+"="+digest(token))
 	}
 	return flags
 }
@@ -88,10 +103,10 @@ func continuationCommand(contextName string, operation operationstore.Operation,
 	case "none":
 		return ""
 	case string(reconciliation.Destroy):
-		return contextCommand(contextName, action, authorizing(requiredTokens(reconciliation.RemainingSubset(frozen, states)))...)
+		return contextCommand(contextName, action, authorizingUnfixed(reconciliation.RemainingSubset(frozen, states))...)
 	}
 	if !pendingRemains(frozen, states) {
 		return contextCommand(contextName, string(operation.Verb))
 	}
-	return contextCommand(contextName, string(operation.Verb), authorizing(requiredTokens(frozen))...)
+	return contextCommand(contextName, string(operation.Verb), authorizing(frozen)...)
 }

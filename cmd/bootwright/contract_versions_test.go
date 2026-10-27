@@ -147,7 +147,7 @@ func automationFormats() map[string]automationFormat {
 		"ceph-export-request-v1":     {class: formatMirrored},
 		"ceph-export-evidence-v1":    {class: formatMirrored},
 		"cluster-network-request-v1": {class: formatMirrored},
-		"cluster-objects-v1":         {class: formatMirrored},
+		"cluster-objects-v2":         {class: formatMirrored},
 		// The host block writes them; the core block's workers read them back
 		// for the manager account, the cephadm cache and the OSD identities.
 		"ceph-runtime-profile-v3":         persistedBy(ceph.HostImplementation, ceph.Implementation),

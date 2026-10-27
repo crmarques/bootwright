@@ -80,6 +80,14 @@ type confirmation struct {
 	object                             *diagnostics.ObjectIdentity
 }
 
+func (c *Confirmation) Interactive() bool {
+	if c == nil || c.isTerminal == nil {
+		return false
+	}
+	interactive, err := c.isTerminal()
+	return err == nil && interactive
+}
+
 // Confirm asks before an effect on this host or on a context as a whole. The
 // exact action each production consumer sends selects its entry, and every
 // other action is the context store's own.

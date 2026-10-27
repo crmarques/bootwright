@@ -169,7 +169,7 @@ func TestNextStepsCarryTheContextAndTheTokensTheirDecisionNeeds(t *testing.T) {
 			}
 		}
 	}
-	continued := "bootwright apply --context lab-b --authorize data-loss"
+	continued := "bootwright apply --context lab-b --authorize @shown@"
 	for _, row := range []struct {
 		name    string
 		arrange func(*testing.T, *harness)
@@ -190,7 +190,7 @@ func TestNextStepsCarryTheContextAndTheTokensTheirDecisionNeeds(t *testing.T) {
 					t.Fatalf("the removal = %+v (%v)", result, err)
 				}
 			},
-			steps: []string{"bootwright destroy --context lab-b --authorize data-loss"},
+			steps: []string{"bootwright destroy --context lab-b --authorize " + unfixed},
 		},
 	} {
 		t.Run(row.name, func(t *testing.T) {
@@ -198,19 +198,24 @@ func TestNextStepsCarryTheContextAndTheTokensTheirDecisionNeeds(t *testing.T) {
 			definitions[1].Consumes = authorized
 			h := newPlannedHarness(t, definitions)
 			renamed(h, "lab-b")
+			shown := shownBinding(t, h, "lab-b")
+			steps := make([]string, len(row.steps))
+			for index, step := range row.steps {
+				steps[index] = strings.ReplaceAll(step, "@shown@", shown)
+			}
 			row.arrange(t, h)
 			status, err := h.service.Status(ctx, StatusRequest{ContextName: "lab-b"})
-			if err != nil || !slices.Equal(status.NextSteps, row.steps) {
-				t.Fatalf("status = %+v (%v), want steps %q", status, err, row.steps)
+			if err != nil || !slices.Equal(status.NextSteps, steps) {
+				t.Fatalf("status = %+v (%v), want steps %q", status, err, steps)
+			}
+			for _, step := range status.NextSteps {
+				noBareAuthorization(t, step)
 			}
 			if status.Lifecycle == nil {
 				return
 			}
-			fields := strings.Fields(status.NextSteps[0])
-			verb, tokens := reconciliation.Verb(fields[1]), []string{}
-			for index := 4; index+1 < len(fields); index += 2 {
-				tokens = append(tokens, fields[index+1])
-			}
+			verb := reconciliation.Verb(strings.Fields(status.NextSteps[0])[1])
+			tokens := reviewed(authorizeTokens(status.NextSteps[0]), shownBinding(t, h, "lab-b"))
 			requireAuthorizedAs(t, h, verb, nil, "lifecycle.authorization")
 			requireAuthorizedAs(t, h, verb, tokens, "")
 		})

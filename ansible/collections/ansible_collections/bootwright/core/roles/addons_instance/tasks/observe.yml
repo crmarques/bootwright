@@ -20,4 +20,4 @@
     cluster_objects_material: "{{ bootwright_addon_instance_material }}"
     cluster_objects_evidence: "{{ bootwright_addon_instance_material.evidence | default('{}') | from_json }}"
     cluster_objects_digest: "{{ bootwright_addon_instance_digest }}"
-    cluster_objects_evidence_version: addon-instance-evidence-v2
+    cluster_objects_evidence_version: addon-instance-evidence-v3

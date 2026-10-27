@@ -18,7 +18,7 @@ func lifecycleInspectionCommands() []commandSpec {
 func lifecycleMutationCommands() []commandSpec {
 	return []commandSpec{
 		available(commandSpec{path: "apply", short: "Apply the complete selected lifecycle unit", flags: []flagSpec{authorizationFlag(), stageFlag(), confirmationFlag()}, long: "Realize the complete selected Environment, or continue the exact operation an interruption left behind. The plan is always complete; --stage only gates which blocks this invocation starts, and the operation pauses at that boundary. Review the plan before confirming; --yes skips ordinary confirmation."}),
-		available(commandSpec{path: "destroy", short: "Destroy the complete selected lifecycle unit", flags: []flagSpec{authorizationFlag(), unregisteredFlag(), confirmationFlag()}, long: "Remove what this context's apply owns, whether that apply completed or not, proving each removal before it registers; a failed destroy is replaced by a fresh removal. Follow the plan's Stop first and Stop after online cleanup lists (bootwright machine stop): online cleanup, such as storage cleanup or a subscription unregistration, needs its Machines running, and destroy pauses for their stop after it. A plan that deletes disks needs --authorize data-loss. A rotated management controller or registry login credential is presented at its current version only with --authorize rebind=<secret>, which records a new binding version. A Machine whose subscription registration cannot be read and that you unregistered with the subscription service's own tools is named with --unregistered. Review the plan before confirming; --yes skips ordinary confirmation."}),
+		available(commandSpec{path: "destroy", short: "Destroy the complete selected lifecycle unit", flags: []flagSpec{authorizationFlag(), unregisteredFlag(), confirmationFlag()}, long: "Remove what this context's apply owns, whether that apply completed or not, proving each removal before it registers; a failed destroy is replaced by a fresh removal. Follow the plan's Stop first and Stop after online cleanup lists (bootwright machine stop): online cleanup, such as storage cleanup or a subscription unregistration, needs its Machines running, and destroy pauses for their stop after it. A plan that deletes disks needs --authorize data-loss; with --yes or without a terminal it must be --authorize data-loss=<digest>, the digest bootwright plan prints for those steps. A rotated management controller or registry login credential is presented at its current version only with --authorize rebind=<secret>, which records a new binding version. A Machine whose subscription registration cannot be read and that you unregistered with the subscription service's own tools is named with --unregistered. Review the plan before confirming; --yes skips ordinary confirmation."}),
 	}
 }
 
@@ -57,6 +57,7 @@ func (s Services) invokeLifecycle(ctx context.Context, path string, values *requ
 			Stages:           values.names("stage"),
 			Authorizations:   values.authorizations(),
 			SkipConfirmation: values.boolean("yes"),
+			Unattended:       values.boolean("yes"),
 			SSH:              values.ssh(),
 		}, s.Lifecycle.Apply)
 	case "destroy":
@@ -65,6 +66,7 @@ func (s Services) invokeLifecycle(ctx context.Context, path string, values *requ
 			Authorizations:   values.authorizations(),
 			Unregistered:     values.unregistered(),
 			SkipConfirmation: values.boolean("yes"),
+			Unattended:       values.boolean("yes"),
 			SSH:              values.ssh(),
 		}, s.Lifecycle.Destroy)
 	default:

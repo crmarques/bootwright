@@ -9,6 +9,7 @@ import pytest
 
 from ansible_collections.bootwright.core.plugins.module_utils.substrate_libvirt import (
     MAX_OUTPUT,
+    collisions,
     domain_metadata,
     domain_state,
     invoke,
@@ -803,3 +804,67 @@ def test_the_pool_directory_is_observed_by_its_path(tmp_path):
         assert observe_host(answers, pool_request(tmp_path / name))["directory"] is present, name
     observation = observe_host(runner_for({}), pool_request(tmp_path / "directory"))
     assert (observation["uri"], observation["directory"]) == (False, True)
+
+
+LINKS = '[{"ifname": "lo"}, {"ifname": "eth0"}, {"ifname": "virbr0"}]'
+ROUTES4 = (
+    '[{"dst": "default", "gateway": "192.0.2.1", "dev": "eth0"},'
+    ' {"dst": "192.0.2.0/24", "dev": "eth0"},'
+    ' {"type": "local", "dst": "192.0.2.10", "dev": "eth0", "table": "local"},'
+    ' {"dst": "192.168.122.0/24", "dev": "virbr0"}]'
+)
+ROUTES6 = '[{"dst": "fe80::/64", "dev": "eth0"}, {"dst": "default", "dev": "eth0"}]'
+
+
+def host_answers(**replaced):
+    answers = {
+        "/usr/sbin/ip -json link show": (0, LINKS, ""),
+        "/usr/sbin/ip -json -4 route show table all": (0, ROUTES4, ""),
+        "/usr/sbin/ip -json -6 route show table all": (0, ROUTES6, ""),
+    }
+    answers.update(replaced)
+    return runner_for(answers)
+
+
+def managed(address, bridge="virbr-lab"):
+    return [{"name": "bootwright-lab-guests", "bridge": bridge, "address": address, "managed": True}]
+
+
+def test_a_managed_network_clear_of_every_host_link_and_route_collides_with_nothing():
+    assert collisions(host_answers(), managed("198.51.100.1/24"), set()) == ([], True)
+    # A default route overlaps every prefix and collides with none.
+    assert collisions(host_answers(), managed("2001:db8::1/64"), set()) == ([], True)
+
+
+def test_an_overlapping_route_identical_or_nested_refuses_naming_the_address():
+    for address, route in (
+        ("192.168.122.1/24", "192.168.122.0/24 dev virbr0"),
+        ("192.168.0.1/16", "192.168.122.0/24 dev virbr0"),
+        ("192.0.2.129/25", "192.0.2.0/24 dev eth0"),
+    ):
+        found, answered = collisions(host_answers(), managed(address), set())
+        assert answered
+        assert any(entry.startswith("route " + route) and entry.endswith("change the address of attachment bootwright-lab-guests")
+                   for entry in found), (address, found)
+    # The host's own address is a local route of the same table.
+    found = collisions(host_answers(), managed("192.0.2.10/32"), set())[0]
+    assert any(entry.startswith("route 192.0.2.10/32 dev eth0") for entry in found), found
+
+
+def test_an_existing_link_of_the_bridges_name_refuses_naming_the_bridge():
+    found, answered = collisions(host_answers(), managed("198.51.100.1/24", bridge="virbr0"), set())
+    assert answered
+    assert found == ["link virbr0, which no network of this context runs: change the bridge of attachment bootwright-lab-guests"]
+
+
+def test_what_a_network_this_context_runs_holds_is_no_collision():
+    assert collisions(host_answers(), managed("192.168.122.1/24", bridge="virbr0"), {"virbr0"}) == ([], True)
+
+
+def test_a_host_that_does_not_answer_for_its_links_or_routes_proves_nothing():
+    for silent in ("/usr/sbin/ip -json link show", "/usr/sbin/ip -json -6 route show table all"):
+        assert collisions(host_answers(**{silent: (1, "", "")}), managed("198.51.100.1/24"), set()) == ([], False)
+    assert collisions(host_answers(**{"/usr/sbin/ip -json -4 route show table all": (0, "{", "")}), managed("198.51.100.1/24"), set()) == ([], False)
+    # An external attachment alone needs no read.
+    external = [{"name": "external", "bridge": "br0", "managed": False}]
+    assert collisions(runner_for({}), external, set()) == ([], True)

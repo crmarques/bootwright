@@ -8675,6 +8675,43 @@ ordering fields stay as they are.
 selection and edge-catalog tests, each proved by a seeded mismatch; the
 delivering commit records the gates.
 
+### X170 — Audit lane J: reconciliation rules
+
+**Items:** B830 (2026-10-26 spec audit step L8).
+**Kind:** safety. **Owners:** State reconciliation, Controller setup,
+Substrate and Add-ons. Delivered on 2026-10-27 as lane J of the
+[audit remediation](backlog.md#lane-order-and-progress) under D182, with
+D183's answers to Q93 to Q96 and Q117 and the owner's D186; the lane also
+partly delivered [B816](backlog.md#b816) and parked B843 to B847.
+
+A destroy over a completed apply that holds a lost or non-done block covers
+the whole frozen plan: it resolves unproved blocks by observation before
+registration and takes lost and failed blocks back by their inverse, and the
+repeated apply's refusal and `status` name that destroy and the context
+deletion. One covered set defines what a removal takes back, and the status
+ownership views and realizations read it. An object whose removal is partly
+done reads `unknown` in `status` and `diff`. Handoff is not ready when the
+selected input is not the revision the apply froze. The secret-store,
+interrupted-setup and closure refusals name exits the host can keep, and a
+setup failure that began no dnf transaction clears its pending intent. The
+libvirt host apply refuses before `net-define` on a link of the bridge's name,
+an overlapping route or an unanswering host.
+
+SSH-placed claims are published in the controller record, qualified by
+`ssh/<address>:<port>/` unless the placement is the controller; the record
+stays version 3 (D186). The unknown-operation rows resolve every unproved
+block and then retry what stays failed, and the scheduler re-reads a block's
+record after a failed start or resolution. Add-on and cluster-network receipts
+carry their ownership basis (`cluster-objects-v2`). `--authorize
+data-loss=<digest>` binds the authorization to the plan's consuming steps; a
+bare token refuses under `--yes` or without a terminal, a stale digest refuses
+before registration, and every remedy prints the bound form or the digest
+placeholder `bootwright plan` fills.
+
+**Guard tests:** the lifecycle, status, diff, handoff, reservation, receipt,
+libvirt host and authorization tests named in the delivering commit, each
+proved by a seeded mismatch; the commit records the gates.
+
 ## M3 independent in-tree completion
 
 The owner's 2026-10-23 request (D181) delivers the independent implementation

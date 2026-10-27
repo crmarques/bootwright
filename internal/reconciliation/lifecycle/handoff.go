@@ -13,7 +13,7 @@ type HandoffSummary struct {
 	Reasons []string
 }
 
-func handoff(operation operationstore.Operation, frozen reconciliation.Plan, states map[string]reconciliation.BlockState) HandoffSummary {
+func handoff(contextName string, operation operationstore.Operation, frozen reconciliation.Plan, states map[string]reconciliation.BlockState, drift string) HandoffSummary {
 	result := HandoffSummary{Reasons: []string{}}
 	if operation.ID == "" {
 		result.Reasons = append(result.Reasons, "no apply is recorded")
@@ -40,6 +40,13 @@ func handoff(operation operationstore.Operation, frozen reconciliation.Plan, sta
 	}
 	if operation.LogFault {
 		result.Reasons = append(result.Reasons, "the operation has a latched required-log fault")
+	}
+	if operation.Verb == reconciliation.Apply && drift != "" {
+		reason := "the selected input is not the revision " + operation.Revision + " the apply froze"
+		if drift == driftBytes {
+			reason = "the selected input's bytes are not the ones revision " + operation.Revision + " froze"
+		}
+		result.Reasons = append(result.Reasons, reason+"; "+contextCommand(contextName, "diff")+" names what changed")
 	}
 	result.Ready = len(result.Reasons) == 0
 	return result

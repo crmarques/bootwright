@@ -59,7 +59,7 @@ func (a *addonAdapter) Run(_ context.Context, run lifecycle.RunRequest) (lifecyc
 	if err != nil {
 		return lifecycle.RunResult{}, err
 	}
-	evidence := instance.Evidence{Version: "addon-instance-evidence-v2", Request: run.Digest, Postcondition: true, Evidence: co.Evidence{Receipts: []co.Receipt{}, Observations: []co.ObjectObservation{}, Checks: []co.CheckResult{}, OLM: []co.OLMFacts{}, Dependents: []co.DependentFacts{}}}
+	evidence := instance.Evidence{Version: "addon-instance-evidence-v3", Request: run.Digest, Postcondition: true, Evidence: co.Evidence{Receipts: []co.Receipt{}, Observations: []co.ObjectObservation{}, Checks: []co.CheckResult{}, OLM: []co.OLMFacts{}, Dependents: []co.DependentFacts{}}}
 	checks := len(program.Checks)
 	for _, step := range program.Steps {
 		checks += len(step.Wait)
@@ -76,7 +76,7 @@ func (a *addonAdapter) Run(_ context.Context, run lifecycle.RunRequest) (lifecyc
 			object = &co.ObjectEntry{Ref: co.Ref{APIVersion: "v1", Kind: "Secret", Namespace: step.Place.Namespace, Name: step.Place.Name, Namespaced: true}, DesiredDigest: step.Place.DesiredDigest}
 		}
 		if object != nil {
-			evidence.Receipts = append(evidence.Receipts, co.Receipt{Ref: object.Ref, UID: "uid-" + object.Name, DesiredDigest: object.DesiredDigest, Disposition: "unchanged"})
+			evidence.Receipts = append(evidence.Receipts, co.Receipt{Ref: object.Ref, UID: "uid-" + object.Name, DesiredDigest: object.DesiredDigest, Disposition: "unchanged", Basis: co.Created})
 			evidence.Observations = append(evidence.Observations, co.ObjectObservation{Ref: object.Ref, Ownership: co.Own, Equal: true})
 		}
 	}

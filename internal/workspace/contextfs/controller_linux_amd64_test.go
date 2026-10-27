@@ -532,6 +532,7 @@ func TestTheControllerRecordV3HoldsNoReceipt(t *testing.T) {
 	}
 	for name, document := range map[string]string{
 		"version 2":                          strings.Replace(string(encoded), `"version":3`, `"version":2`, 1),
+		"version 4":                          strings.Replace(string(encoded), `"version":3`, `"version":4`, 1),
 		"a receipt":                          strings.Replace(string(encoded), `"toolAreas":[]`, `"receipt":{},"toolAreas":[]`, 1),
 		"retained resolutions":               strings.Replace(string(encoded), `"toolAreas":[]`, `"retainedDefinitions":[],"toolAreas":[]`, 1),
 		"retained setup sources":             strings.Replace(string(encoded), `"toolAreas":[]`, `"retainedSources":[],"toolAreas":[]`, 1),
@@ -545,6 +546,46 @@ func TestTheControllerRecordV3HoldsNoReceipt(t *testing.T) {
 		if _, _, err := decodeControllerRecord([]byte(document)); err == nil {
 			t.Errorf("a record with %s was accepted", name)
 		}
+	}
+}
+
+// The SSH qualifier was added under version 3 (Q96), so a version 3 record an
+// earlier build wrote, every key unqualified, still reads, and one record holds
+// unqualified and `ssh/<address>:<port>/` keys side by side, the same claim on
+// two hosts included, and reads back as written.
+func TestAVersion3RecordHoldsUnqualifiedAndSSHQualifiedKeys(t *testing.T) {
+	golden, err := os.ReadFile(filepath.Join("testdata", "controller-record.golden"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var earlier bytes.Buffer
+	if err := json.Compact(&earlier, golden); err != nil {
+		t.Fatal(err)
+	}
+	earlier.WriteByte('\n')
+	if !bytes.Contains(earlier.Bytes(), []byte(`"version":3`)) || bytes.Contains(earlier.Bytes(), []byte(`"ssh/`)) {
+		t.Fatal("the fixture is not an unqualified version 3 record")
+	}
+	read, _, err := decodeControllerRecord(earlier.Bytes())
+	if err != nil || len(read.Reservations) != 2 {
+		t.Fatalf("an unqualified version 3 record was refused: %#v", diagnostics.Of(err))
+	}
+	value := syntheticControllerState(t)
+	value.Reservations = []prerequisites.HostReservation{
+		{Context: "lab", Kind: "proxy", Service: "local-proxy", Keys: []string{"socket:0.0.0.0:3128", "unit:bootwright-proxy"}},
+		{Context: "lab", Kind: "proxy", Service: "remote-proxy", Keys: []string{"ssh/fd00::10:22/socket:0.0.0.0:3128", "ssh/fd00::10:22/unit:bootwright-proxy"}},
+		{Context: "second", Kind: "proxy", Service: "other-proxy", Keys: []string{"ssh/proxy.example.test:22/socket:0.0.0.0:3128"}},
+	}
+	if err := validateControllerState(value, nil); err != nil {
+		t.Fatalf("a record mixing unqualified and qualified keys was refused: %#v", diagnostics.Of(err))
+	}
+	encoded, err := encodeRecord(controllerRecord(value, nil), maxControllerState)
+	if err != nil {
+		t.Fatal(err)
+	}
+	decoded, _, err := decodeControllerRecord(encoded)
+	if err != nil || !reflect.DeepEqual(decoded, value) || !bytes.Contains(encoded, []byte(`"version":3`)) {
+		t.Fatalf("a record mixing unqualified and qualified keys read back as %+v (%#v)", decoded, diagnostics.Of(err))
 	}
 }
 
@@ -578,5 +619,57 @@ func TestControllerDirectoryCreationInterruptionNeverAdoptsOrphan(t *testing.T) 
 	var stat syscall.Stat_t
 	if err := syscall.Stat(filepath.Join(store.options.Root, "controller"), &stat); err != nil {
 		t.Fatal("refusal removed unknown evidence")
+	}
+}
+
+// A store whose controller record another version wrote is not read or
+// converted, and no command rebuilds the record alone, so the refusal names the
+// one recovery that is safe: the fresh install the registry's cut-over names,
+// and what it costs, the contexts with their Secrets and the stored media. The
+// record is left as it was. Version 3 stays the one this build reads (Q96).
+func TestAControllerRecordOfAnotherVersionNamesTheFreshInstall(t *testing.T) {
+	store, sources := fixture(t)
+	record := publish(t, store, "example", sources)
+	recordPreparedSetup(t, store)
+	bind(t, store, record.Name)
+	path := filepath.Join(store.options.Root, "controller", "state.json")
+	current, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx := context.Background()
+	for _, version := range []string{"2", "4"} {
+		earlier := bytes.Replace(current, []byte(`"version":3`), []byte(`"version":`+version), 1)
+		if bytes.Equal(earlier, current) {
+			t.Fatal("the fixture did not change the record version")
+		}
+		writePrivate(t, path, earlier)
+		for name, operation := range map[string]func() error{
+			"a controller read": func() error {
+				return store.ReadController(ctx, "", func(prerequisites.StorageView) error { return nil })
+			},
+			"a transaction": func() error { return store.Transact(ctx, false, nil, func(contexts.Transaction) error { return nil }) },
+		} {
+			reported := diagnostics.Of(operation())
+			want := "controller evidence version " + version + " is unsupported: this build reads version 3 only and converts none"
+			if len(reported) != 1 || reported[0].Code != "context.state" || reported[0].Message != want || reported[0].Remediation != controllerVersionRemedy {
+				t.Errorf("version %s, %s refused with %#v, want %q with the fresh install", version, name, reported, want)
+			}
+		}
+		if after, err := os.ReadFile(path); err != nil || !bytes.Equal(after, earlier) {
+			t.Fatalf("the refused record was rewritten: %q %v", after, err)
+		}
+	}
+	for _, part := range []string{
+		"destroy each environment (bootwright destroy --context <name>)",
+		"delete each context (bootwright context delete --name <name> --purge)",
+		"remove /var/lib/bootwright and /var/lib/bootwright-staging and run bootwright setup",
+		"Never remove /var/lib/bootwright while services it manages run.",
+		"drops this host's contexts with their Secrets and its stored media",
+		"bootwright context init and bootwright media add",
+	} {
+		if !strings.Contains(controllerVersionRemedy, part) {
+			t.Errorf("the remedy %q lacks %q", controllerVersionRemedy, part)
+		}
 	}
 }

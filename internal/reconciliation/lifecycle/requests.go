@@ -67,6 +67,7 @@ type ApplyRequest struct {
 	Stages           []string
 	Authorizations   []string
 	SkipConfirmation bool
+	Unattended       bool
 	SSH              machine.SSHOptions
 }
 
@@ -75,6 +76,7 @@ type DestroyRequest struct {
 	Authorizations   []string
 	Unregistered     []string
 	SkipConfirmation bool
+	Unattended       bool
 	SSH              machine.SSHOptions
 }
 
@@ -164,6 +166,7 @@ type PlanResult struct {
 	// StopsAfterOnline names Machines whose stop proof follows durable online cleanup:
 	// online service removal or a pre-stop inverse. They must remain reachable until then.
 	StopsAfterOnline []string
+	Authorizations   []string
 	Warnings         []diagnostics.Diagnostic
 	Receipt          Receipt
 }

@@ -51,6 +51,28 @@ func contextRun(t *testing.T, services cli.Services, want int, args ...string) (
 	return out.String(), errOut.String()
 }
 
+// reviewedDataLoss is the data-loss authorization bound to the steps the
+// context's plan shows, as an unattended invocation must supply it.
+func reviewedDataLoss(t *testing.T, services cli.Services, contextName string) string {
+	t.Helper()
+	out, _ := contextRun(t, services, 0, "plan", "--context", contextName, "--output", "json")
+	var envelope struct {
+		Result struct {
+			Authorizations []string `json:"authorizations"`
+		} `json:"result"`
+	}
+	if err := json.Unmarshal([]byte(out), &envelope); err != nil {
+		t.Fatalf("the plan output is not one JSON envelope: %v\n%s", err, out)
+	}
+	for _, authorization := range envelope.Result.Authorizations {
+		if strings.HasPrefix(authorization, "data-loss=") {
+			return authorization
+		}
+	}
+	t.Fatalf("the plan names no data-loss authorization: %s", out)
+	return ""
+}
+
 func stateFingerprint(t *testing.T, root string) map[string]string {
 	t.Helper()
 	result := map[string]string{}

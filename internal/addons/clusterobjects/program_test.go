@@ -62,7 +62,7 @@ func TestProgramGolden(t *testing.T) {
 
 func TestProgramRefusesClosedAndDeferredArms(t *testing.T) {
 	tests := map[string]func(*Program){
-		"version":       func(p *Program) { p.Version = "cluster-objects-v2" },
+		"version":       func(p *Program) { p.Version = "cluster-objects-v1" },
 		"step":          func(p *Program) { p.Steps[0].Kind = "apply" },
 		"multiple arms": func(p *Program) { p.Steps[0].Wait = []Check{{ResourceExists: &p.Steps[0].Create.Ref}} },
 		"empty wait":    func(p *Program) { p.Steps = []Step{{Kind: "wait", Wait: []Check{}}} },
@@ -279,7 +279,7 @@ func TestVocabularyGolden(t *testing.T) {
 	if _, err := ThawVersion(data, Options{Namespace: "operators"}); err != nil {
 		t.Fatal(err)
 	}
-	evidence := Evidence{Receipts: []Receipt{{Ref: ref, UID: "uid-1", DesiredDigest: p.Steps[0].Create.DesiredDigest, Disposition: "created"}}, OLM: []OLMFacts{{Namespace: "operators", Subscription: "operator", InstallPlan: InstallPlan{Name: "install-1", UID: "plan-1", CSVs: []string{"operator.v1.0.0"}}, InstalledCSV: "operator.v1.0.0", CSVVersion: "1.0.0", UpgradePending: true, MaxOpenShiftVersion: "4.21", CatalogImage: "registry.example.test/catalog:v1", BundleImage: "registry.example.test/bundle:v1"}}, Dependents: []DependentFacts{{Namespace: "engine", Subscription: "engine", UID: "engine-1", InstallPlan: InstallPlan{Name: "engine-install", UID: "engine-plan", CSVs: []string{"engine.v1.0.0"}}, InstalledCSV: "engine.v1.0.0"}}, Checks: []CheckResult{{Index: 0, Satisfied: true, Stale: true, LastObservation: "Available", Unknown: true}}, Observations: []ObjectObservation{{Ref: ref, Ownership: Own, Equal: true}}}
+	evidence := Evidence{Receipts: []Receipt{{Ref: ref, UID: "uid-1", DesiredDigest: p.Steps[0].Create.DesiredDigest, Disposition: "created", Basis: Created}}, OLM: []OLMFacts{{Namespace: "operators", Subscription: "operator", InstallPlan: InstallPlan{Name: "install-1", UID: "plan-1", CSVs: []string{"operator.v1.0.0"}}, InstalledCSV: "operator.v1.0.0", CSVVersion: "1.0.0", UpgradePending: true, MaxOpenShiftVersion: "4.21", CatalogImage: "registry.example.test/catalog:v1", BundleImage: "registry.example.test/bundle:v1"}}, Dependents: []DependentFacts{{Namespace: "engine", Subscription: "engine", UID: "engine-1", InstallPlan: InstallPlan{Name: "engine-install", UID: "engine-plan", CSVs: []string{"engine.v1.0.0"}}, InstalledCSV: "engine.v1.0.0"}}, Checks: []CheckResult{{Index: 0, Satisfied: true, Stale: true, LastObservation: "Available", Unknown: true}}, Observations: []ObjectObservation{{Ref: ref, Ownership: Own, Equal: true}}}
 	evidence.OLM[0].Plans = []OperatorPlan{{Name: "install-1", CSVs: []string{"operator.v1.0.0"}, Approved: true}}
 	evidence.OLM[0].CSVs = []OperatorCSV{{Name: "operator.v1.0.0", Version: "1.0.0", Phase: "Succeeded"}}
 	data, err = Canonical(evidence)

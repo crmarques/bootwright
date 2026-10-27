@@ -413,7 +413,7 @@ func (s Service) acknowledgedReleases(contextName string, plan reconciliation.Pl
 			objects[block.Object] = true
 		}
 	}
-	passing := contextCommand(contextName, string(plan.Verb), authorizing(requiredTokens(plan))...)
+	passing := contextCommand(contextName, string(plan.Verb), authorizing(plan)...)
 	for _, name := range slices.Compact(slices.Sorted(slices.Values(names))) {
 		if !objects[name] {
 			return failure("lifecycle.authorization",
@@ -477,7 +477,7 @@ func (s Service) invoke(ctx context.Context, tx Transaction, store OperationStor
 		continuation := ""
 		var prepare func(context.Context, json.RawMessage) error
 		if operation.Verb == reconciliation.Apply && resolution == 0 {
-			continuation = contextCommand(tx.Identity().Name, string(reconciliation.Apply), authorizing(requiredTokens(plan))...)
+			continuation = contextCommand(tx.Identity().Name, string(reconciliation.Apply), authorizing(plan)...)
 		}
 		if operation.Verb == reconciliation.Apply && resolution == 0 && attempt > 0 {
 			prepare = func(inner context.Context, preparation json.RawMessage) error {

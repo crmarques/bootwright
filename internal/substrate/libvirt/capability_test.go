@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"slices"
+	"strings"
 	"testing"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
@@ -100,6 +101,28 @@ func TestAMachineOnAnSSHHostClaimsItsBMCSocketThere(t *testing.T) {
 		plan.SSHReservations[0].Reservation.Service != "rhel-01" ||
 		!slices.Contains(plan.SSHReservations[0].Reservation.Keys, "socket:192.0.2.5:8000") {
 		t.Fatalf("SSH claims = %+v, want rhel-01's BMC socket qualified by the Machine hypervisor at 192.0.2.5:22", plan.SSHReservations)
+	}
+}
+
+// A provider reached over SSH publishes no controller reservation, but claims
+// its pool, networks, bridges and prefixes on its host Machine at the SSH
+// address and port it is reached at, which planning publishes qualified by
+// that host (Q96).
+func TestAProviderOnAnSSHHostClaimsItsKeysThere(t *testing.T) {
+	arm := provider().Spec().Get("libvirt")
+	remote := provider(field("libvirt", arm.With("machineRef", api.StringValue("hypervisor"))))
+	catalog := catalogOf(controller(), remoteHost(), remote, networkConfig(), guest("rhel-01"))
+	plan, err := NewHost(nil).Plan(context.Background(), lifecycle.PlanInput{
+		Verb: reconciliation.Apply, State: compilation.NewState(catalog, catalog, nil),
+		Controller: "controller", Context: lifecycle.ContextIdentity{Name: testContext},
+	})
+	if err != nil || len(plan.Definitions) != 1 || len(plan.Reservations) != 0 {
+		t.Fatalf("plan = %+v (%v)", plan, err)
+	}
+	if len(plan.SSHReservations) == 0 || plan.SSHReservations[0].Machine != "hypervisor" || plan.SSHReservations[0].Port != 22 ||
+		plan.SSHReservations[0].Reservation.Kind != "substrate-host" ||
+		!slices.ContainsFunc(plan.SSHReservations[0].Reservation.Keys, func(key string) bool { return strings.HasPrefix(key, "libvirt-pool:") }) {
+		t.Fatalf("SSH claims = %+v, want the provider's keys on the Machine hypervisor", plan.SSHReservations)
 	}
 }
 

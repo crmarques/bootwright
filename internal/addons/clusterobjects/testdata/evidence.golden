@@ -72,6 +72,7 @@
   "receipts": [
     {
       "apiVersion": "v1",
+      "basis": "created",
       "desiredDigest": "89ec66223f0e31553122ec688c47bdd2a5d8edf0292b4216cb52a93c93a9bf29",
       "disposition": "created",
       "kind": "ConfigMap",

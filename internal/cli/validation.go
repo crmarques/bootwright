@@ -190,10 +190,15 @@ func validateCommandFlags(command *cobra.Command, path string) string {
 			for _, token := range strings.Split(occurrence, ",") {
 				token = strings.TrimSpace(token)
 				secret, rebind := strings.CutPrefix(token, lifecycle.RebindAuthorization)
-				if token != "data-loss" && (!rebind || !api.ValidLexical("name", secret)) || seen[token] {
-					return "--authorize accepts data-loss and rebind=<secret>, each at most once"
+				name, digest, bound := strings.Cut(token, "=")
+				if rebind {
+					name = token
 				}
-				seen[token] = true
+				dataLoss := name == "data-loss" && (!bound || authorizationDigest(digest))
+				if !dataLoss && (!rebind || !api.ValidLexical("name", secret)) || seen[name] {
+					return "--authorize accepts data-loss or data-loss=<digest> and rebind=<secret>, each at most once"
+				}
+				seen[name] = true
 			}
 		}
 		for _, occurrence := range arrayValue(flags, "unregistered") {
@@ -432,4 +437,16 @@ func structuredLabel(command *cobra.Command) string {
 		return "YAML"
 	}
 	return "JSON"
+}
+
+func authorizationDigest(value string) bool {
+	if len(value) != 16 {
+		return false
+	}
+	for _, c := range value {
+		if !(c >= '0' && c <= '9' || c >= 'a' && c <= 'f') {
+			return false
+		}
+	}
+	return true
 }

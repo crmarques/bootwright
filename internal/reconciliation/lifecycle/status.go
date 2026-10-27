@@ -110,32 +110,32 @@ func recordReleased(ctx context.Context, store OperationStore, operation operati
 	if operation.Verb != reconciliation.Destroy || operation.Source == "" {
 		return nil
 	}
-	plan, states, err := removedApply(ctx, store, operation.Source)
+	applied, plan, states, err := removedApply(ctx, store, operation.Source)
 	if err != nil {
 		return err
 	}
-	for _, block := range reconciliation.OwnedSubset(plan, states).Blocks {
+	for _, block := range coveredBy(applied, plan, states).Blocks {
 		recordOwnership(owned, block, operation.Verb, reconciliation.BlockDone)
 	}
 	return nil
 }
 
-// removedApply reads the frozen plan of the apply a removal removes and what
-// its block records reached.
-func removedApply(ctx context.Context, store recordReader, source string) (reconciliation.Plan, map[string]reconciliation.BlockState, error) {
+// removedApply reads the apply a removal removes, its frozen plan and what its
+// block records reached.
+func removedApply(ctx context.Context, store recordReader, source string) (operationstore.Operation, reconciliation.Plan, map[string]reconciliation.BlockState, error) {
 	applied, err := store.ReadOperation(ctx, source)
 	if err != nil {
-		return reconciliation.Plan{}, nil, err
+		return operationstore.Operation{}, reconciliation.Plan{}, nil, err
 	}
 	plan, err := store.ReadPlan(ctx, applied.ID)
 	if err != nil {
-		return reconciliation.Plan{}, nil, err
+		return operationstore.Operation{}, reconciliation.Plan{}, nil, err
 	}
 	states, err := store.BlockStates(ctx, applied.ID, plan)
 	if err != nil {
-		return reconciliation.Plan{}, nil, err
+		return operationstore.Operation{}, reconciliation.Plan{}, nil, err
 	}
-	return plan, states, nil
+	return applied, plan, states, nil
 }
 
 // recordOwnership keeps the least settled state reported for one object, so a
@@ -203,7 +203,7 @@ func (s Service) status(ctx context.Context, view View) (*StatusResult, error) {
 	}
 	result.SetupChecks = setupChecks(view, index.Current != "")
 	if index.Current == "" {
-		result.Handoff = handoff(operationstore.Operation{}, reconciliation.Plan{}, nil)
+		result.Handoff = handoff("", operationstore.Operation{}, reconciliation.Plan{}, nil, "")
 		if result.Contradictions, err = unindexed(ctx, view, store); err != nil {
 			return nil, err
 		}
@@ -224,7 +224,7 @@ func (s Service) status(ctx context.Context, view View) (*StatusResult, error) {
 	if err != nil {
 		return nil, err
 	}
-	result.Handoff = handoff(operation, plan, states)
+	result.Handoff = handoff(view.Identity().Name, operation, plan, states, inputDrift(view, operation))
 	if result.Contradictions, err = recordContradictions(ctx, store, operation, plan, states, attempts); err != nil {
 		return nil, err
 	}
@@ -304,18 +304,26 @@ func idleSteps(view View, unindexed []string) []string {
 // removal follows however it stopped, unless its records contradict what it
 // started: each contradiction status names for it refuses that removal. A
 // completed apply admits a removal too, but naming it there reads as an
-// instruction to undo what just succeeded. A completed removal holding a
-// block that is not done is refused by both verbs, which name the deletion
-// the context guard admits, so that deletion is offered instead, the orphan
-// acknowledgement over evidence the guard cannot read.
+// instruction to undo what just succeeded, unless a block of it is not done:
+// then that removal and the deletion its apply's refusal names are offered. A
+// completed removal holding such a block is refused by both verbs, which name
+// the deletion the context guard admits, so that deletion alone is offered.
 func (s Service) offered(ctx context.Context, view View, store OperationStore, operation operationstore.Operation, frozen reconciliation.Plan, states map[string]reconciliation.BlockState, next string, contradicted []string) ([]string, error) {
 	steps := []string{}
 	if operation.State == reconciliation.OperationDone {
-		if operation.Verb == reconciliation.Apply && operation.LogFault && inputDrift(view, operation) == "" && len(unfinishedBlocks(frozen, states)) == 0 {
+		unfinished := len(unfinishedBlocks(frozen, states)) != 0
+		if operation.Verb == reconciliation.Apply && operation.LogFault && inputDrift(view, operation) == "" && !unfinished {
 			return []string{contextCommand(view.Identity().Name, string(reconciliation.Apply))}, nil
 		}
-		if operation.Verb != reconciliation.Destroy || len(unfinishedBlocks(frozen, states)) == 0 {
+		if !unfinished {
 			return steps, nil
+		}
+		if operation.Verb == reconciliation.Apply {
+			removal := contextCommand(view.Identity().Name, string(reconciliation.Destroy))
+			if s.setupGates(ctx, view) {
+				removal = setupStep
+			}
+			steps = append(steps, removal)
 		}
 		command, _ := deletionCommand(view)
 		return append(steps, command), nil
@@ -528,12 +536,12 @@ func realizations(ctx context.Context, store recordReader, operation operationst
 	owned := map[string]int{}
 	ownedBlocks := 0
 	if operation.Source != "" {
-		source, sourceStates, err := removedApply(ctx, store, operation.Source)
+		removed, source, sourceStates, err := removedApply(ctx, store, operation.Source)
 		if err != nil {
 			return nil, err
 		}
 		applied = reachedByObject(source, sourceStates)
-		subset := reconciliation.OwnedSubset(source, sourceStates).Blocks
+		subset := coveredBy(removed, source, sourceStates).Blocks
 		for _, block := range subset {
 			realized[block.Kind+"/"+block.Object] = RealizationPending
 			owned[block.Kind+"/"+block.Object]++
@@ -581,7 +589,7 @@ func replacedRemovals(ctx context.Context, store recordReader, operation operati
 		if record.Verb != reconciliation.Destroy {
 			return nil, false, failure("lifecycle.state", "the operation this removal replaces is no removal", "restore the context store")
 		}
-		plan, states, err := removedApply(ctx, store, id)
+		_, plan, states, err := removedApply(ctx, store, id)
 		if err != nil {
 			return nil, false, err
 		}
@@ -663,6 +671,8 @@ func removedStatus(reached, applied []reconciliation.BlockState, owned int, repl
 		return RealizationUnknown
 	case slices.Contains(reached, reconciliation.BlockFailed):
 		return RealizationFailed
+	case slices.Contains(reached, reconciliation.BlockDone) && slices.ContainsFunc(reached, notDone):
+		return RealizationUnknown
 	case slices.Contains(reached, reconciliation.BlockDone):
 		return RealizationPending
 	case replaced != "":

@@ -72,6 +72,7 @@ def test_absent_create_uses_frozen_identity_and_manager(tmp_path, object_request
     assert body["metadata"]["annotations"][model.OWNER] == live["metadata"]["annotations"][model.OWNER]
     assert "bootwright-" + model.mark("operation", "block")[:32] in calls[1]["argv"]
     assert all("--request-timeout=30s" in c["argv"] for c in calls)
+    assert [r["basis"] for r in result["state"]["receipts"]] == ["created"]
 
 
 @pytest.mark.parametrize("failure", [{"code": 1}, {"code": 0, "stdout": "broken"}])
@@ -80,6 +81,19 @@ def test_lost_create_response_reprobes_owned_object(tmp_path, object_request, fa
     result = Engine(object_request, oc.read, oc.write, clock=lambda: 0).execute()
     assert result["state"]["postcondition"]
     assert [c["argv"][3] for c in oc.calls()] == ["get", "create", "get"]
+    # A create whose reply was lost is this block's by its mark alone.
+    assert [r["basis"] for r in result["state"]["receipts"]] == ["mark-recovered"]
+
+
+def test_a_receipt_records_the_basis_of_its_ownership(object_request):
+    obj = object_request["program"]["steps"][0]["create"]
+    live = owned(object_request)
+    recovered = Engine(object_request, lambda *_: {"answered": True, "object": live}).execute(observe=True)
+    assert [r["basis"] for r in recovered["state"]["receipts"]] == ["mark-recovered"]
+    object_request["receipts"] = [dict(model.ref(obj), uid="uid-1", desiredDigest=obj["desiredDigest"],
+                                       disposition="created", basis="created")]
+    matched = Engine(object_request, lambda *_: {"answered": True, "object": live}).execute(observe=True)
+    assert [r["basis"] for r in matched["state"]["receipts"]] == ["uid-matched"]
 
 
 @pytest.mark.parametrize("reason,retry", [("InternalError", True), ("ServiceUnavailable", True), ("Invalid", False)])
@@ -331,7 +345,7 @@ def test_secret_place_preserves_bytes_and_never_returns_values(tmp_path, object_
     if changed_labels:
         assert not result["accepted"]
         return
-    assert result == {"accepted": True, "equal": False, "uid": "secret-1"}
+    assert result == {"accepted": True, "equal": False, "uid": "secret-1", "basis": "created"}
     assert "document" not in json.dumps(result) and "first line" not in json.dumps(result)
     create = oc.calls()[1]
     assert create["argv"][-2:] == ["-o", "name"]

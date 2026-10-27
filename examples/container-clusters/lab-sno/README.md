@@ -176,13 +176,15 @@ Secret versions the operation bound; rotation does not repair a lost binding.
 ## Cleanup
 
 This removes the VM and its cluster disks. Stop its guest before destroy;
-`--authorize data-loss` acknowledges erasure, independently of confirmation.
+`--authorize data-loss` acknowledges erasure, independently of confirmation;
+under `--yes` it must carry the digest the plan prints, as
+`--authorize data-loss=<digest>`.
 Destroy also withdraws private media, the installer work area, managed services
 and the network. It retains the prepared controller runtime and tool cache.
 
 ```sh
 ./bin/bootwright machine stop --context lab-sno --name sno-01 --yes
-./bin/bootwright destroy --context lab-sno --yes --authorize data-loss
+./bin/bootwright destroy --context lab-sno --authorize data-loss
 ./bin/bootwright status --context lab-sno
 ./bin/bootwright context delete --name lab-sno --purge --yes
 ```

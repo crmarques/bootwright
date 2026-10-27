@@ -262,6 +262,9 @@ func planPreview(plan reconciliation.Plan, states map[string]reconciliation.Bloc
 		Steps: steps(plan, states), Stages: selection.Names(),
 		Waves: schedule.Count, Widest: schedule.Widest,
 	}
+	for _, token := range requiredTokens(plan) {
+		result.Authorizations = append(result.Authorizations, token+"="+AuthorizationDigest(plan, token))
+	}
 	if len(selection) == 0 {
 		return result
 	}

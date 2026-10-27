@@ -15,6 +15,7 @@ import (
 // diagnostic names; a completed operation names none.
 func TestEveryIncompleteResultNamesTheCommandItsRecordsCallFor(t *testing.T) {
 	ctx := context.Background()
+	shown := shownBinding(t, newPlannedHarness(t, []reconciliation.BlockDefinition{destructive("alpha"), definition("bravo")}), testContextName)
 	cases := []struct {
 		name  string
 		run   func(t *testing.T) (*OperationResult, error)
@@ -32,8 +33,8 @@ func TestEveryIncompleteResultNamesTheCommandItsRecordsCallFor(t *testing.T) {
 			},
 		},
 		{
-			name: "a failed apply that consumes an authorization", state: "failed", next: "bootwright apply --context lab --authorize data-loss",
-			remedy: "continue it with bootwright apply --context lab --authorize data-loss",
+			name: "a failed apply that consumes an authorization", state: "failed", next: "bootwright apply --context lab --authorize " + shown,
+			remedy: "continue it with bootwright apply --context lab --authorize " + shown,
 			run: func(t *testing.T) (*OperationResult, error) {
 				h := newPlannedHarness(t, []reconciliation.BlockDefinition{destructive("alpha"), definition("bravo")})
 				h.capability.outcomeFor = map[string]Result{"alpha": {Outcome: reconciliation.OutcomeFailed}}
@@ -92,6 +93,7 @@ func TestEveryIncompleteResultNamesTheCommandItsRecordsCallFor(t *testing.T) {
 			if result == nil || result.Receipt.State != tc.state || result.NextCommand != tc.next {
 				t.Fatalf("result = %+v (%v), want state %s naming %q", result, err, tc.state, tc.next)
 			}
+			noBareAuthorization(t, result.NextCommand)
 			reported := diagnostics.Of(err)
 			if tc.remedy == "" {
 				if len(reported) != 0 {
@@ -100,6 +102,7 @@ func TestEveryIncompleteResultNamesTheCommandItsRecordsCallFor(t *testing.T) {
 				return
 			}
 			last := reported[len(reported)-1]
+			noBareAuthorization(t, last.Remediation)
 			if last.Remediation != tc.remedy || !strings.Contains(last.Remediation, tc.next) {
 				t.Fatalf("the terminal diagnostic names %q, want %q", last.Remediation, tc.remedy)
 			}

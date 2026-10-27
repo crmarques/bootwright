@@ -250,8 +250,9 @@ func TestUninitializedVersusOrphanedStore(t *testing.T) {
 	}
 }
 
-// A refusal over a store no init created, or over a nonempty one that lost its
-// metadata, names the init of the context whose store it is.
+// A refusal over a store no init created names the init of the context whose
+// store it is; one over a nonempty store that lost its metadata names D37's two
+// exits for that context, since no init can recover it.
 func TestAnUninitializedStoreRefusalNamesItsInitInTheContext(t *testing.T) {
 	a, w, _ := testAccess(testBackend("selected", false))
 	err := a.Mutate(context.Background(), w.selected, func(StoreSession, Selection) error {
@@ -267,8 +268,8 @@ func TestAnUninitializedStoreRefusalNamesItsInitInTheContext(t *testing.T) {
 	}
 	w.area.files["orphan"] = []byte("not a fresh store")
 	_, _, err = ReadSelector(context.Background(), w.area, w.selected.Name)
-	if found := diagnostics.Of(err); len(found) != 1 || found[0].Code != "secret.store.corrupt" ||
-		!strings.Contains(found[0].Remediation, "--context "+w.selected.Name) {
+	exits := "restore the context's keyring from a complete backup, or run bootwright status --context fixture, which lists the objects the context owns, then bootwright context delete --name fixture --purge --allow-orphans, which abandons them to be removed by hand, and create the context again"
+	if found := diagnostics.Of(err); len(found) != 1 || found[0].Code != "secret.store.corrupt" || found[0].Remediation != exits {
 		t.Fatalf("refusal of an orphaned store = %+v", found)
 	}
 	if found := diagnostics.Of(Uninitialized("")); len(found) != 1 || found[0].Message != "the secret store is not initialized" ||

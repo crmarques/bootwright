@@ -64,15 +64,21 @@ func (c HostCapability) Plan(ctx context.Context, input lifecycle.PlanInput) (li
 			Request:        canonical,
 		})
 		plan.Secrets = append(plan.Secrets, request.SecretReferences()...)
-		if !request.Placement.Local() {
+		claims := []prerequisites.HostReservation{{
+			Context: input.Context.Name, Kind: "substrate-host", Service: request.Identity.Object, Keys: request.ReservationKeys(),
+		}}
+		if shared := request.SharedReservationKeys(); len(shared) != 0 {
+			claims = append(claims, prerequisites.HostReservation{
+				Context: input.Context.Name, Kind: "substrate-host-use", Service: request.Identity.Object, Keys: shared, Shared: true,
+			})
+		}
+		if request.Placement.Local() {
+			plan.Reservations = append(plan.Reservations, claims...)
 			continue
 		}
-		plan.Reservations = append(plan.Reservations, prerequisites.HostReservation{
-			Context: input.Context.Name, Kind: "substrate-host", Service: request.Identity.Object, Keys: request.ReservationKeys(),
-		})
-		if shared := request.SharedReservationKeys(); len(shared) != 0 {
-			plan.Reservations = append(plan.Reservations, prerequisites.HostReservation{
-				Context: input.Context.Name, Kind: "substrate-host-use", Service: request.Identity.Object, Keys: shared, Shared: true,
+		for _, claim := range claims {
+			plan.SSHReservations = append(plan.SSHReservations, lifecycle.SSHReservation{
+				Machine: request.Placement.Machine, Address: request.Placement.Address, Port: request.Placement.Port, Reservation: claim,
 			})
 		}
 	}

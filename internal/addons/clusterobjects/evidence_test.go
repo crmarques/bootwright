@@ -10,7 +10,7 @@ func TestOwnershipProofTable(t *testing.T) {
 	object := objectFixture(t, "settings")
 	registered := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
 	base := Probe{Ref: object.Ref, ReadKnown: true, Present: true, UID: "uid-1", OwnerMark: OwnerMark("operation-1", "block-1", object.Ref), CreatedAt: registered}
-	receipt := Receipt{Ref: object.Ref, UID: base.UID, DesiredDigest: object.DesiredDigest, Disposition: "created"}
+	receipt := Receipt{Ref: object.Ref, UID: base.UID, DesiredDigest: object.DesiredDigest, Disposition: "created", Basis: Created}
 	cases := []struct {
 		name    string
 		change  func(*Probe)
@@ -86,10 +86,26 @@ func TestObservationTable(t *testing.T) {
 func TestEvidenceRequiresCompleteUniqueCoverage(t *testing.T) {
 	p := programFixture(t)
 	o := p.Steps[0].Create
-	e := Evidence{Receipts: []Receipt{{Ref: o.Ref, UID: "uid", DesiredDigest: o.DesiredDigest, Disposition: "created"}}, Observations: []ObjectObservation{{Ref: o.Ref, Ownership: Own, Equal: true}}, Checks: []CheckResult{{Index: 0, Satisfied: true, LastObservation: "ready"}}}
+	e := Evidence{Receipts: []Receipt{{Ref: o.Ref, UID: "uid", DesiredDigest: o.DesiredDigest, Disposition: "created", Basis: Created}}, Observations: []ObjectObservation{{Ref: o.Ref, Ownership: Own, Equal: true}}, Checks: []CheckResult{{Index: 0, Satisfied: true, LastObservation: "ready"}}}
 	if got := EvaluateEvidence(p, e); got != Completed {
 		t.Fatal(got)
 	}
+	// A receipt names the basis of its ownership; one that names none, as an
+	// earlier evidence version wrote, or another word proves nothing.
+	for _, basis := range []Basis{MarkRecovered, UIDMatched, "", "adopted"} {
+		e.Receipts[0].Basis = basis
+		want := Completed
+		if basis == "" || basis == "adopted" {
+			want = UnknownRealization
+			if err := ValidateEvidence(e); err == nil {
+				t.Fatalf("a receipt of basis %q validated", basis)
+			}
+		}
+		if got := EvaluateEvidence(p, e); got != want {
+			t.Fatalf("basis %q: %s, want %s", basis, got, want)
+		}
+	}
+	e.Receipts[0].Basis = Created
 	saved := e.Receipts
 	e.Receipts = nil
 	if got := EvaluateEvidence(p, e); got != UnknownRealization {

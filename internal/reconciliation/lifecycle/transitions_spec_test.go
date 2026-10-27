@@ -158,13 +158,13 @@ func stateMachineRows() map[string]stateMachineRow {
 			},
 		},
 		"apply unknown": {
-			transition: "resolve the exact unknown block, or start a fresh destroy of the blocks it started, which resolves that block first; start no other effect or retry",
+			transition: "continue it, resolving every unproved block first and then retrying what resolution leaves `failed` (D146), or start a fresh destroy of the blocks it started, which resolves them first",
 			cases: map[string]stateMachineCase{
 				"an apply whose last block lost its outcome": {arrange: failed("charlie", reconciliation.OutcomeUnknown), apply: "continue", destroy: "fresh destroy"},
 			},
 		},
 		"apply done": {
-			transition: "start a fresh destroy; an `apply` of the unchanged input settles without effect, and of a changed input refuses; both the destroy and that apply refuse while a block of the plan is not `done`",
+			transition: "start a fresh destroy of its whole frozen plan, which first resolves every unproved block; an `apply` of the unchanged input settles without effect, and of a changed input refuses; that apply refuses while a block of the plan is not `done`, naming that destroy and `context delete --purge`",
 			cases: map[string]stateMachineCase{
 				"a completed apply": {arrange: func(t *testing.T, h *harness) { completeApply(t, h) }, apply: "settle", destroy: "fresh destroy"},
 				"a completed apply under a changed input": {
@@ -207,7 +207,7 @@ func stateMachineRows() map[string]stateMachineRow {
 					arrange: func(t *testing.T, h *harness) {
 						lose(h, path.Join(completeApply(t, h), "blocks", "charlie")+"/")
 					},
-					apply: "refuse", destroy: "refuse",
+					apply: "refuse", destroy: "fresh destroy",
 				},
 			},
 		},
@@ -230,7 +230,7 @@ func stateMachineRows() map[string]stateMachineRow {
 			},
 		},
 		"destroy unknown": {
-			transition: "resolve the exact unknown block; start no effect or retry",
+			transition: "continue it, resolving every unproved block first and then retrying what resolution leaves `failed` (D146)",
 			cases: map[string]stateMachineCase{
 				"a removal whose first block lost its outcome": {
 					arrange: func(t *testing.T, h *harness) {

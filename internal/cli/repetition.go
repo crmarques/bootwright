@@ -3,6 +3,7 @@ package cli
 import (
 	"strings"
 
+	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
 	"github.com/spf13/pflag"
 )
 
@@ -10,13 +11,11 @@ import (
 const undisclosedAnnotation = "bootwright.undisclosed"
 
 // repeatedCommand is the invocation args name, written as a command an
-// operator can run again: its command path and every flag it set, so a
-// selection or source it chose is never dropped. A command acting in a context
-// names that context with --context first, whether or not the invocation named
-// it, so a copied command never acts in whichever context is current later. An
-// undisclosed value is named by a placeholder. It is empty for arguments that
-// do not resolve to one command, and for operands, which no confirming command
-// takes.
+// operator can run again: its command path and every flag it set. A command
+// acting in a context names it with --context first, so a copied command never
+// acts in whichever context is current later. An undisclosed value is named by
+// a placeholder. It is empty for arguments that do not resolve to one command,
+// and for operands, which no confirming command takes.
 func repeatedCommand(args []string, contextName string) string {
 	if len(args) == 0 || rawBounds(args) != "" {
 		return ""
@@ -51,7 +50,7 @@ func repeatedCommand(args []string, contextName string) string {
 		case flag.Value.Type() == "stringArray":
 			if values, ok := flag.Value.(pflag.SliceValue); ok {
 				for _, value := range values.GetSlice() {
-					words = append(words, name, shellWord(value))
+					words = append(words, name, repeatedValue(flag.Name, value))
 				}
 			}
 		default:
@@ -59,6 +58,26 @@ func repeatedCommand(args []string, contextName string) string {
 		}
 	})
 	return strings.Join(words, " ")
+}
+
+// repeatedValue binds a bare data-loss in a repeated command, which carries
+// --yes and so refuses a bare token (Q117); the unquoted placeholder is no shell word.
+func repeatedValue(flag, value string) string {
+	if flag != "authorize" {
+		return shellWord(value)
+	}
+	members := strings.Split(value, ",")
+	bound := false
+	for index, member := range members {
+		members[index] = strings.TrimSpace(member)
+		if members[index] == "data-loss" {
+			members[index], bound = "data-loss="+lifecycle.DigestPlaceholder, true
+		}
+	}
+	if !bound {
+		return shellWord(value)
+	}
+	return strings.Join(members, ",")
 }
 
 // shellWord quotes one argument for a POSIX shell only when it needs it, so an

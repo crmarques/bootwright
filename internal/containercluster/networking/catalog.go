@@ -11,7 +11,7 @@ const (
 	Kind            = "ContainerClusterNetwork"
 	Implementation  = "cluster-network-v1"
 	requestVersion  = "cluster-network-request-v1"
-	evidenceVersion = "cluster-network-evidence-v2"
+	evidenceVersion = "cluster-network-evidence-v3"
 )
 
 func BlockID(cluster string) string { return "cluster-network-" + cluster }

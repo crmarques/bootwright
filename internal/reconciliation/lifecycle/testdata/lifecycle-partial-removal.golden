@@ -1,0 +1,26 @@
+[
+  {
+    "Name": "lab",
+    "Realization": "",
+    "Real": "present",
+    "Reason": ""
+  },
+  {
+    "Name": "installation",
+    "Realization": "unknown",
+    "Real": "unknown",
+    "Reason": "destroy operation-1 has removed installation and not yet host"
+  },
+  {
+    "Name": "machine",
+    "Realization": "done",
+    "Real": "present",
+    "Reason": ""
+  },
+  {
+    "Name": "storage",
+    "Realization": "pending",
+    "Real": "absent",
+    "Reason": "destroy operation-1 took it back"
+  }
+]

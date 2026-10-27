@@ -4,6 +4,7 @@ import (
 	"encoding/hex"
 	"net/url"
 	"slices"
+	"strconv"
 	"strings"
 
 	"github.com/crmarques/bootwright/internal/controller"
@@ -21,9 +22,17 @@ func controllerFailure(code, message, remediation string) error {
 const toolSourcesRemedy = "no command of this build frees a retained tool source, because it never retires one; run this context's controller stage on another controller host, " +
 	"or start this host afresh: destroy every environment and delete every context on it, then, as root, remove /var/lib/bootwright and run bootwright setup"
 
+// controllerVersionRemedy is the fresh install of a store whose controller
+// record another version wrote. No command rebuilds the record alone, so the
+// whole root goes, and with it the contexts, their Secrets and the stored media.
+const controllerVersionRemedy = freshInstallRemediation + " That fresh install also drops this host's contexts with their Secrets and its stored media: " +
+	"recreate them from your input directories with bootwright context init and bootwright media add."
+
 // ControllerRecordVersion is the private shared-host evidence format. Version 3
-// holds host identity, bindings, tool sources and areas, and reservations; the
-// setup receipt lives in the setup subtree (D152).
+// holds host identity, bindings, tool sources and areas, and reservations,
+// whose keys an SSH-placed claim qualifies by its host; the qualifier was added
+// under version 3 (Q96), since every earlier key is a valid unqualified claim.
+// The setup receipt lives in the setup subtree (D152).
 const ControllerRecordVersion = 3
 
 const (
@@ -82,7 +91,9 @@ func decodeControllerRecord(data []byte) (prerequisites.HostState, []controllerB
 		return prerequisites.HostState{}, nil, err
 	}
 	if record.Version != ControllerRecordVersion {
-		return prerequisites.HostState{}, nil, state("controller evidence version is unsupported")
+		return prerequisites.HostState{}, nil, contexts.StateErrorWithRemediation(
+			"controller evidence version "+strconv.Itoa(record.Version)+" is unsupported: this build reads version "+strconv.Itoa(ControllerRecordVersion)+" only and converts none",
+			controllerVersionRemedy)
 	}
 	host, err := controller.NewInstalledHostIdentity(record.Host.Provider, record.Host.MachineID, record.Host.ProductUUID, record.Host.FilesystemUUID)
 	if err != nil {

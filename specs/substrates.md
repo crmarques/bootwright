@@ -172,10 +172,6 @@ route and the attachment's `bridge` or address as the field to change. A read
 the host does not answer proves nothing and refuses the same way, because
 libvirt's own collision checks are partial and come only once a network starts.
 
-Not yet met: the apply compares a managed prefix and bridge only with the
-managed attachments Bootwright declares; tracked as
-[B816](milestones/backlog.md#b816).
-
 A managed network carries the MTU its attachment declares and one IPv4 or IPv6
 prefix; a Machine's NICs attach, each in declared order, to the attachment its
 interface map names
@@ -810,8 +806,11 @@ The block records the managed-object reference and an ownership marker, and
 every later call addresses that reference, never a name. The marker names the
 context and the Machine, and the block records the vCenter's `instanceUuid`
 and the virtual machine's `instanceUuid`; every power, media and removal call
-compares them with the live object first, under
-[mutation safety](state-reconciliation.md#mutation-safety).
+compares them with the live object immediately before it acts, under
+[mutation safety](state-reconciliation.md#mutation-safety). An object at the
+recorded reference whose marker or either `instanceUuid` differs is foreign
+and refuses, and a vCenter that does not answer, or answers without those
+fields, reads `unknown`, never absent.
 
 Pushed media: `media_insert` uploads the image to
 `[<staging datastore>] <staging folder>/<context>/<cluster>/<machine>-<media identity>.iso`

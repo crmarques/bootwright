@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"slices"
 	"strings"
@@ -221,6 +222,12 @@ func (s Service) apply(ctx context.Context, tx SetupTransaction, current *inspec
 		if err != nil {
 			current.report.Progress[index] = ActionProgress{ID: step, Phase: "observed", Outcome: "failed"}
 			progress("failed")
+			if !slices.Contains(steps[:index+1], packagesStep) {
+				state.Pending = nil
+				if recordErr := tx.Record(ctx, state); recordErr != nil {
+					return errors.Join(err, recordErr)
+				}
+			}
 			return err
 		}
 		current.report.Progress[index] = ActionProgress{ID: step, Phase: "observed", Outcome: "changed"}

@@ -2,7 +2,7 @@
 - name: Validate the frozen cluster object program version
   ansible.builtin.assert:
     that:
-      - cluster_objects_program.version == 'cluster-objects-v1'
+      - cluster_objects_program.version == 'cluster-objects-v2'
     quiet: true
     fail_msg: The frozen cluster object program version is unsupported.
 

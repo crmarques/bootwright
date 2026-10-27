@@ -28,13 +28,13 @@ func (s Service) Apply(ctx context.Context, request ApplyRequest) (*OperationRes
 	if err != nil {
 		return nil, err
 	}
-	return s.mutate(ctx, reconciliation.Apply, request.ContextName, selection, request.Authorizations, nil, request.SkipConfirmation, request.SSH.Borrowed())
+	return s.mutate(ctx, reconciliation.Apply, request.ContextName, selection, request.Authorizations, nil, request.SkipConfirmation, request.Unattended, request.SSH.Borrowed())
 }
 
 // Destroy removes what an apply recorded as owned. It accepts no stage
 // selection: a removal covers exactly the effects that exist.
 func (s Service) Destroy(ctx context.Context, request DestroyRequest) (*OperationResult, error) {
-	return s.mutate(ctx, reconciliation.Destroy, request.ContextName, nil, request.Authorizations, request.Unregistered, request.SkipConfirmation, request.SSH.Borrowed())
+	return s.mutate(ctx, reconciliation.Destroy, request.ContextName, nil, request.Authorizations, request.Unregistered, request.SkipConfirmation, request.Unattended, request.SSH.Borrowed())
 }
 
 // transition is the single legal next step the durable state permits. A noop
@@ -131,7 +131,7 @@ func (b basis) describe() string {
 	return "operation " + b.operation + " (" + string(b.state) + ")"
 }
 
-func (s Service) mutate(ctx context.Context, verb reconciliation.Verb, contextName string, selection reconciliation.StageSelection, authorizations, unregistered []string, skipConfirmation, borrowed bool) (*OperationResult, error) {
+func (s Service) mutate(ctx context.Context, verb reconciliation.Verb, contextName string, selection reconciliation.StageSelection, authorizations, unregistered []string, skipConfirmation, unattended, borrowed bool) (*OperationResult, error) {
 	if err := s.available(ctx); err != nil {
 		return nil, err
 	}
@@ -196,7 +196,10 @@ func (s Service) mutate(ctx context.Context, verb reconciliation.Verb, contextNa
 	if err != nil {
 		return nil, err
 	}
-	if err := s.authorized(name, decided, tokens, unregistered); err != nil {
+	if prompts, reports := s.options.Confirmer.(InteractiveConfirmer); reports && !prompts.Interactive() {
+		unattended = true
+	}
+	if err := s.authorized(name, decided, tokens, unregistered, unattended); err != nil {
 		return nil, err
 	}
 	if decided, err = s.admitRebinds(ctx, name, decided, rebinds); err != nil {
@@ -204,7 +207,11 @@ func (s Service) mutate(ctx context.Context, verb reconciliation.Verb, contextNa
 	}
 	if !skipConfirmation {
 		if s.options.Confirmer == nil {
-			return nil, failure("lifecycle.state", "this operation requires confirmation", "review the plan and repeat with --yes")
+			remedy := "review the plan and repeat with --yes"
+			if len(requiredTokens(decided.plan)) != 0 {
+				remedy = "review the plan, then repeat " + contextCommand(name, string(verb), invocationFlags(decided.selection, authorizing(decided.plan), unregistered)...) + " with --yes"
+			}
+			return nil, failure("lifecycle.state", "this operation requires confirmation", remedy)
 		}
 		if err := s.options.Confirmer.Confirm(ctx, string(verb), name); err != nil {
 			return nil, err
@@ -213,8 +220,8 @@ func (s Service) mutate(ctx context.Context, verb reconciliation.Verb, contextNa
 	return s.execute(releasing(ctx, unregistered), name, decided)
 }
 
-func (s Service) authorized(name string, decided transition, authorizations, unregistered []string) error {
-	if err := authorize(name, decided.verb, decided.selection, decided.plan, authorizations, unregistered); err != nil {
+func (s Service) authorized(name string, decided transition, authorizations, unregistered []string, unattended bool) error {
+	if err := authorize(name, decided.verb, decided.selection, decided.plan, authorizations, unregistered, unattended); err != nil {
 		return err
 	}
 	return s.acknowledgedReleases(name, decided.plan, unregistered)
@@ -315,23 +322,31 @@ func (s Service) proveShared(ctx context.Context, name string, decided transitio
 // cannot pre-authorize a future destructive plan. Either refusal names the
 // consuming steps by their place in the presented plan and the exact command
 // that passes, which keeps the Machines the invocation names unregistered.
-func authorize(contextName string, verb reconciliation.Verb, selection reconciliation.StageSelection, plan reconciliation.Plan, authorizations, unregistered []string) error {
+// An unattended invocation must bind each token to its steps' digest (Q117).
+func authorize(contextName string, verb reconciliation.Verb, selection reconciliation.StageSelection, plan reconciliation.Plan, authorizations, unregistered []string, unattended bool) error {
 	consumers := map[string][]string{}
 	required := requiredTokens(plan)
+	digests := map[string]string{}
+	named := make([]string, 0, len(authorizations))
+	for _, supplied := range authorizations {
+		token, digest, _ := strings.Cut(supplied, "=")
+		named = append(named, token)
+		digests[token] = digest
+	}
+	authorizations = named
 	for index, block := range plan.Blocks {
 		for _, token := range block.Consumes {
 			consumers[token] = append(consumers[token], "step "+strconv.Itoa(index+1)+" ("+block.Description+")")
 		}
 	}
-	var flags []string
-	if len(selection) != 0 {
-		flags = append(flags, "--stage", strings.Join(selection.Names(), ","))
+	var authFlags []string
+	for _, token := range required {
+		if unattended {
+			token += "=" + DigestPlaceholder
+		}
+		authFlags = append(authFlags, "--authorize", token)
 	}
-	flags = append(flags, authorizing(required)...)
-	if len(unregistered) != 0 {
-		flags = append(flags, "--unregistered", strings.Join(slices.Compact(slices.Sorted(slices.Values(unregistered))), ","))
-	}
-	passing := contextCommand(contextName, string(verb), flags...)
+	passing := contextCommand(contextName, string(verb), invocationFlags(selection, authFlags, unregistered)...)
 	supplied := slices.Compact(slices.Sorted(slices.Values(authorizations)))
 	for _, token := range supplied {
 		if !slices.Contains(required, token) {
@@ -346,8 +361,45 @@ func authorize(contextName string, verb reconciliation.Verb, selection reconcili
 				"this plan has "+token+" consequences that are not authorized: "+strings.Join(consumers[token], ", "),
 				"repeat it with the authorization: "+passing)
 		}
+		expected := AuthorizationDigest(plan, token)
+		switch digest := digests[token]; {
+		case digest != "" && digest != expected:
+			return failure("lifecycle.authorization",
+				"--authorize "+token+"="+digest+" names steps this plan no longer holds: its "+token+" steps are now "+strings.Join(consumers[token], ", "),
+				"review them with "+contextCommand(contextName, "plan")+", then repeat "+passing)
+		case digest == "" && unattended:
+			return failure("lifecycle.authorization",
+				"an unattended "+string(verb)+" must bind --authorize "+token+" to the steps it authorizes: "+strings.Join(consumers[token], ", "),
+				"review them with "+contextCommand(contextName, "plan")+", then repeat "+passing)
+		}
 	}
 	return nil
+}
+
+// invocationFlags are the flags a remedy repeats: stage, authorizations, unregistered.
+func invocationFlags(selection reconciliation.StageSelection, authorizing, unregistered []string) []string {
+	var flags []string
+	if len(selection) != 0 {
+		flags = append(flags, "--stage", strings.Join(selection.Names(), ","))
+	}
+	flags = append(flags, authorizing...)
+	if len(unregistered) != 0 {
+		flags = append(flags, "--unregistered", strings.Join(slices.Compact(slices.Sorted(slices.Values(unregistered))), ","))
+	}
+	return flags
+}
+
+// AuthorizationDigest hashes the identity and digests of a token's steps, in frozen order.
+func AuthorizationDigest(plan reconciliation.Plan, token string) string {
+	sum := sha256.New()
+	sum.Write([]byte("bootwright.authorization-v1\x00" + token))
+	for _, block := range plan.Blocks {
+		if slices.Contains(block.Consumes, token) {
+			sum.Write([]byte("\x00" + block.ID + "\x00" + block.Kind + "\x00" + block.Object + "\x00" + block.Implementation +
+				"\x00" + block.ContentDigest + "\x00" + block.RequestDigest))
+		}
+	}
+	return hex.EncodeToString(sum.Sum(nil))[:16]
 }
 
 // decide reads durable state and returns the one legal transition, planned
@@ -434,12 +486,8 @@ func (s Service) decideOver(ctx context.Context, view View, store OperationStore
 			decided, err := s.settleApply(ctx, view, operation, frozen, states)
 			return plannedFrom(decided, operation, states, attempts), err
 		}
-		owned, err := completedOwnership(name, operation, frozen, states)
-		if err != nil {
-			return transition{}, err
-		}
 		decided, err := s.freshDestroy(ctx, name, operation.Executable, operation.ID, firstBinding(operation.Bindings),
-			operation.Bindings, owned, false)
+			operation.Bindings, completedOwnership(frozen), false)
 		if err != nil {
 			return transition{}, err
 		}
@@ -493,21 +541,11 @@ func (s Service) refuseOver(ctx context.Context, view View, operation operations
 		remediation+continuationCommand(name, operation, frozen, states))
 }
 
-// completedOwnership is what a completed apply owns: its whole frozen plan,
-// because an apply completes only once every block of it is done. A block whose
-// record reads anything else contradicts that completion, and a lost record is
-// such a block, since absence reads back as pending. A removal of the done rest
-// would leave that block's effect in place and then release the binding it
-// needs, so the removal refuses instead, naming every such block, before it
-// binds, probes, registers or releases anything. An incomplete apply and a
-// failed removal legitimately hold blocks that are not done and never come here.
-func completedOwnership(contextName string, operation operationstore.Operation, frozen reconciliation.Plan, states map[string]reconciliation.BlockState) (reconciliation.Plan, error) {
-	if unfinished := unfinishedBlocks(frozen, states); len(unfinished) != 0 {
-		return reconciliation.Plan{}, failure("lifecycle.state",
-			"the completed apply "+operation.ID+" records no block completion for these blocks, and a removal that skipped one would leave its effect in place: "+strings.Join(unfinished, ", "),
-			reviewStatus(contextName))
-	}
-	return reconciliation.OwnedSubset(frozen, states), nil
+// completedOwnership is a completed apply's whole frozen plan: every block of
+// it ran, so a block whose record reads anything but done is taken back too
+// (Q93); proveRemovable resolves the unproved ones first.
+func completedOwnership(frozen reconciliation.Plan) reconciliation.Plan {
+	return frozen
 }
 
 func (s Service) finishSettled(ctx context.Context, name string, decided transition, identity ContextIdentity, finalized bool, stranded []string) (*OperationResult, error) {
@@ -549,16 +587,21 @@ func (s Service) finishSettled(ctx context.Context, name string, decided transit
 // that completion: a block whose record reads anything else, a lost one included,
 // contradicts it, and nothing then proves the input applied.
 func (s Service) settleApply(ctx context.Context, view View, operation operationstore.Operation, frozen reconciliation.Plan, states map[string]reconciliation.BlockState) (transition, error) {
-	name := view.Identity().Name
 	if inputDrift(view, operation) != "" {
 		return transition{}, s.changedInput(ctx, view, operation)
 	}
 	if unfinished := unfinishedBlocks(frozen, states); len(unfinished) != 0 {
 		return transition{}, failure("lifecycle.state",
 			"the completed apply "+operation.ID+" records no block completion for these blocks, so this input cannot be proved applied: "+strings.Join(unfinished, ", "),
-			reviewStatus(name))
+			unfinishedApplyExits(view))
 	}
 	return transition{noop: true, verb: reconciliation.Apply, operation: operation, plan: frozen, states: states}, nil
+}
+
+// unfinishedApplyExits names the destroy of the whole frozen plan, or the deletion.
+func unfinishedApplyExits(view View) string {
+	return "take back its whole frozen plan with " + contextCommand(view.Identity().Name, string(reconciliation.Destroy)) +
+		", which first resolves each unproved block, or " + deletionExit(view)
 }
 
 // unfinishedBlocks names each block of a frozen plan whose record reads
@@ -669,7 +712,7 @@ func refuseStageBoundary(contextName string, plan reconciliation.Plan, states ma
 	if len(admitted) != 0 {
 		return nil
 	}
-	tokens := authorizing(requiredTokens(plan))
+	tokens := authorizing(plan)
 	if kind == StepRetry {
 		failed, _ := plan.Block(heldBehind(plan, states, nil))
 		return failure("lifecycle.stage",
@@ -1299,7 +1342,7 @@ func (s Service) proveRemovable(ctx context.Context, tx Transaction, store Opera
 	if len(remaining) != 0 {
 		unresolved = failure("lifecycle.unknown",
 			"this removal cannot prove what these effects left behind, so it registered nothing: "+strings.Join(remaining, ", "),
-			"do what the diagnostic of each reports, then repeat "+contextCommand(name, string(reconciliation.Destroy), authorizing(requiredTokens(decided.plan))...))
+			"do what the diagnostic of each reports, then repeat "+contextCommand(name, string(reconciliation.Destroy), authorizingUnfixed(decided.plan)...))
 	}
 	return withCause(fault, withCause(cause, unresolved))
 }
@@ -1422,7 +1465,8 @@ func (s Service) recordFromBlocks(ctx context.Context, tx Transaction, store Ope
 	if err != nil {
 		return err
 	}
-	if next == current.State {
+	// A completed apply stays done, so the next removal still covers its whole plan.
+	if next == current.State || current.Verb == reconciliation.Apply && current.State == reconciliation.OperationDone {
 		return nil
 	}
 	current.State = next
@@ -1553,7 +1597,7 @@ func (s Service) proveQuiescent(ctx context.Context, store OperationStore, conte
 		return nil
 	}
 	s.reportCheck(ctx, ProgressEvent{Status: "failed"})
-	repeat := "then repeat " + contextCommand(contextName, string(reconciliation.Destroy), authorizing(requiredTokens(plan))...)
+	repeat := "then repeat " + contextCommand(contextName, string(reconciliation.Destroy), authorizingUnfixed(plan)...)
 	remediation := "stop what is running, " + repeat
 	if len(stops) != 0 {
 		remediation = "stop it with " + strings.Join(stops, ", then ") + ", " + repeat
@@ -1868,7 +1912,8 @@ func (s Service) closureRefusal(ctx context.Context, view View, operation operat
 	current := located.closure
 	if current != *operation.Closure {
 		frozen := *operation.Closure
-		remediation := "continue it with " + registeredWith(operation.Executable) + ", whose runtime this host keeps (Python " + frozen.Python + ", ansible-core " + frozen.Ansible + ")"
+		remediation := "run the setup of " + registeredWith(operation.Executable) + ", which restores its runtime (Python " + frozen.Python + ", ansible-core " + frozen.Ansible +
+			"), fetching any wheel its cache no longer holds over the network or with --wheel-mirror <mirror>, then continue it with that build"
 		if supersedable(operation) {
 			remediation += ", or take back what it owns with " + contextCommand(view.Identity().Name, string(reconciliation.Destroy))
 		}

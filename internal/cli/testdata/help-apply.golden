@@ -8,8 +8,10 @@
     bootwright apply [flags]
 
   Command flags
-      --authorize  Acknowledge a planned risk (data-loss), or present a rotated access
-                   credential at its current version (rebind=<secret>) (values: data-loss)
+      --authorize  Acknowledge a planned risk (data-loss, or data-loss=<digest> of the steps
+                   the plan shows, required with --yes or without a terminal), or present a
+                   rotated access credential at its current version (rebind=<secret>) (values:
+                   data-loss)
       --stage      Select comma-separated stages to start (default: all) (values: controller,
                    infra-components, substrates, machines, clusters, add-ons)
       --yes        Confirm the command's ordinary confirmation

@@ -580,9 +580,6 @@ other command's refusal names the same two exits: restore the keyring from a
 owns, then `bootwright context delete --name <name> --purge --allow-orphans`,
 which abandons them to be removed by hand, and create the context again.
 
-Not yet met: that refusal's remedy names `secret encryption init`; tracked as
-[B816](milestones/backlog.md#b816).
-
 A `store.json` that names a backend this
 build's catalog lacks, `local-keyring-v3` included, refuses every access,
 `secret encryption init` included, with `secret.store.implementation` before

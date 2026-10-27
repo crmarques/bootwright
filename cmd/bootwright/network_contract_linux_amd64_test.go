@@ -33,7 +33,7 @@ func contractNetworkPresence(t *testing.T, execution lifecycle.Execution) map[st
 	for _, step := range program.Steps {
 		checks += len(step.Wait)
 		if step.Create != nil {
-			evidence.Receipts = append(evidence.Receipts, co.Receipt{Ref: step.Create.Ref, UID: "uid-" + step.Create.Name, DesiredDigest: step.Create.DesiredDigest, Disposition: "created"})
+			evidence.Receipts = append(evidence.Receipts, co.Receipt{Ref: step.Create.Ref, UID: "uid-" + step.Create.Name, DesiredDigest: step.Create.DesiredDigest, Disposition: "created", Basis: co.Created})
 			evidence.Observations = append(evidence.Observations, co.ObjectObservation{Ref: step.Create.Ref, Ownership: co.Own, Equal: true})
 		}
 	}
@@ -48,7 +48,7 @@ func contractNetworkPresence(t *testing.T, execution lifecycle.Execution) map[st
 	if err := json.Unmarshal(data, &fields); err != nil {
 		t.Fatal(err)
 	}
-	fields["version"] = "cluster-network-evidence-v2"
+	fields["version"] = "cluster-network-evidence-v3"
 	fields["postcondition"] = true
 	fields["classification"] = "completed"
 	return fields

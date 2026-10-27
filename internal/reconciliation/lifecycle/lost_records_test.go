@@ -208,7 +208,9 @@ func failedRemovalWithEveryBlockDone(t *testing.T) (*harness, string) {
 // failedRemovalResolvedAs removes alpha with a removal that fails and is then
 // left running, as a kill before it recorded the failure leaves it; continues
 // it with a retry whose start lands and then reports a failure, which records
-// the removal failed beside alpha's running record; and then supersedes it
+// the removal running beside alpha's running record, as its block records give
+// it (F09-06); rewrites that record failed, the shape an earlier build left,
+// which the generic finalization rule must still read; and then supersedes it
 // with a removal whose resolution observes effect and lands alpha's record
 // reading alpha, killed there, before it recorded what that proved.
 func failedRemovalResolvedAs(t *testing.T, effect reconciliation.EffectState, alpha reconciliation.BlockState) (*harness, string) {
@@ -230,7 +232,8 @@ func failedRemovalResolvedAs(t *testing.T, effect reconciliation.EffectState, al
 	if landed := string(h.workspace.area.files[record]); !strings.Contains(landed, `"state":"running","attempts":2`) {
 		t.Fatalf("the retry start did not land before it failed: %s", landed)
 	}
-	requireRemovalRecords(t, h, removal, reconciliation.OperationFailed, reconciliation.BlockRunning)
+	requireRemovalRecords(t, h, removal, reconciliation.OperationRunning, reconciliation.BlockRunning)
+	rewriteState(t, h, path.Join(removal, "operation.json"), string(reconciliation.OperationFailed))
 	h.capability.observations = []Observation{{Effect: effect}}
 	killed := false
 	h.workspace.area.landing = func(_, _ string, files map[string][]byte) error {

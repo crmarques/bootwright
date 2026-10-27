@@ -21,6 +21,10 @@ func SSHHost(address string, port int) string {
 	return host + ":" + strconv.Itoa(port)
 }
 
+func SSHReservationQualifier(address string, port int) string {
+	return "ssh/" + sshAddress(address) + ":" + strconv.Itoa(port) + "/"
+}
+
 // ReachesController reports an SSH endpoint that is the controller itself:
 // port 22 at a loopback address, at localhost or at an address the controller
 // Machine declares. Another port at one of them may be forwarded to another

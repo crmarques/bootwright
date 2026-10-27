@@ -763,7 +763,7 @@ Machines this context installed` on `libvirt`, and `run bootwright destroy,
 which releases Machine <m> but keeps the system installed on it, then power <m>
 off from its management controller so the next apply installs it again` on
 `baremetal` with retaining removal. With opt-in erase, `<recovery>` instead names
-`run bootwright destroy --authorize data-loss, which overwrites the declared
+`run bootwright destroy --authorize data-loss=<digest bootwright plan prints>, which overwrites the declared
 disks of Machine <m> and removes its installed system before releasing it`.
 A Machine without nmstatectl ends with `<recovery>, then apply
 with an install source that carries the nmstate package`. A refusal that may

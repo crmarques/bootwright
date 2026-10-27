@@ -172,3 +172,49 @@ func TestAKindWithNoBindingIsNamedBeforeRegistration(t *testing.T) {
 		t.Fatal("a build with no capability mutated the context")
 	}
 }
+
+// pipedConfirmer is a confirmer whose input cannot answer a prompt.
+type pipedConfirmer struct{ *testConfirmer }
+
+func (pipedConfirmer) Interactive() bool { return false }
+
+// Under --yes, or input that cannot answer a prompt, no reviewed prompt
+// precedes the effect, so --authorize data-loss must carry the digest of the
+// steps the plan shows it consumes (Q117). A bare token refuses naming the
+// bound form; a digest the frozen plan no longer matches refuses, attended or
+// not; each refusal comes before confirmation and registration. The plan's
+// preview carries the bound form.
+func TestAnUnattendedAuthorizationIsBoundToTheStepsItAuthorizes(t *testing.T) {
+	ctx := context.Background()
+	h := newPlannedHarness(t, []reconciliation.BlockDefinition{destructive("artifacts")})
+	preview, err := h.service.Plan(ctx, PlanRequest{ContextName: "lab"})
+	if err != nil || len(preview.Authorizations) != 1 || !strings.HasPrefix(preview.Authorizations[0], "data-loss=") {
+		t.Fatalf("preview = %+v (%v)", preview, err)
+	}
+	bound := preview.Authorizations[0]
+	refused := func(request ApplyRequest, message, remedy string) {
+		t.Helper()
+		_, err := h.service.Apply(ctx, request)
+		reported := diagnostics.Of(err)
+		if len(reported) != 1 || reported[0].Code != "lifecycle.authorization" || reported[0].Message != message || reported[0].Remediation != remedy {
+			t.Fatalf("%+v = %+v (%v)", request, reported, err)
+		}
+		if h.confirmer.asked != 0 || h.workspace.mutations != 0 || len(h.capability.applies) != 0 {
+			t.Fatal("a refused authorization asked, mutated or ran a block")
+		}
+	}
+	review := "review them with bootwright plan --context lab, then repeat bootwright apply --context lab --authorize data-loss=<digest bootwright plan prints>"
+	refused(ApplyRequest{ContextName: "lab", Authorizations: []string{"data-loss"}, SkipConfirmation: true, Unattended: true},
+		"an unattended apply must bind --authorize data-loss to the steps it authorizes: step 1 (serve artifacts)", review)
+	stale := "data-loss=0123456789abcdef"
+	refused(ApplyRequest{ContextName: "lab", Authorizations: []string{stale}},
+		"--authorize "+stale+" names steps this plan no longer holds: its data-loss steps are now step 1 (serve artifacts)",
+		"review them with bootwright plan --context lab, then repeat bootwright apply --context lab --authorize data-loss")
+	h.service.options.Confirmer = pipedConfirmer{h.confirmer}
+	refused(ApplyRequest{ContextName: "lab", Authorizations: []string{"data-loss"}},
+		"an unattended apply must bind --authorize data-loss to the steps it authorizes: step 1 (serve artifacts)", review)
+	result, err := h.service.Apply(ctx, ApplyRequest{ContextName: "lab", Authorizations: []string{bound}, SkipConfirmation: true, Unattended: true})
+	if err != nil || result.Receipt.State != "done" || !slices.Equal(h.capability.applies, []string{"artifacts"}) {
+		t.Fatalf("the bound apply = %+v (%v), applies %v", result, err, h.capability.applies)
+	}
+}

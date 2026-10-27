@@ -12,7 +12,8 @@ var minorVersion = regexp.MustCompile(`^[0-9]+\.[0-9]+$`)
 func ValidateEvidence(evidence Evidence) error {
 	fail := func() error { return fmt.Errorf("cluster object evidence contains an invalid native value") }
 	for _, receipt := range evidence.Receipts {
-		if validateRef(receipt.Ref) != nil || !bounded(receipt.UID) || !bounded(receipt.DesiredDigest) {
+		if validateRef(receipt.Ref) != nil || !bounded(receipt.UID) || !bounded(receipt.DesiredDigest) ||
+			receipt.Basis != Created && receipt.Basis != UIDMatched && receipt.Basis != MarkRecovered {
 			return fail()
 		}
 	}

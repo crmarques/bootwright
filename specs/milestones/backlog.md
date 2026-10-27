@@ -51,7 +51,7 @@ Alias cell.
 | [B235](#b235) | new, 2026-09-30 (X31) | enabling | CLI and Desired state | Refusals for objects that are not API objects | Parked under the 2026-09-30 triage rule |
 | [B243](#b243) | new, 2026-09-30 (X32) | safety | State reconciliation and Workspace | Room for a replacing removal and its records | Found after the M1 freeze (D48) |
 | [B245](#b245) | new, 2026-09-30 (X32) | enabling | Architecture, with each role's owner | Censored completions that name only fields | Found after the M1 freeze (D48) |
-| [B247](#b247) | new, 2026-09-30 (X32) | safety | Infrastructure services and Substrate | Socket claims of an SSH placement that is the controller | Found after the M1 freeze (D48); publishing SSH claims needs an owner decision |
+| [B247](#b247) | new, 2026-09-30 (X32) | safety | Infrastructure services and Substrate | SSH host recognition and bridge readiness pairing | Found after the M1 freeze (D48); publishing SSH claims decided by D183 (Q96 a) and done with B816 |
 | [B248](#b248) | new, 2026-09-30 (X32) | defect | Infrastructure services | The artifact server compares its start with its files | Found after the M1 freeze (D48) |
 | [B256](#b256) | new, 2026-10-01 (X33) | enabling | Architecture | Line-limit texts for empty lists | Found after the M1 freeze (D48) |
 | [B258](#b258) | split from B206 on 2026-10-01 (D52) | enabling | State reconciliation | Pruning retained operations | D52 names the existing exits; pruning needs a retention rule for evidence and audit |
@@ -285,13 +285,17 @@ Alias cell.
 | [B827](#b827) | new, 2026-10-26 (spec audit L5) | defect | Desired state and Infrastructure services | Machine and service schemas drop dead fields; external ArtifactServer refuses | Audit roadmap work; implemented only on an explicit lane request |
 | [B828](#b828) | new, 2026-10-26 (spec audit L6) | enabling | Add-ons | Reserved CustomPlaybook and ClusterAddon step shapes settled; example notes its target | Audit roadmap work; implemented only on an explicit lane request |
 | [B829](#b829) | new, 2026-10-26 (spec audit L7) | safety | Secrets | Work-area incarnation check, pipelined material payloads and fixed producer identity | Audit roadmap work; implemented only on an explicit lane request |
-| [B830](#b830) | new, 2026-10-26 (spec audit L8) | safety | State reconciliation and Add-ons | Unknown-operation rows allow continuation; add-on receipts carry their ownership basis | Audit roadmap work; implemented only on an explicit lane request |
 | [B833](#b833) | new, 2026-10-26 (spec audit L11) | enabling | Desired state | Examples drop defaulted values, gain an external-services scenario, distinct Environment names | Audit roadmap work; implemented only on an explicit lane request |
 | [B837](#b837) | new, 2026-10-26 (D183, Q118) | product | Add-ons and CLI | Authored add-on ordering and an apply that stops after a named add-on | Lane I work under D182; implemented in its lane |
 | [B838](#b838) | new, 2026-10-26 (lane A review) | safety | Storage | U03's replica-safety refusal applies to every Ceph distribution, not only IBM | Widening adds a refusal; needs an owner decision |
 | [B839](#b839) | new, 2026-10-26 (lane B) | safety | Substrate and Workspace | A shared host claim taken while a removal's effect runs refuses | Found closing B803; the window is the removal's effect itself |
 | [B840](#b840) | new, 2026-10-26 (lane B) | safety | Managed OS | `%pre` compares the resolved root disk's WWN and serial with the frozen values | The follow-up the F10-01 choice left after the by-id path rule |
 | [B841](#b841) | new, 2026-10-26 (lane D) | defect | Verification tooling | The enrollment observer test double is safe under `-race` | Pre-existing test defect found by lane D |
+| [B843](#b843) | new, 2026-10-27 (lane J) | safety | Substrate | The libvirt route check and a broader route through a gateway | The "identical or nested" rule refuses a VPN summary route |
+| [B844](#b844) | new, 2026-10-27 (lane J) | safety | Infrastructure services | Contexts reaching one SSH host by different addresses conflict there | Q96's qualifier keys claims by declared address only |
+| [B845](#b845) | new, 2026-10-27 (lane J) | defect | Substrate | Libvirt network evidence accepts an observed MTU | Pre-existing defect found by lane J |
+| [B846](#b846) | new, 2026-10-27 (lane J) | defect | State reconciliation | `diff --observe` observes a lost block of a completed apply | Lane J's covered set not yet read by diff |
+| [B847](#b847) | new, 2026-10-27 (lane J) | defect | Infrastructure services | A zoned IPv6 SSH address refuses at plan, not at the record write | Found by lane J's review |
 
 ### B82
 
@@ -533,7 +537,7 @@ Since X32 the adapter output prints nothing a failed `no_log` task raised, so co
 
 ### B247
 
-An SSH placement recognized as the controller has its socket, unit and path claims compared only within its context and never published, so another context on the controller is not refused over them; a controller whose sshd listens on a port other than 22 is not recognized; one host reached by a name and an address is not recognized; and bridge readiness pairs providers and services by Machine name (found in X32). **Exit evidence:** the decision, and planning tests for each.
+Widened by D183's answer to Q96 (a): every SSH-placed claim is published in the controller record, one whose placement is the controller as the controller's own and any other with every key qualified by `ssh/<address>:<port>/`, under the controller's conflict and release rules (an additive key form under controller record version 3, no version move; implemented with [B816](#b816)). Still open: a controller whose sshd listens on a port other than 22 is not recognized; one host reached by a name and an address, or by two addresses, is not recognized; and bridge readiness pairs providers and services by Machine name (found in X32). **Exit evidence:** planning tests for each remaining part.
 
 ### B248
 
@@ -3227,6 +3231,14 @@ their Not yet met lines point here.
 **Exit evidence:** the P1-I roadmap exit (F09-01 stays open until the owner
 reopens D38); the goldens and tests above pass; `make check` passes.
 
+
+**Partly delivered** on 2026-10-27 by X170: F09-03, F12-02, F13-03, F13-04,
+F13-05, V2-05, R2-06-05 and CX-R6 above, with D183's answers to Q93 (a), Q94
+(a), Q95 (a) and Q96 (a, D186); V2-20 needed no change. **Remains:** R2-02-03
+waits for B87; F09-01 stays open under D38 (Q92 a); the restored seal counters
+in [contexts](../contexts.md#format-and-restore-boundary) have no work bullet
+yet.
+
 ### B819
 
 **Owner:** Milestones and Agent guidance. **Kind:** enabling. **Requires:**
@@ -3711,50 +3723,6 @@ transfer free of material, and the media role still writes
 `install-config.yaml` with `copy: content:`; the Ceph outputs present no
 recapture identity.
 
-### B830
-
-**Owner:** State reconciliation and Add-ons. **Kind:** safety. **Requires:**
-B816; owner decisions [Q117](#audit-remediation-decisions) and
-[Q118](#audit-remediation-decisions) for their parts. **Definition:** Specified.
-Batch L8 of the [2026-10-26 spec audit](../../audits/spec/2026-10-26.md);
-findings CX-RULEplanbytes, F09-05, F09-06, F09-07, F09-08, F10-06, F10-07,
-F10-08, F12-04. Recovery rows, ownership evidence and authorization say what
-the code does.
-
-**Specs:** [state-reconciliation.md](../state-reconciliation.md) states the
-6 MiB plan bound, all three stop causes and drops commit-anchored clauses;
-[cli.md](../cli.md) no longer claims a repeated command is bound to the
-reviewed plan; [add-ons.md](../add-ons.md) names the ownership basis per
-receipt (Not yet met here) and the narrowed GitOps wait set;
-[substrates.md](../substrates.md) names the vSphere identity fields.
-
-**Work:**
-
-- F09-05: change the `apply unknown` and `destroy unknown` rows and their
-  literals in `internal/reconciliation/lifecycle/transitions_spec_test.go`
-  together, to continue by resolving every unproved block first and then
-  retrying what resolution leaves failed (D146), keeping the fresh-destroy
-  alternative on the apply row only.
-- F09-06: state once that each write records the precedence over the durable
-  block records or running (re-read after a start or resolution publication
-  that reports failure), drop the attempt-count and lag special cases, and add
-  a store test injecting a start publication that lands and then errors;
-  coordinate with [B569](#b569) and [B575](#b575).
-- F10-08: `clusterobjects.Receipt` gains the basis (created, uid-matched,
-  mark-recovered), with the program and evidence versions moving, golden and
-  parity tests, and the evidence projection carrying it.
-- F10-07: B99's definition lists the vSphere marker and identity fields.
-- F12-04: [project.md](../project.md)'s handoff paragraph states the same
-  wait set as add-ons.md.
-- Waits for [Q117](#audit-remediation-decisions): the digest value form of
-  `--authorize data-loss`, if chosen.
-- Waits for [Q118](#audit-remediation-decisions): widening the wait set to every
-  block that reaches the cluster, if chosen.
-
-**Exit evidence:** `TestTransitionTablesMatchSpec` passes with the new rows;
-the failed-start publication test passes; receipts carry the basis in
-goldens; add-ons.md's Not yet met line is removed; `make check`.
-
 ### B833
 
 **Owner:** Desired state. **Kind:** enabling. **Requires:** none.
@@ -3857,6 +3825,60 @@ observations run concurrently (found by lane D, 2026-10-26). **Outcome:** the
 double guards its records. **Exit evidence:** the package passes under
 `-race`, and `make race` covers it if it is meant to.
 
+### B843
+
+**Owner:** Substrate. **Kind:** safety. **Requires:** none.
+**Definition:** Needs definition. Lane J (X170) made the libvirt host apply
+refuse before `net-define` when a host route is identical to or nested with the
+managed prefix, as the spec words it; a broader summary route through a
+gateway (a VPN `/8` covering the prefix) also refuses. **Outcome:** the owner
+decides whether a broader route through a gateway is admitted, warned or
+refused. **Exit evidence:** the chosen rule in substrates.md and a collection
+unit test per case.
+
+### B844
+
+**Owner:** Infrastructure services. **Kind:** safety. **Requires:** none.
+**Definition:** Needs definition. Q96's qualifier (X170, D186) keys an
+SSH-placed claim by the SSH address as declared, so two contexts that reach one
+host by different addresses, or one by a controller address it declares and
+the other by an address its controller does not declare, never conflict.
+**Outcome:** the spec names the case and either refuses it or proves one host
+identity before publishing. **Exit evidence:** a reservation test of two
+spellings of one host.
+
+### B845
+
+**Owner:** Substrate. **Kind:** defect. **Requires:** none. **Definition:**
+Specified. `observe_host` in the libvirt host role adds an `mtu` key to a
+network entry when the request carries an MTU, and
+`substrate_host_protocol.network_evidence` requires an exact key set, so
+publishing completion evidence for such a network raises `ValueError` (found
+by lane J, 2026-10-27; no unit test covers it). **Outcome:** the evidence
+admits the observed MTU, or the observation omits it. **Exit evidence:** a
+collection unit test publishing evidence for a network with an MTU.
+
+### B846
+
+**Owner:** State reconciliation. **Kind:** defect. **Requires:** none.
+**Definition:** Specified. X170 made one covered set (`coveredBy`) the
+definition of what a removal takes back, read by status ownership and
+realizations; `observedBlocks` in `diff_observe.go` still reads the owning
+apply's `OwnedSubset`, so `diff --observe` skips a lost block of a completed
+apply. **Outcome:** diff observes the covered set. **Exit evidence:** a diff
+test over a completed apply with a lost block record.
+
+### B847
+
+**Owner:** Infrastructure services. **Kind:** defect. **Requires:** none.
+**Definition:** Needs definition. A zoned IPv6 SSH address (`fe80::1%eth0`)
+would put `%` in the `ssh/<address>:<port>/` qualifier, which the controller
+record's token grammar refuses, so the apply would fail at the record write
+with `context.state` instead of at plan; whether Machine SSH address admission
+already refuses zoned addresses is unverified. **Outcome:** a zoned address
+refuses at validate or plan with `api.value`, or the qualifier encodes it.
+**Exit evidence:** a test of a zoned SSH address.
+
 ## Audit remediation (2026-10-26)
 
 The [2026-10-26 spec audit](../../audits/spec/2026-10-26.md) ordered its
@@ -3884,7 +3906,7 @@ decision stay open while its other parts land.
 | G Extension architecture | [B808](#b808), B811 (X169), B809 (X169), B810 (X169), B812 (X169) | B800 to B807 | B, C, I, J, K | Q72, Q73, Q74, Q75 |
 | H Cross-build continuation | B813 (X163) | B801 | none | Q76 |
 | I API shape and grammar | [B814](#b814), [B826](#b826), [B827](#b827), [B828](#b828), [B824](#b824), [B821](#b821), [B837](#b837) | B808 | B, F, G | Q77, Q78, Q79, Q80, Q81, Q82, Q83, Q84, Q85, Q86, Q87, Q88, Q105, Q106, Q107, Q110, Q111, Q112, Q113, Q114, Q115, Q118 |
-| J Reconciliation rules | [B816](#b816), [B830](#b830) | B800 to B807 | E, G | Q92, Q93, Q94, Q95, Q96, Q117, Q118 |
+| J Reconciliation rules | [B816](#b816), B830 (X170) | B800 to B807 | E, G | Q92, Q93, Q94, Q95, Q96, Q117, Q118 |
 | K Language and adapter contracts | B818 (X162), B834 (X162) | none | G | none |
 | L Corpus structure and skills | [B815](#b815), [B819](#b819), [B820](#b820), [B822](#b822) | B801; B822 after B813 and B818 | none | Q89, Q90, Q91, Q102, Q103 |
 | M CLI and examples | [B825](#b825), [B833](#b833), [B823](#b823) | none | none | Q104, Q108, Q109 |
@@ -3908,7 +3930,7 @@ also updates this table.
 | 7 | C Storage retirement | merged (X167) |
 | 8 | F Truthful admission | merged (X168) |
 | 9 | G Extension architecture | merged (X169) |
-| 10 | J Reconciliation rules | not started |
+| 10 | J Reconciliation rules | merged (X170) |
 | 11 | I API shape and grammar | not started |
 | 12 | M CLI and examples | not started |
 | 13 | L Corpus structure and skills | not started |
@@ -3988,8 +4010,8 @@ blocks.
 | Q114 | Does the API adopt one public name limit for all kinds, or keep per-kind limits derived from block prefixes? | (a) One 47-byte limit stated once, new block prefixes at most 16 bytes with a test; tightens Machine, InfraProvider, Proxy, DNS, NTP and export names.; (b) Hash long names into block identities; one rule without shortening names, less readable run trees.; (c) Keep per-kind limits in one api.md table linked from each kind. | **Answered by D183: b.** a with an architecture test on prefix length; ask with B814's V2-19 name-limit question. | [B827](#b827) |
 | Q115 | Are the reserved CustomPlaybook shape and ClusterAddon.spec.steps refused at admission instead of validated? | (a) Refuse an authored CustomPlaybook naming B102; lexical rules stay in the deferred page; normalization code removed.; (b) a plus refuse ClusterAddon.spec.steps naming B90, letting B90 redefine steps.; (c) Keep validating both reserved shapes. | **Answered by D183: c.** a; b only if the owner agrees B90 may redefine steps. | [B828](#b828) |
 | Q116 | Do object-user S3 keys leave cluster info --secrets for a per-user selector? | (a) Add --object-user <u> emitting only that user's keys; --secrets alone reveals only the dashboard password; B489 amended.; (b) A new raw single-credential export command for object users.; (c) Keep the current reveal and document the handoff risk. | **Answered by D183: a.** a, a new public flag closing B489's sensitive-output gate; ask with B817's R2-04-02. | [B829](#b829) |
-| Q117 | Is --authorize data-loss bound to the reviewed consuming steps when --yes or non-interactive input suppresses review? | (a) Require --authorize data-loss=<digest of consuming blocks and targets> under --yes; a stale digest refuses before registration.; (b) Keep the bare token; the cli.md wording fix already applied is the whole change. | **Answered by D183: a.** b unless the owner wants hardening; a changes a public flag form under D153 clause 2. | [B830](#b830) |
-| Q118 | Does the last GitOps package wait for every block that reaches its cluster's API, or only the add-ons-stage blocks requiring the installation? | (a) Widen to every block reaching the cluster, whatever its stage; planning edges change and need a cycle check.; (b) Keep the narrowed set now stated, naming the excluded cross-stage blocks. | **Answered by D183: new item B837.** b now; settle with the pending Q48 and Q60 answers. | [B830](#b830), [B837](#b837) |
+| Q117 | Is --authorize data-loss bound to the reviewed consuming steps when --yes or non-interactive input suppresses review? | (a) Require --authorize data-loss=<digest of consuming blocks and targets> under --yes; a stale digest refuses before registration.; (b) Keep the bare token; the cli.md wording fix already applied is the whole change. | **Answered by D183: a.** b unless the owner wants hardening; a changes a public flag form under D153 clause 2. | [B830](delivered.md#x170--audit-lane-j-reconciliation-rules) |
+| Q118 | Does the last GitOps package wait for every block that reaches its cluster's API, or only the add-ons-stage blocks requiring the installation? | (a) Widen to every block reaching the cluster, whatever its stage; planning edges change and need a cycle check.; (b) Keep the narrowed set now stated, naming the excluded cross-stage blocks. | **Answered by D183: new item B837.** b now; settle with the pending Q48 and Q60 answers. | [B830](delivered.md#x170--audit-lane-j-reconciliation-rules), [B837](#b837) |
 
 ## Retired
 
@@ -5183,3 +5205,11 @@ Requires cell as `owner decision: <question>`.
   same store under the exclusive root lock, rewrites the recorded host
   identity once, and keeps every binding and reservation. This adds a public
   command under D153 clause 2.
+- **D186** (2026-10-27, the owner's answer about Q96's qualifier): the
+  private Controller record stays version 3. Its reservation keys may carry
+  the `ssh/<address>:<port>/` qualifier as an additive key form, so a record an
+  earlier build wrote stays current and no controller needs a fresh install;
+  each context publishes its SSH-qualified claims on its next apply. Builds
+  before X170 read a qualified key as opaque, keep other contexts' entries and
+  find no fewer conflicts than before; such a build's apply of a context drops
+  that context's qualified entries until a later build applies it again.

@@ -148,6 +148,28 @@
     label: '{{ item.name }}'
   when: item.managed
 
+# libvirt checks only part of a collision, and only once a network starts, so
+# the host's links, addresses and routes are read before any network is
+# defined. A read the host did not answer proves nothing and refuses too.
+- name: Refuse a managed network whose collisions the host did not answer for
+  ansible.builtin.assert:
+    that:
+      - substrate_libvirt_host_running.observation.collisionsAnswered
+    fail_msg: >-
+      the host did not answer ip link show or ip route show table all, so
+      nothing proves a managed network's bridge or prefix is free; restore
+      them and repeat the apply
+    quiet: true
+
+- name: Refuse a managed network that collides with a host link or route
+  ansible.builtin.assert:
+    that:
+      - substrate_libvirt_host_running.observation.collisions | length == 0
+    fail_msg: >-
+      a managed network would collide with the host:
+      {{ substrate_libvirt_host_running.observation.collisions | join('; ') }}
+    quiet: true
+
 # A pool carries no ownership metadata, so the directory it targets is what
 # makes it this provider's. A same-named pool targeting another directory is
 # foreign and the apply refuses before it defines, stops or starts anything.

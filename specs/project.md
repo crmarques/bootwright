@@ -69,10 +69,12 @@ a change to it is a destroy followed by a fresh apply; upgrades and approvals
 of owned operator subscriptions stay outside Bootwright's scope
 ([B106](milestones/backlog.md#b106)). An optional
 [GitOps bootstrap object](add-ons.md#the-gitops-bootstrap-object) hands one
-cluster to GitOps earlier, once every other add-ons-stage block on that
-cluster is complete
-([last packages](add-ons.md#built-in-packages-and-selection)), under the same
-ownership rule; this early handoff is
+cluster to GitOps earlier, once every other block of the `add-ons` stage that
+requires that cluster's installation block, its other add-on instances and
+its cluster network block included, is complete; a block of another stage
+that reaches the cluster's API is not waited for
+([last packages](add-ons.md#built-in-packages-and-selection)). It hands off
+under the same ownership rule; this early handoff is
 pending the owner's [Q60](milestones/m4.md#m4a-open-decisions) under D173.
 
 ## Implementation and extension model

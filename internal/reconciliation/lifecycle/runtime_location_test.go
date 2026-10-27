@@ -34,20 +34,25 @@ func launchRefused(t *testing.T, h *harness, message string) {
 func requireSetupRefusal(t *testing.T, err error, message string) {
 	t.Helper()
 	reported := diagnostics.Of(err)
-	if len(reported) != 1 || reported[0].Code != "controller.state" || reported[0].Message != message || reported[0].Remediation != "run bootwright setup" {
+	if len(reported) != 1 || reported[0].Code != "controller.state" || reported[0].Message != message || !strings.HasPrefix(reported[0].Remediation, "run bootwright setup") {
 		t.Fatalf("the launch reported %+v (%v), want controller.state %q naming bootwright setup", reported, err, message)
 	}
 }
 
 // A setup interrupted before it finished leaves its outcome unknown, so it
 // blocks every launch until setup runs again, whatever the receipt it may
-// still hold says.
+// still hold says; the refusal names both exits.
 func TestAPendingSetupBlocksALaunch(t *testing.T) {
 	h := newHarness(t, "artifact-server-lab")
 	view := completedSetup("3.14", "3.14.8")
 	view.State.Pending = &prerequisites.PendingSetup{ID: "setup-000042", Actions: []string{"runtime"}}
 	h.setup.set(view)
 	launchRefused(t, h, "a controller setup (setup-000042) was interrupted before it finished")
+	_, err := apply(h)
+	want := "run bootwright setup, adding --wheel-mirror <mirror> on a host that cannot reach the wheel origins, or run the setup of the Bootwright build whose lock the receipt names (" + view.State.Receipt.Lock + ") to keep its runtime"
+	if reported := diagnostics.Of(err); len(reported) != 1 || reported[0].Remediation != want {
+		t.Fatalf("the launch reported %+v, want the remedy %q", reported, want)
+	}
 	if h.guard.entered() != 0 {
 		t.Fatalf("a pending setup let %d launches through", h.guard.entered())
 	}
@@ -246,4 +251,33 @@ func TestAContinuationMissingAWheelRefusesWithRunSetup(t *testing.T) {
 	withRebuilder(h, prerequisites.ErrRuntimeWheelMissing)
 	_, err := continued(h, reconciliation.Apply)
 	requireSetupRefusal(t, err, "the controller runtime for this build (lock 444444444444, Python 3.14) is not prepared")
+}
+
+// diff --observe launches the runtime like any verb that reads a host, so a
+// missing runtime is rebuilt from the cache once before it observes, and one
+// whose wheel the cache lacks refuses naming setup before it observes anything;
+// status, which reads records only, rebuilds nothing.
+func TestAnObservedDiffRebuildsAMissingRuntimeOrRefusesWithSetup(t *testing.T) {
+	t.Run("rebuilt", func(t *testing.T) {
+		f, _, _ := observedFixture(t, "alpha")
+		launched := f.guard.entered()
+		rebuilder := withRebuilder(f.harness, nil)
+		if _, err := f.service.Status(context.Background(), StatusRequest{ContextName: testContextName}); err != nil || len(rebuilder.rebuilds) != 0 {
+			t.Fatalf("status = %v after %d rebuilds", err, len(rebuilder.rebuilds))
+		}
+		f.observe(t)
+		if len(rebuilder.rebuilds) != 1 || f.guard.entered() == launched {
+			t.Fatalf("diff --observe rebuilt %d times and launched %d times", len(rebuilder.rebuilds), f.guard.entered()-launched)
+		}
+	})
+	t.Run("a missing wheel", func(t *testing.T) {
+		f, _, _ := observedFixture(t, "alpha")
+		observes, launched := len(f.capability.observes), f.guard.entered()
+		withRebuilder(f.harness, prerequisites.ErrRuntimeWheelMissing)
+		_, err := f.service.Diff(context.Background(), DiffRequest{ContextName: testContextName, Observe: true})
+		requireSetupRefusal(t, err, "the controller runtime for this build (lock 444444444444, Python 3.14) is not prepared")
+		if f.guard.entered() != launched || len(f.capability.observes) != observes {
+			t.Fatalf("a runtime missing a wheel was launched %d times or observed %v", f.guard.entered()-launched, f.capability.observes)
+		}
+	})
 }

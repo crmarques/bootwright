@@ -165,7 +165,7 @@ quiescence it cannot prove. Repeat destroy to continue a partial removal.
 ./bin/bootwright machine stop --context lab-compact-df --name compact-01 --yes
 ./bin/bootwright machine stop --context lab-compact-df --name compact-02 --yes
 ./bin/bootwright machine stop --context lab-compact-df --name compact-03 --yes
-./bin/bootwright destroy --context lab-compact-df --yes --authorize data-loss
+./bin/bootwright destroy --context lab-compact-df --authorize data-loss
 ./bin/bootwright status --context lab-compact-df
 ./bin/bootwright context delete --name lab-compact-df --purge --yes
 ```

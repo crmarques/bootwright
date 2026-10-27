@@ -51,7 +51,7 @@ func fixtureEvidence(t *testing.T, r Request, digest string) Evidence {
 			e.OLM = append(e.OLM, co.OLMFacts{Namespace: object.Namespace, Subscription: object.Name, InstalledCSV: s.Subscribe.CSV})
 		}
 		if object != nil {
-			e.Receipts = append(e.Receipts, co.Receipt{Ref: object.Ref, UID: "uid-" + object.Name, DesiredDigest: object.DesiredDigest, Disposition: "created"})
+			e.Receipts = append(e.Receipts, co.Receipt{Ref: object.Ref, UID: "uid-" + object.Name, DesiredDigest: object.DesiredDigest, Disposition: "created", Basis: co.Created})
 			e.Observations = append(e.Observations, co.ObjectObservation{Ref: object.Ref, Ownership: co.Own, Equal: true})
 		}
 	}

@@ -149,7 +149,7 @@ func TestADestroyRefusesWhileAPhysicalCompactConsumerSurvives(t *testing.T) {
 		t.Fatal(diagnostics.Of(err))
 	}
 	before := stateFingerprint(t, root)
-	_, stderr := contextRun(t, services, 1, "destroy", "--context", "alpha", "--authorize", "data-loss", "--yes")
+	_, stderr := contextRun(t, services, 1, "destroy", "--context", "alpha", "--authorize", reviewedDataLoss(t, services, "alpha"), "--yes")
 	for _, want := range []string{"lifecycle.live", pair + " and survives this destroy, which takes back StorageExport/compact-storage,", "StorageCluster/ceph-lab"} {
 		if !strings.Contains(humanContent(stderr), humanContent(want)) {
 			t.Fatalf("the destroy refusal does not name %q:\n%s", want, stderr)

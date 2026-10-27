@@ -233,7 +233,7 @@ def test_opt_in_physical_erase_recovery_names_the_destructive_policy_and_authori
     templar = Templar(loader=LOADER, variables=dict(defaults(), **scope))
     for name in DESTROYING:
         message = templar.template(trust_as_template(tasks[index_of(tasks, named(name), name)][FAIL]["msg"]))
-        assert "bootwright destroy --authorize data-loss" in message
+        assert "bootwright destroy --authorize data-loss=<digest bootwright plan prints>, which overwrites" in message
         assert "overwrites the declared disks of Machine " + MACHINE in message
         assert "keeps the system installed" not in message
 

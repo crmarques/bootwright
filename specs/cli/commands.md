@@ -118,8 +118,8 @@ The three `media` commands follow the host-wide
 | `bootwright render effective` | none | normalized effective desired state and object counts | none |
 | `bootwright render installer` | `--clusters <list>` default all ContainerClusters; `--sensitive` false | installer artifact manifest | local placeholder files and optional sensitive files |
 | `bootwright render storage` | `--clusters <list>` default all StorageClusters | storage artifact manifest | local native files or scripts only; never execution |
-| `bootwright apply` | repeatable `--authorize <token>[,<token>...]`; `--stage <list>` default all stages; `--yes` false | completed full apply, a pause at the selected stage boundary, exact continued state, or a settled result when the declared state is already realized | complete planned mutation, or none when it settles, beyond completing an operation's interrupted finalization (its record, releases and evidence) |
-| `bootwright destroy` | repeatable `--authorize <token>[,<token>...]`; repeatable `--unregistered <machine>[,<machine>...]`; `--yes` false | completed full destroy, exact continued state, or a settled result when the context owns nothing | complete planned removal, or none when it settles, beyond completing an operation's interrupted finalization (its record, releases and evidence) or releasing what an interrupted registration left, and the [housekeeping](../state-reconciliation.md#context-mutation-evidence) of the operation claims that hold nothing; over an apply that did not complete, it first proves the outcome of every effect it takes back |
+| `bootwright apply` | repeatable `--authorize <token>[=<digest>][,<token>...]`; `--stage <list>` default all stages; `--yes` false | completed full apply, a pause at the selected stage boundary, exact continued state, or a settled result when the declared state is already realized | complete planned mutation, or none when it settles, beyond completing an operation's interrupted finalization (its record, releases and evidence) |
+| `bootwright destroy` | repeatable `--authorize <token>[=<digest>][,<token>...]`; repeatable `--unregistered <machine>[,<machine>...]`; `--yes` false | completed full destroy, exact continued state, or a settled result when the context owns nothing | complete planned removal, or none when it settles, beyond completing an operation's interrupted finalization (its record, releases and evidence) or releasing what an interrupted registration left, and the [housekeeping](../state-reconciliation.md#context-mutation-evidence) of the operation claims that hold nothing; over an apply that did not complete, it first proves the outcome of every effect it takes back |
 
 Not yet met: `preflight infra`, `preflight clusters`, `preflight all`,
 `preflight add-ons`, `render` with a path flag, `render installer` and `render
@@ -364,12 +364,16 @@ a supplied value that resolves to no member and an unrecognized member are both
 usage errors. Omission selects every stage. What a selection gates is owned by
 [state reconciliation](../state-reconciliation.md#stages-and-the-pause-boundary).
 
-`--authorize` accepts only `data-loss` and `rebind=<secret>`, and only on
-`apply` and `destroy`. `rebind=<secret>` names one Secret by its API name and
+`--authorize` accepts only `data-loss`, `data-loss=<digest>` with the 16
+lowercase hexadecimal digits a plan prints for the steps it authorizes, and
+`rebind=<secret>`, and only on `apply` and `destroy`; `--yes`, or input that
+cannot answer a prompt, requires the `data-loss=<digest>` form.
+`rebind=<secret>` names one Secret by its API name and
 presents a rotated access credential at its current version through the
 [access-credential rebind](../state-reconciliation.md#access-credential-rebind).
-Unknown, empty, or duplicate tokens, and a `rebind=` that names no valid Secret
-name, are usage errors; `all` is not accepted.
+Unknown, empty, or duplicate tokens, `data-loss` given twice in either form,
+a digest of another shape, and a `rebind=` that names no valid Secret name, are
+usage errors; `all` is not accepted.
 Whitespace around comma-separated tokens is ignored. A token grants no
 confirmation authority either: it neither replaces nor implies
 [ordinary confirmation](../cli.md#ordinary-confirmation). Whether the frozen plan

@@ -68,13 +68,14 @@ type planPresentation struct {
 	AnotherBuild     *planBuildPresentation  `json:"anotherBuild,omitempty"`
 	Stops            []string                `json:"stops"`
 	StopsAfterOnline []string                `json:"stopsAfterOnline"`
+	Authorizations   []string                `json:"authorizations,omitempty"`
 	Receipt          receiptPresentation     `json:"receipt"`
 }
 
 func (planPresentation) documentedResult() {}
 
 func displayPlan(result *lifecycle.PlanResult) planPresentation {
-	shown := planPresentation{Context: resultContext{Name: escapeDisplayLine(result.Context.Name), Mode: escapeDisplayLine(result.Context.Mode)}, Verb: escapeDisplayLine(result.Verb), Steps: displayPlanSteps(result.Steps), Stages: displayLines(result.Stages), Waves: result.Waves, Widest: result.Widest, Bound: result.Bound, Startable: result.Startable, Deferred: result.Deferred, Continuation: result.Continuation, Finalizes: result.Finalizes, Stops: displayLines(result.Stops), StopsAfterOnline: displayLines(result.StopsAfterOnline), Receipt: displayReceipt(result.Receipt)}
+	shown := planPresentation{Context: resultContext{Name: escapeDisplayLine(result.Context.Name), Mode: escapeDisplayLine(result.Context.Mode)}, Verb: escapeDisplayLine(result.Verb), Steps: displayPlanSteps(result.Steps), Stages: displayLines(result.Stages), Waves: result.Waves, Widest: result.Widest, Bound: result.Bound, Startable: result.Startable, Deferred: result.Deferred, Continuation: result.Continuation, Finalizes: result.Finalizes, Stops: displayLines(result.Stops), StopsAfterOnline: displayLines(result.StopsAfterOnline), Authorizations: displayLines(result.Authorizations), Receipt: displayReceipt(result.Receipt)}
 	for _, check := range result.Checks {
 		shown.Checks = append(shown.Checks, planCheckPresentation{ID: escapeDisplayLine(check.ID), Status: escapeDisplayLine(check.Status), Summary: escapeDisplayLine(check.Summary), Remedy: escapeDisplayLine(check.Remedy)})
 	}

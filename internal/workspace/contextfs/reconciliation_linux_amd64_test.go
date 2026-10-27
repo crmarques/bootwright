@@ -406,6 +406,36 @@ func TestAWildcardSocketReservationRefusesEveryAddressAtItsPort(t *testing.T) {
 	}
 }
 
+// A claim placed over SSH is stored with every key qualified by its SSH host
+// (Q96), so two contexts of one store refuse each other's conflicting claims
+// on one SSH host, an IPv6 host included, and never those on another host or
+// on the controller.
+func TestSSHQualifiedReservationsConflictOnTheirHostAlone(t *testing.T) {
+	ctx := context.Background()
+	store, record := lifecycleFixture(t)
+	_, sources := fixture(t)
+	publish(t, store, "second", sources)
+	reserveFixture(t, store, record)
+	reserve := func(name, service string, keys ...string) error {
+		return store.MutateLifecycle(ctx, name, func(tx lifecycle.Transaction) error {
+			return tx.Reserve(ctx, []prerequisites.HostReservation{{Context: name, Kind: "proxy", Service: service, Keys: keys}})
+		})
+	}
+	if err := reserve(record.Name, "remote-proxy", "ssh/fd00::10:22/socket:0.0.0.0:3128", "ssh/fd00::10:22/unit:bootwright-remote-proxy"); err != nil {
+		t.Fatalf("a qualified claim was refused: %#v", diagnostics.Of(err))
+	}
+	for _, other := range []string{"ssh/fd00::10:2222/socket:192.0.2.9:3128", "ssh/192.0.2.10:22/socket:192.0.2.9:3128", "socket:192.0.2.9:3128"} {
+		if err := reserve("second", "other-proxy", other); err != nil {
+			t.Fatalf("%s was refused beside another host's claim: %#v", other, diagnostics.Of(err))
+		}
+	}
+	err := reserve("second", "other-proxy", "ssh/fd00::10:22/socket:192.0.2.9:3128")
+	if reported := diagnostics.Of(err); len(reported) != 1 || reported[0].Code != "controller.conflict" ||
+		!strings.Contains(reported[0].Message, "holds socket 0.0.0.0:3128 on the SSH host [fd00::10]:22 for Proxy/remote-proxy") {
+		t.Fatalf("a conflicting claim on one SSH host = %#v", reported)
+	}
+}
+
 // Every claim another context holds that this context's claims conflict with
 // is its own diagnostic. A continuation of the holder that completes publishes
 // the same claims again, so only the holder's release, which a completed

@@ -1,5 +1,5 @@
 implementation: addon-instance-v1
-content-digest: 493e3268d9a21775626378b40d42829af4892dfc23f8e9cc142598a817a63681
+content-digest: e15fa2a2a2109ab0d0b22080fb1244340c0c561109eda150c3550771b5f3d790
 request-version: addon-instance-request-v1
 automation-formats: none
 mark-formats: bootwright.cluster-objects.owner-v1, bootwright.io/owner
@@ -50,6 +50,7 @@ evidence-schema:
   receipts[].uid string
   receipts[].desiredDigest string
   receipts[].disposition string
+  receipts[].basis string
   olm []struct clusterobjects.OLMFacts
   olm[].namespace string
   olm[].subscription string

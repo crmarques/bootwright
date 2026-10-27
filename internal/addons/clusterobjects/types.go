@@ -8,7 +8,7 @@ import (
 )
 
 const (
-	Version             = "cluster-objects-v1"
+	Version             = "cluster-objects-v2"
 	OwnerAnnotation     = "bootwright.io/owner"
 	OwnerDomain         = "bootwright.cluster-objects.owner-v1"
 	ObjectDomain        = "bootwright.cluster-objects.object-v1"

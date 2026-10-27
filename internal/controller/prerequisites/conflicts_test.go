@@ -138,3 +138,45 @@ func TestManagedPrefixesConflictWhenTheyOverlap(t *testing.T) {
 		})
 	}
 }
+
+// A key placed on an SSH host carries that host's qualifier (Q96), so two
+// contexts targeting one SSH host conflict there by the controller's rules,
+// and keys on two SSH hosts, or on an SSH host and the controller, never do.
+// The refusal names the socket, bridge or prefix with its SSH host, and a
+// removal of an SSH host's bridge is guarded by that host's bridge-use alone.
+func TestKeysQualifiedByOneSSHHostConflictThereAlone(t *testing.T) {
+	const host, other = "ssh/192.0.2.10:22/", "ssh/192.0.2.10:2222/"
+	held := []HostReservation{{Context: "alpha", Kind: "proxy", Service: "squid", Keys: []string{host + "socket:0.0.0.0:3128", host + "unit:bootwright-squid"}}}
+	for name, test := range map[string]struct {
+		keys     []string
+		conflict bool
+	}{
+		"a socket on the wildcard's port on that host": {[]string{host + "socket:192.0.2.9:3128"}, true},
+		"the same unit on that host":                   {[]string{host + "unit:bootwright-squid"}, true},
+		"that socket at another SSH port":              {[]string{other + "socket:192.0.2.9:3128"}, false},
+		"that socket on the controller":                {[]string{"socket:192.0.2.9:3128"}, false},
+		"that unit on the controller":                  {[]string{"unit:bootwright-squid"}, false},
+	} {
+		wanted := []HostReservation{{Context: "lab", Kind: "dns", Service: "unbound", Keys: test.keys}}
+		if got := len(Conflicts(held, wanted)) != 0; got != test.conflict {
+			t.Errorf("%s: conflict = %t, want %t", name, got, test.conflict)
+		}
+	}
+	conflicts := Conflicts(held, []HostReservation{{Context: "lab", Kind: "dns", Service: "unbound", Keys: []string{host + "socket:192.0.2.9:3128"}}})
+	want := "context alpha holds socket 0.0.0.0:3128 on the SSH host 192.0.2.10:22 for Proxy/squid, which conflicts with socket 192.0.2.9:3128 on the SSH host 192.0.2.10:22 that DNSServer/unbound of this context claims"
+	if got := ConflictDiagnostic(conflicts[0]); got.Message != want ||
+		got.Remediation != "run bootwright destroy --context alpha first, or change spec.bindAddress or spec.port on DNSServer/unbound" {
+		t.Fatalf("diagnostic = %+v", got)
+	}
+	bridges := []HostReservation{
+		{Context: "lab", Kind: "substrate-host", Service: "remote", Keys: []string{host + "bridge:virbr-lab"}},
+		{Context: "alpha", Kind: "substrate-host-use", Service: "near", Keys: []string{other + "bridge-use:virbr-lab"}, Shared: true},
+	}
+	if found := ReleaseConflicts(bridges, "lab"); len(found) != 0 {
+		t.Fatalf("another SSH host's bridge use guarded the release: %+v", found)
+	}
+	bridges[1].Keys = []string{host + "bridge-use:virbr-lab"}
+	if found := ReleaseConflicts(bridges, "lab"); len(found) != 1 {
+		t.Fatalf("the SSH host's own bridge use did not guard the release: %+v", found)
+	}
+}

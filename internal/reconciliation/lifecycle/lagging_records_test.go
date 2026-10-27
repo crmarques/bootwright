@@ -314,7 +314,10 @@ func withoutIdentities(data []byte) []byte {
 // that is not done still refuse, naming the deletion of the context as their
 // exit, with --allow-orphans only beside evidence that is not pristine, and
 // none beside evidence the context guard cannot read; status names what they
-// refuse and offers no verb, only the deletion their refusal names. A failed
+// refuse and offers no verb, only the deletion their refusal names. A
+// completed apply holding a block that is not done refuses its repeat, naming
+// the destroy of its whole frozen plan and that deletion, both of which status
+// offers, and its destroy takes back that whole plan (Q93). A failed
 // apply whose blocks are all done is finalized by its apply and replaced by
 // its destroy, and status offers both.
 func TestTheRecordStatesBothVerbsRefusedMatchTheirGoldens(t *testing.T) {
@@ -371,6 +374,19 @@ func TestTheRecordStatesBothVerbsRefusedMatchTheirGoldens(t *testing.T) {
 			"beside protected evidence": unfinished(true),
 			"beside unreadable evidence": func(t *testing.T) *harness {
 				h := unfinished(false)(t)
+				h.workspace.evidence = []byte("{")
+				return h
+			},
+		},
+		"lifecycle-unfinished-apply": {
+			"a lost block record": func(t *testing.T) *harness {
+				h := newHarness(t, "alpha", "bravo")
+				lose(h, path.Join(completeApply(t, h), "blocks", "bravo")+"/")
+				return h
+			},
+			"a lost block record beside unreadable evidence": func(t *testing.T) *harness {
+				h := newHarness(t, "alpha", "bravo")
+				lose(h, path.Join(completeApply(t, h), "blocks", "bravo")+"/")
 				h.workspace.evidence = []byte("{")
 				return h
 			},

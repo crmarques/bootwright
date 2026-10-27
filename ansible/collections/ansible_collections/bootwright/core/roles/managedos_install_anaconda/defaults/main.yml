@@ -249,7 +249,7 @@ managedos_install_anaconda_network_show:
 # Recovery follows the frozen removal policy. Retaining physical Machines
 # also need power-off so their existing install marker cannot answer.
 managedos_install_anaconda_network_recovery: >-
-  {{ ('run bootwright destroy --authorize data-loss, which overwrites the declared disks of Machine '
+  {{ ('run bootwright destroy --authorize data-loss=<digest bootwright plan prints>, which overwrites the declared disks of Machine '
   ~ bootwright_os_install_request.identity.object ~ ' and removes its installed system before releasing it'
   if bootwright_os_install_request.eraseOnRemoval | default(false)
   else 'run bootwright destroy, which releases Machine ' ~ bootwright_os_install_request.identity.object

@@ -3049,22 +3049,15 @@ func TestADestroyOverAnApplyThatStartedNothingCompletes(t *testing.T) {
 	}
 }
 
-// Only an apply still running or paused may have started nothing, and a failed
-// removal left nothing to remove is finalized first. Any other operation whose
+// Only an apply still running or paused may have started nothing, a completed
+// apply's removal covers its whole frozen plan, and a failed removal left
+// nothing to remove is finalized first. Any other operation whose
 // records leave nothing to remove contradicts them, so its removal refuses
 // before it registers, reaches a host, or releases the material the effects
 // still on that host need.
 func TestARemovalOverRecordsThatContradictThemselvesRefuses(t *testing.T) {
 	const block = "artifact-server-lab"
 	for name, arrange := range map[string]func(*testing.T, *harness){
-		"a completed apply without its block record": func(t *testing.T, h *harness) {
-			if _, err := h.service.Apply(context.Background(), ApplyRequest{ContextName: "lab", SkipConfirmation: true}); err != nil {
-				t.Fatal(err)
-			}
-			h.workspace.area.mutex.Lock()
-			defer h.workspace.area.mutex.Unlock()
-			delete(h.workspace.area.files, path.Join("op-"+strings.Repeat("01", 16), "blocks", block, "state.json"))
-		},
 		"a failed apply that records no started block": func(t *testing.T, h *harness) {
 			refuseStart(h, block, 1)
 			if _, err := h.service.Apply(context.Background(), ApplyRequest{ContextName: "lab", SkipConfirmation: true}); err == nil {
@@ -4146,7 +4139,7 @@ func TestAStageRefusalNamesAnApplyThatPassesAuthorization(t *testing.T) {
 	definitions := []reconciliation.BlockDefinition{stagedDefinition("artifacts", reconciliation.StageInfraComponents), install}
 	h := newPlannedHarness(t, definitions)
 	authorized := []string{reconciliation.AuthorizationDataLoss}
-	want := "repeat bootwright apply --context lab --stage infra-components,machines --authorize data-loss"
+	want := "repeat bootwright apply --context lab --stage infra-components,machines --authorize " + shownBinding(t, h, "lab")
 	_, err := h.service.Apply(context.Background(), ApplyRequest{ContextName: "lab", SkipConfirmation: true, Stages: []string{"machines"}, Authorizations: authorized})
 	if reported := diagnostics.Of(err); len(reported) != 1 || reported[0].Code != "lifecycle.stage" || reported[0].Remediation != want {
 		t.Fatalf("fresh refusal = %+v, want the remedy %q", reported, want)

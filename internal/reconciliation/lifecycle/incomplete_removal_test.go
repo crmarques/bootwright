@@ -46,8 +46,9 @@ func applyChained(t *testing.T, h *harness, outcomes map[string]Result, stages .
 }
 
 // failRetryStart fails bravo and continues the apply with a retry whose start
-// lands bravo's running record and then reports a failure, which leaves the
-// apply failed beside that running block.
+// lands bravo's running record and then reports a failure. The invocation
+// re-reads that record, so the apply is recorded running beside that running
+// block, as its block records give it (F09-06).
 func failRetryStart(t *testing.T, h *harness) {
 	t.Helper()
 	applyChained(t, h, map[string]Result{"bravo": {Outcome: reconciliation.OutcomeFailed}})
@@ -208,8 +209,9 @@ func TestADestroyOverAnIncompleteApplyWithAContradictedBlockRefuses(t *testing.T
 }
 
 // Blocks that are not done are legitimate in an incomplete apply, and so are an
-// unknown apply that holds no unknown block and a failed apply that holds a
-// running or unknown block in place of a failed one. None of them contradicts
+// unknown apply that holds no unknown block and a failed apply, as an earlier
+// build's records may show it, that holds an unknown block in place of a
+// failed one. None of them contradicts
 // what the apply started, so each removal resolves every unproved block, takes
 // back every started block and completes. A removal records a failed apply in
 // the state its blocks give it before it resolves any of them, so one killed
@@ -232,12 +234,12 @@ func TestAnIncompleteApplyWithoutAContradictionIsStillRemovable(t *testing.T) {
 			states:    map[string]reconciliation.BlockState{"alpha": "done", "bravo": "failed", "charlie": "pending"},
 			removed:   []string{"alpha", "bravo"},
 		},
-		"a failed apply whose retry start landed and then reported a failure": {
+		"an apply whose retry start landed and then reported a failure": {
 			arrange: func(t *testing.T, h *harness) {
 				failRetryStart(t, h)
 				h.capability.observations = []Observation{{Effect: reconciliation.EffectCompleted}}
 			},
-			operation: reconciliation.OperationFailed,
+			operation: reconciliation.OperationRunning,
 			states:    map[string]reconciliation.BlockState{"alpha": "done", "bravo": "running", "charlie": "pending"},
 			resolved:  []string{"bravo"},
 			removed:   []string{"alpha", "bravo"},
@@ -259,6 +261,8 @@ func TestAnIncompleteApplyWithoutAContradictionIsStillRemovable(t *testing.T) {
 		"a failed apply whose removal could not record it first": {
 			arrange: func(t *testing.T, h *harness) {
 				failRetryStart(t, h)
+				killResolution(t, h, reconciliation.BlockUnknown)
+				rewriteState(t, h, path.Join(currentOperation(t, h), "operation.json"), string(reconciliation.OperationFailed))
 				h.capability.observations = []Observation{{Effect: reconciliation.EffectCompleted}}
 				recorded := "replace " + path.Join(currentOperation(t, h), "operation.json")
 				fault := errors.New("no space left on device")
@@ -273,7 +277,7 @@ func TestAnIncompleteApplyWithoutAContradictionIsStillRemovable(t *testing.T) {
 				}
 			},
 			operation: reconciliation.OperationFailed,
-			states:    map[string]reconciliation.BlockState{"alpha": "done", "bravo": "running", "charlie": "pending"},
+			states:    map[string]reconciliation.BlockState{"alpha": "done", "bravo": "unknown", "charlie": "pending"},
 			resolved:  []string{"bravo"},
 			removed:   []string{"alpha", "bravo"},
 		},
@@ -381,5 +385,30 @@ func TestAnIncompleteApplyWithoutAContradictionIsStillRemovable(t *testing.T) {
 				t.Fatalf("released %v", h.binder.released)
 			}
 		})
+	}
+}
+
+// A start whose publication lands and then reports a failure leaves its block
+// record running. The invocation re-reads that record, so the operation is
+// recorded from its block records alone (F09-06): running beside that running
+// block, never failed beside no failed block, and status names no
+// contradiction; the next continuation resolves the block first.
+func TestAStartThatLandsThenFailsRecordsTheOperationFromItsBlockRecords(t *testing.T) {
+	h := newPlannedHarness(t, chainedDefinitions())
+	failRetryStart(t, h)
+	operation, states := durableOperation(t, h)
+	want := map[string]reconciliation.BlockState{"alpha": "done", "bravo": "running", "charlie": "pending"}
+	if operation.State != reconciliation.OperationRunning || !maps.Equal(states, want) {
+		t.Fatalf("the records read %s with %v, want running with %v", operation.State, states, want)
+	}
+	status, err := h.service.Status(context.Background(), StatusRequest{ContextName: testContextName})
+	if err != nil || len(status.Contradictions) != 0 {
+		t.Fatalf("status = %v, contradictions %v", err, status.Contradictions)
+	}
+	h.capability.observations = []Observation{{Effect: reconciliation.EffectCompleted}}
+	h.capability.observes = nil
+	result, err := h.service.Apply(context.Background(), ApplyRequest{ContextName: testContextName, SkipConfirmation: true})
+	if err != nil || result.Receipt.State != string(reconciliation.OperationDone) || !slices.Equal(h.capability.observes, []string{"bravo"}) {
+		t.Fatalf("the continuation = %+v (%v), observed %v", result, err, h.capability.observes)
 	}
 }

@@ -295,19 +295,32 @@ func (c *scheduler) start(ctx context.Context, block reconciliation.Block, posit
 			// that never started recorded nothing, and the block keeps its state.
 			state, err = c.service.resolveUnknown(ctx, c.tx, c.store, c.approved, c.logging, c.operation, c.plan, block, c.material, position+1, len(c.plan.Blocks), c.removal, c.removalPlan, command, retry)
 			if state == "" {
-				state = prior
+				state = c.durable(ctx, block.ID, prior)
 			}
 			announced = retry && state == reconciliation.BlockFailed
 		} else {
-			// An attempt that never started recorded nothing either, and the
-			// block keeps the state it had.
+			// An attempt that never started performed no effect; its block
+			// holds what its record reads, running when the start landed.
 			state, err = c.service.attempt(ctx, c.tx, c.store, c.approved, c.logging, c.operation, c.plan, block, c.material, position+1, len(c.plan.Blocks))
 			if state == "" {
-				state, unstarted = prior, true
+				state, unstarted = c.durable(ctx, block.ID, prior), true
 			}
 		}
 		c.results <- step{block: block.ID, state: state, err: err, unstarted: unstarted, announced: announced, position: position + 1}
 	}()
+}
+
+// durable re-reads a block whose start or resolution reported a failure, so
+// the operation is recorded from its block records alone (F09-06).
+func (c *scheduler) durable(ctx context.Context, block string, prior reconciliation.BlockState) reconciliation.BlockState {
+	record, err := c.store.Block(recordingContext(ctx), c.operation.ID, block)
+	if err != nil {
+		return reconciliation.BlockUnknown
+	}
+	if record.State == "" {
+		return prior
+	}
+	return record.State
 }
 
 // observingCommand is the exact command that observes again a block a
@@ -317,7 +330,7 @@ func (c *scheduler) start(ctx context.Context, block reconciliation.Block, posit
 func (c *scheduler) observingCommand() string {
 	name := c.tx.Identity().Name
 	if c.removal {
-		return contextCommand(name, string(reconciliation.Destroy), authorizing(requiredTokens(c.removalPlan))...)
+		return contextCommand(name, string(reconciliation.Destroy), authorizingUnfixed(c.removalPlan)...)
 	}
 	if command := continuationCommand(name, c.operation, c.plan, c.states); command != "" {
 		return command

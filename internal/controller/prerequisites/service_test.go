@@ -185,6 +185,7 @@ type osPython struct {
 	mirrors   []string
 	exported  []string
 	buildErr  error
+	fetchErr  error
 }
 
 func (p *osPython) interpreter() PythonInterpreter {
@@ -222,7 +223,7 @@ func (p *osPython) RuntimeWheels(_ context.Context, digest string) ([]string, er
 func (p *osPython) Fetch(_ context.Context, _ string, _ SetupEgress, mirror WheelMirror) error {
 	p.owner.record("fetch")
 	p.mirrors = append(p.mirrors, mirror.String())
-	return nil
+	return p.fetchErr
 }
 
 func (p *osPython) Export(_ context.Context, destination string, _ SetupEgress, mirror WheelMirror) (WheelExport, error) {
@@ -458,6 +459,43 @@ func TestAnInterruptedSetupIsReinspectedAfterConfirmation(t *testing.T) {
 	}
 	if final := f.store.view.State; final.Pending != nil || final.Receipt == nil || final.Runtimes.Current != f.python.runtime().Digest {
 		t.Fatalf("the setup left %+v", final)
+	}
+}
+
+// A setup that fails before any dnf transaction began, as a wheel fetch does,
+// leaves no unknown outcome: it clears its pending intent, so the runtime the
+// kept receipt names still launches. One that ran dnf first keeps the intent.
+func TestAFailureBeforeAnyDnfTransactionClearsThePendingIntent(t *testing.T) {
+	for name, test := range map[string]struct {
+		missing string
+		pending bool
+	}{
+		"a failed wheel fetch":               {},
+		"a failed wheel fetch after dnf ran": {missing: "podman", pending: true},
+	} {
+		t.Run(name, func(t *testing.T) {
+			f := newSetupFixture(t)
+			f.prepared()
+			kept := *f.store.view.State.Receipt
+			f.python.ready = false
+			if test.missing != "" {
+				f.packages.present[test.missing] = false
+			}
+			f.python.fetchErr = failure("controller.setup", "the wheel origin did not answer", "pass --wheel-mirror")
+			if _, err := f.service.Setup(context.Background(), SetupRequest{}); codeOf(err) != "controller.setup" {
+				t.Fatalf("Setup = %v", err)
+			}
+			state := f.store.view.State
+			if first := f.store.recorded[0]; first.Pending == nil {
+				t.Fatalf("the setup recorded no intent before its effects: %+v", first)
+			}
+			if (state.Pending != nil) != test.pending || state.Receipt == nil || state.Receipt.Lock != kept.Lock || state.Receipt.Runtime != kept.Runtime {
+				t.Fatalf("the failed setup left %+v", state)
+			}
+			if err := SetupLaunchRefusal(f.store.view); (err != nil) != test.pending {
+				t.Fatalf("a launch of the kept runtime = %v", err)
+			}
+		})
 	}
 }
 

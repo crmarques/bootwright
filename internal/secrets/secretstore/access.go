@@ -7,7 +7,6 @@ import (
 
 	"github.com/crmarques/bootwright/internal/canonicaljson"
 	"github.com/crmarques/bootwright/internal/diagnostics"
-	"github.com/crmarques/bootwright/internal/secrets"
 )
 
 type Access struct {
@@ -228,9 +227,15 @@ func ReadSelector(ctx context.Context, area Area, contextName string) (Selector,
 	}
 	if len(entries) != 0 {
 		return Selector{}, false, diagnostics.NewFailureWithRemediation("secret.store.corrupt",
-			"the nonempty secret store of context "+contextName+" has no metadata", "", secrets.Command(contextName, "encryption init")+" recovers it")
+			"the nonempty secret store of context "+contextName+" has no metadata", "", CorruptStoreExits(contextName))
 	}
 	return Selector{}, false, nil
+}
+
+func CorruptStoreExits(contextName string) string {
+	return "restore the context's keyring from a complete backup, or run bootwright status --context " + contextName +
+		", which lists the objects the context owns, then bootwright context delete --name " + contextName +
+		" --purge --allow-orphans, which abandons them to be removed by hand, and create the context again"
 }
 
 func readSelectorRecord(ctx context.Context, area Area, contextName string) (Selector, bool, error) {

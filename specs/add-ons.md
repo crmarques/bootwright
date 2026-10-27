@@ -213,9 +213,6 @@ an interrupted or failed attempt, not a proof, because every value it hashes is
 readable from the cluster. A `mark-recovered` receipt records the `uid` the
 read returned, and the completion evidence carries each basis.
 
-Not yet met: a receipt records no ownership basis; tracked as
-[B830](milestones/backlog.md#b830).
-
 ## The cluster object adapter
 
 The adapter runs on the controller with the `oc` the controller stage

@@ -124,6 +124,13 @@ func TestANextStepIsACommandAnOperatorCanRun(t *testing.T) {
 			{BlockDefinition: reconciliation.BlockDefinition{ID: "bravo", Consumes: []string{"network-outage"}}},
 		}}
 	}
+	// both is the continuation of the whole frozen plan, each token bound to
+	// the digest of the steps that consume it.
+	both := func(verb reconciliation.Verb) string {
+		plan := frozen(verb)
+		return "bootwright " + string(verb) + " --context lab-b --authorize data-loss=" + AuthorizationDigest(plan, "data-loss") +
+			" --authorize network-outage=" + AuthorizationDigest(plan, "network-outage")
+	}
 	for _, offer := range []struct {
 		verb     reconciliation.Verb
 		state    reconciliation.OperationState
@@ -133,21 +140,21 @@ func TestANextStepIsACommandAnOperatorCanRun(t *testing.T) {
 	}{
 		{reconciliation.Apply, reconciliation.OperationDone, reconciliation.BlockDone, reconciliation.BlockDone, ""},
 		{reconciliation.Apply, reconciliation.OperationFailed, reconciliation.BlockDone, reconciliation.BlockFailed,
-			"bootwright apply --context lab-b --authorize data-loss --authorize network-outage"},
+			both(reconciliation.Apply)},
 		{reconciliation.Apply, reconciliation.OperationPaused, reconciliation.BlockDone, reconciliation.BlockPending,
-			"bootwright apply --context lab-b --authorize data-loss --authorize network-outage"},
+			both(reconciliation.Apply)},
 		{reconciliation.Apply, reconciliation.OperationFailed, reconciliation.BlockDone, reconciliation.BlockDone, "bootwright apply --context lab-b"},
 		{reconciliation.Destroy, reconciliation.OperationRunning, reconciliation.BlockDone, reconciliation.BlockRunning,
-			"bootwright destroy --context lab-b --authorize data-loss --authorize network-outage"},
+			both(reconciliation.Destroy)},
 		{reconciliation.Destroy, reconciliation.OperationFailed, reconciliation.BlockDone, reconciliation.BlockFailed,
-			"bootwright destroy --context lab-b --authorize network-outage"},
+			"bootwright destroy --context lab-b --authorize network-outage=" + DigestPlaceholder},
 		{reconciliation.Destroy, reconciliation.OperationFailed, reconciliation.BlockDone, reconciliation.BlockDone, "bootwright destroy --context lab-b"},
 		// An unproved effect is resolved by repeating the operation that left
 		// it, so each verb offers its own command rather than a `resolve` one.
 		{reconciliation.Apply, reconciliation.OperationUnknown, reconciliation.BlockUnknown, reconciliation.BlockPending,
-			"bootwright apply --context lab-b --authorize data-loss --authorize network-outage"},
+			both(reconciliation.Apply)},
 		{reconciliation.Destroy, reconciliation.OperationUnknown, reconciliation.BlockDone, reconciliation.BlockUnknown,
-			"bootwright destroy --context lab-b --authorize data-loss --authorize network-outage"},
+			both(reconciliation.Destroy)},
 	} {
 		operation := operationstore.Operation{Verb: offer.verb, State: offer.state}
 		states := map[string]reconciliation.BlockState{"alpha": offer.alpha, "bravo": offer.bravo}
@@ -235,9 +242,9 @@ func TestAResolutionRemedyNamesTheCommandThatTakesItOn(t *testing.T) {
 		remedy  string
 	}{
 		{reconciliation.Apply, reconciliation.EffectNoEffect, "the frozen effect was never performed",
-			"repeat bootwright apply --context lab --authorize data-loss to perform it"},
+			"repeat bootwright apply --context lab --authorize @shown@ to perform it"},
 		{reconciliation.Apply, reconciliation.EffectPartial, "the frozen effect is partly realized and owned by this context",
-			"repeat bootwright apply --context lab --authorize data-loss to converge it, or take back what it owns with bootwright destroy --context lab"},
+			"repeat bootwright apply --context lab --authorize @shown@ to converge it, or take back what it owns with bootwright destroy --context lab"},
 		{reconciliation.Destroy, reconciliation.EffectNoEffect, "the frozen effect was never performed",
 			"run the destroy this result's last diagnostic names, which performs it"},
 		{reconciliation.Destroy, reconciliation.EffectPartial, "the frozen effect is partly realized and owned by this context",
@@ -246,6 +253,7 @@ func TestAResolutionRemedyNamesTheCommandThatTakesItOn(t *testing.T) {
 		t.Run(string(test.verb)+" "+string(test.effect), func(t *testing.T) {
 			h := newPlannedHarness(t, []reconciliation.BlockDefinition{destructive("artifacts")})
 			h.capability.consumes = map[string][]string{"artifacts": dataLoss()}
+			test.remedy = strings.ReplaceAll(test.remedy, "@shown@", shownBinding(t, h, testContextName))
 			run := func(ctx context.Context) error {
 				if test.verb == reconciliation.Destroy {
 					_, err := h.service.Destroy(ctx, DestroyRequest{ContextName: testContextName, Authorizations: dataLoss(), SkipConfirmation: true})
@@ -283,26 +291,21 @@ func TestAResolutionRemedyNamesTheCommandThatTakesItOn(t *testing.T) {
 					}
 				}
 			}
-			tokens, named := namedTokens(reported[len(reported)-1].Remediation, command)
-			if !named || !slices.Equal(tokens, dataLoss()) {
-				t.Fatalf("the resolving %s closes with %+v, want %s --authorize data-loss", test.verb, reported[len(reported)-1], command)
+			closing := reported[len(reported)-1].Remediation
+			if test.verb == reconciliation.Destroy {
+				// A removal's plan is not fixed until the destroy runs, so its
+				// repeat binds the placeholder an operator replaces from plan.
+				if !strings.Contains(closing, command+" --authorize "+unfixed) {
+					t.Fatalf("the resolving %s closes with %+v, want %s --authorize %s", test.verb, reported[len(reported)-1], command, unfixed)
+				}
 			}
+			noBareAuthorization(t, closing)
+			tokens := authorizeTokens(closing)
+			if len(tokens) == 0 {
+				t.Fatalf("the resolving %s closes with %+v, want %s with its token", test.verb, reported[len(reported)-1], command)
+			}
+			tokens = reviewed(tokens, shownBinding(t, h, testContextName))
 			requireAuthorizedIn(t, h, testContextName, test.verb, tokens, "")
 		})
 	}
-}
-
-// namedTokens reads the --authorize tokens that follow command where
-// remediation names it.
-func namedTokens(remediation, command string) ([]string, bool) {
-	_, rest, found := strings.Cut(remediation, command)
-	if !found {
-		return nil, false
-	}
-	tokens := []string{}
-	fields := strings.Fields(strings.ReplaceAll(rest, ",", " "))
-	for index := 0; index+1 < len(fields) && fields[index] == "--authorize"; index += 2 {
-		tokens = append(tokens, fields[index+1])
-	}
-	return tokens, true
 }

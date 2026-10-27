@@ -7,6 +7,7 @@ import (
 	"path"
 	"reflect"
 	"slices"
+	"strings"
 	"testing"
 	"time"
 
@@ -261,18 +262,41 @@ func TestAPlanWhoseOwnSocketsConflictOnAnSSHHostNamesTheHost(t *testing.T) {
 	}
 }
 
-// An SSH host's claims are compared within the context and never published,
-// because two contexts targeting one SSH host are not coordinated: the apply
-// reserves its controller claims alone.
-func TestAnApplyPublishesOnlyItsControllerClaims(t *testing.T) {
+// An SSH host's claims are published beside the controller's (Q96): a claim on
+// an SSH host with every key qualified by that host's address and port, so two
+// contexts targeting one SSH host conflict there, and a claim on an SSH host
+// that is the controller as the controller's own.
+func TestAnApplyPublishesItsSSHClaimsQualifiedByTheirHost(t *testing.T) {
 	h := newPlannedHarness(t, nestedDefinitions())
+	h.service.compiler = testCompiler{state: withControllerAddress()}
 	h.capability.reservations = reservationOf("alpha")
-	h.capability.sshClaims = sshSockets("services", "storage")
+	h.capability.sshClaims = append(sshSockets("services", "storage"),
+		sshClaim("declared", prerequisites.HostReservation{Context: testContextName, Kind: "ntp", Service: "epsilon", Keys: []string{"path:/srv/ntp", "socket:192.0.2.1:123"}}),
+		sshClaim("forwarded", prerequisites.HostReservation{Context: testContextName, Kind: "proxy", Service: "zeta", Keys: []string{"socket:0.0.0.0:3128", "unit:bootwright-zeta"}}))
 	if _, err := h.service.Apply(context.Background(), ApplyRequest{ContextName: "lab", SkipConfirmation: true}); err != nil {
 		t.Fatal(err)
 	}
-	if !reflect.DeepEqual(h.workspace.reservations, reservationOf("alpha")) {
-		t.Fatalf("published %+v, want the controller's claims alone", h.workspace.reservations)
+	want := append(reservationOf("alpha"),
+		prerequisites.HostReservation{Context: testContextName, Kind: "proxy", Service: "gamma", Keys: []string{"ssh/192.0.2.10:22/socket:0.0.0.0:3128"}},
+		prerequisites.HostReservation{Context: testContextName, Kind: "dns", Service: "delta", Keys: []string{"ssh/192.0.2.20:22/socket:192.0.2.9:3128"}},
+		prerequisites.HostReservation{Context: testContextName, Kind: "ntp", Service: "epsilon", Keys: []string{"path:/srv/ntp", "socket:192.0.2.1:123"}},
+		prerequisites.HostReservation{Context: testContextName, Kind: "proxy", Service: "zeta", Keys: []string{"ssh/192.0.2.10:2222/socket:0.0.0.0:3128", "ssh/192.0.2.10:2222/unit:bootwright-zeta"}},
+	)
+	if !reflect.DeepEqual(h.workspace.reservations, want) {
+		t.Fatalf("published %+v, want %+v", h.workspace.reservations, want)
+	}
+}
+
+// A qualified key that would pass the record's key bound refuses while the
+// context plans, naming the Machine whose address makes it long.
+func TestAnSSHAddressTooLongToQualifyItsClaimsRefuses(t *testing.T) {
+	h := newPlannedHarness(t, nestedDefinitions())
+	long := strings.Repeat("a", 63) + "." + strings.Repeat("b", 63) + "." + strings.Repeat("c", 63) + ".example"
+	h.capability.sshClaims = []SSHReservation{{Machine: "services", Address: long, Port: 22,
+		Reservation: prerequisites.HostReservation{Context: testContextName, Kind: "proxy", Service: "gamma", Keys: []string{"path:/srv/bootwright/proxies/gamma/" + strings.Repeat("d", 24)}}}}
+	_, err := h.service.Plan(context.Background(), PlanRequest{ContextName: "lab"})
+	if reported := diagnostics.Of(err); len(reported) != 1 || reported[0].Code != "api.value" || !strings.Contains(reported[0].Message, "of Machine/services is too long") {
+		t.Fatalf("refusal = %+v (%v)", reported, err)
 	}
 }
 
@@ -460,7 +484,7 @@ func previewRows(ctx context.Context) []previewRow {
 			h.workspace.evidence = evidenceBytes(t, reconciliation.Apply, reconciliation.OperationRunning)
 			return harnessCase(h, reconciliation.Destroy)
 		}},
-		{name: "a destroy of a completed apply with a lost block record", refusal: "lifecycle.state", prepare: func(t *testing.T) previewCase {
+		{name: "a destroy of a completed apply with a lost block record", shown: reconciliation.Destroy, prepare: func(t *testing.T) previewCase {
 			h := newHarness(t, "alpha", "bravo", "charlie")
 			current := completeApply(t, h)
 			h.workspace.area.mutex.Lock()

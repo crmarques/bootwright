@@ -81,6 +81,7 @@
   "receipts": [
     {
       "apiVersion": "v1",
+      "basis": "created",
       "desiredDigest": "a1f0588f338e3b8362bc779ae512a0fec3b43dd363bf3500183c1cc4dd49c6bb",
       "disposition": "created",
       "kind": "Namespace",
@@ -91,6 +92,7 @@
     },
     {
       "apiVersion": "operators.coreos.com/v1",
+      "basis": "created",
       "desiredDigest": "3814e9c1a91c3e6ccffa59827505232f6a9e3d30713b47317a4a1af964f4dc49",
       "disposition": "created",
       "kind": "OperatorGroup",
@@ -101,6 +103,7 @@
     },
     {
       "apiVersion": "operators.coreos.com/v1alpha1",
+      "basis": "created",
       "desiredDigest": "63739328c6a10d7b50daee5a954ae346a132a94c2a6a1fbedeb6d12efee8daf0",
       "disposition": "created",
       "kind": "Subscription",
@@ -111,6 +114,7 @@
     },
     {
       "apiVersion": "example.test/v1",
+      "basis": "created",
       "desiredDigest": "019d5dfe8db35e5e7439f53716a520f791da636c35aaf4e6e4c1318d4617d6f5",
       "disposition": "created",
       "kind": "Fixture",
@@ -121,5 +125,5 @@
     }
   ],
   "request": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-  "version": "addon-instance-evidence-v2"
+  "version": "addon-instance-evidence-v3"
 }

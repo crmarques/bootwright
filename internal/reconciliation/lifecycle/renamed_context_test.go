@@ -147,7 +147,7 @@ func TestLiveRemovalNamesTheStopCommandWithItsContext(t *testing.T) {
 	h.service.capabilities = testResolver{capability: contextStopping{testCapability: h.capability, machine: "rhel-01"}}
 	_, err := h.service.Destroy(ctx, DestroyRequest{ContextName: "lab-b", Authorizations: []string{reconciliation.AuthorizationDataLoss}, SkipConfirmation: true})
 	reported := diagnostics.Of(err)
-	want := "stop it with bootwright machine stop --context lab-b --name rhel-01, then repeat bootwright destroy --context lab-b --authorize data-loss"
+	want := "stop it with bootwright machine stop --context lab-b --name rhel-01, then repeat bootwright destroy --context lab-b --authorize " + unfixed
 	if len(reported) != 1 || reported[0].Code != "lifecycle.live" || reported[0].Remediation != want {
 		t.Fatalf("the removal over a running machine reported %+v, want the remedy %q", reported, want)
 	}
@@ -195,7 +195,7 @@ func TestEveryExecutionCarriesTheContextItRunsIn(t *testing.T) {
 
 // A refusal over a completed apply names the commands of the context it read:
 // a changed input the removal that takes back what the apply owns and the
-// apply that follows, and a lost block record the status that shows it.
+// apply that follows, and a lost block record that removal and the deletion.
 func TestRefusalsOverACompletedApplyNameTheirContext(t *testing.T) {
 	ctx := context.Background()
 	t.Run("a changed input", func(t *testing.T) {
@@ -222,16 +222,12 @@ func TestRefusalsOverACompletedApplyNameTheirContext(t *testing.T) {
 		}
 		applied, _ := durableOperation(t, h)
 		lose(h, path.Join(applied.ID, "blocks", "bravo")+"/")
-		h.capability.destroys = nil
-		_, err := h.service.Destroy(ctx, DestroyRequest{ContextName: "lab-b", SkipConfirmation: true})
+		_, err := h.service.Apply(ctx, ApplyRequest{ContextName: "lab-b", SkipConfirmation: true})
 		reported := diagnostics.Of(err)
-		message := "the completed apply " + applied.ID + " records no block completion for these blocks, and a removal that skipped one would leave its effect in place: bravo (pending)"
-		want := "review its durable state with bootwright status --context lab-b"
+		message := "the completed apply " + applied.ID + " records no block completion for these blocks, so this input cannot be proved applied: bravo (pending)"
+		want := "take back its whole frozen plan with bootwright destroy --context lab-b, which first resolves each unproved block, or delete the context with bootwright context delete --name lab-b --purge --allow-orphans, which abandons what it may still own"
 		if len(reported) != 1 || reported[0].Message != message || reported[0].Remediation != want {
-			t.Fatalf("the removal = %+v (%v), want %q with %q", reported, err, message, want)
-		}
-		if len(h.capability.destroys) != 0 {
-			t.Fatalf("the refused removal destroyed %v", h.capability.destroys)
+			t.Fatalf("the repeated apply = %+v (%v), want %q with %q", reported, err, message, want)
 		}
 	})
 }

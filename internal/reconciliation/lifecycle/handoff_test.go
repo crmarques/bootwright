@@ -114,6 +114,14 @@ func TestStatusHandoffReadsRecordsWithoutWriting(t *testing.T) {
 			id := completeApply(t, h)
 			changeOperation(t, h, id, func(record *operationstore.Operation) { record.LogFault = true })
 		}, []string{"the operation has a latched required-log fault"}},
+		{"a new revision of the frozen bytes", func(t *testing.T, h *harness) {
+			completeApply(t, h)
+			h.update("rev-2", h.workspace.inputs)
+		}, []string{"the selected input is not the revision " + testRevision + " the apply froze; bootwright diff --context lab names what changed"}},
+		{"edited input", func(t *testing.T, h *harness) {
+			completeApply(t, h)
+			h.update("rev-2", diffSources("kind: Environment\n# edited\n"))
+		}, []string{"the selected input is not the revision " + testRevision + " the apply froze; bootwright diff --context lab names what changed"}},
 		{"destroy", func(t *testing.T, h *harness) {
 			completeApply(t, h)
 			if _, err := h.service.Destroy(context.Background(), DestroyRequest{ContextName: testContextName, SkipConfirmation: true}); err != nil {

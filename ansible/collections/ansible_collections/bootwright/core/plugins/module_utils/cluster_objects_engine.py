@@ -71,7 +71,8 @@ class Engine:
         self.state["observations"].append(observation)
         if own == "own" and equal:
             receipt = dict(model.ref(obj), uid=live["metadata"]["uid"],
-                           desiredDigest=obj["desiredDigest"], disposition="unchanged")
+                           desiredDigest=obj["desiredDigest"], disposition="unchanged",
+                           basis=model.basis(obj, live, self.request))
             self.keep_receipt(receipt)
             if not any(model.identity(r) == model.identity(obj) for r in self.request.get("receipts", [])):
                 self.request.setdefault("receipts", []).append(receipt)
@@ -105,7 +106,7 @@ class Engine:
                 if differing:
                     raise Refused(model.label(obj) + " differs at " + differing)
                 receipt = dict(model.ref(obj), uid=created["metadata"]["uid"],
-                               desiredDigest=obj["desiredDigest"], disposition="created")
+                               desiredDigest=obj["desiredDigest"], disposition="created", basis="created")
                 self.request.setdefault("receipts", []).append(receipt)
                 self.changed = True
                 self.keep_receipt(receipt)
@@ -147,7 +148,8 @@ class Engine:
         if not result.get("accepted"):
             raise Refused(model.label(obj) + " differs at " + result.get("difference", "unproved placement"))
         receipt = dict(model.ref(obj), uid=result["uid"], desiredDigest=obj["desiredDigest"],
-                       disposition="unchanged" if result.get("equal") else "created")
+                       disposition="unchanged" if result.get("equal") else "created",
+                       basis=result.get("basis", "mark-recovered"))
         self.changed = self.changed or not result.get("equal")
         self.keep_receipt(receipt)
         self.state["observations"].append(dict(model.ref(obj), ownership="own", equal=True))

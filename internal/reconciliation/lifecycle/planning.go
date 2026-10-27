@@ -124,6 +124,11 @@ func (s Service) planFrom(ctx context.Context, view View, state *compilation.Sta
 	if err := refuseOwnSocketConflicts(state.Effective(), controller, binding.reservations, placed); err != nil {
 		return reconciliation.Plan{}, capabilityBinding{}, err
 	}
+	published, err := publishedSSHClaims(state.Effective(), controller, placed)
+	if err != nil {
+		return reconciliation.Plan{}, capabilityBinding{}, err
+	}
+	binding.reservations = append(binding.reservations, published...)
 	definitions, err = s.dependOnStageTails(definitions)
 	if err != nil {
 		return reconciliation.Plan{}, capabilityBinding{}, err
@@ -179,6 +184,27 @@ func refuseOwnSocketConflicts(catalog api.Catalog, controller string, reservatio
 		}
 	}
 	return nil
+}
+
+// publishedSSHClaims qualifies each SSH-placed claim's keys by its host unless that host is the controller (Q96).
+func publishedSSHClaims(catalog api.Catalog, controller string, placed []SSHReservation) ([]prerequisites.HostReservation, error) {
+	own, _ := catalog.Find(api.Machine, controller)
+	published := make([]prerequisites.HostReservation, 0, len(placed))
+	for _, claim := range placed {
+		reservation := claim.Reservation
+		reservation.Keys = slices.Clone(reservation.Keys)
+		if !machine.ReachesController(own, claim.Address, claim.Port) {
+			reservation.Keys = prerequisites.QualifiedKeys(machine.SSHReservationQualifier(claim.Address, claim.Port), reservation.Keys)
+		}
+		if slices.ContainsFunc(reservation.Keys, func(key string) bool { return len(key) > prerequisites.MaxReservationKeyBytes }) {
+			return nil, failure("api.value",
+				"the SSH address "+claim.Address+" of Machine/"+claim.Machine+" is too long to qualify the host reservations "+
+					reservation.Kind+" "+reservation.Service+" publishes, which hold at most "+strconv.Itoa(prerequisites.MaxReservationKeyBytes)+" bytes each",
+				"reach Machine/"+claim.Machine+" by a shorter address")
+		}
+		published = append(published, reservation)
+	}
+	return published, nil
 }
 
 // hostClaims is every socket claim this context places on one host: through

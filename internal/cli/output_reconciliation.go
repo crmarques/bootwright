@@ -175,7 +175,7 @@ func writeLifecycleSteps(text *display, result lifecycle.PlanResult) {
 	}
 	// A finalization runs no block, so the apply that completes it consumes,
 	// and requires, no authorization.
-	if required := requiredAuthorizations(result.Steps); required != "" && !result.Finalizes {
+	if required := requiredAuthorizations(result.Steps, result.Authorizations); required != "" && !result.Finalizes {
 		closing = append(closing, field{Label: "Requires", Value: required})
 	}
 	if len(closing) != 0 {
@@ -215,10 +215,11 @@ func waitMarker(planned lifecycle.PlanStep) string {
 	return "[after " + strings.Join(places, ", ") + "]"
 }
 
-// requiredAuthorizations names each token the plan consumes and the steps that
-// consume it, by their place in the plan, so the closing field says what the
+// requiredAuthorizations names each token the plan consumes, bound to the
+// digest of its steps where the plan carries one, and the steps that consume
+// it, by their place in the plan, so the closing field says what the
 // invocation must acknowledge and for which steps.
-func requiredAuthorizations(steps []lifecycle.PlanStep) string {
+func requiredAuthorizations(steps []lifecycle.PlanStep, bound []string) string {
 	var tokens []string
 	consumers := map[string][]string{}
 	for index, planned := range steps {
@@ -231,7 +232,13 @@ func requiredAuthorizations(steps []lifecycle.PlanStep) string {
 	}
 	required := make([]string, 0, len(tokens))
 	for _, token := range tokens {
-		required = append(required, "--authorize "+token+" (step "+strings.Join(consumers[token], ", ")+")")
+		flag := token
+		for _, authorization := range bound {
+			if strings.HasPrefix(authorization, token+"=") {
+				flag = authorization
+			}
+		}
+		required = append(required, "--authorize "+escapeDisplayLine(flag)+" (step "+strings.Join(consumers[token], ", ")+")")
 	}
 	return strings.Join(required, "; ")
 }

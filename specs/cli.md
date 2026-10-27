@@ -256,7 +256,16 @@ repeated with `--yes` in `next:`; a cancellation names no command. The
 repeated command is the invocation's own: its command path and every flag it
 set, so a stage, Machine or source selection, an authorization and every other
 choice stay. It runs the verb afresh, so its plan is the one the records then
-current freeze, and an authorization names no plan. A command that acts in a
+current freeze; a bare authorization names no plan, and under that `--yes` an
+`apply` or `destroy` refuses a `data-loss` authorization that does not carry
+the digest of the steps it authorizes
+([authorization](state-reconciliation.md#confirmation-and-authorization)), so
+the repeated command writes a bare `data-loss` as
+`data-loss=<digest bootwright plan prints>` and never authorizes steps nobody
+reviewed. Every other remedy that names a command consuming `data-loss` writes
+the bound form too: the digest where the command authorizes exactly the plan
+the code holds (the continuation of a frozen plan), else that placeholder, so a
+remedy followed literally is never refused for the token's form. A command that acts in a
 context names it with `--context <name>` whether or not the invocation did, and a value no output repeats, a `--from-url`,
 is named by a placeholder such as `<from-url>`. A Secret's `--username` is
 identity metadata rather than secret material
@@ -555,9 +564,11 @@ retry; Bootwright never takes a lease over.
 [transitions](state-reconciliation.md#state-machine),
 [execution rules](state-reconciliation.md#plan-and-execution) and
 [authorization gates](state-reconciliation.md#confirmation-and-authorization).
-The CLI presents the frozen plan and required authorizations, then obtains
-ordinary confirmation unless `--yes` was supplied. A flag bypasses no state
-or safety gate.
+The CLI presents the frozen plan and required authorizations, each bound to
+the digest of the steps that consume it, then obtains ordinary confirmation
+unless `--yes` was supplied. Under `--yes`, or input that cannot answer a
+prompt, an authorization must carry that digest. A flag bypasses no state or
+safety gate.
 
 ### Stage selection
 
@@ -705,10 +716,13 @@ changes the case it governs:
   of a failed removal, which prove the setup before they resolve or register
   anything, are then replaced by it too, and a finalization is not held to it
   and stays offered;
-- over a completed operation, nothing, except over a completed destroy or a
-  completed apply holding a block that is not `done`, which both verbs refuse:
-  there the deletion of the context, as beside unindexed records, which
-  abandons what the operation owns;
+- over a completed operation, nothing, except over a completed destroy holding
+  a block that is not `done`, which both verbs refuse: there the deletion of
+  the context, as beside unindexed records, which abandons what the operation
+  owns; and over a completed apply holding such a block, whose repeated
+  `apply` refuses: there `bootwright destroy --context <name>`, which takes
+  back its whole frozen plan, or `bootwright setup` in its place while setup
+  gates it, then that deletion;
 - over an operation whose continuation or removal reopens a Secret binding the
   context's keyring no longer lists, or whose keyring listing fails reporting
   the material corrupt or undecryptable, as the reopen would, in place of any
@@ -727,10 +741,6 @@ it stopped in, so taking them back is as legitimate a way forward as
 continuing. A completed apply is the exception, for the reason above. These are
 next steps only; the receipt's `next` still names what the operation's own
 records call for.
-
-Not yet met: over a completed apply holding a block that is not `done`, the
-refusals name only `bootwright status` and `status` offers no step; tracked as
-[B816](milestones/backlog.md#b816).
 
 ### Desired and realized state comparison
 

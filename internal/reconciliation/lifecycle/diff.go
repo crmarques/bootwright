@@ -347,6 +347,10 @@ func recordedSide(read diffRead, identity string) RealSide {
 		side.Reason = "destroy " + current.ID + " took it back"
 	case named && status == RealizationPending:
 		side.Reason = "apply " + current.ID + " has not realized it"
+	case named && current.Verb == reconciliation.Destroy && read.partlyRemoved(identity):
+		removed, remaining := read.removalOf(identity)
+		side.State = sideUnknown
+		side.Reason = "destroy " + current.ID + " has removed " + strings.Join(removed, ", ") + " and not yet " + strings.Join(remaining, ", ")
 	case named:
 		side.State, side.Remedy = sideUnknown, reviewStatus(read.context.Name)
 		side.Reason = "its blocks read " + string(status) + ": " + strings.Join(read.blocksOf(identity), ", ")
@@ -376,6 +380,30 @@ func (r diffRead) appliedSide(identity string, realized bool) RealSide {
 		side.State, side.Reason = sideAbsent, "apply "+r.owning.ID+" did not declare it"
 	}
 	return side
+}
+
+// partlyRemoved reports a removal that proved some of an object's blocks gone
+// and has not yet run the others, which proves nothing of the object as a whole.
+func (r diffRead) partlyRemoved(identity string) bool {
+	removed, remaining := r.removalOf(identity)
+	return len(removed) != 0 && len(remaining) != 0 && !slices.ContainsFunc(r.plan.Blocks, func(block reconciliation.Block) bool {
+		state := r.states[block.ID]
+		return block.Kind+"/"+block.Object == identity && (unproved(state) || state == reconciliation.BlockFailed)
+	})
+}
+
+func (r diffRead) removalOf(identity string) ([]string, []string) {
+	var removed, remaining []string
+	for _, block := range r.plan.Blocks {
+		switch {
+		case block.Kind+"/"+block.Object != identity:
+		case r.states[block.ID] == reconciliation.BlockDone:
+			removed = append(removed, block.ID)
+		default:
+			remaining = append(remaining, block.ID)
+		}
+	}
+	return removed, remaining
 }
 
 func (r diffRead) blocksOf(identity string) []string {

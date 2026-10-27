@@ -86,9 +86,9 @@ a changed, missing, corrupt or unparseable entry refuses before the connection,
 and an observed key mismatch refuses before any remote command. No SSH
 configuration, agent, ambient `known_hosts` or user identity is consulted.
 
-Two contexts targeting one SSH host are not coordinated. Only the controller
-arm publishes the host reservations below; the sockets an SSH host's blocks
-claim are compared within their own context alone.
+Two contexts targeting one SSH host are coordinated by the
+[host reservations](#host-reservations) below, which an SSH host's blocks
+publish qualified by that host's declared address and port.
 
 ## Host reservations
 
@@ -196,15 +196,22 @@ resolves no name. Two of its claims on one host whose sockets conflict refuse
 `api.invariant` before registration, naming each claim's kind, service and
 socket, that host, and each Machine through which either claim reaches it over
 SSH when that is not the host's own name, because the second could never
-listen; claims on two hosts never conflict. The socket claims of a managed
-service, an artifact server or an
-[emulated BMC](substrates.md#machine-realization) placed on an SSH host are
-compared only within their context and never published, because two contexts
-targeting one SSH host are not coordinated.
+listen; claims on two hosts never conflict.
 
-Not yet met: an SSH placement recognized as the controller still publishes no
-host-wide claim, so it does not exclude another context's local claim; tracked
-as [B247](milestones/backlog.md#b247).
+Every claim placed over SSH is also published (Q96). One whose placement is
+the controller is published as the controller's own, with its keys as they
+are. Any other, a managed service's, an artifact server's, an
+[emulated BMC's](substrates.md#machine-realization) or a libvirt provider
+host's, is published with every key qualified by its SSH host,
+`ssh/<address>:<port>/<key>`, the address and port written as the host is
+named above with an IPv6 address unbracketed, and holds and releases those
+keys by the controller's conflict relation and release paths, compared only
+with keys of the same qualifier. Two contexts of one store targeting one SSH
+host therefore refuse each other's conflicting claims there. The host is
+named by its declared address only, so two contexts reaching one host by two
+addresses, or by a name and an address, are still not coordinated. A
+qualified key past the record's 256-byte key bound refuses `api.value` while
+the context plans, naming the Machine whose SSH address makes it long.
 
 One claim's keys never conflict with each other, and
 no other key class is compared within a context, because one context's claims

@@ -170,7 +170,7 @@ func stageFlag() flagSpec {
 }
 
 func authorizationFlag() flagSpec {
-	flag := stringFlag("authorize", "Acknowledge a planned risk (data-loss), or present a rotated access credential at its current version (rebind=<secret>)")
+	flag := stringFlag("authorize", "Acknowledge a planned risk (data-loss, or data-loss=<digest> of the steps the plan shows, required with --yes or without a terminal), or present a rotated access credential at its current version (rebind=<secret>)")
 	flag.kind, flag.enum = "stringArray", []string{"data-loss"}
 	return flag
 }

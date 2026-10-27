@@ -21,6 +21,7 @@ QEMU_IMG = "/usr/bin/qemu-img"
 SYSTEMCTL = "/usr/bin/systemctl"
 PODMAN = "/usr/bin/podman"
 RPM = "/usr/bin/rpm"
+IP = "/usr/sbin/ip"
 
 MAX_OUTPUT = 1 << 20
 UNIT_STATES = ("active", "activating", "deactivating", "inactive", "failed")
@@ -362,6 +363,74 @@ def bridge_mtu(name):
         return 0
 
 
+def host_links(runner):
+    """The names of every link the host carries, or None when `ip` did not answer."""
+    code, output = invoke(runner, [IP, "-json", "link", "show"])
+    if code != 0:
+        return None
+    try:
+        return {str(item["ifname"]) for item in json.loads(output or "[]")}
+    except (ValueError, KeyError, TypeError):
+        return None
+
+
+def host_routes(runner):
+    """Every IPv4 and IPv6 route of every table, the host's own addresses included.
+
+    The local table holds a route for each address the host carries, so one
+    listing covers addresses and routes alike. A default route overlaps every
+    prefix and collides with none, so it is left out. None means a listing did
+    not answer, which proves nothing.
+    """
+    routes = []
+    for family, width in (("-4", 32), ("-6", 128)):
+        code, output = invoke(runner, [IP, "-json", family, "route", "show", "table", "all"])
+        if code != 0:
+            return None
+        try:
+            for item in json.loads(output or "[]"):
+                destination = str(item.get("dst") or "")
+                if destination in ("", "default"):
+                    continue
+                if "/" not in destination:
+                    destination += "/" + str(width)
+                prefix = ipaddress.ip_network(destination, strict=False)
+                if prefix.prefixlen:
+                    routes.append((prefix, str(item.get("dev") or "")))
+        except (ValueError, TypeError, AttributeError):
+            return None
+    return routes
+
+
+def collisions(runner, networks, ours):
+    """What on the host a managed network would collide with, before it is defined.
+
+    A link of the managed bridge's name, or a route overlapping the managed
+    prefix, identical or nested, collides unless a network this context owns
+    and runs holds it (`ours`, by bridge). The second value is whether the
+    host answered: a listing it did not answer proves nothing.
+    """
+    managed = [network for network in networks if network.get("managed")]
+    if not managed:
+        return [], True
+    links, routes = host_links(runner), host_routes(runner)
+    if links is None or routes is None:
+        return [], False
+    found = []
+    for network in managed:
+        name, bridge = str(network["name"]), str(network["bridge"])
+        if bridge in links and bridge not in ours:
+            found.append("link %s, which no network of this context runs: change the bridge of attachment %s" % (bridge, name))
+        address = str(network.get("address") or "")
+        if not address:
+            continue
+        prefix = ipaddress.ip_network(address, strict=False)
+        for route, device in routes:
+            if device not in ours and route.version == prefix.version and route.overlaps(prefix):
+                found.append("route %s dev %s, which overlaps %s: change the address of attachment %s" % (route, device or "none", prefix, name))
+    return sorted(set(found)), True
+
+
 def pool_target(runner, uri, name):
     """The target path one pool's definition names, or None when it cannot be read."""
     code, output = virsh(runner, uri, "pool-dumpxml", name)
@@ -629,13 +698,16 @@ def observe_host(runner, request):
     an external network, never read, carries none. `drifted` names each owned
     managed network that runs another definition than its frozen entry, which
     only a restart converges, with the `guests` a restart would cut off and
-    whether the hypervisor answered for them all; evidence never carries it.
+    whether the hypervisor answered for them all; evidence never carries it,
+    nor `collisions`, what a managed network would collide with on the host,
+    or `collisionsAnswered`, whether the host answered for its links and
+    routes.
     Each managed network answered for reports `autostart`, whether it starts
     with the host, and `owned` only when its metadata names this context and
     that network. `poolAutostart` is whether the pool starts with the host and
     `poolOwned` whether it targets the frozen directory.
     """
-    networks, drifted = [], []
+    networks, drifted, ours = [], [], set()
     answers = uri_answers(runner, request["uri"])
     context = str((request.get("identity") or {}).get("context") or "")
     for network in request.get("networks") or []:
@@ -648,6 +720,8 @@ def observe_host(runner, request):
             state = network_state(runner, request["uri"], network["name"], network, context)
             entry["answered"], entry["definition"], entry["state"] = state["answered"], state["definition"], state["state"]
             entry["owned"], entry["uuid"], entry["autostart"] = state["owned"], state["uuid"], state["autostart"]
+            if state["owned"] and state["state"] == "active":
+                ours.update({str(network["bridge"]), str(state["bridge"] or "")} - {""})
             if state["drifted"]:
                 guests = network_guests(runner, request["uri"], network["name"], state["bridge"], context)
                 drifted.append({"name": network["name"], "guests": guests or [], "guestsAnswered": guests is not None})
@@ -662,7 +736,10 @@ def observe_host(runner, request):
             "state": unit_state(runner, service),
             "enabled": unit_enabled(runner, service),
         })
+    collided, probed = collisions(runner, request.get("networks") or [], ours)
     return {
+        "collisions": collided,
+        "collisionsAnswered": probed,
         "directory": os.path.lexists(request["poolPath"]),
         "firewallReady": observe_firewall_ready(runner, request),
         "drifted": drifted,

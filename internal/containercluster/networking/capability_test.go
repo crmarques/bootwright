@@ -47,7 +47,7 @@ func TestNetworkPartialReceiptsSurviveButUnsafeEvidenceDoesNot(t *testing.T) {
 		t.Fatal("no create")
 	}
 	for _, valid := range []bool{true, false} {
-		evidence := driver.Evidence{Version: evidenceVersion, Request: block.RequestDigest, Classification: "partial", Evidence: co.Evidence{Receipts: []co.Receipt{{Ref: owned.Ref, UID: "uid", DesiredDigest: owned.DesiredDigest, Disposition: "created"}}, OLM: []co.OLMFacts{}, Dependents: []co.DependentFacts{}, Checks: []co.CheckResult{}, Observations: []co.ObjectObservation{}}}
+		evidence := driver.Evidence{Version: evidenceVersion, Request: block.RequestDigest, Classification: "partial", Evidence: co.Evidence{Receipts: []co.Receipt{{Ref: owned.Ref, UID: "uid", DesiredDigest: owned.DesiredDigest, Disposition: "created", Basis: co.Created}}, OLM: []co.OLMFacts{}, Dependents: []co.DependentFacts{}, Checks: []co.CheckResult{}, Observations: []co.ObjectObservation{}}}
 		if !valid {
 			evidence.Receipts[0].UID = "unsafe\nvalue"
 		}

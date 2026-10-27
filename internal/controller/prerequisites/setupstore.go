@@ -77,9 +77,17 @@ func SetupLaunchRefusal(v SetupView) error {
 	case v.Foreign != "":
 		return diagnostics.NewFailureWithRemediation("controller.state", "the controller setup record was written by another Bootwright build", "", setupStateRemedy)
 	case v.State.Pending != nil:
-		return diagnostics.NewFailureWithRemediation("controller.state", "a controller setup ("+v.State.Pending.ID+") was interrupted before it finished", "", setupStateRemedy)
+		return diagnostics.NewFailureWithRemediation("controller.state", "a controller setup ("+v.State.Pending.ID+") was interrupted before it finished", "", interruptedSetupRemedy(v.State.Receipt))
 	}
 	return nil
+}
+
+func interruptedSetupRemedy(receipt *HostReceipt) string {
+	remedy := setupStateRemedy + ", adding --wheel-mirror <mirror> on a host that cannot reach the wheel origins"
+	if receipt == nil || receipt.Lock == "" {
+		return remedy
+	}
+	return remedy + ", or run the setup of the Bootwright build whose lock the receipt names (" + receipt.Lock + ") to keep its runtime"
 }
 
 func DiscardForeignSetupAction(format string) string {

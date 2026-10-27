@@ -80,7 +80,7 @@ def place(params):
         differing = model.difference(body["metadata"].get("labels", {}), live["metadata"].get("labels", {}), "metadata.labels")
         if differing:
             return {"accepted": False, "difference": differing}
-        return {"accepted": True, "equal": True, "uid": live["metadata"]["uid"]}
+        return {"accepted": True, "equal": True, "uid": live["metadata"]["uid"], "basis": model.basis(obj, live, params["context"])}
     argv = ["create", "--filename=-", "--namespace", obj["namespace"], "--field-manager", params["manager"], "-o", "name"]
     code, ignored_output, ignored_error = native.run(params["oc"], params["kubeconfig"], argv, params["deadline"], json.dumps(body))
     # A read after any create resolves a response lost after the API persisted it.
@@ -89,5 +89,6 @@ def place(params):
         differing = model.difference(body["data"], live.get("data"), "data", strict=True)
         labels = model.difference(body["metadata"].get("labels", {}), live["metadata"].get("labels", {}), "metadata.labels")
         if not differing and not labels and live.get("type") == body["type"]:
-            return {"accepted": True, "equal": code != 0, "uid": live["metadata"]["uid"]}
+            basis = "created" if code == 0 else model.basis(obj, live, params["context"])
+            return {"accepted": True, "equal": code != 0, "uid": live["metadata"]["uid"], "basis": basis}
     return {"accepted": False, "unknown": live is False}

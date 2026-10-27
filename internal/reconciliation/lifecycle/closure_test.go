@@ -182,11 +182,12 @@ func TestAPythonZStreamUpdateContinues(t *testing.T) {
 // A build with another runtime lock, or a setup that chose an interpreter of
 // another ABI, carries another closure, so a continuation of either verb
 // refuses before it restores its log or marks its operation running. The
-// refusal names the kept runtime the registering build continues it with,
-// and an apply also the removal that takes back what it owns; restoring the
+// refusal names the registering build's setup, which restores that runtime
+// from the network or a wheel mirror, then its continuation, and an apply also
+// the removal that takes back what it owns; restoring the
 // lock the operation registered under continues it.
 func TestALockChangeRefusesContinuationNamingTheKeptRuntime(t *testing.T) {
-	const kept = "continue it with bootwright devel (abcdef1), whose runtime this host keeps (Python 3.14, ansible-core 2.21.5)"
+	const kept = "run the setup of bootwright devel (abcdef1), which restores its runtime (Python 3.14, ansible-core 2.21.5), fetching any wheel its cache no longer holds over the network or with --wheel-mirror <mirror>, then continue it with that build"
 	for _, change := range []struct {
 		name    string
 		move    func(*harness)

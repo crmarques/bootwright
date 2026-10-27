@@ -1,5 +1,5 @@
 implementation: cluster-network-v1
-content-digest: d88db7f8f1ee3c9e02902ffe1bec80b514a7218367da863cfd4f2ec5be75ca6f
+content-digest: 22b0c5e94a22737fdeb15928666467a794fc4e36d723c782fdeadb4157809fa3
 request-version: cluster-network-request-v1
 automation-formats: none
 mark-formats: bootwright.cluster-objects.owner-v1, bootwright.io/owner
@@ -41,6 +41,7 @@ evidence-schema:
   receipts[].uid string
   receipts[].desiredDigest string
   receipts[].disposition string
+  receipts[].basis string
   olm []struct clusterobjects.OLMFacts
   olm[].namespace string
   olm[].subscription string

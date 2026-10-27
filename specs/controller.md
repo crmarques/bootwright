@@ -831,13 +831,10 @@ digest and the ABI, with the ABI and `ansible-core` release a refusal names
 An OS Python z-stream update, an OS release upgrade that keeps the ABI, and any
 rebuild with the same lock continue a live operation; a new lock or another
 ABI refuses its continuation, naming the build that registered it, whose setup
-restores its runtime, fetching any wheel the cache no longer holds, or the
-destroy that takes back what it owns.
-
-Not yet met: that refusal says this host keeps the registering build's
-runtime, which [retention](#publication-and-interrupted-setup) or a
-setup-format discard may have retired; tracked as
-[B816](milestones/backlog.md#b816).
+restores its runtime, fetching any wheel the cache no longer holds over the
+network or with `--wheel-mirror`, because [retention](#publication-and-interrupted-setup)
+keeps only the current and previous runtimes and a setup-format discard keeps
+none, or the destroy that takes back what it owns.
 
 No service port or container name is reserved by setup.
 [Infrastructure services](infrastructure-services.md#host-reservations) defines
@@ -858,23 +855,24 @@ GitOps readiness.
 **Intent before effect.** Before dnf or the runtime build runs, setup writes
 and synchronizes the pending intent: its run ID, plan digest, remaining
 actions and start time. Each finished action shortens that list, and the
-receipt written last clears it. Interrupted or failed setup may leave approved
+receipt written last clears it. A setup that fails before any dnf transaction
+began, as a failed wheel fetch does, also clears it, because a runtime
+publishes only whole and nothing else changed, so the runtime a kept receipt
+names still launches. Interrupted or failed setup may leave approved
 packages installed; nothing is rolled back, and shared OS packages are never
 removed.
 
 **An unknown outcome blocks every consumer.** A launch that finds the pending
 intent refuses `controller.state`, "a controller setup (`setup-000042`) was
 interrupted before it finished", with the remedy `run bootwright setup`, adding
-`--wheel-mirror` on a host that cannot reach the wheel origins, or, when a
-receipt names one, the setup of the build whose runtime it names. Setup itself
+`--wheel-mirror <mirror>` on a host that cannot reach the wheel origins, or,
+when it keeps a receipt, the setup of the build whose lock that receipt names,
+which keeps its runtime. Setup itself
 re-inspects: its plan names the interrupted run and the step it stopped in and
 asks for confirmation, then installs only what is still missing and publishes
 a runtime only whole, so both effects are idempotent. No stranded, abandoned
 or canceled receipt exists, and no setup refuses an earlier one's route or
 executable.
-
-Not yet met: the remedy names only `run bootwright setup`; tracked as
-[B816](milestones/backlog.md#b816).
 
 **Format healing.** A setup record that cannot be read or carries another
 format, or a setup subtree holding an entry this build does not list, is

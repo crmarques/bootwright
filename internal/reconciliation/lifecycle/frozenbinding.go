@@ -104,7 +104,7 @@ func (s Service) lostBinding(ctx context.Context, name string, decided transitio
 	}
 	objects := objectsOf(decided.plan)
 	if !decided.fresh {
-		objects = objectsOf(ownedBy(decided.operation.Verb, decided.plan, decided.states))
+		objects = objectsOf(coveredBy(decided.operation, decided.plan, decided.states))
 	}
 	return failure("lifecycle.state",
 		lostBindingMessage(decided.basis.record, binding, why, objects),
@@ -131,13 +131,17 @@ func lostBindingExit(name string) string {
 	return "bootwright context delete --name " + name + " --purge --allow-orphans"
 }
 
-// ownedBy is what an operation still owns: every block an apply started, or
-// every block a removal has not yet proved gone.
-func ownedBy(verb reconciliation.Verb, plan reconciliation.Plan, states map[string]reconciliation.BlockState) reconciliation.Plan {
-	if verb == reconciliation.Apply {
-		return reconciliation.OwnedSubset(plan, states)
+// coveredBy is what a removal of an operation takes back, and so what every view
+// of its ownership reports: a completed apply's whole plan, an incomplete
+// apply's started blocks, or a removal's blocks not yet proved gone.
+func coveredBy(operation operationstore.Operation, plan reconciliation.Plan, states map[string]reconciliation.BlockState) reconciliation.Plan {
+	switch {
+	case operation.Verb != reconciliation.Apply:
+		return reconciliation.RemainingSubset(plan, states)
+	case operation.State == reconciliation.OperationDone:
+		return completedOwnership(plan)
 	}
-	return reconciliation.RemainingSubset(plan, states)
+	return reconciliation.OwnedSubset(plan, states)
 }
 
 // objectsOf names each API object a plan's blocks realize, once, in bytewise
@@ -199,7 +203,7 @@ func frozenReopenOf(ctx context.Context, store OperationStore) (frozenReopen, er
 		return frozenReopen{}, nil
 	}
 	return frozenReopen{
-		operation: operation, binding: binding, objects: objectsOf(ownedBy(operation.Verb, plan, states)),
+		operation: operation, binding: binding, objects: objectsOf(coveredBy(operation, plan, states)),
 		finalizes: operation.Verb == reconciliation.Apply && !pendingRemains(plan, states) && slices.Contains([]reconciliation.OperationState{
 			reconciliation.OperationRunning, reconciliation.OperationUnknown, reconciliation.OperationFailed,
 		}, operation.State),

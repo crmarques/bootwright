@@ -37,7 +37,7 @@ func contractAddonRow() contractRow {
 	for _, ref := range refs {
 		objects = append(objects, co.ObjectObservation{Ref: ref, Ownership: co.Absent})
 	}
-	return contractRow{kind: instance.Kind, implementation: instance.Implementation, example: "addon-fixture", retirementOnly: true, retains: true, removalObservesNothing: "specs/add-ons.md Retirement: removal retires from the frozen request without contacting the cluster", presence: contractAddonPresence, absence: map[string]any{"version": "addon-instance-evidence-v2", "retired": true}, noEffect: map[string]any{"version": "addon-instance-evidence-v2", "observations": objects, "checks": []co.CheckResult{{Index: 0}}, "olm": []co.OLMFacts{{Namespace: "fixture", Subscription: "fixture"}}}, drift: map[string]any{"olm": []co.OLMFacts{{Namespace: "fixture", Subscription: "fixture", InstalledCSV: "unexpected.v2.0.0"}}}}
+	return contractRow{kind: instance.Kind, implementation: instance.Implementation, example: "addon-fixture", retirementOnly: true, retains: true, removalObservesNothing: "specs/add-ons.md Retirement: removal retires from the frozen request without contacting the cluster", presence: contractAddonPresence, absence: map[string]any{"version": "addon-instance-evidence-v3", "retired": true}, noEffect: map[string]any{"version": "addon-instance-evidence-v3", "observations": objects, "checks": []co.CheckResult{{Index: 0}}, "olm": []co.OLMFacts{{Namespace: "fixture", Subscription: "fixture"}}}, drift: map[string]any{"olm": []co.OLMFacts{{Namespace: "fixture", Subscription: "fixture", InstalledCSV: "unexpected.v2.0.0"}}}}
 }
 func contractAddonState(state *compilation.State) *compilation.State {
 	catalog := state.Effective()
@@ -82,7 +82,7 @@ func contractAddonPresence(t *testing.T, execution lifecycle.Execution) map[stri
 	if err != nil {
 		t.Fatal(err)
 	}
-	evidence := instance.Evidence{Version: "addon-instance-evidence-v2", Postcondition: true, Evidence: co.Evidence{Observations: []co.ObjectObservation{}, Receipts: []co.Receipt{}, Checks: []co.CheckResult{}, OLM: []co.OLMFacts{}, Dependents: []co.DependentFacts{}}}
+	evidence := instance.Evidence{Version: "addon-instance-evidence-v3", Postcondition: true, Evidence: co.Evidence{Observations: []co.ObjectObservation{}, Receipts: []co.Receipt{}, Checks: []co.CheckResult{}, OLM: []co.OLMFacts{}, Dependents: []co.DependentFacts{}}}
 	checks := len(program.Checks)
 	for _, step := range program.Steps {
 		checks += len(step.Wait)
@@ -93,7 +93,7 @@ func contractAddonPresence(t *testing.T, execution lifecycle.Execution) map[stri
 		}
 		if object != nil {
 			evidence.Observations = append(evidence.Observations, co.ObjectObservation{Ref: object.Ref, Ownership: co.Own, Equal: true})
-			evidence.Receipts = append(evidence.Receipts, co.Receipt{Ref: object.Ref, UID: "uid-" + object.Name, DesiredDigest: object.DesiredDigest, Disposition: "created"})
+			evidence.Receipts = append(evidence.Receipts, co.Receipt{Ref: object.Ref, UID: "uid-" + object.Name, DesiredDigest: object.DesiredDigest, Disposition: "created", Basis: co.Created})
 		}
 	}
 	for i := range checks {

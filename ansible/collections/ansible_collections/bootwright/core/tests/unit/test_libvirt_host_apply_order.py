@@ -156,3 +156,29 @@ def test_a_drifted_network_is_refused_before_any_effect_or_restarted_between_its
         tasks, lambda task: task.get("register") == "substrate_libvirt_host_after", "observes what the apply proves",
     )
     assert define < stop < start < proof
+
+
+# libvirt checks a collision only partly and only once a network starts, so
+# both collision refusals read the observation taken once the drivers run and
+# come before the first task that defines, starts or writes anything.
+def test_a_managed_network_that_collides_with_the_host_is_refused_before_any_definition():
+    tasks = apply_tasks()
+    running = drivers_run(tasks)
+    answered = index_of(
+        tasks, lambda task: conditions_of(task) == ["substrate_libvirt_host_running.observation.collisionsAnswered"],
+        "refuses collisions the host did not answer for",
+    )
+    collided = index_of(
+        tasks, lambda task: conditions_of(task) == ["substrate_libvirt_host_running.observation.collisions | length == 0"],
+        "refuses a collision",
+    )
+    observed = index_of(
+        tasks, lambda task: task.get("register") == "substrate_libvirt_host_running", "observes once the drivers run",
+    )
+    effect = next(
+        index for index, task in enumerate(tasks)
+        if index > observed and (
+            "ansible.builtin.file" in task or "ansible.builtin.template" in task
+            or (argv_of(task)[:1] == ["/usr/bin/virsh"] and argv_of(task)[-1:] != ["version"]))
+    )
+    assert running < observed < answered < collided < effect

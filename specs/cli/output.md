@@ -288,7 +288,9 @@ and `deferred` are the counts of the `Concurrency` and selection fields below;
 `continuation` and `finalizes` say whether a preview continues an operation or
 only completes its finalization; `stops` and `stopsAfterOnline` name the
 Machines of `Stop first` and `Stop after online cleanup`; `anotherBuild` carries
-`registeredBy` and the `steps` places this build runs; `settled` says the result
+`registeredBy` and the `steps` places this build runs; `authorizations`, present
+when the plan consumes one, lists each required token bound to the digest of
+its steps, as `data-loss=<digest>`; `settled` says the result
 performed no work and `recovered` names what it first completed; and `next` is
 the command of the `Next` field.
 
@@ -690,8 +692,9 @@ plan order the Machines whose initial removal quiescence gate observes on the ho
 as `Stop first  rhel-01, rhel-02`, because that gate follows the prompt; a
 continuation is not gated again and carries none. Every
 presentation of a plan that consumes an authorization closes with a `Requires`
-field naming each token the whole frozen plan requires and the steps that
-consume it, as `--authorize data-loss (step 3, 5)`; a finalization's preview
+field naming each token the whole frozen plan requires, bound to the digest of
+the steps that consume it, and those steps, as
+`--authorize data-loss=3f2a9c01b7e4d6a8 (step 3, 5)`; a finalization's preview
 carries none, because the `apply` or `destroy` that completes it runs no block
 and requires no authorization. With a stage selection,
 each pending step also says whether this invocation would start it, that it is
@@ -768,10 +771,6 @@ reads `pending`. An object no operation names keeps what its declaration gives
 it: `unsupported` for the reasons above, else `pending`. Human `status`
 presents them as `[SKIPPED]`, `[PENDING]`, `[OK]`, `[FAIL]` and `[UNKNOWN]`,
 and any other value as `[UNKNOWN]`.
-
-Not yet met: a removal block proved gone makes its object `pending` although
-other removal blocks of the object have not run; tracked as
-[B816](../milestones/backlog.md#b816).
 
 Rows sort by their documented key: checks in the order above, blocks in frozen
 order, contradictions in the order their refusal names them, resources in API

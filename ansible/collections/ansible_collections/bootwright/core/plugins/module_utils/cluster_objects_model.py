@@ -7,7 +7,7 @@ import re
 from datetime import datetime
 from urllib.parse import urlsplit
 
-VERSION = "cluster-objects-v1"
+VERSION = "cluster-objects-v2"
 OWNER = "bootwright.io/owner"
 DOMAIN = "bootwright.cluster-objects.owner-v1"
 REF_KEYS = ("apiVersion", "kind", "namespace", "name", "namespaced")
@@ -58,6 +58,18 @@ def ownership(obj, live, context):
     except (KeyError, TypeError, ValueError):
         return "unknown"
     return "own" if recent else "foreign"
+
+
+def basis(obj, live, context):
+    """How ownership of a present object this block owns was established.
+
+    A receipt whose uid the object carries proves it outright; otherwise the
+    owner mark recovered it, after a receipt lost with an interrupted attempt.
+    """
+    receipt = next((r for r in context.get("receipts", []) if identity(r) == identity(obj)), None)
+    if receipt is not None and receipt.get("uid") == (live or {}).get("metadata", {}).get("uid"):
+        return "uid-matched"
+    return "mark-recovered"
 
 
 def difference(wanted, live, path="", strict=False):

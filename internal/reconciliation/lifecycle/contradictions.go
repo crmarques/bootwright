@@ -73,21 +73,9 @@ func refuseContradictions(ctx context.Context, store OperationStore, contextName
 // dependency is done and a done block never changes; a block that lost its
 // record beside an attempt of it, since a start publishes the block record
 // first; and a failed apply holding a block that is not done, yet no failed or
-// unknown block and no running block its record counts as retried, since an
-// apply records failed only once a block failed, a failed block changes only
-// through a retry that first marks the apply running, and a running or unknown
-// block changes only through a resolution, before which a continuation marks
-// the apply running and a removal records a failed apply in the state its
-// blocks give it, which is failed only while another block is. A failed apply
-// whose blocks are all done is no contradiction: its record lags them, and a
-// removal takes back its whole frozen plan. A retry whose start published its
-// running record and then reported a failure leaves the apply failed beside
-// that running block, which is no contradiction: the block counts the attempt
-// it retried as well, and its outcome is unproved, so the removal resolves it
-// before it registers. A running block with a single attempt is never that
-// retry, so it accounts for nothing. An unknown apply without an unknown block
-// is not one of them either: a removal interrupted after resolving that block
-// and before recording the apply leaves it so.
+// unknown block, since an operation is recorded from its block records alone
+// (F09-06). A failed apply whose blocks are all done is no contradiction: its
+// record lags them, and a removal takes back its whole frozen plan.
 func contradictions(operation operationstore.Operation, frozen reconciliation.Plan, states map[string]reconciliation.BlockState, attempts map[string]int, lost []string) []string {
 	read := func(id string) reconciliation.BlockState {
 		if state := states[id]; state != "" {
@@ -101,8 +89,6 @@ func contradictions(operation operationstore.Operation, frozen reconciliation.Pl
 		state := read(block.ID)
 		switch {
 		case state == reconciliation.BlockFailed, state == reconciliation.BlockUnknown:
-			accounted = true
-		case state == reconciliation.BlockRunning && attempts[block.ID] > 1:
 			accounted = true
 		}
 		if state != reconciliation.BlockDone {

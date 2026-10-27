@@ -14,6 +14,8 @@ import (
 // controller record stores them (specs/contexts/controller-record.md, Bounds).
 const MaxReservationKeys = 64
 
+const MaxReservationKeyBytes = 256
+
 // Conflict is one exclusive key another context holds and the key of this
 // context's claim it conflicts with.
 type Conflict struct {
@@ -57,9 +59,34 @@ func firstConflict(holder HostReservation, heldKey string, wanted []HostReservat
 	return Conflict{}, false
 }
 
+func QualifiedKeys(qualifier string, keys []string) []string {
+	qualified := make([]string, 0, len(keys))
+	for _, key := range keys {
+		qualified = append(qualified, qualifier+key)
+	}
+	return qualified
+}
+
+func unqualified(key string) (string, string) {
+	rest, found := strings.CutPrefix(key, "ssh/")
+	if !found {
+		return "", key
+	}
+	host, key, found := strings.Cut(rest, "/")
+	if !found {
+		return "", "ssh/" + rest
+	}
+	return "ssh/" + host + "/", key
+}
+
 func keysConflict(first, second string) bool {
 	if first == second {
 		return true
+	}
+	firstHost, first := unqualified(first)
+	secondHost, second := unqualified(second)
+	if firstHost != secondHost {
+		return false
 	}
 	if ours, ok := socketKey(first); ok {
 		theirs, ok := socketKey(second)
@@ -106,7 +133,8 @@ var conflictKinds = map[string]api.Kind{
 // held key, so the remedy is that destroy or the field that chooses the key.
 // It is a function rather than a method so Conflict stays a plain value.
 func ConflictDiagnostic(c Conflict) diagnostics.Diagnostic {
-	class, _, _ := strings.Cut(c.HeldKey, ":")
+	_, heldKey := unqualified(c.HeldKey)
+	class, _, _ := strings.Cut(heldKey, ":")
 	wantedPart := "the same " + class + " reservation"
 	switch class {
 	case "socket", "bridge", "prefix":
@@ -130,18 +158,27 @@ func conflictObject(claim HostReservation) string {
 }
 
 func describeKey(key string) string {
+	host, key := unqualified(key)
+	on := ""
+	if host != "" {
+		endpoint := strings.TrimSuffix(strings.TrimPrefix(host, "ssh/"), "/")
+		if separator := strings.LastIndexByte(endpoint, ':'); strings.Count(endpoint, ":") > 1 {
+			endpoint = "[" + endpoint[:separator] + "]" + endpoint[separator:]
+		}
+		on = " on the SSH host " + endpoint
+	}
 	class, value, _ := strings.Cut(key, ":")
 	switch class {
 	case "socket":
 		if socket, ok := socketKey(key); ok {
-			return "socket " + socket.text()
+			return "socket " + socket.text() + on
 		}
 	case "bridge":
-		return "bridge " + value
+		return "bridge " + value + on
 	case "prefix":
-		return "managed network prefix " + value
+		return "managed network prefix " + value + on
 	}
-	return "a " + class + " reservation"
+	return "a " + class + " reservation" + on
 }
 
 // conflictField names the field that chooses a key of this context's claim,
@@ -259,8 +296,9 @@ func ReleaseConflicts(held []HostReservation, contextName string) []Conflict {
 }
 
 func releaseGuard(key string, shared bool) (string, bool) {
+	host, key := unqualified(key)
 	if bridge, found := strings.CutPrefix(key, "bridge:"); found && !shared {
-		return "bridge-use:" + bridge, true
+		return host + "bridge-use:" + bridge, true
 	}
 	if strings.HasPrefix(key, "bmc:") && shared {
 		return key, false

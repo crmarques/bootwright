@@ -77,7 +77,30 @@ under the
 [Infrastructure services conflict contract](../infrastructure-services.md#host-reservations).
 Each entry contains the context name, capability kind, service name and a sorted
 unique key list, plus a shared marker present only on a shared claim; entries
-are ordered by context name then kind then service.
+are ordered by context name then kind then service. A claim a block places on
+an SSH host that is not the controller prefixes every key with
+`ssh/<address>:<port>/`, the SSH address as declared (an IP in canonical form,
+unbracketed, a DNS name without case or a final dot) and port its placement
+connects to; keys with two qualifiers, or one and none, never conflict, and
+keys with one qualifier conflict by their class's relation. Version 3 holds
+keys with or without the qualifier, side by side in one record: the qualifier
+was added under version 3 (Q96) without a version move, because every earlier
+entry is a valid unqualified claim, so a record an earlier build wrote reads
+unchanged and each context publishes its SSH-qualified claims on its next
+apply. A record of any other version is not read, and no build converts one.
+A controller read and every context transaction refuse with `context.state`,
+"controller evidence version N is unsupported: this build reads version 3 only
+and converts none", and the same fresh-install remedy a registry version 5
+names ([contexts](../contexts.md#storage-locking-and-publication)): with the
+build that wrote the record, destroy each environment and delete each context,
+then, as root, remove `/var/lib/bootwright` and `/var/lib/bootwright-staging`
+and run `bootwright setup`. No command rebuilds the record alone: it is
+published by the first binding of an apply on a root that holds none, and a
+root holding one never gets a second. The fresh install also drops the host's
+contexts with their Secrets and its stored media, which `bootwright context init`
+and `bootwright media add` recreate from the input directories and images; the
+refusal says so and leaves the record unchanged
+(`TestAControllerRecordOfAnotherVersionNamesTheFreshInstall`).
 Workspace stores them and, before it publishes a context's entries, applies
 the conflict relation each key class has under that contract (equal keys,
 a wildcard socket and a socket on its port, overlapping prefixes), which the

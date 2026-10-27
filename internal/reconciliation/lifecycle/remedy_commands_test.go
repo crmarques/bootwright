@@ -43,11 +43,12 @@ func authorizedApply(h *harness) error {
 // its frozen plan consumes.
 func TestAnUnobservedBlockNamesTheCommandThatObservesIt(t *testing.T) {
 	h := newPlannedHarness(t, []reconciliation.BlockDefinition{destructive("alpha")})
+	shown := shownBinding(t, h, "lab")
 	h.capability.outcomeFor = map[string]Result{"alpha": {Outcome: reconciliation.OutcomeUnknown}}
 	if err := authorizedApply(h); err == nil {
 		t.Fatal("an apply whose block is unknown completed")
 	}
-	want := "run bootwright apply --context lab --authorize data-loss, which observes it before anything else starts"
+	want := "run bootwright apply --context lab --authorize " + shown + ", which observes it before anything else starts"
 	if got := blockUnresolved(t, h, "alpha"); got.Remedy != want {
 		t.Fatalf("status names %+v, want remedy %q", got, want)
 	}
@@ -57,6 +58,7 @@ func TestAnUnobservedBlockNamesTheCommandThatObservesIt(t *testing.T) {
 // observes it again.
 func TestAnUnresolvedBlockNamesItsExactRetry(t *testing.T) {
 	h := newPlannedHarness(t, []reconciliation.BlockDefinition{destructive("alpha")})
+	shown := shownBinding(t, h, "lab")
 	h.capability.outcomeFor = map[string]Result{"alpha": {Outcome: reconciliation.OutcomeUnknown}}
 	if err := authorizedApply(h); err == nil {
 		t.Fatal("an apply whose block is unknown completed")
@@ -64,7 +66,7 @@ func TestAnUnresolvedBlockNamesItsExactRetry(t *testing.T) {
 	h.capability.outcomeFor = nil
 	reported := diagnostics.Of(authorizedApply(h))
 	if len(reported) == 0 || reported[0].Code != "lifecycle.unknown" ||
-		!strings.HasSuffix(reported[0].Remediation, ", then repeat bootwright apply --context lab --authorize data-loss to observe it again") {
+		!strings.HasSuffix(reported[0].Remediation, ", then repeat bootwright apply --context lab --authorize "+shown+" to observe it again") {
 		t.Fatalf("the resolution reported %+v", reported)
 	}
 	// A removal resolves the apply's block by its own check, so the command
@@ -73,7 +75,7 @@ func TestAnUnresolvedBlockNamesItsExactRetry(t *testing.T) {
 	_, err := h.service.Destroy(context.Background(), DestroyRequest{ContextName: "lab", Authorizations: []string{"data-loss"}, SkipConfirmation: true})
 	reported = diagnostics.Of(err)
 	if len(reported) == 0 || reported[0].Code != "lifecycle.unknown" ||
-		!strings.HasSuffix(reported[0].Remediation, ", then repeat bootwright destroy --context lab --authorize data-loss to observe it again") {
+		!strings.HasSuffix(reported[0].Remediation, ", then repeat bootwright destroy --context lab --authorize "+unfixed+" to observe it again") {
 		t.Fatalf("the removal reported %+v", reported)
 	}
 }
@@ -85,6 +87,7 @@ func TestAStageAttemptCarriesItsContinuation(t *testing.T) {
 	stage := destructive("clients")
 	stage.Stage = reconciliation.StageController
 	h := newPlannedHarness(t, []reconciliation.BlockDefinition{stage})
+	shown := shownBinding(t, h, "lab")
 	h.capability.outcomeFor = map[string]Result{"clients": {Outcome: reconciliation.OutcomeUnknown}}
 	if err := authorizedApply(h); err == nil {
 		t.Fatal("an apply whose block is unknown completed")
@@ -101,7 +104,7 @@ func TestAStageAttemptCarriesItsContinuation(t *testing.T) {
 	for _, execution := range h.capability.executions {
 		continuations = append(continuations, execution.Continuation)
 	}
-	want := []string{"bootwright apply --context lab --authorize data-loss", "", ""}
+	want := []string{"bootwright apply --context lab --authorize " + shown, "", ""}
 	if strings.Join(continuations, "|") != strings.Join(want, "|") {
 		t.Fatalf("the attempts carried %q, want %q", continuations, want)
 	}

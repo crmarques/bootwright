@@ -30,12 +30,16 @@ func TestASoleEmptyOccurrenceOfARepeatableFlagIsAUsageError(t *testing.T) {
 	}
 }
 
-// --authorize takes data-loss and one rebind=<secret> per rotated access
-// credential, each at most once; anything else is a usage error before any
-// call.
+// --authorize takes data-loss, bare or bound to the 16-digit digest of the
+// steps a plan shows, and one rebind=<secret> per rotated access credential,
+// each at most once; anything else is a usage error before any call.
 func TestAuthorizeAcceptsDataLossAndNamedRebindsOnly(t *testing.T) {
-	want := "  error  cli.usage\n    --authorize accepts data-loss and rebind=<secret>, each at most once\n"
+	want := "  error  cli.usage\n    --authorize accepts data-loss or data-loss=<digest> and rebind=<secret>, each at most once\n"
 	for _, args := range [][]string{
+		{"apply", "--authorize", "data-loss="},
+		{"apply", "--authorize", "data-loss=ABCDEF0123456789"},
+		{"apply", "--authorize", "data-loss=0123456789abcdef0"},
+		{"apply", "--authorize", "data-loss,data-loss=0123456789abcdef"},
 		{"destroy", "--authorize", "rebind="},
 		{"destroy", "--authorize", "rebind=Not_A_Name"},
 		{"destroy", "--authorize", "rebind=bmc,rebind=bmc"},
@@ -49,6 +53,7 @@ func TestAuthorizeAcceptsDataLossAndNamedRebindsOnly(t *testing.T) {
 	}
 	for _, args := range [][]string{
 		{"destroy", "--authorize", "data-loss,rebind=bmc", "--yes"},
+		{"destroy", "--authorize", "data-loss=0123456789abcdef", "--yes"},
 		{"apply", "--authorize", "rebind=bmc", "--authorize", "rebind=registry-login", "--yes"},
 	} {
 		if code, _, errOut, record := runRecorded(args); code == 2 || record.calls != 1 {
