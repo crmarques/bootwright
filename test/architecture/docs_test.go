@@ -20,15 +20,21 @@ import (
 )
 
 // docsByteBudgets bounds the files an agent reads at the start of every task or
-// every tracked edit, each .claude/rules page among them. A budget more than a
-// tenth above its file's size fails, so each one follows its file down; never
-// raise one to admit growth that belongs in an on-demand page.
+// every tracked edit, each .claude/rules page among them, and the opening of
+// each milestone page (key path#opening: the bytes before its first level-2
+// heading), which a slice task reads whole beside its row and section. A
+// budget more than a tenth above its size fails, so each one follows its file
+// down; never raise one to admit growth that belongs in an on-demand page.
 func docsByteBudgets() map[string]int {
 	return map[string]int{
-		"AGENTS.md":           2516,
-		"CLAUDE.md":           12,
-		"specs/index.md":      4008,
-		"specs/milestones.md": 8192,
+		"AGENTS.md":                                   2516,
+		"CLAUDE.md":                                   12,
+		"specs/index.md":                              5952,
+		"specs/milestones.md":                         8576,
+		"specs/milestones/m1.md#opening":              1792,
+		"specs/milestones/m2.md#opening":              6400,
+		"specs/milestones/m3.md#opening":              5504,
+		"specs/milestones/m4.md#opening":              4096,
 		".agents/skills/code-implementation/SKILL.md": 3072,
 		".claude/rules/ansible.md":                    440,
 		".claude/rules/go.md":                         564,
@@ -461,23 +467,87 @@ func TestDocsSkillsAreDiscoverable(t *testing.T) {
 		t.Fatal("find skills: the repository tracks none")
 	}
 	wrappers := trackedGlob(t, ".claude/skills/*/SKILL.md")
+	read := func(path string) (string, string) {
+		return frontmatter(t, filepath.Join(root, path))
+	}
+	for _, violation := range skillDiscoveryViolations(canonical, wrappers, read) {
+		t.Error(violation)
+	}
+}
+
+// skillDiscoveryViolations reports each canonical skill whose frontmatter is
+// invalid or that has no .claude/skills wrapper, each wrapper whose
+// frontmatter differs from its skill, and each wrapper with no canonical skill.
+func skillDiscoveryViolations(canonical, wrappers []string, read func(path string) (string, string)) []string {
+	var violations []string
+	skills := map[string]bool{}
 	for _, path := range canonical {
 		directory := filepath.Base(filepath.Dir(path))
-		name, description := frontmatter(t, filepath.Join(root, path))
+		skills[directory] = true
+		name, description := read(path)
 		if name != directory || len(name) > 64 {
-			t.Errorf("%s: name %q must equal its directory and stay within 64 characters", path, name)
+			violations = append(violations, fmt.Sprintf("%s: name %q must equal its directory and stay within 64 characters", path, name))
 		}
 		if description == "" || len(description) > 1536 {
-			t.Errorf("%s: description must be present and within 1,536 characters", path)
+			violations = append(violations, fmt.Sprintf("%s: description must be present and within 1,536 characters", path))
 		}
 		wrapper := ".claude/skills/" + directory + "/SKILL.md"
 		if !slices.Contains(wrappers, wrapper) {
+			violations = append(violations, fmt.Sprintf("%s: skill has no wrapper %s", path, wrapper))
 			continue
 		}
-		wrapperName, wrapperDescription := frontmatter(t, filepath.Join(root, wrapper))
+		wrapperName, wrapperDescription := read(wrapper)
 		if wrapperName != name || wrapperDescription != description {
-			t.Errorf("%s: frontmatter differs from %s", wrapper, path)
+			violations = append(violations, fmt.Sprintf("%s: frontmatter differs from %s", wrapper, path))
 		}
+	}
+	for _, wrapper := range wrappers {
+		directory := filepath.Base(filepath.Dir(wrapper))
+		if !skills[directory] {
+			violations = append(violations, fmt.Sprintf("%s: wrapper has no canonical skill .agents/skills/%s/SKILL.md", wrapper, directory))
+		}
+	}
+	return violations
+}
+
+func TestDocsSkillDiscoveryViolations(t *testing.T) {
+	skill := ".agents/skills/one/SKILL.md"
+	wrapper := ".claude/skills/one/SKILL.md"
+	frontmatters := map[string][2]string{
+		skill:                         {"one", "does one"},
+		wrapper:                       {"one", "does one"},
+		".agents/skills/two/SKILL.md": {"two", "does two"},
+		".claude/skills/two/SKILL.md": {"two", "does two"},
+		".claude/skills/old/SKILL.md": {"old", "does old"},
+	}
+	read := func(path string) (string, string) {
+		pair := frontmatters[path]
+		return pair[0], pair[1]
+	}
+	cases := []struct {
+		name      string
+		canonical []string
+		wrappers  []string
+		want      []string
+	}{
+		{"matched", []string{skill}, []string{wrapper}, nil},
+		{"two matched", []string{skill, ".agents/skills/two/SKILL.md"}, []string{wrapper, ".claude/skills/two/SKILL.md"}, nil},
+		{"missing wrapper", []string{skill}, nil,
+			[]string{".agents/skills/one/SKILL.md: skill has no wrapper .claude/skills/one/SKILL.md"}},
+		{"wrapper without skill", []string{skill}, []string{wrapper, ".claude/skills/old/SKILL.md"},
+			[]string{".claude/skills/old/SKILL.md: wrapper has no canonical skill .agents/skills/old/SKILL.md"}},
+	}
+	for _, tc := range cases {
+		got := skillDiscoveryViolations(tc.canonical, tc.wrappers, read)
+		if !slices.Equal(got, tc.want) {
+			t.Errorf("%s: got %q, want %q", tc.name, got, tc.want)
+		}
+	}
+	frontmatters[wrapper] = [2]string{"one", "drifted"}
+	got := skillDiscoveryViolations([]string{skill}, []string{wrapper}, read)
+	want := []string{".claude/skills/one/SKILL.md: frontmatter differs from .agents/skills/one/SKILL.md"}
+	if !slices.Equal(got, want) {
+		t.Errorf("drifted wrapper: got %q, want %q", got, want)
 	}
 }
 
@@ -557,28 +627,60 @@ func TestExampleIndexViolations(t *testing.T) {
 
 func TestDocsStayWithinByteBudgets(t *testing.T) {
 	root := filepath.Join("..", "..")
-	for _, violation := range byteBudgetViolations(root, repositoryFiles(t), docsByteBudgets(), trackedGlob(t, ".claude/rules/*.md")) {
+	required := append(trackedGlob(t, ".claude/rules/*.md"), milestoneOpeningKeys...)
+	for _, violation := range byteBudgetViolations(root, repositoryFiles(t), docsByteBudgets(), required) {
 		t.Error(violation)
 	}
 }
 
+// milestoneOpeningKeys name the budgets of the milestone pages' openings.
+var milestoneOpeningKeys = []string{
+	"specs/milestones/m1.md#opening", "specs/milestones/m2.md#opening",
+	"specs/milestones/m3.md#opening", "specs/milestones/m4.md#opening",
+}
+
+// openingSuffix marks a budget key that bounds a page's opening: the bytes
+// before its first level-2 heading, or the whole page when it has none.
+const openingSuffix = "#opening"
+
+// budgetedSize returns the bytes a budget key bounds: a file's size, or the
+// size of a page's opening.
+func budgetedSize(root, key string) (int, error) {
+	file, opening := strings.CutSuffix(key, openingSuffix)
+	if !opening {
+		info, err := os.Stat(filepath.Join(root, key))
+		if err != nil {
+			return 0, err
+		}
+		return int(info.Size()), nil
+	}
+	data, err := os.ReadFile(filepath.Join(root, file))
+	if err != nil {
+		return 0, err
+	}
+	if index := bytes.Index(append([]byte("\n"), data...), []byte("\n## ")); index >= 0 {
+		return index, nil
+	}
+	return len(data), nil
+}
+
 // byteBudgetViolations reports each budgeted file outside tracked, each file
-// above its budget, each budget more than a tenth above its file's size, and
-// each required file without a budget. The largest budget a file of size bytes
-// admits is size+size/9.
+// or page opening above its budget, each budget more than a tenth above its
+// size, and each required key without a budget. The largest budget a size of
+// bytes admits is size+size/9.
 func byteBudgetViolations(root string, tracked []string, budgets map[string]int, required []string) []string {
 	var violations []string
 	check := func(path string, limit int) {
-		if !slices.Contains(tracked, path) {
-			violations = append(violations, fmt.Sprintf("budgeted file %s is not tracked", path))
+		file, _ := strings.CutSuffix(path, openingSuffix)
+		if !slices.Contains(tracked, file) {
+			violations = append(violations, fmt.Sprintf("budgeted file %s is not tracked", file))
 			return
 		}
-		info, err := os.Stat(filepath.Join(root, path))
+		size, err := budgetedSize(root, path)
 		if err != nil {
 			violations = append(violations, fmt.Sprintf("budgeted file %s: %v", path, err))
 			return
 		}
-		size := int(info.Size())
 		if size > limit {
 			violations = append(violations, fmt.Sprintf("%s is %d bytes, above its %d-byte budget; move detail to an on-demand page", path, size, limit))
 		} else if limit-size > limit/10 {
@@ -600,7 +702,11 @@ var (
 	notYetMetLink    = regexp.MustCompile(`\[(B\d+)\]\(([^)\s]+)\)`)
 	notYetMetPage    = regexp.MustCompile(`^specs/milestones/(m[1-9][0-9]*|backlog)\.md$`)
 	notYetMetRowHead = regexp.MustCompile(`^\| \[(B\d+)\]\(#b\d+\) \|`)
+
+	notYetMetItemLabel = regexp.MustCompile(`^B\d+$`)
 )
+
+const notYetMetDelivered = "specs/milestones/delivered.md"
 
 func TestDocsNotYetMetNamesAnUndeliveredItem(t *testing.T) {
 	for _, violation := range notYetMetViolations(guidanceFiles(t)) {
@@ -635,6 +741,13 @@ func TestDocsNotYetMetMatcherRejectsBadParagraphs(t *testing.T) {
 		{"item on another page", "Not yet met: a; [B3](../milestones/m2.md#b3).", []string{"specs/api/x.md:1 B3 has no heading on specs/milestones/m2.md", "specs/api/x.md:1 B3 has no row on specs/milestones/m2.md"}},
 		{"delivered row", "Not yet met: a; [B2](../milestones/m2.md#b2).", []string{"specs/api/x.md:1 B2 is delivered on specs/milestones/m2.md"}},
 		{"row without heading", "Not yet met: a; [B4](../milestones/m2.md#b4).", []string{"specs/api/x.md:1 B4 has no heading on specs/milestones/m2.md"}},
+		{"a slice record beside a good item", "Not yet met: a; [B1](../milestones/m2.md#b1), delivered by [X12](../milestones/delivered.md#x12--first).",
+			[]string{"specs/api/x.md:1 Not yet met paragraph links the delivered record ../milestones/delivered.md#x12--first; delivery state belongs on the milestone page"}},
+		{"a delivered record under any label", "Not yet met: a; [B3](../milestones/backlog.md#b3) and [the record](../milestones/delivered.md).",
+			[]string{"specs/api/x.md:1 Not yet met paragraph links the delivered record ../milestones/delivered.md; delivery state belongs on the milestone page"}},
+		{"a delivered record on a later line", "Not yet met: a; [B3](../milestones/backlog.md#b3)\nand [X4](../milestones/delivered.md#x4).",
+			[]string{"specs/api/x.md:1 Not yet met paragraph links the delivered record ../milestones/delivered.md#x4; delivery state belongs on the milestone page"}},
+		{"a spec link beside a good item", "Not yet met: a; [B1](../milestones/m2.md#b1) and [the rule](../api.md#grammar).", nil},
 	}
 	for _, test := range cases {
 		t.Run(test.name, func(t *testing.T) {
@@ -695,6 +808,12 @@ func notYetMetParagraph(pages map[string]markdownFile, from string, line int, te
 		return []string{fmt.Sprintf("%s:%d Not yet met paragraph links no B<n> item", from, line)}
 	}
 	var violations []string
+	for _, link := range markdownLinkWithLabel.FindAllStringSubmatch(inlineCode.ReplaceAllString(text, ""), -1) {
+		linked, _, _ := strings.Cut(link[2], "#")
+		if !notYetMetItemLabel.MatchString(link[1]) && linked != "" && path.Join(path.Dir(from), linked) == notYetMetDelivered {
+			violations = append(violations, fmt.Sprintf("%s:%d Not yet met paragraph links the delivered record %s; delivery state belongs on the milestone page", from, line, link[2]))
+		}
+	}
 	for _, link := range links {
 		item, target := link[1], link[2]
 		linked, anchor, _ := strings.Cut(target, "#")

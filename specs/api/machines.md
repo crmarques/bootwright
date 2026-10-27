@@ -608,7 +608,7 @@ identity supplied by the managed storage-cluster relationship; it is invalid
 on a Bootwright-installed machine or a machine without that successor login.
 
 A lifecycle placement host connects as root and never escalates
-([owner decision D7](../milestones/backlog.md#decisions)). A Machine with
+([owner decision D7](../milestones/backlog.md#d7)). A Machine with
 `access.ssh` is a lifecycle placement host when a `management: managed`
 infrastructure service names it as `spec.machineRef`, or an `InfraProvider`
 names it as `spec.libvirt.machineRef`. On such a host an effective

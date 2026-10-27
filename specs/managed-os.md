@@ -129,7 +129,9 @@ hands the frozen arm to the substrate's machine port dispatcher, which fails
 closed on an arm it has no port for, as the
 [adapter boundary](#adapter-boundary) states.
 
-**Supported shape.** The profile's `anaconda` arm, with `packageSource` absent
+### Supported shape
+
+The profile's `anaconda` arm, with `packageSource` absent
 so the boot media is a DVD installed from `cdrom`, or `hostedTree`, so a boot
 image installs from a package tree the artifact server publishes. `bootMedia`
 and `fromMedia` name entries of the media store as `local-media:<name>`, and
@@ -179,7 +181,7 @@ without verifying the server, which the
 [security spec](security.md#network-remote-systems-and-privilege) bounds to
 that one host. The network the Kickstart carries is one static IPv4 install
 address on its install interface, its default route and the selected name
-servers, as the [derived installation](#installation) states;
+servers, as the [derived installation](#derived-installation) states;
 [network convergence](#network-convergence) applies the rest of the declared
 network after installation. Publicly
 served content remains secret-free by construction; an installation delivers
@@ -194,7 +196,9 @@ The Environment's
 refused at admission, because no rescue journey exists yet; the schema keeps
 it for a later one, and no lifecycle requires or consumes it.
 
-**Derived installation.** Planning derives the complete Kickstart from
+### Derived installation
+
+Planning derives the complete Kickstart from
 effective state alone: text mode; the accepted license; the install source;
 `lang`, `keyboard` and `timezone` with the selected NTP servers from
 `localization` and the profile's effective NTP selections; one static
@@ -358,7 +362,9 @@ connections intersect the pinned algorithms with this policy; explicit key
 pinning cannot re-enable an excluded signature. An absent system policy uses
 OpenSSH defaults. This proves access compatibility, not FIPS certification.
 
-**Publication.** The block publishes beneath the selected artifact server's
+### Publication
+
+The block publishes beneath the selected artifact server's
 served root under the
 [consumer publication contract](infrastructure-services.md#consumer-publication):
 the per-Machine installer image, built by `mkksiso` from the frozen boot media
@@ -397,7 +403,9 @@ The tooling that builds the image and extracts the tree is a
 [context prerequisite](controller.md#the-controller-stage) the controller block
 installs on the controller, where every installation publishes.
 
-**Boot.** Immediately before it inserts anything, the block proves the exact
+### Boot
+
+Immediately before it inserts anything, the block proves the exact
 target through its substrate's own proof: that the machine it is about to
 overwrite is the one the desired state names, and that the machine is powered
 off. Before that proof it fetches the first byte of the published image, and
@@ -430,7 +438,9 @@ deliberately rather than racing a reboot: once the installer has powered the
 machine off, the block ejects the media and boots the installed disk through
 the substrate's disk-boot entry point.
 
-**Budgets.** Each of the six waits an apply performs while the machine
+### Budgets
+
+Each of the six waits an apply performs while the machine
 installs, starts and converges is a budget its request freezes, as a number of
 retries and the seconds between them, never a value the adapter chooses: the
 installer powering the machine off (180 retries 20 seconds apart), the
@@ -465,7 +475,9 @@ counts, are not budgets: they are part of each call's bound. Nor is the single
 retry, one second later, of an observation's reachability check, which is part
 of the reads that hour allows for.
 
-**Completion.** Completion requires the identity channel answering, the install
+### Completion
+
+Completion requires the identity channel answering, the install
 marker it returns matching the frozen marker byte for byte, the machine's SSH
 host public key established through that same channel, an SSH connection to the
 selected install address accepting that exact key and the fleet identity for the
@@ -491,7 +503,9 @@ host key without proving the connection reports a partial installation, never a
 complete one. A Machine that holds the marker and has not accepted the
 connection yet is converging rather than failed.
 
-**Replay.** A Machine whose guest already answers with the frozen marker
+### Replay
+
+A Machine whose guest already answers with the frozen marker
 boots no installer but still converges its
 [network](#network-convergence) and, when the request registers, its
 [registration](#registration); it reports `completed` with the same
@@ -514,7 +528,9 @@ marker installs. A positively answered foreign marker publishes the typed
 bytes remain private; the diagnostic names the refused installation and the
 supported declaration-correction path.
 
-**Inverse.** Destroy removes the published image, the private subtree when one was
+### Inverse
+
+Destroy removes the published image, the private subtree when one was
 published, with a private installation's image inside it, and the machine's
 work area, then proves each absent. It never deletes the shared package tree;
 inverse dependencies remove that publication only after every installation
@@ -540,7 +556,9 @@ none holds nothing of this installation; a Machine that does not answer
 refuses `registration-unreachable` before any effect, naming `bootwright
 machine start`, and withdraws nothing.
 
-**Unknown resolution.** The observation that resolves an apply reads the
+### Unknown resolution
+
+The observation that resolves an apply reads the
 marker through the identity operation, the power the BMC reports and
 the published content's presence, and its evidence carries that power whatever
 else it found. A matching marker with the
@@ -603,7 +621,9 @@ counts it as left. Observation reads durable work without creating it;
 identity and reachability reads use private invocation scratch, which is
 cleaned when those reads end.
 
-**Quiescence and cancellation.** This block owns published installer content,
+### Quiescence and cancellation
+
+This block owns published installer content,
 which an installed Machine no longer reads, so its quiescence follows the
 Machines under the
 [removal gate](state-reconciliation.md#quiescence-before-removal); a

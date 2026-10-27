@@ -238,7 +238,7 @@ Alias cell.
 | [B746](#b746) | new, 2026-10-20 (D172) | enabling | Substrate | One staged image per cluster on push arms | Per-node pushes keep ownership per Machine; it needs evidence from M3e or M3f runs that per-node pushes are the bottleneck |
 | [B747](#b747) | new, 2026-10-20 (D172) | product | Container cluster and Substrate | A cluster whose nodes span KubeVirt or vSphere and another arm | No run qualifies it, and the media block would both publish and push; it needs B88 or B733 and a qualifying run |
 | [B748](#b748) | new, 2026-10-20 (D172) | product | Container cluster | OKD clusters through the agent installer | M3's coverage is OpenShift; OKD's release, client and image sources need their own definition, and its refusal row stays |
-| [B769](#b769) | new, 2026-10-20 (D173) | product | Add-ons | One add-on instance removed online from a cluster that stays | M4 retires instances with their cluster; [D153](#decisions) refuses changing a completed apply's selection |
+| [B769](#b769) | new, 2026-10-20 (D173) | product | Add-ons | One add-on instance removed online from a cluster that stays | M4 retires instances with their cluster; [D153](#d153) refuses changing a completed apply's selection |
 | [B770](#b770) | new, 2026-10-20 (D173) | product | Add-ons | `preflight add-ons` reports add-on prerequisites before an apply | No check is provable before the cluster exists; apply-time gates name their failures |
 | [B771](#b771) | new, 2026-10-20 (D173); folds B365 | defect | Add-ons, with Workspace | The `add-ons/_store` selection exception, its marker and its reader rules leave the input reader | Dead surface now that B89 is retired; removing input-reader rules is not needed by any M4 package |
 | [B772](#b772) | new, 2026-10-20 (D173) | product | Add-ons | A package installed through OLM v1 (`ClusterExtension`) | ODF/FDF, ACM, MCE and GitLab do not qualify; own-namespace installs are Technology Preview |
@@ -270,11 +270,8 @@ Alias cell.
 | [B799](#b799) | new, 2026-10-23 (M3 verification) | defect | Workspace | Setup interruption retries identify any remaining setup-lock holder | Pre-existing intermittent refusal; its cause is unproved |
 | [B805](#b805) | new, 2026-10-26 (spec audit P0-F) | safety | Secrets and State reconciliation | Secret references declare a class; a rotated access credential has a recorded removal exit | Audit roadmap work; implemented only on an explicit lane request |
 | [B808](#b808) | new, 2026-10-26 (spec audit P1-A) | enabling | Architecture | Engine claim check, implementation fitness test and a shared Capability-port contract suite | Audit roadmap work; implemented only on an explicit lane request |
-| [B815](#b815) | new, 2026-10-26 (spec audit P1-H) | enabling | Milestones | Portfolio separated from envelope; Requires state real dependencies; one clause queue | Audit roadmap work; implemented only on an explicit lane request |
 | [B816](#b816) | new, 2026-10-26 (spec audit P1-I) | safety | State reconciliation and Controller setup | Recovery refusals, partial-removal readings and host probes match the rules | Audit roadmap work; implemented only on an explicit lane request |
-| [B819](#b819) | new, 2026-10-26 (spec audit P2-A) | enabling | Milestones and Agent guidance | Milestone page openings budgeted, waiver history in decisions, per-decision anchors | Audit roadmap work; implemented only on an explicit lane request |
 | [B820](#b820) | new, 2026-10-26 (spec audit P2-B) | enabling | Agent guidance and Verification tooling | Section-level index rows and docs gates for budgets, reachability and history links | Audit roadmap work; implemented only on an explicit lane request |
-| [B822](#b822) | new, 2026-10-26 (spec audit P2-D) | enabling | Agent guidance and Verification tooling | Wrapper parity test fails on gaps; focus reports flaky lanes and bounds lane time | Audit roadmap work; implemented only on an explicit lane request |
 | [B825](#b825) | new, 2026-10-26 (spec audit L3) | product | CLI | CLI diff, settled, remediation, flag spellings and stub catalog match cli specs | Audit roadmap work; implemented only on an explicit lane request |
 | [B826](#b826) | new, 2026-10-26 (spec audit L4) | defect | Desired state | Admission enforces closed Entitlement arms, authored indexes, retired names and reserved-directory warning | Audit roadmap work; implemented only on an explicit lane request |
 | [B829](#b829) | new, 2026-10-26 (spec audit L7) | safety | Secrets | Work-area incarnation check, pipelined material payloads and fixed producer identity | Audit roadmap work; implemented only on an explicit lane request |
@@ -430,8 +427,13 @@ non-disclosure tests.
 ### B106
 
 The day-2 surface a completed cluster exposes, beyond bootstrap, continuation
-and removal. It stays parked until a product-scope change admits it. **Exit
-evidence:** set by that change.
+and removal. It stays parked until a product-scope change admits it. Owned
+objects are frozen after handoff ([project](../project.md#lifecycle-and-handoff)),
+so the two options the 2026-10-26 audit raised (F01-02) wait here: an explicit
+relinquish verb that records an ownership release for GitOps to adopt, which
+amends the handoff sentence that ownership is never transferred, or a named
+post-handoff owner for a class of owned object, such as an approved InstallPlan.
+Either needs an owner decision. **Exit evidence:** set by that change.
 
 ### B107
 
@@ -1333,7 +1335,7 @@ which a missing interpreter still refuses with "run bootwright setup".
 
 ### B567
 
-[D155](#decisions) requires definition and delivery of this guard with B568's
+[D155](#d155) requires definition and delivery of this guard with B568's
 interim orphan warning before further `destroy` on a shared libvirt host.
 Implementation still needs its named safety slice. Destroying a libvirt
 provider host runs `virsh net-destroy` and `net-undefine` on every owned managed network
@@ -1384,7 +1386,7 @@ and `make docs-check` over the amended spec sentences.
 
 ### B568
 
-[D155](#decisions) accepts persistent random incarnation identity as the
+[D155](#d155) accepts persistent random incarnation identity as the
 design direction. Exact formats and migration belong to its named slice;
 implementation is not authorized by this decision. B567 and the interim orphan
 warning come first, before further shared-host destroy; full identity precedes
@@ -1630,7 +1632,7 @@ fix:** narrow `specs/substrates.md:336` to what the evidence proves and say that
 the definition is rewritten on every attempt; report `changed` when
 the dumpxml taken before the define differs from the rendered XML; widen
 `libvirt_domain_inspect` and `MachineEvidence` as the Machine projector item
-needs a field. [D155](#decisions) accepts this correction for a future named
+needs a field. [D155](#d155) accepts this correction for a future named
 slice. **Exit evidence:** the narrowed sentence, a role test that an actual
 redefine reports `changed`, and read-back tests for each newly supported field.
 
@@ -1774,7 +1776,7 @@ quick`.
 
 When the X91 audit ran, the Ceph pool phase ran `osd pool set size` and
 `min_size` blindly on every pass that was not ready and passed the ownership
-check, writing drift back unreported. [D155](#decisions) accepts refusal without
+check, writing drift back unreported. [D155](#d155) accepts refusal without
 writes until a named delta admits drift.
 [X99](delivered.md#x99--operator-selected-ceph-artifacts-and-m2b-completion)
 delivers that policy for the minimal pool phase: each setter retains its intent
@@ -1893,7 +1895,7 @@ the new row.
 ### B598
 
 Input restored byte for byte after an edit gets a new revision, so a completed
-apply currently refuses even when all original bytes are restored. [D155](#decisions)
+apply currently refuses even when all original bytes are restored. [D155](#d155)
 accepts settlement over exact-original-byte restoration for a future named
 slice. Until that slice changes the content comparison and spec row, the
 current code and refusal remain. **Exit evidence:** a lifecycle test and spec
@@ -2186,7 +2188,7 @@ admission test that refuses the second apply.
 
 ### B660
 
-Assigned to M2c lane x61-ceph-fips on 2026-10-19 ([D166](#decisions)), under
+Assigned to M2c lane x61-ceph-fips on 2026-10-19 ([D166](#d166)), under
 [B484](m2.md#b484). The in-tree route probe selects ECDSA synthetic keys from
 the observed FIPS kernel state and keeps inherited crypto policy. Declared
 and bound Ed25519 cluster keys refuse before host preparation. Host-independent
@@ -2228,9 +2230,9 @@ fingerprint stays the trust anchor, and the `el10cp` signer is recorded in
 [knowledge](../../.agents/knowledge/ibm-ceph-version-constraints.md) once an
 `el10cp` package is inspected. **Why parked:** it fails closed today and needed
 a scope decision. **Assigned:** M2c lane x59-d4-host-pull-route on 2026-10-19
-([D166](#decisions)), which takes the key from the declared mirror under its
+([D166](#d166)), which takes the key from the declared mirror under its
 trust bundle. **Decided outcome:** D166 took the "if so" branch, and
-[D169](#decisions) (2026-10-20, the owner) chose "Add the field": a new
+[D169](#d169) (2026-10-20, the owner) chose "Add the field": a new
 required field `ceph.packageRepositoryKey` whenever `ceph.packageRepository` is
 authored, using that repository's scheme, host and port and its trust bundle,
 with the key's fingerprint matching the code pin. Lane x59-d4-host-pull-route
@@ -2671,7 +2673,7 @@ positive absence of Subscription, CSV and namespace, a terminating namespace
 reported from its conditions, and a report of the OLM footprint it cannot
 invert (CSVs, InstallPlans, CRDs, dependency Subscriptions). Parked on
 2026-10-20 (D173): M4 retires instances with their cluster, and
-[D153](#decisions) refuses changing a completed apply's selection. **Revive
+[D153](#d153) refuses changing a completed apply's selection. **Revive
 when** the owner asks for day-2 removal; it needs a desired-state journey D153
 does not admit today.
 
@@ -3080,40 +3082,6 @@ double, and each domain exports its effect-bearing predicate. **Remains:** the
 bare-metal InfraProviders plan no block, ClusterAddonBinding blocks are keyed
 by package and cluster, and refused KubeVirt objects plan no block.
 
-### B815
-
-**Owner:** Milestones. **Kind:** enabling. **Requires:** B801; owner decisions
-[Q89](#audit-remediation-decisions), [Q90](#audit-remediation-decisions),
-[Q91](#audit-remediation-decisions) and [Q60](m4.md#m4a-open-decisions).
-**Definition:** Needs definition. Roadmap step P1-H of the
-[2026-10-26 spec audit](../../audits/spec/2026-10-26.md); findings F01-01,
-F17-02, F01-02, F17-04, F01-04. Milestones complete on the committed
-portfolio, Requires lines state real dependencies, and session-taken clauses
-sit in one review queue.
-
-**Specs:** [lifecycle and handoff](../project.md#lifecycle-and-handoff)
-defines downstream day-2 resources and the frozen post-handoff stance;
-state-reconciliation.md readiness links it; project.md marks the early
-per-cluster handoff pending Q60.
-
-**Work:**
-
-- F01-02 (Medium): link project.md#lifecycle-and-handoff from add-ons.md
-  GitOps handoff evidence; add the relinquish-verb and named-owner options to
-  B106 as a note.
-- F01-04 (Low): add the pending-Q60 marker to add-ons.md's GitOps bootstrap
-  object; when Q60 is answered, remove all three markers together and record
-  the answer as a decision.
-- Waits for [Q89](#audit-remediation-decisions): split project.md Product scope
-  into two labelled lists, each committed entry linking its milestone.
-- Waits for [Q90](#audit-remediation-decisions): per-submilestone Requires cells
-  on m1 to m4, M3d's M4 prerequisites in the Status Requires cell, the waiver
-  citation corrected to D174.
-- Waits for [Q91](#audit-remediation-decisions): one scope rule in milestones.md and
-  one open-clause list, trimmed to the page's byte budget.
-
-**Exit evidence:** the P1-H roadmap exit; `make docs-check` passes.
-
 ### B816
 
 **Owner:** State reconciliation and Controller setup. **Kind:** safety.
@@ -3181,55 +3149,6 @@ waits for B87; F09-01 stays open under D38 (Q92 a); the restored seal counters
 in [contexts](../contexts.md#format-and-restore-boundary) have no work bullet
 yet.
 
-### B819
-
-**Owner:** Milestones and Agent guidance. **Kind:** enabling. **Requires:**
-B801, B815; owner decision [Q102](#audit-remediation-decisions) for the move only.
-**Definition:** Specified. Roadmap step P2-A of the
-[2026-10-26 spec audit](../../audits/spec/2026-10-26.md); findings F15-01,
-F15-04, F15-06, F15-09, F15-10, V2-12. A slice task reads a bounded milestone
-card instead of a history-laden page, and each decision link opens its own
-entry.
-
-**Specs:** [AGENTS.md](../../AGENTS.md) and code-implementation already
-mandate only the page opening, the Planned slices row, the item row and its
-`### B<n>` section. [Milestones](../milestones.md) Identifiers still places the
-log in this page and defines no Q or OD prefix. The coverage pages' Not yet
-met lines no longer carry delivery state.
-
-**Work:**
-
-- F15-01 (Medium): move each dated waiver narrative out of the Requires
-  paragraphs of [m1](m1.md) to [m4](m4.md) into its D entry; give each page
-  opening (before `## Submilestones`) an entry in `docsByteBudgets`
-  (`test/architecture/docs_test.go`) of at most 16 KB; have
-  [specs/index.md](../index.md) name the row and section, not the page.
-- F15-04: `notYetMetParagraph` rejects a link into `milestones/delivered.md`,
-  with seeded fixture cases beside
-  `TestDocsNotYetMetMatcherRejectsBadParagraphs`.
-- F15-06: one Identifiers bullet defining every prefix used under
-  `specs/milestones/` (Q, OD and any other in use) with existing numbers fixed;
-  one open-decision table header with a Status column naming the answering D;
-  reconcile m4.md's open-decision rows with D174; a milestone check fails on an
-  unknown header or an answered row without a D link. milestones.md has about
-  57 bytes of budget left: trim or restate the budget.
-- F15-09: reduce [B688](m2.md#b688) to a one-line outcome naming what D170
-  accepted plus a link to `../ceph.md#cluster-execution-budget`; its
-  Original findings narrative moves to the decision or delivered record.
-- F15-10, V2-12: give each decision an `#d<n>` anchor and a leading status
-  token (owner, session-pending, accepted-by D<n>, superseded-by D<n>);
-  retarget every `[D<n>]` link in `specs/` and `.agents/` (security.md's D152
-  and D108 included); docs-check fails when a D link targets the section
-  anchor or a missing one, and when entries leave numeric order.
-- Waits for [Q102](#audit-remediation-decisions): moving the log to its own page and
-  retargeting the links that name `backlog.md#decisions`.
-
-**Exit evidence:** every milestone opening within its budget under
-`TestDocsStayWithinByteBudgets`; no Requires paragraph holds a dated waiver
-narrative; grep for `backlog.md#decisions` inside a `[D<n>]` link returns
-nothing; the new checks fail on seeded violations; Task A's mandatory reading
-re-measured below 20k tokens; `make docs-check`.
-
 ### B820
 
 **Owner:** Agent guidance and Verification tooling. **Kind:** enabling.
@@ -3277,47 +3196,12 @@ main; no level-2 spec section above the budget except named exceptions; the
 review page is history or gone from `specs/`; the index routes the named
 sections; `make docs-check`.
 
-### B822
 
-**Owner:** Agent guidance and Verification tooling. **Kind:** enabling.
-**Requires:** B800, B813, B818; owner decision
-[Q103](#audit-remediation-decisions) for its AGENTS.md sentence. **Definition:**
-Specified. Roadmap step P2-D of the
-[2026-10-26 spec audit](../../audits/spec/2026-10-26.md); findings F14-03,
-F14-04, F14-05, F14-06, F14-07, F14-09, F14-11, F14-12, V2-11, CX-G4, CX-G5.
-The skill-portfolio tooling enforces what the skills now state.
-
-**Specs:** the skills already lead with local fast-forward (D168), define one
-safety class, own the verification tiers in one reference and keep no model
-routing table. The [skill index](../../.agents/skills/index.md) and
-[verification.md](../../.agents/skills/code-implementation/references/verification.md)
-carry the two Not yet met lines that point here.
-
-**Work:**
-
-- F14-12: `TestDocsSkillsAreDiscoverable` (`test/architecture/docs_test.go`)
-  fails on a canonical skill with no `.claude/skills/<name>/SKILL.md` wrapper
-  (replacing its `continue`) and on a wrapper with no canonical skill; drop the
-  skill index's Not yet met sentence.
-- V2-11: `scripts/tools/focus.py` reports a failure that passes only on the
-  serial rerun as FLAKY, with flagged output and a distinct non-zero exit, and
-  bounds each parallel lane with a timeout that prints its reproduce command;
-  `focus_test.py` cases for both; drop verification.md's Not yet met line.
-- F14-09: optional: replace the vendor model names in
-  [m4](m4.md)'s routing notes with the routine or complex tag.
-- F14-11: optional: reduce `docs/development.md` tier rows to command
-  descriptions linking verification.md.
-- Waits for [Q103](#audit-remediation-decisions): the carve-out sentence in
-  AGENTS.md (about 230 bytes against a budget with 1 byte left, so trim or
-  restate the budget), and code-implementation step 1 links it instead of
-  restating the ban.
-- Outside the repository, for the owner only: a local-only override in the
-  primary checkout defers to AGENTS.md (F14-04), and any vendor routing table
-  lives in a user-level file (F14-09).
-
-**Exit evidence:** deleting a wrapper or adding an unmatched one fails the
-test; focus_test.py proves FLAKY reporting and the lane timeout; grep under
-`.agents/skills` finds no model product name; `make docs-check`.
+**Partly delivered** on 2026-10-27 by X173: F15-08, F15-03 (the review page
+indexed as history), F15-07, F16-03's link and R2-02-05 above. **Remains:**
+F17-07's acceptance-row templates, which ride with the first M3b and M4b
+acceptance baselines; the optional structured help fields `examples` and
+`available`.
 
 ### B825
 
@@ -3503,7 +3387,7 @@ scope. **Definition:** Needs definition. Found in the lane A review of
 2026-10-26. Admission refuses a host-domain replicated pool whose size equals
 the OSD-host count (matrix row U03, `internal/storage/cephcluster/pools.go`) only when the
 cluster's `distribution` is `ibm`, because the rule began as IBM's colocation
-guidance. [D183](#decisions) (Q64 a) now justifies it natively: a size-N
+guidance. [D183](#d183) (Q64 a) now justifies it natively: a size-N
 pool needs N+1 OSD hosts to recover a lost host's replicas, which holds for
 every Ceph distribution. Whether the refusal widens to `oss` clusters is open,
 because widening adds a refusal to a plan that admits today. **Outcome:** the
@@ -3773,12 +3657,12 @@ decision stay open while its other parts land.
 | I API shape and grammar | B814 (X171), [B826](#b826), B827 (X171), B828 (X171), B824 (X171), B821 (X171), B837 (X171) | B808 | B, F, G | Q77, Q78, Q79, Q80, Q81, Q82, Q83, Q84, Q85, Q86, Q87, Q88, Q105, Q106, Q107, Q110, Q111, Q112, Q113, Q114, Q115, Q118 |
 | J Reconciliation rules | [B816](#b816), B830 (X170) | B800 to B807 | E, G | Q92, Q93, Q94, Q95, Q96, Q117, Q118 |
 | K Language and adapter contracts | B818 (X162), B834 (X162) | none | G | none |
-| L Corpus structure and skills | [B815](#b815), [B819](#b819), [B820](#b820), [B822](#b822) | B801; B822 after B813 and B818 | none | Q89, Q90, Q91, Q102, Q103 |
+| L Corpus structure and skills | B815 (X173), B819 (X173), [B820](#b820), B822 (X173) | B801; B822 after B813 and B818 | none | Q89, Q90, Q91, Q102, Q103 |
 | M CLI and examples | [B825](#b825), B833 (X172), B823 (X172), B842 (X172) | none | none | Q104, Q108, Q109 |
 
 ### Lane order and progress
 
-[D182](#decisions) runs the lanes in this order, from the harness and the
+[D182](#d182) runs the lanes in this order, from the harness and the
 low-level contracts to the operator-facing surface, one at a time. Each lane
 is one branch, `lane-<letter>`, in the worktree
 `../bootwright-worktrees/lane-<letter>`, and lands on main as one commit that
@@ -3798,7 +3682,7 @@ also updates this table.
 | 10 | J Reconciliation rules | merged (X170) |
 | 11 | I API shape and grammar | merged (X171) |
 | 12 | M CLI and examples | merged (X172) |
-| 13 | L Corpus structure and skills | not started |
+| 13 | L Corpus structure and skills | merged (X173) |
 
 To continue, take the first row not `merged`. If its branch exists, resume it:
 each finished item is a `wip` commit whose body names what remains, and the
@@ -3815,68 +3699,68 @@ to `merged (X<n>)`, and fast-forward main. Pushing waits for the owner.
 ### Audit remediation decisions
 
 Questions for the owner, numbered after M4a's Q61. The owner answered all of
-them on 2026-10-26 ([D183](#decisions)); each answer is applied by the item it
+them on 2026-10-26 ([D183](#d183)); each answer is applied by the item it
 blocks.
 
-| Q | Question | Options | Recommendation | Blocks |
-| --- | --- | --- | --- | --- |
-| Q62 | Should a Codex project hook call scripts/hooks/stop-check, which needs a narrow .codex/hooks.json un-ignored in the tracked tree? | (a: add it) Codex sessions get the same advisory end-of-turn focus check; .gitignore gains one exception.; (b: leave .codex/ untracked) Only Claude Code runs the hook; Codex users configure their own. | **Answered by D183: a.** The report (10.4) leaves it to the owner without a recommendation; non-blocking for B800's docs test. | [B800](delivered.md#x161--audit-lane-a-harness-and-guards) |
-| Q63 | How should the WIP limit of two active slices (D158) be reconciled with the five slices now in progress (X61, X118, X123, X130, X143), where X130 (M3e, D181) has no recorded exception? | (a: keep the limit and per-decision exceptions) Record an exception for X130 or pause one slice; the scope rule stays as written.; (b: a limit per program or milestone) Rewrite the scope rule to count active slices per program; the standing exceptions in D134, D143, D159, D172 and D173 retire.; (c: retire the WIP limit) Delete the limit and its exceptions; the Active slices table alone governs authorization. | **Answered by D183: b.** The audit leaves the WIP limit to the owner (P0-B exit); it suggests a rule current practice satisfies, such as a per-program limit, but does not choose. | [B801](delivered.md#x161--audit-lane-a-harness-and-guards) |
-| Q64 | Does matrix row U03 (replicated size equal to the OSD-host count refused, citing IBM's colocation page) stay as an admission refusal under D159 clause 15? | (a: keep) U03 stays tested, recorded as a native replica-safety rule (three replicas need four hosts) rather than a support statement.; (b: remove) Admission stops refusing size equal to host count; the U03 row, fixture and admission check are removed by a code change. | **Answered by D183: a.** The report routes this to the owner without a recommendation; its basis may be a replica-safety rule rather than a vendor table. | [B801](delivered.md#x161--audit-lane-a-harness-and-guards) |
-| Q65 | How does a removal observation that cannot tell its postcondition from an unreadable target resolve (state-reconciliation.md Resolution outcomes, against security.md's unknown-stays-unknown rule)? | (a: delete the clause) An unreadable removal observation stays unknown and only an operator resolution moves it; smallest edit, more manual resolutions, teardown can strand.; (b: typed inconclusive result) A new effect state distinct from no-effect permits one retry only for a capability declaring the removal idempotent, with ownership proved from durable records and a re-read before any effect; one table row, one capability field, one test, and one sentence in security.md. | **Answered by D183: b.** The report gives both without choosing (14.8); section 8.B3 calls B the smallest correction that keeps replay-safe teardown. Either way the negative test is the same. | [B802](delivered.md#x165--audit-lane-b-physical-targets-and-shared-hosts) |
-| Q66 | How is a private Machine that the network restart powered off before (or after) its disk boot read on recovery (managed-os.md 'the one window', currently 'positive no effect')? | (a: relabel) Read the window as a positive partial realization of this operation's own installation, retried by the same frozen request behind the boot proof, and name the cases it covers including power-off after disk boot.; (b: durable intent) Record durably before power-off that installation was proved and disk boot is intended; recovery takes the disk-boot identity path or stays unknown, never re-running the installer. | **Answered by D183: b.** The report records no choice; it calls the relabel the smallest fix, while durable intent removes the reinstall. | [B802](delivered.md#x165--audit-lane-b-physical-targets-and-shared-hosts) |
-| Q67 | Should an orphan-acknowledged context deletion keep its exclusive host keys as an abandoned/<name> tombstone instead of releasing them at once (amending D38)? | (a: keep D38) Keys release at the deletion; the orphan confirmation names the keys it frees and the reinstall hazard (spec applied, code in B803).; (b: tombstone) Exclusive entries become an abandoned/<name> holder that refuses conflicting claims until a new confirmed 'bootwright controller release --abandoned <name>'; shared media entries still drop at once. | **Answered by D183: a.** Arbiter and lanes: A's warning now; B only if the owner reopens D38. | [B803](delivered.md#x165--audit-lane-b-physical-targets-and-shared-hosts) |
-| Q68 | Confirm the D143 clause 6 reading: does retiring a Ceph cluster (or StorageExport) with its virtual hosts require that no consumer of its exports survives the removal? | (a: refuse) Removal refuses before registration naming the surviving consumer and export until B491; a mixed context (virtual Ceph, physical OpenShift) has no full destroy until then (the specs state this refusal as the interim safe reading).; (b: named impact plus acknowledgement) Removal proceeds after an acknowledgement naming the surviving consumer, whose PVs and Secrets then point at deleted storage. | **Answered by D183: a.** Roadmap P0-E and R2-02-01 recommend A with a plan-time topology flag; F10-04's refuter and calibrator prefer B as smaller. | [B804](delivered.md#x167--audit-lane-c-storage-retirement) |
-| Q69 | Should B659, B662 and B491 become prerequisites of M2d's B485 exit, or does B485 close with the physical recovery limitation recorded? | (a: prerequisites) B485 Requires gains B659, B662 and B491; M2d cannot complete until interrupted physical deployments have exits, which first needs their protocol decisions.; (b: record the limitation) B485 may close with the physical profile documented as an incomplete recovery profile (text applied now); the exits stay parked. | **Answered by D183: a.** The audit (14.8) offers both and keeps the recovery protocols as owner decisions; it does not choose. | [B485](m2.md#b485) |
-| Q70 | Should continuation and removal be able to present the current version of a rotated access credential (BMC/Redfish, KubeVirt kubeconfigRef, vCenter, registry login) instead of the bound one, and through which recorded gate? | (a: explicit recorded rebind exit) A third exit beside D37 for access credentials only, gated by a flag or the --authorize token model and recorded as a new binding version; ownership proofs still run and effect-material Secrets refuse it.; (b: keep today's rule) Removal always presents the bound version; a rotated credential strands destroy, leaving restore-keyring or --purge --allow-orphans. | **Answered by D183: a.** The report recommends A, gated by the --authorize model and named apart from B181's bounded-run rebind, keeping D37 and D85; the owner decides the flag. | [B805](#b805) |
-| Q71 | Refuse the four inert ContainerCluster endpoint fields (port, scheme, prefixLength, interfaceNetworks) at plan on the agent path, or remove them from the schema until a consumer exists? | (a: refuse at plan) Fields stay admitted; an authored non-native value refuses at its path with a refusal row per field (spec states this).; (b: remove the fields) The endpoint shape loses the four fields; no refusal rows; examples and goldens change. | **Answered by D183: a.** Refuse at plan now (roadmap P0-H); removal stays an owner option. Non-blocking: B807 implements A unless the owner chooses B first. | [B807](delivered.md#x168--audit-lane-f-truthful-admission) |
-| Q72 | Which mechanism scopes an Environment: the source directory, spec.resources and cluster lists all narrow scope today? | (a) Remove spec.resources; the Environment directory is the scope and cluster lists are the only narrowing, documented with an example.; (b) Keep spec.resources and drop cluster lists, which makes the hostClusterRef retention edge moot.; (c) Keep both, with one tracked example using spec.resources and a one-sentence rationale in environment.md. | **Answered by D183: a.** Decide together with hostclusterref-retention-edge; the report's first option is (a), and the lanes expect cluster lists to stay. Either way the excluded-reference refusal names the selection field. | [B812](delivered.md#x169--audit-lane-g-extension-architecture) |
-| Q73 | If cluster lists stay, does selecting a nested cluster retain its KubeVirt provider's hostClusterRef ContainerCluster as a root with its own closure? | (a) Add the closure row, effective when B732 lifts the KubeVirt refusal, with a multidc selection test as B732 exit evidence.; (b) Moot because cluster lists are dropped (environment-scope-mechanism b). | **Answered by D183: a.** a if cluster lists stay; record the selection test as B732 exit evidence either way. | [B812](delivered.md#x169--audit-lane-g-extension-architecture) |
-| Q74 | Does an authored cluster list retain Bootwright-installed Machines (and their provider closure) that are nodes or hosts of no declared cluster, instead of only warning? | (a) Retain them as roots; the validate warning covers only what stays excluded.; (b) Warn only, as the spec states today. | **Answered by D183: a.** a (calibrator), decided with environment-scope-mechanism; the warning stands until then. | [B812](delivered.md#x169--audit-lane-g-extension-architecture) |
-| Q75 | When an attachment reaches a cluster root that an authored list omits, does validate warn, refuse, or retain the full closure? | (a) Deterministic validate warning naming the list to extend (spec today).; (b) Validate error naming the list to extend, since a completed apply's selection cannot change (D153).; (c) Retain the full closure of the omitted root. | **Answered by D183: b.** b (calibrator); the warning is the interim minimum. | [B812](delivered.md#x169--audit-lane-g-extension-architecture) |
-| Q76 | Does a removal under another build compare an effect-identity part of the content digest with the build in hand (amending D145(4))? | (a) Keep D145(4): removals compare no digest and rely on identity values travelling in the frozen request (stated in the spec now).; (b) Split the digest into effect-identity and mechanism parts; a removal refuses lifecycle.state before resolution on an effect-identity mismatch, naming the registering build and the deletion exit. | **Answered by D183: a.** a now (calibrator, smallest); b presented to the owner as an amendment of D145(4). | [B813](delivered.md#x163--audit-lane-h-cross-build-continuation-guards) |
-| Q77 | How does a non-OpenShift distribution enter ContainerCluster, and does B748's OKD arm follow the same path? | (a) A distribution-neutral envelope (nodes with neutral roles, endpoints, networks, proxy/NTP/registry, trust) plus a presence union of distribution arms starting with spec.openshift; node binding reads a distribution-declared node capability; role master becomes control-plane and endpoint source.type openshift becomes installer (section 4.3).; (b) One kind per distribution family, with the generic touch points each new kind implies listed.; (c) Confirm OpenShift and OKD only in project.md and defer the question. | **Answered by D183: b, as OpenShiftCluster.** Record one decision now, linked from api/openshift-clusters.md, stating node binding and B748 alignment; the report's scenario analysis favors a, which is cheapest before 1.x. M3/M4 keep the flat shape until decided. | [B814](delivered.md#x171--audit-lane-i-api-shape-and-grammar) |
-| Q78 | How are the Ceph-only Storage* child kinds bound to Ceph? | (a) Rename the children to Ceph* (CephPool, CephClient, CephRBDImage and the rest), keeping StorageCluster neutral; revisits D133's naming baseline and touches examples and goldens.; (b) Keep the names; api/ceph.md states they are the Ceph arm's kinds, admission refuses a child whose cluster's type is not ceph, a new storage type brings its own kinds, and StorageExport is classified. | **Answered by D183: a, with CephCluster.** b (verifiers and calibrator); a only as an explicit owner decision revisiting D133, which the report prefers while renames are cheap. | [B814](delivered.md#x171--audit-lane-i-api-shape-and-grammar) |
-| Q79 | Does Machine carry substrate facts in a per-substrate arm mirroring the InfraProvider arm? | (a) Full arm: spec.substrate {providerRef, baremetal/libvirt/kubevirt/vsphere} with admission requiring the arm to match the provider.; (b) Narrow arm: NIC names and neutral root hints stay top level; only bmc, MACs, wwn/hctl/serial admissibility, profileRef, failureDomainRef, template and interfaceAttachments move into arms.; (c) Keep the flat shape and derive per-substrate admissibility from one substrate-arm registry table. | **Answered by D183: b.** b, decided before B87/B99 revive the arms; D44 and D94 hold under every option. | [B814](delivered.md#x171--audit-lane-i-api-shape-and-grammar) |
-| Q80 | Are the Machine.capabilities role tokens (openshift-node, ceph-node, ceph-arbiter) dropped and container-runtime and libvirt derived from placements? | (a) Drop the three roles and derive the prerequisites at once; remove the field or keep the remainder as hostPrerequisites (section 4.3).; (b) Staged: first state the ceph-node rule in the storage API spec (or drop it) and drop ceph-arbiter; then derive container-runtime and libvirt and remove the roles, keeping an authored path for the controller Machine.; (c) Keep the field and its role tokens. | **Answered by D183: a.** b; step one needs no shape change beyond removing a value nothing reads; update controller.md and the environment.md controller refusal table. | [B814](delivered.md#x171--audit-lane-i-api-shape-and-grammar) |
-| Q81 | Which single testable rule decides between a presence arm and a type, method or implementation enum, and which current idioms change? | (a) State the rule, drop StorageCluster.spec.type, fold install.method into install.agent presence and make the service implementation an arm; an architecture test enforces it.; (b) Same rule, but StorageCluster gets an engine arm usable for external management before type goes, and the service implementation stays an enum.; (c) Keep the four idioms and only state the criterion. | **Answered by D183: one rule with its architecture test; services keep the implementation enum.** b, recorded with current and proposed examples; the rule then goes into api.md#unions with its architecture test. | [B814](delivered.md#x171--audit-lane-i-api-shape-and-grammar) |
-| Q82 | Does api.md state that a value with exactly one valid derivation is derived, not authored and compared (bindAddress, generated SANs, node fqdn)? | (a) State the principle; fold bindAddress into B333; derive generated-certificate SANs from consumer endpoints; derive node fqdn.; (b) As a, but node fqdn keeps its explicit optional override and only examples stop authoring derived values.; (c) Keep authored-and-compared copies and only document the collision trap. | **Answered by D183: b.** b; pre-1.x no-compatibility removes B333's digest-window reason; reread ADR 0035/0036 before touching fqdn. | [B814](delivered.md#x171--audit-lane-i-api-shape-and-grammar) |
-| Q83 | Which single-valued storage references become derived: mdsServiceRef, the SMB share cluster_id, and SMB resourceRefs versus the native refs? | (a) mdsServiceRef dropped or optional (mds.<name>), cluster_id optional from smbClusterRef, one of resourceRefs or native refs derived from the other; a disagreeing authored value still refuses at its field.; (b) mdsServiceRef optional, not dropped; native refs stay the authored home (D133) and resourceRefs become optional, derived by native ID.; (c) Keep every value authored and agreement-checked. | **Answered by D183: b.** b; the 6-node services example must validate with the leaves removed. | [B814](delivered.md#x171--audit-lane-i-api-shape-and-grammar) |
-| Q84 | Where does an admitted but unrealized declaration refuse by default, and what single criterion allows an admission-time refusal? | (a) api.md#compiler-boundary names plan-time lifecycle.unsupported as the default and one criterion for admission-time api.invariant (no build has any consumer, as rescue under D29); kind pages link it.; (b) Leave the refusal point per field. | **Answered by D183: a.** a. | [B814](delivered.md#x171--audit-lane-i-api-shape-and-grammar) |
-| Q85 | Does validate warn, with a stable diagnostic code in text and -o json output, for every admitted but unrealized declaration, backed by one api.md table held to the lifecycle.unsupported set by a test? | (a) Add the warning code and the code-checked table (a new public diagnostic).; (b) No warning; the plan-time refusal is the only signal. | **Answered by D183: a.** a as revision 2 of the report asks, taken as a separate UX decision from unrealized-refusal-point. | [B814](delivered.md#x171--audit-lane-i-api-shape-and-grammar) |
-| Q86 | Which single rule replaces the StorageCluster name limits that vary with declared services (44, 39, 37, 26)? | (a) One unconditional metadata.name limit (26 or less) on the API page; the per-service caps link to it.; (b) One block-identity rule: an identity over 63 characters replaces its overflowing segment with a fixed-length hash token, so public limits stop depending on internal prefixes. | **Answered by D183: b.** b (report); either way no name limit depends on declared services, and each kind gets one name rule. | [B814](delivered.md#x171--audit-lane-i-api-shape-and-grammar) |
-| Q87 | Do the section 4.3 before-1.0 renames that hang on these shape decisions (Ceph*, hostPrerequisites, control-plane, installer) land in one coordinated slice with the reshapes and the L2 renames? | (a) One batched slice per surface with retired-path refusals naming each replacement, landed while few live contexts exist.; (b) Each rename lands with its own shape change, as separate slices.; (c) Keep the current names. | **Answered by D183: a.** a (report 5.6); every moved request or block identity stops D142 continuation, so affected live operations complete or are destroyed first. | [B814](delivered.md#x171--audit-lane-i-api-shape-and-grammar), [B824](delivered.md#x171--audit-lane-i-api-shape-and-grammar) |
-| Q88 | Is the tracked lab-kubevirt example the external-endpoint profile (lab-kubevirt-external) or the first-ranked baremetal-VIP profile of Q19? | (a) Rename the example, golden and README to lab-kubevirt-external, reconcile its sizing with the coverage row, and fix the B731 note.; (b) Change the coverage row to match the tracked example. | **Answered by D183: a.** a; it matches Q19 (a) and pre-empts no answer. | [B814](delivered.md#x171--audit-lane-i-api-shape-and-grammar) |
-| Q89 | Is project.md Product scope split into a committed portfolio and an extension envelope that gates no milestone until promoted? | (a) Two labelled lists, each committed entry linking its milestone; no milestone page changes.; (b) a plus moving family-only arms (M1f vSphere, M3f) out of their gating milestones; amends D158 and the D172 Q1 reading.; (c) Keep one list; every family item keeps gating its milestone. | **Answered by D183: a.** a now; b as a separate owner option; an envelope-only arm needs owner promotion, never a session clause. | [B815](#b815) |
-| Q90 | Do milestone Requires state only real dependencies per submilestone, and may portfolio submilestones complete without family arms? | (a) Per-submilestone Requires cells on m1 to m4 with true prerequisites, cross-milestone items included; completion rules unchanged.; (b) a plus a portfolio or family tag so a milestone can be done on its portfolio submilestones; supersedes D158's all-items clause.; (c) a plus moving M1f, M3f (and optionally M4e, M4f) to a later milestone; amends D158, D172, D173. | **Answered by D183: a.** a, correcting the waiver citation to D174; b or c only as an owner decision superseding D158. | [B815](#b815) |
-| Q91 | How do session-taken clauses pending the owner's review bind, and where are they tracked? | (a) One scope rule: a waiver quotes the owner's explicit request, pending clauses bind until overturned and an overturned clause reopens its work; one open-clause list.; (b) Pending clauses authorize nothing until the owner confirms them. | **Answered by D183: a.** a; milestones.md is at its byte budget, so the rule needs equal trimming. | [B815](#b815) |
-| Q92 | Does a fresh destroy accept a scoped, acknowledged abandonment of one block that stays unknown, so one unreachable target no longer blocks the whole removal (reopening D38)? | (a) Keep D38: the removal stays refused and the orphan-acknowledged deletion is the only exit.; (b) Record that block abandoned, keep it, its plan ancestors and host reservations, and remove the rest in inverted order; needs B568 so its markers stay guarded. | **Answered by D183: a.** No recommendation in the report: it is a request to reopen D38, and roadmap 14.6 holds the work until the owner does. | [B816](#b816) |
-| Q93 | Which exit does a completed apply holding a lost block record get? | (a) The existing purge-with-orphans deletion, named in the refusal and status; abandons the apply's host effects (spec today).; (b) A destroy over the completed apply covers its whole frozen plan, resolving non-done blocks by observation first. | **Answered by D183: b.** a; b only as an owner item. | [B816](#b816) |
-| Q94 | Does handoff readiness cover the selected input revision or the revision the apply froze? | (a) Add a predicate condition and status reason: the selected revision is not the one the apply froze, and diff shows what changed.; (b) Readiness covers the frozen scope; project.md says so and status prints the frozen revision beside ready. | **Answered by D183: a.** a (calibrator), mirroring the settlement scope. | [B816](#b816) |
-| Q95 | Does retention pin the runtime and wheels of every non-terminal operation so its continuation survives more than one lock change or a setup-format discard offline? | (a) Wording only: current-plus-previous retention stays and refusals name the registering build's setup with network or --wheel-mirror (spec today).; (b) A host-wide pin list under setup/lock written at registration, honoured by retention and format healing, dropped at finalization or deletion. | **Answered by D183: a.** a now; b parked as an owner option under D152 clauses 8 and 9. | [B816](#b816) |
-| Q96 | Are SSH-placed host claims published in the controller record, qualified by the SSH host token, so two contexts of one store targeting one SSH host conflict? | (a) Widen B247: every SSH-placed key gains an ssh/<address>:<port>/ qualifier with the controller conflict and release rules, best effort per declared address; controller-record schema moves pre-1.x.; (b) Keep B247 narrow and carry cross-context SSH coordination in a new parked item.; (c) Keep the limitation documented; contexts on one SSH host stay uncoordinated. | **Answered by D183: a.** a, decided with B247; do not edit delivered history. | [B816](#b816) |
-| Q97 | How does machine trust under --yes or structured output reconcile with the explicit host-key confirmation rule? | (a) Add --expect <machine>=SHA256:<fp> and make --replace take one; an add or replace whose fingerprint is not named refuses (new public flag syntax).; (b) security.md names --yes enrollment as an operator-accepted trust-on-first-use exception; no code change. | **Answered by D183: a.** The roadmap P1-J exit chooses a; the calibrator preferred b with a as hardening. a adds a public flag, so the owner decides. | [B817](delivered.md#x166--audit-lane-d-credentials-and-trust) |
-| Q98 | Is a usernamePassword Secret's username secret? | (a) Declare it non-secret identity metadata in security.md and secrets.md; cli.md stops treating --username as hidden.; (b) Add a file or stdin input for the username (new public flag). | **Answered by D183: a.** a (calibrator); D72/D73 keep usernames on the flag without deciding they are non-secret. | [B817](delivered.md#x166--audit-lane-d-credentials-and-trust) |
-| Q99 | May a query-signed media URL travel on argv for media add --from-url? | (a) Take the URL from a file or stdin (for example --from-url-file) and state that a signed query is a credential (new public flag).; (b) Record a named exception in security.md for a query-signed URL on argv. | **Answered by D183: a.** a or b (calibrator); refusing queries is rejected because managed OS intends signed URLs. | [B817](delivered.md#x166--audit-lane-d-credentials-and-trust) |
-| Q100 | Is the cluster info --secrets reveal of StorageObjectUser S3 keys (objectUsers) a current, authorized reveal? | (a) Current: secrets.md lists it, and ceph-resources.md and ceph.md link the reveal instead of saying no command reveals the pair.; (b) Not authorized: cli.md marks it Not yet met under B489 and the code stops revealing it. | **Answered by D183: a.** a (calibrator): delivered under B489's in-tree handoff, but D143 clause 7 authorizes only the dashboard password, so the owner confirms. | [B817](delivered.md#x166--audit-lane-d-credentials-and-trust) |
-| Q101 | What does cluster info --secrets emit for a dashboard password whose apply never proved the dashboard reachable? | (a) No warning: dashboard.status unproved and its reason convey it.; (b) A distinct registered warning code such as access.unreachable. | **Answered by D183: a.** a, the smaller change; either way access.unproved keeps only the D124 custody meaning. | [B817](delivered.md#x166--audit-lane-d-credentials-and-trust) |
-| Q102 | Does the decision log stay in backlog.md (with per-decision anchors and status tokens) or move to its own page? | (a) Keep the log in backlog.md#decisions and add #d<n> anchors, status tokens and an order check.; (b) Move the log to specs/milestones/decisions.md, retarget every backlog.md#decisions link and amend milestones.md's D<n> bullet. | **Answered by D183: a.** a: the smallest change; anchors and status tokens need no move. | [B819](#b819) |
-| Q103 | May a pre-existing defect that blocks the authorized outcome or its gates be fixed inside the slice? | (a) AGENTS.md admits the fix in its own commit after the defect is recorded as an item the Refs line names; other defects are reported.; (b) Keep the unqualified ban; a blocking defect stops the slice until the owner authorizes its item. | **Answered by D183: a.** a, as the report drafts it; its only precedent (D152 clause 13) still awaits the owner's review. | [B822](#b822) |
-| Q104 | Does the State reconciliation context keep its display name, given its contract disclaims reconciliation? | (a) Rename the display name (architecture row, H1, index link text), keeping the file path and retargeting inbound anchors.; (b) Keep the name; the disclaimer now applied in state-reconciliation.md is the whole change. | **Answered by D183: b.** b is smallest; a if the owner wants the name fixed before 1.0. | [B823](delivered.md#x172--audit-lane-m-cli-and-examples) |
-| Q105 | Which single casing do Bootwright-owned enum values use, and are Secret type names an exception? | (a) lowerCamel: renames the kebab outliers (container-runtime, import-certificate, install-only, read-only, verified-tunnel).; (b) kebab-case: renames redfishVirtualMedia, loadBalancer, logicalOverwrite, dataFoundation, certManager and the Secret types.; (c) State the rule per page and leave existing values unchanged. | **Answered by D183: a.** The convention with the smaller rename count, likely lowerCamel; native spellings exempt; decide Secret types as an explicit exception. | [B824](delivered.md#x171--audit-lane-i-api-shape-and-grammar) |
-| Q106 | Is the --stage token infra-components renamed to match 'infrastructure services'? | (a) Rename it (for example infrastructure-services) in the CLI, plan goldens, completion, examples and specs.; (b) Keep the token; the glossary entry defines it. | **Answered by D183: a.** a, cheap before 1.0, together with stating what preflight infra checks. | [B824](delivered.md#x171--audit-lane-i-api-shape-and-grammar) |
-| Q107 | Is StorageExport (a per-consumer Data Foundation attachment) renamed, and does its shape change? | (a) Rename to StorageAttachment or StorageConsumer with per-protocol arms, drop spec.type, move external details to StorageCluster's external arm (B107).; (b) Rename the kind and fdf.storageExportRef only; keep spec.type unless api.md's union list is amended.; (c) Keep the name with the clarification now in api/ceph.md. | **Answered by D183: b.** b at least, keeping the D173 decomposition; ask with B814's storage naming questions. | [B824](delivered.md#x171--audit-lane-i-api-shape-and-grammar) |
-| Q108 | Should status add Secret and media readiness hints to nextSteps? | (a) Add read-only rows for missing or stale Secrets and missing media, with remedies before plan or apply, as a separate item.; (b) Keep status as now narrowed; operators use secret check and media list. | **Answered by D183: a.** b now; a only as its own UX item. | [B825](#b825) |
-| Q109 | Accept an opt-in bootwright diff --exit-code (exit 3 on any differing or unknown object, default unchanged)? | (a) Add the flag, its commands.md row, an exit-status row and an amended ok/exitCode rule.; (b) No flag; document a stable JSON summary field as the drift signal. | **Answered by D183: a.** b costs nothing; a is the common convention and needs acceptance as a new public flag under D153 clause 2. | [B825](#b825) |
-| Q110 | Which schema-discovery commands or flags does the CLI gain? | (a) render effective --origins marks each leaf authored, defaults.<Kind>, built-in or derived, with a golden.; (b) a plus bootwright schema --format json-schema as an advisory export.; (c) a and b plus bootwright explain with per-field docs in Go, a second owner of field meaning.; (d) Defer all. | **Answered by D183: a and b.** a first; b optional; c only if the owner wants Go as the single source of field docs. | [B826](#b826) |
-| Q111 | Is a plain enabled boolean allowed for a featureless switch, or do presence blocks replace them? | (a) api.md allows a plain boolean when the feature has no settings and omission equals the stated default (fips, firewall); no schema change.; (b) Presence blocks only: fips: {} and firewall: {} replace the booleans in schema, examples and goldens. | **Answered by D183: a.** a. | [B826](#b826) |
-| Q112 | Which one-value mechanics of the libvirt arm and managed services stop being authored, and is managed-service implementation optional? | (a) libvirt uri becomes optional with a materialized default and bmcEmulationDefaults is renamed; implementation stays required.; (b) As a, and implementation becomes optional with a materialized default while a kind has one implementation. | **Answered by D183: a.** a: explicit implementation selection stays, unless the owner prefers b. | [B827](delivered.md#x171--audit-lane-i-api-shape-and-grammar) |
-| Q113 | Do managed services keep image.local and image.public with the stated precedence, or collapse to one image reference? | (a) Keep both; the precedence now stated is the contract, no schema change.; (b) One image reference; schema, admission, kind defaults, examples and goldens change, mirroring left to registry policy (B69). | **Answered by D183: a.** a now; b only together with the registry-policy design. | [B827](delivered.md#x171--audit-lane-i-api-shape-and-grammar) |
-| Q114 | Does the API adopt one public name limit for all kinds, or keep per-kind limits derived from block prefixes? | (a) One 47-byte limit stated once, new block prefixes at most 16 bytes with a test; tightens Machine, InfraProvider, Proxy, DNS, NTP and export names.; (b) Hash long names into block identities; one rule without shortening names, less readable run trees.; (c) Keep per-kind limits in one api.md table linked from each kind. | **Answered by D183: b.** a with an architecture test on prefix length; ask with B814's V2-19 name-limit question. | [B827](delivered.md#x171--audit-lane-i-api-shape-and-grammar) |
-| Q115 | Are the reserved CustomPlaybook shape and ClusterAddon.spec.steps refused at admission instead of validated? | (a) Refuse an authored CustomPlaybook naming B102; lexical rules stay in the deferred page; normalization code removed.; (b) a plus refuse ClusterAddon.spec.steps naming B90, letting B90 redefine steps.; (c) Keep validating both reserved shapes. | **Answered by D183: c.** a; b only if the owner agrees B90 may redefine steps. | [B828](delivered.md#x171--audit-lane-i-api-shape-and-grammar) |
-| Q116 | Do object-user S3 keys leave cluster info --secrets for a per-user selector? | (a) Add --object-user <u> emitting only that user's keys; --secrets alone reveals only the dashboard password; B489 amended.; (b) A new raw single-credential export command for object users.; (c) Keep the current reveal and document the handoff risk. | **Answered by D183: a.** a, a new public flag closing B489's sensitive-output gate; ask with B817's R2-04-02. | [B829](#b829) |
-| Q117 | Is --authorize data-loss bound to the reviewed consuming steps when --yes or non-interactive input suppresses review? | (a) Require --authorize data-loss=<digest of consuming blocks and targets> under --yes; a stale digest refuses before registration.; (b) Keep the bare token; the cli.md wording fix already applied is the whole change. | **Answered by D183: a.** b unless the owner wants hardening; a changes a public flag form under D153 clause 2. | [B830](delivered.md#x170--audit-lane-j-reconciliation-rules) |
-| Q118 | Does the last GitOps package wait for every block that reaches its cluster's API, or only the add-ons-stage blocks requiring the installation? | (a) Widen to every block reaching the cluster, whatever its stage; planning edges change and need a cycle check.; (b) Keep the narrowed set now stated, naming the excluded cross-stage blocks. | **Answered by D183: new item B837.** b now; settle with the pending Q48 and Q60 answers. | [B830](delivered.md#x170--audit-lane-j-reconciliation-rules), [B837](delivered.md#x171--audit-lane-i-api-shape-and-grammar) |
+| ID | Question | Options | Recommendation | Blocks | Status |
+| --- | --- | --- | --- | --- | --- |
+| Q62 | Should a Codex project hook call scripts/hooks/stop-check, which needs a narrow .codex/hooks.json un-ignored in the tracked tree? | (a: add it) Codex sessions get the same advisory end-of-turn focus check; .gitignore gains one exception.; (b: leave .codex/ untracked) Only Claude Code runs the hook; Codex users configure their own. | **Answered by D183: a.** The report (10.4) leaves it to the owner without a recommendation; non-blocking for B800's docs test. | [B800](delivered.md#x161--audit-lane-a-harness-and-guards) | answered by [D183](#d183) |
+| Q63 | How should the WIP limit of two active slices (D158) be reconciled with the five slices now in progress (X61, X118, X123, X130, X143), where X130 (M3e, D181) has no recorded exception? | (a: keep the limit and per-decision exceptions) Record an exception for X130 or pause one slice; the scope rule stays as written.; (b: a limit per program or milestone) Rewrite the scope rule to count active slices per program; the standing exceptions in D134, D143, D159, D172 and D173 retire.; (c: retire the WIP limit) Delete the limit and its exceptions; the Active slices table alone governs authorization. | **Answered by D183: b.** The audit leaves the WIP limit to the owner (P0-B exit); it suggests a rule current practice satisfies, such as a per-program limit, but does not choose. | [B801](delivered.md#x161--audit-lane-a-harness-and-guards) | answered by [D183](#d183) |
+| Q64 | Does matrix row U03 (replicated size equal to the OSD-host count refused, citing IBM's colocation page) stay as an admission refusal under D159 clause 15? | (a: keep) U03 stays tested, recorded as a native replica-safety rule (three replicas need four hosts) rather than a support statement.; (b: remove) Admission stops refusing size equal to host count; the U03 row, fixture and admission check are removed by a code change. | **Answered by D183: a.** The report routes this to the owner without a recommendation; its basis may be a replica-safety rule rather than a vendor table. | [B801](delivered.md#x161--audit-lane-a-harness-and-guards) | answered by [D183](#d183) |
+| Q65 | How does a removal observation that cannot tell its postcondition from an unreadable target resolve (state-reconciliation.md Resolution outcomes, against security.md's unknown-stays-unknown rule)? | (a: delete the clause) An unreadable removal observation stays unknown and only an operator resolution moves it; smallest edit, more manual resolutions, teardown can strand.; (b: typed inconclusive result) A new effect state distinct from no-effect permits one retry only for a capability declaring the removal idempotent, with ownership proved from durable records and a re-read before any effect; one table row, one capability field, one test, and one sentence in security.md. | **Answered by D183: b.** The report gives both without choosing (14.8); section 8.B3 calls B the smallest correction that keeps replay-safe teardown. Either way the negative test is the same. | [B802](delivered.md#x165--audit-lane-b-physical-targets-and-shared-hosts) | answered by [D183](#d183) |
+| Q66 | How is a private Machine that the network restart powered off before (or after) its disk boot read on recovery (managed-os.md 'the one window', currently 'positive no effect')? | (a: relabel) Read the window as a positive partial realization of this operation's own installation, retried by the same frozen request behind the boot proof, and name the cases it covers including power-off after disk boot.; (b: durable intent) Record durably before power-off that installation was proved and disk boot is intended; recovery takes the disk-boot identity path or stays unknown, never re-running the installer. | **Answered by D183: b.** The report records no choice; it calls the relabel the smallest fix, while durable intent removes the reinstall. | [B802](delivered.md#x165--audit-lane-b-physical-targets-and-shared-hosts) | answered by [D183](#d183) |
+| Q67 | Should an orphan-acknowledged context deletion keep its exclusive host keys as an abandoned/<name> tombstone instead of releasing them at once (amending D38)? | (a: keep D38) Keys release at the deletion; the orphan confirmation names the keys it frees and the reinstall hazard (spec applied, code in B803).; (b: tombstone) Exclusive entries become an abandoned/<name> holder that refuses conflicting claims until a new confirmed 'bootwright controller release --abandoned <name>'; shared media entries still drop at once. | **Answered by D183: a.** Arbiter and lanes: A's warning now; B only if the owner reopens D38. | [B803](delivered.md#x165--audit-lane-b-physical-targets-and-shared-hosts) | answered by [D183](#d183) |
+| Q68 | Confirm the D143 clause 6 reading: does retiring a Ceph cluster (or StorageExport) with its virtual hosts require that no consumer of its exports survives the removal? | (a: refuse) Removal refuses before registration naming the surviving consumer and export until B491; a mixed context (virtual Ceph, physical OpenShift) has no full destroy until then (the specs state this refusal as the interim safe reading).; (b: named impact plus acknowledgement) Removal proceeds after an acknowledgement naming the surviving consumer, whose PVs and Secrets then point at deleted storage. | **Answered by D183: a.** Roadmap P0-E and R2-02-01 recommend A with a plan-time topology flag; F10-04's refuter and calibrator prefer B as smaller. | [B804](delivered.md#x167--audit-lane-c-storage-retirement) | answered by [D183](#d183) |
+| Q69 | Should B659, B662 and B491 become prerequisites of M2d's B485 exit, or does B485 close with the physical recovery limitation recorded? | (a: prerequisites) B485 Requires gains B659, B662 and B491; M2d cannot complete until interrupted physical deployments have exits, which first needs their protocol decisions.; (b: record the limitation) B485 may close with the physical profile documented as an incomplete recovery profile (text applied now); the exits stay parked. | **Answered by D183: a.** The audit (14.8) offers both and keeps the recovery protocols as owner decisions; it does not choose. | [B485](m2.md#b485) | answered by [D183](#d183) |
+| Q70 | Should continuation and removal be able to present the current version of a rotated access credential (BMC/Redfish, KubeVirt kubeconfigRef, vCenter, registry login) instead of the bound one, and through which recorded gate? | (a: explicit recorded rebind exit) A third exit beside D37 for access credentials only, gated by a flag or the --authorize token model and recorded as a new binding version; ownership proofs still run and effect-material Secrets refuse it.; (b: keep today's rule) Removal always presents the bound version; a rotated credential strands destroy, leaving restore-keyring or --purge --allow-orphans. | **Answered by D183: a.** The report recommends A, gated by the --authorize model and named apart from B181's bounded-run rebind, keeping D37 and D85; the owner decides the flag. | [B805](#b805) | answered by [D183](#d183) |
+| Q71 | Refuse the four inert ContainerCluster endpoint fields (port, scheme, prefixLength, interfaceNetworks) at plan on the agent path, or remove them from the schema until a consumer exists? | (a: refuse at plan) Fields stay admitted; an authored non-native value refuses at its path with a refusal row per field (spec states this).; (b: remove the fields) The endpoint shape loses the four fields; no refusal rows; examples and goldens change. | **Answered by D183: a.** Refuse at plan now (roadmap P0-H); removal stays an owner option. Non-blocking: B807 implements A unless the owner chooses B first. | [B807](delivered.md#x168--audit-lane-f-truthful-admission) | answered by [D183](#d183) |
+| Q72 | Which mechanism scopes an Environment: the source directory, spec.resources and cluster lists all narrow scope today? | (a) Remove spec.resources; the Environment directory is the scope and cluster lists are the only narrowing, documented with an example.; (b) Keep spec.resources and drop cluster lists, which makes the hostClusterRef retention edge moot.; (c) Keep both, with one tracked example using spec.resources and a one-sentence rationale in environment.md. | **Answered by D183: a.** Decide together with hostclusterref-retention-edge; the report's first option is (a), and the lanes expect cluster lists to stay. Either way the excluded-reference refusal names the selection field. | [B812](delivered.md#x169--audit-lane-g-extension-architecture) | answered by [D183](#d183) |
+| Q73 | If cluster lists stay, does selecting a nested cluster retain its KubeVirt provider's hostClusterRef ContainerCluster as a root with its own closure? | (a) Add the closure row, effective when B732 lifts the KubeVirt refusal, with a multidc selection test as B732 exit evidence.; (b) Moot because cluster lists are dropped (environment-scope-mechanism b). | **Answered by D183: a.** a if cluster lists stay; record the selection test as B732 exit evidence either way. | [B812](delivered.md#x169--audit-lane-g-extension-architecture) | answered by [D183](#d183) |
+| Q74 | Does an authored cluster list retain Bootwright-installed Machines (and their provider closure) that are nodes or hosts of no declared cluster, instead of only warning? | (a) Retain them as roots; the validate warning covers only what stays excluded.; (b) Warn only, as the spec states today. | **Answered by D183: a.** a (calibrator), decided with environment-scope-mechanism; the warning stands until then. | [B812](delivered.md#x169--audit-lane-g-extension-architecture) | answered by [D183](#d183) |
+| Q75 | When an attachment reaches a cluster root that an authored list omits, does validate warn, refuse, or retain the full closure? | (a) Deterministic validate warning naming the list to extend (spec today).; (b) Validate error naming the list to extend, since a completed apply's selection cannot change (D153).; (c) Retain the full closure of the omitted root. | **Answered by D183: b.** b (calibrator); the warning is the interim minimum. | [B812](delivered.md#x169--audit-lane-g-extension-architecture) | answered by [D183](#d183) |
+| Q76 | Does a removal under another build compare an effect-identity part of the content digest with the build in hand (amending D145(4))? | (a) Keep D145(4): removals compare no digest and rely on identity values travelling in the frozen request (stated in the spec now).; (b) Split the digest into effect-identity and mechanism parts; a removal refuses lifecycle.state before resolution on an effect-identity mismatch, naming the registering build and the deletion exit. | **Answered by D183: a.** a now (calibrator, smallest); b presented to the owner as an amendment of D145(4). | [B813](delivered.md#x163--audit-lane-h-cross-build-continuation-guards) | answered by [D183](#d183) |
+| Q77 | How does a non-OpenShift distribution enter ContainerCluster, and does B748's OKD arm follow the same path? | (a) A distribution-neutral envelope (nodes with neutral roles, endpoints, networks, proxy/NTP/registry, trust) plus a presence union of distribution arms starting with spec.openshift; node binding reads a distribution-declared node capability; role master becomes control-plane and endpoint source.type openshift becomes installer (section 4.3).; (b) One kind per distribution family, with the generic touch points each new kind implies listed.; (c) Confirm OpenShift and OKD only in project.md and defer the question. | **Answered by D183: b, as OpenShiftCluster.** Record one decision now, linked from api/openshift-clusters.md, stating node binding and B748 alignment; the report's scenario analysis favors a, which is cheapest before 1.x. M3/M4 keep the flat shape until decided. | [B814](delivered.md#x171--audit-lane-i-api-shape-and-grammar) | answered by [D183](#d183) |
+| Q78 | How are the Ceph-only Storage* child kinds bound to Ceph? | (a) Rename the children to Ceph* (CephPool, CephClient, CephRBDImage and the rest), keeping StorageCluster neutral; revisits D133's naming baseline and touches examples and goldens.; (b) Keep the names; api/ceph.md states they are the Ceph arm's kinds, admission refuses a child whose cluster's type is not ceph, a new storage type brings its own kinds, and StorageExport is classified. | **Answered by D183: a, with CephCluster.** b (verifiers and calibrator); a only as an explicit owner decision revisiting D133, which the report prefers while renames are cheap. | [B814](delivered.md#x171--audit-lane-i-api-shape-and-grammar) | answered by [D183](#d183) |
+| Q79 | Does Machine carry substrate facts in a per-substrate arm mirroring the InfraProvider arm? | (a) Full arm: spec.substrate {providerRef, baremetal/libvirt/kubevirt/vsphere} with admission requiring the arm to match the provider.; (b) Narrow arm: NIC names and neutral root hints stay top level; only bmc, MACs, wwn/hctl/serial admissibility, profileRef, failureDomainRef, template and interfaceAttachments move into arms.; (c) Keep the flat shape and derive per-substrate admissibility from one substrate-arm registry table. | **Answered by D183: b.** b, decided before B87/B99 revive the arms; D44 and D94 hold under every option. | [B814](delivered.md#x171--audit-lane-i-api-shape-and-grammar) | answered by [D183](#d183) |
+| Q80 | Are the Machine.capabilities role tokens (openshift-node, ceph-node, ceph-arbiter) dropped and container-runtime and libvirt derived from placements? | (a) Drop the three roles and derive the prerequisites at once; remove the field or keep the remainder as hostPrerequisites (section 4.3).; (b) Staged: first state the ceph-node rule in the storage API spec (or drop it) and drop ceph-arbiter; then derive container-runtime and libvirt and remove the roles, keeping an authored path for the controller Machine.; (c) Keep the field and its role tokens. | **Answered by D183: a.** b; step one needs no shape change beyond removing a value nothing reads; update controller.md and the environment.md controller refusal table. | [B814](delivered.md#x171--audit-lane-i-api-shape-and-grammar) | answered by [D183](#d183) |
+| Q81 | Which single testable rule decides between a presence arm and a type, method or implementation enum, and which current idioms change? | (a) State the rule, drop StorageCluster.spec.type, fold install.method into install.agent presence and make the service implementation an arm; an architecture test enforces it.; (b) Same rule, but StorageCluster gets an engine arm usable for external management before type goes, and the service implementation stays an enum.; (c) Keep the four idioms and only state the criterion. | **Answered by D183: one rule with its architecture test; services keep the implementation enum.** b, recorded with current and proposed examples; the rule then goes into api.md#unions with its architecture test. | [B814](delivered.md#x171--audit-lane-i-api-shape-and-grammar) | answered by [D183](#d183) |
+| Q82 | Does api.md state that a value with exactly one valid derivation is derived, not authored and compared (bindAddress, generated SANs, node fqdn)? | (a) State the principle; fold bindAddress into B333; derive generated-certificate SANs from consumer endpoints; derive node fqdn.; (b) As a, but node fqdn keeps its explicit optional override and only examples stop authoring derived values.; (c) Keep authored-and-compared copies and only document the collision trap. | **Answered by D183: b.** b; pre-1.x no-compatibility removes B333's digest-window reason; reread ADR 0035/0036 before touching fqdn. | [B814](delivered.md#x171--audit-lane-i-api-shape-and-grammar) | answered by [D183](#d183) |
+| Q83 | Which single-valued storage references become derived: mdsServiceRef, the SMB share cluster_id, and SMB resourceRefs versus the native refs? | (a) mdsServiceRef dropped or optional (mds.<name>), cluster_id optional from smbClusterRef, one of resourceRefs or native refs derived from the other; a disagreeing authored value still refuses at its field.; (b) mdsServiceRef optional, not dropped; native refs stay the authored home (D133) and resourceRefs become optional, derived by native ID.; (c) Keep every value authored and agreement-checked. | **Answered by D183: b.** b; the 6-node services example must validate with the leaves removed. | [B814](delivered.md#x171--audit-lane-i-api-shape-and-grammar) | answered by [D183](#d183) |
+| Q84 | Where does an admitted but unrealized declaration refuse by default, and what single criterion allows an admission-time refusal? | (a) api.md#compiler-boundary names plan-time lifecycle.unsupported as the default and one criterion for admission-time api.invariant (no build has any consumer, as rescue under D29); kind pages link it.; (b) Leave the refusal point per field. | **Answered by D183: a.** a. | [B814](delivered.md#x171--audit-lane-i-api-shape-and-grammar) | answered by [D183](#d183) |
+| Q85 | Does validate warn, with a stable diagnostic code in text and -o json output, for every admitted but unrealized declaration, backed by one api.md table held to the lifecycle.unsupported set by a test? | (a) Add the warning code and the code-checked table (a new public diagnostic).; (b) No warning; the plan-time refusal is the only signal. | **Answered by D183: a.** a as revision 2 of the report asks, taken as a separate UX decision from unrealized-refusal-point. | [B814](delivered.md#x171--audit-lane-i-api-shape-and-grammar) | answered by [D183](#d183) |
+| Q86 | Which single rule replaces the StorageCluster name limits that vary with declared services (44, 39, 37, 26)? | (a) One unconditional metadata.name limit (26 or less) on the API page; the per-service caps link to it.; (b) One block-identity rule: an identity over 63 characters replaces its overflowing segment with a fixed-length hash token, so public limits stop depending on internal prefixes. | **Answered by D183: b.** b (report); either way no name limit depends on declared services, and each kind gets one name rule. | [B814](delivered.md#x171--audit-lane-i-api-shape-and-grammar) | answered by [D183](#d183) |
+| Q87 | Do the section 4.3 before-1.0 renames that hang on these shape decisions (Ceph*, hostPrerequisites, control-plane, installer) land in one coordinated slice with the reshapes and the L2 renames? | (a) One batched slice per surface with retired-path refusals naming each replacement, landed while few live contexts exist.; (b) Each rename lands with its own shape change, as separate slices.; (c) Keep the current names. | **Answered by D183: a.** a (report 5.6); every moved request or block identity stops D142 continuation, so affected live operations complete or are destroyed first. | [B814](delivered.md#x171--audit-lane-i-api-shape-and-grammar), [B824](delivered.md#x171--audit-lane-i-api-shape-and-grammar) | answered by [D183](#d183) |
+| Q88 | Is the tracked lab-kubevirt example the external-endpoint profile (lab-kubevirt-external) or the first-ranked baremetal-VIP profile of Q19? | (a) Rename the example, golden and README to lab-kubevirt-external, reconcile its sizing with the coverage row, and fix the B731 note.; (b) Change the coverage row to match the tracked example. | **Answered by D183: a.** a; it matches Q19 (a) and pre-empts no answer. | [B814](delivered.md#x171--audit-lane-i-api-shape-and-grammar) | answered by [D183](#d183) |
+| Q89 | Is project.md Product scope split into a committed portfolio and an extension envelope that gates no milestone until promoted? | (a) Two labelled lists, each committed entry linking its milestone; no milestone page changes.; (b) a plus moving family-only arms (M1f vSphere, M3f) out of their gating milestones; amends D158 and the D172 Q1 reading.; (c) Keep one list; every family item keeps gating its milestone. | **Answered by D183: a.** a now; b as a separate owner option; an envelope-only arm needs owner promotion, never a session clause. | [B815](delivered.md#x173--audit-lane-l-corpus-structure-and-skills) | answered by [D183](#d183) |
+| Q90 | Do milestone Requires state only real dependencies per submilestone, and may portfolio submilestones complete without family arms? | (a) Per-submilestone Requires cells on m1 to m4 with true prerequisites, cross-milestone items included; completion rules unchanged.; (b) a plus a portfolio or family tag so a milestone can be done on its portfolio submilestones; supersedes D158's all-items clause.; (c) a plus moving M1f, M3f (and optionally M4e, M4f) to a later milestone; amends D158, D172, D173. | **Answered by D183: a.** a, correcting the waiver citation to D174; b or c only as an owner decision superseding D158. | [B815](delivered.md#x173--audit-lane-l-corpus-structure-and-skills) | answered by [D183](#d183) |
+| Q91 | How do session-taken clauses pending the owner's review bind, and where are they tracked? | (a) One scope rule: a waiver quotes the owner's explicit request, pending clauses bind until overturned and an overturned clause reopens its work; one open-clause list.; (b) Pending clauses authorize nothing until the owner confirms them. | **Answered by D183: a.** a; milestones.md is at its byte budget, so the rule needs equal trimming. | [B815](delivered.md#x173--audit-lane-l-corpus-structure-and-skills) | answered by [D183](#d183) |
+| Q92 | Does a fresh destroy accept a scoped, acknowledged abandonment of one block that stays unknown, so one unreachable target no longer blocks the whole removal (reopening D38)? | (a) Keep D38: the removal stays refused and the orphan-acknowledged deletion is the only exit.; (b) Record that block abandoned, keep it, its plan ancestors and host reservations, and remove the rest in inverted order; needs B568 so its markers stay guarded. | **Answered by D183: a.** No recommendation in the report: it is a request to reopen D38, and roadmap 14.6 holds the work until the owner does. | [B816](#b816) | answered by [D183](#d183) |
+| Q93 | Which exit does a completed apply holding a lost block record get? | (a) The existing purge-with-orphans deletion, named in the refusal and status; abandons the apply's host effects (spec today).; (b) A destroy over the completed apply covers its whole frozen plan, resolving non-done blocks by observation first. | **Answered by D183: b.** a; b only as an owner item. | [B816](#b816) | answered by [D183](#d183) |
+| Q94 | Does handoff readiness cover the selected input revision or the revision the apply froze? | (a) Add a predicate condition and status reason: the selected revision is not the one the apply froze, and diff shows what changed.; (b) Readiness covers the frozen scope; project.md says so and status prints the frozen revision beside ready. | **Answered by D183: a.** a (calibrator), mirroring the settlement scope. | [B816](#b816) | answered by [D183](#d183) |
+| Q95 | Does retention pin the runtime and wheels of every non-terminal operation so its continuation survives more than one lock change or a setup-format discard offline? | (a) Wording only: current-plus-previous retention stays and refusals name the registering build's setup with network or --wheel-mirror (spec today).; (b) A host-wide pin list under setup/lock written at registration, honoured by retention and format healing, dropped at finalization or deletion. | **Answered by D183: a.** a now; b parked as an owner option under D152 clauses 8 and 9. | [B816](#b816) | answered by [D183](#d183) |
+| Q96 | Are SSH-placed host claims published in the controller record, qualified by the SSH host token, so two contexts of one store targeting one SSH host conflict? | (a) Widen B247: every SSH-placed key gains an ssh/<address>:<port>/ qualifier with the controller conflict and release rules, best effort per declared address; controller-record schema moves pre-1.x.; (b) Keep B247 narrow and carry cross-context SSH coordination in a new parked item.; (c) Keep the limitation documented; contexts on one SSH host stay uncoordinated. | **Answered by D183: a.** a, decided with B247; do not edit delivered history. | [B816](#b816) | answered by [D183](#d183) |
+| Q97 | How does machine trust under --yes or structured output reconcile with the explicit host-key confirmation rule? | (a) Add --expect <machine>=SHA256:<fp> and make --replace take one; an add or replace whose fingerprint is not named refuses (new public flag syntax).; (b) security.md names --yes enrollment as an operator-accepted trust-on-first-use exception; no code change. | **Answered by D183: a.** The roadmap P1-J exit chooses a; the calibrator preferred b with a as hardening. a adds a public flag, so the owner decides. | [B817](delivered.md#x166--audit-lane-d-credentials-and-trust) | answered by [D183](#d183) |
+| Q98 | Is a usernamePassword Secret's username secret? | (a) Declare it non-secret identity metadata in security.md and secrets.md; cli.md stops treating --username as hidden.; (b) Add a file or stdin input for the username (new public flag). | **Answered by D183: a.** a (calibrator); D72/D73 keep usernames on the flag without deciding they are non-secret. | [B817](delivered.md#x166--audit-lane-d-credentials-and-trust) | answered by [D183](#d183) |
+| Q99 | May a query-signed media URL travel on argv for media add --from-url? | (a) Take the URL from a file or stdin (for example --from-url-file) and state that a signed query is a credential (new public flag).; (b) Record a named exception in security.md for a query-signed URL on argv. | **Answered by D183: a.** a or b (calibrator); refusing queries is rejected because managed OS intends signed URLs. | [B817](delivered.md#x166--audit-lane-d-credentials-and-trust) | answered by [D183](#d183) |
+| Q100 | Is the cluster info --secrets reveal of StorageObjectUser S3 keys (objectUsers) a current, authorized reveal? | (a) Current: secrets.md lists it, and ceph-resources.md and ceph.md link the reveal instead of saying no command reveals the pair.; (b) Not authorized: cli.md marks it Not yet met under B489 and the code stops revealing it. | **Answered by D183: a.** a (calibrator): delivered under B489's in-tree handoff, but D143 clause 7 authorizes only the dashboard password, so the owner confirms. | [B817](delivered.md#x166--audit-lane-d-credentials-and-trust) | answered by [D183](#d183) |
+| Q101 | What does cluster info --secrets emit for a dashboard password whose apply never proved the dashboard reachable? | (a) No warning: dashboard.status unproved and its reason convey it.; (b) A distinct registered warning code such as access.unreachable. | **Answered by D183: a.** a, the smaller change; either way access.unproved keeps only the D124 custody meaning. | [B817](delivered.md#x166--audit-lane-d-credentials-and-trust) | answered by [D183](#d183) |
+| Q102 | Does the decision log stay in backlog.md (with per-decision anchors and status tokens) or move to its own page? | (a) Keep the log in backlog.md#decisions and add #d<n> anchors, status tokens and an order check.; (b) Move the log to specs/milestones/decisions.md, retarget every backlog.md#decisions link and amend milestones.md's D<n> bullet. | **Answered by D183: a.** a: the smallest change; anchors and status tokens need no move. | [B819](delivered.md#x173--audit-lane-l-corpus-structure-and-skills) | answered by [D183](#d183) |
+| Q103 | May a pre-existing defect that blocks the authorized outcome or its gates be fixed inside the slice? | (a) AGENTS.md admits the fix in its own commit after the defect is recorded as an item the Refs line names; other defects are reported.; (b) Keep the unqualified ban; a blocking defect stops the slice until the owner authorizes its item. | **Answered by D183: a.** a, as the report drafts it; its only precedent (D152 clause 13) still awaits the owner's review. | [B822](delivered.md#x173--audit-lane-l-corpus-structure-and-skills) | answered by [D183](#d183) |
+| Q104 | Does the State reconciliation context keep its display name, given its contract disclaims reconciliation? | (a) Rename the display name (architecture row, H1, index link text), keeping the file path and retargeting inbound anchors.; (b) Keep the name; the disclaimer now applied in state-reconciliation.md is the whole change. | **Answered by D183: b.** b is smallest; a if the owner wants the name fixed before 1.0. | [B823](delivered.md#x172--audit-lane-m-cli-and-examples) | answered by [D183](#d183) |
+| Q105 | Which single casing do Bootwright-owned enum values use, and are Secret type names an exception? | (a) lowerCamel: renames the kebab outliers (container-runtime, import-certificate, install-only, read-only, verified-tunnel).; (b) kebab-case: renames redfishVirtualMedia, loadBalancer, logicalOverwrite, dataFoundation, certManager and the Secret types.; (c) State the rule per page and leave existing values unchanged. | **Answered by D183: a.** The convention with the smaller rename count, likely lowerCamel; native spellings exempt; decide Secret types as an explicit exception. | [B824](delivered.md#x171--audit-lane-i-api-shape-and-grammar) | answered by [D183](#d183) |
+| Q106 | Is the --stage token infra-components renamed to match 'infrastructure services'? | (a) Rename it (for example infrastructure-services) in the CLI, plan goldens, completion, examples and specs.; (b) Keep the token; the glossary entry defines it. | **Answered by D183: a.** a, cheap before 1.0, together with stating what preflight infra checks. | [B824](delivered.md#x171--audit-lane-i-api-shape-and-grammar) | answered by [D183](#d183) |
+| Q107 | Is StorageExport (a per-consumer Data Foundation attachment) renamed, and does its shape change? | (a) Rename to StorageAttachment or StorageConsumer with per-protocol arms, drop spec.type, move external details to StorageCluster's external arm (B107).; (b) Rename the kind and fdf.storageExportRef only; keep spec.type unless api.md's union list is amended.; (c) Keep the name with the clarification now in api/ceph.md. | **Answered by D183: b.** b at least, keeping the D173 decomposition; ask with B814's storage naming questions. | [B824](delivered.md#x171--audit-lane-i-api-shape-and-grammar) | answered by [D183](#d183) |
+| Q108 | Should status add Secret and media readiness hints to nextSteps? | (a) Add read-only rows for missing or stale Secrets and missing media, with remedies before plan or apply, as a separate item.; (b) Keep status as now narrowed; operators use secret check and media list. | **Answered by D183: a.** b now; a only as its own UX item. | [B825](#b825) | answered by [D183](#d183) |
+| Q109 | Accept an opt-in bootwright diff --exit-code (exit 3 on any differing or unknown object, default unchanged)? | (a) Add the flag, its commands.md row, an exit-status row and an amended ok/exitCode rule.; (b) No flag; document a stable JSON summary field as the drift signal. | **Answered by D183: a.** b costs nothing; a is the common convention and needs acceptance as a new public flag under D153 clause 2. | [B825](#b825) | answered by [D183](#d183) |
+| Q110 | Which schema-discovery commands or flags does the CLI gain? | (a) render effective --origins marks each leaf authored, defaults.<Kind>, built-in or derived, with a golden.; (b) a plus bootwright schema --format json-schema as an advisory export.; (c) a and b plus bootwright explain with per-field docs in Go, a second owner of field meaning.; (d) Defer all. | **Answered by D183: a and b.** a first; b optional; c only if the owner wants Go as the single source of field docs. | [B826](#b826) | answered by [D183](#d183) |
+| Q111 | Is a plain enabled boolean allowed for a featureless switch, or do presence blocks replace them? | (a) api.md allows a plain boolean when the feature has no settings and omission equals the stated default (fips, firewall); no schema change.; (b) Presence blocks only: fips: {} and firewall: {} replace the booleans in schema, examples and goldens. | **Answered by D183: a.** a. | [B826](#b826) | answered by [D183](#d183) |
+| Q112 | Which one-value mechanics of the libvirt arm and managed services stop being authored, and is managed-service implementation optional? | (a) libvirt uri becomes optional with a materialized default and bmcEmulationDefaults is renamed; implementation stays required.; (b) As a, and implementation becomes optional with a materialized default while a kind has one implementation. | **Answered by D183: a.** a: explicit implementation selection stays, unless the owner prefers b. | [B827](delivered.md#x171--audit-lane-i-api-shape-and-grammar) | answered by [D183](#d183) |
+| Q113 | Do managed services keep image.local and image.public with the stated precedence, or collapse to one image reference? | (a) Keep both; the precedence now stated is the contract, no schema change.; (b) One image reference; schema, admission, kind defaults, examples and goldens change, mirroring left to registry policy (B69). | **Answered by D183: a.** a now; b only together with the registry-policy design. | [B827](delivered.md#x171--audit-lane-i-api-shape-and-grammar) | answered by [D183](#d183) |
+| Q114 | Does the API adopt one public name limit for all kinds, or keep per-kind limits derived from block prefixes? | (a) One 47-byte limit stated once, new block prefixes at most 16 bytes with a test; tightens Machine, InfraProvider, Proxy, DNS, NTP and export names.; (b) Hash long names into block identities; one rule without shortening names, less readable run trees.; (c) Keep per-kind limits in one api.md table linked from each kind. | **Answered by D183: b.** a with an architecture test on prefix length; ask with B814's V2-19 name-limit question. | [B827](delivered.md#x171--audit-lane-i-api-shape-and-grammar) | answered by [D183](#d183) |
+| Q115 | Are the reserved CustomPlaybook shape and ClusterAddon.spec.steps refused at admission instead of validated? | (a) Refuse an authored CustomPlaybook naming B102; lexical rules stay in the deferred page; normalization code removed.; (b) a plus refuse ClusterAddon.spec.steps naming B90, letting B90 redefine steps.; (c) Keep validating both reserved shapes. | **Answered by D183: c.** a; b only if the owner agrees B90 may redefine steps. | [B828](delivered.md#x171--audit-lane-i-api-shape-and-grammar) | answered by [D183](#d183) |
+| Q116 | Do object-user S3 keys leave cluster info --secrets for a per-user selector? | (a) Add --object-user <u> emitting only that user's keys; --secrets alone reveals only the dashboard password; B489 amended.; (b) A new raw single-credential export command for object users.; (c) Keep the current reveal and document the handoff risk. | **Answered by D183: a.** a, a new public flag closing B489's sensitive-output gate; ask with B817's R2-04-02. | [B829](#b829) | answered by [D183](#d183) |
+| Q117 | Is --authorize data-loss bound to the reviewed consuming steps when --yes or non-interactive input suppresses review? | (a) Require --authorize data-loss=<digest of consuming blocks and targets> under --yes; a stale digest refuses before registration.; (b) Keep the bare token; the cli.md wording fix already applied is the whole change. | **Answered by D183: a.** b unless the owner wants hardening; a changes a public flag form under D153 clause 2. | [B830](delivered.md#x170--audit-lane-j-reconciliation-rules) | answered by [D183](#d183) |
+| Q118 | Does the last GitOps package wait for every block that reaches its cluster's API, or only the add-ons-stage blocks requiring the installation? | (a) Widen to every block reaching the cluster, whatever its stage; planning edges change and need a cycle check.; (b) Keep the narrowed set now stated, naming the excluded cross-stage blocks. | **Answered by D183: new item B837.** b now; settle with the pending Q48 and Q60 answers. | [B830](delivered.md#x170--audit-lane-j-reconciliation-rules), [B837](delivered.md#x171--audit-lane-i-api-shape-and-grammar) | answered by [D183](#d183) |
 
 ## Retired
 
@@ -3909,1181 +3793,1869 @@ item, whose Alias cell names the old ID too. Searching an old ID over
 | Phase 0 to Phase 4 | 2026-09-28 | The audit plan's ordering; slices carry order now. |
 | M1h's (D1) to (D6) | 2026-09-28 | Capability labels that collided with the decision log; they became prose. |
 | D13, D15 | never issued | Recorded so nobody looks for them. |
-| B497 | 2026-10-12 | Answered by [D143](#decisions): M2b's acceptance is an ordinary staged apply recorded as an owner-accepted ledger row ([B476](delivered.md#x94--post-destroy-cluster-inspection)), and there is no runtime registry to promote. |
-| B498 | 2026-10-12 | Answered by [D143](#decisions): converge. [X70](delivered.md#x70--ceph-through-the-ordinary-staged-apply) retires the second executable and its engine (B513, B512, B518, B515). |
-| B501 | 2026-10-12 | Folded into B513 ([X70](delivered.md#x70--ceph-through-the-ordinary-staged-apply)) under [D143](#decisions), which removes the three allow-list edges. |
-| B502 | 2026-10-12 | Moot under [D143](#decisions): no fixture state exists, and a leftover anchor refuses at index read with a named remedy (B513, [X70](delivered.md#x70--ceph-through-the-ordinary-staged-apply)). |
-| B505 | 2026-10-12 | Moot under [D143](#decisions): B512 ([X70](delivered.md#x70--ceph-through-the-ordinary-staged-apply)) keeps a failed resolution's adapter output in its attempt file. |
-| B507 | 2026-10-12 | Moot under [D143](#decisions): the example's `acceptance.py` and `test_acceptance.py` are deleted by B513 ([X70](delivered.md#x70--ceph-through-the-ordinary-staged-apply)). |
-| B227 | 2026-10-14 | Moot under [D152](#decisions): X89 deleted the execution bundle and its reprojection; every command stages the automation it runs. |
-| B231 | 2026-10-14 | Moot under [D152](#decisions): X89 deleted `setup --purge-old-bundles` and the kept bundle's resolutions. |
-| B238 | 2026-10-14 | Moot under [D152](#decisions): X89 deleted the setup bound over resolutions and the purge that reported them. |
-| B263 | 2026-10-14 | Moot under [D152](#decisions): X89 deleted the retained bundle and its fresh-resolution fallback. |
-| B335 | 2026-10-14 | Moot under [D152](#decisions): X89 deleted the setup resolution it would have exercised; the host's dnf path on RHEL awaits the owner's run in X90's acceptance ([B560](#b560)). |
-| B429 | 2026-10-14 | Moot under [D152](#decisions): X89 deleted the foundation guards, the native resolver and its Go-run helpers. |
-| B527 | 2026-10-14 | Moot under [D152](#decisions): X89 deleted the approved bundle; each command stages its own automation, so no setup projects it. |
-| B528 | 2026-10-14 | Moot under [D152](#decisions): X89 deleted the execution bundles, retained resolutions and `setup --purge-old-bundles` it concerned. |
-| B542 | 2026-10-14 | Moot under [D152](#decisions): X89 deleted the Fedora native plan and its libdnf5 solver; the host's dnf installs controller packages. |
-| B574 | 2026-10-16 | [D155](#decisions) retains records-only settlement; comparing the current build's plan is declined for now. No implementation remains. |
-| B500 | 2026-10-16 | Superseded by [D157](#decisions) and [B615](delivered.md#b615): remove reviewed release pins instead of consolidating them into per-language release profiles. |
-| B62 | 2026-10-20 | Alias L2. Folded under [D172](#decisions) into [B713](delivered.md#b713) and each M3 item's own planning goldens; it named no bounded shape. |
-| B63 | 2026-10-20 | Alias L4. Folded under [D172](#decisions) into [B713](delivered.md#b713); each later shape carries its own lifecycle journeys. |
-| B65 | 2026-10-20 | Alias L6. Retired under [D172](#decisions): every M3 item carries the contract, crash, replay, cancellation and real-system evidence of its own binding. |
-| B397 | 2026-10-20 | Folded under [D172](#decisions) into [B308](delivered.md#b308), whose refusal-table rows include the off-controller boot-image server. |
-| B89 | 2026-10-20 | Alias C10. Moved from M6 and folded under [D173](#decisions) into [B752](delivered.md#b752) (built-in packages need no acquisition; authored packages are input-tree data frozen with the context) and [B754](delivered.md#b754) (the registration commands are removed); its `add-ons/_store` exception is parked as [B771](#b771). |
-| B365 | 2026-10-20 | Folded under [D173](#decisions) into [B771](#b771), which removes the `add-ons/_store` exception and its marker, so the hard-linked-marker disagreement leaves with them. |
+| B497 | 2026-10-12 | Answered by [D143](#d143): M2b's acceptance is an ordinary staged apply recorded as an owner-accepted ledger row ([B476](delivered.md#x94--post-destroy-cluster-inspection)), and there is no runtime registry to promote. |
+| B498 | 2026-10-12 | Answered by [D143](#d143): converge. [X70](delivered.md#x70--ceph-through-the-ordinary-staged-apply) retires the second executable and its engine (B513, B512, B518, B515). |
+| B501 | 2026-10-12 | Folded into B513 ([X70](delivered.md#x70--ceph-through-the-ordinary-staged-apply)) under [D143](#d143), which removes the three allow-list edges. |
+| B502 | 2026-10-12 | Moot under [D143](#d143): no fixture state exists, and a leftover anchor refuses at index read with a named remedy (B513, [X70](delivered.md#x70--ceph-through-the-ordinary-staged-apply)). |
+| B505 | 2026-10-12 | Moot under [D143](#d143): B512 ([X70](delivered.md#x70--ceph-through-the-ordinary-staged-apply)) keeps a failed resolution's adapter output in its attempt file. |
+| B507 | 2026-10-12 | Moot under [D143](#d143): the example's `acceptance.py` and `test_acceptance.py` are deleted by B513 ([X70](delivered.md#x70--ceph-through-the-ordinary-staged-apply)). |
+| B227 | 2026-10-14 | Moot under [D152](#d152): X89 deleted the execution bundle and its reprojection; every command stages the automation it runs. |
+| B231 | 2026-10-14 | Moot under [D152](#d152): X89 deleted `setup --purge-old-bundles` and the kept bundle's resolutions. |
+| B238 | 2026-10-14 | Moot under [D152](#d152): X89 deleted the setup bound over resolutions and the purge that reported them. |
+| B263 | 2026-10-14 | Moot under [D152](#d152): X89 deleted the retained bundle and its fresh-resolution fallback. |
+| B335 | 2026-10-14 | Moot under [D152](#d152): X89 deleted the setup resolution it would have exercised; the host's dnf path on RHEL awaits the owner's run in X90's acceptance ([B560](#b560)). |
+| B429 | 2026-10-14 | Moot under [D152](#d152): X89 deleted the foundation guards, the native resolver and its Go-run helpers. |
+| B527 | 2026-10-14 | Moot under [D152](#d152): X89 deleted the approved bundle; each command stages its own automation, so no setup projects it. |
+| B528 | 2026-10-14 | Moot under [D152](#d152): X89 deleted the execution bundles, retained resolutions and `setup --purge-old-bundles` it concerned. |
+| B542 | 2026-10-14 | Moot under [D152](#d152): X89 deleted the Fedora native plan and its libdnf5 solver; the host's dnf installs controller packages. |
+| B574 | 2026-10-16 | [D155](#d155) retains records-only settlement; comparing the current build's plan is declined for now. No implementation remains. |
+| B500 | 2026-10-16 | Superseded by [D157](#d157) and [B615](delivered.md#b615): remove reviewed release pins instead of consolidating them into per-language release profiles. |
+| B62 | 2026-10-20 | Alias L2. Folded under [D172](#d172) into [B713](delivered.md#b713) and each M3 item's own planning goldens; it named no bounded shape. |
+| B63 | 2026-10-20 | Alias L4. Folded under [D172](#d172) into [B713](delivered.md#b713); each later shape carries its own lifecycle journeys. |
+| B65 | 2026-10-20 | Alias L6. Retired under [D172](#d172): every M3 item carries the contract, crash, replay, cancellation and real-system evidence of its own binding. |
+| B397 | 2026-10-20 | Folded under [D172](#d172) into [B308](delivered.md#b308), whose refusal-table rows include the off-controller boot-image server. |
+| B89 | 2026-10-20 | Alias C10. Moved from M6 and folded under [D173](#d173) into [B752](delivered.md#b752) (built-in packages need no acquisition; authored packages are input-tree data frozen with the context) and [B754](delivered.md#b754) (the registration commands are removed); its `add-ons/_store` exception is parked as [B771](#b771). |
+| B365 | 2026-10-20 | Folded under [D173](#d173) into [B771](#b771), which removes the `add-ons/_store` exception and its marker, so the hard-linked-marker disagreement leaves with them. |
 
 ## Decisions
 
-Owner decisions, dated. An item waiting on one not yet taken names it in its
+Decisions, dated. An item waiting on one not yet taken names it in its
 Requires cell as `owner decision: <question>`.
 
-- **D1** (2026-09-26): the substrate owns the machine port as role entry points.
-- **D2** (2026-09-26): lifting the physical refusal needs in-tree tests and an
-  emulated rehearsal, with real-hardware acceptance before support is claimed.
-- **D3** (2026-09-26): the BMC certificate is imported where the BMC supports
-  it, otherwise an explicit per-machine disable-verification exception applies,
-  never a default, and controller-to-BMC TLS gains a CA bundle.
-- **D4** (2026-09-26): administrator access is kept in context custody with
-  `cluster kubeconfig`.
-- **D5** (2026-09-26): every node presenting this block's own tokenized image
-  proves a partial install.
-- **D6** (2026-09-26): the first proved UUID and serial are pinned and a
-  mismatch refuses.
-- **D7** (2026-09-26): non-root SSH accounts refuse at admission for now.
-  Read on 2026-09-29 by the session, pending the owner's review, as applying
-  to lifecycle placement hosts: the machines managed services and libvirt
-  providers name (X22).
-- **D8** (2026-09-26): the cluster identity is the build's kubeconfig trust
-  anchor, refined on 2026-09-27 (S26) to its admin client certificate, which
-  the installer's install-complete rewrite keeps.
-- **D9** (2026-09-26): multi-node libvirt stays admitted under F14.
-- **D10** (2026-09-26): ansible-core is the latest patch of the qualified 2.21
-  minor.
-- **D11** (2026-09-26): postcondition decisions stay in Go.
-- **D12** (2026-09-26): media completion claims the inputs digest and installer
-  version, not an image digest.
-- **D14** (2026-09-26): documentation stays in the bundle but leaves the
-  automation digest.
-- **D16** (2026-09-26): managed-OS waits are frozen as request budgets.
-- **D17** (2026-09-28): M3 and M4 are done only with two owner-accepted
-  acceptance-ledger rows each: an emulated rehearsal on libvirt guests behind
-  sushy-tools Redfish BMCs, and a run on real hardware. Each item keeps the
-  gate its own detail names.
-- **D18** (2026-09-28): the product scope names MetalLB, IBM Fusion Data
-  Foundation, Red Hat Advanced Cluster Management, Argo CD and GitLab as the
-  first add-on packages.
-- **D19** (2026-09-28): M5 integrates OpenShift with a Ceph cluster M4 manages;
-  an external Ceph cluster is parked as [B107](#b107).
-- **D20** (2026-09-29, taken by the session under the owner's instruction to
-  proceed with recommendations; pending review): the controller CPython is
-  the latest patch of the newest minor the qualified ansible-core supports as
-  a controller, and `latest` ignores a newer minor (X22).
-- **D21** (2026-09-29, taken by the session under the owner's instruction to
-  proceed with recommendations; pending review): an elevated child announces
-  that it started, and the held `sudo:` lines decide the outcome only when that
-  announcement cannot be proved (X20).
-- **D22** (2026-09-29, taken likewise; pending review): an elevated command
-  that exits without a result reports `runtime.internal` with exit status 1;
-  `runtime.interrupted` still wins after an interrupt (X20).
-- **D23** (2026-09-30, taken by the session under the owner's instruction to proceed with recommendations): B9: a controller's CA bundle is the only anchor of its Redfish calls; without one, the system trust store.
-- **D24** (2026-09-30, taken by the session under the owner's instruction to proceed with recommendations): B9: a physical Machine's virtual media imports the media certificate by default; `disable-verification` is admitted only on one Machine and refused beside private delivery.
-- **D25** (2026-09-30, taken by the session under the owner's instruction to proceed with recommendations): B10: the local keyring becomes `local-keyring-v4`, which holds produced material; an earlier keyring refuses and names the build that reads it.
-- **D26** (2026-09-30, taken by the session under the owner's instruction to proceed with recommendations): B10: the custodied kubeconfig is withdrawn when the context's removal of its cluster completes.
-- **D27** (2026-09-30, accepted by the owner from the session's recommendations): B29: a foreign image on one of the cluster's own Machines reads as partial during an agent-install removal.
-- **D28** (2026-09-30, accepted by the owner from the session's recommendations): B34: an SSH-host provider's hypervisor packages resolve at apply time; the frozen transaction is parked (B167).
-- **D29** (2026-09-30, accepted by the owner from the session's recommendations): B40: admission refuses `spec.lifecycle.rescue` until a rescue journey exists.
-- **D30** (2026-09-30, accepted by the owner from the session's recommendations): Follow-ups a slice finds enter M1 only when they are safety or defect items; enabling and polish follow-ups are parked unless they block an M1 item.
-- **D31** (2026-09-30, accepted by the owner from the session's recommendations): B137: `status` offers as next steps only the verbs the records allow.
-- **D32** (2026-09-30, accepted by the owner from the session's recommendations): B140: the cluster boot budget is 300 seconds per node with a 900-second floor; polled reads still count as answered at once.
-- **D33** (2026-09-30, accepted by the owner from the session's recommendations): B141: the agent-install decoders refuse, for every verb, a frozen placement off the controller; the runner refuses a material listed twice.
-- **D34** (2026-09-30, accepted by the owner from the session's recommendations): B143: a proved UUID or serial refuses anything that is not printable, by the CLI's printable rule.
-- **D35** (2026-09-30, accepted by the owner from the session's recommendations): B146: a YAML key is refused for the construct it carries (`yaml.alias`, `yaml.tag`), as a value is.
-- **D36** (2026-09-30, accepted by the owner from the session's recommendations): B41: the Secret `file` source is retired; operators load files with `secret set`.
-- **D37** (2026-09-30, accepted by the owner from the session's recommendations): B42: a lost frozen binding refuses before any effect and names the exits: restore the keyring, or an orphan-acknowledged delete.
-- **D38** (2026-09-30, accepted by the owner from the session's recommendations): B43: an unresolvable unknown block keeps its refusal, which names why and how to fix it; the orphan-acknowledged delete also releases host reservations.
-- **D39** (2026-09-30, accepted by the owner from the session's recommendations): B136: a failed apply whose blocks are all done is recovered; the other two refused states name their exit.
-- **D40** (2026-09-30, accepted by the owner from the session's recommendations): B44: only the remaining bundle-area limit is fixed; the layer is parked (B165), which [X88](delivered.md#x88--controller-setup-v2-cut-over) closed under D152's clause 7.
-- **D41** (2026-09-30, accepted by the owner from the session's recommendations): B45: a continuation freezes its Python and Ansible closure and refuses when it moves; scoped removal is parked (B166).
-- **D42** (2026-09-30, accepted by the owner from the session's recommendations): B46: local setup keeps its Ansible output in its own bounded run area, the newest eight runs.
-- **D43** (2026-09-30, accepted by the owner from the session's recommendations): B122: lifecycle JSON results are parked until a milestone names a consumer.
-- **D44** (2026-09-30, accepted by the owner from the session's recommendations): B111: validation refuses wwn, hctl and serial root-device hints on a libvirt Machine.
-- **D45** (2026-09-30, accepted by the owner from the session's recommendations): B116: the emulated BMC admits canonical IPv6 unicast bind addresses, with a bracketed endpoint and the shared socket key.
-- **D46** (2026-09-30, accepted by the owner from the session's recommendations): B131: media publication proves nothing wrote the stage after it was measured, and the spec says so; the pre-X20 long-name leftover is removed by hand.
-- **D47** (2026-09-30, accepted by the owner from the session's recommendations): B158: a newer Index API minor version makes setup warn and continue; a newer major version refuses.
-- **D48** (2026-09-30, the owner): M1 is frozen after X33. Follow-ups X32, X33 and later slices find are parked here for a future milestone, whatever their kind, instead of entering M1; D30 no longer admits items to M1. M1 keeps its open items: X32, X33, the owner decisions and the chain behind B49.
-- **D49** (2026-10-01, the owner accepted the session's recommendation A): B32: after a stall the install role reads the registered hosts from the rendezvous host's assisted-service API with the watcher token, bounded and under `no_log`, and the give-up names the node.
-- **D50** (2026-10-01, the owner accepted the session's recommendation A): B175: `setup --purge-old-bundles` retires superseded areas under a pending receipt whose bundle holds no area, then resumes it.
-- **D51** (2026-10-01, the owner accepted the session's recommendation A): B188: a drifted running network restarts when its Machines are stopped and otherwise refuses before any effect, naming them.
-- **D52** (2026-10-01, the owner accepted the session's recommendation A): B206: the retained-operation refusal names destroy, then context deletion and a fresh init; pruning is parked (B258).
-- **D53** (2026-10-01, the owner accepted the session's recommendation A): B208: a retained bundle that lost a bootstrap source falls back to a fresh resolution.
-- **D54** (2026-10-01, the owner accepted the session's recommendation A): B220: before a wait, the install role restores a truncated installer kubeconfig from the kept copy when it names the same cluster.
-- **D55** (2026-10-03, the owner accepted the session's recommendation A): B175: under `setup --purge-old-bundles`, a receipt stranded at the bound that this executable cannot resume is recorded as canceled, its never-started bundle publication observed as such, and a fresh setup follows; D50's resume stays for one it can prepare.
-- **D56** (2026-10-05, the owner): M1 gates the owner's full bar: well-defined specs; architecture and code that follow best practices; well-structured, domain-constrained APIs with input validation; good UX and CLI output; and a CLI ready for every controller function (context, secret, media, setup, preflight, validate, render effective, status, plan, apply, destroy and the machine commands) and for creating RHEL machines on libvirt and sushy-tools. This amends D48: M1 takes the parked B94, B95, B179, B198, B200 to B202, B222 to B225, B228, B233, B234, B236, B240 to B242, B244, B246, B249, B252, B255, B257, B264, B270 to B272 and B275 to B277, and the new B278 to B302 and B336 to B338.
-- **D57** (2026-10-05, the owner): B17 to B24: X23 is dropped, and X24 keeps B19 to B22, re-planned with the role and request fixes of its lanes. B17 keeps its ID for the managed-OS work area's relocation, and B303 splits from it with per-invocation scratch, disjoint namespaces and the two-concurrent-installs test; B24 keeps its ID for cross-context scoping and an attributed refusal, and B304 splits from it with the exemption of an invocation's own in-flight jobs. B18, B23, B303 and B304 move to M3, B18 recording that context reads refuse during an apply and taking B265 into its exit evidence, and the parked B195, B237, B239, B250, B251, B259, B260 and B265 join them there.
-- **D58** (2026-10-05, the owner): B72: the lab-rhel ledger row of 2026-10-05, which matches B72's acceptance baseline and gate, is accepted for B72 too, so B72 leaves M4 for X38's record; the defects the run found stay M1 items.
-- **D59** (2026-10-05, the owner): M1's closing operator gate is the extended lab-rhel run on a clean build of X44's landing, on a host missing at least one native root so that setup or the controller stage downloads through the Python path: setup with the new bundle, media, context, secrets, a staged apply, preflight, plan, apply, `status` with its four JSON checks, `machine list` and `--power-status`, `machine exec` and `rsh`, restart, a destroy refused and then `machine stop`, destroy, a fresh apply, a host restart, `machine start` and `stop`, destroy, `status` after the destroy, the unit and time checks and an explicit `qemu-img info --force-share` read. One owner-accepted row completes the real-host evidence of B19, B20 and B277.
-- **D60** (2026-10-05, the owner): the real physical-BMC test follows M1, which closes without physical installation, and B73 to B78 stay in M4, B74 to B77 outside any planned slice. On the owner's explicit request of 2026-10-05, X45, the slice the session's plan called XB, runs out of sequence right after X43 and X24, in the same digest window, and delivers B73's repair and B305, the Redfish client on the owner's physical BMC. A run on a disposable RHEL 9.8 controller, the lab-baremetal rehearsal and one physical server with a reduced first-test profile, run from a separate RHEL 9.8 controller (D109) and recorded as an observation, follow it.
-- **D61** (2026-10-05, accepted by the owner from the session's recommendations): B279 and B295: `spec.libvirt.uri` is an enumeration holding `qemu:///system`, which closes the command transports escaping cannot.
-- **D62** (2026-10-05, accepted by the owner from the session's recommendations): B280 and B282: an operator whose account comes from a directory service resolves through NSS with a pinned, root-owned `getent` under the same single-entry and clean-home checks, `/etc/passwd` serving only where `getent` is absent, and a `sudo -i` root shell resolves as direct root.
-- **D63** (2026-10-05, accepted by the owner from the session's recommendations): B281: store-wide verification stays, but a damaged context's refusal names the context, the store-relative entry and the errno, and `context delete --name <it> --purge` runs over exactly that context; per-context isolation is parked as B325.
-- **D64** (2026-10-05, accepted by the owner from the session's recommendations): B283: an installed Machine's SSH session defaults `access.ssh.addressRef` to its `ssh` address, else its install address, else its FQDN, and the mismatch refusal gains a remedy.
-- **D65** (2026-10-05, accepted by the owner from the session's recommendations): B283: a new or replaced trust record whose address collides with the record of a Machine the context no longer declares replaces it in the same confirmed write, shown as a remove row.
-- **D66** (2026-10-05, accepted by the owner from the session's recommendations): B283 and B287: every remedy and next step that names a command carries `--context`, and every per-object prompt names the context.
-- **D67** (2026-10-05, accepted by the owner from the session's recommendations): B275: after a removal, `status` reports a shared service whose destroy is done or released as `pending`, a failed one as `failed` with the token `[FAIL]`, and a running or unknown one as `unknown`.
-- **D68** (2026-10-05, accepted by the owner from the session's recommendations): B284: `status` relabels `Bound` as the bindings count and reports 0 once a completed removal finalized, so that status still reads no keyring.
-- **D69** (2026-10-05, accepted by the owner from the session's recommendations): B222: over a lost binding, `status` offers `bootwright apply` first, which finalizes without reopening the binding, then the orphan-acknowledged delete.
-- **D70** (2026-10-05, accepted by the owner from the session's recommendations): B284 and B300: the `machine list` and `media list` JSON rows rename `address` to `contact` and `ips` to `addresses`, with the columns CONTACT and ADDRESSES, before any consumer exists.
-- **D71** (2026-10-05, accepted by the owner from the session's recommendations): B285: a Secret declaration's fingerprint drops its provenance and covers type, source and parameters only, and a stored version whose fingerprint equals the legacy one stays current.
-- **D72** (2026-10-05, accepted by the owner from the session's recommendations): B285: `secret set` keeps its strict input-file rule for files carrying a value, password, token or private key, and accepts a certificate or public-key file that is a regular single-link file, not writable by others and owned by the invoker or root.
-- **D73** (2026-10-05, accepted by the owner from the session's recommendations): B285: `--value-stdin` and `--password-stdin` at a terminal prompt on standard error with echo off and read one line for tokens and passwords; opaque and `dockerConfigJson` values refuse a terminal with a pipe-or-file remedy.
-- **D74** (2026-10-05, accepted by the owner from the session's recommendations): B287: Bootwright's own refusals before a `machine exec` or `rsh` session opens, `trust.identity` included, exit 255, and once the session opened its own status wins over an interrupt.
-- **D75** (2026-10-05, accepted by the owner from the session's recommendations): B287: a declined or non-interactive confirmation reports its consumer's existing code, with the confirmer's reason and the `--yes` remedy.
-- **D76** (2026-10-05, accepted by the owner from the session's recommendations): B287: the CLI and command specs say that destroy's proofs needing the exclusive lock or a remote observation follow the prompt and still refuse before registration, and the plan names the Machines that must be stopped.
-- **D77** (2026-10-05, accepted by the owner from the session's recommendations): B288: controller egress keeps a pure route grammar for endpoint and bypass at admission and selection, and the executable's limits on a managed proxy, authentication, private trust and extra capabilities refuse as controller Unsupported rows with remedies.
-- **D78** (2026-10-05, accepted by the owner from the session's recommendations): B289: an installation that selects an external DNSServer or NTPServer uses its declared address with no requirement edge.
-- **D79** (2026-10-05, accepted by the owner from the session's recommendations): B289 and B338: network overrides are composed, and secondary addresses, MTUs, non-install bonds and VLANs and extra routes refuse before registration on a Bootwright-installed Machine; post-install NMState convergence is B326 on M4, before B80.
-- **D80** (2026-10-05, accepted by the owner from the session's recommendations): B289: DHCP-only Anaconda installations refuse at admission, and both specs say so; DHCP installation is parked as B327.
-- **D81** (2026-10-05, accepted by the owner from the session's recommendations): B289: MachineImage and hosted-tree media narrow to `local-media:<name>`, and installed consumers need the `redfishVirtualMedia` endpoint.
-- **D82** (2026-10-05, accepted by the owner from the session's recommendations): B289: an installation whose image or tree server is not on the controller refuses before registration, the managed-OS spec is corrected and the unused install tooling deleted.
-- **D83** (2026-10-05, accepted by the owner from the session's recommendations): B249: a Machine and a MachineInstallProfile of one name that publish through one server refuse at admission.
-- **D84** (2026-10-05, accepted by the owner from the session's recommendations): B225: the runs area keeps the newest runs per context, removing the oldest before a new one, as D42 does for setup runs.
-- **D85** (2026-10-05, accepted by the owner from the session's recommendations): B104 stays parked for bounded lifetime allocation, its reason corrected to state that every bounded run consumed a reservation; the narrow fix, in which `machine` power, `rsh` and `exec` read their material in one keyring session and publish no durable binding, splits out as B337 in M1.
-- **D86** (2026-10-05, accepted by the owner from the session's recommendations): B290: media URLs are HTTPS only, in validation, the acquirer, help and the specs.
-- **D87** (2026-10-05, accepted by the owner from the session's recommendations): B291: an identical `context update` over a completed apply keeps the selected revision, reports it unchanged and asks nothing, and changed input over a completed apply warns before the prompt.
-- **D88** (2026-10-05, accepted by the owner from the session's recommendations): B291: an orphan-acknowledged deletion names `bootwright status --context <name>` as its inventory in the refusal and the prompt, and the specs narrow to that; a guard port that lists the owned blocks is parked as B324.
-- **D89** (2026-10-05, accepted by the owner from the session's recommendations): B236: `--allow-orphans` may abandon a context whose evidence is unreadable or differently spelled, saying that its objects cannot be listed, and the refusal names that exit.
-- **D90** (2026-10-05, accepted by the owner from the session's recommendations): B292: M1 ships the remedies and the corrected spec sentence for a 16-area bound held by client areas; their retirement by `setup --purge-old-bundles` is parked as B322. D152's clause 8, pending the owner's review, supersedes it where it bounds execution areas: [X90](delivered.md#x90--controller-setup-v2-retention-and-offline-sources) retires a tool area no binding names and closed B322.
-- **D91** (2026-10-05, accepted by the owner from the session's recommendations): B202: setup prints resolution warnings with the plan, before the prompt.
-- **D92** (2026-10-05, accepted by the owner from the session's recommendations): B228: setup runs and bounded runs share one 4 MiB output bound.
-- **D93** (2026-10-05, accepted by the owner from the session's recommendations): B271: D55's cancellation extends to a pending setup receipt below the bound that this executable cannot resume, including one whose native action refused before authorizing any transaction.
-- **D94** (2026-10-05, accepted by the owner from the session's recommendations): B294: the dead InfraProvider and Machine fields leave v1alpha1: the libvirt provider's `bmcEmulationDefaults.disableCertificateVerification` is removed; the bare-metal attachment's `vlan` is removed, coordinated with B74; bare metal no longer requires the `attachmentRef` nothing reads; `hardware.boot.nicRef` is removed; and `hardware.nics` MACs and `management.bmc` on a libvirt provider's Machines refuse at admission.
-- **D95** (2026-10-05, accepted by the owner from the session's recommendations): B294: one managed attachment name or bridge on two libvirt providers of one host refuses at admission, naming both providers.
-- **D96** (2026-10-05, accepted by the owner from the session's recommendations): B296: installation media is pinned as the managed-OS spec says: plan freezes the store record's size and digest, a declared checksum must match, and each attempt proves size and digest before first use.
-- **D97** (2026-10-05, accepted by the owner from the session's recommendations): B296: the Kickstart renders formats with their glibc langpack, repositories as `%post` `.repo` files with `gpgcheck`, `gpgkey` and `name`, and a credential-free external proxy that exempts the artifact endpoint; `passwordAuthentication: true` refuses while `initialPassword` does, and the architecture enumerates `x86_64`.
-- **D98** (2026-10-05, accepted by the owner from the session's recommendations): B17 is split: the managed-OS work area moves under a root-only 0700 parent in M1's digest window, and the rest of B17 is B303 in M3.
-- **D99** (2026-10-05, accepted by the owner from the session's recommendations): B19 is not split: progress emission tasks stay in roles, one shared plugin base carries per-capability evidence functions, postcondition decisions stay in Go (D11), and B19's text and the architecture spec's Not-yet-met line are refreshed.
-- **D100** (2026-10-05, accepted by the owner from the session's recommendations): B300: `version`'s `Dependency bundle` field is the embedded automation digest, computed at composition.
-- **D101** (2026-10-05, accepted by the owner from the session's recommendations): B98 stays parked for pruning the narration; the amendment allowing short rationale and safety-invariant comments in the architecture spec, with a shrink-only per-package ratchet on the comment count, splits out as B336 in M1.
-- **D102** (2026-10-05, accepted by the owner from the session's recommendations): B301 adds a Not-yet-met line for removals that release service socket reservations without proving the sockets free; the proof is parked as B323, for the per-capability evidence functions B19 creates.
-- **D103** (2026-10-05, accepted by the owner from the session's recommendations): B73: the per-machine installer ISO is published only under the private token subtree and withdrawn after completion, the in-installer `curl --cacert` fetch stays, and private delivery requires a verified controller-to-BMC leg, because InsertMedia carries the token URL.
-- **D104** (2026-10-05, accepted by the owner from the session's recommendations): B305 and B319: on the physical BMC under test, under `established` trust, the client reads `VerifyCertificate` and `HttpsTransferCertVerification` before the insert and refuses private delivery when either reads false, the operator importing the CA out of band, within B73's repair; the manager SecurityService root-CA import follows as B319, before the first real-hardware row. D121 (2026-10-07) amends which flag the read-back counts.
-- **D105** (2026-10-05, accepted by the owner from the session's recommendations): the parked B96 to B107, B122, B161 to B167, B171, B180, B181, B193, B194, B196, B197, B199, B226, B227, B229 to B232, B235, B238, B243, B245, B247, B248, B256, B258, B261 to B263, B266 to B269, B273 and B274 stay parked.
-- **D106** (2026-10-05, accepted by the owner from the session's recommendations): B288: a RHEL controller accepts `lorax` and `xorriso` the operator installed from the host's own entitled, vendor-signed repositories, proved by presence like any root; an entitled-source adapter is parked as B330. D152's clause 6, pending the owner's review, supersedes it: [X88](delivered.md#x88--controller-setup-v2-cut-over) installs both through the host's dnf and closed B330.
-- **D107** (2026-10-05, accepted by the owner from the session's recommendations): B292 and B297: the execution foundation keeps its byte-exact guard at every launch and gains a named check, a refusal naming package, build and file, a documented hold procedure and a regeneration tool in B292; in B297, within X43's window, setup qualifies vendor-signed glibc and libgcc within the qualified minor against the RPM database and records the proved digests as the receipt's requirement. D152's clause 1, pending the owner's review, supersedes it: [X88](delivered.md#x88--controller-setup-v2-cut-over) dropped the byte guard from every launch, and X89 deletes its code.
-- **D108** (2026-10-05, accepted by the owner from the session's recommendations): B292: on a FIPS-mode controller host, Bootwright's runtime brings its own cryptography, which the docs state and preflight reports beside the host's FIPS mode; a FIPS-qualified runtime is parked as B331.
-- **D109** (2026-10-05, accepted by the owner from the session's recommendations): the real-hardware test runs this build on a separate RHEL 9.8 controller in a subnet the BMC network reaches on the artifact ports, touching nothing on the owner's bastion; B280's host guidance says so. A test profile grants no authority over any other host.
-- **D110** (2026-10-05, accepted by the owner from the session's recommendations): B301 and B73: the operator owns the controller host's firewall, and the docs list each listener's ports by source with firewalld commands; a per-socket readiness check in preflight and plan is [B318](delivered.md#x62--controller-listener-firewall-inspection), before B78.
-- **D111** (2026-10-05, accepted by the owner from the session's recommendations): B282: operator-named paths are opened by a bounded helper under the invoking credentials, which passes the descriptors to root, and root keeps every proof.
-- **D112** (2026-10-05, accepted by the owner from the session's recommendations): B283: the machines spec documents what `auth.operatorIdentity` does today; running its client under the invoking account is parked as B332, after B282.
-- **D113** (2026-10-05, accepted by the owner from the session's recommendations): B305: generated serving certificates stay P-256; B305 records the physical BMC under test's RSA premise (it has fetched only from an RSA-2048 self-signed server, so whether it accepts a P-256 serving certificate is unproved) with its check and, as the workaround, a `contextStore` RSA-2048 certificate set with `secret set`; a `keyType` for generation follows only if that check fails. No hardware certificate-compatibility result is recorded here.
-- **D114** (2026-10-05, accepted by the owner from the session's recommendations): B299: a DNSServer keeps its wildcard bind default, the new pre-start check names a colliding socket, and the examples and docs declare explicit binds; a derived default is parked as B333.
-- **D115** (2026-10-05, accepted by the owner from the session's recommendations): B301: the examples bind their emulated BMCs to loopback, and the docs state that a privileged or cleartext-credential listener binds loopback or a host-only address unless its network is trusted; emulator TLS, a refusal of a non-loopback bind address and a confined SELinux type are parked as B334.
-- **D116** (2026-10-06, the owner): every safety or defect follow-up a slice finds in M1's journeys joins M1, folded into the next fitting slice or a final sweep slice before the closing run (D59); enabling and wording follow-ups stay parked. This amends D56 and D48 for follow-ups found from X39 on: a safety or defect follow-up found in M1's journeys joins M1 on the planned sweep slice X46, or on an earlier planned slice whose lane already owns its files, with the Alias `new, <date> (<slice>); attached to M1 on <date> (D116)`; an enabling, wording, test-depth or knowledge follow-up stays parked under D48. M1 takes X39's parked safety and defect follow-ups B339, B340, B342 to B344, B347, B349 to B351 and B356 on X46.
-- **D117** (2026-10-06, the owner accepted the session's recommendation): B357: D65 widens, so a confirmed trust write that takes over an endpoint also drops the record of a still-declared Machine that no longer uses the context's SSH trust, the controller Machine's included, as a `remove` row in every lifecycle state, with no input edit.
-- **D118** (2026-10-06, the owner accepted the session's recommendation): B372: a file-input `secret set` replacement, `secret delete` and `secret encryption rotate` confirm before the lease and revalidate under it, as standard input does since D73, refusing with `secret.store.conflict` and writing nothing when the store changed meanwhile.
-- **D119** (2026-10-07, the owner accepted the session's recommendation): B440 joins M1 on X46: a destroy over an unknown apply resolves each block with the removal's own check, which proves the object is this context's and can be taken back, so a drifted machine is removed with its ownership proved; the state-reconciliation spec records what that resolution proves.
-- **D120** (2026-10-07, the owner): the emulated controller serves TLS: the libvirt emulator unit serves HTTPS with a generated serving certificate the InfraProvider's emulated-BMC defaults name, the lab-baremetal physical copy names its authority in `trustBundleRef` and verifies the leg, so D103's verified controller leg holds for the rehearsal; B334 splits: its TLS half joins M4 as B446 on a new planned slice X47, the loopback bind stays with X44 (D115) and confinement stays parked.
-- **D121** (2026-10-07, accepted by the owner from the session's recommendation): D104 is amended: where the manager publishes `HttpsTransferCertVerification` that switch alone decides, and the device's `VerifyCertificate` counts only on firmware whose manager publishes no such switch; a hardware capture of the device flag stays an operator item; this is B447 on X47 together with the follow-up that `disable-verification` is a silent no-op on the iBMC.
-- **D122** (2026-10-07, accepted by the owner from the session's recommendation): after a failed physical apply the private subtree stays published until the next apply or a destroy clears it; the managed-OS spec says so.
-- **D123** (2026-10-08, the owner accepted the session's recommendation): B440: D119's destroy resolution must not lose produced material: a destroy that resolves an unknown apply block first runs that block's apply observation (the capability's read-only Observe) and, when it proves the operation completed, captures the produced material into custody exactly as a completed apply's finalization does (for example the agent-install admin kubeconfig) before any inverse runs; a drifted machine whose observation does not prove completion is still resolved by the removal's ownership proof as D119 says; the state-reconciliation spec states the capture.
-- **D124** (2026-10-08, the owner accepted the session's recommendation): B440: an installer's kept administrator kubeconfig is never deleted while custody holds none for that cluster: when a removal (the agent-install media block's inverse, or any inverse that deletes the installer's work area) would delete the kept kubeconfig and custody holds no kubeconfig for that ContainerCluster, it first moves the kept copy into custody as produced material marked unproved access, its completion never proved, under the custody path and bounds a completed apply's capture uses, and only then removes the work area, so a crash between the two leaves the copy in one durable place or both and never in neither; `bootwright cluster kubeconfig` exports it with a warning that its access was not proved; deleting the context removes it as it removes any custody entry; this holds whatever the nodes' power state, so the destroy's `Stop first` path loses nothing.
-- **D125** (2026-10-09, the owner): bounded concurrent execution is required for M1 to be implemented. B303 and B304 return from M3 to M1 with their IDs, and B466 adds separate shared package-tree publication and production concurrency, with contract definition required before its implementation. X48 is planned after X46 and before X44; D59's closing gate must prove independent service and machine work, including three same-profile installations, actually overlapping, with replay, cleanup and safe destroy. Prior serial acceptance does not discharge this gate. This request authorizes review and backlog planning; implementation remains subject to the scope rules.
-- **D126** (2026-10-09, the owner): finish X44's remaining implementation while deferring the Go toolchain upgrade B470 requires. B470 and the failing vulnerability gate remain unmet; the deferral changes no exit gate or security requirement and declares neither X44 nor M1 complete.
-- **D127** (2026-10-09, the owner): rebase M1 on current main and implement X48 there, so the three-node RHEL fixture and future examples use all dependency-ready parallelism within the existing bound. B466 realizes shared profile publication under implementation/request `os-package-tree-v1` and evidence `os-package-tree-evidence-v1`, advances installation requests to `os-install-anaconda-v8`, and records effect, replay, inverse and compatibility boundaries in Managed OS. This also names X48 as the slice retiring libvirt's provider/Machine name collision refusal through separate durable namespaces. B470's existing upgrade deferral and every M1 exit gate remain unchanged.
-- **D128** (2026-10-10, the owner): keep M1's scope, sequence and completion gates unchanged. M2 is full managed IBM Ceph 9.9.x provisioning on libvirt+sushy and physical bare metal/BMC, with every provider provisioning feature qualified through B472, B80 and B81; M3 is full OpenShift cluster provisioning on those two provider paths, with complete coverage defined by B473. Move the former M4 Ceph scope to M2, former M5 first add-ons to M4, former M6 OpenShift Virtualization to M5, former M7 ACM/Argo CD/GitLab to M6, and former M2 standalone native rendering to the final M7. Move B70's shared physical erase gate from M3 to M2; managed storage projection and lifecycle qualification no longer wait for standalone rendering or OpenShift. B, X and prior D identifiers remain fixed, and dated history retains its original milestone numbers. Each scope transferred as a whole keeps its items and delivery evidence.
+Each decision is a `### D<n>` entry in numeric order, so `#d<n>` anchors it, and
+opens with its status token: `owner`, `delegated` (decided by a session under
+the owner's explicit instruction to proceed; binding and not in the review
+queue), `session-pending` (a clause a session took, listed below),
+`accepted-by D<n>` or `superseded-by D<n>`.
 
-- **D129** (2026-10-11, the owner): define M2 before implementation and deliver
-  its Ceph journey in order: minimal three-node libvirt+sushy, full virtual
-  provider coverage, full physical BMC coverage, then two-data-site stretch
-  with a third-site monitor-only tiebreaker. Split B80/B81's combined outcomes
-  into independently qualified feature families and acceptance checkpoints;
-  B472 owns the release/coverage definition and B474 its executable projection.
-  Plan X52 to X66 alongside retained X47, with the [M2 page](m2.md) owning
-  their dependencies. B82 is parked without a concrete consumer; B346 joins
-  M2 for its FIPS access profile. The [provider matrix](../ceph-coverage.md)
-  records native restrictions and alternate profiles; full coverage never
-  claims unsupported combinations. B491 must settle the online-cleanup versus
-  machine-quiescence contract, and B70 remains blocked on physical erase
-  evidence. This is a specs-only definition request: M1 gates remain, no
-  implementation slice is activated and no host operation is authorized.
+### Open session clauses
 
-- **D130** (2026-10-11, the owner): M2 supports every cluster size IBM supports
-  for the qualified release and deployment mode. Features follow the provider's
-  requirements, including per-site/per-role capacity, topology and service
-  compatibility. Acceptance profiles are examples, not product limits; include
-  larger qualifying profiles for supported features that require them.
-  B472 records the support ranges and requirements, B474/B79/B490 qualify
-  admission and internal bounds, and B487/B488 cover the service-specific
-  stretch profiles.
-  The definition remains planning-only and changes no implementation authority.
+A clause a session took pending the owner's review binds until the owner
+overturns it, and an overturned clause reopens the work it shaped as a new item
+([scope rules](../milestones.md#scope-rules)). This list names each decision
+holding such a clause, the clauses pending and the work they enable.
 
-- **D131** (2026-10-11, the owner): name the M2 submilestones for future
-  reference: M2a detailed scope/task definition, M2b simple three-node
-  libvirt+sushy Ceph, M2c full-featured virtual Ceph, M2d full-featured physical
-  bare-metal/BMC Ceph, and M2e full-featured stretch for all provider-supported
-  desired-state configurations and sizes. The [M2 page](m2.md#submilestones)
-  owns their mapping and exit gates. M2a is definition only; executable work
-  remains in the existing slices mapped to M2b through M2e. This expressly
-  permits the suffixed submilestone IDs while retaining M2's single status and
-  all B/X/D identifiers. Pre-2026-09-28 M2a/M2b aliases keep their historical
-  meanings. Squash the M2 planning commits into one commit over the M1 base;
-  no implementation or host operation is authorized.
+- [D7](#d7): the 2026-09-29 reading that non-root SSH accounts refuse on
+  lifecycle placement hosts (X22).
+- [D20](#d20), [D21](#d21), [D22](#d22): the controller
+  CPython patch rule (X22); the elevated child's start announcement and the
+  `runtime.internal` result of an elevated command with none (X20).
+- [D134](#d134): the 2026-10-11 readings that D134 waives M2's Requires for
+  X47, X52, X53 and X54 and excepts M2b from the WIP limit; moot since D165
+  returned those slices and D183 counts the WIP limit per program.
+- [D141](#d141): the neutral wording restored into D60, D104, D109 and D113
+  and the X45 record.
+- [D143](#d143): clauses (1) to (11), Ceph through the ordinary staged
+  apply (X70); D157 supersedes the release admission of (1) and (2).
+- [D145](#d145): clauses (1) to (3), (5) and (6), continuation under a
+  rebuilt binary and its contract guard (X74); D183 (Q76 (a)) confirms (4).
+- [D150](#d150), [D151](#d151): the clauses after the owner's words,
+  the several-Machine and several-cluster `exec` and power rules (X85, X86).
+- [D159](#d159): clauses (1) to (16), the M2c program, X55 and X60 (X56 to
+  X61).
+- [D161](#d161): the session finding (1) and the clauses after the owner's
+  answers, the Ceph auxiliary-image and SSO lanes (X57).
+- [D172](#d172): clauses (1) to (10), the M3 submilestones, M3f read as
+  vSphere (Q1) and M2's waiver for M3b to M3d (Q2).
+- [D173](#d173): clauses (1) to (13), the M4 submilestones and M4b to M4f's
+  waiver (D174 applied it for M4b and M4c, D180 for M4d's and M4e's
+  blockers); Q26 to Q61 stay open, D174 having accepted their recommended
+  baseline; (13), the per-cluster early handoff, waits for Q60.
 
-- **D132** (2026-10-11, the owner): include the complete Ceph API and operator
-  authoring review in [M2a](m2.md#m2a). Preserve useful existing abstractions
-  and native declarative formats where they reduce operator learning; expose
-  imperative-only storage resources as declarative intent. Make small,
-  justified corrections, but obtain owner approval with current/proposed
-  examples before adopting substantial API changes. The
-  [review](../storage-api-review.md) records findings and pending proposals;
-  this decision does not approve those proposals, authorize implementation,
-  or declare M2a complete. B494 records the review's bounded admission defects.
+### D1
 
-- **D133** (2026-10-11, the owner): approve the two substantial M2a API
-  proposals reviewed under D132. P1 consolidates daemon configuration and
-  placement into complete native Ceph service documents, with Bootwright
-  retaining proved Machine/site ownership, release pins and protected secret
-  bindings. P2 keeps pools/filesystems and adds separately owned declarative
-  resources for imperative-only objects; NFS exports and SMB resources retain
-  their native formats. The [native service](../ceph-native-api.md) and
-  [resource](../ceph-resources.md) specs own the target and migration;
-  B474 delivers the common schema path and each family item its qualified
-  extensions. This approves the breaking v1alpha1 authoring target, not a
-  version change, runtime implementation, sensitive-output command or host
-  operation. M1 and implementation promotion gates remain unchanged.
+**owner** (2026-09-26): the substrate owns the machine port as role entry points.
 
-- **D134** (2026-10-11, the owner): accept M2a's definition baseline and
-  explicitly authorize M2b implementation, its generic three-node example,
-  a locally ignored machine-specific copy, static execution review and an
-  operator setup/provision/test/cleanup runbook. M1's outstanding checks and
-  owner acceptance remain promotion gates. No privileged operator test or
-  push is authorized. Test runs resolve the latest provider release available
-  at setup and pin its exact artifacts for the whole run. Keep verified native
-  Ceph SSH mandatory: P3's proposed provider-default exception is rejected;
-  bootstrap remains gated until the entitled IBM artifact proves verification.
+### D2
 
-- **D135** (2026-10-11, the owner): approve P4's verified-tunnel design and
-  qualification. Add `clusterSSH.transport: verified-tunnel` while retaining
-  required verification: an outer pinned OpenSSH connection forwards only to
-  the same authenticated host's loopback SSH endpoint, with no direct fallback.
-  Protected MGR mounts, staged bootstrap, server forwarding restrictions and
-  restart/failover/recovery are part of qualification. Approval changes the
-  target API and trust boundary; it grants no provider-default exception,
-  operator-evidence bypass or automatic artifact promotion. B472/B79/B80 own
-  the remaining exact-artifact and runtime evidence.
+**owner** (2026-09-26): lifting the physical refusal needs in-tree tests and an
+emulated rehearsal, with real-hardware acceptance before support is claimed.
 
-- **D136** (2026-10-11, the owner): approve P5's protected RBD canary retention
-  until explicit cluster teardown. The fixed fixture owns a 16 MiB image,
-  retains its ID before writing/reading at most 1 MiB by ID, closes the client
-  and reports `cleanup: cluster-teardown-required`. No immediate deletion by
-  name is permitted; exact disposable-cluster removal owns the retained data.
-  This changes the test retention contract, not public input schemas or
-  ordinary cluster qualification gates.
+### D3
 
-- **D137** (2026-10-11, the owner): approve P6's optional libvirt
-  `dataDisks[].media: ssd`. Explicit SSD data disks use virtio-SCSI with
-  `rotation_rate="1"`, starting at `/dev/sda`; root remains `/dev/vda` and
-  omission preserves the existing virtio-blk layout. Mixed profiles use
-  independent target sequences. Frozen requests, domain inspection, guest
-  device observation and native Ceph class must agree. This declares virtual
-  guest media behavior rather than physical host performance; existing
-  realizations keep their original requests and require teardown before a
-  changed layout is installed. Actual guest/runtime acceptance remains open.
+**owner** (2026-09-26): the BMC certificate is imported where the BMC supports
+it, otherwise an explicit per-machine disable-verification exception applies,
+never a default, and controller-to-BMC TLS gains a CA bundle.
 
-- **D138** (2026-10-11, the owner): clarify M2b's entitlement-driven artifact
-  acquisition. After an operator imports the registry credential into the
-  Entitlement's selected Secret, Bootwright resolves the provider image and
-  downloads required IBM images/packages itself. Remove the manual image
-  pre-pull and digest-discovery prerequisite from the example and runbook.
-  Preserve immutable resolution, original credential custody, verified TLS,
-  current qualification gates and the separate Red Hat media/source boundary.
-  This corrects the authorized M2b flow without changing public Storage schemas
-  or authorizing an agent-run privileged or entitled test.
+### D4
 
-- **D139** (2026-10-11, the owner): "every backlog to milestone M1 done, except the ones that i need to run myself the test in real bare metal and the one related to a go version that is not available in my machine". Recorded meaning: `make vulncheck`'s go1.26.8 standard-library findings (B470) no longer hold any other M1 item. An item completes when every other exit gate passes (`make check`'s other steps, `make race`, `make docs-check`, `./scripts/ansible-check` and its own tests), or awaits operator acceptance when it also has a host gate; B470 alone carries the vulnerability gate, on its own slice X67; M1 completes only after B470 and the owner's host gates. It amends D126's sentence that the deferral "declares neither X44 nor M1 complete" for X44's items and X48 to X51 (M1 itself stays incomplete), and it settles the 2026-10-11 audit's finding that X46's second pass completed under a different standard in favour of completion, so X46's second pass stays delivered. D129 to D138, recorded on the M2 branch, precede it there.
-- **D140** (2026-10-11, taken by the session, pending the owner's review): `machine exec` and `cluster exec` stop at the payload, as `cluster oc` and `cluster kubectl` already did: the first operand that is not a flag starts the remote command and every later token is payload verbatim, flag-shaped or not, so a remote command's own `--context` or `--name` can never retarget the session. Bootwright flags go before the command; `--` is needed only when the payload's first token is flag-shaped, and a required Bootwright flag written after the payload is refused with where flags go. This replaces the earlier rule under which a recognized flag after the first operand still took effect; `TestPayloadParsing`, `TestPayloadTailNeverRetargetsTheSession` and `TestAFlagWrittenAfterThePayloadIsRefusedWithWhereFlagsGo` prove it. The owner accepted it on 2026-10-14 (D148).
-- **D141** (2026-10-12, taken by the session, pending the owner's review): vendor and device names were removed from D60, D104, D109 and D113 and the X45 record on 2026-10-11 for confidentiality; their operative content, restored here, is unchanged by the redaction. The constraints (D109's bastion), the observed firmware behaviors, the check procedures and the RSA-2048 workaround (D113) that the redaction dropped are written back in neutral wording ("the physical BMC under test"), in those decisions, in the X45 record and in the [Redfish knowledge page](../../.agents/knowledge/redfish-physical-bmc.md), and no vendor, model, firmware, serial or host name returns.
-- **D142** (2026-10-12, the owner): before 1.x no backward compatibility is wanted. An incomplete operation is bound to the blocks it froze, not to the build that froze them: another build, meaning other automation, another version or commit, or any build stamped `modified`, continues it exactly when it freezes the same blocks, every frozen member except the words they are presented in, and the execution closure check stays. No converter or older reader is added for any record or request version. B504 joins M1 as an exception to D48 and is delivered by X69, an out-of-sequence enabling slice implemented on the M2 branch at the owner's request.
-- **D143** (2026-10-12, the owner; the clauses after the owner's words are taken by the session, pending the owner's review): "The only binary that should implement all features of bootwright is bootwright itself; the operator declares desired state and runs bootwright apply, with --stage for phases; validation through machine exec / cluster exec; a bootwright command prints the dashboard access info", and, on the M2 branch, "Yes. Work and apply changes on branch M2". This settles [B498](#retired): converge, so the `bootwright-ceph-qualification` executable and its fixture engine are retired. It settles [B497](#retired): M2b's acceptance is an ordinary staged `bootwright apply` over the declared StorageCluster, StoragePool and StorageClient, recorded as an owner-accepted ledger row ([B476](delivered.md#x94--post-destroy-cluster-inspection)); no fixture evidence closes an item, and there is no runtime registry to promote. [X70](delivered.md#x70--ceph-through-the-ordinary-staged-apply) delivers it. Taken by the session, pending the owner's review: (1) each build supports one reviewed, code-pinned release: IBM Storage Ceph 9.9.1.2, image `cp.icr.io/cp/ibm-ceph/ceph-9-rhel9` tag `v9.9.1-25074`, packages `20.2.1-405.el9cp`, cephadm-ansible `5.0.3-1`; a different declared release, repository or tag refuses at admission naming the pinned one, and a newer release needs a reviewed pin bump. This amends D134's "latest provider release available at setup". (2) Apply resolves the pinned tag through the Entitlement's registry Secret to its linux/amd64 child manifest digest in a block that completes before any native effect and is frozen for continuation; an authored `sha256:` digest is admitted only when it equals that resolution; the digest is not code-pinned until B472's lock adds it. (3) `verified-tunnel` is the only supported transport; `native` stays refused (D134, D135). (4) The empty qualification registry and its refusal are removed by B512. Pinned-release admission, verified host keys, data-loss authorization and the frozen plan still protect apply. (5) Every guest proof the fixture made moves into ordinary per-host blocks (B518, B499) and is not dropped. (6) A managed cluster whose hosts are all Bootwright-owned virtual Machines that the same destroy removes is retired with them, with no native call (B515); removal while hosts survive stays [B491](m2.md#b491). (7) The dashboard is enabled after readiness, with user `admin`, a generated password in produced custody revealed only by `bootwright cluster info --secrets --name`, and Ceph's self-signed certificate whose SHA-256 `cluster info` prints. Bootwright never rotates it, and a password changed outside Bootwright refuses as drift. This is the public interface B489 left for owner approval, narrowed to that credential; client export stays B489, and certificates, roles, SSO and monitoring stay B479. (8) B476's 1 MiB RBD test is run by the operator through `bootwright cluster exec` with the bootstrap node's administrator keyring, keeping D136's retention (a retained 16 MiB image, no deletion by name, removed by teardown); Bootwright's canary and StorageClient-material harness retire. (9) `cluster list` and `cluster info` become available for every kind; `cluster rsh` and `cluster exec` connect for managed Ceph (node by name or FQDN, default first in canonical order, argv verbatim, exit 255 for every refusal before the session); ContainerCluster sessions stay [B101](#b101). (10) The owner's request is the dated waiver of M1, X52 and X53 for X70's implementation, and X70 joins D134's exception to the WIP limit; promotion still requires them. (11) A context holding a fixture anchor is retired with the build that prepared it; a later build refuses it, and its only fallback is `bootwright context delete --name <ctx> --purge --allow-orphans`, which abandons that context's Machines, disks and reserved bindings.
-- **D144** (2026-10-13, the owner): "check why those steps for vms were not performed in parallel. remember that any step that could be ran in parallel must be done as that, to optimize provision time". Failed blocks are retried concurrently under the admission rules of a first attempt (dependencies `done`, stage selected, once per invocation, exclusive resources free, the engine bound), beside every startable block; unproved effects are still resolved first with nothing beside them, and a selection that admits no failed block still refuses `lifecycle.stage`. This replaces the rule that a retry runs alone. [X71](delivered.md#x71--concurrent-retries) delivers it as B523.
-- **D145** (2026-10-13, taken by the session, pending the owner's review): the owner proposed to continue an operation under a rebuilt binary by comparing declared versions in place of the content digest, on the premise that the content digest hashes Ansible code. It does not: it is the implementation's contract identity, computed from its identity, its request and evidence versions and its effect pins, and no capability package reads the automation. A fix confined to automation, or to Go code that moves no version or pin, such as X72, X73, X75 and X76, therefore moves the automation digest and no content digest, request byte or version, so D142's rule already continues it once `setup` has projected the fix; the 35-minute destroy of the M2b run was advised, not required. Dropping the content digest from the rule would let a pin change (a Ceph image, the cephadm binary, a package set, a host path) continue an operation half done under the old pin. So: (1) D142's rule stands: a block continues under another build exactly when it freezes the same blocks, content digest included, and nothing here narrows a refusal. (2) A contract guard replaces the human rule that an automation change that alters what an effect is must move its content digest, where a tool can check it: a golden per implementation pins its content digest beside its Go request and evidence schemas and the persisted format versions quoted in the collection's embedded plugins and roles, and changing any of them while the content digest stays fails the build and cannot be recorded (`TestEveryImplementationMovesItsContentDigestWithItsContract`). It sees versions and Go schemas, not meaning: a raw-JSON member, such as the cluster services the Ceph core and host requests carry, is fingerprinted as opaque, and an unquoted, dynamically built or unversioned format is not seen. (3) Every attempt and resolution record names the build it ran under, an optional `build` member that moves no record version. A consequence for the owner to review: the member is compatible one way only, since a build from before X74 decodes records closed and refuses one that carries `build` as "lifecycle record is malformed or unsupported", so once a build that writes `build` has worked an operation, no earlier build can continue or remove it, and the removal under the build in hand is the way out. The alternative, moving the attempt record version, would have stranded every live operation at once. (4) A destroy continuation keeps X69's rule: its removal is derived from the frozen plan and runs under the build in hand, as a fresh removal does, and its proof compares what the removal decides, the authorizations it consumes, its groups and that each block's capability reads its frozen request; it cannot compare content digests, because the removal copies them from the frozen plan. An unknown removal block is observed by the build in hand, whose closed evidence decoding refuses evidence it cannot read, and every removal attempt and resolution names the build that ran it. (5) A continuation previewed under another build names the build that registered it and the steps this build runs, and `status` says whether the build in hand is another build. The preview has no JSON form because `plan`, `apply` and `destroy` have no JSON mode, so `status --output json` carries `anotherBuild` instead. (6) No content digest, request version, record version or plan encoding moves, so the owner's live operation, registered by 91855545e, continues under a build that contains X74. [X74](delivered.md#x74--continuation-under-a-rebuilt-binary) delivers it as B525.
-- **D146** (2026-10-13, the owner): "i had to run twice apply to make it work. it shouldn't be needed. check if you can fix it", after an `apply` resolved an unknown Ceph pool block as partly realized and stopped, and a second `apply` retried it and the client after it. This settles B529: a resolution is not an attempt. An invocation still observes a block at most once and never observes one its own attempt left unproved, but a block its resolution leaves `failed` is retried by that same invocation once every unproved effect is resolved, under the admission rules of any retry (stage selected, dependencies `done`, exclusive resources free, the engine bound), so its dependents start there too. A failed resolution admits further first attempts as a proved outcome does; a failed attempt, including that retry, still admits none. A fresh `destroy`'s resolutions of the apply it supersedes retry nothing. The resolution's progress row stays running into the retry and is settled `failed` when the invocation stops before the retry starts. It amends D144's "once per invocation" only in that a resolution no longer counts as the block's turn. [X82](delivered.md#x82--resolution-and-retry-in-one-invocation) delivers it as B529.
-- **D147** (2026-10-14, the owner): "you can upgrade go to 1.26.9 and mark this backlog as done". This ends D126's deferral of the Go upgrade: [X67](delivered.md#x67--go-toolchain-vulnerability-gate) moves the pin from go1.26.8 to go1.26.9 and delivers B470, so `make vulncheck`, and with it `make check`, passes again and D139's separation of the vulnerability gate from M1's other items holds nothing more. It moves no other dependency; Go 1.27 stays parked as [B273](#b273).
-- **D148** (2026-10-14, the owner accepted the session's recommendation): D140 stands as taken. `machine exec`, `cluster exec`, `cluster oc` and `cluster kubectl` keep the one payload rule of [the CLI contract](../cli.md#parsing-and-input-conventions): Bootwright flags go before the remote command, and every token from the first operand on is payload verbatim, so a remote command's own `--context` or `--name` never retargets the session and `ls -la` needs no `--`. The alternatives the owner declined were the earlier rule, under which a recognized flag after the first operand still took effect, and a mandatory `--` before every payload. No code or contract changes; M1 holds no open decision.
-- **D149** (2026-10-14, the owner): "i upgraded my fedora to 44. bootwright should support it", after `setup` refused the upgraded controller with `controller.unsupported`. This joins B541 to M1 as an exception to D48, because M1's closing run (D59, D125) runs on that controller, and [X84](delivered.md#x84--fedora-44-controllers) delivers it: `setup`, `preflight controller` and the controller stage admit Fedora 44 beside Fedora 43, which stays admitted, and RHEL 9.8.
-- **D150** (2026-10-14, the owner): "update commands bootwright machine start|stop|restart|exec to accept a comma-separated list of machines that the command will be applied in parallel to all". `--name` of those four commands is a comma-separated list under the existing list rules; one member behaves exactly as before and several run concurrently, each power run as today's single-Machine run (at most the engine's bound at once, inside one invocation scope, behind one confirmation) and each exec session non-interactive with its output lines prefixed by their Machine. `machine rsh` stays single because it opens one interactive session, and `cluster rsh` and `cluster exec` are unchanged. Taken by the session, pending the owner's review: (1) a Machine whose resolved identity is a password refuses a several-Machine `exec`, because a password prompt cannot be shared by concurrent sessions; (2) a partial power failure exits `1` with one diagnostic for each failed Machine and still presents every admitted Machine's row; (3) a several-Machine `exec` exits with the highest status any session returned and warns `access.exit` for each nonzero one. [X85](delivered.md#x85--machine-commands-across-several-machines) delivers it as B543.
-- **D151** (2026-10-14, the owner): "when you finish, do the same for bootwright cluster commands", following the request that made `machine start|stop|restart|exec --name` a comma-separated list applied in parallel (D150). The owner answered two questions. For `cluster exec`: "BOTH `--name` and `--node` take comma lists. `--name a,b` runs on every listed cluster and `--node n1,n2` on several nodes. Each listed cluster runs on its default first node, or on the `--node` members it declares. A `--node` member no listed cluster declares is refused. Every resolved node Machine runs in parallel, exactly like `machine exec` with several names." For `cluster info`: "`--name` takes a comma list too (a selection convenience; local read, nothing to parallelize)." `cluster rsh` stays single because it opens one interactive session, and `cluster info --secrets` still reveals exactly one cluster. Taken by the session, pending the owner's review: (1) a listed cluster that declares none of the `--node` members refuses `access.target` instead of running nothing there; (2) the session prefix is the Machine name, and Machines two nodes share run once; (3) a FQDN shared by several nodes of one cluster refuses as it does for a single cluster. [X86](delivered.md#x86--cluster-commands-across-several-clusters-and-nodes) delivers it as B546.
-- **D152** (2026-10-14, the owner's request; the clauses are taken by the session, pending the owner's review): "make a full review and audit of how bootwright install/setup works. i think this is too restrict and not optimal about dependencies. for instance, i had my fedora updated from 43 to 44 and it stopped working. you actually fixed this, but i think we could review this process in a broader way. check how dependencies are defined and used. i want bootwright to require those dependencies in a general but safe way. this should work in a similar way other linux packages that requires dependencies work. other thing that is bothering me is how long it takes to run bootwright setup, to install ansible and python dependencies, even after a previous bootwright setup, with older bootwright's version. this make setup take too long (more than 3 minutes). bootwright seems to be using dedicate installation for those package. evaluate if it is really necessary or would make more sense or would be justified to used SO's package for that. how other similar community package handle that? if it makes sense to use a dedicate python installation, for instance, couldn't the bootwright setup from a newer bootwright's version reuse the previous one? ... check alternatives and impact in code and propose a plan for us to refactor this installation/setup use case, using the best alternative, considering estability and ux and community pattern/best practices. no backward compatibility needed/wanted. you can consider a new fresh installation for this new bootwright version." It carries forward the owner's rules of 2026-09-13: "bootwright should just check if dependency packages are available and only if not install; it shouldn't check for updates unless a specific min version becomes necessary", and "versioning logic for packages is over-engineering; only check the required packages exist; add version logic only when a specific version issue appears". Until the owner accepts it, D152 is a proposal and authorizes nothing; acceptance authorizes [X87 to X90](m1.md#planned-slices) on M1 as an out-of-sequence exception to D48, in the form of D149, and must carry the owner's dated sequencing choice for X88 (clause 9). The clauses: (1) The glibc and libgcc byte pin is not a security boundary and is dropped: the per-file digests, link pins, the single-link and exact-upstream rules, D107's requalification, the receipt's `foundation`, the operator guide's hold procedure, the compiled catalog and scripts/foundation-catalog. Root ownership with no group or other write stays on every executed or loaded path, extended to the interpreter's standard library and `lib-dynload` and to the re-executed binary (B548), and specs/security.md states the attacker model and the widenings W1 to W4 once. Declined: digests as a reproducibility check, the cause of the Fedora 44 refusal, since no attacker model was found in which digests of root-owned files stop an attacker who cannot already write them. Supersedes D107. (2) Admission is by family and floors and fails closed: `ID` is fedora or rhel or `ID_LIKE` names one, amd64, a qualified `/usr/bin/rpm` and `/usr/bin/dnf`, a locked-ABI interpreter installed or offered, and glibc at or above the lock's floor (2.34). A release outside the lock's tested list gets the informational line `controller.untested-release` and is never refused; a docs test ties that list to the development guide. Declined: exact (OS, release) rows, the cause of the Fedora 43 to 44 break, refusing untested releases or derivatives, and silent admission. (3) The interpreter is the OS CPython 3.12 to 3.14 at its versioned path `/usr/bin/python3.X`, with one venv per lock, ABI and interpreter path and no python-build-standalone fallback (parked as B561). Python TLS follows the host's OpenSSL and crypto-policy, since `OPENSSL_CONF=/dev/null` goes; D108 is amended: the Go binary and cryptography's bundled OpenSSL stay outside any FIPS claim, and B331 stays parked. Declined: a standalone CPython with a lock, wheels embedded in the binary, distribution ansible-core (no distribution ships 2.21) and an Execution Environment image. (4) Versions are chosen at build time in a lock the binary embeds (internal/controller/runtimelock/lock.json, format `bootwright.controller.runtime-lock-v1`), which `scripts/runtime-lock generate` writes with network, run by the owner or by CI, and which is committed; `verify` runs in a network CI workflow and `outdated` is advisory. Setup never discovers versions or checks for updates, the upgrade verb is a new build, and D10's and D20's "latest patch" means the latest at lock generation, which also meets the rules of 2026-09-13. (5) ansible-core is exactly the 2.21 minor the collection's `requires_ansible` admits, its patch pinned in the lock; a guard test requires the lock, `scripts/tools/ansible-requirements.txt` and the collection's `meta/runtime.yml` to agree. cryptography stays because ansible-core declares it; dropping it is parked as B559. (6) Native packages come from the host's dnf. Requirements are names or capabilities in one Go table, presence is `rpm -q --whatprovides` with no version logic, and before confirmation a root `dnf install --assumeno --setopt=install_weak_deps=False` preview is shown verbatim as display text bounded to 64 KiB; lines naming core packages (glibc, libgcc, kernel, systemd, openssl-libs, the selected python3.X) get an informational note, never a refusal. Install is `dnf install --assumeyes` with the same option, presence is checked again, and each provider's NEVRA and repository are recorded. The host's dnf configuration owns signers, versionlock, excludes, protected packages, mirrors, Satellite and `proxy=`; Bootwright never passes `--allowerasing`, `--nogpgcheck`, `--repofrompath`, `--enablerepo` or `--releasever`. The Ceph node's dnf4 core keeps its files and only the controller-only branches go. Declined: the frozen plan with a cache, a host-configured solver with vendor-only signers, and a protected-set refusal or `--exclude`. Supersedes D106; closes B330 and B542. (7) Automation leaves every setup identity: the embedded `ansible/` tree is extracted for each invocation into root 0700 staging, held by an inherited lock while descendants run; the automation digest and D145's re-proof are unchanged; the runtime digest hashes `runtime-v1`, the lock digest, the ABI and the interpreter path; the closure digest hashes `execution-closure-v2`, the lock digest and the ABI. An `ansible/`-only fix is build and apply. Closes B165, parked by D40, and supersedes D14's per-build area where it describes the runtime. Declined: a persistent automation directory per digest. (8) Retention runs at the end of each successful setup under the setup lock: the current runtime and the previous distinct one and their wheels stay, every other runtime is retired under a non-blocking exclusive lock that skips one in use, and the newest 8 run logs stay. apply, destroy and the controller stage rebuild this build's runtime without network when its directory is missing and every locked wheel is cached, and refuse with "run bootwright setup" only when a wheel is missing. Tool areas move under the controller's tools directory with their own bound of 16 and are retired when no binding names them (B557, closing B322). The bound of 16 on execution areas, retained sources and definitions, and `--purge-old-bundles` go; this supersedes D90 where it bounds execution areas. Declined: keeping only the current runtime, which would strand live operations offline after a lock change, and unbounded rebuild without retention. (9) The cut-over is a fresh install. A setup-owned subtree `/var/lib/bootwright/setup/` stays root 0700, carries the format `setup-state-v1`, lies outside the registry descriptor and heals itself: setup discards another build's format after confirmation, and launches refuse with "run bootwright setup". The controller record moves from version 2 to 3 and the registry from 5 to 6, and a version 5 store refuses with "/var/lib/bootwright holds a store an earlier Bootwright build wrote (registry version 5), which this build does not read or convert" and the remedy "with the build that wrote it, destroy each environment (bootwright destroy --context <name>) and delete each context (bootwright context delete --name <name>); then, as root, remove /var/lib/bootwright and /var/lib/bootwright-staging and run bootwright setup with this build. Never remove /var/lib/bootwright while services it manages run." The owner retires m2b-ceph and the lab contexts with the old build before the first X88 build runs on the owner's host. X87 integrates on acceptance; X88 integrates only after the owner records, dated, either (a) M1's closing run (D59, D125) and B476's run complete on the current build, which the session recommends, or (b) a waiver that runs the closing validation on the X88 build. **Open: the owner's choice.** Declined: a separate world-readable setup root, which contradicts the root 0700 store rule (a readable index copy is parked as owner decision B558), and moving bindings out of the controller record. (10) `--wheel-mirror` (a `file://` directory or an `https://` base) is untrusted transport bound by the lock's sha256; `setup --download-only --dest-dir DIR` runs unprivileged and writes the wheels, the installer and the lock; `--dry-run --output json` lists every locked file's URL and sha256. The default origin is only `files.pythonhosted.org`, native packages use dnf's own configuration, and the admitted context-free `HTTPS_PROXY` and `NO_PROXY` route is forwarded to dnf as `https_proxy` and `no_proxy`, where dnf.conf's `proxy=` wins; credentials and `ALL_PROXY` stay refused. (11) nmstate leaves the baseline, since nothing consumes it; podman stays, because the container-runtime capability is mandatory. (12) The rpm read lock is not held: each launch holds a shared lock on its runtime directory for the whole Ansible block, so retirement never removes a runtime in use and the operator's dnf is never blocked; a same-minor standard-library update during a run is an accepted risk that setup's import probe repairs. (13) Pre-existing defects: the re-executed binary has no owner or mode check, which X87 fixes as B548 in its own commit; controller-record refusals name no remedy, and the registry version 6 and setup-subtree refusals that replace them each name one; the spec's missing native re-solve, the staged `other` metadata, the stale python3.13 defaults and B542 are moot with the code X89 deletes; the operator guide's Fedora 43 examples are rewritten in X89. Parked by D152: B558 to B563. The session integrated [X87](delivered.md#x87--controller-setup-v2-foundations) on 2026-10-14 ahead of this acceptance, as its workflow directed: it is additive and unwired except B548. On 2026-10-14 the owner deferred clause 9's sequencing choice ("implement whatever you can; I will test when I can run"), so the session integrated [X88](delivered.md#x88--controller-setup-v2-cut-over) on local main without a push; the choice and the owner's review of D152 stay open, and the owner's fresh-install acceptance of B555 waits until the owner can run it.
-- **D153** (2026-10-14, the owner): "today bootwright must accept only this scenario: non-existent real state ... half-provisioned/setup ... real state already equals desired state ... bootwright could have an command: bootwright diff ... do not implement this support yet, just make code, logic and architecture ready for this in the future ... reconciliation must be predictable and safe. target environment can never be broken with bootwright apply". Taken by the session, pending the owner's review: (1) `apply` admits exactly three scenarios: a fresh apply where the context's records show no operation or a completed destroy, a continuation of an incomplete apply over byte-identical input, and an idempotent settle of a completed apply over unchanged input. Changed input over a completed apply keeps refusing before any effect and names what changed, with destroy then apply as the remedy; `TestApplyAdmitsOnlyTheThreeScenarios` pins the placement. (2) `bootwright diff` is read-only: it compares the context's selected desired state with what its apply realized, object by object, reads durable records only, or with `--observe` each realized block's target through that block's read-only observation, writes no record, takes no lock beyond the shared read lock and exits 0 whenever it renders. (3) Every further scenario is added one per named slice by the recipe in the design: a decision, a spec row and a `stateMachineRows` case, the prerequisite items, and one branch in the changed-input path, all in one commit; none is implemented here, and this slice builds only seams with a present consumer (the comparison, the read-only guard, the retained-revision reader). (4) The settled scenario means "the records prove the frozen plan done over unchanged input": a settled apply attests its own records and reaches no host. Drift that `diff --observe` shows is reported, never repaired. [X91](delivered.md#x91--read-only-diff-and-the-delta-seam) delivers it; the audit's blocking findings [B567](#b567) and [B568](#b568) stay parked and recommended as a dedicated safety slice before any further `destroy` on a shared libvirt host. Needs the owner's decision: whether a settle also requires the current build to freeze the same plan ([B574](#retired); the recommendation is not now). Needs the owner's decision: whether input restored byte for byte after an edit settles a completed apply ([B598](#b598)). Needs the owner's decision: the libvirt redefine semantics and what machine evidence proves ([B576](#b576)). Needs the owner's decision: whether Ceph pool `size` and `min_size` drift is refused or reported ([B587](#b587)). Needs the owner's decision: the context incarnation identity design ([B568](#b568)).
-- **D154** (2026-10-15, the owner): "mark all backlogs that we validated so far
-  as done; save this fix as a new backlog; we will handle it and §9 in near
-  future", and, asked, accepted D152 with clause 9's option (b) and the
-  closing run's B339 observation as met. The owner accepts the ledger rows of
-  [X93](delivered.md#x93--the-owner-run-of-2026-10-14) for B19, B20, B270, B276, B277,
-  B339, B549 and B555, which leave M1; accepts D152 as written, whose clause 9
-  is (b): the closing validation ran on the X88 build; and records the
-  reboot defect as [B608](delivered.md#b608) on M1, where it blocks B466. M1 stays
-  in progress, and B476's run (M2b) follows later. D156 subsequently closes
-  the remaining M1 gates.
-- **D155** (2026-10-16, the owner accepts the recommendations): D153 clauses
-  1 to 4 stand as written. B574 is retired: settlement continues to attest only
-  the completed frozen records over unchanged input, without re-planning or a
-  host check. B598 adopts exact-original-byte restoration as a future scenario;
-  until its named slice, the current code and changed-revision refusal remain.
-  B576 will narrow claims to observed evidence, report an actual redefine as
-  changed, and widen read-back with each supported field. B587 will refuse
-  detected pool `size` or `min_size` drift without writing until a named delta
-  admits it. B568 adopts a persistent random context incarnation design;
-  exact formats and migration are defined in its named slice. Define and
-  schedule B567 and B568 before shared-host destroy: the B567 guard and B568
-  interim orphan warning come first, full incarnation identity before later
-  deltas. These are accepted directions for future work, not authorization to
-  implement those items now. The owner authorizes the bounded post-destroy
-  inspection correction as X94/B613. Conditional agreement to finish M1 does
-  not satisfy its gates: B608 is unimplemented and B466's host-restart rerun is
-  missing, so M1 remains in progress. The owner accepts B476's
-  [ledger row](../../docs/acceptance.md) and explicitly attests that dashboard
-  fingerprint comparison, successful login and expected host/OSD inventory
-  checks passed. This closes B476's operator gate on 2026-10-16; M2b promotion
-  still requires M1 and its remaining core/prerequisite gates. D156
-  subsequently satisfies M1; the other M2b gates remain open.
-- **D156** (2026-10-16, the owner): the standing acceptance of passing criteria
-  in conversation applies to the completed B466/B608 journey. The owner
-  requested the records after the actual fresh apply, controller host restart,
-  automatic network and managed-service recovery, guest startup/access checks,
-  safe removal, evidence preservation and context purge passed. Accept B466
-  and B608 on clean tested build
-  `591af9616446596a77a599cd6303970a85131694`, recorded by
-  [X98](delivered.md#x98--m1-owner-acceptance) and the existing acceptance
-  ledger. No separate hand-back form or further approval is required.
-  M1 is done on 2026-10-16 at that tested build, with no open item or planned
-  slice. M2's M1 prerequisite is satisfied; M2b's remaining core/prerequisite
-  and B80 promotion gates remain open. B476's acceptance under D155 stands.
-  This decision neither completes M2 nor authorizes unrelated implementation.
-  Runtime facts, exact commands, digests and raw evidence are retained locally.
-- **D157** (2026-10-16, the owner): require [B615](delivered.md#b615) before M2b
-  completes. Operators may supply any IBM Ceph release, package/tool version,
-  container tag/digest and related version parameter, even nonexistent or
-  incompatible selections. Bootwright attempts those selections through native
-  package, container and Ceph tools and reports their native errors. It does
-  not validate version compatibility, register IBM's release table, maintain
-  approved-version catalogs or require per-release profiles or approval.
-  This supersedes D143's single-release admission and pinned-tag selection
-  policy, the corresponding B472 restriction and B500's proposed release
-  profiles. Independent authenticity, transport trust, authorization and frozen
-  artifact/continuation requirements remain. The owning contract is
-  [storage admission](../api/ceph.md). X99 was planned and not started at
-  this decision; its later authorized implementation and acceptance are recorded
-  in [X99](delivered.md#x99--operator-selected-ceph-artifacts-and-m2b-completion).
-  This initial request authorized backlog/specification work, not implementation.
-- **D158** (2026-10-17, the owner): redefine M1 as Foundations: substrates,
-  infrastructure components and Machines. Group it as M1a API review, M1b
-  repository/code structuring, M1c libvirt+sushy, M1d infrastructure components,
-  M1e bare metal, and future M1f vSphere and M1g OpenShift Virtualization.
-  Move unfinished shared foundation work from M2/M3 into M1: X47, X55, X60,
-  X62 and X63 retain their IDs and item states; B78 moves out of X64 into
-  M1e's X100; B68 moves from M3 to M1d. Shared lifecycle safety B18/B23
-  moves to M1b, machine/network exclusion B265 to M1c, and the generic
-  controller/check-tool procedure B509 from M2 to M1c. Move parked B99 to M1f and B87 from
-  M5 to M1g, retaining IDs and requiring definition before implementation.
-  B100 and other parked work stay unpromoted. M1a/M1b map the previously
-  accepted hardening work; this declares no new audit or restructuring done.
-  Reopen M1 for its remaining foundation scope as an explicit exception to
-  the done-milestone rule. Preserve D156/X98's historical completion, every
-  accepted gate and M2b's completion under X99. B/X IDs and dated decisions
-  stay fixed; the historical M1a to M1g delivery labels retain their meanings
-  and distinct links. This changes planning history, not Git history.
-  M2 retains Ceph effects and service/security compatibility, including
-  CephX/FIPS and daemon compatibility in B472/B484/B485. M3 retains OpenShift
-  cluster delivery and M2 as a prerequisite. Moved B509 still gates full M2;
-  moved B18/B23/B265 still gate M3 completion, without reopening accepted
-  checkpoints or becoming prerequisites of every implementation slice.
-  M5 retains B88's OpenShift
-  cluster lifecycle and requires M3 plus B87. M1g consumes an existing
-  qualified host cluster and does not require Bootwright to provision it.
-  Consumers require the foundation capabilities they use, not all of M1;
-  vSphere and OpenShift Virtualization do not gate libvirt/bare-metal delivery.
-  Schedule shared foundation work with its first consuming product checkpoint;
-  M2c remains next with its required foundation gaps. M1f/M1g are future work
-  and do not take scheduling priority merely because they belong to M1.
-  All M1 items still gate M1's eventual completion. The WIP limit, promotion
-  gates, safety refusals and operator acceptance requirements remain. This
-  request authorizes roadmap and ownership changes only, with no new active
-  slice or substrate implementation.
+**owner** (2026-09-26): administrator access is kept in context custody with
+`cluster kubeconfig`.
 
-- **D159** (2026-10-18, the owner's requests; the clauses after the owner's
-  words are taken by the session, pending the owner's review): on 2026-10-15
-  the owner asked to "start planning and then implement M2c, using best fitting
-  model/effort for each subtask", and on 2026-10-18, after D158 and M2b's
-  completion, said "resume". The session reads them as authorizing
-  [M2c](m2.md#m2c)'s slices X56 to X59 and X61 and, as the foundation gaps M2c
-  requires under D158, M1c's slices [X55 and X60](m1.md#planned-slices). It
-  replaces the session's earlier activation records on the unmerged branch
-  `m2c`, whose decision and item numbers collided with main's and are not used.
-  Taken by the session, pending the owner's review: (1) M2b is done, so nothing
-  of it is waived; M2's Requires on M1's X55 and X60 is waived for the
-  implementation of X56 and X61 only, and X55's Requires on X47's trust
-  contracts and X60's and B346's Requires on B448 are waived for implementation
-  only; promotion of B74, B326, B75 to B77 and B346 still requires them.
-  Promotion of each M2c item still requires the M1 features its profile uses,
-  and M2c's exit stays [B484](m2.md#b484)'s owner-accepted matrix on the commit
-  closing X61. (2) X55 to X61 are excepted from the two-active-slice WIP limit
-  and may run out of sequence. (3) The M2c program's dependency graph fixes the
-  landing order of its lanes; the Requires between these slices name the work a
-  lane builds on and do not force whole-slice integration order. (4) The work
-  lands on the local branch `m2c`, never pushed, rebased onto main `a38a6d183`:
-  this docs commit opens it, the code commits of the lanes that had landed
-  follow it, and each later reviewed lane is rebased onto the branch tip and
-  fast-forwarded by one serialized landing step; slice checkpoints run the full
-  gates and an adversarial review of the slice's commits. Merging `m2c` waits
-  for the owner. A version-specifics slice on main and this branch integrate in
-  landing order: whoever lands second rebases, and no M2c lane adds
-  release-conditional behavior outside that slice's architecture. (5) In the
-  replay, each replayed commit that moved a frozen version moves it one step
-  from its value on the replay tip, commit by commit; after that, each lane
-  that changes a frozen type moves that version exactly one step from its value
-  on the branch tip, lanes holding the same version are ordered by the graph,
-  and no reader of an older version is added.
-  A context made by an earlier build, including every build of `m2c` before this
-  rebase, is finished or destroyed with that build. (6) X56's "Requires D143"
-  means D143's transport and retirement baseline as D157 amends it, and waives
-  nothing else. (7) One execution mechanism for services the cluster block does
-  not own: the cluster block applies mon, mgr, osd and mds in its one services
-  batch with its deadline formula unchanged; RGW and its ingress run in the
-  gateway block; NFS, monitoring, the management gateway, NVMe-oF gateways and
-  rbd-mirror run in one generic service-unit block type with per-type hooks;
-  core observation tolerates a delegated daemon only when its service is listed
-  in the request and it runs on that service's hosts; per-host and per-service
-  intent records extend the formats M2b delivered. (8) Families tied to one
-  cluster are actions of the core Ceph request; SMB, the NVMe-oF subsystem and
-  cross-cluster replication are their own implementations; the host request
-  carries only host-relevant facts. (9) A settings block is the single writer
-  of every `mgr/cephadm/container_image_*` key a declared family needs, each
-  from its frozen digest, and of every manager module a declared family derives
-  (nfs, smb); cephadm enables the prometheus module itself for a declared
-  prometheus service; `spec.ceph.mgrModules` admits none of them; a key holding
-  a foreign value refuses without overwrite. Bootwright keeps no auxiliary
-  image default; their source is M2c's question OD28. (10) Every cluster child
-  block depends on its core cluster block by block ID, not through Requires
-  StorageCluster. (11) Post-install network convergence runs on every installed
-  anaconda Machine ([B326](m1.md#b326)), which amends the B326 sentence that
-  B80's minimal profile uses the delivered install path (D129). A network
-  declaration error found by convergence is recovered by `bootwright destroy`
-  and a fresh apply; destroy keeps a physical Machine's installed system, so
-  its operator also powers it off from its management controller before that
-  apply ([B623](m1.md#b623)). (12) [B76](m1.md#b76) never publishes
-  registration secrets: its exit evidence reads "secrets reach the guest only
-  on a fixed worker's stdin and are never published" instead of "over the
-  private path". (13) The defaults listed under M2c's question OD25 are
-  implemented as recorded, except B81's erasure-profile and jerasure rows, which
-  D157 removes because Bootwright checks no vendor support, and the FIPS service
-  list, which OD29 asks about. (14) M2c's questions OD1 to OD31 (OD8 merged into
-  OD7) are listed on [its page](m2.md#m2c-open-decisions); until answered, the
-  lanes a question gates do not start, every gated lane starts only after the
-  decision-free program has landed, and for each non-gating open question the
-  option named under Running by default is implemented. (15) No product string
-  claims or cites a vendor support status or a release: a refusal of a feature
-  Bootwright does not realize names the object, that Bootwright does not realize
-  it and the next step, and may name its parked item; a restriction whose only
-  basis is a vendor support table is removed (D157). Decision and question IDs
-  never appear in operator-visible strings. (16) Under D158, Ceph on FIPS-mode
-  hosts belongs to [B484](m2.md#b484) and the Ceph controller-to-host
-  crypto-policy defect to [B625](delivered.md#x61--ceph-transport-crypto-policy), both in X61; X60 keeps the OS arms
-  B75, B76 and B77 and controller access B346. Each overturned clause reopens
-  the work it shaped as a new item.
-- **D160** (2026-10-15, the owner; recorded on 2026-10-18 under D159): after
-  reading the M2c decisions brief (questions OD1 to OD27, OD8 merged into OD7),
-  the owner replied: "I accept recommendations". The owner accepts the
-  recommendation of every question OD1 to OD27 of
-  [M2c](m2.md#m2c-open-decisions), which answers them as follows; a bracket
-  says where a later owner decision changes an answer's premise. OD1 (a): M2c
-  lands on the local branch `m2c` [M2b is done (X99), so "main stays B476's
-  build" no longer applies; OD31 asks when M1c's X55 and X60 reach main]. OD2
-  (a): per-resource online removal and B489's single-client revocation move to
-  [B491](m2.md#b491); the family items keep whole-cluster retirement. OD3 (a):
-  StorageObjectUser and StorageObjectBucket, with the example records of the
-  X56b slice plan, 1.1, approved. OD4 (a): `objectUserRef` user-level RGW NFS
-  exports. OD5 (a): the owner supplies the then-pinned image's auxiliary tags
-  and refusing pin tables guard until then [superseded by D157: Bootwright
-  keeps no pin table or image catalog; OD28 asks how auxiliary images are
-  selected]. OD6 (d1) if the image facts show loki and its agent, else (d2)
-  [D161 settles (d1); under D157 the selected release's cephadm refuses a
-  service type it does not know]. OD7 (a): park SSO, the direct-dashboard
-  certificate and local roles, and revisit (b) only if the image facts show
-  that the IBM oauth2-proxy template verifies the IdP [reopened and answered by
-  D161]. OD9 (a). OD10 (a), a cluster keyring command, with the output shape
-  (o1) [the shared output presentation carries (o1): compact identity and
-  health, full scope and endpoints]. OD11 (a): StorageExport material moves to
-  M4's [B86](m4.md#b86). OD12 (a): one StorageNVMeoFSubsystem kind. OD13 (B):
-  host-NQN authorization plus gateway mTLS now, and (C) DH-HMAC-CHAP after the
-  live probe. OD14 (B): refuse `linked_to_cluster`. OD15 (A). OD16 (A) and OD17
-  (a): IBM's physical image names through `Entitlement.registry` plus two
-  package-mirror fields, and the pinned tag resolved on the declared mirror
-  [D157's authored image base and `ceph.packageRepository` change both
-  premises; OD30 re-asks them]. OD18 (A). OD19 (a). OD20 (c): a pre-stop
-  removal phase. OD21 (b): IBM per-guest sums plus 2 GiB [M2b's capacity
-  admission also refuses an apply that does not fit the provider host]. OD22
-  (a): a bounded item split from B79 and B475 into M2c. OD23 (a): a larger
-  single lab host, which the owner provides. OD24 (A). OD25: every session
-  default is accepted as recorded [D157 removes B81's erasure-profile and
-  jerasure rows, which came from a vendor table; isa stays the default; OD29
-  asks whether the FIPS service list stays]. OD26 (a): refuse and park [the
-  refusals name no release or decision, D159 clause 15]. OD27 (a) for NFS over
-  RDMA and CephFS snapshot mirroring from IBM's public pages, and (b) for iSCSI
-  and the RHEL FIPS row [under D157 Bootwright records no vendor status: NFS
-  over RDMA, CephFS snapshot mirroring and iSCSI refuse as features Bootwright
-  does not realize, and the RHEL FIPS row becomes OD29's service-list question].
-  The gated lanes start only after the decision-free program has landed (D159
-  clause 14).
-- **D161** (2026-10-15, a session finding and the owner's answers; recorded on
-  2026-10-18 under D159; the clauses after the owner's words are taken by the
-  session, pending the owner's review): (1) Session finding, not an owner
-  answer: the session read the then-pinned image
-  `cp.icr.io/cp/ibm-ceph/ceph-9-rhel9:v9.9.1-25074` (manifest digest
-  `sha256:c5b181f15d4ebff833a1c0de84398d2d55ff416d9dd5ed3816a9baa817eb4bde`;
-  `ceph-common` and `cephadm` `20.2.1-405.el9cp`) read-only with the network
-  disabled and recorded its auxiliary image defaults, known service types and
-  oauth2-proxy template as
-  [research](../../.agents/knowledge/ibm-ceph-auxiliary-images.md). Under D157
-  they describe that release only and are not Bootwright defaults; this
-  supersedes the session's earlier reading that the image answered OD5. OD6
-  resolves to (d1): `alloy`, `loki` and `promtail` are known service types
-  there. `iscsi` is still a known type, which establishes no vendor support.
-  The oauth2-proxy template writes `ssl_insecure_skip_verify=true` only when
-  the spec field (default false) is true, so D160's condition for revisiting
-  OD7 held. (2) The owner's answers, to the session's questions: OD7: "Also
-  private-CA IdPs". oauth2-proxy SSO is admitted for an IdP whose certificate
-  chains to a CA in the selected image's trust store and, for a private-CA IdP,
-  through a Bootwright-bound CA bundle mounted into the oauth2-proxy container
-  through the native `custom_configs`; `ssl_insecure_skip_verify=true` always
-  refuses. Because the release is the operator's (D157), verification is proved
-  from the deployed daemon's rendered configuration, never from one release's
-  template. This supersedes D160's OD7 (a) for SSO and adds a gated SSO lane to
-  X57; the direct-dashboard certificate and local roles stay parked. OD15: "No
-  AD available". Both SMB authentication modes are implemented and
-  offline-tested; the active-directory live row stays unrun and is recorded as
-  such. OD23: "Bigger host later". The session builds the larger profiles and
-  their runbooks, and the owner runs their rows when the host exists. OD27:
-  "Leave them open"; D157 later settled them: Bootwright records no vendor
-  status, and only the FIPS service list remains a question (OD29).
+### D5
 
-- **D162** (2026-10-18, the owner requests this architecture and readiness
-  for the listed versions; clauses (b) to (d) are the design's recommendations
-  taken under that request, which the owner may revise): adopt version
-  specializations as defined in
-  [architecture](../architecture.md#implementations-and-version-variation),
-  after the owner asked to "design and implement a general architecture and
-  code structure" in which code has one general flow, the default for any
-  component version, and a small specialized flow for a given version handles a
-  known issue or dependency and then returns to the general flow, with the
-  specifics in code and in repository knowledge with references, and to be
-  ready for the provider-supported versions from OpenShift 4.21, IBM Storage
-  Ceph 9.9.0.x, IBM Fusion 2.13 and Fusion Data Foundation 4.21 to current. It
-  refines D157 and does not reverse it.
-  (a) Each component keeps one general flow. Within one implementation, an
-  adapter or driver may deviate from it only through a registered
-  specialization: a record with an id, a declared seam of that flow, a declared
-  variant, and a condition over facts that pure detectors derive from the bytes
-  of the operation's frozen, authenticated artifacts. Only when no artifact
-  feature exposes the difference may the condition use a proved coordinate,
-  ordered by the component's own comparator. An unknown fact or an unparseable
-  version selects the general flow and is never by itself a refusal. A
-  specialization adapts how a step reaches its declared outcome, and the flow
-  then returns to the general flow. It never approves, screens, refuses,
-  selects or substitutes a version or an artifact. It never changes a block's
-  intent, ordering or authorization. It never weakens trust, host-key
-  verification, publisher signatures, redaction, an ownership proof or a trust
-  refusal. Each specialization has a row with evidence in the
-  [version-specialization catalog](../../.agents/knowledge/version-specializations.md),
-  and a test keeps each registry and the catalog equal. This shape applies to
-  every registry, whatever its language, including later add-on drivers.
-  Specializations are not per-release profiles or a release catalog. They key
-  on observed capability, exist only where the general flow is known to fail,
-  and gate no selection.
-  (b) `spec.distribution.ibm.callHome: disabled` is admitted by planning, and the selected
-  build decides how it is realized, as [storage API](../api/ceph.md) states.
-  Every refusal of a Call Home intent comes before the cluster is claimed but
-  after host preparation, so correcting it is an input change that needs the
-  operation's destroy and a fresh apply; planning no longer refuses it first.
-  (c) D157's non-screening extends to OpenShift release minors. The agent
-  installer's accepted control-plane counts are a general rule for every
-  minor, with per-minor specializations only where an installer differs. A
-  minor with no specialization takes the general rule, and the installer
-  judges the release. This narrows the per-minor refusal of
-  [container clusters](../api/openshift-clusters.md#topology).
-  (d) Provider OS and version pairings, such as IBM Storage Ceph 9.9.0.x on
-  RHEL 9.7, and Fusion, Data Foundation and OpenShift compatibility are
-  recorded as dependency rows of the catalog; Bootwright does not gate on them
-  (D157), and native tools judge installability.
-  This request authorizes the specification and the version-specialization
-  slice, with its 9.9.0.x first wave. It authorizes no M3 node-role work, no M4
-  add-on work and no evidence-format move. The evidence member rides the next
-  coordinated Ceph contract move.
-  D163 supersedes clause (d).
-- **D163** (2026-10-19, the owner): Bootwright registers and enforces no
-  component version rule: no pairing or compatibility rule between component
-  versions, such as an IBM Storage Ceph release requiring a RHEL release, and
-  no Fusion, Data Foundation, OpenShift or Ceph compatibility rule. Neither
-  code nor repository knowledge records such rules; choosing versions is the
-  operator's responsibility. This extends D157 to every component and
-  supersedes D162 clause (d). Version specializations stay: they adapt native
-  mechanics to capabilities of the selected artifacts and never approve,
-  refuse or recommend a version. The owner also authorizes the defect work for
-  the confirmed general findings of the 2026-10-18 audit of main
-  fcff2f58f..ce190446a, planned as X102.
+**owner** (2026-09-26): every node presenting this block's own tokenized image
+proves a partial install.
 
-- **D164** (2026-10-18, the owner; recorded on 2026-10-19): the owner answered
-  the four questions OD28 to OD31 that D157 and the rebase onto main created for
-  [M2c](m2.md#m2c-open-decisions), choosing the recommended option each time.
-  Their selections: OD28 "Authored per family (Recommended)"; OD29 "Drop the
-  list (Recommended)"; OD30 "Trust + closure (Recommended)"; OD31 "M1c at
-  checkpoints (Recommended)". They settle the following. (1) OD28 (a): a
-  StorageCluster field `ceph.images.<name>` with `base` and `version`, like
-  `ceph.image`, keyed by cephadm's `container_image_<name>` names, required
-  only when a declared family needs that image. Each is resolved and frozen by
-  digest, and the settings block writes the frozen digests. Bootwright keeps no
-  default and no table; examples author the values and the owner confirms them
-  for the authored release, because the research on one release's images is not
-  a source for another. This replaces OD5 (a) of D160 and the OD5 part of D161
-  (the image facts stay research). The pull broker's scope grows from one frozen
-  repository@digest to the frozen set (lane X56b-E1), and the lanes implement this answer in place of the
-  running default (a family that needs an auxiliary image refuses at plan),
-  which no lane has built.
-  (2) OD29 (b): every declared service is admitted on FIPS-mode hosts. A service
-  that cannot run under the OS's FIPS policy fails natively and the operator
-  sees its cause through nativeError, then recovers by destroy and apply.
-  Bootwright keeps the host FIPS proof and the Ed25519 and AES256K key
-  refusals, which are mechanism refusals. This replaces OD25's service list and
-  OD27's RHEL FIPS row; x61-ceph-fips and od29-fips-service-list implement
-  no service allow-list (none was built), and [B484](m2.md#b484)'s FIPS rows record the
-  tested services as evidence, never as an allowlist. (3) OD30 (a): D157's
-  naming stays, so the authored registry, image base and `ceph.packageRepository`
-  are the disconnected naming, and no physical-name rule or second pair of
-  package-mirror fields is added; OD16 (A) and OD17 (a) of D160 are superseded.
-  [B493](m2.md#b493) adds the registry trust-bundle consumer
-  ([B619](delivered.md#x59--registry-trust-bundle-consumer)), a CA-bundle binding for the package repository (one new
-  field), auxiliary-image closure and an egress-denied proof with a disconnected
-  example. The lanes x59-d1 to x59-d4 are re-planned to that scope before their
-  briefs; x59-d5 and X61-L7 keep their purpose. (4) OD31 (b) changes the
-  integration cadence of D160's OD1 and D159: when int-x55 or int-x60 passes
-  (int-x55 re-runs on the replayed tip), the session offers that M1c slice's
-  commits to main for the owner to merge, then rebases `m2c` onto main. M1c's
-  X55 and X60 are therefore offered to main at their checkpoints; M2c's Ceph
-  slices stay on `m2c` until the owner merges them. OD1's branch answer stands,
-  and the owner still decides each merge: nothing merges or is pushed without
-  that decision. The four answers gate no lane any longer; the gated lanes
-  still start only after the decision-free program has landed (D159 clause 14).
-  The brackets in D159, D160 and D161 that name these questions are history.
-- **D167** (2026-10-19, the owner): the owner answered the session's question
-  about how destroy tells an installation that never registered from one whose
-  registration it cannot read, choosing "Install evidence (Recommended)". The
-  X60 checkpoint found that `spec.subscription` stays refused after destroy's
-  pre-stop unregistration was built, because no rule decided that difference
-  ([B76](m1.md#b76)). The rule: at destroy, the installation block's own apply
-  evidence decides. Registration runs only after the install marker is proved,
-  so an installation whose marker was never proved never registered, and the
-  pre-stop removal skips unregistration for it. A proved marker with an
-  unreadable registration refuses before any effect, naming the Machine, the
-  reason and a manual next step. M1c lane x60-subscription-lift (slice X60,
-  item B76) implements the rule and lifts the `spec.subscription` refusal. The
-  answer changes no product spec by itself and no delivery state: B76 stays in
-  progress until that lane lands, and the lane updates the owning spec.
+### D6
 
-- **D165** (2026-10-19, the owner): the owner answered the seven questions that
-  X102 and X103 left open (B650 to B656). (1) B650: the libvirt-3-nodes-ceph
-  example authors the build tag `v9.9.2-26729`, which the owner confirmed
-  exists in the entitlement, instead of the alias `v9.9.2`. (2) B651:
-  `machine info --name` and `secret info --name` refuse an explicitly named
-  unknown resource with `access.target`, like `cluster info`, instead of
-  selecting no rows; an omitted `--name` still lists all, and a separator-only
-  list is a usage error. (3) B652: public acceptance evidence in the
-  [acceptance ledger](../../docs/acceptance.md) is a summary row (date, build
-  commit, command sequence, outcome) plus the operation-log digest of the
-  private evidence archive, and an agent may record an acceptance the owner
-  states explicitly. (4) B653: the owner confirms authorizing B615's
-  implementation on 2026-10-16 and accepting B615 and M2b on 2026-10-17; M2b
-  stays done, and the fixes after its acceptance (named in X102) are
-  post-completion corrections. (5) B654: slices X47 and X52 to X54 return to
-  `not started`, carrying their full-M2 remainder; D134's M2b-only WIP
-  exception is not extended. (6) B655: the owner authorized commit 2dc470bff,
-  the shared CLI output presentation, including the
-  `github.com/charmbracelet/x/ansi` dependency; it is recorded as delivered
-  under M1 (M1b) in [X104](delivered.md#x104--owner-answers-of-2026-10-19).
-  (7) B656: the controller's `controller.untested-release` warning (the runtime
-  lock's `tested` list, warning only) is an explicit exception to D163, because
-  it concerns Bootwright's own host and never refuses; the
-  [controller spec](../controller.md#supported-hosts) records it.
-  *Correction (2026-10-20):* the tag in clause (1) does not exist in the
-  registry; `v9.9.2-26947` replaces it under [D171](#decisions).
+**owner** (2026-09-26): the first proved UUID and serial are pinned and a
+mismatch refuses.
 
-- **D166** (2026-10-19, the owner): the owner answered the session's question
-  about the two audit defects that X102 parked and that held eight M2c lanes,
-  choosing "Fix both in M2c (Recommended)". (1) [B660](#b660): the Ceph route
-  probe always generates ssh-ed25519 synthetic keys, so a FIPS-mode Ceph host
-  cannot pass host preparation and its refusal reads as a route failure; M2c
-  lane x61-ceph-fips fixes it with ECDSA synthetic probe keys on FIPS hosts.
-  (2) [B664](#b664): the IBM package publisher key is always fetched from the
-  public IBM site even when `ceph.packageRepository` names a mirror; M2c lane
-  x59-d4-host-pull-route fixes it, and the key comes from the declared mirror
-  under its trust bundle. The answer releases the program's two holds: the
-  lanes x61-ceph-fips, od29-fips-service-list, x61-host-variants-example, X61-L6
-  and int-x61-held, and the lanes x59-d4-host-pull-route, x59-d5-disconnected-profile
-  and int-x59-held. It changes no product spec and no delivery state; the
-  items stay parked and name their lanes.
+### D7
 
-- **D168** (2026-10-20, the owner): the owner instructed that "finished lanes
-  that are complete and would make main functional with the feature it
-  implemented can be merged to main as soon as they are done". This supersedes
-  the owner-merge step of [D164](#decisions) (OD31 (b)), D160's OD1 and D159
-  clause (4), "merging waits for the owner" / "Merging `m2c` waits for the
-  owner": the session merges a checkpoint-passed,
-  feature-complete slice to local main as soon as it is done, without asking,
-  and pushing still waits for the owner. A lane that is a dependency of such a
-  slice and is itself complete goes with it and is reported (X61's first lane,
-  the matrix catalog and refusal table, went with X56); a lane of a slice whose
-  checkpoint has not passed, or whose gated lanes are open, stays on the local
-  branch `m2c`. The instruction changes no product spec. It records X56 and X57
-  in-tree: [B81](m2.md#b81) and [B492](m2.md#b492) await operator acceptance,
-  and [B477](m2.md#b477), [B478](m2.md#b478), [B479](m2.md#b479) and
-  [B489](m2.md#b489) stay in progress for their gated lanes. It also records
-  [B686](m2.md#b686) and [B687](m1.md#b687), found at the int-x57 and
-  int-x55-r checkpoints.
-  The same rule merged X58's in-tree work and the lane od28-aux-image-source
-  (D164's OD28 (a)) after the int-x58 checkpoint: [B482](m2.md#b482) awaits
-  operator acceptance, with the active-directory live row unrun (D161, OD15);
-  [B481](delivered.md#x58--iscsi-refusal) stays in progress for the vendor support statement the
-  owner left open (D161, OD27); and [B477](m2.md#b477), [B478](m2.md#b478) and
-  [B479](m2.md#b479) plan their families once the images are authored.
-  It then merged X59's in-tree lanes after the int-x59 checkpoint, with the
-  docs commit of D166 that assigns [B664](#b664) to the lane
-  x59-d4-host-pull-route: [B619](delivered.md#x59--registry-trust-bundle-consumer)
-  is delivered; [B483](m2.md#b483) stays in progress for the replication lanes
-  (D160, OD18 (A) and OD19 (a)) and [B493](m2.md#b493) for the host pull route
-  and the disconnected profile.
-  It then merged X61's lane x61-ceph-transport-policy after the int-x61
-  checkpoint: [B625](delivered.md#x61--ceph-transport-crypto-policy) is
-  delivered; [B484](m2.md#b484) stays in progress for the acceptance matrix
-  lanes X61-L2 to X61-L9 and the lanes D166 released, x61-ceph-fips,
-  x61-host-variants-example and X61-L6 (none implemented).
-  Finally, by the owner's order of 2026-10-20 to merge everything already
-  implemented and ready, it merged the remaining checkpoint-passed lanes of
-  X57 and the definition of X61's cluster execution budget (the int-ready-v4a
-  checkpoint) together with D169 to D171: [B686](m2.md#b686) (crash collection
-  as a derived Ceph service unit) awaits operator acceptance;
-  [B627](delivered.md#x57--applied-specializations-in-ceph-evidence) is
-  delivered; [B479](m2.md#b479) (log collection) and [B489](m2.md#b489) (a
-  StorageClient scoped to a CephFS filesystem or subvolume, the `cluster
-  keyring` export, and managed StorageExport material named as
-  [B86](m4.md#b86)'s) stay in progress; and [B688](m2.md#b688), split from B79
-  and B475, is Specified by the owner's acceptance (D170) with no code. It
-  records [B689](m2.md#b689) (Ceph file logging for a declared log agent) and
-  B690 (the Go toolchain's move to go1.26.10, which clears
-  GO-2026-6809 in `make vulncheck`, delivered by [X156](delivered.md#x156--go-toolchain-vulnerability-gate-go12610)). Under that order M2c is paused: X57's SSO,
-  all X56b and X58 lanes, X59's host pull route, disconnected profile,
-  replication and multisite lanes, B620's field removal and X61's other lanes
-  are not implemented, and no M2c item has operator evidence.
+**session-pending** (2026-09-26): non-root SSH accounts refuse at admission for now.
+Read on 2026-09-29 by the session, pending the owner's review, as applying
+to lifecycle placement hosts: the machines managed services and libvirt
+providers name (X22).
 
-- **D169** (2026-10-20, the owner): the owner answered the session's three
-  questions for M2c's follow-up program, choosing the recommended option each
-  time. (1) [B620](delivered.md#b620) (`ceph.ibm.packages.source: subscription` and
-  `ceph.osSubscriptionRef` are admitted but never read): "Remove the fields
-  (Recommended)". Both fields leave the API (pre-1.x, no compatibility) and may
-  be re-added when a subscription package source is implemented; an M2c lane
-  removes them with admission, spec and example updates. (2) [B627](delivered.md#x57--applied-specializations-in-ceph-evidence)
-  (the core and host evidence `specializations` member and its `cluster info`
-  line): "Carry it in M2c (Recommended)". The next M2c lane that moves the Ceph
-  core contract adds the member and the line with B627's exit evidence, so no
-  version moves for B627 alone. (3) [B664](#b664)'s fix in lane
-  x59-d4-host-pull-route: "Add the field (Recommended)". A new required field
-  `ceph.packageRepositoryKey` whenever `ceph.packageRepository` is authored,
-  using the repository's scheme, host and port and its trust bundle, with the
-  key's fingerprint matching the code pin, as B664's recorded outcome requires.
-  The answers change no product spec by themselves and no delivery state:
-  B620, B627 and B664 stay in their current state until their lanes land, and
-  each lane updates the owning spec.
+### D8
 
-- **D170** (2026-10-20, the owner): the owner accepted the definition of
-  [B688](m2.md#b688) (Ceph clusters of three to six hosts: the deadline formula,
-  concurrent per-host rounds and batched enrollment) that commits 16116f4b1 and
-  6d140d248 landed on `m2c`, and answered the session's question about its OSD
-  variants with "Accept, variants in B688 (Recommended)". DB/WAL, encrypted and
-  TPM2 OSDs on explicit devices stay in B688 with one added lane after the
-  enrollment lane, m2c-osd-variants, which moves the core request version one step
-  from its value at that lane's base; the alternative of leaving them with
-  [B475](m2.md#b475) (X53) is not taken. B688 becomes Specified with the lanes
-  m2c-cluster-budget-plan, m2c-cluster-budget-enrollment and m2c-osd-variants,
-  and the amendment of D159 clause (7) in it is accepted: the services and
-  enrollment calls count toward the cluster deadline. B659's continuation after
-  a partial enrollment and clusters above six hosts stay out of B688. The
-  decision changes no product spec by itself and no delivery state: B688 stays
-  not started until its first lane lands, and each lane updates the owning spec.
+**owner** (2026-09-26): the cluster identity is the build's kubeconfig trust
+anchor, refined on 2026-09-27 (S26) to its admin client certificate, which
+the installer's install-complete rewrite keeps.
 
-- **D171** (2026-10-20, the owner): the owner confirmed from the entitlement
-  registry the coordinates of the Ceph image the examples author, and the
-  auxiliary images of that build. (1) The tag `v9.9.2-26729` that
-  [D165](#decisions) recorded does not exist: a pull gives "manifest unknown".
-  The build tag that exists is `v9.9.2-26947`, `cp.icr.io/cp/ibm-ceph/ceph-9-rhel10`
-  with ceph-common and cephadm 20.2.2-349.el10cp, manifest
-  `sha256:6cb6f09bae7b1da7e7d1e9a594dec7d90b76829af94683f11ac5cc37b402f5ca`;
-  the floating alias `v9.9.2` also exists. The examples now author
-  `v9.9.2-26947` in place of both the nonexistent build tag and the alias.
-  (2) The auxiliary images of `v9.9.2-26947`: applying OD28 (a) of
-  [D164](#decisions) (1), the owner chose "I'll pin digests". Each example that
-  declares one of these families authors the image as `ceph.images.<name>`, with
-  `base` set to the listed repository and `version` set to the digest. The
-  defaults were read from the image with `ceph.cephadm.images.DefaultImages` and
-  the digests resolved by the owner with `skopeo inspect`:
+### D9
 
-  | cephadm name | base | version (digest) |
-  | --- | --- | --- |
-  | haproxy | cp.icr.io/cp/ibm-ceph/haproxy-rhel10 | sha256:59d020dd7a02ad25248ae3766914f5bc5a241de77c2257fcad7124c13eea82f1 |
-  | keepalived | cp.icr.io/cp/ibm-ceph/keepalived-rhel10 | sha256:4ade24fea1bf11cc0c2e88af631597f21bc586562da3001ea15b8d10e0860694 |
-  | prometheus | cp.icr.io/cp/ibm-ceph/prometheus | sha256:f4d613a79bebcb4deeb0b5f9b1f231ba8046572978207abe242bc7c9cf589789 |
-  | alertmanager | cp.icr.io/cp/ibm-ceph/prometheus-alertmanager | sha256:7331dd1e3aabe689ae45470e560472dc39aeeea611c3c479e266bae9140243ed |
-  | node_exporter | cp.icr.io/cp/ibm-ceph/prometheus-node-exporter | sha256:4d4e3433d212042b07534c042d512bf1f8c65a43823b20e6f1b05da5cd88f0ba |
-  | grafana | cp.icr.io/cp/ibm-ceph/grafana-rhel10 | sha256:12006a7f211b2bf24893e39f7e5ea208b8d641d1dd9c9b562a0c502663484141 |
-  | loki | cp.icr.io/cp/ibm-ceph/logging-loki-rhel8 | sha256:e7e4c7c372a02aa2fbab9a0f3af48475f0df860164551e8562565983576dc61c |
-  | alloy | cp.icr.io/cp/ibm-ceph/alloy-rhel10 | sha256:4f645e6ee02545ceb29cd01fb42e2d9de03e1e48e509281898a325cc72d14b85 |
-  | nvmeof | cp.icr.io/cp/ibm-ceph/nvmeof-rhel10 | sha256:4727ed1dd465b8d0064d8da6064b32f39068fca558fea9a78c3d65f41923b226 |
-  | snmp_gateway | cp.icr.io/cp/ibm-ceph/snmp-notifier-rhel10 | sha256:ecf89943abe681278df906508ef1ff011661654170488be27e2ab3eeaaa339ba |
-  | samba | cp.icr.io/cp/ibm-ceph/samba-server-rhel10 | sha256:3b8f9164c478d267427e51e0b387c9e32ae3566e3a2078471e16d44ac6807cf1 |
-  | samba_metrics | cp.icr.io/cp/ibm-ceph/samba-metrics-rhel10 | sha256:090f5d43981a51923b593da36b9010d43d67264691a625ff2b92005676574f29 |
-  | nginx | cp.icr.io/cp/ibm-ceph/nginx-126-rhel10 | sha256:c7ba454e04aab177e3d2e283e679412dc90477d77848715ebabd3db9af4b45af |
-  | oauth2_proxy | cp.icr.io/cp/ibm-ceph/oauth2-proxy-rhel10 | sha256:bdeafeb29fdd9d46a29b148a99d9df200aa7cd1867037911ffcfc1b270f9a2a9 |
+**owner** (2026-09-26): multi-node libvirt stays admitted under F14.
 
-  promtail is not used: its default lives on registry.redhat.io, outside the
-  entitlement registry, so the examples use alloy. The decision changes no
-  product spec and no delivery state; a lane that authors an auxiliary image in
-  an example uses this table.
+### D10
 
-- **D172** (2026-10-20, the owner's requests; the clauses after the owner's
-  words are taken by the session, pending the owner's review): the owner asked
-  "let's start planning m3 / think of basic requisite and structure the
-  high-level design / we will divide m3 in submilestones: / m3a: requisite
-  details and spec update, so implementation will be straigthforward / m3b:
-  support to provision a sno over libvirt+sushy / m3c: support to provision a
-  3-node ocp over libvirt+sushy / m3d: support to any size ocp cluster over
-  libvirt+sushy and real bmc+bare metal, with advanced networking as NAD and
-  CUDN/UDN for providing external network for internal containers/vms, and
-  usage of metallb (to be installed and configured as add-on, after initial
-  implementation of M4 / m3e: support to any size ocp cluster over openshift
-  virtualization / m3f: support to any size ocp cluster over openshift
-  virtualization / detail the high-level spec and implement m3a, so i could use
-  other AIs to implement the following m3 submilestones", then "create a new
-  branch call m3 to save the work from this session, and later we will
-  incorporate to main", then "reference branch already implemented those
-  features in the past and have a lot of lession / i don't want you to blindly
-  copy things from there, but you could be inspired and take some notes of the
-  problems that have been overcome", and then "optimize token consumption by
-  dividing tasks and using best fitting model/effort for any of them". The
-  [M3 page](m3.md#submilestones) owns the submilestones' mapping and gates and
-  the [coverage page](../openshift-coverage.md) the provider matrix.
-  This expressly permits the suffixed submilestone IDs M3a to M3f while
-  retaining M3's single status and all B/X/D identifiers, as D131 did for M2.
-  Taken by the session, pending the owner's review: (1) m3f repeats m3e's
-  words; the session reads M3f as OpenShift over VMware vSphere, which mirrors
-  M1f and is the one product-scope substrate no other submilestone covers
-  ([Q1](m3.md#m3a-open-decisions)). (2) M3a is definition only, delivered as
-  enabling slice X110 whose one item, [B473](m3.md#b473), is redefined as M3's
-  coverage and contract definition and completes when the owner accepts the
-  baseline, as D134 accepted M2a; it grants no implementation authority. B473's
-  "exact supported releases" gives way to recorded evidence under D157, D162
-  and D163. (3) [B88](m3.md#b88) moves from M5 to M3e; M5 is retired, its page a
-  stub holding no item, its Status row kept `not started`, and its number never
-  reused. M4 requires M2 and M3c instead of M3, so M3d consumes M4's B83 and B84
-  after their first delivery, and B83 requires [B64](delivered.md#b64). (4) B62, B63,
-  B65 and the parked B397 retire into named items; the parked B411, B462, B622
-  and B680 move into M3b; B64, B66, B67, B69, B71, B195, B250, B251, B259, B260
-  and B314 are redefined, B71 requiring only B61; B87 and B99 gain the
-  cluster-facing requirements of M3e and M3f. B688 to B699 and X105 to X109 are
-  left unused so this session cannot collide with M2c's concurrent allocations;
-  the numbers carry no meaning, and integration re-checks main for B688 or
-  later and X105 or later and renumbers the unlanded items on a collision. The
-  integration on 2026-10-20 found M2c had taken B688 to B690 and no collision.
-  New
-  items B700 to B748: shared
-  foundation items B700 to B704 sit on M1's page under M1c and M1g, scheduled
-  with their first M3 consumer (D158); B727 and B735 sit on M4's page; B736 to
-  B748 are parked. (5) The words "so i could use other AIs to implement the
-  following m3 submilestones" are read as waiving M2 for the implementation of
-  M3b to M3d's slices (X111 to X127) only, excepting those slices from the
-  two-active-slice WIP limit beside M2c's (D159 clause 2), and letting M3c's
-  and M3d's in-tree slices start on the preceding submilestone's in-tree
-  slices; promotion, every operator gate and M3 completion keep their Requires
-  ([Q2](m3.md#m3a-open-decisions)). The waiver takes effect only for a slice
-  the owner authorizes. (6) Native facts are evidence, never rules: the agent
-  installer's 48-hour authentication token belongs to the day-2
-  `oc adm node-image` flow and an install image's tokens do not expire, so no
-  image-age rule is added ([Q6](m3.md#m3a-open-decisions)); the agent installer
-  in the 4.20 to 4.22 branches does not forward
-  `platform.baremetal.loadBalancer` (its development branch does), so today's
-  user-managed rendering is a pre-existing defect recorded as
-  [B707](delivered.md#b707), and modelling an external load balancer only as `none` is
-  Bootwright's choice. (7) The
-  reference branch is read for lessons only: a native fact it observed enters
-  knowledge marked "observed by the v1 implementation (main-v1); re-verify on
-  this tree" unless research confirmed it, and none of its architecture becomes
-  a requirement. (8) The token instruction governs how the session divides and
-  routes its work; it changes no product spec. (9) The definition lands as one
-  squashed docs commit on the local branch `m3`, created from main `9d2d8cf5c`
-  and never pushed; incorporating `m3` into main waits for the owner, and D168's
-  merge on checkpoint applies to M3's slices only once `m3` is on main. (10)
-  Each slice that changes a frozen request moves its version exactly one step
-  from its value on the branch tip, the second of two slices holding one
-  version rebases it, no reader of an older version is added, and a context an
-  earlier build applied is destroyed with that build first. No implementation
-  slice is activated and no host operation is authorized.
+**owner** (2026-09-26): ansible-core is the latest patch of the qualified 2.21
+minor.
 
-- **D173** (2026-10-20, the owner's request; the clauses after the owner's
-  words are taken by the session, pending the owner's review): the owner asked
-  "let's start planning m4 - addons / think of basic requisites and structure
-  the high-level design / we will divide m4 in submilestones: / m4a: requisite
-  details and spec update, so implementation will be straigthforward / m4b:
-  code skelleton to handle add-ons fully / m4c: network addons / m4d: ibm data
-  foundation add-ons / m4e: acm/gitops addon / m4f: Gitlab addon / detail the
-  high-level spec and implement m4a, so i could use other AIs to implement the
-  following m4 submilestones / create a new branch call m4 to save the work
-  from this session, and later we will incorporate to main / reference branch
-  already implemented some of those features in the past and have a lot of
-  learned lessions / i don't want you to blindly copy things from there, but
-  you could be inspired and take some notes of the problems that have been
-  overcome / optimize token usage but dividing work in tasks that will be
-  performed by the best fitting model/effort". The
-  [M4 page](m4.md#submilestones) owns the submilestones' mapping and gates,
-  the [add-on lifecycle](../add-ons.md) the shared contract, and the
-  [coverage page](../add-on-coverage.md) the package matrix. This expressly
-  permits the suffixed submilestone IDs M4a to M4f while retaining M4's single
-  status and all B/X/D identifiers, as D131 did for M2 and D172 for M3; M4's
-  title becomes "Cluster add-ons". Taken by the session, pending the owner's
-  review: (1) M4a is definition only, delivered as enabling slice X135 whose
-  one item, [B749](delivered.md#b749), is M4's coverage and contract definition and
-  completes when the owner accepts the baseline, as D134 accepted M2a; it
-  grants no implementation authority. (2) "code skelleton to handle add-ons
-  fully" is read as the one built-in lifecycle every M4c to M4f package uses:
-  packages compiled into the executable and selected under a binding's
-  `spec.packages` with typed configuration ([Q26](m4.md#m4a-open-decisions)),
-  one cluster object program and adapter over `oc`, create-only with
-  operation-specific ownership ([Q27](m4.md#m4a-open-decisions)), Manual OLM
-  approval of a declared `startingCSV` ([Q28](m4.md#m4a-open-decisions)), one
-  instance block per package and cluster retired with its cluster
-  ([Q32](m4.md#m4a-open-decisions)), owned cluster Secrets and the package
-  listing; a built-in package is therefore reviewed Go code rather than
-  declarative data, and the [project's extension model](../project.md#implementation-and-extension-model)
-  and the [custom-code rule](../security.md#custom-code) are amended to say so,
-  authored packages staying declarative data refused until B90
-  ([Q26](m4.md#m4a-open-decisions)); the program carries from its first delivery every approval policy
-  and Secret placement source M4c to M4f use, so those submilestones move no
-  existing contract version (M4d's B86 adds the new `ceph-export` identities).
-  The Kubernetes NMState Operator, [B735](m4.md#b735),
-  moves from M4c into M4b as its reference package
-  ([Q29](m4.md#m4a-open-decisions)). Authored (custom) packages stay
-  [B90](m4.md#b90), scheduled after M4f ([Q31](m4.md#m4a-open-decisions));
-  online removal, add-on preflight, OLM v1, the global pull-secret merge and a
-  least-privilege cluster identity are parked. (3) M6 folds into M4 because
-  the owner placed ACM and GitOps in M4e and GitLab in M4f: [B91](m4.md#b91)
-  and [B92](m4.md#b92), "acm/gitops" read as Red Hat Advanced Cluster
-  Management and Red Hat OpenShift GitOps, move to M4e, [B93](m4.md#b93) to
-  M4f and B90 to M4, each with a dated alias; B89 retires, folded into
-  [B752](delivered.md#b752) and [B754](delivered.md#b754), with `add-ons add` and
-  `add-ons delete` removed ([Q30](m4.md#m4a-open-decisions)); M6 is retired as
-  M5 was, its page a stub holding no item, its Status row kept
-  `not started`, and its number never reused; M7 requires M4 instead of M6.
-  (4) "network addons" is read as MetalLB with its layer 2 pools
-  ([Q36](m4.md#m4a-open-decisions)); X134 keeps its ID as M4c's
-  network-package slice, which B83 and B735 leave for X138, and M3d's
-  cluster-network block narrows its dependency on B83 to the program and
-  adapter it consumes ([B750](delivered.md#b750), [B751](delivered.md#b751)). (5) "ibm data
-  foundation add-ons" is read as one package, `fdf`, installing the operator
-  package `odf-operator` from IBM's catalog or, expected but unverified until
-  [B761](m4.md#b761), the same package from Red Hat's, as the binding names
-  ([Q38](m4.md#m4a-open-decisions)), attached in external mode to the Ceph
-  cluster M2 manages; the Ceph side stays Storage's
-  ([B86](m4.md#b86), [B762](delivered.md#b762), [B763](delivered.md#b763)), and the IBM
-  entitlement travels in the cluster's install pull secret
-  ([Q33](m4.md#m4a-open-decisions)). (6) The words "so i could use other AIs
-  to implement the following m4 submilestones" are read, as D172 (5) read
-  them, as waiving M2 and M3c for the implementation of M4b to M4f's slices
-  only, each slice keeping the M2 and M3 slices its row names, excepting those
-  slices from the two-active-slice WIP limit beside M2c's and M3's, and
-  letting M4c to M4f's in-tree slices start once the M4b in-tree slices they
-  name have landed; promotion, every operator gate and M4 completion keep
-  their Requires ([Q59](m4.md#m4a-open-decisions)), and
-  [Q25](m3.md#m3a-open-decisions) keeps M3d's scope. The waiver takes effect
-  only for a slice the owner authorizes. (7) Each submilestone exits on an
-  emulated rehearsal recorded as an owner-accepted ledger row; D17's "M4"
-  names the milestone that D128 renumbered to M2, so no M4 row on real
-  hardware is required, and no package needs one
-  ([Q61](m4.md#m4a-open-decisions)). (8) Native facts are
-  evidence, never rules: the operator declares every channel, CSV and catalog
-  image; a bundle's `olm.maxOpenShiftVersion` is recorded, never enforced; a
-  difference between release minors becomes a registered version
-  specialization only when a run shows the general mechanism failing (D157,
-  D162, D163). The reference branch is read for lessons only, as D172 (7)
-  states, and none of its architecture becomes a requirement. (9) The token
-  instruction governs how the session divides and routes its work; it changes
-  no product spec. (10) New items B749 to B795: B749 is M4a's; B750 to B768 sit
-  on M4's page, B762 to B764 with Owner Storage; B769 to B795 are parked. New
-  slices X135 to X155, and X134 is re-planned. Owner questions continue M3's
-  series as Q26 to Q61. The parked B365 retires, folded into
-  [B771](#b771). B688 to B699 and X105 to X109 stay unused (D172 (4)); the
-  numbers carry no meaning, and integration re-checks main, `m2c` and `m3` for
-  B749 or later, X135 or later and D173 or later and renumbers the unlanded
-  items on a collision, and re-checks `m2c` for conflicts with m2.md's B491
-  addition (revoking one export's principals, [Q39](m4.md#m4a-open-decisions))
-  and OD25 text and with Q43's change to M2c's default of no published storage
-  FQDN. (11) The definition lands as one squashed docs commit
-  on the local branch `m4`, created from branch `m3` at `310284528` (the
-  unmerged M3 definition) and never pushed; incorporating `m4` into main waits
-  for the owner and follows `m3`'s, and D168's merge on checkpoint applies to
-  M4's slices only once `m4` is on main. (12) Each slice that changes a frozen
-  request moves its version as D172 (10) states. (13) The GitOps bootstrap
-  object hands its cluster to GitOps once every other block that reaches that
-  cluster is complete, before the environment-wide handoff predicate holds,
-  and the [project's handoff paragraph](../project.md#lifecycle-and-handoff)
-  is amended to allow that per-cluster early handoff; this clause stays
-  pending until the owner answers [Q60](m4.md#m4a-open-decisions). No
-  implementation slice is activated and no host operation is authorized.
+### D11
 
-- **D174** (2026-10-21, the owner's requests): the owner accepted M4a's
-  recommended definition baseline and requested implementation of M4b and
-  M4c on `m4`. The owner also authorized their missing M3 prerequisites:
-  B64's produced-input lending, B719's typed OVN gateway manifests and
-  B726's secondary-network block. D173's implementation waiver applies;
-  operator rehearsals and their acceptance remain separate gates. No M4d
-  to M4f implementation or host operation is authorized by these requests.
+**owner** (2026-09-26): postcondition decisions stay in Go.
 
-- **D175** (2026-10-22, accepted by the owner): B496 adds optional
-  `Secret.spec.source.generated.issuerRef` to a generated `tlsCertificate`, naming
-  a generated `caBundle`. Generation signs the leaf with that authority while
-  retaining the signing key in private custody. Existing self-signed
-  generation remains available when the reference is omitted. This resolves
-  the API choice; implementation and rehearsal evidence remain B496's gates.
+### D12
 
-- **D176** (2026-10-22, accepted by the owner): B481 closes with the
-  implemented field-specific refusal of iSCSI declarations, with guidance
-  toward NVMe-oF and no vendor support-status claim. This supplies the closing
-  decision left open under D161, OD27; it authorizes no iSCSI lifecycle.
+**owner** (2026-09-26): media completion claims the inputs digest and installer
+version, not an image digest.
 
-- **D177** (2026-10-22, accepted by the owner): B70 uses opt-in
-  `Machine.spec.hardware.eraseOnRemoval` with `method: logicalOverwrite` and
-  explicit targets containing `deviceName`, `wwn`, `serialNumber` and
-  `sizeBytes`. Omission retains the installed system. An offline RAM worker
-  must prove the machine and every target, overwrite and read back all
-  addressable bytes, and deliver a durable receipt before shutdown. This
-  contract claims neither remapped-sector coverage nor hardware sanitization;
-  implementation and hardware qualification remain required.
+### D14
 
-- **D178** (2026-10-23, the owner): tools used only by a runbook may be
-  installed by that runbook and removed at its end. Bootwright installs and
-  manages only packages its own execution needs. This narrows B509's
-  2026-10-12 rule: the lab-rhel diagnostic tools remain in its independent
-  checks, with operator installation and cleanup preserving pre-existing
-  packages, rather than becoming controller prerequisites. B509 closes when
-  that procedure is documented and verified; no host operation is performed
-  by recording this decision.
+**owner** (2026-09-26): documentation stays in the bundle but leaves the
+automation digest.
 
-- **D179** (2026-10-23, the owner): keep the implemented guest SSH forwarding
-  restrictions under D135 and complete their qualification. The policy is
-  additional hygiene for the root-equivalent cluster account; pinned host-key
-  verification, fixed loopback forwarding and no direct fallback remain the
-  transport boundary. This answers the 2026-10-11 review's Q1 without removing
-  policy management, reloads or the include-closure proof. Live qualification
-  remains a separate gate.
+### D16
 
-- **D180** (2026-10-23, the owner's request): implement every independent
-  blocker of M4a to M4e, including their specified code prerequisites, while
-  leaving operator inputs, live rehearsals and owner acceptance open. B195
-  follows Q13(a): an authored-only typed additional trust policy, without a
-  default, required by M4a's accepted Data Foundation trust contract. This
-  authorizes no host operation and claims no passed operator gate.
+**owner** (2026-09-26): managed-OS waits are frozen as request budgets.
 
-- **D181** (2026-10-23, the owner's request): "finish implementing all items
-  that are blocking M3a-e to be declared done that doesn't requires anything
-  from me". Implement the independent specified code, tests and acceptance
-  preparation, including shared prerequisites, while leaving owner decisions,
-  baseline acceptance, live environments, captured native responses and
-  operator-run acceptance open. This records no host operation or passed live
-  gate. The resulting in-tree work is recorded under
-  [M3 independent completion](delivered.md#m3-independent-in-tree-completion).
+### D17
 
-- **D182** (2026-10-26, the owner's request): "order all lanes from most
-  basic, fundamentals, architectural and low level one to the high level
-  ones, and start implementing all of them in sequence. One branch for each
-  lane that will be merged to main branch as a single commit", proceeding so
-  another coding agent can continue. This authorizes the
-  [audit remediation lanes](#lane-order-and-progress) in the recorded order,
-  one lane at a time, each merged to local main as one commit once its gates
-  pass. Parts that wait for an owner question (Q62 to Q118) stay open, no host
-  operation or live gate is authorized, and pushing waits for the owner.
+**owner** (2026-09-28): M3 and M4 are done only with two owner-accepted
+acceptance-ledger rows each: an emulated rehearsal on libvirt guests behind
+sushy-tools Redfish BMCs, and a run on real hardware. Each item keeps the
+gate its own detail names.
 
-- **D183** (2026-10-26, the owner's answers to the
-  [audit remediation questions](#audit-remediation-decisions)): Q62 (a) a
-  tracked `.codex/hooks.json` runs the same advisory end-of-turn check; Q63 (b)
-  the WIP limit is at most two active slices per program, the slices one owner
-  decision or request authorizes, so the standing per-decision exceptions are
-  no longer needed and the one-product-or-defect-plus-one-enabling composition
-  clause retires with them (composition clause retired; orchestrator's reading);
-  Q64 (a) U03 stays as a native replica-safety rule; Q65 (b) an unreadable
-  removal observation becomes a typed inconclusive result, never no-effect;
-  Q66 (b) durable install-then-disk-boot intent; Q67 (a) D38 stands with the
-  named-keys warning; Q68 (a) retirement refuses while a consumer survives;
-  Q69 (a) B659, B662 and B491 become prerequisites of [B485](m2.md#b485), so
-  B659 and B662 move to M2; Q70 (a) a recorded access-credential rebind exit
-  under the `--authorize` model; Q71 (a) refuse inert endpoint fields at plan;
-  Q72 (a) `spec.resources` is removed and cluster lists are the only
-  narrowing; Q73 (a), Q74 (a), Q75 (b) validate error; Q76 (a) D145(4) stands.
-  API shape: Q77 one kind per cluster distribution, `ContainerCluster`
-  becoming `OpenShiftCluster` (OKD as its distribution variant) with a
-  cluster-family registry so a new family is additive; Q78 (a) the storage
-  children become `Ceph*` and `StorageCluster` becomes `CephCluster`, revisiting
-  D133's naming; Q79 (b) a narrow per-substrate Machine arm; Q80 (a) the
-  capability role tokens are dropped and prerequisites derived in one change;
-  Q81 one testable union rule with its architecture test, the service
-  implementation staying an enum; Q82 (b); Q83 (b); Q84 (a); Q85 (a); Q86 and
-  Q114 (b) block identities hash an overflowing segment, so one public name
-  rule serves every kind; Q87 (a) the renames land in one batched slice per
-  surface with retired-path refusals; Q88 (a); Q105 (a) lowerCamel enum values,
-  native spellings exempt; Q106 (a) the stage token is renamed; Q107 (b) the
-  export kind and `fdf.storageExportRef` are renamed in the `Ceph*` family with
-  their shape kept; Q110 (a and b) `render effective --origins` and an
-  advisory JSON Schema export; Q111 (a); Q112 (a); Q113 (a); Q115 (c) both
-  reserved shapes keep validating. Recovery and trust: Q92 (a) D38 stands; Q93
-  (b) a destroy over a completed apply covers its whole frozen plan; Q94 (a);
-  Q95 (a); Q96 (a) B247 widens to SSH-placed keys; Q97 (a) `--expect`
-  fingerprints; Q98 (a); Q99 (a) `--from-url-file`; Q100 (a) the object-user
-  reveal is authorized; Q101 (a); Q116 (a) `--object-user <name>` selects one
-  user's keys and `--secrets` alone reveals only the dashboard password; Q117
-  (a) `--authorize data-loss=<digest>` under `--yes`. Corpus: Q89 (a); Q90 (a);
-  Q91 (a) pending clauses bind until overturned; Q102 (a); Q103 (a) a blocking
-  pre-existing defect may be fixed in its own commit once recorded as an item;
-  Q104 (b) the name stays; Q108 (a) and Q109 (a) status readiness hints and
-  `diff --exit-code`. Q118: authored add-on ordering and an apply that stops
-  after a named add-on become [B837](delivered.md#x171--audit-lane-i-api-shape-and-grammar) in lane I. Each answer authorizes
-  only the item that applies it, within D182.
+### D18
 
-- **D184** (2026-10-26, the owner's answer about [B836](delivered.md#x164--audit-lane-e-store-durability-and-controller-records)): a
-  root-confirmed `bootwright controller rebind` moves every context to a
-  controller host whose machine-id, DMI product UUID or root filesystem UUID
-  changed. It confirms interactively, naming the recorded and the new
-  identity, or under `--yes` only with the new identity named; it proves the
-  same store under the exclusive root lock, rewrites the recorded host
-  identity once, and keeps every binding and reservation. This adds a public
-  command under D153 clause 2.
+**owner** (2026-09-28): the product scope names MetalLB, IBM Fusion Data
+Foundation, Red Hat Advanced Cluster Management, Argo CD and GitLab as the
+first add-on packages.
 
-- **D185** (2026-10-26, the owner's confirmation of [B814](delivered.md#x171--audit-lane-i-api-shape-and-grammar)'s names):
-  `StorageExport` becomes `CephConsumer` (`fdf.cephConsumerRef`, block prefix
-  `ceph-consumer-`); `CephCluster` settings flatten from `spec.ceph.*` to
-  `spec.*`; the node role `master` becomes `controlPlane`, still rendered as
-  `master` for the installer; the domain spec pages are renamed with the
-  kinds (OpenShift and Ceph pages, coverage pages included). The rest of
-  B814's rename table stands as defined.
+### D19
 
-- **D186** (2026-10-27, the owner's answer about Q96's qualifier): the
-  private Controller record stays version 3. Its reservation keys may carry
-  the `ssh/<address>:<port>/` qualifier as an additive key form, so a record an
-  earlier build wrote stays current and no controller needs a fresh install;
-  each context publishes its SSH-qualified claims on its next apply. Builds
-  before X170 read a qualified key as opaque, keep other contexts' entries and
-  find no fewer conflicts than before; such a build's apply of a context drops
-  that context's qualified entries until a later build applies it again.
+**owner** (2026-09-28): M5 integrates OpenShift with a Ceph cluster M4 manages;
+an external Ceph cluster is parked as [B107](#b107).
+
+### D20
+
+**session-pending** (2026-09-29, taken by the session under the owner's instruction to
+proceed with recommendations; pending review): the controller CPython is
+the latest patch of the newest minor the qualified ansible-core supports as
+a controller, and `latest` ignores a newer minor (X22).
+
+### D21
+
+**session-pending** (2026-09-29, taken by the session under the owner's instruction to
+proceed with recommendations; pending review): an elevated child announces
+that it started, and the held `sudo:` lines decide the outcome only when that
+announcement cannot be proved (X20).
+
+### D22
+
+**session-pending** (2026-09-29, taken likewise; pending review): an elevated command
+that exits without a result reports `runtime.internal` with exit status 1;
+`runtime.interrupted` still wins after an interrupt (X20).
+
+### D23
+
+**delegated** (2026-09-30, taken by the session under the owner's instruction to proceed with recommendations): B9: a controller's CA bundle is the only anchor of its Redfish calls; without one, the system trust store.
+
+### D24
+
+**delegated** (2026-09-30, taken by the session under the owner's instruction to proceed with recommendations): B9: a physical Machine's virtual media imports the media certificate by default; `disable-verification` is admitted only on one Machine and refused beside private delivery.
+
+### D25
+
+**delegated** (2026-09-30, taken by the session under the owner's instruction to proceed with recommendations): B10: the local keyring becomes `local-keyring-v4`, which holds produced material; an earlier keyring refuses and names the build that reads it.
+
+### D26
+
+**delegated** (2026-09-30, taken by the session under the owner's instruction to proceed with recommendations): B10: the custodied kubeconfig is withdrawn when the context's removal of its cluster completes.
+
+### D27
+
+**owner** (2026-09-30, accepted by the owner from the session's recommendations): B29: a foreign image on one of the cluster's own Machines reads as partial during an agent-install removal.
+
+### D28
+
+**owner** (2026-09-30, accepted by the owner from the session's recommendations): B34: an SSH-host provider's hypervisor packages resolve at apply time; the frozen transaction is parked (B167).
+
+### D29
+
+**owner** (2026-09-30, accepted by the owner from the session's recommendations): B40: admission refuses `spec.lifecycle.rescue` until a rescue journey exists.
+
+### D30
+
+**owner** (2026-09-30, accepted by the owner from the session's recommendations): Follow-ups a slice finds enter M1 only when they are safety or defect items; enabling and polish follow-ups are parked unless they block an M1 item.
+
+### D31
+
+**owner** (2026-09-30, accepted by the owner from the session's recommendations): B137: `status` offers as next steps only the verbs the records allow.
+
+### D32
+
+**owner** (2026-09-30, accepted by the owner from the session's recommendations): B140: the cluster boot budget is 300 seconds per node with a 900-second floor; polled reads still count as answered at once.
+
+### D33
+
+**owner** (2026-09-30, accepted by the owner from the session's recommendations): B141: the agent-install decoders refuse, for every verb, a frozen placement off the controller; the runner refuses a material listed twice.
+
+### D34
+
+**owner** (2026-09-30, accepted by the owner from the session's recommendations): B143: a proved UUID or serial refuses anything that is not printable, by the CLI's printable rule.
+
+### D35
+
+**owner** (2026-09-30, accepted by the owner from the session's recommendations): B146: a YAML key is refused for the construct it carries (`yaml.alias`, `yaml.tag`), as a value is.
+
+### D36
+
+**owner** (2026-09-30, accepted by the owner from the session's recommendations): B41: the Secret `file` source is retired; operators load files with `secret set`.
+
+### D37
+
+**owner** (2026-09-30, accepted by the owner from the session's recommendations): B42: a lost frozen binding refuses before any effect and names the exits: restore the keyring, or an orphan-acknowledged delete.
+
+### D38
+
+**owner** (2026-09-30, accepted by the owner from the session's recommendations): B43: an unresolvable unknown block keeps its refusal, which names why and how to fix it; the orphan-acknowledged delete also releases host reservations.
+
+### D39
+
+**owner** (2026-09-30, accepted by the owner from the session's recommendations): B136: a failed apply whose blocks are all done is recovered; the other two refused states name their exit.
+
+### D40
+
+**owner** (2026-09-30, accepted by the owner from the session's recommendations): B44: only the remaining bundle-area limit is fixed; the layer is parked (B165), which [X88](delivered.md#x88--controller-setup-v2-cut-over) closed under D152's clause 7.
+
+### D41
+
+**owner** (2026-09-30, accepted by the owner from the session's recommendations): B45: a continuation freezes its Python and Ansible closure and refuses when it moves; scoped removal is parked (B166).
+
+### D42
+
+**owner** (2026-09-30, accepted by the owner from the session's recommendations): B46: local setup keeps its Ansible output in its own bounded run area, the newest eight runs.
+
+### D43
+
+**owner** (2026-09-30, accepted by the owner from the session's recommendations): B122: lifecycle JSON results are parked until a milestone names a consumer.
+
+### D44
+
+**owner** (2026-09-30, accepted by the owner from the session's recommendations): B111: validation refuses wwn, hctl and serial root-device hints on a libvirt Machine.
+
+### D45
+
+**owner** (2026-09-30, accepted by the owner from the session's recommendations): B116: the emulated BMC admits canonical IPv6 unicast bind addresses, with a bracketed endpoint and the shared socket key.
+
+### D46
+
+**owner** (2026-09-30, accepted by the owner from the session's recommendations): B131: media publication proves nothing wrote the stage after it was measured, and the spec says so; the pre-X20 long-name leftover is removed by hand.
+
+### D47
+
+**owner** (2026-09-30, accepted by the owner from the session's recommendations): B158: a newer Index API minor version makes setup warn and continue; a newer major version refuses.
+
+### D48
+
+**owner** (2026-09-30, the owner): M1 is frozen after X33. Follow-ups X32, X33 and later slices find are parked here for a future milestone, whatever their kind, instead of entering M1; D30 no longer admits items to M1. M1 keeps its open items: X32, X33, the owner decisions and the chain behind B49.
+
+### D49
+
+**owner** (2026-10-01, the owner accepted the session's recommendation A): B32: after a stall the install role reads the registered hosts from the rendezvous host's assisted-service API with the watcher token, bounded and under `no_log`, and the give-up names the node.
+
+### D50
+
+**owner** (2026-10-01, the owner accepted the session's recommendation A): B175: `setup --purge-old-bundles` retires superseded areas under a pending receipt whose bundle holds no area, then resumes it.
+
+### D51
+
+**owner** (2026-10-01, the owner accepted the session's recommendation A): B188: a drifted running network restarts when its Machines are stopped and otherwise refuses before any effect, naming them.
+
+### D52
+
+**owner** (2026-10-01, the owner accepted the session's recommendation A): B206: the retained-operation refusal names destroy, then context deletion and a fresh init; pruning is parked (B258).
+
+### D53
+
+**owner** (2026-10-01, the owner accepted the session's recommendation A): B208: a retained bundle that lost a bootstrap source falls back to a fresh resolution.
+
+### D54
+
+**owner** (2026-10-01, the owner accepted the session's recommendation A): B220: before a wait, the install role restores a truncated installer kubeconfig from the kept copy when it names the same cluster.
+
+### D55
+
+**owner** (2026-10-03, the owner accepted the session's recommendation A): B175: under `setup --purge-old-bundles`, a receipt stranded at the bound that this executable cannot resume is recorded as canceled, its never-started bundle publication observed as such, and a fresh setup follows; D50's resume stays for one it can prepare.
+
+### D56
+
+**owner** (2026-10-05, the owner): M1 gates the owner's full bar: well-defined specs; architecture and code that follow best practices; well-structured, domain-constrained APIs with input validation; good UX and CLI output; and a CLI ready for every controller function (context, secret, media, setup, preflight, validate, render effective, status, plan, apply, destroy and the machine commands) and for creating RHEL machines on libvirt and sushy-tools. This amends D48: M1 takes the parked B94, B95, B179, B198, B200 to B202, B222 to B225, B228, B233, B234, B236, B240 to B242, B244, B246, B249, B252, B255, B257, B264, B270 to B272 and B275 to B277, and the new B278 to B302 and B336 to B338.
+
+### D57
+
+**owner** (2026-10-05, the owner): B17 to B24: X23 is dropped, and X24 keeps B19 to B22, re-planned with the role and request fixes of its lanes. B17 keeps its ID for the managed-OS work area's relocation, and B303 splits from it with per-invocation scratch, disjoint namespaces and the two-concurrent-installs test; B24 keeps its ID for cross-context scoping and an attributed refusal, and B304 splits from it with the exemption of an invocation's own in-flight jobs. B18, B23, B303 and B304 move to M3, B18 recording that context reads refuse during an apply and taking B265 into its exit evidence, and the parked B195, B237, B239, B250, B251, B259, B260 and B265 join them there.
+
+### D58
+
+**owner** (2026-10-05, the owner): B72: the lab-rhel ledger row of 2026-10-05, which matches B72's acceptance baseline and gate, is accepted for B72 too, so B72 leaves M4 for X38's record; the defects the run found stay M1 items.
+
+### D59
+
+**owner** (2026-10-05, the owner): M1's closing operator gate is the extended lab-rhel run on a clean build of X44's landing, on a host missing at least one native root so that setup or the controller stage downloads through the Python path: setup with the new bundle, media, context, secrets, a staged apply, preflight, plan, apply, `status` with its four JSON checks, `machine list` and `--power-status`, `machine exec` and `rsh`, restart, a destroy refused and then `machine stop`, destroy, a fresh apply, a host restart, `machine start` and `stop`, destroy, `status` after the destroy, the unit and time checks and an explicit `qemu-img info --force-share` read. One owner-accepted row completes the real-host evidence of B19, B20 and B277.
+
+### D60
+
+**owner** (2026-10-05, the owner): the real physical-BMC test follows M1, which closes without physical installation, and B73 to B78 stay in M4, B74 to B77 outside any planned slice. On the owner's explicit request of 2026-10-05, X45, the slice the session's plan called XB, runs out of sequence right after X43 and X24, in the same digest window, and delivers B73's repair and B305, the Redfish client on the owner's physical BMC. A run on a disposable RHEL 9.8 controller, the lab-baremetal rehearsal and one physical server with a reduced first-test profile, run from a separate RHEL 9.8 controller (D109) and recorded as an observation, follow it.
+
+### D61
+
+**owner** (2026-10-05, accepted by the owner from the session's recommendations): B279 and B295: `spec.libvirt.uri` is an enumeration holding `qemu:///system`, which closes the command transports escaping cannot.
+
+### D62
+
+**owner** (2026-10-05, accepted by the owner from the session's recommendations): B280 and B282: an operator whose account comes from a directory service resolves through NSS with a pinned, root-owned `getent` under the same single-entry and clean-home checks, `/etc/passwd` serving only where `getent` is absent, and a `sudo -i` root shell resolves as direct root.
+
+### D63
+
+**owner** (2026-10-05, accepted by the owner from the session's recommendations): B281: store-wide verification stays, but a damaged context's refusal names the context, the store-relative entry and the errno, and `context delete --name <it> --purge` runs over exactly that context; per-context isolation is parked as B325.
+
+### D64
+
+**owner** (2026-10-05, accepted by the owner from the session's recommendations): B283: an installed Machine's SSH session defaults `access.ssh.addressRef` to its `ssh` address, else its install address, else its FQDN, and the mismatch refusal gains a remedy.
+
+### D65
+
+**owner** (2026-10-05, accepted by the owner from the session's recommendations): B283: a new or replaced trust record whose address collides with the record of a Machine the context no longer declares replaces it in the same confirmed write, shown as a remove row.
+
+### D66
+
+**owner** (2026-10-05, accepted by the owner from the session's recommendations): B283 and B287: every remedy and next step that names a command carries `--context`, and every per-object prompt names the context.
+
+### D67
+
+**owner** (2026-10-05, accepted by the owner from the session's recommendations): B275: after a removal, `status` reports a shared service whose destroy is done or released as `pending`, a failed one as `failed` with the token `[FAIL]`, and a running or unknown one as `unknown`.
+
+### D68
+
+**owner** (2026-10-05, accepted by the owner from the session's recommendations): B284: `status` relabels `Bound` as the bindings count and reports 0 once a completed removal finalized, so that status still reads no keyring.
+
+### D69
+
+**owner** (2026-10-05, accepted by the owner from the session's recommendations): B222: over a lost binding, `status` offers `bootwright apply` first, which finalizes without reopening the binding, then the orphan-acknowledged delete.
+
+### D70
+
+**owner** (2026-10-05, accepted by the owner from the session's recommendations): B284 and B300: the `machine list` and `media list` JSON rows rename `address` to `contact` and `ips` to `addresses`, with the columns CONTACT and ADDRESSES, before any consumer exists.
+
+### D71
+
+**owner** (2026-10-05, accepted by the owner from the session's recommendations): B285: a Secret declaration's fingerprint drops its provenance and covers type, source and parameters only, and a stored version whose fingerprint equals the legacy one stays current.
+
+### D72
+
+**owner** (2026-10-05, accepted by the owner from the session's recommendations): B285: `secret set` keeps its strict input-file rule for files carrying a value, password, token or private key, and accepts a certificate or public-key file that is a regular single-link file, not writable by others and owned by the invoker or root.
+
+### D73
+
+**owner** (2026-10-05, accepted by the owner from the session's recommendations): B285: `--value-stdin` and `--password-stdin` at a terminal prompt on standard error with echo off and read one line for tokens and passwords; opaque and `dockerConfigJson` values refuse a terminal with a pipe-or-file remedy.
+
+### D74
+
+**owner** (2026-10-05, accepted by the owner from the session's recommendations): B287: Bootwright's own refusals before a `machine exec` or `rsh` session opens, `trust.identity` included, exit 255, and once the session opened its own status wins over an interrupt.
+
+### D75
+
+**owner** (2026-10-05, accepted by the owner from the session's recommendations): B287: a declined or non-interactive confirmation reports its consumer's existing code, with the confirmer's reason and the `--yes` remedy.
+
+### D76
+
+**owner** (2026-10-05, accepted by the owner from the session's recommendations): B287: the CLI and command specs say that destroy's proofs needing the exclusive lock or a remote observation follow the prompt and still refuse before registration, and the plan names the Machines that must be stopped.
+
+### D77
+
+**owner** (2026-10-05, accepted by the owner from the session's recommendations): B288: controller egress keeps a pure route grammar for endpoint and bypass at admission and selection, and the executable's limits on a managed proxy, authentication, private trust and extra capabilities refuse as controller Unsupported rows with remedies.
+
+### D78
+
+**owner** (2026-10-05, accepted by the owner from the session's recommendations): B289: an installation that selects an external DNSServer or NTPServer uses its declared address with no requirement edge.
+
+### D79
+
+**owner** (2026-10-05, accepted by the owner from the session's recommendations): B289 and B338: network overrides are composed, and secondary addresses, MTUs, non-install bonds and VLANs and extra routes refuse before registration on a Bootwright-installed Machine; post-install NMState convergence is B326 on M4, before B80.
+
+### D80
+
+**owner** (2026-10-05, accepted by the owner from the session's recommendations): B289: DHCP-only Anaconda installations refuse at admission, and both specs say so; DHCP installation is parked as B327.
+
+### D81
+
+**owner** (2026-10-05, accepted by the owner from the session's recommendations): B289: MachineImage and hosted-tree media narrow to `local-media:<name>`, and installed consumers need the `redfishVirtualMedia` endpoint.
+
+### D82
+
+**owner** (2026-10-05, accepted by the owner from the session's recommendations): B289: an installation whose image or tree server is not on the controller refuses before registration, the managed-OS spec is corrected and the unused install tooling deleted.
+
+### D83
+
+**owner** (2026-10-05, accepted by the owner from the session's recommendations): B249: a Machine and a MachineInstallProfile of one name that publish through one server refuse at admission.
+
+### D84
+
+**owner** (2026-10-05, accepted by the owner from the session's recommendations): B225: the runs area keeps the newest runs per context, removing the oldest before a new one, as D42 does for setup runs.
+
+### D85
+
+**owner** (2026-10-05, accepted by the owner from the session's recommendations): B104 stays parked for bounded lifetime allocation, its reason corrected to state that every bounded run consumed a reservation; the narrow fix, in which `machine` power, `rsh` and `exec` read their material in one keyring session and publish no durable binding, splits out as B337 in M1.
+
+### D86
+
+**owner** (2026-10-05, accepted by the owner from the session's recommendations): B290: media URLs are HTTPS only, in validation, the acquirer, help and the specs.
+
+### D87
+
+**owner** (2026-10-05, accepted by the owner from the session's recommendations): B291: an identical `context update` over a completed apply keeps the selected revision, reports it unchanged and asks nothing, and changed input over a completed apply warns before the prompt.
+
+### D88
+
+**owner** (2026-10-05, accepted by the owner from the session's recommendations): B291: an orphan-acknowledged deletion names `bootwright status --context <name>` as its inventory in the refusal and the prompt, and the specs narrow to that; a guard port that lists the owned blocks is parked as B324.
+
+### D89
+
+**owner** (2026-10-05, accepted by the owner from the session's recommendations): B236: `--allow-orphans` may abandon a context whose evidence is unreadable or differently spelled, saying that its objects cannot be listed, and the refusal names that exit.
+
+### D90
+
+**owner** (2026-10-05, accepted by the owner from the session's recommendations): B292: M1 ships the remedies and the corrected spec sentence for a 16-area bound held by client areas; their retirement by `setup --purge-old-bundles` is parked as B322. D152's clause 8, pending the owner's review, supersedes it where it bounds execution areas: [X90](delivered.md#x90--controller-setup-v2-retention-and-offline-sources) retires a tool area no binding names and closed B322.
+
+### D91
+
+**owner** (2026-10-05, accepted by the owner from the session's recommendations): B202: setup prints resolution warnings with the plan, before the prompt.
+
+### D92
+
+**owner** (2026-10-05, accepted by the owner from the session's recommendations): B228: setup runs and bounded runs share one 4 MiB output bound.
+
+### D93
+
+**owner** (2026-10-05, accepted by the owner from the session's recommendations): B271: D55's cancellation extends to a pending setup receipt below the bound that this executable cannot resume, including one whose native action refused before authorizing any transaction.
+
+### D94
+
+**owner** (2026-10-05, accepted by the owner from the session's recommendations): B294: the dead InfraProvider and Machine fields leave v1alpha1: the libvirt provider's `bmcEmulationDefaults.disableCertificateVerification` is removed; the bare-metal attachment's `vlan` is removed, coordinated with B74; bare metal no longer requires the `attachmentRef` nothing reads; `hardware.boot.nicRef` is removed; and `hardware.nics` MACs and `management.bmc` on a libvirt provider's Machines refuse at admission.
+
+### D95
+
+**owner** (2026-10-05, accepted by the owner from the session's recommendations): B294: one managed attachment name or bridge on two libvirt providers of one host refuses at admission, naming both providers.
+
+### D96
+
+**owner** (2026-10-05, accepted by the owner from the session's recommendations): B296: installation media is pinned as the managed-OS spec says: plan freezes the store record's size and digest, a declared checksum must match, and each attempt proves size and digest before first use.
+
+### D97
+
+**owner** (2026-10-05, accepted by the owner from the session's recommendations): B296: the Kickstart renders formats with their glibc langpack, repositories as `%post` `.repo` files with `gpgcheck`, `gpgkey` and `name`, and a credential-free external proxy that exempts the artifact endpoint; `passwordAuthentication: true` refuses while `initialPassword` does, and the architecture enumerates `x86_64`.
+
+### D98
+
+**owner** (2026-10-05, accepted by the owner from the session's recommendations): B17 is split: the managed-OS work area moves under a root-only 0700 parent in M1's digest window, and the rest of B17 is B303 in M3.
+
+### D99
+
+**owner** (2026-10-05, accepted by the owner from the session's recommendations): B19 is not split: progress emission tasks stay in roles, one shared plugin base carries per-capability evidence functions, postcondition decisions stay in Go (D11), and B19's text and the architecture spec's Not-yet-met line are refreshed.
+
+### D100
+
+**owner** (2026-10-05, accepted by the owner from the session's recommendations): B300: `version`'s `Dependency bundle` field is the embedded automation digest, computed at composition.
+
+### D101
+
+**owner** (2026-10-05, accepted by the owner from the session's recommendations): B98 stays parked for pruning the narration; the amendment allowing short rationale and safety-invariant comments in the architecture spec, with a shrink-only per-package ratchet on the comment count, splits out as B336 in M1.
+
+### D102
+
+**owner** (2026-10-05, accepted by the owner from the session's recommendations): B301 adds a Not-yet-met line for removals that release service socket reservations without proving the sockets free; the proof is parked as B323, for the per-capability evidence functions B19 creates.
+
+### D103
+
+**owner** (2026-10-05, accepted by the owner from the session's recommendations): B73: the per-machine installer ISO is published only under the private token subtree and withdrawn after completion, the in-installer `curl --cacert` fetch stays, and private delivery requires a verified controller-to-BMC leg, because InsertMedia carries the token URL.
+
+### D104
+
+**owner** (2026-10-05, accepted by the owner from the session's recommendations): B305 and B319: on the physical BMC under test, under `established` trust, the client reads `VerifyCertificate` and `HttpsTransferCertVerification` before the insert and refuses private delivery when either reads false, the operator importing the CA out of band, within B73's repair; the manager SecurityService root-CA import follows as B319, before the first real-hardware row. D121 (2026-10-07) amends which flag the read-back counts.
+
+### D105
+
+**owner** (2026-10-05, accepted by the owner from the session's recommendations): the parked B96 to B107, B122, B161 to B167, B171, B180, B181, B193, B194, B196, B197, B199, B226, B227, B229 to B232, B235, B238, B243, B245, B247, B248, B256, B258, B261 to B263, B266 to B269, B273 and B274 stay parked.
+
+### D106
+
+**superseded-by D152** (2026-10-05, accepted by the owner from the session's recommendations): B288: a RHEL controller accepts `lorax` and `xorriso` the operator installed from the host's own entitled, vendor-signed repositories, proved by presence like any root; an entitled-source adapter is parked as B330. D152's clause 6, pending the owner's review, supersedes it: [X88](delivered.md#x88--controller-setup-v2-cut-over) installs both through the host's dnf and closed B330.
+
+### D107
+
+**superseded-by D152** (2026-10-05, accepted by the owner from the session's recommendations): B292 and B297: the execution foundation keeps its byte-exact guard at every launch and gains a named check, a refusal naming package, build and file, a documented hold procedure and a regeneration tool in B292; in B297, within X43's window, setup qualifies vendor-signed glibc and libgcc within the qualified minor against the RPM database and records the proved digests as the receipt's requirement. D152's clause 1, pending the owner's review, supersedes it: [X88](delivered.md#x88--controller-setup-v2-cut-over) dropped the byte guard from every launch, and X89 deletes its code.
+
+### D108
+
+**owner** (2026-10-05, accepted by the owner from the session's recommendations): B292: on a FIPS-mode controller host, Bootwright's runtime brings its own cryptography, which the docs state and preflight reports beside the host's FIPS mode; a FIPS-qualified runtime is parked as B331.
+
+### D109
+
+**owner** (2026-10-05, accepted by the owner from the session's recommendations): the real-hardware test runs this build on a separate RHEL 9.8 controller in a subnet the BMC network reaches on the artifact ports, touching nothing on the owner's bastion; B280's host guidance says so. A test profile grants no authority over any other host.
+
+### D110
+
+**owner** (2026-10-05, accepted by the owner from the session's recommendations): B301 and B73: the operator owns the controller host's firewall, and the docs list each listener's ports by source with firewalld commands; a per-socket readiness check in preflight and plan is [B318](delivered.md#x62--controller-listener-firewall-inspection), before B78.
+
+### D111
+
+**owner** (2026-10-05, accepted by the owner from the session's recommendations): B282: operator-named paths are opened by a bounded helper under the invoking credentials, which passes the descriptors to root, and root keeps every proof.
+
+### D112
+
+**owner** (2026-10-05, accepted by the owner from the session's recommendations): B283: the machines spec documents what `auth.operatorIdentity` does today; running its client under the invoking account is parked as B332, after B282.
+
+### D113
+
+**owner** (2026-10-05, accepted by the owner from the session's recommendations): B305: generated serving certificates stay P-256; B305 records the physical BMC under test's RSA premise (it has fetched only from an RSA-2048 self-signed server, so whether it accepts a P-256 serving certificate is unproved) with its check and, as the workaround, a `contextStore` RSA-2048 certificate set with `secret set`; a `keyType` for generation follows only if that check fails. No hardware certificate-compatibility result is recorded here.
+
+### D114
+
+**owner** (2026-10-05, accepted by the owner from the session's recommendations): B299: a DNSServer keeps its wildcard bind default, the new pre-start check names a colliding socket, and the examples and docs declare explicit binds; a derived default is parked as B333.
+
+### D115
+
+**owner** (2026-10-05, accepted by the owner from the session's recommendations): B301: the examples bind their emulated BMCs to loopback, and the docs state that a privileged or cleartext-credential listener binds loopback or a host-only address unless its network is trusted; emulator TLS, a refusal of a non-loopback bind address and a confined SELinux type are parked as B334.
+
+### D116
+
+**owner** (2026-10-06, the owner): every safety or defect follow-up a slice finds in M1's journeys joins M1, folded into the next fitting slice or a final sweep slice before the closing run (D59); enabling and wording follow-ups stay parked. This amends D56 and D48 for follow-ups found from X39 on: a safety or defect follow-up found in M1's journeys joins M1 on the planned sweep slice X46, or on an earlier planned slice whose lane already owns its files, with the Alias `new, <date> (<slice>); attached to M1 on <date> (D116)`; an enabling, wording, test-depth or knowledge follow-up stays parked under D48. M1 takes X39's parked safety and defect follow-ups B339, B340, B342 to B344, B347, B349 to B351 and B356 on X46.
+
+### D117
+
+**owner** (2026-10-06, the owner accepted the session's recommendation): B357: D65 widens, so a confirmed trust write that takes over an endpoint also drops the record of a still-declared Machine that no longer uses the context's SSH trust, the controller Machine's included, as a `remove` row in every lifecycle state, with no input edit.
+
+### D118
+
+**owner** (2026-10-06, the owner accepted the session's recommendation): B372: a file-input `secret set` replacement, `secret delete` and `secret encryption rotate` confirm before the lease and revalidate under it, as standard input does since D73, refusing with `secret.store.conflict` and writing nothing when the store changed meanwhile.
+
+### D119
+
+**owner** (2026-10-07, the owner accepted the session's recommendation): B440 joins M1 on X46: a destroy over an unknown apply resolves each block with the removal's own check, which proves the object is this context's and can be taken back, so a drifted machine is removed with its ownership proved; the state-reconciliation spec records what that resolution proves.
+
+### D120
+
+**owner** (2026-10-07, the owner): the emulated controller serves TLS: the libvirt emulator unit serves HTTPS with a generated serving certificate the InfraProvider's emulated-BMC defaults name, the lab-baremetal physical copy names its authority in `trustBundleRef` and verifies the leg, so D103's verified controller leg holds for the rehearsal; B334 splits: its TLS half joins M4 as B446 on a new planned slice X47, the loopback bind stays with X44 (D115) and confinement stays parked.
+
+### D121
+
+**owner** (2026-10-07, accepted by the owner from the session's recommendation): D104 is amended: where the manager publishes `HttpsTransferCertVerification` that switch alone decides, and the device's `VerifyCertificate` counts only on firmware whose manager publishes no such switch; a hardware capture of the device flag stays an operator item; this is B447 on X47 together with the follow-up that `disable-verification` is a silent no-op on the iBMC.
+
+### D122
+
+**owner** (2026-10-07, accepted by the owner from the session's recommendation): after a failed physical apply the private subtree stays published until the next apply or a destroy clears it; the managed-OS spec says so.
+
+### D123
+
+**owner** (2026-10-08, the owner accepted the session's recommendation): B440: D119's destroy resolution must not lose produced material: a destroy that resolves an unknown apply block first runs that block's apply observation (the capability's read-only Observe) and, when it proves the operation completed, captures the produced material into custody exactly as a completed apply's finalization does (for example the agent-install admin kubeconfig) before any inverse runs; a drifted machine whose observation does not prove completion is still resolved by the removal's ownership proof as D119 says; the state-reconciliation spec states the capture.
+
+### D124
+
+**owner** (2026-10-08, the owner accepted the session's recommendation): B440: an installer's kept administrator kubeconfig is never deleted while custody holds none for that cluster: when a removal (the agent-install media block's inverse, or any inverse that deletes the installer's work area) would delete the kept kubeconfig and custody holds no kubeconfig for that ContainerCluster, it first moves the kept copy into custody as produced material marked unproved access, its completion never proved, under the custody path and bounds a completed apply's capture uses, and only then removes the work area, so a crash between the two leaves the copy in one durable place or both and never in neither; `bootwright cluster kubeconfig` exports it with a warning that its access was not proved; deleting the context removes it as it removes any custody entry; this holds whatever the nodes' power state, so the destroy's `Stop first` path loses nothing.
+
+### D125
+
+**owner** (2026-10-09, the owner): bounded concurrent execution is required for M1 to be implemented. B303 and B304 return from M3 to M1 with their IDs, and B466 adds separate shared package-tree publication and production concurrency, with contract definition required before its implementation. X48 is planned after X46 and before X44; D59's closing gate must prove independent service and machine work, including three same-profile installations, actually overlapping, with replay, cleanup and safe destroy. Prior serial acceptance does not discharge this gate. This request authorizes review and backlog planning; implementation remains subject to the scope rules.
+
+### D126
+
+**owner** (2026-10-09, the owner): finish X44's remaining implementation while deferring the Go toolchain upgrade B470 requires. B470 and the failing vulnerability gate remain unmet; the deferral changes no exit gate or security requirement and declares neither X44 nor M1 complete.
+
+### D127
+
+**owner** (2026-10-09, the owner): rebase M1 on current main and implement X48 there, so the three-node RHEL fixture and future examples use all dependency-ready parallelism within the existing bound. B466 realizes shared profile publication under implementation/request `os-package-tree-v1` and evidence `os-package-tree-evidence-v1`, advances installation requests to `os-install-anaconda-v8`, and records effect, replay, inverse and compatibility boundaries in Managed OS. This also names X48 as the slice retiring libvirt's provider/Machine name collision refusal through separate durable namespaces. B470's existing upgrade deferral and every M1 exit gate remain unchanged.
+
+### D128
+
+**owner** (2026-10-10, the owner): keep M1's scope, sequence and completion gates unchanged. M2 is full managed IBM Ceph 9.9.x provisioning on libvirt+sushy and physical bare metal/BMC, with every provider provisioning feature qualified through B472, B80 and B81; M3 is full OpenShift cluster provisioning on those two provider paths, with complete coverage defined by B473. Move the former M4 Ceph scope to M2, former M5 first add-ons to M4, former M6 OpenShift Virtualization to M5, former M7 ACM/Argo CD/GitLab to M6, and former M2 standalone native rendering to the final M7. Move B70's shared physical erase gate from M3 to M2; managed storage projection and lifecycle qualification no longer wait for standalone rendering or OpenShift. B, X and prior D identifiers remain fixed, and dated history retains its original milestone numbers. Each scope transferred as a whole keeps its items and delivery evidence.
+
+### D129
+
+**owner** (2026-10-11, the owner): define M2 before implementation and deliver
+its Ceph journey in order: minimal three-node libvirt+sushy, full virtual
+provider coverage, full physical BMC coverage, then two-data-site stretch
+with a third-site monitor-only tiebreaker. Split B80/B81's combined outcomes
+into independently qualified feature families and acceptance checkpoints;
+B472 owns the release/coverage definition and B474 its executable projection.
+Plan X52 to X66 alongside retained X47, with the [M2 page](m2.md) owning
+their dependencies. B82 is parked without a concrete consumer; B346 joins
+M2 for its FIPS access profile. The [provider matrix](../ceph-coverage.md)
+records native restrictions and alternate profiles; full coverage never
+claims unsupported combinations. B491 must settle the online-cleanup versus
+machine-quiescence contract, and B70 remains blocked on physical erase
+evidence. This is a specs-only definition request: M1 gates remain, no
+implementation slice is activated and no host operation is authorized.
+
+### D130
+
+**owner** (2026-10-11, the owner): M2 supports every cluster size IBM supports
+for the qualified release and deployment mode. Features follow the provider's
+requirements, including per-site/per-role capacity, topology and service
+compatibility. Acceptance profiles are examples, not product limits; include
+larger qualifying profiles for supported features that require them.
+B472 records the support ranges and requirements, B474/B79/B490 qualify
+admission and internal bounds, and B487/B488 cover the service-specific
+stretch profiles.
+The definition remains planning-only and changes no implementation authority.
+
+### D131
+
+**owner** (2026-10-11, the owner): name the M2 submilestones for future
+reference: M2a detailed scope/task definition, M2b simple three-node
+libvirt+sushy Ceph, M2c full-featured virtual Ceph, M2d full-featured physical
+bare-metal/BMC Ceph, and M2e full-featured stretch for all provider-supported
+desired-state configurations and sizes. The [M2 page](m2.md#submilestones)
+owns their mapping and exit gates. M2a is definition only; executable work
+remains in the existing slices mapped to M2b through M2e. This expressly
+permits the suffixed submilestone IDs while retaining M2's single status and
+all B/X/D identifiers. Pre-2026-09-28 M2a/M2b aliases keep their historical
+meanings. Squash the M2 planning commits into one commit over the M1 base;
+no implementation or host operation is authorized.
+
+### D132
+
+**owner** (2026-10-11, the owner): include the complete Ceph API and operator
+authoring review in [M2a](m2.md#m2a). Preserve useful existing abstractions
+and native declarative formats where they reduce operator learning; expose
+imperative-only storage resources as declarative intent. Make small,
+justified corrections, but obtain owner approval with current/proposed
+examples before adopting substantial API changes. The
+[review](../storage-api-review.md) records findings and pending proposals;
+this decision does not approve those proposals, authorize implementation,
+or declare M2a complete. B494 records the review's bounded admission defects.
+
+### D133
+
+**owner** (2026-10-11, the owner): approve the two substantial M2a API
+proposals reviewed under D132. P1 consolidates daemon configuration and
+placement into complete native Ceph service documents, with Bootwright
+retaining proved Machine/site ownership, release pins and protected secret
+bindings. P2 keeps pools/filesystems and adds separately owned declarative
+resources for imperative-only objects; NFS exports and SMB resources retain
+their native formats. The [native service](../ceph-native-api.md) and
+[resource](../ceph-resources.md) specs own the target and migration;
+B474 delivers the common schema path and each family item its qualified
+extensions. This approves the breaking v1alpha1 authoring target, not a
+version change, runtime implementation, sensitive-output command or host
+operation. M1 and implementation promotion gates remain unchanged.
+
+### D134
+
+**session-pending** (2026-10-11, the owner): accept M2a's definition baseline and
+explicitly authorize M2b implementation, its generic three-node example,
+a locally ignored machine-specific copy, static execution review and an
+operator setup/provision/test/cleanup runbook. M1's outstanding checks and
+owner acceptance remain promotion gates. No privileged operator test or
+push is authorized. Test runs resolve the latest provider release available
+at setup and pin its exact artifacts for the whole run. Keep verified native
+Ceph SSH mandatory: P3's proposed provider-default exception is rejected;
+bootstrap remains gated until the entitled IBM artifact proves verification.
+
+Taken by the session on 2026-10-11, pending the owner's review: D134 is the
+dated waiver of M2's Requires for the implementation of X47, X52, X53 and X54
+only, and it excepts M2b from the two-active-slice WIP limit, so X47, X52, X53
+and X54 could be active together; remaining verification, acceptance and
+release/operator gates are not waived. Both readings were taken by the
+session, pending the owner's review, and [D165](#d165) (2026-10-19, the owner)
+returns those slices to `not started` without extending the exception. Both
+readings are moot: D165 returned the slices they cover, and since
+[D183](#d183) the WIP limit counts per program.
+
+### D135
+
+**owner** (2026-10-11, the owner): approve P4's verified-tunnel design and
+qualification. Add `clusterSSH.transport: verified-tunnel` while retaining
+required verification: an outer pinned OpenSSH connection forwards only to
+the same authenticated host's loopback SSH endpoint, with no direct fallback.
+Protected MGR mounts, staged bootstrap, server forwarding restrictions and
+restart/failover/recovery are part of qualification. Approval changes the
+target API and trust boundary; it grants no provider-default exception,
+operator-evidence bypass or automatic artifact promotion. B472/B79/B80 own
+the remaining exact-artifact and runtime evidence.
+
+### D136
+
+**owner** (2026-10-11, the owner): approve P5's protected RBD canary retention
+until explicit cluster teardown. The fixed fixture owns a 16 MiB image,
+retains its ID before writing/reading at most 1 MiB by ID, closes the client
+and reports `cleanup: cluster-teardown-required`. No immediate deletion by
+name is permitted; exact disposable-cluster removal owns the retained data.
+This changes the test retention contract, not public input schemas or
+ordinary cluster qualification gates.
+
+### D137
+
+**owner** (2026-10-11, the owner): approve P6's optional libvirt
+`dataDisks[].media: ssd`. Explicit SSD data disks use virtio-SCSI with
+`rotation_rate="1"`, starting at `/dev/sda`; root remains `/dev/vda` and
+omission preserves the existing virtio-blk layout. Mixed profiles use
+independent target sequences. Frozen requests, domain inspection, guest
+device observation and native Ceph class must agree. This declares virtual
+guest media behavior rather than physical host performance; existing
+realizations keep their original requests and require teardown before a
+changed layout is installed. Actual guest/runtime acceptance remains open.
+
+### D138
+
+**owner** (2026-10-11, the owner): clarify M2b's entitlement-driven artifact
+acquisition. After an operator imports the registry credential into the
+Entitlement's selected Secret, Bootwright resolves the provider image and
+downloads required IBM images/packages itself. Remove the manual image
+pre-pull and digest-discovery prerequisite from the example and runbook.
+Preserve immutable resolution, original credential custody, verified TLS,
+current qualification gates and the separate Red Hat media/source boundary.
+This corrects the authorized M2b flow without changing public Storage schemas
+or authorizing an agent-run privileged or entitled test.
+
+### D139
+
+**owner** (2026-10-11, the owner): "every backlog to milestone M1 done, except the ones that i need to run myself the test in real bare metal and the one related to a go version that is not available in my machine". Recorded meaning: `make vulncheck`'s go1.26.8 standard-library findings (B470) no longer hold any other M1 item. An item completes when every other exit gate passes (`make check`'s other steps, `make race`, `make docs-check`, `./scripts/ansible-check` and its own tests), or awaits operator acceptance when it also has a host gate; B470 alone carries the vulnerability gate, on its own slice X67; M1 completes only after B470 and the owner's host gates. It amends D126's sentence that the deferral "declares neither X44 nor M1 complete" for X44's items and X48 to X51 (M1 itself stays incomplete), and it settles the 2026-10-11 audit's finding that X46's second pass completed under a different standard in favour of completion, so X46's second pass stays delivered. D129 to D138, recorded on the M2 branch, precede it there.
+
+### D140
+
+**accepted-by D148** (2026-10-11, taken by the session, pending the owner's review): `machine exec` and `cluster exec` stop at the payload, as `cluster oc` and `cluster kubectl` already did: the first operand that is not a flag starts the remote command and every later token is payload verbatim, flag-shaped or not, so a remote command's own `--context` or `--name` can never retarget the session. Bootwright flags go before the command; `--` is needed only when the payload's first token is flag-shaped, and a required Bootwright flag written after the payload is refused with where flags go. This replaces the earlier rule under which a recognized flag after the first operand still took effect; `TestPayloadParsing`, `TestPayloadTailNeverRetargetsTheSession` and `TestAFlagWrittenAfterThePayloadIsRefusedWithWhereFlagsGo` prove it. The owner accepted it on 2026-10-14 (D148).
+
+### D141
+
+**session-pending** (2026-10-12, taken by the session, pending the owner's review): vendor and device names were removed from D60, D104, D109 and D113 and the X45 record on 2026-10-11 for confidentiality; their operative content, restored here, is unchanged by the redaction. The constraints (D109's bastion), the observed firmware behaviors, the check procedures and the RSA-2048 workaround (D113) that the redaction dropped are written back in neutral wording ("the physical BMC under test"), in those decisions, in the X45 record and in the [Redfish knowledge page](../../.agents/knowledge/redfish-physical-bmc.md), and no vendor, model, firmware, serial or host name returns.
+
+### D142
+
+**owner** (2026-10-12, the owner): before 1.x no backward compatibility is wanted. An incomplete operation is bound to the blocks it froze, not to the build that froze them: another build, meaning other automation, another version or commit, or any build stamped `modified`, continues it exactly when it freezes the same blocks, every frozen member except the words they are presented in, and the execution closure check stays. No converter or older reader is added for any record or request version. B504 joins M1 as an exception to D48 and is delivered by X69, an out-of-sequence enabling slice implemented on the M2 branch at the owner's request.
+
+### D143
+
+**session-pending** (2026-10-12, the owner; the clauses after the owner's words are taken by the session, pending the owner's review): "The only binary that should implement all features of bootwright is bootwright itself; the operator declares desired state and runs bootwright apply, with --stage for phases; validation through machine exec / cluster exec; a bootwright command prints the dashboard access info", and, on the M2 branch, "Yes. Work and apply changes on branch M2". This settles [B498](#retired): converge, so the `bootwright-ceph-qualification` executable and its fixture engine are retired. It settles [B497](#retired): M2b's acceptance is an ordinary staged `bootwright apply` over the declared StorageCluster, StoragePool and StorageClient, recorded as an owner-accepted ledger row ([B476](delivered.md#x94--post-destroy-cluster-inspection)); no fixture evidence closes an item, and there is no runtime registry to promote. [X70](delivered.md#x70--ceph-through-the-ordinary-staged-apply) delivers it. Taken by the session, pending the owner's review: (1) each build supports one reviewed, code-pinned release: IBM Storage Ceph 9.9.1.2, image `cp.icr.io/cp/ibm-ceph/ceph-9-rhel9` tag `v9.9.1-25074`, packages `20.2.1-405.el9cp`, cephadm-ansible `5.0.3-1`; a different declared release, repository or tag refuses at admission naming the pinned one, and a newer release needs a reviewed pin bump. This amends D134's "latest provider release available at setup". (2) Apply resolves the pinned tag through the Entitlement's registry Secret to its linux/amd64 child manifest digest in a block that completes before any native effect and is frozen for continuation; an authored `sha256:` digest is admitted only when it equals that resolution; the digest is not code-pinned until B472's lock adds it. (3) `verified-tunnel` is the only supported transport; `native` stays refused (D134, D135). (4) The empty qualification registry and its refusal are removed by B512. Pinned-release admission, verified host keys, data-loss authorization and the frozen plan still protect apply. (5) Every guest proof the fixture made moves into ordinary per-host blocks (B518, B499) and is not dropped. (6) A managed cluster whose hosts are all Bootwright-owned virtual Machines that the same destroy removes is retired with them, with no native call (B515); removal while hosts survive stays [B491](m2.md#b491). (7) The dashboard is enabled after readiness, with user `admin`, a generated password in produced custody revealed only by `bootwright cluster info --secrets --name`, and Ceph's self-signed certificate whose SHA-256 `cluster info` prints. Bootwright never rotates it, and a password changed outside Bootwright refuses as drift. This is the public interface B489 left for owner approval, narrowed to that credential; client export stays B489, and certificates, roles, SSO and monitoring stay B479. (8) B476's 1 MiB RBD test is run by the operator through `bootwright cluster exec` with the bootstrap node's administrator keyring, keeping D136's retention (a retained 16 MiB image, no deletion by name, removed by teardown); Bootwright's canary and StorageClient-material harness retire. (9) `cluster list` and `cluster info` become available for every kind; `cluster rsh` and `cluster exec` connect for managed Ceph (node by name or FQDN, default first in canonical order, argv verbatim, exit 255 for every refusal before the session); ContainerCluster sessions stay [B101](#b101). (10) The owner's request is the dated waiver of M1, X52 and X53 for X70's implementation, and X70 joins D134's exception to the WIP limit; promotion still requires them. (11) A context holding a fixture anchor is retired with the build that prepared it; a later build refuses it, and its only fallback is `bootwright context delete --name <ctx> --purge --allow-orphans`, which abandons that context's Machines, disks and reserved bindings.
+
+### D144
+
+**owner** (2026-10-13, the owner): "check why those steps for vms were not performed in parallel. remember that any step that could be ran in parallel must be done as that, to optimize provision time". Failed blocks are retried concurrently under the admission rules of a first attempt (dependencies `done`, stage selected, once per invocation, exclusive resources free, the engine bound), beside every startable block; unproved effects are still resolved first with nothing beside them, and a selection that admits no failed block still refuses `lifecycle.stage`. This replaces the rule that a retry runs alone. [X71](delivered.md#x71--concurrent-retries) delivers it as B523.
+
+### D145
+
+**session-pending** (2026-10-13, taken by the session, pending the owner's review): the owner proposed to continue an operation under a rebuilt binary by comparing declared versions in place of the content digest, on the premise that the content digest hashes Ansible code. It does not: it is the implementation's contract identity, computed from its identity, its request and evidence versions and its effect pins, and no capability package reads the automation. A fix confined to automation, or to Go code that moves no version or pin, such as X72, X73, X75 and X76, therefore moves the automation digest and no content digest, request byte or version, so D142's rule already continues it once `setup` has projected the fix; the 35-minute destroy of the M2b run was advised, not required. Dropping the content digest from the rule would let a pin change (a Ceph image, the cephadm binary, a package set, a host path) continue an operation half done under the old pin. So: (1) D142's rule stands: a block continues under another build exactly when it freezes the same blocks, content digest included, and nothing here narrows a refusal. (2) A contract guard replaces the human rule that an automation change that alters what an effect is must move its content digest, where a tool can check it: a golden per implementation pins its content digest beside its Go request and evidence schemas and the persisted format versions quoted in the collection's embedded plugins and roles, and changing any of them while the content digest stays fails the build and cannot be recorded (`TestEveryImplementationMovesItsContentDigestWithItsContract`). It sees versions and Go schemas, not meaning: a raw-JSON member, such as the cluster services the Ceph core and host requests carry, is fingerprinted as opaque, and an unquoted, dynamically built or unversioned format is not seen. (3) Every attempt and resolution record names the build it ran under, an optional `build` member that moves no record version. A consequence for the owner to review: the member is compatible one way only, since a build from before X74 decodes records closed and refuses one that carries `build` as "lifecycle record is malformed or unsupported", so once a build that writes `build` has worked an operation, no earlier build can continue or remove it, and the removal under the build in hand is the way out. The alternative, moving the attempt record version, would have stranded every live operation at once. (4) A destroy continuation keeps X69's rule: its removal is derived from the frozen plan and runs under the build in hand, as a fresh removal does, and its proof compares what the removal decides, the authorizations it consumes, its groups and that each block's capability reads its frozen request; it cannot compare content digests, because the removal copies them from the frozen plan. An unknown removal block is observed by the build in hand, whose closed evidence decoding refuses evidence it cannot read, and every removal attempt and resolution names the build that ran it. (5) A continuation previewed under another build names the build that registered it and the steps this build runs, and `status` says whether the build in hand is another build. The preview has no JSON form because `plan`, `apply` and `destroy` have no JSON mode, so `status --output json` carries `anotherBuild` instead. (6) No content digest, request version, record version or plan encoding moves, so the owner's live operation, registered by 91855545e, continues under a build that contains X74. [X74](delivered.md#x74--continuation-under-a-rebuilt-binary) delivers it as B525.
+
+### D146
+
+**owner** (2026-10-13, the owner): "i had to run twice apply to make it work. it shouldn't be needed. check if you can fix it", after an `apply` resolved an unknown Ceph pool block as partly realized and stopped, and a second `apply` retried it and the client after it. This settles B529: a resolution is not an attempt. An invocation still observes a block at most once and never observes one its own attempt left unproved, but a block its resolution leaves `failed` is retried by that same invocation once every unproved effect is resolved, under the admission rules of any retry (stage selected, dependencies `done`, exclusive resources free, the engine bound), so its dependents start there too. A failed resolution admits further first attempts as a proved outcome does; a failed attempt, including that retry, still admits none. A fresh `destroy`'s resolutions of the apply it supersedes retry nothing. The resolution's progress row stays running into the retry and is settled `failed` when the invocation stops before the retry starts. It amends D144's "once per invocation" only in that a resolution no longer counts as the block's turn. [X82](delivered.md#x82--resolution-and-retry-in-one-invocation) delivers it as B529.
+
+### D147
+
+**owner** (2026-10-14, the owner): "you can upgrade go to 1.26.9 and mark this backlog as done". This ends D126's deferral of the Go upgrade: [X67](delivered.md#x67--go-toolchain-vulnerability-gate) moves the pin from go1.26.8 to go1.26.9 and delivers B470, so `make vulncheck`, and with it `make check`, passes again and D139's separation of the vulnerability gate from M1's other items holds nothing more. It moves no other dependency; Go 1.27 stays parked as [B273](#b273).
+
+### D148
+
+**owner** (2026-10-14, the owner accepted the session's recommendation): D140 stands as taken. `machine exec`, `cluster exec`, `cluster oc` and `cluster kubectl` keep the one payload rule of [the CLI contract](../cli.md#parsing-and-input-conventions): Bootwright flags go before the remote command, and every token from the first operand on is payload verbatim, so a remote command's own `--context` or `--name` never retargets the session and `ls -la` needs no `--`. The alternatives the owner declined were the earlier rule, under which a recognized flag after the first operand still took effect, and a mandatory `--` before every payload. No code or contract changes; M1 holds no open decision.
+
+### D149
+
+**owner** (2026-10-14, the owner): "i upgraded my fedora to 44. bootwright should support it", after `setup` refused the upgraded controller with `controller.unsupported`. This joins B541 to M1 as an exception to D48, because M1's closing run (D59, D125) runs on that controller, and [X84](delivered.md#x84--fedora-44-controllers) delivers it: `setup`, `preflight controller` and the controller stage admit Fedora 44 beside Fedora 43, which stays admitted, and RHEL 9.8.
+
+### D150
+
+**session-pending** (2026-10-14, the owner): "update commands bootwright machine start|stop|restart|exec to accept a comma-separated list of machines that the command will be applied in parallel to all". `--name` of those four commands is a comma-separated list under the existing list rules; one member behaves exactly as before and several run concurrently, each power run as today's single-Machine run (at most the engine's bound at once, inside one invocation scope, behind one confirmation) and each exec session non-interactive with its output lines prefixed by their Machine. `machine rsh` stays single because it opens one interactive session, and `cluster rsh` and `cluster exec` are unchanged. Taken by the session, pending the owner's review: (1) a Machine whose resolved identity is a password refuses a several-Machine `exec`, because a password prompt cannot be shared by concurrent sessions; (2) a partial power failure exits `1` with one diagnostic for each failed Machine and still presents every admitted Machine's row; (3) a several-Machine `exec` exits with the highest status any session returned and warns `access.exit` for each nonzero one. [X85](delivered.md#x85--machine-commands-across-several-machines) delivers it as B543.
+
+### D151
+
+**session-pending** (2026-10-14, the owner): "when you finish, do the same for bootwright cluster commands", following the request that made `machine start|stop|restart|exec --name` a comma-separated list applied in parallel (D150). The owner answered two questions. For `cluster exec`: "BOTH `--name` and `--node` take comma lists. `--name a,b` runs on every listed cluster and `--node n1,n2` on several nodes. Each listed cluster runs on its default first node, or on the `--node` members it declares. A `--node` member no listed cluster declares is refused. Every resolved node Machine runs in parallel, exactly like `machine exec` with several names." For `cluster info`: "`--name` takes a comma list too (a selection convenience; local read, nothing to parallelize)." `cluster rsh` stays single because it opens one interactive session, and `cluster info --secrets` still reveals exactly one cluster. Taken by the session, pending the owner's review: (1) a listed cluster that declares none of the `--node` members refuses `access.target` instead of running nothing there; (2) the session prefix is the Machine name, and Machines two nodes share run once; (3) a FQDN shared by several nodes of one cluster refuses as it does for a single cluster. [X86](delivered.md#x86--cluster-commands-across-several-clusters-and-nodes) delivers it as B546.
+
+### D152
+
+**accepted-by D154** (2026-10-14, the owner's request; the clauses are taken by the session, pending the owner's review): "make a full review and audit of how bootwright install/setup works. i think this is too restrict and not optimal about dependencies. for instance, i had my fedora updated from 43 to 44 and it stopped working. you actually fixed this, but i think we could review this process in a broader way. check how dependencies are defined and used. i want bootwright to require those dependencies in a general but safe way. this should work in a similar way other linux packages that requires dependencies work. other thing that is bothering me is how long it takes to run bootwright setup, to install ansible and python dependencies, even after a previous bootwright setup, with older bootwright's version. this make setup take too long (more than 3 minutes). bootwright seems to be using dedicate installation for those package. evaluate if it is really necessary or would make more sense or would be justified to used SO's package for that. how other similar community package handle that? if it makes sense to use a dedicate python installation, for instance, couldn't the bootwright setup from a newer bootwright's version reuse the previous one? ... check alternatives and impact in code and propose a plan for us to refactor this installation/setup use case, using the best alternative, considering estability and ux and community pattern/best practices. no backward compatibility needed/wanted. you can consider a new fresh installation for this new bootwright version." It carries forward the owner's rules of 2026-09-13: "bootwright should just check if dependency packages are available and only if not install; it shouldn't check for updates unless a specific min version becomes necessary", and "versioning logic for packages is over-engineering; only check the required packages exist; add version logic only when a specific version issue appears". Until the owner accepts it, D152 is a proposal and authorizes nothing; acceptance authorizes [X87 to X90](m1.md#planned-slices) on M1 as an out-of-sequence exception to D48, in the form of D149, and must carry the owner's dated sequencing choice for X88 (clause 9). The clauses: (1) The glibc and libgcc byte pin is not a security boundary and is dropped: the per-file digests, link pins, the single-link and exact-upstream rules, D107's requalification, the receipt's `foundation`, the operator guide's hold procedure, the compiled catalog and scripts/foundation-catalog. Root ownership with no group or other write stays on every executed or loaded path, extended to the interpreter's standard library and `lib-dynload` and to the re-executed binary (B548), and specs/security.md states the attacker model and the widenings W1 to W4 once. Declined: digests as a reproducibility check, the cause of the Fedora 44 refusal, since no attacker model was found in which digests of root-owned files stop an attacker who cannot already write them. Supersedes D107. (2) Admission is by family and floors and fails closed: `ID` is fedora or rhel or `ID_LIKE` names one, amd64, a qualified `/usr/bin/rpm` and `/usr/bin/dnf`, a locked-ABI interpreter installed or offered, and glibc at or above the lock's floor (2.34). A release outside the lock's tested list gets the informational line `controller.untested-release` and is never refused; a docs test ties that list to the development guide. Declined: exact (OS, release) rows, the cause of the Fedora 43 to 44 break, refusing untested releases or derivatives, and silent admission. (3) The interpreter is the OS CPython 3.12 to 3.14 at its versioned path `/usr/bin/python3.X`, with one venv per lock, ABI and interpreter path and no python-build-standalone fallback (parked as B561). Python TLS follows the host's OpenSSL and crypto-policy, since `OPENSSL_CONF=/dev/null` goes; D108 is amended: the Go binary and cryptography's bundled OpenSSL stay outside any FIPS claim, and B331 stays parked. Declined: a standalone CPython with a lock, wheels embedded in the binary, distribution ansible-core (no distribution ships 2.21) and an Execution Environment image. (4) Versions are chosen at build time in a lock the binary embeds (internal/controller/runtimelock/lock.json, format `bootwright.controller.runtime-lock-v1`), which `scripts/runtime-lock generate` writes with network, run by the owner or by CI, and which is committed; `verify` runs in a network CI workflow and `outdated` is advisory. Setup never discovers versions or checks for updates, the upgrade verb is a new build, and D10's and D20's "latest patch" means the latest at lock generation, which also meets the rules of 2026-09-13. (5) ansible-core is exactly the 2.21 minor the collection's `requires_ansible` admits, its patch pinned in the lock; a guard test requires the lock, `scripts/tools/ansible-requirements.txt` and the collection's `meta/runtime.yml` to agree. cryptography stays because ansible-core declares it; dropping it is parked as B559. (6) Native packages come from the host's dnf. Requirements are names or capabilities in one Go table, presence is `rpm -q --whatprovides` with no version logic, and before confirmation a root `dnf install --assumeno --setopt=install_weak_deps=False` preview is shown verbatim as display text bounded to 64 KiB; lines naming core packages (glibc, libgcc, kernel, systemd, openssl-libs, the selected python3.X) get an informational note, never a refusal. Install is `dnf install --assumeyes` with the same option, presence is checked again, and each provider's NEVRA and repository are recorded. The host's dnf configuration owns signers, versionlock, excludes, protected packages, mirrors, Satellite and `proxy=`; Bootwright never passes `--allowerasing`, `--nogpgcheck`, `--repofrompath`, `--enablerepo` or `--releasever`. The Ceph node's dnf4 core keeps its files and only the controller-only branches go. Declined: the frozen plan with a cache, a host-configured solver with vendor-only signers, and a protected-set refusal or `--exclude`. Supersedes D106; closes B330 and B542. (7) Automation leaves every setup identity: the embedded `ansible/` tree is extracted for each invocation into root 0700 staging, held by an inherited lock while descendants run; the automation digest and D145's re-proof are unchanged; the runtime digest hashes `runtime-v1`, the lock digest, the ABI and the interpreter path; the closure digest hashes `execution-closure-v2`, the lock digest and the ABI. An `ansible/`-only fix is build and apply. Closes B165, parked by D40, and supersedes D14's per-build area where it describes the runtime. Declined: a persistent automation directory per digest. (8) Retention runs at the end of each successful setup under the setup lock: the current runtime and the previous distinct one and their wheels stay, every other runtime is retired under a non-blocking exclusive lock that skips one in use, and the newest 8 run logs stay. apply, destroy and the controller stage rebuild this build's runtime without network when its directory is missing and every locked wheel is cached, and refuse with "run bootwright setup" only when a wheel is missing. Tool areas move under the controller's tools directory with their own bound of 16 and are retired when no binding names them (B557, closing B322). The bound of 16 on execution areas, retained sources and definitions, and `--purge-old-bundles` go; this supersedes D90 where it bounds execution areas. Declined: keeping only the current runtime, which would strand live operations offline after a lock change, and unbounded rebuild without retention. (9) The cut-over is a fresh install. A setup-owned subtree `/var/lib/bootwright/setup/` stays root 0700, carries the format `setup-state-v1`, lies outside the registry descriptor and heals itself: setup discards another build's format after confirmation, and launches refuse with "run bootwright setup". The controller record moves from version 2 to 3 and the registry from 5 to 6, and a version 5 store refuses with "/var/lib/bootwright holds a store an earlier Bootwright build wrote (registry version 5), which this build does not read or convert" and the remedy "with the build that wrote it, destroy each environment (bootwright destroy --context <name>) and delete each context (bootwright context delete --name <name>); then, as root, remove /var/lib/bootwright and /var/lib/bootwright-staging and run bootwright setup with this build. Never remove /var/lib/bootwright while services it manages run." The owner retires m2b-ceph and the lab contexts with the old build before the first X88 build runs on the owner's host. X87 integrates on acceptance; X88 integrates only after the owner records, dated, either (a) M1's closing run (D59, D125) and B476's run complete on the current build, which the session recommends, or (b) a waiver that runs the closing validation on the X88 build. **Open: the owner's choice.** Declined: a separate world-readable setup root, which contradicts the root 0700 store rule (a readable index copy is parked as owner decision B558), and moving bindings out of the controller record. (10) `--wheel-mirror` (a `file://` directory or an `https://` base) is untrusted transport bound by the lock's sha256; `setup --download-only --dest-dir DIR` runs unprivileged and writes the wheels, the installer and the lock; `--dry-run --output json` lists every locked file's URL and sha256. The default origin is only `files.pythonhosted.org`, native packages use dnf's own configuration, and the admitted context-free `HTTPS_PROXY` and `NO_PROXY` route is forwarded to dnf as `https_proxy` and `no_proxy`, where dnf.conf's `proxy=` wins; credentials and `ALL_PROXY` stay refused. (11) nmstate leaves the baseline, since nothing consumes it; podman stays, because the container-runtime capability is mandatory. (12) The rpm read lock is not held: each launch holds a shared lock on its runtime directory for the whole Ansible block, so retirement never removes a runtime in use and the operator's dnf is never blocked; a same-minor standard-library update during a run is an accepted risk that setup's import probe repairs. (13) Pre-existing defects: the re-executed binary has no owner or mode check, which X87 fixes as B548 in its own commit; controller-record refusals name no remedy, and the registry version 6 and setup-subtree refusals that replace them each name one; the spec's missing native re-solve, the staged `other` metadata, the stale python3.13 defaults and B542 are moot with the code X89 deletes; the operator guide's Fedora 43 examples are rewritten in X89. Parked by D152: B558 to B563. The session integrated [X87](delivered.md#x87--controller-setup-v2-foundations) on 2026-10-14 ahead of this acceptance, as its workflow directed: it is additive and unwired except B548. On 2026-10-14 the owner deferred clause 9's sequencing choice ("implement whatever you can; I will test when I can run"), so the session integrated [X88](delivered.md#x88--controller-setup-v2-cut-over) on local main without a push; the choice and the owner's review of D152 stay open, and the owner's fresh-install acceptance of B555 waits until the owner can run it.
+
+### D153
+
+**accepted-by D155** (2026-10-14, the owner): "today bootwright must accept only this scenario: non-existent real state ... half-provisioned/setup ... real state already equals desired state ... bootwright could have an command: bootwright diff ... do not implement this support yet, just make code, logic and architecture ready for this in the future ... reconciliation must be predictable and safe. target environment can never be broken with bootwright apply". Taken by the session, pending the owner's review: (1) `apply` admits exactly three scenarios: a fresh apply where the context's records show no operation or a completed destroy, a continuation of an incomplete apply over byte-identical input, and an idempotent settle of a completed apply over unchanged input. Changed input over a completed apply keeps refusing before any effect and names what changed, with destroy then apply as the remedy; `TestApplyAdmitsOnlyTheThreeScenarios` pins the placement. (2) `bootwright diff` is read-only: it compares the context's selected desired state with what its apply realized, object by object, reads durable records only, or with `--observe` each realized block's target through that block's read-only observation, writes no record, takes no lock beyond the shared read lock and exits 0 whenever it renders. (3) Every further scenario is added one per named slice by the recipe in the design: a decision, a spec row and a `stateMachineRows` case, the prerequisite items, and one branch in the changed-input path, all in one commit; none is implemented here, and this slice builds only seams with a present consumer (the comparison, the read-only guard, the retained-revision reader). (4) The settled scenario means "the records prove the frozen plan done over unchanged input": a settled apply attests its own records and reaches no host. Drift that `diff --observe` shows is reported, never repaired. [X91](delivered.md#x91--read-only-diff-and-the-delta-seam) delivers it; the audit's blocking findings [B567](#b567) and [B568](#b568) stay parked and recommended as a dedicated safety slice before any further `destroy` on a shared libvirt host. Needs the owner's decision: whether a settle also requires the current build to freeze the same plan ([B574](#retired); the recommendation is not now). Needs the owner's decision: whether input restored byte for byte after an edit settles a completed apply ([B598](#b598)). Needs the owner's decision: the libvirt redefine semantics and what machine evidence proves ([B576](#b576)). Needs the owner's decision: whether Ceph pool `size` and `min_size` drift is refused or reported ([B587](#b587)). Needs the owner's decision: the context incarnation identity design ([B568](#b568)).
+
+### D154
+
+**owner** (2026-10-15, the owner): "mark all backlogs that we validated so far
+as done; save this fix as a new backlog; we will handle it and §9 in near
+future", and, asked, accepted D152 with clause 9's option (b) and the
+closing run's B339 observation as met. The owner accepts the ledger rows of
+[X93](delivered.md#x93--the-owner-run-of-2026-10-14) for B19, B20, B270, B276, B277,
+B339, B549 and B555, which leave M1; accepts D152 as written, whose clause 9
+is (b): the closing validation ran on the X88 build; and records the
+reboot defect as [B608](delivered.md#b608) on M1, where it blocks B466. M1 stays
+in progress, and B476's run (M2b) follows later. D156 subsequently closes
+the remaining M1 gates.
+
+### D155
+
+**owner** (2026-10-16, the owner accepts the recommendations): D153 clauses
+1 to 4 stand as written. B574 is retired: settlement continues to attest only
+the completed frozen records over unchanged input, without re-planning or a
+host check. B598 adopts exact-original-byte restoration as a future scenario;
+until its named slice, the current code and changed-revision refusal remain.
+B576 will narrow claims to observed evidence, report an actual redefine as
+changed, and widen read-back with each supported field. B587 will refuse
+detected pool `size` or `min_size` drift without writing until a named delta
+admits it. B568 adopts a persistent random context incarnation design;
+exact formats and migration are defined in its named slice. Define and
+schedule B567 and B568 before shared-host destroy: the B567 guard and B568
+interim orphan warning come first, full incarnation identity before later
+deltas. These are accepted directions for future work, not authorization to
+implement those items now. The owner authorizes the bounded post-destroy
+inspection correction as X94/B613. Conditional agreement to finish M1 does
+not satisfy its gates: B608 is unimplemented and B466's host-restart rerun is
+missing, so M1 remains in progress. The owner accepts B476's
+[ledger row](../../docs/acceptance.md) and explicitly attests that dashboard
+fingerprint comparison, successful login and expected host/OSD inventory
+checks passed. This closes B476's operator gate on 2026-10-16; M2b promotion
+still requires M1 and its remaining core/prerequisite gates. D156
+subsequently satisfies M1; the other M2b gates remain open.
+
+### D156
+
+**owner** (2026-10-16, the owner): the standing acceptance of passing criteria
+in conversation applies to the completed B466/B608 journey. The owner
+requested the records after the actual fresh apply, controller host restart,
+automatic network and managed-service recovery, guest startup/access checks,
+safe removal, evidence preservation and context purge passed. Accept B466
+and B608 on clean tested build
+`591af9616446596a77a599cd6303970a85131694`, recorded by
+[X98](delivered.md#x98--m1-owner-acceptance) and the existing acceptance
+ledger. No separate hand-back form or further approval is required.
+M1 is done on 2026-10-16 at that tested build, with no open item or planned
+slice. M2's M1 prerequisite is satisfied; M2b's remaining core/prerequisite
+and B80 promotion gates remain open. B476's acceptance under D155 stands.
+This decision neither completes M2 nor authorizes unrelated implementation.
+Runtime facts, exact commands, digests and raw evidence are retained locally.
+
+### D157
+
+**owner** (2026-10-16, the owner): require [B615](delivered.md#b615) before M2b
+completes. Operators may supply any IBM Ceph release, package/tool version,
+container tag/digest and related version parameter, even nonexistent or
+incompatible selections. Bootwright attempts those selections through native
+package, container and Ceph tools and reports their native errors. It does
+not validate version compatibility, register IBM's release table, maintain
+approved-version catalogs or require per-release profiles or approval.
+This supersedes D143's single-release admission and pinned-tag selection
+policy, the corresponding B472 restriction and B500's proposed release
+profiles. Independent authenticity, transport trust, authorization and frozen
+artifact/continuation requirements remain. The owning contract is
+[storage admission](../api/ceph.md). X99 was planned and not started at
+this decision; its later authorized implementation and acceptance are recorded
+in [X99](delivered.md#x99--operator-selected-ceph-artifacts-and-m2b-completion).
+This initial request authorized backlog/specification work, not implementation.
+
+### D158
+
+**owner** (2026-10-17, the owner): redefine M1 as Foundations: substrates,
+infrastructure components and Machines. Group it as M1a API review, M1b
+repository/code structuring, M1c libvirt+sushy, M1d infrastructure components,
+M1e bare metal, and future M1f vSphere and M1g OpenShift Virtualization.
+Move unfinished shared foundation work from M2/M3 into M1: X47, X55, X60,
+X62 and X63 retain their IDs and item states; B78 moves out of X64 into
+M1e's X100; B68 moves from M3 to M1d. Shared lifecycle safety B18/B23
+moves to M1b, machine/network exclusion B265 to M1c, and the generic
+controller/check-tool procedure B509 from M2 to M1c. Move parked B99 to M1f and B87 from
+M5 to M1g, retaining IDs and requiring definition before implementation.
+B100 and other parked work stay unpromoted. M1a/M1b map the previously
+accepted hardening work; this declares no new audit or restructuring done.
+Reopen M1 for its remaining foundation scope as an explicit exception to
+the done-milestone rule. Preserve D156/X98's historical completion, every
+accepted gate and M2b's completion under X99. B/X IDs and dated decisions
+stay fixed; the historical M1a to M1g delivery labels retain their meanings
+and distinct links. This changes planning history, not Git history.
+M2 retains Ceph effects and service/security compatibility, including
+CephX/FIPS and daemon compatibility in B472/B484/B485. M3 retains OpenShift
+cluster delivery and M2 as a prerequisite. Moved B509 still gates full M2;
+moved B18/B23/B265 still gate M3 completion, without reopening accepted
+checkpoints or becoming prerequisites of every implementation slice.
+M5 retains B88's OpenShift
+cluster lifecycle and requires M3 plus B87. M1g consumes an existing
+qualified host cluster and does not require Bootwright to provision it.
+Consumers require the foundation capabilities they use, not all of M1;
+vSphere and OpenShift Virtualization do not gate libvirt/bare-metal delivery.
+Schedule shared foundation work with its first consuming product checkpoint;
+M2c remains next with its required foundation gaps. M1f/M1g are future work
+and do not take scheduling priority merely because they belong to M1.
+All M1 items still gate M1's eventual completion. The WIP limit, promotion
+gates, safety refusals and operator acceptance requirements remain. This
+request authorizes roadmap and ownership changes only, with no new active
+slice or substrate implementation.
+
+### D159
+
+**session-pending** (2026-10-18, the owner's requests; the clauses after the owner's
+words are taken by the session, pending the owner's review): on 2026-10-15
+the owner asked to "start planning and then implement M2c, using best fitting
+model/effort for each subtask", and on 2026-10-18, after D158 and M2b's
+completion, said "resume". The session reads them as authorizing
+[M2c](m2.md#m2c)'s slices X56 to X59 and X61 and, as the foundation gaps M2c
+requires under D158, M1c's slices [X55 and X60](m1.md#planned-slices). It
+replaces the session's earlier activation records on the unmerged branch
+`m2c`, whose decision and item numbers collided with main's and are not used.
+Taken by the session, pending the owner's review: (1) M2b is done, so nothing
+of it is waived; M2's Requires on M1's X55 and X60 is waived for the
+implementation of X56 and X61 only, and X55's Requires on X47's trust
+contracts and X60's and B346's Requires on B448 are waived for implementation
+only; promotion of B74, B326, B75 to B77 and B346 still requires them.
+Promotion of each M2c item still requires the M1 features its profile uses,
+and M2c's exit stays [B484](m2.md#b484)'s owner-accepted matrix on the commit
+closing X61. (2) X55 to X61 are excepted from the two-active-slice WIP limit
+and may run out of sequence. (3) The M2c program's dependency graph fixes the
+landing order of its lanes; the Requires between these slices name the work a
+lane builds on and do not force whole-slice integration order. (4) The work
+lands on the local branch `m2c`, never pushed, rebased onto main `a38a6d183`:
+this docs commit opens it, the code commits of the lanes that had landed
+follow it, and each later reviewed lane is rebased onto the branch tip and
+fast-forwarded by one serialized landing step; slice checkpoints run the full
+gates and an adversarial review of the slice's commits. Merging `m2c` waits
+for the owner. A version-specifics slice on main and this branch integrate in
+landing order: whoever lands second rebases, and no M2c lane adds
+release-conditional behavior outside that slice's architecture. (5) In the
+replay, each replayed commit that moved a frozen version moves it one step
+from its value on the replay tip, commit by commit; after that, each lane
+that changes a frozen type moves that version exactly one step from its value
+on the branch tip, lanes holding the same version are ordered by the graph,
+and no reader of an older version is added.
+A context made by an earlier build, including every build of `m2c` before this
+rebase, is finished or destroyed with that build. (6) X56's "Requires D143"
+means D143's transport and retirement baseline as D157 amends it, and waives
+nothing else. (7) One execution mechanism for services the cluster block does
+not own: the cluster block applies mon, mgr, osd and mds in its one services
+batch with its deadline formula unchanged; RGW and its ingress run in the
+gateway block; NFS, monitoring, the management gateway, NVMe-oF gateways and
+rbd-mirror run in one generic service-unit block type with per-type hooks;
+core observation tolerates a delegated daemon only when its service is listed
+in the request and it runs on that service's hosts; per-host and per-service
+intent records extend the formats M2b delivered. (8) Families tied to one
+cluster are actions of the core Ceph request; SMB, the NVMe-oF subsystem and
+cross-cluster replication are their own implementations; the host request
+carries only host-relevant facts. (9) A settings block is the single writer
+of every `mgr/cephadm/container_image_*` key a declared family needs, each
+from its frozen digest, and of every manager module a declared family derives
+(nfs, smb); cephadm enables the prometheus module itself for a declared
+prometheus service; `spec.ceph.mgrModules` admits none of them; a key holding
+a foreign value refuses without overwrite. Bootwright keeps no auxiliary
+image default; their source is M2c's question OD28. (10) Every cluster child
+block depends on its core cluster block by block ID, not through Requires
+StorageCluster. (11) Post-install network convergence runs on every installed
+anaconda Machine ([B326](m1.md#b326)), which amends the B326 sentence that
+B80's minimal profile uses the delivered install path (D129). A network
+declaration error found by convergence is recovered by `bootwright destroy`
+and a fresh apply; destroy keeps a physical Machine's installed system, so
+its operator also powers it off from its management controller before that
+apply ([B623](m1.md#b623)). (12) [B76](m1.md#b76) never publishes
+registration secrets: its exit evidence reads "secrets reach the guest only
+on a fixed worker's stdin and are never published" instead of "over the
+private path". (13) The defaults listed under M2c's question OD25 are
+implemented as recorded, except B81's erasure-profile and jerasure rows, which
+D157 removes because Bootwright checks no vendor support, and the FIPS service
+list, which OD29 asks about. (14) M2c's questions OD1 to OD31 (OD8 merged into
+OD7) are listed on [its page](m2.md#m2c-open-decisions); until answered, the
+lanes a question gates do not start, every gated lane starts only after the
+decision-free program has landed, and for each non-gating open question the
+option named under Running by default is implemented. (15) No product string
+claims or cites a vendor support status or a release: a refusal of a feature
+Bootwright does not realize names the object, that Bootwright does not realize
+it and the next step, and may name its parked item; a restriction whose only
+basis is a vendor support table is removed (D157). Decision and question IDs
+never appear in operator-visible strings. (16) Under D158, Ceph on FIPS-mode
+hosts belongs to [B484](m2.md#b484) and the Ceph controller-to-host
+crypto-policy defect to [B625](delivered.md#x61--ceph-transport-crypto-policy), both in X61; X60 keeps the OS arms
+B75, B76 and B77 and controller access B346. Each overturned clause reopens
+the work it shaped as a new item.
+
+### D160
+
+**owner** (2026-10-15, the owner; recorded on 2026-10-18 under D159): after
+reading the M2c decisions brief (questions OD1 to OD27, OD8 merged into OD7),
+the owner replied: "I accept recommendations". The owner accepts the
+recommendation of every question OD1 to OD27 of
+[M2c](m2.md#m2c-open-decisions), which answers them as follows; a bracket
+says where a later owner decision changes an answer's premise. OD1 (a): M2c
+lands on the local branch `m2c` [M2b is done (X99), so "main stays B476's
+build" no longer applies; OD31 asks when M1c's X55 and X60 reach main]. OD2
+(a): per-resource online removal and B489's single-client revocation move to
+[B491](m2.md#b491); the family items keep whole-cluster retirement. OD3 (a):
+StorageObjectUser and StorageObjectBucket, with the example records of the
+X56b slice plan, 1.1, approved. OD4 (a): `objectUserRef` user-level RGW NFS
+exports. OD5 (a): the owner supplies the then-pinned image's auxiliary tags
+and refusing pin tables guard until then [superseded by D157: Bootwright
+keeps no pin table or image catalog; OD28 asks how auxiliary images are
+selected]. OD6 (d1) if the image facts show loki and its agent, else (d2)
+[D161 settles (d1); under D157 the selected release's cephadm refuses a
+service type it does not know]. OD7 (a): park SSO, the direct-dashboard
+certificate and local roles, and revisit (b) only if the image facts show
+that the IBM oauth2-proxy template verifies the IdP [reopened and answered by
+D161]. OD9 (a). OD10 (a), a cluster keyring command, with the output shape
+(o1) [the shared output presentation carries (o1): compact identity and
+health, full scope and endpoints]. OD11 (a): StorageExport material moves to
+M4's [B86](m4.md#b86). OD12 (a): one StorageNVMeoFSubsystem kind. OD13 (B):
+host-NQN authorization plus gateway mTLS now, and (C) DH-HMAC-CHAP after the
+live probe. OD14 (B): refuse `linked_to_cluster`. OD15 (A). OD16 (A) and OD17
+(a): IBM's physical image names through `Entitlement.registry` plus two
+package-mirror fields, and the pinned tag resolved on the declared mirror
+[D157's authored image base and `ceph.packageRepository` change both
+premises; OD30 re-asks them]. OD18 (A). OD19 (a). OD20 (c): a pre-stop
+removal phase. OD21 (b): IBM per-guest sums plus 2 GiB [M2b's capacity
+admission also refuses an apply that does not fit the provider host]. OD22
+(a): a bounded item split from B79 and B475 into M2c. OD23 (a): a larger
+single lab host, which the owner provides. OD24 (A). OD25: every session
+default is accepted as recorded [D157 removes B81's erasure-profile and
+jerasure rows, which came from a vendor table; isa stays the default; OD29
+asks whether the FIPS service list stays]. OD26 (a): refuse and park [the
+refusals name no release or decision, D159 clause 15]. OD27 (a) for NFS over
+RDMA and CephFS snapshot mirroring from IBM's public pages, and (b) for iSCSI
+and the RHEL FIPS row [under D157 Bootwright records no vendor status: NFS
+over RDMA, CephFS snapshot mirroring and iSCSI refuse as features Bootwright
+does not realize, and the RHEL FIPS row becomes OD29's service-list question].
+The gated lanes start only after the decision-free program has landed (D159
+clause 14).
+
+### D161
+
+**session-pending** (2026-10-15, a session finding and the owner's answers; recorded on
+2026-10-18 under D159; the clauses after the owner's words are taken by the
+session, pending the owner's review): (1) Session finding, not an owner
+answer: the session read the then-pinned image
+`cp.icr.io/cp/ibm-ceph/ceph-9-rhel9:v9.9.1-25074` (manifest digest
+`sha256:c5b181f15d4ebff833a1c0de84398d2d55ff416d9dd5ed3816a9baa817eb4bde`;
+`ceph-common` and `cephadm` `20.2.1-405.el9cp`) read-only with the network
+disabled and recorded its auxiliary image defaults, known service types and
+oauth2-proxy template as
+[research](../../.agents/knowledge/ibm-ceph-auxiliary-images.md). Under D157
+they describe that release only and are not Bootwright defaults; this
+supersedes the session's earlier reading that the image answered OD5. OD6
+resolves to (d1): `alloy`, `loki` and `promtail` are known service types
+there. `iscsi` is still a known type, which establishes no vendor support.
+The oauth2-proxy template writes `ssl_insecure_skip_verify=true` only when
+the spec field (default false) is true, so D160's condition for revisiting
+OD7 held. (2) The owner's answers, to the session's questions: OD7: "Also
+private-CA IdPs". oauth2-proxy SSO is admitted for an IdP whose certificate
+chains to a CA in the selected image's trust store and, for a private-CA IdP,
+through a Bootwright-bound CA bundle mounted into the oauth2-proxy container
+through the native `custom_configs`; `ssl_insecure_skip_verify=true` always
+refuses. Because the release is the operator's (D157), verification is proved
+from the deployed daemon's rendered configuration, never from one release's
+template. This supersedes D160's OD7 (a) for SSO and adds a gated SSO lane to
+X57; the direct-dashboard certificate and local roles stay parked. OD15: "No
+AD available". Both SMB authentication modes are implemented and
+offline-tested; the active-directory live row stays unrun and is recorded as
+such. OD23: "Bigger host later". The session builds the larger profiles and
+their runbooks, and the owner runs their rows when the host exists. OD27:
+"Leave them open"; D157 later settled them: Bootwright records no vendor
+status, and only the FIPS service list remains a question (OD29).
+
+### D162
+
+**delegated** (2026-10-18, the owner requests this architecture and readiness
+for the listed versions; clauses (b) to (d) are the design's recommendations
+taken under that request, which the owner may revise): adopt version
+specializations as defined in
+[architecture](../architecture.md#implementations-and-version-variation),
+after the owner asked to "design and implement a general architecture and
+code structure" in which code has one general flow, the default for any
+component version, and a small specialized flow for a given version handles a
+known issue or dependency and then returns to the general flow, with the
+specifics in code and in repository knowledge with references, and to be
+ready for the provider-supported versions from OpenShift 4.21, IBM Storage
+Ceph 9.9.0.x, IBM Fusion 2.13 and Fusion Data Foundation 4.21 to current. It
+refines D157 and does not reverse it.
+(a) Each component keeps one general flow. Within one implementation, an
+adapter or driver may deviate from it only through a registered
+specialization: a record with an id, a declared seam of that flow, a declared
+variant, and a condition over facts that pure detectors derive from the bytes
+of the operation's frozen, authenticated artifacts. Only when no artifact
+feature exposes the difference may the condition use a proved coordinate,
+ordered by the component's own comparator. An unknown fact or an unparseable
+version selects the general flow and is never by itself a refusal. A
+specialization adapts how a step reaches its declared outcome, and the flow
+then returns to the general flow. It never approves, screens, refuses,
+selects or substitutes a version or an artifact. It never changes a block's
+intent, ordering or authorization. It never weakens trust, host-key
+verification, publisher signatures, redaction, an ownership proof or a trust
+refusal. Each specialization has a row with evidence in the
+[version-specialization catalog](../../.agents/knowledge/version-specializations.md),
+and a test keeps each registry and the catalog equal. This shape applies to
+every registry, whatever its language, including later add-on drivers.
+Specializations are not per-release profiles or a release catalog. They key
+on observed capability, exist only where the general flow is known to fail,
+and gate no selection.
+(b) `spec.distribution.ibm.callHome: disabled` is admitted by planning, and the selected
+build decides how it is realized, as [storage API](../api/ceph.md) states.
+Every refusal of a Call Home intent comes before the cluster is claimed but
+after host preparation, so correcting it is an input change that needs the
+operation's destroy and a fresh apply; planning no longer refuses it first.
+(c) D157's non-screening extends to OpenShift release minors. The agent
+installer's accepted control-plane counts are a general rule for every
+minor, with per-minor specializations only where an installer differs. A
+minor with no specialization takes the general rule, and the installer
+judges the release. This narrows the per-minor refusal of
+[container clusters](../api/openshift-clusters.md#topology).
+(d) Provider OS and version pairings, such as IBM Storage Ceph 9.9.0.x on
+RHEL 9.7, and Fusion, Data Foundation and OpenShift compatibility are
+recorded as dependency rows of the catalog; Bootwright does not gate on them
+(D157), and native tools judge installability.
+This request authorizes the specification and the version-specialization
+slice, with its 9.9.0.x first wave. It authorizes no M3 node-role work, no M4
+add-on work and no evidence-format move. The evidence member rides the next
+coordinated Ceph contract move.
+D163 supersedes clause (d).
+
+### D163
+
+**owner** (2026-10-19, the owner): Bootwright registers and enforces no
+component version rule: no pairing or compatibility rule between component
+versions, such as an IBM Storage Ceph release requiring a RHEL release, and
+no Fusion, Data Foundation, OpenShift or Ceph compatibility rule. Neither
+code nor repository knowledge records such rules; choosing versions is the
+operator's responsibility. This extends D157 to every component and
+supersedes D162 clause (d). Version specializations stay: they adapt native
+mechanics to capabilities of the selected artifacts and never approve,
+refuse or recommend a version. The owner also authorizes the defect work for
+the confirmed general findings of the 2026-10-18 audit of main
+fcff2f58f..ce190446a, planned as X102.
+
+### D164
+
+**owner** (2026-10-18, the owner; recorded on 2026-10-19): the owner answered
+the four questions OD28 to OD31 that D157 and the rebase onto main created for
+[M2c](m2.md#m2c-open-decisions), choosing the recommended option each time.
+Their selections: OD28 "Authored per family (Recommended)"; OD29 "Drop the
+list (Recommended)"; OD30 "Trust + closure (Recommended)"; OD31 "M1c at
+checkpoints (Recommended)". They settle the following. (1) OD28 (a): a
+StorageCluster field `ceph.images.<name>` with `base` and `version`, like
+`ceph.image`, keyed by cephadm's `container_image_<name>` names, required
+only when a declared family needs that image. Each is resolved and frozen by
+digest, and the settings block writes the frozen digests. Bootwright keeps no
+default and no table; examples author the values and the owner confirms them
+for the authored release, because the research on one release's images is not
+a source for another. This replaces OD5 (a) of D160 and the OD5 part of D161
+(the image facts stay research). The pull broker's scope grows from one frozen
+repository@digest to the frozen set (lane X56b-E1), and the lanes implement this answer in place of the
+running default (a family that needs an auxiliary image refuses at plan),
+which no lane has built.
+(2) OD29 (b): every declared service is admitted on FIPS-mode hosts. A service
+that cannot run under the OS's FIPS policy fails natively and the operator
+sees its cause through nativeError, then recovers by destroy and apply.
+Bootwright keeps the host FIPS proof and the Ed25519 and AES256K key
+refusals, which are mechanism refusals. This replaces OD25's service list and
+OD27's RHEL FIPS row; x61-ceph-fips and od29-fips-service-list implement
+no service allow-list (none was built), and [B484](m2.md#b484)'s FIPS rows record the
+tested services as evidence, never as an allowlist. (3) OD30 (a): D157's
+naming stays, so the authored registry, image base and `ceph.packageRepository`
+are the disconnected naming, and no physical-name rule or second pair of
+package-mirror fields is added; OD16 (A) and OD17 (a) of D160 are superseded.
+[B493](m2.md#b493) adds the registry trust-bundle consumer
+([B619](delivered.md#x59--registry-trust-bundle-consumer)), a CA-bundle binding for the package repository (one new
+field), auxiliary-image closure and an egress-denied proof with a disconnected
+example. The lanes x59-d1 to x59-d4 are re-planned to that scope before their
+briefs; x59-d5 and X61-L7 keep their purpose. (4) OD31 (b) changes the
+integration cadence of D160's OD1 and D159: when int-x55 or int-x60 passes
+(int-x55 re-runs on the replayed tip), the session offers that M1c slice's
+commits to main for the owner to merge, then rebases `m2c` onto main. M1c's
+X55 and X60 are therefore offered to main at their checkpoints; M2c's Ceph
+slices stay on `m2c` until the owner merges them. OD1's branch answer stands,
+and the owner still decides each merge: nothing merges or is pushed without
+that decision. The four answers gate no lane any longer; the gated lanes
+still start only after the decision-free program has landed (D159 clause 14).
+The brackets in D159, D160 and D161 that name these questions are history.
+
+### D165
+
+**owner** (2026-10-19, the owner): the owner answered the seven questions that
+X102 and X103 left open (B650 to B656). (1) B650: the libvirt-3-nodes-ceph
+example authors the build tag `v9.9.2-26729`, which the owner confirmed
+exists in the entitlement, instead of the alias `v9.9.2`. (2) B651:
+`machine info --name` and `secret info --name` refuse an explicitly named
+unknown resource with `access.target`, like `cluster info`, instead of
+selecting no rows; an omitted `--name` still lists all, and a separator-only
+list is a usage error. (3) B652: public acceptance evidence in the
+[acceptance ledger](../../docs/acceptance.md) is a summary row (date, build
+commit, command sequence, outcome) plus the operation-log digest of the
+private evidence archive, and an agent may record an acceptance the owner
+states explicitly. (4) B653: the owner confirms authorizing B615's
+implementation on 2026-10-16 and accepting B615 and M2b on 2026-10-17; M2b
+stays done, and the fixes after its acceptance (named in X102) are
+post-completion corrections. (5) B654: slices X47 and X52 to X54 return to
+`not started`, carrying their full-M2 remainder; D134's M2b-only WIP
+exception is not extended. (6) B655: the owner authorized commit 2dc470bff,
+the shared CLI output presentation, including the
+`github.com/charmbracelet/x/ansi` dependency; it is recorded as delivered
+under M1 (M1b) in [X104](delivered.md#x104--owner-answers-of-2026-10-19).
+(7) B656: the controller's `controller.untested-release` warning (the runtime
+lock's `tested` list, warning only) is an explicit exception to D163, because
+it concerns Bootwright's own host and never refuses; the
+[controller spec](../controller.md#supported-hosts) records it.
+*Correction (2026-10-20):* the tag in clause (1) does not exist in the
+registry; `v9.9.2-26947` replaces it under [D171](#d171).
+
+### D166
+
+**owner** (2026-10-19, the owner): the owner answered the session's question
+about the two audit defects that X102 parked and that held eight M2c lanes,
+choosing "Fix both in M2c (Recommended)". (1) [B660](#b660): the Ceph route
+probe always generates ssh-ed25519 synthetic keys, so a FIPS-mode Ceph host
+cannot pass host preparation and its refusal reads as a route failure; M2c
+lane x61-ceph-fips fixes it with ECDSA synthetic probe keys on FIPS hosts.
+(2) [B664](#b664): the IBM package publisher key is always fetched from the
+public IBM site even when `ceph.packageRepository` names a mirror; M2c lane
+x59-d4-host-pull-route fixes it, and the key comes from the declared mirror
+under its trust bundle. The answer releases the program's two holds: the
+lanes x61-ceph-fips, od29-fips-service-list, x61-host-variants-example, X61-L6
+and int-x61-held, and the lanes x59-d4-host-pull-route, x59-d5-disconnected-profile
+and int-x59-held. It changes no product spec and no delivery state; the
+items stay parked and name their lanes.
+
+### D167
+
+**owner** (2026-10-19, the owner): the owner answered the session's question
+about how destroy tells an installation that never registered from one whose
+registration it cannot read, choosing "Install evidence (Recommended)". The
+X60 checkpoint found that `spec.subscription` stays refused after destroy's
+pre-stop unregistration was built, because no rule decided that difference
+([B76](m1.md#b76)). The rule: at destroy, the installation block's own apply
+evidence decides. Registration runs only after the install marker is proved,
+so an installation whose marker was never proved never registered, and the
+pre-stop removal skips unregistration for it. A proved marker with an
+unreadable registration refuses before any effect, naming the Machine, the
+reason and a manual next step. M1c lane x60-subscription-lift (slice X60,
+item B76) implements the rule and lifts the `spec.subscription` refusal. The
+answer changes no product spec by itself and no delivery state: B76 stays in
+progress until that lane lands, and the lane updates the owning spec.
+
+### D168
+
+**owner** (2026-10-20, the owner): the owner instructed that "finished lanes
+that are complete and would make main functional with the feature it
+implemented can be merged to main as soon as they are done". This supersedes
+the owner-merge step of [D164](#d164) (OD31 (b)), D160's OD1 and D159
+clause (4), "merging waits for the owner" / "Merging `m2c` waits for the
+owner": the session merges a checkpoint-passed,
+feature-complete slice to local main as soon as it is done, without asking,
+and pushing still waits for the owner. A lane that is a dependency of such a
+slice and is itself complete goes with it and is reported (X61's first lane,
+the matrix catalog and refusal table, went with X56); a lane of a slice whose
+checkpoint has not passed, or whose gated lanes are open, stays on the local
+branch `m2c`. The instruction changes no product spec. It records X56 and X57
+in-tree: [B81](m2.md#b81) and [B492](m2.md#b492) await operator acceptance,
+and [B477](m2.md#b477), [B478](m2.md#b478), [B479](m2.md#b479) and
+[B489](m2.md#b489) stay in progress for their gated lanes. It also records
+[B686](m2.md#b686) and [B687](m1.md#b687), found at the int-x57 and
+int-x55-r checkpoints.
+The same rule merged X58's in-tree work and the lane od28-aux-image-source
+(D164's OD28 (a)) after the int-x58 checkpoint: [B482](m2.md#b482) awaits
+operator acceptance, with the active-directory live row unrun (D161, OD15);
+[B481](delivered.md#x58--iscsi-refusal) stays in progress for the vendor support statement the
+owner left open (D161, OD27); and [B477](m2.md#b477), [B478](m2.md#b478) and
+[B479](m2.md#b479) plan their families once the images are authored.
+It then merged X59's in-tree lanes after the int-x59 checkpoint, with the
+docs commit of D166 that assigns [B664](#b664) to the lane
+x59-d4-host-pull-route: [B619](delivered.md#x59--registry-trust-bundle-consumer)
+is delivered; [B483](m2.md#b483) stays in progress for the replication lanes
+(D160, OD18 (A) and OD19 (a)) and [B493](m2.md#b493) for the host pull route
+and the disconnected profile.
+It then merged X61's lane x61-ceph-transport-policy after the int-x61
+checkpoint: [B625](delivered.md#x61--ceph-transport-crypto-policy) is
+delivered; [B484](m2.md#b484) stays in progress for the acceptance matrix
+lanes X61-L2 to X61-L9 and the lanes D166 released, x61-ceph-fips,
+x61-host-variants-example and X61-L6 (none implemented).
+Finally, by the owner's order of 2026-10-20 to merge everything already
+implemented and ready, it merged the remaining checkpoint-passed lanes of
+X57 and the definition of X61's cluster execution budget (the int-ready-v4a
+checkpoint) together with D169 to D171: [B686](m2.md#b686) (crash collection
+as a derived Ceph service unit) awaits operator acceptance;
+[B627](delivered.md#x57--applied-specializations-in-ceph-evidence) is
+delivered; [B479](m2.md#b479) (log collection) and [B489](m2.md#b489) (a
+StorageClient scoped to a CephFS filesystem or subvolume, the `cluster
+keyring` export, and managed StorageExport material named as
+[B86](m4.md#b86)'s) stay in progress; and [B688](m2.md#b688), split from B79
+and B475, is Specified by the owner's acceptance (D170) with no code. It
+records [B689](m2.md#b689) (Ceph file logging for a declared log agent) and
+B690 (the Go toolchain's move to go1.26.10, which clears
+GO-2026-6809 in `make vulncheck`, delivered by [X156](delivered.md#x156--go-toolchain-vulnerability-gate-go12610)). Under that order M2c is paused: X57's SSO,
+all X56b and X58 lanes, X59's host pull route, disconnected profile,
+replication and multisite lanes, B620's field removal and X61's other lanes
+are not implemented, and no M2c item has operator evidence.
+
+### D169
+
+**owner** (2026-10-20, the owner): the owner answered the session's three
+questions for M2c's follow-up program, choosing the recommended option each
+time. (1) [B620](delivered.md#b620) (`ceph.ibm.packages.source: subscription` and
+`ceph.osSubscriptionRef` are admitted but never read): "Remove the fields
+(Recommended)". Both fields leave the API (pre-1.x, no compatibility) and may
+be re-added when a subscription package source is implemented; an M2c lane
+removes them with admission, spec and example updates. (2) [B627](delivered.md#x57--applied-specializations-in-ceph-evidence)
+(the core and host evidence `specializations` member and its `cluster info`
+line): "Carry it in M2c (Recommended)". The next M2c lane that moves the Ceph
+core contract adds the member and the line with B627's exit evidence, so no
+version moves for B627 alone. (3) [B664](#b664)'s fix in lane
+x59-d4-host-pull-route: "Add the field (Recommended)". A new required field
+`ceph.packageRepositoryKey` whenever `ceph.packageRepository` is authored,
+using the repository's scheme, host and port and its trust bundle, with the
+key's fingerprint matching the code pin, as B664's recorded outcome requires.
+The answers change no product spec by themselves and no delivery state:
+B620, B627 and B664 stay in their current state until their lanes land, and
+each lane updates the owning spec.
+
+### D170
+
+**owner** (2026-10-20, the owner): the owner accepted the definition of
+[B688](m2.md#b688) (Ceph clusters of three to six hosts: the deadline formula,
+concurrent per-host rounds and batched enrollment) that commits 16116f4b1 and
+6d140d248 landed on `m2c`, and answered the session's question about its OSD
+variants with "Accept, variants in B688 (Recommended)". DB/WAL, encrypted and
+TPM2 OSDs on explicit devices stay in B688 with one added lane after the
+enrollment lane, m2c-osd-variants, which moves the core request version one step
+from its value at that lane's base; the alternative of leaving them with
+[B475](m2.md#b475) (X53) is not taken. B688 becomes Specified with the lanes
+m2c-cluster-budget-plan, m2c-cluster-budget-enrollment and m2c-osd-variants,
+and the amendment of D159 clause (7) in it is accepted: the services and
+enrollment calls count toward the cluster deadline. B659's continuation after
+a partial enrollment and clusters above six hosts stay out of B688. The
+decision changes no product spec by itself and no delivery state: B688 stays
+not started until its first lane lands, and each lane updates the owning spec.
+
+**Definition record moved from B688 (2026-10-27, F15-09).** The original findings, design point, alternatives, lanes and in-tree corrections follow, as B688 recorded them.
+
+**Original findings.** The former formula (7n+6 calls, internal/storage/ceph/materials.go)
+under-counts its own sequence: the per-host tunnel preflight, OSD preparation
+and per-service calls were added without the formula growing. At the three-node
+example the run can make 35 calls of 660 s against 27 counted, so the deadline
+is 5280 s short of the per-call bounds, and the 2026-10-13 note in B79 ("covers
+two hosts or more") does not hold. No serial formula at 660 s per call fits four
+or more hosts under the six-hour ceiling, so the per-host loops of the cluster
+apply change; its `partial-cluster` refusals do not.
+
+**Original design point changed from the recommendation.** The plan recommended one
+enrollment call whose host documents go to cephadm in one apply, for a formula
+independent of the host count. Enrollment's fixed proofs include a manager wait
+bounded by a 480 s horizon inside its 640 s worker budget, which leaves 160 s:
+less than six 60 s host documents plus a 60 s readback (420 s), and the time
+cephadm takes per host document is not measured offline. Enrollment therefore
+takes the bounded-batch branch, which adds up to n calls: at six hosts the
+largest S is six (21 + S ≤ 27 calls), and P1's four services
+fit. The closing correction below replaces that per-service call count with
+one batch. The OSD services call keeps a host-independent command count (one readback,
+one apply, one readback), because it already leaves daemon creation to the
+readiness wait.
+
+**Part 2, B475's OSD variants.** `db_devices` and `wal_devices` with explicit
+paths, `encrypted` and `tpm2` now have frozen request members, host device
+proofs for DB and WAL devices, and native OSD submission.
+`internal/storage/ceph/osd_variants_test.go` and the native device tests cover
+the in-tree path; their live P1 results remain unrun. Admission already validates the native spellings,
+DB/WAL overlap with data and TPM2's need for encryption and a TPM profile. The
+`tpm2` field is cephadm's own spelling: Ceph's drive group specification lists
+it among its supported features
+([drive_group.py](https://github.com/ceph/ceph/blob/tentacle/src/python-common/ceph/deployment/drive_group.py),
+with the
+[OSD service specification](https://docs.ceph.com/en/tentacle/cephadm/services/osd/#advanced-osd-service-specifications)).
+P1's HDD-data/SSD-DB lane also requires the bounded libvirt HDD prerequisite:
+`dataDisks[].media: hdd` realizes a known rotational SCSI presentation, and
+frozen media identity is checked by original Machine custody and live host
+proofs. Explicit SSD and omitted-media behavior remain stable. This prerequisite
+belongs to B688 and makes no physical qualification claim.
+Dynamic selectors (`all` and the filters), `osds_per_device` other than 1 and
+slot or size options stay refused. Two OSD services on one host with distinct
+explicit data paths need no additional variant code: admission accepts them
+and each retains its own specification and attempt in the services batch.
+Recommended (i), accepted by the owner on 2026-10-20 (D170): the variants stay
+in this item with one added lane, m2c-osd-variants, after the enrollment lane, which moves the core request version
+one step from its value at that lane's base (and the host request's if it gains
+DB/WAL identities). That lane refuses, before any effect, every partial state on
+a DB or WAL device instead of recovering it, because owned partial LVM recovery
+is parked [B662](m2.md#b662); dm-crypt keys stay in the cluster's own store
+and Bootwright never reads or publishes them. Alternative (ii): the variants stay
+with B475 (X53), and P1's DB/WAL, encryption and TPM2 cells stay unrun, so
+B484's exit waits on X53.
+
+**Alternatives considered.** Concurrent rounds were chosen. Per-phase call
+ceilings below 660 s were rejected: no measured per-phase worst case exists
+offline, so a slow healthy host would fail `native-timeout`. Per-host enrollment
+blocks were rejected: a new block type and durable plan shape close to B659's
+protocol, more than the planned lanes. Raising `lifecycle.MaxDeadline` is
+excluded: every adapter shares it.
+
+**Lanes** (program names, never product strings): m2c-cluster-budget-plan, in
+Go: the host bound and its refusal row, the formula and the deadline refusal
+naming the cluster; it adds no request member and moves no version, and it
+updates the three-node deadline pin (21540 s to 17580 s) and the premise of the
+MDS deadline test, since services now move the deadline.
+m2c-cluster-budget-enrollment, in collection Python: the rounds, the OSD
+multi-document apply and enrollment's bounded batches. Its file list changes
+from the cluster apply read-only to the per-host call loops of
+apply_tunnel_cluster and execute's prerequisites loop in ceph_core.py, with the
+five `partial-cluster` refusal lines and the stage checks unchanged, plus the
+enroll and services phases of ceph_native.py. Part 2 adds the lane m2c-osd-variants
+after it (D170). The generator re-plans the enrollment lane's files and adds that lane.
+
+**Original amendment to D159 clause (7)**, accepted with this definition (D170): the services calls
+and enrollment calls are counted, so the cluster deadline grows with the
+request's mon, mgr, osd and mds services and with its hosts.
+
+**Implementation correction:** license verification reads a variable number of
+provider records and license acceptance may retry under the manager horizon.
+It cannot fit a proved fixed tail of the final enrollment batch. A dedicated
+license call preserves its native budgets and adds 660 s to the initial
+14+n+S formula, giving 15+n+S and the limits above. Every host completion is
+re-proved before this call may accept a license.
+
+**Delivered in-tree:** the plan and enrollment lanes enforce the six-host bound
+and request-derived deadline, join each host round before the next phase,
+batch enrollment within the remaining native worker budget and submit each OSD
+service's children together. Host-order refusals, enrollment interruption and
+replay, no-progress budget refusal and service call counts have offline tests.
+The five partial-cluster fences and native per-call budgets remain in place.
+The explicit-device OSD variant path is implemented too; this is not live
+timing, device or unlock evidence.
+
+**Closing implementation correction (2026-10-23):** physical P1 needs twelve
+host-specific OSD specifications, and physical P2 needs six; their unique WWN
+selectors cannot share the virtual profiles' cross-host drive groups. Calling
+the services worker once per specification exceeded the six-hour block budget.
+The worker's existing bounded batch validates each specification and original
+attempt, submits pending documents together and proves readback. The cluster
+adapter now invokes that batch once, and its deadline counts that one call.
+This changes neither the frozen request nor its version; the embedded
+automation changes. Six-host and native command-count regressions cover the
+expanded physical shape, interruption and replay. Operator timing and every
+physical acceptance row remain unrun.
+
+The linked P1 [six-host pools fixture](../../examples/ceph-clusters/libvirt-6-nodes-ceph-pools/README.md)
+plans five MONs, two MGRs and twelve OSDs, including HDD data with SSD DB,
+encryption and a TPM2 variant. Its declared budget, production capability plan
+and runbook structure are tested. The runbook records the fail-closed partial
+DB/WAL boundary and leaves all operator timing, I/O, media, unlock and failure
+acceptance unrun.
+
+### D171
+
+**owner** (2026-10-20, the owner): the owner confirmed from the entitlement
+registry the coordinates of the Ceph image the examples author, and the
+auxiliary images of that build. (1) The tag `v9.9.2-26729` that
+[D165](#d165) recorded does not exist: a pull gives "manifest unknown".
+The build tag that exists is `v9.9.2-26947`, `cp.icr.io/cp/ibm-ceph/ceph-9-rhel10`
+with ceph-common and cephadm 20.2.2-349.el10cp, manifest
+`sha256:6cb6f09bae7b1da7e7d1e9a594dec7d90b76829af94683f11ac5cc37b402f5ca`;
+the floating alias `v9.9.2` also exists. The examples now author
+`v9.9.2-26947` in place of both the nonexistent build tag and the alias.
+(2) The auxiliary images of `v9.9.2-26947`: applying OD28 (a) of
+[D164](#d164) (1), the owner chose "I'll pin digests". Each example that
+declares one of these families authors the image as `ceph.images.<name>`, with
+`base` set to the listed repository and `version` set to the digest. The
+defaults were read from the image with `ceph.cephadm.images.DefaultImages` and
+the digests resolved by the owner with `skopeo inspect`:
+
+| cephadm name | base | version (digest) |
+| --- | --- | --- |
+| haproxy | cp.icr.io/cp/ibm-ceph/haproxy-rhel10 | sha256:59d020dd7a02ad25248ae3766914f5bc5a241de77c2257fcad7124c13eea82f1 |
+| keepalived | cp.icr.io/cp/ibm-ceph/keepalived-rhel10 | sha256:4ade24fea1bf11cc0c2e88af631597f21bc586562da3001ea15b8d10e0860694 |
+| prometheus | cp.icr.io/cp/ibm-ceph/prometheus | sha256:f4d613a79bebcb4deeb0b5f9b1f231ba8046572978207abe242bc7c9cf589789 |
+| alertmanager | cp.icr.io/cp/ibm-ceph/prometheus-alertmanager | sha256:7331dd1e3aabe689ae45470e560472dc39aeeea611c3c479e266bae9140243ed |
+| node_exporter | cp.icr.io/cp/ibm-ceph/prometheus-node-exporter | sha256:4d4e3433d212042b07534c042d512bf1f8c65a43823b20e6f1b05da5cd88f0ba |
+| grafana | cp.icr.io/cp/ibm-ceph/grafana-rhel10 | sha256:12006a7f211b2bf24893e39f7e5ea208b8d641d1dd9c9b562a0c502663484141 |
+| loki | cp.icr.io/cp/ibm-ceph/logging-loki-rhel8 | sha256:e7e4c7c372a02aa2fbab9a0f3af48475f0df860164551e8562565983576dc61c |
+| alloy | cp.icr.io/cp/ibm-ceph/alloy-rhel10 | sha256:4f645e6ee02545ceb29cd01fb42e2d9de03e1e48e509281898a325cc72d14b85 |
+| nvmeof | cp.icr.io/cp/ibm-ceph/nvmeof-rhel10 | sha256:4727ed1dd465b8d0064d8da6064b32f39068fca558fea9a78c3d65f41923b226 |
+| snmp_gateway | cp.icr.io/cp/ibm-ceph/snmp-notifier-rhel10 | sha256:ecf89943abe681278df906508ef1ff011661654170488be27e2ab3eeaaa339ba |
+| samba | cp.icr.io/cp/ibm-ceph/samba-server-rhel10 | sha256:3b8f9164c478d267427e51e0b387c9e32ae3566e3a2078471e16d44ac6807cf1 |
+| samba_metrics | cp.icr.io/cp/ibm-ceph/samba-metrics-rhel10 | sha256:090f5d43981a51923b593da36b9010d43d67264691a625ff2b92005676574f29 |
+| nginx | cp.icr.io/cp/ibm-ceph/nginx-126-rhel10 | sha256:c7ba454e04aab177e3d2e283e679412dc90477d77848715ebabd3db9af4b45af |
+| oauth2_proxy | cp.icr.io/cp/ibm-ceph/oauth2-proxy-rhel10 | sha256:bdeafeb29fdd9d46a29b148a99d9df200aa7cd1867037911ffcfc1b270f9a2a9 |
+
+promtail is not used: its default lives on registry.redhat.io, outside the
+entitlement registry, so the examples use alloy. The decision changes no
+product spec and no delivery state; a lane that authors an auxiliary image in
+an example uses this table.
+
+### D172
+
+**session-pending** (2026-10-20, the owner's requests; the clauses after the owner's
+words are taken by the session, pending the owner's review): the owner asked
+"let's start planning m3 / think of basic requisite and structure the
+high-level design / we will divide m3 in submilestones: / m3a: requisite
+details and spec update, so implementation will be straigthforward / m3b:
+support to provision a sno over libvirt+sushy / m3c: support to provision a
+3-node ocp over libvirt+sushy / m3d: support to any size ocp cluster over
+libvirt+sushy and real bmc+bare metal, with advanced networking as NAD and
+CUDN/UDN for providing external network for internal containers/vms, and
+usage of metallb (to be installed and configured as add-on, after initial
+implementation of M4 / m3e: support to any size ocp cluster over openshift
+virtualization / m3f: support to any size ocp cluster over openshift
+virtualization / detail the high-level spec and implement m3a, so i could use
+other AIs to implement the following m3 submilestones", then "create a new
+branch call m3 to save the work from this session, and later we will
+incorporate to main", then "reference branch already implemented those
+features in the past and have a lot of lession / i don't want you to blindly
+copy things from there, but you could be inspired and take some notes of the
+problems that have been overcome", and then "optimize token consumption by
+dividing tasks and using best fitting model/effort for any of them". The
+[M3 page](m3.md#submilestones) owns the submilestones' mapping and gates and
+the [coverage page](../openshift-coverage.md) the provider matrix.
+This expressly permits the suffixed submilestone IDs M3a to M3f while
+retaining M3's single status and all B/X/D identifiers, as D131 did for M2.
+Taken by the session, pending the owner's review: (1) m3f repeats m3e's
+words; the session reads M3f as OpenShift over VMware vSphere, which mirrors
+M1f and is the one product-scope substrate no other submilestone covers
+([Q1](m3.md#m3a-open-decisions)). (2) M3a is definition only, delivered as
+enabling slice X110 whose one item, [B473](m3.md#b473), is redefined as M3's
+coverage and contract definition and completes when the owner accepts the
+baseline, as D134 accepted M2a; it grants no implementation authority. B473's
+"exact supported releases" gives way to recorded evidence under D157, D162
+and D163. (3) [B88](m3.md#b88) moves from M5 to M3e; M5 is retired, its page a
+stub holding no item, its Status row kept `not started`, and its number never
+reused. M4 requires M2 and M3c instead of M3, so M3d consumes M4's B83 and B84
+after their first delivery, and B83 requires [B64](delivered.md#b64). (4) B62, B63,
+B65 and the parked B397 retire into named items; the parked B411, B462, B622
+and B680 move into M3b; B64, B66, B67, B69, B71, B195, B250, B251, B259, B260
+and B314 are redefined, B71 requiring only B61; B87 and B99 gain the
+cluster-facing requirements of M3e and M3f. B688 to B699 and X105 to X109 are
+left unused so this session cannot collide with M2c's concurrent allocations;
+the numbers carry no meaning, and integration re-checks main for B688 or
+later and X105 or later and renumbers the unlanded items on a collision. The
+integration on 2026-10-20 found M2c had taken B688 to B690 and no collision.
+New
+items B700 to B748: shared
+foundation items B700 to B704 sit on M1's page under M1c and M1g, scheduled
+with their first M3 consumer (D158); B727 and B735 sit on M4's page; B736 to
+B748 are parked. (5) The words "so i could use other AIs to implement the
+following m3 submilestones" are read as waiving M2 for the implementation of
+M3b to M3d's slices (X111 to X127) only, excepting those slices from the
+two-active-slice WIP limit beside M2c's (D159 clause 2), and letting M3c's
+and M3d's in-tree slices start on the preceding submilestone's in-tree
+slices; promotion, every operator gate and M3 completion keep their Requires
+([Q2](m3.md#m3a-open-decisions)). The waiver takes effect only for a slice
+the owner authorizes. (6) Native facts are evidence, never rules: the agent
+installer's 48-hour authentication token belongs to the day-2
+`oc adm node-image` flow and an install image's tokens do not expire, so no
+image-age rule is added ([Q6](m3.md#m3a-open-decisions)); the agent installer
+in the 4.20 to 4.22 branches does not forward
+`platform.baremetal.loadBalancer` (its development branch does), so today's
+user-managed rendering is a pre-existing defect recorded as
+[B707](delivered.md#b707), and modelling an external load balancer only as `none` is
+Bootwright's choice. (7) The
+reference branch is read for lessons only: a native fact it observed enters
+knowledge marked "observed by the v1 implementation (main-v1); re-verify on
+this tree" unless research confirmed it, and none of its architecture becomes
+a requirement. (8) The token instruction governs how the session divides and
+routes its work; it changes no product spec. (9) The definition lands as one
+squashed docs commit on the local branch `m3`, created from main `9d2d8cf5c`
+and never pushed; incorporating `m3` into main waits for the owner, and D168's
+merge on checkpoint applies to M3's slices only once `m3` is on main. (10)
+Each slice that changes a frozen request moves its version exactly one step
+from its value on the branch tip, the second of two slices holding one
+version rebases it, no reader of an older version is added, and a context an
+earlier build applied is destroyed with that build first. No implementation
+slice is activated and no host operation is authorized.
+
+### D173
+
+**session-pending** (2026-10-20, the owner's request; the clauses after the owner's
+words are taken by the session, pending the owner's review): the owner asked
+"let's start planning m4 - addons / think of basic requisites and structure
+the high-level design / we will divide m4 in submilestones: / m4a: requisite
+details and spec update, so implementation will be straigthforward / m4b:
+code skelleton to handle add-ons fully / m4c: network addons / m4d: ibm data
+foundation add-ons / m4e: acm/gitops addon / m4f: Gitlab addon / detail the
+high-level spec and implement m4a, so i could use other AIs to implement the
+following m4 submilestones / create a new branch call m4 to save the work
+from this session, and later we will incorporate to main / reference branch
+already implemented some of those features in the past and have a lot of
+learned lessions / i don't want you to blindly copy things from there, but
+you could be inspired and take some notes of the problems that have been
+overcome / optimize token usage but dividing work in tasks that will be
+performed by the best fitting model/effort". The
+[M4 page](m4.md#submilestones) owns the submilestones' mapping and gates,
+the [add-on lifecycle](../add-ons.md) the shared contract, and the
+[coverage page](../add-on-coverage.md) the package matrix. This expressly
+permits the suffixed submilestone IDs M4a to M4f while retaining M4's single
+status and all B/X/D identifiers, as D131 did for M2 and D172 for M3; M4's
+title becomes "Cluster add-ons". Taken by the session, pending the owner's
+review: (1) M4a is definition only, delivered as enabling slice X135 whose
+one item, [B749](delivered.md#b749), is M4's coverage and contract definition and
+completes when the owner accepts the baseline, as D134 accepted M2a; it
+grants no implementation authority. (2) "code skelleton to handle add-ons
+fully" is read as the one built-in lifecycle every M4c to M4f package uses:
+packages compiled into the executable and selected under a binding's
+`spec.packages` with typed configuration ([Q26](m4.md#m4a-open-decisions)),
+one cluster object program and adapter over `oc`, create-only with
+operation-specific ownership ([Q27](m4.md#m4a-open-decisions)), Manual OLM
+approval of a declared `startingCSV` ([Q28](m4.md#m4a-open-decisions)), one
+instance block per package and cluster retired with its cluster
+([Q32](m4.md#m4a-open-decisions)), owned cluster Secrets and the package
+listing; a built-in package is therefore reviewed Go code rather than
+declarative data, and the [project's extension model](../project.md#implementation-and-extension-model)
+and the [custom-code rule](../security.md#custom-code) are amended to say so,
+authored packages staying declarative data refused until B90
+([Q26](m4.md#m4a-open-decisions)); the program carries from its first delivery every approval policy
+and Secret placement source M4c to M4f use, so those submilestones move no
+existing contract version (M4d's B86 adds the new `ceph-export` identities).
+The Kubernetes NMState Operator, [B735](m4.md#b735),
+moves from M4c into M4b as its reference package
+([Q29](m4.md#m4a-open-decisions)). Authored (custom) packages stay
+[B90](m4.md#b90), scheduled after M4f ([Q31](m4.md#m4a-open-decisions));
+online removal, add-on preflight, OLM v1, the global pull-secret merge and a
+least-privilege cluster identity are parked. (3) M6 folds into M4 because
+the owner placed ACM and GitOps in M4e and GitLab in M4f: [B91](m4.md#b91)
+and [B92](m4.md#b92), "acm/gitops" read as Red Hat Advanced Cluster
+Management and Red Hat OpenShift GitOps, move to M4e, [B93](m4.md#b93) to
+M4f and B90 to M4, each with a dated alias; B89 retires, folded into
+[B752](delivered.md#b752) and [B754](delivered.md#b754), with `add-ons add` and
+`add-ons delete` removed ([Q30](m4.md#m4a-open-decisions)); M6 is retired as
+M5 was, its page a stub holding no item, its Status row kept
+`not started`, and its number never reused; M7 requires M4 instead of M6.
+(4) "network addons" is read as MetalLB with its layer 2 pools
+([Q36](m4.md#m4a-open-decisions)); X134 keeps its ID as M4c's
+network-package slice, which B83 and B735 leave for X138, and M3d's
+cluster-network block narrows its dependency on B83 to the program and
+adapter it consumes ([B750](delivered.md#b750), [B751](delivered.md#b751)). (5) "ibm data
+foundation add-ons" is read as one package, `fdf`, installing the operator
+package `odf-operator` from IBM's catalog or, expected but unverified until
+[B761](m4.md#b761), the same package from Red Hat's, as the binding names
+([Q38](m4.md#m4a-open-decisions)), attached in external mode to the Ceph
+cluster M2 manages; the Ceph side stays Storage's
+([B86](m4.md#b86), [B762](delivered.md#b762), [B763](delivered.md#b763)), and the IBM
+entitlement travels in the cluster's install pull secret
+([Q33](m4.md#m4a-open-decisions)). (6) The words "so i could use other AIs
+to implement the following m4 submilestones" are read, as D172 (5) read
+them, as waiving M2 and M3c for the implementation of M4b to M4f's slices
+only, each slice keeping the M2 and M3 slices its row names, excepting those
+slices from the two-active-slice WIP limit beside M2c's and M3's, and
+letting M4c to M4f's in-tree slices start once the M4b in-tree slices they
+name have landed; promotion, every operator gate and M4 completion keep
+their Requires ([Q59](m4.md#m4a-open-decisions)), and
+[Q25](m3.md#m3a-open-decisions) keeps M3d's scope. The waiver takes effect
+only for a slice the owner authorizes. (7) Each submilestone exits on an
+emulated rehearsal recorded as an owner-accepted ledger row; D17's "M4"
+names the milestone that D128 renumbered to M2, so no M4 row on real
+hardware is required, and no package needs one
+([Q61](m4.md#m4a-open-decisions)). (8) Native facts are
+evidence, never rules: the operator declares every channel, CSV and catalog
+image; a bundle's `olm.maxOpenShiftVersion` is recorded, never enforced; a
+difference between release minors becomes a registered version
+specialization only when a run shows the general mechanism failing (D157,
+D162, D163). The reference branch is read for lessons only, as D172 (7)
+states, and none of its architecture becomes a requirement. (9) The token
+instruction governs how the session divides and routes its work; it changes
+no product spec. (10) New items B749 to B795: B749 is M4a's; B750 to B768 sit
+on M4's page, B762 to B764 with Owner Storage; B769 to B795 are parked. New
+slices X135 to X155, and X134 is re-planned. Owner questions continue M3's
+series as Q26 to Q61. The parked B365 retires, folded into
+[B771](#b771). B688 to B699 and X105 to X109 stay unused (D172 (4)); the
+numbers carry no meaning, and integration re-checks main, `m2c` and `m3` for
+B749 or later, X135 or later and D173 or later and renumbers the unlanded
+items on a collision, and re-checks `m2c` for conflicts with m2.md's B491
+addition (revoking one export's principals, [Q39](m4.md#m4a-open-decisions))
+and OD25 text and with Q43's change to M2c's default of no published storage
+FQDN. (11) The definition lands as one squashed docs commit
+on the local branch `m4`, created from branch `m3` at `310284528` (the
+unmerged M3 definition) and never pushed; incorporating `m4` into main waits
+for the owner and follows `m3`'s, and D168's merge on checkpoint applies to
+M4's slices only once `m4` is on main. (12) Each slice that changes a frozen
+request moves its version as D172 (10) states. (13) The GitOps bootstrap
+object hands its cluster to GitOps once every other block that reaches that
+cluster is complete, before the environment-wide handoff predicate holds,
+and the [project's handoff paragraph](../project.md#lifecycle-and-handoff)
+is amended to allow that per-cluster early handoff; this clause stays
+pending until the owner answers [Q60](m4.md#m4a-open-decisions). No
+implementation slice is activated and no host operation is authorized.
+
+### D174
+
+**owner** (2026-10-21, the owner's requests): the owner accepted M4a's
+recommended definition baseline and requested implementation of M4b and
+M4c on `m4`. The owner also authorized their missing M3 prerequisites:
+B64's produced-input lending, B719's typed OVN gateway manifests and
+B726's secondary-network block. D173's implementation waiver applies;
+operator rehearsals and their acceptance remain separate gates. No M4d
+to M4f implementation or host operation is authorized by these requests.
+
+### D175
+
+**owner** (2026-10-22, accepted by the owner): B496 adds optional
+`Secret.spec.source.generated.issuerRef` to a generated `tlsCertificate`, naming
+a generated `caBundle`. Generation signs the leaf with that authority while
+retaining the signing key in private custody. Existing self-signed
+generation remains available when the reference is omitted. This resolves
+the API choice; implementation and rehearsal evidence remain B496's gates.
+
+### D176
+
+**owner** (2026-10-22, accepted by the owner): B481 closes with the
+implemented field-specific refusal of iSCSI declarations, with guidance
+toward NVMe-oF and no vendor support-status claim. This supplies the closing
+decision left open under D161, OD27; it authorizes no iSCSI lifecycle.
+
+### D177
+
+**owner** (2026-10-22, accepted by the owner): B70 uses opt-in
+`Machine.spec.hardware.eraseOnRemoval` with `method: logicalOverwrite` and
+explicit targets containing `deviceName`, `wwn`, `serialNumber` and
+`sizeBytes`. Omission retains the installed system. An offline RAM worker
+must prove the machine and every target, overwrite and read back all
+addressable bytes, and deliver a durable receipt before shutdown. This
+contract claims neither remapped-sector coverage nor hardware sanitization;
+implementation and hardware qualification remain required.
+
+### D178
+
+**owner** (2026-10-23, the owner): tools used only by a runbook may be
+installed by that runbook and removed at its end. Bootwright installs and
+manages only packages its own execution needs. This narrows B509's
+2026-10-12 rule: the lab-rhel diagnostic tools remain in its independent
+checks, with operator installation and cleanup preserving pre-existing
+packages, rather than becoming controller prerequisites. B509 closes when
+that procedure is documented and verified; no host operation is performed
+by recording this decision.
+
+### D179
+
+**owner** (2026-10-23, the owner): keep the implemented guest SSH forwarding
+restrictions under D135 and complete their qualification. The policy is
+additional hygiene for the root-equivalent cluster account; pinned host-key
+verification, fixed loopback forwarding and no direct fallback remain the
+transport boundary. This answers the 2026-10-11 review's Q1 without removing
+policy management, reloads or the include-closure proof. Live qualification
+remains a separate gate.
+
+### D180
+
+**owner** (2026-10-23, the owner's request): implement every independent
+blocker of M4a to M4e, including their specified code prerequisites, while
+leaving operator inputs, live rehearsals and owner acceptance open. B195
+follows Q13(a): an authored-only typed additional trust policy, without a
+default, required by M4a's accepted Data Foundation trust contract. This
+authorizes no host operation and claims no passed operator gate.
+
+### D181
+
+**owner** (2026-10-23, the owner's request): "finish implementing all items
+that are blocking M3a-e to be declared done that doesn't requires anything
+from me". Implement the independent specified code, tests and acceptance
+preparation, including shared prerequisites, while leaving owner decisions,
+baseline acceptance, live environments, captured native responses and
+operator-run acceptance open. This records no host operation or passed live
+gate. The resulting in-tree work is recorded under
+[M3 independent completion](delivered.md#m3-independent-in-tree-completion).
+
+### D182
+
+**owner** (2026-10-26, the owner's request): "order all lanes from most
+basic, fundamentals, architectural and low level one to the high level
+ones, and start implementing all of them in sequence. One branch for each
+lane that will be merged to main branch as a single commit", proceeding so
+another coding agent can continue. This authorizes the
+[audit remediation lanes](#lane-order-and-progress) in the recorded order,
+one lane at a time, each merged to local main as one commit once its gates
+pass. Parts that wait for an owner question (Q62 to Q118) stay open, no host
+operation or live gate is authorized, and pushing waits for the owner.
+
+### D183
+
+**owner** (2026-10-26, the owner's answers to the
+[audit remediation questions](#audit-remediation-decisions)): Q62 (a) a
+tracked `.codex/hooks.json` runs the same advisory end-of-turn check; Q63 (b)
+the WIP limit is at most two active slices per program, the slices one owner
+decision or request authorizes, so the standing per-decision exceptions are
+no longer needed and the one-product-or-defect-plus-one-enabling composition
+clause retires with them (composition clause retired; orchestrator's reading);
+Q64 (a) U03 stays as a native replica-safety rule; Q65 (b) an unreadable
+removal observation becomes a typed inconclusive result, never no-effect;
+Q66 (b) durable install-then-disk-boot intent; Q67 (a) D38 stands with the
+named-keys warning; Q68 (a) retirement refuses while a consumer survives;
+Q69 (a) B659, B662 and B491 become prerequisites of [B485](m2.md#b485), so
+B659 and B662 move to M2; Q70 (a) a recorded access-credential rebind exit
+under the `--authorize` model; Q71 (a) refuse inert endpoint fields at plan;
+Q72 (a) `spec.resources` is removed and cluster lists are the only
+narrowing; Q73 (a), Q74 (a), Q75 (b) validate error; Q76 (a) D145(4) stands.
+API shape: Q77 one kind per cluster distribution, `ContainerCluster`
+becoming `OpenShiftCluster` (OKD as its distribution variant) with a
+cluster-family registry so a new family is additive; Q78 (a) the storage
+children become `Ceph*` and `StorageCluster` becomes `CephCluster`, revisiting
+D133's naming; Q79 (b) a narrow per-substrate Machine arm; Q80 (a) the
+capability role tokens are dropped and prerequisites derived in one change;
+Q81 one testable union rule with its architecture test, the service
+implementation staying an enum; Q82 (b); Q83 (b); Q84 (a); Q85 (a); Q86 and
+Q114 (b) block identities hash an overflowing segment, so one public name
+rule serves every kind; Q87 (a) the renames land in one batched slice per
+surface with retired-path refusals; Q88 (a); Q105 (a) lowerCamel enum values,
+native spellings exempt; Q106 (a) the stage token is renamed; Q107 (b) the
+export kind and `fdf.storageExportRef` are renamed in the `Ceph*` family with
+their shape kept; Q110 (a and b) `render effective --origins` and an
+advisory JSON Schema export; Q111 (a); Q112 (a); Q113 (a); Q115 (c) both
+reserved shapes keep validating. Recovery and trust: Q92 (a) D38 stands; Q93
+(b) a destroy over a completed apply covers its whole frozen plan; Q94 (a);
+Q95 (a); Q96 (a) B247 widens to SSH-placed keys; Q97 (a) `--expect`
+fingerprints; Q98 (a); Q99 (a) `--from-url-file`; Q100 (a) the object-user
+reveal is authorized; Q101 (a); Q116 (a) `--object-user <name>` selects one
+user's keys and `--secrets` alone reveals only the dashboard password; Q117
+(a) `--authorize data-loss=<digest>` under `--yes`. Corpus: Q89 (a); Q90 (a);
+Q91 (a) pending clauses bind until overturned; Q102 (a); Q103 (a) a blocking
+pre-existing defect may be fixed in its own commit once recorded as an item;
+Q104 (b) the name stays; Q108 (a) and Q109 (a) status readiness hints and
+`diff --exit-code`. Q118: authored add-on ordering and an apply that stops
+after a named add-on become [B837](delivered.md#x171--audit-lane-i-api-shape-and-grammar) in lane I. Each answer authorizes
+only the item that applies it, within D182.
+
+### D184
+
+**owner** (2026-10-26, the owner's answer about [B836](delivered.md#x164--audit-lane-e-store-durability-and-controller-records)): a
+root-confirmed `bootwright controller rebind` moves every context to a
+controller host whose machine-id, DMI product UUID or root filesystem UUID
+changed. It confirms interactively, naming the recorded and the new
+identity, or under `--yes` only with the new identity named; it proves the
+same store under the exclusive root lock, rewrites the recorded host
+identity once, and keeps every binding and reservation. This adds a public
+command under D153 clause 2.
+
+### D185
+
+**owner** (2026-10-26, the owner's confirmation of [B814](delivered.md#x171--audit-lane-i-api-shape-and-grammar)'s names):
+`StorageExport` becomes `CephConsumer` (`fdf.cephConsumerRef`, block prefix
+`ceph-consumer-`); `CephCluster` settings flatten from `spec.ceph.*` to
+`spec.*`; the node role `master` becomes `controlPlane`, still rendered as
+`master` for the installer; the domain spec pages are renamed with the
+kinds (OpenShift and Ceph pages, coverage pages included). The rest of
+B814's rename table stands as defined.
+
+### D186
+
+**owner** (2026-10-27, the owner's answer about Q96's qualifier): the
+private Controller record stays version 3. Its reservation keys may carry
+the `ssh/<address>:<port>/` qualifier as an additive key form, so a record an
+earlier build wrote stays current and no controller needs a fresh install;
+each context publishes its SSH-qualified claims on its next apply. Builds
+before X170 read a qualified key as opaque, keep other contexts' entries and
+find no fewer conflicts than before; such a build's apply of a context drops
+that context's qualified entries until a later build applies it again.
+
+### D187
+
+**owner** (2026-10-27, the owner's answers during lane L's review): D174
+accepted M4a's recommended definition baseline for implementation and
+answered no open question, so [Q26 to Q61](m4.md#m4a-open-decisions) stay
+open and D173's clauses stay pending. A decision a session took under the
+owner's explicit instruction to proceed carries the status token `delegated`:
+it binds and is not in the review queue; D23 to D26 and D162 carry it.

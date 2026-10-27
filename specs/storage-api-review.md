@@ -1,7 +1,7 @@
 # Ceph API review for M2a
 
-This page records the [M2a](milestones/m2.md#m2a) API and operator-journey
-review. It records the M2a baseline and approved target.
+This page is history, indexed as such: it records the [M2a](milestones/m2.md#m2a)
+API and operator-journey review, the M2a baseline and approved target.
 [Storage admission](api/ceph.md) and `api/v1alpha1/storage.go` own
 accepted input. [Storage](ceph.md) owns target lifecycle behavior;
 [coverage](ceph-coverage.md) owns provider qualification.

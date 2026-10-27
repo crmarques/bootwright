@@ -253,7 +253,7 @@ Which runtimes and cached wheels a setup keeps and retires follows its
 directory named `setup-` and six digits, from `setup-000001` upward, holding at
 most one file, `run.output`, which is bounded at 4 MiB. That is the
 [bounded run](../cli/output.md#bounded-run-output)'s bound, so every run's
-output shares one ([D92](../milestones/backlog.md#decisions)). Directories are
+output shares one ([D92](../milestones/backlog.md#d92)). Directories are
 `0700` and the file `0600`. There are at most 8 runs:
 the next is numbered one past the newest, the oldest are removed before it is
 created, and a setup whose next number would need a seventh digit keeps no

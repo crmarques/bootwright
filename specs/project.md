@@ -17,22 +17,35 @@ operator actions.
 
 ## Product scope
 
-The target platform families are:
+The **committed portfolio** is what a milestone page schedules, and every item
+on those pages gates its milestone ([scope rules](milestones.md#scope-rules)):
 
-- bare metal through BMCs, libvirt, VMware vSphere and KubeVirt, including
-  OpenShift Virtualization;
+- bare metal through BMCs ([M1e](milestones/m1.md#m1e), [M3d](milestones/m3.md#m3d)),
+  libvirt with sushy-tools ([M1c](milestones/m1.md#m1c),
+  [M3b](milestones/m3.md#m3b)), VMware vSphere ([M1f](milestones/m1.md#m1f),
+  [M3f](milestones/m3.md#m3f)) and KubeVirt, including OpenShift
+  Virtualization ([M1g](milestones/m1.md#m1g), [M3e](milestones/m3.md#m3e));
 - machine operating systems that Bootwright installs from installer media,
-  with entitlement use, first RHEL through Anaconda;
-- infrastructure services: artifact serving, load balancing, proxying, DNS,
-  time synchronization and registries;
-- OpenShift and OKD container clusters;
-- open-source, Red Hat and IBM Ceph storage distributions; and
-- cluster-bound integrations through built-in and custom add-ons, first
-  MetalLB, IBM Fusion Data Foundation, Red Hat Advanced Cluster Management,
-  Argo CD and GitLab.
+  with entitlement use, first RHEL through Anaconda
+  ([M1c](milestones/m1.md#m1c), [M1e](milestones/m1.md#m1e));
+- infrastructure services: artifact serving, proxying, DNS, time
+  synchronization and registries ([M1d](milestones/m1.md#m1d));
+- OpenShift container clusters ([M3](milestones/m3.md));
+- IBM Ceph storage ([M2](milestones/m2.md)); and
+- cluster-bound integrations through built-in add-ons, first MetalLB, IBM
+  Fusion Data Foundation, Red Hat Advanced Cluster Management, Argo CD and
+  GitLab ([M4](milestones/m4.md)), then custom add-ons ([B90](milestones/m4.md#b90)).
 
-These platform families bound Bootwright's intended scope;
-[milestones](milestones.md) own what is delivered.
+The **extension envelope** is what the design must not preclude and no
+milestone gates on: OKD clusters ([B748](milestones/backlog.md#b748)), the
+open-source and Red Hat Ceph distributions beyond IBM Ceph, machine operating
+systems other than RHEL, a managed load balancer
+([B100](milestones/backlog.md#b100)) and a cluster spanning substrate arms
+([B747](milestones/backlog.md#b747)). Only the owner promotes an envelope entry
+into the portfolio; no session clause does.
+
+These lists bound Bootwright's intended scope; [milestones](milestones.md) own
+what is delivered.
 
 Bootwright owns the provider-host virtual networks that a
 [Machine's network attachment](api/machines.md#machine-profiles-and-network-attachments)

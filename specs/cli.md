@@ -182,7 +182,7 @@ preserve these command-specific compatibility rules:
   usage error, and a member naming no Machine or Secret the context holds
   fails `access.target` with exit status 1, naming every such member and the
   list command that shows the resources the context selects, as `cluster info`
-  does ([D165](milestones/backlog.md#decisions)). An explicitly empty scalar
+  does ([D165](milestones/backlog.md#d165)). An explicitly empty scalar
   occurrence still fails under the general rule above; and
 - `cluster info --secrets` requires `--name` to name exactly one cluster after
   normalization, so a list of several is a usage error.

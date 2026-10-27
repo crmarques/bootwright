@@ -191,7 +191,7 @@ No effect. Decision: one decision path, re-proof included, for `plan`,
 
 **[B574](../../specs/milestones/backlog.md#retired): a settle is a claim about
 records.** A build planning other blocks for the same input still reports
-`done`; specified and fail-safe. [D155](../../specs/milestones/backlog.md#decisions) accepts
+`done`; specified and fail-safe. [D155](../../specs/milestones/backlog.md#d155) accepts
 records-only settle: it does not replan or read the host.
 
 **B248: the artifact server's resolution records `done` over a superseded

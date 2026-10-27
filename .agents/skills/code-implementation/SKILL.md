@@ -10,9 +10,9 @@ It never authorizes a push, a release, product scope or a command with effects.
 
 ## Before editing
 
-1. Confirm the authorized slice (AGENTS.md); read the item's row and its
-   `### B<n>` section, not the whole milestone page, then its owning specs and
-   knowledge.
+1. Confirm the authorized slice and its defect rule (AGENTS.md); read the
+   item's row and its `### B<n>` section, not the whole milestone page, then
+   its owning specs and knowledge.
 2. Work on a task branch in its own worktree, never in the destination
    checkout. Inspect status first and preserve unrelated changes: never stash,
    reset or rewrite them.
@@ -39,12 +39,12 @@ omits.
   boundaries, sized like their neighbours; keep no scratch checks. Prefer
   targeted edits to rewrites.
 - Verify by the [tiers](references/verification.md). The commit that integrates
-  into main rests on `make check`, which CI runs, plus the safety additions.
+  into main rests on `make check` plus the safety additions.
 - A change to what an effect is moves its content digest (Go and Ansible
   references).
 - Record exact commands and results; failed, skipped, flaky, unavailable and
   unrun gates are not passes.
-- Before committing, review the complete diff and run `git diff --cached --check`.
+- Before committing, review the whole diff and run `git diff --cached --check`.
 
 ## Commit and integrate
 

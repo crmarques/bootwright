@@ -327,7 +327,7 @@ context deleted without its destroy leaves its guests, units and listeners
 behind with nothing that owns them. The
 real-hardware test runs this build on a separate RHEL controller, in a subnet
 the BMC network reaches on the artifact ports
-([D109](../specs/milestones/backlog.md#decisions)).
+([D109](../specs/milestones/backlog.md#d109)).
 
 ### Changing the controller host's identity
 
@@ -417,7 +417,7 @@ same sockets and the same guest bridge.
 
 | Journey | What it runs | Gate |
 | --- | --- | --- |
-| [lab-rhel](../examples/machines/lab-rhel/README.md#run-it) | One RHEL guest installed through an emulated Redfish BMC, machine list and power reads, exec/rsh sessions, drift observation, replay, restart and safe removal; extended acceptance checks are below | [B72](../specs/milestones/delivered.md#x38--the-real-host-run-of-2026-10-05) operator gate, accepted; M1's extended checks follow [D59](../specs/milestones/backlog.md#decisions) |
+| [lab-rhel](../examples/machines/lab-rhel/README.md#run-it) | One RHEL guest installed through an emulated Redfish BMC, machine list and power reads, exec/rsh sessions, drift observation, replay, restart and safe removal; extended acceptance checks are below | [B72](../specs/milestones/delivered.md#x38--the-real-host-run-of-2026-10-05) operator gate, accepted; M1's extended checks follow [D59](../specs/milestones/backlog.md#d59) |
 | [lab-sno](../examples/openshift-clusters/lab-sno/README.md#run-it) | A single-node OpenShift cluster installed by the agent installer on one libvirt guest | [B61](../specs/milestones/m3.md#b61) operator gate |
 | [lab-baremetal](../examples/machines/lab-baremetal/README.md#run-it) | One physical Machine claimed, proved and installed through its own Redfish BMC, its installer image and host key published privately; the [separate rehearsal substrate](../examples/machines/lab-baremetal-substrate/README.md) supplies a generated CA-issued emulator leaf, [B496](../specs/milestones/m1.md#b496) | [B73](../specs/milestones/m1.md#b73) operator gate, not run |
 

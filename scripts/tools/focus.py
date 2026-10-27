@@ -9,13 +9,41 @@ It is no gate: make check runs every gate once, before integration.
 from __future__ import annotations
 
 import ast
+import contextlib
+import os
 from pathlib import Path
 import re
 import shlex
+import signal
 import subprocess
 import sys
 import threading
 import time
+
+# The exit status of a narrowed Ansible unit run that failed in parallel and
+# passed on the serial rerun, which scripts/tools/ansible_check.py exits with
+# (its FLAKY_STATUS) and this driver exits with when no check failed outright.
+# Only that step reports it; any other check exiting with it fails.
+FLAKY_STATUS = 75
+UNITS = ["./scripts/ansible-check", "--suite", "units"]
+
+# The seconds a lane may run before the driver kills it and names the command
+# that reproduces the stalled check, since a worker that deadlocks in a fork
+# would otherwise hold the lane until interrupted. The slowest lane takes
+# about 4 minutes cold.
+LANE_TIMEOUT = 900.0
+
+# The seconds the driver keeps reading a killed check's output: a descendant
+# that left its process group may hold the output open, and the lane then
+# stops reading rather than wait for it.
+DRAIN_TIMEOUT = 5.0
+
+# The process group of each running check, so an interrupt or termination of
+# the driver kills every check instead of leaving it running, and the flag
+# that stops further checks from starting once it has.
+_running_lock = threading.Lock()
+_running: set[int] = set()
+_stopping = threading.Event()
 
 COLLECTION = "ansible/collections/ansible_collections/bootwright/core"
 PACKAGE = "ansible_collections.bootwright.core"
@@ -237,31 +265,122 @@ def ansible_steps(root: Path, changed: list[str], present: list[str]) -> list[tu
     return steps
 
 
-def run_lane(root: Path, steps: list[tuple[str, str, list[str]]], report: threading.Lock, failed: list[str]) -> None:
+def run_command(root: Path, command: list[str], timeout: float) -> tuple[subprocess.CompletedProcess, bool]:
+    """Run a command, killing its whole process group when the timeout ends.
+
+    The group is killed, not just the command, as a shell or a worker it
+    started would otherwise hold the output open; an interrupt kills it too
+    before it propagates. Once stop_checks ran, no command starts. It returns
+    the completed process and whether the timeout ended it.
+    """
+    with _running_lock:
+        if _stopping.is_set():
+            return subprocess.CompletedProcess(command, 130, "focus: interrupted before this check started\n"), False
+        try:
+            # A failing test may print bytes that are not UTF-8.
+            process = subprocess.Popen(
+                command, cwd=root, stdin=subprocess.DEVNULL,
+                stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                text=True, errors="replace", start_new_session=True,
+            )
+        except OSError as failure:
+            return subprocess.CompletedProcess(command, 127, f"{failure}\n"), False
+        _running.add(process.pid)
+    try:
+        try:
+            output, _ = process.communicate(timeout=max(timeout, 0.0))
+            return subprocess.CompletedProcess(command, process.returncode, output), False
+        except subprocess.TimeoutExpired:
+            kill_group(process.pid)
+            return subprocess.CompletedProcess(command, process.wait(), drain(process)), True
+        except BaseException:
+            kill_group(process.pid)
+            process.wait()
+            if process.stdout:
+                process.stdout.close()
+            raise
+    finally:
+        with _running_lock:
+            _running.discard(process.pid)
+
+
+def kill_group(group: int) -> None:
+    """Kill a check's process group, which may already have ended."""
+    with contextlib.suppress(ProcessLookupError, PermissionError):
+        os.killpg(group, signal.SIGKILL)
+
+
+def drain(process: subprocess.Popen) -> str:
+    """Read a killed check's remaining output for at most DRAIN_TIMEOUT."""
+    try:
+        output, _ = process.communicate(timeout=DRAIN_TIMEOUT)
+        return output or ""
+    except subprocess.TimeoutExpired as expired:
+        if process.stdout:
+            process.stdout.close()
+        partial = expired.output or b""
+        if isinstance(partial, bytes):
+            partial = partial.decode(errors="replace")
+        return partial + "focus: a process outside the check's group holds its output open; stopped reading\n"
+
+
+def stop_checks() -> None:
+    """Kill the process group of every running check and start no other."""
+    with _running_lock:
+        _stopping.set()
+        groups = list(_running)
+    for group in groups:
+        kill_group(group)
+
+
+def run_lane(
+    root: Path,
+    steps: list[tuple[str, str, list[str]]],
+    report: threading.Lock,
+    failed: list[str],
+    flaky: list[str] | None = None,
+    timeout: float = LANE_TIMEOUT,
+) -> None:
     """Run one lane's checks in order, printing each as it ends.
 
     A passing check prints its last line; a failing one prints its whole
-    output and the command that reproduces it, and ends the lane.
+    output and the command that reproduces it, and ends the lane. A check that
+    exits FLAKY_STATUS passed only on its serial rerun: it is no pass, ends the
+    lane and is named in flaky; only the Ansible units step reports it. The
+    lane as a whole gets timeout seconds; the
+    check running when they end is killed, printed with its reproduce command
+    and counted as failed.
     """
+    deadline = time.monotonic() + timeout
+    flaky = [] if flaky is None else flaky
     for lane, name, command in steps:
         started = time.monotonic()
-        try:
-            # A failing test may print bytes that are not UTF-8.
-            completed = subprocess.run(
-                command, cwd=root, check=False, stdin=subprocess.DEVNULL,
-                stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-                text=True, errors="replace",
-            )
-        except OSError as failure:
-            completed = subprocess.CompletedProcess(command, 127, f"{failure}\n")
+        completed, expired = run_command(root, command, deadline - started)
         elapsed = time.monotonic() - started
         lines = [line for line in completed.stdout.splitlines() if line.strip()]
         with report:
+            if expired:
+                print(completed.stdout, end="", flush=True)
+                print(
+                    f"focus: [{lane}] {name} TIMED OUT after {timeout:.0f}s of its lane; "
+                    f"rerun: {shlex.join(command)}",
+                    flush=True,
+                )
+                failed.append(f"{lane} {name} timed out")
+                return
             if completed.returncode == 0:
                 last = f": {lines[-1].strip()}" if lines else ""
                 print(f"focus: [{lane}] {name} passed in {elapsed:.1f}s{last}", flush=True)
                 continue
             print(completed.stdout, end="", flush=True)
+            if completed.returncode == FLAKY_STATUS and command[: len(UNITS)] == UNITS:
+                print(
+                    f"focus: [{lane}] {name} FLAKY in {elapsed:.1f}s: it failed in parallel and "
+                    f"passed only on the serial rerun, so it is no pass; rerun: {shlex.join(command)}",
+                    flush=True,
+                )
+                flaky.append(f"{lane} {name}")
+                return
             print(f"focus: [{lane}] {name} FAILED in {elapsed:.1f}s; rerun: {shlex.join(command)}", flush=True)
             failed.append(f"{lane} {name}")
             return
@@ -279,29 +398,49 @@ def main() -> int:
         lanes.setdefault(step[0], []).append(step)
     report = threading.Lock()
     failed: list[str] = []
-    if "ansible" in lanes or "units" in lanes:
-        run_lane(root, [("ansible", "environment", ["sh", "-c", PREPARE])], report, failed)
+    flaky: list[str] = []
     finished: list[str] = []
 
     def lane(name: str, steps: list[tuple[str, str, list[str]]]) -> None:
-        run_lane(root, steps, report, failed)
+        run_lane(root, steps, report, failed, flaky)
         finished.append(name)
 
-    threads = [
-        threading.Thread(target=lane, args=(name, steps))
-        for name, steps in lanes.items()
-        if not failed
-    ]
-    for thread in threads:
-        thread.start()
-    for thread in threads:
-        thread.join()
+    def terminate(signum: int, frame: object) -> None:
+        raise KeyboardInterrupt
+
+    _stopping.clear()
+    threads: list[threading.Thread] = []
+    previous = signal.signal(signal.SIGTERM, terminate)
+    try:
+        if "ansible" in lanes or "units" in lanes:
+            run_lane(root, [("ansible", "environment", ["sh", "-c", PREPARE])], report, failed, flaky)
+        threads = [
+            threading.Thread(target=lane, args=(name, steps), daemon=True)
+            for name, steps in lanes.items()
+            if not failed and not flaky
+        ]
+        for thread in threads:
+            thread.start()
+        for thread in threads:
+            thread.join()
+    except KeyboardInterrupt:
+        stop_checks()
+        for thread in threads:
+            thread.join(DRAIN_TIMEOUT + 5)
+        print(f"focus: interrupted after {time.monotonic() - started:.1f}s; killed the running checks", flush=True)
+        return 130
+    finally:
+        stop_checks()
+        signal.signal(signal.SIGTERM, previous)
     # A lane that ended without finishing raised; that is no pass.
     failed.extend(f"{name} lane ended early" for name in lanes if threads and name not in finished)
     elapsed = time.monotonic() - started
     if failed:
         print(f"focus: failed in {elapsed:.1f}s: {', '.join(failed)}", flush=True)
         return 1
+    if flaky:
+        print(f"focus: FLAKY in {elapsed:.1f}s, not a pass: {', '.join(flaky)}", flush=True)
+        return FLAKY_STATUS
     print(
         f"focus: passed in {elapsed:.1f}s; a focused run is no gate: "
         "run make check before integration",

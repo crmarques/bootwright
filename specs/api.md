@@ -33,7 +33,7 @@ An admitted declaration that no capability of this build realizes refuses at
 refusal point, and each capability's refusal table names its rows. Admission
 refuses a declaration with `api.invariant` instead only when no build of this
 API version has any consumer for it, as it refuses `spec.lifecycle.rescue`
-under [D29](milestones/backlog.md#decisions). Kind pages link this rule rather
+under [D29](milestones/backlog.md#d29). Kind pages link this rule rather
 than restate it.
 
 ### Admitted but unrealized

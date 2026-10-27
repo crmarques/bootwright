@@ -2076,7 +2076,7 @@ owned object of the apply, created after every other block that reaches its
 cluster. It hands that cluster to GitOps without waiting for the predicate
 over the whole environment, as the
 [project's handoff paragraph](project.md#lifecycle-and-handoff) allows
-(pending the owner's Q60 under [D173](milestones/backlog.md#decisions)), and
+(pending the owner's Q60 under [D173](milestones/backlog.md#d173)), and
 transfers no ownership.
 
 Not yet met: no apply creates a bootstrap object; tracked as

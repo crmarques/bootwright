@@ -76,7 +76,7 @@ the same proof under a bound of eight links, and such a file may carry a
 package's hard links, as that back-end's target does. Every other native
 source refuses a link and is the only name of its inode. The guest policy,
 its reload and its include-closure proof remain required hygiene; the owner
-retained them under [D179](milestones/backlog.md#decisions). Candidate alias
+retained them under [D179](milestones/backlog.md#d179). Candidate alias
 resolution is deliberately closed pending the actual RHEL configuration
 qualification.
 

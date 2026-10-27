@@ -82,6 +82,12 @@ def collection_targets(collection: Path, paths: list[str]) -> list[str]:
     return targets
 
 
+# The status a narrowed unit run exits with when tests failed in parallel and
+# passed on the serial rerun: not a pass, and not a failure the rerun confirms.
+# scripts/tools/focus.py reports it as FLAKY.
+FLAKY_STATUS = 75
+
+
 def narrowed_units(
     pytest: list[str], collection: Path, targets: list[str], environment: dict
 ) -> int:
@@ -92,7 +98,8 @@ def narrowed_units(
     serially, which gives its verdict: a worker's threads take
     process-directed signals and make every fork a test performs one that may
     deadlock, so a test that signals itself, as the route probe's alarm tests
-    do, fails there alone.
+    do, fails there alone. A run that fails in parallel and passes on the
+    serial rerun is flaky: it prints FLAKY and exits FLAKY_STATUS, not 0.
     """
     collections = collection.parents[2]
     paths = [str(collection.relative_to(collections) / target) for target in targets]
@@ -106,12 +113,19 @@ def narrowed_units(
     if parallel.returncode != 1:
         return parallel.returncode
     print("Rerunning the tests that failed in parallel serially; that run decides.")
-    return subprocess.run(
+    serial = subprocess.run(
         pytest + ["--last-failed", "--last-failed-no-failures", "none"] + paths,
         cwd=collections,
         env=environment,
         check=False,
     ).returncode
+    if serial == 0:
+        print(
+            "FLAKY: tests failed in parallel and passed on the serial rerun; "
+            "this is no pass."
+        )
+        return FLAKY_STATUS
+    return serial
 
 
 def floor_interpreter(root: Path, fixtures: Path, area: Path) -> tuple[str, Path]:

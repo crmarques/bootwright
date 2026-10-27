@@ -45,7 +45,7 @@ implementations the contract goldens pin.
 ## Integration variants
 
 - **Local fast-forward (default).** Under
-  [D168](../../../../specs/milestones/backlog.md#decisions) a slice that passed
+  [D168](../../../../specs/milestones/backlog.md#d168) a slice that passed
   its checkpoint and is feature complete integrates into local main as soon as
   it is done, without asking. Rebase the task branch onto the destination tip,
   rerun `make check` and any safety additions, run

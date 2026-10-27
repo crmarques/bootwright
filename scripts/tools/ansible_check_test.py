@@ -1,10 +1,14 @@
 """Tests of the Ansible check harness, which its units suite runs."""
 
+import contextlib
 import importlib.util
+import io
 import os
 from pathlib import Path
 import string
+import subprocess
 import unittest
+from unittest import mock
 import warnings
 
 from jinja2.nativetypes import NativeEnvironment
@@ -144,6 +148,47 @@ class SelectionTest(unittest.TestCase):
                 with self.subTest(path=str(path)):
                     with self.assertRaises(SystemExit):
                         ansible_check.collection_targets(collection, [str(path)])
+
+
+class NarrowedUnitsTest(unittest.TestCase):
+    """A failure only the serial rerun clears is flaky, never a pass."""
+
+    def narrowed(self, *statuses: int) -> tuple[int, list[list[str]]]:
+        """Run narrowed_units over two files with each run exiting as given."""
+        calls: list[list[str]] = []
+        results = iter(statuses)
+
+        def run(command, **_):
+            calls.append(command)
+            return subprocess.CompletedProcess(command, next(results))
+
+        with ansible_check.check_area() as temporary:
+            collection = Path(temporary) / "a" / "b" / "c"
+            for name in ("one", "two"):
+                (collection / name).mkdir(parents=True)
+            output = io.StringIO()
+            with (
+                mock.patch.object(ansible_check.subprocess, "run", run),
+                contextlib.redirect_stdout(output),
+            ):
+                status = ansible_check.narrowed_units(
+                    ["pytest"], collection, ["one", "two"], {}
+                )
+        self.output = output.getvalue()
+        return status, calls
+
+    def test_a_parallel_pass_or_a_confirmed_failure_exits_as_the_run_did(self):
+        self.assertEqual(self.narrowed(0), (0, [["pytest", "-n", "auto", "a/b/c/one", "a/b/c/two"]]))
+        status, calls = self.narrowed(1, 1)
+        self.assertEqual((status, len(calls)), (1, 2))
+        self.assertNotIn("FLAKY", self.output)
+
+    def test_a_failure_that_passes_on_the_serial_rerun_exits_flaky(self):
+        status, calls = self.narrowed(1, 0)
+        self.assertEqual(status, ansible_check.FLAKY_STATUS)
+        self.assertEqual(len(calls), 2)
+        self.assertIn("--last-failed", calls[1])
+        self.assertIn("FLAKY", self.output)
 
 
 if __name__ == "__main__":

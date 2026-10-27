@@ -6,9 +6,8 @@ load language references only as directed by that workflow. Skills are
 canonical here, where Codex discovers them; `.claude/skills/` holds thin
 wrappers with the same frontmatter so Claude Code discovers them too. Edit the
 canonical file, and give a new skill its wrapper in the same change: the docs
-gate keeps each wrapper's frontmatter in step, but does not yet fail on a
-skill without a wrapper or a wrapper without a skill
-([B822](../../specs/milestones/backlog.md#b822)).
+gate fails on a skill without a wrapper, a wrapper without a skill and a
+wrapper whose frontmatter differs.
 
 | Work | Skill |
 | --- | --- |

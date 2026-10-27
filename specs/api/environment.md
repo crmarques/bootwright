@@ -195,7 +195,8 @@ naming it and no other attached `OpenShiftCluster`. When an attachment reaches
 a cluster root that its authored list omits, `validate` refuses with an error
 on that list naming the root and the export that reached it, because the
 selection of a completed apply cannot change
-([D153](../state-reconciliation.md#lifecycle-unit)); a cluster retained only
+([lifecycle unit](../state-reconciliation.md#lifecycle-unit),
+[D153](../milestones/backlog.md#d153)); a cluster retained only
 through an attachment is therefore always refused by that omitted-root rule.
 A retained
 `CephReplication` retains both its clusters as full roots, and selecting

@@ -151,7 +151,8 @@ An attempt runs under one absolute deadline, its start plus the budget, which
 mutation consumes; the run deadline is the budget plus ten minutes, and
 admission bounds a budget at `5h50m`. An instance is never added to or removed
 from a completed apply, and repeating `apply` over a completed apply contacts no
-cluster ([D153](state-reconciliation.md#lifecycle-unit)).
+cluster ([lifecycle unit](state-reconciliation.md#lifecycle-unit),
+[D153](milestones/backlog.md#d153)).
 
 ## The cluster object program
 
@@ -419,7 +420,8 @@ installed CSV and each readiness result; it names no Secret value and no
 vendor payload. Handoff transfers no ownership: a GitOps source must exclude
 what the evidence lists. The listed objects stay as applied: a change to one is
 a destroy followed by a fresh apply
-([D153](state-reconciliation.md#lifecycle-unit)), and approving an upgrade of
+([lifecycle unit](state-reconciliation.md#lifecycle-unit),
+[D153](milestones/backlog.md#d153)), and approving an upgrade of
 an owned Subscription is outside Bootwright's scope
 ([B106](milestones/backlog.md#b106)).
 [Project](project.md#lifecycle-and-handoff) defines the downstream day-2

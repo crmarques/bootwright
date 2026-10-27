@@ -53,13 +53,11 @@ targets. A collection test that reads a role or a plugin as data without
 importing or naming it is reached only through the whole-tree run a non-Python
 change triggers. Its parallel unit runs settle each failure by a serial rerun;
 the gate runs every test serially. A failure that passes only on the serial
-rerun is flaky, not a pass, and is recorded as flaky. Each parallel lane is
-bounded in time and prints its reproduce command when the bound expires.
-
-Not yet met: the focus driver reports a failure the serial rerun recovered as
-passing, and a parallel lane has no timeout, so a worker that deadlocks in a
-fork hangs the lane until interrupted; tracked as
-[B822](../../../../specs/milestones/backlog.md#b822).
+rerun is flaky, not a pass, and is recorded as flaky: the units step exits 75,
+and focus prints its output and FLAKY and exits 75, not 0 or 1; any other
+check exiting 75 fails. Each parallel lane is bounded in time (900 s) and
+prints its reproduce command when the bound expires, and an interrupt or
+termination of focus kills every running check.
 
 ## End-of-turn hook
 

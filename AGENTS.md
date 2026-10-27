@@ -1,7 +1,7 @@
 # Agent Guidance
 
 Bootwright coordinates declarative day-0 platform bootstrap through qualified
-native tools and adapters. Route to the owner of each fact; do not bulk-read.
+native tools and adapters. Route to each fact's owner; do not bulk-read.
 
 - [specs/index.md](specs/index.md) names the spec that owns each question. Load
   only the owning sections.
@@ -20,9 +20,11 @@ Implement only what the prompt authorizes: an active slice's open work, or an
 explicitly requested slice or item. With no active slice, only an explicit
 request authorizes a tracked edit; a spec or backlog entry never does. Record
 other discovered work as an item of the earliest fitting milestone, or parked,
-instead of doing it, and report a pre-existing defect you find rather than
-fixing it in the same change. Update the owning spec with any intentional
-contract change; add future detail when a requested feature needs it.
+instead of doing it. Report a pre-existing defect you find; fix one that
+blocks the authorized outcome or its gates only in its own commit, after
+recording it as an item the Refs line names. Update the owning spec with any
+intentional contract change; add future detail when a requested feature needs
+it.
 
 Agents never run `ansible-playbook` against a host, or a Bootwright command
 with effects (`apply`, `destroy`, `setup`, `media add`, `machine` or `cluster`
@@ -32,15 +34,14 @@ the conversation.
 For every tracked edit, follow
 [code-implementation](.agents/skills/code-implementation/SKILL.md), the single
 owner of verification, commits and integration, and the domain skills of [the
-skill index](.agents/skills/index.md). Inspect the worktree before editing and
-preserve unrelated work. Repository guidance never authorizes a push, release,
-or additional product scope.
+skill index](.agents/skills/index.md). Repository guidance never authorizes a
+push, release, or extra product scope.
 
 Commands (always through the pinned wrappers, never a bare `go`):
 
 - `make focus`: the checks this branch's diff selects.
 - `make quick`: formatting, vet, architecture suite, changed packages.
-- `make docs-check`: guidance links, cited paths and spec tables against code.
+- `make docs-check`: guidance links, cited paths and spec tables.
 - `./scripts/go test ./internal/<package>/...`: one package's tests.
 - `./scripts/ansible-check --suite units [PATH...]`: collection unit tests.
 - `make check`: every gate; CI runs it on each push.

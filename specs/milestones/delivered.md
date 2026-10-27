@@ -3805,7 +3805,8 @@ operator gates awaiting acceptance:** [B276](#x93--the-owner-run-of-2026-10-14) 
 [B277](#x93--the-owner-run-of-2026-10-14), whose rows stay on M1 with Delivery
 `awaiting operator acceptance`.
 
-**Outcome, B95:** every visible command has complete help with examples, its enum
+**Outcome, B95:** every visible command has complete help with examples
+([the rule](../cli/commands.md#help-content)), its enum
 values are named in the help and in the scalar-enum refusal, the root listing and
 each unavailable command say so, and a usage refusal tells an unknown flag from
 one that belongs to another command. Goldens hold the root and every available
@@ -6047,7 +6048,7 @@ applied side with a note saying so. A libvirt disk resized by hand beside a
 running controller reads unknown with the size refusal as its reason rather
 than projecting the observed size ([B606](backlog.md#b606)). A newer build may not compile an old frozen
 revision, and its applied objects then read unknown. A settled apply attests
-only its own records ([D155](backlog.md#decisions) retains that policy and
+only its own records ([D155](backlog.md#d155) retains that policy and
 retires B574).
 
 ### X90 — Controller setup v2 retention and offline sources
@@ -6338,7 +6339,7 @@ are retained locally. The public ledger records the accepted qualifications.
 **Owner:** CLI and Managed OS. A bounded defect slice of [M1](m1.md), the
 first unfinished hardening milestone, authorized on 2026-10-16. **Items:**
 B613, created and completed here; B476, acceptance of original X54 work.
-**Decision:** [D155](backlog.md#decisions).
+**Decision:** [D155](backlog.md#d155).
 
 **Outcome:** `cluster info` after destroy reaches its existing unavailable and
 custody handling. Host-key inspection checks that managed-OS evidence belongs
@@ -6475,7 +6476,7 @@ B466 and M1 under [X98](#x98--m1-owner-acceptance).
 
 **Owner:** State reconciliation and Substrate. An acceptance record for
 [M1](m1.md), authorized on 2026-10-16. **Items:** B466 and B608, completed.
-**Decision:** [D156](backlog.md#decisions). **Tested build:**
+**Decision:** [D156](backlog.md#d156). **Tested build:**
 `591af9616446596a77a599cd6303970a85131694`, source `clean`.
 
 **Outcome:** the owner-accepted three-node scenario completed fresh apply,
@@ -6587,7 +6588,7 @@ retained locally.
 ### X99 — Operator-selected Ceph artifacts and M2b completion
 
 **Owner:** Storage and Desired state, with CLI. **Item:**
-[B615](#b615), completed. **Decision:** [D157](backlog.md#decisions).
+[B615](#b615), completed. **Decision:** [D157](backlog.md#d157).
 **Submilestone:** [M2b](m2.md#m2b), done on 2026-10-17 at
 `7e3963d91851cc53bfaf54ed1962409a4051aca2`.
 
@@ -6727,7 +6728,7 @@ version or combination. Update the owning specs and examples with delivery.
 [M2](m2.md), delivered on the owner's request of 2026-10-18 as one commit.
 **Item:** [B626](m2.md#b626), whose in-tree gates pass; its operator gate is
 the owner's three runs, so its row stays on M2 with Delivery `awaiting operator
-acceptance`; the slice leaves the Planned slices table, as a delivered slice does. **Decision:** [D162](backlog.md#decisions), under D157.
+acceptance`; the slice leaves the Planned slices table, as a delivered slice does. **Decision:** [D162](backlog.md#d162), under D157.
 
 **Outcome:** each component keeps one general flow, and a release difference in
 native mechanics is a registered specialization selected from facts that pure
@@ -6865,7 +6866,7 @@ B479.
 **Owner:** Storage, with State reconciliation and CLI. A defect slice of
 [M2](m2.md), delivered as one commit on the owner's approval of 2026-10-19 to
 fix the general defects of the 2026-10-18 audit of main `fcff2f58f..ce190446a`.
-**Decision:** [D163](backlog.md#decisions), which authorizes it and records that
+**Decision:** [D163](backlog.md#d163), which authorizes it and records that
 Bootwright registers and enforces no component version rule. A slice is the
 ordered items of one milestone, so D163's audit work is split: this slice
 carries the M2 items and X103 the M1 items. **Items:** B636, B637, B618, B638,
@@ -7011,7 +7012,7 @@ D163 as component version rules: gap1-package-resolution-matri-3-2 (a RHEL
 release requirement), gap1-package-resolution-matri-3-4 (binding the license to
 a Ceph release) and gap1-test-weakening-2-1 (an OS gate; its residual
 diagnostic is parked). Owner questions B650 to B656, answered by
-[D165](backlog.md#decisions) and closed in
+[D165](backlog.md#d165) and closed in
 [X104](#x104--owner-answers-of-2026-10-19). Parked: [B657](backlog.md#b657) to [B664](backlog.md#b664),
 [B674](backlog.md#b674), [B675](backlog.md#b675), [B677](backlog.md#b677),
 [B678](backlog.md#b678) and [B679](backlog.md#b679). The audit also noted that
@@ -7072,7 +7073,7 @@ on Python 3.9, which this slice does not touch, is recorded in
 Environment and Docs. A defect slice of [M1](m1.md), delivered as one commit
 after [X102](#x102--audit-defects-for-full-ibm-ceph-m2) on the owner's approval
 of 2026-10-19 to fix the general defects of the 2026-10-18 audit of main
-`fcff2f58f..ce190446a`. **Decision:** [D163](backlog.md#decisions), which
+`fcff2f58f..ce190446a`. **Decision:** [D163](backlog.md#d163), which
 authorizes the audit defect work, planned as X102, and records that Bootwright
 registers and enforces no component version rule. A slice is the ordered items
 of one milestone, so the work splits: X102 carries the M2 items and this slice
@@ -7187,7 +7188,7 @@ lanes left.
 ### X104 — Owner answers of 2026-10-19
 
 **Owner:** the owner, with CLI, Controller, Storage and Docs. An enabling slice
-delivered as one commit under [D165](backlog.md#decisions), which records the
+delivered as one commit under [D165](backlog.md#d165), which records the
 owner's answers of 2026-10-19 to the seven questions that
 [X102](#x102--audit-defects-for-full-ibm-ceph-m2) and
 [X103](#x103--audit-defects-and-d163-screens-for-foundations-m1) left open. It
@@ -7245,7 +7246,7 @@ the M2 page with what each has delivered in-tree. B619 was found while planning 
 `Entitlement.registry.trustBundleRef` was admitted and documented as for
 registry trust, but no storage code read it. **Items:** B619, delivered by the
 lanes x59-d1-supply-admission, x59-d2-image-origin and int-x59, merged to main
-with X59's other in-tree lanes under [D168](backlog.md#decisions).
+with X59's other in-tree lanes under [D168](backlog.md#d168).
 
 **Outcome:** a declared bundle is the only TLS anchor of every registry
 connection the Ceph supply makes. Image resolution, the guest pull broker and
@@ -7297,7 +7298,7 @@ X60: the Ceph controller-to-host SSH passed `-F /dev/null` and no
 controller's crypto policy, and the contained tunnel's outer configuration
 intersected no host-key algorithm with the pinned keys. **Items:** B625,
 delivered by the lane x61-ceph-transport-policy and the fixes of the int-x61
-checkpoint, merged to main under [D168](backlog.md#decisions).
+checkpoint, merged to main under [D168](backlog.md#d168).
 
 **Outcome:** every Ceph controller-to-host session takes the controller's
 crypto-policy back end, reduced to its crypto directives, and the managed-OS
@@ -7365,8 +7366,8 @@ the registry, the seams and the refusal coordinate carried the applied
 specialization ids, but the Ceph block evidence did not, so an operator could
 read them only from a refusal. **Items:** B627, delivered by the lane X57-L7b
 (its sub-items a and b and the review rounds that guard them) and merged to main
-with X57's other in-tree lanes under [D168](backlog.md#decisions), carried in
-M2c by [D169](backlog.md#decisions), riding the core move of the CephFS client
+with X57's other in-tree lanes under [D168](backlog.md#d168), carried in
+M2c by [D169](backlog.md#d169), riding the core move of the CephFS client
 lane; only `ceph-host-evidence-v2` moved for the member, and it strands nothing
 the same commit's core move did not.
 
@@ -7424,7 +7425,7 @@ digest, which alone needs a rebuild and an apply to continue.
 
 **Owner:** Controller, with Container cluster. A defect slice of
 [M3b](m3.md#m3b), delivered in-tree on `m3` at the explicit request of
-2026-10-20 under [D172](backlog.md#decisions)'s M2 implementation waiver. The
+2026-10-20 under [D172](backlog.md#d172)'s M2 implementation waiver. The
 delivering commit records the verification commands and results; no host
 operation ran. [B706](m3.md#b706), the `nmstatectl` host-package closure of
 the controller stage, is implemented and source-verified but stays on the M3
@@ -8886,6 +8887,53 @@ NTP and proxy.
 `TestUnavailableCommandsMatchTheStubWiring`,
 `TestExampleEnvironmentNamesAreDistinct` and the status readiness tests, each
 proved by a seeded mismatch; the delivering commit records the gates.
+
+### X173 — Audit lane L: corpus structure and skills
+
+**Items:** B815, B819 and B822 (2026-10-26 spec audit steps P1-H, P2-A and
+P2-D).
+**Kind:** enabling. **Owners:** Milestones, Agent guidance and Verification
+tooling. Delivered on 2026-10-27 as lane L of the
+[audit remediation](backlog.md#lane-order-and-progress) under D182, with
+D183's answers to Q89 to Q91, Q102 and Q103 and the owner's D187; the lane
+also partly delivered [B820](backlog.md#b820).
+
+Product scope lists a committed portfolio, each entry linking its milestone,
+and an extension envelope only the owner promotes from. Milestone tables carry
+per-submilestone Requires cells, M3d names its M4 item prerequisites, and one
+scope rule governs session clauses, which one open-clause list in the
+decision log names. The pending-Q60 markers stay until Q60 is answered.
+
+Every decision is a `### D<n>` entry in numeric order, so each D link opens
+its own entry, and each opens with a status token (`owner`, `delegated`,
+`session-pending`, `accepted-by` or `superseded-by`). Dated waiver narratives
+left the milestone Requires paragraphs for their decisions, B688 kept only its
+outcome, the four open-decision tables share one header with a Status column,
+and milestones.md's Identifiers define D, Q and OD. Each milestone opening has
+a byte budget, and a slice task's mandatory reading measured about 16.6k
+tokens after the lane (the audit measured about 45k).
+
+New docs gates bound level-2 spec sections (named, dated exceptions that only
+fall), require every spec page to be reachable from the index, and ratchet
+`delivered.md` links and X ids out of normative pages. The index routes the
+six largest domains by section, managed-os.md's Installation splits into named
+leaves, substrates.md gains a Qualification section, and the storage API review
+is indexed as history. A canonical skill without its wrapper, or a wrapper
+without its skill, fails docs-check; `make focus` reports a unit failure that
+passes only on the serial rerun as FLAKY (exit 75), bounds each lane at 900 s,
+and stops its checks on an interrupt. AGENTS.md admits fixing a blocking
+pre-existing defect in its own commit once it is recorded as an item (Q103).
+
+The review found no blocking defect; its five major and eleven minor findings
+were fixed, except two the entries' own text contradicts (B74 stays on the
+libvirt row; D152's token follows D154). D183's Q103 note says D152 clause 13
+still awaits the owner's review while D154 accepts D152 as written, which the
+owner settles.
+
+**Guard tests:** the milestone, decision-link, opening-budget, section-budget,
+reachability, history-ratchet and skill-discovery tests and the focus and
+ansible-check tests, each proved by a seeded violation; the delivering commit
+records the gates.
 
 ## M3 independent in-tree completion
 

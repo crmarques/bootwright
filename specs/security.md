@@ -59,7 +59,7 @@ therefore admitted only when it and every directory above it are owned by root
 (or, for the binary and the invoking account's own build output, by that
 account) and writable by neither group nor others. A defence against root, such
 as byte digests of root-owned system libraries, is no boundary here and is not
-kept ([D152](milestones/backlog.md#decisions)).
+kept ([D152](milestones/backlog.md#d152)).
 
 Controller setup v2 widens the trusted set in four named ways, each stated
 here once:
@@ -78,7 +78,7 @@ here once:
   follows the host's crypto-policy and FIPS mode. Bootwright's Go binary and
   cryptography's bundled OpenSSL, which Bootwright never uses for TLS, stay
   outside the host's FIPS-validated modules
-  ([D108](milestones/backlog.md#decisions) as D152 amends it); a
+  ([D108](milestones/backlog.md#d108) as D152 amends it); a
   FIPS-qualified runtime stays parked as [B331](milestones/backlog.md#b331).
 
 ### Remote principals

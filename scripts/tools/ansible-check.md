@@ -50,7 +50,8 @@ or under them, lint lints them, sanity runs every sanity test over them and the
 floor import test as usual, and units runs only the plain pytest loop over
 them, skipping the harness's own tests, ansible-test and the floor. One test
 file runs serially; more, or a directory, run across pytest-xdist workers, and
-the tests that fail there run again serially, which decides. A worker's
+the tests that fail there run again serially, which decides: when they pass
+there the run prints FLAKY and exits 75, which is no pass. A worker's
 threads take process-directed signals, so a test that signals itself can fail
 only in parallel. Neither form is a substitute for the argument-free gate,
 which `make check` and CI run.

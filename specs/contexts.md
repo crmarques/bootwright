@@ -242,7 +242,7 @@ build that wrote it, destroy each environment (bootwright destroy --context
 <name>) and delete each context (bootwright context delete --name <name>
 --purge); then, as root, remove /var/lib/bootwright and
 /var/lib/bootwright-staging and run bootwright setup with this build. Never remove /var/lib/bootwright while
-services it manages run." ([D152](milestones/backlog.md#decisions),
+services it manages run." ([D152](milestones/backlog.md#d152),
 `TestARegistryVersion5StoreNamesTheFreshInstallRemedy`). Nothing in that store
 is rewritten. A `registry.json` of any other format version, such as the
 versions 2, 3 and 4 earlier builds wrote, is refused rather than converted, as

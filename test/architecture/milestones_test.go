@@ -73,6 +73,8 @@ type milestoneCheck struct {
 	planned   map[string]bool
 	pageOf    map[string]string
 	pageItems map[string][]milestoneItem
+
+	decisionSet map[int]bool
 }
 
 func (c *milestoneCheck) report(path string, line int, format string, args ...any) {
@@ -521,6 +523,8 @@ func milestoneFindings(sources map[string]string) []string {
 	c.references(entries)
 	c.activeSlices()
 	c.delivered()
+	c.decisions()
+	c.openDecisions()
 	return c.findings
 }
 
@@ -636,7 +640,7 @@ func milestoneFixture() map[string]string {
 			milestoneParkedHeader + "\n" + milestoneSeparator(6) + "\n" +
 			"| [B7](#b7) | F1 | enabling | CLI | An outcome | No milestone |\n\n### B7\n\nDetail.\n\n" +
 			"## Retired\n\n| Old ID | Retired on | Reason and record |\n| --- | --- | --- |\n| V1 | 2026-09-28 | Folded into [B3](m2.md#b3). |\n\n" +
-			"## Decisions\n\n### D1\n\nDecided.\n",
+			milestoneFixtureDecisions,
 		milestoneDeliveredPath: "# Delivered\n\n### X1 — first\n\n**Owner:** CLI. Integrated in one commit. " +
 			"**Items:** B8 (was B2 (rest)), B9\n(was F2). **Outcome:** B1 and B2 advanced.\n\nB3 is in no Items field.\n",
 	}

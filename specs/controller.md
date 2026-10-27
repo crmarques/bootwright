@@ -16,7 +16,7 @@ and neither command performs the other's work.
 Bootwright installs and manages only packages its own execution needs.
 Tools used solely for an operator runbook's independent diagnostics belong
 to that runbook, which documents installation and removal while preserving
-packages already present ([D178](milestones/backlog.md#decisions)).
+packages already present ([D178](milestones/backlog.md#d178)).
 
 | Scope | Prerequisites | Owner |
 | --- | --- | --- |
@@ -32,7 +32,7 @@ Setup installs only what is missing and never checks for updates: a host
 package is asked of the host's own dnf by name or RPM capability, and the
 runtime's wheels come from the lock the running build embeds. A ready host is
 reported in under a second with no network request, confirmation or write.
-The upgrade verb is a new Bootwright build ([D152](milestones/backlog.md#decisions)).
+The upgrade verb is a new Bootwright build ([D152](milestones/backlog.md#d152)).
 
 ## Supported hosts
 
@@ -59,8 +59,8 @@ records it. A release outside it is admitted with the informational
 `controller.untested-release` line, for example "Fedora 45 is newer than the
 releases this build was tested on (43, 44); setup checks its floors and
 continues", which never changes readiness, the plan or the next command. This
-warning is an explicit exception to [D163](milestones/backlog.md#decisions)
-under [D165](milestones/backlog.md#decisions): it concerns Bootwright's own
+warning is an explicit exception to [D163](milestones/backlog.md#d163)
+under [D165](milestones/backlog.md#d165): it concerns Bootwright's own
 host, never refuses and is not a component version rule.
 
 A non-empty `/etc/ld.so.preload` is reported as the informational
@@ -213,7 +213,7 @@ inherits the extraction's exclusive lock, so the staging sweep never removes a
 tree a descendant still runs from, and the invocation releases it at its end.
 The digest covers every embedded automation file except documentation, the
 collection's root `README` and `CHANGELOG`
-([D14](milestones/backlog.md#decisions)), under a domain version of its own,
+([D14](milestones/backlog.md#d14)), under a domain version of its own,
 and an extraction holds exactly what it covers. An `ansible/`-only fix
 therefore needs a build and an apply, never a setup.
 

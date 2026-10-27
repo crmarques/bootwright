@@ -100,6 +100,19 @@ Its reason and remedy are the diagnostic's message and remediation, in which
 | A provider with more managed attachments than its reservation holds | a libvirt provider with more than 20 `networkAttachments[]` entries of `management: managed` | `a libvirt provider's host reservation claims three keys for each managed attachment beside the two of its media pool and its firewall readiness unit, within the 64 keys one reservation holds, so it declares at most 20 managed attachments` | `declare at most 20 attachments with management: managed in spec.networkAttachments of <provider>, or make the others external` |
 | A provider using more external bridges than its use reservation holds | a libvirt provider whose `networkAttachments[]` entries of `management: external` name more than 64 distinct bridges | `a libvirt provider's bridge-use reservation claims one shared key for each bridge its external attachments use, within the 64 keys one reservation holds, so they use at most 64 bridges` | `name at most 64 distinct bridges in the external attachments of spec.networkAttachments of <provider>` |
 
+## Qualification
+
+One row per realized arm and management-controller family: the operator gates
+that still qualify it and the [acceptance ledger](../docs/acceptance.md#ledger)
+rows that accepted part of it, or `unrun` when no row exists. The rows name no
+version and no host; the private archive behind each ledger row keeps those.
+The KubeVirt and vSphere arms are not realized and have no row.
+
+| Arm | Management controller | Operator gates | Ledger rows |
+| --- | --- | --- | --- |
+| `libvirt` | emulated Redfish service (sushy-tools) | [B74](milestones/m1.md#b74), [B75](milestones/m1.md#b75), [B76](milestones/m1.md#b76), [B77](milestones/m1.md#b77), [B326](milestones/m1.md#b326), [B346](milestones/m1.md#b346), [B703](milestones/m1.md#b703) | 2026-09-17 (`lab-rhel`, observation); 2026-10-05 (B49, B72); 2026-10-15 (B19, B20, B270, B276, B277, B339); 2026-10-15 (concurrent installations, observation); 2026-10-16 (B476); 2026-10-16 (B466, B608); 2026-10-17 (B615, M2b) |
+| `baremetal` | physical Redfish BMC | [B70](milestones/m1.md#b70), [B73](milestones/m1.md#b73), [B78](milestones/m1.md#b78), [B305](milestones/m1.md#b305), [B319](milestones/m1.md#b319), [B496](milestones/m1.md#b496) | `unrun` |
+
 ## Provider host realization
 
 The block `substrate-host-<provider>` realizes the host's virtualization
