@@ -121,13 +121,13 @@ func TestOpenShiftClusterRefusalTableMatchesUnsupported(t *testing.T) {
 		"A node with an install profile":    {onSNO(installed), "OpenShiftCluster/sno", onNode},
 		"A node on an unrealized substrate": {onSNO(unrealized, vsphere), "OpenShiftCluster/sno", onSNOCluster},
 		"A KubeVirt node on a nested host":  {onSNO(unrealized, nestedKubevirt), "OpenShiftCluster/sno", map[string]string{"<provider>": "InfraProvider/vc"}},
-		"A node whose emulated controller port does not allocate": {
+		"A node whose emulated BMC port does not allocate": {
 			singleNodeOnProvider(portPastTheSpace, guest("sno-00", "198.51.100.20/24")), "OpenShiftCluster/sno", map[string]string{"<provider>": "InfraProvider/lab-libvirt", "<node>": "master-0", "<machine>": "Machine/sno-01"},
 		},
-		"A node's provider with no emulated controller credential": {
+		"A node's provider with no emulated BMC credential": {
 			singleNodeOnProvider(noControllerCredential), "OpenShiftCluster/sno", map[string]string{"<provider>": "InfraProvider/lab-libvirt", "<node>": "master-0", "<machine>": "Machine/sno-01"},
 		},
-		"A physical node with an HTTP controller": {physicalWithController(func(v api.Value) api.Value {
+		"A physical node with an HTTP BMC": {physicalWithController(func(v api.Value) api.Value {
 			return v.With("address", api.StringValue("http://bmc.example.test/redfish/v1/Systems/1"))
 		}), "OpenShiftCluster/metal", map[string]string{"<machine>": "Machine/metal-01"}},
 		"A physical node with unverified BMC TLS": {physicalWithController(func(v api.Value) api.Value { return v.WithPath(api.BoolValue(false), "tls", "verify") }), "OpenShiftCluster/metal", map[string]string{"<machine>": "Machine/metal-01"}},

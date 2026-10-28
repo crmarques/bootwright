@@ -128,7 +128,7 @@ func diffObserved() *lifecycle.DiffResult {
 			NotCompared: []string{"spec.substrate.libvirt.profileRef", "spec.hardware", "spec.os", "spec.network", "spec.access"},
 			Notes: []string{
 				"machine-rhel-01: part of this effect is realized as its frozen request states",
-				"machine-rhel-01: domain running; its controller reports power On",
+				"machine-rhel-01: domain running; its BMC reports power On",
 			},
 		},
 	}

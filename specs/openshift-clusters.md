@@ -42,7 +42,7 @@ management controller under the trust its Machine declares, with the
 [private delivery](#boot-media) rules below.
 
 A virtual node whose provider host is not the Machine the selected artifact
-server is placed on refuses because its emulated controller fetches the private
+server is placed on refuses because its emulated BMC fetches the private
 [boot image](#boot-media) without verifying the server. The placement, install-profile and physical-node refusals
 and the two root-device refusals name the bound Machine in the remediation the
 refusal carries, because it is what the operator changes. A node whose
@@ -117,9 +117,9 @@ their diagnostic carries the refused field's path.
 | A node with an install profile | `spec.os.installProfileRef` on a node's Machine | `a declared node selects an install profile, so two installations would write its disk` | `remove spec.os.installProfileRef from <machine> or drop it from <cluster>` |
 | A node on an unrealized substrate | a node's Machine whose provider declares a substrate this executable does not realize | `a declared node is on a substrate this executable does not realize` | `correct <cluster>` |
 | A KubeVirt node on a nested host | a node's KubeVirt provider names `hostClusterRef` | `a declared node's KubeVirt provider names hostClusterRef` | `select kubeconfigRef on <provider>` |
-| A node whose emulated controller port does not allocate | a virtual node whose provider's `spec.libvirt.bmcEmulation.port` plus the node's position among that provider's Machines is past 65535 | `node <node> (<machine>): the Machine's emulated controller port does not allocate` | `correct spec.libvirt.bmcEmulation.port on <provider>` |
-| A node's provider with no emulated controller credential | a virtual node whose provider declares no `spec.libvirt.bmcEmulation.auth.credentialsRef` | `node <node> (<machine>): the provider declares no emulated controller credential` | `set spec.libvirt.bmcEmulation.auth.credentialsRef on <provider>` |
-| A physical node with an HTTP controller | a physical node's controller uses HTTP | `a physical node's private boot image requires an HTTPS management controller` | `set spec.substrate.baremetal.bmc.address on <machine> to an HTTPS ComputerSystem endpoint` |
+| A node whose emulated BMC port does not allocate | a virtual node whose provider's `spec.libvirt.bmcEmulation.port` plus the node's position among that provider's Machines is past 65535 | `node <node> (<machine>): the Machine's emulated BMC port does not allocate` | `correct spec.libvirt.bmcEmulation.port on <provider>` |
+| A node's provider with no emulated BMC credential | a virtual node whose provider declares no `spec.libvirt.bmcEmulation.auth.credentialsRef` | `node <node> (<machine>): the provider declares no emulated BMC credential` | `set spec.libvirt.bmcEmulation.auth.credentialsRef on <provider>` |
+| A physical node with an HTTP BMC | a physical node's BMC uses HTTP | `a physical node's private boot image requires an HTTPS management controller` | `set spec.substrate.baremetal.bmc.address on <machine> to an HTTPS ComputerSystem endpoint` |
 | A physical node with unverified BMC TLS | a physical node disables BMC TLS verification | `a physical node's private boot image requires a BMC connection that verifies its certificate` | `enable spec.substrate.baremetal.bmc.tls.verify on <machine> and declare its trust bundle when needed` |
 | A physical node with unverified media TLS | a physical node selects disableVerification | `a physical node's private boot image requires virtual-media TLS verification` | `set spec.substrate.baremetal.bmc.virtualMedia.tls.trust on <machine> to importCertificate or established` |
 | A root device the installer cannot name | a node's `spec.hardware.rootDevice.deviceName` other than `/dev/<name>` or `/dev/disk/by-path/<name>` | `the agent installer names a root device only as /dev/<name> or /dev/disk/by-path/<name>` | `set spec.hardware.rootDevice.deviceName on <machine> to such a path` |
@@ -139,13 +139,13 @@ table and its test change in that commit:
 
 Each other row stays until an item names it.
 
-A physical node's controller imports the artifact server's certificate under
+A physical node's BMC imports the artifact server's certificate under
 `importCertificate`, its default, and the installation carries that trust
 through the cluster role exactly as the managed-OS installation does: the
-controller leg's bundle to the pre-boot, boot and disk-boot entry points, and
+BMC leg's bundle to the pre-boot, boot and disk-boot entry points, and
 the virtual-media trust, the server's certificate part, private delivery and
 the restore and removal settings to the insert and the eject. Because the image
-is private, a physical node whose controller leg is `http` or does not verify,
+is private, a physical node whose BMC leg is `http` or does not verify,
 or whose virtual-media trust is `disableVerification`, refuses before
 registration, and an insert under `established` refuses where the manager's
 deciding setting reads false.
@@ -154,10 +154,10 @@ deciding setting reads false.
 
 A cluster's size is bounded by its installation [deadline](#installation)
 alone. Its nodes' per-node work runs at a fan-out frozen per provider kind, four
-nodes at a time behind emulated controllers and sixteen behind physical ones,
+nodes at a time behind emulated BMCs and sixteen behind physical ones,
 and a cluster takes the smallest fan-out among its nodes. With the budgets
 below a cluster fits the 6-hour ceiling with up to 28 nodes behind emulated
-controllers, and with `16 × floor(9,000 / (1,800 + m))` physical nodes, where
+BMCs, and with `16 × floor(9,000 / (1,800 + m))` physical nodes, where
 `m` is the physical round margin, at least 32 while `m` is at most 45 minutes.
 A larger cluster refuses before registration, naming its deadline and how many
 nodes fit.
@@ -454,7 +454,7 @@ URL or a token
 
 That contract requires the fetching controller to verify the serving
 certificate. A physical management controller does so under the trust its
-Machine declares. An [emulated controller](substrates.md#machine-realization)
+Machine declares. An [emulated BMC](substrates.md#machine-realization)
 does not: it fetches over HTTPS without verifying the server's certificate, so
 on that substrate confidentiality rests on the token and on the fetch never
 leaving the provider host. Selection enforces the second: a virtual node whose
@@ -574,7 +574,7 @@ node-name order, each through
 [its own substrate's boot operation](substrates.md#identity-and-power-operations).
 Before anything is presented, each node the boot does not skip is proved
 through its substrate's pre-boot proof, exactly as an OS installation proves
-its target: a machine the substrate created by its controller answering with
+its target: a machine the substrate created by its BMC answering with
 the machine off, and a physical node against the declared NICs its install
 request froze and the identity its Machine's
 [bare-metal block pinned](substrates.md#physical-machine-realization) earlier in
@@ -615,15 +615,15 @@ the image the media block published, proves that link by the
 [publication fetch](infrastructure-services.md#private-consumer-publication),
 and inserts its URL. After the eject that releases the node, in release or in
 this block's inverse, it removes that token's directory and proves it absent.
-A link no controller presents is retired too, because a controller may have
+A link no BMC presents is retired too, because a BMC may have
 journaled it: an insert that fails has its link retired in the same attempt
-once its controller, read without being changed, answers presenting something
-else, and every insert link no controller presents is swept when an apply has
+once its BMC, read without being changed, answers presenting something
+else, and every insert link no BMC presents is swept when an apply has
 read its nodes and before it boots any, when a release has ejected every node,
 and in this block's inverse after its ejects, which keeps only the media of a
 node whose eject failed. A link is presented when its token is a component of
-the path of an image some controller reports, whatever host and port that image
-names, because a physical controller may echo the image without its
+the path of an image some BMC reports, whatever host and port that image
+names, because a physical BMC may echo the image without its
 non-default port; a token is too random for a foreign image to name it. The
 sweep removes an unpresented link only when it is
 a directory holding nothing but a file that is, by device and inode, the media
@@ -635,7 +635,7 @@ removed, kept and refused, and a refusal names those counts to the operator.
 Observation never retires a link.
 The token appears in no request, evidence, progress output or log. A node
 presents this cluster's own image when the scheme and host of the image its
-controller reports are the media block's publication's, and its path names a
+BMC reports are the media block's publication's, and its path names a
 file beneath `private/clusters/<cluster>/` that is the same file, by device and
 inode, as the media block's published image; any other image is foreign. The
 block writes only beneath the media block's reserved path, and that block's
@@ -728,7 +728,7 @@ chooses: the media request's build budget of 1,800 seconds, and the install
 request's boot budget, the per-round boot allowance of its slowest arm for each
 round of its fan-out, never less than 900 seconds, and its bootstrap and
 installation wait budgets of 5,400 seconds each. A round's allowance is 600
-seconds behind emulated controllers and 1,800 behind physical ones; the
+seconds behind emulated BMCs and 1,800 behind physical ones; the
 KubeVirt and vSphere arms publish theirs. The image build runs
 under `timeout` with the build budget and the same grace; a build the budget
 stopped fails the media block as the budget spent, publishes nothing, and is
@@ -743,7 +743,7 @@ repeated apply boots only the nodes not already running from the image. Each
 proof that a node answers waits for what is left of the same deadline, but for
 no less than one second, so a node checked after an earlier one spent the
 deadline still gets one connection attempt and is named only when it does not
-answer. The read of a node's controller after an insert it did not complete
+answer. The read of a node's BMC after an insert it did not complete
 runs under the media read's own bound plus 30 seconds rather than what is left
 of the boot budget, so an insert that failed near the deadline still has its
 link retired or the read's own failure named, rather than a censored timeout;
@@ -758,12 +758,12 @@ connection and never answers. Every run of either block is bounded by a
 budgets its request froze: the build budget plus 30 minutes for the media
 block, and for the installation its three budgets back to back plus 30 minutes
 and one round margin for each round, which is 3 hours 56 minutes for up to four
-nodes behind emulated controllers. A round margin is exactly the
+nodes behind emulated BMCs. A round margin is exactly the
 [bounds](substrates.md#identity-and-power-operations) its arm publishes for the
 calls the installation makes to a node outside the boot budget: its media read
 in each of the two state reads, and the eject and the disk selection that
-release its media, 11 minutes behind an emulated controller; a physical
-controller's margin is the one [B67](milestones/m3.md#b67) derives. Those
+release its media, 11 minutes behind an emulated BMC; a physical
+BMC's margin is the one [B67](milestones/m3.md#b67) derives. Those
 bounds count the requests of a call's polls as answered at once. The waits do
 not grow with the nodes, which join concurrently. A cluster whose installation
 deadline would pass the runner's 6-hour ceiling refuses before registration,
@@ -827,7 +827,7 @@ written to evidence, progress output or a log.
 **Releasing the media.** Once the read that follows the installation wait
 proves the installation complete, as Completion below defines it with every
 declared node present, and only then, each node's virtual media is ejected and
-its controller is pointed at the installed disk through the substrate's
+its BMC is pointed at the installed disk through the substrate's
 disk-boot entry point, which powers nothing on, in node-name order. An
 installation wait that returns while a declared node is missing releases
 nothing and fails the block naming each missing node. When that node is the
@@ -847,7 +847,7 @@ and asks for the cluster to be inspected before the apply is repeated.
 **Completion.** Completion requires the cluster answering with this build's
 identity, reporting the release it was installed for and its installation
 completed at that release, holding every declared node, with no node's
-controller still presenting the media it booted from. The cluster reports its
+BMC still presenting the media it booted from. The cluster reports its
 installation completed only when its `ClusterVersion` condition `Available` is
 `True` and the newest entry of its update history, `status.history[0]`, is
 `Completed` at the declared release. The cluster opens that entry `Partial` when
@@ -892,7 +892,7 @@ image is foreign.
 declared release, reporting its installation completed and holding every
 declared node, reports `completed` with the same evidence, boots nothing and
 waits for nothing. The only differences it converges are media it did not
-finish releasing and each node's controller pointed at its installed disk:
+finish releasing and each node's BMC pointed at its installed disk:
 release runs on every apply, so a settled apply selects each node's disk again.
 The same cluster answering while it does not report its installation
 completed, as an attempt interrupted during the installation wait leaves it, is
@@ -933,13 +933,13 @@ or the bootstrap wait leaves. Anything else stays unknown, including a foreign
 answer, a foreign image while nothing answers, and a node running while nothing
 answers and no node presents this cluster's own image, because the first two
 may belong to another installation and the last may be installing now. A
-removal's resolution observes only the media each node's controller presents,
+removal's resolution observes only the media each node's BMC presents,
 because that is what the removal takes back and a completed installation
 already presents none, so it reads nothing of the cluster: no node presenting
 media is its completion; any of this cluster's declared Machines presenting
 media, this cluster's own image or any other, is a positive partial
 realization, because the removal ejects whatever each node presents and
-repeating it converges; and it stays unknown when a node's controller cannot be
+repeating it converges; and it stays unknown when a node's BMC cannot be
 read, which fails the observation, or when the evidence names a Machine that is
 not one of the cluster's nodes.
 

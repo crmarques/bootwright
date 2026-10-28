@@ -355,12 +355,12 @@ func TestUnsupportedNamesEveryClusterWithANodeThisContractCannotBoot(t *testing.
 		},
 		"controller port past the port space": {
 			singleNodeOnProvider(portPastTheSpace, guest("sno-00", "198.51.100.20/24")), "OpenShiftCluster/sno",
-			"node master-0 (Machine/sno-01): the Machine's emulated controller port does not allocate",
+			"node master-0 (Machine/sno-01): the Machine's emulated BMC port does not allocate",
 			"correct spec.libvirt.bmcEmulation.port on InfraProvider/lab-libvirt",
 		},
 		"no controller credential": {
 			singleNodeOnProvider(noControllerCredential), "OpenShiftCluster/sno",
-			"node master-0 (Machine/sno-01): the provider declares no emulated controller credential",
+			"node master-0 (Machine/sno-01): the provider declares no emulated BMC credential",
 			"set spec.libvirt.bmcEmulation.auth.credentialsRef on InfraProvider/lab-libvirt",
 		},
 	} {

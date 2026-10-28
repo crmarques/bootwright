@@ -777,7 +777,7 @@ registration. Each VirtualMachine claims
 store never realize one VirtualMachine.
 
 Not yet met: nothing marks, adopts or reserves a KubeVirt object as this
-paragraph states; tracked as [B816](milestones/backlog.md#b816).
+paragraph states; tracked as [B87](milestones/m1.md#b87).
 
 Pushed media: `media_insert` creates an upload DataVolume of its own name,
 labelled with the media identity, waits until it is ready for upload, runs

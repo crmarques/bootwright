@@ -12,10 +12,6 @@ nothing. A new term enters this page with its owner link in the same change.
 - **Controller**: the host that runs Bootwright, and in desired state the
   Machine that `spec.controller.machineRef` names ([controller](controller.md)).
   Bare "controller" never names anything else.
-
-  Not yet met: openshift-clusters.md and openshift-coverage.md still
-  call a BMC a controller; tracked as
-  [B851](milestones/backlog.md#b851).
 - **BMC** or **management controller**: a Machine's out-of-band Redfish
   endpoint, physical or emulated ([substrates](substrates.md)).
 - **Realized target**: what a substrate derives for a Machine: the management

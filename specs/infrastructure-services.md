@@ -117,7 +117,7 @@ A reservation key is one of:
 | `media:<filename.iso>` | A shared claim on one image of the [media store](managed-os.md#media-store); it conflicts with nothing and blocks only that image's deletion or replacement while any context holds it. |
 
 Not yet met: no KubeVirt VirtualMachine claims a
-`kubevirt-vm:` key; tracked as [B816](milestones/backlog.md#b816).
+`kubevirt-vm:` key; tracked as [B87](milestones/m1.md#b87).
 
 A `socket:` key writes an IPv6 address unbracketed, the one form every
 capability claims, while a plan's listener impact names the socket as an

@@ -266,13 +266,9 @@ Alias cell.
 | [B797](#b797) | new, 2026-10-21 (X56) | product | Storage | A StorageObjectBucket's declared policy changes after completion | A completed bucket refuses `object-bucket-identity` on a changed policy; a day-2 update is a state-contract change no milestone needs |
 | [B798](#b798) | new, 2026-10-23 (M3 verification) | defect | Verification tooling | The full Ansible unit gate selects its intended worker mode explicitly | Pre-existing tooling behavior outside the requested product change |
 | [B799](#b799) | new, 2026-10-23 (M3 verification) | defect | Workspace | Setup interruption retries identify any remaining setup-lock holder | Pre-existing intermittent refusal; its cause is unproved |
-| [B805](#b805) | new, 2026-10-26 (spec audit P0-F) | safety | Secrets and State reconciliation | Secret references declare a class; a rotated access credential has a recorded removal exit | Audit roadmap work; implemented only on an explicit lane request |
-| [B816](#b816) | new, 2026-10-26 (spec audit P1-I) | safety | State reconciliation and Controller setup | Recovery refusals, partial-removal readings and host probes match the rules | Audit roadmap work; implemented only on an explicit lane request |
-| [B820](#b820) | new, 2026-10-26 (spec audit P2-B) | enabling | Agent guidance and Verification tooling | Section-level index rows and docs gates for budgets, reachability and history links | Audit roadmap work; implemented only on an explicit lane request |
 | [B847](#b847) | new, 2026-10-27 (lane J) | defect | Infrastructure services | A zoned IPv6 SSH address refuses at plan, not at the record write | Found by lane J's review |
 | [B848](#b848) | new, 2026-10-27 (lane I) | enabling | Architecture | Cluster families publish the facts machine, controller and managed-service code reads | Found by the lane I review; each site reads its kind's own spec layout |
 | [B850](#b850) | new, 2026-10-27 (lane I) | defect | Desired state | A derived Machine contact `<machine>.<domain>` is checked against DNS name lengths | Found by the lane I review; derived cluster names were bounded in X171 |
-| [B851](#b851) | new, 2026-10-27 (lane I) | defect | Architecture | Spec prose says "controller" for a BMC | Found by the lane I review; B824 swept messages, rows and goldens |
 | [B853](#b853) | new, 2026-10-27 (lane I) | product | Managed OS | The `templateClone` installer is realized or retired | Admitted and refused at plan; no milestone names it |
 | [B854](#b854) | new, 2026-10-27 (lane I) | product | Managed OS | Anaconda `packageSource.mirror` and `fromSubscription` are realized or retired | Admitted and refused at plan; no milestone names them |
 | [B855](#b855) | new, 2026-10-27 (lane I) | product | Managed OS | An install profile's `ssh.initialPassword` is realized or retired | Admitted and refused at plan; no milestone names it |
@@ -397,6 +393,16 @@ Controller relocation, left over from C16, was split out as [B836](delivered.md#
 coherent snapshot validation, authorized inode rebinding, a fresh key before
 writes after rollback, interruption and retry and wrong-store refusal tests;
 lifecycle recovery evidence preserved.
+
+**Work moved here from B816 (2026-10-27):**
+
+- The restored seal counters of the
+  [format and restore boundary](../contexts.md#format-and-restore-boundary):
+  restore establishes the fresh encryption key the rule requires and detects
+  rolled-back seal counters, so a keyring restored with older seal counters
+  never keeps sealing under its old key with its usage counted from the older
+  value; a test restores a keyring with older counters and proves a new seal
+  uses a fresh key (the "fresh key before writes after rollback" test above).
 
 ### B104
 
@@ -536,7 +542,7 @@ Since X32 the adapter output prints nothing a failed `no_log` task raised, so co
 
 ### B247
 
-Widened by D183's answer to Q96 (a): every SSH-placed claim is published in the controller record, one whose placement is the controller as the controller's own and any other with every key qualified by `ssh/<address>:<port>/`, under the controller's conflict and release rules (an additive key form under controller record version 3, no version move; implemented with [B816](#b816)). Still open: a controller whose sshd listens on a port other than 22 is not recognized; one host reached by a name and an address, or by two addresses, is not recognized; and bridge readiness pairs providers and services by Machine name (found in X32). **Exit evidence:** planning tests for each remaining part.
+Widened by D183's answer to Q96 (a): every SSH-placed claim is published in the controller record, one whose placement is the controller as the controller's own and any other with every key qualified by `ssh/<address>:<port>/`, under the controller's conflict and release rules (an additive key form under controller record version 3, no version move; implemented with [B816](delivered.md#x182--audit-lane-n0-remaining-parts-to-their-owners-and-bmc-wording)). Still open: a controller whose sshd listens on a port other than 22 is not recognized; one host reached by a name and an address, or by two addresses, is not recognized; and bridge readiness pairs providers and services by Machine name (found in X32). **Exit evidence:** planning tests for each remaining part.
 
 ### B248
 
@@ -2931,164 +2937,6 @@ evidence:** parallel interruption/retry probes and a justified release fix,
 considering an explicit unlock before close without weakening exclusion or
 adding a retry that conceals a live owner.
 
-### B805
-
-**Owner:** Secrets and State reconciliation. **Kind:** safety.
-**Requires:** owner decision [Q70](#audit-remediation-decisions) for the exit.
-**Definition:** Specified. Roadmap step P0-F of the
-[2026-10-26 spec audit](../../audits/spec/2026-10-26.md); finding R2-04-01. A
-rotated BMC, KubeVirt, vCenter or registry credential no longer strands
-continuation and removal, while every ownership proof still runs.
-
-**Specs:** [immutable binding](../secrets.md#immutable-binding-and-contexts)
-names the two classes, effect material and access credential;
-[continuation and removal](../state-reconciliation.md#continuation-and-removal)
-keeps D37's two exits until the owner decides.
-
-**Work:**
-
-- R2-04-01 (High): each `*Ref` field to a Secret in `../api/` declares its
-  class (machines BMC credential, provider `kubeconfigRef`, vCenter, registry
-  `credentialsRef`, `recoveryPassphraseRef`, host keys); a docs test fails on
-  an unclassified field.
-- Waits for [Q70](#audit-remediation-decisions): the exit beside D37, named apart
-  from B181's bounded-run rebind, recorded as a new binding version in the
-  operation's evidence; continuation-and-removal and the managed-os and
-  substrates KubeVirt wording follow; the expired KubeVirt token case in
-  [M1](m1.md) is settled under the same rule.
-
-**Exit evidence:** a test rotates a bound BMC credential and proves destroy
-succeeds only through the chosen exit while the ownership proof still runs, and
-that an effect-material Secret refuses it; `make check` passes.
-
-**Partly delivered** on 2026-10-26 by X166: every Secret reference in
-`specs/api` names its class, held by `TestDocsSecretReferencesNameTheirClass`,
-and `--authorize rebind=<secret>` is the recorded access-credential rebind
-exit (D183, Q70), classified through each capability's Secret references.
-**Remains:** classifying the KubeVirt `kubeconfigRef` and the vCenter login
-when those arms exist ([B87](m1.md#b87), [B99](m1.md#b99)).
-
-### B816
-
-**Owner:** State reconciliation and Controller setup. **Kind:** safety.
-**Requires:** B800 to B807 (Phase 0); owner decisions
-[Q92](#audit-remediation-decisions), [Q93](#audit-remediation-decisions),
-[Q94](#audit-remediation-decisions), [Q95](#audit-remediation-decisions) and
-[Q96](#audit-remediation-decisions) for their parts only. **Definition:** Specified.
-Roadmap step P1-I of the
-[2026-10-26 spec audit](../../audits/spec/2026-10-26.md); findings F09-01,
-F09-03, F12-01, F12-02, F13-03, F13-04, F13-05, V2-05, V2-20, R2-02-03,
-R2-06-05, R2-06-06, CX-R6 (F09-04, F12-03 and CX-R4 applied). Every recovery
-refusal names an exit the host can keep, and partial removals read unknown.
-
-**Specs:** [continuation and removal](../state-reconciliation.md#continuation-and-removal),
-[the controller runtime](../controller.md#the-controller-runtime),
-[format and restore](../contexts.md#format-and-restore-boundary),
-secrets.md, cli.md, cli/output.md and
-[substrates](../substrates.md#kubevirt-machine-realization) carry the rules;
-their Not yet met lines point here.
-
-**Work:**
-
-- F09-03 (Medium): the completed-apply refusal names `deletionExit` in
-  `internal/reconciliation/lifecycle`, and `status.go` `offered()` returns the
-  deletion as for a completed destroy; a status golden over a completed apply
-  with a lost block record names `context delete --purge --allow-orphans`.
-- F12-02 (Medium): `diff.go` `recordedSide` and `status.go` `removedStatus`
-  read an object unknown when some but not all of its removal blocks are done;
-  diff and status goldens over a destroy paused at the online-cleanup boundary.
-- F13-03 (Medium): the `secret.store.corrupt` remedy in
-  `internal/secrets/secretstore/access.go` names D37's two exits with the
-  context name; a text test.
-- F13-04 (Medium): the pending-intent refusal and golden name both exits; in
-  this item's named slice, a setup failure that began no dnf transaction
-  clears the pending intent, with a test of a failed wheel fetch followed by
-  a successful launch of the receipt's runtime.
-- F13-05, V2-05 (Medium, Low): `execution.go`'s closure refusal and golden
-  name the registering build's setup (network or `--wheel-mirror`) and the
-  superseding removal.
-- V2-20 (Medium): a lifecycle test drives a completed apply with a latched log
-  fault through a settled apply (log reopened, flag cleared, handoff ready),
-  and a test that `status` never clears it.
-- R2-06-05 (Medium): `substrate_libvirt_host` probes addresses, IPv4 and IPv6
-  routes and link names before `net-define`; collection unit tests refuse an
-  overlapping route and an existing link of the bridge's name.
-- R2-02-03 (Medium): with B87, marks, lost-reply adoption and the
-  `kubevirt-vm:` key, and a fake-API test of lost-reply adoption and a foreign
-  same-labelled object.
-- CX-R6 (Medium): a test that `diff --observe` with a missing runtime and a
-  held `setup/lock` waits then rebuilds, refuses naming `bootwright setup`
-  without the wheel, and `status` never rebuilds, unless one exists.
-- Waits for [Q92](#audit-remediation-decisions), [Q93](#audit-remediation-decisions),
-  [Q94](#audit-remediation-decisions), [Q95](#audit-remediation-decisions),
-  [Q96](#audit-remediation-decisions): the chosen rule, its state-machine or status
-  reason, and its test.
-
-**Exit evidence:** the P1-I roadmap exit (F09-01 stays open until the owner
-reopens D38); the goldens and tests above pass; `make check` passes.
-
-
-**Partly delivered** on 2026-10-27 by X170: F09-03, F12-02, F13-03, F13-04,
-F13-05, V2-05, R2-06-05 and CX-R6 above, with D183's answers to Q93 (a), Q94
-(a), Q95 (a) and Q96 (a, D186); V2-20 needed no change. **Remains:** R2-02-03
-waits for B87; F09-01 stays open under D38 (Q92 a); the restored seal counters
-in [contexts](../contexts.md#format-and-restore-boundary) have no work bullet
-yet.
-
-### B820
-
-**Owner:** Agent guidance and Verification tooling. **Kind:** enabling.
-**Requires:** B819. **Definition:** Specified. Roadmap step P2-B of the
-[2026-10-26 spec audit](../../audits/spec/2026-10-26.md); findings F15-08,
-F15-03, F15-07, F16-03, F17-07, R2-02-05. Agents reach the owning section of a
-large domain from the index, and the docs gates bound what they read.
-
-**Specs:** the glossary moved to [glossary.md](../glossary.md), shrinking
-[specs/index.md](../index.md) to about 3.6 of 4.0 KB.
-[storage-api-review.md](../storage-api-review.md) no longer claims admitted
-subsets and points at [api/ceph.md](../api/ceph.md).
-[cli/commands.md](../cli/commands.md) holds the help content rule. Both
-coverage pages say their public ledger row summarizes locally retained fields.
-
-**Work:**
-
-- F15-08 (Medium): docs gates in `test/architecture/docs_test.go` for
-  per-section byte budgets, reachability of every `specs/*.md` from the index,
-  and a ratcheted ban on `delivered.md` links and X ids in normative pages,
-  each with a seeded-violation fixture test.
-- F15-03: move `storage-api-review.md` into milestones history or index it as
-  history, retargeting the links from m2.md, backlog.md,
-  [ceph-resources.md](../ceph-resources.md) and
-  [ceph-native-api.md](../ceph-native-api.md).
-- F15-07: split [managed-os.md](../managed-os.md) `## Installation` into named
-  `###` leaves keeping existing anchors; section-level index rows for the six
-  largest domains (managed OS, state reconciliation, storage, CLI, contexts,
-  substrates), restating the index budget in `docsByteBudgets` as needed; a
-  section-budget ratchet with named, dated exceptions.
-- F16-03: [delivered](delivered.md)'s help-contract record links the
-  commands.md help section; optionally the structured help result gains
-  `examples` and `available` ([cli/output.md](../cli/output.md)) with a golden.
-- R2-02-05: a Qualification section in [substrates.md](../substrates.md), one
-  row per realized arm and management-controller family (its B item, operator
-  gate, ledger row or `unrun`; no versions or host identities), and an index
-  row routing "which substrates and controllers are qualified" to it.
-- F17-07 rides with the first M3b and M4b acceptance baselines: `Container
-  cluster row` and `Add-on row` templates in
-  [docs/acceptance.md](../../docs/acceptance.md), linked from each coverage
-  page's Rows rule.
-
-**Exit evidence:** each new gate fails on its seeded violation and passes on
-main; no level-2 spec section above the budget except named exceptions; the
-review page is history or gone from `specs/`; the index routes the named
-sections; `make docs-check`.
-
-
-**Partly delivered** on 2026-10-27 by X173: F15-08, F15-03 (the review page
-indexed as history), F15-07, F16-03's link and R2-02-05 above. **Remains:**
-F17-07's acceptance-row templates, which ride with the first M3b and M4b
-acceptance baselines; the optional structured help fields `examples` and
-`available`.
-
 ### B847
 
 **Owner:** Infrastructure services. **Kind:** defect. **Requires:** none.
@@ -3135,20 +2983,6 @@ X171 added that check for derived OpenShift node and endpoint names only.
 names do. **Exit evidence:** a test with a domain long enough that a valid
 Machine name composes an over-long contact, and one that composes a name just
 within the bound.
-
-### B851
-
-**Owner:** Architecture. **Kind:** defect. **Requires:** none. **Definition:**
-Specified. Found by the lane I review (X171). The
-[glossary](../glossary.md) reserves bare "controller" for the host that runs
-Bootwright, yet the prose of [openshift-clusters.md](../openshift-clusters.md)
-and [openshift-coverage.md](../openshift-coverage.md) still calls a BMC "the
-controller", an "emulated controller" or a "physical controller", and speaks
-of a "controller leg". B824 swept the messages, refusal rows and goldens only.
-**Outcome:** those pages say BMC, management controller or emulated BMC where
-they mean one, and [substrates.md](../substrates.md) is read once more for the
-same. **Exit evidence:** a grep of the pages finds "controller" only for the
-Environment's controller; the glossary's Not yet met line is removed.
 
 ### B853
 
@@ -3380,15 +3214,15 @@ decision stay open while its other parts land.
 | A Harness and guards | B800 (X161), B801 (X161) | none | none | Q62, Q63, Q64 |
 | B Physical targets and shared hosts | B802 (X165), B803 (X165) | B801 | D, E, G, I | Q65, Q66, Q67 |
 | C Storage retirement | B804 (X167), B835 (X167) | none | F, G | Q68 |
-| D Credentials and trust | [B805](#b805), B817 (X166), [B829](delivered.md#x181--audit-lane-r-private-installer-material-and-recapture-identity), B831 (X166) | none | B | Q70, Q97, Q98, Q99, Q100, Q101, Q116 |
+| D Credentials and trust | [B805](delivered.md#x182--audit-lane-n0-remaining-parts-to-their-owners-and-bmc-wording), B817 (X166), [B829](delivered.md#x181--audit-lane-r-private-installer-material-and-recapture-identity), B831 (X166) | none | B | Q70, Q97, Q98, Q99, Q100, Q101, Q116 |
 | E Store durability and controller records | B806 (X164), B836 (X164), B832 (X164) | B801 | B, J | none |
 | F Truthful admission | B807 (X168) | none | C, I | Q71 |
 | G Extension architecture | [B808](delivered.md#x179--audit-lane-q1-per-object-claims-and-nested-references), B811 (X169), B809 (X169), B810 (X169), B812 (X169) | B800 to B807 | B, C, I, J, K | Q72, Q73, Q74, Q75 |
 | H Cross-build continuation | B813 (X163) | B801 | none | Q76 |
 | I API shape and grammar | B814 (X171), [B826](delivered.md#x179--audit-lane-q1-per-object-claims-and-nested-references), B827 (X171), B828 (X171), B824 (X171), B821 (X171), B837 (X171) | B808 | B, F, G | Q77, Q78, Q79, Q80, Q81, Q82, Q83, Q84, Q85, Q86, Q87, Q88, Q105, Q106, Q107, Q110, Q111, Q112, Q113, Q114, Q115, Q118 |
-| J Reconciliation rules | [B816](#b816), B830 (X170) | B800 to B807 | E, G | Q92, Q93, Q94, Q95, Q96, Q117, Q118 |
+| J Reconciliation rules | [B816](delivered.md#x182--audit-lane-n0-remaining-parts-to-their-owners-and-bmc-wording), B830 (X170) | B800 to B807 | E, G | Q92, Q93, Q94, Q95, Q96, Q117, Q118 |
 | K Language and adapter contracts | B818 (X162), B834 (X162) | none | G | none |
-| L Corpus structure and skills | B815 (X173), B819 (X173), [B820](#b820), B822 (X173) | B801; B822 after B813 and B818 | none | Q89, Q90, Q91, Q102, Q103 |
+| L Corpus structure and skills | B815 (X173), B819 (X173), [B820](delivered.md#x182--audit-lane-n0-remaining-parts-to-their-owners-and-bmc-wording), B822 (X173) | B801; B822 after B813 and B818 | none | Q89, Q90, Q91, Q102, Q103 |
 | M CLI and examples | [B825](delivered.md#x177--audit-lane-t-inherited-flags-and-cluster-preflight), B833 (X172), B823 (X172), B842 (X172) | none | none | Q104, Q108, Q109 |
 
 ### Lane order and progress
@@ -3425,7 +3259,7 @@ also updates this table.
 | 21 | R Installer material (B829) | merged (X181) |
 | 22 | T Context-free commands and preflight (B852, B825) | merged (X177) |
 | 23 | U Unrealized fields (B853 to B856) | not started |
-| 24 | N0 Remaining text to owning items (B805, B816, B820, B851) | not started |
+| 24 | N0 Remaining text to owning items (B805, B816, B820, B851) | merged (X182) |
 
 To continue, take the first row not `merged`. If its branch exists, resume it:
 each finished item is a `wip` commit whose body names what remains, and the
@@ -3455,7 +3289,7 @@ blocks.
 | Q67 | Should an orphan-acknowledged context deletion keep its exclusive host keys as an abandoned/<name> tombstone instead of releasing them at once (amending D38)? | (a: keep D38) Keys release at the deletion; the orphan confirmation names the keys it frees and the reinstall hazard (spec applied, code in B803).; (b: tombstone) Exclusive entries become an abandoned/<name> holder that refuses conflicting claims until a new confirmed 'bootwright controller release --abandoned <name>'; shared media entries still drop at once. | **Answered by D183: a.** Arbiter and lanes: A's warning now; B only if the owner reopens D38. | [B803](delivered.md#x165--audit-lane-b-physical-targets-and-shared-hosts) | answered by [D183](#d183) |
 | Q68 | Confirm the D143 clause 6 reading: does retiring a Ceph cluster (or StorageExport) with its virtual hosts require that no consumer of its exports survives the removal? | (a: refuse) Removal refuses before registration naming the surviving consumer and export until B491; a mixed context (virtual Ceph, physical OpenShift) has no full destroy until then (the specs state this refusal as the interim safe reading).; (b: named impact plus acknowledgement) Removal proceeds after an acknowledgement naming the surviving consumer, whose PVs and Secrets then point at deleted storage. | **Answered by D183: a.** Roadmap P0-E and R2-02-01 recommend A with a plan-time topology flag; F10-04's refuter and calibrator prefer B as smaller. | [B804](delivered.md#x167--audit-lane-c-storage-retirement) | answered by [D183](#d183) |
 | Q69 | Should B659, B662 and B491 become prerequisites of M2d's B485 exit, or does B485 close with the physical recovery limitation recorded? | (a: prerequisites) B485 Requires gains B659, B662 and B491; M2d cannot complete until interrupted physical deployments have exits, which first needs their protocol decisions.; (b: record the limitation) B485 may close with the physical profile documented as an incomplete recovery profile (text applied now); the exits stay parked. | **Answered by D183: a.** The audit (14.8) offers both and keeps the recovery protocols as owner decisions; it does not choose. | [B485](m2.md#b485) | answered by [D183](#d183) |
-| Q70 | Should continuation and removal be able to present the current version of a rotated access credential (BMC/Redfish, KubeVirt kubeconfigRef, vCenter, registry login) instead of the bound one, and through which recorded gate? | (a: explicit recorded rebind exit) A third exit beside D37 for access credentials only, gated by a flag or the --authorize token model and recorded as a new binding version; ownership proofs still run and effect-material Secrets refuse it.; (b: keep today's rule) Removal always presents the bound version; a rotated credential strands destroy, leaving restore-keyring or --purge --allow-orphans. | **Answered by D183: a.** The report recommends A, gated by the --authorize model and named apart from B181's bounded-run rebind, keeping D37 and D85; the owner decides the flag. | [B805](#b805) | answered by [D183](#d183) |
+| Q70 | Should continuation and removal be able to present the current version of a rotated access credential (BMC/Redfish, KubeVirt kubeconfigRef, vCenter, registry login) instead of the bound one, and through which recorded gate? | (a: explicit recorded rebind exit) A third exit beside D37 for access credentials only, gated by a flag or the --authorize token model and recorded as a new binding version; ownership proofs still run and effect-material Secrets refuse it.; (b: keep today's rule) Removal always presents the bound version; a rotated credential strands destroy, leaving restore-keyring or --purge --allow-orphans. | **Answered by D183: a.** The report recommends A, gated by the --authorize model and named apart from B181's bounded-run rebind, keeping D37 and D85; the owner decides the flag. | [B805](delivered.md#x182--audit-lane-n0-remaining-parts-to-their-owners-and-bmc-wording) | answered by [D183](#d183) |
 | Q71 | Refuse the four inert ContainerCluster endpoint fields (port, scheme, prefixLength, interfaceNetworks) at plan on the agent path, or remove them from the schema until a consumer exists? | (a: refuse at plan) Fields stay admitted; an authored non-native value refuses at its path with a refusal row per field (spec states this).; (b: remove the fields) The endpoint shape loses the four fields; no refusal rows; examples and goldens change. | **Answered by D183: a.** Refuse at plan now (roadmap P0-H); removal stays an owner option. Non-blocking: B807 implements A unless the owner chooses B first. | [B807](delivered.md#x168--audit-lane-f-truthful-admission) | answered by [D183](#d183) |
 | Q72 | Which mechanism scopes an Environment: the source directory, spec.resources and cluster lists all narrow scope today? | (a) Remove spec.resources; the Environment directory is the scope and cluster lists are the only narrowing, documented with an example.; (b) Keep spec.resources and drop cluster lists, which makes the hostClusterRef retention edge moot.; (c) Keep both, with one tracked example using spec.resources and a one-sentence rationale in environment.md. | **Answered by D183: a.** Decide together with hostclusterref-retention-edge; the report's first option is (a), and the lanes expect cluster lists to stay. Either way the excluded-reference refusal names the selection field. | [B812](delivered.md#x169--audit-lane-g-extension-architecture) | answered by [D183](#d183) |
 | Q73 | If cluster lists stay, does selecting a nested cluster retain its KubeVirt provider's hostClusterRef ContainerCluster as a root with its own closure? | (a) Add the closure row, effective when B732 lifts the KubeVirt refusal, with a multidc selection test as B732 exit evidence.; (b) Moot because cluster lists are dropped (environment-scope-mechanism b). | **Answered by D183: a.** a if cluster lists stay; record the selection test as B732 exit evidence either way. | [B812](delivered.md#x169--audit-lane-g-extension-architecture) | answered by [D183](#d183) |
@@ -3477,11 +3311,11 @@ blocks.
 | Q89 | Is project.md Product scope split into a committed portfolio and an extension envelope that gates no milestone until promoted? | (a) Two labelled lists, each committed entry linking its milestone; no milestone page changes.; (b) a plus moving family-only arms (M1f vSphere, M3f) out of their gating milestones; amends D158 and the D172 Q1 reading.; (c) Keep one list; every family item keeps gating its milestone. | **Answered by D183: a.** a now; b as a separate owner option; an envelope-only arm needs owner promotion, never a session clause. | [B815](delivered.md#x173--audit-lane-l-corpus-structure-and-skills) | answered by [D183](#d183) |
 | Q90 | Do milestone Requires state only real dependencies per submilestone, and may portfolio submilestones complete without family arms? | (a) Per-submilestone Requires cells on m1 to m4 with true prerequisites, cross-milestone items included; completion rules unchanged.; (b) a plus a portfolio or family tag so a milestone can be done on its portfolio submilestones; supersedes D158's all-items clause.; (c) a plus moving M1f, M3f (and optionally M4e, M4f) to a later milestone; amends D158, D172, D173. | **Answered by D183: a.** a, correcting the waiver citation to D174; b or c only as an owner decision superseding D158. | [B815](delivered.md#x173--audit-lane-l-corpus-structure-and-skills) | answered by [D183](#d183) |
 | Q91 | How do session-taken clauses pending the owner's review bind, and where are they tracked? | (a) One scope rule: a waiver quotes the owner's explicit request, pending clauses bind until overturned and an overturned clause reopens its work; one open-clause list.; (b) Pending clauses authorize nothing until the owner confirms them. | **Answered by D183: a.** a; milestones.md is at its byte budget, so the rule needs equal trimming. | [B815](delivered.md#x173--audit-lane-l-corpus-structure-and-skills) | answered by [D183](#d183) |
-| Q92 | Does a fresh destroy accept a scoped, acknowledged abandonment of one block that stays unknown, so one unreachable target no longer blocks the whole removal (reopening D38)? | (a) Keep D38: the removal stays refused and the orphan-acknowledged deletion is the only exit.; (b) Record that block abandoned, keep it, its plan ancestors and host reservations, and remove the rest in inverted order; needs B568 so its markers stay guarded. | **Answered by D183: a.** No recommendation in the report: it is a request to reopen D38, and roadmap 14.6 holds the work until the owner does. | [B816](#b816) | answered by [D183](#d183) |
-| Q93 | Which exit does a completed apply holding a lost block record get? | (a) The existing purge-with-orphans deletion, named in the refusal and status; abandons the apply's host effects (spec today).; (b) A destroy over the completed apply covers its whole frozen plan, resolving non-done blocks by observation first. | **Answered by D183: b.** a; b only as an owner item. | [B816](#b816) | answered by [D183](#d183) |
-| Q94 | Does handoff readiness cover the selected input revision or the revision the apply froze? | (a) Add a predicate condition and status reason: the selected revision is not the one the apply froze, and diff shows what changed.; (b) Readiness covers the frozen scope; project.md says so and status prints the frozen revision beside ready. | **Answered by D183: a.** a (calibrator), mirroring the settlement scope. | [B816](#b816) | answered by [D183](#d183) |
-| Q95 | Does retention pin the runtime and wheels of every non-terminal operation so its continuation survives more than one lock change or a setup-format discard offline? | (a) Wording only: current-plus-previous retention stays and refusals name the registering build's setup with network or --wheel-mirror (spec today).; (b) A host-wide pin list under setup/lock written at registration, honoured by retention and format healing, dropped at finalization or deletion. | **Answered by D183: a.** a now; b parked as an owner option under D152 clauses 8 and 9. | [B816](#b816) | answered by [D183](#d183) |
-| Q96 | Are SSH-placed host claims published in the controller record, qualified by the SSH host token, so two contexts of one store targeting one SSH host conflict? | (a) Widen B247: every SSH-placed key gains an ssh/<address>:<port>/ qualifier with the controller conflict and release rules, best effort per declared address; controller-record schema moves pre-1.x.; (b) Keep B247 narrow and carry cross-context SSH coordination in a new parked item.; (c) Keep the limitation documented; contexts on one SSH host stay uncoordinated. | **Answered by D183: a.** a, decided with B247; do not edit delivered history. | [B816](#b816) | answered by [D183](#d183) |
+| Q92 | Does a fresh destroy accept a scoped, acknowledged abandonment of one block that stays unknown, so one unreachable target no longer blocks the whole removal (reopening D38)? | (a) Keep D38: the removal stays refused and the orphan-acknowledged deletion is the only exit.; (b) Record that block abandoned, keep it, its plan ancestors and host reservations, and remove the rest in inverted order; needs B568 so its markers stay guarded. | **Answered by D183: a.** No recommendation in the report: it is a request to reopen D38, and roadmap 14.6 holds the work until the owner does. | [B816](delivered.md#x182--audit-lane-n0-remaining-parts-to-their-owners-and-bmc-wording) | answered by [D183](#d183) |
+| Q93 | Which exit does a completed apply holding a lost block record get? | (a) The existing purge-with-orphans deletion, named in the refusal and status; abandons the apply's host effects (spec today).; (b) A destroy over the completed apply covers its whole frozen plan, resolving non-done blocks by observation first. | **Answered by D183: b.** a; b only as an owner item. | [B816](delivered.md#x182--audit-lane-n0-remaining-parts-to-their-owners-and-bmc-wording) | answered by [D183](#d183) |
+| Q94 | Does handoff readiness cover the selected input revision or the revision the apply froze? | (a) Add a predicate condition and status reason: the selected revision is not the one the apply froze, and diff shows what changed.; (b) Readiness covers the frozen scope; project.md says so and status prints the frozen revision beside ready. | **Answered by D183: a.** a (calibrator), mirroring the settlement scope. | [B816](delivered.md#x182--audit-lane-n0-remaining-parts-to-their-owners-and-bmc-wording) | answered by [D183](#d183) |
+| Q95 | Does retention pin the runtime and wheels of every non-terminal operation so its continuation survives more than one lock change or a setup-format discard offline? | (a) Wording only: current-plus-previous retention stays and refusals name the registering build's setup with network or --wheel-mirror (spec today).; (b) A host-wide pin list under setup/lock written at registration, honoured by retention and format healing, dropped at finalization or deletion. | **Answered by D183: a.** a now; b parked as an owner option under D152 clauses 8 and 9. | [B816](delivered.md#x182--audit-lane-n0-remaining-parts-to-their-owners-and-bmc-wording) | answered by [D183](#d183) |
+| Q96 | Are SSH-placed host claims published in the controller record, qualified by the SSH host token, so two contexts of one store targeting one SSH host conflict? | (a) Widen B247: every SSH-placed key gains an ssh/<address>:<port>/ qualifier with the controller conflict and release rules, best effort per declared address; controller-record schema moves pre-1.x.; (b) Keep B247 narrow and carry cross-context SSH coordination in a new parked item.; (c) Keep the limitation documented; contexts on one SSH host stay uncoordinated. | **Answered by D183: a.** a, decided with B247; do not edit delivered history. | [B816](delivered.md#x182--audit-lane-n0-remaining-parts-to-their-owners-and-bmc-wording) | answered by [D183](#d183) |
 | Q97 | How does machine trust under --yes or structured output reconcile with the explicit host-key confirmation rule? | (a) Add --expect <machine>=SHA256:<fp> and make --replace take one; an add or replace whose fingerprint is not named refuses (new public flag syntax).; (b) security.md names --yes enrollment as an operator-accepted trust-on-first-use exception; no code change. | **Answered by D183: a.** The roadmap P1-J exit chooses a; the calibrator preferred b with a as hardening. a adds a public flag, so the owner decides. | [B817](delivered.md#x166--audit-lane-d-credentials-and-trust) | answered by [D183](#d183) |
 | Q98 | Is a usernamePassword Secret's username secret? | (a) Declare it non-secret identity metadata in security.md and secrets.md; cli.md stops treating --username as hidden.; (b) Add a file or stdin input for the username (new public flag). | **Answered by D183: a.** a (calibrator); D72/D73 keep usernames on the flag without deciding they are non-secret. | [B817](delivered.md#x166--audit-lane-d-credentials-and-trust) | answered by [D183](#d183) |
 | Q99 | May a query-signed media URL travel on argv for media add --from-url? | (a) Take the URL from a file or stdin (for example --from-url-file) and state that a signed query is a credential (new public flag).; (b) Record a named exception in security.md for a query-signed URL on argv. | **Answered by D183: a.** a or b (calibrator); refusing queries is rejected because managed OS intends signed URLs. | [B817](delivered.md#x166--audit-lane-d-credentials-and-trust) | answered by [D183](#d183) |
@@ -5413,7 +5247,7 @@ broader routes refuse ([B843](delivered.md#x178--audit-lane-s-libvirt-host-evide
 host's pinned SSH host-key fingerprint (`sshkey/<SHA256>/`), an additive key
 form under controller record version 3 ([B844](delivered.md#x180--audit-lane-p-removal-views-releasing-claims-and-host-key-claims)). `schema` and `version`
 drop `--context`, and structured help gains no `examples` or `available`
-([B852](delivered.md#x177--audit-lane-t-inherited-flags-and-cluster-preflight), [B820](#b820)). `installer.templateClone` folds into
+([B852](delivered.md#x177--audit-lane-t-inherited-flags-and-cluster-preflight), [B820](delivered.md#x182--audit-lane-n0-remaining-parts-to-their-owners-and-bmc-wording)). `installer.templateClone` folds into
 [B99](m1.md#b99); `packageSource.mirror`, `packageSource.fromSubscription`,
 `ssh.initialPassword` and ArtifactServer retention `installOnly` retire with
 their replacements (B853 to B856). `preflight clusters` runs the container-cluster and

@@ -108,7 +108,7 @@ func TestMachineProjectionRendersObservedDiskSizes(t *testing.T) {
 	request := projectionRequest(t, Disk{Name: "data1", SizeGiB: 50}, Disk{Name: "data2", SizeGiB: 20})
 	projections := mustProject(t, request, projectionEvidence(t, "resized-root"))
 	requireProjection(t, projections[0], api.Machine, "rhel-01", machineSpec(), []string{
-		"machine-rhel-01: domain running", "machine-rhel-01: its controller reports power On",
+		"machine-rhel-01: domain running", "machine-rhel-01: its BMC reports power On",
 	})
 	requireProjection(t, projections[1], api.InfraProvider, "lab-libvirt", profile(
 		text("name", "rhel"), number("diskGiB", "100"),

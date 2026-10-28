@@ -156,7 +156,7 @@ func MachineRequests(catalog api.Catalog, controllerMachine, contextName string)
 		}
 		base, ok := provider.Spec().Get("libvirt", "bmcEmulation", "port").Int64()
 		if !ok || base < 1 {
-			return nil, refusal("api.value", "the provider declares no emulated controller port", "set spec.libvirt.bmcEmulation.port on "+provider.Identity())
+			return nil, refusal("api.value", "the provider declares no emulated BMC port", "set spec.libvirt.bmcEmulation.port on "+provider.Identity())
 		}
 		for ordinal, machine := range substrate.HostedMachines(catalog, provider.Name()) {
 			request, err := machineRequestFor(catalog, provider, machine, placement, egress, contextName, int(base)+ordinal)
@@ -176,7 +176,7 @@ func machineRequestFor(catalog api.Catalog, provider, machine api.Object, placem
 		return MachineRequest{}, refusal("lifecycle.state", "the Machine name is not a safe host identifier", "rename "+machine.Identity())
 	}
 	if port > 65535 {
-		return MachineRequest{}, refusal("api.value", "the provider's emulated controller range leaves the port space", "lower spec.libvirt.bmcEmulation.port on "+provider.Identity())
+		return MachineRequest{}, refusal("api.value", "the provider's emulated BMC range leaves the port space", "lower spec.libvirt.bmcEmulation.port on "+provider.Identity())
 	}
 	profile, found := findNamed(provider.Spec().Get("libvirt", "machineProfiles"), "name", substrate.MachineProfileRef(machine))
 	if !found {
@@ -197,11 +197,11 @@ func machineRequestFor(catalog api.Catalog, provider, machine api.Object, placem
 	}
 	credentials := provider.Spec().Get("libvirt", "bmcEmulation", "auth", "credentialsRef").Text()
 	if credentials == "" {
-		return MachineRequest{}, refusal("api.required", "the provider declares no emulated controller credential", "set spec.libvirt.bmcEmulation.auth.credentialsRef on "+provider.Identity())
+		return MachineRequest{}, refusal("api.required", "the provider declares no emulated BMC credential", "set spec.libvirt.bmcEmulation.auth.credentialsRef on "+provider.Identity())
 	}
 	certificate := provider.Spec().Get("libvirt", "bmcEmulation", "certificateRef").Text()
 	if certificate == "" {
-		return MachineRequest{}, refusal("api.required", "the provider declares no emulated controller serving certificate", "set spec.libvirt.bmcEmulation.certificateRef on "+provider.Identity())
+		return MachineRequest{}, refusal("api.required", "the provider declares no emulated BMC serving certificate", "set spec.libvirt.bmcEmulation.certificateRef on "+provider.Identity())
 	}
 	address := provider.Spec().Get("libvirt", "bmcEmulation", "bindAddress").Text()
 	uuid := substrate.DomainUUID(contextName, name)

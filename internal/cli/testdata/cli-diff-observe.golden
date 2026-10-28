@@ -7,7 +7,7 @@ diff real/Machine/rhel-01 desired/Machine/rhel-01
 # plan: same (machine-rhel-01); realized: done
 # not compared: spec.substrate.libvirt.profileRef, spec.hardware, spec.os, spec.network, spec.access
 # machine-rhel-01: part of this effect is realized as its frozen request states
-# machine-rhel-01: domain running; its controller reports power On
+# machine-rhel-01: domain running; its BMC reports power On
 
 diff real/Machine/rhel-02 desired/Machine/rhel-02
 # plan: same (machine-rhel-02); realized: done

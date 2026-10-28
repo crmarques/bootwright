@@ -1845,7 +1845,7 @@ token:
 Today the bare-metal Machine, the managed-OS installation and its physical
 erase of a bare-metal target, and the agent installation's bare-metal nodes
 present their management controller's `credentialsRef`, and the Ceph cluster,
-host and image blocks present the registry login. An emulated controller's
+host and image blocks present the registry login. An emulated BMC's
 credentials are effect material its libvirt host gave the emulator, and a
 trust anchor (`trustBundleRef`, `knownHostsRef`) is never presented, so neither
 is rebound. A KubeVirt or vSphere arm names its kubeconfig or vCenter login the

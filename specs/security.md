@@ -124,7 +124,7 @@ embed no credential; private-estate identifiers still do not belong in public
 examples. The prohibition covers Bootwright-owned sinks. A management
 controller necessarily receives a private virtual-media URL to fetch an image
 and may retain it or log it in its own access records; treat those records as
-confidential too. An emulated controller has the same behavior.
+confidential too. An emulated BMC has the same behavior.
 
 `validate` and `render effective` read no Secret material under the
 [compiler boundary](api.md#compiler-boundary), and desired state names no
@@ -501,15 +501,15 @@ by default. Its one insecure exception, `disableVerification`, is explicit,
 declared on one Machine and visible in that Machine's effective state. It is
 never inherited, never a provider default and never an Environment kind
 default, and a Machine whose installation delivers private material refuses it
-before registration. The one bounded exception is the emulated controller of a
-virtual Machine, whose controller uses verified HTTPS but fetches media
+before registration. The one bounded exception is the emulated BMC of a
+virtual Machine, whose BMC uses verified HTTPS but fetches media
 without verifying the artifact server. Every consumer booting through one has
-its artifact server placed on that controller's provider host, so the
+its artifact server placed on that BMC's provider host, so the
 unverified fetch never leaves that host: the
 [container-cluster boot media](openshift-clusters.md#boot-media) and the
 [managed-OS installation](managed-os.md#refusal-table) each refuse before
 registration otherwise. A
-controller's own transport verifies against its declared CA bundle alone, or
+BMC's own transport verifies against its declared CA bundle alone, or
 against the system trust store when it declares none
 ([Machine BMC trust](api/machines.md#bmc-and-root-device-shape)).
 

@@ -8550,14 +8550,14 @@ delivering commit records the gates.
 cluster. Delivered on 2026-10-26 as lane D of the
 [audit remediation](backlog.md#lane-order-and-progress) under D182, with
 D183's answers to Q70, Q97 to Q101 and Q116; the lane also partly delivered
-[B805](backlog.md#b805) and [B829](#x181--audit-lane-r-private-installer-material-and-recapture-identity), which stay open.
+[B805](#x182--audit-lane-n0-remaining-parts-to-their-owners-and-bmc-wording) and [B829](#x181--audit-lane-r-private-installer-material-and-recapture-identity), which stay open.
 
 Every Secret reference names its class, access credential or effect
 material, and `--authorize rebind=<secret>` presents a rotated access
 credential's current version to a continuation or removal as a recorded new
 binding version, refusing effect material and any Secret no frozen block
 reads as an access credential; ownership proofs still run
-([B805](backlog.md#b805) keeps the KubeVirt and vCenter classes). Several-Machine
+([B805](#x182--audit-lane-n0-remaining-parts-to-their-owners-and-bmc-wording) keeps the KubeVirt and vCenter classes). Several-Machine
 `machine exec` and `cluster exec` sessions are bounded and an interrupted run
 never exits 0; `machine trust --expect <machine>=SHA256:<fp>` names the
 fingerprint an unattended enrollment or replacement must see; usernames are
@@ -8683,7 +8683,7 @@ delivering commit records the gates.
 Substrate and Add-ons. Delivered on 2026-10-27 as lane J of the
 [audit remediation](backlog.md#lane-order-and-progress) under D182, with
 D183's answers to Q93 to Q96 and Q117 and the owner's D186; the lane also
-partly delivered [B816](backlog.md#b816) and parked B843 to B847.
+partly delivered [B816](#x182--audit-lane-n0-remaining-parts-to-their-owners-and-bmc-wording) and parked B843 to B847.
 
 A destroy over a completed apply that holds a lost or non-done block covers
 the whole frozen plan: it resolves unproved blocks by observation before
@@ -8896,7 +8896,7 @@ P2-D).
 tooling. Delivered on 2026-10-27 as lane L of the
 [audit remediation](backlog.md#lane-order-and-progress) under D182, with
 D183's answers to Q89 to Q91, Q102 and Q103 and the owner's D187; the lane
-also partly delivered [B820](backlog.md#b820).
+also partly delivered [B820](#x182--audit-lane-n0-remaining-parts-to-their-owners-and-bmc-wording).
 
 Product scope lists a committed portfolio, each entry linking its milestone,
 and an extension envelope only the owner promotes from. Milestone tables carry
@@ -9161,6 +9161,29 @@ and the store is intact.
 **Guard tests:** the `private_file`, transfer-rule, work-area, incarnation,
 recapture-identity and keyring reader tests, each proved by a seeded
 mismatch; the delivering commit records the gates.
+
+### X182 — Audit lane N0: remaining parts to their owners and BMC wording
+
+**Items:** B805, B816, B820 and B851.
+**Kind:** enabling. **Owners:** Milestones, Substrate, State reconciliation
+and Container cluster. Delivered on 2026-10-27 as lane N0 of the
+[audit remediation](backlog.md#lane-order-and-progress) under the owner's
+request to implement the remaining items, with D188's answers; it closes the
+partly delivered items whose remaining parts belong to other items.
+
+B805's KubeVirt `kubeconfigRef` classification and B816's KubeVirt marks,
+lost-reply adoption and `kubevirt-vm:` key move to [B87](m1.md#b87), B805's
+vCenter `credentialsRef` classification to [B99](m1.md#b99), the restored seal
+counters to [B103](backlog.md#b103), and B820's acceptance-row templates to
+[B61](m3.md#b61) and [B755](m4.md#b755); the specs' Not yet met lines follow
+them. B816's F09-01 stays declined under D38, and B820's optional structured
+help fields are declined by D188. Refusals, diagnostics and specs name a
+baseboard management controller BMC, keeping "controller" for the
+Environment's controller host and stage.
+
+**Guard tests:** the refusal-table, projection and diff golden tests that hold
+the renamed messages, and `make docs-check` over the moved Not yet met lines;
+the delivering commit records the gates.
 
 ## M3 independent in-tree completion
 

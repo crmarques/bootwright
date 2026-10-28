@@ -55,7 +55,7 @@ func eachPreBootRefusal(t *testing.T, continuation string) {
 			RefusalIdentityMismatch: refusal("the management controller at "+preBootEndpoint+" answers as another system than the one this operation proved "+
 				"for Machine/metal-01, so no media was inserted into it and it was not booted",
 				"take this context back with bootwright destroy --context lab-b, correct spec.substrate.baremetal.bmc.address on Machine/metal-01 "+
-					"if it names another controller and import that input with bootwright context update --name lab-b --input-dir <directory>, "+
+					"if it names another BMC and import that input with bootwright context update --name lab-b --input-dir <directory>, "+
 					"then run bootwright apply --context lab-b, so the machine is proved again"),
 			RefusalMachineRunning: running,
 			RefusalTPMAbsent:      refusal("Machine/metal-01 does not positively report an enabled TPM 2.0, so no encrypted installer was booted", "enable a supported TPM 2.0 on Machine/metal-01, then run "+next),

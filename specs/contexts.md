@@ -862,8 +862,7 @@ written to a keyring whose seal counters a restore rolled back.
 Not yet met: nothing establishes the fresh encryption key the rule above
 requires or detects rolled-back seal counters, so a keyring restored with older
 seal counters keeps sealing under its old key with its usage counted from the
-older value; tracked as [B816](milestones/backlog.md#b816) and
-[B103](milestones/backlog.md#b103).
+older value; tracked as [B103](milestones/backlog.md#b103).
 
 ## Permanent deletion
 

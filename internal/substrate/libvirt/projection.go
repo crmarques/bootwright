@@ -77,7 +77,7 @@ func machineNotes(name string, observed MachineEvidence) []string {
 		notes = append(notes, "machine-"+name+": domain "+observed.State)
 	}
 	if observed.Power != "" {
-		notes = append(notes, "machine-"+name+": its controller reports power "+observed.Power)
+		notes = append(notes, "machine-"+name+": its BMC reports power "+observed.Power)
 	}
 	return notes
 }

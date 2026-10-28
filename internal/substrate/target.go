@@ -199,7 +199,7 @@ func authoredController(machine api.Object) (Controller, error) {
 	}
 	endpoint, ok := NormalizeControllerEndpoint(bmc.Get("address").Text())
 	if !ok {
-		return Controller{}, refusal("api.value", "the Machine's controller address does not select one exact ComputerSystem",
+		return Controller{}, refusal("api.value", "the Machine's BMC address does not select one exact ComputerSystem",
 			"set "+BMCPath+".address to an absolute /redfish/v1/Systems/<id> URL on "+machine.Identity())
 	}
 	credentials := bmc.Get("credentialsRef").Text()
@@ -221,17 +221,17 @@ func authoredController(machine api.Object) (Controller, error) {
 func virtualTarget(catalog api.Catalog, provider, machine api.Object, contextName string, target Target) (Target, error) {
 	port, ok := ControllerPort(catalog, provider, machine.Name())
 	if !ok {
-		return Target{}, refusal("api.value", "the Machine's emulated controller port does not allocate",
+		return Target{}, refusal("api.value", "the Machine's emulated BMC port does not allocate",
 			"correct spec.libvirt.bmcEmulation.port on "+provider.Identity())
 	}
 	credentials := provider.Spec().Get("libvirt", "bmcEmulation", "auth", "credentialsRef").Text()
 	if credentials == "" {
-		return Target{}, refusal("api.required", "the provider declares no emulated controller credential",
+		return Target{}, refusal("api.required", "the provider declares no emulated BMC credential",
 			"set spec.libvirt.bmcEmulation.auth.credentialsRef on "+provider.Identity())
 	}
 	certificate := provider.Spec().Get("libvirt", "bmcEmulation", "certificateRef").Text()
 	if certificate == "" {
-		return Target{}, refusal("api.required", "the provider declares no emulated controller serving certificate",
+		return Target{}, refusal("api.required", "the provider declares no emulated BMC serving certificate",
 			"set spec.libvirt.bmcEmulation.certificateRef on "+provider.Identity())
 	}
 	host, ok := catalog.Find(api.Machine, provider.Spec().Get("libvirt", "machineRef").Text())

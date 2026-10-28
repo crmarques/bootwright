@@ -65,7 +65,7 @@ func PreBootRefusals(arm, contextName, continuation, machine, endpoint string) m
 					", correct spec.substrate.baremetal.bmc.address or spec.substrate.baremetal.nics on "+identity+update+", then run "+apply),
 			RefusalIdentityMismatch: refused("the management controller at "+endpoint+" answers as another system than the one this operation proved for "+
 				identity+", so no media was inserted into it and it was not booted",
-				destroy+", correct spec.substrate.baremetal.bmc.address on "+identity+" if it names another controller"+update+", then run "+apply+
+				destroy+", correct spec.substrate.baremetal.bmc.address on "+identity+" if it names another BMC"+update+", then run "+apply+
 					", so the machine is proved again"),
 			RefusalMachineRunning: running,
 			RefusalTPMAbsent:      refused(identity+" does not positively report an enabled TPM 2.0, so no encrypted installer was booted", "enable a supported TPM 2.0 on "+identity+", then run "+next),
