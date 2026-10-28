@@ -73,7 +73,7 @@ func projectServices(r *Request, cluster api.Object) error {
 			if err := checkDevices(*r, names, cluster, svc); err != nil {
 				return err
 			}
-			projected.Spec = &nativeOSD{DataDevices: nativeDevices{Paths: svc.Get("spec", "data_devices", "paths").Strings()}, Encrypted: svc.Get("spec", "encrypted").Bool(), TPM2: svc.Get("spec", "tpm2").Bool()}
+			projected.Spec = &nativeSpec{DataDevices: &nativeDevices{Paths: svc.Get("spec", "data_devices", "paths").Strings()}, Encrypted: svc.Get("spec", "encrypted").Bool(), TPM2: svc.Get("spec", "tpm2").Bool()}
 			if svc.Get("spec").Has("db_devices") {
 				projected.Spec.DBDevices = &nativeDevices{Paths: svc.Get("spec", "db_devices", "paths").Strings()}
 			}
@@ -89,14 +89,12 @@ func projectServices(r *Request, cluster api.Object) error {
 					allocated[key] = true
 				}
 			}
-		case "mds":
-			if svc.Get("spec").Len() != 0 || !svc.Get("service_id").Present() {
-				return failure("lifecycle.unsupported", "core MDS services carry only service_id and placement", "declare the MDS service with its service_id and placement and no spec")
-			}
 		default:
-			if svc.Get("spec").Len() != 0 || svc.Get("service_id").Present() {
-				return failure("lifecycle.unsupported", "core MON/MGR service-specific options are not yet qualified", "declare MON/MGR placement without spec or service_id")
+			spec, err := daemonSpec(*r, t, svc, hosts)
+			if err != nil {
+				return err
 			}
+			projected.Spec = spec
 		}
 		data, err := json.Marshal(projected)
 		if err != nil {

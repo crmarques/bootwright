@@ -38,7 +38,7 @@ def core_request():
               "devices": [{"path": "/dev/vdb", "serial": "disk" + str(i), "sizeBytes": 1024 ** 3}], "labels": [], "location": {},
               "sshKeyRef": "fleet-key"} for i in range(1, 4)]
     names = [h["name"] for h in hosts]
-    return {"controller": "controller", "version": "ceph-core-v34", "action": "cluster", "cluster": "example", "owner": "apply-123",
+    return {"controller": "controller", "version": "ceph-core-v35", "action": "cluster", "cluster": "example", "owner": "apply-123",
             "fsid": "4c0a4300-aa43-458c-86d7-ac2256d1fc00", "image": "registry.example.test/ceph@sha256:" + "a" * 64,
             "cephadm": {"path": "/usr/sbin/cephadm", "packageVersion": "20.2.1-405.el9cp"},
             "release": "synthetic-release", "ansiblePackageVersion": "synthetic-ansible",
@@ -146,7 +146,7 @@ def identities(core_request, form="{serial}"):
 
 
 def observation(core_request, ready=False):
-    return {"version": "ceph-core-evidence-v12", "request": "", "action": core_request["action"], "owner": core_request["owner"], "fsid": core_request["fsid"],
+    return {"version": "ceph-core-evidence-v13", "request": "", "action": core_request["action"], "owner": core_request["owner"], "fsid": core_request["fsid"],
             "owned": True, "exists": ready, "ready": ready, "removed": not ready, "partial": False, "health": "HEALTH_OK" if ready else "",
             "hosts": [h["name"] for h in core_request["hosts"]] if ready else [], "monitors": [], "monAddrs": [], "mgrActive": "", "mgrStandbys": [],
             "osds": [], "resource": {"id": "", "path": ""}, "client": "", "dashboard": dict(EMPTY_DASHBOARD),
@@ -363,7 +363,7 @@ def host_block(core_request):
         {"host": host["name"], "profile": "rhel", "media": "rhel-dvd.iso", "mediaSHA256": "e" * 64, "mediaSize": 1024,
          "publicationPath": "/var/lib/bootwright-services/example/public/os/rhel/tree", "url": "https://192.0.2.10:8443/os/rhel/tree",
          "certificateRef": "serving-tls"} for host in cluster["hosts"]]}
-    request = {"version": "ceph-host-v9", "cluster": cluster, "host": "node-2"}
+    request = {"version": "ceph-host-v10", "cluster": cluster, "host": "node-2"}
     record = {"version": "ceph-host-evidence-v4", "host": "node-2", "owner": cluster["owner"], "fsid": cluster["fsid"], "image": cluster["image"],
               "ready": False, "removed": False, "imageID": "", "uid": 0, "gid": 0, "label": "", "policySHA256": "", "cephadmSHA256": "",
               "planDigest": "", "route": False, "devices": []}
@@ -610,7 +610,8 @@ def test_private_input_is_opened_without_links_and_not_in_argv(core_request, tmp
         envelope = json.loads(data)
         assert set(envelope) == {"sources", "payload", "budget"}
         assert envelope["payload"]["private"] == {"registryJSON": "REGISTRY-SECRET-SENTINEL"}
-        assert set(envelope["sources"]) == {"ceph_native", "ceph_native_observe", "ceph_native_resources", "ceph_tunnel", "ceph_tunnel_staging",
+        assert set(envelope["sources"]) == {"ceph_native", "ceph_native_observe", "ceph_native_resources", "ceph_native_stretch", "ceph_tunnel",
+                                            "ceph_tunnel_staging",
                                             "ceph_tunnel_custody", "ceph_host_route_probe", "ceph_host_runtime", "native_diagnostics",
                                             "canonical_json", "bounded_process",
                                             "native_specializations", "ceph_pull_broker", "ceph_native_nfs", "ceph_native_nvmeof", "ceph_native_observability",
@@ -2214,7 +2215,8 @@ def test_evidence_refuses_daemons_outside_a_service_unit(core_request):
 def test_resource_phases_ship_in_their_own_module():
     modules = ceph_native_worker.MODULES
     assert modules[modules.index("ceph_native") + 1] == "ceph_native_resources"
-    assert modules[modules.index("ceph_native_resources") + 1] == "ceph_native_nfs"
+    assert modules[modules.index("ceph_native_resources") + 1] == "ceph_native_stretch"
+    assert modules[modules.index("ceph_native_stretch") + 1] == "ceph_native_nfs"
     assert modules[modules.index("ceph_native_nfs") + 1] == "ceph_native_nvmeof"
     assert modules[modules.index("ceph_native_nvmeof") + 1] == "ceph_native_observability"
     assert modules[modules.index("ceph_native_observability") + 1] == "ceph_native_units"

@@ -3298,6 +3298,8 @@ holding such a clause, the clauses pending and the work they enable.
   derived from its Machine's erase policy (X201).
 - [D199](#d199): clauses (1) to (9), node placement once the installation
   completes (X126).
+- [D200](#d200): clauses (1) to (12), how stretch activation is realized,
+  read back and refused (X199).
 
 ### D1
 
@@ -5555,3 +5557,69 @@ taints, an infra node without authored labels, a continuation after a lost
 reply, an observation that `diff --observe` reports as partial without
 restoring the label, a settled apply reaching no host; the operator gate is
 an owner-accepted infra row of lab-anysize on X126's build.
+
+### D200
+
+**session-pending** (2026-10-28, the owner; the clauses after the owner's
+words are taken by the session, pending the owner's review). The owner asked
+the session to "Plan and implement what is still missing" and said "the
+solution must be as good as possible in terms of well-designed architecture
+and ux". Under [D196](#d196)'s authorization of X199 it fixes how
+[B486](m2.md#b486)'s activation is realized; D196 is unchanged. Taken by the
+session, pending the owner's review: (1) A data host's enrollment `location`
+is `{<failureDomain>: <site>, root: default}`, after IBM's bootstrap example,
+so its site bucket hangs under the root the rule takes; the authored
+`location` still names only the failure domain, and the tiebreaker has none.
+(2) The MON spec's `crush_locations` is derived for every MON host, the
+tiebreaker's at its own site; an authored MON `spec` other than exactly
+those entries refuses at plan. (3) Activation starts once the cluster is
+ready in every other respect, because `enable_stretch_mode` needs every MON
+located; it runs in two bootstrap-host calls, `stretch_locate` (`located`,
+`rule-present`) and `stretch_enable` (`election-connectivity`,
+`stretch-enabled`, `verified`), before the final readiness wait and the
+dashboard, and a stretch cluster whose other recovery stages are complete
+continues from activation. D196 (3)'s stages are unchanged; the brief's
+separate `tiebreaker-located` stage is part of `located`. (4) `located`
+corrects only the bootstrap host's bucket, absent or directly under
+`default`, with `osd crush add-bucket` or `osd crush move`, and a MON
+without a location with `mon set_location`, because cephadm sets no
+location on a MON it already deployed; any other misplacement refuses
+`stretch-location`. (5) The rule is injected by IBM's
+get/decompile/edit/compile/set procedure, compiled offline in the frozen
+image's `crushtool` with the next free rule ID, and set with `osd
+setcrushmap -i - <crush_version>`, the version read before the map, so a
+concurrent map change refuses rather than being overwritten. (6) A stage
+whose attempt record has no completion is read back: its postcondition
+completes it, and its absence refuses `stretch-interrupted` and never
+repeats the command, even when the readback suggests the command never ran;
+the forward exit is [B920](m2.md#b920). A completed stage that no longer
+holds refuses `stretch-drift`. (7) A rule of the stretch rule's name, or
+stretch mode, found without this operation's attempt refuses
+(`stretch-rule`, `stretch-foreign`); an election strategy already
+`connectivity` is recorded without a command, since it is a setting and not
+an object; before the `stretch-enabled` attempt the stage also proves the
+two data-site buckets and every pool replicated at the default protection,
+so a refusal `enable_stretch_mode` would make leaves no attempt behind. (8) `verified` reads every pool on the stretch rule at 4/2, else
+`stretch-pools`; every observation reads all pools again, so a service-created
+pool off the rule keeps the cluster partial until [B487](m2.md#b487)
+qualifies that service. A CephPool and a gateway's zone pool of a stretch
+cluster are created on the stretch rule at 4/2, admitted with exactly four
+OSD hosts, the native two per site. (9) A change of `topology.stretch`, its
+tiebreaker, failure domain, rule or a host's site refuses `stretch-intent`
+by name in host and cluster blocks, before the generic ownership proof. (10)
+The cluster evidence carries a `stretch` member, the last journaled stage and
+whether stretch mode is enabled as this request enabled it; readiness also
+requires every stage's postcondition observed again; the core request moves
+to `ceph-core-v35` and its evidence to `ceph-core-evidence-v13`; every
+block's cluster scope carries the stretch block, so the host request moves to
+`ceph-host-v10`; older records refuse by name (D142). (11) A stretch cluster's deadline adds its
+two calls and one readiness wait, so seven hosts, the reference profile, are
+the most a stretch cluster admits (21120 s), a refusal-table row of its own.
+(12) The JSON keys of `mon dump`, `osd dump` and `osd crush tree` that no
+cited page fixes are recorded as unverified in
+[the stretch knowledge page](../../.agents/knowledge/ceph-stretch-native-facts.md)
+and read from the selected build by [B488](m2.md#b488)'s emulated rehearsal.
+Exit evidence: the request and evidence goldens, the stage, interruption,
+drift, foreign-state and frozen-intent tests over the scripted monitor, the
+controller order test and the refusal-table row; the operator gate is B488's
+emulated rehearsal of the reference profile.

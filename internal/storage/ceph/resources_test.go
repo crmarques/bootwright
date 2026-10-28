@@ -150,8 +150,8 @@ func TestEveryPolicyOfAStretchClusterRefusesForTheStretchRule(t *testing.T) {
 			"remove CephPlacementPolicy "+name+" and every CephPool placementPolicyRef naming it; a pool of a stretch cluster takes the stretch rule and 4/2 protection implicitly")
 	}
 	_, err := planned(t, catalog, api.CephCluster, "example")
-	if d := diagnostics.Of(err); len(d) != 1 || !strings.Contains(d[0].Message, "whose native activation this build does not realize yet (B486)") {
-		t.Fatalf("a stretch cluster planned: %+v", d)
+	if d := diagnostics.Of(err); len(d) != 1 || !strings.Contains(d[0].Message, "is at no data site of CephCluster example") {
+		t.Fatalf("a stretch cluster without sites planned: %+v", d)
 	}
 }
 

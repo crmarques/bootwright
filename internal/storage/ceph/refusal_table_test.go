@@ -41,6 +41,10 @@ func TestCephRefusalTableMatchesUnsupported(t *testing.T) {
 			nodes := spec.Get("topology", "nodes").Items()
 			return spec.WithPath(api.ListValue(slices.Repeat(nodes[:1], 12)...), "topology", "nodes")
 		}}, values: map[string]string{"<cluster>": "example", "<hosts>": "12", "<deadline>": "6h10m0s", "<most>": "11"}},
+		"More hosts than a stretch cluster's run deadline admits": {edits: map[string]func(api.Value) api.Value{"eight stretch hosts": func(spec api.Value) api.Value {
+			nodes := spec.Get("topology", "nodes").Items()
+			return spec.WithPath(api.ListValue(slices.Repeat(nodes[:1], 8)...), "topology", "nodes").WithPath(requestMap("failureDomain", "datacenter"), "topology", "stretch")
+		}}, values: map[string]string{"<cluster>": "example", "<hosts>": "8", "<deadline>": "6h3m0s", "<most>": "7"}},
 		"A distribution that core Ceph does not realize": {edits: map[string]func(api.Value) api.Value{
 			"oss arm": func(spec api.Value) api.Value {
 				return spec.WithPath(requestMap("oss", api.MapValue()), "distribution")

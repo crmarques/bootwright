@@ -10,7 +10,7 @@ import (
 	"github.com/crmarques/bootwright/internal/reconciliation"
 )
 
-const EvidenceVersion = "ceph-core-evidence-v12"
+const EvidenceVersion = "ceph-core-evidence-v13"
 
 const DashboardPort = "8443"
 
@@ -94,6 +94,7 @@ type Evidence struct {
 	Resource        ResourceEvidence  `json:"resource"`
 	Specializations []string          `json:"specializations,omitempty"`
 	SSO             string            `json:"sso"`
+	Stretch         *StretchEvidence  `json:"stretch,omitempty"`
 	Version         string            `json:"version"`
 }
 
@@ -107,7 +108,21 @@ func decodeEvidence(data []byte) (Evidence, error) {
 		return e, err
 	}
 	fields, err := reconciliation.DecodeEvidence[map[string]json.RawMessage](data, 60*1024, "Ceph members")
-	if err != nil || len(fields) != 24 && (len(fields) != 25 || !validSpecializationsMember(fields)) {
+	expected := 24
+	if _, ok := fields["specializations"]; ok {
+		expected++
+		if !validSpecializationsMember(fields) {
+			return Evidence{}, evidenceFailure()
+		}
+	}
+	if raw, ok := fields["stretch"]; ok {
+		expected++
+		stretch, err := reconciliation.DecodeEvidence[map[string]json.RawMessage](raw, 1024, "Ceph stretch members")
+		if err != nil || !closedMembers(stretch, "stage", "enabled") {
+			return Evidence{}, evidenceFailure()
+		}
+	}
+	if err != nil || len(fields) != expected {
 		return Evidence{}, evidenceFailure()
 	}
 	required := []string{"version", "request", "action", "fsid", "owner", "owned", "exists", "ready", "removed", "partial", "health", "hosts", "monitors", "monAddrs", "mgrActive", "mgrStandbys", "osds", "resource", "client", "dashboard", "endpoint", "daemons", "sso", "incarnation"}
@@ -412,7 +427,7 @@ func validateReady(e Evidence, r Request) bool {
 	}
 	switch r.Action {
 	case "cluster":
-		return true
+		return stretchReady(e, r)
 	case "settings":
 		return r.Settings != nil
 	case "service":
@@ -451,7 +466,7 @@ func EvaluateEvidence(data []byte, r Request, digest string, removal bool) (reco
 	if err != nil {
 		return reconciliation.EffectUnknown, err
 	}
-	if e.Version != EvidenceVersion || e.Request != digest || digest == "" || e.Action != r.Action || e.Owner != r.Owner || r.Owner == "" || e.FSID != r.FSID || r.FSID == "" || !validateScope(e, r) || !validDashboard(e, r) || !validEndpoint(e, r) || !validSSO(e, r) || !validIncarnation(e.Incarnation) {
+	if e.Version != EvidenceVersion || e.Request != digest || digest == "" || e.Action != r.Action || e.Owner != r.Owner || r.Owner == "" || e.FSID != r.FSID || r.FSID == "" || !validateScope(e, r) || !validDashboard(e, r) || !validEndpoint(e, r) || !validSSO(e, r) || !validIncarnation(e.Incarnation) || !validStretchEvidence(e, r) {
 		return reconciliation.EffectUnknown, evidenceFailure()
 	}
 	if e.Ready && (!e.Owned || !e.Exists || e.Partial || e.Removed) || e.Removed && (!e.Owned || e.Exists || e.Ready || e.Partial) || e.Partial && (!e.Owned || !e.Exists || e.Ready || e.Removed) {

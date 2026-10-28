@@ -16,7 +16,7 @@ import (
 	"github.com/crmarques/bootwright/internal/substrate"
 )
 
-const Version = "ceph-core-v34"
+const Version = "ceph-core-v35"
 const Implementation = "storage-ceph-core-v3"
 
 type Device struct {
@@ -176,18 +176,19 @@ type nativePlacement struct {
 type nativeDevices struct {
 	Paths []string `json:"paths"`
 }
-type nativeOSD struct {
-	DataDevices nativeDevices  `json:"data_devices"`
-	DBDevices   *nativeDevices `json:"db_devices,omitempty"`
-	Encrypted   bool           `json:"encrypted,omitempty"`
-	TPM2        bool           `json:"tpm2,omitempty"`
-	WALDevices  *nativeDevices `json:"wal_devices,omitempty"`
+type nativeSpec struct {
+	CrushLocations map[string][]string `json:"crush_locations,omitempty"`
+	DataDevices    *nativeDevices      `json:"data_devices,omitempty"`
+	DBDevices      *nativeDevices      `json:"db_devices,omitempty"`
+	Encrypted      bool                `json:"encrypted,omitempty"`
+	TPM2           bool                `json:"tpm2,omitempty"`
+	WALDevices     *nativeDevices      `json:"wal_devices,omitempty"`
 }
 type nativeService struct {
 	Placement   nativePlacement `json:"placement"`
 	ServiceID   string          `json:"service_id,omitempty"`
 	ServiceType string          `json:"service_type"`
-	Spec        *nativeOSD      `json:"spec,omitempty"`
+	Spec        *nativeSpec     `json:"spec,omitempty"`
 }
 
 const DefaultPackageRepository = "https://public.dhe.ibm.com/ibmdl/export/pub/storage/ceph/9/rhel9/x86_64"
@@ -252,6 +253,7 @@ type Request struct {
 	Service                  *ServiceUnit                 `json:"service,omitempty"`
 	Services                 []json.RawMessage            `json:"services"`
 	Settings                 *Settings                    `json:"settings,omitempty"`
+	Stretch                  *Stretch                     `json:"stretch,omitempty"`
 	Subvolume                *Subvolume                   `json:"subvolume,omitempty"`
 	Version                  string                       `json:"version"`
 }
@@ -284,7 +286,7 @@ func scopeOf(r Request) ClusterScope {
 		ClusterKeyRef: r.ClusterKeyRef, ClusterNetworks: r.ClusterNetworks, ClusterSSHTransport: r.ClusterSSHTransport, ClusterSSHUser: r.ClusterSSHUser,
 		Security: r.Security, Config: r.Config, Controller: r.Controller, FSID: r.FSID, Hosts: r.Hosts, Image: r.Image, MonIP: r.MonIP,
 		NFSGaneshaPackageVersion: r.NFSGaneshaPackageVersion, Owner: r.Owner, PackageRepository: r.PackageRepository, PackageRepositoryKey: r.PackageRepositoryKey, Packages: r.Packages,
-		PublicNetworks: r.PublicNetworks, Registry: r.Registry, RegistryRef: r.RegistryRef, RegistryTrustBundleRef: r.RegistryTrustBundleRef, Release: r.Release, Services: r.Services, Version: r.Version}
+		PublicNetworks: r.PublicNetworks, Registry: r.Registry, RegistryRef: r.RegistryRef, RegistryTrustBundleRef: r.RegistryTrustBundleRef, Release: r.Release, Services: r.Services, Stretch: r.Stretch, Version: r.Version}
 }
 
 func FSIDFor(operation, cluster string) string {
@@ -352,9 +354,7 @@ func baseRequest(c api.Catalog, cluster api.Object, contextName string) (Request
 	if r.ClusterSSHUser == "" || r.ClusterKeyRef == "" || r.RegistryRef == "" || spec.Get("security", "cephx", "keyType").Present() && spec.Get("security", "cephx", "keyType").Text() != "aes" {
 		return Request{}, failure("lifecycle.unsupported", "the requested Ceph trust profile is not implemented by the core adapter", "declare the cluster SSH key, registry entitlement and the aes CephX core profile")
 	}
-	if spec.Has("topology", "stretch") {
-		return Request{}, stretchActivationFailure(cluster.Name())
-	}
+	r.Stretch = stretchOf(cluster)
 	if r.Security, err = securityPolicy(c, spec, r.ClusterKeyRef); err != nil {
 		return Request{}, err
 	}
@@ -376,6 +376,9 @@ func baseRequest(c api.Catalog, cluster api.Object, contextName string) (Request
 		}
 	}
 	if err := bindHosts(&r, c, cluster, contextName); err != nil {
+		return Request{}, err
+	}
+	if err := locateHosts(&r, c, cluster); err != nil {
 		return Request{}, err
 	}
 	if err := validateHostEndpoints(r); err != nil {
@@ -443,12 +446,6 @@ func bindHosts(r *Request, c api.Catalog, cluster api.Object, contextName string
 			return failure("lifecycle.unsupported", "core Ceph requires its owned managed installation's verified host key", "use captured installation evidence; do not substitute an unrelated knownHostsRef")
 		}
 		h := Host{Name: name, Machine: m.Name(), Address: ssh.Address, User: ssh.User, Port: ssh.Port, Devices: []Device{}, Labels: node.Get("labels").Strings(), Location: map[string]string{}, SSHKeyRef: ssh.PrivateKeyRef, HostKeyRef: hostKeyRef}
-		for _, loc := range node.Get("location").Fields() {
-			h.Location[loc.Name] = loc.Value.Text()
-		}
-		if len(h.Location) != 0 {
-			return failure("lifecycle.unsupported", "a host CRUSH location is realized only with native stretch activation (B486)", "omit topology.nodes[].location until the stretch activation slice delivers it")
-		}
 		h.Physical = substrate.RealizesPhysicalNICs(provider)
 		var err error
 		if h.Physical {
@@ -487,8 +484,8 @@ func bindHosts(r *Request, c api.Catalog, cluster api.Object, contextName string
 			}
 		}
 	}
-	if len(r.Hosts) > maxClusterHosts {
-		return clusterBudgetFailure(r.Cluster, len(r.Hosts))
+	if len(r.Hosts) > hostBound(r.Stretch != nil) {
+		return clusterBudgetFailure(r.Cluster, len(r.Hosts), r.Stretch != nil)
 	}
 	slices.SortFunc(r.Hosts, func(a, b Host) int { return strings.Compare(a.Name, b.Name) })
 	if len(r.Hosts) < 3 || r.Bootstrap == "" {
@@ -632,8 +629,11 @@ func hostRequirements(hosts ...Host) []reconciliation.ObjectRef {
 	return requires
 }
 
-func osdPaths(spec *nativeOSD, dataOnly bool) []string {
-	paths := append([]string(nil), spec.DataDevices.Paths...)
+func osdPaths(spec *nativeSpec, dataOnly bool) []string {
+	paths := []string{}
+	if spec.DataDevices != nil {
+		paths = append(paths, spec.DataDevices.Paths...)
+	}
 	if !dataOnly {
 		for _, devices := range []*nativeDevices{spec.DBDevices, spec.WALDevices} {
 			if devices != nil {

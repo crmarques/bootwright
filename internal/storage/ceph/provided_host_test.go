@@ -29,8 +29,13 @@ func tiebreakerCatalog(change func(machine, cluster api.Value) (api.Value, api.V
 			continue
 		}
 		spec := object.Spec()
-		nodes := append(spec.Get("topology", "nodes").Items(), requestMap("name", "tie", "machineRef", "tie", "labels", api.StringList()))
-		spec = spec.WithPath(api.ListValue(nodes...), "topology", "nodes").WithPath(requestMap("failureDomain", "datacenter", "ruleName", "stretch-rule", "tiebreaker", requestMap("node", "tie", "site", "site-c")), "topology", "stretch").
+		nodes := spec.Get("topology", "nodes").Items()
+		for i := range nodes {
+			nodes[i] = nodes[i].With("site", api.StringValue([]string{"site-a", "site-b"}[i*2/len(nodes)]))
+		}
+		nodes = append(nodes, requestMap("name", "tie", "machineRef", "tie", "site", "site-c", "labels", api.StringList("mon")))
+		spec = spec.WithPath(api.ListValue(nodes...), "topology", "nodes").WithPath(requestMap("failureDomain", "datacenter", "ruleName", "stretch-rule", "dataSites", api.StringList("site-a", "site-b"),
+			"tiebreaker", requestMap("node", "tie", "site", "site-c")), "topology", "stretch").
 			WithPath(api.StringList("192.0.2.0/24", "198.51.100.0/24"), "networks", "publicCIDRs")
 		if change != nil {
 			tie, spec = change(tie, spec)
@@ -66,8 +71,8 @@ func tieHost(t *testing.T, r Request) Host {
 
 func TestAProvidedTiebreakerBindsAsAMONOnlyHostWithItsPinnedKeyAndTheBootstrapDVD(t *testing.T) {
 	catalog, cluster := tiebreakerCatalog(nil)
-	if _, err := baseRequest(catalog, cluster, "synthetic"); !strings.Contains(diagnostics.Of(err)[0].Message, "native activation this build does not realize yet (B486)") {
-		t.Fatalf("a stretch cluster planned before its activation: %v", err)
+	if _, err := baseRequest(catalog, cluster, "synthetic"); err != nil {
+		t.Fatalf("a stretch cluster with a provided tiebreaker did not plan: %+v", diagnostics.Of(err))
 	}
 	r, err := boundTiebreaker(catalog, cluster)
 	if err != nil {

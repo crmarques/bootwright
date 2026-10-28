@@ -705,7 +705,9 @@ overridden through `location`. Each declared site resolves through
 Environment and the Machine. `location` is admitted only on a stretch
 topology and names only its failure-domain bucket, whose value is the node's
 site ([stretch topology](ceph.md#stretch-topology)); it cannot put the host in
-a second site. B486 qualifies the hierarchy it creates.
+a second site. The enrollment spec adds `root: default` beside it
+([activation](ceph.md#stretch-topology)); B488's rehearsal qualifies the
+hierarchy it creates.
 
 `topology.roles`, per-node `devices`/`osd` and `topology.osdDrivegroups` are
 retired by this migration. Native service placement is the authority for

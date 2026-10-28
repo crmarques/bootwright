@@ -42,7 +42,7 @@ func smbMaterial(e lifecycle.Execution, r SMBRequest, scope ClusterScope, operat
 	}
 	known := strings.Builder{}
 	for _, h := range scope.Hosts {
-		key, err := provedHostKey(h, e, readers)
+		key, err := fleetHostKey(h, scope.Security, e, readers)
 		if err != nil {
 			return e, nil, cleanup, err
 		}

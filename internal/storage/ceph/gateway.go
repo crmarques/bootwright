@@ -85,6 +85,9 @@ func derivedZonePools(gateway api.Object) []string {
 }
 
 func zonePoolReplicas(r Request) (size, minSize int) {
+	if r.Stretch != nil {
+		return 4, 2
+	}
 	if r.Config["global"]["osd_pool_default_size"] == "2" {
 		return 2, 2
 	}
@@ -332,14 +335,14 @@ func gatewayRequests(c api.Catalog, gateway api.Object, contextName string) ([]R
 			osdHosts++
 		}
 	}
-	if size >= osdHosts {
+	if size > osdHosts || base.Stretch == nil && size == osdHosts {
 		remedy := "add OSD-bearing hosts to CephCluster " + cluster.Name()
 		if base.Config["global"]["osd_pool_default_size"] != "2" {
 			remedy += ", or set osd_pool_default_size and osd_pool_default_min_size to \"2\" under its spec.config.global"
 		}
 		return nil, failure("api.invariant", fmt.Sprintf("CephObjectGateway %s derives its zone pools with the cluster's default replica size %d, which needs more than %d OSD-bearing hosts; %d are declared", name, size, size, osdHosts), remedy)
 	}
-	if err := pgBudget(c, cluster, base, defaultRule); err != nil {
+	if err := pgBudget(c, cluster, base, poolRule(cluster)); err != nil {
 		return nil, err
 	}
 	zone := gateway.Spec().Get("zone").Text()
@@ -347,7 +350,7 @@ func gatewayRequests(c api.Catalog, gateway api.Object, contextName string) ([]R
 	for _, suffix := range suffixes {
 		r := base
 		r.Action = "pool"
-		r.Pool = &Pool{Name: zone + ".rgw." + suffix, Type: "replicated", Role: "rgw", Application: cephcluster.RoleApplication("rgw"), CrushRule: defaultRule,
+		r.Pool = &Pool{Name: zone + ".rgw." + suffix, Type: "replicated", Role: "rgw", Application: cephcluster.RoleApplication("rgw"), CrushRule: poolRule(cluster),
 			Autoscale: PoolAutoscale{Mode: "on"}, PGNum: int(clampPGs(0, 0)), Size: size, MinSize: minSize}
 		requests = append(requests, r)
 	}

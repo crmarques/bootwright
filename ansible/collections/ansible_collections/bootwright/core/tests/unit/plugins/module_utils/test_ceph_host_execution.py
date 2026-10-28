@@ -39,7 +39,7 @@ def host_request(request_value):
          "publicationPath": "/var/lib/bootwright-services/example/public/os/rhel/tree", "url": "https://192.0.2.10:8443/os/rhel/tree",
          "certificateRef": "serving-tls"}
         for host in cluster["hosts"]]}
-    return {"version": "ceph-host-v9", "cluster": cluster, "host": "node-2"}
+    return {"version": "ceph-host-v10", "cluster": cluster, "host": "node-2"}
 
 
 request_value = host_fixtures.request_value

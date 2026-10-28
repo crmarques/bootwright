@@ -389,7 +389,32 @@ service-unit request refuses with `api.invariant` when the
 not one declared service, and a filesystem request when the
 `mds.<filesystem>` name its `spec.mdsServiceRef` names is not.
 
-### Stretch topology
+### Refusal table
+
+Each row is one refusal of the Ceph capability, and
+`TestCephRefusalTableMatchesUnsupported` holds its `Unsupported` to it before
+operation registration and secret custody. Its reason and remedy are the
+refusal's reason and remediation. The capability refuses the CephCluster
+and every CephPlacementPolicy, CephPool and CephClient whose
+`clusterRef` names it, each with the same row. [Unsupported combinations](ceph-coverage.md#unsupported-combinations)
+links each matrix combination that this table refuses.
+
+| Refusal | Path | Reason | Remedy |
+| --- | --- | --- | --- |
+| Incomplete or unsafe Ceph coordinates or transport | a CephCluster, or a CephPlacementPolicy, CephPool or CephClient whose `clusterRef` names it, declaring an empty `release`, `packageVersion`, `cephadm.ansible.packageVersion` or `image.version`, an empty `image.base`, or a `cephadm.clusterSSH.transport` other than `verifiedTunnel` in an effective state that admission did not refuse (an omitted transport normalizes to `verifiedTunnel`, and `validate` refuses `native`) | `the selected Ceph coordinates or cluster SSH transport are incomplete or unsafe` | `declare bounded version strings, an image repository and verifiedTunnel transport; native transport is refused and host-key verification cannot be disabled` |
+| A replication network that a Ceph host has no address inside | a CephCluster, or a CephPlacementPolicy, CephPool or CephClient whose `clusterRef` names it, declaring `networks.clusterCIDRs` while the Machine of a `topology.nodes[]` entry declares no IP address inside any of them, a Machine whose addresses are assigned at runtime included; `<host>` is the first such node's native hostname in declaration order, `<machine>` its Machine and `<cidrs>` the declared networks joined by a comma and a space | `Ceph host <host> (Machine <machine>) has no address inside the replication networks <cidrs>` | `add an address inside one of <cidrs> to the network of <machine>, or remove spec.networks.clusterCIDRs` |
+| A native service whose auxiliary image is not selected | a CephCluster, or a CephPlacementPolicy, CephPool or CephClient whose `clusterRef` names it, declaring in `services` a service whose type needs an auxiliary image (an `alertmanager`, `alloy`, `grafana`, `ingress`, `loki`, `mgmt-gateway`, `node-exporter`, `nvmeof`, `oauth2-proxy`, `prometheus`, `promtail`, `smb` or `snmp-gateway` service) that `images` does not set, and that the previous row does not refuse; `<service>` is the first such service's qualified name in name order, `<family>` its `service_type`, `<name>` the first image it needs in name order that `images` does not set (only `keepalived` for an `ingress` with `spec.keepalive_only`) and `<cluster>` the CephCluster | `the <family> service <service> needs cephadm's container_image_<name>, and spec.images.<name> is not set; Bootwright keeps no default` | `set spec.images.<name> of CephCluster <cluster> to an image beneath its Entitlement registry, or remove <service> from its spec.services, together with its spec.serviceBindings entries` |
+| CephSMBResource objects whose samba images are not selected | a CephCluster, or a CephPlacementPolicy, CephPool or CephClient whose `clusterRef` names it, that a CephSMBResource of any resource type names in its `clusterRef` while `images` does not set both `samba` and `samba_metrics`, and that neither of the two previous rows refuses; `<smb>` is the first such CephSMBResource in name order, `<name>` is `samba` unless `images` sets it, else `samba_metrics`, and `<cluster>` the CephCluster | `CephSMBResource <smb> needs cephadm's container_image_<name>, and spec.images.<name> is not set; Bootwright keeps no default` | `set spec.images.<name> of CephCluster <cluster> to an image beneath its Entitlement registry, or remove every CephSMBResource whose spec.clusterRef is <cluster> from the selected Environment` |
+| An auxiliary image that no declared service needs | a CephCluster, or a CephPlacementPolicy, CephPool or CephClient whose `clusterRef` names it, setting `images.<name>` for an image that no service in `services` and no CephSMBResource naming it needs (per the auxiliary image table, with `samba` and `samba_metrics` for a CephSMBResource) and that none of the three previous rows refuses; `<name>` is the first such name in name order and `<cluster>` the CephCluster | `spec.images.<name> is set, but no declared service or CephSMBResource of CephCluster <cluster> needs cephadm's container_image_<name>` | `remove spec.images.<name> from CephCluster <cluster>` |
+| More Ceph hosts than the cluster run deadline admits | a CephCluster without `topology.stretch`, or a CephPlacementPolicy, CephPool or CephClient naming it, whose topology declares more nodes than the [cluster execution budget](#cluster-execution-budget) fits under the run ceiling; `<deadline>` is that budget's apply deadline for `<hosts>` hosts and `<most>` the largest host count it admits | `CephCluster <cluster> declares <hosts> Ceph hosts, whose cluster run deadline of <deadline> is past the 6h0m0s every adapter run is held to` | `declare at most <most> entries in spec.topology.nodes of CephCluster <cluster>; B79 tracks larger clusters` |
+| More hosts than a stretch cluster's run deadline admits | a CephCluster declaring `topology.stretch`, or a CephPlacementPolicy, CephPool or CephClient naming it, whose topology declares more nodes than the [cluster execution budget](#cluster-execution-budget) with its stretch activation fits under the run ceiling; `<deadline>` is that budget's apply deadline for `<hosts>` hosts and `<most>` the largest host count it admits | `CephCluster <cluster> declares <hosts> Ceph hosts, whose cluster run deadline of <deadline> is past the 6h0m0s every adapter run is held to` | `declare at most <most> entries in spec.topology.nodes of CephCluster <cluster>; B79 tracks larger clusters` |
+| A distribution that core Ceph does not realize | a CephCluster, or a CephPlacementPolicy, CephPool or CephClient whose `clusterRef` names it, whose `distribution` selects the `oss` or `redhat` arm, an omitted `distribution` included, because omission selects `oss` ([distribution](api/ceph.md#cephcluster)) | `core Ceph realizes only the IBM Storage Ceph distribution` | `select spec.distribution.ibm` |
+
+The [`clusterSSH.transport` field rule](api/ceph.md) states what omission
+selects and that `validate` refuses `native`, so the transport part of this
+row holds only as a guard behind admission.
+
+## Stretch topology
 
 A `topology.stretch` cluster is native
 [stretch mode](https://docs.ceph.com/en/tentacle/rados/operations/stretch-mode/):
@@ -429,57 +454,87 @@ topology; this section owns what the plan derives and realizes (D196).
   erasure-coded pools and device-class rules. A CephPlacementPolicy of a
   stretch cluster refuses at validation and at plan, and so does a CephPool
   `placementPolicyRef`, each remedy saying that the stretch rule applies.
-- **Activation.** Declarative where native specs exist: host `location` in
-  each host's enrollment spec, and a `crush_locations` entry
-  `<failureDomain>=<site>` for every MON in the MON spec, derived from the
-  topology. Then imperatively, in order, each stage with an attempt record
-  before its command and a completion record after its readback: `located`
-  (`osd crush tree`), `rule-present` (`osd crush rule dump`),
-  `election-connectivity` (`mon set election_strategy connectivity`, read
-  from `mon dump`), `stretch-enabled` (`mon enable_stretch_mode <tiebreaker>
-  <ruleName> <failureDomain>`, read from the stretch fields of `mon dump`
-  and `osd dump`) and `verified` (every pool 4/2 on the rule). A stage whose
-  attempt record exists without its completion record is observed and never
-  repeated. Activation completes before any pool is created.
-- **Frozen intent.** Stretch is day-1 intent of the frozen cluster request:
-  adding or removing `topology.stretch` on an applied cluster refuses, its
-  remedy retiring the whole cluster, and `mon disable_stretch_mode` is never
-  run as an inverse.
-- **Readiness and observation.** Readiness requires the `verified` stage and
-  an observed stretch state; observation reports it, and `bootwright diff
-  --observe` reports a cluster whose observed stretch state lacks a stage as
-  partial realization.
+- **Activation.** Declarative where native specs exist: each data host's
+  enrollment spec carries the `location` `{<failureDomain>: <site>, root:
+  default}`, as IBM's bootstrap specification places a site bucket under
+  the root the rule takes, and the MON spec carries a `crush_locations`
+  entry `<failureDomain>=<site>` for every MON host, the tiebreaker's at its
+  own site, all derived from the topology; an authored MON `spec` other than
+  exactly those entries refuses at plan. Activation starts once the cluster
+  is ready in every other respect (every MON in quorum, every OSD up),
+  because `mon enable_stretch_mode` needs every MON's location, and runs in
+  two bootstrap-host calls, `stretch_locate` and `stretch_enable`, through
+  five ordered stages. Each stage writes an attempt record before its first
+  native command and a completion record only after its readback shows its
+  postcondition:
+  - `located`: `osd crush tree` shows each data host's bucket under its
+    site's failure-domain bucket under `default`, no bucket for the
+    tiebreaker or its site, and `mon dump` shows the MON count, the
+    tiebreaker's MON, a MON at each data site and each MON's location. The
+    bootstrap host's bucket, when absent or directly under `default`, is
+    created or moved with `osd crush add-bucket <host> host root=default
+    <failureDomain>=<site>` or `osd crush move <host> root=default
+    <failureDomain>=<site>`, and a MON without a location takes `mon
+    set_location <mon> <failureDomain>=<site>`, because cephadm sets no
+    location on a MON it already deployed
+    ([MON service](https://docs.ceph.com/en/tentacle/cephadm/services/mon/));
+    any other misplacement refuses `stretch-location`.
+  - `rule-present`: IBM's procedure (`osd getcrushmap`, `crushtool -d`, the
+    rule appended with the next free rule ID, `crushtool -c`) compiled offline
+    in the frozen image, then `osd setcrushmap -i - <crush_version>` guarded
+    by the CRUSH version `osd dump` reported before the map was read, read
+    back from `osd crush rule dump`
+    ([IBM CRUSH map for stretch mode](https://www.ibm.com/docs/en/SSEG27_9.9.1/administration/config-crush-map-stretch-mode.html)).
+    A rule of that name without this operation's attempt refuses
+    `stretch-rule`.
+  - `election-connectivity`: `mon set election_strategy connectivity`, read
+    from `mon dump`; a strategy already set to connectivity is recorded
+    without a command.
+  - `stretch-enabled`: `mon enable_stretch_mode <tiebreaker MON>
+    <ruleName> <failureDomain>`, read from the stretch fields of `mon dump`
+    and `osd dump`; stretch mode already enabled without this operation's
+    attempt refuses `stretch-foreign`. Before its attempt record the stage
+    proves what the command needs: exactly the two data-site buckets of the
+    failure domain (else `stretch-location`) and every pool replicated at the
+    default protection (else `stretch-pools`).
+  - `verified`: every pool `osd dump` lists is on the rule at size 4 and
+    min_size 2, otherwise `stretch-pools`.
 
-Not yet met: planning refuses a stretch cluster with `lifecycle.unsupported`
-before any effect, so host location, activation, readiness and observation
-are not realized; tracked as [B486](milestones/m2.md#b486).
+  A stage whose attempt record exists without its completion record is read
+  back: its postcondition completes it, and its absence refuses
+  `stretch-interrupted` without repeating the command; a completed stage
+  that no longer holds refuses `stretch-drift`. Only the manager's `.mgr`
+  pool, which bootstrap creates at the default protection, exists before
+  activation, which `enable_stretch_mode` moves to the rule; every other
+  pool, a CephPool's, a gateway's zone pool or a service's own, is created
+  by a later block, after the cluster block's readiness. A CephPool and a
+  zone pool of a stretch cluster are created on the stretch rule at 4/2, and
+  the PG budget counts them on it.
+- **Frozen intent.** Stretch is day-1 intent of the frozen cluster request:
+  adding or removing `topology.stretch`, changing its tiebreaker, failure
+  domain or rule, or a host's site refuses `stretch-intent` against the
+  ownership and bootstrap-scope records the cluster was created with, before
+  any other proof, its remedy retiring the whole cluster, and `mon
+  disable_stretch_mode` is never run as an inverse.
+- **Readiness and observation.** The cluster evidence carries a `stretch`
+  member, the last journaled stage and whether stretch mode is enabled as
+  this request enabled it. Readiness requires the `verified` stage and every
+  stage's postcondition observed again; observation reports the member, and
+  `bootwright diff --observe` reports a cluster whose observed stretch state
+  lacks a stage or no longer holds one as partial realization. A
+  service-created pool off the rule or protection keeps the cluster
+  partial; [B487](milestones/m2.md#b487) qualifies each service's pools.
+  Every block's frozen cluster scope carries the stretch block, so host,
+  SMB, consumer and replication blocks prove the same bootstrap scope.
+
+The JSON keys the stages read that no cited page fixes are recorded as
+unverified in the [stretch native facts](../.agents/knowledge/ceph-stretch-native-facts.md)
+until B488's rehearsal reads them from the selected build.
+Not yet met: an interrupted stretch stage has no forward exit short of
+retiring the whole cluster; tracked as [B920](milestones/m2.md#b920).
 Not yet met: destroy never retires a cluster with a provided tiebreaker,
 because no block removes that Machine, so it refuses by the surviving-host
 rule; tracked as [B892](milestones/m2.md#b892).
-
-### Refusal table
-
-Each row is one refusal of the Ceph capability, and
-`TestCephRefusalTableMatchesUnsupported` holds its `Unsupported` to it before
-operation registration and secret custody. Its reason and remedy are the
-refusal's reason and remediation. The capability refuses the CephCluster
-and every CephPlacementPolicy, CephPool and CephClient whose
-`clusterRef` names it, each with the same row. [Unsupported combinations](ceph-coverage.md#unsupported-combinations)
-links each matrix combination that this table refuses.
-
-| Refusal | Path | Reason | Remedy |
-| --- | --- | --- | --- |
-| Incomplete or unsafe Ceph coordinates or transport | a CephCluster, or a CephPlacementPolicy, CephPool or CephClient whose `clusterRef` names it, declaring an empty `release`, `packageVersion`, `cephadm.ansible.packageVersion` or `image.version`, an empty `image.base`, or a `cephadm.clusterSSH.transport` other than `verifiedTunnel` in an effective state that admission did not refuse (an omitted transport normalizes to `verifiedTunnel`, and `validate` refuses `native`) | `the selected Ceph coordinates or cluster SSH transport are incomplete or unsafe` | `declare bounded version strings, an image repository and verifiedTunnel transport; native transport is refused and host-key verification cannot be disabled` |
-| A replication network that a Ceph host has no address inside | a CephCluster, or a CephPlacementPolicy, CephPool or CephClient whose `clusterRef` names it, declaring `networks.clusterCIDRs` while the Machine of a `topology.nodes[]` entry declares no IP address inside any of them, a Machine whose addresses are assigned at runtime included; `<host>` is the first such node's native hostname in declaration order, `<machine>` its Machine and `<cidrs>` the declared networks joined by a comma and a space | `Ceph host <host> (Machine <machine>) has no address inside the replication networks <cidrs>` | `add an address inside one of <cidrs> to the network of <machine>, or remove spec.networks.clusterCIDRs` |
-| A native service whose auxiliary image is not selected | a CephCluster, or a CephPlacementPolicy, CephPool or CephClient whose `clusterRef` names it, declaring in `services` a service whose type needs an auxiliary image (an `alertmanager`, `alloy`, `grafana`, `ingress`, `loki`, `mgmt-gateway`, `node-exporter`, `nvmeof`, `oauth2-proxy`, `prometheus`, `promtail`, `smb` or `snmp-gateway` service) that `images` does not set, and that the previous row does not refuse; `<service>` is the first such service's qualified name in name order, `<family>` its `service_type`, `<name>` the first image it needs in name order that `images` does not set (only `keepalived` for an `ingress` with `spec.keepalive_only`) and `<cluster>` the CephCluster | `the <family> service <service> needs cephadm's container_image_<name>, and spec.images.<name> is not set; Bootwright keeps no default` | `set spec.images.<name> of CephCluster <cluster> to an image beneath its Entitlement registry, or remove <service> from its spec.services, together with its spec.serviceBindings entries` |
-| CephSMBResource objects whose samba images are not selected | a CephCluster, or a CephPlacementPolicy, CephPool or CephClient whose `clusterRef` names it, that a CephSMBResource of any resource type names in its `clusterRef` while `images` does not set both `samba` and `samba_metrics`, and that neither of the two previous rows refuses; `<smb>` is the first such CephSMBResource in name order, `<name>` is `samba` unless `images` sets it, else `samba_metrics`, and `<cluster>` the CephCluster | `CephSMBResource <smb> needs cephadm's container_image_<name>, and spec.images.<name> is not set; Bootwright keeps no default` | `set spec.images.<name> of CephCluster <cluster> to an image beneath its Entitlement registry, or remove every CephSMBResource whose spec.clusterRef is <cluster> from the selected Environment` |
-| An auxiliary image that no declared service needs | a CephCluster, or a CephPlacementPolicy, CephPool or CephClient whose `clusterRef` names it, setting `images.<name>` for an image that no service in `services` and no CephSMBResource naming it needs (per the auxiliary image table, with `samba` and `samba_metrics` for a CephSMBResource) and that none of the three previous rows refuses; `<name>` is the first such name in name order and `<cluster>` the CephCluster | `spec.images.<name> is set, but no declared service or CephSMBResource of CephCluster <cluster> needs cephadm's container_image_<name>` | `remove spec.images.<name> from CephCluster <cluster>` |
-| More Ceph hosts than the cluster run deadline admits | a CephCluster or a CephPlacementPolicy, CephPool or CephClient naming it, whose topology declares more nodes than the [cluster execution budget](#cluster-execution-budget) fits under the run ceiling; `<deadline>` is that budget's apply deadline for `<hosts>` hosts and `<most>` the largest host count it admits | `CephCluster <cluster> declares <hosts> Ceph hosts, whose cluster run deadline of <deadline> is past the 6h0m0s every adapter run is held to` | `declare at most <most> entries in spec.topology.nodes of CephCluster <cluster>; B79 tracks larger clusters` |
-| A distribution that core Ceph does not realize | a CephCluster, or a CephPlacementPolicy, CephPool or CephClient whose `clusterRef` names it, whose `distribution` selects the `oss` or `redhat` arm, an omitted `distribution` included, because omission selects `oss` ([distribution](api/ceph.md#cephcluster)) | `core Ceph realizes only the IBM Storage Ceph distribution` | `select spec.distribution.ibm` |
-
-The [`clusterSSH.transport` field rule](api/ceph.md) states what omission
-selects and that `validate` refuses `native`, so the transport part of this
-row holds only as a guard behind admission.
 
 ## Bootstrap identity and continuation
 
@@ -749,6 +804,11 @@ native multi-document apply, and proves their readback. A lost response retains
 each service's attempt identity; continuation never adopts a foreign service.
 Physical hosts may therefore select their distinct WWN devices in separate
 OSD specifications without multiplying bounded remote calls.
+A stretch cluster's deadline adds its two activation calls and one more
+readiness wait, the one before activation: 2 × 660 s + 900 s. Seven stretch
+hosts, the reference profile, need 21120 s, the most the ceiling fits, and
+eight would need 21780 s; past seven, a stretch cluster refuses with the
+[refusal table](#refusal-table)'s row for a stretch cluster's run deadline.
 Three hosts need 19 calls and 16260 s; six hosts need 22 calls and 18240 s,
 including P1's physical shape with twelve host-specific OSD specifications;
 seven need 23 calls and 18900 s; eleven need 27 calls and 21540 s, the most

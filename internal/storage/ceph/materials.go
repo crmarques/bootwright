@@ -66,10 +66,7 @@ func boundMaterial(e lifecycle.Execution, r Request, operation string, readers D
 	}
 	known := strings.Builder{}
 	for _, h := range r.Hosts {
-		key, err := provedHostKey(h, e, readers)
-		if err == nil && h.Provided && r.Security != nil && r.Security.FIPS {
-			err = fipsHostKey(h, key)
-		}
+		key, err := fleetHostKey(h, r.Security, e, readers)
 		if err != nil {
 			return e, nil, cleanup, err
 		}
@@ -229,8 +226,8 @@ func cephDeadline(r Request, operation string) (time.Duration, error) {
 	if r.Action == "object-bucket" {
 		return objectBucketDeadline(operation), nil
 	}
-	if len(r.Hosts) > maxClusterHosts {
-		return 0, clusterBudgetFailure(r.Cluster, len(r.Hosts))
+	if len(r.Hosts) > hostBound(r.Stretch != nil) {
+		return 0, clusterBudgetFailure(r.Cluster, len(r.Hosts), r.Stretch != nil)
 	}
 	nativeCalls, waits := len(r.Hosts)+2, 0
 	if operation == "observe" && r.Action == "cluster" {
@@ -239,7 +236,7 @@ func cephDeadline(r Request, operation string) (time.Duration, error) {
 	if operation == "apply" {
 		nativeCalls = 2*len(r.Hosts) + 3
 		if r.Action == "cluster" {
-			return clusterApplyDeadline(len(r.Hosts)), nil
+			return applyDeadline(len(r.Hosts), r.Stretch != nil), nil
 		}
 		if r.Action == "filesystem" && r.Filesystem != nil {
 			nativeCalls, waits = 2*len(r.Hosts)+3+len(r.Filesystem.DataPools)+len(r.Filesystem.Groups), readinessWait
@@ -254,7 +251,7 @@ func cephDeadline(r Request, operation string) (time.Duration, error) {
 			fmt.Sprintf("declare fewer spec.dataPoolRefs or spec.subvolumeGroups on CephFilesystem %s, or fewer entries in spec.topology.nodes of CephCluster %s", r.Filesystem.Name, r.Cluster))
 	}
 	if deadline > lifecycle.MaxDeadline {
-		return 0, clusterBudgetFailure(r.Cluster, len(r.Hosts))
+		return 0, clusterBudgetFailure(r.Cluster, len(r.Hosts), r.Stretch != nil)
 	}
 	return deadline, nil
 }
@@ -263,16 +260,32 @@ func clusterApplyDeadline(hosts int) time.Duration {
 	return time.Duration((16+hosts)*nativeCall+bootstrapCall+2*readinessWait+60) * time.Second
 }
 
-var maxClusterHosts = func() int {
+func applyDeadline(hosts int, stretch bool) time.Duration {
+	if stretch {
+		return clusterApplyDeadline(hosts) + time.Duration(2*nativeCall+readinessWait)*time.Second
+	}
+	return clusterApplyDeadline(hosts)
+}
+
+func largestCluster(stretch bool) int {
 	hosts := 0
-	for clusterApplyDeadline(hosts+1) <= lifecycle.MaxDeadline {
+	for applyDeadline(hosts+1, stretch) <= lifecycle.MaxDeadline {
 		hosts++
 	}
 	return hosts
-}()
+}
 
-func clusterBudgetFailure(cluster string, hosts int) error {
-	reason, remedy := clusterHostBudget(cluster, hosts)
+var maxClusterHosts, maxStretchHosts = largestCluster(false), largestCluster(true)
+
+func hostBound(stretch bool) int {
+	if stretch {
+		return maxStretchHosts
+	}
+	return maxClusterHosts
+}
+
+func clusterBudgetFailure(cluster string, hosts int, stretch bool) error {
+	reason, remedy := clusterHostBudget(cluster, hosts, stretch)
 	return failure("lifecycle.unsupported", reason, remedy)
 }
 
@@ -340,6 +353,7 @@ func adapterRefusals() map[string]error {
 	out["ingress-firewall"] = failure("lifecycle.unknown", "a host that runs the ingress of a Ceph NFS service or CephObjectGateway has an active firewalld that does not permit VRRP (IP protocol 112) or the ingress's client port on the interface that carries its virtual IP", "permit VRRP (IP protocol 112) and the port the native error names in the firewalld zone it names on the host it names, for example with firewall-cmd --permanent --zone=<zone> --add-protocol=vrrp --add-port=<port>/tcp and firewall-cmd --reload, or install that host without an active firewall, then apply again; Bootwright never changes a host's firewall, and this apply changed nothing before the check")
 	out["pg-budget"] = failure("lifecycle.unknown", "the monitor refused the pool: placement groups per OSD on its CRUSH rule would exceed mon_max_pg_per_osd", "add OSDs, lower pgNumMin or targetSizeRatio, or declare fewer pools on that CRUSH rule, then apply again")
 	maps.Copy(out, sshPolicyRefusals())
+	maps.Copy(out, stretchRefusals())
 	out["tunnel-host-key-excluded"] = failure("lifecycle.unsupported", "the SSH crypto policy inside the selected Ceph image admits none of the algorithms of a Ceph host's pinned host key, so cephadm's tunnel could not reach that host; the cluster block refused before this apply claimed or authorized any Ceph host", "the native error names the host and its key type; the apply froze this input, so take back what it owns with bootwright destroy --context <context>, then with bootwright context update select a Ceph image whose SSH crypto policy admits that type, or change spec.customizations.security.fips on that host's MachineInstallProfile so its fresh installation generates a host key of an admitted type (ssh-ed25519 with fips off, ecdsa-sha2-nistp256 with fips on), then apply")
 	out["pool-drift"] = failure("lifecycle.unknown", "a setting this operation completed on the Ceph pool (size, min_size, a quota, a compression option, erasure-coded overwrites or its application) no longer has the value its CephPool or CephObjectGateway froze", "compare ceph osd pool ls detail with the CephPool and set that setting back to its frozen value outside Bootwright, then apply again; or take back what this context owns with bootwright destroy --context <context>, then apply; Bootwright never rewrites a completed pool setting")
 	out["sso-unverified"] = failure("lifecycle.unknown", "an oauth2-proxy daemon of a Ceph management gateway runs with a configuration that skips the identity provider's certificate verification, so Bootwright did not enable the dashboard's single sign-on", "the native error names the host, the daemon and where the skip was found; take back what this context owns with bootwright destroy --context <context>, then with bootwright context update either select a Ceph image whose cephadm renders oauth2-proxy without that skip, or remove the oauth2-proxy service, its spec.serviceBindings entries and spec.enable_auth on the mgmt-gateway, then apply; Bootwright never changes an applied management gateway unit, so removing the service without that destroy refuses")
@@ -349,7 +363,7 @@ func adapterRefusals() map[string]error {
 	return out
 }
 
-func clusterHostBudget(cluster string, hosts int) (string, string) {
-	return fmt.Sprintf("CephCluster %s declares %d Ceph hosts, whose cluster run deadline of %s is past the %s every adapter run is held to", cluster, hosts, clusterApplyDeadline(hosts), lifecycle.MaxDeadline),
-		fmt.Sprintf("declare at most %d entries in spec.topology.nodes of CephCluster %s; B79 tracks larger clusters", maxClusterHosts, cluster)
+func clusterHostBudget(cluster string, hosts int, stretch bool) (string, string) {
+	return fmt.Sprintf("CephCluster %s declares %d Ceph hosts, whose cluster run deadline of %s is past the %s every adapter run is held to", cluster, hosts, applyDeadline(hosts, stretch), lifecycle.MaxDeadline),
+		fmt.Sprintf("declare at most %d entries in spec.topology.nodes of CephCluster %s; B79 tracks larger clusters", hostBound(stretch), cluster)
 }

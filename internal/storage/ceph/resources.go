@@ -121,6 +121,9 @@ func poolOf(c api.Catalog, pool api.Object, r Request) (*Pool, error) {
 	if p.Name != pool.Name() {
 		p.Object = pool.Name()
 	}
+	if r.Stretch != nil {
+		p.CrushRule = r.Stretch.Rule
+	}
 	if p.Type == "" {
 		p.Type = "replicated"
 	}
@@ -160,7 +163,7 @@ func poolOf(c api.Catalog, pool api.Object, r Request) (*Pool, error) {
 			osdHosts++
 		}
 	}
-	if size >= int64(osdHosts) {
+	if size > int64(osdHosts) || r.Stretch == nil && size == int64(osdHosts) {
 		return nil, failure("api.invariant", fmt.Sprintf("replication size %d requires more than %d OSD-bearing hosts; %d are declared", size, size, osdHosts), "add OSD-bearing hosts, or explicitly select size 2 and minSize 2 for a three-host cluster; omitted or zero size takes the cluster default of "+strconv.FormatInt(defaultSize, 10))
 	}
 	p.Size, p.MinSize = int(size), int(minSize)
@@ -199,6 +202,9 @@ func placementOf(c api.Catalog, pool api.Object) (rule, class string, width, pgs
 		return cephcluster.PoolName(pool), s.Get("erasure", "crushDeviceClass").Text(), positiveOr(s.Get("erasure", "dataChunks"), 0) + positiveOr(s.Get("erasure", "codingChunks"), 0), pgs, true
 	}
 	rule, width = defaultRule, positiveOr(s.Get("replicated", "size"), 0)
+	if cluster, found := c.Find(api.CephCluster, s.Get("clusterRef").Text()); found && cluster.Spec().Has("topology", "stretch") {
+		return poolRule(cluster), "", 4, pgs, true
+	}
 	if ref := s.Get("placementPolicyRef").Text(); ref != "" {
 		policy, found := c.Find(api.CephPlacementPolicy, ref)
 		if !found {
@@ -230,7 +236,7 @@ func pgBudget(c api.Catalog, cluster api.Object, r Request, rule string) error {
 			class = poolClass
 		}
 	}
-	if rule == defaultRule {
+	if rule == poolRule(cluster) {
 		size, _ := zonePoolReplicas(r)
 		total += int64(size)
 		root := int64(0)

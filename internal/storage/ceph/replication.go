@@ -226,7 +226,7 @@ func replicationMaterial(e lifecycle.Execution, scopes []ClusterScope, readers D
 		}
 		files = append(files, lifecycle.MaterialFile{Name: prefix + "-key", Secret: scope.Hosts[bootstrap].SSHKeyRef, Part: secrets.PrivateKeyPart, Variable: prefix + "SSHKey"})
 		for _, h := range scope.Hosts {
-			key, err := provedHostKey(h, e, readers)
+			key, err := fleetHostKey(h, scope.Security, e, readers)
 			if err != nil {
 				return e, nil, func() {}, err
 			}

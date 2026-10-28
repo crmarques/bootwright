@@ -24,11 +24,6 @@ func (f *HostFIPS) proved() bool {
 	return f != nil && f.Kernel == FIPSKernelEnabled && f.Policy == FIPSPolicy
 }
 
-func stretchActivationFailure(cluster string) error {
-	return failure("lifecycle.unsupported", "CephCluster "+cluster+" declares spec.topology.stretch, whose native activation this build does not realize yet (B486)",
-		"validate admits the stretch topology; plan and apply it with the build that delivers stretch activation, or remove spec.topology.stretch for a single-site cluster")
-}
-
 func bindProvidedHost(r *Request, m api.Object, node api.Value, tiebreaker, bootstrap, addressRef string) error {
 	name := cephcluster.NativeHostname(node)
 	if tiebreaker == "" || node.Get("name").Text() != tiebreaker || node.Get("name").Text() == bootstrap {

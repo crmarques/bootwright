@@ -267,8 +267,8 @@ func (c Capability) Unsupported(state *compilation.State) []lifecycle.Refusal {
 			cluster, _ = state.Effective().Find(api.CephCluster, object.Spec().Get("clusterRef").Text())
 		}
 		ceph := cluster.Spec()
-		if hosts := len(ceph.Get("topology", "nodes").Items()); hosts > maxClusterHosts {
-			reason, remedy := clusterHostBudget(cluster.Name(), hosts)
+		if hosts, stretch := len(ceph.Get("topology", "nodes").Items()), ceph.Has("topology", "stretch"); hosts > hostBound(stretch) {
+			reason, remedy := clusterHostBudget(cluster.Name(), hosts, stretch)
 			out = append(out, lifecycle.RefusalOf(object, reason, remedy))
 		}
 		if distribution := api.CephDistribution(ceph); distribution != "" && distribution != "ibm" {

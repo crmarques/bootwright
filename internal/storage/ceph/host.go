@@ -17,7 +17,7 @@ import (
 )
 
 const HostImplementation = "storage-ceph-host-v1"
-const HostVersion = "ceph-host-v9"
+const HostVersion = "ceph-host-v10"
 const HostEvidenceVersion = "ceph-host-evidence-v4"
 const SharedLabel = "system_u:object_r:container_file_t:s0"
 const maxHostEvidence = 16384
@@ -51,6 +51,7 @@ type ClusterScope struct {
 	Release                  string                       `json:"release"`
 	Security                 *Security                    `json:"security,omitempty"`
 	Services                 []json.RawMessage            `json:"services"`
+	Stretch                  *Stretch                     `json:"stretch,omitempty"`
 	Version                  string                       `json:"version"`
 }
 
@@ -367,7 +368,7 @@ func provedFor(e lifecycle.Execution) []lifecycle.BlockEvidence {
 }
 
 func hostRefusals() map[string]error {
-	out := map[string]error{"unsupported-release": unsupportedFailure(), "fips-policy": adapterRefusals()["fips-policy"], "fips-not-enabled": fipsNotEnabled("")}
+	out := map[string]error{"unsupported-release": unsupportedFailure(), "fips-policy": adapterRefusals()["fips-policy"], "fips-not-enabled": fipsNotEnabled(""), "stretch-intent": stretchRefusals()["stretch-intent"]}
 	for reason, message := range map[string]string{
 		"image-pull":      "the frozen Ceph image or an auxiliary image digest could not be pulled within its three bounded attempts",
 		"image-platform":  "a pulled image is not its frozen linux/amd64 digest",
@@ -408,10 +409,7 @@ func packageRefusals() map[string]error {
 
 func hostMaterial(e lifecycle.Execution, r HostRequest, operation string, readers DependencyProofs) (lifecycle.Execution, []lifecycle.MaterialFile, func(), error) {
 	host, _ := r.target()
-	key, err := provedHostKey(host, e, readers)
-	if err == nil && host.Provided && r.Cluster.Security != nil && r.Cluster.Security.FIPS {
-		err = fipsHostKey(host, key)
-	}
+	key, err := fleetHostKey(host, r.Cluster.Security, e, readers)
 	if err != nil {
 		return e, nil, func() {}, err
 	}

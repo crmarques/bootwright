@@ -528,7 +528,7 @@ func TestRequestSchemaChangeLeavesHostDigest(t *testing.T) {
 	}
 	want := []string{"ansiblePackageVersion", "auxiliary", "bootstrap", "callHome", "cephadm", "cluster", "clusterKeyRef", "clusterNetworks", "clusterSSHTransport", "clusterSSHUser",
 		"config", "controller", "fsid", "hosts", "image", "monIP", "nfsGaneshaPackageVersion", "owner", "packageRepository", "packageRepositoryKey", "packages", "publicNetworks", "registry",
-		"registryRef", "registryTrustBundleRef", "release", "security", "services", "version"}
+		"registryRef", "registryTrustBundleRef", "release", "security", "services", "stretch", "version"}
 	slices.Sort(want)
 	if got := jsonNames(reflect.TypeFor[ClusterScope]()); !slices.Equal(got, want) {
 		t.Fatalf("ClusterScope members %v, want %v", got, want)
@@ -544,6 +544,7 @@ func TestRequestSchemaChangeLeavesHostDigest(t *testing.T) {
 	r.RegistryTrustBundleRef = "registry-ca"
 	r.Security = &Security{FIPS: true, CephXKeyType: "aes"}
 	r.PublicNetworks, r.ClusterNetworks = []string{"192.0.2.0/24"}, []string{"198.51.100.0/24"}
+	r.Stretch = &Stretch{DataSites: []string{"site-a", "site-b"}, FailureDomain: "datacenter", Rule: "stretch-rule", Tiebreaker: "node-3", TiebreakerSite: "site-c"}
 	r.Action, r.Pool, r.Client = "pool", &Pool{Name: "volumes"}, &Client{Name: "consumer", Pool: "volumes", Access: "readOnly"}
 	scope := scopeOf(r)
 	for field, value := range reflect.ValueOf(scope).Fields() {

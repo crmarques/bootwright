@@ -1,6 +1,6 @@
 implementation: storage-ceph-host-v1
-content-digest: fa6800889852c1d6a62633d885c3321aaa3fb6548d14a7990cc3f733a787feec
-request-version: ceph-host-v9
+content-digest: 5c5d9a851c54e3b12afefbe28dcb65c3ff31d2d17b79be9def3f911e8f2cfebc
+request-version: ceph-host-v10
 automation-formats: bootwright.native-plan-v1, ceph-crypto-policy-v1, ceph-device-identities-v2, ceph-host-route-v3, ceph-package-artifacts-v1, ceph-package-complete-v1, ceph-package-decision-v1, ceph-physical-device-binding-v1, ceph-runtime-profile-v3
 mark-formats: none
 proof-ids: .bootwright-tree-identity, marker:-attempt-%d.json, marker:-pulled.json, marker:auth.json, marker:auxiliary-, marker:cache-directory-intent.json, marker:cache-directory.json, marker:cache-pending.json, marker:cache-ready.json, marker:complete.json, marker:decision.json, marker:device-identities.json, marker:physical-device-binding.json, marker:policy.json, marker:pull-attempt-%d.json, marker:pulled.json, marker:route.json, marker:runtime-profile.json, marker:scope.json, marker:synthetic.json, marker:verified.json
@@ -89,6 +89,12 @@ request-schema:
   cluster.security.cephxKeyType string
   cluster.security.fips bool
   cluster.services []opaque
+  cluster.stretch *struct ceph.Stretch omitempty
+  cluster.stretch.dataSites []string
+  cluster.stretch.failureDomain string
+  cluster.stretch.rule string
+  cluster.stretch.tiebreaker string
+  cluster.stretch.tiebreakerSite string
   cluster.version string
   host string
   version string

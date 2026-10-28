@@ -21,7 +21,7 @@ import time
 from ansible_collections.bootwright.core.plugins.module_utils import (
     adapter_protocol, bounded_process, canonical_json,
     ceph_crypto_policy, ceph_host_route_probe, ceph_host_runtime, ceph_host_worker, ceph_native, ceph_native_nfs, ceph_native_nvmeof,
-    ceph_native_observability,
+    ceph_native_observability, ceph_native_stretch,
     ceph_native_resources, ceph_native_observe, ceph_native_units, ceph_native_object, ceph_native_worker, ceph_package_sources, ceph_package_worker,
     ceph_packages, ceph_registry_discovery, ceph_smb_native, ceph_replication_native, ceph_ssh_policy, ceph_tunnel,
     ceph_tunnel_staging, ceph_tunnel_custody, native_apply, native_diagnostics, native_specializations, native_resolution, native_signatures, ceph_pull_broker,
@@ -52,7 +52,7 @@ UNIT_DAEMON = re.compile(r"[a-z][a-z0-9-]*\.[A-Za-z0-9][A-Za-z0-9_.-]{0,250}\Z")
 # The refusals each block's Go caller remedies by name (hostRefusals,
 # adapterRefusals and smbRefusals in internal/storage/ceph); a test holds them equal.
 HOST_REASONS = (
-    "fips-policy", "fips-not-enabled",
+    "fips-policy", "fips-not-enabled", "stretch-intent",
     "unsupported-release", "image-pull", "image-platform", "image-profile", "route-probe", "device-identity", "runtime-profile", "not-ready",
     "package-resolution", "package-signature", "package-transaction", "request", "artifact", "ownership", "evidence", "material", "packages",
     "package-artifact", "package-drift", "package-journal", "package-license",
@@ -75,7 +75,8 @@ CLUSTER_REASONS = (
     "object-bucket-identity", "object-bucket-s3", "nfs-export-foreign", "nfs-export-apply", "nfs-export-path-escape", "nfs-export-realm-default",
     "nvmeof-native", "nvmeof-identity", "nvmeof-foreign", "nvmeof-budget",
     "ingress-firewall", "service-credential-foreign", "ssh-policy-host-excluded", "ssh-policy-unavailable", "tunnel-host-key-excluded",
-    "sso-unverified",
+    "sso-unverified", "stretch-intent", "stretch-interrupted", "stretch-location", "stretch-rule", "stretch-foreign", "stretch-pools",
+    "stretch-drift",
 )
 SMB_REASONS = (
     "request", "artifact", "ownership", "evidence", "material", "transport", "remote-refusal", "adapter-exception", "native-command",
@@ -218,7 +219,8 @@ def evidence(value, request_digest, request=None):
         return host_evidence(value, request_digest, request)
     fields = {"version", "request", "action", "fsid", "owner", "owned", "exists", "ready", "removed", "partial", "health", "hosts", "monitors", "monAddrs",
               "mgrActive", "mgrStandbys", "osds", "resource", "client", "dashboard", "endpoint", "daemons", "sso", "incarnation"}
-    ceph_native.require(isinstance(value, dict) and set(value) in (fields, fields | {"specializations"}), "evidence")
+    ceph_native.require(isinstance(value, dict) and fields <= set(value) <= fields | {"specializations", "stretch"}, "evidence")
+    ceph_native_stretch.evidence(value, request)
     ceph_native.require("specializations" not in value or specialization_ids(value["specializations"]), "evidence")
     ceph_native.require(value["version"] == ceph_native.EVIDENCE_VERSION and value["request"] == request_digest and ceph_native.digest(request_digest),
                         "evidence")
@@ -494,7 +496,7 @@ class Transport:
     def native_sources():
         modules = (native_diagnostics, native_specializations, canonical_json, bounded_process,
                    ceph_tunnel, ceph_tunnel_staging, ceph_tunnel_custody, ceph_native_observe, ceph_native,
-                   ceph_native_resources, ceph_native_nfs, ceph_native_nvmeof, ceph_native_observability,
+                   ceph_native_resources, ceph_native_stretch, ceph_native_nfs, ceph_native_nvmeof, ceph_native_observability,
                    ceph_native_units, ceph_native_object, ceph_smb_native,
                    ceph_replication_native, ceph_export_dns, ceph_export_native,
                    ceph_host_route_probe, ceph_pull_broker, physical_machine_identity, ceph_host_runtime)
@@ -653,9 +655,9 @@ class Transport:
         return result
 
 
-def observe_state(request, request_digest, bootstrap, transport, deadline=None, now=time.monotonic, blocking=None):
-    """One validated snapshot; an optional deadline bounds all of its probes, and an optional list receives the health check
-    codes that kept readiness unproved."""
+def observe_state(request, request_digest, bootstrap, transport, deadline=None, now=time.monotonic, blocking=None, activation=None):
+    """One validated snapshot; an optional deadline bounds all of its probes, an optional list receives the health check
+    codes that kept readiness unproved, and another whether only a stretch cluster's activation is still missing."""
     def read(host, phase):
         try:
             if deadline is None:
@@ -676,6 +678,8 @@ def observe_state(request, request_digest, bootstrap, transport, deadline=None, 
     ceph_native.require(isinstance(observed, dict), "evidence")
     observed = dict(observed)
     checks = observed.pop("blocking", [])
+    pending_activation = observed.pop("activation", False)
+    ceph_native.require(type(pending_activation) is bool and (not pending_activation or "stretch" in request), "evidence")
     ceph_native.require(isinstance(checks, list) and len(checks) <= 16 and all(blocking_entry(check) for check in checks), "evidence")
     if blocking is not None:
         blocking[:] = checks
@@ -719,6 +723,9 @@ def observe_state(request, request_digest, bootstrap, transport, deadline=None, 
             blocking[:] = (pending + checks)[:16]
         observed["ready"] = False
         observed["partial"] = observed["exists"]
+        pending_activation = False
+    if activation is not None:
+        activation[:] = [pending_activation and observed["exists"] and observed["owned"] and all(state["exists"] for state in host_states)]
     return evidence(observed, request_digest, request)
 
 
@@ -746,6 +753,44 @@ def wait_ready(request, request_digest, bootstrap, transport, now, pause):
         if remaining <= 0:
             raise ReadinessRefusal(blocking)
         pause(min(READINESS_INTERVAL, remaining))
+
+
+def wait_activation(request, request_digest, bootstrap, transport, now, pause):
+    """Wait, read-only, until a stretch cluster is ready but for its activation, or already ready; a timeout names what blocks it."""
+    deadline = now() + READINESS_TIMEOUT
+    blocking, pending = [], [False]
+    while True:
+        try:
+            observed = observe_state(request, request_digest, bootstrap, transport, deadline, now, blocking, pending)
+        except UnsettledRefusal as error:
+            blocking[:] = (["unsettled@" + error.host] + [entry for entry in blocking if not entry.startswith("unsettled@")])[:16]
+            observed = None
+        except ceph_native.Refusal as error:
+            if type(error) is ceph_native.Refusal and str(error) == "not-ready":
+                raise ReadinessRefusal(blocking) from None
+            raise
+        if observed is not None and (observed["ready"] or pending[0]):
+            return observed
+        ceph_native.require(observed is None or observed["owned"] and observed["exists"] and observed["partial"], "not-ready")
+        remaining = deadline - now()
+        if remaining <= 0:
+            raise ReadinessRefusal(blocking)
+        pause(min(READINESS_INTERVAL, remaining))
+
+
+def activate_stretch(request, request_digest, bootstrap, transport, now, pause):
+    """Native stretch mode once every MON is in quorum with its location and every OSD up: two journaled calls, before any pool."""
+    if wait_activation(request, request_digest, bootstrap, transport, now, pause)["ready"]:
+        return False
+    changed = False
+    for phase, last in (("stretch_locate", "rule-present"), ("stretch_enable", "verified")):
+        result = transport.call(bootstrap, phase)
+        # A continuation finds later stages already complete: each call reports the last completed stage, at least its own.
+        ceph_native.require(isinstance(result, dict) and set(result) == {"changed", "stage"} and type(result["changed"]) is bool
+                            and result["stage"] in ceph_native_stretch.STAGES
+                            and ceph_native_stretch.STAGES.index(result["stage"]) >= ceph_native_stretch.STAGES.index(last), "evidence")
+        changed = result["changed"] or changed
+    return changed
 
 
 def recovery_preparations(request, values):
@@ -860,6 +905,24 @@ def apply_filesystem(request, bootstrap, transport, now, pause):
     return transport.call(bootstrap, "filesystem_groups")["changed"] or changed
 
 
+def tunnel_before(request, request_digest, bootstrap, state, preparations):
+    """The bootstrap host's recovery stage and the evidence it proved, agreeing with every host's own stage."""
+    stage = ceph_tunnel_staging.prove_recovery_record(request, bootstrap["name"], state, evidence=True)
+    host_stages = recovery_preparations(request, preparations)
+    before = state["evidence"]
+    ceph_native.require(isinstance(before, dict), "evidence")
+    before = dict(before, request=request_digest)
+    evidence(before, request_digest, request)
+    ceph_native.require(before["owned"] == (stage != "unclaimed") and before["exists"] == (stage != "unclaimed"), "evidence")
+    # A stretch cluster is complete before its activation is: complete and partial until activation verifies.
+    activating = "stretch" in request and stage == "complete" and not before["ready"]
+    ceph_native.require((before["ready"] or activating) == (stage == "complete")
+                        and before["partial"] == (stage not in ("unclaimed", "complete") or activating), "evidence")
+    if stage == "complete":
+        ceph_native.require(all(value == "complete" for value in host_stages.values()), "partial-cluster")
+    return stage, before
+
+
 def execute(request, operation, request_digest, transport, outputs=None, *, now=time.monotonic, pause=time.sleep, connect=tls_certificate):
     """Keep read-only observation distinct from any preparation or mutation."""
     ceph_native.validate(request)
@@ -892,23 +955,18 @@ def execute(request, operation, request_digest, transport, outputs=None, *, now=
                         else [transport.call(host, "prerequisites") for host in request["hosts"]])
         tunnel = request["action"] == "cluster" and request["clusterSSHTransport"] == "verifiedTunnel"
         state = transport.call(bootstrap, "bootstrap_state") if tunnel else None
+        stage = None
         if tunnel:
-            stage = ceph_tunnel_staging.prove_recovery_record(request, bootstrap["name"], state, evidence=True)
-            host_stages = recovery_preparations(request, preparations)
-            before = state["evidence"]
-            ceph_native.require(isinstance(before, dict), "evidence")
-            before = dict(before, request=request_digest)
-            evidence(before, request_digest, request)
-            ceph_native.require(before["owned"] == (stage != "unclaimed") and before["exists"] == (stage != "unclaimed"), "evidence")
-            ceph_native.require(before["ready"] == (stage == "complete") and before["partial"] == (stage not in ("unclaimed", "complete")), "evidence")
-            if stage == "complete":
-                ceph_native.require(all(value == "complete" for value in host_stages.values()), "partial-cluster")
+            stage, before = tunnel_before(request, request_digest, bootstrap, state, preparations)
         else:
             before = transport.call(bootstrap, "observe")
         if not before["ready"]:
             if request["action"] == "cluster":
                 if tunnel:
-                    changed = apply_tunnel_cluster(request, bootstrap, transport, state, preparations) or changed
+                    if stage != "complete":
+                        changed = apply_tunnel_cluster(request, bootstrap, transport, state, preparations) or changed
+                    if "stretch" in request:
+                        changed = activate_stretch(request, request_digest, bootstrap, transport, now, pause) or changed
                 else:
                     # Devices precede ownership; an existing native default path
                     # retains its original partial-cluster refusal.
@@ -1261,7 +1319,7 @@ def dashboard_phase(request, operation, request_digest, bootstrap, transport, ob
 
 def host_request(value):
     """A frozen host block request: its cluster's host scope and one of its hosts."""
-    ceph_native.require(isinstance(value, dict) and set(value) == {"cluster", "host", "version"} and value["version"] == "ceph-host-v9")
+    ceph_native.require(isinstance(value, dict) and set(value) == {"cluster", "host", "version"} and value["version"] == "ceph-host-v10")
     cluster = ceph_native.validate_scope(value["cluster"])
     ceph_native.require("packages" in cluster)
     ceph_native.require(sum(host["name"] == value["host"] for host in cluster["hosts"]) == 1)

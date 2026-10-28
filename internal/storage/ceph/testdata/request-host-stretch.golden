@@ -1,0 +1,264 @@
+{
+  "cluster": {
+    "ansiblePackageVersion": "5.0.3-1",
+    "bootstrap": "node-1",
+    "callHome": "enabled",
+    "cephadm": {
+      "packageVersion": "20.2.1-405.el9cp",
+      "path": "/usr/sbin/cephadm"
+    },
+    "cluster": "example",
+    "clusterKeyRef": "cluster-key",
+    "clusterNetworks": [],
+    "clusterSSHTransport": "verifiedTunnel",
+    "clusterSSHUser": "operator",
+    "controller": "controller",
+    "fsid": "5effe704-a878-5cae-8b43-c81f7112832a",
+    "hosts": [
+      {
+        "address": "192.0.2.1",
+        "devices": [
+          {
+            "path": "/dev/vdb",
+            "serial": "bwdfe74888b831437e0a",
+            "sizeBytes": 1073741824
+          }
+        ],
+        "labels": [
+          "mon",
+          "storage"
+        ],
+        "location": {
+          "datacenter": "site-a",
+          "root": "default"
+        },
+        "machine": "node-1",
+        "name": "node-1",
+        "port": 22,
+        "sshKeyRef": "fleet-key",
+        "user": "operator"
+      },
+      {
+        "address": "192.0.2.2",
+        "devices": [
+          {
+            "path": "/dev/vdb",
+            "serial": "bwb915b15101775327fa",
+            "sizeBytes": 1073741824
+          }
+        ],
+        "labels": [
+          "mon",
+          "storage"
+        ],
+        "location": {
+          "datacenter": "site-a",
+          "root": "default"
+        },
+        "machine": "node-2",
+        "name": "node-2",
+        "port": 22,
+        "sshKeyRef": "fleet-key",
+        "user": "operator"
+      },
+      {
+        "address": "192.0.2.3",
+        "devices": [
+          {
+            "path": "/dev/vdb",
+            "serial": "bwc3fb2249231be58313",
+            "sizeBytes": 1073741824
+          }
+        ],
+        "labels": [
+          "mon",
+          "storage"
+        ],
+        "location": {
+          "datacenter": "site-b",
+          "root": "default"
+        },
+        "machine": "node-3",
+        "name": "node-3",
+        "port": 22,
+        "sshKeyRef": "fleet-key",
+        "user": "operator"
+      },
+      {
+        "address": "192.0.2.4",
+        "devices": [
+          {
+            "path": "/dev/vdb",
+            "serial": "bw455f1f933e76697c7e",
+            "sizeBytes": 1073741824
+          }
+        ],
+        "labels": [
+          "mon",
+          "storage"
+        ],
+        "location": {
+          "datacenter": "site-b",
+          "root": "default"
+        },
+        "machine": "node-4",
+        "name": "node-4",
+        "port": 22,
+        "sshKeyRef": "fleet-key",
+        "user": "operator"
+      },
+      {
+        "address": "198.51.100.10",
+        "devices": [],
+        "knownHostsRef": "tie-known-hosts",
+        "labels": [
+          "mon"
+        ],
+        "location": {},
+        "machine": "tie",
+        "name": "tie",
+        "port": 22,
+        "provided": true,
+        "sshKeyRef": "fleet-key",
+        "user": "operator"
+      }
+    ],
+    "image": "cp.icr.io/cp/ibm-ceph/ceph-9-rhel9:v9.9.1-25074",
+    "monIP": "192.0.2.1",
+    "owner": "apply-original",
+    "packageRepository": "https://public.dhe.ibm.com/ibmdl/export/pub/storage/ceph/9/rhel9/x86_64",
+    "packageRepositoryKey": "https://public.dhe.ibm.com/ibmdl/export/pub/storage/ceph/RPM-GPG-KEY-IBM-CEPH",
+    "packages": {
+      "licenseAccepted": true,
+      "sources": [
+        {
+          "certificateRef": "serving-tls",
+          "host": "node-1",
+          "media": "rhel-dvd.iso",
+          "profile": "rhel",
+          "publicationPath": "/var/lib/bootwright-services/synthetic/artifact-server/artifacts/public/os/rhel/tree",
+          "url": "https://192.0.2.10:8443/os/rhel/tree"
+        },
+        {
+          "certificateRef": "serving-tls",
+          "host": "node-2",
+          "media": "rhel-dvd.iso",
+          "profile": "rhel",
+          "publicationPath": "/var/lib/bootwright-services/synthetic/artifact-server/artifacts/public/os/rhel/tree",
+          "url": "https://192.0.2.10:8443/os/rhel/tree"
+        },
+        {
+          "certificateRef": "serving-tls",
+          "host": "node-3",
+          "media": "rhel-dvd.iso",
+          "profile": "rhel",
+          "publicationPath": "/var/lib/bootwright-services/synthetic/artifact-server/artifacts/public/os/rhel/tree",
+          "url": "https://192.0.2.10:8443/os/rhel/tree"
+        },
+        {
+          "certificateRef": "serving-tls",
+          "host": "node-4",
+          "media": "rhel-dvd.iso",
+          "profile": "rhel",
+          "publicationPath": "/var/lib/bootwright-services/synthetic/artifact-server/artifacts/public/os/rhel/tree",
+          "url": "https://192.0.2.10:8443/os/rhel/tree"
+        },
+        {
+          "certificateRef": "serving-tls",
+          "host": "tie",
+          "media": "rhel-dvd.iso",
+          "profile": "rhel",
+          "publicationPath": "/var/lib/bootwright-services/synthetic/artifact-server/artifacts/public/os/rhel/tree",
+          "url": "https://192.0.2.10:8443/os/rhel/tree"
+        }
+      ],
+      "version": "ceph-packages-v3"
+    },
+    "publicNetworks": [
+      "192.0.2.0/24",
+      "198.51.100.0/24"
+    ],
+    "registry": "cp.icr.io",
+    "registryRef": "registry",
+    "release": "9.9.1.2",
+    "services": [
+      {
+        "placement": {
+          "count": 3,
+          "hosts": [
+            "node-1",
+            "node-2",
+            "node-3",
+            "node-4",
+            "tie"
+          ]
+        },
+        "service_type": "mon",
+        "spec": {
+          "crush_locations": {
+            "node-1": [
+              "datacenter=site-a"
+            ],
+            "node-2": [
+              "datacenter=site-a"
+            ],
+            "node-3": [
+              "datacenter=site-b"
+            ],
+            "node-4": [
+              "datacenter=site-b"
+            ],
+            "tie": [
+              "datacenter=site-c"
+            ]
+          }
+        }
+      },
+      {
+        "placement": {
+          "count": 2,
+          "hosts": [
+            "node-1",
+            "node-2",
+            "node-3",
+            "node-4",
+            "tie"
+          ]
+        },
+        "service_type": "mgr"
+      },
+      {
+        "placement": {
+          "hosts": [
+            "node-1",
+            "node-2",
+            "node-3",
+            "node-4"
+          ]
+        },
+        "service_id": "data",
+        "service_type": "osd",
+        "spec": {
+          "data_devices": {
+            "paths": [
+              "/dev/vdb"
+            ]
+          }
+        }
+      }
+    ],
+    "stretch": {
+      "dataSites": [
+        "site-a",
+        "site-b"
+      ],
+      "failureDomain": "datacenter",
+      "rule": "stretch-rule",
+      "tiebreaker": "tie",
+      "tiebreakerSite": "site-c"
+    },
+    "version": "ceph-core-v35"
+  },
+  "host": "tie",
+  "version": "ceph-host-v10"
+}

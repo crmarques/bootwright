@@ -61,7 +61,7 @@ WORKER_DEADLINE = None
 SCOPE_MEMBERS = frozenset(("controller", "version", "cluster", "owner", "fsid", "image", "cephadm", "bootstrap", "hosts", "services", "clusterSSHUser",
                            "clusterSSHTransport", "monIP", "publicNetworks", "clusterNetworks", "callHome", "release", "ansiblePackageVersion",
                            "packageRepository", "packageRepositoryKey", "clusterKeyRef", "registryRef", "registry"))
-SCOPE_OPTIONAL = frozenset(("security", "auxiliary", "config", "packages", "nfsGaneshaPackageVersion", "registryTrustBundleRef"))
+SCOPE_OPTIONAL = frozenset(("security", "auxiliary", "config", "packages", "nfsGaneshaPackageVersion", "registryTrustBundleRef", "stretch"))
 # cephadm's container_image_<name> settings an auxiliary image may fill, in name order.
 AUXILIARY_NAMES = (
     "alertmanager", "alloy", "grafana", "haproxy", "keepalived", "loki", "nginx", "node_exporter",
@@ -75,9 +75,10 @@ SUBVOLUME_UUID = re.compile(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0
 SUBVOLUME_PATH = re.compile(r"/volumes/(?:_nogroup|[A-Za-z0-9][A-Za-z0-9_.-]{0,127})/[a-z0-9](?:[-a-z0-9]{0,46}[a-z0-9])?/"
                             r"([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\Z")
 CORE_PHASES = frozenset(("prerequisites", "claim", "devices", "osd_prepare", "tunnel_preflight", "authorize", "bootstrap", "tunnel_configure", "tunnel_mount",
-                         "cache", "enroll", "license", "services", "dashboard", "dashboard_read", "observe", "bootstrap_state", "host_state", "destroy"))
+                         "cache", "enroll", "license", "services", "stretch_locate", "stretch_enable", "dashboard", "dashboard_read", "observe",
+                         "bootstrap_state", "host_state", "destroy"))
 CORE_READ_ONLY_PHASES = frozenset(("prerequisites", "devices", "tunnel_preflight", "observe", "bootstrap_state", "host_state", "dashboard_read"))
-EVIDENCE_VERSION = "ceph-core-evidence-v12"
+EVIDENCE_VERSION = "ceph-core-evidence-v13"
 # The specialization ids the last dispatched phase's worker applied; the remote wrapper reads it once per process.
 APPLIED = []
 DASHBOARD_USER = "admin"
@@ -570,7 +571,7 @@ def package_url(value):
 
 
 def scope_checks(request):
-    require(request["version"] == "ceph-core-v34")
+    require(request["version"] == "ceph-core-v35")
     if "security" in request:
         security = request["security"]
         require(isinstance(security, dict) and set(security) == {"fips", "cephxKeyType"})
@@ -631,6 +632,8 @@ def scope_checks(request):
             names.append(source["host"])
         require(names == sorted(host["name"] for host in hosts))
     validate_services(request, hosts, seen)
+    from ansible_collections.bootwright.core.plugins.module_utils import ceph_native_stretch
+    ceph_native_stretch.validate(request, hosts)
     return hosts
 
 
@@ -688,7 +691,6 @@ def validate_hosts(request):
         require(named(host["sshKeyRef"]))
         require(host["labels"] is None or isinstance(host["labels"], list) and all(named(v) for v in host["labels"]))
         require(isinstance(host["location"], dict) and all(named(k) and named(v) for k, v in host["location"].items()))
-        require(not host["location"], "host-location-unqualified")
         require(not host.get("hostKeyRef") or named(host["hostKeyRef"]))
         require(not host.get("knownHosts") or isinstance(host["knownHosts"], str) and len(host["knownHosts"]) <= 65536)
         require(host["name"] not in seen)
@@ -762,7 +764,8 @@ def validate_services(request, hosts, seen):
             require("spec" not in service, "service-unqualified")
             continue
         if kind != "osd":
-            require(not service.get("spec") and not service.get("service_id"), "service-unqualified")
+            # A MON's crush_locations are the stretch topology's, which ceph_native_stretch.validate proves.
+            require((kind == "mon" or not service.get("spec")) and not service.get("service_id"), "service-unqualified")
             continue
         require(named(service.get("service_id")))
         require(placement.get("count", len(placement["hosts"])) == len(placement["hosts"]), "device-unproved")
@@ -986,6 +989,9 @@ class Markers:
 
     def owned(self):
         record = self.read()
+        if record is not None and record != marker_identity(self.request):
+            from ansible_collections.bootwright.core.plugins.module_utils import ceph_native_stretch
+            ceph_native_stretch.prove_retained(self.request, owner=record)
         require(record is None or record == marker_identity(self.request), "ownership")
         return record is not None
 
@@ -1210,6 +1216,7 @@ class Worker:
         self.horizon = None
         self.execution_deadline = None
         self.blocking = []
+        self.base_ready = False
         from ansible_collections.bootwright.core.plugins.module_utils import native_specializations
         self.selection = native_specializations.Selection({"host-cephadm": self.verified_tool, "image-cephadm": self.image_payload})
         self._tool_bytes = None
@@ -1355,7 +1362,11 @@ class Worker:
     def recovery_scope(self):
         unused, staging = tunnel_helpers()
         scope = staging.recovery_scope(self.request)
-        require(canonical(self.markers.read("bootstrap-scope.json")) == canonical(scope), "ownership")
+        retained = self.markers.read("bootstrap-scope.json")
+        if canonical(retained) != canonical(scope):
+            from ansible_collections.bootwright.core.plugins.module_utils import ceph_native_stretch
+            ceph_native_stretch.prove_retained(self.request, scope=retained)
+        require(canonical(retained) == canonical(scope), "ownership")
         return scope
 
     def bootstrap_sources(self):
@@ -2469,7 +2480,8 @@ class Worker:
         if self.markers.read("bootstrap-enrollment.json") is not None:
             require(canonical(self.markers.read("bootstrap-enrollment.json")) == canonical(self.recovery_scope()), "ownership")
             evidence = self.observe()
-            stage = "complete" if evidence["ready"] else "enrolling"
+            # A stretch cluster is complete once everything but its activation is ready; activation continues from there.
+            stage = "complete" if evidence["ready"] or self.base_ready else "enrolling"
         elif not daemons:
             require(self.markers.read("bootstrap-attempt.json") is None, "partial-cluster")
             if owned:
@@ -3039,6 +3051,8 @@ class Worker:
         for host in self.request["hosts"]:
             name = host["name"]
             spec = {"service_type": "host", "hostname": name, "addr": host["address"], "labels": host["labels"] or []}
+            if host["location"]:
+                spec["location"] = host["location"]
             intent = {"scope": scope, "host": spec}
             prefix = "enrollment-" + name
             attempt, complete = self.markers.read(prefix + "-attempt.json"), self.markers.read(prefix + "-complete.json")
@@ -3319,6 +3333,14 @@ class Worker:
             require(observed.get(prefix[len("service-"):]) == intent["service"], "not-ready")
             self.markers.write(prefix + "-complete.json", intent)
         return {"changed": changed}
+
+    def stretch_locate(self):
+        from ansible_collections.bootwright.core.plugins.module_utils import ceph_native_stretch
+        return ceph_native_stretch.Activation(self).locate()
+
+    def stretch_enable(self):
+        from ansible_collections.bootwright.core.plugins.module_utils import ceph_native_stretch
+        return ceph_native_stretch.Activation(self).enable()
 
     def dashboard_scope(self):
         """Bind the dashboard credential to the owned cluster incarnation and its bootstrap host."""
@@ -3652,11 +3674,14 @@ class Worker:
         return monmap_time(dump.get("created")), dump
 
     def empty_evidence(self):
-        return {"version": EVIDENCE_VERSION, "request": "", "action": self.request["action"], "fsid": self.request["fsid"],
-                "owner": self.request["owner"], "owned": self.markers.owned(), "exists": False, "ready": False, "removed": False, "partial": False,
-                "health": "", "hosts": [], "monitors": [], "monAddrs": [], "mgrActive": "", "mgrStandbys": [], "osds": [],
-                "resource": {"id": "", "path": ""}, "client": "", "dashboard": {"url": "", "certificateSHA256": "", "reachable": False},
-                "endpoint": {"certificateSHA256": "", "reachable": False}, "daemons": [], "sso": "", "incarnation": ""}
+        evidence = {"version": EVIDENCE_VERSION, "request": "", "action": self.request["action"], "fsid": self.request["fsid"],
+                    "owner": self.request["owner"], "owned": self.markers.owned(), "exists": False, "ready": False, "removed": False, "partial": False,
+                    "health": "", "hosts": [], "monitors": [], "monAddrs": [], "mgrActive": "", "mgrStandbys": [], "osds": [],
+                    "resource": {"id": "", "path": ""}, "client": "", "dashboard": {"url": "", "certificateSHA256": "", "reachable": False},
+                    "endpoint": {"certificateSHA256": "", "reachable": False}, "daemons": [], "sso": "", "incarnation": ""}
+        if self.request["action"] == "cluster" and "stretch" in self.request:
+            evidence["stretch"] = {"stage": "", "enabled": False}
+        return evidence
 
     def observe(self):
         if self.recovery_enabled() and self.request["action"] == "cluster" and self.markers.read("bootstrap-enrollment.json") is None:
@@ -3802,9 +3827,18 @@ class Worker:
         evidence["removed"] = evidence["owned"] and not evidence["exists"]
         # A manager container this host is restarting is unfinished work, named beside the blocking health checks.
         self.blocking = (pending + self.blocking)[:16]
-        evidence["ready"] = ready and pg_ready and healthy and license_ready and not pending
+        evidence["ready"] = self.with_stretch(evidence, ready and pg_ready and healthy and license_ready and not pending)
         evidence["partial"] = evidence["exists"] and not evidence["ready"]
         return evidence
+
+    def with_stretch(self, evidence, ready):
+        """A stretch cluster is ready only once its activation is verified and holds; the rest of its readiness is kept for activation."""
+        if self.request["action"] != "cluster" or "stretch" not in self.request:
+            return ready
+        from ansible_collections.bootwright.core.plugins.module_utils import ceph_native_stretch
+        self.base_ready = ready
+        evidence["stretch"], held = ceph_native_stretch.Activation(self).observe()
+        return ready and held
 
     def metadata_device_name(self, host, device):
         if not host.get("physical"):
@@ -3954,6 +3988,9 @@ def dispatch(envelope):
     elif phase == "observe":
         # The health checks that kept readiness unproved travel beside the closed evidence, for the refusal's detail only.
         result = dict(worker.observe(), blocking=list(worker.blocking))
+        if worker.request["action"] == "cluster" and "stretch" in worker.request:
+            # Everything but stretch activation is ready: the controller activates before its final readiness wait.
+            result["activation"] = worker.base_ready and not result["ready"]
     else:
         result = getattr(worker, phase)()
     APPLIED[:] = sorted(worker.selection.applied)
