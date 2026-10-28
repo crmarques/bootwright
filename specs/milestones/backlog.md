@@ -270,6 +270,10 @@ Alias cell.
 | [B867](#b867) | new, 2026-10-27 (lane R review) | safety | Storage | The Ceph incarnation rule is confirmed on a live cluster | The monitor map's creation time was chosen without a live run |
 | [B881](#b881) | new, 2026-10-28 (X190 review) | safety | State reconciliation, with Substrate | A cancelled or deadline-ended firmware power cycle still forces its machine off | The adapter supervisor kills the worker with no grace; a grace changes every adapter's termination |
 | [B882](#b882) | new, 2026-10-28 (owner request: the e2e stretch case) | product | Storage, with Machine and Managed OS | A Ceph host on a provided-OS Machine, such as one another context installed | Core Ceph binds only hosts it installed, with one fleet key and its own installation's host-key proof |
+| [B905](#b905) | new, 2026-10-28 (D197) | product | Substrate and Managed OS | A Bootwright-installed operating system on a KubeVirt Machine | B87 realizes installer-provisioned Machines; an installation needs an identity channel and seeds the arm does not define |
+| [B906](#b906) | new, 2026-10-28 (D197) | product | Substrate, with Add-ons | A KubeVirt profile's persistent vTPM state is proved migratable on a declared state class | The current target declares no vTPM; the state class is host-wide and set on HyperConverged |
+| [B907](#b907) | new, 2026-10-28 (D197) | product | Substrate | KubeVirt Machines boot with EFI Secure Boot | Whether the agent image boots under KubeVirt Secure Boot is unverified |
+| [B909](#b909) | new, 2026-10-28 (D197) | product | Substrate | KubeVirt interfaces on a namespaced UserDefinedNetwork | The arm realizes Localnet ClusterUserDefinedNetwork and bridge NetworkAttachmentDefinition attachments; no profile needs a UDN |
 
 ### B82
 
@@ -2984,6 +2988,51 @@ and removal that leaves the operating system. **Outcome:** the e2e
 **Exit evidence:** a planning test admitting a provided-OS node with its own
 key, a host-trust test, and an owner-run `stretch-ceph` apply and destroy.
 
+### B905
+
+**Owner:** Substrate and Managed OS. **Kind:** product. **Requires:**
+[B87](m1.md#b87). **Definition:** Needs definition: the identity channel a
+Bootwright-installed Machine on KubeVirt proves itself through (a delivered
+host key or the guest agent), its install seeds and the managed-OS boot path
+over the pushed port. Today a KubeVirt Machine naming an install profile
+refuses before registration ([selection](../substrates.md#selection-and-refusal)).
+**Outcome:** a RHEL Machine installed on a KubeVirt provider. **Exit
+evidence:** request goldens, refusal tests and an owner-run installation.
+
+### B906
+
+**Owner:** Substrate, with Add-ons. **Kind:** product. **Requires:**
+[B87](m1.md#b87). **Definition:** Needs definition: how the provider proof
+reads the effective VM state storage class (HyperConverged
+`vmStateStorageClass`, then the default virtualization class, then the cluster
+default) and refuses one that cannot migrate a persistent vTPM VM, and where
+the class is declared (a `kubevirt` package field, [B732](m3.md#b732)'s
+question 3b). Today a profile's `tpm` renders a persistent vTPM whose state
+claim's migratability is not proved
+([KubeVirt machine realization](../substrates.md#kubevirt-machine-realization)).
+**Outcome:** a vTPM Machine is placed only where its host can drain it.
+**Exit evidence:** proof tests over a fake API and a live drain of a vTPM VM.
+
+### B907
+
+**Owner:** Substrate. **Kind:** product. **Requires:** [B87](m1.md#b87).
+**Definition:** Needs definition: the firmware specialization, keyed on an
+observed fact and never on a release label (D163), that sets
+`secureBoot: true` with SMM once a live run boots the agent image under it.
+**Outcome:** KubeVirt Machines boot with Secure Boot. **Exit evidence:** a
+live boot and request goldens.
+
+### B909
+
+**Owner:** Substrate. **Kind:** product. **Requires:** [B87](m1.md#b87).
+**Definition:** Needs definition: whether a namespaced secondary
+UserDefinedNetwork attaches through the NetworkAttachmentDefinition it
+generates, which binding it takes and how the provider proof reads it. Today
+the arm refuses an attachment of any kind but a ClusterUserDefinedNetwork or a
+NetworkAttachmentDefinition before registration. **Outcome:** a KubeVirt
+interface on a UDN. **Exit evidence:** selection and proof tests and a live
+attachment.
+
 ## Audit remediation (2026-10-26)
 
 The [2026-10-26 spec audit](../../audits/spec/2026-10-26.md) ordered its
@@ -3243,6 +3292,8 @@ holding such a clause, the clauses pending and the work they enable.
   host bound (X197).
 - [D196](#d196): clauses (1) to (12), the stretch reference profile, its
   topology inputs and the provided-host FIPS proof (X198, X199).
+- [D197](#d197): clauses (1) to (13), the KubeVirt Machine arm over an
+  externally supplied host (X129).
 - [D198](#d198): clauses (1) to (7), the physical Ceph host's disk bound
   derived from its Machine's erase policy (X201).
 - [D199](#d199): clauses (1) to (9), node placement once the installation
@@ -5311,6 +5362,85 @@ keeps planning refused (`lifecycle.unsupported`) until X199 realizes
 activation. (12) Destroy of a cluster with a provided tiebreaker keeps
 refusing by the surviving-host rule until [B892](m2.md#b892) removes that
 host's MON daemon and cluster data.
+
+### D197
+
+**session-pending** (2026-10-28, the owner; the clauses after the owner's
+words are taken by the session, pending the owner's review). The owner asked
+the session to "Plan and implement what is still missing" and said "the
+solution must be as good as possible in terms of well-designed architecture
+and ux". It answers [Q18](m3.md#m3a-open-decisions) and the open questions of
+[B87](m1.md#b87), promotes B87 to `Specified` and authorizes it as the planned
+slice X129 on M1; B87's Requires on a qualified host is waived for
+implementation only, the host qualification staying the operator gate
+([B731](m3.md#b731) under X130). The owner also directed that the target
+machines need FIPS, but neither a vTPM nor disk encryption, which clause (8)
+follows. Taken by the session, pending the owner's review:
+(1) Q18 (a): the arm speaks the host's native API, VirtualMachine and
+DataVolume through the Kubernetes API and `virtctl image-upload --no-create`
+through the CDI upload proxy, behind the substrate port; the Redfish facade
+stays parked as [B745](#b745).
+(2) Question 1: installer-provisioned Machines only; a Bootwright-installed
+operating system on KubeVirt is [B905](#b905) and keeps refusing before
+registration.
+(3) Question 2: the VirtualMachine is `<machine>-<8 hex digits>`, the Machine
+name cut to 48 bytes and the digits the head of the SHA-256 of the context and
+Machine names, with DataVolumes `<vm>-root` and `<vm>-media`, each at most 63
+bytes; the brief's 52-byte cut would put `<vm>-media` at 67 bytes. The labels
+`bootwright.io/context` and `bootwright.io/machine` derive the name, so a port
+entry point refuses a same-named object whose labels derive another. The
+operation-and-block mark is the annotation `bootwright.io/owner`, because a
+label value holds 63 bytes and the mark 64. The namespace is the operator's and
+is never created or written.
+(4) Question 3: each interface's MAC is libvirt's derivation, QEMU's locally
+administered prefix `52:54:00`, pinned on the VirtualMachine; the provider
+proof reads KubeMacPool's range where it may and records the pins `inside`,
+`outside` or `unknown` of it, refusing nothing; the operator gate confirms an
+out-of-range pin is accepted.
+(5) Question 4: a read-only provider block, `substrate-host-kubevirt-v1`, in
+the `substrates` stage, which every machine block of the provider requires;
+it changes nothing and its removal reads nothing. Its checks are the ones
+[KubeVirt machine realization](../substrates.md#kubevirt-machine-realization)
+lists; a check it cannot read is unknown and fails the block, so no machine
+effect follows.
+(6) Question 5: the accepted kubeconfig forms are as listed: one cluster, one
+user and one context, an embedded certificate authority, and a client
+certificate and key or a token. The adapter refuses any other form before its
+first request, in every block and port entry point, since no material is read
+before registration; the security contract's "before registration" is
+corrected to that. Both blocks read the kubeconfig as an access credential, so
+a rotated or expired one takes the
+[access-credential rebind](../state-reconciliation.md#access-credential-rebind)
+(B805's remainder).
+(7) Question 6: EFI with `secureBoot: false`, frozen at creation; Secure Boot
+is [B907](#b907).
+(8) Question 7: a vTPM is rendered only when the profile declares `tpm`, with
+`persistent`, `true` by default, frozen at creation and never toggled.
+Admission refuses `security.diskEncryption` on a cluster whose encrypted
+KubeVirt node's profile lacks `tpm` or sets `persistent: false`. Removal proves
+every claim the VirtualMachine owned absent, a persistent state claim found by
+its owner reference to the VirtualMachine's UID. The state class's
+migratability proof and its `vmStateStorageClass` setting are [B906](#b906).
+(9) Question 8: the arm sets `evictionStrategy: LiveMigrate`, and the provider
+proof refuses a root class whose StorageProfile offers no `ReadWriteMany`,
+naming the class; the StorageProfile decides the volume mode, so a Block class
+gives a Block root.
+(10) Question 9: the conservative call bounds and boot allowance
+[KubeVirt machine realization](../substrates.md#kubevirt-machine-realization)
+publishes; [B731](m3.md#b731)'s phase durations correct them.
+(11) Question 10: `machine stop` asks the `stop` subresource and polls until
+the VirtualMachineInstance is absent within the published power bound, then
+reports the machine still running; `--force` stops it with a zero grace
+period. The power service lends a controller credential by the parts the arm
+names, a substrate fact this slice adds, so it names no arm.
+(12) Question 11: the provider proof records the server and the `kube-system`
+namespace UID; every machine block compares the live UID with that apply
+record and with its own, and a mismatch refuses. Each VirtualMachine claims
+`kubevirt-vm:<server>/<namespace>/<name>` once its block proves it (B816's
+remainder).
+(13) New items: [B905](#b905), [B906](#b906), [B907](#b907),
+[B908](m3.md#b908) (peer VM placement) and [B909](#b909) (UserDefinedNetwork
+attachments, refused by the arm until then).
 
 ### D198
 

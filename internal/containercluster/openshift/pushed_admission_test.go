@@ -71,3 +71,50 @@ func TestKubeVirtBaremetalRefusesExternalEndpointSources(t *testing.T) {
 		}
 	}
 }
+
+func TestAnEncryptedKubeVirtNodeNeedsAPersistentVTPM(t *testing.T) {
+	encrypted := func(tpm api.Value, roles ...string) (api.Object, api.Catalog) {
+		cluster, catalog := fixture("kubevirt", 1, false)
+		encryption := m("unlock", m("tpm2", m()))
+		if len(roles) > 0 {
+			encryption = encryption.With("roles", api.StringList(roles...))
+		}
+		cluster = cluster.WithSpec(cluster.Spec().WithPath(encryption, "security", "diskEncryption"))
+		objects := catalog.Objects()
+		for index, object := range objects {
+			switch object.Kind() {
+			case api.InfraProvider:
+				profile := m("name", "node", "cpu", 4, "memoryMiB", 16384, "diskGiB", 120)
+				if tpm.Present() {
+					profile = profile.With("tpm", tpm)
+				}
+				objects[index] = object.WithSpec(object.Spec().WithPath(list(profile), "kubevirt", "machineProfiles"))
+			case api.Machine:
+				objects[index] = object.WithSpec(object.Spec().WithPath(api.StringValue("node"), "substrate", "kubevirt", "profileRef"))
+			}
+		}
+		return cluster, api.NewCatalog(objects)
+	}
+	for name, test := range map[string]struct {
+		tpm     api.Value
+		roles   []string
+		refused bool
+	}{
+		"no TPM":              {api.Value{}, nil, true},
+		"non-persistent":      {m("persistent", false), nil, true},
+		"default persistence": {m(), nil, false},
+		"persistent":          {m("persistent", true), nil, false},
+		"role not encrypted":  {api.Value{}, []string{"worker"}, false},
+		"role encrypted":      {api.Value{}, []string{"controlPlane"}, true},
+	} {
+		t.Run(name, func(t *testing.T) {
+			cluster, catalog := encrypted(test.tpm, test.roles...)
+			refused := slices.ContainsFunc(validatePushedNodes(cluster, catalog), func(issue api.Issue) bool {
+				return issue.Field == "$.spec.nodes[0].machineRef" && strings.Contains(issue.Message, "persistent vTPM")
+			})
+			if refused != test.refused {
+				t.Fatalf("refused %v, want %v: %v", refused, test.refused, validatePushedNodes(cluster, catalog))
+			}
+		})
+	}
+}

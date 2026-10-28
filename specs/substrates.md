@@ -13,24 +13,28 @@ that plans two block families: one provider-host block per `InfraProvider` in
 the `substrates` stage, and one machine block per hosted Machine in the
 `machines` stage. A substrate whose provider host runs nothing Bootwright
 installs plans no host block at all, so an Environment of physical machines
-has an empty `substrates` stage. The machine family has one implementation
+has an empty `substrates` stage; a KubeVirt provider's host block is a
+read-only proof of the host cluster it is given. The machine family has one implementation
 per substrate arm, so a block resolves by kind and implementation together.
 
 ## Selection and refusal
 
-This contract realizes the libvirt and bare-metal arms. The arm an
+This contract realizes the libvirt, bare-metal and KubeVirt arms. The arm an
 `InfraProvider` declares is the selector: `libvirt` selects the implementation
-identities `substrate-host-libvirt-v1` and `machine-libvirt-v1`, and
-`baremetal` selects `machine-baremetal-v1`. A provider host block
-is planned for every libvirt `InfraProvider` in the selected graph, and a
-machine block for every Machine on any realized provider whose effective
-`os.provided` is `false`. A bare-metal `InfraProvider` plans no block of its
-own: `machine-baremetal-v1` claims it, realized only through its Machines.
-Provided Machines are never realized. A vSphere or
-KubeVirt provider, and every non-provided Machine on one, refuses before
-operation registration with one diagnostic per unsupported object, which names
-the object, why it is refused (a Machine's names its provider) and the remedy,
-as the [refusal table](#refusal-table) states.
+identities `substrate-host-libvirt-v1` and `machine-libvirt-v1`, `baremetal`
+selects `machine-baremetal-v1`, and `kubevirt` naming `kubeconfigRef` selects
+`substrate-host-kubevirt-v1` and `machine-kubevirt-v1`. A provider host block
+is planned for every libvirt and KubeVirt `InfraProvider` in the selected
+graph, and a machine block for every Machine on any realized provider whose
+effective `os.provided` is `false`. A bare-metal `InfraProvider` plans no block
+of its own: `machine-baremetal-v1` claims it, realized only through its
+Machines. A KubeVirt provider's block only proves the host it is given and
+changes nothing on it. Provided Machines are never realized. A vSphere
+provider, a KubeVirt provider naming `hostClusterRef`, and every non-provided
+Machine on one, refuses before operation registration with one diagnostic per
+unsupported object, which names the object, why it is refused (a Machine's
+names its provider) and the remedy, as the [refusal table](#refusal-table)
+states.
 
 Which arm realizes a Machine is settled once, from the substrate its provider
 declares, and frozen into the realized target every consumer reads: the
@@ -55,7 +59,8 @@ realized target names no management controller: it names the arm's own
 management API and access, an identity channel of none, the interfaces the
 realization derived, the delivery kind `push`, and the controller Machine as
 placement. A Bootwright-installed Machine on either arm keeps refusing until
-its arm defines an identity channel.
+its arm defines an identity channel ([B905](milestones/backlog.md#b905) for
+KubeVirt).
 
 Not yet met: a KubeVirt provider and its Machines refuse before registration;
 tracked as [B87](milestones/m1.md#b87).
@@ -882,69 +887,153 @@ blocks present it only to authenticate, so a continuation or removal over a
 token that expired or was rotated since its operation bound it presents the
 current version through the
 [access-credential rebind](state-reconciliation.md#access-credential-rebind),
-and every ownership proof the arm runs is unchanged.
+and every ownership proof the arm runs is unchanged. The adapter accepts one
+form of it, refused before its first request in every block and port entry
+point: exactly one cluster, one user and one context, which `current-context`
+names; the cluster's `server` one `https` URL with no path, query or user
+information and its `certificate-authority-data` embedded; and the user
+authenticating by `client-certificate-data` with `client-key-data`, or by
+`token`. Any other member, an `exec` or `auth-provider` entry, a file
+reference, `insecure-skip-tls-verify`, `proxy-url`, `tls-server-name`, a
+username or password, or a second credential refuses, naming the Secret.
 
-The machine block of each Machine creates, once, a VirtualMachine with
-`runStrategy: Manual`, so no later write changes its power, and a root
-DataVolume template requested through `spec.storage` with the provider's
-`storageClassRef` or the host's default virtualization class, naming neither
-access mode nor volume mode so the class's StorageProfile decides them, and
+**Provider proof.** The block `substrate-host-<provider>`, implementation
+`substrate-host-kubevirt-v1`, proves the host before any Machine of the
+provider is touched; each Machine's block requires it. It changes nothing and
+its removal reads nothing. In order it reads `/version`, then
+`/apis/subresources.kubevirt.io/v1/version`, so a host without OpenShift
+Virtualization is told from a wrong kubeconfig; the `kube-system` namespace's
+UID; the provider's namespace, which must exist; the CDI configuration's
+`status.uploadProxyURL`; ConfigMap `openshift-config-managed/default-ingress-cert`,
+the certificate authority the upload proxy is verified against; the root
+class, the provider's `storageClassRef` or else the class annotated
+`storageclass.kubevirt.io/is-default-virt-class: "true"` or else the cluster's
+default class, and its StorageProfile, whose `claimPropertySets` must be
+non-empty and offer `ReadWriteMany`, since the arm sets
+`evictionStrategy: LiveMigrate` and a root a host drain cannot migrate would
+block it (the refusal names the class); one SelfSubjectAccessReview per verb
+the arm uses on VirtualMachines, VirtualMachineInstances, DataVolumes,
+PersistentVolumeClaims and the `start` and `stop` subresources in the
+namespace; and each referenced attachment's NetworkAttachmentDefinition in
+its namespace, the derived one of a ClusterUserDefinedNetwork's name in the
+provider's namespace, with the ClusterUserDefinedNetwork's `NetworkCreated`
+condition true where the credential may read it. Where it may, it reads
+KubeMacPool's range and records the pinned MACs as inside, outside or unknown
+of it, refusing nothing. Its evidence records the server, the `kube-system`
+UID, the upload proxy and each answer. A check it cannot read is unknown and
+fails the block, so no machine effect follows.
+
+**Names and ownership.** The VirtualMachine is `<machine>-<digits>`: the
+Machine name cut to 48 bytes, without a trailing `-`, and the first 8
+hexadecimal digits of the SHA-256 of `bootwright.substrate.kubevirt.name-v1`,
+NUL, the context name, NUL and the Machine name. Its root DataVolume is `<vm>-root`
+and its upload DataVolume `<vm>-media`, each at most 63 bytes. Every object
+carries the labels `app.kubernetes.io/managed-by: bootwright`,
+`bootwright.io/context` and `bootwright.io/machine`, from which a port entry
+point derives the name again and refuses an object whose labels derive
+another, and the annotation `bootwright.io/owner`, the operation-and-block
+mark of [ownership receipts](add-ons.md#ownership-receipts) (an annotation,
+because a label value holds 63 bytes and the mark 64). Objects are created,
+never applied over; the only writes to an owned VirtualMachine are the media
+volume's addition and removal, each a JSON patch that tests its UID first. The
+block records each API-returned UID as a receipt in its evidence: a recorded
+UID proves ownership outright, and an object whose create reply was lost is
+this block's only when its mark names this operation and block and its
+`creationTimestamp` is not earlier than the operation's registration. A
+same-named object without them, or with another UID, is foreign and refuses.
+The root DataVolume and every claim are the VirtualMachine's when their
+controller owner reference names its recorded UID. Each machine block reads
+the `kube-system` UID and refuses when it differs from the provider proof's
+apply record or its own, so a kubeconfig that now reaches another cluster
+never acts there. Each VirtualMachine claims
+`kubevirt-vm:<server>/<namespace>/<name>` once its block proves it, so two
+contexts of one controller store never realize one VirtualMachine.
+
+**Machine.** The machine block `machine-<machine>`, implementation
+`machine-kubevirt-v1`, creates, once, a VirtualMachine with
+`runStrategy: Manual`, so no later write changes its power, the profile's CPU
+count as the cores of one socket and its memory, EFI firmware with
+`secureBoot: false` and no SMM, frozen at creation, `evictionStrategy:
+LiveMigrate`, and a persistent vTPM, `devices.tpm.persistent` as the profile's
+`tpm.persistent` (default `true`), only when the profile declares `tpm`. Its
+root DataVolume template is requested through `spec.storage` with the root
+class the proof read, naming neither access mode nor volume mode so the
+class's StorageProfile decides them, at the profile's `diskGiB`, blank, and
 annotated `cdi.kubevirt.io/storage.bind.immediate.requested: "true"` so a
 stopped machine's claim binds on a WaitForFirstConsumer class. The root disk
 is the first `virtio` disk, presented as `/dev/vda`, with `bootOrder: 1`. Each
 NMState `ethernet` interface becomes one interface with the `bridge` binding
-and a pinned `macAddress` derived from the context, Machine and interface
-names, never authored (the KubeVirt
-[substrate arm](api/machines.md#substrate-arm) has no MAC field), on the network its attachment's `networkRef`
-names: for a `Localnet` ClusterUserDefinedNetwork the derived
-NetworkAttachmentDefinition of the same name in the provider's namespace, and
-for a NetworkAttachmentDefinition of type `bridge` that object in the
-provider's namespace. Every object carries the context's and Machine's
-ownership labels, and the block records each API-returned UID; a same-named
-object without them, or with another UID, is foreign and refuses. Objects are
-created, never applied over. The labels carry the operation-and-block mark of
-[ownership receipts](add-ons.md#ownership-receipts) beside the context and
-Machine: a recorded UID proves ownership outright, and an object whose create
-reply was lost is this block's only when its mark names this operation and
-block and its `creationTimestamp` is not earlier than the operation's
-registration. Each VirtualMachine claims
-`kubevirt-vm:<server>/<namespace>/<name>`, so two contexts of one controller
-store never realize one VirtualMachine.
+and a pinned `macAddress`, libvirt's derivation from the context, Machine and
+interface names with QEMU's locally administered prefix `52:54:00`, never
+authored (the KubeVirt [substrate arm](api/machines.md#substrate-arm) has no
+MAC field), on the network its attachment's `networkRef` names: for a
+`Localnet` ClusterUserDefinedNetwork the derived NetworkAttachmentDefinition
+of the same name in the provider's namespace, and for a
+NetworkAttachmentDefinition of type `bridge` that object, in the namespace
+admission gave it. A reread VirtualMachine whose frozen fields (CPU, memory,
+firmware, TPM, interfaces and their MACs, root size and class) differ from the
+request refuses, because the arm never rewrites them. A vTPM's state claim is
+placed on the host's VM state class, which this arm neither sets nor proves
+migratable ([B906](milestones/backlog.md#b906)).
 
-Not yet met: nothing marks, adopts or reserves a KubeVirt object as this
-paragraph states; tracked as [B87](milestones/m1.md#b87).
-
-Pushed media: `media_insert` creates an upload DataVolume of its own name,
-labelled with the media identity, waits until it is ready for upload, runs
-`virtctl image-upload --no-create` with the image file under what the boot
-budget has left, verifying the upload proxy against the ingress certificate
-authority the host publishes in ConfigMap
+**Port.** The realized target names, as its management controller, the
+endpoint `kubevirt:<namespace>/<vm>` and the provider's `kubeconfigRef` as its
+credential, which a consumer lends as one file, the parts the substrate's
+`ControllerCredentialParts` names, and passes to an entry point as
+`kubeconfig`; `user`, `password` and `ca` are admitted for the port's parity
+and must be empty. The machine must be off, by a positive `NotFound` of its
+VirtualMachineInstance, before any media write. `media_insert` takes the
+image file as `image_path` and the controller's `virtctl` as `virtctl`; it
+creates the upload DataVolume `<vm>-media`, blank with `source.upload`, sized
+to the image rounded up to the next GiB plus one, labelled with the media
+identity, waits until it is `UploadReady`, runs `virtctl image-upload dv
+<vm>-media --no-create` with the image file under what the boot budget has
+left, verifying the upload proxy the provider proof read against the ingress
+certificate authority the host publishes in ConfigMap
 `openshift-config-managed/default-ingress-cert` read through the verified API
-(a v1 observation; re-verified by M3e's first run), and then adds the volume to
-the stopped VirtualMachine as a SATA `cdrom` with `bootOrder: 2`. The
-persistent boot order sends a blank disk to the image and an installed disk to
-itself, so no boot selection is ever made (an inference; re-verified by M3e's
-first run). The machine
-must be off, by a positive `NotFound` of its VirtualMachineInstance, before
-any media write. `boot_media` starts the VirtualMachine and polls until its
+(as the process's only trust anchor, never with `--insecure`; a v1
+observation re-verified by M3e's first run), waits until it has `Succeeded`, and
+then adds the volume to the stopped VirtualMachine as a SATA `cdrom` with
+`bootOrder: 2`. An upload DataVolume already present is reused when it is
+this Machine's with the same media identity and `Succeeded`, and is otherwise
+ejected first, or refuses as foreign. The persistent boot order sends a blank
+disk to the image and an installed disk to itself, so no boot selection is ever
+made (an inference; re-verified by M3e's first run). `boot_media` starts the
+VirtualMachine through its `start` subresource and polls until its
 VirtualMachineInstance exists and runs. `media_eject` removes the volume from
-the VirtualMachine and deletes the upload DataVolume; the claim stays bound
-under `kubernetes.io/pvc-protection` until the instance next stops, and the
-state read reports the media the VirtualMachine will present. `boot_disk`
-makes no request unless asked to power on.
+the VirtualMachine and deletes the upload DataVolume with its UID as
+precondition; the claim stays bound under `kubernetes.io/pvc-protection` until
+the instance next stops, and the state read reports the media the
+VirtualMachine will present. `boot_disk` makes no request unless asked to power
+on. `power` starts through `start`, stops through `stop` and polls until the
+VirtualMachineInstance is absent, and restarts as a stop and a start; a stop
+the guest has not finished within the stop bound reports the machine still
+running, and `force` stops it with a zero grace period. `pre_boot` proves the
+VirtualMachine this context's and off, and, given `require_tpm`, that it
+presents a persistent vTPM; it applies no firmware settings and refuses a
+non-empty firmware declaration. `identity_read` answers that the arm has no
+identity channel.
 
-Removal requires the VirtualMachineInstance absent, which is its quiescence
-under the [removal gate](state-reconciliation.md#quiescence-before-removal);
-deletes the VirtualMachine with `preconditions.uid`; and proves the
-VirtualMachine, every DataVolume and every claim it owned, its persistent TPM
-state claim included, absent by a positive `NotFound`. It consumes
-`data-loss`, because it deletes the disks. The namespace and every network
-object are the operator's and are never written. A host that cannot be read,
-refuses the request or answers what is not the expected object is unknown,
-never absent.
+**Bounds.** The arm publishes, with every request bounded at 30 seconds and
+B731's phase durations to correct them: state read 120 s, power read 60 s,
+pre-boot 120 s, media insert 1800 s (a 1200 s upload and the DataVolume's
+readiness waits), media eject 420 s, power 720 s, media boot and disk boot
+360 s each, a per-node margin of 660 s, a boot allowance of 2400 s and a
+fan-out of 4 nodes, the uploads the upload proxy serves at once.
 
-Not yet met: nothing realizes a KubeVirt Machine; tracked as
+Not yet met: nothing marks, adopts or reserves a KubeVirt object, and nothing
+realizes a KubeVirt Machine, as this section states; tracked as
 [B87](milestones/m1.md#b87).
+
+**Removal.** Removal requires the VirtualMachineInstance absent, which is its
+quiescence under the [removal gate](state-reconciliation.md#quiescence-before-removal);
+deletes the upload DataVolume and then the VirtualMachine, each with
+`preconditions.uid`; and proves the VirtualMachine, every DataVolume and every
+claim it owned, its persistent TPM state claim included, absent by a positive
+`NotFound` or a listing that answered without them. It consumes `data-loss`,
+because it deletes the disks. The namespace and every network object are the
+operator's and are never written. A host that cannot be read, refuses the
+request or answers what is not the expected object is unknown, never absent.
 
 ## vSphere machine realization
 
@@ -1230,8 +1319,9 @@ through one fixed entrypoint per block family, implementation and operation,
 under [the adapter result protocol](architecture.md#the-adapter-result-protocol)
 and the [process](security.md#process-boundary) and
 [Secret-material](security.md#sensitive-material) rules. The adapter invokes
-`virsh`, `qemu-img`, `podman` and `systemctl` with exact argument vectors, or
-speaks Redfish to exactly the endpoint the frozen request names. Both placement
+`virsh`, `qemu-img`, `podman`, `systemctl` and `virtctl` with exact argument
+vectors, or speaks Redfish or a KubeVirt host's Kubernetes API to exactly the
+endpoint the frozen request or its lent kubeconfig names. Both placement
 arms use the same roles, requests and evidence.
 
 Each substrate's machine role also publishes eight entry points that

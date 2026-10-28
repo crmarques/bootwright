@@ -443,6 +443,13 @@ read or disk operation. General destructive and secret boundaries are defined
 in [security.md](../security.md) and
 [state-reconciliation.md](../state-reconciliation.md).
 
+A KubeVirt node's TPM is the VirtualMachine's vTPM, and a non-persistent one
+is discarded whenever the host stops the instance, which a TPM2-sealed root
+cannot survive. Admission therefore refuses `api.invariant` at the node's
+`machineRef` when the node's role is encrypted and its KubeVirt profile
+declares no `tpm`, or sets `tpm.persistent: false`
+([KubeVirt machine realization](../substrates.md#kubevirt-machine-realization)).
+
 On the agent path the roles resolve to the installer's `enableOn` value: every
 represented role is `all`, `controlPlane` alone is `masters`, and `worker`, `infra` or
 both is `workers`; the installer accepts no other selector, whatever its custom

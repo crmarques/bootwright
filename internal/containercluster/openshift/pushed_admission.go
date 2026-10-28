@@ -36,6 +36,12 @@ func validatePushedNodes(cluster api.Object, catalog api.Catalog) []api.Issue {
 			continue
 		}
 		path := fmt.Sprintf("$.spec.nodes[%d].machineRef", index)
+		if encryptedNode(cluster, node.Get("role").Text()) {
+			if _, profile, found := substrate.SelectedProfile(catalog, bound); found && (!profile.Has("tpm") || profile.Has("tpm", "persistent") && !profile.Get("tpm", "persistent").Bool()) {
+				issues = add(issues, invariantRemediation(path, "an encrypted KubeVirt node needs a persistent vTPM, which a host stop would otherwise discard with the key its disk is sealed to",
+					"declare tpm: {} without persistent: false on the profile "+substrate.MachineProfileRef(bound)+" of "+provider.Identity()+", or remove the node's role from spec.security.diskEncryption.roles"))
+			}
+		}
 		if !baremetal {
 			continue
 		}
@@ -60,4 +66,16 @@ func validatePushedNodes(cluster api.Object, catalog api.Catalog) []api.Issue {
 		}
 	}
 	return issues
+}
+
+func encryptedNode(cluster api.Object, role string) bool {
+	encryption := cluster.Spec().Get("security", "diskEncryption")
+	if !encryption.Present() {
+		return false
+	}
+	roles := encryption.Get("roles").Strings()
+	if !encryption.Has("roles") || slices.Contains(roles, role) {
+		return true
+	}
+	return (role == "worker" || role == "infra") && (slices.Contains(roles, "worker") || slices.Contains(roles, "infra"))
 }
