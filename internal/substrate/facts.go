@@ -6,6 +6,7 @@ import (
 	"time"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
+	"github.com/crmarques/bootwright/internal/secrets"
 )
 
 type facts struct {
@@ -13,13 +14,24 @@ type facts struct {
 	accessCredential bool
 	bridgedGuests    bool
 	tools            []string
+	credential       [2]secrets.Part
 }
 
+var account = [2]secrets.Part{secrets.UsernamePart, secrets.PasswordPart}
+
 var armFacts = map[string]facts{
-	ArmBaremetal: {delivery: DeliveryFetch, accessCredential: true},
-	ArmLibvirt:   {delivery: DeliveryFetch, bridgedGuests: true},
-	ArmVSphere:   {delivery: DeliveryFetch, tools: []string{"govc"}},
-	ArmKubeVirt:  {delivery: DeliveryPush, tools: []string{"virtctl"}},
+	ArmBaremetal: {delivery: DeliveryFetch, accessCredential: true, credential: account},
+	ArmLibvirt:   {delivery: DeliveryFetch, bridgedGuests: true, credential: account},
+	ArmVSphere:   {delivery: DeliveryFetch, tools: []string{"govc"}, credential: account},
+	ArmKubeVirt:  {delivery: DeliveryPush, accessCredential: true, tools: []string{"virtctl"}, credential: [2]secrets.Part{secrets.ValuePart}},
+}
+
+func ControllerCredential(arm string) (user, password secrets.Part) {
+	credential, ok := armFacts[arm]
+	if !ok {
+		return secrets.UsernamePart, secrets.PasswordPart
+	}
+	return credential.credential[0], credential.credential[1]
 }
 
 func DeliveryOf(arm string) string {
@@ -35,7 +47,9 @@ func BridgedGuests(arm string) bool { return armFacts[arm].bridgedGuests }
 
 func ProviderTools(provider api.Object) []string { return armFacts[Variant(provider)].tools }
 
-func IsRealized(provider api.Object) bool { return slices.Contains(Realized(), Variant(provider)) }
+func IsRealized(provider api.Object) bool {
+	return slices.Contains(Realized(), Variant(provider)) && !NamesHostCluster(provider)
+}
 
 func HostMachine(provider api.Object) string {
 	return provider.Spec().Get(ArmLibvirt, "machineRef").Text()

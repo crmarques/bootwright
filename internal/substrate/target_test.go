@@ -278,9 +278,9 @@ func TestAnUnrealizedSubstrateRefuses(t *testing.T) {
 	}
 	want := [][3]string{
 		{"InfraProvider/vc", "this executable realizes no provider on the substrate it declares",
-			"remove InfraProvider/vc and the Machines it hosts from the selected Environment, or declare them on a baremetal or libvirt provider"},
+			"remove InfraProvider/vc and the Machines it hosts from the selected Environment, or declare them on a baremetal, kubevirt or libvirt provider"},
 		{"Machine/vm", "its provider InfraProvider/vc is on a substrate this executable does not realize",
-			"host Machine/vm on a baremetal or libvirt provider, declare its operating system provided, or remove it from the selected Environment"},
+			"host Machine/vm on a baremetal, kubevirt or libvirt provider, declare its operating system provided, or remove it from the selected Environment"},
 	}
 	if !slices.Equal(unrealizable, want) {
 		t.Fatalf("unrealizable = %q, want %q", unrealizable, want)

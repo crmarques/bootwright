@@ -1,0 +1,74 @@
+---
+# Objects are created, never applied over: a VirtualMachine this block's
+# receipt or owner mark does not prove its own refuses, and the cluster the
+# kubeconfig reaches must be the one the provider proof recorded.
+- name: Validate the frozen machine request
+  ansible.builtin.assert:
+    that:
+      - bootwright_substrate_kubevirt_machine_request.version == 'machine-kubevirt-v1'
+      - bootwright_substrate_kubevirt_machine_digest is match('[0-9a-f]{64}')
+    quiet: true
+  no_log: true
+
+- name: Complete the qualified execution handoff
+  bootwright.core.substrate_kubevirt_protocol:
+    phase: loaded
+  no_log: true
+
+- name: Report the first step
+  bootwright.core.substrate_kubevirt_protocol:
+    phase: group
+    group: create-machine
+    status: running
+  no_log: true
+
+- name: Run the apply operation through the host cluster's API
+  bootwright.core.substrate_kubevirt_api:
+    operation: apply
+    kubeconfig: '{{ bootwright_substrate_kubevirt_machine_material.kubeconfig }}'
+    scratch: '{{ bootwright_run_scratch }}'
+    request: '{{ bootwright_substrate_kubevirt_machine_request }}'
+    apply_operation: '{{ bootwright_substrate_kubevirt_machine_material.operation }}'
+    block: '{{ bootwright_substrate_kubevirt_machine_material.block }}'
+    registered: '{{ bootwright_substrate_kubevirt_machine_material.registered }}'
+    pinned: '{{ bootwright_substrate_kubevirt_machine_material.pinned | from_json }}'
+    seconds: '{{ substrate_kubevirt_machine_seconds }}'
+  register: substrate_kubevirt_machine_result
+  failed_when: false
+  no_log: true
+
+# ansible-core keeps nothing of a failure under no_log but that it failed, so
+# the refusal is reported here, where no credential is.
+- name: Stop at what the host refused
+  ansible.builtin.assert:
+    that:
+      - substrate_kubevirt_machine_result.msg is not defined
+    fail_msg: >-
+      the apply of Machine {{ bootwright_substrate_kubevirt_machine_request.identity.object }} on
+      VirtualMachine {{ bootwright_substrate_kubevirt_machine_request.namespace }}/{{ bootwright_substrate_kubevirt_machine_request.name }}
+      failed: {{ (substrate_kubevirt_machine_result.msg | default('') | string | bootwright.core.printable)[:512] }}
+    quiet: true
+
+- name: Report the first step done
+  bootwright.core.substrate_kubevirt_protocol:
+    phase: group
+    group: create-machine
+    status: ok
+  no_log: true
+
+- name: Report the proof
+  bootwright.core.substrate_kubevirt_protocol:
+    phase: group
+    group: verify-machine
+    status: '{{ "ok" if substrate_kubevirt_machine_result.observation.postcondition else "failed" }}'
+  no_log: true
+
+- name: Publish bounded machine evidence
+  bootwright.core.substrate_kubevirt_protocol:
+    phase: completed
+    subject: machine
+    observed: false
+    outcome: '{{ "changed" if substrate_kubevirt_machine_result.changed else "unchanged" }}'
+    digest: '{{ bootwright_substrate_kubevirt_machine_digest }}'
+    observation: '{{ substrate_kubevirt_machine_result.observation }}'
+  no_log: true

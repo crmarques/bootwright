@@ -1,0 +1,30 @@
+---
+# The proof created nothing on the host cluster, so its removal reads nothing
+# and takes nothing back: it publishes the proof released.
+- name: Validate the frozen provider request
+  ansible.builtin.assert:
+    that:
+      - bootwright_substrate_kubevirt_host_request.version == 'substrate-host-kubevirt-v1'
+      - bootwright_substrate_kubevirt_host_digest is match('[0-9a-f]{64}')
+    quiet: true
+  no_log: true
+
+- name: Complete the qualified execution handoff
+  bootwright.core.substrate_kubevirt_protocol:
+    phase: loaded
+  no_log: true
+
+- name: Report the proof released
+  bootwright.core.substrate_kubevirt_protocol:
+    phase: group
+    group: release-proof
+    status: ok
+  no_log: true
+
+- name: Publish the released proof
+  bootwright.core.substrate_kubevirt_protocol:
+    phase: completed
+    subject: host
+    released: true
+    outcome: unchanged
+    digest: '{{ bootwright_substrate_kubevirt_host_digest }}'

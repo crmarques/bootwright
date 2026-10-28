@@ -1,0 +1,309 @@
+argument_specs:
+  apply:
+    short_description: Realize one frozen VirtualMachine and its root disk.
+    options: &request
+      bootwright_substrate_kubevirt_machine_request:
+        type: dict
+        required: true
+        options:
+          cpu:
+            type: int
+            required: true
+          diskGiB:
+            type: int
+            required: true
+          identity:
+            type: dict
+            required: true
+          interfaces:
+            type: list
+            elements: dict
+            required: true
+          kubeconfigRef:
+            type: str
+            required: true
+          mediaVolume:
+            type: str
+            required: true
+          memoryMiB:
+            type: int
+            required: true
+          name:
+            type: str
+            required: true
+          namespace:
+            type: str
+            required: true
+          placement:
+            type: dict
+            required: true
+          provider:
+            type: str
+            required: true
+          rootVolume:
+            type: str
+            required: true
+          storageClass:
+            type: str
+            required: false
+          tpm:
+            type: dict
+            required: false
+          version:
+            type: str
+            required: true
+            choices: [machine-kubevirt-v1]
+      bootwright_substrate_kubevirt_machine_material:
+        type: dict
+        required: true
+      bootwright_substrate_kubevirt_machine_digest:
+        type: str
+        required: true
+      bootwright_run_scratch:
+        type: path
+        required: true
+
+  observe:
+    short_description: Observe one frozen VirtualMachine without changing it.
+    options: *request
+
+  destroy:
+    short_description: Remove one frozen VirtualMachine and prove everything it owned absent.
+    options: *request
+
+  # The machine port other domains compose, each entry point included by
+  # exactly this key. ansible-core validates these inputs before the entry
+  # point's first task and echoes a value it refuses, so the kubeconfig is
+  # passed as the path of its lent file, the port's user input, never as its
+  # bytes. password and ca are admitted for the port's parity: a KubeVirt
+  # host authenticates with the one document.
+  pre_boot:
+    short_description: Prove a VirtualMachine this context realized is off before media is inserted.
+    options:
+      bootwright_run_scratch:
+        type: path
+      bootwright_machine_port:
+        type: dict
+        required: true
+        options:
+          endpoint:
+            type: str
+            required: true
+          user:
+            type: path
+            required: true
+          password:
+            type: str
+          ca:
+            type: str
+          verify:
+            type: bool
+            required: true
+          expected:
+            type: list
+            elements: str
+          pinned_uuid_base64:
+            type: str
+          pinned_serial_base64:
+            type: str
+          require_tpm:
+            type: bool
+          firmware:
+            type: dict
+
+  boot_media:
+    short_description: Start the VirtualMachine from the media it presents.
+    options:
+      bootwright_run_scratch:
+        type: path
+      bootwright_machine_port:
+        type: dict
+        required: true
+        options:
+          endpoint:
+            type: str
+            required: true
+          user:
+            type: path
+            required: true
+          password:
+            type: str
+          ca:
+            type: str
+          verify:
+            type: bool
+            required: true
+          installer_powers_off:
+            type: bool
+            required: true
+
+  boot_disk:
+    short_description: Point the VirtualMachine at its installed disk.
+    options:
+      bootwright_run_scratch:
+        type: path
+      bootwright_machine_port:
+        type: dict
+        required: true
+        options:
+          endpoint:
+            type: str
+            required: true
+          user:
+            type: path
+            required: true
+          password:
+            type: str
+          ca:
+            type: str
+          verify:
+            type: bool
+            required: true
+          power_on:
+            type: bool
+            required: true
+
+  identity_read:
+    short_description: Answer that this arm has no identity channel.
+    options:
+      bootwright_machine_identity:
+        type: dict
+
+  state_read:
+    short_description: Read the VirtualMachine's power and presented media.
+    options:
+      bootwright_run_scratch:
+        type: path
+      bootwright_machine_port:
+        type: dict
+        required: true
+        options:
+          endpoint:
+            type: str
+            required: true
+          user:
+            type: path
+            required: true
+          password:
+            type: str
+          ca:
+            type: str
+          verify:
+            type: bool
+            required: true
+          media_identity:
+            type: str
+          media:
+            type: bool
+          image_url_file:
+            type: path
+          retries:
+            type: int
+          delay:
+            type: int
+          inspect:
+            type: bool
+          expected_power:
+            type: str
+            choices: ['On', 'Off']
+
+  media_insert:
+    short_description: Upload an image into the stopped VirtualMachine's media volume and present it.
+    options:
+      bootwright_run_scratch:
+        type: path
+      bootwright_machine_port:
+        type: dict
+        required: true
+        options:
+          endpoint:
+            type: str
+            required: true
+          user:
+            type: path
+            required: true
+          password:
+            type: str
+          ca:
+            type: str
+          verify:
+            type: bool
+            required: true
+          media_identity:
+            type: str
+          image_url_file:
+            type: path
+          image_path:
+            type: path
+          virtctl:
+            type: path
+          private:
+            type: bool
+          trust:
+            type: str
+          certificate:
+            type: path
+
+  media_eject:
+    short_description: Take the media volume back and delete its DataVolume.
+    options:
+      bootwright_run_scratch:
+        type: path
+      bootwright_machine_port:
+        type: dict
+        required: true
+        options:
+          endpoint:
+            type: str
+            required: true
+          user:
+            type: path
+            required: true
+          password:
+            type: str
+          ca:
+            type: str
+          verify:
+            type: bool
+            required: true
+          media_identity:
+            type: str
+          restore_verification:
+            type: bool
+          remove_certificate:
+            type: bool
+          certificate:
+            type: path
+
+  power:
+    short_description: Bring the VirtualMachine to a power state.
+    options:
+      bootwright_run_scratch:
+        type: path
+      bootwright_machine_port:
+        type: dict
+        required: true
+        options:
+          endpoint:
+            type: str
+            required: true
+          user:
+            type: path
+            required: true
+          password:
+            type: str
+          ca:
+            type: str
+          verify:
+            type: bool
+            required: true
+          media_identity:
+            type: str
+          power:
+            type: str
+            required: true
+            choices: ['on', 'off', restart]
+          force:
+            type: bool
+          attempts:
+            type: int

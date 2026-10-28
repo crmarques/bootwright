@@ -1,0 +1,33 @@
+---
+# The machine must be off by a positive absence of its instance before any
+# media write. The image is pushed through the CDI upload proxy, verified
+# against the ingress authority the host publishes, never with --insecure.
+- name: Clear the refusal an earlier entry point named
+  ansible.builtin.set_fact:
+    substrate_kubevirt_machine_refusal: ''
+  no_log: true
+
+# A KubeVirt host authenticates with the one kubeconfig the port's user input
+# names; a password or a separate trust bundle would be a second credential.
+- name: Refuse port access this arm does not read
+  ansible.builtin.assert:
+    that:
+      - bootwright_machine_port.verify | bool
+      - (bootwright_machine_port.password | default('', true)) | length == 0
+      - (bootwright_machine_port.ca | default('', true)) | length == 0
+    fail_msg: a KubeVirt machine port takes one verified kubeconfig as its user input and no password or trust bundle
+    quiet: true
+
+- name: Run media_insert through the host cluster's API
+  bootwright.core.substrate_kubevirt_api:
+    operation: media_insert
+    kubeconfig: '{{ bootwright_machine_port.user }}'
+    scratch: '{{ bootwright_run_scratch }}'
+    endpoint: '{{ bootwright_machine_port.endpoint }}'
+    image_path: '{{ bootwright_machine_port.image_path }}'
+    virtctl: '{{ bootwright_machine_port.virtctl }}'
+    media_identity: '{{ bootwright_machine_port.media_identity | default("") }}'
+    seconds: 1780
+  register: substrate_kubevirt_machine_port_result
+  failed_when: false
+  no_log: true

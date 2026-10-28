@@ -48,6 +48,7 @@ import (
 	"github.com/crmarques/bootwright/internal/secrets"
 	"github.com/crmarques/bootwright/internal/storage/ceph"
 	"github.com/crmarques/bootwright/internal/substrate/baremetal"
+	"github.com/crmarques/bootwright/internal/substrate/kubevirt"
 	"github.com/crmarques/bootwright/internal/substrate/libvirt"
 )
 
@@ -197,6 +198,13 @@ func contractRows() []contractRow {
 			noEffectUnreported:     "specs/substrates.md proves no effect only from a claim never published, which the controller's reservations hold, not the adapter's evidence",
 			removalObservesNothing: "specs/substrates.md, Physical machine realization, releases only the claim and never contacts the machine",
 			drift:                  map[string]any{"power": ""}},
+		{kind: kubevirt.HostKind, implementation: kubevirt.HostImplementation, example: "lab-kubevirt-external", presence: contractKubeVirtHostPresence,
+			retains: true, indivisible: true,
+			noEffectUnreported:     "specs/substrates.md, KubeVirt machine realization: the provider proof changes nothing, so its evidence never reports an effect it had",
+			removalObservesNothing: "specs/substrates.md, KubeVirt machine realization: the provider proof's removal reads nothing",
+			drift:                  map[string]any{"readWriteMany": false}},
+		{kind: kubevirt.MachineKind, implementation: kubevirt.MachineImplementation, example: "lab-kubevirt-external",
+			completedFrom: "specs/substrates.md, KubeVirt machine realization: each machine block pins the server, cluster identity and root class its provider's original apply proof recorded"},
 		{kind: installation.TreeKind, implementation: installation.TreeImplementation, example: "lab-rhel", presence: contractTreePresence,
 			noEffect: map[string]any{"version": installation.TreeEvidenceVersion}, absence: map[string]any{"version": installation.TreeEvidenceVersion},
 			drift: map[string]any{"identity": strings.Repeat("a", 64)}},
@@ -1256,6 +1264,26 @@ func contractBareMetalPresence(t *testing.T, execution lifecycle.Execution) map[
 	return map[string]any{
 		"postcondition": true, "uuid": "4c4c4544-0000-1000-8000-000000000001", "manufacturer": "Contract", "model": "Contract",
 		"serial": "CONTRACT1", "power": "On", "addresses": request.Addresses(),
+	}
+}
+
+// contractKubeVirtHostPresence proves a provider's host: a Kubernetes API with
+// OpenShift Virtualization, a cluster identity, a migratable root class, a
+// published upload proxy and every network present.
+func contractKubeVirtHostPresence(t *testing.T, execution lifecycle.Execution) map[string]any {
+	t.Helper()
+	request, err := kubevirt.DecodeHostRequest(execution.Block.Request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	networks := []any{}
+	for _, network := range request.Networks {
+		networks = append(networks, map[string]any{"attachment": network.Attachment, "present": true})
+	}
+	return map[string]any{
+		"failures": []any{}, "kubeSystemUID": "6c1f2b8e-0000-4000-8000-000000000001", "macPool": "outside", "networks": networks,
+		"postcondition": true, "readWriteMany": true, "server": "https://api.host.example.test:6443", "storageClass": "guest-block-storage",
+		"uploadProxy": "https://cdi-uploadproxy.apps.host.example.test", "version": "v1.34.2",
 	}
 }
 

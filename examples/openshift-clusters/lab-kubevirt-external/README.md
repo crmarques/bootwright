@@ -7,10 +7,11 @@ Virtualization host, with external API and ingress endpoints and the derived
 `none` installer platform. It is not the baremetal-VIP lab-kubevirt profile
 Q19 ranks first, and it claims no accepted run.
 
-Planning refuses the KubeVirt provider until
-[B87](../../../specs/milestones/m1.md#b87) qualifies the realization and native
-port implementation; B88's pushed-media preparation alone does not make this
-profile runnable. Do not bypass the refusal. The API validates the profile.
+[B87](../../../specs/milestones/m1.md#b87) realizes the provider and its
+guests in-tree; the cluster installation still refuses nodes whose image is
+pushed until [B88](../../../specs/milestones/m3.md#b88) boots them, so this
+profile does not run yet. Do not bypass the refusal. The API validates the
+profile.
 
 ## Worth noting
 

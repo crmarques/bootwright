@@ -76,6 +76,14 @@ func InterfaceMAC(contextName, machine, iface string) string {
 	return "52:54:00:" + value[0:2] + ":" + value[2:4] + ":" + value[4:6]
 }
 
+func KubeVirtName(contextName, machine string) string {
+	sum := sha256.Sum256([]byte("bootwright.substrate.kubevirt.name-v1\x00" + contextName + "\x00" + machine))
+	head := strings.TrimRight(machine[:min(len(machine), 48)], "-")
+	return head + "-" + hex.EncodeToString(sum[:4])
+}
+
+func KubeVirtEndpoint(namespace, name string) string { return "kubevirt:" + namespace + "/" + name }
+
 // ControllerEndpoint is the Redfish address a consumer reaches one Machine's
 // management controller at. Its declared serving certificate always protects
 // the authenticated controller connection.

@@ -50,7 +50,7 @@ proves each row warned and refused at `plan`.
 | Kind | Declaration | Tracked by |
 | --- | --- | --- |
 | InfraProvider | `spec.vsphere` | [B99](milestones/m1.md#b99) |
-| InfraProvider | `spec.kubevirt` | [B87](milestones/m1.md#b87) |
+| InfraProvider | `spec.kubevirt.hostClusterRef` | [B732](milestones/m3.md#b732) |
 | MachineInstallProfile | `spec.installer.templateClone` | [B99](milestones/m1.md#b99) |
 | Registry | `spec.management: managed` | [B68](milestones/m1.md#b68) |
 | LoadBalancer | `spec.management: managed` | [B100](milestones/backlog.md#b100) |

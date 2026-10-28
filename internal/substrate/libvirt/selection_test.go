@@ -362,9 +362,9 @@ func TestUnsupportedNamesEveryObjectThisContractCannotRealize(t *testing.T) {
 	}
 	want := []string{
 		"InfraProvider/vc: this executable realizes no provider on the substrate it declares; " +
-			"remove InfraProvider/vc and the Machines it hosts from the selected Environment, or declare them on a baremetal or libvirt provider",
+			"remove InfraProvider/vc and the Machines it hosts from the selected Environment, or declare them on a baremetal, kubevirt or libvirt provider",
 		"Machine/node-01: its provider InfraProvider/vc is on a substrate this executable does not realize; " +
-			"host Machine/node-01 on a baremetal or libvirt provider, declare its operating system provided, or remove it from the selected Environment",
+			"host Machine/node-01 on a baremetal, kubevirt or libvirt provider, declare its operating system provided, or remove it from the selected Environment",
 	}
 	if !slices.Equal(reasons, want) {
 		t.Fatalf("refusals =\n%q\nwant\n%q", reasons, want)

@@ -12,6 +12,7 @@ import (
 	"github.com/crmarques/bootwright/internal/reconciliation"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
 	"github.com/crmarques/bootwright/internal/secrets"
+	"github.com/crmarques/bootwright/internal/substrate"
 )
 
 // A reading names one machine per entry, so its bound is the fleet an
@@ -28,7 +29,7 @@ type ReadTarget struct {
 	CAVariable       string `json:"caVariable,omitempty"`
 	Controller       Access `json:"controller"`
 	Object           string `json:"object"`
-	PasswordVariable string `json:"passwordVariable"`
+	PasswordVariable string `json:"passwordVariable,omitempty"`
 	UserVariable     string `json:"userVariable"`
 }
 
@@ -96,10 +97,9 @@ func readSurveysFor(catalog api.Catalog, contextName string, names []string, rea
 		survey := grouped[placement.Machine]
 		survey.Context, survey.Placement, survey.Version = contextName, placement, ReadImplementation
 		index := strconv.Itoa(len(survey.Targets))
-		target := ReadTarget{
-			Arm: managed.Port, Controller: controller, Object: object.Name(),
-			PasswordVariable: "controllerPassword" + index,
-			UserVariable:     "controllerUser" + index,
+		target := ReadTarget{Arm: managed.Port, Controller: controller, Object: object.Name(), UserVariable: "controllerUser" + index}
+		if _, password := substrate.ControllerCredential(managed.Port); password != "" {
+			target.PasswordVariable = "controllerPassword" + index
 		}
 		if controller.TrustBundleRef != "" {
 			target.CAVariable = "controllerCA" + index
@@ -125,10 +125,11 @@ func readMaterials(survey ReadSurvey) []lifecycle.MaterialFile {
 	files := make([]lifecycle.MaterialFile, 0, 3*len(survey.Targets))
 	for index, target := range survey.Targets {
 		position := strconv.Itoa(index)
-		files = append(files,
-			lifecycle.MaterialFile{Name: "bmc-user-" + position, Part: secrets.UsernamePart, Secret: target.Controller.CredentialsRef, Variable: target.UserVariable},
-			lifecycle.MaterialFile{Name: "bmc-password-" + position, Part: secrets.PasswordPart, Secret: target.Controller.CredentialsRef, Variable: target.PasswordVariable},
-		)
+		user, password := substrate.ControllerCredential(target.Arm)
+		files = append(files, lifecycle.MaterialFile{Name: "bmc-user-" + position, Part: user, Secret: target.Controller.CredentialsRef, Variable: target.UserVariable})
+		if password != "" {
+			files = append(files, lifecycle.MaterialFile{Name: "bmc-password-" + position, Part: password, Secret: target.Controller.CredentialsRef, Variable: target.PasswordVariable})
+		}
 		if target.CAVariable != "" {
 			files = append(files,
 				lifecycle.MaterialFile{Name: "bmc-ca-" + position, Part: secrets.CertificatePart, Secret: target.Controller.TrustBundleRef, Variable: target.CAVariable})

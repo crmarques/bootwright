@@ -30,6 +30,7 @@ import (
 	"github.com/crmarques/bootwright/internal/storage/ceph"
 	"github.com/crmarques/bootwright/internal/substrate"
 	"github.com/crmarques/bootwright/internal/substrate/baremetal"
+	"github.com/crmarques/bootwright/internal/substrate/kubevirt"
 	"github.com/crmarques/bootwright/internal/substrate/libvirt"
 )
 
@@ -114,6 +115,11 @@ func contractRecipes() map[string]digestRecipe {
 		libvirt.MachineImplementation: digestOf(partDomain("bootwright.substrate.libvirt.machine-v1"), partImplementation(libvirt.MachineImplementation), partRequest("machine-libvirt-v8"),
 			partPin("quay.io/metal3-io/sushy-tools@sha256:f760343718e1175343f230ec43496a4f0d850f1d0a3139b92db1e475ac91d11e"),
 			partPin(substrate.ImagePrefix), partPin(substrate.Prefix), partPin("data-media-ssd-scsi-v1"), partPin("shared-bmc-claim")),
+		kubevirt.HostImplementation: digestOf(partDomain("bootwright.substrate.kubevirt.host-v1"), partImplementation(kubevirt.HostImplementation), partRequest("substrate-host-kubevirt-v1"),
+			partVersion("substrate-host-kubevirt-evidence-v1"), partPin("access-reviews"), partPin("root-class-rwx"), partPin("kube-system-uid"), partPin("ingress-ca")),
+		kubevirt.MachineImplementation: digestOf(partDomain("bootwright.substrate.kubevirt.machine-v1"), partImplementation(kubevirt.MachineImplementation), partRequest("machine-kubevirt-v1"),
+			partVersion("machine-kubevirt-evidence-v1"), partPin("run-strategy-manual"), partPin("efi-no-secure-boot"), partPin("evict-live-migrate"), partPin("bridge-binding"),
+			partPin("root-template-blank"), partPin("owner-annotation-mark")),
 		baremetal.Implementation: digestOf(partDomain("bootwright.substrate.baremetal.machine-v1"), partImplementation(baremetal.Implementation), partRequest("machine-baremetal-v2"),
 			partPin("identity+exact-addresses+power+system-claim")),
 		installation.TreeImplementation:  digestOf(partImplementation(installation.TreeImplementation), partVersion(installation.TreeEvidenceVersion)),
@@ -162,6 +168,8 @@ func requestIdentities() map[string][]string {
 		libvirt.MachineImplementation: {"identity.context", "identity.object", "identity.block", "uri", "domain", "uuid", "directory", "poolName",
 			"poolPath", "disks[].name", "disks[].path", "interfaces[].macAddress", "controller.unit", "controller.port"},
 		baremetal.Implementation:        {"identity.context", "identity.object", "identity.block", "provider", "controller.endpoint", "hardware[].macAddress"},
+		kubevirt.HostImplementation:     {"identity.context", "identity.object", "identity.block", "namespace", "kubeconfigRef"},
+		kubevirt.MachineImplementation:  {"identity.context", "identity.object", "identity.block", "provider", "namespace", "name", "rootVolume", "mediaVolume", "interfaces[].macAddress"},
 		installation.TreeImplementation: {"identity.context", "identity.profile", "media.name", "publication.path", "placement.machine"},
 		installation.EraseImplementation: {"install.identity.context", "install.identity.object", "install.identity.block", "installDigest",
 			"targets[].deviceName", "targets[].serialNumber", "targets[].wwn"},

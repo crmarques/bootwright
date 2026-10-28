@@ -530,8 +530,11 @@ kubeconfig names, verified against the certificate authority that kubeconfig
 embeds and authenticated by its client certificate or token, and a kubeconfig
 that disables verification, carries no certificate authority, names a proxy,
 refers to files or runs a plugin (an `exec` or `auth-provider` entry) refuses
-before registration, because each would let the host connection run or trust
-something the declaration does not name. Its CDI upload proxy is verified against the
+before the adapter's first request, in the provider proof every Machine of
+the provider waits for and again in every block and port entry point
+([KubeVirt machine realization](substrates.md#kubevirt-machine-realization)),
+because each would let the host connection run or trust something the
+declaration does not name. Its CDI upload proxy is verified against the
 ingress certificate authority read through that verified connection, never with
 `--insecure`. A vCenter is reached at its declared server and port over TLS
 verified against the system trust store; its `disableCertificateVerification`
@@ -541,8 +544,8 @@ verified endpoints, and its destination's access control is recorded as inside
 the trust boundary of what it embeds
 ([container clusters](openshift-clusters.md#boot-media)).
 
-Not yet met: no KubeVirt or vSphere connection exists; tracked as
-[B87](milestones/m1.md#b87) and [B99](milestones/m1.md#b99).
+Not yet met: no vSphere connection exists; tracked as
+[B99](milestones/m1.md#b99).
 
 Managed probes and effects use the
 [Ansible boundary and locked runtime closure](architecture.md#go-and-ansible-responsibility-boundary),

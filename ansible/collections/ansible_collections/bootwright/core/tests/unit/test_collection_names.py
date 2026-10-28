@@ -23,7 +23,7 @@ ACTIONS = COLLECTION / "plugins" / "action"
 DOMAINS = frozenset(("addons", "containercluster", "controller", "machine", "managedos", "storage", "substrate"))
 
 # The implementations a role or plugin names; one belongs directly after its domain.
-IMPLEMENTATIONS = frozenset(("anaconda", "baremetal", "ceph", "libvirt", "nginx", "redfish"))
+IMPLEMENTATIONS = frozenset(("anaconda", "baremetal", "ceph", "kubevirt", "libvirt", "nginx", "redfish"))
 
 SHAPE = re.compile(r"[a-z][a-z0-9]*(?:_[a-z0-9]+)+")
 

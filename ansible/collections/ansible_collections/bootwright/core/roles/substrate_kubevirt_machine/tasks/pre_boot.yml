@@ -1,0 +1,55 @@
+---
+# Prove the exact target immediately before destructive media is inserted:
+# the VirtualMachine is this context's, presents the interfaces its
+# realization derived, and is off. The result channel is the consumer's, so a
+# named refusal is left in substrate_kubevirt_machine_refusal for it to name.
+- name: Clear the refusal an earlier entry point named
+  ansible.builtin.set_fact:
+    substrate_kubevirt_machine_refusal: ''
+  no_log: true
+
+# A KubeVirt host authenticates with the one kubeconfig the port's user input
+# names; a password or a separate trust bundle would be a second credential.
+- name: Refuse port access this arm does not read
+  ansible.builtin.assert:
+    that:
+      - bootwright_machine_port.verify | bool
+      - (bootwright_machine_port.password | default('', true)) | length == 0
+      - (bootwright_machine_port.ca | default('', true)) | length == 0
+    fail_msg: a KubeVirt machine port takes one verified kubeconfig as its user input and no password or trust bundle
+    quiet: true
+
+- name: Run pre_boot through the host cluster's API
+  bootwright.core.substrate_kubevirt_api:
+    operation: pre_boot
+    kubeconfig: '{{ bootwright_machine_port.user }}'
+    scratch: '{{ bootwright_run_scratch }}'
+    endpoint: '{{ bootwright_machine_port.endpoint }}'
+    require_tpm: '{{ bootwright_machine_port.require_tpm | default(false) }}'
+    expected: '{{ bootwright_machine_port.expected | default([]) }}'
+    firmware: '{{ bootwright_machine_port.firmware | default({}) }}'
+  register: substrate_kubevirt_machine_port_result
+  failed_when: false
+  no_log: true
+
+- name: Name a vTPM the machine does not present as the refusal
+  ansible.builtin.set_fact:
+    substrate_kubevirt_machine_refusal: tpm-absent
+  when: substrate_kubevirt_machine_port_result.refusal | default('') == 'tpm-absent'
+
+- name: Name a running machine as the refusal
+  ansible.builtin.set_fact:
+    substrate_kubevirt_machine_refusal: machine-running
+  when: substrate_kubevirt_machine_port_result.refusal | default('') == 'machine-running'
+
+- name: Refuse a machine the proof did not hold for
+  ansible.builtin.assert:
+    that:
+      - substrate_kubevirt_machine_port_result.msg is not defined
+    fail_msg: >-
+      {{ (substrate_kubevirt_machine_port_result.msg | default('') | string | bootwright.core.printable)[:512] }}
+    quiet: true
+
+- name: Clear the refusal now that the machine is proved
+  ansible.builtin.set_fact:
+    substrate_kubevirt_machine_refusal: ''

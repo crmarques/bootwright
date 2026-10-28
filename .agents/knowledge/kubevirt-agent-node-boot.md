@@ -86,6 +86,21 @@ ids L2-K01 to K15 and L1 KV-1 to KV-7):
 - A typed `kubectl get` hides a generic 404 behind discovery errors, so probe
   `/apis/subresources.kubevirt.io/v1/version` and then `/version`.
 
+## Inferences the arm rests on
+
+The [B87](../../specs/milestones/m1.md#b87) arm (D197) rests on these, each
+unverified until [B731](../../specs/milestones/m3.md#b731)'s run:
+
+- `virtctl image-upload` builds its upload client from Go's system pool, which
+  on Linux is the one file `SSL_CERT_FILE` names, so the ingress authority is
+  the upload proxy's only anchor without `--insecure`.
+- A `dataVolumeTemplates` entry's labels and annotations reach the DataVolume
+  KubeVirt creates, which a controller owner reference ties to the
+  VirtualMachine, and CDI's claim of that DataVolume is owned by it.
+- A persistent vTPM's state claim carries an owner reference to its
+  VirtualMachine, so the removal proof finds it by that reference.
+- KubeMacPool admits a pinned `macAddress` outside its range.
+
 ## Decision history
 
 `virtctl image-upload` is kept on purpose (owner, 2026-06-28). A DataVolume

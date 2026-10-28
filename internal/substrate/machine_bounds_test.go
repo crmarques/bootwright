@@ -12,8 +12,13 @@ func TestMachinePortsPublishBoundsForEveryRealizedArm(t *testing.T) {
 			t.Fatalf("%s: %+v", arm, bounds)
 		}
 	}
-	if _, ok := MachineBoundsFor(ArmKubeVirt); ok {
+	if _, ok := MachineBoundsFor(ArmVSphere); ok {
 		t.Fatal("unqualified arm published bounds")
+	}
+	kubevirt, _ := MachineBoundsFor(ArmKubeVirt)
+	if kubevirt.NodeMargin != 1020*time.Second || kubevirt.MediaInsert != 1800*time.Second || kubevirt.Power != 720*time.Second ||
+		kubevirt.BootAllowance != 40*time.Minute || kubevirt.Fanout != 4 || kubevirt.ControllerKind != "api" {
+		t.Fatalf("KubeVirt bounds = %+v, not the ones its realization publishes", kubevirt)
 	}
 	if LibvirtNodeMargin != 11*time.Minute {
 		t.Fatalf("emulated margin = %s", LibvirtNodeMargin)

@@ -34,6 +34,7 @@ import (
 	"github.com/crmarques/bootwright/internal/substrate"
 	"github.com/crmarques/bootwright/internal/substrate/baremetal"
 	"github.com/crmarques/bootwright/internal/substrate/capacity"
+	"github.com/crmarques/bootwright/internal/substrate/kubevirt"
 	"github.com/crmarques/bootwright/internal/substrate/libvirt"
 	"github.com/crmarques/bootwright/internal/trust"
 	"github.com/crmarques/bootwright/internal/workspace/contexts"
@@ -147,6 +148,12 @@ func operationPlaybook() map[string]string {
 		baremetal.Implementation + "/apply":             "substrate/baremetal_machine_apply.yml",
 		baremetal.Implementation + "/observe":           "substrate/baremetal_machine_observe.yml",
 		baremetal.Implementation + "/destroy":           "substrate/baremetal_machine_destroy.yml",
+		kubevirt.HostImplementation + "/apply":          "substrate/kubevirt_host_apply.yml",
+		kubevirt.HostImplementation + "/observe":        "substrate/kubevirt_host_observe.yml",
+		kubevirt.HostImplementation + "/destroy":        "substrate/kubevirt_host_destroy.yml",
+		kubevirt.MachineImplementation + "/apply":       "substrate/kubevirt_machine_apply.yml",
+		kubevirt.MachineImplementation + "/observe":     "substrate/kubevirt_machine_observe.yml",
+		kubevirt.MachineImplementation + "/destroy":     "substrate/kubevirt_machine_destroy.yml",
 		power.Implementation + "/power":                 "machine/power.yml",
 		power.ReadImplementation + "/read":              "machine/power_read.yml",
 		agentinstall.InstallImplementation + "/apply":   "containercluster/install_apply.yml",
@@ -214,6 +221,12 @@ func buildCapabilitiesWith(clock systemClock, controller controllerDependencies,
 	}, {
 		kind: baremetal.Kind, implementation: baremetal.Implementation, family: substrate.MachineFamily,
 		capability: baremetal.NewMachine(runner),
+	}, {
+		kind: kubevirt.MachineKind, implementation: kubevirt.MachineImplementation, family: substrate.MachineFamily,
+		capability: kubevirt.NewMachine(runner),
+	}, {
+		kind: kubevirt.HostKind, implementation: kubevirt.HostImplementation, family: "substrate-host",
+		capability: kubevirt.NewHost(runner),
 	}, {
 		kind: installation.TreeKind, implementation: installation.TreeImplementation, family: "os-package-tree",
 		capability: installation.NewTree(runner).WithMedia(records),

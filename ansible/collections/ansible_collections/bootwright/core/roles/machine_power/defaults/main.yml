@@ -55,6 +55,6 @@ machine_power_reports_declared: >-
 machine_power_access:
   endpoint: '{{ bootwright_machine_power_request.controller.endpoint }}'
   user: '{{ bootwright_machine_power_material.controllerUser }}'
-  password: '{{ bootwright_machine_power_material.controllerPassword }}'
+  password: "{{ bootwright_machine_power_material.controllerPassword | default('') }}"
   ca: "{{ bootwright_machine_power_material.controllerCA | default('') }}"
   verify: '{{ bootwright_machine_power_request.controller.tlsVerify }}'

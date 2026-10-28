@@ -8,7 +8,9 @@
     bootwright_machine_port:
       endpoint: '{{ machine_power_read_target.controller.endpoint }}'
       user: '{{ bootwright_machine_power_read_material[machine_power_read_target.userVariable] }}'
-      password: '{{ bootwright_machine_power_read_material[machine_power_read_target.passwordVariable] }}'
+      password: >-
+        {{ bootwright_machine_power_read_material[machine_power_read_target.passwordVariable]
+           if machine_power_read_target.passwordVariable | default('') | length > 0 else '' }}
       verify: '{{ machine_power_read_target.controller.tlsVerify }}'
       ca: >-
         {{ bootwright_machine_power_read_material[machine_power_read_target.caVariable]

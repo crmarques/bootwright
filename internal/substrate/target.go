@@ -27,7 +27,7 @@ func Arms() []string { return []string{ArmBaremetal, ArmLibvirt, ArmVSphere, Arm
 
 // Realized lists the arms this executable can realize, in canonical order.
 // Every other arm refuses before an operation registers.
-func Realized() []string { return []string{ArmBaremetal, ArmLibvirt} }
+func Realized() []string { return []string{ArmBaremetal, ArmKubeVirt, ArmLibvirt} }
 
 // RealizesPhysicalNICs reports whether a provider's machines are operator-owned
 // hardware whose interfaces exist before Bootwright realizes anything. A
@@ -48,6 +48,7 @@ const (
 	// is known before the machine is ever contacted and the read is an SSH
 	// connection pinned to exactly it.
 	ChannelDeliveredKey = "delivered-key"
+	ChannelNone         = "none"
 )
 
 // The virtual-media trust a controller's fetch of published media uses. It is
@@ -162,13 +163,16 @@ func TargetFor(catalog api.Catalog, machine api.Object, contextName, controllerM
 			"declare "+reference+" or correct spec.substrate.providerRef on "+machine.Identity())
 	}
 	arm := Variant(provider)
-	if !slices.Contains(Realized(), arm) {
+	if !IsRealized(provider) {
 		return Target{}, refusal("lifecycle.state", "this executable does not realize the substrate of "+provider.Identity(),
-			"place "+machine.Identity()+" on a libvirt or bare-metal provider")
+			"place "+machine.Identity()+" on a libvirt, bare-metal or KubeVirt provider")
 	}
 	target := Target{Provider: provider.Name(), Substrate: arm, Port: arm, Delivery: DeliveryOf(arm)}
-	if arm == ArmBaremetal {
+	switch arm {
+	case ArmBaremetal:
 		return physicalTarget(catalog, provider, machine, controllerMachine, target)
+	case ArmKubeVirt:
+		return kubevirtTarget(catalog, provider, machine, contextName, controllerMachine, target)
 	}
 	return virtualTarget(catalog, provider, machine, contextName, target)
 }
@@ -255,6 +259,37 @@ func virtualTarget(catalog api.Catalog, provider, machine api.Object, contextNam
 		URI:     provider.Spec().Get("libvirt", "uri").Text(),
 		Domain:  DomainName(contextName, machine.Name()),
 	}
+	names, err := EthernetInterfaces(catalog, machine)
+	if err != nil {
+		return Target{}, err
+	}
+	for _, name := range names {
+		target.Interfaces = append(target.Interfaces, Interface{
+			Name: name, MACAddress: InterfaceMAC(contextName, machine.Name(), name),
+		})
+	}
+	target.RootDeviceHints = rootDeviceHints(machine)
+	target.PlacementMachine = host
+	return target, nil
+}
+
+func kubevirtTarget(catalog api.Catalog, provider, machine api.Object, contextName, controllerMachine string, target Target) (Target, error) {
+	arm := provider.Spec().Get(ArmKubeVirt)
+	credentials := arm.Get("kubeconfigRef").Text()
+	if credentials == "" {
+		return Target{}, refusal("api.required", "the KubeVirt provider names no kubeconfig",
+			"set spec.kubevirt.kubeconfigRef on "+provider.Identity())
+	}
+	host, ok := catalog.Find(api.Machine, controllerMachine)
+	if !ok {
+		return Target{}, refusal("api.reference", "the Environment's controller Machine is not in the selected graph",
+			"declare it or correct spec.controller.machineRef")
+	}
+	target.Controller = Controller{
+		Endpoint:       KubeVirtEndpoint(arm.Get("namespace").Text(), KubeVirtName(contextName, machine.Name())),
+		CredentialsRef: credentials, TLSVerify: true,
+	}
+	target.Identity = Identity{Channel: ChannelNone}
 	names, err := EthernetInterfaces(catalog, machine)
 	if err != nil {
 		return Target{}, err
@@ -453,15 +488,20 @@ type Unrealized struct {
 // non-provided Machine hosted on one. It has one owner so that adding an arm
 // narrows the refusal in exactly one place.
 func Unrealizable(catalog api.Catalog) []Unrealized {
-	realized := "a " + strings.Join(Realized(), " or ") + " provider"
+	arms := Realized()
+	realized := "a " + strings.Join(arms[:len(arms)-1], ", ") + " or " + arms[len(arms)-1] + " provider"
 	var found []Unrealized
 	for _, provider := range catalog.OfKind(api.InfraProvider) {
-		if slices.Contains(Realized(), Variant(provider)) {
+		if IsRealized(provider) {
 			continue
 		}
 		reason := "this executable realizes no provider on the substrate it declares"
-		found = append(found, Unrealized{Object: provider, Reason: reason,
-			Remediation: "remove " + provider.Identity() + " and the Machines it hosts from the selected Environment, or declare them on " + realized})
+		remediation := "remove " + provider.Identity() + " and the Machines it hosts from the selected Environment, or declare them on " + realized
+		if NamesHostCluster(provider) {
+			reason = "this executable realizes a KubeVirt provider only on the host cluster its kubeconfigRef names"
+			remediation = "declare spec.kubevirt.kubeconfigRef instead of hostClusterRef on " + provider.Identity() + ", or remove " + provider.Identity() + " and the Machines it hosts from the selected Environment"
+		}
+		found = append(found, Unrealized{Object: provider, Reason: reason, Remediation: remediation})
 		for _, machine := range HostedMachines(catalog, provider.Name()) {
 			found = append(found, Unrealized{Object: machine,
 				Reason:      "its provider " + provider.Identity() + " is on a substrate this executable does not realize",

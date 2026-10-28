@@ -163,6 +163,9 @@ func unsupportedReason(catalog api.Catalog, cluster api.Object) (reason, remedia
 		if provider, ok := machine.Provider(bound, catalog); ok && substrate.NamesHostCluster(provider) {
 			return "a declared node's KubeVirt provider names hostClusterRef", "select kubeconfigRef on " + provider.Identity()
 		}
+		if provider, ok := machine.Provider(bound, catalog); ok && substrate.IsRealized(provider) && substrate.DeliveryOf(substrate.Variant(provider)) == substrate.DeliveryPush {
+			return "a declared node's substrate pushes its boot image, which this executable's agent installation does not boot yet", "correct " + cluster.Identity()
+		}
 		target, err := substrate.TargetFor(catalog, bound, cluster.Name(), controllerMachine)
 		if err != nil {
 			reason, remedy := nodeTargetRefusal(catalog, bound, err)

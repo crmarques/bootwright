@@ -1,0 +1,61 @@
+implementation: substrate-host-kubevirt-v1
+content-digest: 06f3c7571c80825b325fe162a18cd1a1137e4ad198d6cc5506ed5ac5c9c9a816
+request-version: substrate-host-kubevirt-v1
+automation-formats: none
+mark-formats: none
+proof-ids: none
+fixed-places: none
+effect-pins:
+  access-reviews
+  root-class-rwx
+  kube-system-uid
+  ingress-ca
+request-identity:
+  identity.context
+  identity.object
+  identity.block
+  namespace
+  kubeconfigRef
+request-schema:
+  access []struct kubevirt.Access
+  access[].group string omitempty
+  access[].resource string
+  access[].subresource string omitempty
+  access[].verb string
+  identity struct kubevirt.Identity
+  identity.block string
+  identity.context string
+  identity.object string
+  kubeconfigRef string
+  macAddresses []string
+  namespace string
+  networks []struct kubevirt.Network
+  networks[].attachment string
+  networks[].derived string omitempty
+  networks[].name string
+  networks[].namespace string
+  placement struct machine.Placement
+  placement.address string omitempty
+  placement.connection string
+  placement.knownHostsRef string omitempty
+  placement.machine string
+  placement.port int omitempty
+  placement.privateKeyRef string omitempty
+  placement.user string omitempty
+  storageClass string omitempty
+  version string
+evidence-schema:
+  absent bool
+  failures []string
+  kubeSystemUID string
+  macPool string
+  networks []struct kubevirt.NetworkEvidence
+  networks[].attachment string
+  networks[].present bool
+  postcondition bool
+  readWriteMany bool
+  request string
+  server string
+  storageClass string
+  uploadProxy string
+  version string

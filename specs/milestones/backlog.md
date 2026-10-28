@@ -5439,8 +5439,9 @@ record and with its own, and a mismatch refuses. Each VirtualMachine claims
 `kubevirt-vm:<server>/<namespace>/<name>` once its block proves it (B816's
 remainder).
 (13) New items: [B905](#b905), [B906](#b906), [B907](#b907),
-[B908](m3.md#b908) (peer VM placement) and [B909](#b909) (UserDefinedNetwork
-attachments, refused by the arm until then).
+[B908](m3.md#b908) (peer VM placement), [B909](#b909) (UserDefinedNetwork
+attachments, refused by the arm until then) and [B910](m1.md#b910), the port's
+cluster and UID pin the slice's review found missing.
 
 ### D198
 

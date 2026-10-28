@@ -113,6 +113,7 @@ their diagnostic carries the refused field's path.
 | A node with an install profile | `spec.os.installProfileRef` on a node's Machine | `a declared node selects an install profile, so two installations would write its disk` | `remove spec.os.installProfileRef from <machine> or drop it from <cluster>` |
 | A node on an unrealized substrate | a node's Machine whose provider declares a substrate this executable does not realize | `a declared node is on a substrate this executable does not realize` | `correct <cluster>` |
 | A KubeVirt node on a nested host | a node's KubeVirt provider names `hostClusterRef` | `a declared node's KubeVirt provider names hostClusterRef` | `select kubeconfigRef on <provider>` |
+| A node on a substrate that pushes its image | a node's Machine on a realized provider whose arm takes pushed delivery (`kubevirt`) | `a declared node's substrate pushes its boot image, which this executable's agent installation does not boot yet` | `correct <cluster>` |
 | A node whose emulated BMC port does not allocate | a virtual node whose provider's `spec.libvirt.bmcEmulation.port` plus the node's position among that provider's Machines is past 65535 | `node <node> (<machine>): the Machine's emulated BMC port does not allocate` | `correct spec.libvirt.bmcEmulation.port on <provider>` |
 | A node's provider with no emulated BMC credential | a virtual node whose provider declares no `spec.libvirt.bmcEmulation.auth.credentialsRef` | `node <node> (<machine>): the provider declares no emulated BMC credential` | `set spec.libvirt.bmcEmulation.auth.credentialsRef on <provider>` |
 | A physical node with an HTTP BMC | a physical node's BMC uses HTTP | `a physical node's private boot image requires an HTTPS management controller` | `set spec.substrate.baremetal.bmc.address on <machine> to an HTTPS ComputerSystem endpoint` |
@@ -127,9 +128,10 @@ table and its test change in that commit:
 
 - [B723](milestones/m3.md#b723) lifts the serving-certificate row.
 - [B69](milestones/m3.md#b69) lifts the disconnected-cluster row.
-- [B88](milestones/m3.md#b88) lifts the unrealized-substrate row for a node on
-  a KubeVirt provider, and [B733](milestones/m3.md#b733) for a node on a
-  vSphere provider and the multi-node `vsphere` platform row.
+- [B88](milestones/m3.md#b88) lifts the pushed-image row for a node on a
+  KubeVirt provider, and [B733](milestones/m3.md#b733) the unrealized-substrate
+  row for a node on a vSphere provider and the multi-node `vsphere` platform
+  row.
 - [B743](milestones/backlog.md#b743) lifts the row for a node off the artifact
   server's host, and [B748](milestones/backlog.md#b748) the OKD row.
 
@@ -191,12 +193,13 @@ These rules are evidence of what the 4.20 to 4.22 agent installer accepts and
 does, not a support statement
 ([knowledge](../.agents/knowledge/kubevirt-agent-node-boot.md)).
 
-Not yet met: a node on a KubeVirt provider still refuses as a node on an
-unrealized substrate; a nested host is refused by lifecycle selection. Admission checks the homogeneous arm,
-attachment kinds and endpoint sources, and installer input projections have
-offline goldens. Target derivation, native port integration and published
-bounds still require [B87](milestones/m1.md#b87); tracked as
-[B88](milestones/m3.md#b88).
+Not yet met: a node on a KubeVirt provider refuses as a node whose substrate
+pushes its image; a nested host is refused by lifecycle selection. Admission
+checks the homogeneous arm, attachment kinds and endpoint sources, installer
+input projections have offline goldens, and [B87](milestones/m1.md#b87)
+delivers the target, the port and its bounds; the installation's pushed boot
+through that port, which lends the kubeconfig by the arm's credential parts,
+is tracked as [B88](milestones/m3.md#b88).
 
 Not yet met: a node on a vSphere provider refuses as a node on an unrealized
 substrate, and a multi-node `vsphere` cluster refuses as several nodes on

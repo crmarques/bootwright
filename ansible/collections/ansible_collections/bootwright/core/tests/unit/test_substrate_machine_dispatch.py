@@ -31,7 +31,7 @@ PORT = ("pre_boot", "boot_media", "boot_disk", "identity_read", "state_read", "m
 INCLUDE = "ansible.builtin.include_role"
 FAIL = "ansible.builtin.fail"
 SET_FACT = "ansible.builtin.set_fact"
-SYNTHETIC = "kubevirt"
+SYNTHETIC = "vsphere"
 
 
 @pytest.fixture(name="plugins")
@@ -132,7 +132,7 @@ def test_an_unlisted_arm_is_refused_by_name_before_any_lookup(plugins):
     rendering = Templar(loader=LOADER, variables=scope(SYNTHETIC))
     assert rendering.evaluate_conditional(task["when"]) is True
     assert " ".join(rendering.template(task[FAIL]["msg"]).split()) == (
-        "the substrate has no machine port for arm 'kubevirt', so its power entry point did not run; "
+        "the substrate has no machine port for arm 'vsphere', so its power entry point did not run; "
         "plan the installation again with this release")
     for arm in table():
         assert Templar(loader=LOADER, variables=scope(arm)).evaluate_conditional(task["when"]) is False
@@ -151,7 +151,7 @@ def test_power_refuses_an_unlisted_arm_by_name_before_its_first_port_entry_point
                                                       bootwright_machine_arm=Templar(loader=LOADER, variables=request).template(arm)))
     assert rendering.evaluate_conditional(refusal["when"]) is True
     assert " ".join(rendering.template(refusal[FAIL]["msg"]).split()) == (
-        "the substrate has no machine port for arm 'kubevirt', so nothing was done; plan the installation again "
+        "the substrate has no machine port for arm 'vsphere', so nothing was done; plan the installation again "
         "with this release")
 
 
@@ -165,16 +165,16 @@ def test_a_synthetic_arm_reaches_machine_power_through_its_own_entry_points(plug
     assert include[INCLUDE] == {"name": "bootwright.core.substrate_machine", "tasks_from": "power"}
     request = {"bootwright_machine_power_request": {"arm": SYNTHETIC}}
     arm = Templar(loader=LOADER, variables=request).template(include["vars"]["bootwright_machine_arm"])
-    arms = dict(table(), **{SYNTHETIC: "bootwright.core.substrate_kubevirt_machine"})
+    arms = dict(table(), **{SYNTHETIC: "bootwright.core.substrate_vsphere_machine"})
     tasks, refusal, lookup = dispatch()
     rendering = Templar(loader=LOADER, variables=scope(arm, arms))
     assert rendering.evaluate_conditional(tasks[refusal]["when"]) is False
     [entered] = [task for task in walk([tasks[lookup]]) if INCLUDE in task]
-    assert rendering.template(entered[INCLUDE]["name"]) == "bootwright.core.substrate_kubevirt_machine"
+    assert rendering.template(entered[INCLUDE]["name"]) == "bootwright.core.substrate_vsphere_machine"
     assert rendering.template(entered[INCLUDE]["tasks_from"]) == "power"
     [published] = [task for task in walk([tasks[lookup]]) if SET_FACT in task]
-    assert rendering.template(published["vars"]["substrate_machine_prefix"]) == "substrate_kubevirt_machine"
-    answered = dict(scope(arm, arms), substrate_machine_prefix="substrate_kubevirt_machine",
-                    substrate_kubevirt_machine_port_result={"power": "Off"})
+    assert rendering.template(published["vars"]["substrate_machine_prefix"]) == "substrate_vsphere_machine"
+    answered = dict(scope(arm, arms), substrate_machine_prefix="substrate_vsphere_machine",
+                    substrate_vsphere_machine_port_result={"power": "Off"})
     answer = Templar(loader=LOADER, variables=answered).template(published[SET_FACT]["substrate_machine_port_result"])
     assert answer == {"power": "Off"}

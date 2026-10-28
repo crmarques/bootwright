@@ -12,7 +12,7 @@ listed commands return the [unavailable result](cli.md#recognized-but-unavailabl
 
 | ID | Milestone | Requires | Delivery | Next |
 | --- | --- | --- | --- | --- |
-| [M1](milestones/m1.md) | Foundations: substrates, infrastructure services and Machines | none | in progress | operator gates; X129; X132's definition |
+| [M1](milestones/m1.md) | Foundations: substrates, infrastructure services and Machines | none | in progress | operator gates; X132's definition |
 | [M2](milestones/m2.md) | Full IBM Ceph 9.9.x: virtual, physical and stretch | D156; applicable M1c/M1d/M1e | in progress | M2c's X61 (B484); B483 blocked; operator gates |
 | [M3](milestones/m3.md) | Full OpenShift on libvirt+sushy, BMCs, KubeVirt, vSphere | M2; applicable M1c to M1g; B18/B23/B265; B83, B735, B750, B751 before B726; B84, B727, B758 before B729 | in progress | M3b operator gate |
 | [M4](milestones/m4.md) | Cluster add-ons | M2; M3c; B64, B719, B726 where a package uses them | in progress | M4a accepted; M4b–e in-tree; live gates pending |

@@ -54,6 +54,9 @@ COMPLETIONS = ("completed", "refused")
 # names no completion outside no_log fails.
 PRINTED_COMPLETIONS = frozenset({
     ("substrate_baremetal_machine/tasks/apply.yml", "Publish bounded machine proof"),
+    ("substrate_kubevirt_host/tasks/apply.yml", "Publish the bounded provider proof"),
+    ("substrate_kubevirt_host/tasks/observe.yml", "Publish the bounded provider proof"),
+    ("substrate_kubevirt_host/tasks/destroy.yml", "Publish the released proof"),
     ("substrate_baremetal_machine/tasks/observe.yml", "Publish bounded machine observation"),
 })
 

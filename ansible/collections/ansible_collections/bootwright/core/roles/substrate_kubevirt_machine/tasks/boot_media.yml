@@ -1,0 +1,37 @@
+---
+# The persistent boot order sends a blank root disk to the presented media and
+# an installed one to itself, so starting the VirtualMachine is the boot.
+- name: Clear the refusal an earlier entry point named
+  ansible.builtin.set_fact:
+    substrate_kubevirt_machine_refusal: ''
+  no_log: true
+
+# A KubeVirt host authenticates with the one kubeconfig the port's user input
+# names; a password or a separate trust bundle would be a second credential.
+- name: Refuse port access this arm does not read
+  ansible.builtin.assert:
+    that:
+      - bootwright_machine_port.verify | bool
+      - (bootwright_machine_port.password | default('', true)) | length == 0
+      - (bootwright_machine_port.ca | default('', true)) | length == 0
+    fail_msg: a KubeVirt machine port takes one verified kubeconfig as its user input and no password or trust bundle
+    quiet: true
+
+- name: Run boot_media through the host cluster's API
+  bootwright.core.substrate_kubevirt_api:
+    operation: boot_media
+    kubeconfig: '{{ bootwright_machine_port.user }}'
+    scratch: '{{ bootwright_run_scratch }}'
+    endpoint: '{{ bootwright_machine_port.endpoint }}'
+  register: substrate_kubevirt_machine_port_result
+  failed_when: false
+  no_log: true
+
+- name: Stop at a start the host refused
+  ansible.builtin.assert:
+    that:
+      - substrate_kubevirt_machine_port_result.msg is not defined
+    fail_msg: >-
+      starting {{ bootwright_machine_port.endpoint }} failed:
+      {{ (substrate_kubevirt_machine_port_result.msg | default('') | string | bootwright.core.printable)[:512] }}
+    quiet: true

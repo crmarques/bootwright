@@ -13,6 +13,7 @@ import (
 	"github.com/crmarques/bootwright/internal/desiredstate/compilation"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
 	"github.com/crmarques/bootwright/internal/substrate"
+	"github.com/crmarques/bootwright/internal/substrate/kubevirt"
 )
 
 // refusalSpec owns this capability's refusal table, read from this package's
@@ -29,7 +30,8 @@ type refusalCase struct {
 }
 
 // TestSubstrateRefusalTableMatchesUnsupported holds the provider host
-// capability's Unsupported to the substrate refusal table: every row refuses
+// capabilities' Unsupported, libvirt's and KubeVirt's, to the substrate
+// refusal table: every row refuses
 // its object with exactly its reason and remedy, and a row added or removed on
 // either side fails here. A hosted Machine is refused beside its provider, so
 // each row is held to the refusals of its own object.
@@ -52,6 +54,14 @@ func TestSubstrateRefusalTableMatchesUnsupported(t *testing.T) {
 			"InfraProvider/lab-libvirt", map[string]string{"<provider>": "InfraProvider/lab-libvirt"}},
 		"A provider using more external bridges than its use reservation holds": {catalogOf(controller(), provider(externalAttachments(manyBridges(substrate.MaxExternalBridges+1)...))),
 			"InfraProvider/lab-libvirt", map[string]string{"<provider>": "InfraProvider/lab-libvirt"}},
+		"A KubeVirt provider on a host this context builds": {catalogOf(controller(), kubevirtProvider("hostClusterRef", "")), "InfraProvider/kv",
+			map[string]string{"<provider>": "InfraProvider/kv"}},
+		"A Bootwright-installed Machine on KubeVirt": {catalogOf(controller(), networkConfig(), kubevirtProvider("kubeconfigRef", ""),
+			kubevirtGuest(text("installProfileRef", "rhel-9-8"))), "Machine/node-01", map[string]string{"<machine>": "Machine/node-01"}},
+		"A KubeVirt profile without a size": {catalogOf(controller(), networkConfig(), kubevirtProvider("kubeconfigRef", "", number("cpu", "0")), kubevirtGuest()),
+			"Machine/node-01", map[string]string{"<provider>": "InfraProvider/kv", "<profile>": "node"}},
+		"A KubeVirt interface on an unrealized network kind": {catalogOf(controller(), networkConfig(), kubevirtProvider("kubeconfigRef", "UserDefinedNetwork"), kubevirtGuest()),
+			"Machine/node-01", map[string]string{"<machine>": "Machine/node-01", "<attachment>": "lab-guests"}},
 	}
 	for _, row := range refusalTable(t) {
 		test, found := cases[row.name]
@@ -63,7 +73,8 @@ func TestSubstrateRefusalTableMatchesUnsupported(t *testing.T) {
 		t.Run(row.name, func(t *testing.T) {
 			kind, name, _ := strings.Cut(test.refused, "/")
 			want := []lifecycle.Refusal{{Kind: kind, Name: name, Reason: expand(row.reason, test.values), Remediation: expand(row.remedy, test.values)}}
-			got := slices.DeleteFunc(NewHost(nil).Unsupported(compilation.NewState(test.catalog, test.catalog, nil)),
+			state := compilation.NewState(test.catalog, test.catalog, nil)
+			got := slices.DeleteFunc(append(NewHost(nil).Unsupported(state), kubevirt.NewHost(nil).Unsupported(state)...),
 				func(refused lifecycle.Refusal) bool { return refused.Kind != kind || refused.Name != name })
 			if !reflect.DeepEqual(got, want) {
 				t.Fatalf("the capability refuses %+v, the table %+v", got, want)
@@ -145,4 +156,34 @@ func manyBridges(count int) []string {
 		bridges = append(bridges, fmt.Sprintf("br-%02d", index))
 	}
 	return bridges
+}
+
+// kubevirtProvider is a KubeVirt provider on the host its credential names,
+// with one profile and one attachment of the network kind given.
+func kubevirtProvider(credential, kind string, profile ...api.FieldValue) api.Object {
+	group := map[string]string{"": "k8s.cni.cncf.io", "UserDefinedNetwork": "k8s.ovn.org"}[kind]
+	if kind == "" {
+		kind = "NetworkAttachmentDefinition"
+	}
+	selected := api.MapValue(text("name", "node"), number("cpu", "4"), number("memoryMiB", "16384"), number("diskGiB", "120"))
+	for _, extra := range profile {
+		selected = selected.With(extra.Name, extra.Value)
+	}
+	return api.NewObject(api.InfraProvider, "kv", api.Value{}, api.MapValue(
+		field("kubevirt", api.MapValue(text(credential, "host"), text("namespace", "guests"), field("machineProfiles", api.ListValue(selected)))),
+		field("networkAttachments", api.ListValue(api.MapValue(text("name", "lab-guests"), field("kubevirt", api.MapValue(field("networkRef",
+			api.MapValue(text("apiGroup", group), text("kind", kind), text("name", "guest-l2"), text("namespace", "guests")))))))),
+	))
+}
+
+func kubevirtGuest(os ...api.FieldValue) api.Object {
+	declared := api.MapValue(field("provided", api.BoolValue(false)))
+	for _, extra := range os {
+		declared = declared.With(extra.Name, extra.Value)
+	}
+	return api.NewObject(api.Machine, "node-01", api.Value{}, api.MapValue(
+		field("substrate", api.MapValue(text("providerRef", "kv"), field("kubevirt", api.MapValue(text("profileRef", "node"))))),
+		field("os", declared),
+		field("network", api.MapValue(text("configRef", "lab-guests"), text("attachmentRef", "lab-guests"))),
+	))
 }

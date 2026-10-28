@@ -62,8 +62,8 @@ placement. A Bootwright-installed Machine on either arm keeps refusing until
 its arm defines an identity channel ([B905](milestones/backlog.md#b905) for
 KubeVirt).
 
-Not yet met: a KubeVirt provider and its Machines refuse before registration;
-tracked as [B87](milestones/m1.md#b87).
+Not yet met: a KubeVirt provider naming `hostClusterRef`, and its Machines,
+refuse before registration; tracked as [B732](milestones/m3.md#b732).
 
 Not yet met: a vSphere provider and its Machines refuse before registration;
 tracked as [B99](milestones/m1.md#b99).
@@ -101,8 +101,12 @@ Its reason and remedy are the diagnostic's message and remediation, in which
 
 | Refusal | Path | Reason | Remedy |
 | --- | --- | --- | --- |
-| A provider on an unrealized substrate | an `InfraProvider` whose arm is `vsphere` or `kubevirt` | `this executable realizes no provider on the substrate it declares` | `remove <provider> and the Machines it hosts from the selected Environment, or declare them on a baremetal or libvirt provider` |
-| A Machine on an unrealized substrate | a Machine with `os.provided: false` whose `spec.substrate.providerRef` names such a provider | `its provider <provider> is on a substrate this executable does not realize` | `host <machine> on a baremetal or libvirt provider, declare its operating system provided, or remove it from the selected Environment` |
+| A provider on an unrealized substrate | an `InfraProvider` whose arm is `vsphere` | `this executable realizes no provider on the substrate it declares` | `remove <provider> and the Machines it hosts from the selected Environment, or declare them on a baremetal, kubevirt or libvirt provider` |
+| A KubeVirt provider on a host this context builds | a KubeVirt provider's `spec.kubevirt.hostClusterRef` | `this executable realizes a KubeVirt provider only on the host cluster its kubeconfigRef names` | `declare spec.kubevirt.kubeconfigRef instead of hostClusterRef on <provider>, or remove <provider> and the Machines it hosts from the selected Environment` |
+| A Machine on an unrealized substrate | a Machine with `os.provided: false` whose `spec.substrate.providerRef` names such a provider | `its provider <provider> is on a substrate this executable does not realize` | `host <machine> on a baremetal, kubevirt or libvirt provider, declare its operating system provided, or remove it from the selected Environment` |
+| A Bootwright-installed Machine on KubeVirt | a Machine on a KubeVirt provider that names `spec.os.installProfileRef` | `a KubeVirt Machine is realized for an installer that supplies its operating system, and this one names an install profile` | `remove spec.os.installProfileRef from <machine>, or host it on a baremetal or libvirt provider` |
+| A KubeVirt profile without a size | a non-provided Machine on a KubeVirt provider whose profile's `cpu`, `memoryMiB` or `diskGiB` is `0` | `a KubeVirt machine is created with the CPU count, memory and root disk its profile declares, and its profile <profile> declares one as zero` | `set cpu, memoryMiB and diskGiB above zero on profile <profile> of <provider>` |
+| A KubeVirt interface on an unrealized network kind | an interface of such a Machine whose attachment's `networkRef` is neither a `k8s.ovn.org` `ClusterUserDefinedNetwork` nor a `k8s.cni.cncf.io` `NetworkAttachmentDefinition` | `a KubeVirt interface attaches to a Localnet ClusterUserDefinedNetwork or a bridge NetworkAttachmentDefinition, and attachment <attachment> names another kind` | `select a ClusterUserDefinedNetwork or NetworkAttachmentDefinition attachment for every interface of <machine>` |
 | An emulated BMC no endpoint can name | a libvirt provider's `spec.libvirt.bmcEmulation.bindAddress` that is not one unicast host address | `an emulated BMC listens on one unicast address its Machines' BMC endpoints can name, and this provider's bindAddress is not one` | `set spec.libvirt.bmcEmulation.bindAddress on <provider> to one unicast host address` |
 | A provider with more managed attachments than its reservation holds | a libvirt provider with more than 20 `networkAttachments[]` entries of `management: managed` | `a libvirt provider's host reservation claims three keys for each managed attachment beside the two of its media pool and its firewall readiness unit, within the 64 keys one reservation holds, so it declares at most 20 managed attachments` | `declare at most 20 attachments with management: managed in spec.networkAttachments of <provider>, or make the others external` |
 | A provider using more external bridges than its use reservation holds | a libvirt provider whose `networkAttachments[]` entries of `management: external` name more than 64 distinct bridges | `a libvirt provider's bridge-use reservation claims one shared key for each bridge its external attachments use, within the 64 keys one reservation holds, so they use at most 64 bridges` | `name at most 64 distinct bridges in the external attachments of spec.networkAttachments of <provider>` |
@@ -113,12 +117,13 @@ One row per realized arm and management-controller family: the operator gates
 that still qualify it and the [acceptance ledger](../docs/acceptance.md#ledger)
 rows that accepted part of it, or `unrun` when no row exists. The rows name no
 version and no host; the private archive behind each ledger row keeps those.
-The KubeVirt and vSphere arms are not realized and have no row.
+The vSphere arm is not realized and has no row.
 
 | Arm | Management controller | Operator gates | Ledger rows |
 | --- | --- | --- | --- |
 | `libvirt` | emulated Redfish service (sushy-tools) | [B74](milestones/m1.md#b74), [B75](milestones/m1.md#b75), [B76](milestones/m1.md#b76), [B77](milestones/m1.md#b77), [B326](milestones/m1.md#b326), [B346](milestones/m1.md#b346), [B703](milestones/m1.md#b703) | 2026-09-17 (`lab-rhel`, observation); 2026-10-05 (B49, B72); 2026-10-15 (B19, B20, B270, B276, B277, B339); 2026-10-15 (concurrent installations, observation); 2026-10-16 (B476); 2026-10-16 (B466, B608); 2026-10-17 (B615, M2b) |
 | `baremetal` | physical Redfish BMC | [B70](milestones/m1.md#b70), [B73](milestones/m1.md#b73), [B78](milestones/m1.md#b78), [B305](milestones/m1.md#b305), [B319](milestones/m1.md#b319), [B496](milestones/m1.md#b496) | `unrun` |
+| `kubevirt` | the host cluster's Kubernetes API (OpenShift Virtualization) | [B87](milestones/m1.md#b87), [B731](milestones/m3.md#b731) | `unrun` |
 
 ## Provider host realization
 
@@ -978,10 +983,17 @@ migratable ([B906](milestones/backlog.md#b906)).
 
 **Port.** The realized target names, as its management controller, the
 endpoint `kubevirt:<namespace>/<vm>` and the provider's `kubeconfigRef` as its
-credential, which a consumer lends as one file, the parts the substrate's
-`ControllerCredentialParts` names, and passes to an entry point as
-`kubeconfig`; `user`, `password` and `ca` are admitted for the port's parity
-and must be empty. The machine must be off, by a positive `NotFound` of its
+credential. A consumer lends a controller credential by the parts the
+substrate's `ControllerCredential` fact names: an account's username and
+password for a Redfish arm, and for this one the kubeconfig's value alone, as
+the port's `user` file; `password` and `ca` stay empty. Every entry point
+refuses a VirtualMachine whose labels do not derive its name.
+
+Not yet met: a port entry point proves the VirtualMachine by its labels alone,
+not by the cluster identity and UID its machine block recorded, so a
+kubeconfig moved to another cluster holding a same-named VirtualMachine of a
+same-named context is not refused there; tracked as
+[B910](milestones/m1.md#b910). The machine must be off, by a positive `NotFound` of its
 VirtualMachineInstance, before any media write. `media_insert` takes the
 image file as `image_path` and the controller's `virtctl` as `virtctl`; it
 creates the upload DataVolume `<vm>-media`, blank with `source.upload`, sized
@@ -1018,12 +1030,8 @@ identity channel.
 B731's phase durations to correct them: state read 120 s, power read 60 s,
 pre-boot 120 s, media insert 1800 s (a 1200 s upload and the DataVolume's
 readiness waits), media eject 420 s, power 720 s, media boot and disk boot
-360 s each, a per-node margin of 660 s, a boot allowance of 2400 s and a
+360 s each, a per-node margin of 1020 s (two state reads, an eject and a disk boot), a boot allowance of 2400 s and a
 fan-out of 4 nodes, the uploads the upload proxy serves at once.
-
-Not yet met: nothing marks, adopts or reserves a KubeVirt object, and nothing
-realizes a KubeVirt Machine, as this section states; tracked as
-[B87](milestones/m1.md#b87).
 
 **Removal.** Removal requires the VirtualMachineInstance absent, which is its
 quiescence under the [removal gate](state-reconciliation.md#quiescence-before-removal);

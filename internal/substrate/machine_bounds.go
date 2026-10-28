@@ -41,8 +41,32 @@ const (
 	BaremetalFanout             = 16
 )
 
+const (
+	KubeVirtRequestTimeout   = 30 * time.Second
+	KubeVirtPowerWait        = 5 * time.Minute
+	KubeVirtUploadBound      = 20 * time.Minute
+	KubeVirtStateReadBound   = 4 * KubeVirtRequestTimeout
+	KubeVirtPowerReadBound   = 2 * KubeVirtRequestTimeout
+	KubeVirtPreBootBound     = 4 * KubeVirtRequestTimeout
+	KubeVirtMediaInsertBound = KubeVirtUploadBound + KubeVirtPowerWait + 10*KubeVirtRequestTimeout
+	KubeVirtMediaEjectBound  = KubeVirtPowerWait + 4*KubeVirtRequestTimeout
+	KubeVirtPowerBound       = 2*KubeVirtPowerWait + 4*KubeVirtRequestTimeout
+	KubeVirtBootBound        = KubeVirtPowerWait + 2*KubeVirtRequestTimeout
+	KubeVirtNodeMargin       = 2*KubeVirtStateReadBound + KubeVirtMediaEjectBound + KubeVirtBootBound
+	KubeVirtBootAllowance    = 40 * time.Minute
+	KubeVirtFanout           = 4
+)
+
 // MachineBoundsFor refuses arms that have no qualified machine port.
 func MachineBoundsFor(arm string) (MachineBounds, bool) {
+	if arm == ArmKubeVirt {
+		return MachineBounds{
+			ControllerKind: "api", StateRead: KubeVirtStateReadBound, PowerRead: KubeVirtPowerReadBound,
+			MediaInsert: KubeVirtMediaInsertBound, MediaEject: KubeVirtMediaEjectBound, Power: KubeVirtPowerBound,
+			PreBoot: KubeVirtPreBootBound, BootMedia: KubeVirtBootBound, BootDisk: KubeVirtBootBound,
+			NodeMargin: KubeVirtNodeMargin, BootAllowance: KubeVirtBootAllowance, Fanout: KubeVirtFanout,
+		}, true
+	}
 	if arm != ArmLibvirt && arm != ArmBaremetal {
 		return MachineBounds{}, false
 	}

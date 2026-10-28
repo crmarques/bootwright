@@ -20,7 +20,7 @@ argument_specs:
               arm:
                 type: str
                 required: true
-                choices: [baremetal, libvirt]
+                choices: [baremetal, kubevirt, libvirt]
               caVariable:
                 type: str
                 required: false
@@ -45,7 +45,7 @@ argument_specs:
                 required: true
               passwordVariable:
                 type: str
-                required: true
+                required: false
               userVariable:
                 type: str
                 required: true

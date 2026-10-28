@@ -43,6 +43,9 @@ BOOT = "bootwright.core.redfish_boot"
 READ = "bootwright.core.redfish_system_read"
 
 SUBSTRATES = {"libvirt": "substrate_libvirt_machine", "baremetal": "substrate_baremetal_machine"}
+# The arms whose port no consumer composes yet, by the item that composes it:
+# an agent installation's pushed boot reaches KubeVirt's port under B88.
+UNCOMPOSED = {"kubevirt": ("substrate_kubevirt_machine", "B88")}
 PORT = {"pre_boot", "boot_media", "boot_disk", "identity_read", "state_read", "media_insert", "media_eject", "power"}
 LIFECYCLE = {"apply", "observe", "destroy"}
 INSTALLATIONS = ("containercluster_install_agent", "managedos_install_anaconda")
@@ -198,6 +201,8 @@ def composed():
     its file, each arm it reaches, tasks_from and task. The dispatcher reaches
     every arm its table binds."""
     bindings = defaults("substrate_machine")["substrate_machine_arms"]
+    for arm in UNCOMPOSED:
+        assert bindings.pop(arm) == "bootwright.core." + UNCOMPOSED[arm][0]
     for arm, role in bindings.items():
         assert role == "bootwright.core." + SUBSTRATES[arm]
     found = []

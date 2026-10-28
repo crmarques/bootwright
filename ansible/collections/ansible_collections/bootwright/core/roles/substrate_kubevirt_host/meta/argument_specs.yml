@@ -1,0 +1,56 @@
+argument_specs:
+  apply:
+    short_description: Prove one KubeVirt provider's host cluster without changing it.
+    options: &request
+      bootwright_substrate_kubevirt_host_request:
+        type: dict
+        required: true
+        options:
+          access:
+            type: list
+            elements: dict
+            required: true
+          identity:
+            type: dict
+            required: true
+          kubeconfigRef:
+            type: str
+            required: true
+          macAddresses:
+            type: list
+            elements: str
+            required: true
+          namespace:
+            type: str
+            required: true
+          networks:
+            type: list
+            elements: dict
+            required: true
+          placement:
+            type: dict
+            required: true
+          storageClass:
+            type: str
+            required: false
+          version:
+            type: str
+            required: true
+            choices: [substrate-host-kubevirt-v1]
+      bootwright_substrate_kubevirt_host_material:
+        type: dict
+        required: true
+      bootwright_substrate_kubevirt_host_digest:
+        type: str
+        required: true
+      bootwright_run_scratch:
+        type: path
+        required: true
+
+  observe:
+    short_description: Repeat one KubeVirt provider's proof read-only.
+    options: *request
+
+  destroy:
+    short_description: Publish one KubeVirt provider's proof released, reading nothing.
+    options: *request

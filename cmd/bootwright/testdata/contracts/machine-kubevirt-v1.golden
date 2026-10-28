@@ -1,0 +1,74 @@
+implementation: machine-kubevirt-v1
+content-digest: b73dcf33cbb5e84625c6f99d10187a801df4c3a730ce886221233df67e2bbed9
+request-version: machine-kubevirt-v1
+automation-formats: none
+mark-formats: bootwright.io/context, bootwright.io/machine, bootwright.io/owner, bootwright.substrate.kubevirt.owner-v1
+proof-ids: bootwright.io/media-identity
+fixed-places: bootwright.substrate.kubevirt.name-v1
+effect-pins:
+  run-strategy-manual
+  efi-no-secure-boot
+  evict-live-migrate
+  bridge-binding
+  root-template-blank
+  owner-annotation-mark
+request-identity:
+  identity.context
+  identity.object
+  identity.block
+  provider
+  namespace
+  name
+  rootVolume
+  mediaVolume
+  interfaces[].macAddress
+request-schema:
+  cpu int
+  diskGiB int
+  identity struct kubevirt.Identity
+  identity.block string
+  identity.context string
+  identity.object string
+  interfaces []struct kubevirt.Interface
+  interfaces[].macAddress string
+  interfaces[].name string
+  interfaces[].network string
+  kubeconfigRef string
+  mediaVolume string
+  memoryMiB int
+  name string
+  namespace string
+  placement struct machine.Placement
+  placement.address string omitempty
+  placement.connection string
+  placement.knownHostsRef string omitempty
+  placement.machine string
+  placement.port int omitempty
+  placement.privateKeyRef string omitempty
+  placement.user string omitempty
+  provider string
+  rootVolume string
+  storageClass string omitempty
+  tpm *struct kubevirt.TPM omitempty
+  tpm.persistent bool
+  version string
+evidence-schema:
+  absent bool
+  answered bool
+  foreign bool
+  instance string
+  kubeSystemUID string
+  owned bool
+  postcondition bool
+  receipts []struct kubevirt.Receipt
+  receipts[].basis string
+  receipts[].kind string
+  receipts[].name string
+  receipts[].uid string
+  request string
+  server string
+  virtualMachine string
+  volumes []struct kubevirt.VolumeEvidence
+  volumes[].kind string
+  volumes[].name string
+  volumes[].present bool

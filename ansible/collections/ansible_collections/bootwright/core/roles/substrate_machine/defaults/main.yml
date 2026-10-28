@@ -4,4 +4,5 @@
 # consumer names neither; an arm added here reaches every consumer.
 substrate_machine_arms:
   baremetal: bootwright.core.substrate_baremetal_machine
+  kubevirt: bootwright.core.substrate_kubevirt_machine
   libvirt: bootwright.core.substrate_libvirt_machine

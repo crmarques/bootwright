@@ -349,7 +349,7 @@ func referenceRefusals() []diagnosticTuple {
 			}
 		}
 		result = append(result, diagnosticTuple{"api.unrealized", "ClusterAddonBinding", name + "-addons", "$.spec.profileRefs"},
-			diagnosticTuple{"api.unrealized", "InfraProvider", "kubevirt-" + name, "$.spec.kubevirt"})
+			diagnosticTuple{"api.unrealized", "InfraProvider", "kubevirt-" + name, "$.spec.kubevirt.hostClusterRef"})
 	}
 	return result
 }

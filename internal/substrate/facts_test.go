@@ -14,7 +14,7 @@ func TestEveryArmAnswersTheFactsConsumersAsk(t *testing.T) {
 		if got, want := DeliveryOf(arm) == DeliveryPush, arm == ArmKubeVirt; got != want {
 			t.Errorf("%s pushes its image = %t, want %t", arm, got, want)
 		}
-		if got, want := ControllerCredentialIsAccess(arm), arm == ArmBaremetal; got != want {
+		if got, want := ControllerCredentialIsAccess(arm), arm == ArmBaremetal || arm == ArmKubeVirt; got != want {
 			t.Errorf("%s controller credential is access = %t, want %t", arm, got, want)
 		}
 	}

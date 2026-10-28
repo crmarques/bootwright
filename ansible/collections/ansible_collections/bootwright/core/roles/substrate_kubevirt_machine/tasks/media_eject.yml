@@ -1,0 +1,28 @@
+---
+# The volume leaves the VirtualMachine and its DataVolume is deleted by UID;
+# the claim stays bound under pvc-protection until the instance next stops.
+- name: Clear the refusal an earlier entry point named
+  ansible.builtin.set_fact:
+    substrate_kubevirt_machine_refusal: ''
+  no_log: true
+
+# A KubeVirt host authenticates with the one kubeconfig the port's user input
+# names; a password or a separate trust bundle would be a second credential.
+- name: Refuse port access this arm does not read
+  ansible.builtin.assert:
+    that:
+      - bootwright_machine_port.verify | bool
+      - (bootwright_machine_port.password | default('', true)) | length == 0
+      - (bootwright_machine_port.ca | default('', true)) | length == 0
+    fail_msg: a KubeVirt machine port takes one verified kubeconfig as its user input and no password or trust bundle
+    quiet: true
+
+- name: Run media_eject through the host cluster's API
+  bootwright.core.substrate_kubevirt_api:
+    operation: media_eject
+    kubeconfig: '{{ bootwright_machine_port.user }}'
+    scratch: '{{ bootwright_run_scratch }}'
+    endpoint: '{{ bootwright_machine_port.endpoint }}'
+  register: substrate_kubevirt_machine_port_result
+  failed_when: false
+  no_log: true

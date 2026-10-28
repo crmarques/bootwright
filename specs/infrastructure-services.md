@@ -137,9 +137,6 @@ A reservation key is one of:
 | `bmc-system:<UUID>` | The same physical machine, named by the `UUID` its proof records in lower case, claimed once the proof records it and before any media is inserted, so a second spelling of one server's address refuses. A system that reports no `UUID` claims no such key. |
 | `media:<filename.iso>` | A shared claim on one image of the [media store](managed-os.md#media-store); it conflicts with nothing and blocks only that image's deletion or replacement while any context holds it. |
 
-Not yet met: no KubeVirt VirtualMachine claims a
-`kubevirt-vm:` key; tracked as [B87](milestones/m1.md#b87).
-
 A `socket:` key writes an IPv6 address unbracketed, the one form every
 capability claims, while a plan's listener impact names the socket as an
 address and port are written, an IPv6 address bracketed, as

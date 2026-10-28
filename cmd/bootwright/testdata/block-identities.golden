@@ -128,9 +128,13 @@ lab-features-ipv6:
 lab-kubevirt-external:
   controller-prerequisites
   dns-lab-dns
+  machine-kubevirt-01
+  machine-kubevirt-02
+  machine-kubevirt-03
   ntp-lab-ntp
   refused OpenShiftCluster/cluster-install-agent-v1 lifecycle.unsupported
   refused OpenShiftCluster/cluster-media-agent-v1 lifecycle.unsupported
+  substrate-host-lab-kubevirt
 lab-networks:
   addon-metallb-networks
   addon-nmstate-networks

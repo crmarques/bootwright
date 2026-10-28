@@ -1,0 +1,71 @@
+---
+# The proof changes nothing on the host cluster: it reads the API server, the
+# cluster identity, the namespace, the root class, the upload proxy, each
+# permission the arm uses and each network, and a check it cannot read fails
+# it, so no Machine of the provider is touched on an unproved host.
+- name: Validate the frozen provider request
+  ansible.builtin.assert:
+    that:
+      - bootwright_substrate_kubevirt_host_request.version == 'substrate-host-kubevirt-v1'
+      - bootwright_substrate_kubevirt_host_digest is match('[0-9a-f]{64}')
+    quiet: true
+  no_log: true
+
+- name: Complete the qualified execution handoff
+  bootwright.core.substrate_kubevirt_protocol:
+    phase: loaded
+  no_log: true
+
+- name: Report reaching the host cluster
+  bootwright.core.substrate_kubevirt_protocol:
+    phase: group
+    group: reach-host
+    status: running
+  no_log: true
+
+- name: Prove the host cluster through the provider's kubeconfig
+  bootwright.core.substrate_kubevirt_api:
+    operation: proof
+    kubeconfig: '{{ substrate_kubevirt_host_kubeconfig }}'
+    scratch: '{{ bootwright_run_scratch }}'
+    request: '{{ bootwright_substrate_kubevirt_host_request }}'
+  register: substrate_kubevirt_host_proof
+  failed_when: false
+  no_log: true
+
+# ansible-core keeps nothing of a failure under no_log but that it failed, so
+# the refusal is reported here, where no credential is.
+- name: Stop at a host cluster the kubeconfig does not reach
+  ansible.builtin.assert:
+    that:
+      - substrate_kubevirt_host_proof.msg is not defined
+    fail_msg: >-
+      proving the host cluster of InfraProvider/{{ bootwright_substrate_kubevirt_host_request.identity.object }}
+      failed: {{ (substrate_kubevirt_host_proof.msg | default('') | string | bootwright.core.printable)[:512] }}
+    quiet: true
+
+- name: Report the host cluster answered
+  bootwright.core.substrate_kubevirt_protocol:
+    phase: group
+    group: reach-host
+    status: ok
+  no_log: true
+
+- name: Report the proof
+  bootwright.core.substrate_kubevirt_protocol:
+    phase: group
+    group: prove-host
+    status: '{{ "ok" if substrate_kubevirt_host_proof.observation.postcondition else "failed" }}'
+  no_log: true
+
+# The publication names only check names, never a value the host returned
+# beyond the bounded fields the evidence carries, so it is not censored: its
+# refusal is what the attempt's retained output tells the operator.
+- name: Publish the bounded provider proof
+  bootwright.core.substrate_kubevirt_protocol:
+    phase: completed
+    subject: host
+    observed: false
+    outcome: unchanged
+    digest: '{{ bootwright_substrate_kubevirt_host_digest }}'
+    observation: '{{ substrate_kubevirt_host_proof.observation }}'

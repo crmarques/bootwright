@@ -1,0 +1,31 @@
+---
+# A stop asks the stop subresource and polls the instance until it is absent;
+# one the guest has not finished within the bound reports the machine still
+# running, and force stops it with a zero grace period.
+- name: Clear the refusal an earlier entry point named
+  ansible.builtin.set_fact:
+    substrate_kubevirt_machine_refusal: ''
+  no_log: true
+
+# A KubeVirt host authenticates with the one kubeconfig the port's user input
+# names; a password or a separate trust bundle would be a second credential.
+- name: Refuse port access this arm does not read
+  ansible.builtin.assert:
+    that:
+      - bootwright_machine_port.verify | bool
+      - (bootwright_machine_port.password | default('', true)) | length == 0
+      - (bootwright_machine_port.ca | default('', true)) | length == 0
+    fail_msg: a KubeVirt machine port takes one verified kubeconfig as its user input and no password or trust bundle
+    quiet: true
+
+- name: Run power through the host cluster's API
+  bootwright.core.substrate_kubevirt_api:
+    operation: power
+    kubeconfig: '{{ bootwright_machine_port.user }}'
+    scratch: '{{ bootwright_run_scratch }}'
+    endpoint: '{{ bootwright_machine_port.endpoint }}'
+    power: '{{ bootwright_machine_port.power }}'
+    force: '{{ bootwright_machine_port.force | default(false) }}'
+  register: substrate_kubevirt_machine_port_result
+  failed_when: false
+  no_log: true

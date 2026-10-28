@@ -1,0 +1,4 @@
+---
+# Derived from the frozen request only. Nothing here is authored by desired
+# state, and no value selects an executable, a role or a task file.
+substrate_kubevirt_host_kubeconfig: '{{ bootwright_substrate_kubevirt_host_material.kubeconfig }}'

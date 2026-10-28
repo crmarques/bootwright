@@ -8,10 +8,10 @@ installer platform. It is not the baremetal-VIP lab-kubevirt profile Q19 ranks
 first, and it claims no accepted run. The existing host is reached
 through a context-bound kubeconfig; Bootwright does not create the host cluster.
 
-The API validates this profile, but the KubeVirt realization and native port
-implementation remain [B87](../../specs/milestones/m1.md#b87). Runtime
-planning refuses that unqualified provider. B88's pushed-media preparation
-alone does not make this profile runnable. Do not bypass the refusal.
+The API validates this profile, and [B87](../../specs/milestones/m1.md#b87)
+realizes the provider proof and the guests in-tree; the installation refuses a
+node whose image is pushed until [B88](../../specs/milestones/m3.md#b88) boots
+it, so the profile does not run yet. Do not bypass the refusal.
 The provider derives each interface's MAC from the context, Machine and
 interface name, so no Machine authors a MAC or an `interfaceBinding`
 ([B87](../../specs/milestones/m1.md#b87)).
@@ -43,8 +43,9 @@ media specification; use the VM start/stop subresources; delete owned VMs,
 DataVolumes and PVCs with identity checks; and request CDI upload tokens.
 It also needs read access to the referenced network, storage class and
 StorageProfile, host version/virtualization discovery and the named ingress-CA
-ConfigMap. Namespace and network writes are not required. The exact deployable
-Role/ClusterRole and native request set remain part of B87 qualification;
+ConfigMap. Namespace and network writes are not required. The provider proof reviews exactly the verbs its frozen request lists
+(`internal/substrate/kubevirt/catalog.go`), and the exact deployable
+Role/ClusterRole remains part of B87 qualification;
 this runbook does not invent an accepted RBAC manifest or prescribe cluster-admin.
 Verify the resulting least-privilege permissions against that implementation
 before its first live run.

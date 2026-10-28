@@ -61,6 +61,12 @@ func PreBootRefusals(arm, contextName, continuation, machine, endpoint string) m
 	switch arm {
 	case ArmLibvirt:
 		return map[string]error{RefusalMachineRunning: running}
+	case ArmKubeVirt:
+		return map[string]error{
+			RefusalMachineRunning: running,
+			RefusalTPMAbsent: refused(identity+" presents no persistent vTPM, so no encrypted installer was booted",
+				destroy+", declare tpm without persistent: false on the profile "+identity+" selects"+update+", then run "+apply),
+		}
 	case ArmBaremetal:
 		return map[string]error{
 			RefusalHardwareMismatch: refused("the machine answering at "+endpoint+" does not report exactly the hardware addresses "+identity+

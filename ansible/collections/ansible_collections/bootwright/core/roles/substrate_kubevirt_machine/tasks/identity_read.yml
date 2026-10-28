@@ -1,0 +1,10 @@
+---
+# A KubeVirt Machine's installer supplies its operating system and this arm
+# never reads it back: it offers no identity channel, so the read answers
+# nothing and a consumer that needs one refuses.
+- name: Publish that this arm has no identity channel
+  ansible.builtin.set_fact:
+    substrate_kubevirt_machine_identity_answered: false
+    substrate_kubevirt_machine_identity_marker: ''
+    substrate_kubevirt_machine_identity_host_key: ''
+  changed_when: false

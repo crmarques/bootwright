@@ -29,6 +29,7 @@ PROTOCOLS = {
     "cluster_objects_protocol", "containercluster_install_protocol", "containercluster_media_protocol",
     "controller_protocol", "infra_service_protocol", "machine_power_protocol", "managedos_install_protocol", "managedos_tree_protocol",
     "substrate_host_protocol", "substrate_libvirt_machine_protocol", "substrate_physical_protocol", "physical_erase_protocol",
+    "substrate_kubevirt_protocol",
 }
 
 # The plugins that act on the controller, each with the helper that would act,
@@ -37,6 +38,7 @@ EFFECTS = {
     "controller_tool": "prepare_tool",
     "cluster_objects_read": "Engine",
     "cluster_objects_write": "Engine",
+    "substrate_kubevirt_api": "connect",
 }
 
 

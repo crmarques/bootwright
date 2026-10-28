@@ -30,6 +30,7 @@ import (
 	"github.com/crmarques/bootwright/internal/managedos/installation"
 	"github.com/crmarques/bootwright/internal/storage/ceph"
 	"github.com/crmarques/bootwright/internal/substrate/baremetal"
+	"github.com/crmarques/bootwright/internal/substrate/kubevirt"
 	"github.com/crmarques/bootwright/internal/substrate/libvirt"
 )
 
@@ -50,6 +51,8 @@ func contractVersions() []contractVersion {
 		{libvirt.HostImplementation, libvirt.HostContentDigest(), reflect.TypeFor[libvirt.HostRequest](), reflect.TypeFor[libvirt.HostEvidence]()},
 		{libvirt.MachineImplementation, libvirt.MachineContentDigest(), reflect.TypeFor[libvirt.MachineRequest](), reflect.TypeFor[libvirt.MachineEvidence]()},
 		{baremetal.Implementation, baremetal.ContentDigest(), reflect.TypeFor[baremetal.Request](), reflect.TypeFor[baremetal.Evidence]()},
+		{kubevirt.HostImplementation, kubevirt.HostContentDigest(), reflect.TypeFor[kubevirt.HostRequest](), reflect.TypeFor[kubevirt.HostEvidence]()},
+		{kubevirt.MachineImplementation, kubevirt.MachineContentDigest(), reflect.TypeFor[kubevirt.MachineRequest](), reflect.TypeFor[kubevirt.MachineEvidence]()},
 		{installation.TreeImplementation, installation.TreeContentDigest(), reflect.TypeFor[installation.TreeRequest](), reflect.TypeFor[installation.TreeEvidence]()},
 		{installation.EraseImplementation, installation.EraseContentDigest(), reflect.TypeFor[installation.EraseRequest](), reflect.TypeFor[installation.EraseEvidence]()},
 		{installation.Implementation, installation.ContentDigest(), reflect.TypeFor[installation.Request](), reflect.TypeFor[installation.Evidence]()},
@@ -217,16 +220,18 @@ func automationFormats() map[string]automationFormat {
 		"ceph-replication-v1":          {class: formatMirrored},
 		"ceph-replication-evidence-v1": {class: formatMirrored},
 		// The request versions each role refuses unless its request names.
-		"substrate-host-libvirt-v6": {class: formatMirrored},
-		"machine-libvirt-v8":        {class: formatMirrored},
-		"machine-baremetal-v2":      {class: formatMirrored},
-		"os-package-tree-v1":        {class: formatMirrored},
-		"os-install-anaconda-v21":   {class: formatMirrored},
-		"physical-erase-v6":         {class: formatMirrored},
-		"cluster-media-agent-v9":    {class: formatMirrored},
-		"cluster-install-agent-v10": {class: formatMirrored},
-		"artifact-server-nginx-v2":  {class: formatMirrored},
-		"managed-service-v4":        {class: formatMirrored},
+		"substrate-host-libvirt-v6":  {class: formatMirrored},
+		"machine-libvirt-v8":         {class: formatMirrored},
+		"machine-baremetal-v2":       {class: formatMirrored},
+		"substrate-host-kubevirt-v1": {class: formatMirrored},
+		"machine-kubevirt-v1":        {class: formatMirrored},
+		"os-package-tree-v1":         {class: formatMirrored},
+		"os-install-anaconda-v21":    {class: formatMirrored},
+		"physical-erase-v6":          {class: formatMirrored},
+		"cluster-media-agent-v9":     {class: formatMirrored},
+		"cluster-install-agent-v10":  {class: formatMirrored},
+		"artifact-server-nginx-v2":   {class: formatMirrored},
+		"managed-service-v4":         {class: formatMirrored},
 		// Power is no plan block: each run binds its request to the power
 		// content digest these implementations feed, and nothing is retained.
 		"machine-power-v3":      {class: formatMirrored},
@@ -258,7 +263,12 @@ func automationIdentities() map[string]automationFormat {
 	scriptName := transient("the $0 word of a fixed shell probe")
 	identities := map[string]automationFormat{
 		"bootwright.cluster-objects.owner-v1":     fixedBy(kindMark, "the domain an applied object's owner annotation is derived under", addon, network),
-		"bootwright.io/owner":                     fixedBy(kindMark, "the annotation key of an applied object's owner mark", addon, network),
+		"bootwright.io/owner":                     fixedBy(kindMark, "the annotation key of an applied object's owner mark", addon, network, kubevirt.MachineImplementation),
+		"bootwright.substrate.kubevirt.owner-v1":  fixedBy(kindMark, "the domain a VirtualMachine's and its DataVolume's owner annotation is derived under", kubevirt.MachineImplementation),
+		"bootwright.substrate.kubevirt.name-v1":   fixedBy(kindPlace, "the domain a VirtualMachine's name is derived under from its context and Machine", kubevirt.MachineImplementation),
+		"bootwright.io/context":                   fixedBy(kindMark, "the label naming the context a VirtualMachine was realized for", kubevirt.MachineImplementation),
+		"bootwright.io/machine":                   fixedBy(kindMark, "the label naming the Machine a VirtualMachine realizes", kubevirt.MachineImplementation),
+		"bootwright.io/media-identity":            fixedBy(kindProof, "the annotation naming the media an upload DataVolume holds", kubevirt.MachineImplementation),
 		"bootwright-":                             fixedBy(kindPlace, "the prefix of the server-side apply field manager and of the install's wildcard DNS label", addon, network, install),
 		"bootwright-cluster-install":              fixedBy(kindPlace, "the field manager of the JSON patch that places a completed cluster's node labels and taints", install),
 		"bootwright-owner":                        fixedBy(kindMark, "the key of the owner mark on a Ceph resource", core, ceph.ConsumerImplementation, ceph.SMBImplementation, ceph.ReplicationImplementation),

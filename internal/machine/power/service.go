@@ -20,6 +20,7 @@ import (
 	"github.com/crmarques/bootwright/internal/reconciliation"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
 	"github.com/crmarques/bootwright/internal/secrets"
+	"github.com/crmarques/bootwright/internal/substrate"
 )
 
 type Service struct {
@@ -409,9 +410,10 @@ func readInvocation(runtime lifecycle.Runtime, frozen ReadSurvey, canonical []by
 
 func invocation(runtime lifecycle.Runtime, frozen Request, canonical []byte, digest string, pin machine.HardwareIdentity,
 	progress func(context.Context, string, string)) lifecycle.RunRequest {
-	materials := []lifecycle.MaterialFile{
-		{Name: "bmc-user", Part: secrets.UsernamePart, Secret: frozen.Controller.CredentialsRef, Variable: "controllerUser"},
-		{Name: "bmc-password", Part: secrets.PasswordPart, Secret: frozen.Controller.CredentialsRef, Variable: "controllerPassword"},
+	user, password := substrate.ControllerCredential(frozen.Arm)
+	materials := []lifecycle.MaterialFile{{Name: "bmc-user", Part: user, Secret: frozen.Controller.CredentialsRef, Variable: "controllerUser"}}
+	if password != "" {
+		materials = append(materials, lifecycle.MaterialFile{Name: "bmc-password", Part: password, Secret: frozen.Controller.CredentialsRef, Variable: "controllerPassword"})
 	}
 	if frozen.Controller.TrustBundleRef != "" {
 		materials = append(materials,

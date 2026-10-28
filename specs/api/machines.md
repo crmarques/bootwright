@@ -49,7 +49,7 @@ its 63-byte identity.
 | `spec.baremetal` | object | union | The bare-metal arm below. |
 | `spec.libvirt` | object | union | The libvirt arm below. |
 | `spec.vsphere` | object | union | A [refused arm](#refused-arms). |
-| `spec.kubevirt` | object | union | A [refused arm](#refused-arms). |
+| `spec.kubevirt` | object | union | The KubeVirt arm, whose fields [refused machine arms](../deferred/machine-arms.md#kubevirt-arm) records; `hostClusterRef` is a [refused arm](#refused-arms). |
 | `spec.networkAttachments` | array | no | Set keyed by `name`; each entry has exactly the arm matching the selected substrate. |
 
 ### Bare-metal arm
@@ -126,12 +126,16 @@ vendor minimum. Overflow beyond the native quantity representation refuses.
 
 ### Refused arms
 
-The `vsphere` and `kubevirt` provider arms, their network-attachment arms and
-the `templateClone` installer arm are admitted by the closed schema and refused
-before registration by [substrate selection](../substrates.md#selection-and-refusal)
-and [managed-OS installation](../managed-os.md#installation). Their field
-detail is recorded in [refused machine arms](../deferred/machine-arms.md),
-which [B87](../milestones/m1.md#b87) and [B99](../milestones/m1.md#b99) revive.
+The `vsphere` provider arm and its network-attachment arm, a `kubevirt`
+provider naming `hostClusterRef`, and the `templateClone` installer arm are
+admitted by the closed schema and refused before registration by
+[substrate selection](../substrates.md#selection-and-refusal) and
+[managed-OS installation](../managed-os.md#installation). A `kubevirt`
+provider naming `kubeconfigRef` is realized for installer-provisioned Machines
+([KubeVirt machine realization](../substrates.md#kubevirt-machine-realization)).
+The field detail of both arms is recorded in
+[refused machine arms](../deferred/machine-arms.md), which
+[B99](../milestones/m1.md#b99) and [B732](../milestones/m3.md#b732) revive.
 A Machine's per-interface attachments, `substrate.libvirt.interfaceAttachments`
 and `substrate.kubevirt.interfaceAttachments` ([substrate arm](#substrate-arm)),
 are read by libvirt and KubeVirt Machines.

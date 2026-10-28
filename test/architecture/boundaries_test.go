@@ -105,7 +105,7 @@ func packageRoles() map[string]packageRole {
 		"machine/access", "machine/inventory", "machine/power", "managedos/media", "managedos/installation",
 		"nativeartifacts/rendering", "reconciliation/lifecycle",
 		"secrets/custody", "secrets/encryption", "storage/preflight", "storage/rendering", "storage/ceph",
-		"substrate/baremetal", "substrate/libvirt", "trust/enrollment", "workspace/contexts",
+		"substrate/baremetal", "substrate/kubevirt", "substrate/libvirt", "trust/enrollment", "workspace/contexts",
 	} {
 		roles["internal/"+capability] = applicationRole
 	}
@@ -137,6 +137,7 @@ func applicationDependencies() map[string][]string {
 		// into the capacity budget's allocations.
 		"internal/substrate/libvirt":   append(capabilityDependencies(), "internal/infrastructureservices/managedservice", "internal/substrate/capacity"),
 		"internal/substrate/baremetal": {"internal/controller/prerequisites", "internal/reconciliation/lifecycle"},
+		"internal/substrate/kubevirt":  capabilityDependencies(),
 		// Storage derives its DVD package endpoint through ArtifactServer's
 		// published selection/path rules rather than reconstructing publication.
 		"internal/storage/ceph":                          {"internal/desiredstate/compilation", "internal/reconciliation/lifecycle", "internal/infrastructureservices/artifactserver"},

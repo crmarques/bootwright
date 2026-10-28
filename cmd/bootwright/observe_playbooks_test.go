@@ -64,6 +64,8 @@ func observeAllowlist() map[observeTaskKey]observeAllowance {
 		"substrate_baremetal_machine":    "substrate_physical_protocol",
 		"substrate_libvirt_host":         "substrate_host_protocol",
 		"substrate_libvirt_machine":      "substrate_libvirt_machine_protocol",
+		"substrate_kubevirt_host":        "substrate_kubevirt_protocol",
+		"substrate_kubevirt_machine":     "substrate_kubevirt_protocol",
 	} {
 		add(role, "observe.yml", observeCollection+protocol, "publishes the handoff and evidence on the runner's own channel", read)
 	}
@@ -71,6 +73,7 @@ func observeAllowlist() map[observeTaskKey]observeAllowance {
 		"addons_instance", "containercluster_network", "containercluster_install_agent", "containercluster_media_agent", "managedos_install_anaconda",
 		"managedos_package_tree", "storage_ceph_core", "storage_ceph_host", "storage_ceph_image",
 		"storage_ceph_smb", "storage_ceph_replication", "storage_ceph_consumer", "substrate_baremetal_machine", "substrate_libvirt_host", "substrate_libvirt_machine",
+		"substrate_kubevirt_host", "substrate_kubevirt_machine",
 	} {
 		add(role, "observe.yml", "ansible.builtin.assert", "validates the frozen request in memory", read)
 	}
@@ -91,6 +94,16 @@ func observeAllowlist() map[observeTaskKey]observeAllowance {
 			add(role, "state_read.yml", module, "reads controller state and retains answers in memory", read)
 		}
 	}
+	kubevirtRead := func(operation string) func(map[string]any, map[string]any) bool {
+		return func(params, _ map[string]any) bool { return params["operation"] == operation }
+	}
+	add("substrate_kubevirt_host", "observe.yml", observeCollection+"substrate_kubevirt_api", "repeats the provider proof, which only reads the host's API", kubevirtRead("proof"))
+	add("substrate_kubevirt_machine", "observe.yml", observeCollection+"substrate_kubevirt_api", "reads the VirtualMachine and what it owns, creating and deleting nothing", kubevirtRead("observe"))
+	add("substrate_kubevirt_machine", "state_read.yml", observeCollection+"substrate_kubevirt_api", "reads the instance's power and the presented volume", kubevirtRead("state_read"))
+	for _, module := range []string{"ansible.builtin.set_fact", "ansible.builtin.assert"} {
+		add("substrate_kubevirt_machine", "state_read.yml", module, "validates the port input and retains answers in memory", read)
+	}
+	add("substrate_kubevirt_machine", "identity_read.yml", "ansible.builtin.set_fact", "answers that the arm has no identity channel", read)
 	add("containercluster_install_agent", "state_node_serial.yml", "ansible.builtin.set_fact", "retains a node read in memory", read)
 	add("containercluster_install_agent", "port.yml", "ansible.builtin.assert", "validates the fixed substrate binding", read)
 	add("containercluster_install_agent", "port.yml", "ansible.builtin.set_fact", "retains the port answer in memory", read)
