@@ -94,7 +94,10 @@ func projectNVMeOFPools(catalog api.Catalog, cluster api.Object, requests []Requ
 		if err != nil {
 			return err
 		}
-		pool, _ := catalog.Find(api.CephPool, service.Get("spec", "pool").Text())
+		pool, err := nvmeofConfigPool(catalog, cluster, unit.ID, service)
+		if err != nil {
+			return err
+		}
 		service = service.WithPath(api.StringValue(cephcluster.PoolName(pool)), "spec", "pool")
 		document, err := unitDocumentOf(cluster, service, nvmeofSpecOf)
 		if err != nil {
@@ -103,6 +106,26 @@ func projectNVMeOFPools(catalog api.Catalog, cluster api.Object, requests []Requ
 		unit.Documents = []json.RawMessage{document}
 	}
 	return nil
+}
+
+func nvmeofPoolName(cluster api.Object, id string, service api.Value) (string, error) {
+	name := service.Get("spec", "pool").Text()
+	if name == "" {
+		return "", failure("api.required", "the nvmeof service "+id+" of CephCluster "+cluster.Name()+" declares no spec.pool, the CephPool that keeps its gateway state", "set spec.pool of that nvmeof service to a replicated CephPool with role rbd of this cluster")
+	}
+	return name, nil
+}
+
+func nvmeofConfigPool(catalog api.Catalog, cluster api.Object, id string, service api.Value) (api.Object, error) {
+	name, err := nvmeofPoolName(cluster, id, service)
+	if err != nil {
+		return api.Object{}, err
+	}
+	pool, found := catalog.Find(api.CephPool, name)
+	if !found {
+		return api.Object{}, failure("api.reference", "the nvmeof service "+id+" of CephCluster "+cluster.Name()+" names spec.pool "+name+", which is not a declared CephPool", "declare a replicated CephPool "+name+" with role rbd for this cluster, or set spec.pool to the name of one")
+	}
+	return pool, nil
 }
 
 func nvmeofService(cluster api.Object, id string) (api.Value, error) {
@@ -120,7 +143,11 @@ func nvmeofDependencies(cluster api.Object, unit ServiceUnit) ([]string, error) 
 	if err != nil {
 		return nil, err
 	}
-	return []string{reconciliation.BlockIdentity("ceph-pool-", service.Get("spec", "pool").Text())}, nil
+	name, err := nvmeofPoolName(cluster, unit.ID, service)
+	if err != nil {
+		return nil, err
+	}
+	return []string{reconciliation.BlockIdentity("ceph-pool-", name)}, nil
 }
 
 func nvmeofRequest(catalog api.Catalog, object api.Object, contextName string) (Request, error) {
@@ -135,7 +162,10 @@ func nvmeofRequest(catalog api.Catalog, object api.Object, contextName string) (
 		return Request{}, failure("api.invariant", "NVMe-oF requires a declared gateway service", "set spec.serviceRef to the qualified native service name")
 	}
 	native := service.Get("spec")
-	configPool, _ := catalog.Find(api.CephPool, native.Get("pool").Text())
+	configPool, err := nvmeofConfigPool(catalog, cluster, service.Get("service_id").Text(), service)
+	if err != nil {
+		return Request{}, err
+	}
 	frozen := &NVMeOFSubsystem{Name: object.Name(), Service: service.Get("service_id").Text(), Group: native.Get("group").Text(), Pool: cephcluster.PoolName(configPool),
 		MTLS: "enable_auth", NQN: spec.Get("nqn").Text(), Hosts: []string{}, Gateways: []NVMeOFEndpoint{}, Listeners: []NVMeOFEndpoint{}, Namespaces: []NVMeOFNamespace{}}
 	if !native.Get("enable_auth").Bool() {

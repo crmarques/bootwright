@@ -207,6 +207,17 @@ func TestCorePoolUsesProviderReplicationCapacityAndDefaults(t *testing.T) {
 	}
 }
 
+func TestPoolReplicaRefusalNamesNoDistribution(t *testing.T) {
+	pool := api.NewObject(api.CephPool, "volumes", api.Value{}, requestMap("clusterRef", "example", "role", "rbd", "replicated", requestMap("size", 3, "minSize", 2)))
+	_, err := poolRequest(poolRequestCatalog(3, 3), pool, "synthetic")
+	issues := diagnostics.Of(err)
+	if len(issues) != 1 || issues[0].Code != "api.invariant" ||
+		issues[0].Message != "replication size 3 requires more than 3 OSD-bearing hosts; 3 are declared" ||
+		issues[0].Remediation != "add OSD-bearing hosts, or explicitly select size 2 and minSize 2 for a three-host cluster; omitted or zero size takes the cluster default of 3" {
+		t.Fatalf("replica refusal = %+v", issues)
+	}
+}
+
 func TestDisabledCallHomePlansAndChangesOnlyItsOwnField(t *testing.T) {
 	type planner func(context.Context, lifecycle.PlanInput) (lifecycle.CapabilityPlan, error)
 	plan := func(callHome string) (Request, map[string][]byte, []byte) {

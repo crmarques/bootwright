@@ -268,8 +268,6 @@ Alias cell.
 | [B799](#b799) | new, 2026-10-23 (M3 verification) | defect | Workspace | Setup interruption retries identify any remaining setup-lock holder | Pre-existing intermittent refusal; its cause is unproved |
 | [B857](#b857) | new, 2026-10-27 (lane I) | enabling | Desired state | The audit 5.7 operator tasks run on the reshaped API | B814's paper check was not run before X171 |
 | [B867](#b867) | new, 2026-10-27 (lane R review) | safety | Storage | The Ceph incarnation rule is confirmed on a live cluster | The monitor map's creation time was chosen without a live run |
-| [B872](#b872) | new, 2026-10-28 (lane V1) | defect | Storage | An NVMe-oF service with no pool refuses at plan | Pre-existing gap found by lane V1 |
-| [B873](#b873) | new, 2026-10-28 (lane V1) | defect | Storage | The plan builder's replica refusal names no distribution | Pre-existing wording found by lane V1 |
 | [B877](#b877) | new, 2026-10-28 (D190) | product | Managed OS, with Secrets | A managed registration with a Satellite or Capsule, and an update within the release from its content | D190 authorizes only the hosted subscription service; Satellite registration needs its trust, ownership and removal defined |
 | [B881](#b881) | new, 2026-10-28 (X190 review) | safety | State reconciliation, with Substrate | A cancelled or deadline-ended firmware power cycle still forces its machine off | The adapter supervisor kills the worker with no grace; a grace changes every adapter's termination |
 
@@ -2953,22 +2951,6 @@ upgrade, and changes when the cluster is bootstrapped again under the same
 fsid; otherwise the rule moves to a value that does. **Exit evidence:** a
 ledger row from that live run.
 
-### B872
-
-**Owner:** Storage. **Kind:** defect. **Requires:** none. **Definition:**
-Specified. `projectNVMeOFPools` ignores a missed `spec.pool` lookup; admission
-refuses an absent pool, but an empty `spec.pool` appears to reach the plan
-unchecked (lane V1, 2026-10-28). **Outcome:** an NVMe-oF service with no pool
-refuses at admission or plan by name. **Exit evidence:** a refusal test.
-
-### B873
-
-**Owner:** Storage. **Kind:** defect. **Requires:** none. **Definition:**
-Specified. The plan builder's replica refusal in
-`internal/storage/ceph/resources.go` reads "IBM replication size", but D188
-applies the rule to every distribution. **Outcome:** the message names no
-distribution. **Exit evidence:** the refusal test pins the new text.
-
 ### B877
 
 **Owner:** Managed OS, with Secrets. **Kind:** product. **Requires:** B876.
@@ -3067,7 +3049,7 @@ also updates this table.
 | 27 | V3 Known-hosts and claim kinds (B869, B870, B871, B868) | merged (X188) |
 | 28 | W1 Preflight infra and all, render to a path (B858) | merged (X191) |
 | 29 | W2 Adapter warnings (B864) | merged (X187) |
-| 30 | Y1 NVMe-oF pool and replica wording (B872, B873) | not started |
+| 30 | Y1 NVMe-oF pool and replica wording (B872, B873) | merged (X193) |
 | 31 | Y2 Parallel test flakes (B874, B875) | merged (X192) |
 
 To continue, take the first row not `merged`. If its branch exists, resume it:

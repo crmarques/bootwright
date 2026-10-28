@@ -9376,6 +9376,28 @@ in no fixed order.
 change (11 of 48 and 9 of 16 runs) and passed every run after it; the
 delivering commit records the gates.
 
+### X193 — Audit lane Y1: NVMe-oF pool and replica wording
+
+**Items:** B872 and B873.
+**Kind:** defect. **Owner:** Storage. Delivered on 2026-10-28 as lane Y1 of
+the [audit remediation](backlog.md#lane-order-and-progress) on the owner's
+request to implement them.
+
+An NVMe-oF gateway service with an empty, absent or undeclared pool is refused
+at admission, and every plan path that reads the pool (the cluster plan's pool
+projection, the subsystem plan and the unit dependencies) refuses an empty
+pool with `api.required` and an undeclared one with `api.reference`, by name;
+the unit dependency hook, which holds no catalog, leaves the undeclared case to
+the cluster plan that refuses it first. The plan builder's replica refusal
+names no distribution.
+
+**Guard tests:** `TestExampleNVMeOFRefusesAGatewayServiceWithoutAUsablePool`,
+`TestNVMeOFClusterPlanRefusesAGatewayPoolItCannotResolve`,
+`TestNVMeOFSubsystemPlanRefusesAGatewayPoolItCannotResolve`,
+`TestNVMeOFDependenciesRefuseAGatewayServiceWithoutAPool` and
+`TestPoolReplicaRefusalNamesNoDistribution`, each proved by a seeded mismatch;
+the delivering commit records the gates.
+
 ## M3 independent in-tree completion
 
 The owner's 2026-10-23 request (D181) delivers the independent implementation

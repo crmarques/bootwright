@@ -162,7 +162,7 @@ func poolOf(c api.Catalog, pool api.Object, r Request) (*Pool, error) {
 		}
 	}
 	if size >= int64(osdHosts) {
-		return nil, failure("api.invariant", fmt.Sprintf("IBM replication size %d requires more than %d OSD-bearing hosts; %d are declared", size, size, osdHosts), "add OSD-bearing hosts, or explicitly select size 2 and minSize 2 for a three-host cluster; omitted or zero size takes the cluster default of "+strconv.FormatInt(defaultSize, 10))
+		return nil, failure("api.invariant", fmt.Sprintf("replication size %d requires more than %d OSD-bearing hosts; %d are declared", size, size, osdHosts), "add OSD-bearing hosts, or explicitly select size 2 and minSize 2 for a three-host cluster; omitted or zero size takes the cluster default of "+strconv.FormatInt(defaultSize, 10))
 	}
 	p.Size, p.MinSize = int(size), int(minSize)
 	return p, nil

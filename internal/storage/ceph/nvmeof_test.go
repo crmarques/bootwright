@@ -322,3 +322,75 @@ func TestNVMeOFDependenciesRefuseAnUnresolvedDerivedName(t *testing.T) {
 		t.Fatalf("an unresolved NVMe-oF dependency refused as %+v", d)
 	}
 }
+
+func TestNVMeOFClusterPlanRefusesAGatewayPoolItCannotResolve(t *testing.T) {
+	for name, test := range map[string]struct {
+		pool, code, message, remedy string
+	}{
+		"empty pool": {"", "api.required", "the nvmeof service config.primary of CephCluster example declares no spec.pool, the CephPool that keeps its gateway state",
+			"set spec.pool of that nvmeof service to a replicated CephPool with role rbd of this cluster"},
+		"undeclared pool": {"absent", "api.reference", "the nvmeof service config.primary of CephCluster example names spec.pool absent, which is not a declared CephPool",
+			"declare a replicated CephPool absent with role rbd for this cluster, or set spec.pool to the name of one"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			objects := nvmeCatalog().Objects()
+			for i, object := range objects {
+				if object.Kind() != api.CephCluster {
+					continue
+				}
+				services := object.Spec().Get("services").Items()
+				for j, service := range services {
+					if service.Get("service_type").Text() == "nvmeof" {
+						services[j] = service.WithPath(api.StringValue(test.pool), "spec", "pool")
+					}
+				}
+				objects[i] = object.WithSpec(object.Spec().WithPath(api.ListValue(services...), "services"))
+			}
+			catalog := api.NewCatalog(objects)
+			input := lifecycle.PlanInput{Verb: reconciliation.Apply, Context: lifecycle.ContextIdentity{Name: "synthetic"}, State: compilation.NewState(catalog, catalog, nil), Controller: "controller"}
+			_, err := New(api.CephCluster, nil).Plan(context.Background(), input)
+			refusedWith(t, err, test.code, test.message, test.remedy)
+		})
+	}
+}
+
+func nvmeofCatalogWithGatewayPool(pool string) api.Catalog {
+	objects := nvmeCatalog().Objects()
+	for i, object := range objects {
+		if object.Kind() != api.CephCluster {
+			continue
+		}
+		services := object.Spec().Get("services").Items()
+		for j, service := range services {
+			if service.Get("service_type").Text() == "nvmeof" {
+				services[j] = service.WithPath(api.StringValue(pool), "spec", "pool")
+			}
+		}
+		objects[i] = object.WithSpec(object.Spec().WithPath(api.ListValue(services...), "services"))
+	}
+	return api.NewCatalog(objects)
+}
+
+func TestNVMeOFSubsystemPlanRefusesAGatewayPoolItCannotResolve(t *testing.T) {
+	for name, test := range map[string]struct {
+		pool, code, message, remedy string
+	}{
+		"empty pool": {"", "api.required", "the nvmeof service config.primary of CephCluster example declares no spec.pool, the CephPool that keeps its gateway state",
+			"set spec.pool of that nvmeof service to a replicated CephPool with role rbd of this cluster"},
+		"undeclared pool": {"absent", "api.reference", "the nvmeof service config.primary of CephCluster example names spec.pool absent, which is not a declared CephPool",
+			"declare a replicated CephPool absent with role rbd for this cluster, or set spec.pool to the name of one"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			catalog := nvmeofCatalogWithGatewayPool(test.pool)
+			_, err := planned(t, catalog, api.CephNVMeoFSubsystem, "subsystem")
+			refusedWith(t, err, test.code, test.message, test.remedy)
+		})
+	}
+}
+
+func TestNVMeOFDependenciesRefuseAGatewayServiceWithoutAPool(t *testing.T) {
+	cluster, _ := nvmeofCatalogWithGatewayPool("").Find(api.CephCluster, "example")
+	_, err := nvmeofDependencies(cluster, ServiceUnit{Type: "nvmeof", ID: "config.primary"})
+	refusedWith(t, err, "api.required", "the nvmeof service config.primary of CephCluster example declares no spec.pool, the CephPool that keeps its gateway state",
+		"set spec.pool of that nvmeof service to a replicated CephPool with role rbd of this cluster")
+}
