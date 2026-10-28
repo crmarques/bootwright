@@ -29,6 +29,7 @@ func ValidatePartial(o api.Object, c api.Catalog) []api.Issue {
 		issues = appendIssues(issues, invariant("$.spec.substrate."+arm+".interfaceAttachments", "attachment selections are mutually exclusive", "keep either network.attachmentRef or substrate."+arm+".interfaceAttachments"))
 	}
 	issues = appendIssues(issues, validateDefaultMediaTrust(substrate.MachineBMC(o))...)
+	issues = appendIssues(issues, validateDefaultFirmware(o)...)
 	if o.Spec().Get("os", "provided").Bool() {
 		if o.Spec().Has("os", "install", "ntp") {
 			issues = appendIssues(issues, invariant("$.spec.os.install.ntp", "OS-ready Machines forbid installation NTP choices", "remove os.install.ntp"))
@@ -51,4 +52,13 @@ func validateDefaultMediaTrust(bmc api.Value) []api.Issue {
 	return []api.Issue{{Code: "api.invariant", Field: "$." + substrate.BMCPath + ".virtualMedia.tls.trust",
 		Message:     "disableVerification is a per-Machine exception and never a kind default",
 		Remediation: "declare substrate.baremetal.bmc.virtualMedia.tls.trust: disableVerification on each Machine that needs it"}}
+}
+
+func validateDefaultFirmware(o api.Object) []api.Issue {
+	if substrate.MachineFirmware(o) == nil {
+		return nil
+	}
+	return []api.Issue{{Code: "api.invariant", Field: "$." + substrate.FirmwarePath,
+		Message:     "firmware is per-Machine intent and never a kind default",
+		Remediation: "declare substrate.baremetal.firmware on each Machine that needs it"}}
 }

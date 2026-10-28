@@ -7,18 +7,20 @@ import "time"
 // and the poll count a power operation takes by default
 // (plugins/modules/redfish_boot.py). A test holds each to the client's own.
 const (
-	controllerRequestTimeout   = 30 * time.Second
-	controllerMediaTimeout     = 300 * time.Second
-	controllerInsertAttempts   = 3
-	controllerInsertRetryDelay = 10 * time.Second
-	controllerTaskPolls        = 60
-	controllerTaskPollDelay    = 2 * time.Second
-	controllerMediaProbes      = 24
-	controllerMediaProbeDelay  = 5 * time.Second
-	controllerPowerPolls       = 60
-	controllerPowerPollDelay   = 2 * time.Second
-	controllerBootPolls        = 12
-	controllerBootPollDelay    = 5 * time.Second
+	controllerRequestTimeout    = 30 * time.Second
+	controllerMediaTimeout      = 300 * time.Second
+	controllerInsertAttempts    = 3
+	controllerInsertRetryDelay  = 10 * time.Second
+	controllerTaskPolls         = 60
+	controllerTaskPollDelay     = 2 * time.Second
+	controllerMediaProbes       = 24
+	controllerMediaProbeDelay   = 5 * time.Second
+	controllerPowerPolls        = 60
+	controllerPowerPollDelay    = 2 * time.Second
+	controllerBootPolls         = 12
+	controllerBootPollDelay     = 5 * time.Second
+	controllerFirmwarePolls     = 60
+	controllerFirmwarePollDelay = 10 * time.Second
 )
 
 // controllerMediaReads is what finding the virtual-media device requests: the
@@ -43,6 +45,26 @@ const (
 	controllerEjectPauses = controllerMediaProbes * controllerMediaProbeDelay
 	controllerBootPauses  = controllerBootPolls * controllerBootPollDelay
 	controllerPowerPauses = controllerPowerPolls * controllerPowerPollDelay
+)
+
+// The wall-clock share each poll of the firmware step stops at
+// (plugins/module_utils/redfish_control.py): its pauses and the requests of its
+// last round at the request timeout, one read for the boot selection, a task
+// and the power-on and power-off, and the Secure Boot and BIOS reads for the
+// settings. The step's requests outside its polls number 27 before the
+// power-on and 6 from it on; it sends no power-on once the share before it,
+// those 27 requests at the request timeout, the boot-selection poll and three
+// task polls, is spent. Each poll read's socket timeout is cut to the share
+// left, so the ForceOff is sent within the shares counted before it unless the
+// controller trickles an answer, which the run deadline then ends.
+const (
+	controllerBootBudget            = controllerBootPauses + controllerRequestTimeout
+	controllerTaskBudget            = controllerTaskPolls*controllerTaskPollDelay + controllerRequestTimeout
+	controllerPowerOnBudget         = controllerPowerPauses + controllerRequestTimeout
+	controllerFirmwarePollBudget    = controllerFirmwarePolls*controllerFirmwarePollDelay + 2*controllerRequestTimeout
+	controllerFirmwareWriteRequests = 27
+	controllerFirmwareCycleRequests = 6
+	controllerFirmwareWritesBudget  = controllerFirmwareWriteRequests*controllerRequestTimeout + controllerBootBudget + 3*controllerTaskBudget
 )
 
 // The bound of each management-controller call, which a consumer's run

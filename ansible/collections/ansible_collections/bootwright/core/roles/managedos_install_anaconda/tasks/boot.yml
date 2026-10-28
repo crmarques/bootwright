@@ -27,6 +27,7 @@
       expected: '{{ managedos_install_anaconda_expected }}'
       pinned_uuid_base64: '{{ bootwright_os_install_material.pinnedUUIDBase64 | default("") }}'
       pinned_serial_base64: '{{ bootwright_os_install_material.pinnedSerialBase64 | default("") }}'
+      firmware: '{{ bootwright_os_install_request.target.firmware | default({}) }}'
 
 # Published only here, after the substrate proved the target and before the
 # media is inserted, so a replay or an apply that finds the machine installed

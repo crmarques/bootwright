@@ -16,6 +16,17 @@
   ansible.builtin.set_fact:
     substrate_libvirt_machine_refusal: ''
 
+# Firmware settings are a physical Machine's; a machine this substrate created
+# has none to apply, so a declaration reaching it fails closed before any read.
+- name: Refuse firmware settings this substrate does not apply
+  ansible.builtin.assert:
+    that:
+      - (bootwright_machine_port.firmware | default({})) | length == 0
+    fail_msg: >-
+      firmware settings are applied only to a bare-metal Machine, and this
+      machine's substrate created it; remove the firmware declaration
+    quiet: true
+
 - name: Read the machine this installation is about to overwrite
   bootwright.core.redfish_system_read:
     endpoint: '{{ substrate_libvirt_machine_target_endpoint }}'

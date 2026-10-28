@@ -38,6 +38,9 @@ options:
         operation froze.
       - C(foreign-installation) names a machine whose answered marker belongs
         to another installation. C(tpm-absent) names a missing positive TPM 2.0 proof.
+      - C(firmware-setting-mismatch) names declared firmware settings a proof
+        found different, and C(firmware-setting-not-applied) declared settings
+        the firmware step did not apply.
       - C(ssh-policy-unavailable), C(ssh-policy-host-excluded),
         C(ssh-policy-fleet-excluded) and C(ssh-policy-generated-excluded)
         identify pre-effect SSH policy refusals.

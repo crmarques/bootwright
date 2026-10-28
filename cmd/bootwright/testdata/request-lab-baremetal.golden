@@ -116,6 +116,11 @@
             "trust": "importCertificate"
           }
         },
+        "firmware": {
+          "bootMode": "UEFI",
+          "mode": "prove",
+          "secureBoot": true
+        },
         "hardware": {
           "interfaces": [
             {
@@ -141,7 +146,7 @@
         "size": 13107200000
       },
       "user": "bootwright",
-      "version": "os-install-anaconda-v19"
+      "version": "os-install-anaconda-v20"
     }
   ],
   "baremetalMachines": [

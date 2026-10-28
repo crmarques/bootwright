@@ -28,10 +28,15 @@ func machineBMCSchema() *Shape {
 	return record(required("address", nonempty()), field("protocol", enumeration("redfish")), field("credentialsRef", secret("usernamePassword")), field("tls", machineBMCTLSSchema()), field("virtualMedia", machineVirtualMediaSchema()))
 }
 
+func machineFirmwareSchema() *Shape {
+	attributes := &Shape{Type: Mapping, Open: true, Atomic: true, Element: &Shape{Alternatives: []*Shape{text(), integer("-9223372036854775808", "9223372036854775807"), boolean()}}}
+	return atomic(record(defaulted("mode", enumeration("enforce", "prove"), StringValue("enforce")), field("secureBoot", boolean()), field("bootMode", enumeration("UEFI")), field("biosAttributes", attributes)))
+}
+
 func machineSubstrateSchema() *Shape {
 	macs := &Shape{Type: Sequence, Atomic: true, NameKey: "nicRef", Element: record(required("nicRef", nestedIn(Scope{Noun: "hardware NIC", Entries: []string{"hardware", "nics"}})), required("macAddress", lexical("mac")))}
 	attachments := &Shape{Type: Sequence, Atomic: true, NameKey: "interface", Element: record(required("interface", lexical("ifname")), required("attachmentRef", nestedIn(Scope{Noun: "network attachment", Owner: []string{"substrate", "providerRef"}, Kind: InfraProvider, Entries: []string{"networkAttachments"}})))}
-	baremetal := record(field("bmc", machineBMCSchema()), field("nics", macs), field("rootDevice", record(field("wwn", nonempty()), field("hctl", nonempty()), field("serialNumber", nonempty()))))
+	baremetal := record(field("bmc", machineBMCSchema()), field("nics", macs), field("rootDevice", record(field("wwn", nonempty()), field("hctl", nonempty()), field("serialNumber", nonempty()))), field("firmware", machineFirmwareSchema()))
 	libvirt := record(field("profileRef", nestedIn(Scope{Noun: "machine profile", Owner: []string{"substrate", "providerRef"}, Kind: InfraProvider, Within: []string{"libvirt"}, Entries: []string{"libvirt", "machineProfiles"}})), field("interfaceAttachments", attachments))
 	kubevirt := record(field("profileRef", nestedIn(Scope{Noun: "machine profile", Owner: []string{"substrate", "providerRef"}, Kind: InfraProvider, Within: []string{"kubevirt"}, Entries: []string{"kubevirt", "machineProfiles"}})), field("interfaceAttachments", attachments))
 	vsphere := record(field("profileRef", nestedIn(Scope{Noun: "machine profile", Owner: []string{"substrate", "providerRef"}, Kind: InfraProvider, Within: []string{"vsphere"}, Entries: []string{"vsphere", "machineProfiles"}})), field("nics", macs))

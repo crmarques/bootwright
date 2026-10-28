@@ -23,6 +23,10 @@ const (
 	RefusalMachineRunning = "machine-running"
 	// RefusalTPMAbsent means an encrypted install lacks a positive TPM 2.0 proof.
 	RefusalTPMAbsent = "tpm-absent"
+	// RefusalFirmwareMismatch is a prove firmware block the machine does not match.
+	RefusalFirmwareMismatch = "firmware-setting-mismatch"
+	// RefusalFirmwareNotApplied is an enforce firmware block the BMC refused or did not apply.
+	RefusalFirmwareNotApplied = "firmware-setting-not-applied"
 )
 
 // PreBootRefusals is what the pre-boot proof of a Machine on one arm may
@@ -69,6 +73,14 @@ func PreBootRefusals(arm, contextName, continuation, machine, endpoint string) m
 					", so the machine is proved again"),
 			RefusalMachineRunning: running,
 			RefusalTPMAbsent:      refused(identity+" does not positively report an enabled TPM 2.0, so no encrypted installer was booted", "enable a supported TPM 2.0 on "+identity+", then run "+next),
+			RefusalFirmwareMismatch: refused("the machine answering at "+endpoint+" does not report the firmware settings "+identity+" declares under "+FirmwarePath+".mode prove, so no media was inserted into it and it was not booted",
+				"set the declared values on "+identity+" through its BMC, then run "+next+"; to have Bootwright set them instead, "+destroy+
+					", set "+FirmwarePath+".mode to enforce on "+identity+update+", then run "+apply),
+			RefusalFirmwareNotApplied: refused("the management controller at "+endpoint+" refused or did not apply the firmware settings "+identity+" declares, so no media was inserted into it and no installer was booted",
+				"when the reasons say the machine was not proved off, first stop it with bootwright machine stop --context "+contextName+" --name "+machine+" --force; "+
+					"read the BMC's message in the attempt's retained output and correct the cause through the BMC, then run "+next+
+					"; any one-time setup boot and settings this step staged stay on the machine and apply at its next boot; to correct the declaration instead, "+destroy+
+					", correct "+FirmwarePath+" on "+identity+update+", then run "+apply),
 		}
 	}
 	return nil

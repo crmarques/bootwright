@@ -51,7 +51,7 @@ hardware identities and credentials in operator-owned files outside Git.
 | --- | --- |
 | [Controller](infra/machines/controller.yaml) and [services](infra/components) | Replace `192.0.2.1` with an existing controller IP and update the service bind addresses; the controller's FQDN derives from the base domain. |
 | [Serving certificate](secret-descriptors/artifact-server-tls.yaml) | Match all HTTPS endpoint IP/DNS names to the customized addresses. |
-| [Physical Machine](infra/machines/metal-01.yaml) | Set the full Redfish system URL, actual NIC name/MAC, install IP and root-device hint; `/dev/sda` is only an example. |
+| [Physical Machine](infra/machines/metal-01.yaml) | Set the full Redfish system URL, actual NIC name/MAC, install IP and root-device hint; `/dev/sda` is only an example. Match or remove its [firmware](#physical-firmware) block. |
 | [NetworkConfig](infra/networkconfigs/lab-metal.yaml) | Set the actual installer subnet, gateway, interface and route; this provider does not create a physical network. |
 | [Environment](environment.yaml) and DNS/NTP | Replace the base domain, from which every Machine FQDN derives; replace or remove upstream `192.0.2.53` and `192.0.2.123`. |
 | [BMC provider](infra/providers/lab-metal.yaml) | Keep certificate verification; `lab-bmc-ca` must contain the BMC's issuing CA chain. |
@@ -135,6 +135,37 @@ access after network convergence and reboot, and a console recovery exercise.
 Never collect key bytes, recovery values or RHSM credentials. Record each
 operator check as unrun until executed. Removal retains the installed system;
 this feature does not add physical erase.
+
+## Physical firmware
+
+[metal-01](infra/machines/metal-01.yaml) declares a
+[firmware block](../../../specs/api/machines.md#firmware-block) with
+`mode: prove`: the installation's pre-boot step reads Secure Boot and the boot
+mode through the BMC, before any media is inserted, and refuses with
+`firmware-setting-mismatch` when the machine differs. Proving writes nothing,
+so set those values through the BMC first, or remove the block.
+
+To have Bootwright set them, declare `mode: enforce` before the first apply:
+
+```yaml
+firmware:
+  mode: enforce
+  secureBoot: true
+  bootMode: UEFI
+  biosAttributes:
+    VendorAttributeName: VendorValue
+```
+
+`biosAttributes` names are vendor-specific: each is passed verbatim to the
+BMC's BIOS settings and never validated, so copy the names and values your
+BMC's Redfish `Bios` resource reports. Enforcing powers the machine on once
+into firmware setup and off again, inside the installation apply that consumes
+`data-loss`, and shows as its `configure-firmware metal-01` impact. Settings
+are never reverted: neither removing the block nor destroying the context
+restores earlier values. A refused write names `firmware-setting-not-applied`
+and the BMC's message is in the attempt's retained output; see
+[physical firmware](../../../specs/substrates.md#physical-firmware). These
+paths have offline tests only; no BMC's firmware behavior is claimed.
 
 ## Run it
 

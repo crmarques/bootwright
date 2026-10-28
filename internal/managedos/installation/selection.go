@@ -548,6 +548,7 @@ func targetFor(catalog api.Catalog, machine api.Object, contextName, controllerM
 			},
 		},
 		Domain:     derived.Identity.Domain,
+		Firmware:   requestFirmware(derived.Firmware),
 		HostKeyRef: derived.Identity.HostKeyRef,
 		Physical:   derived.Physical,
 		Substrate:  derived.Substrate,
@@ -568,6 +569,17 @@ func targetFor(catalog api.Catalog, machine api.Object, contextName, controllerM
 		target.Hardware = &hardware
 	}
 	return target, nil
+}
+
+func requestFirmware(declared *substrate.Firmware) *Firmware {
+	if declared == nil {
+		return nil
+	}
+	firmware := &Firmware{BootMode: declared.BootMode, Mode: declared.Mode, SecureBoot: declared.SecureBoot}
+	for _, attribute := range declared.BIOSAttributes {
+		firmware.BIOSAttributes = append(firmware.BIOSAttributes, BIOSAttribute(attribute))
+	}
+	return firmware
 }
 
 var durableRootPath = regexp.MustCompile(`^/dev/disk/by-id/wwn-0x[0-9a-f]{16}(?:[0-9a-f]{16})?$`)

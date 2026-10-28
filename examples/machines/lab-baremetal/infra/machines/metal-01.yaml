@@ -15,6 +15,13 @@ spec:
         - nicRef: eno1
           macAddress: 52:54:00:9a:1b:01
 
+      # Proved before media is inserted: the installation refuses a machine
+      # whose BMC does not report these, and never changes them.
+      firmware:
+        mode: prove
+        secureBoot: true
+        bootMode: UEFI
+
   os:
     provided: false
     installProfileRef: rhel-9-8

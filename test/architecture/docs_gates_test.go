@@ -160,7 +160,7 @@ var docsSectionExceptions = map[string]docsSectionException{
 	"specs/contexts.md ## Storage, locking and publication":     {ceiling: 44625, since: "2026-10-27"},
 	"specs/cli.md ## Resource inspection and explicit access":   {ceiling: 44570, since: "2026-10-27"},
 	"specs/ceph-native-api.md ## Cluster and service ownership": {ceiling: 43942, since: "2026-10-27"},
-	"specs/api/machines.md ## Machine":                          {ceiling: 32780, since: "2026-10-27"},
+	"specs/api/machines.md ## Machine":                          {ceiling: 26652, since: "2026-10-27"},
 	"specs/openshift-clusters.md ## Installation":               {ceiling: 30134, since: "2026-10-27"},
 	"specs/architecture.md ## Go package structure":             {ceiling: 28975, since: "2026-10-27"},
 	"specs/cli/commands.md ## Command and flag catalog":         {ceiling: 28622, since: "2026-10-27"},

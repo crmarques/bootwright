@@ -94,6 +94,9 @@ def test_machine_consumers_compose_substrate_ports_instead_of_native_modules():
 @pytest.mark.parametrize("arm", ["libvirt", "baremetal"])
 @pytest.mark.parametrize("entry,extra", [
     ("pre_boot", {"expected": ["02:00:00:00:00:01"], "pinned_uuid_base64": "", "pinned_serial_base64": "", "require_tpm": False}),
+    ("pre_boot", {"expected": ["02:00:00:00:00:01"], "pinned_uuid_base64": "", "pinned_serial_base64": "", "require_tpm": False,
+                  "firmware": {"mode": "prove", "secureBoot": True, "bootMode": "UEFI",
+                               "biosAttributes": [{"name": "TpmEnable", "boolean": True}]}}),
     ("boot_media", {"installer_powers_off": False}),
     ("boot_disk", {"power_on": True}),
 ])

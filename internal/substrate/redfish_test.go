@@ -49,6 +49,9 @@ func TestTheControllerBoundsAreTheClientsOwn(t *testing.T) {
 		"MEDIA_PROBES": controllerMediaProbes, "MEDIA_PROBE_DELAY": seconds(controllerMediaProbeDelay),
 		"POLL_ATTEMPTS": controllerPowerPolls, "POLL_DELAY": seconds(controllerPowerPollDelay),
 		"BOOT_POLLS": controllerBootPolls, "BOOT_POLL_DELAY": seconds(controllerBootPollDelay),
+		"FIRMWARE_POLLS": controllerFirmwarePolls, "FIRMWARE_POLL_DELAY": seconds(controllerFirmwarePollDelay),
+		"FIRMWARE_WRITE_REQUESTS": controllerFirmwareWriteRequests,
+		"FIRMWARE_CYCLE_REQUESTS": controllerFirmwareCycleRequests,
 		"CERTIFICATE_MEMBERS":     controllerCertificateMembers,
 		"MAX_MEDIA_MANAGERS":      BaremetalMediaManagers,
 		"MAX_MEDIA_CANDIDATES":    BaremetalMediaCandidates,
@@ -86,6 +89,22 @@ func TestTheControllerBoundsAreTheWorstCasesTheClientDocuments(t *testing.T) {
 	} {
 		if !strings.Contains(boot, stated) {
 			t.Errorf("redfish_boot.py does not document %q", stated)
+		}
+	}
+	// The firmware bound counts each poll of the firmware step at the share
+	// the client stops it at, and the writes before the power-on at the share
+	// the step refuses to power on after, which the client derives from the
+	// constants held above.
+	_, control := redfishSource(t, "module_utils/redfish_control.py")
+	for _, stated := range []string{
+		"BOOT_BUDGET = BOOT_POLLS * BOOT_POLL_DELAY + REQUEST_TIMEOUT ",
+		"TASK_BUDGET = TASK_POLLS * TASK_POLL_DELAY + REQUEST_TIMEOUT ",
+		"POWER_ON_BUDGET = POLL_ATTEMPTS * POLL_DELAY + REQUEST_TIMEOUT ",
+		"FIRMWARE_POLL_BUDGET = FIRMWARE_POLLS * FIRMWARE_POLL_DELAY + 2 * REQUEST_TIMEOUT ",
+		"FIRMWARE_WRITES_BUDGET = FIRMWARE_WRITE_REQUESTS * REQUEST_TIMEOUT + BOOT_BUDGET + 3 * TASK_BUDGET ",
+	} {
+		if !strings.Contains(control, stated) {
+			t.Errorf("redfish_control.py does not set %q, from which the firmware bound's shares are derived", stated)
 		}
 	}
 	_, read := redfishSource(t, "modules/redfish_system_read.py")

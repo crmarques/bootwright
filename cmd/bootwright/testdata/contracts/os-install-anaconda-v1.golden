@@ -1,6 +1,6 @@
 implementation: os-install-anaconda-v1
-content-digest: 78300882f36ab168b9e0d2b2a199bf5974f54a07bd4d227ba5e66d719d5fa7e8
-request-version: os-install-anaconda-v19
+content-digest: 20b939062ec5aaa346c5af22299f8cadc2ca23a957e7ef2d87b8e000e928164c
+request-version: os-install-anaconda-v20
 automation-formats: none
 mark-formats: none
 proof-ids: .bootwright-tree-identity, /etc/bootwright/registration.json, /etc/bootwright/update.json
@@ -113,6 +113,15 @@ request-schema:
   target.controller.virtualMedia.restoreVerification bool
   target.controller.virtualMedia.trust string
   target.domain string omitempty
+  target.firmware *struct installation.Firmware omitempty
+  target.firmware.biosAttributes []struct installation.BIOSAttribute omitempty
+  target.firmware.biosAttributes[].boolean *bool omitempty
+  target.firmware.biosAttributes[].integer *int64 omitempty
+  target.firmware.biosAttributes[].name string
+  target.firmware.biosAttributes[].string *string omitempty
+  target.firmware.bootMode string omitempty
+  target.firmware.mode string
+  target.firmware.secureBoot *bool omitempty
   target.hardware *struct installation.Hardware omitempty
   target.hardware.interfaces []struct installation.Interface
   target.hardware.interfaces[].macAddress string

@@ -217,6 +217,9 @@ func impacts(verb reconciliation.Verb, request Request) []string {
 			"power-on "+request.Identity.Object,
 			"configure-network "+request.Identity.Object,
 			"restart "+request.Identity.Object)
+		if request.Target.Firmware.enforced() {
+			impacts = append(impacts, "configure-firmware "+request.Identity.Object)
+		}
 	}
 	if request.Registration != nil {
 		action := "register-subscription "

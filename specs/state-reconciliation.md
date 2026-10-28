@@ -2249,7 +2249,11 @@ one predicate. The claim serializes use but cannot replace any live proof.
 [Physical machine realization](substrates.md#physical-machine-realization)
 holds the claim and the controller-side proof, and
 [physical installation](managed-os.md#physical-installation) repeats that proof
-immediately before it boots and again inside the installer itself.
+immediately before it boots and again inside the installer itself. A declared
+[firmware write](substrates.md#physical-firmware) is such a change: it runs
+only after those proofs, inside the installation apply that consumes
+`data-loss`, shows as that block's `configure-firmware <machine>` impact, and
+is set-only: no removal reverts it.
 
 The interval between the controller's last proof and the installer's first
 write is a residual race, not an ownership proof. No MAC set, root-device hint,

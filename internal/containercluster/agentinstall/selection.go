@@ -218,21 +218,21 @@ func nodeTargetRefusal(catalog api.Catalog, bound api.Object, err error) (reason
 // cluster too large for it refuses here instead of being killed mid-install.
 func pastTheCeiling(catalog api.Catalog, cluster api.Object) (reason, remediation string) {
 	nodes := cluster.Spec().Get("nodes").Len()
-	arms := clusterArms(catalog, cluster)
-	deadline := installDeadline(installBudgets(nodes, arms...), nodes)
+	arms, enforced := clusterArms(catalog, cluster), enforcedArms(catalog, cluster)
+	deadline := installDeadline(installBudgets(nodes, enforced, arms...), nodes)
 	if deadline <= lifecycle.MaxDeadline {
 		return "", ""
 	}
 	return "installing " + strconv.Itoa(nodes) + " nodes needs a run deadline of " + deadline.String() +
 			", past the " + lifecycle.MaxDeadline.String() + " every adapter run is held to",
-		"declare at most " + strconv.Itoa(largestCluster(arms...)) + " nodes on " + cluster.Identity()
+		"declare at most " + strconv.Itoa(largestCluster(enforced, arms...)) + " nodes on " + cluster.Identity()
 }
 
 // largestCluster is the most nodes whose installation deadline fits within the
 // ceiling. The plan bounds the declared Machine set at 512.
-func largestCluster(arms ...string) int {
+func largestCluster(enforced []string, arms ...string) int {
 	for nodes := 512; nodes > 0; nodes-- {
-		if installDeadline(installBudgets(nodes, arms...), nodes) <= lifecycle.MaxDeadline {
+		if installDeadline(installBudgets(nodes, enforced, arms...), nodes) <= lifecycle.MaxDeadline {
 			return nodes
 		}
 	}
@@ -347,7 +347,7 @@ func requestFor(catalog api.Catalog, cluster api.Object, controllerMachine, cont
 	}
 	installRequest := InstallRequest{
 		DeliveryKind: delivery, Rendezvous: agent["rendezvousIP"].(string), PublicationRoot: image, TLSCertificateRef: certificate, VIPs: projectedVIPs(catalog, cluster),
-		Budgets: installBudgets(len(nodes), clusterArms(catalog, cluster)...), Endpoints: endpointNames(catalog, cluster),
+		Budgets: installBudgets(len(nodes), enforcedArms(catalog, cluster), clusterArms(catalog, cluster)...), Endpoints: endpointNames(catalog, cluster),
 		Identity: identity(InstallBlockID(name)), Image: image, Nodes: frozenNodes(nodes),
 		Placement: placement, Release: release, Tool: tool,
 		Version: installRequestVersion, WorkRoot: WorkRoot(contextName, name),
@@ -525,7 +525,7 @@ func frozenNodes(nodes []nodeProjection) []Node {
 	frozen := make([]Node, 0, len(nodes))
 	for _, node := range nodes {
 		frozen = append(frozen, Node{
-			Address: node.address, ControllerKind: controllerKind(node.target.Substrate),
+			Address: node.address, ControllerKind: controllerKind(node.target.Substrate), Firmware: nodeFirmware(node.target.Firmware),
 			Controller: Controller{
 				CredentialsRef: node.target.Controller.CredentialsRef,
 				Endpoint:       node.target.Controller.Endpoint,
@@ -543,6 +543,17 @@ func frozenNodes(nodes []nodeProjection) []Node {
 		})
 	}
 	return frozen
+}
+
+func nodeFirmware(declared *substrate.Firmware) *Firmware {
+	if declared == nil {
+		return nil
+	}
+	firmware := &Firmware{BootMode: declared.BootMode, Mode: declared.Mode, SecureBoot: declared.SecureBoot}
+	for _, attribute := range declared.BIOSAttributes {
+		firmware.BIOSAttributes = append(firmware.BIOSAttributes, BIOSAttribute(attribute))
+	}
+	return firmware
 }
 
 // frozenHardware is the hardware a physical node is proved against: the NICs
@@ -628,7 +639,16 @@ func refusalAt(code, field, message, remediation string) error {
 }
 
 func clusterArms(catalog api.Catalog, cluster api.Object) []string {
-	var arms []string
+	arms, _ := nodeArms(catalog, cluster)
+	return arms
+}
+
+func enforcedArms(catalog api.Catalog, cluster api.Object) []string {
+	_, enforced := nodeArms(catalog, cluster)
+	return enforced
+}
+
+func nodeArms(catalog api.Catalog, cluster api.Object) (arms, enforced []string) {
 	for _, node := range cluster.Spec().Get("nodes").Items() {
 		bound, ok := catalog.Find(api.Machine, node.Get("machineRef").Text())
 		if !ok {
@@ -639,8 +659,11 @@ func clusterArms(catalog api.Catalog, cluster api.Object) []string {
 			continue
 		}
 		arms = append(arms, substrate.Variant(provider))
+		if nodeFirmware(substrate.MachineFirmware(bound)).enforced() {
+			enforced = append(enforced, substrate.Variant(provider))
+		}
 	}
-	return arms
+	return arms, enforced
 }
 
 func controllerKind(arm string) string {

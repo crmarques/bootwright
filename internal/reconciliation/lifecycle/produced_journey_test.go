@@ -43,7 +43,7 @@ func installedRequest() agentinstall.InstallRequest {
 		Rendezvous:      "192.0.2.20", TLSCertificateRef: "artifact-server-tls", VIPs: []agentinstall.VIP{},
 		Release:  agentinstall.Release{Distribution: "openshift", Version: installedRelease},
 		Tool:     agentinstall.Tool{Compatibility: "openshift", Kind: "openshift-install", Version: installedRelease},
-		Version:  "cluster-install-agent-v8",
+		Version:  "cluster-install-agent-v9",
 		WorkRoot: "/var/lib/bootwright/work/lab/sno",
 	}
 }

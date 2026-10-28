@@ -616,7 +616,8 @@ context that uses it, so this block proves the exact machine the desired state
 names and claims it for this context; it creates no hardware, changes no
 firmware setting and powers nothing on or off. What it establishes is the
 identity every later effect depends on, proved once, in one place, rather than
-re-derived by each consumer.
+re-derived by each consumer. A declared [firmware block](#physical-firmware)
+is applied by an installation's pre-boot proof, never by this block.
 
 **Target proof.** The Machine's `substrate.baremetal.bmc.address` names one
 exact ComputerSystem. The block reads that resource with the bound credential
@@ -718,8 +719,9 @@ block never created anything whose removal could be observed. It therefore
 reports positive no effect only when its own claim was never published.
 
 **Inverse.** Destroy releases the claim and proves nothing else. The server,
-its firmware settings, its disks and whatever operating system is installed on
-it are retained exactly as they are, so the block's removal description says it
+its firmware settings, those a [firmware block](#physical-firmware) set
+included, its disks and whatever operating system is installed on it are
+retained exactly as they are, so the block's removal description says it
 retains the machine and lists no impact. It consumes no authorization, because
 it destroys nothing. The removal's resolution observes nothing and is always
 its completion, because the removal changes nothing on the machine. Physical
@@ -735,6 +737,134 @@ The running operating system is not this block's to stop: a removal that leaves
 the machine untouched interrupts nothing, and the installation that would
 change it has its own gate below. No effect of this block can be left half
 performed by cancellation, because it performs none.
+
+## Physical firmware
+
+A bare-metal Machine's [firmware block](api/machines.md#firmware-block)
+declares Secure Boot, the boot mode and BIOS attributes. The bare-metal
+`pre_boot` entry point applies or proves them, after the target proof and
+before any media is inserted, for the
+[managed-OS](managed-os.md#installation) and the
+[cluster installation](openshift-clusters.md#installation) alike; nothing else
+writes firmware. Only an apply that boots the installer runs that `pre_boot`:
+never a replay, a proved boot or an apply that finds the installation done.
+
+**Resources.** Secure Boot is `SecureBootEnable` on the resource the system's
+`SecureBoot` link names. The boot mode is the system's
+`Boot.BootSourceOverrideMode`, because Redfish defines no persistent boot-mode
+property; a persistent switch is a vendor BIOS attribute. BIOS attributes are
+the `Attributes` of the resource the system's `Bios` link names, passed
+verbatim and never interpreted. A setting is written to the resource's
+`@Redfish.Settings.SettingsObject` when it publishes one, and to the resource
+itself otherwise. Every resource is reached through the BMC's own links, never
+a path built from another. `SecureBootCurrentBoot` is neither required nor
+recorded; `ResetKeys` and `SecureBootMode` are never touched. A value equals
+the declared one only in both type and value, so `true` never matches `1`.
+
+**Sequence.** Each step runs only once the one before it holds:
+
+1. The [target proof](#physical-machine-realization) holds: identity, the
+   complete MAC set, the pin and power `Off`. Nothing is written before it.
+2. The step reads the system, its Secure Boot and BIOS resources and the
+   SettingsObject each links, and compares every declared field with both its
+   current value and any pending value, because the next reset applies the
+   pending one: a declared field whose pending value differs from the
+   declaration is a difference. When none differs it changes nothing. Under `mode: prove` it stops here, and any difference or
+   unpublished resource refuses `firmware-setting-mismatch`.
+3. Under `enforce` it refuses `firmware-setting-not-applied` before any write
+   when its own system read does not report `PowerState: Off`, a resource or
+   SettingsObject it needs is unpublished, an advertised
+   `@Redfish.AllowableValues` excludes a declared value, or the
+   SettingsObject holds a pending attribute the Machine does not declare whose
+   value differs from the current one, because a reset would apply another
+   party's change.
+4. It sets the one-time override `BootSourceOverrideTarget: BiosSetup`,
+   `BootSourceOverrideEnabled: Once` and reads it back, so the power-on that
+   applies the settings stops in firmware setup rather than booting the
+   operator's disk. An unproved override refuses before any further write.
+5. It patches `Boot.BootSourceOverrideMode` when it differs, then the Secure
+   Boot target, then the BIOS SettingsObject. Each PATCH carries `If-Match`
+   from a fresh read; `@Redfish.SettingsApplyTime` asks for `OnReset` only
+   where the SettingsObject advertises it; a task the BMC answers with is
+   polled; and the pending read-back must show the declared values.
+6. A fresh system read must still report the one-time override and power
+   `Off`, and both resets must resolve to a type the controller accepts, at a
+   target on the BMC's own endpoint, or it refuses without any power request.
+   It also refuses, with the machine still `Off`, once the share of the
+   [bound](#identity-and-power-operations) before the power-on, measured on a
+   monotonic clock from the step's start, is spent: the writes took longer
+   than their share. It then powers the machine on, polls to `On`, and polls
+   the BIOS and Secure Boot resources until the declared values read back or
+   the bound is spent.
+7. Whatever happened once the power-on was sent, it sends `ForceOff` and
+   polls to `Off`, since a power-on may land whatever a read showed; no failed
+   read skips it. A `ForceOff` answered 400 or 409 passes only when a fresh
+   read then shows `Off`; one refused with any other status is still polled
+   and passes on an `Off` read; a poll that spends its share has not proved
+   it off.
+8. It reads again and proves every declared field; any difference refuses
+   `firmware-setting-not-applied`.
+9. When the step changed anything, `pre_boot` repeats the whole target proof,
+   and the TPM proof reads that fresh answer, so an attribute that enables the
+   TPM counts.
+
+Every poll of the step, the boot selection's, each task's, `On`, the settings
+and `Off`, stops at its wall-clock share of the bound: its pauses and the reads
+of its last round at the request timeout. Each read's socket timeout is cut to
+the share left, which bounds each socket operation but not a whole answer, so
+a BMC that trickles a response, or a name that resolves slowly, can still
+outlast a share; the run deadline then ends the step.
+
+A SIGTERM sent to the step while it enforces is only recorded. The poll under
+way ends at its next read or pause as a spent share would, no further write
+or power-on is sent, a machine the step powered on is still forced off and
+polled to `Off`, and the step reports `firmware-setting-not-applied` because
+it was asked to stop, with any power-off failure. A run deadline or a
+cancellation ends the step through its supervisor's kill, which the step
+cannot intercept ([B881](milestones/backlog.md#b881)), and leaves the machine unproved, possibly on in firmware
+setup: as for a `firmware-setting-not-applied` machine not proved off,
+`bootwright machine stop --context <context> --name <machine> --force` stops
+it before the continuation.
+
+`boot_media`'s later override names no mode, so the declared one stands. A
+refusal names the declared field paths and the BMC's
+`@Redfish.Settings.Messages` or task `MessageId`s, never a reported value. A
+PATCH the BMC answers with HTTP 400 refuses carrying its `MessageId`; a read
+the BMC does not answer before any write, and a 401 or 403, keep the client's
+own rules ([adapter boundary](#adapter-boundary)); once a write was sent, any
+failure, a refused certificate included, refuses
+`firmware-setting-not-applied` and keeps the power-off outcome: only that
+poll or fresh read proves the machine off, and a refused certificate ends it.
+
+**Power.** This is the only bare-metal step that powers an operator-owned
+machine on. It finds the machine off, starts it only into firmware setup and
+leaves it off, so it powers off only what it powered on.
+
+**Ownership.** Firmware settings are set-only: no removal of the block, no
+destroy and no erase reverts them, they are no part of the
+[claim](#physical-machine-realization), and the claim's evidence and
+observation are unchanged. An `enforce` block's write is authorized by the
+installation's `data-loss`
+([physical disk safety](state-reconciliation.md#physical-disk-safety)). Bootwright
+itself never clears a physical TPM; an authored attribute that clears or
+disables one is the operator's explicit native instruction.
+
+**Measurement.** Every write precedes the installer's first TPM seal, so no
+later apply moves a sealed disk's measurements. A block changed after
+installation reaches the machine only through destroy and a fresh
+installation, because a context continues its frozen plan. An installation
+that fails after a write leaves the system already on the disk measured
+differently; the consumed `data-loss` acknowledges that.
+
+**Recovery.** Either refusal leaves the attempt
+[unknown](state-reconciliation.md#attempts-and-unknown-outcomes). A
+continuing apply reads and compares first, so an unproved write converges and
+is never repeated blind. A refusal after the setup override leaves the
+machine off with that one-time override, and any pending SettingsObject the
+step wrote, in place: both apply at the machine's next boot, whoever starts it.
+
+These rules are proved in-tree; no BMC's firmware behavior is claimed, and
+[B78](milestones/m1.md#b78) qualifies them on hardware.
 
 ## KubeVirt machine realization
 
@@ -894,7 +1024,17 @@ eight distinct device candidates; an inventory over either bound refuses
 without reporting media absent. Hardware inspection admits at most 64
 interface members and otherwise reports an incomplete inventory without
 reading a partial set. The physical pre-boot read budget is therefore 33
-minutes at the per-request timeout. The separate 30-minute boot phase budget
+minutes at the per-request timeout. `BaremetalFirmwareBound`, 74 minutes 30
+seconds, bounds a pre-boot that carries an `enforce`
+[firmware block](#physical-firmware): that read budget for the repeated target
+proof; the 22 minutes 30 seconds before the power-on, after which the step
+refuses to power on, which are 27 requests outside polls, the 1 minute 30
+seconds the boot-selection poll stops at and the 2 minutes 30 seconds each of
+three PATCH task polls stops at; then the power-on, the `ForceOff` and the
+final proof's four reads, the 2 minutes 30 seconds each of the `On` and `Off`
+polls stops at, and the 11 minutes the settings poll stops at. An
+installation's media margin and a cluster node's boot share add it for such a
+Machine. The separate 30-minute boot phase budget
 can still expire on slow responses, leaving the attempt unknown; these bounds
 are execution ceilings, not a promise that a native BMC completes.
 
@@ -1097,8 +1237,9 @@ arms use the same roles, requests and evidence.
 Each substrate's machine role also publishes eight entry points that
 consumers compose by qualified role name and entry-point key, each validated
 by the role's argument specification before its first task: `pre_boot`
-proves the exact target immediately before destructive media is inserted,
-`boot_media` boots from inserted media, `boot_disk` boots the installed disk,
+proves the exact target immediately before destructive media is inserted
+and, given a firmware declaration, applies or proves it
+([physical firmware](#physical-firmware)), `boot_media` boots from inserted media, `boot_disk` boots the installed disk,
 `identity_read` performs the identity read above, `state_read` reads the
 power state and whether the media presented is the consumer's own, another
 or none, `media_insert` presents an image, from the published address on a
@@ -1117,7 +1258,7 @@ The state entry point returns normalized power and media classifications beside
 the native observation its existing consumers use; an unreadable probe remains
 unknown. A requested physical TPM proof accepts only an enabled TPM 2.0 in the
 BMC's `TrustedModules` inventory and otherwise names `tpm-absent` before
-any image is inserted.
+any image is inserted. The TPM proof reads the system after any firmware step.
 
 The bare-metal entry points that reach the BMC also take the
 path of its trust-bundle material, empty when it declares none.
@@ -1144,7 +1285,16 @@ destroy, correcting that address if it names another BMC, the same
 context update and apply, so the machine is proved again; and
 `machine-running`, on either arm, remedied by stopping it with
 `bootwright machine stop --context <context> --name <machine>`, then running
-the refusing apply's continuation. That continuation is the exact command the
+the refusing apply's continuation; `firmware-setting-mismatch`, a
+`mode: prove` [firmware block](#physical-firmware) the machine does not match,
+remedied by setting the declared values through the BMC, then running the
+continuation or, to have Bootwright set them, by the same destroy, setting
+`firmware.mode: enforce`, the same context update and apply; and
+`firmware-setting-not-applied`, an `enforce` block the BMC refused or did not
+apply, remedied by reading the BMC's message in the attempt's retained output
+and correcting the cause through the BMC, then running the continuation or, to
+correct the declaration instead, by the same destroy, context update and
+apply. That continuation is the exact command the
 lifecycle hands the attempt, `bootwright apply --context <context>` with every
 `--authorize` token its frozen plan consumes, and the plain apply when the
 attempt carries none; the apply after a destroy plans anew and names its own

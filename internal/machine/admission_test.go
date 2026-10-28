@@ -630,3 +630,29 @@ func TestAnacondaInstallationRequiresAStaticIPv4Address(t *testing.T) {
 		t.Fatalf("an ambiguous install address refused %#v, want its ambiguity alone", found)
 	}
 }
+
+func TestAMachineKindDefaultCannotDeclareFirmware(t *testing.T) {
+	const field = "$.spec.substrate.baremetal.firmware"
+	partial := object(api.Machine, "", m("substrate", m("baremetal", m("firmware", m("secureBoot", true)))))
+	issues := ValidatePartial(partial, api.Catalog{})
+	if len(issues) != 1 || issues[0] != (api.Issue{Code: "api.invariant", Field: field,
+		Message: "firmware is per-Machine intent and never a kind default", Remediation: "declare substrate.baremetal.firmware on each Machine that needs it"}) {
+		t.Fatalf("a firmware kind default: %+v", issues)
+	}
+	if issues := ValidatePartial(object(api.Machine, "", m("substrate", m("baremetal", m("bmc", m("tls", m("verify", true)))))), api.Catalog{}); mentions(issues, field) {
+		t.Fatalf("a default without firmware was refused: %+v", issues)
+	}
+}
+
+func TestFirmwareOnALibvirtProviderRefusesAtTheArm(t *testing.T) {
+	lab := libvirtLab(list(m("name", "enp1s0", "type", "ethernet")))
+	attached := installOn("192.0.2.11/24")
+	arm := m("providerRef", "lab", "baremetal", m("bmc", m("address", "https://bmc.example.test/redfish/v1/Systems/1", "credentialsRef", "bmc"), "firmware", m("secureBoot", true)))
+	machine := attached.WithSpec(attached.Spec().With("substrate", arm))
+	mismatch := api.Issue{Code: "api.invariant", Field: "$.spec.substrate.baremetal",
+		Message:     "the Machine's substrate arm baremetal does not match the libvirt arm of its provider InfraProvider/lab",
+		Remediation: "move the fields of spec.substrate.baremetal to spec.substrate.libvirt on Machine/guest, or select a provider with the baremetal arm"}
+	if issues := admission(machine, lab...); !slices.Contains(issues, mismatch) {
+		t.Fatalf("firmware on a libvirt provider: %#v", issues)
+	}
+}

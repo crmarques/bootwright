@@ -174,6 +174,9 @@ func ValidateAuthored(o api.Object, _ api.Catalog) []api.Issue {
 }
 
 func Validate(o api.Object, c api.Catalog) []api.Issue {
+	if o.Kind() == api.Machine {
+		return validateFirmware(o)
+	}
 	if o.Kind() != api.InfraProvider {
 		return nil
 	}
@@ -524,6 +527,91 @@ func findNamed(values api.Value, key, name string) (api.Value, bool) {
 		}
 	}
 	return found, count == 1
+}
+
+func validateFirmware(o api.Object) []api.Issue {
+	block := o.Spec().Get("substrate", ArmBaremetal, "firmware")
+	if !block.Present() {
+		return nil
+	}
+	path := "$." + FirmwarePath
+	refuse := func(field, message, remediation string) api.Issue {
+		return api.Issue{Code: "api.invariant", Field: field, Message: message, Remediation: remediation}
+	}
+	issues := []api.Issue{}
+	if !block.Has("secureBoot") && !block.Has("bootMode") && !block.Has("biosAttributes") {
+		issues = add(issues, refuse(path, "a firmware block must declare secureBoot, bootMode or biosAttributes", "set one of "+FirmwarePath+".secureBoot, bootMode or biosAttributes, or remove "+FirmwarePath))
+	}
+	if !MachineBMC(o).Present() {
+		issues = add(issues, refuse(path, "firmware settings are applied through the Machine's BMC and none is declared", "declare "+BMCPath+" beside "+FirmwarePath+", or remove "+FirmwarePath))
+	}
+	if o.Spec().Get("os", "provided").Bool() {
+		issues = add(issues, refuse(path, "an OS-ready Machine is not installed by Bootwright, so nothing applies its firmware block", "remove "+FirmwarePath+", or set os.provided: false so Bootwright installs the Machine"))
+	}
+	attributes := block.Get("biosAttributes")
+	if !attributes.Present() {
+		return issues
+	}
+	field := path + ".biosAttributes"
+	entries := attributes.Fields()
+	if len(entries) < 1 || len(entries) > FirmwareAttributes {
+		issues = add(issues, refuse(field, fmt.Sprintf("biosAttributes must declare 1 to %d entries, not %d", FirmwareAttributes, len(entries)), "declare between 1 and "+fmt.Sprint(FirmwareAttributes)+" BIOS attributes, or remove biosAttributes"))
+	}
+	for index, entry := range entries {
+		at := fmt.Sprintf("%s entry %d (%s)", field, index+1, quotedName(entry.Name))
+		if !firmwareAttributeName(entry.Name) {
+			issues = add(issues, refuse(field, fmt.Sprintf("%s: a name must start with a letter and hold 2 to %d letters, digits or underscores", at, FirmwareNameBytes), "rename the attribute to the exact name the BMC publishes in its Bios Attributes"))
+		} else if strings.Contains(strings.ToLower(entry.Name), "password") {
+			issues = add(issues, refuse(field, at+": a firmware password is secret material and never desired state", "remove the attribute and set the password through the BMC's own interface"))
+		}
+		switch value := entry.Value; value.Type() {
+		case api.String:
+			if !firmwareString(value.Text()) {
+				issues = add(issues, refuse(field, fmt.Sprintf("%s: a string value must be at most %d bytes of printable ASCII", at, FirmwareStringBytes), "shorten the value or remove control and non-ASCII characters"))
+			}
+		case api.Integer:
+			if _, ok := value.Int64(); !ok {
+				issues = add(issues, refuse(field, at+": an integer value must fit in 64 bits", "use an integer between -9223372036854775808 and 9223372036854775807"))
+			}
+		case api.Boolean:
+		default:
+			issues = add(issues, refuse(field, at+": a value must be a string, an integer or a boolean", "declare the attribute as a string, an integer or a boolean, not a null, a float, a list or a map"))
+		}
+	}
+	return issues
+}
+
+func quotedName(name string) string {
+	if len(name) > 40 {
+		name = name[:40] + "..."
+	}
+	return fmt.Sprintf("%q", name)
+}
+
+func firmwareAttributeName(name string) bool {
+	if len(name) < 2 || len(name) > FirmwareNameBytes {
+		return false
+	}
+	for index := 0; index < len(name); index++ {
+		character := name[index]
+		letter := character >= 'a' && character <= 'z' || character >= 'A' && character <= 'Z'
+		if !letter && (index == 0 || character != '_' && (character < '0' || character > '9')) {
+			return false
+		}
+	}
+	return true
+}
+
+func firmwareString(value string) bool {
+	if len(value) > FirmwareStringBytes {
+		return false
+	}
+	for index := 0; index < len(value); index++ {
+		if value[index] < 0x20 || value[index] > 0x7e {
+			return false
+		}
+	}
+	return true
 }
 
 func issue(field, message string) api.Issue {

@@ -147,8 +147,23 @@ def test_each_proof_reaches_the_nodes_own_controller_with_its_own_credential(tmp
         assert (rendered["user"], rendered["password"]) == (
             "/run/bootwright/bmc-user-metal-02", "/run/bootwright/bmc-password-metal-02"), arm
         assert set(rendered) == {"endpoint", "verify", "user", "password", "ca", "expected",
-                                 "pinned_uuid_base64", "pinned_serial_base64", "require_tpm"}, arm
+                                 "pinned_uuid_base64", "pinned_serial_base64", "require_tpm", "firmware"}, arm
         assert rendered["ca"] == "/run/bootwright/bmc-ca-metal-02"
+
+
+# A node's frozen firmware block reaches its proof whole, as the dict the
+# request froze, and a node that declares none hands its proof an empty one
+# (specs/substrates.md, Physical firmware).
+def test_a_nodes_frozen_firmware_reaches_its_proof_whole(tmp_path):
+    task, _parents = proof("baremetal")
+    declared = task["vars"]["bootwright_machine_port"]["firmware"]
+    firmware = {"mode": "enforce", "secureBoot": True, "bootMode": "UEFI", "biosAttributes": [
+        {"name": "AcPwrRcvryUserDelay", "boolean": False}, {"name": "PowerCycleDelay", "integer": 5},
+        {"name": "ProcVirtualization", "string": "Enabled"}]}
+    frozen = dict(node(), firmware=firmware)
+    # JSON compares type as well as value, so False never passes for 0.
+    assert json.dumps(rendering(tmp_path, frozen).template(declared), sort_keys=True) == json.dumps(firmware, sort_keys=True)
+    assert json.dumps(rendering(tmp_path, node()).template(declared), sort_keys=True) == json.dumps({}, sort_keys=True)
 
 
 # Each node reads only the pin under its own position in the frozen order, and

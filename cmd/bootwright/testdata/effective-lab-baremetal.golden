@@ -55,6 +55,10 @@ spec:
       nics:
         - nicRef: eno1
           macAddress: 52:54:00:9a:1b:01
+      firmware:
+        mode: prove
+        secureBoot: true
+        bootMode: UEFI
   hardware:
     nics:
       - name: eno1

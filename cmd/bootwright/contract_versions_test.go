@@ -221,10 +221,10 @@ func automationFormats() map[string]automationFormat {
 		"machine-libvirt-v8":        {class: formatMirrored},
 		"machine-baremetal-v2":      {class: formatMirrored},
 		"os-package-tree-v1":        {class: formatMirrored},
-		"os-install-anaconda-v19":   {class: formatMirrored},
-		"physical-erase-v4":         {class: formatMirrored},
+		"os-install-anaconda-v20":   {class: formatMirrored},
+		"physical-erase-v5":         {class: formatMirrored},
 		"cluster-media-agent-v9":    {class: formatMirrored},
-		"cluster-install-agent-v8":  {class: formatMirrored},
+		"cluster-install-agent-v9":  {class: formatMirrored},
 		"artifact-server-nginx-v2":  {class: formatMirrored},
 		"managed-service-v4":        {class: formatMirrored},
 		// Power is no plan block: each run binds its request to the power

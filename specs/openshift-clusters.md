@@ -159,6 +159,9 @@ and a cluster takes the smallest fan-out among its nodes. With the budgets
 below a cluster fits the 6-hour ceiling with up to 28 nodes behind emulated
 BMCs, and with `16 × floor(9,000 / (1,800 + m))` physical nodes, where
 `m` is the physical round margin, at least 32 while `m` is at most 45 minutes.
+Each round that boots a node whose Machine declares `enforce`
+[firmware](substrates.md#physical-firmware) adds that arm's firmware bound to
+the boot budget, at most one per round, so fewer such nodes fit.
 A larger cluster refuses before registration, naming its deadline and how many
 nodes fit.
 
@@ -578,7 +581,9 @@ its target: a machine the substrate created by its BMC answering with
 the machine off, and a physical node against the declared NICs its install
 request froze and the identity its Machine's
 [bare-metal block pinned](substrates.md#physical-machine-realization) earlier in
-the same operation. A node that fails the proof is neither presented the image
+the same operation; its Machine's declared
+[firmware](substrates.md#physical-firmware) is applied or proved there. A node
+that fails the proof is neither presented the image
 nor booted. Then the image is presented through the node's `media_insert`, the
 published image on a fetching arm and the image file on a pushing one, the
 substrate applies whatever boot selection its machine needs, and the machine is
@@ -726,9 +731,10 @@ part of the wait's budget, and the installation's deadline covers it.
 time by a budget its frozen request carries, never by a value the adapter
 chooses: the media request's build budget of 1,800 seconds, and the install
 request's boot budget, the per-round boot allowance of its slowest arm for each
-round of its fan-out, never less than 900 seconds, and its bootstrap and
-installation wait budgets of 5,400 seconds each. A round's allowance is 600
-seconds behind emulated BMCs and 1,800 behind physical ones; the
+fan-out round, never less than 900 seconds, plus [firmware](#cluster-size),
+and its bootstrap and installation wait budgets of 5,400 seconds each. A
+round's allowance is 600 seconds behind emulated BMCs, 1,800 behind physical
+ones; the
 KubeVirt and vSphere arms publish theirs. The image build runs
 under `timeout` with the build budget and the same grace; a build the budget
 stopped fails the media block as the budget spent, publishes nothing, and is

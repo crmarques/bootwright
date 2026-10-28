@@ -139,6 +139,7 @@ type Target struct {
 	// erase, exactly as the Machine declares them. Which of them an
 	// installation can carry is that installation's own rule.
 	RootDeviceHints RootDeviceHints
+	Firmware        *Firmware
 	// PlacementMachine is the Machine whose host reaches the controller.
 	PlacementMachine api.Object
 }
@@ -185,7 +186,7 @@ func authoredTarget(catalog api.Catalog, machine api.Object, controllerMachine s
 		return Target{}, refusal("api.reference", "the Environment's controller Machine is not in the selected graph",
 			"declare it or correct spec.controller.machineRef")
 	}
-	return Target{Physical: true, Delivery: DeliveryFetch, Port: ArmBaremetal, Controller: controller, PlacementMachine: host}, nil
+	return Target{Physical: true, Delivery: DeliveryFetch, Port: ArmBaremetal, Controller: controller, Firmware: MachineFirmware(machine), PlacementMachine: host}, nil
 }
 
 // authoredController reads the management controller a Machine declares. It is
@@ -293,6 +294,7 @@ func physicalTarget(catalog api.Catalog, provider, machine api.Object, controlle
 	}
 	target.Interfaces = interfaces
 	target.RootDeviceHints = rootDeviceHints(machine)
+	target.Firmware = MachineFirmware(machine)
 	target.PlacementMachine = host
 	return target, nil
 }

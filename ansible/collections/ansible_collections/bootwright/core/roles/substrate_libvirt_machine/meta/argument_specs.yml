@@ -105,6 +105,10 @@ argument_specs:
             type: str
           require_tpm:
             type: bool
+          # Admitted for the port's parity and refused when not empty: this
+          # substrate applies no firmware settings.
+          firmware:
+            type: dict
       substrate_libvirt_machine_target_endpoint:
         type: str
         required: true

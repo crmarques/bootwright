@@ -271,6 +271,7 @@ Alias cell.
 | [B872](#b872) | new, 2026-10-28 (lane V1) | defect | Storage | An NVMe-oF service with no pool refuses at plan | Pre-existing gap found by lane V1 |
 | [B873](#b873) | new, 2026-10-28 (lane V1) | defect | Storage | The plan builder's replica refusal names no distribution | Pre-existing wording found by lane V1 |
 | [B877](#b877) | new, 2026-10-28 (D190) | product | Managed OS, with Secrets | A managed registration with a Satellite or Capsule, and an update within the release from its content | D190 authorizes only the hosted subscription service; Satellite registration needs its trust, ownership and removal defined |
+| [B881](#b881) | new, 2026-10-28 (X190 review) | safety | State reconciliation, with Substrate | A cancelled or deadline-ended firmware power cycle still forces its machine off | The adapter supervisor kills the worker with no grace; a grace changes every adapter's termination |
 
 ### B82
 
@@ -2981,6 +2982,19 @@ managed registration with a Satellite or Capsule, updated within the declared
 release from its content. **Exit evidence:** ownership, replay and removal
 tests and an operator-run rehearsal against a Satellite.
 
+### B881
+
+**Owner:** State reconciliation, with Substrate. **Kind:** safety.
+**Requires:** [B880](m1.md#b880). **Definition:** Needs definition: whether
+the adapter supervisor signals its descendants and grants a bounded grace
+before its kill, and how that grace enters every deadline. Today a run
+deadline or cancellation during the [firmware](../substrates.md#physical-firmware)
+power cycle kills the worker before its ForceOff, leaving the machine
+unproved, possibly on in firmware setup; the refusal's remedy stops it.
+**Outcome:** the cycle's ForceOff is sent and polled after a cancellation or
+deadline. **Exit evidence:** a supervisor test that cancels during the cycle
+and observes the ForceOff.
+
 ## Audit remediation (2026-10-26)
 
 The [2026-10-26 spec audit](../../audits/spec/2026-10-26.md) ordered its
@@ -5088,3 +5102,21 @@ the pre-existing defect that no code reads `spec.os.version`. Satellite
 registration is not authorized and is parked as [B877](#b877). The operator
 chooses repository IDs and update streams; no rule pairs a minor with a
 stream ([D163](#d163)).
+
+### D191
+
+**owner** (2026-10-28, the owner's request about BMC firmware settings). The
+request: "Does it already support communicating with bmc to setup necessary
+flags in machine before initiating installation in fips mode? That question
+can be expanded for any rhel machine too", then, after the session's plan, "Ok.
+Let's implement all recommendations in this session." It accepts: a
+bare-metal Machine declares Secure Boot, a UEFI-only boot mode and verbatim
+BIOS attributes in `spec.substrate.baremetal.firmware`; the managed-OS and
+cluster installations apply or prove them in the bare-metal pre-boot step
+before media insert, under their `data-loss`, set-only and never reverted. The
+session's refinements under that instruction are `delegated`: `mode: prove`
+replaces the planned `proveOnly` boolean, and the block is never a kind
+default. This authorizes [B880](m1.md#b880) as slice X190 on M1 alone, out of
+sequence; the contract is [physical firmware](../substrates.md#physical-firmware).
+The operator chooses attribute names and values; no rule pairs them with a
+vendor or firmware version ([D163](#d163)).

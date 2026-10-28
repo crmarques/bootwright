@@ -177,3 +177,87 @@ def test_the_same_strings_unmarked_are_rendered(recorded, fixture):
     for name, text in FIXTURES[fixture]["rendered"].items():
         assert rendered[name] == text, rendered
     assert rendered["pipe"].startswith("uid="), rendered
+
+
+# A Machine's firmware declaration reaches the bare-metal firmware step as the
+# runner wrote it: the role's own alias, argument spec and module argument,
+# read from the role, hand the dict whole, so a BIOS attribute string holding
+# Jinja arrives verbatim beside its typed neighbours.
+ROLE = COLLECTIONS / "ansible_collections" / "bootwright" / "core" / "roles" / "substrate_baremetal_machine"
+ECHOED_FIRMWARE = """#!/usr/bin/python
+from __future__ import annotations
+import json
+from ansible.module_utils.basic import AnsibleModule
+module = AnsibleModule(argument_spec={"firmware": {"type": "dict", "required": True}, "path": {"type": "path", "required": True}})
+with open(module.params["path"], "w", encoding="utf-8") as stream:
+    stream.write(json.dumps(module.params["firmware"]))
+module.exit_json(changed=True)
+"""
+FIRMWARE = {"mode": "enforce", "secureBoot": True, "biosAttributes": [
+    {"name": "Banner", "string": PIPE}, {"name": "Cores", "integer": 8}, {"name": "Tpm", "boolean": False},
+    {"name": "Largest", "integer": (1 << 63) - 1}, {"name": "Smallest", "integer": -(1 << 63)}]}
+
+
+def typed(value):
+    """A value's JSON text, which tells 8 from 8.0, "8" and True apart."""
+    return json.dumps(value, sort_keys=True)
+
+
+def marked(value):
+    """A document as both runners write one: every string an __ansible_unsafe object."""
+    if isinstance(value, str):
+        return {"__ansible_unsafe": value}
+    if isinstance(value, dict):
+        return {key: marked(item) for key, item in value.items()}
+    if isinstance(value, list):
+        return [marked(item) for item in value]
+    return value
+
+
+def firmware_play(work, unsafe):
+    import yaml
+
+    specs = yaml.safe_load((ROLE / "meta" / "argument_specs.yml").read_text())["argument_specs"]["pre_boot"]["options"]
+    defaults = yaml.safe_load((ROLE / "defaults" / "main.yml").read_text())
+    tasks = yaml.safe_load((ROLE / "tasks" / "firmware.yml").read_text())
+    [call] = [task for task in tasks if "bootwright.core.redfish_firmware" in task]
+    alias = "substrate_baremetal_machine_target_firmware"
+    role = work / "roles" / "probe"
+    for part in ("meta", "tasks", "defaults"):
+        (role / part).mkdir(parents=True)
+    options = {"bootwright_machine_port": {"type": "dict", "required": True, "options": {
+        "firmware": specs["bootwright_machine_port"]["options"]["firmware"]}}, alias: specs[alias]}
+    (role / "meta" / "argument_specs.yml").write_text(json.dumps({"argument_specs": {"main": {
+        "short_description": "probe", "options": options}}}))
+    (role / "defaults" / "main.yml").write_text(json.dumps({alias: defaults[alias]}))
+    record = work / "firmware.json"
+    (role / "tasks" / "main.yml").write_text(json.dumps([{"name": "echo", "echoed_firmware": {
+        "firmware": call["bootwright.core.redfish_firmware"]["firmware"], "path": str(record)}}]))
+    (work / "library").mkdir()
+    (work / "library" / "echoed_firmware.py").write_text(ECHOED_FIRMWARE)
+    (work / "play.yml").write_text(json.dumps([{
+        "hosts": "localhost", "gather_facts": False, "connection": "local",
+        "vars": {"ansible_python_interpreter": sys.executable},
+        "tasks": [{"name": "probe", "ansible.builtin.include_role": {"name": "probe"}}]}]))
+    document = {"bootwright_machine_port": {"firmware": FIRMWARE}}
+    (work / "request.json").write_text(json.dumps(marked(document) if unsafe else document))
+    (work / "ansible.cfg").write_text("")
+    environment = dict(os.environ, ANSIBLE_CONFIG=str(work / "ansible.cfg"), ANSIBLE_HOME=str(work / "home"),
+                       ANSIBLE_LOCAL_TEMP=str(work / "local"), ANSIBLE_COLLECTIONS_PATH=str(COLLECTIONS),
+                       ANSIBLE_NOCOLOR="1", ANSIBLE_FORCE_COLOR="0", LC_ALL="C.UTF-8")
+    ran = subprocess.run(
+        [sys.executable, "-m", "ansible.cli.playbook", "-i", "localhost,", "--extra-vars", "@" + str(work / "request.json"),
+         str(work / "play.yml")],
+        stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, env=environment, cwd=str(work), check=False)
+    assert ran.returncode == 0, ran.stdout.decode()
+    return json.loads(record.read_text(encoding="utf-8"))
+
+
+def test_a_bios_attribute_string_reaches_the_firmware_step_verbatim(tmp_path):
+    assert typed(firmware_play(tmp_path, unsafe=True)) == typed(FIRMWARE)
+
+
+def test_the_same_attribute_string_unmarked_is_rendered(tmp_path):
+    rendered = firmware_play(tmp_path, unsafe=False)
+    assert rendered["biosAttributes"][0]["string"].startswith("uid="), rendered
+    assert typed(rendered["biosAttributes"][1:]) == typed(FIRMWARE["biosAttributes"][1:])

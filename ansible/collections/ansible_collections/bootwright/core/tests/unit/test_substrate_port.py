@@ -112,7 +112,8 @@ OPTIONS = {
         "pre_boot": dict(access(BAREMETAL + "_target", bundled=True), **{
             BAREMETAL + "_target_expected": ("list", True, "str"),
             BAREMETAL + "_target_pinned_uuid_base64": ("str", True, None),
-            BAREMETAL + "_target_pinned_serial_base64": ("str", True, None)}),
+            BAREMETAL + "_target_pinned_serial_base64": ("str", True, None),
+            BAREMETAL + "_target_firmware": ("dict", False, None)}),
         "boot_media": access(BAREMETAL + "_boot", bundled=True),
         "boot_disk": dict(access(BAREMETAL + "_disk", bundled=True), **{BAREMETAL + "_disk_power_on": ("bool", True, None)}),
         "identity_read": identity(BAREMETAL + "_identity", ("address", "user", "file", "key", "marker_path", "work")),
@@ -361,6 +362,7 @@ def test_each_machine_role_declares_exactly_the_port_beside_its_lifecycle(arm):
                 expected["bootwright_machine_identity"] = ("dict", False, None)
             if arm == "baremetal" and entry == "pre_boot":
                 expected[BAREMETAL + "_target_require_tpm"] = ("bool", False, None)
+                expected[BAREMETAL + "_target_firmware"] = ("dict", False, None)
             assert found == expected, entry
         else:
             assert found == {"bootwright_machine_port": ("dict", True, None)}

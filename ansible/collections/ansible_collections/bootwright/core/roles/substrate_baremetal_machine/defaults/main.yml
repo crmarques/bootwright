@@ -37,6 +37,7 @@ substrate_baremetal_machine_target_expected: "{{ bootwright_machine_port.expecte
 substrate_baremetal_machine_target_pinned_uuid_base64: "{{ bootwright_machine_port.pinned_uuid_base64 | default('') }}"
 substrate_baremetal_machine_target_pinned_serial_base64: "{{ bootwright_machine_port.pinned_serial_base64 | default('') }}"
 substrate_baremetal_machine_target_require_tpm: "{{ bootwright_machine_port.require_tpm | default(false) }}"
+substrate_baremetal_machine_target_firmware: "{{ bootwright_machine_port.firmware | default({}) }}"
 
 substrate_baremetal_machine_boot_endpoint: "{{ bootwright_machine_port.endpoint }}"
 substrate_baremetal_machine_boot_ca: "{{ bootwright_machine_port.ca }}"

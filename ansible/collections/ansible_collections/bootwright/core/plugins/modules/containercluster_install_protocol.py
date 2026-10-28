@@ -29,7 +29,10 @@ options:
       - The refusal of a node's pre-boot proof a refused phase names to the
         runner before the run fails, which the runner reports as the
         installation's own diagnostic for that node's Machine. One of
-        C(hardware-mismatch), C(identity-mismatch) or C(machine-running).
+        C(hardware-mismatch), C(identity-mismatch), C(machine-running),
+        C(tpm-absent), C(firmware-setting-mismatch) for declared firmware
+        settings a proof found different, or C(firmware-setting-not-applied)
+        for declared settings the firmware step did not apply.
     type: str
     required: false
   node:

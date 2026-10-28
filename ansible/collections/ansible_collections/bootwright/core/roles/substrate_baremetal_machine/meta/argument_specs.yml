@@ -87,8 +87,14 @@ argument_specs:
             type: str
           require_tpm:
             type: bool
+          # The Machine's frozen firmware declaration, handed to the firmware
+          # step whole; empty when it declares none.
+          firmware:
+            type: dict
       substrate_baremetal_machine_target_require_tpm:
         type: bool
+      substrate_baremetal_machine_target_firmware:
+        type: dict
       substrate_baremetal_machine_target_endpoint:
         type: str
         required: true

@@ -122,6 +122,9 @@ func installImpacts(verb reconciliation.Verb, request InstallRequest) []string {
 			continue
 		}
 		impacts = append(impacts, "install-cluster "+node.Machine, "power-on "+node.Machine)
+		if node.Firmware.enforced() {
+			impacts = append(impacts, "configure-firmware "+node.Machine)
+		}
 	}
 	slices.Sort(impacts)
 	return slices.Compact(impacts)

@@ -1,0 +1,67 @@
+---
+# Apply or prove the firmware settings this Machine declares, on a machine the
+# target proof just proved off (specs/substrates.md, Physical firmware). The
+# declaration is handed to the module whole, as data: its strings arrive
+# unsafe and are never rendered. Proving only reads; enforcing may power the
+# machine through firmware setup and always powers off what it powered on.
+#
+# The module reports its outcome as data and never fails on it, so the
+# controller's own refusal reaches the operator below, outside no_log. A
+# controller that did not answer before anything was written names no
+# refusal; otherwise the mode's refusal is named before the outcome is judged.
+- name: Apply or prove the declared firmware settings through the controller
+  bootwright.core.redfish_firmware:
+    endpoint: '{{ substrate_baremetal_machine_target_endpoint }}'
+    user: '{{ lookup("ansible.builtin.file", substrate_baremetal_machine_target_user) }}'
+    password: '{{ lookup("ansible.builtin.file", substrate_baremetal_machine_target_password) }}'
+    verify: '{{ substrate_baremetal_machine_target_verify }}'
+    ca_data: >-
+      {{ lookup('ansible.builtin.file', substrate_baremetal_machine_target_ca)
+         if substrate_baremetal_machine_target_ca | length > 0 else '' }}
+    firmware: '{{ substrate_baremetal_machine_target_firmware }}'
+  register: substrate_baremetal_machine_firmware
+  failed_when: false
+  no_log: true
+
+- name: Stop at a firmware step the management controller did not answer
+  ansible.builtin.assert:
+    that:
+      - substrate_baremetal_machine_firmware.msg is not defined
+    fail_msg: >-
+      the firmware settings of the machine at {{ substrate_baremetal_machine_target_endpoint }}
+      were not read, so it must not be installed:
+      {{ (substrate_baremetal_machine_firmware.msg | default('') | string | bootwright.core.printable)[:512] }}
+    quiet: true
+
+- name: Name the firmware comparison as the refusal this proof makes
+  ansible.builtin.set_fact:
+    substrate_baremetal_machine_refusal: firmware-setting-mismatch
+  when: (substrate_baremetal_machine_target_firmware.mode | default('enforce')) == 'prove'
+
+- name: Name the firmware write as the refusal this step makes
+  ansible.builtin.set_fact:
+    substrate_baremetal_machine_refusal: firmware-setting-not-applied
+  when: (substrate_baremetal_machine_target_firmware.mode | default('enforce')) != 'prove'
+
+# The message names the declared field paths, the step's fixed reasons and the
+# controller's message identifiers, never a value the controller reported.
+- name: Refuse firmware settings that do not read as this Machine declares
+  ansible.builtin.assert:
+    that:
+      - (substrate_baremetal_machine_firmware.refusal | default('')) | length == 0
+    fail_msg: >-
+      the machine at {{ substrate_baremetal_machine_target_endpoint }} does not report the
+      firmware settings its Machine declares, so it must not be installed; fields:
+      {{ (((substrate_baremetal_machine_firmware.fields | default([]) | join(', ')) or 'none')
+      | string | bootwright.core.printable)[:512] }};
+      reasons:
+      {{ (((substrate_baremetal_machine_firmware.reasons | default([]) | join('; ')) or 'none')
+      | string | bootwright.core.printable)[:768] }};
+      controller messages:
+      {{ (((substrate_baremetal_machine_firmware.messages | default([]) | join(', ')) or 'none')
+      | string | bootwright.core.printable)[:256] }}
+    quiet: true
+
+- name: Clear the refusal now that the firmware settings are proved
+  ansible.builtin.set_fact:
+    substrate_baremetal_machine_refusal: ''

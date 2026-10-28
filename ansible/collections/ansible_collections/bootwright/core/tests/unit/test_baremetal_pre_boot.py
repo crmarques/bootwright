@@ -72,7 +72,9 @@ def one(found, description):
 
 
 def proof():
-    return loaded(BAREMETAL / "tasks" / "pre_boot.yml")
+    """The target proof pre_boot.yml makes before the firmware step and, when
+    that step changed anything, again after it."""
+    return loaded(BAREMETAL / "tasks" / "target_proof.yml")
 
 
 def asserting(needle, description):
@@ -181,6 +183,23 @@ def test_the_pin_is_compared_after_the_inventory_and_before_the_power_state():
     assert not {"no_log", "when"} & set(pinned())
     for task in (declared(), pinned()):
         assert not {"failed_when", "ignore_errors"} & set(task)
+
+
+INCLUDE_TASKS = "ansible.builtin.include_tasks"
+
+
+def test_the_firmware_step_runs_between_two_target_proofs_and_before_the_tpm_check():
+    tasks = loaded(BAREMETAL / "tasks" / "pre_boot.yml")
+    included = [(index, task[INCLUDE_TASKS]) for index, task in enumerate(tasks) if INCLUDE_TASKS in task]
+    assert [name for _index, name in included] == ["target_proof.yml", "firmware.yml", "target_proof.yml"]
+    tpm = one([index for index, task in enumerate(tasks)
+               if ASSERT in task and "tpm_usable" in json.dumps(task[ASSERT])], "require the TPM")
+    assert included[-1][0] < tpm
+    assert not any(INSPECT in task for task in tasks)
+    again = tasks[included[-1][0]]
+    assert "substrate_baremetal_machine_firmware.changed | default(false) | bool" in again["when"]
+    firmware = loaded(BAREMETAL / "tasks" / "firmware.yml")
+    assert not any(INSPECT in task or INCLUDE_TASKS in task for task in firmware)
 
 
 def test_a_material_value_is_evaluated_when_it_is_read(tmp_path):

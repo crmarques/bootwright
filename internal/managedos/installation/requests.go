@@ -7,6 +7,7 @@ import (
 
 	machineref "github.com/crmarques/bootwright/internal/machine"
 	"github.com/crmarques/bootwright/internal/reconciliation"
+	"github.com/crmarques/bootwright/internal/substrate"
 )
 
 // Identity names the block, context and Machine one request belongs to.
@@ -76,6 +77,22 @@ type Hardware struct {
 	WWN          string      `json:"wwn,omitempty"`
 }
 
+type Firmware struct {
+	BIOSAttributes []BIOSAttribute `json:"biosAttributes,omitempty"`
+	BootMode       string          `json:"bootMode,omitempty"`
+	Mode           string          `json:"mode"`
+	SecureBoot     *bool           `json:"secureBoot,omitempty"`
+}
+
+func (f *Firmware) enforced() bool { return f != nil && f.Mode == substrate.FirmwareModeEnforce }
+
+type BIOSAttribute struct {
+	Boolean *bool   `json:"boolean,omitempty"`
+	Integer *int64  `json:"integer,omitempty"`
+	Name    string  `json:"name"`
+	String  *string `json:"string,omitempty"`
+}
+
 // Target is the realized machine this installation acts on, exactly as the
 // substrate derived it. Everything this contract does differently for one
 // substrate follows from these fields, so the installation reads them and
@@ -89,6 +106,7 @@ type Target struct {
 	// Domain and URI address the hypervisor a guest-agent channel reaches
 	// through, and are absent on every other channel.
 	Domain   string    `json:"domain,omitempty"`
+	Firmware *Firmware `json:"firmware,omitempty"`
 	Hardware *Hardware `json:"hardware,omitempty"`
 	// HostKeyRef names the key pair a delivered-key installation installs as
 	// the machine's own, and is absent on every other channel.
@@ -226,7 +244,7 @@ func (r Request) fips() bool { return slices.Contains(r.InstallerArguments, fips
 // Deadline bounds every run of this request: its budgets back to back, and
 // the margin for everything else an apply does.
 func (r Request) Deadline() time.Duration {
-	deadline := r.Budgets.total() + time.Duration(r.Network.CheckpointSeconds)*time.Second + networkRollbackGrace + machineMediaMargin(r.Target.Substrate)
+	deadline := r.Budgets.total() + time.Duration(r.Network.CheckpointSeconds)*time.Second + networkRollbackGrace + machineMediaMargin(r.Target.Substrate, r.Target.Firmware)
 	if r.Registration != nil {
 		deadline += registrationBound
 	}

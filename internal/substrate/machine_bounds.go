@@ -6,7 +6,7 @@ import "time"
 type MachineBounds struct {
 	ControllerKind                                       string
 	StateRead, PowerRead, MediaInsert, MediaEject, Power time.Duration
-	PreBoot, BootMedia, BootDisk                         time.Duration
+	PreBoot, BootMedia, BootDisk, Firmware               time.Duration
 	NodeMargin, BootAllowance                            time.Duration
 	Fanout                                               int
 }
@@ -30,6 +30,7 @@ const (
 	BaremetalMediaManagers      = 4
 	BaremetalHardwareInterfaces = 64
 	BaremetalPreBootBound       = (BaremetalHardwareInterfaces + 2) * controllerRequestTimeout
+	BaremetalFirmwareBound      = BaremetalPreBootBound + controllerFirmwareWritesBudget + controllerFirmwareCycleRequests*controllerRequestTimeout + 2*controllerPowerOnBudget + controllerFirmwarePollBudget
 	BaremetalMediaCandidates    = 8
 	BaremetalDiscoveryReads     = 2 + 2*BaremetalMediaManagers + BaremetalMediaCandidates
 	BaremetalStateReadBound     = (BaremetalDiscoveryReads + 2) * controllerRequestTimeout
@@ -62,6 +63,7 @@ func MachineBoundsFor(arm string) (MachineBounds, bool) {
 		bounds.MediaEject = BaremetalMediaEjectBound
 		bounds.NodeMargin = BaremetalNodeMargin
 		bounds.PreBoot = BaremetalPreBootBound
+		bounds.Firmware = BaremetalFirmwareBound
 		bounds.BootMedia = ControllerBootSelectionBound + ControllerPowerBound
 	}
 	return bounds, true

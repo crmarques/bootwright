@@ -26,6 +26,7 @@ var nativeEnumFields = map[string]string{
 	"ClusterAddonBinding.spec.packages.acm.hub.tolerations[].operator":                "Kubernetes toleration operators",
 	"Environment.spec.lifecycle.rescue.os.architecture":                               "machine architectures",
 	"InfraProvider.spec.libvirt.uri":                                                  "libvirt connection URIs",
+	"Machine.spec.substrate.baremetal.firmware.bootMode":                              "Redfish boot modes",
 	"MachineInstallProfile.spec.os.architecture":                                      "machine architectures",
 	"OpenShiftCluster.spec.install.additionalTrustBundlePolicy":                       "install-config trust bundle policies",
 	"OpenShiftCluster.spec.install.registries.imageDigestSources[].sourcePolicy":      "image digest source policies",

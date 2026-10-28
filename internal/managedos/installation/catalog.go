@@ -17,7 +17,7 @@ const Implementation = "os-install-anaconda-v1"
 // Kind is shared with the substrate; resolution also requires the implementation.
 const Kind = "Machine"
 
-const requestVersion = "os-install-anaconda-v19"
+const requestVersion = "os-install-anaconda-v20"
 
 // installationBudgets are the waits every installation this build plans
 // freezes. The installer takes minutes to write a disk; a physical server adds
@@ -55,12 +55,16 @@ const mediaMargin = time.Hour + controllerCalls
 const controllerCalls = substrate.LibvirtPreBootBound + substrate.LibvirtMediaInsertBound +
 	substrate.LibvirtBootMediaBound + 2*substrate.LibvirtBootDiskBound + 2*substrate.LibvirtMediaEjectBound
 
-func machineMediaMargin(arm string) time.Duration {
+func machineMediaMargin(arm string, firmware *Firmware) time.Duration {
 	bounds, ok := substrate.MachineBoundsFor(arm)
 	if !ok {
 		return mediaMargin
 	}
-	return time.Hour + bounds.PreBoot + bounds.MediaInsert + bounds.BootMedia + 2*bounds.BootDisk + 2*bounds.MediaEject
+	margin := time.Hour + bounds.PreBoot + bounds.MediaInsert + bounds.BootMedia + 2*bounds.BootDisk + 2*bounds.MediaEject
+	if firmware.enforced() {
+		margin += bounds.Firmware
+	}
+	return margin
 }
 
 // consumerPrefix owns os/<object>/ beneath the artifact server's served root.

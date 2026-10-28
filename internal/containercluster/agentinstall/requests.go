@@ -1,6 +1,7 @@
 package agentinstall
 
 import (
+	"cmp"
 	"slices"
 	"time"
 
@@ -66,6 +67,7 @@ type Node struct {
 	Address        string     `json:"address"`
 	Controller     Controller `json:"controller"`
 	ControllerKind string     `json:"controllerKind"`
+	Firmware       *Firmware  `json:"firmware,omitempty"`
 	// Hardware is what a physical node proves about itself before its boot
 	// erases what it holds. A node its substrate created carries none.
 	Hardware *Hardware `json:"hardware,omitempty"`
@@ -77,6 +79,22 @@ type Node struct {
 	RequireTPM       bool   `json:"requireTPM,omitempty"`
 	StateReadSeconds int    `json:"stateReadSeconds"`
 	Substrate        string `json:"substrate"`
+}
+
+type Firmware struct {
+	BIOSAttributes []BIOSAttribute `json:"biosAttributes,omitempty"`
+	BootMode       string          `json:"bootMode,omitempty"`
+	Mode           string          `json:"mode"`
+	SecureBoot     *bool           `json:"secureBoot,omitempty"`
+}
+
+func (f *Firmware) enforced() bool { return f != nil && f.Mode == substrate.FirmwareModeEnforce }
+
+type BIOSAttribute struct {
+	Boolean *bool   `json:"boolean,omitempty"`
+	Integer *int64  `json:"integer,omitempty"`
+	Name    string  `json:"name"`
+	String  *string `json:"string,omitempty"`
 }
 
 // Hardware is the complete set of NICs a physical node must report, in the
@@ -197,11 +215,26 @@ var mediaBudgets = MediaBudgets{BuildSeconds: 1800}
 
 const minBootSeconds = 900
 
-func installBudgets(nodes int, arms ...string) InstallBudgets {
+func installBudgets(nodes int, enforced []string, arms ...string) InstallBudgets {
 	fanout, allowance, margin := substrate.ClusterBounds(arms...)
 	rounds := (nodes + fanout - 1) / fanout
+	boot := rounds*int(allowance/time.Second) + int(firmwareShare(rounds, enforced)/time.Second)
 	return InstallBudgets{FanOut: fanout, RoundMarginSeconds: int(margin / time.Second),
-		BootSeconds: max(minBootSeconds, rounds*int(allowance/time.Second)), BootstrapSeconds: 5400, InstallSeconds: 5400}
+		BootSeconds: max(minBootSeconds, boot), BootstrapSeconds: 5400, InstallSeconds: 5400}
+}
+
+func firmwareShare(rounds int, enforced []string) time.Duration {
+	bounds := make([]time.Duration, 0, len(enforced))
+	for _, arm := range enforced {
+		machine, _ := substrate.MachineBoundsFor(arm)
+		bounds = append(bounds, machine.Firmware)
+	}
+	slices.SortFunc(bounds, func(x, y time.Duration) int { return cmp.Compare(y, x) })
+	var share time.Duration
+	for _, bound := range bounds[:min(rounds, len(bounds))] {
+		share += bound
+	}
+	return share
 }
 
 func seconds(count int) time.Duration { return time.Duration(count) * time.Second }

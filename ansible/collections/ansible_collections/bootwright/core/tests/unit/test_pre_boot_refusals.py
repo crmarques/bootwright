@@ -24,6 +24,7 @@ tests/unit/plugins, so these checks live here.
 from __future__ import annotations
 
 import base64
+import json
 import pathlib
 
 import pytest
@@ -41,6 +42,9 @@ LOADER = DataLoader()
 ASSERT = "ansible.builtin.assert"
 FAIL = "ansible.builtin.fail"
 SET_FACT = "ansible.builtin.set_fact"
+INCLUDE_TASKS = "ansible.builtin.include_tasks"
+FIRMWARE = "bootwright.core.redfish_firmware"
+FIRMWARE_RESULT = "substrate_baremetal_machine_firmware"
 READS = {"baremetal": "bootwright.core.redfish_system_inspect", "libvirt": "bootwright.core.redfish_system_read"}
 FACTS = {arm: "substrate_%s_machine_refusal" % arm for arm in READS}
 REGISTERED = {arm: "substrate_%s_machine_target" % arm for arm in READS}
@@ -65,32 +69,69 @@ def walk(tasks, parents=()):
             yield from walk([child for child in task.get(section) or [] if isinstance(child, dict)], parents + (task,))
 
 
-def proof(arm):
-    return loaded(ROLES / ("substrate_%s_machine" % arm) / "tasks" / "pre_boot.yml")
+def proof(arm, name="pre_boot.yml"):
+    return loaded(ROLES / ("substrate_%s_machine" % arm) / "tasks" / name)
+
+
+def expanded(arm, name="pre_boot.yml"):
+    """A proof's tasks in order, each included task file in place of its include."""
+    for task in proof(arm, name):
+        if INCLUDE_TASKS in task:
+            yield {"include": task[INCLUDE_TASKS], "when": task.get("when", True), "name": task["name"]}
+            yield from expanded(arm, task[INCLUDE_TASKS])
+            yield {"included": task[INCLUDE_TASKS]}
+        else:
+            yield task
 
 
 def named(arm):
-    """Every value the proof of one arm sets its refusal fact to, in order."""
-    return [task[SET_FACT][FACTS[arm]] for task in proof(arm) if FACTS[arm] in (task.get(SET_FACT) or {})]
+    """Every value the proof of one arm sets its refusal fact to, in order, each
+    included file's as often as it is included."""
+    return [task[SET_FACT][FACTS[arm]] for task in expanded(arm) if FACTS[arm] in (task.get(SET_FACT) or {})]
 
 
-def prove(arm, registered, **variables):
+def holds(rendering, when):
+    return all(rendering.evaluate_conditional(item) for item in (when if isinstance(when, list) else [when]))
+
+
+def prove(arm, registered, firmware=None, reads=None, **variables):
     """Runs one proof's facts and checks in order, as a play does, over what its
-    read registered: the facts it left, and whether every check held."""
-    facts = {}
-    for task in proof(arm):
+    reads registered: the facts it left, whether every check held, and the
+    task files it included. Each target read registers the next of `reads`,
+    or `registered` when none are given; the firmware step registers
+    `firmware`."""
+    facts, skipping, ran = {}, [], []
+    reads = list(reads or [registered])
+    results = {REGISTERED[arm]: reads[0]}
+    for task in expanded(arm):
+        if "included" in task:
+            if skipping and skipping[-1] == task["included"]:
+                skipping.pop()
+            continue
+        if skipping:
+            continue
+        rendering = Templar(loader=LOADER, variables=dict(variables, **facts, **results))
+        if "include" in task:
+            if holds(rendering, task["when"]):
+                ran.append(task["include"])
+            else:
+                skipping.append(task["include"])
+            continue
         assert "loop" not in task, task["name"]
-        rendering = Templar(loader=LOADER, variables=dict(variables, **facts, **{REGISTERED[arm]: registered}))
-        if not rendering.evaluate_conditional(task.get("when", True)):
+        if not holds(rendering, task.get("when", True)):
             continue
         if SET_FACT in task:
             facts.update({name: rendering.template(value) for name, value in task[SET_FACT].items()})
         elif ASSERT in task:
             if not all(rendering.evaluate_conditional(item) for item in task[ASSERT]["that"]):
-                return facts, False
+                return facts, False, ran
+        elif FIRMWARE in task:
+            assert task["register"] == FIRMWARE_RESULT and task["no_log"] is True, task["name"]
+            results[FIRMWARE_RESULT] = firmware
         else:
             assert READS[arm] in task and task["register"] == REGISTERED[arm], task["name"]
-    return facts, True
+            results[REGISTERED[arm]] = reads.pop(0) if len(reads) > 1 else reads[0]
+    return facts, True, ran
 
 
 def encoded(value):
@@ -110,6 +151,7 @@ PHYSICAL = {
     "substrate_baremetal_machine_target_expected": MACS,
     "substrate_baremetal_machine_target_pinned_uuid_base64": encoded(UUID),
     "substrate_baremetal_machine_target_pinned_serial_base64": encoded(SERIAL),
+    "substrate_baremetal_machine_target_firmware": {},
     # What a node proved before this one left; every proof starts from none.
     FACTS["baremetal"]: "identity-mismatch",
 }
@@ -128,7 +170,7 @@ PROVED = {
 
 @pytest.mark.parametrize("registered, refusal", PROVED.values(), ids=PROVED.keys())
 def test_a_physical_proof_names_the_refusal_its_failed_check_makes(registered, refusal):
-    facts, held = prove("baremetal", registered, **PHYSICAL)
+    facts, held, _ran = prove("baremetal", registered, **PHYSICAL)
     assert held is (refusal is None)
     assert facts[FACTS["baremetal"]] == (refusal or "")
 
@@ -142,7 +184,7 @@ EMULATED = {
 
 @pytest.mark.parametrize("registered, refusal", EMULATED.values(), ids=EMULATED.keys())
 def test_a_proof_of_a_machine_its_substrate_created_names_only_a_running_one(registered, refusal):
-    facts, held = prove("libvirt", registered, **{FACTS["libvirt"]: "machine-running"})
+    facts, held, _ran = prove("libvirt", registered, **{FACTS["libvirt"]: "machine-running"})
     assert held is (refusal is None)
     assert facts[FACTS["libvirt"]] == (refusal or "")
 
@@ -152,7 +194,9 @@ def test_a_proof_of_a_machine_its_substrate_created_names_only_a_running_one(reg
 # (TestEachArmsPreBootEntryPointNamesExactlyTheseRefusals), and the protocol of
 # each consumer names exactly the union.
 def test_each_proof_names_each_refusal_once_and_clears_it_around_its_checks():
-    assert named("baremetal") == ["", "hardware-mismatch", "identity-mismatch", "machine-running", "tpm-absent", ""]
+    target = ["hardware-mismatch", "identity-mismatch", "machine-running", ""]
+    firmware = ["firmware-setting-mismatch", "firmware-setting-not-applied", ""]
+    assert named("baremetal") == [""] + target + firmware + target + ["tpm-absent", ""]
     assert named("libvirt") == ["", "machine-running", ""]
     union = set(named("baremetal")) | set(named("libvirt"))
     lifecycle = {
@@ -266,6 +310,85 @@ def test_the_cluster_boot_names_the_refusal_under_the_nodes_position(plugins, ar
 def test_encrypted_physical_installation_requires_positive_tpm_proof(usable, held):
     result = inspected()
     result["tpm_usable"] = usable
-    facts, accepted = prove("baremetal", result, **PHYSICAL, substrate_baremetal_machine_target_require_tpm=True)
+    facts, accepted, _ran = prove("baremetal", result, **PHYSICAL, substrate_baremetal_machine_target_require_tpm=True)
     assert accepted is held
     assert facts[FACTS["baremetal"]] == ("" if held else "tpm-absent")
+
+
+def physical(firmware):
+    """The physical proof's scope with this firmware declaration."""
+    variables = dict(PHYSICAL)
+    variables["substrate_baremetal_machine_target_firmware"] = firmware
+    return variables
+
+
+def firmware_result(refusal="", changed=False, msg=None):
+    """What redfish_firmware registers: data, or a failure that carries a message."""
+    result = {"changed": changed, "refusal": refusal, "fields": ["firmware.secureBoot"] if refusal else [],
+              "reasons": [], "messages": ["Base.1.8.PropertyModificationNeedPrivilege"] if refusal else [],
+              "power": "Off"}
+    if msg is not None:
+        result = {"changed": False, "failed": True, "msg": msg}
+    return result
+
+
+# The firmware step runs only for a declaration, between the two target
+# proofs; it names its mode's refusal only once the controller answered, and
+# the TPM check reads the target proof made after it.
+FIRMWARE_CASES = {
+    "nothing declared": ({}, None, None, ["target_proof.yml"]),
+    "proved as declared": ({"mode": "prove", "secureBoot": True}, firmware_result(), None,
+                           ["target_proof.yml", "firmware.yml"]),
+    "a proof that found differences": ({"mode": "prove", "secureBoot": True},
+                                       firmware_result("firmware-setting-mismatch"), "firmware-setting-mismatch",
+                                       ["target_proof.yml", "firmware.yml"]),
+    "applied": ({"mode": "enforce", "secureBoot": True}, firmware_result(changed=True), None,
+                ["target_proof.yml", "firmware.yml", "target_proof.yml"]),
+    "not applied": ({"secureBoot": True}, firmware_result("firmware-setting-not-applied", changed=True),
+                    "firmware-setting-not-applied", ["target_proof.yml", "firmware.yml"]),
+    "a controller that did not answer": ({"secureBoot": True}, firmware_result(msg="reading: HTTP 503"), "",
+                                         ["target_proof.yml", "firmware.yml"]),
+}
+
+
+@pytest.mark.parametrize("declared, result, refusal, included", FIRMWARE_CASES.values(), ids=FIRMWARE_CASES.keys())
+def test_the_firmware_step_names_its_modes_refusal_between_two_target_proofs(declared, result, refusal, included):
+    facts, held, ran = prove("baremetal", inspected(), firmware=result,
+                             **physical(declared))
+    assert ran == included
+    assert held is (refusal is None)
+    assert facts[FACTS["baremetal"]] == (refusal or "")
+
+
+def test_the_tpm_check_reads_the_proof_made_after_a_firmware_change():
+    before, after = dict(inspected(), tpm_usable=False), dict(inspected(), tpm_usable=True)
+    facts, held, ran = prove("baremetal", before, firmware=firmware_result(changed=True), reads=[before, after],
+                             **physical({"biosAttributes": [
+                                 {"name": "TpmEnable", "boolean": True}]}),
+                             substrate_baremetal_machine_target_require_tpm=True)
+    assert ran == ["target_proof.yml", "firmware.yml", "target_proof.yml"]
+    assert held is True and facts[FACTS["baremetal"]] == ""
+
+
+def test_a_machine_left_running_by_the_firmware_step_is_refused_by_the_second_proof():
+    facts, held, _ran = prove("baremetal", inspected(), firmware=firmware_result(changed=True),
+                              reads=[inspected(), inspected(power="On")],
+                              **physical({"secureBoot": True}))
+    assert held is False and facts[FACTS["baremetal"]] == "machine-running"
+
+
+def test_the_firmware_call_is_hidden_and_its_refusal_reported_beside_it():
+    tasks = proof("baremetal", "firmware.yml")
+    [call] = [task for task in tasks if FIRMWARE in task]
+    assert call["no_log"] is True and call["failed_when"] is False
+    following = tasks[tasks.index(call) + 1]
+    assert ASSERT in following and "no_log" not in following
+    assert FIRMWARE_RESULT + ".msg" in json.dumps(following[ASSERT])
+    assert call[FIRMWARE]["firmware"] == "{{ substrate_baremetal_machine_target_firmware }}"
+
+
+@pytest.mark.parametrize("declared, held", [({}, True), ({"secureBoot": True}, False)])
+def test_a_machine_its_substrate_created_refuses_a_firmware_declaration(declared, held):
+    facts, accepted, _ran = prove("libvirt", {"changed": False, "power": "Off"},
+                                  bootwright_machine_port={"firmware": declared})
+    assert accepted is held

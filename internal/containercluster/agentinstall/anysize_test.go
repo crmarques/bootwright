@@ -122,19 +122,19 @@ func TestPhysicalRoundBudgetsAndMixedKinds(t *testing.T) {
 	// Four managers and eight candidate media devices bound the physical discovery.
 	// Two reads, eject with certificate restoration, and disk selection cost 42 minutes per round.
 	for _, test := range []struct{ nodes, boot, deadline int }{{16, 1800, 16920}, {32, 3600, 21240}, {33, 5400, 25560}} {
-		budgets := installBudgets(test.nodes, substrate.ArmBaremetal)
+		budgets := installBudgets(test.nodes, nil, substrate.ArmBaremetal)
 		if budgets.FanOut != 16 || budgets.RoundMarginSeconds != 2520 || budgets.BootSeconds != test.boot || int(installDeadline(budgets, test.nodes).Seconds()) != test.deadline {
 			t.Fatalf("%d physical nodes: %+v, %s", test.nodes, budgets, installDeadline(budgets, test.nodes))
 		}
 	}
-	mixed := installBudgets(5, substrate.ArmLibvirt, substrate.ArmBaremetal)
+	mixed := installBudgets(5, nil, substrate.ArmLibvirt, substrate.ArmBaremetal)
 	if mixed.FanOut != 4 || mixed.BootSeconds != 3600 || mixed.RoundMarginSeconds != 2520 {
 		t.Fatalf("mixed kinds: %+v", mixed)
 	}
-	if largestCluster(substrate.ArmBaremetal) != 32 {
+	if largestCluster(nil, substrate.ArmBaremetal) != 32 {
 		t.Fatal("physical ceiling changed")
 	}
-	refused := installBudgets(29, substrate.ArmLibvirt)
+	refused := installBudgets(29, nil, substrate.ArmLibvirt)
 	if refused.BootSeconds != 4800 || int(installDeadline(refused, 29).Seconds()) != 22680 {
 		t.Fatalf("first refused emulated size: %+v", refused)
 	}

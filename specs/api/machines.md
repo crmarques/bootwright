@@ -203,7 +203,7 @@ own refusal.
 | --- | --- | --- | --- | --- |
 | `spec.placement.site` | string | conditional | — | `Environment.spec.sites[].name`; required only where a consumer needs site placement. |
 | `spec.substrate.providerRef` | string | conditional | — | Global `InfraProvider`; required whenever `os.provided: false`. |
-| `spec.substrate.baremetal` | object | conditional | — | The bare-metal [substrate arm](#substrate-arm): `bmc`, `nics` and `rootDevice`; required for a bare-metal install machine. |
+| `spec.substrate.baremetal` | object | conditional | — | The bare-metal [substrate arm](#substrate-arm): `bmc`, `nics`, `rootDevice` and [`firmware`](#firmware-block); required for a bare-metal install machine. |
 | `spec.substrate.libvirt` | object | conditional | — | The libvirt [substrate arm](#substrate-arm): `profileRef` and `interfaceAttachments`. |
 | `spec.substrate.kubevirt` | object | conditional | — | The KubeVirt [substrate arm](#substrate-arm): `profileRef` and `interfaceAttachments`. |
 | `spec.substrate.vsphere` | object | conditional | — | The vSphere [substrate arm](#substrate-arm): `profileRef` and `nics`. |
@@ -297,6 +297,7 @@ substrate reads; NIC names and substrate-neutral root-device hints stay in
 | `baremetal` | `bmc` | object | The management controller; exact shape [below](#bmc-and-root-device-shape). |
 | `baremetal` | `nics` | array | Set of `{nicRef, macAddress}` keyed by `nicRef`; `nicRef` names a `hardware.nics[].name`, at most one entry per NIC; `macAddress` is EUI-48. |
 | `baremetal` | `rootDevice` | object | Physical-disk hints `wwn`, `hctl` and `serialNumber`, each a non-empty string. |
+| `baremetal` | `firmware` | object | Declared firmware settings; [shape](#firmware-block). |
 | `libvirt`, `kubevirt` | `profileRef` | string | Provider-local `machineProfiles[].name`. |
 | `libvirt`, `kubevirt` | `interfaceAttachments` | array | Set of `{interface, attachmentRef}` keyed by `interface`, as [network configuration](#network-configuration) states. |
 | `vsphere` | `profileRef` | string | Provider-local `machineProfiles[].name`. |
@@ -324,91 +325,6 @@ host because it is the Environment's controller or a managed service's
 `machineRef`, and a libvirt host because an `InfraProvider`'s
 `libvirt.machineRef` names it ([controller](../controller.md#host-packages)).
 The retired `spec.capabilities` refuses with `api.field`.
-
-### BMC and root-device shape
-
-`substrate.baremetal.bmc` contains only:
-
-| Field | Type | Required | Default | Rule |
-| --- | --- | --- | --- | --- |
-| `address` | string | with the BMC block | — | Redfish endpoint naming one exact ComputerSystem, in the one canonical spelling below, on every Machine that authors it. |
-| `protocol` | string | no | `redfish` | `redfish`. |
-| `credentialsRef` | string | resolved with the BMC block | configured provider default | `usernamePassword` `Secret`; machine-local values take precedence. Access credential. |
-| `tls.verify` | boolean | no | `true` | Whether the controller-to-BMC TLS leg is verified: against `tls.trustBundleRef` alone when it is set, and against the system trust store otherwise. |
-| `tls.trustBundleRef` | string | no | configured provider default | `caBundle` `Secret`; the one anchor of the controller-to-BMC leg. Refused beside `tls.verify: false`. Access credential. |
-| `virtualMedia.tls.trust` | string | no | `importCertificate` | How the BMC is made to trust the artifact server it fetches media from. `importCertificate` uses the device certificate collection or the qualified discovered SecurityService [media trust contract](../substrates.md#identity-and-power-operations); `established` changes nothing, because the BMC already trusts the server; `disableVerification` turns the device's verification off before the insert and is the per-Machine exception below. |
-| `virtualMedia.tls.restoreVerificationAfterBoot` | boolean | no | `true` | Only with `disableVerification`; the eject turns verification back on. |
-| `virtualMedia.tls.removeCertificateAfterBoot` | boolean | no | `false` | Only with `importCertificate`; the eject deletes the imported certificate. |
-
-For private media delivery, a manager's published
-`HttpsTransferCertVerification` is authoritative and must read `true`; only
-without that switch does the device's `VerifyCertificate` decide. An
-authoritative manager switch refuses `disableVerification` before any write.
-
-`address` is what a destructive operation is aimed at, so it has one spelling:
-admission accepts only that spelling, and nothing rewrites it before the
-BMC reservation and every request are derived from it. The reservation key
-fills the scheme's default port when the address omits it, so two spellings of
-one endpoint name one reservation; the address itself is not rewritten. It
-starts with exactly
-`http://` or `https://`, is an absolute URL with no userinfo, query, fragment
-or percent-encoding, even an empty one, and every byte is printable ASCII other
-than space. Its host is a lowercase DNS name whose last label is not all
-digits, or an IP literal in the form Go's `netip` prints (an IPv6 literal
-bracketed); its port, when present, is `1..65535` with no empty or leading-zero
-spelling; and its path is exactly `/redfish/v1/Systems/<id>`, where `<id>` is
-one or more RFC 3986 unreserved characters (`A-Z`, `a-z`, `0-9`, `-`, `.`, `_`,
-`~`) and is not `.` or `..`. A collection, a child resource, a trailing slash
-and every `redfish+` or `redfish-virtualmedia+` scheme are refused.
-
-If `virtualMedia.tls` is authored, it sets at least one option. The two TLS
-legs stay independent; no BMC verification opt-out changes artifact-server
-trust. `disableVerification` is an explicit per-Machine exception, admitted
-only where a Machine authors it and visible in its effective state: a
-provider default of it is refused at
-`$.spec.baremetal.defaults.bmc.virtualMedia.tls.trust`, and an Environment
-kind default of it, for a Machine or an InfraProvider, is refused at its
-`$.spec.defaults.<Kind>` path. A managed-OS installation that delivers private
-material refuses it before registration
-([managed OS](../managed-os.md#installation)). Under `established` such an
-installation's insert first reads whether the BMC verifies the artifact
-server and refuses unless it does
-([identity and power operations](../substrates.md#identity-and-power-operations)).
-
-`hardware.rootDevice` admits only `deviceName`, `model`, `vendor`,
-`minSizeGigabytes` and boolean `rotational`, on every substrate and with or
-without `installProfileRef`; `substrate.baremetal.rootDevice` admits `wwn`,
-`hctl` and `serialNumber`, which only a physical disk carries, since the disks a
-virtual substrate creates carry no WWN, SCSI address or serial number
-([substrates](../substrates.md#machine-realization)).
-`deviceName` is a device path: a clean absolute path beneath `/dev/` built
-only from ASCII letters, digits, `.`, `_`, `-`, `/`, `:` and `+`, so
-whitespace, control characters, quotes, other shell metacharacters and `.` or
-`..` segments are refused, because the path reaches installer directives and
-shell words verbatim. `minSizeGigabytes` is non-negative. For a bare-metal
-install, `hardware.rootDevice.deviceName` or `substrate.baremetal.rootDevice.wwn`
-is mandatory, and a Bootwright-installed Machine narrows `deviceName` to its
-by-id form below; predicate-only hints are not an adequate destructive target
-selector. Which hints an installation carries,
-and which it refuses, is the rule of the consumer that installs the Machine:
-[managed OS](../managed-os.md#installation) or the
-[cluster installer](../openshift-clusters.md#selection-and-refusal).
-Nothing installs an OS-ready Machine: there `deviceName` and `wwn` name the
-root disk that a Ceph OSD selection must not name, compared with each explicit
-OSD device path, `wwn` as its `/dev/disk/by-id/wwn-0x` path without regard to
-case or a `0x` prefix, and every other hint warns `api.deferred` at its path,
-since it selects no disk.
-
-A bare-metal Bootwright-installed Machine names its root disk by a durable
-identity: `deviceName` is `/dev/disk/by-id/wwn-0x` followed by 16 or 32
-lowercase hexadecimal digits, the form
-[managed physical hosts](../ceph.md#devices-and-destructive-ownership) use
-for OSD paths. The installation erases that disk, and a kernel name such as
-`/dev/sda` moves with probe order, firmware and hot-added disks, so it refuses
-at `hardware.rootDevice.deviceName`, naming the by-id form. Its `%pre` stops
-before storage unless the name is a whole disk reporting any declared `wwn` and
-`serialNumber`
-([physical installation](../managed-os.md#physical-installation)).
 
 ### Network configuration
 
@@ -649,6 +565,121 @@ host key is the one its
 delivered or captured, so it consults no trust store, and a session dialing
 any other address refuses `trust.identity` naming the address the installation
 proved.
+
+## Bare-metal Machine fields
+
+The nested blocks of the bare-metal [substrate arm](#substrate-arm).
+
+### BMC and root-device shape
+
+`substrate.baremetal.bmc` contains only:
+
+| Field | Type | Required | Default | Rule |
+| --- | --- | --- | --- | --- |
+| `address` | string | with the BMC block | — | Redfish endpoint naming one exact ComputerSystem, in the one canonical spelling below, on every Machine that authors it. |
+| `protocol` | string | no | `redfish` | `redfish`. |
+| `credentialsRef` | string | resolved with the BMC block | configured provider default | `usernamePassword` `Secret`; machine-local values take precedence. Access credential. |
+| `tls.verify` | boolean | no | `true` | Whether the controller-to-BMC TLS leg is verified: against `tls.trustBundleRef` alone when it is set, and against the system trust store otherwise. |
+| `tls.trustBundleRef` | string | no | configured provider default | `caBundle` `Secret`; the one anchor of the controller-to-BMC leg. Refused beside `tls.verify: false`. Access credential. |
+| `virtualMedia.tls.trust` | string | no | `importCertificate` | How the BMC is made to trust the artifact server it fetches media from. `importCertificate` uses the device certificate collection or the qualified discovered SecurityService [media trust contract](../substrates.md#identity-and-power-operations); `established` changes nothing, because the BMC already trusts the server; `disableVerification` turns the device's verification off before the insert and is the per-Machine exception below. |
+| `virtualMedia.tls.restoreVerificationAfterBoot` | boolean | no | `true` | Only with `disableVerification`; the eject turns verification back on. |
+| `virtualMedia.tls.removeCertificateAfterBoot` | boolean | no | `false` | Only with `importCertificate`; the eject deletes the imported certificate. |
+
+For private media delivery, a manager's published
+`HttpsTransferCertVerification` is authoritative and must read `true`; only
+without that switch does the device's `VerifyCertificate` decide. An
+authoritative manager switch refuses `disableVerification` before any write.
+
+`address` is what a destructive operation is aimed at, so it has one spelling:
+admission accepts only that spelling, and nothing rewrites it before the
+BMC reservation and every request are derived from it. The reservation key
+fills the scheme's default port when the address omits it, so two spellings of
+one endpoint name one reservation; the address itself is not rewritten. It
+starts with exactly
+`http://` or `https://`, is an absolute URL with no userinfo, query, fragment
+or percent-encoding, even an empty one, and every byte is printable ASCII other
+than space. Its host is a lowercase DNS name whose last label is not all
+digits, or an IP literal in the form Go's `netip` prints (an IPv6 literal
+bracketed); its port, when present, is `1..65535` with no empty or leading-zero
+spelling; and its path is exactly `/redfish/v1/Systems/<id>`, where `<id>` is
+one or more RFC 3986 unreserved characters (`A-Z`, `a-z`, `0-9`, `-`, `.`, `_`,
+`~`) and is not `.` or `..`. A collection, a child resource, a trailing slash
+and every `redfish+` or `redfish-virtualmedia+` scheme are refused.
+
+If `virtualMedia.tls` is authored, it sets at least one option. The two TLS
+legs stay independent; no BMC verification opt-out changes artifact-server
+trust. `disableVerification` is an explicit per-Machine exception, admitted
+only where a Machine authors it and visible in its effective state: a
+provider default of it is refused at
+`$.spec.baremetal.defaults.bmc.virtualMedia.tls.trust`, and an Environment
+kind default of it, for a Machine or an InfraProvider, is refused at its
+`$.spec.defaults.<Kind>` path. A managed-OS installation that delivers private
+material refuses it before registration
+([managed OS](../managed-os.md#installation)). Under `established` such an
+installation's insert first reads whether the BMC verifies the artifact
+server and refuses unless it does
+([identity and power operations](../substrates.md#identity-and-power-operations)).
+
+`hardware.rootDevice` admits only `deviceName`, `model`, `vendor`,
+`minSizeGigabytes` and boolean `rotational`, on every substrate and with or
+without `installProfileRef`; `substrate.baremetal.rootDevice` admits `wwn`,
+`hctl` and `serialNumber`, which only a physical disk carries, since the disks a
+virtual substrate creates carry no WWN, SCSI address or serial number
+([substrates](../substrates.md#machine-realization)).
+`deviceName` is a device path: a clean absolute path beneath `/dev/` built
+only from ASCII letters, digits, `.`, `_`, `-`, `/`, `:` and `+`, so
+whitespace, control characters, quotes, other shell metacharacters and `.` or
+`..` segments are refused, because the path reaches installer directives and
+shell words verbatim. `minSizeGigabytes` is non-negative. For a bare-metal
+install, `hardware.rootDevice.deviceName` or `substrate.baremetal.rootDevice.wwn`
+is mandatory, and a Bootwright-installed Machine narrows `deviceName` to its
+by-id form below; predicate-only hints are not an adequate destructive target
+selector. Which hints an installation carries,
+and which it refuses, is the rule of the consumer that installs the Machine:
+[managed OS](../managed-os.md#installation) or the
+[cluster installer](../openshift-clusters.md#selection-and-refusal).
+Nothing installs an OS-ready Machine: there `deviceName` and `wwn` name the
+root disk that a Ceph OSD selection must not name, compared with each explicit
+OSD device path, `wwn` as its `/dev/disk/by-id/wwn-0x` path without regard to
+case or a `0x` prefix, and every other hint warns `api.deferred` at its path,
+since it selects no disk.
+
+A bare-metal Bootwright-installed Machine names its root disk by a durable
+identity: `deviceName` is `/dev/disk/by-id/wwn-0x` followed by 16 or 32
+lowercase hexadecimal digits, the form
+[managed physical hosts](../ceph.md#devices-and-destructive-ownership) use
+for OSD paths. The installation erases that disk, and a kernel name such as
+`/dev/sda` moves with probe order, firmware and hot-added disks, so it refuses
+at `hardware.rootDevice.deviceName`, naming the by-id form. Its `%pre` stops
+before storage unless the name is a whole disk reporting any declared `wwn` and
+`serialNumber`
+([physical installation](../managed-os.md#physical-installation)).
+
+### Firmware block
+
+`substrate.baremetal.firmware` is atomic and authored only on a Machine: no
+`InfraProvider` defaults it, and an Environment kind default of it refuses
+`api.invariant` at its `$.spec.defaults.Machine` path, because firmware is
+per-Machine intent and never a kind default.
+[Physical firmware](../substrates.md#physical-firmware) owns what it does.
+
+| Field | Type | Required | Default | Rule |
+| --- | --- | --- | --- | --- |
+| `mode` | string | no | `enforce` | `enforce` applies each declared setting and proves it; `prove` reads and compares only, never writing, resetting or powering the machine. |
+| `secureBoot` | boolean | no | — | The declared Secure Boot enablement. |
+| `bootMode` | string | no | — | `UEFI`, the only value. |
+| `biosAttributes` | map | no | — | 1 to 64 BIOS attributes, each name to a string, integer or boolean, passed verbatim and never interpreted. |
+
+The block sets at least one of `secureBoot`, `bootMode` and `biosAttributes`
+and needs `bmc` beside it; an OS-ready Machine, which nothing installs, admits
+none. Each refuses `api.invariant` at `$.spec.substrate.baremetal.firmware`.
+An attribute name matches `^[A-Za-z][A-Za-z0-9_]{1,127}$`, a string is 0 to
+256 bytes of printable ASCII, an integer is signed 64-bit, and a null,
+fractional, list or map value refuses. A name containing `password` in any
+letter case refuses `api.invariant`: a firmware password is secret material,
+never desired state. Each attribute refusal names
+`$.spec.substrate.baremetal.firmware.biosAttributes` and the entry's position,
+because a map key is no path segment.
 
 ## MachineImage
 

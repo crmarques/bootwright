@@ -41,7 +41,7 @@ implemented or authorized.
 | Storage: bootstrap, resources, removal | [bootstrap and continuation](ceph.md#bootstrap-identity-and-continuation), [resources and access](ceph.md#resources-readiness-and-access), [removal](ceph.md#removal-and-concurrency) |
 | CLI: lifecycle, access, inspection | [lifecycle](cli.md#lifecycle-behavior), [inspection and access](cli.md#resource-inspection-and-explicit-access), [power](cli.md#machine-power-operations) |
 | Contexts: layout, locking, restore, deletion | [storage and locking](contexts.md#storage-locking-and-publication), [restore](contexts.md#format-and-restore-boundary), [deletion](contexts.md#permanent-deletion) |
-| Substrates: host, Machine, identity | [host](substrates.md#provider-host-realization), [Machine](substrates.md#machine-realization), [physical](substrates.md#physical-machine-realization), [identity and power](substrates.md#identity-and-power-operations) |
+| Substrates: host, Machine, identity | [host](substrates.md#provider-host-realization), [Machine](substrates.md#machine-realization), [physical](substrates.md#physical-machine-realization), [firmware](substrates.md#physical-firmware), [identity and power](substrates.md#identity-and-power-operations) |
 | Which substrates and controllers are qualified | [qualification](substrates.md#qualification) |
 | The M2a Ceph API review, as history | [review](storage-api-review.md) |
 

@@ -31,17 +31,20 @@ from ansible.utils.collection_loader import AnsibleCollectionConfig
 ROLES = pathlib.Path(__file__).resolve().parents[2] / "roles"
 LOADER = DataLoader()
 
-MODULES = ("bootwright.core.redfish_boot", "bootwright.core.redfish_system_read", "bootwright.core.redfish_system_inspect")
+MODULES = ("bootwright.core.redfish_boot", "bootwright.core.redfish_system_read", "bootwright.core.redfish_system_inspect",
+           "bootwright.core.redfish_firmware")
 BOOT = "bootwright.core.redfish_boot"
 INCLUDES = ("ansible.builtin.include_role", "ansible.builtin.import_role", "include_role", "import_role")
 BAREMETAL = "bootwright.core.substrate_baremetal_machine"
 PORT_BUNDLE = {"pre_boot": "substrate_baremetal_machine_target_ca", "boot_media": "substrate_baremetal_machine_boot_ca",
                "boot_disk": "substrate_baremetal_machine_disk_ca"}
+# The task files an entry point includes, which read that entry point's bundle.
+ENTRY_FILES = {"target_proof": "pre_boot", "firmware": "pre_boot"}
 
 # The roles that reach a controller a bundle can anchor, and how many Redfish
 # module tasks each holds. Finding another number means the walk or a role
 # changed, and either must be looked at.
-BUNDLED = {"substrate_baremetal_machine": 13, "substrate_libvirt_machine": 14}
+BUNDLED = {"substrate_baremetal_machine": 14, "substrate_libvirt_machine": 14}
 # The roles that make Redfish calls without a bundle, and why.
 UNBUNDLED = {
     "containercluster_media_agent": "it makes no Redfish call",
@@ -117,7 +120,7 @@ def test_each_lifecycle_role_reads_the_bundle_it_was_handed(lookups, tmp_path, r
         variables = dict(defaults(role), **{material: handed})
         assert Templar(loader=LOADER, variables=variables).template(variables[variable]) == expected
     for name, _module, arguments, _task in calls(role):
-        port = PORT_BUNDLE.get(name[:-len(".yml")])
+        port = PORT_BUNDLE.get(ENTRY_FILES.get(name[:-len(".yml")], name[:-len(".yml")]))
         generic = "bootwright_machine_port.ca" in str(arguments["ca_data"])
         assert generic or (port or variable) in str(arguments["ca_data"]), (name, arguments["ca_data"])
         for path, expected in ((str(bundle), pem), ("", "")):

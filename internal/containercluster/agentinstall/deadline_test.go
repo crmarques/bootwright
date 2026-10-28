@@ -476,7 +476,7 @@ func TestAClusterWhoseDeadlinePassesTheCeilingRefusesBeforeRegistration(t *testi
 	// The count is bounded, so a deadline that stops growing with its nodes
 	// fails here rather than holding the suite until go test's own timeout.
 	const most = 1000
-	deadlineOf := func(nodes int) time.Duration { return installDeadline(installBudgets(nodes), nodes) }
+	deadlineOf := func(nodes int) time.Duration { return installDeadline(installBudgets(nodes, nil), nodes) }
 	largest := 0
 	for ; largest < most && deadlineOf(largest+1) <= lifecycle.MaxDeadline; largest++ {
 		if deadlineOf(largest+1) < deadlineOf(largest) {

@@ -1073,8 +1073,10 @@ only to that disk, enumerates only its LUKS descendants, and proves each has
 that disk as its sole physical parent. Missing, foreign or ambiguous ancestry
 refuses before the first bind; other disks are never scanned for binding.
 The TPM must already be available to the installer; Bootwright never clears
-a physical TPM. Firmware readiness, reboot unlock and console recovery remain
-[B78](milestones/m1.md#b78) operator qualification, not an offline-test claim.
+a physical TPM. Only an apply that boots the installer writes
+[firmware](substrates.md#physical-firmware), before clevis seals, so no later
+apply moves a sealed disk's PCRs; reboot unlock and console recovery remain
+[B78](milestones/m1.md#b78) qualification.
 
 **Proof.** After the installed system's network converged, an apply reads,
 over the pinned fleet connection with root from the Kickstart's sudoers entry,

@@ -1,0 +1,106 @@
+---
+# The target proof the pre-boot step makes, before the firmware step and again
+# after it when that step changed anything: the exact system, its complete
+# hardware inventory, the pin and the power state, read fresh each time. Each
+# check names the refusal it makes before it runs, as pre_boot.yml describes,
+# and clears it once the whole proof holds.
+- name: Read the machine this installation is about to overwrite
+  bootwright.core.redfish_system_inspect:
+    endpoint: '{{ substrate_baremetal_machine_target_endpoint }}'
+    user: '{{ lookup("ansible.builtin.file", substrate_baremetal_machine_target_user) }}'
+    password: '{{ lookup("ansible.builtin.file", substrate_baremetal_machine_target_password) }}'
+    verify: '{{ substrate_baremetal_machine_target_verify }}'
+    ca_data: >-
+      {{ lookup('ansible.builtin.file', substrate_baremetal_machine_target_ca)
+         if substrate_baremetal_machine_target_ca | length > 0 else '' }}
+    require_tpm: '{{ substrate_baremetal_machine_target_require_tpm | default(false) }}'
+  register: substrate_baremetal_machine_target
+  failed_when: false
+  no_log: true
+
+# ansible-core keeps nothing of a failure under no_log but that it failed, so
+# the controller's own refusal is reported here, where no credential is.
+- name: Stop at a read the management controller did not answer
+  ansible.builtin.assert:
+    that:
+      - substrate_baremetal_machine_target.msg is not defined
+    fail_msg: >-
+      reading the machine at {{ substrate_baremetal_machine_target_endpoint }} failed, so it must
+      not be erased:
+      {{ (substrate_baremetal_machine_target.msg | default('') | string | bootwright.core.printable)[:512] }}
+    quiet: true
+
+- name: Name the hardware check as the refusal this proof makes
+  ansible.builtin.set_fact:
+    substrate_baremetal_machine_refusal: hardware-mismatch
+
+- name: Refuse a machine that is not the one this Machine declares
+  ansible.builtin.assert:
+    that:
+      - substrate_baremetal_machine_target_expected | length > 0
+      - substrate_baremetal_machine_target.observation.failures | length == 0
+      - substrate_baremetal_machine_target_expected | difference(substrate_baremetal_machine_target.observation.addresses) | length == 0
+      - substrate_baremetal_machine_target.observation.addresses | difference(substrate_baremetal_machine_target_expected) | length == 0
+      - substrate_baremetal_machine_target.observation.uuid | length > 0
+        or substrate_baremetal_machine_target.observation.serial | length > 0
+    fail_msg: >-
+      the machine answering at this controller does not report exactly the
+      hardware addresses its declaration requires, or its inventory could not
+      be read in full, so it must not be erased; declared addresses not
+      reported:
+      {{ (((substrate_baremetal_machine_target_expected
+      | difference(substrate_baremetal_machine_target.observation.addresses | default([]))
+      | join(', ')) or 'none') | string | bootwright.core.printable)[:256] }};
+      reported addresses not declared:
+      {{ substrate_baremetal_machine_target.observation.addresses | default([])
+      | difference(substrate_baremetal_machine_target_expected) | length }};
+      inventory failures:
+      {{ (((substrate_baremetal_machine_target.observation.failures | default([]) | join('; ')) or 'none')
+      | string | bootwright.core.printable)[:256] }}
+    quiet: true
+
+# The Machine's bare-metal block pinned the UUID and serial it proved earlier
+# in this operation. The pin arrives base64-encoded, because a run's variables
+# are rendered as templates when they are read, and is decoded only inside the
+# comparison, where a decoded value is data and never a template. A value the
+# proof recorded empty is not compared, and no pin compares nothing. Neither
+# identity is printed: the endpoint and the remedy say what to correct.
+- name: Name the identity check as the refusal this proof makes
+  ansible.builtin.set_fact:
+    substrate_baremetal_machine_refusal: identity-mismatch
+
+- name: Refuse a machine that answers as another system than this operation proved
+  ansible.builtin.assert:
+    that:
+      - >-
+        (substrate_baremetal_machine_target_pinned_uuid_base64 | default('') | length == 0)
+        or ((substrate_baremetal_machine_target.observation.uuid | default('') | trim | lower)
+        == (substrate_baremetal_machine_target_pinned_uuid_base64 | b64decode | trim | lower))
+      - >-
+        (substrate_baremetal_machine_target_pinned_serial_base64 | default('') | length == 0)
+        or ((substrate_baremetal_machine_target.observation.serial | default('') | trim)
+        == (substrate_baremetal_machine_target_pinned_serial_base64 | b64decode | trim))
+    fail_msg: >-
+      the machine answering at {{ substrate_baremetal_machine_target_endpoint }}
+      is not the system this operation proved for its Machine, so it must not
+      be erased; correct spec.substrate.baremetal.bmc.address, or destroy and
+      apply this context so the machine is proved again
+    quiet: true
+
+- name: Name the power check as the refusal this proof makes
+  ansible.builtin.set_fact:
+    substrate_baremetal_machine_refusal: machine-running
+
+- name: Refuse a machine that is running
+  ansible.builtin.assert:
+    that:
+      - substrate_baremetal_machine_target.observation.power == 'Off'
+    fail_msg: >-
+      this machine is running, and an installation erases its disk; stop it
+      explicitly before installing over it
+    quiet: true
+
+# A later step's failure must not be read as this proof's refusal.
+- name: Clear the refusal now that the target is proved
+  ansible.builtin.set_fact:
+    substrate_baremetal_machine_refusal: ''

@@ -79,6 +79,7 @@
               user: '{{ containercluster_install_agent_user }}'
               password: '{{ containercluster_install_agent_password }}'
               require_tpm: '{{ containercluster_install_agent_node.requireTPM | default(false) }}'
+              firmware: '{{ containercluster_install_agent_node.firmware | default({}) }}'
               expected: "{{ containercluster_install_agent_node.hardware.interfaces | default([]) | map(attribute='macAddress') | list }}"
               pinned_uuid_base64: >-
                 {{ bootwright_cluster_install_material['pinnedUUIDBase64Node' ~ containercluster_install_agent_index] | default('') }}

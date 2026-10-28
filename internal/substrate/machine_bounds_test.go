@@ -22,3 +22,14 @@ func TestMachinePortsPublishBoundsForEveryRealizedArm(t *testing.T) {
 		t.Fatal("physical round omits a port call")
 	}
 }
+
+func TestOnlyThePhysicalArmPublishesAFirmwareBound(t *testing.T) {
+	libvirt, _ := MachineBoundsFor(ArmLibvirt)
+	baremetal, _ := MachineBoundsFor(ArmBaremetal)
+	if libvirt.Firmware != 0 {
+		t.Fatalf("emulated firmware bound = %s", libvirt.Firmware)
+	}
+	if baremetal.Firmware != BaremetalFirmwareBound || BaremetalFirmwareBound != 74*time.Minute+30*time.Second {
+		t.Fatalf("physical firmware bound = %s, constant %s", baremetal.Firmware, BaremetalFirmwareBound)
+	}
+}

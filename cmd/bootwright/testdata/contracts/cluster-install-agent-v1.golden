@@ -1,6 +1,6 @@
 implementation: cluster-install-agent-v1
-content-digest: c66d89a1d3a7f0808b79e5ea5476e748c3e10aabb91d4782d455c1392ccb4efb
-request-version: cluster-install-agent-v8
+content-digest: 16d34a2c031ad2acc4d6b5f16407c8f90c83a0f8ba986c5180982d310f60352f
+request-version: cluster-install-agent-v9
 automation-formats: none
 mark-formats: none
 proof-ids: .bootwright-booted, /.bootwright-booted, bootwright/containercluster/identity/v2
@@ -52,6 +52,15 @@ request-schema:
   nodes[].controller.virtualMedia.restoreVerification bool
   nodes[].controller.virtualMedia.trust string
   nodes[].controllerKind string
+  nodes[].firmware *struct agentinstall.Firmware omitempty
+  nodes[].firmware.biosAttributes []struct agentinstall.BIOSAttribute omitempty
+  nodes[].firmware.biosAttributes[].boolean *bool omitempty
+  nodes[].firmware.biosAttributes[].integer *int64 omitempty
+  nodes[].firmware.biosAttributes[].name string
+  nodes[].firmware.biosAttributes[].string *string omitempty
+  nodes[].firmware.bootMode string omitempty
+  nodes[].firmware.mode string
+  nodes[].firmware.secureBoot *bool omitempty
   nodes[].hardware *struct agentinstall.Hardware omitempty
   nodes[].hardware.interfaces []struct agentinstall.Interface
   nodes[].hardware.interfaces[].macAddress string

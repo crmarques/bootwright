@@ -57,6 +57,32 @@ POLL_ATTEMPTS = 60
 # this long to report a selection.
 BOOT_POLLS = 12
 BOOT_POLL_DELAY = 5
+# Declared firmware settings applied by one power cycle into setup are read
+# until they report the declared values. No firmware has been observed applying
+# pending settings; the bound allows ten minutes for a POST that applies them.
+FIRMWARE_POLLS = 60
+FIRMWARE_POLL_DELAY = 10
+# The wall-clock share of the firmware bound each poll of the firmware step may
+# take: its pauses and the requests of its last round at the request timeout.
+# Each read's socket timeout is cut to the share left, so a controller that
+# stalls its reads spends the share sooner; one that trickles an answer can
+# still outlast it, which the run deadline then ends. The power-on and the
+# power-off poll take the same share.
+BOOT_BUDGET = BOOT_POLLS * BOOT_POLL_DELAY + REQUEST_TIMEOUT
+TASK_BUDGET = TASK_POLLS * TASK_POLL_DELAY + REQUEST_TIMEOUT
+POWER_ON_BUDGET = POLL_ATTEMPTS * POLL_DELAY + REQUEST_TIMEOUT
+FIRMWARE_POLL_BUDGET = FIRMWARE_POLLS * FIRMWARE_POLL_DELAY + 2 * REQUEST_TIMEOUT
+# The firmware step's requests outside its polls: before the power-on, five
+# reads of the system, its two resources and their settings, the reset metadata
+# for each reset, two boot-selection PATCHes, a read, a PATCH, a retry of both
+# after 412 and a read-back for each of the three writes, and a system read and
+# the reset metadata again before the power-on; after it, the power-on, the
+# ForceOff and the four resource reads of the final proof. The step does not
+# power on once its share before the power-on is spent: those requests at the
+# request timeout, the boot-selection poll and the three task polls.
+FIRMWARE_WRITE_REQUESTS = 27
+FIRMWARE_CYCLE_REQUESTS = 6
+FIRMWARE_WRITES_BUDGET = FIRMWARE_WRITE_REQUESTS * REQUEST_TIMEOUT + BOOT_BUDGET + 3 * TASK_BUDGET
 POWER_STATES = ("On", "Off")
 LINE_LIMIT = 200
 PATH_LIMIT = 128
@@ -192,7 +218,7 @@ class Client:
         _trust_context(self.verify, self.ca_data)
         self.home = _authority(self.endpoint)
         self.root = redfish_discovery.service_root(self.endpoint) if self.home else ""
-        self.sleep = time.sleep
+        self.sleep, self.clock = time.sleep, time.monotonic
         self.last_power, self.last_image = "", ""
         self.last_trust_slot = None
         self._system = self._media = self._member = None
@@ -593,32 +619,41 @@ class Client:
                     return entry["target"], info
         return None
 
-    def _await_task(self, body, headers):
-        """Follow an accepted attach's task: the reason it failed, or "" to read back.
+    def _await_task(self, body, headers, doing="attaching", budget=None, stop=None):
+        """Follow an accepted write's task: the reason it failed, or "" to read back.
 
         A reference that is absent or names another authority is never
-        requested, and the device read back decides. 202, a 5xx, no answer or a
+        requested, and the resource read back decides. 202, a 5xx, no answer or a
         running state mean the task is not finished. A terminal state decides,
         Completed whatever its TaskStatus says; any other answer leaves the
-        outcome to the device.
+        outcome to the resource read back. A budget and a stop end the poll as
+        they end `_await`'s.
         """
         try:
-            url = self._own(redfish_discovery.task_reference(body, headers), "attaching")
+            url = self._own(redfish_discovery.task_reference(body, headers), doing)
         except ControllerError:
             return ""
-        status, task = 0, None
+        status, task, polls = 0, None, 0
+        deadline = None if budget is None else self.clock() + budget
         for poll in range(TASK_POLLS):
-            status, task, _headers = self.fetch(url, doing="attaching")
+            left = self._window(REQUEST_TIMEOUT, deadline, stop)
+            if left <= 0:
+                break
+            polls += 1
+            status, task, _headers = self.fetch(url, timeout=left, doing=doing)
             settled, succeeded = redfish_discovery.task_settled(task)
             if settled and status in (200, 202):
-                return "" if succeeded else str(_failure("attaching", url, status, task, "task " + task["TaskState"]))
+                return "" if succeeded else str(_failure(doing, url, status, task, "task " + task["TaskState"]))
             if not _task_running(status, task):
                 return ""
             if poll + 1 < TASK_POLLS:
-                self.sleep(TASK_POLL_DELAY)
+                pause = self._window(TASK_POLL_DELAY, deadline, stop)
+                if pause <= 0:
+                    break
+                self.sleep(pause)
         state = task.get("TaskState") if isinstance(task, dict) and isinstance(task.get("TaskState"), str) else ""
-        return str(_failure("attaching", url, status, task, "the task is still %s after %d polls" % (
-            state[:32] or "unsettled", TASK_POLLS)))
+        return str(_failure(doing, url, status, task, "the task is still %s after %d polls" % (
+            state[:32] or "unsettled", polls)))
 
     def _presented(self, member, image):
         """Read the device back until it presents the image: "" once it does."""
@@ -836,11 +871,12 @@ class Client:
                 self.sleep(MEDIA_PROBE_DELAY)
         return str(_failure("ejecting", member, status, body, "the device still presents media"))
 
-    def boot_once(self, target="Cd"):
+    def boot_once(self, target="Cd", budget=None, stop=None):
         """Select the next boot device and read the selection back.
 
         The precondition some firmware requires is the system's entity tag,
         from its ETag header or its body, and `*` is the one retry after a 412.
+        A budget and a stop end the read-back poll as they end `_await`'s.
         """
         doing = "selecting the boot device"
         tag = self._tag()
@@ -851,7 +887,8 @@ class Client:
             status, body, _headers = self.fetch(method="PATCH", payload=payload, headers={"If-Match": "*"}, doing=doing)
         if status != 0 and not 200 <= status < 300:
             raise _failure(doing, self.endpoint, status, body)
-        status = self._await(BOOT_POLLS, BOOT_POLL_DELAY, lambda seen: redfish_discovery.boot_selected(seen, target))
+        status = self._await(BOOT_POLLS, BOOT_POLL_DELAY, lambda seen: redfish_discovery.boot_selected(seen, target),
+                             budget, stop)
         if status is not None:
             raise _failure(doing, self.endpoint, status, None, "the system does not report %s for the next boot" % target)
 
@@ -898,20 +935,37 @@ class Client:
                 _shown(target), wanted, ", ".join(allowed) or "nothing"))
         return target, chosen
 
-    def _await(self, polls, delay, reached):
+    def _await(self, polls, delay, reached, budget=None, stop=None):
         """Read the system fresh until `reached` holds: None once it does, else
         the last status. An answer that is not a readable resource is not yet
-        the state, so only exhaustion fails."""
-        status = 0
+        the state, so only exhaustion fails. A budget in seconds also ends the
+        poll once that much time has passed, and a `stop` that returns true
+        ends it at its next read or pause as a spent budget does."""
+        status, deadline = 0, None if budget is None else self.clock() + budget
         for poll in range(polls):
-            status, body, headers = self.fetch()
+            left = self._window(REQUEST_TIMEOUT, deadline, stop)
+            if left <= 0:
+                break
+            status, body, headers = self.fetch(timeout=left)
             if status == 200 and isinstance(body, dict):
                 self._keep(body, headers)
                 if reached(body):
                     return None
             if poll + 1 < polls:
-                self.sleep(delay)
+                pause = self._window(delay, deadline, stop)
+                if pause <= 0:
+                    break
+                self.sleep(pause)
         return status
+
+    def _window(self, wanted, deadline, stop=None):
+        """The seconds a poll's next read or pause may take: `wanted`, cut to
+        what its budget has left, and none once it is spent or `stop` holds.
+        A read is given that as its socket timeout, which bounds each socket
+        operation, not a whole answer the controller trickles."""
+        if stop is not None and stop():
+            return 0
+        return wanted if deadline is None else min(wanted, deadline - self.clock())
 
 
 def _power(system):

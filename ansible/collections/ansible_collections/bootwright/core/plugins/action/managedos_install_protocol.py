@@ -24,7 +24,8 @@ from ansible_collections.bootwright.core.plugins.module_utils.controller_channel
 # and those of the update within the release (update.go), whose detail names
 # the version found, the repository offering it or the closed cause.
 # The tree image is the shared package-tree publication's to prove.
-REFUSALS = ("hardware-mismatch", "identity-mismatch", "machine-running", "tpm-absent", "foreign-installation")
+REFUSALS = ("hardware-mismatch", "identity-mismatch", "machine-running", "tpm-absent", "firmware-setting-mismatch",
+            "firmware-setting-not-applied", "foreign-installation")
 MEDIA_REFUSALS = ("media-changed-boot",)
 POLICY_REFUSALS = ("ssh-policy-unavailable", "ssh-policy-host-excluded", "ssh-policy-fleet-excluded", "ssh-policy-generated-excluded")
 FIPS_REFUSALS = ("fips-not-enabled",)
