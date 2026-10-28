@@ -362,7 +362,7 @@ func TestClusterSSHTransportDefaultsToTheVerifiedTunnel(t *testing.T) {
 	}
 }
 
-func TestDeferredStretchStillConstrainsProtection(t *testing.T) {
+func TestStretchConstrainsProtection(t *testing.T) {
 	catalog := fixtureCatalog()
 	cluster := find(t, catalog, api.CephCluster, "storage")
 	nodes := []api.Value{}
@@ -378,7 +378,7 @@ func TestDeferredStretchStillConstrainsProtection(t *testing.T) {
 	cluster = cluster.WithSpec(cluster.Spec().WithPath(api.ListValue(nodes...), "topology", "nodes").WithPath(m("failureDomain", "datacenter", "dataSites", api.StringList("site-a", "site-b"), "tiebreaker", api.MapValue()), "topology", "stretch").WithPath(m("nodeRef", "stretch-0"), "cephadm", "bootstrap"))
 	catalog = replace(catalog, cluster)
 	issues := Validate(cluster, catalog)
-	requireIssue(t, issues, "$.spec.topology.stretch")
+	requireIssue(t, issues, "$.spec.topology.stretch.tiebreaker.node")
 	pool := find(t, catalog, api.CephPool, "block")
 	pool = pool.WithSpec(pool.Spec().With("replicated", m("size", 3)))
 	requireIssue(t, Validate(pool, catalog), "$.spec.replicated")
@@ -460,8 +460,6 @@ func TestDeferredScopeRefusalsNameTheDeliveringItem(t *testing.T) {
 	cluster := find(t, catalog, api.CephCluster, "storage")
 	changed := cluster.WithSpec(cluster.Spec().WithPath(api.StringList("mgmt-gateway-spec-dependency-recording"), "cephadm", "workarounds"))
 	requireRemedy(Validate(changed, replace(catalog, changed)), "$.spec.cephadm.workarounds", "remove workarounds from $.spec.cephadm")
-	changed = cluster.WithSpec(cluster.Spec().WithPath(m("dataSites", api.StringList("site-a", "site-b"), "tiebreaker", m("site", "site-b")), "topology", "stretch"))
-	requireRemedy(Validate(changed, replace(catalog, changed)), "$.spec.topology.stretch", "remove stretch from $.spec.topology; B486 delivers it")
 }
 
 func coreServices() api.Value {

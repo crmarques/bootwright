@@ -28,9 +28,8 @@ func policyRequest(c api.Catalog, policy api.Object, contextName string) (Reques
 		if owned == "" {
 			owned = "stretch-rule"
 		}
-		if rule == owned {
-			return Request{}, failure("lifecycle.unsupported", "placement policy "+policy.Name()+" names the stretch rule "+rule+", which stretch mode (B486) owns", "B486 decides whether a stretch policy binds the stretch rule; until then omit this policy or give it another ruleName")
-		}
+		return Request{}, failure("lifecycle.unsupported", "placement policy "+policy.Name()+" places pools on stretch cluster "+cluster.Name()+", whose every pool uses the cluster's own stretch rule "+owned,
+			"remove CephPlacementPolicy "+policy.Name()+" and every CephPool placementPolicyRef naming it; a pool of a stretch cluster takes the stretch rule and 4/2 protection implicitly")
 	}
 	if domain := s.Get("failureDomain").Text(); domain != "" && domain != "host" {
 		return Request{}, failure("lifecycle.unsupported", "placement policy "+policy.Name()+" selects CRUSH failure domain "+domain+"; only host is realized", "set spec.failureDomain to host or omit it; Bootwright does not support site or rack failure domains yet")

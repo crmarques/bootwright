@@ -1,11 +1,13 @@
 package cephcluster
 
 import (
+	"net/netip"
 	"net/url"
 	"slices"
 	"strings"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
+	"github.com/crmarques/bootwright/internal/machine"
 )
 
 func (a *admission) cluster() {
@@ -152,22 +154,17 @@ func (a *admission) topology(ceph api.Value) {
 			if site := textOf(machine.Spec(), "placement", "site"); site != "" && textOf(node, "site") != "" && site != textOf(node, "site") {
 				a.invalid(field+".site", "storage node site must agree with its Machine placement", "set the topology node site to its Machine placement site")
 			}
-			if ceph.Get("security", "fips", "enabled").Bool() {
-				if profile, ok := a.catalog.Find(api.MachineInstallProfile, textOf(machine.Spec(), "os", "installProfileRef")); !ok || machine.Spec().Get("os", "provided").Bool() || !profile.Spec().Get("customizations", "security", "fips", "enabled").Bool() {
+			provided := machine.Spec().Get("os", "provided").Bool()
+			if ceph.Get("security", "fips", "enabled").Bool() && !provided {
+				if profile, ok := a.catalog.Find(api.MachineInstallProfile, textOf(machine.Spec(), "os", "installProfileRef")); !ok || !profile.Spec().Get("customizations", "security", "fips", "enabled").Bool() {
 					a.invalid(field+".machineRef", "FIPS storage requires a FIPS install profile on installed nodes", "select Machines installed with FIPS enabled or disable FIPS for the storage cluster")
 				}
 			}
 		}
 		a.storageSite(textOf(node, "site"), field+".site")
-		for _, location := range node.Get("location").Fields() {
-			if location.Name == "host" || location.Value.Type() != api.String || !nativeID.MatchString(location.Name) || !nativeID.MatchString(location.Value.Text()) {
-				a.invalid(field+".location", "CRUSH location uses nonempty qualified bucket names; host identity is generated", "remove the host bucket and use nonempty qualified bucket names and values in location")
-			}
-			if domain := textOf(ceph, "topology", "stretch", "failureDomain"); domain != "" && location.Name == domain && location.Value.Text() != textOf(node, "site") {
-				a.invalid(field+".location", "CRUSH site location must agree with the proved site", "set location."+domain+" to the topology node's proved site")
-			}
-		}
+		a.location(ceph, node, field)
 	}
+	a.monNetworks(ceph)
 	a.uniqueValues(fqdns, "$.spec.topology.nodes", "registered storage hostnames must be unique")
 	a.uniqueValues(names, "$.spec.topology.nodes", "storage node names must be unique")
 	a.uniqueValues(machines, "$.spec.topology.nodes", "one Machine cannot register as multiple storage nodes")
@@ -176,12 +173,58 @@ func (a *admission) topology(ceph api.Value) {
 			a.invalid("$.spec.cephadm.bootstrap.singleHostDefaults", "single-host defaults require exactly one non-stretch node", "remove spec.cephadm.bootstrap.singleHostDefaults or use exactly one topology node without stretch")
 		}
 	}
-	if ceph.Has("topology", "stretch") {
-		for i, site := range ceph.Get("topology", "stretch", "dataSites").Strings() {
-			a.storageSite(site, indexed("$.spec.topology.stretch.dataSites", i))
+	a.stretch(ceph)
+}
+
+func (a *admission) location(ceph api.Value, node api.Value, field string) {
+	domain := textOf(ceph, "topology", "stretch", "failureDomain")
+	for _, location := range node.Get("location").Fields() {
+		if location.Name == "host" || location.Value.Type() != api.String || !nativeID.MatchString(location.Name) || !nativeID.MatchString(location.Value.Text()) {
+			a.invalid(field+".location", "CRUSH location uses nonempty qualified bucket names; host identity is generated", "remove the host bucket and use nonempty qualified bucket names and values in location")
+			continue
 		}
-		a.storageSite(textOf(ceph, "topology", "stretch", "tiebreaker", "site"), "$.spec.topology.stretch.tiebreaker.site")
-		a.deferred("$.spec.topology.stretch", "native stretch lifecycle requires the later qualified stretch slice", "stretch from $.spec.topology", "B486")
+		switch {
+		case domain == "":
+			a.invalid(field+".location."+location.Name, "a host CRUSH location is admitted only on a stretch topology, whose failure domain it names", "remove topology.nodes[].location; host-domain placement needs none")
+		case location.Name != domain:
+			a.invalid(field+".location."+location.Name, "a host CRUSH location names only the stretch failure domain "+domain+", which the node's site already gives", "remove topology.nodes[].location."+location.Name+"; each data host is placed under its site's "+domain+" bucket")
+		case textOf(node, "name") == textOf(ceph, "topology", "stretch", "tiebreaker", "node"):
+			a.invalid(field+".location."+location.Name, "the tiebreaker holds no OSD, so it has no host CRUSH location; its MON is located by the stretch topology", "remove topology.nodes[].location from the tiebreaker node")
+		case location.Value.Text() != textOf(node, "site"):
+			a.invalid(field+".location", "CRUSH site location must agree with the proved site", "set location."+domain+" to the topology node's proved site")
+		}
+	}
+}
+
+func (a *admission) monNetworks(ceph api.Value) {
+	cidrs := ceph.Get("networks", "publicCIDRs").Strings()
+	if len(cidrs) == 0 {
+		return
+	}
+	for i, node := range ceph.Get("topology", "nodes").Items() {
+		m, ok := a.catalog.Find(api.Machine, textOf(node, "machineRef"))
+		if !ok || !nativeMember(a.object, "mon", textOf(node, "name")) {
+			continue
+		}
+		reference := textOf(ceph, "cephadm", "addressRef")
+		if reference == "" {
+			reference = textOf(m.Spec(), "access", "ssh", "addressRef")
+		}
+		address, declared := machine.Address(m, reference)
+		ip, err := netip.ParseAddr(address)
+		if !declared || err != nil {
+			continue
+		}
+		inside := false
+		for _, cidr := range cidrs {
+			if prefix, err := netip.ParsePrefix(cidr); err == nil && prefix.Masked().Contains(ip) {
+				inside = true
+			}
+		}
+		if !inside {
+			a.invalid(indexed("$.spec.topology.nodes", i)+".machineRef", "MON host "+NativeHostname(node)+" address "+address+" lies inside no public CIDR "+strings.Join(cidrs, ", ")+", so cephadm cannot place its MON",
+				"add the CIDR that holds "+address+" to spec.networks.publicCIDRs, or address Machine/"+m.Name()+" inside one of them")
+		}
 	}
 }
 
@@ -205,38 +248,27 @@ func declaredDataDevices(osd api.Value) int {
 	return osd.Get("dataDevices", "paths").Len() + osd.Get("dataDevices", "pathSpecs").Len()
 }
 
+var stretchDomains = []string{"chassis", "rack", "row", "pdu", "pod", "room", "datacenter", "zone", "region"}
+
 func (a *admission) stretch(ceph api.Value) {
 	stretch := ceph.Get("topology", "stretch")
 	if !stretch.Present() {
 		return
 	}
 	sites := stretch.Get("dataSites").Strings()
+	for i, site := range sites {
+		a.storageSite(site, indexed("$.spec.topology.stretch.dataSites", i))
+	}
+	tie := stretch.Get("tiebreaker")
+	a.storageSite(textOf(tie, "site"), "$.spec.topology.stretch.tiebreaker.site")
+	if domain := textOf(stretch, "failureDomain"); domain != "" && !slices.Contains(stretchDomains, domain) {
+		a.invalid("$.spec.topology.stretch.failureDomain", "the stretch failure domain "+domain+" is not a native default CRUSH bucket type above host", "set spec.topology.stretch.failureDomain to one of "+strings.Join(stretchDomains, ", ")+"; datacenter is the usual choice")
+	}
 	if len(sites) != 2 {
 		a.invalid("$.spec.topology.stretch.dataSites", "stretch requires exactly two data sites", "declare exactly two distinct sites in spec.topology.stretch.dataSites")
 	}
-	for _, site := range sites {
-		mon, osd := 0, 0
-		for _, node := range ceph.Get("topology", "nodes").Items() {
-			if textOf(node, "site") == site {
-				if hasRole(node, "mon") {
-					mon++
-				}
-				if hasRole(node, "osd") {
-					osd++
-				}
-			}
-		}
-		if mon == 0 || osd < 2 {
-			a.invalid("$.spec.topology.stretch.dataSites", "each stretch data site requires monitor membership and capacity for two replicas", "assign MON membership and at least two OSD-bearing nodes to each stretch data site")
-		}
-	}
-	tie := stretch.Get("tiebreaker")
-	if textOf(tie, "node") == "" && textOf(tie, "site") == "" {
-		a.issue("api.deferred", "$.spec.topology.stretch.tiebreaker", "native stretch activation is deferred without an independent tiebreaker", "declare an independent tiebreaker node to enable native stretch")
-		return
-	}
 	if textOf(tie, "node") == "" {
-		a.invalid("$.spec.topology.stretch.tiebreaker.node", "a populated tiebreaker requires a node", "set spec.topology.stretch.tiebreaker.node or omit tiebreaker")
+		a.invalid("$.spec.topology.stretch.tiebreaker.node", "native stretch mode needs a tiebreaker MON at a third site", "set spec.topology.stretch.tiebreaker.node to a topology node at a site other than both data sites")
 		return
 	}
 	node, ok := lookupNode(a.object, textOf(tie, "node"))
@@ -244,11 +276,44 @@ func (a *admission) stretch(ceph api.Value) {
 		a.invalid("$.spec.topology.stretch.tiebreaker.node", "tiebreaker must resolve to one topology node", "set spec.topology.stretch.tiebreaker.node to a declared topology node name")
 		return
 	}
-	if !hasRole(node, "mon") || node.Get("roles").Len() != 1 {
-		a.invalid("$.spec.topology.stretch.tiebreaker.node", "tiebreaker requires a monitor-only non-OSD node", "select a tiebreaker node with only the mon role and no OSD membership")
-	}
+	tiebreaker := textOf(node, "name")
 	if textOf(tie, "site") == "" || textOf(node, "site") != textOf(tie, "site") || slices.Contains(sites, textOf(tie, "site")) {
 		a.invalid("$.spec.topology.stretch.tiebreaker.site", "tiebreaker must occupy its node's distinct third site", "set tiebreaker.site to its node's site, distinct from both stretch dataSites")
+	}
+	if !nativeMember(a.object, "mon", tiebreaker) {
+		a.invalid("$.spec.topology.stretch.tiebreaker.node", "the tiebreaker node must be eligible for the declared MON service", "include the tiebreaker node in the mon service placement")
+	}
+	if textOf(ceph, "cephadm", "bootstrap", "nodeRef") == tiebreaker {
+		a.invalid("$.spec.cephadm.bootstrap.nodeRef", "the bootstrap node runs the first MGR, and the tiebreaker runs a MON alone", "select a data-site node as spec.cephadm.bootstrap.nodeRef")
+	}
+	for i, service := range ceph.Get("services").Items() {
+		kind := textOf(service, "service_type")
+		names, issues := ResolveServicePlacement(a.object, service)
+		if kind != "mon" && len(issues) == 0 && slices.Contains(names, tiebreaker) {
+			a.invalid(indexed("$.spec.services", i)+".placement", "the "+kind+" service places on the stretch tiebreaker "+tiebreaker+", which runs a MON alone", "narrow this service's placement to data-site nodes")
+		}
+	}
+	for i, node := range ceph.Get("topology", "nodes").Items() {
+		if site := textOf(node, "site"); textOf(node, "name") != tiebreaker && !slices.Contains(sites, site) {
+			a.invalid(indexed("$.spec.topology.nodes", i)+".site", "a stretch node occupies one of the two data sites, or is the tiebreaker", "place this node's Machine at one of spec.topology.stretch.dataSites")
+		}
+	}
+	for _, site := range sites {
+		mon, osd := 0, 0
+		for _, node := range ceph.Get("topology", "nodes").Items() {
+			if textOf(node, "site") != site {
+				continue
+			}
+			if nativeMember(a.object, "mon", textOf(node, "name")) {
+				mon++
+			}
+			if nativeMember(a.object, "osd", textOf(node, "name")) {
+				osd++
+			}
+		}
+		if mon == 0 || osd < 2 {
+			a.invalid("$.spec.topology.stretch.dataSites", "stretch data site "+site+" needs a MON and at least two OSD hosts, which hold its two replicas", "place MON membership and at least two OSD-bearing nodes at site "+site)
+		}
 	}
 }
 

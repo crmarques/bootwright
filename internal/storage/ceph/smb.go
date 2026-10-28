@@ -405,8 +405,10 @@ func smbDefinition(c api.Catalog, object api.Object, input lifecycle.PlanInput) 
 	}
 	for _, h := range base.Hosts {
 		secrets = append(secrets, h.SSHKeyRef)
-		if h.HostKeyRef != "" {
-			secrets = append(secrets, h.HostKeyRef)
+		for _, ref := range []string{h.HostKeyRef, h.KnownHostsRef} {
+			if ref != "" {
+				secrets = append(secrets, ref)
+			}
 		}
 	}
 	return reconciliation.BlockDefinition{ID: SMBBlockID(object.Name()), Description: removal.Description, Stage: reconciliation.StageClusters, Requires: smbRequires(object.Spec(), r.ResourceType),

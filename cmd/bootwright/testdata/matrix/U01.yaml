@@ -9,15 +9,21 @@ expect:
 - code: api.invariant
   kind: CephCluster
   name: ceph-lab
-  field: $.spec.topology.stretch
-  message: native stretch lifecycle requires the later qualified stretch slice
-  remediation: remove stretch from $.spec.topology; B486 delivers it
+  field: $.spec.topology.stretch.dataSites
+  message: stretch requires exactly two data sites
+  remediation: declare exactly two distinct sites in spec.topology.stretch.dataSites
+- code: api.invariant
+  kind: CephCluster
+  name: ceph-lab
+  field: $.spec.topology.stretch.tiebreaker.node
+  message: native stretch mode needs a tiebreaker MON at a third site
+  remediation: set spec.topology.stretch.tiebreaker.node to a topology node at a site other than both data sites
 - code: api.invariant
   kind: CephPlacementPolicy
   name: ssd-hosts
-  field: $.spec.replicated
-  message: stretch fixes replicated protection at size four and minimum two
-  remediation: "set spec.replicated.size to 4 and spec.replicated.minSize to 2, including inherited policy values"
+  field: $.spec.clusterRef
+  message: stretch cluster ceph-lab places every pool with its own stretch rule stretch-rule, so no placement policy applies
+  remediation: "remove this CephPlacementPolicy and every CephPool placementPolicyRef naming it; a stretch cluster's pools take the stretch rule and 4/2 protection implicitly"
 - code: api.invariant
   kind: CephPool
   name: cephfs-data

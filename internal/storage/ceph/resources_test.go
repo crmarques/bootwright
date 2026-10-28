@@ -138,17 +138,20 @@ func TestNonDefaultCrushRootRefusesAtPlan(t *testing.T) {
 	}
 }
 
-func TestPolicyNamingStretchRuleRefusesNamingB486(t *testing.T) {
+func TestEveryPolicyOfAStretchClusterRefusesForTheStretchRule(t *testing.T) {
 	stretch := func(spec api.Value) api.Value {
 		return spec.WithPath(requestMap("failureDomain", "datacenter"), "topology", "stretch")
 	}
 	catalog := planCatalog(3, 3, stretch, childOf(api.CephPlacementPolicy, "stretched", "ruleName", "stretch-rule", "failureDomain", "datacenter"),
 		childOf(api.CephPlacementPolicy, "other", "ruleName", "other"))
-	_, err := planned(t, catalog, api.CephPlacementPolicy, "stretched")
-	refusedWith(t, err, "lifecycle.unsupported", "placement policy stretched names the stretch rule stretch-rule, which stretch mode (B486) owns", "B486 decides whether a stretch policy binds the stretch rule; until then omit this policy or give it another ruleName")
-	_, err = planned(t, catalog, api.CephPlacementPolicy, "other")
-	if d := diagnostics.Of(err); len(d) != 1 || strings.Contains(d[0].Message, "B486") || !strings.Contains(d[0].Message, "topology profile") {
-		t.Fatalf("a policy naming another rule on a stretch cluster: %+v", d)
+	for _, name := range []string{"stretched", "other"} {
+		_, err := planned(t, catalog, api.CephPlacementPolicy, name)
+		refusedWith(t, err, "lifecycle.unsupported", "placement policy "+name+" places pools on stretch cluster example, whose every pool uses the cluster's own stretch rule stretch-rule",
+			"remove CephPlacementPolicy "+name+" and every CephPool placementPolicyRef naming it; a pool of a stretch cluster takes the stretch rule and 4/2 protection implicitly")
+	}
+	_, err := planned(t, catalog, api.CephCluster, "example")
+	if d := diagnostics.Of(err); len(d) != 1 || !strings.Contains(d[0].Message, "whose native activation this build does not realize yet (B486)") {
+		t.Fatalf("a stretch cluster planned: %+v", d)
 	}
 }
 

@@ -95,8 +95,10 @@ func (c Capability) Plan(ctx context.Context, input lifecycle.PlanInput) (lifecy
 		plan.Secrets = append(plan.Secrets, request.ClusterKeyRef, request.RegistryRef)
 		for _, h := range request.Hosts {
 			plan.Secrets = append(plan.Secrets, h.SSHKeyRef)
-			if h.HostKeyRef != "" {
-				plan.Secrets = append(plan.Secrets, h.HostKeyRef)
+			for _, ref := range []string{h.HostKeyRef, h.KnownHostsRef} {
+				if ref != "" {
+					plan.Secrets = append(plan.Secrets, ref)
+				}
 			}
 		}
 		for _, r := range requests {
@@ -184,8 +186,8 @@ func placement(object api.Object, request Request) ([]reconciliation.ObjectRef, 
 	switch request.Action {
 	case "cluster":
 		dependencies = []string{ImageBlockID(request.Cluster)}
+		requires = append(requires, hostRequirements(request.Hosts...)...)
 		for _, host := range request.Hosts {
-			requires = append(requires, hostRequirement(host))
 			dependencies = append(dependencies, HostBlockID(request.Cluster, host.Machine))
 		}
 		slices.SortFunc(requires, func(a, b reconciliation.ObjectRef) int {

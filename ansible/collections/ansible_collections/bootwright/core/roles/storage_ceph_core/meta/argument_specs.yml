@@ -122,7 +122,7 @@ argument_specs:
           version:
             type: str
             required: true
-            choices: [ceph-core-v33]
+            choices: [ceph-core-v34]
       bootwright_ceph_digest:
         type: str
         required: true

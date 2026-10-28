@@ -699,12 +699,13 @@ The generated native HostSpec is visible as non-secret plan intent. A raw
 second infrastructure owner.
 
 Native [HostSpec location](https://docs.ceph.com/en/tentacle/cephadm/host-management/#setting-the-initial-crush-location-of-host)
-describes initial hierarchy placement, not a live hierarchy-edit API. Native
-`host` identity is generated, not overridden through `location`. Each
-declared site resolves through Environment and the Machine. When a site maps
-to the configured CRUSH failure-domain bucket, `location` must agree with that
-mapping; it cannot put the host in a second site. B81/B486 qualify hierarchy,
-capacity and removal of owned buckets without removing foreign parents.
+describes initial hierarchy placement, not a live hierarchy-edit API: later
+changes to it are ignored. Native `host` identity is generated, not
+overridden through `location`. Each declared site resolves through
+Environment and the Machine. `location` is admitted only on a stretch
+topology and names only its failure-domain bucket, whose value is the node's
+site ([stretch topology](ceph.md#stretch-topology)); it cannot put the host in
+a second site. B486 qualifies the hierarchy it creates.
 
 `topology.roles`, per-node `devices`/`osd` and `topology.osdDrivegroups` are
 retired by this migration. Native service placement is the authority for

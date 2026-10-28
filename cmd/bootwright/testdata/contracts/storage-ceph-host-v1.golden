@@ -1,6 +1,6 @@
 implementation: storage-ceph-host-v1
-content-digest: b36780e2eda619d5bb11d1cb5f3d5581460c1c8c7ce27d99c798072f4d1f5d23
-request-version: ceph-host-v8
+content-digest: fa6800889852c1d6a62633d885c3321aaa3fb6548d14a7990cc3f733a787feec
+request-version: ceph-host-v9
 automation-formats: bootwright.native-plan-v1, ceph-crypto-policy-v1, ceph-device-identities-v2, ceph-host-route-v3, ceph-package-artifacts-v1, ceph-package-complete-v1, ceph-package-decision-v1, ceph-physical-device-binding-v1, ceph-runtime-profile-v3
 mark-formats: none
 proof-ids: .bootwright-tree-identity, marker:-attempt-%d.json, marker:-pulled.json, marker:auth.json, marker:auxiliary-, marker:cache-directory-intent.json, marker:cache-directory.json, marker:cache-pending.json, marker:cache-ready.json, marker:complete.json, marker:decision.json, marker:device-identities.json, marker:physical-device-binding.json, marker:policy.json, marker:pull-attempt-%d.json, marker:pulled.json, marker:route.json, marker:runtime-profile.json, marker:scope.json, marker:synthetic.json, marker:verified.json
@@ -51,12 +51,14 @@ request-schema:
   cluster.hosts[].hardware.uuid string
   cluster.hosts[].hostKeyRef string omitempty
   cluster.hosts[].knownHosts string omitempty
+  cluster.hosts[].knownHostsRef string omitempty
   cluster.hosts[].labels []string
   cluster.hosts[].location map[string]string
   cluster.hosts[].machine string
   cluster.hosts[].name string
   cluster.hosts[].physical bool omitempty
   cluster.hosts[].port int
+  cluster.hosts[].provided bool omitempty
   cluster.hosts[].sshKeyRef string
   cluster.hosts[].user string
   cluster.image string
@@ -100,6 +102,9 @@ evidence-schema:
   devices[].serial string
   devices[].sizeBytes int64 omitempty
   devices[].wwn string omitempty
+  fips *struct ceph.HostFIPS omitempty
+  fips.kernel string
+  fips.policy string
   fsid string
   gid int
   host string

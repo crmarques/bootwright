@@ -85,7 +85,6 @@ func positive(value api.Value) bool               { return numeric(value).Sign()
 func floatPositive(value api.Value) bool          { n, ok := value.Float64(); return ok && n > 0 }
 func indexed(field string, index int) string      { return fmt.Sprintf("%s[%d]", field, index) }
 func contains(value api.Value, token string) bool { return slices.Contains(value.Strings(), token) }
-func hasRole(node api.Value, role string) bool    { return contains(node.Get("roles"), role) }
 func lookupNode(cluster api.Object, name string) (api.Value, bool) {
 	var result api.Value
 	count := 0
@@ -163,7 +162,9 @@ func Validate(object api.Object, catalog api.Catalog) []api.Issue {
 	}
 	switch object.Kind() {
 	case api.CephPlacementPolicy:
-		a.replication(owner, api.Object{})
+		if !owner.Spec().Has("topology", "stretch") {
+			a.replication(owner, api.Object{})
+		}
 		a.policy(owner)
 	case api.CephReplication:
 		a.storageReplication(owner)

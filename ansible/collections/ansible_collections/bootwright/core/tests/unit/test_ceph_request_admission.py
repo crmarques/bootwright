@@ -124,7 +124,7 @@ CORE = {
     "services": [{"placement": {"count": 2, "hosts": ["node-1"]}, "service_type": "mgr"}],
     "settings": {"modules": ["nfs"]},
     "subvolume": {"filesystem": "files", "gid": 0, "group": "", "mode": "755", "name": "docs", "pool": "files-data", "sizeBytes": 0, "uid": 0},
-    "version": "ceph-core-v33",
+    "version": "ceph-core-v34",
 }
 
 IMAGE = {
@@ -143,7 +143,7 @@ IMAGE = {
 }
 
 HOST = {"cluster": {key: value for key, value in CORE.items() if key not in ("action", "delegated", "gateway", "service", "settings")},
-        "host": "node-1", "version": "ceph-host-v8"}
+        "host": "node-1", "version": "ceph-host-v9"}
 
 SMB = {
     "bindings": [],

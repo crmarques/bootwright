@@ -173,8 +173,8 @@ func admissibleExampleSources(t *testing.T, withExtras bool) desiredstate.Source
 		}
 		files = append(files, desiredstate.NewSourceFile(file.Path(), []byte(body)))
 	}
-	if dropped != 15 {
-		t.Fatalf("the projection dropped %d sources, want the 15 Ceph sources", dropped)
+	if dropped != 14 {
+		t.Fatalf("the projection dropped %d sources, want the 14 Ceph sources", dropped)
 	}
 	files = append(files, desiredstate.NewSourceFile(filepath.Join(root, admissibleCephSources), readAcceptanceFixture(t, "ceph-admissible.yaml")))
 	if withExtras {
@@ -228,8 +228,8 @@ func requireObject(t *testing.T, catalog api.Catalog, kind api.Kind, name string
 // refuses those declarations explicitly rather than dropping them from input.
 func TestActualCLIRefusesFutureReferenceFeatures(t *testing.T) {
 	sources := exampleSources(t)
-	if len(sources.Files) != 104 {
-		t.Fatalf("reference discovery: got %d files, want 104", len(sources.Files))
+	if len(sources.Files) != 103 {
+		t.Fatalf("reference discovery: got %d files, want 103", len(sources.Files))
 	}
 	var out, errOut bytes.Buffer
 	code := run(context.Background(), []string{"validate", "-f", sources.Roots[0], "--output", "json"}, &out, &errOut)
@@ -251,17 +251,16 @@ func TestActualCLIRefusesFutureReferenceFeatures(t *testing.T) {
 // its diagnostics, every diagnostic belongs to exactly one bullet, and a bullet
 // that claims none or a bullet outside the table fails.
 func TestReferenceReadmeListsExactlyTheReferenceRefusals(t *testing.T) {
-	stretch := func(d diagnosticTuple) bool {
-		return d.field == "$.spec.mgrModules" || d.field == "$.spec.topology.stretch"
+	modules := func(d diagnosticTuple) bool {
+		return d.field == "$.spec.mgrModules"
 	}
 	global := func(d diagnosticTuple) bool { return strings.HasPrefix(d.field, "$.spec.config.global.") }
 	bullets := map[string]func(diagnosticTuple) bool{
 		"External endpoint sources on the two baremetal OpenShiftClusters.": func(d diagnosticTuple) bool {
 			return d.kind == "OpenShiftCluster" && strings.HasPrefix(d.field, "$.spec.install.endpoints.")
 		},
-		"Stretch topology and manager-module intent.":                                                              stretch,
+		"Manager-module intent.": modules,
 		"Unqualified global Ceph options, including missing members of the currently qualified pool-default pair.": global,
-		"A FIPS Ceph node without a managed FIPS installation profile.":                                            func(d diagnosticTuple) bool { return d.field == "$.spec.topology.nodes[6].machineRef" },
 		"Agent-install bridge interfaces on the two physical OpenShiftClusters.": func(d diagnosticTuple) bool {
 			return d.kind == "OpenShiftCluster" && strings.HasPrefix(d.field, "$.spec.nodes[")
 		},
@@ -323,7 +322,7 @@ const (
 
 // referenceRefusals is the complete set of diagnostics the unmodified
 // reference raises: the managed Ceph cluster's per-field qualification
-// refusals and its stretch intent, and each storage family refused until its
+// refusals, and each storage family refused until its
 // later slice. A diagnostic outside the set, or a missing one, fails.
 func referenceRefusals() []diagnosticTuple {
 	cluster := func(field string) diagnosticTuple {
@@ -342,8 +341,6 @@ func referenceRefusals() []diagnosticTuple {
 		{"api.required", storageClusterKind, multidcCluster, "$.spec.config.global.osd_pool_default_min_size"},
 		{"api.required", storageClusterKind, multidcCluster, "$.spec.config.global.osd_pool_default_size"},
 		cluster("$.spec.mgrModules"),
-		cluster("$.spec.topology.stretch"),
-		cluster("$.spec.topology.nodes[6].machineRef"),
 	}
 	for _, name := range []string{"ocp-multidc-01", "ocp-multidc-02"} {
 		for index := 0; index < 3; index++ {

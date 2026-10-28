@@ -213,7 +213,6 @@ func TestNVMeoFOnStretchClusterDefersToB487(t *testing.T) {
 	cluster, catalog := nvmeofCatalog(t)
 	stretched := cluster.WithSpec(cluster.Spec().WithPath(m("dataSites", api.StringList("site-a", "site-b"), "tiebreaker", m("site", "site-b")), "topology", "stretch"))
 	issues := Validate(stretched, replace(catalog, stretched))
-	requireNVMeoFIssue(t, issues, "$.spec.topology.stretch", "stretch", "remove stretch from $.spec.topology; B486 delivers it")
 	requireNVMeoFIssue(t, issues, nvmeofField, "NVMe-oF gateways on a stretch cluster need the stretch capacity gate", "remove this nvmeof service from spec.services; B487 delivers it")
 }
 

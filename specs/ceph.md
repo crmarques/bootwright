@@ -83,9 +83,18 @@ publisher trust. FIPS, CephX, encryption and call-home choices retain their
 independent API, trust and authorization requirements. Native tools determine
 whether the selected versions can realize those choices; Bootwright does not
 screen their version compatibility. A FIPS Ceph request freezes its FIPS and
-AES CephX policy, requires a completed FIPS installation proof for every host,
-and checks each host's kernel and inherited crypto policy before cluster
-claims. Ed25519 cluster SSH keys and authored AES256K CephX policy refuse
+AES CephX policy, requires a completed FIPS installation proof for every
+installed host, and checks each host's kernel and inherited crypto policy
+before cluster claims: exactly `1` and exactly `FIPS`, as the
+[managed-OS proof](managed-os.md#fips-mode) reads them. A provided host has no
+installation proof, so its host block reads the same two files over the fleet
+connection before host preparation and on every apply and observation, and
+records them as its `fips` host evidence, never as a Machine installation
+proof; a mismatch or an unreadable file refuses `fips-not-enabled`, naming the
+Machine, and the cluster block requires that evidence. Its pinned host key
+must be ECDSA or RSA of at least 2048 bits. Bootwright never switches a
+host's FIPS mode; FIPS mode at installation, disk encryption and patching of
+a provided host stay the operator's. Ed25519 cluster SSH keys and authored AES256K CephX policy refuse
 before host preparation. Synthetic route keys use ECDSA on an observed FIPS
 kernel. Native auth keys must prove the declared AES type before readiness
 or client-key publication; a mismatch retains ownership and reports its cause,
@@ -366,10 +375,8 @@ the topology names them ([substrate arm](api/machines.md#substrate-arm),
 judge ([release qualification](ceph-coverage.md#release-qualification));
 acceptance-profile sizes impose no additional restriction. Native stretch mode
 requires the complete two-data-site topology and an independent
-third-site monitor-only tiebreaker; an incomplete tiebreaker declaration retains
-its [admission meaning](api/ceph.md#complete-graph-invariants) and cannot
-claim stretch readiness. [B486](milestones/m2.md#b486) qualifies native stretch,
-[B487](milestones/m2.md#b487) its service/endpoint restrictions, and
+third-site monitor-only tiebreaker, which [stretch topology](#stretch-topology)
+owns. [B487](milestones/m2.md#b487) owns its service/endpoint restrictions and
 [B488](milestones/m2.md#b488) its failure and recovery acceptance.
 
 A compiled graph resolves every reference field, so the plan looks up only
@@ -381,6 +388,74 @@ service-unit request refuses with `api.invariant` when the
 `nvmeof.<service_id>` name that an `nvmeof` service's `service_id` derives is
 not one declared service, and a filesystem request when the
 `mds.<filesystem>` name its `spec.mdsServiceRef` names is not.
+
+### Stretch topology
+
+A `topology.stretch` cluster is native
+[stretch mode](https://docs.ceph.com/en/tentacle/rados/operations/stretch-mode/):
+two data sites hold two replicas each and a third site holds only a
+tiebreaker MON. [Admission](api/ceph.md#complete-graph-invariants) proves the
+topology; this section owns what the plan derives and realizes (D196).
+
+- **Failure domain and host location.** `failureDomain` is a native default
+  CRUSH bucket type above `host`. Each data-site host is placed under its
+  site's bucket of that type: a node's `location` names only that key, its
+  value is the node's site, and an omitted `location` is derived from the
+  site. The tiebreaker holds no OSD and has no host location. Outside stretch
+  a host `location` refuses.
+- **The tiebreaker.** It runs a MON alone: it is never the bootstrap node, and
+  an authored service other than `mon` whose resolved placement includes it
+  refuses; the derived per-host crash collector still runs there
+  ([B686](milestones/m2.md#b686)). It may be a provided Machine
+  (`os.provided: true`), the only place a provided Machine joins a Ceph
+  cluster. A provided tiebreaker is reached over the fleet connection: its
+  `access.ssh` names the fleet key the other hosts use and the cluster SSH
+  user, and its `knownHostsRef` pins the one host key every Ceph connection
+  verifies. It holds no device and no erase claim, needs no Machine block,
+  and takes its OS dependency packages from the hosted DVD of the bootstrap
+  host's install profile; a host whose release that tree cannot serve fails
+  the native package resolution. Its FIPS proof is
+  [observed](#frozen-release-and-trust).
+- **Networks.** `networks.publicCIDRs` may list several CIDRs, rendered as
+  one comma-separated `public_network`; every MON host's address lies inside
+  one of them, because cephadm places a MON only on such a host
+  ([MON service](https://docs.ceph.com/en/tentacle/cephadm/services/mon/)).
+- **Pools and placement.** The cluster owns one CRUSH rule, `ruleName`, in
+  IBM's single-`take` form: `take default`, `choose firstn 0 type
+  <failureDomain>`, `chooseleaf firstn 2 type host`
+  ([IBM stretch mode](https://www.ibm.com/docs/en/storage-ceph/9.9.1?topic=storage-stretch-mode)).
+  Every pool of the cluster, service-created pools included, uses that rule
+  with `size: 4` and `minSize: 2`; an authored other pair refuses, and so do
+  erasure-coded pools and device-class rules. A CephPlacementPolicy of a
+  stretch cluster refuses at validation and at plan, and so does a CephPool
+  `placementPolicyRef`, each remedy saying that the stretch rule applies.
+- **Activation.** Declarative where native specs exist: host `location` in
+  each host's enrollment spec, and a `crush_locations` entry
+  `<failureDomain>=<site>` for every MON in the MON spec, derived from the
+  topology. Then imperatively, in order, each stage with an attempt record
+  before its command and a completion record after its readback: `located`
+  (`osd crush tree`), `rule-present` (`osd crush rule dump`),
+  `election-connectivity` (`mon set election_strategy connectivity`, read
+  from `mon dump`), `stretch-enabled` (`mon enable_stretch_mode <tiebreaker>
+  <ruleName> <failureDomain>`, read from the stretch fields of `mon dump`
+  and `osd dump`) and `verified` (every pool 4/2 on the rule). A stage whose
+  attempt record exists without its completion record is observed and never
+  repeated. Activation completes before any pool is created.
+- **Frozen intent.** Stretch is day-1 intent of the frozen cluster request:
+  adding or removing `topology.stretch` on an applied cluster refuses, its
+  remedy retiring the whole cluster, and `mon disable_stretch_mode` is never
+  run as an inverse.
+- **Readiness and observation.** Readiness requires the `verified` stage and
+  an observed stretch state; observation reports it, and `bootwright diff
+  --observe` reports a cluster whose observed stretch state lacks a stage as
+  partial realization.
+
+Not yet met: planning refuses a stretch cluster with `lifecycle.unsupported`
+before any effect, so host location, activation, readiness and observation
+are not realized; tracked as [B486](milestones/m2.md#b486).
+Not yet met: destroy never retires a cluster with a provided tiebreaker,
+because no block removes that Machine, so it refuses by the surviving-host
+rule; tracked as [B892](milestones/m2.md#b892).
 
 ### Refusal table
 

@@ -332,8 +332,8 @@ value is preserved:
   Machine's `placement.site`;
 - a `topology.stretch` block's `ruleName: stretch-rule`, its tiebreaker
   `site` from the tiebreaker node and, when omitted, its `dataSites` as the
-  sorted distinct sites of the `mon` nodes other than the tiebreaker, while
-  stretch admission stays unavailable; and
+  sorted distinct sites of the nodes the MON service places, other than the
+  tiebreaker; and
 - `serviceBindings` and their `secrets` in sorted order.
 
 Implicit defaults owned by Ceph or a native renderer, such as role-derived
@@ -446,9 +446,28 @@ checks:
   cluster ([field record](../ceph-resources.md#cephsmbresource)); and
 - an NFS service's mode follows its ingress, and the HAProxy mode that hides
   client addresses refuses
-  ([NFS modes](../ceph-native-api.md#rgw-ingress-and-nfs-records)).
+  ([NFS modes](../ceph-native-api.md#rgw-ingress-and-nfs-records));
+- every MON host's address, from `cephadm.addressRef` or else the Machine's
+  `access.ssh.addressRef`, lies inside one of `networks.publicCIDRs`; and
+- a `topology.stretch` block declares a `failureDomain` that is a native
+  default CRUSH bucket type above `host` (`chassis`, `rack`, `row`, `pdu`,
+  `pod`, `room`, `datacenter`, `zone` or `region`), exactly two `dataSites`,
+  each holding a MON and at least two OSD hosts, and a `tiebreaker.node` that
+  the MON service places, at its own `tiebreaker.site` distinct from both,
+  that is not the bootstrap node and that no other service places; every
+  other node sits at a data site; a node `location` names only the failure
+  domain, equal to its site, the tiebreaker none, and a cluster without
+  stretch none; a CephPlacementPolicy of a stretch cluster and a CephPool
+  `placementPolicyRef` naming one refuse, and a pool's protection is `4/2`
+  ([stretch topology](../ceph.md#stretch-topology)).
 
-Stretch admission remains unavailable until its provider-qualified slice.
+A FIPS cluster admits a provided Machine, whose FIPS mode its host block
+observes ([frozen release and trust](../ceph.md#frozen-release-and-trust));
+planning admits a provided Machine only as the stretch tiebreaker
+([stretch topology](../ceph.md#stretch-topology)). The MON address proof
+covers each MON host whose address reference resolves to a declared IP
+literal; a DNS or runtime-assigned address is proved by cephadm's own
+placement.
 
 These checks qualify desired intent only. Live capacity, device safety,
 external-cluster identity and native-output interpretation remain gates of

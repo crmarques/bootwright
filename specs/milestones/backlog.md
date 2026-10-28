@@ -3239,6 +3239,8 @@ holding such a clause, the clauses pending and the work they enable.
   uplink rules (X196).
 - [D195](#d195): clauses (1) to (6), the Ceph cluster deadline as the only
   host bound (X197).
+- [D196](#d196): clauses (1) to (12), the stretch reference profile, its
+  topology inputs and the provided-host FIPS proof (X198, X199).
 - [D198](#d198): clauses (1) to (7), the physical Ceph host's disk bound
   derived from its Machine's erase policy (X201).
 
@@ -5249,6 +5251,62 @@ name and fields instead of the cluster's text. (5) Evidence: in-tree planning
 goldens and the recording fake transport at seven hosts and at the bound; a
 live seven-guest libvirt run is the operator gate. (6) The 900 s readiness
 waits are unchanged; a shortfall the live run measures is its own item.
+
+### D196
+
+**session-pending** (2026-10-28, the owner; the clauses after the owner's
+words are taken by the session, pending the owner's review). The owner asked
+the session to "Plan and implement what is still missing" and said "the
+solution must be as good as possible in terms of well-designed architecture
+and ux". It splits [B893](m2.md#b893), the stretch topology inputs, from
+[B486](m2.md#b486), and authorizes B893 with [B887](m2.md#b887) as slice X198
+and B486, activation and readiness, as X199 on M2, out of sequence, and is the dated waiver of B486's Requires on B485, B316 and B472,
+for implementation only. Taken by the session, pending the owner's review:
+(1) One reference stretch profile is admitted ahead of the full M2c/M2d
+matrix (two data sites of three OSD hosts, a MON-only tiebreaker at a third
+site, `4/2` on a `datacenter` stretch rule); its exit evidence is B488's
+subset for that profile, and the matrix rows stay open. (2) Activation is
+declarative where native specs exist (host `location` at enrollment, MON
+`crush_locations` derived from the topology), and imperative only for
+`election_strategy connectivity`, the stretch rule and `enable_stretch_mode`.
+(3) Those run as stages `located`, `rule-present`, `election-connectivity`,
+`stretch-enabled` and `verified`, each with an attempt and a completion record
+and read back before the next; an ambiguous stage is observed, never
+repeated; activation precedes every pool. (4) The cluster owns its stretch
+rule, `ruleName`, in IBM's single-`take` form; every pool uses it at `4/2`; a
+CephPlacementPolicy of a stretch cluster, and a CephPool
+`placementPolicyRef` naming one, refuse at validation and at plan with a
+remedy saying the stretch rule applies. (5) `failureDomain` is any native
+default CRUSH bucket type above `host`; a host `location` names only that
+key, equal to the node's site, derived when omitted; the tiebreaker has none;
+outside stretch a `location` refuses at validation. (6) A provided Machine
+joins a Ceph cluster only as its stretch tiebreaker: MON-only, never the
+bootstrap node, with the fleet key, the cluster SSH user and a
+`knownHostsRef`-pinned host key, no device or erase claim and no Machine
+block requirement; its OS dependency packages come from the bootstrap host's
+hosted DVD; any other authored service placing on it refuses, while the
+derived crash collector still runs there. (7) `publicCIDRs` may span several
+CIDRs; admission proves each MON host address inside one. (8) Stretch is
+frozen day-1 intent: adding or removing it refuses with whole-cluster
+retirement as the remedy, and `disable_stretch_mode` is never an inverse,
+which settles the IBM pages' differing exit guidance for Bootwright. (9) A
+provided host proves FIPS mode by its host block reading
+`/proc/sys/crypto/fips_enabled` and `/etc/crypto-policies/state/current` over
+the fleet connection before host preparation and on every apply and
+observation, exactly `1` and `FIPS`; the reading is the host block's `fips`
+evidence, never a Machine installation proof, and the cluster block requires
+it; a mismatch or unreadable file refuses `fips-not-enabled` naming the
+Machine; the pinned host key must be ECDSA or RSA of at least 2048 bits;
+`/proc/cmdline` is not read, since the two files are what `fips-mode-setup
+--check` reads; the run-time FIPS check of installed hosts now also requires
+exactly `FIPS`, as the managed-OS proof does. (10) [B316](m2.md#b316) needs
+no new field for stretch: X198 adds only that every stretch node sits at a
+data site or the tiebreaker's; its service-placement remainder stays with
+[B487](m2.md#b487). (11) X198 admits the stretch topology at validation and
+keeps planning refused (`lifecycle.unsupported`) until X199 realizes
+activation. (12) Destroy of a cluster with a provided tiebreaker keeps
+refusing by the surviving-host rule until [B892](m2.md#b892) removes that
+host's MON daemon and cluster data.
 
 ### D198
 

@@ -196,9 +196,6 @@ spec:
         labels:
           - mon
 
-        location:
-          datacenter: site-c
-
   services:
     - service_type: mon
 

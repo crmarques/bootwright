@@ -5,6 +5,5 @@ metadata:
 
 spec:
   clusterRef: ceph-multidc-01
-  placementPolicyRef: stretch-datacenter
   role: cephfsData
   application: cephfs

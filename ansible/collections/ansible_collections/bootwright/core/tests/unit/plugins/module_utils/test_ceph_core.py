@@ -38,7 +38,7 @@ def core_request():
               "devices": [{"path": "/dev/vdb", "serial": "disk" + str(i), "sizeBytes": 1024 ** 3}], "labels": [], "location": {},
               "sshKeyRef": "fleet-key"} for i in range(1, 4)]
     names = [h["name"] for h in hosts]
-    return {"controller": "controller", "version": "ceph-core-v33", "action": "cluster", "cluster": "example", "owner": "apply-123",
+    return {"controller": "controller", "version": "ceph-core-v34", "action": "cluster", "cluster": "example", "owner": "apply-123",
             "fsid": "4c0a4300-aa43-458c-86d7-ac2256d1fc00", "image": "registry.example.test/ceph@sha256:" + "a" * 64,
             "cephadm": {"path": "/usr/sbin/cephadm", "packageVersion": "20.2.1-405.el9cp"},
             "release": "synthetic-release", "ansiblePackageVersion": "synthetic-ansible",
@@ -363,8 +363,8 @@ def host_block(core_request):
         {"host": host["name"], "profile": "rhel", "media": "rhel-dvd.iso", "mediaSHA256": "e" * 64, "mediaSize": 1024,
          "publicationPath": "/var/lib/bootwright-services/example/public/os/rhel/tree", "url": "https://192.0.2.10:8443/os/rhel/tree",
          "certificateRef": "serving-tls"} for host in cluster["hosts"]]}
-    request = {"version": "ceph-host-v8", "cluster": cluster, "host": "node-2"}
-    record = {"version": "ceph-host-evidence-v3", "host": "node-2", "owner": cluster["owner"], "fsid": cluster["fsid"], "image": cluster["image"],
+    request = {"version": "ceph-host-v9", "cluster": cluster, "host": "node-2"}
+    record = {"version": "ceph-host-evidence-v4", "host": "node-2", "owner": cluster["owner"], "fsid": cluster["fsid"], "image": cluster["image"],
               "ready": False, "removed": False, "imageID": "", "uid": 0, "gid": 0, "label": "", "policySHA256": "", "cephadmSHA256": "",
               "planDigest": "", "route": False, "devices": []}
     return request, record
@@ -2378,11 +2378,40 @@ def test_host_fips_policy_is_observed_before_claim(monkeypatch, kernel, policy):
     request = {"security": {"fips": True, "cephxKeyType": "aes"}}
     monkeypatch.setattr("builtins.open", lambda path, mode: io.BytesIO(kernel))
     monkeypatch.setattr(ceph_native, "read_regular", lambda *args, **kwargs: policy)
-    if kernel == b"1\n" and policy.startswith(b"FIPS"):
+    if kernel == b"1\n" and policy == b"FIPS":
         ceph_native.prove_fips(request)
     else:
         with pytest.raises(ceph_native.NativeFailure, match="fips-policy"):
             ceph_native.prove_fips(request)
+
+
+@pytest.mark.parametrize("kernel,policy,proved", [(b"1\n", b"FIPS\n", True), (b"0\n", b"FIPS\n", False), (b"1\n", b"FIPS:OSPP\n", False),
+                                                  (b"1\n", b"DEFAULT\n", False), (None, b"FIPS\n", False), (b"1\n", None, False)])
+def test_a_provided_host_observes_exact_fips_mode_or_refuses_fips_not_enabled(monkeypatch, kernel, policy, proved):
+    import io
+
+    def opened(path, mode):
+        if kernel is None:
+            raise PermissionError(path)
+        return io.BytesIO(kernel)
+
+    def regular(*args, **kwargs):
+        if policy is None:
+            raise ceph_native.Refusal("request")
+        return policy
+    monkeypatch.setattr("builtins.open", opened)
+    monkeypatch.setattr(ceph_native, "read_regular", regular)
+    request, host = {"security": {"fips": True, "cephxKeyType": "aes"}}, {"name": "tie.example.test", "machine": "tie", "provided": True}
+    if proved:
+        assert ceph_native.observe_fips(request, host) == {"kernel": "1", "policy": "FIPS"}
+    else:
+        with pytest.raises(ceph_native.NativeFailure, match="fips-not-enabled") as caught:
+            ceph_native.observe_fips(request, host)
+        assert str(caught.value) == "fips-not-enabled" and "kernel=" in repr(caught.value.native_error)
+    with pytest.raises(ceph_native.Refusal, match="request"):
+        ceph_native.observe_fips({"security": {"fips": False, "cephxKeyType": "aes"}}, host)
+    with pytest.raises(ceph_native.Refusal, match="request"):
+        ceph_native.observe_fips(request, dict(host, provided=False))
 
 
 def test_missing_live_fips_refuses_before_any_claim_effect(core_request, monkeypatch):

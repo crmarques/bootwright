@@ -27,10 +27,9 @@ credential references, devices and topology are synthetic; consult the
 The expected result is failure with explicit diagnostics for:
 
 - External endpoint sources on the two baremetal OpenShiftClusters.
-- Stretch topology and manager-module intent.
+- Manager-module intent.
 - Unqualified global Ceph options, including missing members of the currently
   qualified pool-default pair.
-- A FIPS Ceph node without a managed FIPS installation profile.
 - Agent-install bridge interfaces on the two physical OpenShiftClusters.
 - Unrealized-declaration warnings for the KubeVirt providers and the authored
   add-on profile selections.

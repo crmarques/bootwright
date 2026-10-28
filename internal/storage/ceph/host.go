@@ -17,8 +17,8 @@ import (
 )
 
 const HostImplementation = "storage-ceph-host-v1"
-const HostVersion = "ceph-host-v8"
-const HostEvidenceVersion = "ceph-host-evidence-v3"
+const HostVersion = "ceph-host-v9"
+const HostEvidenceVersion = "ceph-host-evidence-v4"
 const SharedLabel = "system_u:object_r:container_file_t:s0"
 const maxHostEvidence = 16384
 
@@ -67,7 +67,7 @@ func (r HostRequest) SecretReferences() []string { return r.Cluster.secretRefere
 func (s ClusterScope) secretReferences() []string {
 	references := []string{s.ClusterKeyRef, s.RegistryRef, s.RegistryTrustBundleRef}
 	for _, host := range s.Hosts {
-		references = append(references, host.SSHKeyRef, host.HostKeyRef)
+		references = append(references, host.SSHKeyRef, host.HostKeyRef, host.KnownHostsRef)
 	}
 	return lifecycle.SecretNames(append(references, s.Packages.secretReferences()...)...)
 }
@@ -132,6 +132,7 @@ type HostDevice struct {
 type HostEvidence struct {
 	CephadmSHA256   string       `json:"cephadmSHA256"`
 	Devices         []HostDevice `json:"devices"`
+	FIPS            *HostFIPS    `json:"fips,omitempty"`
 	FSID            string       `json:"fsid"`
 	GID             int          `json:"gid"`
 	Host            string       `json:"host"`
@@ -186,13 +187,16 @@ func (e HostEvidence) identifies(r HostRequest) bool {
 }
 
 func (e HostEvidence) empty() bool {
-	return !e.Ready && !e.Removed && !e.Route && e.ImageID == "" && e.UID == 0 && e.GID == 0 && e.Label == "" && e.PolicySHA256 == "" && e.CephadmSHA256 == "" && e.PlanDigest == "" && len(e.Devices) == 0
+	return !e.Ready && !e.Removed && !e.Route && e.FIPS == nil && e.ImageID == "" && e.UID == 0 && e.GID == 0 && e.Label == "" && e.PolicySHA256 == "" && e.CephadmSHA256 == "" && e.PlanDigest == "" && len(e.Devices) == 0
 }
 
 func (e HostEvidence) prepared(r HostRequest) bool {
 	host, ok := r.target()
 	if !ok || !e.Ready || e.Removed || !e.Route || !hex64(e.ImageID) || e.UID <= 0 || e.UID != e.GID || e.UID >= 65536 || e.Label != SharedLabel ||
 		!hex64(e.PolicySHA256) || !hex64(e.CephadmSHA256) || !hex64(e.PlanDigest) || len(e.Devices) != len(host.Devices) {
+		return false
+	}
+	if observed := host.Provided && r.Cluster.Security != nil && r.Cluster.Security.FIPS; observed != (e.FIPS != nil) || observed && !e.FIPS.proved() {
 		return false
 	}
 	for i, device := range host.Devices {
@@ -271,10 +275,10 @@ func (c HostCapability) Plan(ctx context.Context, input lifecycle.PlanInput) (li
 				return plan, err
 			}
 			description, impacts := hostDescription(input.Verb, cluster.Cluster, host.Name)
-			requires := []reconciliation.ObjectRef{hostRequirement(host)}
+			requires := hostRequirements(host)
 			for _, peer := range cluster.Hosts {
 				if peer.Physical {
-					requires = append(requires, hostRequirement(peer))
+					requires = append(requires, hostRequirements(peer)...)
 				}
 			}
 			for _, profile := range cluster.Packages.Sources {
@@ -295,8 +299,10 @@ func (c HostCapability) Plan(ctx context.Context, input lifecycle.PlanInput) (li
 				plan.Secrets = append(plan.Secrets, cluster.ClusterKeyRef)
 			}
 			plan.Secrets = append(plan.Secrets, cluster.RegistryRef, host.SSHKeyRef, source.CertificateRef)
-			if host.HostKeyRef != "" {
-				plan.Secrets = append(plan.Secrets, host.HostKeyRef)
+			for _, ref := range []string{host.HostKeyRef, host.KnownHostsRef} {
+				if ref != "" {
+					plan.Secrets = append(plan.Secrets, ref)
+				}
 			}
 			if cluster.RegistryTrustBundleRef != "" {
 				plan.Secrets = append(plan.Secrets, cluster.RegistryTrustBundleRef)
@@ -361,7 +367,7 @@ func provedFor(e lifecycle.Execution) []lifecycle.BlockEvidence {
 }
 
 func hostRefusals() map[string]error {
-	out := map[string]error{"unsupported-release": unsupportedFailure(), "fips-policy": adapterRefusals()["fips-policy"]}
+	out := map[string]error{"unsupported-release": unsupportedFailure(), "fips-policy": adapterRefusals()["fips-policy"], "fips-not-enabled": fipsNotEnabled("")}
 	for reason, message := range map[string]string{
 		"image-pull":      "the frozen Ceph image or an auxiliary image digest could not be pulled within its three bounded attempts",
 		"image-platform":  "a pulled image is not its frozen linux/amd64 digest",
@@ -403,6 +409,9 @@ func packageRefusals() map[string]error {
 func hostMaterial(e lifecycle.Execution, r HostRequest, operation string, readers DependencyProofs) (lifecycle.Execution, []lifecycle.MaterialFile, func(), error) {
 	host, _ := r.target()
 	key, err := provedHostKey(host, e, readers)
+	if err == nil && host.Provided && r.Cluster.Security != nil && r.Cluster.Security.FIPS {
+		err = fipsHostKey(host, key)
+	}
 	if err != nil {
 		return e, nil, func() {}, err
 	}
@@ -459,8 +468,12 @@ func (c HostCapability) run(ctx context.Context, e lifecycle.Execution, operatio
 		}
 	}
 	defer cleanup()
+	refusals := hostRefusals()
+	if host, _ := r.target(); host.Provided {
+		refusals["fips-not-enabled"] = fipsNotEnabled(host.Machine)
+	}
 	return c.runner.Run(ctx, lifecycle.RunFor(execution, lifecycle.Invocation{Implementation: HostImplementation, Operation: operation, Variable: "bootwright_ceph_host", Canonical: canonical,
-		Placement: machine.Placement{Connection: machine.ConnectionLocal, Machine: r.Cluster.Controller}, Materials: files, Refusals: hostRefusals(), NativeErrors: true, Deadline: hostDeadline(operation)}))
+		Placement: machine.Placement{Connection: machine.ConnectionLocal, Machine: r.Cluster.Controller}, Materials: files, Refusals: refusals, NativeErrors: true, Deadline: hostDeadline(operation)}))
 }
 
 func (c HostCapability) Apply(ctx context.Context, e lifecycle.Execution) (lifecycle.Result, error) {
@@ -581,7 +594,20 @@ func (HostCapability) Quiescent(ctx context.Context, _ lifecycle.Probe) (lifecyc
 }
 
 func ProvedHost(proofs []lifecycle.BlockEvidence, cluster, machineName, image string) (HostEvidence, error) {
+	r, evidence, err := preparedHostProof(proofs, cluster, machineName)
+	if err != nil {
+		return HostEvidence{}, err
+	}
+	r.Cluster.Owner, r.Cluster.FSID, r.Cluster.Image = evidence.Owner, evidence.FSID, image
+	if evidence.Image != image || evidence.FSID != FSIDFor(evidence.Owner, cluster) || !evidence.prepared(r) {
+		return HostEvidence{}, failure("lifecycle.state", "the Ceph host preparation proof does not prove the frozen image's runtime", "")
+	}
+	return evidence, nil
+}
+
+func preparedHostProof(proofs []lifecycle.BlockEvidence, cluster, machineName string) (HostRequest, HostEvidence, error) {
 	var found *HostEvidence
+	var request HostRequest
 	for _, proof := range proofs {
 		if proof.Kind != string(api.CephCluster) || proof.Object != cluster || proof.Implementation != HostImplementation || proof.Verb != reconciliation.Apply || proof.State != reconciliation.BlockDone ||
 			proof.Block.Kind != proof.Kind || proof.Block.Object != proof.Object || proof.Block.Implementation != proof.Implementation {
@@ -589,29 +615,25 @@ func ProvedHost(proofs []lifecycle.BlockEvidence, cluster, machineName, image st
 		}
 		r, err := DecodeHostRequest(proof.Block.Request)
 		if err != nil || r.Cluster.Cluster != cluster {
-			return HostEvidence{}, failure("lifecycle.state", "a Ceph host preparation proof names another request", "")
+			return HostRequest{}, HostEvidence{}, failure("lifecycle.state", "a Ceph host preparation proof names another request", "")
 		}
 		host, _ := r.target()
 		if host.Machine != machineName {
 			continue
 		}
 		if found != nil {
-			return HostEvidence{}, failure("lifecycle.state", "the Ceph host has ambiguous preparation proofs", "")
+			return HostRequest{}, HostEvidence{}, failure("lifecycle.state", "the Ceph host has ambiguous preparation proofs", "")
 		}
 		evidence, err := decodeHostEvidence(proof.Evidence, proof.Block.RequestDigest)
 		if err != nil {
-			return HostEvidence{}, failure("lifecycle.state", "the Ceph host preparation proof is unreadable", "")
+			return HostRequest{}, HostEvidence{}, failure("lifecycle.state", "the Ceph host preparation proof is unreadable", "")
 		}
-		r.Cluster.Owner, r.Cluster.FSID, r.Cluster.Image = evidence.Owner, evidence.FSID, image
-		if evidence.Image != image || evidence.FSID != FSIDFor(evidence.Owner, cluster) || !evidence.prepared(r) {
-			return HostEvidence{}, failure("lifecycle.state", "the Ceph host preparation proof does not prove the frozen image's runtime", "")
-		}
-		found = &evidence
+		found, request = &evidence, r
 	}
 	if found == nil {
-		return HostEvidence{}, failure("lifecycle.state", "Ceph lacks its original apply's host preparation proof", "restore the original apply evidence; each host is prepared before the cluster block runs")
+		return HostRequest{}, HostEvidence{}, failure("lifecycle.state", "Ceph lacks its original apply's host preparation proof", "restore the original apply evidence; each host is prepared before the cluster block runs")
 	}
-	return *found, nil
+	return request, *found, nil
 }
 
 func (c HostCapability) AccessCredentials(block reconciliation.Block) ([]string, error) {

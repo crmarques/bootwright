@@ -123,8 +123,10 @@ func (c ReplicationCapability) Plan(ctx context.Context, input lifecycle.PlanInp
 			exclusive = append(exclusive, "ceph/"+base.Cluster)
 			for _, host := range base.Hosts {
 				plan.Secrets = append(plan.Secrets, host.SSHKeyRef)
-				if host.HostKeyRef != "" {
-					plan.Secrets = append(plan.Secrets, host.HostKeyRef)
+				for _, ref := range []string{host.HostKeyRef, host.KnownHostsRef} {
+					if ref != "" {
+						plan.Secrets = append(plan.Secrets, ref)
+					}
 				}
 			}
 		}

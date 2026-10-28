@@ -57,6 +57,9 @@ func packageSources(c api.Catalog, r Request, contextName string) (*PackageReque
 	result := &PackageRequest{LicenseAccepted: accepted, PackageRepositoryTrustBundleRef: cluster.Spec().Get("packageRepositoryTrustBundleRef").Text(), Version: PackageVersion, Sources: []PackageSource{}}
 	for _, host := range r.Hosts {
 		m, _ := c.Find(api.Machine, host.Machine)
+		if host.Provided {
+			m = bootstrapMachine(c, r)
+		}
 		profile, ok := c.Find(api.MachineInstallProfile, m.Spec().Get("os", "installProfileRef").Text())
 		if !ok || profile.Spec().Get("os", "family").Text() != "rhel" || profile.Spec().Get("os", "architecture").Text() != "x86_64" {
 			return nil, failure("lifecycle.unsupported", "Ceph package acquisition requires the owned RHEL x86_64 DVD installation profile", "select the hosted DVD profile used to install each Ceph Machine")
@@ -143,3 +146,13 @@ func bindPackageSources(e lifecycle.Execution, packages *PackageRequest, readers
 }
 
 func packageCertificateVariable(index int) string { return "packageCA" + strconv.Itoa(index) }
+
+func bootstrapMachine(c api.Catalog, r Request) api.Object {
+	for _, host := range r.Hosts {
+		if host.Name == r.Bootstrap {
+			m, _ := c.Find(api.Machine, host.Machine)
+			return m
+		}
+	}
+	return api.Object{}
+}

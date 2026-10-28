@@ -67,6 +67,9 @@ func boundMaterial(e lifecycle.Execution, r Request, operation string, readers D
 	known := strings.Builder{}
 	for _, h := range r.Hosts {
 		key, err := provedHostKey(h, e, readers)
+		if err == nil && h.Provided && r.Security != nil && r.Security.FIPS {
+			err = fipsHostKey(h, key)
+		}
 		if err != nil {
 			return e, nil, cleanup, err
 		}

@@ -9,6 +9,9 @@ import (
 // provedHostKey uses the installed identity the original apply already proved.
 // It never fetches a key from a guest or substitutes ambient known_hosts.
 func provedHostKey(h Host, e lifecycle.Execution, readers DependencyProofs) (trust.HostKey, error) {
+	if h.Provided {
+		return pinnedHostKey(h, e)
+	}
 	if h.HostKeyRef != "" {
 		value, err := materialPart(e.Material, h.HostKeyRef, secrets.PublicKeyPart)
 		if err != nil {
@@ -43,9 +46,29 @@ func proveFIPS(e lifecycle.Execution, r Request, readers DependencyProofs) error
 		proofs = e.Proved
 	}
 	for _, host := range r.Hosts {
+		if host.Provided {
+			if r.Cluster == "" {
+				continue
+			}
+			if err := observedFIPS(proofs, r.Cluster, host.Machine); err != nil {
+				return err
+			}
+			continue
+		}
 		if err := readers.FIPS(proofs, host.Machine, host.Address); err != nil {
 			return err
 		}
+	}
+	return nil
+}
+
+func observedFIPS(proofs []lifecycle.BlockEvidence, cluster, machineName string) error {
+	_, evidence, err := preparedHostProof(proofs, cluster, machineName)
+	if err != nil {
+		return err
+	}
+	if !evidence.FIPS.proved() {
+		return fipsNotEnabled(machineName)
 	}
 	return nil
 }

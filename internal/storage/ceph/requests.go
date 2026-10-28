@@ -16,7 +16,7 @@ import (
 	"github.com/crmarques/bootwright/internal/substrate"
 )
 
-const Version = "ceph-core-v33"
+const Version = "ceph-core-v34"
 const Implementation = "storage-ceph-core-v3"
 
 type Device struct {
@@ -33,19 +33,21 @@ type PhysicalIdentity struct {
 }
 
 type Host struct {
-	Address    string            `json:"address"`
-	Devices    []Device          `json:"devices"`
-	Hardware   *PhysicalIdentity `json:"hardware,omitempty"`
-	HostKeyRef string            `json:"hostKeyRef,omitempty"`
-	KnownHosts string            `json:"knownHosts,omitempty"`
-	Labels     []string          `json:"labels"`
-	Location   map[string]string `json:"location"`
-	Machine    string            `json:"machine"`
-	Name       string            `json:"name"`
-	Physical   bool              `json:"physical,omitempty"`
-	Port       int               `json:"port"`
-	SSHKeyRef  string            `json:"sshKeyRef"`
-	User       string            `json:"user"`
+	Address       string            `json:"address"`
+	Devices       []Device          `json:"devices"`
+	Hardware      *PhysicalIdentity `json:"hardware,omitempty"`
+	HostKeyRef    string            `json:"hostKeyRef,omitempty"`
+	KnownHosts    string            `json:"knownHosts,omitempty"`
+	KnownHostsRef string            `json:"knownHostsRef,omitempty"`
+	Labels        []string          `json:"labels"`
+	Location      map[string]string `json:"location"`
+	Machine       string            `json:"machine"`
+	Name          string            `json:"name"`
+	Physical      bool              `json:"physical,omitempty"`
+	Port          int               `json:"port"`
+	Provided      bool              `json:"provided,omitempty"`
+	SSHKeyRef     string            `json:"sshKeyRef"`
+	User          string            `json:"user"`
 }
 
 type Tool struct {
@@ -347,8 +349,11 @@ func baseRequest(c api.Catalog, cluster api.Object, contextName string) (Request
 	if r.ClusterSSHTransport != "native" && r.ClusterSSHTransport != "verifiedTunnel" {
 		return Request{}, failure("api.invariant", "unknown Ceph SSH transport", "select native or verifiedTunnel; each transport requires artifact qualification")
 	}
-	if r.ClusterSSHUser == "" || r.ClusterKeyRef == "" || r.RegistryRef == "" || spec.Has("topology", "stretch") || spec.Get("security", "cephx", "keyType").Present() && spec.Get("security", "cephx", "keyType").Text() != "aes" {
-		return Request{}, failure("lifecycle.unsupported", "the requested Ceph trust or topology profile is not implemented by the core adapter", "declare the cluster SSH key, registry entitlement and a non-stretch CephX core profile")
+	if r.ClusterSSHUser == "" || r.ClusterKeyRef == "" || r.RegistryRef == "" || spec.Get("security", "cephx", "keyType").Present() && spec.Get("security", "cephx", "keyType").Text() != "aes" {
+		return Request{}, failure("lifecycle.unsupported", "the requested Ceph trust profile is not implemented by the core adapter", "declare the cluster SSH key, registry entitlement and the aes CephX core profile")
+	}
+	if spec.Has("topology", "stretch") {
+		return Request{}, stretchActivationFailure(cluster.Name())
 	}
 	if r.Security, err = securityPolicy(c, spec, r.ClusterKeyRef); err != nil {
 		return Request{}, err
@@ -399,8 +404,16 @@ func bindHosts(r *Request, c api.Catalog, cluster api.Object, contextName string
 	if reason, remedy, gap := replicationNetworkGap(c, cluster); gap {
 		return failure("api.invariant", reason, remedy)
 	}
+	tiebreaker := spec.Get("topology", "stretch", "tiebreaker", "node").Text()
 	for _, node := range spec.Get("topology", "nodes").Items() {
 		m, _ := c.Find(api.Machine, node.Get("machineRef").Text())
+		provided := m.Spec().Get("os", "provided").Bool()
+		if provided {
+			if err := bindProvidedHost(r, m, node, tiebreaker, spec.Get("cephadm", "bootstrap", "nodeRef").Text(), spec.Get("cephadm", "addressRef").Text()); err != nil {
+				return err
+			}
+			continue
+		}
 		if r.Security != nil && r.Security.FIPS {
 			profile, found := c.Find(api.MachineInstallProfile, m.Spec().Get("os", "installProfileRef").Text())
 			if !found || !machine.Installed(m) || !profile.Spec().Get("customizations", "security", "fips", "enabled").Bool() {
@@ -434,7 +447,7 @@ func bindHosts(r *Request, c api.Catalog, cluster api.Object, contextName string
 			h.Location[loc.Name] = loc.Value.Text()
 		}
 		if len(h.Location) != 0 {
-			return failure("lifecycle.unsupported", "native host CRUSH locations require release qualification", "omit topology.nodes[].location for the core virtual profile")
+			return failure("lifecycle.unsupported", "a host CRUSH location is realized only with native stretch activation (B486)", "omit topology.nodes[].location until the stretch activation slice delivers it")
 		}
 		h.Physical = substrate.RealizesPhysicalNICs(provider)
 		var err error
@@ -609,8 +622,14 @@ func checkDevices(r Request, names []string, cluster api.Object, service api.Val
 	return nil
 }
 
-func hostRequirement(host Host) reconciliation.ObjectRef {
-	return reconciliation.ObjectRef{Kind: string(api.Machine), Object: host.Machine}
+func hostRequirements(hosts ...Host) []reconciliation.ObjectRef {
+	requires := []reconciliation.ObjectRef{}
+	for _, host := range hosts {
+		if !host.Provided {
+			requires = append(requires, reconciliation.ObjectRef{Kind: string(api.Machine), Object: host.Machine})
+		}
+	}
+	return requires
 }
 
 func osdPaths(spec *nativeOSD, dataOnly bool) []string {

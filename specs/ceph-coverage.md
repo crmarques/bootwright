@@ -434,10 +434,13 @@ front-door/DNS or load-balancer arrangement: a routed inter-site link does not
 make a floating L2 VIP work across sites. External traffic management remains
 operator-owned unless a separately specified Bootwright capability owns it.
 
-IBM's stretch overview and [changing stretch mode](https://www.ibm.com/docs/en/storage-ceph/9.9.1?topic=mode-changing-stretch)
-give different reversibility guidance. B472 resolves the exact patch's native
-behavior; continuation never assumes that disabling stretch is a safe inverse
-of a partially completed activation. Owned-cluster removal has its own proof.
+IBM's stretch overview says stretch mode cannot be exited, while
+[changing stretch mode](https://www.ibm.com/docs/en/storage-ceph/9.9.1?topic=mode-changing-stretch)
+and upstream document `ceph mon disable_stretch_mode`. Bootwright treats
+stretch as frozen day-1 intent and never runs the disable command, so the
+difference does not reach its contract
+([stretch topology](ceph.md#stretch-topology)); owned-cluster removal has its
+own proof.
 
 ## Other native restrictions to freeze
 
@@ -546,7 +549,7 @@ before B484's exit.
 
 | ID | Combination | Source | Owner | Owning diagnostic | Status | Fixture |
 | --- | --- | --- | --- | --- | --- | --- |
-| U01 | Stretch topology in a non-stretch milestone | [Stretch constraints](#stretch-constraints) (M2e) | [B486](milestones/m2.md#b486) | admission `api.invariant` on CephCluster `$.spec.topology.stretch`, beside `api.invariant` on each CephPool `$.spec.replicated` that the stretch default makes invalid | tested | [U01.yaml](../cmd/bootwright/testdata/matrix/U01.yaml) |
+| U01 | Incomplete stretch topology | [Stretch constraints](#stretch-constraints) (M2e) | [B486](milestones/m2.md#b486) | admission `api.invariant` on CephCluster `$.spec.topology.stretch.dataSites` and `$.spec.topology.stretch.tiebreaker.node`, on each CephPlacementPolicy `$.spec.clusterRef` and on each CephPool `$.spec.replicated` that the stretch default makes invalid | tested | [U01.yaml](../cmd/bootwright/testdata/matrix/U01.yaml) |
 | U02 | Host-domain replicas above the declared OSD hosts | [IBM colocation](https://www.ibm.com/docs/en/storage-ceph/9.9.1?topic=recommendations-colocation) | [B81](milestones/m2.md#b81) | admission `api.invariant` on CephPool `$.spec.replicated.size` | tested | [U02.yaml](../cmd/bootwright/testdata/matrix/U02.yaml) |
 | U03 | Replicated size equal to the OSD-host count | Native replica safety: a size-N host-domain pool needs N+1 OSD hosts to recover a lost host's replicas ([rule](ceph-resources.md#replicated-protection)) | [B81](milestones/m2.md#b81) | admission `api.invariant` on CephPool `$.spec.replicated.size` (replica-safety rule) | tested | [U03.yaml](../cmd/bootwright/testdata/matrix/U03.yaml) |
 | U04a | EC `k+m` above the declared OSD hosts of the pool's device class | [upstream erasure code](https://docs.ceph.com/en/tentacle/rados/operations/erasure-code/) and [upstream CRUSH device classes](https://docs.ceph.com/en/tentacle/rados/operations/crush-map/#device-classes) (one chunk per host under failure domain host; rule semantics, not a vendor statement) | [B81](milestones/m2.md#b81) | admission `api.invariant` on CephPool `$.spec.erasure` | tested | [U04a.yaml](../cmd/bootwright/testdata/matrix/U04a.yaml) |

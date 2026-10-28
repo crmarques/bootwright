@@ -55,7 +55,7 @@ MAX_REGISTRY = 65536
 # route rather than treating a version identifier as transport trust.
 DEVICE_IDENTITIES = "device-identities.json"
 DEVICE_IDENTITIES_VERSION = "ceph-cluster-device-identities-v2"
-HOST_PHASES = frozenset(("profile", "route", "device_identity", "host_devices", "host_observe"))
+HOST_PHASES = frozenset(("profile", "route", "device_identity", "host_devices", "host_observe", "fips_observe"))
 WORKER_DEADLINE = None
 
 SCOPE_MEMBERS = frozenset(("controller", "version", "cluster", "owner", "fsid", "image", "cephadm", "bootstrap", "hosts", "services", "clusterSSHUser",
@@ -382,17 +382,45 @@ def bounded_command(argv, data=b"", timeout=60, limit=MAX_OUTPUT, environment=No
     return code, NativeOutput(output, stderr)
 
 
+def read_fips():
+    """The two files fips-mode-setup --check reads; None for one that cannot be read."""
+    values = {}
+    for name, path in (("kernel", "/proc/sys/crypto/fips_enabled"), ("policy", "/etc/crypto-policies/state/current")):
+        try:
+            if name == "kernel":
+                with open(path, "rb") as stream:
+                    raw = stream.read(8)
+            else:
+                raw = read_regular(path, maximum=4096)
+            values[name] = raw.decode("ascii").strip()
+        except (OSError, UnicodeError, Refusal):
+            values[name] = None
+    return values
+
+
+def fips_proved(values):
+    """FIPS mode is exactly kernel 1 and policy FIPS; FIPS:OSPP selects a subpolicy and proves nothing."""
+    return values == {"kernel": "1", "policy": "FIPS"}
+
+
 def prove_fips(request):
     if not request.get("security", {}).get("fips"):
         return
-    try:
-        with open("/proc/sys/crypto/fips_enabled", "rb") as stream:
-            kernel = stream.read(3)
-        policy = read_regular("/etc/crypto-policies/state/current", maximum=4096).strip()
-    except (OSError, Refusal):
-        raise NativeFailure("fips-policy", "FIPS host policy", b"the host kernel or inherited crypto policy cannot be proved") from None
-    if kernel != b"1\n" or policy.split(b":")[0] != b"FIPS":
+    values = read_fips()
+    if None in values.values():
+        raise NativeFailure("fips-policy", "FIPS host policy", b"the host kernel or inherited crypto policy cannot be proved")
+    if not fips_proved(values):
         raise NativeFailure("fips-policy", "FIPS host policy", b"the host kernel and inherited crypto policy must both report FIPS mode")
+
+
+def observe_fips(request, host):
+    """A provided host of a FIPS cluster: read-only, before any preparation; refuses fips-not-enabled."""
+    require(request.get("security", {}).get("fips") is True and host.get("provided") is True, "request")
+    values = read_fips()
+    if not fips_proved(values):
+        detail = ", ".join(name + "=" + ("unreadable" if value is None else repr(value)[:40]) for name, value in sorted(values.items()))
+        raise NativeFailure("fips-not-enabled", "FIPS mode of provided host " + host["machine"], detail.encode())
+    return values
 
 
 def prove_cephx_key(request, key):
@@ -542,7 +570,7 @@ def package_url(value):
 
 
 def scope_checks(request):
-    require(request["version"] == "ceph-core-v33")
+    require(request["version"] == "ceph-core-v34")
     if "security" in request:
         security = request["security"]
         require(isinstance(security, dict) and set(security) == {"fips", "cephxKeyType"})
@@ -650,7 +678,12 @@ def validate_hosts(request):
     for host in hosts:
         require(isinstance(host, dict) and set(host) >= {"name", "machine", "address", "user", "port", "devices", "labels", "location", "sshKeyRef"})
         require(not set(host) - {"name", "machine", "address", "user", "port", "devices", "labels", "location", "sshKeyRef",
-                                 "hostKeyRef", "knownHosts", "physical", "hardware"})
+                                 "hostKeyRef", "knownHosts", "knownHostsRef", "physical", "hardware", "provided"})
+        provided = host.get("provided", False)
+        require(type(provided) is bool and ("provided" not in host or provided))
+        require(not provided or named(host.get("knownHostsRef")) and not host["devices"]
+                and not {"hostKeyRef", "knownHosts", "physical", "hardware"} & set(host))
+        require(provided or "knownHostsRef" not in host)
         require(all(named(host[k]) for k in ("name", "machine", "user")))
         require(named(host["sshKeyRef"]))
         require(host["labels"] is None or isinstance(host["labels"], list) and all(named(v) for v in host["labels"]))
@@ -695,7 +728,7 @@ def validate_hosts(request):
             require(type(device["sizeBytes"]) is int and device["sizeBytes"] > 0)
             require(type(device.get("rotational", False)) is bool)
     require(len({host["name"].split(".", 1)[0] for host in hosts}) == len(hosts), "host-identity")
-    require(request["bootstrap"] in seen)
+    require(request["bootstrap"] in seen and not any(host.get("provided") and host["name"] == request["bootstrap"] for host in hosts))
     require(request["monIP"] == next(h["address"] for h in hosts if h["name"] == request["bootstrap"]))
     return hosts, seen
 

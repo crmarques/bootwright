@@ -39,7 +39,7 @@ def host_request(request_value):
          "publicationPath": "/var/lib/bootwright-services/example/public/os/rhel/tree", "url": "https://192.0.2.10:8443/os/rhel/tree",
          "certificateRef": "serving-tls"}
         for host in cluster["hosts"]]}
-    return {"version": "ceph-host-v8", "cluster": cluster, "host": "node-2"}
+    return {"version": "ceph-host-v9", "cluster": cluster, "host": "node-2"}
 
 
 request_value = host_fixtures.request_value
@@ -350,3 +350,71 @@ def test_the_package_call_relays_the_bound_repository_bundle(host_request, tmp_p
         with pytest.raises(ceph_native.Refusal, match="^material$"):
             ceph_core.Transport(request_value, private, run=run, scope=True).packages(request_value["hosts"][1])
     assert len(calls) == 1
+
+
+@pytest.fixture
+def tiebreaker_request(host_request):
+    """A FIPS cluster whose provided tiebreaker runs a MON alone and holds no device."""
+    cluster = host_request["cluster"]
+    cluster["security"] = {"fips": True, "cephxKeyType": "aes"}
+    cluster["hosts"].append({"name": "tie", "machine": "tie", "address": "198.51.100.10", "user": "operator", "port": 22, "devices": [], "labels": [],
+                             "location": {}, "sshKeyRef": "fleet-key", "knownHostsRef": "tie-known-hosts", "provided": True})
+    cluster["publicNetworks"].append("198.51.100.0/24")
+    cluster["services"][0]["placement"]["hosts"] = cluster["services"][0]["placement"]["hosts"] + ["tie"]
+    cluster["packages"]["sources"].append(dict(cluster["packages"]["sources"][0], host="tie"))
+    return dict(host_request, host="tie")
+
+
+def test_a_provided_fips_host_is_observed_before_preparation_and_records_its_fips_mode(tiebreaker_request):
+    fips = {"kernel": "1", "policy": "FIPS"}
+
+    class Observed(Transport):
+        def call(self, host, phase, private=None, *, timeout=660):
+            if phase == "fips_observe":
+                self.calls.append((host["name"], phase))
+                return dict(fips)
+            return super().call(host, phase, private, timeout=timeout)
+    transport = Observed(tiebreaker_request, prepared_evidence(tiebreaker_request, devices=[], fips=fips))
+    result = ceph_core.execute_host(tiebreaker_request, "apply", DIGEST, transport)
+    assert transport.calls[:2] == [("tie", "fips_observe"), ("tie", "packages")] and result["evidence"]["fips"] == fips
+    observed = Observed(tiebreaker_request, prepared_evidence(tiebreaker_request, devices=[], fips=fips))
+    ceph_core.execute_host(tiebreaker_request, "observe", DIGEST, observed)
+    assert observed.calls == [("tie", "fips_observe"), ("tie", "host_observe")]
+    fips["policy"] = "FIPS:OSPP"
+    refused = Observed(tiebreaker_request, prepared_evidence(tiebreaker_request, devices=[]))
+    with pytest.raises(ceph_native.Refusal, match="fips-not-enabled"):
+        ceph_core.execute_host(tiebreaker_request, "apply", DIGEST, refused)
+    assert refused.calls == [("tie", "fips_observe")]
+
+
+@pytest.mark.parametrize("change", [lambda e: e.pop("fips"), lambda e: e.update(fips={"kernel": "1", "policy": "FIPS:OSPP"})])
+def test_provided_host_evidence_carries_exactly_its_proved_fips_mode(tiebreaker_request, change):
+    value = dict(prepared_evidence(tiebreaker_request, devices=[], fips={"kernel": "1", "policy": "FIPS"}), request=DIGEST)
+    assert ceph_core.host_evidence(copy.deepcopy(value), DIGEST, tiebreaker_request)["fips"] == {"kernel": "1", "policy": "FIPS"}
+    change(value)
+    with pytest.raises(ceph_native.Refusal, match="evidence"):
+        ceph_core.host_evidence(value, DIGEST, tiebreaker_request)
+    installed = dict(prepared_evidence(host_request_of(tiebreaker_request), fips={"kernel": "1", "policy": "FIPS"}), request=DIGEST)
+    with pytest.raises(ceph_native.Refusal, match="evidence"):
+        ceph_core.host_evidence(installed, DIGEST, host_request_of(tiebreaker_request))
+
+
+def host_request_of(tiebreaker_request):
+    return dict(tiebreaker_request, host="node-2")
+
+
+@pytest.mark.parametrize("change", [
+    lambda h: h.pop("knownHostsRef"), lambda h: h.update(devices=[{"path": "/dev/sda", "serial": "drive-scsi9", "sizeBytes": 1024 ** 3}]),
+    lambda h: h.update(hostKeyRef="tie-host-key"), lambda h: h.update(physical=False), lambda h: h.update(provided=False)])
+def test_a_provided_host_is_a_deviceless_host_pinned_by_its_known_hosts_ref(tiebreaker_request, change):
+    ceph_core.host_request(copy.deepcopy(tiebreaker_request))
+    change(tiebreaker_request["cluster"]["hosts"][-1])
+    with pytest.raises(ceph_native.Refusal):
+        ceph_core.host_request(tiebreaker_request)
+
+
+def test_a_provided_host_never_bootstraps(tiebreaker_request):
+    cluster = tiebreaker_request["cluster"]
+    cluster["bootstrap"], cluster["monIP"] = "tie", "198.51.100.10"
+    with pytest.raises(ceph_native.Refusal):
+        ceph_core.host_request(tiebreaker_request)

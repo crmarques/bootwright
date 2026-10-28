@@ -129,8 +129,17 @@ func (a *admission) deviceClass(cluster api.Object, value api.Value, field strin
 	a.issue("api.invariant", field, "device class "+class+" is neither an automatic class (hdd, ssd, nvme) nor a crush_device_class an OSD service of this cluster declares", "use hdd, ssd or nvme, or declare crush_device_class: "+class+" on the OSD service that owns those devices")
 }
 
+func stretchRule(cluster api.Object) string {
+	return fallback(cluster.Spec().Get("topology", "stretch", "ruleName"), "stretch-rule")
+}
+
 func (a *admission) policy(cluster api.Object) {
 	spec := a.object.Spec()
+	if cluster.Spec().Has("topology", "stretch") {
+		a.invalid("$.spec.clusterRef", "stretch cluster "+cluster.Name()+" places every pool with its own stretch rule "+stretchRule(cluster)+", so no placement policy applies",
+			"remove this CephPlacementPolicy and every CephPool placementPolicyRef naming it; a stretch cluster's pools take the stretch rule and 4/2 protection implicitly")
+		return
+	}
 	rule := textOf(spec, "ruleName")
 	if spec.Has("ruleName") && !crushRuleName.MatchString(rule) {
 		a.issue("api.invariant", "$.spec.ruleName", "a CRUSH rule name uses only letters, digits, '-', '_' and '.', starts with a letter or digit and has at most 128 characters", "rename spec.ruleName within that grammar")
@@ -245,7 +254,11 @@ func (a *admission) pool(cluster api.Object) {
 	spec := a.object.Spec()
 	policy := api.Object{}
 	policyReady := true
-	if name := textOf(spec, "placementPolicyRef"); name != "" {
+	if name := textOf(spec, "placementPolicyRef"); name != "" && cluster.Spec().Has("topology", "stretch") {
+		a.invalid("$.spec.placementPolicyRef", "a pool of stretch cluster "+cluster.Name()+" is placed by the cluster's stretch rule "+stretchRule(cluster)+", never by a placement policy",
+			"remove spec.placementPolicyRef; the pool takes the stretch rule and 4/2 protection implicitly")
+		policyReady = false
+	} else if name != "" {
 		policy, policyReady = a.sameOwner(api.CephPlacementPolicy, name, "$.spec.placementPolicyRef", cluster)
 	}
 	protection := PoolProtection(spec)

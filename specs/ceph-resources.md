@@ -251,9 +251,10 @@ its own rule. A device class is `hdd`, `ssd` or `nvme`, which OSDs set
 automatically, or a `crush_device_class` that an OSD service of the cluster
 declares at spec or path level. For a declared class, host-domain replicas
 count only the hosts whose OSD services declare it. A failure domain other
-than `host` and a policy naming the stretch rule (owned by
-[B486](milestones/m2.md#b486)) refuse at plan; site and rack domains are
-parked by D160 (OD25).
+than `host` refuses at plan; site and rack domains are parked by D160 (OD25).
+A stretch cluster places every pool with its own stretch rule, so a policy
+whose `clusterRef` names one refuses at validation and at plan
+([stretch topology](ceph.md#stretch-topology)).
 
 | Field | Contract |
 | --- | --- |
@@ -300,7 +301,9 @@ OSD-bearing host. MON-only hosts do not add data
 capacity. A pool or placement policy on a bounded device class, a
 `crush_device_class` OSD services declare or an automatic class they permit on
 fewer hosts than carry OSDs, also needs more hosts of that class than its
-effective size. Stretch protection keeps its separate provider contract.
+effective size. Stretch protection is fixed at `4/2` on the cluster's stretch
+rule, and a stretch pool names no placement policy
+([stretch topology](ceph.md#stretch-topology)).
 
 ## CephPool
 

@@ -52,7 +52,7 @@ UNIT_DAEMON = re.compile(r"[a-z][a-z0-9-]*\.[A-Za-z0-9][A-Za-z0-9_.-]{0,250}\Z")
 # The refusals each block's Go caller remedies by name (hostRefusals,
 # adapterRefusals and smbRefusals in internal/storage/ceph); a test holds them equal.
 HOST_REASONS = (
-    "fips-policy",
+    "fips-policy", "fips-not-enabled",
     "unsupported-release", "image-pull", "image-platform", "image-profile", "route-probe", "device-identity", "runtime-profile", "not-ready",
     "package-resolution", "package-signature", "package-transaction", "request", "artifact", "ownership", "evidence", "material", "packages",
     "package-artifact", "package-drift", "package-journal", "package-license",
@@ -1261,7 +1261,7 @@ def dashboard_phase(request, operation, request_digest, bootstrap, transport, ob
 
 def host_request(value):
     """A frozen host block request: its cluster's host scope and one of its hosts."""
-    ceph_native.require(isinstance(value, dict) and set(value) == {"cluster", "host", "version"} and value["version"] == "ceph-host-v8")
+    ceph_native.require(isinstance(value, dict) and set(value) == {"cluster", "host", "version"} and value["version"] == "ceph-host-v9")
     cluster = ceph_native.validate_scope(value["cluster"])
     ceph_native.require("packages" in cluster)
     ceph_native.require(sum(host["name"] == value["host"] for host in cluster["hosts"]) == 1)
@@ -1273,8 +1273,9 @@ def host_evidence(value, request_digest, request=None):
     """The closed host block projection; no credential, path or vendor text."""
     fields = {"version", "request", "host", "owner", "fsid", "image", "ready", "removed", "imageID", "uid", "gid", "label", "policySHA256",
               "cephadmSHA256", "planDigest", "route", "devices"}
-    ceph_native.require(isinstance(value, dict) and set(value) in (fields, fields | {"specializations"}), "evidence")
+    ceph_native.require(isinstance(value, dict) and fields <= set(value) <= fields | {"specializations", "fips"}, "evidence")
     ceph_native.require("specializations" not in value or specialization_ids(value["specializations"]), "evidence")
+    ceph_native.require("fips" not in value or ceph_native.fips_proved(value["fips"]), "evidence")
     ceph_native.require(value["version"] == ceph_host_runtime.EVIDENCE_VERSION and value["request"] == request_digest and ceph_native.digest(request_digest),
                         "evidence")
     ceph_native.require(all(type(value[key]) is bool for key in ("ready", "removed", "route")), "evidence")
@@ -1297,6 +1298,8 @@ def host_evidence(value, request_digest, request=None):
         cluster = request["cluster"]
         ceph_native.require(value["host"] == request["host"] and value["owner"] == cluster["owner"] and value["fsid"] == cluster["fsid"]
                             and value["image"] == cluster["image"], "evidence")
+        host = next(item for item in cluster["hosts"] if item["name"] == request["host"])
+        ceph_native.require(("fips" in value) == (ceph_host_runtime.observes_fips(cluster, host) and not value["removed"]), "evidence")
     ceph_native.require(len(ceph_native.canonical(value)) <= 16000, "evidence")
     return value
 
@@ -1320,6 +1323,9 @@ def execute_host(request, operation, request_digest, transport):
     host = next(item for item in cluster["hosts"] if item["name"] == request["host"])
     changed = False
     packages = None
+    if ceph_host_runtime.observes_fips(cluster, host):
+        observed = transport.call(host, "fips_observe")
+        ceph_native.require(ceph_native.fips_proved(observed), "fips-not-enabled")
     if operation == "apply":
         ceph_native.require(ceph_native.supported_transport(cluster), "unsupported-release")
         packages = transport.packages(host)

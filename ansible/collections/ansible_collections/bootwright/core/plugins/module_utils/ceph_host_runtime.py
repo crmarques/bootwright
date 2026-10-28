@@ -35,12 +35,12 @@ from ansible_collections.bootwright.core.plugins.module_utils import (
 
 ROOT = "/var/lib/bootwright/ceph-host"
 PACKAGE_ROOT = "/var/lib/bootwright/ceph-packages"
-VERSION = "ceph-host-v8"
+VERSION = "ceph-host-v9"
 PROFILE_VERSION = "ceph-runtime-profile-v3"
 ROUTE_VERSION = "ceph-host-route-v3"
 DEVICES_VERSION = "ceph-device-identities-v2"
 BINDING_VERSION = "ceph-physical-device-binding-v1"
-EVIDENCE_VERSION = "ceph-host-evidence-v3"
+EVIDENCE_VERSION = "ceph-host-evidence-v4"
 PROFILE = "runtime-profile.json"
 PAYLOAD = "cephadm-payload"
 ROUTE = "route.json"
@@ -64,7 +64,7 @@ PULL_MINIMUM = 60
 PULL_RESERVE = 120
 PULL_PAUSE = 15
 PROFILE_CALL_SECONDS = 4285
-PHASES = frozenset(("profile", "route", "device_identity", "host_devices", "host_observe"))
+PHASES = frozenset(("profile", "route", "device_identity", "host_devices", "host_observe", "fips_observe"))
 ARTIFACTS = ("/usr/sbin/cephadm", "/usr/share/ceph/mgr/cephadm/ssh.py", "/usr/share/ceph/mgr/cephadm/module.py",
              "/usr/share/ceph/mgr/cephadm/serve.py", "/usr/bin/ceph", "/usr/bin/ceph-authtool")
 SOURCE_PATHS = ARTIFACTS[1:4]
@@ -866,11 +866,17 @@ class HostRuntime:
         require(durable is not None, "device-identity")
         return {"devices": self.physical_readback(retained_devices(self.request, self.host["name"], durable))}
 
+    def fips_observe(self):
+        """Read-only: the FIPS mode of a provided host, which has no installation proof."""
+        return ceph_native.observe_fips(self.request, self.host)
+
     def host_observe(self):
         """Read-only evidence; absence is proved only from the absent owner record."""
         evidence = {"version": EVIDENCE_VERSION, "host": self.host["name"], "owner": self.request["owner"], "fsid": self.request["fsid"],
                     "image": self.request["image"], "ready": False, "removed": False, "imageID": "", "uid": 0, "gid": 0, "label": "",
                     "policySHA256": "", "cephadmSHA256": "", "planDigest": "", "route": False, "devices": []}
+        if observes_fips(self.request, self.host):
+            evidence["fips"] = ceph_native.observe_fips(self.request, self.host)
         if self.packages.owned():
             complete = self.packages.read("complete.json")
             if complete is not None:
@@ -893,6 +899,11 @@ class HostRuntime:
                 evidence["devices"] = [{key: entry for key, entry in value.items() if key != "host"} for value in values]
             evidence["ready"] = bool(evidence["planDigest"] and evidence["route"] and identified)
         return evidence
+
+
+def observes_fips(request, host):
+    """Only a provided host of a FIPS cluster records its observed FIPS mode as host evidence."""
+    return request.get("security", {}).get("fips") is True and host.get("provided") is True
 
 
 def write_payload(durable, payload):
@@ -968,7 +979,7 @@ def route_cases(value):
 @contextlib.contextmanager
 def staged(directory, synthetic, uid, gid):
     """Retain the synthetic bytes outside the read-only mounted children."""
-    request = {"version": "ceph-core-v33", "owner": "route-probe", "fsid": "11111111-1111-4111-8111-111111111111",
+    request = {"version": "ceph-core-v34", "owner": "route-probe", "fsid": "11111111-1111-4111-8111-111111111111",
                "clusterSSHTransport": "verifiedTunnel", "clusterSSHUser": probe.USER,
                "hosts": [{"name": probe.HOST, "address": probe.ADDRESS, "port": probe.OUTER_PORT}]}
     known = ("[" + probe.ADDRESS + "]:" + str(probe.OUTER_PORT) + " " + synthetic["keys"]["outer"]["public"] + "\n").encode()
