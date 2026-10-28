@@ -7,6 +7,7 @@ import (
 	api "github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/addons"
 	addonpackages "github.com/crmarques/bootwright/internal/addons/packages"
+	"github.com/crmarques/bootwright/internal/containercluster"
 	"github.com/crmarques/bootwright/internal/substrate"
 )
 
@@ -47,27 +48,19 @@ func SelectToolsWithRegistry(catalog api.Catalog, registry addons.Registry) ([]T
 	}
 	virtctl := ToolRequest{Kind: "virtctl", Version: versions["virtctl"], Compatibility: "kubevirt", Mirror: downloads.Get("virtctlMirror").Text()}
 	result := []ToolRequest{}
-	for _, cluster := range catalog.OfKind(api.OpenShiftCluster) {
-		distribution := cluster.Spec().Get("distribution")
-		kind, version := distribution.Get("type").Text(), distribution.Get("release", "version").Text()
-		// A pinned release image is the payload, not a client version. The
-		// declared release still selects the clients; without one there is
-		// nothing to match and the controller stage refuses rather than
-		// inferring it.
-		if (kind != "openshift" && kind != "okd") || !api.ValidLexical("cluster-release", version) {
-			return nil, selectionFailure(cluster, "controller.unsupported", "$.spec.distribution.release", "target tools require an exact supported release version; declare release.version for a cluster pinned to a release image")
+	for _, cluster := range catalog.OfCategory(api.ContainerClusterCategory) {
+		facts, _ := containercluster.FactsOf(cluster.Kind())
+		tools, refused := facts.ControllerTools(cluster)
+		if refused != nil {
+			return nil, selectionFailure(cluster, refused.Code, refused.Field, refused.Message)
 		}
-		installer := "openshift-install"
-		if cluster.Spec().Get("security", "fips", "enabled").Bool() {
-			if kind != "openshift" {
-				return nil, selectionFailure(cluster, "controller.unsupported", "$.spec.security.fips", "FIPS installer acquisition requires the OpenShift publisher")
+		for _, tool := range tools {
+			version := tool.Version
+			if version == "" {
+				version = versions[tool.Kind]
 			}
-			installer = "openshift-install-fips"
+			result = append(result, ToolRequest{Kind: tool.Kind, Version: version, Compatibility: tool.Compatibility, Mirror: downloads.Get(tool.Mirror).Text()})
 		}
-		for _, tool := range []string{"openshift-clients", installer} {
-			result = append(result, ToolRequest{Kind: tool, Version: version, Compatibility: kind, Mirror: downloads.Get("openshiftClientsMirror").Text()})
-		}
-		result = append(result, ToolRequest{Kind: "helm", Version: versions["helm"], Mirror: downloads.Get("helmMirror").Text()})
 	}
 	for _, binding := range catalog.OfKind(api.ClusterAddonBinding) {
 		selected, issues := addons.ExpandBinding(binding, catalog)

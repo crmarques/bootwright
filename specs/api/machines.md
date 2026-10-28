@@ -462,7 +462,7 @@ Anaconda Machine that selects no configuration refuses only at
 | Field | Type | Required | Rule |
 | --- | --- | --- | --- |
 | `name` | string | yes | Non-empty Machine-local name, unique across contacts and assignments. |
-| `address` | string | yes | DNS contact, IP contact, or host IP with a prefix. An assignment requires IP/prefix notation. |
+| `address` | string | yes | DNS contact, unzoned IP contact, or host IP with a prefix; an assignment requires the prefix. |
 | `interface` | string | no | Static assignment to an interface in the effective NMState map; omission declares only a contact. A Linux interface name, 1 to 15 bytes of letters, digits, `_`, `.`, `+` or `-`. |
 
 An assigned interface may be physical or logical, including a VLAN, bond, or
@@ -576,9 +576,9 @@ Machine name or local access. The retired `Machine.spec.os.install.proxy` and
 Address names and references in this section belong to
 `Machine.spec.network.addresses`. Normalization appends an absent `fqdn`
 contact, `<name>.<domain>`, using [Environment domains](environment.md#domains),
-only for a Machine whose name is a DNS label; for any other name it derives
-no contact and no session address it does not declare, so the name's refusal
-is the only one. An authored
+only for a DNS-label name whose contact fits 253 bytes; otherwise it derives
+no contact or session address; an over-long one refuses
+`api.invariant` at `metadata.name`. An authored
 `fqdn` is preserved verbatim, is a DNS subdomain, has no assigned interface,
 and is unique across Machines.
 

@@ -532,6 +532,23 @@ family-owned child kind, which `TestGeneralFlowNamesNoImplementation` holds; a
 new family therefore adds its registry row, its schemas and its domain without
 editing the general flow.
 
+The kinds lay out the facts that flows serving every cluster kind read in
+different spec fields (`spec.nodes` against `spec.topology.nodes`), so each
+cluster kind registers its layout and those flows read the facts through the
+registry's accessors: the Machines its nodes bind (`ClusterNodeMachines`), the
+SSH key fields its nodes trust (`ClusterNodeLoginField`), whether a managed
+non-root keyed login can succeed a revoked root login
+(`ClusterSuccessorLogin`), whether it demands a FIPS controller
+(`ClusterRequiresControllerFIPS`) and whether the agent installer installs it
+(`ClusterInstallsByAgent`). The container-cluster domain publishes per kind
+what needs its derivations (`containercluster.FactsOf`): the controller tools,
+the virtual IPs, the endpoints and the node names. Machine target and
+admission, the controller's tool, host-package and FIPS selection and the
+managed-service name records iterate the registry through these accessors and
+name no family kind, which the same test holds; the one exception it lists is
+the controller's claim table, since a held `cluster-media` claim records no API
+kind.
+
 ## Graph validation
 
 Exactly one `Environment` is required. Reference resolution and validation use

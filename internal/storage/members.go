@@ -9,5 +9,6 @@ func MemberMachines(object api.Object) (environment.Membership, bool) {
 	if object.Kind() != api.CephCluster {
 		return environment.Membership{}, false
 	}
-	return environment.MembersOf("$.spec.topology.nodes", object.Spec().Get("topology", "nodes")), true
+	field, nodes, _ := api.ClusterNodes(object)
+	return environment.MembersOf(field, nodes), true
 }

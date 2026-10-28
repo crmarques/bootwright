@@ -9185,6 +9185,34 @@ Environment's controller host and stage.
 the renamed messages, and `make docs-check` over the moved Not yet met lines;
 the delivering commit records the gates.
 
+### X183 — Audit lane Q2: family accessors and name bounds
+
+**Items:** B848, B850 and B847.
+**Kind:** enabling. **Owners:** Architecture, Machine and Controller setup.
+Delivered on 2026-10-27 as lane Q2 of the
+[audit remediation](backlog.md#lane-order-and-progress) under the owner's
+request to implement the remaining items; the lane parked B870.
+
+Each cluster kind lays out its node list and SSH logins in the schema
+registry and publishes its controller tools, FIPS demand, virtual IPs,
+endpoints and node names (`FactsOf`), so machine membership and admission,
+controller tool selection, the FIPS prerequisite and managed-service cluster
+records iterate the registry and name no family kind; every example compiles
+to the same memberships, tools, FIPS demand and records as before. The
+family-neutral rule covers those package trees, and its one allowlisted use
+(the `cluster-media` claim's kind, [B870](backlog.md#b870)) is counted and
+can only shrink.
+
+A Machine whose derived contact `<machine>.<domain>` would exceed 253 bytes
+derives no contact and refuses at its name, naming the domain field. A zoned
+IPv6 address refuses at validate through the address grammar, so no SSH
+qualifier can carry one.
+
+**Guard tests:** the family-neutral rule and its shrink test, the layout and
+facts tests, `TestAnOverlongDerivedContactIsTheMachinesOnlyDiagnostic` and
+`TestAZonedSSHAddressRefusesAtValidate`, each proved by a seeded mismatch; the
+delivering commit records the gates.
+
 ## M3 independent in-tree completion
 
 The owner's 2026-10-23 request (D181) delivers the independent implementation

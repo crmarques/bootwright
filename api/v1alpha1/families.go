@@ -3,6 +3,7 @@ package v1alpha1
 import (
 	"maps"
 	"slices"
+	"strings"
 )
 
 type Category string
@@ -123,4 +124,83 @@ func (c Catalog) OfCategory(category Category) []Object {
 		objects = append(objects, c.OfKind(kind)...)
 	}
 	return objects
+}
+
+type clusterLayout struct {
+	nodes          []string
+	nodeLogins     [][]string
+	successorLogin []string
+	controllerFIPS []string
+	agentInstall   []string
+}
+
+var clusterLayouts = map[Kind]clusterLayout{
+	OpenShiftCluster: {
+		nodes:          []string{"nodes"},
+		nodeLogins:     [][]string{{"install", "nodeSSH", "keyPairRef"}, {"install", "nodeSSH", "publicKeyRef"}, {"install", "nodeSSH", "privateKeyRef"}},
+		controllerFIPS: []string{"security", "fips", "enabled"},
+		agentInstall:   []string{"install", "agent"},
+	},
+	CephCluster: {
+		nodes:          []string{"topology", "nodes"},
+		nodeLogins:     [][]string{{"cephadm", "clusterSSH", "keyRef"}},
+		successorLogin: []string{"cephadm", "clusterSSH"},
+	},
+}
+
+func (c Catalog) Clusters() []Object {
+	var objects []Object
+	for _, kind := range ClusterKinds() {
+		objects = append(objects, c.OfKind(kind)...)
+	}
+	return objects
+}
+
+func ClusterNodes(cluster Object) (string, Value, bool) {
+	layout, ok := clusterLayouts[cluster.Kind()]
+	if !ok {
+		return "", Value{}, false
+	}
+	return "$.spec." + strings.Join(layout.nodes, "."), cluster.Spec().Get(layout.nodes...), true
+}
+
+func ClusterNodeMachines(cluster Object) []string {
+	_, nodes, _ := ClusterNodes(cluster)
+	var names []string
+	for _, node := range nodes.Items() {
+		names = append(names, node.Get("machineRef").Text())
+	}
+	return names
+}
+
+func ClusterNodeLoginField(cluster Object, key string) (string, bool) {
+	if key == "" {
+		return "", false
+	}
+	for _, path := range clusterLayouts[cluster.Kind()].nodeLogins {
+		if cluster.Spec().Get(path...).Text() == key {
+			return "spec." + strings.Join(path, "."), true
+		}
+	}
+	return "", false
+}
+
+func ClusterSuccessorLogin(cluster Object) bool {
+	path := clusterLayouts[cluster.Kind()].successorLogin
+	if path == nil || cluster.Spec().Get("management").Text() != "managed" {
+		return false
+	}
+	login := cluster.Spec().Get(path...)
+	user := login.Get("user").Text()
+	return user != "" && user != "root" && login.Has("keyRef")
+}
+
+func ClusterRequiresControllerFIPS(cluster Object) bool {
+	path := clusterLayouts[cluster.Kind()].controllerFIPS
+	return path != nil && cluster.Spec().Get(path...).Bool()
+}
+
+func ClusterInstallsByAgent(cluster Object) bool {
+	path := clusterLayouts[cluster.Kind()].agentInstall
+	return path != nil && cluster.Spec().Has(path...)
 }

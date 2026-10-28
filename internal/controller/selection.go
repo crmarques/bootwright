@@ -8,7 +8,7 @@ import (
 	"strings"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
-	"github.com/crmarques/bootwright/internal/containercluster/openshift"
+	"github.com/crmarques/bootwright/internal/containercluster"
 	"github.com/crmarques/bootwright/internal/diagnostics"
 	"github.com/crmarques/bootwright/internal/infrastructureservices"
 	"github.com/crmarques/bootwright/internal/substrate"
@@ -356,12 +356,12 @@ func refuseSelection(object api.Object, code, field, message, remediation string
 }
 
 func requiresNMState(catalog api.Catalog) bool {
-	for _, cluster := range catalog.OfKind(api.OpenShiftCluster) {
-		if !cluster.Spec().Has("install", "agent") {
+	for _, cluster := range catalog.OfCategory(api.ContainerClusterCategory) {
+		if !api.ClusterInstallsByAgent(cluster) {
 			continue
 		}
-		for _, node := range cluster.Spec().Get("nodes").Items() {
-			if _, found := catalog.Find(api.Machine, node.Get("machineRef").Text()); found {
+		for _, name := range api.ClusterNodeMachines(cluster) {
+			if _, found := catalog.Find(api.Machine, name); found {
 				return true
 			}
 		}
@@ -370,11 +370,12 @@ func requiresNMState(catalog api.Catalog) bool {
 }
 
 func requiresIPUtils(catalog api.Catalog, controllerMachine string) bool {
-	for _, cluster := range catalog.OfKind(api.OpenShiftCluster) {
-		if !cluster.Spec().Has("install", "agent") {
+	for _, cluster := range catalog.OfCategory(api.ContainerClusterCategory) {
+		if !api.ClusterInstallsByAgent(cluster) {
 			continue
 		}
-		for _, vip := range openshift.VirtualIPs(catalog, cluster, controllerMachine) {
+		facts, _ := containercluster.FactsOf(cluster.Kind())
+		for _, vip := range facts.VirtualIPs(catalog, cluster, controllerMachine) {
 			address, err := netip.ParseAddr(vip.Address)
 			if err == nil && address.Is4() && vip.Bridge != "" {
 				return true

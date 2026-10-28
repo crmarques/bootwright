@@ -266,9 +266,6 @@ Alias cell.
 | [B797](#b797) | new, 2026-10-21 (X56) | product | Storage | A StorageObjectBucket's declared policy changes after completion | A completed bucket refuses `object-bucket-identity` on a changed policy; a day-2 update is a state-contract change no milestone needs |
 | [B798](#b798) | new, 2026-10-23 (M3 verification) | defect | Verification tooling | The full Ansible unit gate selects its intended worker mode explicitly | Pre-existing tooling behavior outside the requested product change |
 | [B799](#b799) | new, 2026-10-23 (M3 verification) | defect | Workspace | Setup interruption retries identify any remaining setup-lock holder | Pre-existing intermittent refusal; its cause is unproved |
-| [B847](#b847) | new, 2026-10-27 (lane J) | defect | Infrastructure services | A zoned IPv6 SSH address refuses at plan, not at the record write | Found by lane J's review |
-| [B848](#b848) | new, 2026-10-27 (lane I) | enabling | Architecture | Cluster families publish the facts machine, controller and managed-service code reads | Found by the lane I review; each site reads its kind's own spec layout |
-| [B850](#b850) | new, 2026-10-27 (lane I) | defect | Desired state | A derived Machine contact `<machine>.<domain>` is checked against DNS name lengths | Found by the lane I review; derived cluster names were bounded in X171 |
 | [B853](#b853) | new, 2026-10-27 (lane I) | product | Managed OS | The `templateClone` installer is realized or retired | Admitted and refused at plan; no milestone names it |
 | [B854](#b854) | new, 2026-10-27 (lane I) | product | Managed OS | Anaconda `packageSource.mirror` and `fromSubscription` are realized or retired | Admitted and refused at plan; no milestone names them |
 | [B855](#b855) | new, 2026-10-27 (lane I) | product | Managed OS | An install profile's `ssh.initialPassword` is realized or retired | Admitted and refused at plan; no milestone names it |
@@ -286,6 +283,7 @@ Alias cell.
 | [B868](#b868) | new, 2026-10-27 (lane P) | safety | Infrastructure services | A controller reached by an undeclared address conflicts with its own claims | D188's host-key form does not cover the controller's unqualified keys |
 | [B869](#b869) | new, 2026-10-27 (lane P) | defect | Machine | The SSH arm parses the pinned known-hosts entry before it connects | Pre-existing defect found by lane P |
 | [B867](#b867) | new, 2026-10-27 (lane R review) | safety | Storage | The Ceph incarnation rule is confirmed on a live cluster | The monitor map's creation time was chosen without a live run |
+| [B870](#b870) | new, 2026-10-27 (lane Q2) | enabling | Controller setup | A held cluster-media claim records its API kind | The one family kind left in the controller prerequisites |
 
 ### B82
 
@@ -2937,53 +2935,6 @@ evidence:** parallel interruption/retry probes and a justified release fix,
 considering an explicit unlock before close without weakening exclusion or
 adding a retry that conceals a live owner.
 
-### B847
-
-**Owner:** Infrastructure services. **Kind:** defect. **Requires:** none.
-**Definition:** Needs definition. A zoned IPv6 SSH address (`fe80::1%eth0`)
-would put `%` in the `ssh/<address>:<port>/` qualifier, which the controller
-record's token grammar refuses, so the apply would fail at the record write
-with `context.state` instead of at plan; whether Machine SSH address admission
-already refuses zoned addresses is unverified. **Outcome:** a zoned address
-refuses at validate or plan with `api.value`, or the qualifier encodes it.
-**Exit evidence:** a test of a zoned SSH address.
-
-### B848
-
-**Owner:** Architecture. **Kind:** enabling. **Requires:** none.
-**Definition:** Specified. Found by the lane I review (X171). The
-[cluster family registry](../api.md#cluster-family-registry) keeps the general
-flow free of family kinds in environment selection, compilation, status,
-inspection and the CLI, but these sites still name `api.OpenShiftCluster` or
-`api.CephCluster` directly: machine target membership and key collisions
-(`internal/machine/target.go`), machine admission (`admission.go`, including
-`successorLogin`), the controller's tools and selection
-(`internal/controller/tools.go`, `selection.go`), FIPS
-(`internal/controller/prerequisites/fips.go`) and the managed-service requests
-(`internal/infrastructureservices/managedservice/requests.go`). Each reads its
-kind's own spec layout (`spec.nodes` against `spec.topology.nodes`,
-`cephadm.clusterSSH` against `install.nodeSSH`, `install.agent`, the
-endpoints), so iterating `CategoryKinds` is not mechanical. **Outcome:** each
-family publishes one accessor per fact those sites read, and the sites iterate
-the category's kinds, so enabling another kind of a category edits none of
-them. **Exit evidence:** `TestGeneralFlowNamesNoImplementation` covers these
-packages and fails on a seeded family kind constant in each; the existing
-machine, controller and managed-service tests pass unchanged.
-
-### B850
-
-**Owner:** Desired state. **Kind:** defect. **Requires:** none. **Definition:**
-Specified. Found by the lane I review (X171). Normalization appends the
-`fqdn` contact `<machine>.<domain>`
-([Addresses and access](../api/machines.md#addresses-and-access)) with no
-check that the composed name is at most 253 bytes with labels of at most 63;
-X171 added that check for derived OpenShift node and endpoint names only.
-**Outcome:** a derived Machine contact that is not a DNS name refuses with
-`api.invariant` at `metadata.name` naming the composed name, as the cluster
-names do. **Exit evidence:** a test with a domain long enough that a valid
-Machine name composes an over-long contact, and one that composes a name just
-within the bound.
-
 ### B853
 
 **Owner:** Managed OS. **Kind:** product. **Requires:** none. **Definition:**
@@ -3193,6 +3144,17 @@ upgrade, and changes when the cluster is bootstrapped again under the same
 fsid; otherwise the rule moves to a value that does. **Exit evidence:** a
 ledger row from that live run.
 
+### B870
+
+**Owner:** Controller setup. **Kind:** enabling. **Requires:** none.
+**Definition:** Specified. `conflictKinds` in
+`internal/controller/prerequisites/reservations.go` maps the `cluster-media`
+claim to `api.OpenShiftCluster` because a held claim records no API kind, the
+one allowlisted family-kind use of the family-neutral rule (X183).
+**Outcome:** a claim records the kind of the object it reserves for, and the
+conflict diagnostic reads it. **Exit evidence:** the allowlist is empty and its
+ceiling is zero.
+
 ## Audit remediation (2026-10-26)
 
 The [2026-10-26 spec audit](../../audits/spec/2026-10-26.md) ordered its
@@ -3255,7 +3217,7 @@ also updates this table.
 | 17 | S Libvirt host evidence and routes (B845, B843, B840) | merged (X178) |
 | 18 | P Removal views and host claims (B846, B839, B844) | merged (X180) |
 | 19 | Q1 Unclaimed objects and references (B808, B826) | merged (X179) |
-| 20 | Q2 Family accessors and name bounds (B848, B850, B847) | not started |
+| 20 | Q2 Family accessors and name bounds (B848, B850, B847) | merged (X183) |
 | 21 | R Installer material (B829) | merged (X181) |
 | 22 | T Context-free commands and preflight (B852, B825) | merged (X177) |
 | 23 | U Unrealized fields (B853 to B856) | not started |

@@ -1,8 +1,11 @@
 package architecture_test
 
 import (
+	"fmt"
 	"go/ast"
 	"go/token"
+	"maps"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
@@ -65,6 +68,37 @@ func generalFlow(owner string) bool {
 	return false
 }
 
+// familyNeutral is a package that serves every cluster kind and reads each
+// kind's facts through the accessors its family publishes, though it may name
+// an implementation's own vocabulary.
+func familyNeutral(owner string) bool {
+	for _, root := range familyNeutralRoots {
+		if owner == root || strings.HasPrefix(owner, root+"/") {
+			return true
+		}
+	}
+	return generalFlow(owner)
+}
+
+var familyNeutralRoots = []string{"internal/machine", "internal/controller", "internal/infrastructureservices/managedservice"}
+
+// excusedUse is how many times one file may still name one family kind, and why.
+type excusedUse struct {
+	count  int
+	reason string
+}
+
+// familyKindAllowlist names each remaining family kind use in a family-neutral
+// package, by "<file>: <use>", with its occurrence count; the total may never
+// exceed familyKindAllowlistCeiling.
+func familyKindAllowlist() map[string]excusedUse {
+	return map[string]excusedUse{
+		"internal/controller/prerequisites/reservations.go: api.OpenShiftCluster": {1, "a held cluster-media claim records no API kind, so its conflict diagnostic names the claimant's kind from this table"},
+	}
+}
+
+const familyKindAllowlistCeiling = 1
+
 // familyKindNames lists each cluster family kind or family-owned child kind a
 // source names, as an API constant or as a string literal equal to its name.
 func familyKindNames(source sourceFile, kinds map[string]bool) []string {
@@ -108,14 +142,57 @@ func familyKinds() map[string]bool {
 func TestGeneralFlowNamesNoImplementation(t *testing.T) {
 	sources := productionSources(t)
 	rule := implementationIdentityRule(sources)
-	kinds := familyKinds()
 	for _, source := range sources {
 		if !generalFlow(source.owner) {
 			continue
 		}
-		for _, violation := range append(implementationLiterals(rule, source), familyKindNames(source, kinds)...) {
+		for _, violation := range implementationLiterals(rule, source) {
 			t.Error(violation)
 		}
+	}
+	for _, violation := range familyKindViolations(sources, familyKinds(), familyKindAllowlist()) {
+		t.Error(violation)
+	}
+}
+
+// familyKindViolations is each family kind a family-neutral source names that
+// the allowlist does not excuse, then each allowlist row that excuses nothing.
+func familyKindViolations(sources []sourceFile, kinds map[string]bool, allowed map[string]excusedUse) []string {
+	var found []string
+	used := map[string]int{}
+	for _, source := range sources {
+		if !familyNeutral(source.owner) {
+			continue
+		}
+		for _, violation := range familyKindNames(source, kinds) {
+			use, _, _ := strings.Cut(violation, " names a cluster family kind")
+			if used[use] < allowed[use].count {
+				used[use]++
+				continue
+			}
+			found = append(found, violation)
+		}
+	}
+	for _, use := range slices.Sorted(maps.Keys(allowed)) {
+		if used[use] < allowed[use].count {
+			found = append(found, fmt.Sprintf("familyKindAllowlist excuses %d uses of %s, but %d occur; lower it", allowed[use].count, use, used[use]))
+		}
+	}
+	return found
+}
+
+// The allowlist only shrinks: its excused uses never exceed the ceiling, and
+// raising the ceiling is an edit of this test a reviewer sees.
+func TestTheFamilyKindAllowlistOnlyShrinks(t *testing.T) {
+	total := 0
+	for use, excused := range familyKindAllowlist() {
+		if excused.count < 1 || excused.reason == "" {
+			t.Errorf("%s excuses %d uses without a reason", use, excused.count)
+		}
+		total += excused.count
+	}
+	if total > familyKindAllowlistCeiling {
+		t.Errorf("familyKindAllowlist excuses %d uses, above its ceiling of %d; iterate the family registry instead", total, familyKindAllowlistCeiling)
 	}
 }
 
@@ -130,6 +207,30 @@ const kind, child = "CephCluster", "CephConsumer"
 `)
 	if got := familyKindNames(source, familyKinds()); len(got) != 4 {
 		t.Fatalf("violations = %q", got)
+	}
+}
+
+// Each package B848 moved onto the family accessors refuses a family kind
+// constant again, and the allowlist excuses only its exact row.
+func TestTheFamilyNeutralRuleCoversTheAccessorConsumers(t *testing.T) {
+	for _, owner := range []string{"internal/machine", "internal/machine/access", "internal/controller", "internal/controller/prerequisites", "internal/infrastructureservices/managedservice"} {
+		source := compositionSource(t, owner, `package seeded
+
+import api "github.com/crmarques/bootwright/api/v1alpha1"
+
+var kinds = []api.Kind{api.OpenShiftCluster, api.CephCluster, api.CephCluster}
+`)
+		source.path = owner + "/seeded.go"
+		got := familyKindViolations([]sourceFile{source}, familyKinds(), map[string]excusedUse{owner + "/seeded.go: api.CephCluster": {1, "seeded"}})
+		want := []string{owner + "/seeded.go: api.OpenShiftCluster names a cluster family kind; iterate the family registry instead",
+			owner + "/seeded.go: api.CephCluster names a cluster family kind; iterate the family registry instead"}
+		if !slices.Equal(got, want) {
+			t.Errorf("%s violations = %q, want %q", owner, got, want)
+		}
+	}
+	gone := familyKindViolations(nil, familyKinds(), map[string]excusedUse{"internal/machine/gone.go: api.CephCluster": {1, "seeded"}})
+	if !slices.Equal(gone, []string{"familyKindAllowlist excuses 1 uses of internal/machine/gone.go: api.CephCluster, but 0 occur; lower it"}) {
+		t.Fatalf("stale allowlist = %q", gone)
 	}
 }
 

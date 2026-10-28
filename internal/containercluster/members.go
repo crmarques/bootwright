@@ -9,5 +9,6 @@ func MemberMachines(object api.Object) (environment.Membership, bool) {
 	if object.Kind() != api.OpenShiftCluster {
 		return environment.Membership{}, false
 	}
-	return environment.MembersOf("$.spec.nodes", object.Spec().Get("nodes")), true
+	field, nodes, _ := api.ClusterNodes(object)
+	return environment.MembersOf(field, nodes), true
 }

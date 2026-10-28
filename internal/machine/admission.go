@@ -77,25 +77,51 @@ func normalizedContacts(o api.Object, c api.Catalog, network api.Value) api.Valu
 			addresses[i] = address.With("address", api.StringValue(ip.String()))
 		}
 	}
-	if _, ok := namedValue(api.ListValue(addresses...), "fqdn"); !ok && interfaceIndex(addresses, "fqdn") == -1 {
-		exists := false
-		for _, a := range addresses {
-			exists = exists || a.Get("name").Text() == "fqdn"
-		}
-		if envs := c.OfKind(api.Environment); !exists && len(envs) == 1 && api.ValidLexical("name", o.Name()) {
-			domain := envs[0].Spec().Get("domains", "machines").Text()
-			if domain == "" {
-				domain = envs[0].Spec().Get("domains", "base").Text()
-			}
-			if domain != "" {
-				addresses = append(addresses, api.MapValue(api.FieldValue{Name: "name", Value: api.StringValue("fqdn")}, api.FieldValue{Name: "address", Value: api.StringValue(o.Name() + "." + domain)}))
-			}
-		}
+	if contact, ok := derivedContact(o, c, addresses); ok && !contact.overlong {
+		addresses = append(addresses, api.MapValue(api.FieldValue{Name: "name", Value: api.StringValue("fqdn")}, api.FieldValue{Name: "address", Value: api.StringValue(contact.name)}))
 	}
 	if len(addresses) != 0 || network.Has("addresses") {
 		network = network.With("addresses", api.ListValue(addresses...))
 	}
 	return network
+}
+
+type contact struct {
+	name     string
+	overlong bool
+}
+
+// derivedContact is the fqdn contact normalization derives for a Machine that
+// declares none. An over-long one, composed of a valid name and domain, is
+// refused at the name and never appended.
+func derivedContact(o api.Object, c api.Catalog, addresses []api.Value) (contact, bool) {
+	for _, a := range addresses {
+		if a.Get("name").Text() == "fqdn" {
+			return contact{}, false
+		}
+	}
+	envs := c.OfKind(api.Environment)
+	if len(envs) != 1 || !api.ValidLexical("name", o.Name()) {
+		return contact{}, false
+	}
+	domain := envs[0].Spec().Get("domains", "machines").Text()
+	if domain == "" {
+		domain = envs[0].Spec().Get("domains", "base").Text()
+	}
+	if domain == "" {
+		return contact{}, false
+	}
+	name := o.Name() + "." + domain
+	return contact{name: name, overlong: api.ValidLexical("dns", domain) && !api.ValidLexical("dns", name)}, true
+}
+
+func validateDerivedContact(o api.Object, c api.Catalog) []api.Issue {
+	derived, ok := derivedContact(o, c, o.Spec().Get("network", "addresses").Items())
+	if !ok || !derived.overlong {
+		return nil
+	}
+	return []api.Issue{invariant("$.metadata.name", "the derived fqdn contact "+derived.name+" exceeds a DNS name's 253 bytes or a label's 63",
+		"shorten the name of "+o.Identity()+" or the Environment's spec.domains.machines (or spec.domains.base, its default), or author an fqdn contact in spec.network.addresses")}
 }
 
 func normalizedAccess(o api.Object, c api.Catalog, s, network api.Value) api.Value {
@@ -112,8 +138,12 @@ func normalizedAccess(o api.Object, c api.Catalog, s, network api.Value) api.Val
 		// A name that is not a DNS label derives no fqdn contact, so its session
 		// falls back to none rather than repeat the name's refusal.
 		reference := sshAddressRef(o, network)
-		if _, declared := namedValue(network.Get("addresses"), reference); !ssh.Has("addressRef") && (declared || api.ValidLexical("name", o.Name())) {
+		derived, _ := derivedContact(o, c, network.Get("addresses").Items())
+		if _, declared := namedValue(network.Get("addresses"), reference); !ssh.Has("addressRef") && (declared || api.ValidLexical("name", o.Name()) && !derived.overlong) {
 			ssh = ssh.With("addressRef", api.StringValue(reference))
+		}
+		if derived.overlong && ssh.Get("addressRef").Text() == "fqdn" {
+			ssh = ssh.Without("addressRef")
 		}
 		if !ssh.Has("user") && !ssh.Has("auth", "operatorIdentity") && !ssh.Has("auth", "passwordRef") {
 			ssh = ssh.With("user", api.StringValue("root"))
@@ -254,6 +284,7 @@ func Validate(o api.Object, c api.Catalog) []api.Issue {
 	network := s.Get("network")
 	configured := network.Has("configRef") || network.Has("inline")
 	issues = appendIssues(issues, validateNetworkContacts(o, c, configured)...)
+	issues = appendIssues(issues, validateDerivedContact(o, c)...)
 	issues = appendIssues(issues, validateInstallNetwork(o, c, provider, found, variant, configured)...)
 	issues = appendIssues(issues, validateAccess(o, c)...)
 	issues = appendIssues(issues, validatePlacementHost(o, c)...)
@@ -565,17 +596,9 @@ func hostKeyCredentialCollisions(o api.Object, c api.Catalog, key string) []api.
 			collide(machine, "spec.access.ssh.auth.privateKeyRef")
 		}
 	}
-	for _, cluster := range c.OfKind(api.CephCluster) {
-		if cluster.Spec().Get("cephadm", "clusterSSH", "keyRef").Text() == key {
-			collide(cluster, "spec.cephadm.clusterSSH.keyRef")
-		}
-	}
-	for _, cluster := range c.OfKind(api.OpenShiftCluster) {
-		for _, field := range []string{"keyPairRef", "publicKeyRef", "privateKeyRef"} {
-			if cluster.Spec().Get("install", "nodeSSH", field).Text() == key {
-				collide(cluster, "spec.install.nodeSSH."+field)
-				break
-			}
+	for _, cluster := range c.Clusters() {
+		if field, ok := api.ClusterNodeLoginField(cluster, key); ok {
+			collide(cluster, field)
 		}
 	}
 	return issues
@@ -811,19 +834,9 @@ func validateServices(o api.Object, c api.Catalog) []api.Issue {
 }
 
 func successorLogin(o api.Object, c api.Catalog) bool {
-	for _, cluster := range c.OfKind(api.CephCluster) {
-		if cluster.Spec().Get("management").Text() != "managed" {
-			continue
-		}
-		ssh := cluster.Spec().Get("cephadm", "clusterSSH")
-		user := ssh.Get("user").Text()
-		if user == "" || user == "root" || !ssh.Has("keyRef") {
-			continue
-		}
-		for _, node := range cluster.Spec().Get("topology", "nodes").Items() {
-			if node.Get("machineRef").Text() == o.Name() {
-				return true
-			}
+	for _, cluster := range c.Clusters() {
+		if api.ClusterSuccessorLogin(cluster) && slices.Contains(api.ClusterNodeMachines(cluster), o.Name()) {
+			return true
 		}
 	}
 	return false

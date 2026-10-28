@@ -5,7 +5,7 @@ import (
 	"slices"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
-	"github.com/crmarques/bootwright/internal/containercluster/openshift"
+	"github.com/crmarques/bootwright/internal/containercluster"
 	"github.com/crmarques/bootwright/internal/machine"
 	"github.com/crmarques/bootwright/internal/reconciliation"
 )
@@ -152,19 +152,19 @@ func MachineRecords(catalog api.Catalog) []Record {
 // pointing nowhere.
 func ClusterRecords(catalog api.Catalog) []Record {
 	var records []Record
-	for _, cluster := range catalog.OfKind(api.OpenShiftCluster) {
-		for _, endpoint := range openshift.Endpoints(catalog, cluster) {
+	for _, cluster := range catalog.OfCategory(api.ContainerClusterCategory) {
+		facts, _ := containercluster.FactsOf(cluster.Kind())
+		for _, endpoint := range facts.Endpoints(catalog, cluster) {
 			if address := hostAddress(endpoint.Address); address != "" {
 				records = append(records, Record{Addresses: []string{address}, Name: endpoint.Name, Subtree: endpoint.Subtree})
 			}
 		}
-		for _, node := range cluster.Spec().Get("nodes").Items() {
-			name := node.Get("fqdn").Text()
-			address := nodeAddress(catalog, node.Get("machineRef").Text())
-			if name == "" || address == "" {
+		for _, node := range facts.NodeNames(cluster) {
+			address := nodeAddress(catalog, node.Machine)
+			if node.Name == "" || address == "" {
 				continue
 			}
-			records = append(records, Record{Addresses: []string{address}, Name: name})
+			records = append(records, Record{Addresses: []string{address}, Name: node.Name})
 		}
 	}
 	return sortRecords(records)

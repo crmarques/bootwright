@@ -118,20 +118,13 @@ func TrustExemption(o api.Object) string {
 // cluster order. A Machine no cluster names has no entry.
 func Memberships(c api.Catalog) map[string][]string {
 	memberships := map[string][]string{}
-	add := func(cluster string, nodes []api.Value) {
-		for _, node := range nodes {
-			name := node.Get("machineRef").Text()
-			if name == "" || slices.Contains(memberships[name], cluster) {
+	for _, cluster := range c.Clusters() {
+		for _, name := range api.ClusterNodeMachines(cluster) {
+			if name == "" || slices.Contains(memberships[name], cluster.Name()) {
 				continue
 			}
-			memberships[name] = append(memberships[name], cluster)
+			memberships[name] = append(memberships[name], cluster.Name())
 		}
-	}
-	for _, cluster := range c.OfKind(api.OpenShiftCluster) {
-		add(cluster.Name(), cluster.Spec().Get("nodes").Items())
-	}
-	for _, cluster := range c.OfKind(api.CephCluster) {
-		add(cluster.Name(), cluster.Spec().Get("topology", "nodes").Items())
 	}
 	for name := range memberships {
 		slices.Sort(memberships[name])

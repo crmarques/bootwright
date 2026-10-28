@@ -196,6 +196,57 @@ func TestAnInvalidMachineNameDerivesNoContact(t *testing.T) {
 	}
 }
 
+// dnsOfLength is a valid DNS name of exactly n bytes, in labels of at most 63.
+func dnsOfLength(n int) string {
+	var labels []string
+	for n > 0 {
+		size := min(63, n)
+		if n-size == 1 {
+			size--
+		}
+		labels = append(labels, strings.Repeat("a", size))
+		n -= size + 1
+	}
+	return strings.Join(labels, ".")
+}
+
+// The derived contact <name>.<domain> is bounded like any DNS name: a valid
+// name under a valid domain that composes more than 253 bytes refuses at the
+// name, naming the composed contact and the domain field it came from, and
+// derives neither the contact nor a session address dialing it.
+func TestAnOverlongDerivedContactRefusesAtTheName(t *testing.T) {
+	for _, row := range []struct {
+		domains api.Value
+		field   string
+	}{{m("base", dnsOfLength(245)), "spec.domains.base"}, {m("base", "example.test", "machines", dnsOfLength(245)), "spec.domains.machines"}} {
+		machine := object(api.Machine, "rhel-01", m("os", m("provided", true)))
+		within := object(api.Environment, "env", m("domains", row.domains))
+		normalized, _ := Normalize(machine, api.NewCatalog([]api.Object{machine, within}))
+		if fqdn, _ := namedValue(normalized.Spec().Get("network", "addresses"), "fqdn"); len(fqdn.Get("address").Text()) != 253 {
+			t.Fatalf("the contact of exactly 253 bytes was not derived: %v", normalized.Spec().Get("network"))
+		}
+		if issues := admission(machine, within); len(issues) != 0 {
+			t.Fatalf("a derived contact of exactly 253 bytes was refused: %v", issues)
+		}
+		domain := row.domains.Get("machines").Text()
+		if domain == "" {
+			domain = row.domains.Get("base").Text()
+		}
+		over := object(api.Environment, "env", m("domains", row.domains.With(strings.TrimPrefix(row.field, "spec.domains."), api.StringValue("b."+domain))))
+		normalized, _ = Normalize(machine, api.NewCatalog([]api.Object{machine, over}))
+		if _, derived := namedValue(normalized.Spec().Get("network", "addresses"), "fqdn"); derived || normalized.Spec().Has("access", "ssh", "addressRef") {
+			t.Fatalf("an over-long contact was derived or dialed: %v", normalized.Spec())
+		}
+		requireOneIssue(t, admission(machine, over), api.Issue{Code: "api.invariant", Field: "$.metadata.name",
+			Message:     "the derived fqdn contact rhel-01.b." + domain + " exceeds a DNS name's 253 bytes or a label's 63",
+			Remediation: "shorten the name of Machine/rhel-01 or the Environment's spec.domains.machines (or spec.domains.base, its default), or author an fqdn contact in spec.network.addresses"})
+		dialing := machine.WithSpec(machine.Spec().WithPath(m("addressRef", "fqdn", "auth", m("operatorIdentity", m())), "access", "ssh"))
+		if normalized, _ := Normalize(dialing, api.NewCatalog([]api.Object{dialing, over})); normalized.Spec().Has("access", "ssh", "addressRef") {
+			t.Fatalf("an authored reference to the refused contact was kept: %v", normalized.Spec().Get("access"))
+		}
+	}
+}
+
 // An installed Machine's access is derived from the fleet key only when that
 // key names an sshKeyPair Secret; otherwise the Environment's refusal is the
 // only one, with no derived reference repeating it.
