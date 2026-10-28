@@ -154,10 +154,20 @@ func replicatedDefaults(cluster api.Object) (*big.Int, *big.Int) {
 	if cluster.Spec().Has("topology", "stretch") {
 		return big.NewInt(4), big.NewInt(2)
 	}
+	if size, minimum, declared := declaredPoolDefaults(cluster); declared {
+		return size, minimum
+	}
 	if cluster.Spec().Get("cephadm", "bootstrap", "singleHostDefaults").Bool() {
 		return big.NewInt(2), big.NewInt(1)
 	}
 	return big.NewInt(3), big.NewInt(2)
+}
+
+func declaredPoolDefaults(cluster api.Object) (*big.Int, *big.Int, bool) {
+	global := cluster.Spec().Get("config", "global")
+	size, sized := new(big.Int).SetString(textOf(global, "osd_pool_default_size"), 10)
+	minimum, bounded := new(big.Int).SetString(textOf(global, "osd_pool_default_min_size"), 10)
+	return size, minimum, sized && bounded
 }
 func effectiveReplicas(value api.Value, size, minimum *big.Int) (*big.Int, *big.Int) {
 	if positive(value.Get("size")) {
@@ -180,6 +190,7 @@ func osdHostCount(cluster api.Object) int64 {
 func (a *admission) replication(cluster, policy api.Object) {
 	spec := a.object.Spec()
 	size, minimum := replicatedDefaults(cluster)
+	defaultSize := size
 	if policy.Kind() != "" {
 		size, minimum = effectiveReplicas(policy.Spec().Get("replicated"), size, minimum)
 	}
@@ -213,7 +224,14 @@ func (a *admission) replication(cluster, policy api.Object) {
 				a.issue("api.invariant", "$.spec.replicated.size", fmt.Sprintf("host-domain replicas exceed the %d OSD hosts whose OSD services declare device class %s", classHosts, class), fmt.Sprintf("declare crush_device_class %s on OSD services of at least %s hosts, or lower replicated.size", class, size))
 			}
 		} else if !cluster.Spec().Has("topology", "stretch") && size.Cmp(hosts) == 0 {
-			a.issue("api.invariant", "$.spec.replicated.size", "host-domain replication needs an OSD-bearing host beyond the effective replica size to recover a lost host's replicas", "add OSD-bearing hosts, or explicitly select replicated.size: 2 and minSize: 2 for three OSD-bearing hosts; omitted or zero size retains the default of 3")
+			a.issue("api.invariant", "$.spec.replicated.size", "host-domain replication needs an OSD-bearing host beyond the effective replica size to recover a lost host's replicas", "add OSD-bearing hosts, or explicitly select replicated.size: 2 and minSize: 2 for three OSD-bearing hosts; omitted or zero size takes the cluster default of "+defaultSize.String())
+		} else if !cluster.Spec().Has("topology", "stretch") && bounded && size.Cmp(big.NewInt(classHosts)) == 0 {
+			spare := new(big.Int).Add(size, big.NewInt(1))
+			if slices.Contains(automaticClasses, class) {
+				a.issue("api.invariant", "$.spec.replicated.size", fmt.Sprintf("declared OSD services allow device class %s on at most %d OSD hosts, so host-domain replication of size %s has no host of that class beyond its replicas to recover a lost host's replicas", class, classHosts, size), fmt.Sprintf("declare OSD services that permit device class %s on at least %s hosts, or lower replicated.size", class, spare))
+			} else {
+				a.issue("api.invariant", "$.spec.replicated.size", fmt.Sprintf("host-domain replication needs an OSD host whose OSD services declare device class %s beyond the effective replica size to recover a lost host's replicas; %d declare it", class, classHosts), fmt.Sprintf("declare crush_device_class %s on OSD services of at least %s hosts, or lower replicated.size", class, spare))
+			}
 		}
 	}
 }
@@ -372,4 +390,9 @@ func (a *admission) export(cluster api.Object, managed bool) {
 		a.required(spec, "externalDetails", "$.spec")
 		a.forbid(spec, "$.spec", "dataFoundation")
 	}
+}
+
+func DefaultReplicas(cluster api.Object) (int64, int64) {
+	size, minimum := replicatedDefaults(cluster)
+	return size.Int64(), minimum.Int64()
 }

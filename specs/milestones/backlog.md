@@ -268,9 +268,6 @@ Alias cell.
 | [B799](#b799) | new, 2026-10-23 (M3 verification) | defect | Workspace | Setup interruption retries identify any remaining setup-lock holder | Pre-existing intermittent refusal; its cause is unproved |
 | [B857](#b857) | new, 2026-10-27 (lane I) | enabling | Desired state | The audit 5.7 operator tasks run on the reshaped API | B814's paper check was not run before X171 |
 | [B858](#b858) | new, 2026-10-27 (lane T) | product | CLI | `preflight infra`, `preflight all` and `render` with a path flag are defined and run | D188 ran `preflight clusters` as the union of two existing checks; these have no definition |
-| [B859](#b859) | new, 2026-10-27 (lane Q3) | defect | Storage | Pool admission honours the cluster's default replica pair | Pre-existing defect found by lane Q3 |
-| [B860](#b860) | new, 2026-10-27 (lane Q3) | safety | Storage | A bounded device class keeps the additional-host rule | Pre-existing gap found by lane Q3's review |
-| [B861](#b861) | new, 2026-10-27 (lane Q3) | defect | Storage | Ceph request builders refuse each unresolved reference by name | Same defect class as B849, left by lane Q3 |
 | [B862](#b862) | new, 2026-10-27 (lane T) | defect | Verification tooling | The cluster selection cost test holds under `-race` | Pre-existing failure found by lane T |
 | [B863](#b863) | new, 2026-10-27 (lane T) | defect | CLI | `machine rsh` and `machine exec` take only the SSH flags they consume | Found by lane T |
 | [B864](#b864) | new, 2026-10-27 (lane S) | product | State reconciliation | An adapter's warning reaches the run's diagnostics | B843's shadowed-route warning reaches only the attempt output |
@@ -280,6 +277,8 @@ Alias cell.
 | [B869](#b869) | new, 2026-10-27 (lane P) | defect | Machine | The SSH arm parses the pinned known-hosts entry before it connects | Pre-existing defect found by lane P |
 | [B867](#b867) | new, 2026-10-27 (lane R review) | safety | Storage | The Ceph incarnation rule is confirmed on a live cluster | The monitor map's creation time was chosen without a live run |
 | [B870](#b870) | new, 2026-10-27 (lane Q2) | enabling | Controller setup | A held cluster-media claim records its API kind | The one family kind left in the controller prerequisites |
+| [B872](#b872) | new, 2026-10-28 (lane V1) | defect | Storage | An NVMe-oF service with no pool refuses at plan | Pre-existing gap found by lane V1 |
+| [B873](#b873) | new, 2026-10-28 (lane V1) | defect | Storage | The plan builder's replica refusal names no distribution | Pre-existing wording found by lane V1 |
 
 ### B82
 
@@ -2965,43 +2964,6 @@ with its refusals, diagnostics and goldens. **Exit evidence:** the three
 removed from the unavailable list and `wireStubs`, the report contracts in
 [cli/output.md](../cli/output.md), and the tests.
 
-### B859
-
-**Owner:** Storage. **Kind:** defect. **Requires:** none. **Definition:**
-Specified. Pool admission (`replicatedDefaults` in
-`internal/storage/cephcluster/pools.go`) judges a pool that omits its size
-against 3/2 (2/1 on a single host) and ignores the cluster's
-`osd_pool_default_size` and `osd_pool_default_min_size`, while the gateway's
-derived-pool check honours them (found by lane Q3, 2026-10-27). **Outcome:**
-both checks read the same effective default. **Exit evidence:** an admission
-test of a pool without a size on a cluster whose pair is 2/2.
-
-### B860
-
-**Owner:** Storage. **Kind:** safety. **Requires:** none. **Definition:**
-Specified. In `internal/storage/cephcluster/pools.go` the replica checks form
-an if/else-if chain, so a pool on a bounded device class whose size equals the
-class's host count, below the cluster's, skips the additional-host rule
-against the class hosts (lane Q3's review, 2026-10-27). **Outcome:** the
-additional-host rule also holds per bounded class. **Exit evidence:** a
-refusal test of that case on every distribution.
-
-### B861
-
-**Owner:** Storage. **Kind:** defect. **Requires:** none. **Definition:**
-Specified. Lane Q3 made the CephObjectUser, CephNFSExport user and
-CephObjectBucket builders refuse an unresolved reference with `api.reference`;
-`nfsExportRequest` still discards the lookup of `spec.subvolumeRef` and
-`spec.filesystemRef`, and other builders (`gatewayRequests` among them) discard
-theirs, so a reference that escapes compile-time resolution reads as the
-distribution refusal. **Outcome:** every Ceph request builder refuses an
-unresolved reference by name. **Exit evidence:** a test per builder.
-
-Narrowed on 2026-10-27 by X179: a compiled graph resolves every `Ref` field,
-nested ones included, so only lookups by a derived name (`nvmeof.<id>`,
-`mds.<filesystem>`) and the `backend_service` lookup in `services.go` can
-still miss at plan time.
-
 ### B862
 
 **Owner:** Verification tooling. **Kind:** defect. **Requires:** none.
@@ -3097,6 +3059,22 @@ one allowlisted family-kind use of the family-neutral rule (X183).
 conflict diagnostic reads it. **Exit evidence:** the allowlist is empty and its
 ceiling is zero.
 
+### B872
+
+**Owner:** Storage. **Kind:** defect. **Requires:** none. **Definition:**
+Specified. `projectNVMeOFPools` ignores a missed `spec.pool` lookup; admission
+refuses an absent pool, but an empty `spec.pool` appears to reach the plan
+unchecked (lane V1, 2026-10-28). **Outcome:** an NVMe-oF service with no pool
+refuses at admission or plan by name. **Exit evidence:** a refusal test.
+
+### B873
+
+**Owner:** Storage. **Kind:** defect. **Requires:** none. **Definition:**
+Specified. The plan builder's replica refusal in
+`internal/storage/ceph/resources.go` reads "IBM replication size", but D188
+applies the rule to every distribution. **Outcome:** the message names no
+distribution. **Exit evidence:** the refusal test pins the new text.
+
 ## Audit remediation (2026-10-26)
 
 The [2026-10-26 spec audit](../../audits/spec/2026-10-26.md) ordered its
@@ -3164,6 +3142,11 @@ also updates this table.
 | 22 | T Context-free commands and preflight (B852, B825) | merged (X177) |
 | 23 | U Unrealized fields (B853 to B856) | merged (X184) |
 | 24 | N0 Remaining text to owning items (B805, B816, B820, B851) | merged (X182) |
+| 25 | V1 Ceph replica defaults and derived names (B859, B860, B861) | merged (X185) |
+| 26 | V2 Test and CLI defects (B862, B863, B865, B866) | not started |
+| 27 | V3 Known-hosts and claim kinds (B869, B870, B871, B868) | not started |
+| 28 | W1 Preflight infra and all, render to a path (B858) | not started |
+| 29 | W2 Adapter warnings (B864) | not started |
 
 To continue, take the first row not `merged`. If its branch exists, resume it:
 each finished item is a `wip` commit whose body names what remains, and the

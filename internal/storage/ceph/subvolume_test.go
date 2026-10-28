@@ -183,5 +183,5 @@ func TestSubvolumePlanPropagatesFilesystemRefusals(t *testing.T) {
 	_, err := planned(t, planCatalog(6, 6, withMDS, cephfsPool("fs-meta", "cephfsMetadata"), ec, filesystemOf(), subvolumeOf()), api.CephSubvolume, "docs")
 	refusedWith(t, err, "lifecycle.unsupported", "CephFilesystem files names erasure-coded pool fs-data as its default data pool; ceph fs new refuses it unless forced, and Bootwright never forces it", "mark a replicated cephfsData pool default in spec.dataPoolRefs and attach erasure-coded pools as additional data pools")
 	_, err = planned(t, filesystemCatalog(withCorePair, filesystemOf(), subvolumeOf()), api.CephSubvolume, "docs")
-	refusedWith(t, err, "api.invariant", "CephCluster example projects no MDS service mds.files for CephFilesystem files", "declare the mds service entry with service_id files in spec.services")
+	refusedWith(t, err, "api.invariant", "CephCluster example declares no single MDS service mds.files, which spec.mdsServiceRef of CephFilesystem files names", "declare the mds service entry with service_id files in spec.services")
 }

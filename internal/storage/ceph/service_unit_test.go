@@ -127,7 +127,7 @@ func TestUnitTypeRegistryCarriesHooksAndExtraDependencies(t *testing.T) {
 		units: func(api.Object) ([]ServiceUnit, error) {
 			return []ServiceUnit{{Type: "synthetic", Documents: []json.RawMessage{json.RawMessage(`{"placement":{"hosts":["node-1"]},"service_id":"","service_type":"synthetic"}`)}}}, nil
 		},
-		dependencies: func(api.Object, ServiceUnit) []string { return []string{"ceph-pool-gateways"} },
+		dependencies: func(api.Object, ServiceUnit) ([]string, error) { return []string{"ceph-pool-gateways"}, nil },
 		apply:        unitBudget{calls: 1}, observe: unitBudget{calls: 1}, destroy: unitBudget{calls: 1},
 	}
 	for _, definition := range cephDefinitions(t, settingsCatalog(t, nil)) {

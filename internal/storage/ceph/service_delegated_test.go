@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"reflect"
 	"slices"
+	"strings"
 	"testing"
 	"time"
 
@@ -218,5 +219,23 @@ func TestDelegatedServiceRefusesUntilItsBlockLands(t *testing.T) {
 		Remediation: "set spec.images.haproxy of CephCluster example to an image beneath its Entitlement registry, or remove ingress.nfs.files from its spec.services, together with its spec.serviceBindings entries"}}
 	if got := New(api.CephCluster, nil).Unsupported(graph([]api.Value{nfsService("files"), nfsIngress})); !reflect.DeepEqual(got, want) {
 		t.Fatalf("ingress.nfs.files: refuses %+v, want %+v", got, want)
+	}
+}
+
+func TestUnresolvedIngressBackendRefusesEveryRequestByReference(t *testing.T) {
+	const message = "CephCluster example's ingress service ingress.rgw.objects names a spec.backend_service that is not one declared service of this cluster"
+	const remedy = "set spec.backend_service of ingress.rgw.objects to the qualified name of one declared service of CephCluster example, or remove ingress.rgw.objects from spec.services, together with its spec.serviceBindings entries"
+	ingress := requestMap("service_type", "ingress", "service_id", "rgw.objects", "placement", requestMap("label", "mon", "count", 2), "spec", requestMap("backend_service", "rgw.objects", "virtual_ip", "192.0.2.50/24"))
+	_, err := clusterRequestWith(t, func(services []api.Value) []api.Value { return append(services, ingress) })
+	refusedWith(t, err, "api.reference", message, remedy)
+	catalog := planCatalog(3, 3, func(spec api.Value) api.Value {
+		return spec.WithPath(api.ListValue(append(spec.Get("services").Items(), ingress)...), "services")
+	}, replicatedPool("volumes"))
+	_, err = planned(t, catalog, api.CephPool, "volumes")
+	refusedWith(t, err, "api.reference", message, remedy)
+	for _, refusal := range New(api.CephCluster, nil).Unsupported(compilation.NewState(catalog, catalog, nil)) {
+		if strings.Contains(refusal.Reason, "does not deploy") {
+			t.Fatalf("an unresolved ingress backend reads as an unsupported capability: %+v", refusal)
+		}
 	}
 }

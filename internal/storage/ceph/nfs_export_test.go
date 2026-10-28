@@ -325,7 +325,7 @@ func TestNFSExportPlanPropagatesBackingRefusals(t *testing.T) {
 		return withCorePair(spec).WithPath(api.ListValue(append(spec.Get("services").Items(), shares)...), "services")
 	}
 	_, err := planned(t, exportCatalog(3, withoutMDS, subvolumeExport(exportNative())), api.CephNFSExport, "docs")
-	refusedWith(t, err, "api.invariant", "CephCluster example projects no MDS service mds.files for CephFilesystem files", "declare the mds service entry with service_id files in spec.services")
+	refusedWith(t, err, "api.invariant", "CephCluster example declares no single MDS service mds.files, which spec.mdsServiceRef of CephFilesystem files names", "declare the mds service entry with service_id files in spec.services")
 	_, err = planned(t, exportCatalog(3, withMDS, subvolumeExport(exportNative())), api.CephNFSExport, "docs")
 	refusedWith(t, err, "api.invariant", "CephNFSExport docs's spec.serviceID resolves to no declared nfs service of CephCluster example",
 		"add a spec.services entry with service_type nfs and this service_id to CephCluster example, or set spec.serviceID to the service_id of a declared nfs service")

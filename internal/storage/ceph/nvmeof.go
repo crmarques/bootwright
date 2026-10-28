@@ -90,7 +90,10 @@ func projectNVMeOFPools(catalog api.Catalog, cluster api.Object, requests []Requ
 		if unit == nil || unit.Type != "nvmeof" {
 			continue
 		}
-		service, _ := cephcluster.NativeService(cluster, "nvmeof."+unit.ID)
+		service, err := nvmeofService(cluster, unit.ID)
+		if err != nil {
+			return err
+		}
 		pool, _ := catalog.Find(api.CephPool, service.Get("spec", "pool").Text())
 		service = service.WithPath(api.StringValue(cephcluster.PoolName(pool)), "spec", "pool")
 		document, err := unitDocumentOf(cluster, service, nvmeofSpecOf)
@@ -102,9 +105,22 @@ func projectNVMeOFPools(catalog api.Catalog, cluster api.Object, requests []Requ
 	return nil
 }
 
-func nvmeofDependencies(cluster api.Object, unit ServiceUnit) []string {
-	service, _ := cephcluster.NativeService(cluster, "nvmeof."+unit.ID)
-	return []string{reconciliation.BlockIdentity("ceph-pool-", service.Get("spec", "pool").Text())}
+func nvmeofService(cluster api.Object, id string) (api.Value, error) {
+	name := "nvmeof." + id
+	service, found := cephcluster.NativeService(cluster, name)
+	if !found {
+		return api.Value{}, failure("api.invariant", "CephCluster "+cluster.Name()+" declares no single NVMe-oF service "+name+", the name the service_id of its nvmeof service in spec.services derives",
+			"give each nvmeof service in spec.services of CephCluster "+cluster.Name()+" its own non-empty service_id")
+	}
+	return service, nil
+}
+
+func nvmeofDependencies(cluster api.Object, unit ServiceUnit) ([]string, error) {
+	service, err := nvmeofService(cluster, unit.ID)
+	if err != nil {
+		return nil, err
+	}
+	return []string{reconciliation.BlockIdentity("ceph-pool-", service.Get("spec", "pool").Text())}, nil
 }
 
 func nvmeofRequest(catalog api.Catalog, object api.Object, contextName string) (Request, error) {

@@ -56,6 +56,30 @@ func refusedWith(t *testing.T, err error, code, message, remedy string) {
 	}
 }
 
+func TestPoolWithoutSizeTakesTheClusterDefaultPair(t *testing.T) {
+	pool := childOf(api.CephPool, "volumes", "role", "rbd")
+	for _, test := range []struct {
+		name          string
+		change        func(api.Value) api.Value
+		size, minSize int
+	}{
+		{name: "declared 2/2", change: withCorePair, size: 2, minSize: 2},
+		{name: "ordinary 3/2", size: 3, minSize: 2},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			catalog := planCatalog(4, 4, test.change, pool, childOf(api.CephPlacementPolicy, "fast", "ruleName", "fast"))
+			request, err := planned(t, catalog, api.CephPool, "volumes")
+			if err != nil || request.Pool.Size != test.size || request.Pool.MinSize != test.minSize {
+				t.Fatalf("pool %+v, %v; want %d/%d", request.Pool, err, test.size, test.minSize)
+			}
+			request, err = planned(t, catalog, api.CephPlacementPolicy, "fast")
+			if err != nil || request.Policy.Size != test.size {
+				t.Fatalf("policy %+v, %v; want size %d", request.Policy, err, test.size)
+			}
+		})
+	}
+}
+
 func TestErasureParametersRefusedAtPlan(t *testing.T) {
 	catalog := planCatalog(6, 6, nil, erasurePool("volumes", requestMap("dataChunks", 4, "codingChunks", 2, "parameters", requestMap("l", "3"))))
 	_, err := planned(t, catalog, api.CephPool, "volumes")

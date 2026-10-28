@@ -165,7 +165,7 @@ func TestClientPlanStatesScope(t *testing.T) {
 }
 
 func TestClientPropagatesCephFSPlanRefusals(t *testing.T) {
-	const message, remedy = "CephCluster example projects no MDS service mds.files for CephFilesystem files", "declare the mds service entry with service_id files in spec.services"
+	const message, remedy = "CephCluster example declares no single MDS service mds.files, which spec.mdsServiceRef of CephFilesystem files names", "declare the mds service entry with service_id files in spec.services"
 	_, err := planned(t, filesystemCatalog(nil, filesystemOf(), childOf(api.CephClient, "reader", "filesystemRef", "files", "access", "readOnly")), api.CephClient, "reader")
 	refusedWith(t, err, "api.invariant", message, remedy)
 	_, err = planned(t, subvolumeClientCatalog(nil), api.CephClient, "writer")

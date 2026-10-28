@@ -18,6 +18,8 @@ func TestReplicationNeedsAnAdditionalOSDHostOnEveryDistribution(t *testing.T) {
 		extraMON   bool
 		policy     bool
 		stretch    bool
+		defaults   bool
+		removeOSD  bool
 		bad        bool
 	}{
 		{name: "explicit two replicas", replicated: m("size", 2, "minSize", 2)},
@@ -28,12 +30,18 @@ func TestReplicationNeedsAnAdditionalOSDHostOnEveryDistribution(t *testing.T) {
 		{name: "four OSD hosts support default three", extraOSD: true},
 		{name: "monitor-only host supplies no OSD capacity", extraMON: true, bad: true},
 		{name: "stretch protection remains separately owned", extraOSD: true, stretch: true},
+		{name: "declared 2/2 cluster default holds an omitted size on three hosts", defaults: true},
+		{name: "declared 2/2 cluster default holds a policy without a size on three hosts", policy: true, defaults: true},
+		{name: "declared cluster default still needs an additional host", replicated: m("minSize", 2), defaults: true, removeOSD: true, bad: true},
 	} {
 		for distribution, arm := range distributions {
 			t.Run(distribution+" "+test.name, func(t *testing.T) {
 				catalog := fixtureCatalog()
 				cluster := find(t, catalog, api.CephCluster, "storage")
 				cluster = cluster.WithSpec(cluster.Spec().With("distribution", arm))
+				if !test.defaults {
+					cluster = cluster.WithSpec(cluster.Spec().Without("config"))
+				}
 				if test.extraOSD || test.extraMON {
 					nodes := cluster.Spec().Get("topology", "nodes").Items()
 					labels := []string{"mon", "mgr"}
@@ -41,6 +49,11 @@ func TestReplicationNeedsAnAdditionalOSDHostOnEveryDistribution(t *testing.T) {
 						labels = append(labels, "storage")
 					}
 					nodes = append(nodes, m("name", "node-4", "machineRef", "machine-4", "labels", api.StringList(labels...)))
+					cluster = cluster.WithSpec(cluster.Spec().WithPath(api.ListValue(nodes...), "topology", "nodes"))
+				}
+				if test.removeOSD {
+					nodes := cluster.Spec().Get("topology", "nodes").Items()
+					nodes[2] = nodes[2].With("labels", api.StringList("mon", "mgr"))
 					cluster = cluster.WithSpec(cluster.Spec().WithPath(api.ListValue(nodes...), "topology", "nodes"))
 				}
 				if test.stretch {
@@ -186,7 +199,27 @@ func TestDeclaredClassCapacityCountsOnlyDeclaringHosts(t *testing.T) {
 	}
 	policy := placementPolicy("fast-policy", "ruleName", "fast-rule", "crushDeviceClass", "fast", "replicated", m("size", 3))
 	onlyIssue(t, admitted(clusterOf(t, 4, "", data, fast("node-1", "node-2")), policy), "$.spec.replicated.size", "host-domain replicas exceed the 2 OSD hosts whose OSD services declare device class fast", "declare crush_device_class fast on OSD services of at least 3 hosts, or lower replicated.size")
-	noIssues(t, admitted(clusterOf(t, 4, "", data, fast("node-1", "node-2", "node-3")), policy))
+	noIssues(t, admitted(clusterOf(t, 5, "", data, fast("node-1", "node-2", "node-3", "node-4")), policy))
+}
+
+func TestBoundedClassKeepsTheAdditionalHostRuleOnEveryDistribution(t *testing.T) {
+	data := m("service_type", "osd", "service_id", "data", "placement", m("label", "storage"), "spec", m("data_devices", m("paths", api.StringList("/dev/vdb"))))
+	fast := func(hosts ...string) api.Value {
+		return osdWithClass(m("hosts", api.StringList(hosts...)), m("crush_device_class", "fast", "data_devices", m("paths", api.StringList("/dev/vdc"))))
+	}
+	for _, distribution := range []string{"oss", "redhat", "ibm"} {
+		t.Run(distribution, func(t *testing.T) {
+			policy := placementPolicy("fast-policy", "ruleName", "fast-rule", "crushDeviceClass", "fast", "replicated", m("size", 3, "minSize", 2))
+			catalog := clusterOf(t, 5, distribution, data, fast("node-1", "node-2", "node-3"))
+			const message = "host-domain replication needs an OSD host whose OSD services declare device class fast beyond the effective replica size to recover a lost host's replicas; 3 declare it"
+			const remedy = "declare crush_device_class fast on OSD services of at least 4 hosts, or lower replicated.size"
+			onlyIssue(t, admitted(catalog, policy), "$.spec.replicated.size", message, remedy)
+			catalog = replace(catalog, policy)
+			pool := object(api.CephPool, "fast-pool", m("clusterRef", "storage", "role", "rbd", "placementPolicyRef", "fast-policy"))
+			onlyIssue(t, admitted(catalog, pool), "$.spec.replicated.size", message, remedy)
+			noIssues(t, admitted(clusterOf(t, 5, distribution, data, fast("node-1", "node-2", "node-3", "node-4")), policy))
+		})
+	}
 }
 
 func TestAutomaticClassCapacityIncludesOnlyPossibleHosts(t *testing.T) {
@@ -210,8 +243,9 @@ func TestAutomaticClassCapacityIncludesOnlyPossibleHosts(t *testing.T) {
 				t.Fatalf("impossible automatic-class erasure coding has no precise refusal: %+v", issues)
 			}
 			unknown := data.With("service_id", api.StringValue("unknown")).With("placement", m("hosts", api.StringList("node-3"))).With("spec", m("data_devices", m("paths", api.StringList("/dev/vdd"))))
-			noIssues(t, admitted(clusterOf(t, 4, "", data, fast, unknown), policy))
+			onlyIssue(t, admitted(clusterOf(t, 4, "", data, fast, unknown), policy), "$.spec.replicated.size", "declared OSD services allow device class "+class+" on at most 3 OSD hosts, so host-domain replication of size 3 has no host of that class beyond its replicas to recover a lost host's replicas", "declare OSD services that permit device class "+class+" on at least 4 hosts, or lower replicated.size")
 			unknown = unknown.With("placement", m("hosts", api.StringList("node-3", "node-4")))
+			noIssues(t, admitted(clusterOf(t, 4, "", data, fast, unknown), policy))
 			noIssues(t, admitted(clusterOf(t, 4, "", data, fast, unknown), pool))
 		})
 	}

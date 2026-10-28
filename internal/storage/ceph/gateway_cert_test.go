@@ -99,7 +99,7 @@ func TestGatewayFrontedByAnIngressDependsOnTheSettingsBlock(t *testing.T) {
 		request Request
 		want    bool
 	}{"fronted": {fronted, true}, "without the ingress": {direct, false}, "without auxiliary": {unselected, false}} {
-		_, dependencies := placement(gateway, c.request)
+		_, dependencies, _ := placement(gateway, c.request)
 		if slices.Contains(dependencies, "ceph-settings-example") != c.want {
 			t.Fatalf("%s depends on %v", name, dependencies)
 		}

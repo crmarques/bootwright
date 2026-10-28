@@ -125,12 +125,9 @@ func (a *admission) gatewayDerivedPools(cluster api.Object) {
 		return
 	}
 	size, _ := replicatedDefaults(cluster)
-	remedy := "add OSD-bearing hosts to CephCluster " + cluster.Name() + ", or set osd_pool_default_size and osd_pool_default_min_size to \"2\" under its spec.config.global"
-	global := cluster.Spec().Get("config", "global")
-	if global.Has("osd_pool_default_size") && global.Has("osd_pool_default_min_size") {
-		if configured, ok := new(big.Int).SetString(textOf(global, "osd_pool_default_size"), 10); ok {
-			size, remedy = configured, "add OSD-bearing hosts to CephCluster "+cluster.Name()
-		}
+	remedy := "add OSD-bearing hosts to CephCluster " + cluster.Name()
+	if _, _, declared := declaredPoolDefaults(cluster); !declared && !cluster.Spec().Has("topology", "stretch") {
+		remedy += ", or set osd_pool_default_size and osd_pool_default_min_size to \"2\" under its spec.config.global"
 	}
 	hosts := big.NewInt(osdHostCount(cluster))
 	if size.Cmp(hosts) > 0 || !cluster.Spec().Has("topology", "stretch") && size.Cmp(hosts) == 0 {

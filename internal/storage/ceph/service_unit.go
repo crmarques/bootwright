@@ -40,7 +40,7 @@ type unitBudget struct{ calls, waits int }
 
 type unitType struct {
 	units                   func(cluster api.Object) ([]ServiceUnit, error)
-	dependencies            func(cluster api.Object, unit ServiceUnit) []string
+	dependencies            func(cluster api.Object, unit ServiceUnit) ([]string, error)
 	impacts                 func(cluster api.Object, unit ServiceUnit) []string
 	apply, observe, destroy unitBudget
 }
@@ -54,7 +54,7 @@ var unitTypes = map[string]unitType{
 	"rbd-mirror":   {units: mirrorUnits, dependencies: noUnitDependencies, impacts: noUnitImpacts, apply: unitBudget{calls: 2, waits: 1}, observe: unitBudget{calls: 1}, destroy: unitBudget{calls: 2}},
 }
 
-func noUnitDependencies(api.Object, ServiceUnit) []string { return nil }
+func noUnitDependencies(api.Object, ServiceUnit) ([]string, error) { return nil, nil }
 
 func noUnitImpacts(api.Object, ServiceUnit) []string { return nil }
 
@@ -91,16 +91,20 @@ func serviceUnitRequests(base Request, cluster api.Object) ([]Request, error) {
 	return out, nil
 }
 
-func unitDependencies(r Request, cluster api.Object) []string {
+func unitDependencies(r Request, cluster api.Object) ([]string, error) {
 	dependencies := []string{ClusterBlockID(r.Cluster), ImageBlockID(r.Cluster)}
 	if _, needed := settingsRequest(api.Catalog{}, r, cluster); needed {
 		dependencies = append(dependencies, SettingsBlockID(r.Cluster))
 	}
 	if t, known := unitTypes[r.Service.Type]; known {
-		dependencies = append(dependencies, t.dependencies(cluster, *r.Service)...)
+		unit, err := t.dependencies(cluster, *r.Service)
+		if err != nil {
+			return nil, err
+		}
+		dependencies = append(dependencies, unit...)
 	}
 	slices.Sort(dependencies)
-	return slices.Compact(dependencies)
+	return slices.Compact(dependencies), nil
 }
 
 func unitDeadline(r Request, operation string) (time.Duration, error) {
@@ -643,11 +647,11 @@ func gatewayUnits(cluster api.Object) ([]ServiceUnit, error) {
 	return []ServiceUnit{unit}, nil
 }
 
-func gatewayDependencies(cluster api.Object, _ ServiceUnit) []string {
+func gatewayDependencies(cluster api.Object, _ ServiceUnit) ([]string, error) {
 	if units, err := monitoringUnits(cluster); err == nil && len(units) != 0 {
-		return []string{ServiceUnitBlockID(cluster.Name(), ServiceUnit{Type: "monitoring"})}
+		return []string{ServiceUnitBlockID(cluster.Name(), ServiceUnit{Type: "monitoring"})}, nil
 	}
-	return nil
+	return nil, nil
 }
 
 func gatewayImpacts(_ api.Object, unit ServiceUnit) []string {

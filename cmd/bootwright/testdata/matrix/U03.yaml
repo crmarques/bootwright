@@ -11,4 +11,4 @@ expect:
   name: rbd-data
   field: $.spec.replicated.size
   message: host-domain replication needs an OSD-bearing host beyond the effective replica size to recover a lost host's replicas
-  remediation: "add OSD-bearing hosts, or explicitly select replicated.size: 2 and minSize: 2 for three OSD-bearing hosts; omitted or zero size retains the default of 3"
+  remediation: "add OSD-bearing hosts, or explicitly select replicated.size: 2 and minSize: 2 for three OSD-bearing hosts; omitted or zero size takes the cluster default of 2"

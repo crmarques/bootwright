@@ -163,7 +163,10 @@ func (c Capability) definition(verb reconciliation.Verb, object api.Object, requ
 	if request.Service != nil && verb == reconciliation.Apply && unitTypes[request.Service.Type].impacts != nil {
 		impacts = append(impacts, unitTypes[request.Service.Type].impacts(object, *request.Service)...)
 	}
-	requires, dependencies := placement(object, request)
+	requires, dependencies, err := placement(object, request)
+	if err != nil {
+		return reconciliation.BlockDefinition{}, err
+	}
 	id := reconciliation.BlockIdentity("ceph-", request.Action+"-"+object.Name())
 	if request.Service != nil {
 		id = ServiceUnitBlockID(request.Cluster, *request.Service)
@@ -175,7 +178,7 @@ func (c Capability) definition(verb reconciliation.Verb, object api.Object, requ
 	return reconciliation.BlockDefinition{ID: id, Description: description, Stage: reconciliation.StageClusters, Requires: requires, Dependencies: dependencies, Exclusive: []string{"ceph/" + request.Cluster}, Impacts: impacts, Consumes: consumes, Kind: string(c.kind), Object: object.Name(), Implementation: Implementation, ContentDigest: ContentDigest(), Request: canonical}, nil
 }
 
-func placement(object api.Object, request Request) ([]reconciliation.ObjectRef, []string) {
+func placement(object api.Object, request Request) ([]reconciliation.ObjectRef, []string, error) {
 	requires := []reconciliation.ObjectRef{}
 	dependencies := []string{ClusterBlockID(request.Cluster), ImageBlockID(request.Cluster)}
 	switch request.Action {
@@ -193,7 +196,11 @@ func placement(object api.Object, request Request) ([]reconciliation.ObjectRef, 
 		dependencies = []string{ClusterBlockID(request.Cluster)}
 	case "service":
 		if request.Service != nil {
-			dependencies = unitDependencies(request, object)
+			unit, err := unitDependencies(request, object)
+			if err != nil {
+				return nil, nil, err
+			}
+			dependencies = unit
 		}
 	case "pool":
 		if ref := object.Spec().Get("placementPolicyRef").Text(); ref != "" && object.Kind() == api.CephPool {
@@ -243,7 +250,7 @@ func placement(object api.Object, request Request) ([]reconciliation.ObjectRef, 
 		}
 	}
 	slices.Sort(dependencies)
-	return requires, dependencies
+	return requires, dependencies, nil
 }
 
 // Unsupported runs before operation registration and before secret custody.
@@ -272,9 +279,7 @@ func (c Capability) Unsupported(state *compilation.State) []lifecycle.Refusal {
 		if reason, remedy, gap := replicationNetworkGap(state.Effective(), cluster); gap {
 			out = append(out, lifecycle.RefusalOf(object, reason, remedy))
 		}
-		if reason, remedy, gap := undeployedDelegated(cluster); gap {
-			out = append(out, lifecycle.RefusalOf(object, reason, remedy))
-		} else if reason, remedy, gap := unselectedAuxiliary(cluster); gap {
+		if reason, remedy, gap := unselectedAuxiliary(cluster); gap {
 			out = append(out, lifecycle.RefusalOf(object, reason, remedy))
 		} else if reason, remedy, gap := unselectedSMBImages(state.Effective(), cluster); gap {
 			out = append(out, lifecycle.RefusalOf(object, reason, remedy))

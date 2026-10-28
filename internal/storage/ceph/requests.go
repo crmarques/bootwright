@@ -303,6 +303,9 @@ func baseRequest(c api.Catalog, cluster api.Object, contextName string) (Request
 	if api.CephDistribution(spec) != "ibm" {
 		return Request{}, failure("lifecycle.unsupported", distributionReason, distributionRemedy)
 	}
+	if err := unresolvedIngressBackend(cluster); err != nil {
+		return Request{}, err
+	}
 	base, imageVersion := spec.Get("image", "base").Text(), spec.Get("image", "version").Text()
 	reference := base + ":" + imageVersion
 	if ValidImageDigest(imageVersion) {

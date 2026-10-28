@@ -202,7 +202,7 @@ func TestFilesystemPlanRefusesErasureDefaultAndPropagatesPoolRefusals(t *testing
 	_, err = planned(t, filesystemCatalog(withMDS, mirrored, filesystemOf("dataPoolRefs", refs)), api.CephFilesystem, "files")
 	refusedWith(t, err, "lifecycle.unsupported", "CephPool fs-extra declares mirroring without a CephReplication owner", "declare a CephReplication that names this pool, or remove spec.mirroring")
 	_, err = planned(t, filesystemCatalog(withCorePair, filesystemOf()), api.CephFilesystem, "files")
-	refusedWith(t, err, "api.invariant", "CephCluster example projects no MDS service mds.files for CephFilesystem files", "declare the mds service entry with service_id files in spec.services")
+	refusedWith(t, err, "api.invariant", "CephCluster example declares no single MDS service mds.files, which spec.mdsServiceRef of CephFilesystem files names", "declare the mds service entry with service_id files in spec.services")
 }
 
 func TestFilesystemDeadlineCountsPoolsGroupsAndWaits(t *testing.T) {

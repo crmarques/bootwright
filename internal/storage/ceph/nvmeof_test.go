@@ -288,3 +288,37 @@ func TestNVMeOFNativePoolNamesKeepLogicalDependencies(t *testing.T) {
 		t.Fatalf("missing native consumers: %v", found)
 	}
 }
+
+func TestNVMeOFServiceUnitRefusesAnUnresolvedDerivedName(t *testing.T) {
+	for name, service := range map[string]api.Value{
+		"empty service_id":    requestMap("service_type", "nvmeof", "placement", requestMap("hosts", api.StringList("node-1", "node-2")), "spec", requestMap("pool", "config", "group", "other", "enable_auth", false)),
+		"repeated service_id": requestMap("service_type", "nvmeof", "service_id", "config.primary", "placement", requestMap("hosts", api.StringList("node-1", "node-2")), "spec", requestMap("pool", "config", "group", "primary", "enable_auth", false)),
+	} {
+		t.Run(name, func(t *testing.T) {
+			objects := nvmeCatalog().Objects()
+			for i, object := range objects {
+				if object.Kind() == api.CephCluster {
+					objects[i] = object.WithSpec(object.Spec().WithPath(api.ListValue(append(object.Spec().Get("services").Items(), service)...), "services"))
+				}
+			}
+			catalog := api.NewCatalog(objects)
+			input := lifecycle.PlanInput{Verb: reconciliation.Apply, Context: lifecycle.ContextIdentity{Name: "synthetic"}, State: compilation.NewState(catalog, catalog, nil), Controller: "controller"}
+			_, err := New(api.CephCluster, nil).Plan(context.Background(), input)
+			d := diagnostics.Of(err)
+			if len(d) != 1 || d[0].Code != "api.invariant" || !strings.HasPrefix(d[0].Message, "CephCluster example declares no single NVMe-oF service nvmeof.") ||
+				!strings.HasSuffix(d[0].Message, ", the name the service_id of its nvmeof service in spec.services derives") ||
+				d[0].Remediation != "give each nvmeof service in spec.services of CephCluster example its own non-empty service_id" {
+				t.Fatalf("an unresolved NVMe-oF service name refused as %+v", d)
+			}
+		})
+	}
+}
+
+func TestNVMeOFDependenciesRefuseAnUnresolvedDerivedName(t *testing.T) {
+	cluster, _ := nvmeCatalog().Find(api.CephCluster, "example")
+	if _, err := nvmeofDependencies(cluster, ServiceUnit{Type: "nvmeof", ID: "absent"}); err == nil {
+		t.Fatal("an NVMe-oF unit whose service is not declared has dependencies")
+	} else if d := diagnostics.Of(err); len(d) != 1 || d[0].Code != "api.invariant" || !strings.Contains(d[0].Message, "nvmeof.absent") {
+		t.Fatalf("an unresolved NVMe-oF dependency refused as %+v", d)
+	}
+}

@@ -183,8 +183,8 @@ func TestMonitoringUnitFollowsClusterAndImageBlocks(t *testing.T) {
 	cluster, _ := settingsCatalog(t, services).Find(api.CephCluster, "example")
 	r := monitoringRequest(t)
 	r.Cluster = "example"
-	if got := unitDependencies(r, cluster); !slices.Equal(got, []string{"ceph-cluster-example", "ceph-image-example", "ceph-settings-example"}) {
-		t.Fatalf("a monitoring unit with frozen auxiliary images depends on %v", got)
+	if got, err := unitDependencies(r, cluster); err != nil || !slices.Equal(got, []string{"ceph-cluster-example", "ceph-image-example", "ceph-settings-example"}) {
+		t.Fatalf("a monitoring unit with frozen auxiliary images depends on %v (%v)", got, err)
 	}
 }
 

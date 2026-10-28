@@ -61,13 +61,6 @@ func TestCephRefusalTableMatchesUnsupported(t *testing.T) {
 				return spec.WithPath(api.StringList("198.51.100.0/24"), "networks", "clusterCIDRs")
 			},
 		}, values: map[string]string{"<host>": "node-1", "<machine>": "node-1", "<cidrs>": "198.51.100.0/24"}},
-		"An ingress that resolves to no declared service": {edits: map[string]func(api.Value) api.Value{
-			"ingress fronting no declared service": func(spec api.Value) api.Value {
-				services := append(spec.Get("services").Items(), requestMap("service_type", "ingress", "service_id", "rgw.objects",
-					"placement", requestMap("label", "mon", "count", 2), "spec", requestMap("backend_service", "rgw.objects", "virtual_ip", "192.0.2.50/24")))
-				return spec.WithPath(api.ListValue(services...), "services")
-			},
-		}, values: map[string]string{"<service>": "ingress.rgw.objects"}},
 		"A native service whose auxiliary image is not selected": {edits: map[string]func(api.Value) api.Value{
 			"prometheus service": func(spec api.Value) api.Value {
 				services := append(spec.Get("services").Items(), requestMap("service_type", "prometheus", "placement", requestMap("label", "mon", "count", 1)))

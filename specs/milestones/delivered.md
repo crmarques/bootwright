@@ -9092,7 +9092,7 @@ the message echoes the authored value only when it is a valid name. Ceph
 bootstrap `nodeRef` and `addressRef` move from `api.invariant` to
 `api.reference`, and `cephadm.addressRef` refuses at its own field. On a
 compiled graph the plan-time lookups of these references can no longer miss,
-which narrows [B861](backlog.md#b861) to derived names.
+which narrows [B861](#x185--audit-lane-v1-replica-defaults-class-hosts-and-derived-names) to derived names.
 
 **Guard tests:** the per-graph claim, converse claim, family claim, cost,
 scope and shared-diagnostic tests, each proved by a seeded mismatch; the
@@ -9234,6 +9234,30 @@ and refused at plan, and its realization joins [B99](m1.md#b99).
 **Guard tests:** `TestRetiredInstallAndRetentionSpellingsRefuseWithTheirReplacement`
 and the refusals golden rows for each spelling, authored and under kind
 defaults; the delivering commit records the gates.
+
+### X185 — Audit lane V1: replica defaults, class hosts and derived names
+
+**Items:** B859, B860 and B861.
+**Kind:** safety. **Owner:** Storage. Delivered on 2026-10-28 as lane V1 of
+the [audit remediation](backlog.md#lane-order-and-progress) under the owner's
+request to implement the remaining items; the lane parked B872 and B873.
+
+A CephCluster has one default replica pair (4/2 under stretch, else its
+declared `osd_pool_default_size` and `osd_pool_default_min_size`, else 2/1 on a
+single host, else 3/2), which pool and placement-policy admission, a gateway's
+derived pools and the plan builder all read, so a pool that omits its size is
+judged and planned at the cluster's default. A pool or policy on a bounded
+device class whose size equals the class's host count refuses on every
+distribution (matrix row U10). An ingress whose `backend_service` names no
+declared service refuses every request of its cluster with `api.reference`,
+an NVMe-oF unit whose derived `nvmeof.<service_id>` is unusable refuses naming
+it, and the derived `mds.<filesystem>` refusal names `spec.mdsServiceRef`.
+
+**Guard tests:** `TestPoolWithoutSizeTakesTheClusterDefaultPair`,
+`TestBoundedClassKeepsTheAdditionalHostRuleOnEveryDistribution`,
+`TestUnresolvedIngressBackendRefusesEveryRequestByReference` and
+`TestNVMeOFServiceUnitRefusesAnUnresolvedDerivedName`, each proved by a seeded
+mismatch; the delivering commit records the gates.
 
 ## M3 independent in-tree completion
 

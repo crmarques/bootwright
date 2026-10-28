@@ -39,8 +39,9 @@ func policyRequest(c api.Catalog, policy api.Object, contextName string) (Reques
 	if err != nil {
 		return Request{}, err
 	}
+	defaultSize, _ := cephcluster.DefaultReplicas(cluster)
 	r.Action = "policy"
-	r.Policy = &Policy{DeviceClass: s.Get("crushDeviceClass").Text(), FailureDomain: "host", Name: policy.Name(), Root: "default", Rule: rule, Size: int(positiveOr(s.Get("replicated", "size"), 3))}
+	r.Policy = &Policy{DeviceClass: s.Get("crushDeviceClass").Text(), FailureDomain: "host", Name: policy.Name(), Root: "default", Rule: rule, Size: int(positiveOr(s.Get("replicated", "size"), defaultSize))}
 	return r, nil
 }
 
@@ -143,11 +144,13 @@ func poolOf(c api.Catalog, pool api.Object, r Request) (*Pool, error) {
 			minSize = positiveOr(policy.Spec().Get("replicated", "minSize"), 0)
 		}
 	}
+	cluster, _ := c.Find(api.CephCluster, s.Get("clusterRef").Text())
+	defaultSize, defaultMinSize := cephcluster.DefaultReplicas(cluster)
 	if size == 0 {
-		size = 3
+		size = defaultSize
 	}
 	if minSize == 0 {
-		minSize = 2
+		minSize = defaultMinSize
 	}
 	if size < 2 || minSize < 2 || minSize > size {
 		return nil, failure("api.invariant", "core pools require at least two replicas and minSize between two and size", "set replicated.size to at least 2 and replicated.minSize between 2 and replicated.size")
@@ -159,7 +162,7 @@ func poolOf(c api.Catalog, pool api.Object, r Request) (*Pool, error) {
 		}
 	}
 	if size >= int64(osdHosts) {
-		return nil, failure("api.invariant", fmt.Sprintf("IBM replication size %d requires more than %d OSD-bearing hosts; %d are declared", size, size, osdHosts), "add OSD-bearing hosts, or explicitly select size 2 and minSize 2 for a three-host cluster; omitted or zero size retains the default of 3")
+		return nil, failure("api.invariant", fmt.Sprintf("IBM replication size %d requires more than %d OSD-bearing hosts; %d are declared", size, size, osdHosts), "add OSD-bearing hosts, or explicitly select size 2 and minSize 2 for a three-host cluster; omitted or zero size takes the cluster default of "+strconv.FormatInt(defaultSize, 10))
 	}
 	p.Size, p.MinSize = int(size), int(minSize)
 	return p, nil
@@ -427,7 +430,7 @@ func filesystemRequest(c api.Catalog, fs api.Object, contextName string) (Reques
 	}
 	cluster, _ := c.Find(api.CephCluster, r.Cluster)
 	if _, projected := cephcluster.NativeService(cluster, "mds."+fs.Name()); !projected {
-		return Request{}, failure("api.invariant", "CephCluster "+r.Cluster+" projects no MDS service mds."+fs.Name()+" for CephFilesystem "+fs.Name(), "declare the mds service entry with service_id "+fs.Name()+" in spec.services")
+		return Request{}, failure("api.invariant", "CephCluster "+r.Cluster+" declares no single MDS service mds."+fs.Name()+", which spec.mdsServiceRef of CephFilesystem "+fs.Name()+" names", "declare the mds service entry with service_id "+fs.Name()+" in spec.services")
 	}
 	mds := spec.Get("mds")
 	r.Action = "filesystem"

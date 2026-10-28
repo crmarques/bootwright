@@ -184,10 +184,9 @@ absent claims and its sibling gateways share, the per-realm `dashboard` system u
 that the mgr dashboard module creates (never read for keys) and the
 ingress passwords cephadm generates. No declared CephPool can carry a
 derived pool name, because a CephPool name is a DNS label without `.`.
-Derived pools take the cluster's default replica size: the
-`osd_pool_default_size` pair under `spec.config.global` when declared,
-else the replicated default, and that size must satisfy the replicated-pool
-host rule against the declared OSD-bearing hosts.
+Derived pools take the size of the cluster default pair under
+[replicated protection](#replicated-protection), and that size must satisfy
+the replicated-pool host rule against the declared OSD-bearing hosts.
 
 Each derived zone pool is realized by its own block
 `ceph-gateway-<gateway>-pool-<suffix>`, the suffix written with `-` for `.`
@@ -279,11 +278,15 @@ shows. An empty or all-zero `replicated` block leaves every value to the
 cluster, policy or native default, and only its non-zero members conflict with
 a referenced placement policy, which owns those values for its pools.
 
-The ordinary managed-cluster effective pair is `3/2`; bootstrap
-`singleHostDefaults` selects `2/1`, and stretch selects `4/2`. A referenced
-placement policy supplies its resolved pair to the pool. These values qualify
-validation but remain native or policy defaults unless an owning normalization
-rule explicitly materializes them.
+The cluster default pair is `4/2` under stretch; otherwise the
+`osd_pool_default_size` and `osd_pool_default_min_size` pair under
+`spec.config.global` when declared; otherwise `2/1` with bootstrap
+`singleHostDefaults`; otherwise the ordinary managed-cluster `3/2`. Pool and
+policy admission and the gateway's derived pools read this one default. A
+referenced placement policy supplies its resolved pair to the pool. These
+values qualify validation but remain native or policy defaults unless an owning
+normalization rule explicitly materializes them; the pool and placement-policy
+requests the plan builds carry the same default for a size they leave unset.
 
 For ordinary (non-stretch) host-domain replication on every Ceph
 distribution, the declared OSD-bearing host count must exceed the effective
@@ -291,9 +294,13 @@ replica size. This is a native replica-safety rule, not a vendor support
 statement: a replicated pool of size N keeps one replica per host, so it needs at least N+1 hosts to
 re-create a lost host's replicas and return to full size; three replicas need
 four hosts. The three-node development profile therefore explicitly
-selects `size: 2` and `minSize: 2`; omission or zero still selects `3/2` and
-requires an additional OSD-bearing host. MON-only hosts do not add data
-capacity. Stretch protection keeps its separate provider contract.
+selects `size: 2` and `minSize: 2`, or declares the `2/2` cluster default
+pair; omission or zero otherwise selects `3/2` and requires an additional
+OSD-bearing host. MON-only hosts do not add data
+capacity. A pool or placement policy on a bounded device class, a
+`crush_device_class` OSD services declare or an automatic class they permit on
+fewer hosts than carry OSDs, also needs more hosts of that class than its
+effective size. Stretch protection keeps its separate provider contract.
 
 ## CephPool
 

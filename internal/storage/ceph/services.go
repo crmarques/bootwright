@@ -136,7 +136,7 @@ func serviceFamily(cluster api.Object, svc api.Value) string {
 	return backend.Get("service_type").Text()
 }
 
-func undeployedDelegated(cluster api.Object) (string, string, bool) {
+func unresolvedIngressBackend(cluster api.Object) error {
 	services := cluster.Spec().Get("services").Items()
 	slices.SortStableFunc(services, func(a, b api.Value) int {
 		return strings.Compare(cephcluster.NativeServiceName(a), cephcluster.NativeServiceName(b))
@@ -144,11 +144,11 @@ func undeployedDelegated(cluster api.Object) (string, string, bool) {
 	for _, svc := range services {
 		name := cephcluster.NativeServiceName(svc)
 		if svc.Get("service_type").Text() == "ingress" && serviceFamily(cluster, svc) == "" {
-			return "Bootwright does not deploy the native service " + name + " yet",
-				"remove " + name + " from spec.services, together with its spec.serviceBindings entries", true
+			return failure("api.reference", "CephCluster "+cluster.Name()+"'s ingress service "+name+" names a spec.backend_service that is not one declared service of this cluster",
+				"set spec.backend_service of "+name+" to the qualified name of one declared service of CephCluster "+cluster.Name()+", or remove "+name+" from spec.services, together with its spec.serviceBindings entries")
 		}
 	}
-	return "", "", false
+	return nil
 }
 
 func unselectedAuxiliary(cluster api.Object) (string, string, bool) {
