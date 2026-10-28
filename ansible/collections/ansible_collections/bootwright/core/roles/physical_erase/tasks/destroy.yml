@@ -7,7 +7,7 @@
 - name: Validate the frozen private physical erase boundary
   ansible.builtin.assert:
     that:
-      - bootwright_physical_erase_request.version == 'physical-erase-v3'
+      - bootwright_physical_erase_request.version == 'physical-erase-v4'
       - bootwright_physical_erase_request.install.target.physical | bool
       - bootwright_physical_erase_request.install.target.substrate == 'baremetal'
       - bootwright_physical_erase_request.install.target.controller.tlsVerify | bool

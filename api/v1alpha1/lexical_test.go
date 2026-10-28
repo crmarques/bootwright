@@ -282,3 +282,7 @@ func TestKubernetesLabelGrammar(t *testing.T) {
 func TestExactClusterReleaseGrammar(t *testing.T) {
 	lexicalRows(t, "cluster-release", []string{"4.21.15", "4.22.0-rc.1", "4.18.0-okd-scos.8"}, []string{"4.21", "latest", "4.22.0-", "4.22.0/evil", "v4.22.0"})
 }
+
+func TestExactOSReleaseGrammar(t *testing.T) {
+	lexicalRows(t, "os-release", []string{"9.8", "10.0", "11.2", "9.10", "1.0"}, []string{"", "9", "09.8", "9.08", "9.8.1", "rhel9", "0.1", "9.", ".8", "9.8 ", "v9.8", "9,8", "9.00"})
+}

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/sha256"
+	"encoding/binary"
 	"encoding/hex"
 	"errors"
 	"fmt"
@@ -39,6 +40,7 @@ type fakeStore struct {
 	// full read of a stored image.
 	verifyError error
 	digestError error
+	readError   error
 	stages      int
 	writes      int
 	closed      int
@@ -252,6 +254,22 @@ func (f *fakeStage) Verify(context.Context) (Staged, error) {
 	return *f.staged, nil
 }
 
+// ReadAt reads the bytes the stage measured, outside the root lock, and fails
+// as the store when readError is set.
+func (f *fakeStage) ReadAt(buffer []byte, offset int64) (int, error) {
+	if f.store.locked || f.staged == nil || f.closed || f.mismatch {
+		return 0, errors.New("a stage that was not measured, or under the root lock, was read")
+	}
+	if f.store.readError != nil {
+		return 0, f.store.readError
+	}
+	data := f.data
+	if f.adopted != nil {
+		data = f.store.retainedBytes[f.name]
+	}
+	return bytes.NewReader(data).ReadAt(buffer, offset)
+}
+
 // Retain keeps a filled stage beside the record that describes it, so the view
 // lists it and a stage pinned to its digest adopts it.
 func (f *fakeStage) Retain(_ context.Context, record []byte) error {
@@ -457,8 +475,77 @@ func TestAddPublishesTheAcquiredImageWithItsProvenance(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if entry.Source != "file:///images/demo.iso" || entry.Added != "2026-09-15T09:00:00Z" || store.replaced || store.closed != 1 {
+	if entry.Source != "file:///images/demo.iso" || entry.Added != "2026-09-15T09:00:00Z" || entry.Release.Present() || store.replaced || store.closed != 1 {
 		t.Fatalf("published record = %+v replaced=%t closed stages=%d", entry, store.replaced, store.closed)
+	}
+}
+
+// releaseISO is an ISO 9660 image whose Joliet root holds only the .treeinfo
+// given.
+func releaseISO(treeinfo string) string {
+	const sector = 2048
+	image := make([]byte, 22*sector)
+	both := func(field []byte, value uint32) {
+		binary.LittleEndian.PutUint32(field, value)
+		binary.BigEndian.PutUint32(field[4:], value)
+	}
+	entry := func(into []byte, location, length uint32, flags byte, name []byte) {
+		into[0], into[25], into[32] = byte(34+len(name)-len(name)%2), flags, byte(len(name))
+		both(into[2:], location)
+		both(into[10:], length)
+		copy(into[33:], name)
+	}
+	for index, kind := range []byte{1, 2, 255} {
+		descriptor := image[(16+index)*sector:]
+		descriptor[0], descriptor[6] = kind, 1
+		copy(descriptor[1:], "CD001")
+	}
+	copy(image[17*sector+88:], "%/E")
+	binary.LittleEndian.PutUint16(image[17*sector+128:], sector)
+	binary.BigEndian.PutUint16(image[17*sector+130:], sector)
+	entry(image[17*sector+156:], 20, sector, 0x02, []byte{0})
+	var name []byte
+	for _, c := range []byte(".treeinfo;1") {
+		name = append(name, 0, c)
+	}
+	entry(image[20*sector:], 21, uint32(len(treeinfo)), 0, name)
+	copy(image[21*sector:], treeinfo)
+	return string(image)
+}
+
+func TestAddRecordsTheReleaseTheImageNames(t *testing.T) {
+	image := releaseISO("[general]\nfamily = Red Hat Enterprise Linux\nversion = 9.8\narch = x86_64\n")
+	store := &fakeStore{digests: map[string]string{}}
+	acquirer := &fakeAcquirer{data: image, origin: "file:///images/rhel.iso"}
+	if _, err := newService(store, acquirer, nil).Add(context.Background(), AddMediaRequest{
+		Name: "rhel.iso", SourceFile: "/images/rhel.iso", SHA256: digestOf(image),
+	}); err != nil {
+		t.Fatalf("add: %#v", diagnostics.Of(err))
+	}
+	entry, err := managedos.DecodeMediaRecord(store.published, "rhel.iso")
+	want := managedos.MediaRelease{Family: "Red Hat Enterprise Linux", Version: "9.8", Arch: "x86_64"}
+	if err != nil || entry.Release != want {
+		t.Fatalf("published release = %+v (%v), want %+v", entry.Release, err, want)
+	}
+}
+
+// An image whose release cannot be read is published without one, and only a
+// failure to read back the store's own staged bytes refuses the add.
+func TestAnUnreadableReleaseRefusesOnlyAsTheStoresFailure(t *testing.T) {
+	image := releaseISO("[general]\nfamily = Red Hat Enterprise Linux\nfamily = Other\nversion = 9.8\narch = x86_64\n")
+	store := &fakeStore{digests: map[string]string{}}
+	request := AddMediaRequest{Name: "rhel.iso", SourceFile: "/images/rhel.iso", SHA256: digestOf(image)}
+	if _, err := newService(store, &fakeAcquirer{data: image}, nil).Add(context.Background(), request); err != nil {
+		t.Fatalf("add: %#v", diagnostics.Of(err))
+	}
+	if entry, err := managedos.DecodeMediaRecord(store.published, "rhel.iso"); err != nil || entry.Release.Present() {
+		t.Fatalf("an ambiguous .treeinfo was recorded as %+v (%v)", entry.Release, err)
+	}
+	store = &fakeStore{digests: map[string]string{}, readError: diagnostics.NewFailure("media.store", "the staged image could not be read back from the media store", "")}
+	_, err := newService(store, &fakeAcquirer{data: image}, nil).Add(context.Background(), request)
+	expectMediaFailure(t, err)
+	if store.published != nil || store.closed != 1 {
+		t.Fatalf("an image whose stage could not be read back was published or its stage kept: closed %d", store.closed)
 	}
 }
 

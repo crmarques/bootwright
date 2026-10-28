@@ -33,7 +33,7 @@ func obj(kind api.Kind, name string, spec api.Value) api.Object {
 }
 func list(v ...api.Value) api.Value { return api.ListValue(v...) }
 func anaconda() api.Object {
-	return obj(api.MachineInstallProfile, "install", m("os", m("family", "RHEL", "version", "9.6", "architecture", "x86_64"), "installer", m("anaconda", m("imageRef", "image"))))
+	return obj(api.MachineInstallProfile, "install", m("os", m("family", "RHEL", "version", "9.6", "architecture", "x86_64"), "installer", m("anaconda", m("imageRef", "image")), "updates", m("policy", "none")))
 }
 func TestInstallProfileNormalizationAndCustomization(t *testing.T) {
 	o := anaconda()
@@ -60,7 +60,7 @@ func TestInstallProfileNormalizationAndCustomization(t *testing.T) {
 	}
 }
 func TestCloneRestrictionsAndProviderBinding(t *testing.T) {
-	profile := obj(api.MachineInstallProfile, "clone", m("os", m("family", "rhel", "version", "9", "architecture", "x86_64"), "installer", m("templateClone", m("seed", m("cloudInit", m("growRootFilesystem", true)))), "customizations", m("services", m("enabled", api.StringList("sshd")))))
+	profile := obj(api.MachineInstallProfile, "clone", m("os", m("family", "rhel", "version", "9", "architecture", "x86_64"), "installer", m("templateClone", m("seed", m("cloudInit", m("growRootFilesystem", true)))), "customizations", m("services", m("enabled", api.StringList("sshd"))), "updates", m("policy", "none")))
 	provider := obj(api.InfraProvider, "virtual", m("vsphere", m("machineProfiles", list(m("name", "template", "template", "Templates/rhel")))))
 	machine := obj(api.Machine, "node", m("os", m("provided", false, "installProfileRef", "clone"), "substrate", m("providerRef", "virtual", "vsphere", m("profileRef", "template"))))
 	c := api.NewCatalog([]api.Object{provider, machine})
@@ -407,13 +407,49 @@ func TestEveryManagedOSAdmissionRefusalNamesItsRemedy(t *testing.T) {
 
 // The install profile registers no RHEL major-version rule: the operator
 // chooses the version and a native failure on an older or newer target is the
-// operator's to read.
-func TestTheInstallProfileAdmitsAnyRHELMajorVersion(t *testing.T) {
-	for _, version := range []string{"7.9", "8.10", "9", "10.1", "11"} {
-		o := anaconda()
-		o = o.WithSpec(o.Spec().WithPath(api.StringValue(version), "os", "version"))
-		if issues := issuesAt(Validate(o, api.Catalog{}), "$.spec.os.version"); len(issues) != 0 {
-			t.Errorf("os.version %s refused: %#v", version, issues)
+// operator's to read. The version is an exact <major>.<minor> release, so a
+// major-only version, a leading zero or a third component refuses at
+// admission, naming the field and its grammar.
+func TestTheInstallProfileAdmitsAnExactReleaseOfAnyRHELMajor(t *testing.T) {
+	admit := func(version string) []diagnostics.Diagnostic {
+		content := `apiVersion: bootwright.io/v1alpha1
+kind: Environment
+metadata: {name: synthetic}
+spec:
+  domains: {base: example.test}
+  controller: {machineRef: controller}
+---
+apiVersion: bootwright.io/v1alpha1
+kind: Machine
+metadata: {name: controller}
+spec: {os: {provided: true}}
+---
+apiVersion: bootwright.io/v1alpha1
+kind: MachineInstallProfile
+metadata: {name: install}
+spec:
+  os: {family: rhel, version: "` + version + `", architecture: x86_64}
+  installer: {anaconda: {imageRef: image}}
+`
+		input := desiredstate.Sources{Files: []desiredstate.SourceFile{desiredstate.NewSourceFile("/synthetic/profile.yaml", []byte(content))}, Roots: []string{"/synthetic"}}
+		_, _, err := compilation.NewCompiler(yamlstream.Parser{}, nil).Compile(context.Background(), input)
+		var refused []diagnostics.Diagnostic
+		for _, reported := range diagnostics.Of(err) {
+			if reported.Field == "$.spec.os.version" {
+				refused = append(refused, reported)
+			}
+		}
+		return refused
+	}
+	for _, version := range []string{"7.9", "8.10", "9.8", "10.0", "11.2"} {
+		if refused := admit(version); len(refused) != 0 {
+			t.Errorf("os.version %s refused: %#v", version, refused)
+		}
+	}
+	for _, version := range []string{"9", "09.8", "9.08", "9.8.1", "rhel9", "10", "9.x"} {
+		refused := admit(version)
+		if len(refused) != 1 || refused[0].Code != "api.value" || !strings.Contains(refused[0].Message, "os-release") {
+			t.Errorf("os.version %s: refusals = %#v, want one api.value naming the os-release grammar", version, refused)
 		}
 	}
 }
@@ -486,6 +522,7 @@ metadata: {name: install}
 spec:
   os: {family: rhel, version: "9.8", architecture: x86_64}
   installer: {anaconda: {imageRef: image}}
+  updates: {policy: none}
   customizations: {` + test.customizations + `}
 `
 			input := desiredstate.Sources{Files: []desiredstate.SourceFile{desiredstate.NewSourceFile("/synthetic/profile.yaml", []byte(content))}, Roots: []string{"/synthetic"}}

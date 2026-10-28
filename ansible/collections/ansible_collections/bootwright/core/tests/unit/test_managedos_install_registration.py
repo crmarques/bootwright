@@ -45,7 +45,7 @@ READ = "managedos_install_anaconda_registration_read"
 DIGEST = "1" * 64
 CONSUMER = "0f1e2d3c-4b5a-6978-8796-a5b4c3d2e1f0"
 NAMED = ["registration-input", "registration-foreign", "registration-refused", "registration-identity-collision",
-         "registration-unavailable", "registration-repositories"]
+         "registration-unavailable", "registration-repositories", "update-release-unavailable"]
 REGISTER_ONLY = ("organization_file", "activation_key_file", "enable", "disable")
 MATERIAL = ("rhsmOrganization", "rhsmActivationKey")
 # The names each file gives the connection guest.yml makes, so the tasks can be
@@ -145,8 +145,9 @@ def test_register_runs_after_network_and_before_the_completion_inspection():
     inspected = only(applied, lambda task: INSPECT in task and task.get("register") == "managedos_install_anaconda_after",
                      "inspect the completion")
     completed = only(applied, lambda task: (task.get(PROTOCOL) or {}).get("phase") == "completed", "publish the completion")
-    assert withdrawn < network < converged < encryption < security < registered < named < refused < inspected < completed
-    assert registered + 1 == named and named + 1 == refused and refused + 1 == inspected
+    updated = only(applied, included("update.yml"), "update the machine within its release")
+    assert withdrawn < network < converged < encryption < security < registered < named < refused < updated < inspected < completed
+    assert registered + 1 == named and named + 1 == refused and refused + 1 == updated and updated + 1 == inspected
     assert applied[registered]["when"] == [REGISTERING]
     assert holds(applied[registered]["when"]) and not holds(applied[registered]["when"], False)
 
@@ -178,10 +179,11 @@ def test_apply_publishes_the_marker_proof_before_registering():
                  managedos_install_anaconda_marker="m", bootwright_os_install_material={"marker": "m"})
     assert not holds(applied[proved]["ansible.builtin.assert"]["that"],
                      managedos_install_anaconda_marker="other", bootwright_os_install_material={"marker": "m"})
-    # The network restart records the same proof before its power-off (Q66),
-    # and an attempt publishes it once, whichever comes first.
+    # The network restart and the update's reboot record the same proof before
+    # their power-off (Q66), in the one restart both include, and an attempt
+    # publishes it once, whichever comes first.
     assert [name for name in task_files() for task in flattened(name)
-            if (task.get(PROTOCOL) or {}).get("phase") == "prepared"] == ["apply.yml", "network.yml"]
+            if (task.get(PROTOCOL) or {}).get("phase") == "prepared"] == ["apply.yml", "reboot.yml"]
 
 
 def test_register_material_never_enters_a_task_variable():

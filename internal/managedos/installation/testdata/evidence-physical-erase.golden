@@ -1,10 +1,10 @@
 {
-  "version": "physical-erase-v3",
+  "version": "physical-erase-v4",
   "request": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
   "prepared": true,
   "removed": true,
   "receipt": {
-    "version": "physical-erase-v3",
+    "version": "physical-erase-v4",
     "state": "complete",
     "originalAttempt": "remove-1/physical-erase-metal-01/1",
     "request": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",

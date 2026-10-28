@@ -134,6 +134,9 @@ func addObserveReads(add func(string, string, string, string, func(map[string]an
 	add("managedos_install_anaconda", "registration_observe.yml", observeCollection+"ssh_key_policy", "reads the host's effective crypto policy", read)
 	add("managedos_install_anaconda", "registration_observe.yml", "ansible.builtin.set_fact", "names the pinned key's algorithms and the registration answers in memory", read)
 	add("managedos_install_anaconda", "registration_observe.yml", observeCollection+"managedos_registration", "runs the registration worker's read-only inspect operation over ssh pinned to the reported key", observeRegistrationInspect)
+	add("managedos_install_anaconda", "update_observe.yml", observeCollection+"ssh_key_policy", "reads the host's effective crypto policy", read)
+	add("managedos_install_anaconda", "update_observe.yml", "ansible.builtin.set_fact", "names the pinned key's algorithms and the update answers in memory", read)
+	add("managedos_install_anaconda", "update_observe.yml", observeCollection+"managedos_update", "runs the update worker's read-only inspect operation over ssh pinned to the reported key", observeRegistrationInspect)
 	add("managedos_package_tree", "observe.yml", observeCollection+"managedos_tree_inspect", "reads the shared tree and its staging area", read)
 	add("storage_ceph_core", "observe.yml", observeCollection+"ceph_cluster", "runs the adapter's read-only observe operation", observeOperation)
 	add("storage_ceph_host", "observe.yml", observeCollection+"ceph_host", "runs the adapter's read-only observe operation", observeOperation)
@@ -161,6 +164,8 @@ func addObserveScratch(add func(string, string, string, string, func(map[string]
 	add("managedos_install_anaconda", "guest.yml", "ansible.builtin.file", "removes one connection's files under bootwright_run_scratch", observeUnder("path", "{{ managedos_install_anaconda_scratch }}/"))
 	add("managedos_install_anaconda", "registration_observe.yml", "ansible.builtin.copy", "writes one connection's files under bootwright_run_scratch", observeUnder("dest", "{{ managedos_install_anaconda_scratch }}/"))
 	add("managedos_install_anaconda", "registration_observe.yml", "ansible.builtin.file", "removes one connection's files under bootwright_run_scratch", observeUnder("path", "{{ managedos_install_anaconda_scratch }}/"))
+	add("managedos_install_anaconda", "update_observe.yml", "ansible.builtin.copy", "writes one connection's files under bootwright_run_scratch", observeUnder("dest", "{{ managedos_install_anaconda_scratch }}/"))
+	add("managedos_install_anaconda", "update_observe.yml", "ansible.builtin.file", "removes one connection's files under bootwright_run_scratch", observeUnder("path", "{{ managedos_install_anaconda_scratch }}/"))
 	add("substrate_baremetal_machine", "identity_read.yml", "ansible.builtin.copy", "writes one connection's files under the work directory the caller passes, bootwright_run_scratch on observe", observeUnder("dest", "{{ substrate_baremetal_machine_identity_work }}/"))
 	add("substrate_baremetal_machine", "identity_read.yml", "ansible.builtin.file", "removes one connection's files under the work directory the caller passes", observeUnder("path", "{{ substrate_baremetal_machine_identity_work }}/"))
 }

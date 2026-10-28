@@ -20,16 +20,23 @@ type mediaListPresentation struct {
 // verification or a computed digest exists; Reason exactly when the image
 // failed.
 type mediaRowPresentation struct {
-	Name       string   `json:"name"`
-	Size       *int64   `json:"size,omitempty"`
-	SHA256     string   `json:"sha256,omitempty"`
-	Source     string   `json:"source,omitempty"`
-	Added      string   `json:"added,omitempty"`
-	Frozen     bool     `json:"frozen"`
-	ReservedBy []string `json:"reservedBy"`
-	Verified   string   `json:"verified,omitempty"`
-	Computed   string   `json:"computed,omitempty"`
-	Reason     string   `json:"reason,omitempty"`
+	Name       string                    `json:"name"`
+	Size       *int64                    `json:"size,omitempty"`
+	SHA256     string                    `json:"sha256,omitempty"`
+	Source     string                    `json:"source,omitempty"`
+	Added      string                    `json:"added,omitempty"`
+	Release    *mediaReleasePresentation `json:"release,omitempty"`
+	Frozen     bool                      `json:"frozen"`
+	ReservedBy []string                  `json:"reservedBy"`
+	Verified   string                    `json:"verified,omitempty"`
+	Computed   string                    `json:"computed,omitempty"`
+	Reason     string                    `json:"reason,omitempty"`
+}
+
+type mediaReleasePresentation struct {
+	Family  string `json:"family"`
+	Version string `json:"version"`
+	Arch    string `json:"arch"`
 }
 
 func (mediaListPresentation) documentedResult() {}
@@ -68,22 +75,25 @@ func writeMediaList(out io.Writer, command string, result *media.ListResult, jso
 		text.headline("OK", "No stored media")
 		return text.writeTo(out)
 	}
-	headers := []string{"NAME", "SIZE", "DIGEST", "ADDED", "RESERVED", "STATE"}
+	headers := []string{"NAME", "SIZE", "DIGEST", "ADDED", "RELEASE", "RESERVED", "STATE"}
 	if result.Checksums {
-		headers = []string{"NAME", "SIZE", "DIGEST", "COMPUTED", "ADDED", "RESERVED", "STATE"}
+		headers = []string{"NAME", "SIZE", "DIGEST", "COMPUTED", "ADDED", "RELEASE", "RESERVED", "STATE"}
 	}
 	rows := make([][]string, 0, len(result.Media))
 	failed := []field{}
 	for _, row := range result.Media {
-		size, digest, added := "-", "-", "-"
+		size, digest, added, release := "-", "-", "-", "-"
 		if row.SHA256 != "" {
 			size, digest, added = strconv.FormatInt(row.Size, 10), "sha256:"+row.SHA256, row.Added
+		}
+		if row.SHA256 != "" && row.Release.Present() {
+			release = row.Release.Version + " " + row.Release.Arch
 		}
 		cells := []string{row.Name, size, digest}
 		if result.Checksums {
 			cells = append(cells, mediaDigest(row.Computed))
 		}
-		cells = append(cells, added, displayValue(strings.Join(row.ReservedBy, ",")), mediaStateToken(row))
+		cells = append(cells, added, release, displayValue(strings.Join(row.ReservedBy, ",")), mediaStateToken(row))
 		rows = append(rows, cells)
 		if row.Verified == "failed" {
 			failed = append(failed, field{Label: row.Name, Value: row.Failure})
@@ -140,6 +150,13 @@ func displayMediaList(result *media.ListResult) mediaListPresentation {
 		if row.SHA256 != "" {
 			size := row.Size
 			presented.Size = &size
+		}
+		if row.SHA256 != "" && row.Release.Present() {
+			presented.Release = &mediaReleasePresentation{
+				Family:  escapeDisplayLine(row.Release.Family),
+				Version: escapeDisplayLine(row.Release.Version),
+				Arch:    escapeDisplayLine(row.Release.Arch),
+			}
 		}
 		rows = append(rows, presented)
 	}

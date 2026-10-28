@@ -243,6 +243,9 @@ func requestFor(catalog api.Catalog, machine api.Object, controllerMachine, cont
 	if request.Registration, err = registrationFor(catalog, profile); err != nil {
 		return Request{}, Requirements{}, err
 	}
+	if request.Update, err = updateFor(profile); err != nil {
+		return Request{}, Requirements{}, err
+	}
 	if target.Channel == substrate.ChannelGuestAgent {
 		request.Target.HostKeyType = guestHostKeyType(fipsEnabled(profile))
 	}
@@ -386,6 +389,41 @@ func pinned(media Media, records map[string]MediaRecord, owner, field, image str
 	}
 	media.SHA256, media.Size = record.SHA256, record.Size
 	return media, nil
+}
+
+func refusedReleases(catalog api.Catalog, request Request, records map[string]MediaRecord) error {
+	profile, _ := catalog.Find(api.MachineInstallProfile, request.Identity.Profile)
+	if request.TreeMedia == nil {
+		return refusedRelease(request.BootMedia.Name, records, profile)
+	}
+	if records[request.BootMedia.Name].Release.Present() {
+		if err := refusedRelease(request.BootMedia.Name, records, profile); err != nil {
+			return err
+		}
+	}
+	return refusedRelease(request.TreeMedia.Name, records, profile)
+}
+
+func refusedRelease(image string, records map[string]MediaRecord, profile api.Object) error {
+	release, declared := records[image].Release, profile.Spec().Get("os", "version").Text()
+	var message, remediation string
+	switch {
+	case !release.Present():
+		message = "the media store holds no release for " + image + ", which this build reads from the image's .treeinfo when it is added"
+		remediation = "bootwright media delete --name " + image + ", then bootwright media add --name " + image + " with this build"
+	case release.Family != "Red Hat Enterprise Linux" || release.Arch != "x86_64":
+		message = image + " holds a " + release.Family + " " + release.Arch + " release, and an installation installs only Red Hat Enterprise Linux on x86_64"
+		remediation = "import a Red Hat Enterprise Linux x86_64 image with bootwright media add and select it for " + profile.Identity()
+	case release.Version != declared:
+		message = image + " holds release " + release.Version + " and " + profile.Identity() + " declares spec.os.version " + declared
+		remediation = "set spec.os.version on " + profile.Identity() + " to " + release.Version + ", or import the " + declared + " image"
+	default:
+		return nil
+	}
+	object := diagnostics.ObjectIdentity{APIVersion: api.APIVersion, Kind: string(api.MachineInstallProfile), Name: profile.Name()}
+	return &diagnostics.Failure{Diagnostics: []diagnostics.Diagnostic{{
+		Severity: "error", Code: "lifecycle.state", Message: message, Remediation: remediation, Object: &object,
+	}}}
 }
 
 // mediaAdd is the import command a remedy names: media add always takes one

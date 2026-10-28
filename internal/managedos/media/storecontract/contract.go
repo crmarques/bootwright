@@ -43,6 +43,7 @@ func Verify(t *testing.T, within Within) {
 		{"a live stage holds its name", aLiveStageHoldsItsName},
 		{"a closed stage never published or retained leaves nothing", aClosedStageLeavesNothing},
 		{"a stage is filled within its limit", aStageIsFilledWithinItsLimit},
+		{"a filled stage reads back only the bytes it measured", aFilledStageReadsBackItsBytes},
 		{"a publication needs a filled stage of its image and a record of its bytes", aPublicationNeedsAFilledStageAndItsRecord},
 		{"a publication replaces an image only when asked", aPublicationReplacesOnlyWhenAsked},
 		{"a retaining stage is listed and a pinned stage adopts it", aRetainingStageIsListedAndAdopted},
@@ -111,6 +112,23 @@ func aStageIsFilledWithinItsLimit(t *testing.T, store media.Store) {
 	stage := claim(t, store, image, "")
 	if staged, err := stage.Fill(context.Background(), payload(original), int64(len(original))-1); err == nil {
 		t.Fatalf("a stage filled beyond its limit reported %+v", staged)
+	}
+	closes(t, stage)
+	holds(t, store, nil, nil)
+}
+
+func aFilledStageReadsBackItsBytes(t *testing.T, store media.Store) {
+	stage := claim(t, store, image, "")
+	if _, err := stage.ReadAt(make([]byte, 1), 0); err == nil {
+		t.Fatal("a stage was read before it was filled")
+	}
+	fill(t, stage, original)
+	buffer := make([]byte, len(original)-2)
+	if n, err := stage.ReadAt(buffer, 2); err != nil || n != len(buffer) || string(buffer) != original[2:] {
+		t.Fatalf("the filled stage read back %q (%d, %v), want %q", buffer, n, err, original[2:])
+	}
+	if _, err := stage.ReadAt(make([]byte, 2), int64(len(original))-1); err == nil {
+		t.Fatal("a read past the bytes the stage measured succeeded")
 	}
 	closes(t, stage)
 	holds(t, store, nil, nil)

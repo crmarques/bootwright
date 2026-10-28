@@ -78,6 +78,9 @@ func (c Capability) Plan(ctx context.Context, input lifecycle.PlanInput) (lifecy
 			if requests[index], err = pinMedia(catalog, request, records); err != nil {
 				return lifecycle.CapabilityPlan{}, err
 			}
+			if err := refusedReleases(catalog, requests[index], records); err != nil {
+				return lifecycle.CapabilityPlan{}, err
+			}
 		}
 	}
 	plan := lifecycle.CapabilityPlan{Definitions: []reconciliation.BlockDefinition{}}
@@ -372,8 +375,13 @@ func decidedEffect(verb reconciliation.Verb, evidence []byte, request Request, d
 	case ValidatePartial(evidence, digest, marker) == nil:
 		return reconciliation.EffectPartial, nil
 	}
-	if decoded, err := decodeEvidence(evidence, digest); err == nil && foreignRegistration(decoded) != nil {
-		return reconciliation.EffectUnknown, foreignRegistration(decoded)
+	if decoded, err := decodeEvidence(evidence, digest); err == nil {
+		if foreign := foreignRegistration(decoded); foreign != nil {
+			return reconciliation.EffectUnknown, foreign
+		}
+		if foreign := foreignUpdate(decoded); foreign != nil {
+			return reconciliation.EffectUnknown, foreign
+		}
 	}
 	return reconciliation.EffectUnknown, presence
 }
@@ -621,6 +629,7 @@ func (c Capability) applyRefusals(execution lifecycle.Execution, request Request
 		return nil, err
 	}
 	maps.Copy(refusals, registrationRefusals(execution.Context, request))
+	maps.Copy(refusals, updateRefusals(execution.Context, request))
 	if request.Target.Channel == substrate.ChannelGuestAgent {
 		algorithm, err := generatedHostKeyType(execution.Context, request)
 		if err != nil {
