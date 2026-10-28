@@ -114,6 +114,10 @@ type NMStateConfig struct {
 	Subscription PackageSubscription `json:"subscription"`
 	Timeout      string              `json:"timeout"`
 }
+type KubeVirtConfig struct {
+	Subscription PackageSubscription `json:"subscription"`
+	Timeout      string              `json:"timeout"`
+}
 type MetalLBConfig struct {
 	Subscription PackageSubscription `json:"subscription"`
 	Timeout      string              `json:"timeout"`
@@ -135,8 +139,11 @@ func packageSubscriptionSchema() *Shape {
 func packageBaseSchema() *Shape {
 	return record(required("subscription", packageSubscriptionSchema()), defaulted("timeout", duration(), StringValue("30m")))
 }
+func kubevirtPackageSchema() *Shape {
+	return record(required("subscription", packageSubscriptionSchema()), defaulted("timeout", duration(), StringValue("45m")))
+}
 func addonPackagesSchema() *Shape {
 	metallb := packageBaseSchema()
 	metallb.Fields = append(metallb.Fields, field("pools", named(record(required("name", name()), required("addresses", nonemptyArray(array(nonempty()))), defaulted("autoAssign", boolean(), BoolValue(true)), field("l2", record(field("interface", nonempty())))))))
-	return record(field("nmstate", packageBaseSchema()), field("metallb", metallb), field("fdf", fdfPackageSchema()), field("acm", acmPackageSchema()), field("gitops", gitopsPackageSchema()))
+	return record(field("nmstate", packageBaseSchema()), field("kubevirt", kubevirtPackageSchema()), field("metallb", metallb), field("fdf", fdfPackageSchema()), field("acm", acmPackageSchema()), field("gitops", gitopsPackageSchema()))
 }

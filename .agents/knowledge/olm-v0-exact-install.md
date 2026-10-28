@@ -202,6 +202,46 @@ plan's CSV list and which later plans odf-operator approves.
 - MetalLB's shipped CSV is in
   [metallb-on-openshift.md](metallb-on-openshift.md) (RV-R1 C50, corrected).
 
+## OpenShift Virtualization
+
+Source: Red Hat OpenShift Container Platform 4.21, Virtualization >
+Installing, sections 4.3.3 "Subscribe to the OpenShift Virtualization catalog
+by using the CLI" and 4.3.4 "Deploy the OpenShift Virtualization Operator by
+using the CLI"
+(https://docs.redhat.com/en/documentation/openshift_container_platform/4.21/html/virtualization/installing).
+The package is [B883](../../specs/milestones/m4.md#b883); its rendering is
+[coverage](../../specs/add-on-coverage.md#kubevirt).
+
+Documented (4.21):
+
+- The namespace `openshift-cnv` carries the label
+  `openshift.io/cluster-monitoring: "true"`.
+- The OperatorGroup `kubevirt-hyperconverged-group` in `openshift-cnv` targets
+  `openshift-cnv`.
+- The Subscription `hco-operatorhub` names the package
+  `kubevirt-hyperconverged`, channel `stable`, source `redhat-operators`, source
+  namespace `openshift-marketplace` and a `startingCSV` of the form
+  `kubevirt-hyperconverged-operator.v4.21.<z>`, with Manual approval so that a
+  superseded CSV is not installed unasked. Bootwright registers no channel or CSV
+  (D163).
+- After the operator runs, the `HyperConverged` singleton is created from a
+  manifest `hco.kubevirt.io/v1beta1`, named `kubevirt-hyperconverged` in
+  `openshift-cnv`, with `spec: {}`. Readiness is the operator's `Available`
+  condition on that object.
+
+Unverified, re-verified by the package's operator gate (B883):
+
+- That the first InstallPlan lists only the HCO's own CSV
+  (`clusterServiceVersionNames`); the operator is known to bring KubeVirt,
+  CDI and other component operators, and whether their CSVs ride in the first
+  plan or arrive through the HCO is not read.
+- That the shipped CSV supports the OwnNamespace install mode the documented
+  OperatorGroup relies on; Red Hat's page shows the group, not the CSV.
+
+Not rendered, by design: the `HyperConverged` `spec` fields. The location of
+`vmStateStorageClass` differs between API versions of the object, so the
+package renders the documented empty `spec` and nothing else.
+
 ## Wiring facts from v1
 
 Observed by the v1 implementation (main-v1); re-verify on this tree (v1 lesson

@@ -40,6 +40,7 @@ profile on that release only.
 | Package | Native objects | Provides / requires | Typed configuration | Readiness | Removal | Item | Submilestone | Qualification |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | nmstate | owned `v1 Namespace` `openshift-nmstate`; `operators.coreos.com/v1 OperatorGroup` `openshift-nmstate` targeting `[openshift-nmstate]`; `operators.coreos.com/v1alpha1 Subscription` `kubernetes-nmstate-operator` (package `kubernetes-nmstate-operator`, Manual, declared `startingCSV`); the one approved InstallPlan; `nmstate.io/v1 NMState` `nmstate` after `nmstates.nmstate.io` is `Established` | provides `nmstate`; requires none | `subscription` (source default `redhat-operators`); `timeout` (default `30m`) | `csvSucceeded`; `NMState` `nmstate` `Available` `True`; `Deployment` `nmstate-webhook` in `openshift-nmstate` `Available` `True` | retired with its cluster | [B735](milestones/m4.md#b735) | M4b | package qualification in-tree; addons-sno ([B755](milestones/m4.md#b755)); networking use on lab-networks ([B729](milestones/m3.md#b729)) |
+| kubevirt | owned `v1 Namespace` `openshift-cnv` labelled `openshift.io/cluster-monitoring: "true"`; `operators.coreos.com/v1 OperatorGroup` `kubevirt-hyperconverged-group` targeting `[openshift-cnv]`; `operators.coreos.com/v1alpha1 Subscription` `hco-operatorhub` (package `kubevirt-hyperconverged`, Manual, declared `startingCSV`); the one approved InstallPlan; `hco.kubevirt.io/v1beta1 HyperConverged` `kubevirt-hyperconverged` in `openshift-cnv`, with an empty `spec`, after `hyperconvergeds.hco.kubevirt.io` is `Established` | provides `kubevirt`; requires none | `subscription` (source default `redhat-operators`); `timeout` (default `45m`) | `csvSucceeded`; `HyperConverged` `kubevirt-hyperconverged` in `openshift-cnv` `Available` `True` | retired with its cluster | [B883](milestones/m4.md#b883) | none ([D193](milestones/backlog.md#d193)) | package qualification in-tree; the nested host of lab-kubevirt-nested ([B732](milestones/m3.md#b732)) |
 | metallb | owned `v1 Namespace` `metallb-system`; `operators.coreos.com/v1 OperatorGroup` `metallb-operator` with no `spec` (all namespaces); `operators.coreos.com/v1alpha1 Subscription` `metallb-operator-sub` (package `metallb-operator`, Manual, declared `startingCSV`); the one approved InstallPlan; `metallb.io/v1beta1 MetalLB` `metallb` after `metallbs.metallb.io` is `Established`; per pool, after `MetalLB` is `Available`, `metallb.io/v1beta1 IPAddressPool` `<name>` and `L2Advertisement` `<name>` (`ipAddressPools: [<name>]`, `interfaces` when declared) in `metallb-system` | provides `metallb`; requires none | `subscription` (source default `redhat-operators`); `timeout` (default `30m`); `pools[]` (`name`, `addresses`, `autoAssign` default `true`, optional `l2.interface`) admitted against the cluster's networks, node addresses, endpoints, next hops and held addresses; an interface pool needs the cluster's `routingViaHost: true` and `ipForwarding: Global` | `csvSucceeded`; `MetalLB` `metallb` `Available` `True` | retired with its cluster; on a physical cluster that keeps running, its pools keep answering their addresses, unmanaged | [B84](milestones/m4.md#b84), [B727](milestones/m4.md#b727) | M4c | package qualification in-tree; addons-lb ([B757](milestones/m4.md#b757)) for machine-network pools; lab-networks ([B729](milestones/m3.md#b729)) for an interface pool |
 | fdf | owned `v1 Namespace` `openshift-storage` (labelled for cluster monitoring); `operators.coreos.com/v1 OperatorGroup` `openshift-storage` targeting `[openshift-storage]`; optional owned CatalogSource in `openshift-marketplace`; `operators.coreos.com/v1alpha1 Subscription` `odf-operator` (package `odf-operator`, Manual, declared `startingCSV`); the first InstallPlan, approved under the operator-managed policy, because odf-operator approves its own later plans; after `storageclusters.ocs.openshift.io` is `Established`, the owned `Opaque` Secret `rook-ceph-external-cluster-details` (key `external_cluster_details`) placed from the export block's produced details, and `ocs.openshift.io/v1 StorageCluster` `ocs-external-storagecluster` with `spec.externalStorage.enable: true` | provides `dataFoundation`; requires none; requires the referenced CephConsumer's block | `subscription` (`source` required: `isf-data-foundation-catalog` through an owned CatalogSource, or `redhat-operators` for Red Hat OpenShift Data Foundation); `cephConsumerRef` (required, one consumer per export); `defaultStorageClass` (default `false`); `timeout` (default `1h`); the Red Hat catalog serving the same package is expected, unverified | `csvSucceeded`; StorageCluster `status.phase` `Ready` and `ReconcileComplete` `True`; StorageClasses `ocs-external-storagecluster-ceph-rbd`, `ocs-external-storagecluster-cephfs`, `openshift-storage.noobaa.io` and, with a gateway, `ocs-external-storagecluster-ceph-rgw`; `NooBaa` `noobaa` `status.phase` `Ready`; never the `Available` condition | retired with its cluster; the export's principals leave when the export retires under its [retirement condition](ceph-resources.md#cephconsumer), which requires this cluster to be removed by the same destroy on owned virtual Machines; otherwise the export's removal refuses | [B85](milestones/m4.md#b85) (Ceph side [B86](milestones/m4.md#b86), [B762](milestones/delivered.md#b762)) | M4d | package qualification in-tree; addons-df ([B761](milestones/m4.md#b761)) |
 | acm | owned `v1 Namespace` `open-cluster-management`; `operators.coreos.com/v1 OperatorGroup` `open-cluster-management` targeting `[open-cluster-management]`; `operators.coreos.com/v1alpha1 Subscription` `acm-operator-subscription` (package `advanced-cluster-management`, Manual, declared `startingCSV`); the one approved InstallPlan; `operator.open-cluster-management.io/v1 MultiClusterHub` `multiclusterhub` after `multiclusterhubs.operator.open-cluster-management.io` is `Established`, carrying the engine subscription annotation; the approved first InstallPlan of the hub-created Subscription `multicluster-engine` in `multicluster-engine`, a dependent | provides none; requires none | `subscription` (source default `redhat-operators`); `mce` (channel, startingCSV, source, sourceNamespace); `hub` (availabilityConfig, disableHubSelfManagement, nodeSelector, tolerations); `timeout` (default `45m`) | `csvSucceeded` for the hub operator; `csvSucceeded` for the engine at its declared CSV; `MultiClusterHub` `multiclusterhub` `status.phase` `Running` | retired with its cluster | [B91](milestones/m4.md#b91) | M4e | package qualification in-tree; addons-hub ([B766](milestones/m4.md#b766)) |
@@ -82,6 +83,45 @@ install modes and channels are evidence in
 [knowledge](../.agents/knowledge/olm-v0-exact-install.md). The cluster network
 block of M3d requires its instance; its probe host on a disconnected cluster is
 parked as [B775](milestones/backlog.md#b775).
+
+### kubevirt
+
+Red Hat OpenShift Virtualization ([B883](milestones/m4.md#b883),
+[D193](milestones/backlog.md#d193)), the HyperConverged Cluster Operator that
+installs KubeVirt and its companions. A binding selects it with:
+
+```yaml
+spec:
+  clusterRef: lab-nested-host
+  packages:
+    kubevirt:
+      subscription:
+        channel: <a channel the catalog lists>
+        startingCSV: <the CSV that channel lists>
+```
+
+The operator reads a channel's CSV from the PackageManifest
+`kubevirt-hyperconverged` in `openshift-marketplace`; Red Hat's documentation
+names the channel `stable` and a CSV `kubevirt-hyperconverged-operator.v4.<y>.<z>`
+of the release, and Bootwright registers neither (D163). The objects and the
+`HyperConverged` manifest are those of Red Hat's OpenShift Container Platform
+4.21 "Virtualization > Installing" sections 4.3.3 and 4.3.4, whose source and
+open facts are in
+[knowledge](../.agents/knowledge/olm-v0-exact-install.md#openshift-virtualization).
+The `HyperConverged` object is the singleton the operator reconciles and
+carries no field: the documented manifest has an empty `spec`.
+
+Left out, each a deliberate boundary of this package:
+
+- `HyperConverged` `spec` fields, among them feature gates and
+  `vmStateStorageClass` for the persistent virtual TPM backend storage, whose
+  location differs between HyperConverged API versions. A field joins the
+  configuration with the item that needs it; persistent vTPM storage is
+  [B87](milestones/m1.md#b87)'s question 7.
+- The KubeVirt provider namespace of the
+  [KubeVirt substrate](substrates.md); [B732](milestones/m3.md#b732)
+  decides who creates it.
+- HostPathProvisioner and any storage the virtual machines use.
 
 ### metallb
 
@@ -373,8 +413,10 @@ operator provides, its packages and its operator gate.
   `ceph-rgw-tls-cert` without the private key, which Red Hat's document says
   the file includes ([B761](milestones/m4.md#b761)), that `upgradeStrategy:
   Default` is the OperatorGroup API default ([B766](milestones/m4.md#b766)),
-  the single CSV of the MetalLB and GitLab
-  first plans, which plans odf-operator approves, `redhat-operators` serving
+  the single CSV of the MetalLB, GitLab and OpenShift Virtualization
+  first plans, the OpenShift Virtualization CSV's support for its
+  own-namespace OperatorGroup ([B883](milestones/m4.md#b883)), which plans
+  odf-operator approves, `redhat-operators` serving
   `odf-operator` with the same namespace and objects, the CSI Secret `userID`
   form and an `aes` key accepted by the Data Foundation client, NooBaa's
   trust of the gateway's issuing CA, the engine

@@ -3231,6 +3231,8 @@ holding such a clause, the clauses pending and the work they enable.
   baseline; (13), the per-cluster early handoff, waits for Q60.
 - [D192](#d192): clauses (1) to (7), registration with a declared Satellite
   or Capsule and its release pin (X194).
+- [D193](#d193): clauses (1) to (5), the built-in `kubevirt` package (X195)
+  and the estate review's records.
 
 ### D1
 
@@ -5146,3 +5148,29 @@ provisioning keep the pin in place for every later dnf run, as
 [update within release](../managed-os.md#update-within-release) states; destroy
 unregisters the consumer and leaves the Satellite's own host-record setting
 alone ([registration](../managed-os.md#registration)).
+
+### D193
+
+**session-pending** (2026-10-28, the owner; the clauses after the owner's
+words are taken by the session, pending the owner's review). After describing
+a target estate, kept out of this public repository at the owner's
+instruction, the owner asked: "check what is already implemented and what is
+missing for realize this desired environment ... plan the implementation of
+is missing then implement it". It authorizes [B883](m4.md#b883) as slice X195
+on M4, out of sequence, and records the review's other findings. Taken by the
+session, pending the owner's review: (1) [B732](m3.md#b732)'s question 4 is
+answered by the built-in OLM package `kubevirt`, providing `kubevirt`, rather
+than an authored package behind [B90](m4.md#b90). (2) The package's
+HyperConverged carries no spec field: persistent vTPM backend storage stays
+with [B87](m1.md#b87)'s question 7 and the KubeVirt provider namespace with
+B732's question 3. (3) Its operator gate is the nested host of B732's run, so
+it adds no acceptance profile. (4) The review's other findings are recorded,
+not implemented: [B884](m4.md#b884), [B885](m3.md#b885), [B886](m4.md#b886),
+[B887](m2.md#b887) and [B888](m2.md#b888). (5) The existing items the review
+found blocking keep
+their definitions, and this request closes none of their questions:
+[B79](m2.md#b79) for more than six Ceph hosts, [B486](m2.md#b486) and
+[B487](m2.md#b487) for stretch mode, [B87](m1.md#b87), [B88](m3.md#b88),
+[B731](m3.md#b731) and B732 for KubeVirt nodes on a host the context builds,
+[B740](#b740) for a host address on a localnet bridge and [B785](#b785) for
+the ACM cluster-backup component.

@@ -1,0 +1,54 @@
+{
+  "checks": [
+    {
+      "condition": {
+        "apiVersion": "hco.kubevirt.io/v1beta1",
+        "kind": "HyperConverged",
+        "name": "kubevirt-hyperconverged",
+        "namespace": "openshift-cnv",
+        "namespaced": true,
+        "status": "True",
+        "type": "Available"
+      }
+    }
+  ],
+  "steps": [
+    {
+      "kind": "wait",
+      "wait": [
+        {
+          "condition": {
+            "apiVersion": "apiextensions.k8s.io/v1",
+            "kind": "CustomResourceDefinition",
+            "name": "hyperconvergeds.hco.kubevirt.io",
+            "namespace": "",
+            "namespaced": false,
+            "status": "True",
+            "type": "Established"
+          }
+        }
+      ]
+    },
+    {
+      "create": {
+        "apiVersion": "hco.kubevirt.io/v1beta1",
+        "body": {
+          "apiVersion": "hco.kubevirt.io/v1beta1",
+          "kind": "HyperConverged",
+          "metadata": {
+            "name": "kubevirt-hyperconverged",
+            "namespace": "openshift-cnv"
+          },
+          "spec": {}
+        },
+        "desiredDigest": "464c8c6778ad2c6b43a078eb5b865953a8d129245d06988e700f61752bad69d0",
+        "kind": "HyperConverged",
+        "name": "kubevirt-hyperconverged",
+        "namespace": "openshift-cnv",
+        "namespaced": true
+      },
+      "kind": "create"
+    }
+  ],
+  "version": "cluster-objects-v2"
+}

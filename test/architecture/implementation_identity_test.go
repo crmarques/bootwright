@@ -32,6 +32,7 @@ func implementationIdentityAllowlist() map[string]string {
 func coincidentArmWords() map[string]string {
 	return map[string]string{
 		`internal/addons/packages.go: "kubevirt" (substrate.ArmKubeVirt)`:                            "the virtualization add-on package's reader",
+		`internal/addons/packages/kubevirt.go: "kubevirt" (substrate.ArmKubeVirt)`:                   "the virtualization add-on package's name and capability",
 		`internal/containercluster/agentinstall/projection.go: "baremetal" (substrate.ArmBaremetal)`: "the installer's platform type",
 		`internal/containercluster/openshift/virtual_ips.go: "baremetal" (substrate.ArmBaremetal)`:   "the installer's platform type",
 		`internal/controller/bundlelocal/tools.go: "kubevirt" (substrate.ArmKubeVirt)`:               "virtctl's compatibility tag",

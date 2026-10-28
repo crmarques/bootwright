@@ -46,6 +46,19 @@
         ]
       },
       {
+        "name": "kubevirt",
+        "provides": [
+          "kubevirt"
+        ],
+        "requires": [],
+        "olmPackage": "kubevirt-hyperconverged",
+        "defaultSource": "redhat-operators",
+        "configuration": [
+          "subscription",
+          "timeout"
+        ]
+      },
+      {
         "name": "metallb",
         "provides": [
           "metallb"

@@ -332,6 +332,14 @@ The Kubernetes NMState Operator, providing `nmstate`
 is `subscription` (`source` defaults to `redhat-operators`) and `timeout`
 (default `30m`); it has no other field.
 
+### Package kubevirt
+
+Red Hat OpenShift Virtualization, providing `kubevirt`
+([coverage](../add-on-coverage.md#kubevirt)). Its configuration is
+`subscription` (`source` defaults to `redhat-operators`) and `timeout`
+(default `45m`); it has no other field, and the `HyperConverged` object it
+creates carries no configuration.
+
 ### Package metallb
 
 The MetalLB Operator, providing `metallb`
