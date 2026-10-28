@@ -52,7 +52,7 @@ var ignoredGuidancePaths = map[string]bool{
 // in guidance must name something that exists.
 var repositoryPathPrefixes = []string{
 	".agents/", ".claude/", ".github/", "ansible/", "api/", "cmd/", "docs/",
-	"examples/", "internal/", "scripts/", "specs/", "test/",
+	"e2e/", "examples/", "internal/", "scripts/", "specs/", "test/",
 }
 
 type markdownFile struct {

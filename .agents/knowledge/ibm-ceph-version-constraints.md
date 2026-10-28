@@ -13,7 +13,7 @@ evidence inventory.
 ## Current authored example
 
 The [three-node declaration](../../examples/ceph-clusters/libvirt-3-nodes-ceph/storage/cluster.yaml)
-and its [runbook](../../examples/ceph-clusters/libvirt-3-nodes-ceph/README.md)
+and its [runbook](../../e2e/runbooks/libvirt-3-nodes-ceph.md)
 are the owners of these selections as of 2026-10-18:
 
 | Coordinate | Authored value |

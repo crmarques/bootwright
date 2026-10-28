@@ -23,7 +23,7 @@ journeys.
 - `validate` rejects a value the only implementation refuses; no default always
   refuses at plan time.
 - A declared flag is read; an unimplemented one is refused, never ignored.
-- A runbook in `examples/` runs as written against the current build.
+- A runbook or case in `e2e/` runs as written against the current build.
 
 ## Design and review
 

@@ -1,0 +1,123 @@
+# Default input for every e2e case. Copy it outside the repository to change
+# it, or override single keys with --set; e2e/render.sh applies this file first.
+
+# The controller address every managed service binds and guests reach. "auto"
+# takes this host's default-route source address at render time.
+host:
+  address: auto
+  domain: e2e.example.test
+  bmcPort: 8000
+
+  # Upstreams the managed DNS and NTP services forward to.
+  upstreamDNS:
+    - 1.1.1.1
+
+  upstreamNTP:
+    - 162.159.200.1
+
+  # The NAT network Bootwright creates for the guests. Guest n gets the
+  # address firstGuest + n.
+  network:
+    bridge: virbr-e2e
+    cidr: 198.51.100.0/24
+    gateway: 198.51.100.1
+    prefix: 24
+    firstGuest: 10
+
+# Media names as added with `bootwright media add --name`.
+rhel:
+  version: "9.8"
+  bootMedia: rhel-9.8-x86_64-boot.iso
+  dvdMedia: rhel-9.8-x86_64-dvd.iso
+
+# Guest operating-system security, honoured by the rhel and sno cases. fips
+# installs the guest in FIPS mode; tpm2 encrypts the root disk and unlocks it
+# with the guest's TPM2 (rhel also binds a recovery passphrase).
+security:
+  fips: false
+  tpm2: false
+
+# The rhel case only: register with Red Hat Subscription Management from the
+# rhsm-org and rhsm-key Secrets, and update within the release afterwards.
+registration:
+  enabled: false
+  updateWithinRelease: false
+
+openshift:
+  version: 4.21.15
+
+# IBM Storage Ceph, for the ceph and stretch-ceph cases.
+ceph:
+  release: 9.9.2.0
+  packageVersion: 20.2.2-349.el9cp
+  ansiblePackageVersion: 5.0.3-1.el9cp
+  image:
+    base: cp.icr.io/cp/ibm-ceph/ceph-9-rhel10
+    version: v9.9.2-26947
+
+  # The ceph case's services; each may be switched off to save memory.
+  services:
+    block: true
+    file: true
+    object: true
+    nfs: true
+    smb: true
+    observability: true
+    # NVMe-oF needs AVX-512 on the host CPU.
+    nvmeof: false
+
+# Add-ons installed after the cluster.
+addons:
+  sno:
+    nmstate: false
+    metallb: false
+
+  compact:
+    metallb: true
+
+  # The OLM channel and exact CSV of each enabled package: operator choices
+  # with no default. Read them from `oc get packagemanifest <package> -n
+  # openshift-marketplace -o json` (status.channels[].name and .currentCSV)
+  # on any cluster of the same release.
+  subscriptions:
+    nmstate:
+      channel: ""
+      startingCSV: ""
+
+    metallb:
+      channel: ""
+      startingCSV: ""
+
+  # MetalLB layer 2 pool, inside host.network and outside every guest address.
+  metallbPool:
+    - 198.51.100.200-198.51.100.207
+
+# Guest sizes per case.
+sizes:
+  rhel:
+    cpu: 2
+    memoryMiB: 4096
+    diskGiB: 40
+
+  ceph:
+    cpu: 4
+    memoryMiB: 8192
+    diskGiB: 40
+    osdDisks: 1
+    osdDiskGiB: 30
+
+  stretch:
+    cpu: 2
+    memoryMiB: 4096
+    diskGiB: 30
+    osdDiskGiB: 20
+
+  sno:
+    cpu: 8
+    memoryMiB: 16384
+    diskGiB: 120
+
+  compact:
+    cpu: 6
+    memoryMiB: 16384
+    diskGiB: 120

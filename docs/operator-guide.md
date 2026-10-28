@@ -417,9 +417,9 @@ same sockets and the same guest bridge.
 
 | Journey | What it runs | Gate |
 | --- | --- | --- |
-| [lab-rhel](../examples/machines/lab-rhel/README.md#run-it) | One RHEL guest installed through an emulated Redfish BMC, machine list and power reads, exec/rsh sessions, drift observation, replay, restart and safe removal; extended acceptance checks are below | [B72](../specs/milestones/delivered.md#x38--the-real-host-run-of-2026-10-05) operator gate, accepted; M1's extended checks follow [D59](../specs/milestones/backlog.md#d59) |
-| [lab-sno](../examples/openshift-clusters/lab-sno/README.md#run-it) | A single-node OpenShift cluster installed by the agent installer on one libvirt guest | [B61](../specs/milestones/m3.md#b61) operator gate |
-| [lab-baremetal](../examples/machines/lab-baremetal/README.md#run-it) | One physical Machine claimed, proved and installed through its own Redfish BMC, its installer image and host key published privately; the [separate rehearsal substrate](../examples/machines/lab-baremetal-substrate/README.md) supplies a generated CA-issued emulator leaf, [B496](../specs/milestones/m1.md#b496) | [B73](../specs/milestones/m1.md#b73) operator gate, not run |
+| [lab-rhel](../e2e/runbooks/lab-rhel.md#run-it) | One RHEL guest installed through an emulated Redfish BMC, machine list and power reads, exec/rsh sessions, drift observation, replay, restart and safe removal; extended acceptance checks are below | [B72](../specs/milestones/delivered.md#x38--the-real-host-run-of-2026-10-05) operator gate, accepted; M1's extended checks follow [D59](../specs/milestones/backlog.md#d59) |
+| [lab-sno](../e2e/runbooks/lab-sno.md#run-it) | A single-node OpenShift cluster installed by the agent installer on one libvirt guest | [B61](../specs/milestones/m3.md#b61) operator gate |
+| [lab-baremetal](../e2e/runbooks/lab-baremetal.md#run-it) | One physical Machine claimed, proved and installed through its own Redfish BMC, its installer image and host key published privately; the [separate rehearsal substrate](../e2e/runbooks/lab-baremetal-substrate.md) supplies a generated CA-issued emulator leaf, [B496](../specs/milestones/m1.md#b496) | [B73](../specs/milestones/m1.md#b73) operator gate, not run |
 
 Run each block from the repository root, one line at a time, and keep the
 sequence exactly as run: the ledger records it. After each operation, `status`
@@ -598,8 +598,8 @@ effects.
 
 M1's closing operator gate, D59's extended lab-rhel journey, was accepted
 under D154 and D156 ([X98](../specs/milestones/delivered.md#x98--m1-owner-acceptance)).
-To repeat it, run the [lab-rhel runbook](../examples/machines/lab-rhel/README.md#run-it)
-and its [undo](../examples/machines/lab-rhel/README.md#undo) on a clean committed
+To repeat it, run the [lab-rhel runbook](../e2e/runbooks/lab-rhel.md#run-it)
+and its [undo](../e2e/runbooks/lab-rhel.md#undo) on a clean committed
 build, then the extended checks below. A build at or after the setup v2 cut-over (X88)
 first needs the [fresh install](#a-host-an-earlier-bootwright-build-manages) on
 a host an earlier build prepared; the
@@ -612,7 +612,7 @@ does not qualify that part of the gate. Record setup's timings, its plan and
 the receipt table in the [setup row](acceptance.md#setup-v2-fresh-install-row).
 Keep a local run record outside Git.
 
-X48 adds the [three-node RHEL journey](../examples/machines/lab-rhel-3-nodes/README.md)
+X48 adds the [three-node RHEL journey](../e2e/runbooks/lab-rhel-3-nodes.md)
 to that gate. Prove actual overlapping service work, machine realization and
 three same-profile installation waits, with exactly one package-tree
 publication. Keep timestamped progress and operation logs locally; graph

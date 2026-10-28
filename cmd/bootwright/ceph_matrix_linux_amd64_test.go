@@ -32,6 +32,7 @@ const (
 	cephCoverageSpec  = "../../specs/ceph-coverage.md"
 	cephStorageSpec   = "../../specs/ceph.md"
 	cephAcceptanceDoc = "../../docs/acceptance.md"
+	cephRunbookDir    = "../../e2e/runbooks"
 	cephMatrixDir     = "testdata/matrix"
 )
 
@@ -559,7 +560,7 @@ func outsideFences(readme string) []string {
 	return kept
 }
 
-// runbookViolations reports each required heading a README misses, repeats or
+// runbookViolations reports each required heading a runbook misses, repeats or
 // misorders, and each ledger field its measured budget section omits.
 func runbookViolations(readme string) []string {
 	var violations []string
@@ -658,13 +659,14 @@ func TestCephProfileRunbooksHaveRequiredSections(t *testing.T) {
 			continue
 		}
 		checked++
-		data, err := os.ReadFile(filepath.Join(examplePath(t, profile.dir), "README.md"))
+		examplePath(t, profile.dir)
+		data, err := os.ReadFile(filepath.Join(cephRunbookDir, profile.dir+".md"))
 		if err != nil {
 			t.Errorf("%s: %v", profile.id, err)
 			continue
 		}
 		if violations := runbookViolations(string(data)); len(violations) != 0 {
-			t.Errorf("%s: README.md of %s: %q", profile.id, profile.dir, violations)
+			t.Errorf("%s: runbook %s.md: %q", profile.id, profile.dir, violations)
 		}
 	}
 	if checked == 0 {

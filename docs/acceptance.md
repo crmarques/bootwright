@@ -74,7 +74,8 @@ with `--set DEFAULT`, around the Redfish check.
 [B484](../specs/milestones/m2.md#b484)'s owner gate is one row per profile of
 the [profile catalog](../specs/ceph-coverage.md#profile-catalog), each on a
 clean build that descends from B484's acceptance baseline. The run follows
-the profile README's runbook. Copy this template into the ledger and replace
+the profile's runbook, `e2e/runbooks/<profile directory>.md`. Copy this
+template into the ledger and replace
 every `<...>`:
 
 ```text

@@ -16,11 +16,11 @@ import (
 
 // operatorDocuments lists, under root, the human journeys whose command lines
 // must stay runnable against this build's catalog: the Markdown Git tracks in
-// the README, docs and examples, so no untracked or ignored file of a checkout,
+// the README, docs, e2e and examples, so no untracked or ignored file of a checkout,
 // such as a draft under examples/wip/, decides a verdict that CI reaches
 // without it. The caller's GIT_ variables never redirect the listing.
 func operatorDocuments(root string) ([]string, error) {
-	command := exec.Command("git", "ls-files", "-z", "--", "README.md", "docs", "examples")
+	command := exec.Command("git", "ls-files", "-z", "--", "README.md", "docs", "e2e", "examples")
 	command.Dir = root
 	command.Env = slices.DeleteFunc(os.Environ(), func(variable string) bool { return strings.HasPrefix(variable, "GIT_") })
 	output, err := command.Output()

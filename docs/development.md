@@ -240,5 +240,5 @@ of that surface is still unproved against this image: the
 `EthernetInterfaces` collection the
 [physical target proof](../specs/substrates.md#physical-machine-realization)
 reads, which only the
-[lab-baremetal rehearsal](../examples/machines/lab-baremetal/README.md#rehearsing-it-without-hardware)
+[lab-baremetal rehearsal](../e2e/runbooks/lab-baremetal.md#rehearsing-it-without-hardware)
 exercises.

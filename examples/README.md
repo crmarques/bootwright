@@ -1,9 +1,12 @@
 # Examples
 
-Choose the outcome you want, then follow that scenario's README from the
-repository root. Each directory is a self-contained desired-state input;
-validate or import that directory, rather than its category or all of
-`examples/`, which contain multiple Environments.
+Each directory is a self-contained desired-state input: an `environment.yaml`,
+the objects it declares and a concise README that explains the case and what
+is worth noting about it. Validate or import that directory, rather than its
+category or all of `examples/`, which contain multiple Environments. The
+procedure that runs each input is its runbook, `e2e/runbooks/<scenario>.md`,
+which its README names. [`e2e/`](../e2e/README.md) also holds templated
+end-to-end cases that cover some of these scenarios with their own inputs.
 
 | Type | Example | Outcome |
 | --- | --- | --- |
@@ -46,23 +49,24 @@ run or owner acceptance. The row states the outcome only. Each README states its
 qualification limits, and [milestones](../specs/milestones.md) and the
 [acceptance ledger](../docs/acceptance.md) own delivery and acceptance status.
 The [Ceph profile catalog](../specs/ceph-coverage.md#profile-catalog) defines
-the `ceph-clusters/` profiles, each with the runbook sections that page
-requires.
+the `ceph-clusters/` profiles; their runbooks, with the sections that page
+requires, are under `e2e/runbooks/`.
 
 Machine and cluster examples include the infrastructure they need. There is no
 dependency on running another example first. Their shared service addresses and
 ports mean these lab scenarios should run one at a time on a host unless you
-assign distinct resources. Read each runbook's prerequisites and qualification
-limits before applying it. The [operator guide](../docs/operator-guide.md)
-owns controller setup and host access.
+assign distinct resources. Read the README's qualification limits and the
+[host preparation](../e2e/README.md#prepare-the-host) before applying one.
+The [operator guide](../docs/operator-guide.md) owns controller setup and host
+access.
 
 ## Prepare an operator copy
 
 Tracked inputs use documentation addresses and synthetic identities. Copy a
 scenario outside the repository, customize it, and supply licensed media and
-secrets as its runbook directs. Placeholder checksums and registry digests are
-not real content identities: replace them with values verified for your media
-and release. An IBM Storage Ceph Entitlement carries `license.accept: true` as a
+secrets as its README and its runbook direct. Placeholder
+checksums and registry digests are not real content identities: replace them
+with values verified for your media and release. An IBM Storage Ceph Entitlement carries `license.accept: true` as a
 placeholder; reviewing the IBM license terms and accepting them is your explicit
 act. `validate` proves admission, not connectivity or readiness.
 
@@ -76,7 +80,7 @@ before the first `apply --stage`: while a staged operation is paused,
 `context update` refuses until it completes or is destroyed.
 An unfinished apply continues with the same stage selection after the cause is
 resolved. Follow the refusal's remedy if frozen intent or execution inputs
-changed; do not delete context evidence to force a retry. Each scenario gives
+changed; do not delete context evidence to force a retry. Each runbook gives
 its removal sequence.
 
 ## Contributing examples
@@ -84,8 +88,13 @@ its removal sequence.
 Every tracked example must use `apiVersion: bootwright.io/v1alpha1`, conform to
 the [API](../specs/api.md), and contain no secret bytes, real-machine identity,
 private endpoint, topology, or credential-bearing URL. Each scenario has an
-`environment.yaml` and concise README covering customization, execution,
-inspection, recovery and removal. Follow the repository's
+`environment.yaml` and a concise README: what the input declares and its
+outcome, a short list of what is worth noting (topology, sizes, notable fields,
+qualification limits and required operator inputs such as media, Secrets and
+placeholder checksums), and one line naming the runbook that
+runs it. Procedures do not belong in an example README: they go in the
+scenario's runbook, `e2e/runbooks/<scenario>.md`, or in a templated case of
+[`e2e/`](../e2e/README.md). Follow the repository's
 [YAML style](../.agents/skills/code-implementation/references/formatting.md#yaml),
 including one empty line between logical blocks. Co-located non-object YAML
 belongs under the

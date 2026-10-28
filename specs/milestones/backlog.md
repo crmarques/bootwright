@@ -269,6 +269,7 @@ Alias cell.
 | [B857](#b857) | new, 2026-10-27 (lane I) | enabling | Desired state | The audit 5.7 operator tasks run on the reshaped API | B814's paper check was not run before X171 |
 | [B867](#b867) | new, 2026-10-27 (lane R review) | safety | Storage | The Ceph incarnation rule is confirmed on a live cluster | The monitor map's creation time was chosen without a live run |
 | [B881](#b881) | new, 2026-10-28 (X190 review) | safety | State reconciliation, with Substrate | A cancelled or deadline-ended firmware power cycle still forces its machine off | The adapter supervisor kills the worker with no grace; a grace changes every adapter's termination |
+| [B882](#b882) | new, 2026-10-28 (owner request: the e2e stretch case) | product | Storage, with Machine and Managed OS | A Ceph host on a provided-OS Machine, such as one another context installed | Core Ceph binds only hosts it installed, with one fleet key and its own installation's host-key proof |
 
 ### B82
 
@@ -2962,6 +2963,22 @@ unproved, possibly on in firmware setup; the refusal's remedy stops it.
 **Outcome:** the cycle's ForceOff is sent and polled after a cancellation or
 deadline. **Exit evidence:** a supervisor test that cancels during the cycle
 and observes the ForceOff.
+
+### B882
+
+**Owner:** Storage, with Machine and Managed OS. **Kind:** product.
+**Requires:** none. **Definition:** Needs definition: how a
+[provided-OS](../api/machines.md#machine) Machine joins a managed CephCluster
+as a host. Today `bindHosts` (`internal/storage/ceph/requests.go`) refuses it
+with `lifecycle.unsupported`: every topology node must be installed by the
+context on a realized provider, all hosts share one fleet key, and host trust
+reads this context's installation proof. Open: the host-key proof and package
+prerequisites for a host Bootwright did not install, a per-host access key,
+and removal that leaves the operating system. **Outcome:** the e2e
+`stretch-ceph` case applies with `arbiter-01` installed by the
+`stretch-arbiter` context ([e2e](../../e2e/README.md#case-stretch)).
+**Exit evidence:** a planning test admitting a provided-OS node with its own
+key, a host-trust test, and an owner-run `stretch-ceph` apply and destroy.
 
 ## Audit remediation (2026-10-26)
 

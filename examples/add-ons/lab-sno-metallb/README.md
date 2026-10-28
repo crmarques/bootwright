@@ -1,57 +1,34 @@
 # Single-node OpenShift with MetalLB
 
-This self-contained input extends [lab-sno](../../openshift-clusters/lab-sno/README.md)
-with one binding selecting `metallb`. Read that runbook's controller, network,
-Secret and capacity prerequisites, and make the same local substitutions.
-All addresses and identities here are synthetic. Operator acceptance remains
-pending; this example supplies the input for the M4 rehearsal.
+[lab-sno](../../openshift-clusters/lab-sno/) plus one `ClusterAddonBinding`
+selecting `metallb`, as the input for
+[B727](../../../specs/milestones/m4.md#b727). The topology, Secrets and
+controller prerequisites are lab-sno's; the only additions are the Environment
+name and [add-ons/binding.yaml](add-ons/binding.yaml). All addresses and
+identities are synthetic. Operator acceptance is pending.
 
-Copy this example outside Git before customizing it:
+## Worth noting
 
-```sh
-addon_input=$(mktemp -d /tmp/bootwright-addons.XXXXXX)
-cp -R examples/add-ons/lab-sno-metallb/. "$addon_input/"
-```
+- Placeholder channel and CSV: `add-ons/binding.yaml` declares
+  `example-channel` and `metallb-operator.v0.0.0`. They are illustrative, not
+  defaults or a qualified pairing; replace both with the operator's channel
+  and its exact CSV. On a cluster whose catalog serves the package, read
+  `status.channels[].name` and `status.channels[].currentCSV` from:
 
-Replace `example-channel` and `metallb-operator.v0.0.0` in `add-ons/binding.yaml` with
-an operator-selected channel and its exact CSV. These are illustrative values,
-not defaults or a qualified release pairing. On a cluster whose selected
-catalog serves the package, inspect its channels with:
+  `oc get packagemanifest metallb-operator -n openshift-marketplace -o json`
 
-```sh
-oc get packagemanifest metallb-operator -n openshift-marketplace -o json
-```
+- Bootwright approves a Manual InstallPlan only when it resolves exactly the
+  declared CSV from the declared catalog.
+- The `services` pool holds eight machine-network addresses
+  (`198.51.100.128-198.51.100.135`), separate from the node, its endpoints and
+  the managed network's host address. Keep it outside any DHCP range on the
+  network, and adjust it with the subnet. MetalLB does not serve the API or
+  default ingress endpoints. Bootwright creates no test workload; verifying a
+  LoadBalancer Service is the operator's step.
+- The add-on installs after the cluster. A settled apply contacts no cluster,
+  and destroy retires the add-on with the cluster without deleting its
+  Kubernetes objects through the cluster API.
 
-Read `status.channels[].name` and `status.channels[].currentCSV`. Set the
-channel and CSV together; Bootwright approves a Manual InstallPlan only when
-it resolves exactly the declared CSV from the declared catalog.
-
-Validate and import the customized copy, then follow lab-sno's Secret setup
-and controller setup instructions for the new context:
-
-```sh
-bootwright validate --file "$addon_input"
-bootwright context init --name addons-metallb --input-dir "$addon_input"
-bootwright secret generate --context addons-metallb
-bootwright setup
-bootwright plan --context addons-metallb
-bootwright apply --context addons-metallb
-bootwright diff --context addons-metallb --observe
-```
-
-The initial apply installs the operator and its operand after the cluster.
-Repeat an interrupted apply with the same input. A settled apply contacts no
-cluster. Destroy retires the add-on with the cluster, without deleting its
-Kubernetes objects through the cluster API:
-
-```sh
-bootwright destroy --context addons-metallb
-```
-
-The `services` pool contains eight machine-network addresses, separate from
-the node, its endpoints and the managed network's host address. Adjust the
-pool with the subnet substitutions. To verify the rehearsal, create a test
-Deployment and a LoadBalancer Service in an operator-owned namespace, then
-check that its allocated address falls within the pool and answers from the
-controller. Bootwright does not create that workload. MetalLB does not serve
-the API or default ingress endpoints.
+Runbook: [e2e/runbooks/lab-sno-metallb.md](../../../e2e/runbooks/lab-sno-metallb.md).
+The templated e2e [`sno` case](../../../e2e/README.md#case-sno) covers the same
+scenario with its own inputs.

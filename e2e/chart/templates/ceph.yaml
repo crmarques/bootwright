@@ -1,0 +1,878 @@
+{{/*
+Case ceph: three RHEL guests and one managed IBM Storage Ceph cluster. Each
+service group switches with ceph.services.<flag>: block (RBD), file (CephFS),
+object (RGW behind a TLS ingress), nfs and smb (both export CephFS subvolumes,
+so they are skipped when file is off), observability (Prometheus,
+Alertmanager, Grafana, node and Ceph exporters, Loki with Alloy, management
+gateway behind a keepalived-only ingress) and nvmeof (own pools and image). Crash collection is derived by
+Bootwright and needs no document. OAuth2/SSO and SNMP are not declared: both
+need an external identity provider or receiver. Auxiliary images are the
+digests of release v9.9.2-26947 recorded in the backlog (D171); move them
+together with ceph.image when changing ceph.release.
+Addresses: the object ingress VIP is guest 50, the management gateway VIP guest
+52 (both inside host.network, outside the guests).
+*/}}
+{{- if eq .Values.case "ceph" }}
+{{- $v := .Values }}
+{{- $c := $v.ceph }}
+{{- $s := $c.services }}
+{{- $size := $v.sizes.ceph }}
+{{- $dom := $v.host.domain }}
+{{- $prefix := $v.host.network.prefix }}
+{{- $cluster := "ceph-e2e" }}
+{{- $nfs := and $s.nfs $s.file }}
+{{- $smb := and $s.smb $s.file }}
+{{- if gt (int $size.osdDisks) 7 }}
+{{- fail "sizes.ceph.osdDisks is at most 7: a libvirt profile declares at most 7 data disks" }}
+{{- end }}
+{{- $letters := list "a" "b" "c" "d" "e" "f" "g" }}
+{{- $disks := list }}
+{{- $paths := list }}
+{{- range $i := until (int $size.osdDisks) }}
+{{- $disks = append $disks (dict "name" (printf "ceph-data-%d" (add $i 1)) "sizeGiB" (int $size.osdDiskGiB) "media" "ssd") }}
+{{- $paths = append $paths (printf "/dev/sd%s" (index $letters $i)) }}
+{{- end }}
+{{- $profile := dict "name" "ceph" "cpu" (int $size.cpu) "memoryMiB" (int $size.memoryMiB) "diskGiB" (int $size.diskGiB) "dataDisks" $disks }}
+{{- $rgwVIP := include "e2e.guestIP" (dict "root" $ "n" 50) }}
+{{- $mgmtVIP := include "e2e.guestIP" (dict "root" $ "n" 52) }}
+{{- $rhel3 := include "e2e.guestIP" (dict "root" $ "n" 3) }}
+{{- $packages := list "podman" "lvm2" "python3" }}
+{{- if $nfs }}{{ $packages = append $packages "nfs-utils" }}{{ end }}
+{{- if $smb }}{{ $packages = concat $packages (list "cifs-utils" "samba-client") }}{{ end }}
+{{- $repositories := list (dict "id" "ibm-storage-ceph-9" "displayName" "IBM Storage Ceph 9 packages" "baseURL" "https://public.dhe.ibm.com/ibmdl/export/pub/storage/ceph/9/rhel9/x86_64/" "gpgCheck" true "gpgKeyURL" "https://public.dhe.ibm.com/ibmdl/export/pub/storage/ceph/RPM-GPG-KEY-IBM-CEPH") }}
+{{ include "e2e.environment" (dict "root" $) }}
+{{ include "e2e.controller" $ }}
+{{ include "e2e.services" (dict "root" $) }}
+{{ include "e2e.provider" (dict "root" $ "profiles" (list $profile)) }}
+{{ include "e2e.networkConfig" $ }}
+{{ include "e2e.rhelProfile" (dict "root" $ "packages" $packages "repositories" $repositories) }}
+{{ include "e2e.rhelMachine" (dict "root" $ "name" "rhel-01" "n" 1 "profile" "ceph") }}
+{{ include "e2e.rhelMachine" (dict "root" $ "name" "rhel-02" "n" 2 "profile" "ceph") }}
+{{ include "e2e.rhelMachine" (dict "root" $ "name" "rhel-03" "n" 3 "profile" "ceph") }}
+{{ include "e2e.secrets" (dict "root" $) }}
+---
+# bw-path: secret-descriptors/ceph-cluster-key.yaml
+apiVersion: bootwright.io/v1alpha1
+kind: Secret
+metadata:
+  name: ceph-cluster-key
+
+spec:
+  type: sshKeyPair
+
+  source:
+    generated:
+      keyType: {{ if $v.security.fips }}ecdsaP256{{ else }}ed25519{{ end }}
+      comment: ceph-cluster-key
+---
+# bw-path: secret-descriptors/ibm-registry.yaml
+apiVersion: bootwright.io/v1alpha1
+kind: Secret
+metadata:
+  name: ibm-registry
+
+spec:
+  type: usernamePassword
+
+  source:
+    contextStore: {}
+---
+# bw-path: storage/entitlement.yaml
+apiVersion: bootwright.io/v1alpha1
+kind: Entitlement
+metadata:
+  name: ibm-ceph
+
+spec:
+  type: ibmStorageCeph
+
+  registry:
+    url: cp.icr.io
+    credentialsRef: ibm-registry
+
+  license:
+    accept: true
+---
+# bw-path: storage/cluster.yaml
+apiVersion: bootwright.io/v1alpha1
+kind: CephCluster
+metadata:
+  name: {{ $cluster }}
+
+spec:
+  management: managed
+
+  distribution:
+    ibm:
+      callHome: enabled
+
+      packages:
+        source: vendor
+
+  release: {{ $c.release }}
+  packageVersion: {{ $c.packageVersion }}
+
+  image:
+    base: {{ $c.image.base }}
+    version: {{ $c.image.version }}
+
+  entitlementRef: ibm-ceph
+
+  cephadm:
+    addressRef: ip
+
+    ansible:
+      packageVersion: {{ $c.ansiblePackageVersion }}
+
+    clusterSSH:
+      user: bootwright
+      keyRef: ceph-cluster-key
+      transport: verifiedTunnel
+
+    bootstrap:
+      nodeRef: rhel-01
+      addressRef: ip
+
+  networks:
+    publicCIDRs:
+      - {{ $v.host.network.cidr }}
+
+  config:
+    global:
+      osd_pool_default_size: '2'
+      osd_pool_default_min_size: '2'
+
+    osd:
+      osd_memory_target_autotune: 'false'
+      osd_memory_target: '2147483648'
+
+  services:
+    - service_type: mon
+
+      placement:
+        count: 3
+        label: ceph-core
+
+    - service_type: mgr
+
+      placement:
+        count: 2
+        label: ceph-core
+
+    - service_type: osd
+      service_id: data
+
+      placement:
+        label: ceph-core
+
+      spec:
+        data_devices:
+          paths:
+{{- range $paths }}
+            - {{ . }}
+{{- end }}
+{{- if $s.file }}
+
+    - service_type: mds
+      service_id: files
+
+      placement:
+        count: 2
+        label: ceph-core
+{{- end }}
+{{- if $s.object }}
+
+    - service_type: rgw
+      service_id: objects
+
+      placement:
+        count: 2
+
+        hosts:
+          - rhel-01.{{ $dom }}
+          - rhel-02.{{ $dom }}
+
+      spec:
+        rgw_frontend_port: 8081
+        ssl: false
+
+    - service_type: ingress
+      service_id: rgw.objects
+
+      placement:
+        count: 2
+
+        hosts:
+          - rhel-02.{{ $dom }}
+          - rhel-03.{{ $dom }}
+
+      spec:
+        backend_service: rgw.objects
+        virtual_ip: {{ $rgwVIP }}/{{ $prefix }}
+        frontend_port: 443
+        monitor_port: 9043
+        ssl: true
+        certificate_source: inline
+        first_virtual_router_id: 60
+{{- end }}
+{{- if $nfs }}
+
+    - service_type: nfs
+      service_id: shares
+
+      placement:
+        count: 1
+
+        hosts:
+          - rhel-01.{{ $dom }}
+{{- end }}
+{{- if $s.observability }}
+
+    - service_type: prometheus
+      placement:
+        hosts:
+          - rhel-03.{{ $dom }}
+
+      spec:
+        retention_time: 7d
+        retention_size: 5GB
+        port: 9095
+
+    - service_type: alertmanager
+      placement:
+        hosts:
+          - rhel-03.{{ $dom }}
+
+    - service_type: grafana
+      placement:
+        hosts:
+          - rhel-02.{{ $dom }}
+
+      spec:
+        anonymous_access: false
+        protocol: https
+
+    - service_type: node-exporter
+      placement:
+        hosts:
+          - rhel-01.{{ $dom }}
+          - rhel-02.{{ $dom }}
+          - rhel-03.{{ $dom }}
+
+      spec:
+        port: 9100
+
+    - service_type: ceph-exporter
+      placement:
+        hosts:
+          - rhel-01.{{ $dom }}
+          - rhel-02.{{ $dom }}
+          - rhel-03.{{ $dom }}
+
+      spec:
+        prio_limit: 5
+        stats_period: 10
+
+    - service_type: mgmt-gateway
+      placement:
+        hosts:
+          - rhel-01.{{ $dom }}
+          - rhel-02.{{ $dom }}
+
+      spec:
+        port: 9443
+        virtual_ip: {{ $mgmtVIP }}
+        enable_auth: false
+
+    - service_type: ingress
+      service_id: mgmt
+
+      placement:
+        hosts:
+          - rhel-01.{{ $dom }}
+          - rhel-02.{{ $dom }}
+
+      spec:
+        backend_service: mgmt-gateway
+        keepalive_only: true
+        virtual_ip: {{ $mgmtVIP }}
+
+    - service_type: loki
+      placement:
+        hosts:
+          - rhel-03.{{ $dom }}
+
+      spec:
+        port: 3100
+
+    - service_type: alloy
+      placement:
+        hosts:
+          - rhel-01.{{ $dom }}
+          - rhel-02.{{ $dom }}
+          - rhel-03.{{ $dom }}
+{{- end }}
+{{- if $s.nvmeof }}
+
+    - service_type: nvmeof
+      service_id: nvme-config.primary
+
+      placement:
+        hosts:
+          - rhel-02.{{ $dom }}
+          - rhel-03.{{ $dom }}
+
+      spec:
+        pool: nvme-config
+        group: primary
+        enable_auth: false
+{{- end }}
+
+  topology:
+    nodes:
+{{- range $n := until 3 }}
+      - name: rhel-0{{ add $n 1 }}
+        fqdn: rhel-0{{ add $n 1 }}.{{ $dom }}
+        machineRef: rhel-0{{ add $n 1 }}
+
+        labels:
+          - ceph-core
+{{ end }}
+{{- if or $s.object $smb $s.observability $s.nvmeof }}
+  images:
+{{- if $s.object }}
+    haproxy:
+      base: cp.icr.io/cp/ibm-ceph/haproxy-rhel10
+      version: sha256:59d020dd7a02ad25248ae3766914f5bc5a241de77c2257fcad7124c13eea82f1
+{{ end }}
+{{- if or $s.object $s.observability }}
+    keepalived:
+      base: cp.icr.io/cp/ibm-ceph/keepalived-rhel10
+      version: sha256:4ade24fea1bf11cc0c2e88af631597f21bc586562da3001ea15b8d10e0860694
+{{ end }}
+{{- if $smb }}
+    samba:
+      base: cp.icr.io/cp/ibm-ceph/samba-server-rhel10
+      version: sha256:3b8f9164c478d267427e51e0b387c9e32ae3566e3a2078471e16d44ac6807cf1
+
+    samba_metrics:
+      base: cp.icr.io/cp/ibm-ceph/samba-metrics-rhel10
+      version: sha256:090f5d43981a51923b593da36b9010d43d67264691a625ff2b92005676574f29
+{{ end }}
+{{- if $s.observability }}
+    prometheus:
+      base: cp.icr.io/cp/ibm-ceph/prometheus
+      version: sha256:f4d613a79bebcb4deeb0b5f9b1f231ba8046572978207abe242bc7c9cf589789
+
+    alertmanager:
+      base: cp.icr.io/cp/ibm-ceph/prometheus-alertmanager
+      version: sha256:7331dd1e3aabe689ae45470e560472dc39aeeea611c3c479e266bae9140243ed
+
+    grafana:
+      base: cp.icr.io/cp/ibm-ceph/grafana-rhel10
+      version: sha256:12006a7f211b2bf24893e39f7e5ea208b8d641d1dd9c9b562a0c502663484141
+
+    node_exporter:
+      base: cp.icr.io/cp/ibm-ceph/prometheus-node-exporter
+      version: sha256:4d4e3433d212042b07534c042d512bf1f8c65a43823b20e6f1b05da5cd88f0ba
+
+    nginx:
+      base: cp.icr.io/cp/ibm-ceph/nginx-126-rhel10
+      version: sha256:c7ba454e04aab177e3d2e283e679412dc90477d77848715ebabd3db9af4b45af
+
+    loki:
+      base: cp.icr.io/cp/ibm-ceph/logging-loki-rhel8
+      version: sha256:e7e4c7c372a02aa2fbab9a0f3af48475f0df860164551e8562565983576dc61c
+
+    alloy:
+      base: cp.icr.io/cp/ibm-ceph/alloy-rhel10
+      version: sha256:4f645e6ee02545ceb29cd01fb42e2d9de03e1e48e509281898a325cc72d14b85
+{{ end }}
+{{- if $s.nvmeof }}
+    nvmeof:
+      base: cp.icr.io/cp/ibm-ceph/nvmeof-rhel10
+      version: sha256:4727ed1dd465b8d0064d8da6064b32f39068fca558fea9a78c3d65f41923b226
+{{- end }}
+{{- end }}
+{{- if or $s.object $s.observability }}
+
+  serviceBindings:
+{{- if $s.object }}
+    - serviceRef: ingress.rgw.objects
+
+      secrets:
+        - path: /spec/ssl_cert
+          secretRef: rgw-objects-tls
+
+        - path: /spec/ssl_key
+          secretRef: rgw-objects-tls
+{{- end }}
+{{- if $s.observability }}
+    - serviceRef: grafana
+      secrets:
+        - path: /spec/initial_admin_password
+          secretRef: grafana-admin
+
+    - serviceRef: mgmt-gateway
+      secrets:
+        - path: /spec/ssl_cert
+          secretRef: management-tls
+
+        - path: /spec/ssl_key
+          secretRef: management-tls
+{{- end }}
+{{- end }}
+{{- if $s.block }}
+---
+# bw-path: storage/pool-rbd-data.yaml
+apiVersion: bootwright.io/v1alpha1
+kind: CephPool
+metadata:
+  name: rbd-data
+
+spec:
+  clusterRef: {{ $cluster }}
+  role: rbd
+
+  replicated:
+    size: 2
+    minSize: 2
+
+  autoscale:
+    mode: 'on'
+---
+# bw-path: storage/placement-policy.yaml
+apiVersion: bootwright.io/v1alpha1
+kind: CephPlacementPolicy
+metadata:
+  name: ssd-hosts
+
+spec:
+  clusterRef: {{ $cluster }}
+  ruleName: ssd-hosts
+  crushDeviceClass: ssd
+
+  replicated:
+    size: 2
+    minSize: 2
+---
+# bw-path: storage/rbd-image.yaml
+apiVersion: bootwright.io/v1alpha1
+kind: CephRBDImage
+metadata:
+  name: rbd-disk
+
+spec:
+  clusterRef: {{ $cluster }}
+  poolRef: rbd-data
+  sizeBytes: 1073741824
+---
+# bw-path: storage/client-rbd-canary.yaml
+apiVersion: bootwright.io/v1alpha1
+kind: CephClient
+metadata:
+  name: rbd-canary
+
+spec:
+  clusterRef: {{ $cluster }}
+  poolRef: rbd-data
+  access: readWrite
+{{- end }}
+{{- if $s.file }}
+---
+# bw-path: storage/pool-cephfs-data.yaml
+apiVersion: bootwright.io/v1alpha1
+kind: CephPool
+metadata:
+  name: cephfs-data
+
+spec:
+  clusterRef: {{ $cluster }}
+  role: cephfsData
+
+  replicated:
+    size: 2
+    minSize: 2
+---
+# bw-path: storage/pool-cephfs-metadata.yaml
+apiVersion: bootwright.io/v1alpha1
+kind: CephPool
+metadata:
+  name: cephfs-metadata
+
+spec:
+  clusterRef: {{ $cluster }}
+  role: cephfsMetadata
+
+  replicated:
+    size: 2
+    minSize: 2
+---
+# bw-path: storage/filesystem.yaml
+apiVersion: bootwright.io/v1alpha1
+kind: CephFilesystem
+metadata:
+  name: files
+
+spec:
+  clusterRef: {{ $cluster }}
+  metadataPoolRef: cephfs-metadata
+
+  dataPoolRefs:
+    - cephfs-data
+
+  mds:
+    activeCount: 1
+    standbyCountWanted: 1
+    standbyReplay: false
+
+  subvolumeGroups:
+    - name: apps
+      mode: '750'
+---
+# bw-path: storage/subvolume-docs.yaml
+apiVersion: bootwright.io/v1alpha1
+kind: CephSubvolume
+metadata:
+  name: docs
+
+spec:
+  clusterRef: {{ $cluster }}
+  filesystemRef: files
+  group: apps
+  sizeBytes: 1073741824
+  uid: 2000
+  gid: 2000
+  mode: '750'
+---
+# bw-path: storage/subvolume-cephfs-canary.yaml
+apiVersion: bootwright.io/v1alpha1
+kind: CephSubvolume
+metadata:
+  name: cephfs-canary
+
+spec:
+  clusterRef: {{ $cluster }}
+  filesystemRef: files
+  group: apps
+  sizeBytes: 1073741824
+  uid: 2000
+  gid: 2000
+  mode: '750'
+---
+# bw-path: storage/client-cephfs-canary.yaml
+apiVersion: bootwright.io/v1alpha1
+kind: CephClient
+metadata:
+  name: cephfs-canary
+
+spec:
+  clusterRef: {{ $cluster }}
+  subvolumeRef: cephfs-canary
+  access: readWrite
+{{- end }}
+{{- if $s.object }}
+---
+# bw-path: secret-descriptors/rgw-objects-tls.yaml
+apiVersion: bootwright.io/v1alpha1
+kind: Secret
+metadata:
+  name: rgw-objects-tls
+
+spec:
+  type: tlsCertificate
+
+  source:
+    generated:
+      commonName: s3.{{ $dom }}
+
+      dnsNames:
+        - s3.{{ $dom }}
+
+      ipAddresses:
+        - {{ $rgwVIP }}
+
+      validityDays: 3650
+---
+# bw-path: storage/object-gateway.yaml
+apiVersion: bootwright.io/v1alpha1
+kind: CephObjectGateway
+metadata:
+  name: objects
+
+spec:
+  clusterRef: {{ $cluster }}
+  serviceRef: rgw.objects
+  realm: objects
+  zoneGroup: objects
+  zone: objects
+
+  endpoint:
+    fqdn: s3.{{ $dom }}
+---
+# bw-path: storage/object-user.yaml
+apiVersion: bootwright.io/v1alpha1
+kind: CephObjectUser
+metadata:
+  name: s3-canary
+
+spec:
+  clusterRef: {{ $cluster }}
+  objectGatewayRef: objects
+  displayName: E2E canary
+---
+# bw-path: storage/object-bucket.yaml
+apiVersion: bootwright.io/v1alpha1
+kind: CephObjectBucket
+metadata:
+  name: s3-canary-bucket
+
+spec:
+  clusterRef: {{ $cluster }}
+  objectGatewayRef: objects
+  ownerRef: s3-canary
+{{- end }}
+{{- if $nfs }}
+---
+# bw-path: storage/nfs-export.yaml
+apiVersion: bootwright.io/v1alpha1
+kind: CephNFSExport
+metadata:
+  name: docs
+
+spec:
+  clusterRef: {{ $cluster }}
+  serviceID: shares
+  subvolumeRef: docs
+
+  native:
+    pseudo: /docs
+    access_type: NONE
+    squash: root_squash
+
+    protocols:
+      - 4
+
+    fsal:
+      name: CEPH
+
+    clients:
+      - access_type: NONE
+        squash: root_squash
+
+        addresses:
+          - {{ $rhel3 }}
+
+      - access_type: RW
+        squash: root_squash
+
+        addresses:
+          - {{ $v.host.network.cidr }}
+{{- end }}
+{{- if $smb }}
+---
+# bw-path: secret-descriptors/files-smb-user.yaml
+apiVersion: bootwright.io/v1alpha1
+kind: Secret
+metadata:
+  name: files-smb-user
+
+spec:
+  type: opaque
+
+  source:
+    contextStore: {}
+---
+# bw-path: storage/subvolume-smb-documents.yaml
+apiVersion: bootwright.io/v1alpha1
+kind: CephSubvolume
+metadata:
+  name: smb-documents
+
+spec:
+  clusterRef: {{ $cluster }}
+  filesystemRef: files
+  group: apps
+  sizeBytes: 1073741824
+  uid: 2000
+  gid: 2000
+  mode: '750'
+---
+# bw-path: storage/smb-cluster.yaml
+apiVersion: bootwright.io/v1alpha1
+kind: CephSMBResource
+metadata:
+  name: files-smb
+
+spec:
+  clusterRef: {{ $cluster }}
+
+  native:
+    resource_type: ceph.smb.cluster
+    cluster_id: files
+    auth_mode: user
+    clustering: always
+
+    user_group_settings:
+      - source_type: resource
+        ref: files
+
+    placement:
+      count: 2
+
+      hosts:
+        - rhel-02.{{ $dom }}
+        - rhel-03.{{ $dom }}
+---
+# bw-path: storage/smb-users.yaml
+apiVersion: bootwright.io/v1alpha1
+kind: CephSMBResource
+metadata:
+  name: files-users
+
+spec:
+  clusterRef: {{ $cluster }}
+
+  native:
+    resource_type: ceph.smb.usersgroups
+    users_groups_id: files
+
+    values:
+      users:
+        - name: smbuser
+
+      groups: []
+
+  secrets:
+    - path: /values/users/0/password
+      secretRef: files-smb-user
+---
+# bw-path: storage/smb-documents-share.yaml
+apiVersion: bootwright.io/v1alpha1
+kind: CephSMBResource
+metadata:
+  name: smb-documents
+
+spec:
+  clusterRef: {{ $cluster }}
+  smbClusterRef: files-smb
+  subvolumeRef: smb-documents
+
+  native:
+    resource_type: ceph.smb.share
+    share_id: documents
+    readonly: false
+
+    cephfs:
+      volume: files
+      subvolumegroup: apps
+      subvolume: smb-documents
+      path: /
+{{- end }}
+{{- if $s.observability }}
+---
+# bw-path: secret-descriptors/grafana-admin.yaml
+apiVersion: bootwright.io/v1alpha1
+kind: Secret
+metadata:
+  name: grafana-admin
+
+spec:
+  type: token
+
+  source:
+    generated:
+      bytes: 32
+---
+# bw-path: secret-descriptors/management-tls.yaml
+apiVersion: bootwright.io/v1alpha1
+kind: Secret
+metadata:
+  name: management-tls
+
+spec:
+  type: tlsCertificate
+
+  source:
+    generated:
+      commonName: management.{{ $dom }}
+
+      dnsNames:
+        - management.{{ $dom }}
+
+      ipAddresses:
+        - {{ $mgmtVIP }}
+
+      validityDays: 365
+{{- end }}
+{{- if $s.nvmeof }}
+---
+# bw-path: storage/pool-nvme-config.yaml
+apiVersion: bootwright.io/v1alpha1
+kind: CephPool
+metadata:
+  name: nvme-config
+
+spec:
+  clusterRef: {{ $cluster }}
+  role: rbd
+
+  replicated:
+    size: 2
+    minSize: 2
+---
+# bw-path: storage/pool-nvme-data.yaml
+apiVersion: bootwright.io/v1alpha1
+kind: CephPool
+metadata:
+  name: nvme-data
+
+spec:
+  clusterRef: {{ $cluster }}
+  role: rbd
+
+  replicated:
+    size: 2
+    minSize: 2
+---
+# bw-path: storage/rbd-image-nvme.yaml
+apiVersion: bootwright.io/v1alpha1
+kind: CephRBDImage
+metadata:
+  name: nvme-disk
+
+spec:
+  clusterRef: {{ $cluster }}
+  poolRef: nvme-data
+  sizeBytes: 1073741824
+
+  features:
+    - layering
+    - exclusive-lock
+    - object-map
+    - fast-diff
+    - deep-flatten
+---
+# bw-path: storage/nvmeof-subsystem.yaml
+apiVersion: bootwright.io/v1alpha1
+kind: CephNVMeoFSubsystem
+metadata:
+  name: application
+
+spec:
+  clusterRef: {{ $cluster }}
+  serviceRef: nvmeof.nvme-config.primary
+  nqn: nqn.2026-01.test.example:application
+
+  listeners:
+    - host: rhel-02
+    - host: rhel-03
+
+  namespaces:
+    - nsid: 1
+      imageRef: nvme-disk
+
+  hosts:
+    - nqn.2026-01.test.example:initiator
+{{- end }}
+{{- end }}

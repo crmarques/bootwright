@@ -18,7 +18,8 @@ import (
 
 func baremetalReadme(t *testing.T) string {
 	t.Helper()
-	content, err := os.ReadFile(filepath.Join(examplePath(t, "lab-baremetal"), "README.md"))
+	examplePath(t, "lab-baremetal")
+	content, err := os.ReadFile(filepath.Join("..", "..", "e2e", "runbooks", "lab-baremetal.md"))
 	if err != nil {
 		t.Fatal(err)
 	}

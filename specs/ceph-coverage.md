@@ -224,7 +224,8 @@ real hardware; emulated results do not substitute for it.
 
 Each profile is a public example directory `libvirt-<n>-nodes-ceph-<profile>/`
 under `examples/`, where `<n>` counts its Ceph hosts (`2x4` for two clusters
-of four), with one README runbook. The catalog follows these rules:
+of four), with one runbook `e2e/runbooks/<directory>.md` under
+[`e2e/`](../e2e/README.md). The catalog follows these rules:
 
 - Every Ceph daemon placement follows IBM's
   [colocation page](https://www.ibm.com/docs/en/storage-ceph/9.9.1?topic=recommendations-colocation)
@@ -292,7 +293,8 @@ the [B81](milestones/m2.md#b81) and [B492](milestones/m2.md#b492) resources
 that fit them: a placement policy, an RBD pool placed by it, an RBD image,
 replicated CephFS metadata and data pools, an `mds` service of two daemons
 bound to a filesystem with one active rank, one standby and a subvolume group,
-a subvolume in that group and the pool client. Its runbook follows the profile
+a subvolume in that group and the pool client. Its
+[runbook](../e2e/runbooks/libvirt-3-nodes-ceph-block-file.md) follows the profile
 runbook sections and records RBD and CephFS data checks with the administrator
 keyring, MDS failover, interruption and continuation, replay, changed-intent
 refusal and retirement with the hosts. Erasure-coded pools and the larger
@@ -300,8 +302,11 @@ CephFS shapes stay with P1 and P2.
 
 The [three-node object example](../examples/ceph-clusters/libvirt-3-nodes-ceph-object/README.md)
 and the [three-node NFS example](../examples/ceph-clusters/libvirt-3-nodes-ceph-nfs/README.md)
-are outside this catalog and claim no B484 row; their runbooks are inputs to
-P2's. The object example binds a CephObjectGateway to an rgw service of two
+are outside this catalog and claim no B484 row; their runbooks,
+[object](../e2e/runbooks/libvirt-3-nodes-ceph-object.md) and
+[NFS](../e2e/runbooks/libvirt-3-nodes-ceph-nfs.md), are inputs to
+[P2's](../e2e/runbooks/libvirt-6-nodes-ceph-services.md). The object
+example binds a CephObjectGateway to an rgw service of two
 daemons that terminate TLS themselves with a generated `tlsCertificate` Secret
 naming the gateway's endpoint, over the eight derived zone pools. Its runbook
 records an HTTPS status line from each daemon through the endpoint name with
@@ -330,7 +335,8 @@ ingress, VIP failover, multi-active NFS and the client guest.
 
 ### Profile runbooks
 
-Each P1 to P7 README has these `##` headings, each once and in this order.
+Each P1 to P7 runbook, `e2e/runbooks/<directory>.md` named after its example
+directory, has these `##` headings, each once and in this order.
 Other headings may sit between them:
 
 1. `## Budget and prerequisites`: the catalog row's numbers (IBM per guest and
@@ -339,7 +345,7 @@ Other headings may sit between them:
    `grep -m1 'model name' /proc/cpuinfo`.
 2. `## Initial setup`
 3. `## IBM entitlement`: both as the
-   [three-node example](../examples/ceph-clusters/libvirt-3-nodes-ceph/README.md) does.
+   [three-node runbook](../e2e/runbooks/libvirt-3-nodes-ceph.md) does.
 4. `## Create the context`: `validate` with its exact files-seen and
    objects-decoded counts, `context init`, `context update`, `context use`,
    `secret generate`, `secret set` and `secret check`.
@@ -387,8 +393,8 @@ The memory sampler starts in a second terminal just before
 while sleep 10; do date +%s; grep MemAvailable /proc/meminfo; done > "$ev/memavailable-clusters.txt"
 ```
 
-`TestCephProfileRunbooksHaveRequiredSections` checks each linked P1 to P7
-README for these headings and for every measured budget field name in its
+`TestCephProfileRunbooksHaveRequiredSections` checks the runbook of each
+linked P1 to P7 example for these headings and for every measured budget field name in its
 `## Measured budget` section.
 
 ## Stretch constraints
@@ -558,8 +564,9 @@ An omitted transport is no combination: it selects `verifiedTunnel`, as the
 [B485](milestones/m2.md#b485) repeats the applicable P1 to P7 feature and
 combination rows using BMC-installed hosts and real disks, on the
 [B78 host foundation](managed-os.md#physical-host-qualification) with B70 erase
-evidence. The [three-host physical example](../examples/ceph-clusters/physical-3-nodes-ceph/README.md)
-supplies the base installation and storage trajectory. Expand its authored
+evidence. The [three-host physical example](../examples/ceph-clusters/physical-3-nodes-ceph/)
+and its [runbook](../e2e/runbooks/physical-3-nodes-ceph.md) supply the base
+installation and storage trajectory. Expand its authored
 hosts, devices and native services to each catalog profile's required shape.
 
 | Physical profile | Required coverage beyond the common host foundation |
@@ -617,4 +624,5 @@ full P7/B484 qualification is not claimed. Its two clusters each declare
 51 GiB (16+16+11+8); the separate client adds 4 GiB. The authored total is
 106 GiB under OD21 (b); no reduced-memory variant is qualified. The 4 GiB
 controller reserve is additional. The client is realized in a separate
-machine-only context, as the runbook describes.
+machine-only context, as
+[its runbook](../e2e/runbooks/libvirt-2x4-nodes-ceph-multisite.md) describes.
