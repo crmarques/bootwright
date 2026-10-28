@@ -1282,9 +1282,13 @@ func contractInstallationPresence(t *testing.T, execution lifecycle.Execution) m
 	if request.TreeMedia != nil {
 		presence["treeIdentity"] = request.TreeMedia.SHA256
 	}
-	presence["update"] = map[string]any{"kernel": "", "packages": 0, "rebooted": false, "release": "", "state": "none", "transaction": 0}
+	presence["update"] = map[string]any{"kernel": "", "packages": 0, "pin": "", "rebooted": false, "release": "", "state": "none", "transaction": 0}
 	if request.Update != nil {
-		presence["update"] = map[string]any{"kernel": "5.14.0-611.5.1.el9_7.x86_64", "packages": 0, "rebooted": false,
+		pin := "variable"
+		if request.Registration != nil {
+			pin = "release"
+		}
+		presence["update"] = map[string]any{"kernel": "5.14.0-611.5.1.el9_7.x86_64", "packages": 0, "pin": pin, "rebooted": false,
 			"release": request.Update.Release, "state": "complete", "transaction": 0}
 	}
 	return presence

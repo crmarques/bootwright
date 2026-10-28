@@ -225,6 +225,13 @@ type Registration struct {
 	EntitlementRef   string                   `json:"entitlementRef"`
 	OrganizationRef  string                   `json:"organizationRef"`
 	Repositories     SubscriptionRepositories `json:"repositories"`
+	Satellite        *Satellite               `json:"satellite,omitempty"`
+}
+
+type Satellite struct {
+	ContentBaseURL string `json:"contentBaseURL"`
+	Hostname       string `json:"hostname"`
+	TrustBundleRef string `json:"trustBundleRef"`
 }
 
 type Update struct {
@@ -347,6 +354,9 @@ func (r Request) SecretReferences() []string {
 	}
 	if r.Registration != nil {
 		references = append(references, r.Registration.OrganizationRef, r.Registration.ActivationKeyRef)
+		if r.Registration.Satellite != nil {
+			references = append(references, r.Registration.Satellite.TrustBundleRef)
+		}
 	}
 	if r.Image != nil {
 		references = append(references, r.Image.CertificateRef)

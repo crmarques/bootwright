@@ -75,7 +75,7 @@ func TestPhysicalEraseUnstartedRequiresPositiveOriginalAndPairedRetention(t *tes
 			pairs[0].Removed.State = reconciliation.BlockUnknown
 		},
 		"erase claimed instead": func(_ []lifecycle.BlockEvidence, pairs []lifecycle.RemovalEvidence) {
-			pairs[0].Removed.Evidence = json.RawMessage(`{"version":"physical-erase-v5","request":"wrong","prepared":true,"removed":true}`)
+			pairs[0].Removed.Evidence = json.RawMessage(`{"version":"physical-erase-v6","request":"wrong","prepared":true,"removed":true}`)
 		},
 	} {
 		t.Run(name, func(t *testing.T) {

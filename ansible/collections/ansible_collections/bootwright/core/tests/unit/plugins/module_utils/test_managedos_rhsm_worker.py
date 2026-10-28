@@ -16,6 +16,7 @@ import io
 import json
 import os
 import re
+import stat
 import sys
 import types
 
@@ -158,8 +159,12 @@ class Setup:
         self.bus = FakeBus(self.cert, consumer=consumer, error=error, observe=observe)
         self.run = Runner(code, effect)
         self.capture = capture or Capture()
+        self.ca_directory = str(tmp_path / "rhsm-ca")
+        os.makedirs(self.ca_directory, exist_ok=True)
+        self.ca = os.path.join(self.ca_directory, "bootwright-satellite.pem")
         self.guest = worker.Guest(cert=self.cert, record=self.record, directory=self.directory, owner=os.getuid(),
-                                  run=self.run, bus=lambda: self.bus, identity=fake_identity, capture=self.capture)
+                                  run=self.run, bus=lambda: self.bus, identity=fake_identity, capture=self.capture,
+                                  ca=self.ca, ca_directory=self.ca_directory, group=os.getgid())
 
     def with_cert(self, consumer):
         with open(self.cert, "w", encoding="ascii") as handle:
@@ -182,7 +187,7 @@ class Setup:
     def call(self, operation, **values):
         payload = {"operation": operation, "request": DIGEST}
         if operation == "register":
-            payload.update({"organization": ORG, "activationKey": KEY, "enable": [], "disable": [], "release": ""})
+            payload.update({"organization": ORG, "activationKey": KEY, "enable": [], "disable": [], "release": "", "satellite": None})
         payload.update(values)
         output = io.StringIO()
         assert worker.main(stdin=io.BytesIO(json.dumps(payload).encode()), stdout=output, guest=self.guest) == 0
@@ -199,7 +204,7 @@ def test_registers_once_and_records_the_consumer(tmp_path):
     seen = []
     setup = Setup(tmp_path, observe=lambda: seen.append(setup.record_bytes()))
     answer = setup.call("register")[0]
-    assert answer == {"ok": True, "result": {"changed": True, "consumer": UNEW, "owned": True,
+    assert answer == {"ok": True, "result": {"changed": True, "consumer": UNEW, "owned": True, "release": "",
                                              "repositories": {"disable": [], "enable": []}, "state": "registered"}}
     assert seen == [canonical("")]
     assert setup.bus.registrations() == [("Register", ORG, [KEY], "s", {}, "sv", {}, "sv", "", worker.REGISTER_CEILING)]
@@ -256,7 +261,7 @@ def test_replays_an_owned_registration_unchanged(tmp_path):
     setup.with_record(U1)
     before = setup.record_bytes()
     answer = setup.call("register", enable=["rhel-9-for-x86_64-baseos-rpms"])[0]
-    assert answer == {"ok": True, "result": {"changed": False, "consumer": U1, "owned": True,
+    assert answer == {"ok": True, "result": {"changed": False, "consumer": U1, "owned": True, "release": "",
                                              "repositories": {"disable": [], "enable": ["rhel-9-for-x86_64-baseos-rpms"]},
                                              "state": "unchanged"}}
     assert setup.bus.calls == []
@@ -298,7 +303,7 @@ def test_unregisters_only_its_own_consumer_and_proves_absence(tmp_path):
     setup.with_cert(U1)
     setup.with_record(U1)
     answer = setup.call("unregister")[0]
-    assert answer == {"ok": True, "result": {"changed": True, "consumer": U1, "owned": False,
+    assert answer == {"ok": True, "result": {"changed": True, "consumer": U1, "owned": False, "release": "",
                                              "repositories": {"disable": [], "enable": []}, "state": "unregistered"}}
     assert setup.run.calls == [([SM, "unregister"], worker.UNREGISTER_CEILING)]
     assert setup.record_bytes() is None
@@ -411,6 +416,7 @@ def test_a_release_is_proved_offered_and_set_before_the_repositories_on_every_ru
     assert setup.run.calls == [([SM, "release", "--set=9.8"], worker.RELEASE_CEILING),
                                ([SM, "repos", "--enable=rhel-9-for-x86_64-baseos-rpms"], worker.REPOSITORIES_CEILING)] * 2
     assert worker.REGISTER_CEILING + worker.REPOSITORIES_CEILING + 2 * worker.RELEASE_CEILING <= 750 - 30
+    assert worker.REGISTER_CEILING + worker.REPOSITORIES_CEILING + 2 * worker.RELEASE_CEILING + worker.CONFIG_CEILING <= 810 - 30
 
     fresh = Setup(tmp_path / "fresh")
     assert fresh.call("register", release="10.0")[0]["result"]["state"] == "registered"
@@ -437,6 +443,170 @@ def test_a_release_the_service_does_not_offer_or_set_refuses_before_the_reposito
     assert not any(call[0][1] == "repos" for call in setup.run.calls)
 
 
+PEM = "-----BEGIN CERTIFICATE-----\nMIIBszCCAVmgAwIBAgIUQ0FTRUxMSVRF\nU0FURUxMSVRF\n-----END CERTIFICATE-----\n"
+SATELLITE = {"hostname": "satellite.example.test", "contentBaseURL": "https://capsule.example.test/pulp/content", "caBundle": PEM}
+CONFIG = [SM, "config", "--server.hostname=satellite.example.test", "--server.port=443", "--server.prefix=/rhsm",
+          "--server.insecure=0", "--rhsm.baseurl=https://capsule.example.test/pulp/content"]
+
+
+def config_call(setup):
+    return (CONFIG + ["--rhsm.repo_ca_cert=" + setup.ca], worker.CONFIG_CEILING)
+
+
+def test_a_satellite_gets_its_ca_and_configuration_before_the_registration(tmp_path):
+    seen = []
+    setup = Setup(tmp_path, observe=lambda: seen.append((os.path.exists(setup.ca), list(setup.run.calls))))
+    answer = setup.call("register", satellite=SATELLITE, enable=["rhel-9-for-x86_64-baseos-rpms"])[0]
+    assert answer["ok"] is True and answer["result"]["state"] == "registered" and answer["result"]["release"] == ""
+    assert seen == [(True, [config_call(setup)])]
+    assert setup.run.calls == [config_call(setup), ([SM, "repos", "--enable=rhel-9-for-x86_64-baseos-rpms"], worker.REPOSITORIES_CEILING)]
+    status = os.lstat(setup.ca)
+    assert status.st_mode & 0o777 == 0o644 and (status.st_uid, status.st_gid) == (os.getuid(), os.getgid())
+    with open(setup.ca, "rb") as handle:
+        assert handle.read() == PEM.encode()
+    assert os.listdir(setup.ca_directory) == ["bootwright-satellite.pem"]
+    assert setup.bus.registrations() == [("Register", ORG, [KEY], "s", {}, "sv", {}, "sv", "", worker.REGISTER_CEILING)]
+    for argv in (call[0] for call in setup.run.calls):
+        assert "--insecure" not in argv and "--server.insecure=1" not in argv and not any("katello" in item for item in argv)
+
+
+@pytest.mark.parametrize("state", ["owned", "pending"])
+def test_an_owned_or_adopted_satellite_registration_is_configured_on_every_run(tmp_path, state):
+    setup = Setup(tmp_path)
+    setup.with_cert(U1)
+    setup.with_record(U1 if state == "owned" else "")
+    first = setup.call("register", satellite=SATELLITE)[0]
+    assert first["result"]["state"] == ("unchanged" if state == "owned" else "adopted") and first["result"]["changed"] is True
+    second = setup.call("register", satellite=SATELLITE)[0]
+    assert second["result"]["state"] == "unchanged" and second["result"]["changed"] is False
+    assert setup.run.calls == [config_call(setup)] * 2 and setup.bus.calls == []
+
+
+def test_a_foreign_registration_is_not_reconfigured_for_a_satellite(tmp_path):
+    setup = Setup(tmp_path)
+    setup.with_cert(U2)
+    assert setup.call("register", satellite=SATELLITE)[0] == {"ok": False, "reason": "registration-foreign"}
+    assert setup.run.calls == [] and not os.path.exists(setup.ca)
+
+
+@pytest.mark.parametrize("planted", ["symlink", "directory", "fifo"])
+def test_a_ca_path_that_is_not_a_regular_file_refuses_and_is_left(tmp_path, planted):
+    setup = Setup(tmp_path)
+    target = str(tmp_path / "elsewhere.pem")
+    with open(target, "w", encoding="ascii") as handle:
+        handle.write("kept")
+    if planted == "symlink":
+        os.symlink(target, setup.ca)
+    elif planted == "directory":
+        os.mkdir(setup.ca)
+    else:
+        os.mkfifo(setup.ca)
+    answer = setup.call("register", satellite=SATELLITE)[0]
+    assert answer == {"ok": False, "reason": "registration-unavailable", "cause": "tooling"}
+    assert setup.run.calls == [] and setup.bus.calls == []
+    with open(target, encoding="ascii") as handle:
+        assert handle.read() == "kept"
+    assert os.path.lexists(setup.ca) and not os.path.lexists(os.path.join(setup.ca_directory, ".bootwright-satellite.pem.tmp"))
+
+
+def test_a_ca_file_of_another_mode_or_content_is_replaced(tmp_path):
+    setup = owned_setup(tmp_path)
+    with open(setup.ca, "w", encoding="ascii") as handle:
+        handle.write(PEM)
+    os.chmod(setup.ca, 0o666)
+    assert setup.call("register", satellite=SATELLITE)[0]["result"]["changed"] is True
+    assert os.lstat(setup.ca).st_mode & 0o777 == 0o644
+    other = dict(SATELLITE, caBundle=PEM + PEM)
+    assert setup.call("register", satellite=other)[0]["result"]["changed"] is True
+    with open(setup.ca, "rb") as handle:
+        assert handle.read() == (PEM + PEM).encode()
+
+
+@pytest.mark.parametrize("code, expected", [
+    (None, {"ok": False, "reason": "registration-unavailable", "cause": "timeout"}),
+    (1, {"ok": False, "reason": "registration-unavailable", "cause": "tooling"}),
+])
+def test_a_configuration_that_fails_refuses_before_the_registration(tmp_path, code, expected):
+    setup = Setup(tmp_path, code=code)
+    assert setup.call("register", satellite=SATELLITE)[0] == expected
+    assert setup.bus.calls == [] and setup.run.calls == [config_call(setup)]
+
+
+TRUST_FAILURE = json.dumps({"exception": "SSLCertVerificationError", "severity": "error",
+                            "message": "[SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: self-signed certificate in chain"})
+TRUST_TEXT = json.dumps({"exception": "ConnectionException", "severity": "error",
+                         "message": "Unable to verify server's identity: [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed"})
+
+
+@pytest.mark.parametrize("message", [TRUST_FAILURE, TRUST_TEXT], ids=["exception", "text"])
+def test_a_certificate_the_bundle_does_not_verify_refuses_registration_trust(tmp_path, message):
+    setup = Setup(tmp_path, error=DBusException(message))
+    answer, text = setup.call("register", satellite=SATELLITE)
+    assert answer == {"ok": False, "reason": "registration-trust"}
+    assert "self-signed" not in text and "SSL" not in text
+    hosted = Setup(tmp_path / "hosted", error=DBusException(message))
+    assert hosted.call("register")[0]["reason"] != "registration-trust"
+
+
+@pytest.mark.parametrize("satellite", [
+    dict(SATELLITE, hostname="https://satellite.example.test"), dict(SATELLITE, hostname="sat ellite"), dict(SATELLITE, hostname=""),
+    dict(SATELLITE, contentBaseURL="http://capsule.example.test/pulp/content"),
+    dict(SATELLITE, contentBaseURL="https://capsule.example.test/pulp/content?x=1"),
+    dict(SATELLITE, contentBaseURL="https://capsule.example.test/pulp/content#x"),
+    dict(SATELLITE, contentBaseURL="https://user@capsule.example.test/pulp/content"),
+    dict(SATELLITE, caBundle=""), dict(SATELLITE, caBundle="not a certificate"),
+    dict(SATELLITE, caBundle=PEM + "-----BEGIN PRIVATE KEY-----\nAAAA\n-----END PRIVATE KEY-----\n"),
+    dict(SATELLITE, caBundle=PEM + "trailing"), dict(SATELLITE, caBundle=PEM * 33),
+    dict(SATELLITE, caBundle=PEM.replace("MIIB", "MI\u00e9B")), dict(SATELLITE, caBundle=None),
+    {"hostname": "satellite.example.test", "contentBaseURL": "https://capsule.example.test/pulp/content"},
+    dict(SATELLITE, extra=1), "satellite.example.test", {},
+])
+def test_a_satellite_outside_the_grammar_is_refused_before_any_call(tmp_path, satellite):
+    setup = Setup(tmp_path)
+    assert setup.call("register", satellite=satellite)[0] == {"ok": False, "reason": "registration-input"}
+    assert setup.run.calls == [] and setup.bus.calls == [] and not os.path.lexists(setup.ca)
+
+
+def test_a_bundle_at_its_bounds_is_accepted():
+    many = PEM * worker.MAX_CERTIFICATES
+    assert worker.ca_bundle(many) == many.encode()
+    assert worker.ca_bundle("\n " + PEM + "\r\n") == ("\n " + PEM + "\r\n").encode()
+    with pytest.raises(worker.Refused):
+        worker.ca_bundle(PEM + " " * worker.MAX_BUNDLE)
+
+
+@pytest.mark.parametrize("satellite, listed, argv, pinned", [
+    (None, LISTED, [SM, "release", "--set=9.8"], "set"),
+    (SATELLITE, LISTED, [SM, "release", "--set=9.8"], "set"),
+    (SATELLITE, b"9.6\n9.7\n", [SM, "release", "--unset"], "unset"),
+    (SATELLITE, b"", [SM, "release", "--unset"], "unset"),
+], ids=["hosted-offered", "satellite-offered", "satellite-not-offered", "satellite-none-offered"])
+def test_the_release_pin_follows_the_registration(tmp_path, satellite, listed, argv, pinned):
+    setup = owned_setup(tmp_path, capture=Capture((0, listed)))
+    values = {"enable": ["rhel-9-for-x86_64-baseos-rpms"], "release": "9.8"}
+    if satellite is not None:
+        values["satellite"] = satellite
+    answer = setup.call("register", **values)[0]
+    assert answer["ok"] is True and answer["result"]["release"] == pinned
+    calls = [call for call in setup.run.calls if call[0][1] != "config"]
+    assert calls == [(argv, worker.RELEASE_CEILING), ([SM, "repos", "--enable=rhel-9-for-x86_64-baseos-rpms"], worker.REPOSITORIES_CEILING)]
+
+
+def test_the_hosted_service_still_refuses_a_release_it_does_not_offer(tmp_path):
+    setup = owned_setup(tmp_path, capture=Capture((0, b"9.6\n9.7\n")))
+    assert setup.call("register", release="9.8")[0] == {"ok": False, "reason": "update-release-unavailable"}
+    assert setup.run.calls == []
+
+
+def test_inspect_and_unregister_read_no_satellite(tmp_path):
+    setup = Setup(tmp_path)
+    setup.with_cert(U1)
+    setup.with_record(U1)
+    assert setup.call("inspect", satellite=SATELLITE)[0] == {"ok": False, "reason": "registration-input"}
+    assert setup.call("inspect")[0]["result"]["release"] == ""
+    assert setup.run.calls == [] and not os.path.lexists(setup.ca)
+
+
 @pytest.mark.parametrize("release", ["9", "9.08", "9.8.1", "9.8 ", "--set=9.8", 9.8, None])
 def test_a_release_outside_the_grammar_is_refused_before_any_call(tmp_path, release):
     setup = owned_setup(tmp_path)
@@ -453,7 +623,7 @@ def test_worker_answers_transport_for_any_unexpected_failure(tmp_path):
                  json.dumps({"operation": "inspect", "request": "ABC"}).encode(),
                  json.dumps({"operation": "inspect", "request": DIGEST, "extra": 1}).encode(),
                  json.dumps({"operation": "register", "request": DIGEST, "organization": "a b", "activationKey": KEY,
-                             "enable": [], "disable": []}).encode(),
+                             "enable": [], "disable": [], "release": "", "satellite": None}).encode(),
                  b" " * (worker.MAX_INPUT + 1)):
         output = io.StringIO()
         assert worker.main(stdin=io.BytesIO(data), stdout=output, guest=setup.guest) == 0
@@ -501,3 +671,80 @@ def test_worker_source_loads_with_the_standard_library_only(monkeypatch):
     for node in ast.walk(tree):
         if isinstance(node, ast.Constant) and isinstance(node.value, str):
             assert not re.search(r"-v[0-9]+\b", node.value), node.value
+
+
+def test_the_worker_accepts_every_bundle_and_content_root_go_admits(tmp_path):
+    spaced = PEM.replace("MIIBszCCAVmgAwIBAgIUQ0FTRUxMSVRF\n", "MIIBszCCAVmgAwIBAgIUQ0FTRUxMSVRF  \t\n")
+    framed = "\v\f\n" + PEM.replace("-----END CERTIFICATE-----\n", "-----END CERTIFICATE----- \t\r\n") + "\f\v"
+    for bundle in (spaced, framed, PEM + "\n\n" + PEM):
+        assert worker.ca_bundle(bundle) == bundle.encode()
+    for root in ("https://capsule.example.test/pulp/a@b\\c", "https://capsule.example.test/" + "a" * 2000):
+        satellite = worker.satellite_of(dict(SATELLITE, contentBaseURL=root))
+        assert satellite["contentBaseURL"] == root
+    with pytest.raises(worker.Refused):
+        worker.satellite_of(dict(SATELLITE, contentBaseURL="https://capsule.example.test/" + "a" * 2048))
+    setup = Setup(tmp_path)
+    assert setup.call("register", satellite=dict(SATELLITE, caBundle=spaced))[0]["ok"] is True
+    with open(setup.ca, "rb") as handle:
+        assert handle.read() == spaced.encode()
+
+
+@pytest.mark.parametrize("parent", ["symlink", "group-writable", "missing"])
+def test_a_ca_directory_that_is_not_root_s_own_refuses_and_writes_nothing(tmp_path, parent):
+    setup = Setup(tmp_path)
+    real = str(tmp_path / "real-ca")
+    os.mkdir(real)
+    os.rmdir(setup.ca_directory)
+    if parent == "symlink":
+        os.symlink(real, setup.ca_directory)
+    elif parent == "group-writable":
+        os.mkdir(setup.ca_directory)
+        os.chmod(setup.ca_directory, 0o775)
+    answer = setup.call("register", satellite=SATELLITE)[0]
+    assert answer == {"ok": False, "reason": "registration-unavailable", "cause": "tooling"}
+    assert os.listdir(real) == [] and setup.run.calls == [] and setup.bus.calls == []
+
+
+def test_a_failed_ca_write_refuses_tooling_and_leaves_no_stage(tmp_path):
+    setup = Setup(tmp_path)
+    os.mkdir(os.path.join(setup.ca_directory, ".bootwright-satellite.pem.tmp"))
+    answer = setup.call("register", satellite=SATELLITE)[0]
+    assert answer == {"ok": False, "reason": "registration-unavailable", "cause": "tooling"}
+    assert setup.run.calls == [] and not os.path.lexists(setup.ca)
+
+    failing = Setup(tmp_path / "failing")
+
+    def broken(*arguments, **options):
+        raise OSError("disk full")
+
+    failing.guest.publish_ca = lambda parent, bundle: broken()
+    assert failing.call("register", satellite=SATELLITE)[0] == {"ok": False, "reason": "registration-unavailable", "cause": "tooling"}
+
+
+def test_a_failed_stage_write_removes_its_stage(tmp_path, monkeypatch):
+    setup = Setup(tmp_path)
+    real_fsync = os.fsync
+
+    def failing_fsync(descriptor):
+        if stat.S_ISREG(os.fstat(descriptor).st_mode):
+            raise OSError("io error")
+        return real_fsync(descriptor)
+
+    monkeypatch.setattr(worker.os, "fsync", failing_fsync)
+    answer = setup.call("register", satellite=SATELLITE)[0]
+    assert answer == {"ok": False, "reason": "registration-unavailable", "cause": "tooling"}
+    assert os.listdir(setup.ca_directory) == []
+
+
+@pytest.mark.parametrize("answer", [(1, b""), (1, b"9.8\n")], ids=["failed-empty", "failed-listing"])
+def test_a_release_list_that_fails_on_a_satellite_unsets_the_release(tmp_path, answer):
+    setup = owned_setup(tmp_path, capture=Capture(answer))
+    result = setup.call("register", satellite=SATELLITE, release="9.8")[0]
+    assert result["ok"] is True and result["result"]["release"] == "unset"
+    assert [call[0] for call in setup.run.calls if call[0][1] == "release"] == [[SM, "release", "--unset"]]
+    failing = owned_setup(tmp_path / "unreachable", capture=Capture(answer))
+    failing.guest.run = lambda argv, timeout: 1 if argv[1] == "release" else 0
+    assert failing.call("register", satellite=SATELLITE, release="9.8")[0] == {
+        "ok": False, "reason": "registration-unavailable", "cause": "service"}
+    hosted = owned_setup(tmp_path / "hosted", capture=Capture(answer))
+    assert hosted.call("register", release="9.8")[0] == {"ok": False, "reason": "registration-unavailable", "cause": "service"}

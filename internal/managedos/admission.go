@@ -448,9 +448,41 @@ func ValidateRHSM(o api.Object, authored bool) []api.Issue {
 					"set spec.rhsm.organizationRef and spec.rhsm.activationKeyRef"))
 			}
 		}
+		if !authored && o.Spec().Get("type").Text() == "redhatRhel" && rhsm.Has("satellite") {
+			issues = add(issues, validateSatellite(o, rhsm.Get("satellite"))...)
+		}
 	}
 	return issues
 }
+
+func validateSatellite(o api.Object, satellite api.Value) []api.Issue {
+	var issues []api.Issue
+	if !satellite.Has("trustBundleRef") {
+		issues = add(issues, issue("$.spec.rhsm.satellite.trustBundleRef",
+			"a registration with a Satellite or Capsule verifies its certificate against a declared CA bundle, and "+o.Identity()+" names none",
+			"set spec.rhsm.satellite.trustBundleRef on "+o.Identity()+" to the caBundle Secret holding the CA that signs the certificate of "+
+				satellite.Get("hostname").Text()+", such as the Satellite's katello-server-ca.crt"))
+	}
+	if raw := satellite.Get("contentBaseURL").Text(); raw != "" && !satelliteContentRoot(raw) {
+		issues = add(issues, issue("$.spec.rhsm.satellite.contentBaseURL",
+			"the content root of a Satellite is an https URL of at most 2048 printable ASCII characters with a host and no query, fragment or user information",
+			"set spec.rhsm.satellite.contentBaseURL on "+o.Identity()+" to an https URL such as https://"+satellite.Get("hostname").Text()+
+				"/pulp/content, or remove it to take that default"))
+	}
+	return issues
+}
+
+func satelliteContentRoot(raw string) bool {
+	if len(raw) > maxSatelliteContentRoot || strings.ContainsFunc(raw, func(r rune) bool { return r < 0x21 || r > 0x7e }) {
+		return false
+	}
+	parsed, err := url.Parse(raw)
+	return err == nil && parsed.Scheme == "https" && parsed.Host != "" && len(parsed.Host) <= 255 && parsed.Hostname() != "" &&
+		parsed.User == nil && parsed.RawQuery == "" && !parsed.ForceQuery && parsed.Fragment == "" &&
+		!strings.ContainsAny(raw, "#?") && !strings.ContainsAny(parsed.Host, "@\\")
+}
+
+const maxSatelliteContentRoot = 2048
 
 // externalRHSMField refuses registration detail on an externally managed
 // registration, which partial and complete validation both report.

@@ -80,25 +80,9 @@ func validateTLS(certificate, privateKey []byte, now time.Time) error {
 }
 
 func parseCertificates(data []byte) ([]*x509.Certificate, error) {
-	remainder := trimPEMWhitespace(data)
-	certificates := []*x509.Certificate{}
-	for len(remainder) > 0 {
-		block, rest, ok := strictPEMBlock(remainder)
-		if !ok {
-			return nil, failure("input", "certificate material must contain only complete PEM certificate blocks", "")
-		}
-		if block == nil || block.Type != "CERTIFICATE" || len(block.Headers) != 0 {
-			return nil, failure("input", "certificate material contains an invalid PEM block", "")
-		}
-		parsed, err := x509.ParseCertificates(block.Bytes)
-		if err != nil || len(parsed) != 1 {
-			return nil, failure("input", "certificate material contains an invalid X.509 certificate", "")
-		}
-		certificates = append(certificates, parsed[0])
-		remainder = trimPEMWhitespace(rest)
-	}
-	if len(certificates) == 0 {
-		return nil, failure("input", "certificate material is empty", "")
+	certificates, problem := secrets.CertificateBundle(data)
+	if problem != "" {
+		return nil, failure("input", problem, "")
 	}
 	return certificates, nil
 }
@@ -142,51 +126,9 @@ func exactPrivatePEM(data []byte) (*pem.Block, error) {
 // strictPEMBlock decodes only the first complete block. encoding/pem.Decode is
 // intentionally permissive and can skip malformed or nested BEGIN records;
 // secret material must account for every non-whitespace input byte instead.
-func strictPEMBlock(data []byte) (*pem.Block, []byte, bool) {
-	data = bytes.TrimLeft(data, " \t\r\n\v\f")
-	const beginPrefix = "-----BEGIN "
-	const lineSuffix = "-----"
-	if !bytes.HasPrefix(data, []byte(beginPrefix)) {
-		return nil, data, false
-	}
-	beginEnd := bytes.IndexByte(data, '\n')
-	if beginEnd < 0 {
-		return nil, data, false
-	}
-	beginLine := bytes.TrimSuffix(data[:beginEnd], []byte{'\r'})
-	if !bytes.HasSuffix(beginLine, []byte(lineSuffix)) {
-		return nil, data, false
-	}
-	typeName := beginLine[len(beginPrefix) : len(beginLine)-len(lineSuffix)]
-	if len(typeName) == 0 || bytes.ContainsAny(typeName, "\r\n") {
-		return nil, data, false
-	}
-	endMarker := append([]byte("\n-----END "), typeName...)
-	endMarker = append(endMarker, []byte(lineSuffix)...)
-	endStart := bytes.Index(data, endMarker)
-	if endStart < 0 || bytes.Contains(data[beginEnd:endStart], []byte("\n-----BEGIN ")) {
-		return nil, data, false
-	}
-	afterMarker := endStart + len(endMarker)
-	lineEnd := bytes.IndexByte(data[afterMarker:], '\n')
-	consumed := len(data)
-	if lineEnd >= 0 {
-		consumed = afterMarker + lineEnd + 1
-	}
-	if len(bytes.Trim(data[afterMarker:consumed], " \t\r\n")) != 0 {
-		return nil, data, false
-	}
-	blockBytes := data[:consumed]
-	block, ignored := pem.Decode(blockBytes)
-	if block == nil || len(trimPEMWhitespace(ignored)) != 0 || block.Type != string(typeName) {
-		return nil, data, false
-	}
-	return block, data[consumed:], true
-}
+func strictPEMBlock(data []byte) (*pem.Block, []byte, bool) { return secrets.StrictPEMBlock(data) }
 
-func trimPEMWhitespace(data []byte) []byte {
-	return bytes.Trim(data, " \t\r\n\v\f")
-}
+func trimPEMWhitespace(data []byte) []byte { return secrets.TrimPEMWhitespace(data) }
 
 func validCertificatePrivateKey(key any) bool {
 	switch value := key.(type) {

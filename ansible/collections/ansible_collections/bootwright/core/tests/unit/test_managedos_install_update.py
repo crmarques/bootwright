@@ -287,3 +287,22 @@ def test_the_registration_sets_the_release_before_the_repositories():
     plain = dict(scope(False)["bootwright_os_install_request"], **registering)
     assert render(arguments["release"], bootwright_os_install_request=plain) == ""
     assert int(render(arguments["timeout"], bootwright_os_install_request=plain)) == 630
+
+
+@pytest.mark.parametrize("registration, answered, pin", [
+    (None, None, "variable"),
+    ({"entitlementRef": "rhel"}, "set", "release"),
+    ({"entitlementRef": "rhel", "satellite": {"hostname": "satellite.example.test"}}, "set", "release"),
+    ({"entitlementRef": "rhel", "satellite": {"hostname": "satellite.example.test"}}, "unset", "contentView"),
+    ({"entitlementRef": "rhel"}, "", ""),
+    ({"entitlementRef": "rhel"}, None, ""),
+], ids=["no-registration", "hosted", "satellite-offered", "satellite-content-view", "no-release", "no-answer"])
+def test_the_update_names_the_pin_its_registration_answered(registration, answered, pin):
+    request = scope()["bootwright_os_install_request"]
+    if registration is not None:
+        request = dict(request, registration=registration)
+    variables = {"bootwright_os_install_request": request}
+    if answered is not None:
+        variables["managedos_install_anaconda_registration_result"] = {"ok": True, "registration": {"release": answered}}
+    assert render(module("update_session.yml")[UPDATE]["pin"], **variables) == pin
+    assert "pin" not in module("update_observe.yml")[UPDATE]

@@ -62,6 +62,8 @@ options:
         removal of the consumer this installation created.
       - C(registration-repositories) names subscription repository IDs the
         subscription service did not accept.
+      - C(registration-trust) names a Satellite whose certificate the CA
+        bundle its Entitlement declares does not verify.
       - C(registration-unreachable) names an installed system a removal could
         not read through its identity channel or its pinned connection, so
         the registration its installation created was not removed. It is

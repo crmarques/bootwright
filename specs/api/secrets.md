@@ -188,25 +188,32 @@ or storage-cluster field.
 | `organizationRef` | string | conditional | — | Required for managed RHSM; `opaque` Secret containing the organization identifier. Access credential: registration presents it. |
 | `activationKeyRef` | string | conditional | — | Required for managed RHSM; `opaque` or `token` Secret containing the activation key. Access credential: registration presents it. |
 | `connectToInsights` | boolean | no | `false` | Future managed-registration enrollment intent. |
-| `satellite` | object | no | omitted | Optional managed Satellite/Capsule redirect. |
+| `satellite` | object | no | omitted | The Satellite or Capsule a managed registration uses instead of the hosted subscription service. |
 
 An external RHSM arm may contain only `management: external`.
 `organizationRef`, `activationKeyRef`, `connectToInsights`, and `satellite`
 are rejected there.
 
 `satellite` contains `hostname`, `trustBundleRef`, then `contentBaseURL`.
-`hostname` is required when the block is present and is a bare host with no
-scheme, path, whitespace, or surrounding whitespace. `trustBundleRef`, when
-set, names a `caBundle` Secret, an access credential. `contentBaseURL`, when set, is an absolute
-HTTP(S) URL; omission derives
-`https://<hostname>/pulp/content` during normalization.
+`hostname` is required when the block is present, names the Satellite or a
+Capsule, and is a bare host with no scheme, path, whitespace, or surrounding
+whitespace. `trustBundleRef` names a `caBundle` Secret holding the CA that
+signs that server's certificate, such as the Satellite's
+`katello-server-ca.crt`, an access credential; on a `redhatRhel` Entitlement
+it is required whenever `satellite` is present. `contentBaseURL` is the content
+root rhsm appends every repository path to (`rhsm.baseurl`); omission derives
+`https://<hostname>/pulp/content` during normalization, and on a `redhatRhel`
+Entitlement it is an `https` URL of at most 2048 printable ASCII characters
+with a host and no query, fragment or user information. Each refusal names its field and the change that admits it.
 
 `management: managed` registers each Bootwright-installed virtual Machine whose
 install profile selects the Entitlement in `spec.subscription`, proving and
 removing only the consumer its installation created
 ([managed OS](../managed-os.md#registration)); `management: external` is a
-declaration and runs no registration. `satellite` and `connectToInsights: true`
-are admitted and refuse before registration, as rows of the managed-OS
+declaration and runs no registration. With `satellite` the registration
+reaches that server over its declared CA bundle
+([registration](../managed-os.md#registration)). `connectToInsights: true` is
+admitted and refuses before registration, as a row of the managed-OS
 installation's [refusal table](../managed-os.md#refusal-table).
 
 ### Registry and license

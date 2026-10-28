@@ -80,8 +80,8 @@ func completedUpdate(request Request) UpdateEvidence {
 	if request.Update == nil {
 		return UpdateEvidence{State: updateNone}
 	}
-	return UpdateEvidence{Kernel: "5.14.0-611.5.1.el9_7.x86_64", Packages: 212, Rebooted: true, Release: request.Update.Release,
-		State: updateComplete, Transaction: 3}
+	return UpdateEvidence{Kernel: "5.14.0-611.5.1.el9_7.x86_64", Packages: 212, Pin: updatePins(request)[0], Rebooted: true,
+		Release: request.Update.Release, State: updateComplete, Transaction: 3}
 }
 
 // treeIdentity is the identity a tree extracted from the request's frozen

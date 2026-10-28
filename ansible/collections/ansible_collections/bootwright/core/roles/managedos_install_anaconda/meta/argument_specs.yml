@@ -111,6 +111,19 @@ argument_specs:
                     type: list
                     elements: str
                     required: true
+              satellite:
+                type: dict
+                required: false
+                options:
+                  contentBaseURL:
+                    type: str
+                    required: true
+                  hostname:
+                    type: str
+                    required: true
+                  trustBundleRef:
+                    type: str
+                    required: true
           target:
             type: dict
             required: true
@@ -143,7 +156,7 @@ argument_specs:
           version:
             type: str
             required: true
-            choices: [os-install-anaconda-v20]
+            choices: [os-install-anaconda-v21]
       bootwright_os_install_material:
         type: dict
         required: true

@@ -26,6 +26,7 @@
   "update": {
     "kernel": "",
     "packages": 0,
+    "pin": "",
     "rebooted": false,
     "release": "",
     "state": "",

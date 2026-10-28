@@ -6,7 +6,9 @@
 # before the repositories, which its update bound allows 120 more seconds for.
 # The organization and activation key are lent as files whose
 # paths only the controller module reads: their values reach the machine only
-# on the fixed worker's standard input, never a task variable.
+# on the fixed worker's standard input, never a task variable. A registration
+# with a Satellite also lends its CA bundle the same way, and its session has
+# 60 more seconds for the worker's subscription-manager config call.
 - name: Read the effective crypto policy on this connection's placement host
   bootwright.core.ssh_key_policy:
   register: managedos_install_anaconda_registration_ssh_policy
@@ -52,7 +54,12 @@
     enable: '{{ bootwright_os_install_request.registration.repositories.enable }}'
     disable: '{{ bootwright_os_install_request.registration.repositories.disable }}'
     release: "{{ bootwright_os_install_request['update'].release if 'update' in bootwright_os_install_request else '' }}"
-    timeout: "{{ 750 if 'update' in bootwright_os_install_request else 630 }}"
+    satellite_hostname: "{{ bootwright_os_install_request.registration.satellite.hostname | default(omit) }}"
+    satellite_content_base_url: "{{ bootwright_os_install_request.registration.satellite.contentBaseURL | default(omit) }}"
+    satellite_ca_file: "{{ bootwright_os_install_material.rhsmSatelliteCA if 'satellite' in bootwright_os_install_request.registration else omit }}"
+    timeout: >-
+      {{ (750 if 'update' in bootwright_os_install_request else 630)
+         + (60 if 'satellite' in bootwright_os_install_request.registration else 0) }}
   register: managedos_install_anaconda_registration_result
   failed_when: false
   changed_when: false

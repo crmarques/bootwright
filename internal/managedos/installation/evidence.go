@@ -2,6 +2,7 @@ package installation
 
 import (
 	"regexp"
+	"slices"
 	"unicode"
 
 	"github.com/crmarques/bootwright/internal/reconciliation"
@@ -33,6 +34,7 @@ type RegistrationEvidence struct {
 type UpdateEvidence struct {
 	Kernel      string `json:"kernel"`
 	Packages    int64  `json:"packages"`
+	Pin         string `json:"pin"`
 	Rebooted    bool   `json:"rebooted"`
 	Release     string `json:"release"`
 	State       string `json:"state"`
@@ -303,7 +305,20 @@ func updatePresence(update UpdateEvidence, request Request) error {
 	if update.State != updateComplete || update.Release != request.Update.Release {
 		return refusal("lifecycle.state", "the installed machine has not completed its update within release "+request.Update.Release, "")
 	}
+	if !slices.Contains(updatePins(request), update.Pin) {
+		return refusal("lifecycle.state", "the installed machine's update within release "+request.Update.Release+" names a pin its registration does not hold", "")
+	}
 	return nil
+}
+
+func updatePins(request Request) []string {
+	switch {
+	case request.Registration == nil:
+		return []string{pinVariable}
+	case request.Registration.Satellite == nil:
+		return []string{pinRelease}
+	}
+	return []string{pinRelease, pinContentView}
 }
 
 func foreignUpdate(evidence Evidence) error {
@@ -367,7 +382,7 @@ func wellFormedRegistration(registration RegistrationEvidence) bool {
 func wellFormedUpdate(update UpdateEvidence) bool {
 	switch update.State {
 	case updatePending, updateUpgraded, updateComplete:
-		return updateRelease.MatchString(update.Release) && update.Transaction >= 0 && update.Packages >= 0 &&
+		return updateRelease.MatchString(update.Release) && slices.Contains([]string{pinRelease, pinContentView, pinVariable}, update.Pin) && update.Transaction >= 0 && update.Packages >= 0 &&
 			update.Rebooted == (update.State == updateComplete && update.Transaction != 0) && updateKernel.MatchString(update.Kernel)
 	case "", updateNone, updateAbsent, updateForeign:
 		return update == UpdateEvidence{State: update.State}

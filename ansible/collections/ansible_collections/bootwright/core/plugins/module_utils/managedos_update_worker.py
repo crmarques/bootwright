@@ -9,6 +9,12 @@ upgrade --refresh --assumeyes --comment=bootwright:<digest>`, only with at least
 UPGRADE_FLOOR seconds of its session left; it never passes
 --nogpgcheck, --allowerasing or --repofrompath and never changes a repository.
 
+The caller names the release pin the machine's later dnf runs keep: `release`
+when the registration set the sticky release, `contentView` when a Satellite
+that offers no such release had it unset, `variable` when nothing registers
+and /etc/dnf/vars/releasever holds it. The record keeps it and an inspection
+reports it.
+
 Ownership is a root-only record, /etc/bootwright/update.json, keyed by the
 request digest: `pending` before the upgrade, `upgraded` once dnf succeeded,
 `complete` once the caller rebooted the machine and the release was proved
@@ -50,7 +56,8 @@ STATES = {"apply": ("pending", "upgraded", "complete"),
           "complete": ("complete",),
           "inspect": ("absent", "pending", "upgraded", "complete", "foreign")}
 RECORD_STATES = ("pending", "upgraded", "complete")
-KEYS = frozenset(("operation", "request", "release"))
+KEYS = frozenset(("operation", "request", "release", "pin"))
+PINS = ("release", "contentView", "variable")
 DIGEST = re.compile(r"[0-9a-f]{64}")
 RELEASE = re.compile(r"(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)")
 TOKEN = re.compile(r"[A-Za-z0-9._+~-]{1,64}")
@@ -234,7 +241,7 @@ class Guest:
             value = json.loads(data.decode("utf-8")) if len(data) <= MAX_RECORD else None
         except (ValueError, UnicodeError):
             return UNREADABLE
-        if not isinstance(value, dict) or set(value) != {"request", "state", "transaction"}:
+        if not isinstance(value, dict) or set(value) != {"pin", "request", "state", "transaction"} or value["pin"] not in PINS:
             return UNREADABLE
         if not isinstance(value["request"], str) or not DIGEST.fullmatch(value["request"]):
             return UNREADABLE
@@ -259,10 +266,10 @@ class Guest:
         finally:
             os.close(descriptor)
 
-    def write(self, request, state, transaction):
+    def write(self, request, state, transaction, pin):
         """Publish the record atomically and durably as root-only canonical JSON."""
         os.makedirs(self.directory, 0o700, exist_ok=True)
-        data = json.dumps({"request": request, "state": state, "transaction": transaction},
+        data = json.dumps({"pin": pin, "request": request, "state": state, "transaction": transaction},
                           sort_keys=True, separators=(",", ":")).encode("ascii")
         temporary = os.path.join(self.directory, ".update.json.tmp")
         descriptor = os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_TRUNC | os.O_NOFOLLOW | os.O_CLOEXEC, 0o600)
@@ -286,44 +293,46 @@ class Guest:
         return max(1, int(SESSION_CEILING - (self.clock() - self.started)))
 
 
-def result(guest, changed, state, release, transaction, packages):
+def result(guest, changed, state, release, transaction, packages, pin=""):
     kernel = guest.kernel()
     return {"changed": changed, "kernel": kernel if isinstance(kernel, str) and KERNEL.fullmatch(kernel) else "unknown",
-            "packages": packages, "rebooted": state == "complete" and transaction != 0, "release": release,
+            "packages": packages, "pin": pin, "rebooted": state == "complete" and transaction != 0, "release": release,
             "state": state, "transaction": transaction}
 
 
 def apply_operation(guest, payload):
-    request, release = payload["request"], payload["release"]
+    request, release, pin = payload["request"], payload["release"], payload["pin"]
     record = guest.owned(request)
     guest.prove_release(release)
     if record is not None and record["state"] != "pending":
         transaction = record["transaction"]
+        if record["pin"] != pin:
+            guest.write(request, record["state"], transaction, pin)
         packages = guest.transactions(request)[1] if transaction else 0
-        return result(guest, record["state"] != "complete", record["state"], release, transaction, packages)
+        return result(guest, record["state"] != "complete", record["state"], release, transaction, packages, pin)
     counted = guest.resolve(release)
     if guest.remaining() < UPGRADE_FLOOR:
         raise Refused("update-unavailable", "timeout")
-    guest.write(request, "pending", 0)
+    guest.write(request, "pending", 0, pin)
     guest.run(request, guest.remaining())
     transaction, packages = guest.transactions(request)
     if counted and transaction == 0:
         raise Refused("update-failed", "history")
-    guest.write(request, "upgraded", transaction)
-    return result(guest, True, "upgraded", release, transaction, packages)
+    guest.write(request, "upgraded", transaction, pin)
+    return result(guest, True, "upgraded", release, transaction, packages, pin)
 
 
 def complete_operation(guest, payload):
-    request, release = payload["request"], payload["release"]
+    request, release, pin = payload["request"], payload["release"], payload["pin"]
     record = guest.owned(request)
     if record is None or record["state"] == "pending":
         raise Refused("transport")
     guest.prove_release(release)
     transaction = record["transaction"]
     packages = guest.transactions(request)[1] if transaction else 0
-    if record["state"] != "complete":
-        guest.write(request, "complete", transaction)
-    return result(guest, record["state"] != "complete", "complete", release, transaction, packages)
+    if record["state"] != "complete" or record["pin"] != pin:
+        guest.write(request, "complete", transaction, pin)
+    return result(guest, record["state"] != "complete", "complete", release, transaction, packages, pin)
 
 
 def inspect_operation(guest, payload):
@@ -338,7 +347,7 @@ def inspect_operation(guest, payload):
     found, packages = guest.transactions(request) if transaction else (0, 0)
     if state == "complete" and (version_id(guest.os_release) != release or found != transaction):
         state = "upgraded"
-    return result(guest, False, state, release, transaction, packages)
+    return result(guest, False, state, release, transaction, packages, record["pin"])
 
 
 OPERATIONS = {"apply": apply_operation, "complete": complete_operation, "inspect": inspect_operation}
@@ -357,6 +366,8 @@ def parse_request(data):
     if not isinstance(payload["request"], str) or not DIGEST.fullmatch(payload["request"]):
         raise Refused("transport")
     if not isinstance(payload["release"], str) or not RELEASE.fullmatch(payload["release"]):
+        raise Refused("transport")
+    if payload["pin"] not in (("",) if payload["operation"] == "inspect" else PINS):
         raise Refused("transport")
     return payload
 

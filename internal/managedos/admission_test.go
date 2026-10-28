@@ -105,7 +105,7 @@ func TestCustomizationContradictions(t *testing.T) {
 func TestRHSMManagedExternalAndSatellite(t *testing.T) {
 	for _, kind := range []string{"redhatRhel", "redhatCeph"} {
 		t.Run(kind, func(t *testing.T) {
-			o := obj(api.Entitlement, "subscription", m("type", kind, "rhsm", m("organizationRef", "organization", "activationKeyRef", "activation", "satellite", m("hostname", "satellite.example.test"))))
+			o := obj(api.Entitlement, "subscription", m("type", kind, "rhsm", m("organizationRef", "organization", "activationKeyRef", "activation", "satellite", m("hostname", "satellite.example.test", "trustBundleRef", "satellite-ca"))))
 			o = NormalizeRHSM(o)
 			if o.Spec().Get("rhsm", "management").Text() != "managed" || o.Spec().Get("rhsm", "satellite", "contentBaseURL").Text() != "https://satellite.example.test/pulp/content" {
 				t.Fatal("RHSM defaults")
@@ -603,5 +603,43 @@ func TestARepositoryDisplayNameAndKeyURLAreWhatTheRepoFileCarries(t *testing.T) 
 	if issues := configure(m("id", "extras", "baseURL", "https://mirror.example.test/x", "displayName", "Extra packages #1",
 		"gpgKeyURL", "file:///etc/pki/rpm-gpg/RPM-GPG-KEY-redhat-release")); len(issues) != 0 {
 		t.Fatalf("a valid repository was refused: %#v", issues)
+	}
+}
+
+func TestASatelliteDeclaresItsCABundleAndAnHTTPSContentRoot(t *testing.T) {
+	satellite := func(fields ...any) api.Object {
+		return NormalizeRHSM(obj(api.Entitlement, "subscription", m("type", "redhatRhel", "rhsm",
+			m("organizationRef", "organization", "activationKeyRef", "activation", "satellite", m(fields...)))))
+	}
+	if issues := ValidateRHSM(satellite("hostname", "satellite.example.test", "trustBundleRef", "satellite-ca"), false); len(issues) != 0 {
+		t.Fatalf("a Satellite with its CA bundle and the default content root refused: %v", issues)
+	}
+	missing := ValidateRHSM(satellite("hostname", "satellite.example.test"), false)
+	if len(missing) != 1 || missing[0].Field != "$.spec.rhsm.satellite.trustBundleRef" ||
+		missing[0].Message != "a registration with a Satellite or Capsule verifies its certificate against a declared CA bundle, and Entitlement/subscription names none" ||
+		missing[0].Remediation != "set spec.rhsm.satellite.trustBundleRef on Entitlement/subscription to the caBundle Secret holding the CA that signs the certificate of satellite.example.test, such as the Satellite's katello-server-ca.crt" {
+		t.Fatalf("a Satellite without its CA bundle: %v", missing)
+	}
+	for _, root := range []string{"http://satellite.example.test/pulp/content", "https://satellite.example.test/pulp/content?token=x",
+		"https://satellite.example.test/pulp/content#x", "https://user:pass@satellite.example.test/pulp/content", "https:///pulp/content",
+		"https://satellite.example.test/pulp/content?", "satellite.example.test/pulp/content",
+		"https://satellite.example.test/pulp/" + strings.Repeat("a", 2048), "https://satellite.example.test/pulp/cont\u00e9nt",
+		"https://satellite.example.test/pulp/con tent"} {
+		issues := ValidateRHSM(satellite("hostname", "satellite.example.test", "trustBundleRef", "satellite-ca", "contentBaseURL", root), false)
+		if len(issues) != 1 || issues[0].Field != "$.spec.rhsm.satellite.contentBaseURL" ||
+			issues[0].Message != "the content root of a Satellite is an https URL of at most 2048 printable ASCII characters with a host and no query, fragment or user information" {
+			t.Fatalf("%s: %v", root, issues)
+		}
+	}
+	for _, root := range []string{"https://capsule.example.test/pulp/content", "https://capsule.example.test:8443/pulp/content/", "https://[2001:db8::1]/pulp/content",
+		"https://capsule.example.test/pulp/a@b\\c", "https://capsule.example.test/" + strings.Repeat("a", 2000)} {
+		if issues := ValidateRHSM(satellite("hostname", "satellite.example.test", "trustBundleRef", "satellite-ca", "contentBaseURL", root), false); len(issues) != 0 {
+			t.Fatalf("%s refused: %v", root, issues)
+		}
+	}
+	ceph := NormalizeRHSM(obj(api.Entitlement, "ceph", m("type", "redhatCeph", "rhsm",
+		m("organizationRef", "organization", "activationKeyRef", "activation", "satellite", m("hostname", "satellite.example.test")))))
+	if issues := ValidateRHSM(ceph, false); len(issues) != 0 {
+		t.Fatalf("the redhatCeph Entitlement changed: %v", issues)
 	}
 }

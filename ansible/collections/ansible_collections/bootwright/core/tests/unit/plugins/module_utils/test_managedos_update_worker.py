@@ -146,9 +146,9 @@ class Setup:
         if self.ran is not None:
             self.dnf.entries.append(self.ran)
 
-    def with_record(self, state, transaction=0, request=DIGEST, raw=None, mode=0o600):
+    def with_record(self, state, transaction=0, request=DIGEST, raw=None, mode=0o600, pin="release"):
         os.makedirs(self.directory, 0o700, exist_ok=True)
-        data = raw if raw is not None else json.dumps({"request": request, "state": state, "transaction": transaction}).encode()
+        data = raw if raw is not None else json.dumps({"pin": pin, "request": request, "state": state, "transaction": transaction}).encode()
         with open(self.record, "wb") as handle:
             handle.write(data)
         os.chmod(self.record, mode)
@@ -160,17 +160,21 @@ class Setup:
         except FileNotFoundError:
             return None
 
-    def call(self, operation, release="9.8", request=DIGEST):
+    def call(self, operation, release="9.8", request=DIGEST, pin=None):
         output = io.StringIO()
-        payload = {"operation": operation, "release": release, "request": request}
+        if pin is None:
+            pin = "" if operation == "inspect" else "release"
+        payload = {"operation": operation, "pin": pin, "release": release, "request": request}
         assert worker.main(stdin=io.BytesIO(json.dumps(payload).encode()), stdout=output, guest=self.guest) == 0
         text = output.getvalue()
         assert text.endswith("\n") and text.count("\n") == 1
         return json.loads(text), text
 
 
-def result(state, transaction=0, packages=0, changed=True, release="9.8"):
-    return {"ok": True, "result": {"changed": changed, "kernel": KERNEL, "packages": packages,
+def result(state, transaction=0, packages=0, changed=True, release="9.8", pin=None):
+    if pin is None:
+        pin = "release" if state in worker.RECORD_STATES else ""
+    return {"ok": True, "result": {"changed": changed, "kernel": KERNEL, "packages": packages, "pin": pin,
                                    "rebooted": state == "complete" and transaction != 0, "release": release,
                                    "state": state, "transaction": transaction}}
 
@@ -179,8 +183,8 @@ def test_an_update_records_pending_before_dnf_and_upgraded_with_its_transaction(
     setup = Setup(tmp_path, install=[Package("kernel", "5.14.0"), Package("redhat-release", "9.8")], ran=entry(4))
     answer = setup.call("apply")[0]
     assert answer == result("upgraded", 4, 2)
-    assert setup.upgrades == [(DIGEST, worker.SESSION_CEILING, {"request": DIGEST, "state": "pending", "transaction": 0})]
-    assert setup.read() == {"request": DIGEST, "state": "upgraded", "transaction": 4}
+    assert setup.upgrades == [(DIGEST, worker.SESSION_CEILING, {"pin": "release", "request": DIGEST, "state": "pending", "transaction": 0})]
+    assert setup.read() == {"pin": "release", "request": DIGEST, "state": "upgraded", "transaction": 4}
     assert os.stat(setup.record).st_mode & 0o777 == 0o600 and os.stat(setup.directory).st_mode & 0o777 == 0o700
     assert not os.path.exists(os.path.join(setup.directory, ".update.json.tmp"))
     fill = [call for call in setup.dnf.calls if isinstance(call, tuple) and call[0] == "fill_sack"]
@@ -189,7 +193,7 @@ def test_an_update_records_pending_before_dnf_and_upgraded_with_its_transaction(
     assert setup.dnf.downloaded == [["kernel", "redhat-release"]]
 
     assert setup.call("complete")[0] == result("complete", 4, 2)
-    assert setup.read() == {"request": DIGEST, "state": "complete", "transaction": 4}
+    assert setup.read() == {"pin": "release", "request": DIGEST, "state": "complete", "transaction": 4}
     assert setup.call("apply")[0] == result("complete", 4, 2, changed=False)
     assert len(setup.upgrades) == 1
 
@@ -198,7 +202,7 @@ def test_an_update_that_changes_nothing_completes_without_a_transaction(tmp_path
     setup = Setup(tmp_path)
     assert setup.call("apply")[0] == result("upgraded")
     assert setup.call("complete")[0] == result("complete")
-    assert setup.read() == {"request": DIGEST, "state": "complete", "transaction": 0}
+    assert setup.read() == {"pin": "release", "request": DIGEST, "state": "complete", "transaction": 0}
 
 
 def test_a_pending_record_upgrades_again_and_finds_the_transaction_a_lost_reply_ran(tmp_path):
@@ -206,7 +210,7 @@ def test_a_pending_record_upgrades_again_and_finds_the_transaction_a_lost_reply_
     setup.with_record("pending")
     assert setup.call("apply")[0] == result("upgraded", 5, 2)
     assert len(setup.upgrades) == 1
-    assert setup.read() == {"request": DIGEST, "state": "upgraded", "transaction": 5}
+    assert setup.read() == {"pin": "release", "request": DIGEST, "state": "upgraded", "transaction": 5}
 
 
 def test_an_upgraded_record_resumes_without_dnf(tmp_path):
@@ -219,14 +223,14 @@ def test_an_upgraded_record_resumes_without_dnf(tmp_path):
 @pytest.mark.parametrize("record", ["other-request", "malformed", "extra-key", "bad-state", "negative", "group-readable", "symlink"])
 def test_a_record_of_another_installation_or_an_unreadable_one_is_foreign_and_left(tmp_path, record):
     setup = Setup(tmp_path)
-    raw = {"malformed": b"{not json", "extra-key": json.dumps({"request": DIGEST, "state": "pending", "transaction": 0, "x": 1}).encode(),
-           "bad-state": json.dumps({"request": DIGEST, "state": "done", "transaction": 0}).encode(),
-           "negative": json.dumps({"request": DIGEST, "state": "upgraded", "transaction": -1}).encode()}.get(record)
+    raw = {"malformed": b"{not json", "extra-key": json.dumps({"pin": "release", "request": DIGEST, "state": "pending", "transaction": 0, "x": 1}).encode(),
+           "bad-state": json.dumps({"pin": "release", "request": DIGEST, "state": "done", "transaction": 0}).encode(),
+           "negative": json.dumps({"pin": "release", "request": DIGEST, "state": "upgraded", "transaction": -1}).encode()}.get(record)
     if record == "symlink":
         os.makedirs(setup.directory, 0o700)
         target = str(tmp_path / "elsewhere.json")
         with open(target, "w", encoding="ascii") as handle:
-            json.dump({"request": DIGEST, "state": "complete", "transaction": 0}, handle)
+            json.dump({"pin": "release", "request": DIGEST, "state": "complete", "transaction": 0}, handle)
         os.chmod(target, 0o600)
         os.symlink(target, setup.record)
     else:
@@ -251,7 +255,7 @@ def test_complete_proves_the_release_again(tmp_path):
     setup = Setup(tmp_path, version="9.9", history=[entry(5)])
     setup.with_record("upgraded", 5)
     assert setup.call("complete")[0] == {"ok": False, "reason": "update-release-mismatch", "detail": "9.9"}
-    assert setup.read() == {"request": DIGEST, "state": "upgraded", "transaction": 5}
+    assert setup.read() == {"pin": "release", "request": DIGEST, "state": "upgraded", "transaction": 5}
     pending = Setup(tmp_path / "pending")
     pending.with_record("pending")
     assert pending.call("complete")[0] == {"ok": False, "reason": "transport"}
@@ -294,16 +298,16 @@ def test_no_enabled_repository_refuses_before_metadata(tmp_path):
 def test_a_failed_transaction_stays_pending(tmp_path, cause):
     setup = Setup(tmp_path, upgrade_code=cause)
     assert setup.call("apply")[0] == {"ok": False, "reason": "update-failed", "cause": cause}
-    assert setup.read() == {"request": DIGEST, "state": "pending", "transaction": 0}
+    assert setup.read() == {"pin": "release", "request": DIGEST, "state": "pending", "transaction": 0}
 
 
 def test_a_counted_upgrade_whose_history_lacks_the_comment_is_refused_and_stays_pending(tmp_path):
     setup = Setup(tmp_path, install=[Package("kernel", "5.14.0")], history=[entry(3, OTHER)])
     assert setup.call("apply")[0] == {"ok": False, "reason": "update-failed", "cause": "history"}
-    assert len(setup.upgrades) == 1 and setup.read() == {"request": DIGEST, "state": "pending", "transaction": 0}
+    assert len(setup.upgrades) == 1 and setup.read() == {"pin": "release", "request": DIGEST, "state": "pending", "transaction": 0}
     setup.dnf.entries.append(entry(4))
     assert setup.call("apply")[0] == result("upgraded", 4, 2)
-    assert len(setup.upgrades) == 2 and setup.read() == {"request": DIGEST, "state": "upgraded", "transaction": 4}
+    assert len(setup.upgrades) == 2 and setup.read() == {"pin": "release", "request": DIGEST, "state": "upgraded", "transaction": 4}
 
 
 @pytest.mark.parametrize("pending", [False, True])
@@ -317,7 +321,7 @@ def test_a_preview_that_overruns_leaves_too_little_session_and_starts_no_upgrade
         setup.with_record("pending")
     assert setup.call("apply")[0] == {"ok": False, "reason": "update-unavailable", "cause": "timeout"}
     assert started == [] and setup.upgrades == []
-    assert setup.read() == ({"request": DIGEST, "state": "pending", "transaction": 0} if pending else None)
+    assert setup.read() == ({"pin": "release", "request": DIGEST, "state": "pending", "transaction": 0} if pending else None)
 
 
 def test_an_upgrade_starts_with_exactly_the_floor_of_session_left(tmp_path):
@@ -376,9 +380,12 @@ def test_the_worker_answers_transport_for_any_unexpected_failure(tmp_path):
     setup = Setup(tmp_path)
     for data in (b"{not json", b"[]", json.dumps({"operation": "apply", "request": DIGEST}).encode(),
                  json.dumps({"operation": "remove", "request": DIGEST, "release": "9.8"}).encode(),
-                 json.dumps({"operation": "apply", "request": "ABC", "release": "9.8"}).encode(),
-                 json.dumps({"operation": "apply", "request": DIGEST, "release": "9.08"}).encode(),
-                 json.dumps({"operation": "apply", "request": DIGEST, "release": "9.8", "extra": 1}).encode(),
+                 json.dumps({"operation": "apply", "pin": "release", "request": "ABC", "release": "9.8"}).encode(),
+                 json.dumps({"operation": "apply", "pin": "release", "request": DIGEST, "release": "9.08"}).encode(),
+                 json.dumps({"operation": "apply", "pin": "release", "request": DIGEST, "release": "9.8", "extra": 1}).encode(),
+                 json.dumps({"operation": "apply", "pin": "minor", "request": DIGEST, "release": "9.8"}).encode(),
+                 json.dumps({"operation": "apply", "pin": "", "request": DIGEST, "release": "9.8"}).encode(),
+                 json.dumps({"operation": "inspect", "pin": "release", "request": DIGEST, "release": "9.8"}).encode(),
                  b" " * (worker.MAX_INPUT + 1)):
         output = io.StringIO()
         assert worker.main(stdin=io.BytesIO(data), stdout=output, guest=setup.guest) == 0
@@ -396,7 +403,7 @@ def test_a_history_the_guest_cannot_read_is_named(tmp_path):
     setup = Setup(tmp_path)
     setup.dnf.entries = None
     assert setup.call("apply")[0] == {"ok": False, "reason": "update-failed", "cause": "history"}
-    assert setup.read() == {"request": DIGEST, "state": "pending", "transaction": 0}
+    assert setup.read() == {"pin": "release", "request": DIGEST, "state": "pending", "transaction": 0}
 
 
 def test_worker_source_loads_with_the_standard_library_only(monkeypatch):
@@ -424,3 +431,30 @@ def test_worker_source_loads_with_the_standard_library_only(monkeypatch):
             assert {alias.name.split(".")[0] for alias in node.names} <= allowed
         if isinstance(node, ast.ImportFrom):
             assert node.module.split(".")[0] in allowed
+
+
+@pytest.mark.parametrize("pin", worker.PINS)
+def test_the_release_pin_is_recorded_and_reported(tmp_path, pin):
+    setup = Setup(tmp_path, install=[Package("kernel", "5.14.0")], ran=entry(4))
+    assert setup.call("apply", pin=pin)[0] == result("upgraded", 4, 2, pin=pin)
+    assert setup.read()["pin"] == pin
+    assert setup.call("inspect")[0]["result"]["pin"] == pin
+    assert setup.call("complete", pin=pin)[0]["result"]["pin"] == pin and setup.read()["state"] == "complete"
+
+
+def test_a_pin_that_moved_is_recorded_on_the_next_run(tmp_path):
+    setup = Setup(tmp_path)
+    setup.with_record("upgraded", 5, pin="release")
+    setup.dnf.entries.append(entry(5))
+    answer = setup.call("apply", pin="contentView")[0]
+    assert answer["result"]["pin"] == "contentView" and setup.read()["pin"] == "contentView"
+    assert setup.upgrades == []
+    setup.call("complete", pin="release")
+    assert setup.read() == {"pin": "release", "request": DIGEST, "state": "complete", "transaction": 5}
+
+
+def test_a_record_without_a_pin_is_foreign(tmp_path):
+    setup = Setup(tmp_path)
+    setup.with_record("pending", raw=json.dumps({"request": DIGEST, "state": "pending", "transaction": 0}).encode())
+    assert setup.call("apply")[0] == {"ok": False, "reason": "update-foreign"}
+    assert setup.call("inspect")[0]["result"]["state"] == "foreign"

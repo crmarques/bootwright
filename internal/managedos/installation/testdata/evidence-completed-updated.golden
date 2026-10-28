@@ -26,6 +26,7 @@
   "update": {
     "kernel": "5.14.0-611.5.1.el9_7.x86_64",
     "packages": 212,
+    "pin": "release",
     "rebooted": true,
     "release": "9.8",
     "state": "complete",

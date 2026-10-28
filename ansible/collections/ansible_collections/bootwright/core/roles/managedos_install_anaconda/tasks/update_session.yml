@@ -2,8 +2,11 @@
 # One session of the update worker, apply or complete, over the pinned fleet
 # connection guest.yml makes, option for option, as the registration worker's
 # is; test_update_session_is_the_guest_connection holds the two equal. Only
-# the operation, the request digest and the release reach the machine, on the
-# fixed worker's standard input. A refusal is named to the runner with its
+# the operation, the request digest, the release and the release pin reach the
+# machine, on the fixed worker's standard input. The pin is what the
+# registration worker answered on this run, set or unset, and the release
+# variable when nothing registers; any other answer names no pin and the
+# module refuses it. A refusal is named to the runner with its
 # detail, the version found, <found>@<repository> or the closed cause, and the
 # run fails.
 - name: Read the effective crypto policy on this connection's placement host
@@ -47,6 +50,10 @@
     policy_host_key_algorithms: '{{ managedos_install_anaconda_update_ssh_policy.hostKeyAlgorithms }}'
     request: '{{ bootwright_os_install_digest }}'
     release: "{{ bootwright_os_install_request['update'].release }}"
+    pin: >-
+      {{ 'variable' if bootwright_os_install_request.registration is not defined
+         else {'set': 'release', 'unset': 'contentView'}.get(
+           managedos_install_anaconda_registration_result.registration.release | default(''), '') }}
     timeout: "{{ 1800 if managedos_install_anaconda_update_operation == 'apply' else 120 }}"
   register: managedos_install_anaconda_update_answer
   failed_when: false

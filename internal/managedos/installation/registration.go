@@ -13,9 +13,11 @@ import (
 var registrationPackages = []string{"subscription-manager"}
 
 const (
-	subscriptionField      = "spec.subscription"
-	subscriptionReposField = "spec.customizations.repositories.subscription"
-	maxRegistrationValue   = 255
+	subscriptionField        = "spec.subscription"
+	subscriptionReposField   = "spec.customizations.repositories.subscription"
+	maxRegistrationValue     = 255
+	maxSatelliteBundle       = 64 << 10
+	maxSatelliteCertificates = 32
 )
 
 func subscriptionEntitlement(catalog api.Catalog, profile api.Object) (string, api.Object, bool) {
@@ -54,7 +56,22 @@ func registrationFor(catalog api.Catalog, profile api.Object) (*Registration, er
 		return nil, refusal("api.required", "managed RHSM requires organization and activation-key references",
 			"set spec.rhsm.organizationRef and spec.rhsm.activationKeyRef on Entitlement/"+reference)
 	}
+	if satellite := rhsm.Get("satellite"); satellite.Present() {
+		registration.Satellite = &Satellite{
+			ContentBaseURL: satellite.Get("contentBaseURL").Text(),
+			Hostname:       satellite.Get("hostname").Text(),
+			TrustBundleRef: satellite.Get("trustBundleRef").Text(),
+		}
+		if registration.Satellite.Hostname == "" || registration.Satellite.ContentBaseURL == "" || registration.Satellite.TrustBundleRef == "" {
+			return nil, refusal("api.required", "a registration with a Satellite requires its hostname, content root and CA bundle",
+				"set spec.rhsm.satellite.hostname and spec.rhsm.satellite.trustBundleRef on Entitlement/"+reference)
+		}
+	}
 	return &registration, nil
+}
+
+func satelliteRegistration(request Request) bool {
+	return request.Registration != nil && request.Registration.Satellite != nil
 }
 
 func subscriptionRepositories(profile api.Object) SubscriptionRepositories {
@@ -86,17 +103,13 @@ func refusedRegistration(catalog api.Catalog, machine, profile api.Object, deriv
 		return "subscription repositories are enabled on a registration this executable performs, and " + entitlement.Identity() + " sets spec.rhsm.management to external",
 			"remove " + subscriptionReposField + " from " + profile.Identity() + ", or set spec.rhsm.management to managed on " + entitlement.Identity()
 	}
-	if rhsm.Has("satellite") {
-		return "this executable registers only with the hosted subscription service, and " + entitlement.Identity() + " selects a Satellite in spec.rhsm.satellite",
-			"remove spec.rhsm.satellite from " + entitlement.Identity() + ", or " + withoutSubscription
-	}
 	if rhsm.Get("connectToInsights").Bool() {
 		return "this executable does not enroll a Machine in Insights, a second remote identity it neither proves nor removes, and " + entitlement.Identity() + " sets spec.rhsm.connectToInsights to true",
 			"set spec.rhsm.connectToInsights to false on " + entitlement.Identity() + ", or " + withoutSubscription
 	}
 	choice := effectiveProxy(machine, profile)
 	if proxy, found := catalog.Find(api.Proxy, choice.Get("proxyRef").Text()); found && !choice.Has("direct") {
-		return "this executable registers only over a direct route, and " + machine.Identity() + " reaches the network through " + proxy.Identity(),
+		return "this executable registers only over a direct route to the hosted subscription service or the declared Satellite, and " + machine.Identity() + " reaches the network through " + proxy.Identity(),
 			"select direct: {} in spec.proxy of " + machine.Identity() + " or of " + profile.Identity() + ", or " + withoutSubscription
 	}
 	return "", ""
@@ -106,10 +119,45 @@ func registrationMaterial(operation string, request Request) []lifecycle.Materia
 	if operation != "apply" || request.Registration == nil {
 		return nil
 	}
-	return []lifecycle.MaterialFile{
+	materials := []lifecycle.MaterialFile{
 		{Name: "rhsm-organization", Part: secrets.ValuePart, Secret: request.Registration.OrganizationRef, Variable: "rhsmOrganization"},
 		{Name: "rhsm-activation-key", Part: secrets.ValuePart, Secret: request.Registration.ActivationKeyRef, Variable: "rhsmActivationKey"},
 	}
+	if request.Registration.Satellite != nil {
+		materials = append(materials, lifecycle.MaterialFile{Name: "rhsm-satellite-ca", Part: secrets.CertificatePart,
+			Secret: request.Registration.Satellite.TrustBundleRef, Variable: "rhsmSatelliteCA"})
+	}
+	return materials
+}
+
+func satelliteBundleCarried(value []byte) bool {
+	if len(value) > maxSatelliteBundle {
+		return false
+	}
+	certificates, problem := secrets.CertificateBundle(value)
+	return problem == "" && len(certificates) >= 1 && len(certificates) <= maxSatelliteCertificates
+}
+
+func satelliteBundle(execution lifecycle.Execution, request Request) error {
+	satellite := request.Registration.Satellite
+	entitlement := "Entitlement/" + request.Registration.EntitlementRef
+	material, ok := execution.Material[satellite.TrustBundleRef]
+	var value []byte
+	if ok {
+		value, ok = material.Part(secrets.CertificatePart)
+	}
+	if !ok {
+		return refusal("secret.store", "the bound Satellite CA bundle of "+entitlement+" is not available to this attempt",
+			lifecycle.ReopenBindings(execution.Context, execution.Continuation))
+	}
+	if !satelliteBundleCarried(value) {
+		secret := "Secret/" + satellite.TrustBundleRef
+		return refusal("api.value", secret+" holds a Satellite CA bundle for "+entitlement+
+			" that is not 1 to 32 PEM CERTIFICATE blocks of X.509 certificates and nothing else within 64 KiB, so this attempt changed nothing",
+			"replace "+secret+" with the PEM certificates of the CA that signs the certificate of "+satellite.Hostname+
+				", such as the Satellite's katello-server-ca.crt, then run bootwright apply --context "+execution.Context+" again")
+	}
+	return nil
 }
 
 func registrationCarried(value []byte) bool {
@@ -150,6 +198,9 @@ func registrationValues(execution lifecycle.Execution, request Request) error {
 				"replace "+secret+" with one line of 1 to 255 printable ASCII characters without whitespace, then run bootwright apply --context "+execution.Context+" again")
 		}
 	}
+	if request.Registration.Satellite != nil {
+		return satelliteBundle(execution, request)
+	}
 	return nil
 }
 
@@ -163,9 +214,14 @@ func registrationRefusals(contextName string, request Request) map[string]error 
 	organization, key := "Secret/"+request.Registration.OrganizationRef, "Secret/"+request.Registration.ActivationKeyRef
 	again := "then run bootwright apply --context " + contextName + " again"
 	refused := machineRefusal(request)
-	return map[string]error{
-		"registration-input": refused("the registration worker on "+machine+" refused the organization or activation key of "+entitlement+" as not one line of printable ASCII without whitespace",
-			"replace "+organization+" or "+key+" with one line of 1 to 255 printable ASCII characters without whitespace, "+again),
+	input := "the registration worker on " + machine + " refused the organization or activation key of " + entitlement + " as not one line of printable ASCII without whitespace"
+	inputRemedy := "replace " + organization + " or " + key + " with one line of 1 to 255 printable ASCII characters without whitespace, "
+	if satellite := request.Registration.Satellite; satellite != nil {
+		input += ", or the Satellite CA bundle or content root of " + entitlement
+		inputRemedy += "or Secret/" + satellite.TrustBundleRef + " with the PEM certificates of the CA that signs the certificate of " + satellite.Hostname + ", "
+	}
+	refusals := map[string]error{
+		"registration-input": refused(input, inputRemedy+again),
 		"registration-foreign": refused(machine+" is registered with a subscription consumer this installation did not create, and it was left registered",
 			"unregister "+machine+" from its subscription service yourself, "+again+", or take this context back with bootwright destroy --context "+contextName),
 		"registration-refused": refused("the subscription service refused to register "+machine+" with the organization and activation key of "+entitlement,
@@ -178,6 +234,12 @@ func registrationRefusals(contextName string, request Request) map[string]error 
 			"correct the repository IDs in "+subscriptionReposField+" of "+profile+", then take this context back with bootwright destroy --context "+contextName+
 				" and run bootwright apply --context "+contextName+"; a repository edit is another installation"),
 	}
+	if satellite := request.Registration.Satellite; satellite != nil {
+		bundle := "Secret/" + satellite.TrustBundleRef
+		refusals["registration-trust"] = refused("the Satellite "+satellite.Hostname+" presented a certificate that the CA bundle of "+bundle+" does not verify",
+			"set "+bundle+" to the CA that signs the certificate of "+satellite.Hostname+", such as the Satellite's katello-server-ca.crt, "+again)
+	}
+	return refusals
 }
 
 func machineRefusal(request Request) func(message, remediation string) error {

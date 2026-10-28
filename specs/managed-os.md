@@ -262,8 +262,8 @@ Machine whose identity channel is the guest agent; the profile's enabled and
 disabled services; SELinux and firewall as selected; and a `%post` that writes
 the install marker, establishes the host key its identity channel requires,
 writes the regional formats, the configured repositories and, for a profile
-updating `withinRelease`, the release variable
-([Update within release](#update-within-release)), writes the
+updating `withinRelease` that registers with no Satellite, the release
+variable ([Update within release](#update-within-release)), writes the
 sudoers and SSH daemon drop-ins, and removes every retained copy of the
 Kickstart, preceded, for an encrypted root disk, by a second `%post` that binds
 it to the TPM2. The marker is
@@ -1106,18 +1106,19 @@ beside it ([Update within release](#update-within-release)).
 ### Registration
 
 A profile selecting `spec.subscription` with a `managed` `redhatRhel`
-Entitlement registers the installed system with the hosted subscription
-service inside its `os-install-<machine>` block.
+Entitlement registers the installed system inside its `os-install-<machine>`
+block with the hosted subscription service or, when the Entitlement declares
+[`spec.rhsm.satellite`](api/secrets.md#rhsm), with that Satellite or Capsule.
 
 **Admission.** A profile selecting `spec.subscription` is admitted on a
 virtual or physical Machine, and the contract below is what its installation
 performs. Physical registration uses the delivered host key and original
 installation marker, never an independently discovered identity. An
 Entitlement whose `spec.rhsm.management` is `external`
-registers nothing and freezes nothing. Only the hosted subscription service is
-registered with: an Entitlement selecting `spec.rhsm.satellite` or setting
+registers nothing and freezes nothing. An Entitlement setting
 `spec.rhsm.connectToInsights` refuses, and so does a Machine whose effective
-proxy names a Proxy, because the registration has no route but a direct one;
+proxy names a Proxy, because the registration has no route but a direct one to
+the hosted subscription service or the declared Satellite;
 subscription repositories on an `external`
 Entitlement refuse, because this executable applies them only to a
 registration it performs. Each of these refusals names the field that selects
@@ -1128,8 +1129,11 @@ it and the change that admits the profile, as the subscription rows of the
 `entitlementRef`, the `organizationRef` and `activationKeyRef` Secret
 references and `repositories.enable` and `repositories.disable`, each sorted
 and never null, from
-[`spec.customizations.repositories.subscription`](api/machines.md#installer-arms);
-never a value. `%packages` adds `subscription-manager`. A repository edit
+[`spec.customizations.repositories.subscription`](api/machines.md#installer-arms),
+and, for a Satellite, `satellite` `{hostname, contentBaseURL, trustBundleRef}`,
+omitted for the hosted service; never a value. On a Satellite the repository
+IDs are its repository labels: Red Hat's, or a custom product's
+`<organization>_<product>_<repository>`. `%packages` adds `subscription-manager`. A repository edit
 changes the request and so the marker, so it is another installation: the
 context is taken back with `bootwright destroy` and applied again.
 
@@ -1154,7 +1158,19 @@ worker starts the private register bus
 (`com.redhat.RHSM1.RegisterServer.Start`) and calls
 `RegisterWithActivationKeys` with the organization, the one activation key and
 empty options and connection options, never `subscription-manager register`,
-`clean` or `--force`. Sources:
+`clean` or `--force`. With a Satellite, before it registers or adopts and on
+every apply, the worker writes the CA bundle to
+`/etc/rhsm/ca/bootwright-satellite.pem`, root:root 0644, staged and renamed
+through its directory, refusing `registration-unavailable` and changing
+nothing unless that directory is root's and writable by root alone and the
+path holds no link or other non-regular file, and runs `subscription-manager config
+--server.hostname=<hostname> --server.port=443 --server.prefix=/rhsm
+--server.insecure=0 --rhsm.baseurl=<contentBaseURL>
+--rhsm.repo_ca_cert=/etc/rhsm/ca/bootwright-satellite.pem`, so registration
+reaches that server, verified against `/etc/rhsm/ca/`, and repository URLs
+start at the content root, a foreign registration refusing first. It never installs
+`katello-ca-consumer`, fetches nothing over HTTP and never passes
+`--insecure`. Sources:
 [register.py](https://github.com/candlepin/subscription-manager/blob/main/src/rhsmlib/dbus/objects/register.py),
 [constants.py](https://github.com/candlepin/subscription-manager/blob/main/src/rhsmlib/dbus/constants.py)
 and [subscription-manager(8)](https://www.mankier.com/8/subscription-manager).
@@ -1176,9 +1192,17 @@ release before that call ([Update within release](#update-within-release)).
 **Values.** The organization and the activation key are each one line of 1 to
 255 printable ASCII characters without whitespace; another value refuses
 `api.value` before the adapter runs, naming the Secret and never a byte of it.
-They are lent to the apply alone, as material files only the controller
-module reads, and reach the machine only on the worker's standard input, as
-the [adapter boundary](#adapter-boundary) states.
+A Satellite's CA bundle is 1 to 32 X.509 PEM `CERTIFICATE` blocks and
+whitespace, at most 64 KiB; another value
+refuses `api.value` the same way, with `Secret/<bundle> holds a Satellite CA
+bundle for <entitlement> that is not 1 to 32 PEM CERTIFICATE blocks of X.509
+certificates and nothing else within 64 KiB, so this attempt changed
+nothing`, remedied by `replace Secret/<bundle> with the PEM certificates of the
+CA that signs the certificate of <hostname>, such as the Satellite's
+katello-server-ca.crt, then run bootwright apply --context <context> again`.
+They and the CA bundle are lent to the apply alone, as material files only the
+controller module reads, and reach the machine only on the worker's standard
+input, as the [adapter boundary](#adapter-boundary) states.
 
 **Evidence and completion.** The evidence records `registration.consumer` and
 `registration.state`; a registering installation completes only with an
@@ -1190,7 +1214,14 @@ realization the next apply converges, and a `foreign` one stays unknown.
 **Refusals.** The apply names `registration-input`, `registration-foreign`,
 `registration-refused`, `registration-identity-collision`,
 `registration-unavailable` and `registration-repositories` to the runner,
-which reports each with the message and remedy Go owns for it. A worker that
+which reports each with the message and remedy Go owns for it. With a
+Satellite it also names `registration-trust` when subscription-manager's error
+names a certificate verification failure: `the Satellite <hostname> presented
+a certificate that the CA bundle of Secret/<bundle> does not verify`,
+remedied by `set Secret/<bundle> to the CA that signs the certificate of
+<hostname>, such as the Satellite's katello-server-ca.crt, then run bootwright
+apply --context <context> again`; any other failure to reach it is
+`registration-unavailable`. A worker that
 did not answer over its connection, or a session that failed, fails the apply
 with `Machine <machine> was not registered with its subscription service:
 <reason>`, the worker's closed reason and cause and nothing else, and the effect
@@ -1205,7 +1236,10 @@ operation removes only a consumer this installation's record names, owned or
 certificate gone and removes the record, which the evidence records as
 `unregistered` with the consumer UUID; a certificate with another record or
 none is left registered and recorded `retained`; no certificate is `absent`.
-It never runs `subscription-manager clean` or `--force`. The capability
+It never runs `subscription-manager clean` or `--force`. With a Satellite,
+whether it also deletes its host record is its own "Delete Host upon
+unregister" setting, which Bootwright neither reads nor changes; the CA file
+and `rhsm.conf` leave with the Machine's disks. The capability
 decides whether the removal reads the guest at all, and tells the automation
 `guest` or `skip`; an automation told neither refuses before any effect. An
 installation whose apply records hold no preparation naming its marker never
@@ -1249,7 +1283,8 @@ requires, as [the command contract](cli/commands.md) states.
 registration, the worker's whole session being bounded at 630 seconds, 750
 when it also sets the release for an
 [update within release](#update-within-release), whose bound allows the 120
-seconds more, and its unregistration at 300 seconds.
+seconds more, each 60 seconds more with a Satellite for its configuration
+call, and its unregistration at 300 seconds.
 
 ### Physical removal
 
@@ -1469,13 +1504,22 @@ of either changes the request and so the marker, so it is another
 installation: the context is taken back with `bootwright destroy` and applied
 again, as for [registration](#registration).
 
-**Release variable.** The `%post` of a profile updating `withinRelease` writes
-`/etc/dnf/vars/releasever` holding the release and a newline, mode 0644 owned
-by root:root, so `$releasever` in every repository URL, configured or
-subscription, expands to the minor, such as `9.8`, rather than the major dnf
-derives from the installed `redhat-release`. The file stays on the installed
-system. Source: [dnf configuration reference](https://dnf.readthedocs.io/en/latest/conf_ref.html),
-repo variables.
+**Release variable.** The `%post` of a profile updating `withinRelease` that
+registers with no Satellite writes `/etc/dnf/vars/releasever` holding the
+release and a newline, mode 0644 owned by root:root, so `$releasever` in every
+repository URL, configured or subscription, expands to the minor, such as
+`9.8`, rather than the major dnf derives from the installed `redhat-release`.
+The file stays on the installed system. Source: [dnf configuration reference](https://dnf.readthedocs.io/en/latest/conf_ref.html),
+repo variables. With a release set, subscription-manager's repository
+library writes it literally into the URLs of `/etc/yum.repos.d/redhat.repo`;
+with none set, those URLs keep `$releasever` and dnf substitutes it, from that
+file when present. This is observed behavior, not a cited source, and the
+operator rehearsal of [B877](milestones/m1.md#b877) proves it. So a
+profile registering with a Satellite writes no release variable: a content
+view holding repositories synced for the major, such as `.../rhel9/9/...`,
+would otherwise be fetched at a minor path it does not serve. The hosted
+service keeps the variable; there the release is always set, so the variable
+matters only for configured repositories.
 
 **Effect.** After the installed system's network converged, its FIPS and
 root-encryption proofs passed and, when it registers, its registration and
@@ -1483,11 +1527,16 @@ repositories converged, one fixed worker runs as root through `sudo -n` over
 the pinned fleet connection, built option for option as the registration
 worker is:
 
-1. With a registration, the registration worker sets the release before its
-   `subscription-manager repos` call, with `subscription-manager release
-   --set=<release>`, on every apply, after proving that `subscription-manager
-   release --list` offers it; one that does not refuses
-   `update-release-unavailable`.
+1. With a registration, the registration worker pins the release before its
+   `subscription-manager repos` call, on every apply: when
+   `subscription-manager release --list` offers it, with
+   `subscription-manager release --set=<release>`. A release the hosted
+   service does not offer refuses `update-release-unavailable`; one a
+   Satellite does not offer, or a `release --list` that fails on a
+   Satellite, is not a refusal: `subscription-manager release --unset` clears
+   any release the activation key carries, such as 9.6 under a profile
+   declaring 9.8, and the activation key's content view is the pin; an
+   unreachable Satellite fails that call and refuses as before.
 2. It proves that `VERSION_ID` in the installed system's `/etc/os-release`
    equals the release, else refuses `update-release-mismatch`.
 3. It resolves, and downloads, with the guest's own dnf and without applying
@@ -1531,9 +1580,14 @@ unknown ([unknown resolution](#unknown-resolution)).
 `complete`; an observation also reads `absent`, `pending`, `upgraded` or
 `foreign`, and leaves it empty when it read nothing), `update.release`, `update.transaction` (the dnf history ID, `0`
 when nothing changed), `update.packages` (the number of packages it changed),
-`update.rebooted` and `update.kernel` (the running kernel after it). An
-installation updating `withinRelease` completes only with `complete` and the
-release proved; one with `none` records state `none` and nothing else.
+`update.rebooted`, `update.kernel` (the running kernel after it) and
+`update.pin`, the pin the record names: `release` when the registration set
+the release, `contentView` when a Satellite offered none and it was unset, and
+`variable` when nothing registers. An installation updating `withinRelease`
+completes only with `complete`, the release proved and a pin its registration
+holds (`release` for the hosted service, `release` or `contentView` for a
+Satellite, `variable` without registration); one with `none` records state
+`none` and nothing else.
 
 **Refusals.** The worker names each refusal to the runner, which reports it
 with the message and remedy Go owns, `<release>` being the frozen release and
@@ -1570,6 +1624,19 @@ unchanged.
 **Removal.** Nothing beyond the [inverse](#inverse): the updated packages leave
 with the Machine's disks.
 
+**After installation.** The pin stays in place for every later dnf run on the
+Machine, which Bootwright does not run again: the sticky release, the
+Satellite's content view or the release variable. Configured repositories
+beside a Satellite expand `$releasever` to the major; an operator who needs
+the minor writes it literally in their `baseURL`. A content view that holds a
+newer minor makes the preview's `update-release-drift` stop the update, whose
+remedy is the activation key's content view or lifecycle environment. A
+content-view filter that hides `redhat-release` while serving packages of a
+newer minor cannot be seen in the transaction; the `VERSION_ID` proofs are the
+remaining bound. Satellite custom-product repositories carry the GPG keys and
+`gpgcheck` settings the Satellite publishes, and Bootwright never overrides
+them.
+
 **Scenarios.**
 
 | Update source | Behavior |
@@ -1579,7 +1646,9 @@ with the Machine's disks.
 | Internal mirror in `repositories.configure` | `$releasever` expands to the minor; a snapshot mirror pins by content; the drift refusal catches a mirror of another minor. |
 | `external` Entitlement | Only configured repositories count; with none the profile refuses. |
 | Disconnected, DVD or `hostedTree` only | No update source, so `none` is required. |
-| Satellite | Refused before registration today ([B877](milestones/backlog.md#b877)). |
+| Satellite, release offered | The release is set, as on the hosted service, and the content view serves that minor; the evidence pin is `release`. |
+| Satellite, release not offered | The release is unset and the activation key's content view is the pin; the evidence pin is `contentView`. A newer minor in the view stops the update at `update-release-drift`. |
+| Configured repositories beside a Satellite | No release variable is written, so `$releasever` expands to the major; a minor is written literally in `baseURL`. |
 | `templateClone` qcow2 | Refused today ([B99](milestones/m1.md#b99)); steps 2 to 6 read no installer media. |
 | Provided Machine | Out of scope: Bootwright installs no operating system on it. |
 
@@ -1714,9 +1783,8 @@ the length of that many bytes in base64url without padding.
 | A hostname artifact endpoint under disk encryption | a profile selecting `spec.customizations.security.diskEncryption` whose `spec.installer.anaconda.redfishVirtualMedia.artifactServerEndpoint` resolves to a URL whose host is not an IP literal | `the installer fetches the recovery passphrase before it configures name resolution, so the artifact server endpoint of <profile> must be addressed by IP` | `select an artifact server endpoint whose address is an IP literal in spec.installer.anaconda.redfishVirtualMedia.artifactServerEndpoint on <profile>` |
 | A generated recovery passphrase too long | a profile selecting `spec.customizations.security.diskEncryption` whose `recoveryPassphraseRef` names a `token` Secret generating more than 192 bytes | `the recovery passphrase is limited to 256 characters, and <recovery secret> generates <bytes> bytes, which encode to <length> characters` | `set spec.source.generated.bytes to at most 192 on <recovery secret>` |
 | Subscription repositories with external registration | a profile's `spec.customizations.repositories.subscription` with a `spec.subscription` Entitlement whose `spec.rhsm.management` is `external` | `subscription repositories are enabled on a registration this executable performs, and <entitlement> sets spec.rhsm.management to external` | `remove spec.customizations.repositories.subscription from <profile>, or set spec.rhsm.management to managed on <entitlement>` |
-| A Satellite registration | a `spec.subscription` Entitlement with `spec.rhsm.satellite` | `this executable registers only with the hosted subscription service, and <entitlement> selects a Satellite in spec.rhsm.satellite` | `remove spec.rhsm.satellite from <entitlement>, or remove spec.subscription from <profile>` |
 | Insights enrollment | a `spec.subscription` Entitlement with `spec.rhsm.connectToInsights: true` | `this executable does not enroll a Machine in Insights, a second remote identity it neither proves nor removes, and <entitlement> sets spec.rhsm.connectToInsights to true` | `set spec.rhsm.connectToInsights to false on <entitlement>, or remove spec.subscription from <profile>` |
-| Registration through a proxy | a registering profile on a Machine whose effective `spec.proxy` names a Proxy | `this executable registers only over a direct route, and <machine> reaches the network through <proxy>` | `select direct: {} in spec.proxy of <machine> or of <profile>, or remove spec.subscription from <profile>` |
+| Registration through a proxy | a registering profile on a Machine whose effective `spec.proxy` names a Proxy | `this executable registers only over a direct route to the hosted subscription service or the declared Satellite, and <machine> reaches the network through <proxy>` | `select direct: {} in spec.proxy of <machine> or of <profile>, or remove spec.subscription from <profile>` |
 | A credentialed proxy | a Machine's effective `spec.proxy` naming a Proxy with `spec.connection.auth` or `spec.connection.trustBundleRef`, while its profile configures a repository | `the installed system's repositories would reach <proxy> through a credential or private trust anchor, which an installation cannot carry` | `select direct: {} or an external Proxy without spec.connection.auth and spec.connection.trustBundleRef in spec.proxy of <machine> or of <profile>` |
 | An installer image server off the controller | the `spec.machineRef` of the server a profile's `spec.installer.anaconda.redfishVirtualMedia.artifactServerEndpoint` selects, other than the controller Machine | `a managed-OS installation builds and publishes its installer image on the controller, and <server> is placed on <server host>` | `place <server> on the controller Machine, or select a server placed there in spec.installer.anaconda.redfishVirtualMedia.artifactServerEndpoint on <profile>` |
 | A package tree server off the controller | the `spec.machineRef` of the server a profile's `spec.installer.anaconda.packageSource.hostedTree.artifactServerEndpoint` selects, other than the controller Machine | `a managed-OS installation extracts and publishes its package tree on the controller, and <server> is placed on <server host>` | `place <server> on the controller Machine, or select a server placed there in spec.installer.anaconda.packageSource.hostedTree.artifactServerEndpoint on <profile>` |

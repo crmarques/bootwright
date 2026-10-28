@@ -199,15 +199,15 @@ func TestCompletionRequiresTheUpdateItsPolicyNames(t *testing.T) {
 	if err := ValidatePresence(updateEvidence(t, updating, string(marker), complete, nil), updating, "digest", string(marker)); err != nil {
 		t.Fatalf("a complete update refused: %v", diagnostics.Of(err))
 	}
-	unchanged := UpdateEvidence{Kernel: complete.Kernel, Release: "9.8", State: updateComplete}
+	unchanged := UpdateEvidence{Kernel: complete.Kernel, Pin: pinRelease, Release: "9.8", State: updateComplete}
 	if err := ValidatePresence(updateEvidence(t, updating, string(marker), unchanged, nil), updating, "digest", string(marker)); err != nil {
 		t.Fatalf("a complete update that changed nothing refused: %v", diagnostics.Of(err))
 	}
 	otherRelease := complete
 	otherRelease.Release = "9.7"
 	for _, update := range []UpdateEvidence{{}, {State: updateNone}, {State: updateAbsent}, {State: updateForeign},
-		{Kernel: complete.Kernel, Release: "9.8", State: updatePending},
-		{Kernel: complete.Kernel, Packages: 212, Release: "9.8", State: updateUpgraded, Transaction: 3}, otherRelease} {
+		{Kernel: complete.Kernel, Pin: pinRelease, Release: "9.8", State: updatePending},
+		{Kernel: complete.Kernel, Packages: 212, Pin: pinRelease, Release: "9.8", State: updateUpgraded, Transaction: 3}, otherRelease} {
 		err := ValidatePresence(updateEvidence(t, updating, string(marker), update, nil), updating, "digest", string(marker))
 		if reported := diagnostics.Of(err); len(reported) != 1 || reported[0].Message != "the installed machine has not completed its update within release 9.8" {
 			t.Fatalf("%+v: refusal = %#v", update, reported)
@@ -228,8 +228,8 @@ func TestAnUnfinishedUpdateIsAPositivePartialAndAForeignOneStaysUnknown(t *testi
 	request := pinnedRequest(t, labCatalog(updatingProfile(), rhelEntitlement()))
 	marker, _ := MarkerFor(request, "digest")
 	kernel := "5.14.0-570.12.1.el9_6.x86_64"
-	for _, update := range []UpdateEvidence{{}, {State: updateAbsent}, {Kernel: kernel, Release: "9.8", State: updatePending},
-		{Kernel: kernel, Packages: 4, Release: "9.8", State: updateUpgraded, Transaction: 7}} {
+	for _, update := range []UpdateEvidence{{}, {State: updateAbsent}, {Kernel: kernel, Pin: pinRelease, Release: "9.8", State: updatePending},
+		{Kernel: kernel, Packages: 4, Pin: pinRelease, Release: "9.8", State: updateUpgraded, Transaction: 7}} {
 		evidence := updateEvidence(t, request, string(marker), update, unfinished)
 		if effect, err := installationEffect(reconciliation.Apply, evidence, request, "digest", string(marker)); effect != reconciliation.EffectPartial {
 			t.Fatalf("%+v: effect = %s (%v)", update, effect, diagnostics.Of(err))
@@ -259,12 +259,14 @@ func TestMalformedUpdateEvidenceIsRefused(t *testing.T) {
 	for _, update := range []UpdateEvidence{
 		{State: "registered"}, {State: updateNone, Release: "9.8"}, {State: updateAbsent, Transaction: 1},
 		{State: updateForeign, Kernel: kernel}, {State: "", Rebooted: true},
-		{Kernel: kernel, Release: "9", State: updatePending}, {Release: "9.8", State: updatePending},
-		{Kernel: "a b", Release: "9.8", State: updatePending}, {Kernel: kernel, Release: "9.8", State: updateUpgraded, Transaction: -1},
-		{Kernel: kernel, Release: "9.8", State: updateUpgraded, Packages: -1},
-		{Kernel: kernel, Release: "9.8", State: updateUpgraded, Transaction: 3, Rebooted: true},
-		{Kernel: kernel, Release: "9.8", State: updateComplete, Transaction: 3},
-		{Kernel: kernel, Release: "9.8", State: updateComplete, Rebooted: true},
+		{Kernel: kernel, Pin: pinRelease, Release: "9", State: updatePending}, {Pin: pinRelease, Release: "9.8", State: updatePending},
+		{Kernel: "a b", Pin: pinRelease, Release: "9.8", State: updatePending}, {Kernel: kernel, Pin: pinRelease, Release: "9.8", State: updateUpgraded, Transaction: -1},
+		{Kernel: kernel, Pin: pinRelease, Release: "9.8", State: updateUpgraded, Packages: -1},
+		{Kernel: kernel, Pin: pinRelease, Release: "9.8", State: updateUpgraded, Transaction: 3, Rebooted: true},
+		{Kernel: kernel, Pin: pinRelease, Release: "9.8", State: updateComplete, Transaction: 3},
+		{Kernel: kernel, Pin: pinRelease, Release: "9.8", State: updateComplete, Rebooted: true},
+		{Kernel: kernel, Release: "9.8", State: updatePending}, {Kernel: kernel, Pin: "minor", Release: "9.8", State: updatePending},
+		{State: updateNone, Pin: pinRelease}, {State: updateAbsent, Pin: pinVariable},
 	} {
 		_, err := decodeEvidence(updateEvidence(t, request, string(marker), update, nil), "digest")
 		if reported := diagnostics.Of(err); len(reported) != 1 || reported[0].Message != "the installation evidence reports a malformed update" {
@@ -272,7 +274,7 @@ func TestMalformedUpdateEvidenceIsRefused(t *testing.T) {
 		}
 	}
 	for _, update := range []UpdateEvidence{{}, {State: updateNone}, {State: updateAbsent}, {State: updateForeign}, completedUpdate(request),
-		{Kernel: kernel, Release: "10.0", State: updatePending}} {
+		{Kernel: kernel, Pin: pinContentView, Release: "10.0", State: updatePending}} {
 		if _, err := decodeEvidence(updateEvidence(t, request, string(marker), update, nil), "digest"); err != nil {
 			t.Fatalf("%+v refused: %v", update, diagnostics.Of(err))
 		}

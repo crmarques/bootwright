@@ -268,7 +268,6 @@ Alias cell.
 | [B799](#b799) | new, 2026-10-23 (M3 verification) | defect | Workspace | Setup interruption retries identify any remaining setup-lock holder | Pre-existing intermittent refusal; its cause is unproved |
 | [B857](#b857) | new, 2026-10-27 (lane I) | enabling | Desired state | The audit 5.7 operator tasks run on the reshaped API | B814's paper check was not run before X171 |
 | [B867](#b867) | new, 2026-10-27 (lane R review) | safety | Storage | The Ceph incarnation rule is confirmed on a live cluster | The monitor map's creation time was chosen without a live run |
-| [B877](#b877) | new, 2026-10-28 (D190) | product | Managed OS, with Secrets | A managed registration with a Satellite or Capsule, and an update within the release from its content | D190 authorizes only the hosted subscription service; Satellite registration needs its trust, ownership and removal defined |
 | [B881](#b881) | new, 2026-10-28 (X190 review) | safety | State reconciliation, with Substrate | A cancelled or deadline-ended firmware power cycle still forces its machine off | The adapter supervisor kills the worker with no grace; a grace changes every adapter's termination |
 
 ### B82
@@ -2951,19 +2950,6 @@ upgrade, and changes when the cluster is bootstrapped again under the same
 fsid; otherwise the rule moves to a value that does. **Exit evidence:** a
 ledger row from that live run.
 
-### B877
-
-**Owner:** Managed OS, with Secrets. **Kind:** product. **Requires:** B876.
-**Definition:** Needs definition: the Satellite registration route, the
-trust of `spec.rhsm.satellite.trustBundleRef`, the consumer's ownership and
-removal, and how `contentBaseURL` and the Satellite's content views meet the
-[update within release](../managed-os.md#update-within-release). Today an
-Entitlement selecting `spec.rhsm.satellite` refuses before registration, as
-the [refusal table](../managed-os.md#refusal-table) states. **Outcome:** a
-managed registration with a Satellite or Capsule, updated within the declared
-release from its content. **Exit evidence:** ownership, replay and removal
-tests and an operator-run rehearsal against a Satellite.
-
 ### B881
 
 **Owner:** State reconciliation, with Substrate. **Kind:** safety.
@@ -3226,6 +3212,8 @@ holding such a clause, the clauses pending and the work they enable.
   waiver (D174 applied it for M4b and M4c, D180 for M4d's and M4e's
   blockers); Q26 to Q61 stay open, D174 having accepted their recommended
   baseline; (13), the per-cluster early handoff, waits for Q60.
+- [D192](#d192): clauses (1) to (7), registration with a declared Satellite
+  or Capsule and its release pin (X194).
 
 ### D1
 
@@ -5081,7 +5069,7 @@ holding 4, 8 or 9 refuses at admission. This authorizes
 [B876](m1.md#b876) as slice X189 on M1 alone, out of sequence; the contract
 is [update within release](../managed-os.md#update-within-release). It closes
 the pre-existing defect that no code reads `spec.os.version`. Satellite
-registration is not authorized and is parked as [B877](#b877). The operator
+registration is not authorized and is parked as [B877](m1.md#b877). The operator
 chooses repository IDs and update streams; no rule pairs a minor with a
 stream ([D163](#d163)).
 
@@ -5102,3 +5090,42 @@ default. This authorizes [B880](m1.md#b880) as slice X190 on M1 alone, out of
 sequence; the contract is [physical firmware](../substrates.md#physical-firmware).
 The operator chooses attribute names and values; no rule pairs them with a
 vendor or firmware version ([D163](#d163)).
+
+### D192
+
+**session-pending** (2026-10-28, the owner; the clauses after the owner's
+words are taken by the session, pending the owner's review). The request:
+"Plan and implement the support for operator declare his internal satellite
+instance and how bootwright will use it to configure machines with rhel SO".
+It authorizes [B877](m1.md#b877) as slice X194 on M1, out of sequence, and is
+the dated waiver of B877's Requires on [B876](m1.md#b876), delivered in-tree
+and awaiting operator acceptance, for implementation only. The owner then
+asked how the feature affects repository configuration and package updates
+after provisioning under the declared release, which clauses (6) and (7)
+answer. Taken by the session, pending the owner's review: (1) the API reuses
+`Entitlement.spec.rhsm.satellite`; `hostname` names a Satellite or a Capsule;
+on a `redhatRhel` Entitlement `trustBundleRef` is required whenever
+`satellite` is present, and `contentBaseURL`, the root rhsm appends every
+repository path to, is HTTPS with no query, fragment or userinfo
+([RHSM](../api/secrets.md#rhsm)); the `redhatCeph` Entitlement is unchanged.
+(2) The plan admits a Satellite; Insights and a proxy stay refused, the route
+being direct to the hosted service or the declared Satellite. (3) The frozen
+registration carries an optional `satellite` `{hostname, contentBaseURL,
+trustBundleRef}`, omitted for the hosted service, which moves the request
+version. (4) The CA bundle is lent like the organization and activation key
+and is validated before the adapter runs: 1 to 32 X.509 `CERTIFICATE` PEM
+blocks, nothing else, at most 64 KiB. (5) The registration worker writes the
+bundle to `/etc/rhsm/ca/bootwright-satellite.pem` and runs `subscription-manager
+config` naming the server, the content root and that CA on every apply before
+registering over the unchanged D-Bus call; it never installs
+`katello-ca-consumer`, fetches nothing over HTTP and never disables TLS
+verification; a certificate the bundle does not verify refuses
+`registration-trust`. (6) With a Satellite, a release the server does not
+offer is unset rather than refused, so an activation key's own release cannot
+outlive the profile's, and the content view is the pin; the Kickstart writes
+no `/etc/dnf/vars/releasever`; the evidence records the pin in `update.pin`
+(`release`, `contentView` or `variable`). (7) Repositories and updates after
+provisioning keep the pin in place for every later dnf run, as
+[update within release](../managed-os.md#update-within-release) states; destroy
+unregisters the consumer and leaves the Satellite's own host-record setting
+alone ([registration](../managed-os.md#registration)).

@@ -5,8 +5,10 @@ The module runs on the controller. It reads the organization and activation key
 from their lent material files, refuses a value that is not one line of
 printable ASCII without whitespace before any connection opens, and passes
 them only on the standard input of the fixed root worker it runs over the
-installation's pinned SSH session. It returns closed reasons and states only;
-no material value, no native output and no service text reaches its result.
+installation's pinned SSH session. A registration with a Satellite or
+Capsule also reads its lent CA bundle file and passes it the same way. It
+returns closed reasons and states only; no material value, no native output
+and no service text reaches its result.
 """
 
 from __future__ import annotations
@@ -30,6 +32,11 @@ description:
     argument, the environment, the result or a message.
   - A value that is not one line of printable ASCII without whitespace is
     refused with C(registration-input) before any connection opens.
+  - With I(satellite_hostname), the worker first writes the CA bundle to
+    C(/etc/rhsm/ca/bootwright-satellite.pem) and runs
+    C(subscription-manager config) naming that server on port 443 with prefix
+    C(/rhsm), verification on, the content root as C(rhsm.baseurl) and that
+    CA as C(rhsm.repo_ca_cert), on every run, before it registers or adopts.
   - Returns closed reasons only. The operator texts the controller renders for
     them name C(Machine/<m>), the reason and the next step, as follows.
   - C(registration-input) the <organization|activation key> Secret value of
@@ -57,6 +64,12 @@ description:
   - C(update-release-unavailable) the subscription service offers no release
     <release> to Machine/<m>; set spec.os.version on <profile> to a release it
     offers, or set spec.updates.policy to none, then destroy and apply again.
+    A Satellite that offers no such release unsets the release instead.
+  - C(registration-trust) the Satellite <hostname> presented a certificate
+    that the CA bundle of Secret/<bundle> does not verify; set Secret/<bundle>
+    to the CA that signs the certificate of <hostname>, such as the
+    Satellite's katello-server-ca.crt, then run bootwright apply --context <c>
+    again.
   - C(registration-unreachable) the installed system did not answer over its
     pinned SSH connection; start Machine/<m> with bootwright machine start
     --context <c> --name <m>, then run bootwright destroy --context <c> again.
@@ -124,6 +137,15 @@ options:
         repositories; empty sets none. Register only.
     type: str
     default: ""
+  satellite_hostname:
+    description: The Satellite or Capsule to register with; register only, with the two options below.
+    type: str
+  satellite_content_base_url:
+    description: The HTTPS content root rhsm appends every repository path to; register only.
+    type: str
+  satellite_ca_file:
+    description: The lent CA bundle file that signs the Satellite's certificate; register only.
+    type: path
   timeout:
     description: Seconds the whole session may take, from 1 to 900.
     type: int
@@ -160,8 +182,8 @@ reason:
   returned: when ok is false
   type: str
   choices: [registration-foreign, registration-refused, registration-identity-collision, registration-input,
-            registration-unavailable, registration-repositories, update-release-unavailable, registration-unreachable,
-            transport]
+            registration-unavailable, registration-repositories, update-release-unavailable, registration-trust,
+            registration-unreachable, transport]
 cause:
   description: The closed cause of registration-unavailable or of a transport refusal.
   returned: when the reason has one
@@ -188,6 +210,9 @@ registration:
     state:
       description: registered, adopted or unchanged; unregistered, absent or retained; owned, pending, absent or foreign.
       type: str
+    release:
+      description: C(set) when the release was set, C(unset) when a Satellite that does not offer it had it unset, else empty.
+      type: str
     repositories:
       description: The subscription repository changes applied.
       type: dict
@@ -205,8 +230,9 @@ from ansible_collections.bootwright.core.plugins.module_utils.canonical_json imp
 MAX_MATERIAL = 257
 MAX_TIMEOUT = 900
 MATERIAL = (("organization_file", "organization", "organization"), ("activation_key_file", "activationKey", "activation key"))
+SATELLITE = ("satellite_hostname", "satellite_content_base_url", "satellite_ca_file")
 MODULE_CAUSES = ("session", "timeout", "host-key", "exit", "answer")
-RESULT_KEYS = frozenset(("changed", "consumer", "owned", "repositories", "state"))
+RESULT_KEYS = frozenset(("changed", "consumer", "owned", "release", "repositories", "state"))
 
 
 class ArgumentError(ValueError):
@@ -226,9 +252,11 @@ def check_arguments(params):
         for option in (entry[0] for entry in MATERIAL):
             if params.get(option) is not None:
                 raise ArgumentError(option + " is accepted only for the register operation")
-        for option in ("enable", "disable", "release"):
+        for option in ("enable", "disable", "release") + SATELLITE:
             if params.get(option):
                 raise ArgumentError(option + " is accepted only for the register operation")
+    if len({bool(params.get(option)) for option in SATELLITE}) != 1:
+        raise ArgumentError("satellite_hostname, satellite_content_base_url and satellite_ca_file are given together")
     if not isinstance(params["request"], str) or not worker.DIGEST.fullmatch(params["request"]):
         raise ArgumentError("request is not 64 lowercase hexadecimal characters")
     if type(params["timeout"]) is not int or not 1 <= params["timeout"] <= MAX_TIMEOUT:  # pylint: disable=unidiomatic-typecheck
@@ -253,6 +281,36 @@ def read_material(path, name):
     return worker.secret_value(data, name)
 
 
+def read_bundle(path):
+    """The lent Satellite CA bundle, bounded and validated as PEM certificates; it lives only in memory."""
+    refused = worker.Refused("registration-input", detail="the Satellite CA bundle is not 1 to 32 PEM certificates")
+    try:
+        descriptor = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_CLOEXEC | os.O_NONBLOCK)
+    except (OSError, TypeError, ValueError):
+        raise refused from None
+    try:
+        if not stat.S_ISREG(os.fstat(descriptor).st_mode):
+            raise refused
+        data = worker.read_bounded(descriptor, worker.MAX_BUNDLE)
+    finally:
+        os.close(descriptor)
+    try:
+        text = data.decode("ascii")
+    except UnicodeError:
+        raise refused from None
+    worker.ca_bundle(text)
+    return text
+
+
+def satellite_of(params):
+    if not params.get("satellite_hostname"):
+        return None
+    satellite = {"hostname": params["satellite_hostname"], "contentBaseURL": params["satellite_content_base_url"],
+                 "caBundle": read_bundle(params["satellite_ca_file"])}
+    worker.satellite_of(satellite)
+    return satellite
+
+
 def payload_of(params):
     payload = {"operation": params["operation"], "request": params["request"]}
     if params["operation"] == "register":
@@ -262,6 +320,7 @@ def payload_of(params):
         payload["release"] = params.get("release") or ""
         if not worker.RELEASE.fullmatch(payload["release"]) and payload["release"] != "":
             raise worker.Refused("registration-input", detail="the release is not a <major>.<minor> release")
+        payload["satellite"] = satellite_of(params)
     return canonical(payload)
 
 
@@ -282,6 +341,7 @@ def valid_result(operation, value):
     repositories = value["repositories"]
     return (type(value["changed"]) is bool and type(value["owned"]) is bool  # pylint: disable=unidiomatic-typecheck
             and value["state"] in worker.STATES[operation]
+            and value["release"] in (worker.RELEASE_PINS if operation == "register" else ("",))
             and value["owned"] == (value["state"] in worker.OWNED_STATES)
             and isinstance(value["consumer"], str) and (value["consumer"] == "" or bool(worker.UUID.fullmatch(value["consumer"])))
             and isinstance(repositories, dict) and set(repositories) == {"disable", "enable"}
@@ -362,6 +422,9 @@ def main():
             "enable": {"type": "list", "elements": "str", "default": []},
             "disable": {"type": "list", "elements": "str", "default": []},
             "release": {"type": "str", "default": ""},
+            "satellite_hostname": {"type": "str"},
+            "satellite_content_base_url": {"type": "str"},
+            "satellite_ca_file": {"type": "path"},
             "timeout": {"type": "int", "default": 630},
         },
         required_if=[("operation", "register", ("organization_file", "activation_key_file"))],

@@ -45,9 +45,10 @@ READ = "managedos_install_anaconda_registration_read"
 DIGEST = "1" * 64
 CONSUMER = "0f1e2d3c-4b5a-6978-8796-a5b4c3d2e1f0"
 NAMED = ["registration-input", "registration-foreign", "registration-refused", "registration-identity-collision",
-         "registration-unavailable", "registration-repositories", "update-release-unavailable"]
+         "registration-unavailable", "registration-repositories", "registration-trust", "update-release-unavailable"]
 REGISTER_ONLY = ("organization_file", "activation_key_file", "enable", "disable")
-MATERIAL = ("rhsmOrganization", "rhsmActivationKey")
+MATERIAL = ("rhsmOrganization", "rhsmActivationKey", "rhsmSatelliteCA")
+FILES = ("organization_file", "activation_key_file", "satellite_ca_file")
 # The names each file gives the connection guest.yml makes, so the tasks can be
 # compared with guest.yml's option for option.
 SESSIONS = {
@@ -110,6 +111,7 @@ def scope(registering=True, **extra):
         "bootwright_os_install_material": {"fleetIdentity": "/run/material/fleet-id",
                                            "rhsmOrganization": "/run/material/rhsm-organization",
                                            "rhsmActivationKey": "/run/material/rhsm-activation-key",
+                                           "rhsmSatelliteCA": "/run/material/rhsm-satellite-ca",
                                            "unregister": "guest"},
     })
     values.update(extra)
@@ -198,7 +200,8 @@ def test_register_material_never_enters_a_task_variable():
     assert arguments is not None and task["no_log"] is True
     assert arguments["organization_file"] == "{{ bootwright_os_install_material.rhsmOrganization }}"
     assert arguments["activation_key_file"] == "{{ bootwright_os_install_material.rhsmActivationKey }}"
-    others = {key: value for key, value in arguments.items() if key not in ("organization_file", "activation_key_file")}
+    assert "bootwright_os_install_material.rhsmSatelliteCA" in arguments["satellite_ca_file"]
+    others = {key: value for key, value in arguments.items() if key not in FILES}
     assert not any(word in repr(others) for word in MATERIAL)
     assert not any(word in repr({key: value for key, value in task.items() if key != REGISTRATION}) for word in MATERIAL)
     assert "lookup" not in repr(task) and "vars" not in task
@@ -510,3 +513,31 @@ def test_destroy_skips_the_guest_unless_told_to_unregister(unregister):
             "registrationRequired": render(arguments["registrationRequired"], **variables),
         })
         assert refused is None and evidence["postcondition"] is True and evidence["registration"] == {"consumer": "", "state": ""}
+
+
+SATELLITE = {"hostname": "satellite.example.test", "contentBaseURL": "https://capsule.example.test/pulp/content",
+             "trustBundleRef": "satellite-ca"}
+
+
+def satellite_scope(updating):
+    request = scope()["bootwright_os_install_request"]
+    request = dict(request, registration=dict(request["registration"], satellite=SATELLITE))
+    if updating:
+        request["update"] = {"policy": "withinRelease", "release": "9.8"}
+    return {"bootwright_os_install_request": request}
+
+
+@pytest.mark.parametrize("satellite, updating, timeout", [
+    (False, False, 630), (False, True, 750), (True, False, 690), (True, True, 810),
+])
+def test_a_satellite_registration_lends_its_bundle_and_gains_its_configuration_time(satellite, updating, timeout):
+    arguments = module("register.yml")[REGISTRATION]
+    variables = satellite_scope(updating) if satellite else {}
+    if updating and not satellite:
+        request = scope()["bootwright_os_install_request"]
+        variables = {"bootwright_os_install_request": dict(request, update={"policy": "withinRelease", "release": "9.8"})}
+    assert int(render(arguments["timeout"], **variables)) == timeout
+    if satellite:
+        assert render(arguments["satellite_hostname"], **variables) == "satellite.example.test"
+        assert render(arguments["satellite_content_base_url"], **variables) == "https://capsule.example.test/pulp/content"
+        assert render(arguments["satellite_ca_file"], **variables) == "/run/material/rhsm-satellite-ca"

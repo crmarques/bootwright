@@ -2,7 +2,7 @@
 - name: Validate the frozen installation request
   ansible.builtin.assert:
     that:
-      - bootwright_os_install_request.version == 'os-install-anaconda-v20'
+      - bootwright_os_install_request.version == 'os-install-anaconda-v21'
       - bootwright_os_install_request.identity.context is match('^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$')
       - bootwright_os_install_request.identity.object is match('^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$')
       - managedos_install_anaconda_work == '/var/lib/bootwright-install/'
@@ -711,6 +711,7 @@
           - registration-identity-collision
           - registration-unavailable
           - registration-repositories
+          - registration-trust
           - update-release-unavailable
       no_log: true
 
@@ -727,7 +728,7 @@
           {{ managedos_install_anaconda_registration_result.reason | default('')
              if managedos_install_anaconda_registration_result.reason | default('') in
              ['registration-input', 'registration-foreign', 'registration-refused', 'registration-identity-collision',
-              'registration-unavailable', 'registration-repositories', 'update-release-unavailable',
+              'registration-unavailable', 'registration-repositories', 'registration-trust', 'update-release-unavailable',
               'registration-unreachable', 'transport']
              else 'unexpected answer' }}
         managedos_install_anaconda_registration_cause: >-

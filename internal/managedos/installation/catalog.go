@@ -17,7 +17,7 @@ const Implementation = "os-install-anaconda-v1"
 // Kind is shared with the substrate; resolution also requires the implementation.
 const Kind = "Machine"
 
-const requestVersion = "os-install-anaconda-v20"
+const requestVersion = "os-install-anaconda-v21"
 
 // installationBudgets are the waits every installation this build plans
 // freezes. The installer takes minutes to write a disk; a physical server adds
@@ -105,7 +105,7 @@ const networkCheckpointSeconds = 300
 
 const networkRollbackGrace = 30 * time.Second
 
-// registrationBound covers the worker's 630 s session or its 300 s unregistration, its policy read and inspection.
+// registrationBound covers the worker's 630 s session, 690 s with a Satellite, or its 300 s unregistration, its policy read and inspection.
 const registrationBound = 15 * time.Minute
 
 // updateBound covers the 1800 s update session, the 600 s reboot, the 120 s release set, the

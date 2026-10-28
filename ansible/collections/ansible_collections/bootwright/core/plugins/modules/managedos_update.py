@@ -3,7 +3,8 @@
 
 The module runs on the controller. It runs the fixed root worker over the
 installation's pinned SSH session, the one the registration worker uses, with
-only the operation, the request digest and the release on its standard input.
+only the operation, the request digest, the release and the release pin on its
+standard input.
 It returns closed reasons, states and counts only; no native output and no
 repository text reaches its result.
 """
@@ -85,6 +86,13 @@ options:
     description: The frozen release, <major>.<minor>.
     type: str
     required: true
+  pin:
+    description:
+      - The release pin the registration left, C(release), C(contentView) or
+        C(variable), for apply and complete; the record keeps it. Empty for
+        inspect, which reports the recorded one.
+    type: str
+    default: ""
   timeout:
     description: Seconds the whole session may take, from 1 to 1800.
     type: int
@@ -143,6 +151,9 @@ evidence:
     release:
       description: The release proved, or an empty string for absent or foreign.
       type: str
+    pin:
+      description: The release pin recorded, or an empty string for absent or foreign.
+      type: str
     transaction:
       description: The dnf history transaction carrying the request's comment, 0 when nothing changed.
       type: int
@@ -167,7 +178,7 @@ from ansible_collections.bootwright.core.plugins.module_utils.canonical_json imp
 
 MAX_TIMEOUT = 1800
 DETAIL = re.compile(r"[A-Za-z0-9._+~-]{1,64}(@[A-Za-z0-9._:-]{1,90})?")
-RESULT_KEYS = frozenset(("changed", "kernel", "packages", "rebooted", "release", "state", "transaction"))
+RESULT_KEYS = frozenset(("changed", "kernel", "packages", "pin", "rebooted", "release", "state", "transaction"))
 
 
 class ArgumentError(ValueError):
@@ -185,6 +196,8 @@ def check_arguments(params):
         raise ArgumentError("release is not a <major>.<minor> release")
     if type(params["timeout"]) is not int or not 1 <= params["timeout"] <= MAX_TIMEOUT:  # pylint: disable=unidiomatic-typecheck
         raise ArgumentError("timeout is not between 1 and 1800 seconds")
+    if params.get("pin", "") not in (("",) if params["operation"] == "inspect" else worker.PINS):
+        raise ArgumentError("pin is release, contentView or variable for apply and complete, and empty for inspect")
 
 
 def refusal(reason, cause=None, detail=None):
@@ -200,10 +213,18 @@ def counted(value):
     return type(value) is int and value >= 0  # pylint: disable=unidiomatic-typecheck
 
 
-def valid_result(operation, release, value):
+def valid_pin(operation, recorded, value, pin):
+    if operation == "inspect":
+        return value in (worker.PINS if recorded else ("",))
+    return value == pin
+
+
+def valid_result(operation, release, value, pin=""):
     if not isinstance(value, dict) or set(value) != RESULT_KEYS or value["state"] not in worker.STATES[operation]:
         return False
     recorded = value["state"] in worker.RECORD_STATES
+    if not valid_pin(operation, recorded, value["pin"], pin):
+        return False
     return (type(value["changed"]) is bool and type(value["rebooted"]) is bool  # pylint: disable=unidiomatic-typecheck
             and counted(value["transaction"]) and counted(value["packages"])
             and value["rebooted"] is (value["state"] == "complete" and value["transaction"] != 0)
@@ -225,7 +246,7 @@ def valid_refusal(value):
     return True
 
 
-def parse_answer(operation, release, stdout):
+def parse_answer(operation, release, stdout, pin=""):
     """The worker's one closed answer, or None."""
     if not isinstance(stdout, bytes) or b"\n" in stdout.rstrip(b"\n"):
         return None
@@ -236,11 +257,11 @@ def parse_answer(operation, release, stdout):
     if not isinstance(value, dict) or type(value.get("ok")) is not bool:  # pylint: disable=unidiomatic-typecheck
         return None
     if value["ok"]:
-        return value if set(value) == {"ok", "result"} and valid_result(operation, release, value["result"]) else None
+        return value if set(value) == {"ok", "result"} and valid_result(operation, release, value["result"], pin) else None
     return value if valid_refusal(value) else None
 
 
-def interpret(operation, release, outcome):
+def interpret(operation, release, outcome, pin=""):
     if outcome.timed_out:
         return refusal("transport", "timeout")
     if outcome.cause is not None:
@@ -249,7 +270,7 @@ def interpret(operation, release, outcome):
         return refusal("transport", "host-key" if outcome.host_key else "unreachable")
     if outcome.code != 0:
         return refusal("transport", "exit")
-    value = parse_answer(operation, release, outcome.stdout)
+    value = parse_answer(operation, release, outcome.stdout, pin)
     if value is None:
         return refusal("transport", "answer")
     if value["ok"]:
@@ -260,9 +281,10 @@ def interpret(operation, release, outcome):
 
 
 def execute(params, run=managedos_guest_ssh.run):
-    """The module result; only the operation, the digest and the release reach the worker."""
+    """The module result; only the operation, the digest, the release and the pin reach the worker."""
     check_arguments(params)
-    payload = canonical({"operation": params["operation"], "release": params["release"], "request": params["request"]})
+    pin = params.get("pin", "")
+    payload = canonical({"operation": params["operation"], "pin": pin, "release": params["release"], "request": params["request"]})
     remote_argv = remote_command.fixed_worker_argv(worker_source())
     try:
         argv = managedos_guest_ssh.guest_argv(
@@ -271,7 +293,7 @@ def execute(params, run=managedos_guest_ssh.run):
             identity=params["identity"], user=params["user"], address=params["address"], remote_argv=remote_argv)
     except managedos_guest_ssh.SessionError as error:
         return refusal("transport", "session", str(error))
-    return interpret(params["operation"], params["release"], run(argv, payload, params["timeout"]))
+    return interpret(params["operation"], params["release"], run(argv, payload, params["timeout"]), pin)
 
 
 def main():
@@ -287,6 +309,7 @@ def main():
             "policy_host_key_algorithms": {"type": "str", "required": True, "no_log": False},
             "request": {"type": "str", "required": True},
             "release": {"type": "str", "required": True},
+            "pin": {"type": "str", "default": ""},
             "timeout": {"type": "int", "default": 1800},
         },
         supports_check_mode=False,

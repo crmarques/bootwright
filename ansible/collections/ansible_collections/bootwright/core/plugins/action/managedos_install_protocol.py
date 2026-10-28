@@ -32,7 +32,7 @@ FIPS_REFUSALS = ("fips-not-enabled",)
 ENCRYPTION_REFUSALS = ("root-encryption-unproved",)
 REGISTRATION_REFUSALS = (
     "registration-input", "registration-foreign", "registration-refused", "registration-identity-collision",
-    "registration-unavailable", "registration-repositories", "registration-unreachable",
+    "registration-unavailable", "registration-repositories", "registration-unreachable", "registration-trust",
 )
 UPDATE_REFUSALS = (
     "update-release-unavailable", "update-release-mismatch", "update-release-drift", "update-no-repository",
@@ -42,10 +42,13 @@ UPDATE_REFUSALS = (
 # one's; only a record's names a release, a transaction and a kernel.
 UPDATE_STATES = ("", "none", "absent", "pending", "upgraded", "complete", "foreign")
 RECORD_STATES = ("pending", "upgraded", "complete")
-UPDATE_KEYS = frozenset(("kernel", "packages", "rebooted", "release", "state", "transaction"))
+UPDATE_KEYS = frozenset(("kernel", "packages", "pin", "rebooted", "release", "state", "transaction"))
+# The release pin a record names: the sticky release, a Satellite's content
+# view, or the release variable.
+UPDATE_PINS = ("release", "contentView", "variable")
 RELEASE = re.compile(r"(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)")
 KERNEL = re.compile(r"[A-Za-z0-9._+~-]{1,128}")
-EMPTY_UPDATE = {"kernel": "", "packages": 0, "rebooted": False, "release": "", "state": "", "transaction": 0}
+EMPTY_UPDATE = {"kernel": "", "packages": 0, "pin": "", "rebooted": False, "release": "", "state": "", "transaction": 0}
 # The ownership states the registration worker reads or a removal leaves; only
 # an owned, a pending or an unregistered registration names its consumer.
 REGISTRATION_STATES = ("", "owned", "pending", "absent", "foreign", "unregistered", "retained")
@@ -126,7 +129,7 @@ def update(value, required=True):
         return dict(value)
     counts = all(type(value[key]) is int and value[key] >= 0 for key in ("packages", "transaction"))  # pylint: disable=unidiomatic-typecheck
     if (not counts or not isinstance(value["release"], str) or not RELEASE.fullmatch(value["release"])
-            or not isinstance(value["kernel"], str) or not KERNEL.fullmatch(value["kernel"])
+            or not isinstance(value["kernel"], str) or not KERNEL.fullmatch(value["kernel"]) or value["pin"] not in UPDATE_PINS
             or value["rebooted"] is not (state == "complete" and value["transaction"] != 0)):
         raise ValueError("update")
     return dict(value)

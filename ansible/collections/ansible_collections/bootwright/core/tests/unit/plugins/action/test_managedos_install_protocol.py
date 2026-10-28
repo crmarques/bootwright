@@ -203,8 +203,8 @@ def test_a_registering_removal_publishes_only_a_released_registration(monkeypatc
 
 
 KERNEL = "5.14.0-611.5.1.el9_7.x86_64"
-COMPLETE = {"kernel": KERNEL, "packages": 212, "rebooted": True, "release": "9.8", "state": "complete", "transaction": 3}
-NONE = {"kernel": "", "packages": 0, "rebooted": False, "release": "", "state": "none", "transaction": 0}
+COMPLETE = {"kernel": KERNEL, "packages": 212, "pin": "release", "rebooted": True, "release": "9.8", "state": "complete", "transaction": 3}
+NONE = {"kernel": "", "packages": 0, "pin": "", "rebooted": False, "release": "", "state": "none", "transaction": 0}
 
 
 # An installation updating within its release completes only with a complete
@@ -219,6 +219,8 @@ def test_an_updating_installation_completes_only_with_a_complete_update():
     assert evidence["update"] == COMPLETE and evidence["postcondition"] is True and refused is None
     unchanged = dict(COMPLETE, packages=0, rebooted=False, transaction=0)
     assert protocol.completion(proved(updateRequired=True, update=unchanged))[0]["postcondition"] is True
+    for pin in protocol.UPDATE_PINS:
+        assert protocol.completion(proved(updateRequired=True, update=dict(COMPLETE, pin=pin)))[0]["update"]["pin"] == pin
     for arguments in (proved(), proved(updateRequired=False), proved(update=NONE)):
         evidence, refused = protocol.completion(arguments)
         assert evidence["update"] == NONE and evidence["postcondition"] is True and refused is None
@@ -249,6 +251,10 @@ def test_an_observation_publishes_an_unfinished_update(monkeypatch):
     dict(COMPLETE, changed=True),
     dict(NONE, release="9.8"),
     dict(NONE, state="absent", packages=1),
+    dict(COMPLETE, pin=""),
+    dict(COMPLETE, pin="minor"),
+    dict(NONE, pin="release"),
+    {key: value for key, value in COMPLETE.items() if key != "pin"},
     {"state": "complete"},
     "complete",
 ], ids=repr)

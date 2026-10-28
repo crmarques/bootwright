@@ -13,9 +13,25 @@ The record is written pending before the service is asked, so a reply lost
 between the service and the record is adopted by the next run instead of
 looking foreign. Anything else is foreign and left registered.
 
+A request naming a Satellite or Capsule carries its hostname, its content
+root and its CA bundle. Before registering or adopting, on every run, the
+worker writes the bundle to SATELLITE_CA, root-owned 0644, through a
+descriptor of its directory, which must be a real directory owned by root and
+writable by root alone, refusing a link or
+any other non-regular file there, and runs `subscription-manager config` naming
+that server, port 443, prefix /rhsm, verification on, the content root and
+that CA; the private registration bus then reaches the server rhsm.conf names.
+It never installs katello-ca-consumer, fetches nothing and never disables
+verification. A certificate the bundle does not verify refuses
+registration-trust.
+
 A request updating within its release names that release: before the
-repositories the worker proves `subscription-manager release --list` offers
-it and sets it with `subscription-manager release --set`, on every run.
+repositories the worker sets it with `subscription-manager release --set`
+when `subscription-manager release --list` offers it, on every run. A release
+the hosted service does not offer refuses; one a Satellite does not offer is
+unset with `subscription-manager release --unset`, so the activation key's
+content view is the pin; a `release --list` that fails on a Satellite reads as
+no release offered. The result names which, `set` or `unset`.
 
 The answer is one line of JSON carrying only closed reasons, states and the
 consumer UUID; no service text, no secret and no traceback leaves the worker.
@@ -33,6 +49,8 @@ import subprocess
 import sys
 
 CONSUMER_CERT = "/etc/pki/consumer/cert.pem"
+SATELLITE_CA_DIRECTORY = "/etc/rhsm/ca"
+SATELLITE_CA = "/etc/rhsm/ca/bootwright-satellite.pem"
 RECORD_DIRECTORY = "/etc/bootwright"
 RECORD = "/etc/bootwright/registration.json"
 SUBSCRIPTION_MANAGER = "/usr/sbin/subscription-manager"
@@ -45,21 +63,26 @@ REGISTER_CEILING = 300
 REPOSITORIES_CEILING = 300
 UNREGISTER_CEILING = 300
 RELEASE_CEILING = 60
+CONFIG_CEILING = 60
 MAX_RELEASES = 65536
-MAX_INPUT = 65536
+MAX_BUNDLE = 65536
+MAX_CERTIFICATES = 32
+MAX_INPUT = 262144
 MAX_RECORD = 4096
 MAX_REPLY = 1 << 20
 MAX_CERTIFICATE = 65536
 MAX_REPOSITORIES = 256
 REASONS = ("registration-foreign", "registration-refused", "registration-identity-collision",
            "registration-input", "registration-unavailable", "registration-repositories",
-           "update-release-unavailable", "transport")
+           "update-release-unavailable", "registration-trust", "transport")
 CAUSES = {"registration-unavailable": ("service", "timeout", "tooling", "unregister")}
 STATES = {"register": ("registered", "adopted", "unchanged"),
           "unregister": ("unregistered", "absent", "retained"),
           "inspect": ("owned", "pending", "absent", "foreign")}
 OWNED_STATES = frozenset(("registered", "adopted", "unchanged", "owned"))
-KEYS = {"register": frozenset(("operation", "request", "organization", "activationKey", "enable", "disable", "release")),
+RELEASE_PINS = ("", "set", "unset")
+SATELLITE_KEYS = frozenset(("hostname", "contentBaseURL", "caBundle"))
+KEYS = {"register": frozenset(("operation", "request", "organization", "activationKey", "enable", "disable", "release", "satellite")),
         "unregister": frozenset(("operation", "request")),
         "inspect": frozenset(("operation", "request"))}
 UUID = re.compile(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}")
@@ -68,6 +91,12 @@ RELEASE = re.compile(r"(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)")
 SECRET = re.compile(rb"[\x21-\x7e]{1,255}")
 REPOSITORY = re.compile(r"[^\s\"'/\\#,%][^\s\"'/\\#,]{0,254}")
 PRINTABLE = re.compile(r"[\x21-\x7e]+")
+HOSTNAME = re.compile(r"[A-Za-z0-9](?:[A-Za-z0-9.-]{0,251}[A-Za-z0-9])?|[0-9A-Fa-f:.]{2,45}")
+CONTENT_ROOT = re.compile(r"https://[^\s/?#@\\]{1,255}(?:/[^\s?#]*)?")
+MAX_CONTENT_ROOT = 2048
+CERTIFICATE = re.compile(rb"-----BEGIN CERTIFICATE-----\r?\n[A-Za-z0-9+/=\r\n \t]{1,65536}?\n-----END CERTIFICATE-----[ \t\r]*")
+TRUST_ERRORS = frozenset(("SSLCertVerificationError",))
+TRUST_TEXT = ("CERTIFICATE_VERIFY_FAILED", "certificate verify failed")
 COLLISION = re.compile(r"The DMI UUID of this host \(.*\) matches other registered hosts")
 ALREADY_REGISTERED = "This system is already registered."
 UNAVAILABLE = frozenset(("ConnectionException", "ConnectionSetupException",
@@ -115,6 +144,36 @@ def repositories(enable, disable):
     if not repository_list(enable, False) or not repository_list(disable, True) or set(enable) & set(disable):
         raise Refused("registration-input", detail="the subscription repository list is not valid")
     return list(enable), list(disable)
+
+
+def ca_bundle(value):
+    """1 to MAX_CERTIFICATES PEM CERTIFICATE blocks and whitespace only, within MAX_BUNDLE bytes, as bytes."""
+    refused = Refused("registration-input", detail="the Satellite CA bundle is not 1 to 32 PEM certificates")
+    if not isinstance(value, str) or len(value) > MAX_BUNDLE:
+        raise refused
+    try:
+        data = value.encode("ascii")
+    except UnicodeError:
+        raise refused from None
+    blocks = CERTIFICATE.findall(data)
+    if not 1 <= len(blocks) <= MAX_CERTIFICATES or CERTIFICATE.sub(b"", data).strip(b" \t\r\n\v\f") != b"":
+        raise refused
+    return data
+
+
+def satellite_of(value):
+    """The validated Satellite, or None for the hosted service."""
+    if value is None:
+        return None
+    if not isinstance(value, dict) or set(value) != SATELLITE_KEYS:
+        raise Refused("registration-input", detail="the Satellite is not valid")
+    hostname, root = value["hostname"], value["contentBaseURL"]
+    if not isinstance(hostname, str) or not HOSTNAME.fullmatch(hostname):
+        raise Refused("registration-input", detail="the Satellite hostname is not valid")
+    if (not isinstance(root, str) or len(root) > MAX_CONTENT_ROOT or not CONTENT_ROOT.fullmatch(root)
+            or not PRINTABLE.fullmatch(root)):
+        raise Refused("registration-input", detail="the Satellite content root is not valid")
+    return {"hostname": hostname, "contentBaseURL": root, "caBundle": ca_bundle(value["caBundle"])}
 
 
 def read_bounded(descriptor, limit):
@@ -197,8 +256,12 @@ def offered(output):
     return frozenset(line.strip() for line in lines if RELEASE.fullmatch(line.strip()))
 
 
-def classify(error):
-    """A closed refusal for a D-Bus error; the service's text is matched, never carried."""
+def classify(error, satellite=False):
+    """A closed refusal for a D-Bus error; the service's text is matched, never carried.
+
+    With a Satellite, a TLS verification failure the error names refuses
+    registration-trust; the hosted service keeps its earlier mapping.
+    """
     name = error.get_dbus_name()
     if name in TOOLING_ERRORS:
         return Refused("registration-unavailable", "tooling")
@@ -213,6 +276,8 @@ def classify(error):
     if isinstance(parsed, dict):
         text = parsed.get("message") if isinstance(parsed.get("message"), str) else ""
         exception = parsed.get("exception") if isinstance(parsed.get("exception"), str) else ""
+    if satellite and (exception in TRUST_ERRORS or any(marker in text for marker in TRUST_TEXT)):
+        return Refused("registration-trust")
     if COLLISION.search(text):
         return Refused("registration-identity-collision")
     if ALREADY_REGISTERED in text:
@@ -248,7 +313,11 @@ class Guest:
     """The installed machine's registration state; every dependency is injectable."""
 
     def __init__(self, cert=CONSUMER_CERT, record=RECORD, directory=RECORD_DIRECTORY, owner=0,
-                 run=bounded_run, bus=load_dbus, identity=consumer_identity, capture=bounded_capture):
+                 run=bounded_run, bus=load_dbus, identity=consumer_identity, capture=bounded_capture,
+                 ca=SATELLITE_CA, ca_directory=SATELLITE_CA_DIRECTORY, group=0):
+        self.ca = ca
+        self.group = group
+        self.ca_directory = ca_directory
         self.cert = cert
         self.record = record
         self.directory = directory
@@ -340,7 +409,87 @@ class Guest:
         os.unlink(self.record)
         self.sync_directory()
 
-    def register(self, organization, key):
+    def ca_parent(self):
+        """A descriptor of the CA directory when it is a real directory owned by root and writable by root alone."""
+        try:
+            descriptor = os.open(self.ca_directory, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | os.O_CLOEXEC)
+        except OSError:
+            raise Refused("registration-unavailable", "tooling") from None
+        status = os.fstat(descriptor)
+        if not stat.S_ISDIR(status.st_mode) or status.st_uid != self.owner or status.st_mode & 0o022:
+            os.close(descriptor)
+            raise Refused("registration-unavailable", "tooling")
+        return descriptor
+
+    def present_ca(self, parent):
+        """The bytes at the CA path when it is a root-owned 0644 regular file, None when absent; anything else refuses."""
+        name = os.path.basename(self.ca)
+        try:
+            descriptor = os.open(name, os.O_RDONLY | os.O_NOFOLLOW | os.O_CLOEXEC | os.O_NONBLOCK, dir_fd=parent)
+        except FileNotFoundError:
+            return None
+        except OSError:
+            raise Refused("registration-unavailable", "tooling") from None
+        try:
+            status = os.fstat(descriptor)
+            if not stat.S_ISREG(status.st_mode):
+                raise Refused("registration-unavailable", "tooling")
+            data = read_bounded(descriptor, MAX_BUNDLE)
+        finally:
+            os.close(descriptor)
+        if status.st_uid != self.owner or status.st_gid != self.group or stat.S_IMODE(status.st_mode) != 0o644:
+            return b""
+        return data
+
+    def publish_ca(self, parent, bundle):
+        """Stage the bundle beside the CA path and rename it there, durably; the stage never survives a failure."""
+        name, temporary = os.path.basename(self.ca), ".bootwright-satellite.pem.tmp"
+        try:
+            os.unlink(temporary, dir_fd=parent)
+        except FileNotFoundError:
+            pass
+        descriptor = os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW | os.O_CLOEXEC, 0o644, dir_fd=parent)
+        try:
+            try:
+                os.fchown(descriptor, self.owner, self.group)
+                os.fchmod(descriptor, 0o644)
+                view = memoryview(bundle)
+                while view:
+                    view = view[os.write(descriptor, view):]
+                os.fsync(descriptor)
+            finally:
+                os.close(descriptor)
+            os.replace(temporary, name, src_dir_fd=parent, dst_dir_fd=parent)
+        except BaseException:
+            quietly(lambda: os.unlink(temporary, dir_fd=parent))
+            raise
+        os.fsync(parent)
+
+    def trust(self, bundle):
+        """Publish the Satellite CA bundle as a root-owned 0644 file in its directory; True when it changed."""
+        parent = self.ca_parent()
+        try:
+            if self.present_ca(parent) == bundle:
+                return False
+            self.publish_ca(parent, bundle)
+            return True
+        except OSError:
+            raise Refused("registration-unavailable", "tooling") from None
+        finally:
+            os.close(parent)
+
+    def configure(self, satellite):
+        """Point rhsm.conf at the Satellite, its content root and its CA, with verification on."""
+        argv = [SUBSCRIPTION_MANAGER, "config", "--server.hostname=" + satellite["hostname"], "--server.port=443",
+                "--server.prefix=/rhsm", "--server.insecure=0", "--rhsm.baseurl=" + satellite["contentBaseURL"],
+                "--rhsm.repo_ca_cert=" + self.ca]
+        code = self.run(argv, CONFIG_CEILING)
+        if code is None:
+            raise Refused("registration-unavailable", "timeout")
+        if code != 0:
+            raise Refused("registration-unavailable", "tooling")
+
+    def register(self, organization, key, satellite=False):
         """One RegisterWithActivationKeys call on the private bus with empty options; the consumer UUID."""
         dbus = self.bus()
         try:
@@ -348,7 +497,7 @@ class Guest:
             server = dbus.Interface(system.get_object(BUS_NAME, REGISTER_SERVER_PATH), REGISTER_SERVER_INTERFACE)
             address = server.Start("", timeout=REGISTER_CEILING)
         except dbus.exceptions.DBusException as error:
-            raise classify(error) from None
+            raise classify(error, satellite) from None
         private = None
         try:
             private = dbus.connection.Connection(address)
@@ -357,7 +506,7 @@ class Guest:
                 organization, dbus.Array([key], signature="s"), dbus.Dictionary({}, signature="sv"),
                 dbus.Dictionary({}, signature="sv"), "", timeout=REGISTER_CEILING)
         except dbus.exceptions.DBusException as error:
-            raise classify(error) from None
+            raise classify(error, satellite) from None
         finally:
             if private is not None:
                 quietly(private.close)
@@ -375,32 +524,41 @@ class Guest:
         if code != 0:
             raise Refused("registration-repositories")
 
-    def release(self, release):
-        """Prove the subscription service offers the release, then make it the sticky minor release."""
+    def release(self, release, satellite=False):
+        """Make an offered release the sticky minor release, set; on a Satellite that does not offer it, unset any."""
         listed = self.capture([SUBSCRIPTION_MANAGER, "release", "--list"], RELEASE_CEILING)
         if listed is None:
             raise Refused("registration-unavailable", "timeout")
-        if listed[0] != 0:
+        if listed[0] != 0 and not satellite:
             raise Refused("registration-unavailable", "service")
-        if release not in offered(listed[1]):
+        if listed[0] == 0 and release in offered(listed[1]):
+            argv, pinned = [SUBSCRIPTION_MANAGER, "release", "--set=" + release], "set"
+        elif satellite:
+            argv, pinned = [SUBSCRIPTION_MANAGER, "release", "--unset"], "unset"
+        else:
             raise Refused("update-release-unavailable")
-        code = self.run([SUBSCRIPTION_MANAGER, "release", "--set=" + release], RELEASE_CEILING)
+        code = self.run(argv, RELEASE_CEILING)
         if code is None:
             raise Refused("registration-unavailable", "timeout")
         if code != 0:
             raise Refused("registration-unavailable", "service")
+        return pinned
 
 
-def result(changed, consumer, state, enable=(), disable=()):
-    return {"changed": changed, "consumer": consumer or "", "owned": state in OWNED_STATES,
+def result(changed, consumer, state, enable=(), disable=(), release=""):
+    return {"changed": changed, "consumer": consumer or "", "owned": state in OWNED_STATES, "release": release,
             "repositories": {"disable": list(disable), "enable": list(enable)}, "state": state}
 
 
 def register_operation(guest, payload):
-    request, enable, disable = payload["request"], payload["enable"], payload["disable"]
+    request, enable, disable, satellite = payload["request"], payload["enable"], payload["disable"], payload["satellite"]
     kind, common = guest.state(request)[::2]
     if kind == "foreign":
         raise Refused("registration-foreign")
+    trusted = False
+    if satellite is not None:
+        trusted = guest.trust(satellite["caBundle"])
+        guest.configure(satellite)
     if kind == "owned":
         state = "unchanged"
     elif kind == "pending":
@@ -408,16 +566,15 @@ def register_operation(guest, payload):
         state = "adopted"
     else:
         guest.write("", request)
-        consumer = guest.register(payload["organization"], payload["activationKey"])
+        consumer = guest.register(payload["organization"], payload["activationKey"], satellite is not None)
         common = guest.certificate()[1]
         if common != consumer:
             raise Refused("transport")
         guest.write(common, request)
         state = "registered"
-    if payload["release"]:
-        guest.release(payload["release"])
+    pinned = guest.release(payload["release"], satellite is not None) if payload["release"] else ""
     guest.repositories(enable, disable)
-    return result(state != "unchanged", common, state, enable, disable)
+    return result(state != "unchanged" or trusted, common, state, enable, disable, pinned)
 
 
 def unregister_operation(guest, payload):
@@ -473,6 +630,7 @@ def parse_request(data):
         payload["enable"], payload["disable"] = repositories(payload["enable"], payload["disable"])
         if not isinstance(payload["release"], str) or not (payload["release"] == "" or RELEASE.fullmatch(payload["release"])):
             raise Refused("registration-input", detail="the release is not a <major>.<minor> release")
+        payload["satellite"] = satellite_of(payload["satellite"])
     return payload
 
 

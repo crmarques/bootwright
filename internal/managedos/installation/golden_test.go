@@ -191,6 +191,7 @@ func TestTheFrozenRequestsMatchTheirGoldens(t *testing.T) {
 		"lab-rhel-encrypted":  labCatalog(encryptingProfile()),
 		"lab-rhel-registered": labCatalog(registeringProfile(), rhelEntitlement()),
 		"lab-rhel-updated":    labCatalog(updatingProfile(), rhelEntitlement()),
+		"lab-rhel-satellite":  labCatalog(updatingProfile(), satelliteEntitlement()),
 	} {
 		t.Run(name, func(t *testing.T) {
 			request := pinnedRequest(t, catalog)
@@ -224,6 +225,13 @@ func TestEvidenceMatchesItsGoldens(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	satellite := pinnedRequest(t, labCatalog(updatingProfile(), satelliteEntitlement()))
+	satelliteMarker, err := MarkerFor(satellite, digest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	satelliteUpdate := completedUpdate(satellite)
+	satelliteUpdate.Pin = pinContentView
 	for name, test := range map[string]struct {
 		evidence Evidence
 		validate func([]byte) error
@@ -251,6 +259,18 @@ func TestEvidenceMatchesItsGoldens(t *testing.T) {
 				Update:       completedUpdate(updated),
 			},
 			func(data []byte) error { return ValidatePresence(data, updated, digest, string(updatedMarker)) },
+		},
+		// presence() after an apply registered with a Satellite that offers
+		// no such release, so the activation key's content view pins it.
+		"completed-satellite": {
+			Evidence{
+				Address: satellite.Address, HostKey: "ssh-ed25519 AAAAHOST", Image: true, Marker: string(satelliteMarker),
+				Postcondition: true, Power: "On", Reachable: true, Request: digest, Tree: true, TreeContent: true,
+				TreeIdentity: dvdDigest, Network: true, NetworkReboot: true, NetworkDifferences: []string{},
+				Registration: RegistrationEvidence{Consumer: "11111111-2222-4333-8444-555555555555", State: registrationOwned},
+				Update:       satelliteUpdate,
+			},
+			func(data []byte) error { return ValidatePresence(data, satellite, digest, string(satelliteMarker)) },
 		},
 		// absence() once every published path is gone.
 		"removed": {

@@ -87,8 +87,6 @@ func TestManagedOSRefusalTableMatchesUnsupported(t *testing.T) {
 			field("passwordAuthentication", api.BoolValue(true))))))), "Machine/rhel-01", onProfile},
 
 		"Subscription repositories with external registration": {labCatalog(registeringProfile(), externalEntitlement()), "Machine/rhel-01", map[string]string{"<entitlement>": "Entitlement/rhel", "<profile>": "MachineInstallProfile/rhel-9-8"}},
-		"A Satellite registration": {labCatalog(registeringProfile(), rhelEntitlement(field("satellite", api.MapValue(text("hostname", "satellite.example.test"))))),
-			"Machine/rhel-01", map[string]string{"<entitlement>": "Entitlement/rhel", "<profile>": "MachineInstallProfile/rhel-9-8"}},
 		"Insights enrollment": {labCatalog(registeringProfile(), rhelEntitlement(field("connectToInsights", api.BoolValue(true)))), "Machine/rhel-01", map[string]string{"<entitlement>": "Entitlement/rhel", "<profile>": "MachineInstallProfile/rhel-9-8"}},
 		"Registration through a proxy": {labCatalog(registeringProfile(), rhelEntitlement(), externalProxy("corporate", text("httpsProxy", "http://192.0.2.80:3128")), proxiedGuest()),
 			"Machine/rhel-01", map[string]string{"<machine>": "Machine/rhel-01", "<profile>": "MachineInstallProfile/rhel-9-8", "<proxy>": "Proxy/corporate"}},

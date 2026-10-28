@@ -36,6 +36,13 @@ func rhelEntitlement(overrides ...api.FieldValue) api.Object {
 	return api.NewObject(api.Entitlement, "rhel", api.Value{}, api.MapValue(text("type", "redhatRhel"), field("rhsm", rhsm)))
 }
 
+func satelliteEntitlement() api.Object {
+	return rhelEntitlement(field("satellite", api.MapValue(
+		text("hostname", "satellite.example.test"), text("trustBundleRef", "satellite-ca"),
+		text("contentBaseURL", "https://capsule.example.test/pulp/content"),
+	)))
+}
+
 func externalEntitlement() api.Object {
 	return api.NewObject(api.Entitlement, "rhel", api.Value{}, api.MapValue(
 		text("type", "redhatRhel"), field("rhsm", api.MapValue(text("management", "external"))),
@@ -133,10 +140,12 @@ func TestRegistrationRefusalsNameTheEntitlementField(t *testing.T) {
 		target  substrate.Target
 		want    [2]string
 	}{
-		"physical": {labCatalog(registeringProfile(), rhelEntitlement()), metal, delivered, [2]string{}},
-		"satellite": {labCatalog(registeringProfile(), rhelEntitlement(field("satellite", api.MapValue(text("hostname", "satellite.example.test"))))), guest(), agent, [2]string{
-			"this executable registers only with the hosted subscription service, and Entitlement/rhel selects a Satellite in spec.rhsm.satellite",
-			"remove spec.rhsm.satellite from Entitlement/rhel, or remove spec.subscription from MachineInstallProfile/rhel-9-8",
+		"physical":           {labCatalog(registeringProfile(), rhelEntitlement()), metal, delivered, [2]string{}},
+		"satellite":          {labCatalog(registeringProfile(), satelliteEntitlement()), guest(), agent, [2]string{}},
+		"satellite physical": {labCatalog(registeringProfile(), satelliteEntitlement()), metal, delivered, [2]string{}},
+		"satellite proxy": {labCatalog(registeringProfile(), satelliteEntitlement(), corporate, proxiedGuest()), proxiedGuest(), agent, [2]string{
+			"this executable registers only over a direct route to the hosted subscription service or the declared Satellite, and Machine/rhel-01 reaches the network through Proxy/corporate",
+			"select direct: {} in spec.proxy of Machine/rhel-01 or of MachineInstallProfile/rhel-9-8, or remove spec.subscription from MachineInstallProfile/rhel-9-8",
 		}},
 		"insights": {labCatalog(registeringProfile(), rhelEntitlement(field("connectToInsights", api.BoolValue(true)))), guest(), agent, [2]string{
 			"this executable does not enroll a Machine in Insights, a second remote identity it neither proves nor removes, and Entitlement/rhel sets spec.rhsm.connectToInsights to true",
@@ -147,7 +156,7 @@ func TestRegistrationRefusalsNameTheEntitlementField(t *testing.T) {
 			"remove spec.customizations.repositories.subscription from MachineInstallProfile/rhel-9-8, or set spec.rhsm.management to managed on Entitlement/rhel",
 		}},
 		"proxy": {labCatalog(registeringProfile(), rhelEntitlement(), corporate, proxiedGuest()), proxiedGuest(), agent, [2]string{
-			"this executable registers only over a direct route, and Machine/rhel-01 reaches the network through Proxy/corporate",
+			"this executable registers only over a direct route to the hosted subscription service or the declared Satellite, and Machine/rhel-01 reaches the network through Proxy/corporate",
 			"select direct: {} in spec.proxy of Machine/rhel-01 or of MachineInstallProfile/rhel-9-8, or remove spec.subscription from MachineInstallProfile/rhel-9-8",
 		}},
 		"hosted direct":                 {labCatalog(registeringProfile(), rhelEntitlement()), guest(field("proxy", api.MapValue(field("direct", api.MapValue())))), agent, [2]string{}},

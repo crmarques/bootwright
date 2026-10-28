@@ -95,7 +95,7 @@ func installationFor(catalog api.Catalog, machine, profile api.Object, request R
 	installation.InterfaceType, installation.VLANBase, installation.VLANID = topology.Type, topology.VLANBase, topology.VLANID
 	installation.BondPorts, installation.BondOptions = topology.Ports, topology.Options
 	installation.HostKeyType = request.Target.HostKeyType
-	if request.Update != nil {
+	if request.Update != nil && !satelliteRegistration(request) {
 		installation.Release = request.Update.Release
 	}
 	if installation.DiskEncryption = kickstartEncryptionFor(profile); installation.DiskEncryption != nil {

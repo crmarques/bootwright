@@ -22,6 +22,12 @@ const (
 	updateForeign  = "foreign"
 )
 
+const (
+	pinRelease     = "release"
+	pinContentView = "contentView"
+	pinVariable    = "variable"
+)
+
 var (
 	updateRelease = regexp.MustCompile(`^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$`)
 	updateKernel  = regexp.MustCompile(`^[A-Za-z0-9._+~-]{1,128}$`)

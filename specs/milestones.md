@@ -21,12 +21,12 @@ listed commands return the [unavailable result](cli.md#recognized-but-unavailabl
 | [M7](milestones/m7.md) | Standalone native files and commands | M4 | not started | after M4: B51 |
 
 - **Next:** an agent takes only an [active slice](#active-slices)'s open work
-  or an explicit request; the operator takes each page's operator gates and
+  or an explicit request; the operator takes operator gates and
   the open session clauses.
 
 ## Active slices
 
-Slices with an item `in progress`, and what authorized them.
+Slices with an item `in progress`.
 
 | Slice | Milestone | Authorized by | State |
 | --- | --- | --- | --- |
@@ -36,6 +36,7 @@ Slices with an item `in progress`, and what authorized them.
 | X130 | M3e | D181 | in progress |
 | X143 | M4c | D180 | in progress |
 | X189 | M1 | D190 | in progress |
+| X194 | M1 | D192 | in progress |
 
 ## Scope rules
 

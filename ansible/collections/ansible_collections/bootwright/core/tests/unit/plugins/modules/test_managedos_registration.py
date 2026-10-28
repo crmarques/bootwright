@@ -18,7 +18,7 @@ DIGEST = "0123456789abcdef" * 4
 U1 = "11111111-2222-4333-8444-555555555555"
 ORG = "org-sentinel-7f3a"
 KEY = "key-sentinel-91c2"
-ANSWER = {"ok": True, "result": {"changed": True, "consumer": U1, "owned": True,
+ANSWER = {"ok": True, "result": {"changed": True, "consumer": U1, "owned": True, "release": "",
                                  "repositories": {"disable": ["*"], "enable": ["rhel-9-for-x86_64-baseos-rpms"]},
                                  "state": "registered"}}
 
@@ -91,7 +91,7 @@ def test_never_puts_payload_values_in_argv_env_or_errors(tmp_path, monkeypatch):
     call = popen.calls[0]
     stdin = json.loads(call["stdin"])
     assert stdin == {"activationKey": KEY, "disable": ["*"], "enable": ["rhel-9-for-x86_64-baseos-rpms"],
-                     "operation": "register", "organization": ORG, "release": "", "request": DIGEST}
+                     "operation": "register", "organization": ORG, "release": "", "request": DIGEST, "satellite": None}
     released = FakePopen(stdout=encoded(ANSWER))
     module.execute(params(paths, release="9.8", timeout=750), run=session(tmp_path, released, monkeypatch))
     assert json.loads(released.calls[0]["stdin"])["release"] == "9.8" and released.calls[0]["options"]["timeout"] == 750
@@ -239,8 +239,17 @@ def test_registration_session_intersects_pinned_algorithms_with_placement_policy
      {"changed": False, "ok": False, "reason": "registration-foreign"}),
     (FakePopen(stdout=encoded({"ok": False, "reason": "update-release-unavailable"})),
      {"changed": False, "ok": False, "reason": "update-release-unavailable"}),
+    (FakePopen(stdout=encoded({"ok": False, "reason": "registration-trust"})),
+     {"changed": False, "ok": False, "reason": "registration-trust"}),
+    (FakePopen(stdout=encoded({"ok": True, "result": dict(ANSWER["result"], release="unset")})),
+     {"changed": True, "ok": True, "registration": dict(ANSWER["result"], release="unset")}),
+    (FakePopen(stdout=encoded({"ok": True, "result": dict(ANSWER["result"], release="9.8")})),
+     {"changed": False, "ok": False, "reason": "transport", "cause": "answer"}),
+    (FakePopen(stdout=encoded({"ok": True, "result": {key: value for key, value in ANSWER["result"].items() if key != "release"}})),
+     {"changed": False, "ok": False, "reason": "transport", "cause": "answer"}),
 ], ids=["timeout", "start-failure", "output-overrun", "changed-key", "unverified-key", "unreachable", "exit", "non-json", "unknown-reason", "extra-key",
-        "wrong-cause", "missing-cause", "wrong-state", "bad-consumer", "oversized", "unavailable", "foreign", "release-unavailable"])
+        "wrong-cause", "missing-cause", "wrong-state", "bad-consumer", "oversized", "unavailable", "foreign", "release-unavailable",
+        "trust", "release-unset", "release-unknown", "release-missing"])
 def test_module_accepts_only_the_closed_worker_answer(tmp_path, monkeypatch, popen, expected):
     paths = files(tmp_path)
     assert module.execute(params(paths), run=session(tmp_path, popen, monkeypatch)) == expected
@@ -253,6 +262,8 @@ def test_module_accepts_only_the_closed_worker_answer(tmp_path, monkeypatch, pop
     ({"enable": ["a"]}, "enable is accepted only for the register operation"),
     ({"disable": ["*"]}, "disable is accepted only for the register operation"),
     ({"release": "9.8"}, "release is accepted only for the register operation"),
+    ({"satellite_hostname": "satellite.example.test"}, "satellite_hostname is accepted only for the register operation"),
+    ({"satellite_ca_file": "/x"}, "satellite_ca_file is accepted only for the register operation"),
     ({"request": "ABC"}, "request is not 64 lowercase hexadecimal characters"),
     ({"timeout": 901}, "timeout is not between 1 and 900 seconds"),
 ])
@@ -261,3 +272,57 @@ def test_inspect_refuses_material_and_bad_arguments_before_any_session(tmp_path,
     with pytest.raises(module.ArgumentError) as refused:
         module.execute(params(files(tmp_path), operation="inspect", **values), run=session(tmp_path, popen))
     assert str(refused.value) == message and popen.calls == []
+
+
+PEM = "-----BEGIN CERTIFICATE-----\nMIIBszCCAVmgAwIBAgIUQ0FTRUxMSVRF\n-----END CERTIFICATE-----\n"
+
+
+def satellite_params(paths, tmp_path, bundle=PEM.encode(), **values):
+    ca = tmp_path / "satellite-ca"
+    ca.write_bytes(bundle)
+    value = params(paths, satellite_hostname="satellite.example.test",
+                   satellite_content_base_url="https://capsule.example.test/pulp/content", satellite_ca_file=str(ca))
+    value.update(values)
+    return value
+
+
+def test_a_satellite_reaches_the_worker_only_on_its_standard_input(tmp_path):
+    paths = files(tmp_path)
+    popen = FakePopen(stdout=encoded(ANSWER))
+    assert module.execute(satellite_params(paths, tmp_path, timeout=690), run=session(tmp_path, popen))["ok"] is True
+    call = popen.calls[0]
+    assert json.loads(call["stdin"])["satellite"] == {"caBundle": PEM, "contentBaseURL": "https://capsule.example.test/pulp/content",
+                                                      "hostname": "satellite.example.test"}
+    assert call["options"]["timeout"] == 690
+    assert not any("MIIBszCCAVmgAwIBAgIUQ0FTRUxMSVRF" in word or "capsule.example.test" in word for word in call["argv"])
+
+
+@pytest.mark.parametrize("bundle", [b"", b"not a certificate", PEM.encode() + b"-----BEGIN PRIVATE KEY-----\nAA\n-----END PRIVATE KEY-----\n",
+                                    PEM.encode() * 33, "é".encode(), None],
+                         ids=["empty", "garbage", "private-key", "too-many", "non-ascii", "symlink"])
+def test_a_bundle_outside_the_grammar_is_refused_before_any_session(tmp_path, bundle):
+    paths = files(tmp_path)
+    popen = FakePopen(stdout=encoded(ANSWER))
+    value = satellite_params(paths, tmp_path, bundle=bundle or b"")
+    if bundle is None:
+        os.unlink(value["satellite_ca_file"])
+        os.symlink(paths["organization"], value["satellite_ca_file"])
+    outcome = module.execute(value, run=session(tmp_path, popen))
+    assert outcome == {"changed": False, "ok": False, "reason": "registration-input",
+                       "detail": "the Satellite CA bundle is not 1 to 32 PEM certificates"}
+    assert popen.calls == []
+
+
+@pytest.mark.parametrize("values", [{"satellite_hostname": None}, {"satellite_ca_file": None}, {"satellite_content_base_url": None}])
+def test_satellite_options_come_together(tmp_path, values):
+    paths = files(tmp_path)
+    with pytest.raises(module.ArgumentError):
+        module.execute(satellite_params(paths, tmp_path, **values), run=session(tmp_path, FakePopen()))
+
+
+def test_a_satellite_content_root_outside_the_grammar_is_refused(tmp_path):
+    paths = files(tmp_path)
+    popen = FakePopen(stdout=encoded(ANSWER))
+    outcome = module.execute(satellite_params(paths, tmp_path, satellite_content_base_url="http://capsule.example.test/pulp"),
+                             run=session(tmp_path, popen))
+    assert outcome["reason"] == "registration-input" and popen.calls == []
