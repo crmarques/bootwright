@@ -242,7 +242,7 @@ func TestInertFieldsReportDeferredAtTheirPath(t *testing.T) {
 		}
 		got = append(got, issue.Field)
 	}
-	want := []string{"$.spec.install.endpoints.api.dnsName", "$.spec.install.endpoints.api-int.dnsName", "$.spec.install.endpoints.ingress.dnsName", "$.spec.nodes[0].labels", "$.spec.nodes[0].taints"}
+	want := []string{"$.spec.install.endpoints.api.dnsName", "$.spec.install.endpoints.api-int.dnsName", "$.spec.install.endpoints.ingress.dnsName"}
 	if !slices.Equal(got, want) {
 		t.Fatalf("inert fields warn at %q, want %q", got, want)
 	}
@@ -354,7 +354,7 @@ func TestKubernetesLabelsAndRepeatedTaints(t *testing.T) {
 	nodes[0] = nodes[0].With("labels", m("example.test/Zone_Name", "rack.A", "plain", "")).With("taints", list(taint, taint))
 	o = o.WithSpec(o.Spec().With("nodes", list(nodes...)))
 	effective, _ := Normalize(o, c)
-	if issues := Validate(effective, c); len(issues) != 2 || issues[0].Code != "api.deferred" || issues[1].Code != "api.deferred" {
+	if issues := Validate(effective, c); len(issues) != 0 {
 		t.Fatal(issues)
 	}
 	if effective.Spec().Get("nodes").Items()[0].Get("taints").Len() != 2 {

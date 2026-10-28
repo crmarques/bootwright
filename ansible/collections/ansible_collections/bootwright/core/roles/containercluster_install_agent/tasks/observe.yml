@@ -2,7 +2,7 @@
 - name: Validate the frozen installation request
   ansible.builtin.assert:
     that:
-      - bootwright_cluster_install_request.version == 'cluster-install-agent-v9'
+      - bootwright_cluster_install_request.version == 'cluster-install-agent-v10'
       - bootwright_cluster_install_digest is match('[0-9a-f]{64}')
     quiet: true
   no_log: true
@@ -20,6 +20,24 @@
 
 - name: Read the cluster and its nodes back, without changing any of it
   ansible.builtin.import_tasks: state.yml
+
+# What each node carries of its declared labels and taints, read only from the
+# cluster this operation installed. A label or taint removed or changed after
+# the installation reads here as a node short of its placement, which the
+# observation reports and never repairs.
+- name: Read the labels and taints the declared nodes carry
+  bootwright.core.containercluster_install_placement:
+    client: '{{ containercluster_install_agent_client }}'
+    kubeconfig: '{{ containercluster_install_agent_kubeconfig }}'
+    nodes: '{{ bootwright_cluster_install_request.nodes }}'
+    operation: observe
+  register: containercluster_install_agent_placement
+  when:
+    - not (containercluster_install_agent_observes_removal | bool)
+    - containercluster_install_agent_placed_nodes | length > 0
+    - (containercluster_install_agent_before.observation.identity | default('')) | length > 0
+    - containercluster_install_agent_state.cluster == containercluster_install_agent_before.observation.identity
+  no_log: true
 
 # Declared only by the observation that resolves an apply; the engine keeps the
 # copy only when it reads the installation complete.
@@ -45,5 +63,6 @@
     digest: '{{ bootwright_cluster_install_digest }}'
     identity: '{{ containercluster_install_agent_before.observation.identity }}'
     state: '{{ containercluster_install_agent_state }}'
+    placement: '{{ containercluster_install_agent_placement_read }}'
     observed: true
   no_log: true

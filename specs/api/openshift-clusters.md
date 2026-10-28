@@ -460,8 +460,8 @@ a native renderer derives pools and replica counts.
 | `spec.nodes[].fqdn` | string | no | Explicit DNS-subdomain override for the node identity. |
 | `spec.nodes[].role` | string | yes | `controlPlane`, `worker`, or `infra`. A `controlPlane` node is rendered as the installer's native `master`. |
 | `spec.nodes[].machineRef` | string | yes | Global `Machine` reference. |
-| `spec.nodes[].labels` | map of string to string | no | Kubernetes label keys and values. |
-| `spec.nodes[].taints` | array | no | Entries have required `key` and `effect`, optional `value`; effects are `NoSchedule`, `PreferNoSchedule`, or `NoExecute`. |
+| `spec.nodes[].labels` | map of string to string | no | Kubernetes label keys and values the node carries once its installation completes. |
+| `spec.nodes[].taints` | array | no | Entries have required `key` and `effect`, optional `value`; effects are `NoSchedule`, `PreferNoSchedule`, or `NoExecute`. The node carries them once its installation completes. |
 
 Normalization composes the node FQDN `<node>.<cluster>.<domain>` under
 [Environment domains](environment.md#domains); an authored `fqdn` wins verbatim.
@@ -470,8 +470,10 @@ and `*.apps.<cluster>.<domain>`, must fit a DNS name (253 bytes, 63 per label);
 otherwise validate refuses with `api.invariant` at `spec.nodes[].name` or at the
 cluster's `metadata.name`, naming the composed name.
 
-An `infra` node installs through the native worker pool but retains its
-authoring role for post-install placement intent.
+An `infra` node installs through the native worker pool and, once the
+installation completes, also carries `node-role.kubernetes.io/infra` with an
+empty value unless its `labels` author that key; no taint is implied by the
+role ([node placement](../openshift-clusters.md#node-placement)).
 Desired-state compilation accepts and preserves repeated authored taints. A
 native projection deduplicates by `key` plus `effect`; explicitly authoring the
 standard infra taint is therefore a no-op rather than an error.

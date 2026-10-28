@@ -38,6 +38,21 @@ def names(values):
     return sorted(bounded(value) for value in values)
 
 
+def placement_of(item):
+    """One node's observed placement: its name, label values and taints, with an empty taint value omitted."""
+    labels, taints = item.get("labels") or {}, item.get("taints") or []
+    if not isinstance(labels, dict) or not isinstance(taints, list) or len(labels) > 64 or len(taints) > 64:
+        raise ValueError("bounded placement")
+    observed = []
+    for taint in taints:
+        entry = {"effect": bounded(taint.get("effect")), "key": bounded(taint.get("key"), 317)}
+        if taint.get("value"):
+            entry["value"] = bounded(taint.get("value"), 63)
+        observed.append(entry)
+    return {"labels": {bounded(key, 317): str(bounded(value, 63)) for key, value in labels.items()},
+            "name": bounded(item.get("name")), "taints": observed}
+
+
 def evidence(arguments, request_digest, removed):
     """The bounded evidence one completion phase publishes.
 
@@ -74,15 +89,22 @@ def evidence(arguments, request_digest, removed):
     if removed:
         found["postcondition"] = not found["media"]
         return found
+    placed = arguments.get("placement") or {}
+    observed = sorted((placement_of(item) for item in placed.get("placement") or []), key=lambda item: item["name"])
+    if len(observed) > MAX_NAMES:
+        raise ValueError("bounded list")
+    if observed:
+        found["placement"] = observed
     found["postcondition"] = bool(
         found["identity"] and found["cluster"] == found["identity"]
         and found["release"] and found["completed"]
         and not found["missing"] and not found["media"]
+        and not names(placed.get("unplaced"))
     )
     return found
 
 
-def unproved(found):
+def unproved(found, unplaced=()):
     """What a completion proof still lacks, named for a censored message.
 
     These are field names and node names, never credentials, so naming them is
@@ -101,6 +123,8 @@ def unproved(found):
         unmet.append("nodes missing: " + ", ".join(found["missing"]))
     if found["media"]:
         unmet.append("media still inserted on: " + ", ".join(found["media"]))
+    if unplaced:
+        unmet.append("nodes short of their declared labels and taints: " + ", ".join(unplaced))
     return unmet
 
 
@@ -125,7 +149,8 @@ def completion(arguments):
     found = evidence(arguments, arguments.get("digest"), removed)
     if publishes(found, arguments.get("observed")):
         return found, None
-    unmet = ["media still inserted on: " + ", ".join(found["media"])] if removed else unproved(found)
+    unplaced = names((arguments.get("placement") or {}).get("unplaced"))
+    unmet = ["media still inserted on: " + ", ".join(found["media"])] if removed else unproved(found, unplaced)
     return found, "the installation did not reach its postcondition; %s" % ("; ".join(unmet) or "unknown")
 
 

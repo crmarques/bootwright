@@ -17,9 +17,11 @@ acceptance is claimed, and the accepted [lab-sno](../lab-sno/) and
 - Host capacity: at least 56 logical CPUs, 112 GiB available memory and
   1240 GiB pool disk, plus media space; the authored reserve adds 4 CPUs,
   8 GiB and 40 GiB.
-- The infra node uses the native worker pool during installation. Infra labels
-  and taints are B716's owner-defined post-installation row and are not
-  claimed here.
+- The infra node uses the native worker pool during installation and, once it
+  completes, carries `node-role.kubernetes.io/infra` and any `labels` and
+  `taints` it authors; no taint is added for the role, so the default ingress
+  keeps running on worker-labelled nodes. The infra row (B716) is an operator
+  gate not yet accepted.
 - Variants (5 masters with no compute, 4 masters with 2 workers) are made by
   editing a private copy: keep five or six Machines, give the first five or
   four nodes `controlPlane` with `profileRef: master` and the rest `worker`

@@ -278,6 +278,7 @@ def test_after_the_install_complete_rewrite_a_completed_cluster_still_proves_thi
         "bootwright_cluster_install_digest": DIGEST,
         "containercluster_install_agent_before": {"observation": observation},
         "containercluster_install_agent_state": state,
+        "containercluster_install_agent_placement_read": {"placement": [], "unplaced": []},
     }
     settled = Templar(loader=LOADER, variables=scope).template(
         decide["ansible.builtin.set_fact"]["containercluster_install_agent_settled"])
@@ -303,6 +304,7 @@ def test_the_completion_evidence_records_a_restore_of_the_installers_kubeconfig(
         "containercluster_install_agent_before": {"observation": observation},
         "containercluster_install_agent_state": resolved(observation),
         "containercluster_install_agent_settled": False,
+        "containercluster_install_agent_placement_read": {"placement": [], "unplaced": []},
     }, **facts)
     arguments = Templar(loader=LOADER, variables=scope).template(publication("apply.yml"))
     assert arguments["restored"] is expected

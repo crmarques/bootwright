@@ -14,6 +14,16 @@ containercluster_install_agent_client: '{{ bootwright_cluster_install_material.o
 # not read.
 containercluster_install_agent_observes_removal: >-
   {{ bootwright_cluster_install_material.observes | default('') == 'removal' }}
+# The nodes whose frozen request declares labels or taints, which the request
+# omits on a node that declares neither, and what a placement read that did
+# not run proves of them: nothing.
+containercluster_install_agent_placed_nodes: >-
+  {{ (bootwright_cluster_install_request.nodes | selectattr('labels', 'defined') | map(attribute='name') | list)
+     | union(bootwright_cluster_install_request.nodes | selectattr('taints', 'defined') | map(attribute='name') | list) }}
+containercluster_install_agent_placement_read: >-
+  {{ containercluster_install_agent_placement
+     if (containercluster_install_agent_placement | default({})).unplaced is defined
+     else {'placement': [], 'unplaced': containercluster_install_agent_placed_nodes} }}
 # A cluster already answering with the identity this operation's own installer
 # recorded, at the declared release and holding every declared node, is
 # installed. The decision is taken once, before anything is booted, and kept in

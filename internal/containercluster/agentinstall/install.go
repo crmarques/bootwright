@@ -288,8 +288,8 @@ func installEffect(verb reconciliation.Verb, evidence []byte, request InstallReq
 
 // observe runs the read-only observation operation, scoped to what the verb
 // proves, and reads its evidence for the verb the block was frozen for. Only
-// the apply's observation declares the administrator access, and offers it
-// only when it reads the installation complete.
+// the apply's observation inside an operation declares the administrator
+// access, and offers it only when it reads the installation complete.
 func (c InstallCapability) observe(ctx context.Context, execution lifecycle.Execution, verb reconciliation.Verb) (lifecycle.Observation, error) {
 	unknown := lifecycle.Observation{Effect: reconciliation.EffectUnknown}
 	request, err := c.prepare(ctx, execution, "observe")
@@ -299,6 +299,8 @@ func (c InstallCapability) observe(ctx context.Context, execution lifecycle.Exec
 	observes, outputs := "", kubeconfigOutputs()
 	if verb == reconciliation.Destroy {
 		observes, outputs = observesRemoval, nil
+	} else if execution.Attempt == 0 && execution.Resolution == 0 {
+		outputs = nil
 	}
 	result, err := c.runWithOutputs(ctx, execution, "observe", request, outputs, observes)
 	if err != nil {

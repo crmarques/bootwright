@@ -1,10 +1,10 @@
 implementation: cluster-install-agent-v1
-content-digest: 16d34a2c031ad2acc4d6b5f16407c8f90c83a0f8ba986c5180982d310f60352f
-request-version: cluster-install-agent-v9
+content-digest: 4388da141e26f3cf4bc3842fff42e2a43b276f44b0ab0449105b0e43e6c7ebc4
+request-version: cluster-install-agent-v10
 automation-formats: none
 mark-formats: none
 proof-ids: .bootwright-booted, /.bootwright-booted, bootwright/containercluster/identity/v2
-fixed-places: .bootwright-kubeconfig, /.bootwright-kubeconfig, bootwright-
+fixed-places: .bootwright-kubeconfig, /.bootwright-kubeconfig, bootwright-, bootwright-cluster-install
 effect-pins:
   clusters
   agent.iso
@@ -65,12 +65,17 @@ request-schema:
   nodes[].hardware.interfaces []struct agentinstall.Interface
   nodes[].hardware.interfaces[].macAddress string
   nodes[].hardware.interfaces[].name string
+  nodes[].labels map[string]string omitempty
   nodes[].machine string
   nodes[].name string
   nodes[].physical bool
   nodes[].requireTPM bool omitempty
   nodes[].stateReadSeconds int
   nodes[].substrate string
+  nodes[].taints []struct agentinstall.Taint omitempty
+  nodes[].taints[].effect string
+  nodes[].taints[].key string
+  nodes[].taints[].value string omitempty
   placement struct machine.Placement
   placement.address string omitempty
   placement.connection string
@@ -105,6 +110,13 @@ evidence-schema:
   media []string
   missing []string
   ownMedia []string
+  placement []struct agentinstall.NodePlacement omitempty
+  placement[].labels map[string]string
+  placement[].name string
+  placement[].taints []struct agentinstall.Taint
+  placement[].taints[].effect string
+  placement[].taints[].key string
+  placement[].taints[].value string omitempty
   postcondition bool
   powered []string
   release string

@@ -546,3 +546,102 @@ def test_unprobeable_vips_are_recorded_without_private_media_urls():
     found = protocol.evidence({"vips_not_probed": ["2001:db8::10", "192.0.2.10"]}, DIGEST, False)
     assert found["vipsNotProbed"] == ["192.0.2.10", "2001:db8::10"]
     assert "vipsNotProbed" not in protocol.evidence({}, DIGEST, False)
+
+
+# What the placement read returns for internal/containercluster/agentinstall's
+# placement catalog, in the module's own order: Go reads the evidence this
+# publishes as install-evidence-completed-placed, byte for byte.
+PLACED = {
+    "answered": True,
+    "unplaced": [],
+    "placement": [
+        {"name": "master-5", "labels": {"node-role.kubernetes.io/infra": ""}, "taints": []},
+        {"name": "master-3", "labels": {"example.test/rack": "rack-a", "example.test/row": ""}, "taints": []},
+        {"name": "master-4", "labels": {"node-role.kubernetes.io/infra": ""}, "taints": [
+            {"key": "example.test/reserved", "value": "", "effect": "NoExecute"},
+            {"key": "example.test/reserved", "value": "storage", "effect": "NoSchedule"}]},
+    ],
+}
+
+
+def test_the_placement_read_is_published_as_the_go_golden_reads_it():
+    powered = ["master-%d" % index for index in range(6)]
+    found = protocol.evidence(arguments(state=state(powered=powered), placement=PLACED), DIGEST, False)
+    assert found == {
+        "absent": False, "cluster": IDENTITY, "completed": True, "identity": IDENTITY, "media": [], "missing": [],
+        "ownMedia": [], "postcondition": True, "powered": powered, "release": RELEASE, "request": DIGEST,
+        "restored": False, "placement": [
+            {"labels": {"example.test/rack": "rack-a", "example.test/row": ""}, "name": "master-3", "taints": []},
+            {"labels": {"node-role.kubernetes.io/infra": ""}, "name": "master-4", "taints": [
+                {"effect": "NoExecute", "key": "example.test/reserved"},
+                {"effect": "NoSchedule", "key": "example.test/reserved", "value": "storage"}]},
+            {"labels": {"node-role.kubernetes.io/infra": ""}, "name": "master-5", "taints": []},
+        ],
+    }
+
+
+def test_a_node_short_of_its_placement_keeps_the_completion_unproved():
+    found, refusal = protocol.completion(arguments(placement=dict(PLACED, unplaced=["master-3"])))
+    assert found["postcondition"] is False
+    assert refusal.endswith("nodes short of their declared labels and taints: master-3")
+
+
+def test_a_removal_publishes_no_placement():
+    found = protocol.evidence(arguments(placement=PLACED), DIGEST, True)
+    assert "placement" not in found and found["postcondition"] is True
+
+
+PLACEMENT_MODULE = "bootwright.core.containercluster_install_placement"
+
+
+def placement_variables(**overrides):
+    variables = dict(scoped(None))
+    variables.update({
+        "containercluster_install_agent_placed_nodes": defaults()["containercluster_install_agent_placed_nodes"],
+        "bootwright_cluster_install_request": {"release": {"version": RELEASE}, "nodes": [
+            {"name": "master-0"}, {"name": "worker-0", "labels": {"example.test/rack": "a"}},
+            {"name": "infra-0", "taints": [{"key": "example.test/reserved", "effect": "NoSchedule"}]}]},
+        "containercluster_install_agent_before": {"observation": {"identity": IDENTITY}},
+        "containercluster_install_agent_state": state(),
+    })
+    variables.update(overrides)
+    return variables
+
+
+def test_only_the_nodes_whose_request_declares_a_placement_are_placed():
+    templar = Templar(loader=LOADER, variables=placement_variables())
+    assert sorted(templar.template(defaults()["containercluster_install_agent_placed_nodes"])) == ["infra-0", "worker-0"]
+
+
+def test_a_placement_read_that_did_not_run_proves_no_node_placed():
+    variables = placement_variables(containercluster_install_agent_placement={"changed": False, "skipped": True})
+    variables["containercluster_install_agent_placement_read"] = defaults()["containercluster_install_agent_placement_read"]
+    templar = Templar(loader=LOADER, variables=variables)
+    read = templar.template(variables["containercluster_install_agent_placement_read"])
+    assert read["placement"] == [] and sorted(read["unplaced"]) == ["infra-0", "worker-0"]
+    assert protocol.evidence(arguments(placement=read), DIGEST, False)["postcondition"] is False
+
+
+def test_the_observation_reads_the_placement_and_never_places():
+    task = one("observe.yml", lambda task: PLACEMENT_MODULE in task)
+    assert task[PLACEMENT_MODULE]["operation"] == "observe"
+    templar = Templar(loader=LOADER, variables=placement_variables())
+    assert all(templar.evaluate_conditional(condition) for condition in task["when"])
+    removal = Templar(loader=LOADER, variables=dict(placement_variables(), **scoped("removal")))
+    assert not all(removal.evaluate_conditional(condition) for condition in task["when"])
+    foreign = Templar(loader=LOADER, variables=placement_variables(containercluster_install_agent_state=state(cluster="foreign")))
+    assert not all(foreign.evaluate_conditional(condition) for condition in task["when"])
+
+
+def test_placement_runs_only_on_a_proved_completion_and_before_the_access_is_offered():
+    finish = tasks("finish.yml")
+    index = [position for position, task in enumerate(finish) if PLACEMENT_MODULE in task]
+    custody = [position for position, task in enumerate(finish) if "ansible.builtin.copy" in task]
+    assert len(index) == 1 and finish[index[0]][PLACEMENT_MODULE]["operation"] == "place" and index[0] < custody[0]
+    conditions = finish[index[0]]["when"]
+    assert all(Templar(loader=LOADER, variables=placement_variables()).evaluate_conditional(c) for c in conditions)
+    for unproved in (state(completed=False), state(missing=["infra-0"]), state(cluster="")):
+        templar = Templar(loader=LOADER, variables=placement_variables(containercluster_install_agent_state=unproved))
+        assert not all(templar.evaluate_conditional(condition) for condition in conditions)
+    refusal = finish[index[0] + 1]
+    assert "ansible.builtin.fail" in refusal and refusal["when"] == "containercluster_install_agent_placement.refused is defined"

@@ -102,6 +102,9 @@ func observeAllowlist() map[observeTaskKey]observeAllowance {
 func addObserveReads(add func(string, string, string, string, func(map[string]any, map[string]any) bool), read func(map[string]any, map[string]any) bool) {
 	add("containercluster_install_agent", "observe.yml", observeCollection+"containercluster_install_inspect", "reads what the installation recorded", read)
 	add("containercluster_install_agent", "observe.yml", "ansible.builtin.copy", "hands the kept kubeconfig to custody through the declared output", observeCustodyCopy)
+	add("containercluster_install_agent", "observe.yml", observeCollection+"containercluster_install_placement", "reads the declared node labels and taints without patching a node", func(params, _ map[string]any) bool {
+		return params["operation"] == "observe"
+	})
 	add("containercluster_install_agent", "cluster_state.yml", "ansible.builtin.command", "runs oc get against the cluster with a request timeout", read)
 	add("containercluster_install_agent", "cluster_state.yml", "ansible.builtin.set_fact", "resolves the cluster answers in memory", read)
 	add("containercluster_install_agent", "state.yml", observeCollection+"containercluster_media_token", "compares image device and inode without changing publication", observeRegistrationInspect)

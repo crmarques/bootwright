@@ -49,9 +49,8 @@ refusal carries, because it is what the operator changes. A node whose
 [realized target](substrates.md#selection-and-refusal) does not derive, other
 than on an unrealized substrate, refuses with the substrate's own reason and
 remedy, which name the object to change. Node `labels` and `taints` reach no
-installer input, because the agent installer has none for them; whether the
-installation applies them once it completes is
-[B716](milestones/m3.md#b716)'s open decision, and until then they are inert.
+installer input, because the agent installer has none for them; the
+installation applies them once it completes ([node placement](#node-placement)).
 
 The following admitted fields are preserved in effective state and never change
 an agent-install plan; each is inert or refuses at plan, as its row states:
@@ -64,8 +63,6 @@ an agent-install plan; each is inert or refuses at plan, as its row states:
 | `spec.install.endpoints.*.scheme` | Refused at plan when authored with a value other than the native endpoint protocol the installer uses. |
 | `spec.install.endpoints.*.prefixLength` | Refused at plan when authored; no installer input consumes it. |
 | `spec.install.endpoints.*.interfaceNetworks` | Refused at plan when authored non-empty; no installer input consumes it. |
-| `spec.nodes[].labels` | Inert until the node-label decision above is resolved. |
-| `spec.nodes[].taints` | Inert until the node-taint decision above is resolved. |
 
 Each authored field of this table except `channel` and the four endpoint
 fields refused above makes `validate`, `plan` and `apply` report an
@@ -73,8 +70,7 @@ fields refused above makes `validate`, `plan` and `apply` report an
 nothing. An authored endpoint `port`, `scheme`, `prefixLength` or
 `interfaceNetworks` that the installer does not use refuses at `plan`, naming
 the field, because the installation would not follow the declaration; the
-[refusal table](#refusal-table) holds one row for each. Node `labels` and
-`taints` stay warnings until [B716](milestones/m3.md#b716) decides them.
+[refusal table](#refusal-table) holds one row for each.
 
 A multi-node cluster's platform follows who answers its endpoints: on
 `baremetal` the installer owns all three as virtual IPs its own VIP holders
@@ -955,6 +951,52 @@ follows the Machines under the
 [removal gate](state-reconciliation.md#quiescence-before-removal). An
 installation already under way continues on the nodes after cancellation; the
 attempt becomes unknown and is resolved by observing the cluster.
+
+## Node placement
+
+Once the [installation](#installation) block has released the media and the
+read after it proves the installation complete, and before the administrator
+access is offered for custody, the block places each node that declares any
+placement, as
+[D199](milestones/backlog.md#d199) decides. A node's placement is its authored
+`labels`, plus `node-role.kubernetes.io/infra` with an empty value on an
+`infra` node whose labels do not author that key, and its authored `taints`,
+one per key and effect. No taint is synthesized: infra nodes install through
+the worker pool and keep its worker label, and the default ingress controller's
+routers run on worker-labelled nodes without a toleration, so tainting an
+all-infra compute pool would leave ingress unschedulable. Placement is written
+through the cluster API with the kept administrator kubeconfig, never by
+kubelet self-labelling, which the NodeRestriction admission plugin forbids for
+`node-role.kubernetes.io/` labels and for every taint
+([knowledge](../.agents/knowledge/openshift-node-placement.md)).
+
+The block first reads every declared node's uid, labels and spec. A declared
+label key the node carries with another value, or a declared taint whose key
+and effect the node carries with another value, fails the block naming the
+node and the key, writing nothing to any node: another manager's value is
+never overwritten. A node already carrying its whole placement is left as it
+is. Every other node receives one JSON patch under the field manager
+`bootwright-cluster-install` that adds exactly its absent labels and taints,
+pinned by `test` operations on the uid, the whole label map and the whole spec
+it read, so nothing another manager owns is removed, taken over or replaced;
+a node that changed since it was read fails the block naming it, and
+repeating the apply reads it again. It is not a server-side apply, because an
+apply to a node deleted meanwhile would create one and `spec.taints` is an
+atomic list an apply would own whole. The block then reads the placement back:
+completion also requires every declared node to carry its placement, and the
+evidence records, for each node that declares one, the values of its declared
+label keys and its taints of a declared key. Each read and patch passes the
+same `--request-timeout`.
+Placement is written only by an attempt that proves completion, so only until
+the block is first recorded done: a [settled apply](state-reconciliation.md#lifecycle-unit)
+reaches no host. A continuation after a lost reply reads the placement back,
+never writing it twice. An observation reads every declared node's placement
+from the cluster this operation installed; outside an operation, as
+`bootwright diff --observe` runs it, it declares no administrator-access output,
+and its projection renders the observed `spec.nodes[].labels` and
+`spec.nodes[].taints`
+([observable fields](state-reconciliation.md#observable-fields-by-implementation)),
+so a label or taint removed or changed afterwards is reported, never repaired.
 
 ## Preflight
 

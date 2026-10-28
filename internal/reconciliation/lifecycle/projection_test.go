@@ -118,3 +118,26 @@ func TestClaimedPathsGeneralizeNamedItemsThatValueAtAddressesByKey(t *testing.T)
 		t.Fatalf("value at an absent item = %+v", found)
 	}
 }
+
+// A free map such as a node's labels is one field: a projection claims it
+// whole, and a declared key the observation lacks stays declared, so a label
+// removed after it was applied shows as a difference rather than as a field
+// left uncompared.
+func TestAFreeMapIsClaimedAndComparedWhole(t *testing.T) {
+	shape := api.Schema(api.OpenShiftCluster)
+	labels := func(fields ...api.FieldValue) api.Value {
+		return api.MapValue(field("nodes", api.ListValue(api.MapValue(field("name", api.StringValue("worker-0")), field("labels", api.MapValue(fields...))))))
+	}
+	declared := labels(field("example.test/rack", api.StringValue("a")), field("example.test/row", api.StringValue("1")))
+	observed := labels(field("example.test/row", api.StringValue("1")))
+	if paths := claimedPaths(observed, shape, "spec"); !slices.Equal(paths, []string{"spec.nodes[].name", "spec.nodes[].labels"}) {
+		t.Fatalf("claimed %v", paths)
+	}
+	pruned, dropped := prune(declared, observed, shape, "spec", false)
+	if len(dropped) != 0 || !pruned.Equal(declared) {
+		t.Fatalf("pruned %+v, dropping %v", pruned, dropped)
+	}
+	if _, conflicts := merge(observed, labels(field("example.test/row", api.StringValue("2"))), shape, "spec"); !slices.Equal(conflicts, []string{"spec.nodes[worker-0].labels"}) {
+		t.Fatalf("conflicts = %v", conflicts)
+	}
+}

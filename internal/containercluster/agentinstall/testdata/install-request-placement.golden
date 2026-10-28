@@ -1,0 +1,214 @@
+{
+  "budgets": {
+    "bootSeconds": 1200,
+    "bootstrapSeconds": 5400,
+    "fanOut": 4,
+    "installSeconds": 5400,
+    "roundMarginSeconds": 660
+  },
+  "deliveryKind": "fetch",
+  "endpoints": [
+    {
+      "address": "198.51.100.10",
+      "name": "api-int.ocp.lab.example.test"
+    },
+    {
+      "address": "198.51.100.10",
+      "name": "api.ocp.lab.example.test"
+    },
+    {
+      "address": "198.51.100.11",
+      "name": "console-openshift-console.apps.ocp.lab.example.test"
+    }
+  ],
+  "identity": {
+    "block": "cluster-install-ocp",
+    "cluster": "ocp",
+    "context": "lab"
+  },
+  "image": {
+    "path": "/var/lib/bootwright-services/lab/artifact-server/lab-artifacts/public/private/clusters/ocp",
+    "url": "https://192.0.2.1:8443/private/clusters/ocp"
+  },
+  "nodes": [
+    {
+      "address": "198.51.100.100",
+      "controller": {
+        "credentialsRef": "lab-bmc-credentials",
+        "endpoint": "https://192.0.2.1:8000/redfish/v1/Systems/566b9a1d-0751-86e3-ae9d-87255c81379e",
+        "tlsVerify": true,
+        "trustBundleRef": "lab-bmc-tls",
+        "virtualMedia": {
+          "removeCertificate": false,
+          "restoreVerification": false,
+          "trust": "established"
+        }
+      },
+      "controllerKind": "emulated",
+      "machine": "ocp-01",
+      "name": "master-0",
+      "physical": false,
+      "stateReadSeconds": 120,
+      "substrate": "libvirt"
+    },
+    {
+      "address": "198.51.100.101",
+      "controller": {
+        "credentialsRef": "lab-bmc-credentials",
+        "endpoint": "https://192.0.2.1:8001/redfish/v1/Systems/ae08d076-33d5-8cb7-9edd-060818340b06",
+        "tlsVerify": true,
+        "trustBundleRef": "lab-bmc-tls",
+        "virtualMedia": {
+          "removeCertificate": false,
+          "restoreVerification": false,
+          "trust": "established"
+        }
+      },
+      "controllerKind": "emulated",
+      "machine": "ocp-02",
+      "name": "master-1",
+      "physical": false,
+      "stateReadSeconds": 120,
+      "substrate": "libvirt"
+    },
+    {
+      "address": "198.51.100.102",
+      "controller": {
+        "credentialsRef": "lab-bmc-credentials",
+        "endpoint": "https://192.0.2.1:8002/redfish/v1/Systems/9b149228-70e9-86ab-b2fa-998239057cb5",
+        "tlsVerify": true,
+        "trustBundleRef": "lab-bmc-tls",
+        "virtualMedia": {
+          "removeCertificate": false,
+          "restoreVerification": false,
+          "trust": "established"
+        }
+      },
+      "controllerKind": "emulated",
+      "machine": "ocp-03",
+      "name": "master-2",
+      "physical": false,
+      "stateReadSeconds": 120,
+      "substrate": "libvirt"
+    },
+    {
+      "address": "198.51.100.103",
+      "controller": {
+        "credentialsRef": "lab-bmc-credentials",
+        "endpoint": "https://192.0.2.1:8003/redfish/v1/Systems/083b34a3-c07d-8764-8d78-9ac41c376c80",
+        "tlsVerify": true,
+        "trustBundleRef": "lab-bmc-tls",
+        "virtualMedia": {
+          "removeCertificate": false,
+          "restoreVerification": false,
+          "trust": "established"
+        }
+      },
+      "controllerKind": "emulated",
+      "labels": {
+        "example.test/rack": "rack-a",
+        "example.test/row": ""
+      },
+      "machine": "ocp-04",
+      "name": "master-3",
+      "physical": false,
+      "stateReadSeconds": 120,
+      "substrate": "libvirt"
+    },
+    {
+      "address": "198.51.100.104",
+      "controller": {
+        "credentialsRef": "lab-bmc-credentials",
+        "endpoint": "https://192.0.2.1:8004/redfish/v1/Systems/8262c409-23e1-86b4-b1c1-ee64dde06d2b",
+        "tlsVerify": true,
+        "trustBundleRef": "lab-bmc-tls",
+        "virtualMedia": {
+          "removeCertificate": false,
+          "restoreVerification": false,
+          "trust": "established"
+        }
+      },
+      "controllerKind": "emulated",
+      "labels": {
+        "node-role.kubernetes.io/infra": ""
+      },
+      "machine": "ocp-05",
+      "name": "master-4",
+      "physical": false,
+      "stateReadSeconds": 120,
+      "substrate": "libvirt",
+      "taints": [
+        {
+          "effect": "NoExecute",
+          "key": "example.test/reserved"
+        },
+        {
+          "effect": "NoSchedule",
+          "key": "example.test/reserved",
+          "value": "storage"
+        }
+      ]
+    },
+    {
+      "address": "198.51.100.105",
+      "controller": {
+        "credentialsRef": "lab-bmc-credentials",
+        "endpoint": "https://192.0.2.1:8005/redfish/v1/Systems/0e42e819-625a-8c49-8e40-06a51901f2a8",
+        "tlsVerify": true,
+        "trustBundleRef": "lab-bmc-tls",
+        "virtualMedia": {
+          "removeCertificate": false,
+          "restoreVerification": false,
+          "trust": "established"
+        }
+      },
+      "controllerKind": "emulated",
+      "labels": {
+        "node-role.kubernetes.io/infra": ""
+      },
+      "machine": "ocp-06",
+      "name": "master-5",
+      "physical": false,
+      "stateReadSeconds": 120,
+      "substrate": "libvirt"
+    }
+  ],
+  "placement": {
+    "connection": "local",
+    "machine": "controller"
+  },
+  "publicationRoot": {
+    "path": "/var/lib/bootwright-services/lab/artifact-server/lab-artifacts/public/private/clusters/ocp",
+    "url": "https://192.0.2.1:8443/private/clusters/ocp"
+  },
+  "release": {
+    "distribution": "openshift",
+    "version": "4.21.15"
+  },
+  "rendezvous": "198.51.100.100",
+  "tlsCertificateRef": "artifact-server-tls",
+  "tool": {
+    "compatibility": "openshift",
+    "kind": "openshift-install",
+    "version": "4.21.15"
+  },
+  "version": "cluster-install-agent-v10",
+  "vips": [
+    {
+      "address": "198.51.100.10",
+      "bridge": "virbr-lab",
+      "slot": "api"
+    },
+    {
+      "address": "198.51.100.10",
+      "bridge": "virbr-lab",
+      "slot": "api-int"
+    },
+    {
+      "address": "198.51.100.11",
+      "bridge": "virbr-lab",
+      "slot": "ingress"
+    }
+  ],
+  "workRoot": "/var/lib/bootwright-clusters/lab/ocp"
+}

@@ -30,14 +30,6 @@ func TestAdmittedInertFieldsDoNotChangePlans(t *testing.T) {
 			changes[native.slot+" "+field] = cluster.Spec().WithPath(value, "install", "endpoints", native.slot, field)
 		}
 	}
-	for field, value := range map[string]api.Value{
-		"labels": api.MapValue(text("example.test/rack", "rack-a")),
-		"taints": api.ListValue(api.MapValue(text("key", "example.test/reserved"), text("effect", "NoSchedule"))),
-	} {
-		nodes := cluster.Spec().Get("nodes").Items()
-		nodes[0] = nodes[0].With(field, value)
-		changes[field] = cluster.Spec().With("nodes", api.ListValue(nodes...))
-	}
 	for name, spec := range changes {
 		t.Run(name, func(t *testing.T) {
 			objects := base.Objects()

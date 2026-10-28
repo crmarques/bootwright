@@ -584,7 +584,7 @@ func TestTheInstallationIsAlwaysQuiescent(t *testing.T) {
 // The administrator access leaves the installation only with a proved
 // completion: an apply whose evidence proves this cluster installed, or an
 // apply's observation that reads it complete. Every other run offers nothing,
-// a removal declares no output at all, and whatever a run hands back that is
+// a removal and an observation outside any operation declare no output at all, and whatever a run hands back that is
 // not offered is cleared rather than dropped.
 func TestTheInstallOffersItsKubeconfigOnlyOnProvedCompletion(t *testing.T) {
 	const access = "apiVersion: v1\nkind: Config\n"
@@ -611,6 +611,7 @@ func TestTheInstallOffersItsKubeconfigOnlyOnProvedCompletion(t *testing.T) {
 		{"observe reading a partial installation", "unchanged", partial, observed, true, false},
 		{"observe reading no effect", "unchanged", noEffect, observed, true, false},
 		{"observe reading an unknown state", "unchanged", notCompleted, observed, true, false},
+		{"observe outside an operation", "unchanged", nil, unrecorded, false, false},
 		{"destroy", "changed", released, destroyed, false, false},
 		{"observe-removal", "unchanged", released, removalObserved, false, false},
 	} {
@@ -659,6 +660,13 @@ func destroyed(c InstallCapability, execution lifecycle.Execution) ([]lifecycle.
 }
 
 func observed(c InstallCapability, execution lifecycle.Execution) ([]lifecycle.Produced, error) {
+	execution.Resolution = 1
+	observation, err := c.Observe(context.Background(), execution)
+	return observation.Produced, err
+}
+
+// unrecorded observes as diff --observe does, outside any operation.
+func unrecorded(c InstallCapability, execution lifecycle.Execution) ([]lifecycle.Produced, error) {
 	observation, err := c.Observe(context.Background(), execution)
 	return observation.Produced, err
 }

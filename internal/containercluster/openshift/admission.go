@@ -321,16 +321,6 @@ func inertDeclarations(s api.Value) []api.Issue {
 				Remediation: "remove " + path + ", or keep it knowing the installation does not read it"})
 		}
 	}
-	for i, node := range s.Get("nodes").Items() {
-		for _, name := range []string{"labels", "taints"} {
-			if node.Get(name).Len() > 0 {
-				path := fmt.Sprintf("spec.nodes[%d].%s", i, name)
-				issues = add(issues, api.Issue{Code: "api.deferred", Field: "$." + path,
-					Message:     "the agent installer has no input for node " + name + ", so " + path + " changes no installation",
-					Remediation: "remove " + path + ", or apply the node " + name + " after the installation"})
-			}
-		}
-	}
 	return issues
 }
 

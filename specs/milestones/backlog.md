@@ -173,7 +173,7 @@ Alias cell.
 | [B593](#b593) | new, 2026-10-14 (X91 audit) | enabling | Desired state | `RenderEffective` can keep the authored catalog and origins for a consumer that needs them | Found by the X91 audit; no consumer: `diff` takes the compile port |
 | [B594](#b594) | new, 2026-10-14 (X91 audit) | enabling | Desired state | One envelope shape definition serves the decoder and the encoder | Found by the X91 audit; no milestone depends on it: drift risk only |
 | [B595](#b595) | new, 2026-10-14 (X91 audit) | enabling | Storage | A Ceph refusal table test and a docs-check entry | Found by the X91 audit; no consumer until the first Ceph delta scenario |
-| [B596](#b596) | new, 2026-10-14 (X91 audit) | enabling | Storage and Container cluster | Ceph and agent-install observations run without outputs when no operation records them | Found by the X91 audit; no milestone depends on it: until then `diff --observe` reads these blocks as unknown |
+| [B596](#b596) | new, 2026-10-14 (X91 audit); agent-install half delivered by X126 (D199) | enabling | Storage | Ceph observations run without outputs when no operation records them | Found by the X91 audit; no milestone depends on it: until then `diff --observe` reads these blocks as unknown |
 | [B597](#b597) | new, 2026-10-14 (X91 audit) | defect | State reconciliation | The state table names the paused destroy row | Found by the X91 audit; no milestone depends on it: the decision (continue) does not change |
 | [B598](#b598) | new, 2026-10-14 (X91 audit) | safety | State reconciliation and Workspace | Input restored byte for byte after an edit settles a completed apply | D155 accepts exact-byte restoration for a future named slice; current refusal stays |
 | [B599](#b599) | new, 2026-10-14 (X91 audit) | safety | Substrate and Managed OS | Every observe task writes only inside the runner's private directories | Found by the X91 audit; its extent is what the allowlist test finds, and the audit names two candidates |
@@ -1807,7 +1807,9 @@ and require it
 (`ansible/collections/ansible_collections/bootwright/core/plugins/module_utils/ceph_core.py:508-511`,
 `internal/containercluster/agentinstall/install.go:292-296`). The runner refuses
 `Outputs` on an invocation no operation records, so under `diff --observe` these
-blocks read unknown. **Impact:** safe, but it lowers the usefulness of `diff` for
+blocks read unknown. X126 ([D199](#d199)) delivered the agent install block's
+half: its observation declares no output outside an operation; the Ceph
+cluster and client blocks remain. **Impact:** safe, but it lowers the usefulness of `diff` for
 Ceph contexts. **Smallest fix:** their observation runs without outputs when no
 operation records it. It touches the Ansible plugin and the capability Go code.
 **Exit evidence:** a test that `diff --observe` reads the Ceph cluster, Ceph
@@ -3243,6 +3245,8 @@ holding such a clause, the clauses pending and the work they enable.
   topology inputs and the provided-host FIPS proof (X198, X199).
 - [D198](#d198): clauses (1) to (7), the physical Ceph host's disk bound
   derived from its Machine's erase policy (X201).
+- [D199](#d199): clauses (1) to (9), node placement once the installation
+  completes (X126).
 
 ### D1
 
@@ -5362,3 +5366,60 @@ refusal at 16, retirement with five-disk hosts, the recording fake
 transport's OSD-preparation round at 3 to 15 disks and eleven hosts, and the
 worker's device identity at 3, 5 and 15 disks; a physical run with five or
 more WWN disks per host is the operator gate.
+
+### D199
+
+**session-pending** (2026-10-28, the owner; the clauses after the owner's
+words are taken by the session, pending the owner's review). The owner asked
+the session to "Plan and implement what is still missing" and said "the
+solution must be as good as possible in terms of well-designed architecture
+and ux". It authorizes [B716](m3.md#b716) as slice X126 on M3, out of
+sequence, waiving for its implementation only the Q11 owner decision its
+Requires named; [B717](m3.md#b717) stays in X126 behind its own definition
+gate (Q17). Taken by the session, pending the owner's review: (1) Q11 is
+answered (a): the installation block places each node once, in the apply
+attempt that first proves the installation complete, after its media is
+released and before it offers the administrator access to custody. An `infra`
+node carries `node-role.kubernetes.io/infra` with an empty value unless its
+own labels author that key, and every node carries its authored `labels` and
+`taints`. A settled apply attests its records and reaches no host (D153), and
+`bootwright diff --observe` reports a removed or changed label or taint as a
+partial realization, repairing nothing. (2) No taint is synthesized unless
+authored: infra nodes install through the worker pool and keep its worker
+label, and with compute nodes present the default IngressController's routers
+run only on worker-labelled nodes without a toleration, so an all-infra
+compute pool tainted `NoSchedule` would leave ingress unschedulable. Moving
+routers or other workloads onto infra nodes is GitOps' work. (3) The completion
+proof requires placement as evidence: the evidence records, for each node that
+declares any, the observed values of its declared label keys and its taints of
+a declared key, and presence holds only when they equal the frozen request's.
+(4) Labels in `node-role.kubernetes.io/` are written through the API with the
+administrator kubeconfig the installation keeps, never by kubelet
+self-labelling, which the NodeRestriction admission plugin forbids for that
+prefix and for every taint change. (5) Placement is not written by server-side
+apply: an apply to a Node that disappeared between read and write would create
+one, and `spec.taints` is an atomic list an apply would own whole. It is one
+JSON patch per node under the field manager `bootwright-cluster-install`,
+pinned by `test` operations on the node's uid, its whole label map and its
+whole spec as read, that adds only the declared labels and taints the node
+lacks. It never removes, takes over or overwrites another manager's label or
+taint: a declared key present with another value, or a declared taint key and
+effect present with another value, refuses naming the node and key, and a
+node changed between read and write refuses with a repeat of the apply as the
+remedy. (6) A continuation re-observes before it writes: the step reads every
+node first and writes only what is absent, so a lost reply after labelling is
+read back and written again never; an observation that finds the placement is
+positive completion, and one that finds it missing on an otherwise complete
+cluster is a partial realization the next attempt converges. (7) The
+installation's observation outside an operation, as `diff --observe` runs it,
+declares no administrator-access output, so the runner admits it (the
+agent-install half of [B596](#b596)), and its
+projection renders the observed `spec.nodes[].labels` and
+`spec.nodes[].taints`. (8) The install request moves to
+`cluster-install-agent-v10`, freezing each node's placement; a v9 record
+refuses by name (D142). (9) The `api.deferred` warning for node labels and
+taints is removed. Exit evidence: completion-evidence goldens with labels and
+taints, an infra node without authored labels, a continuation after a lost
+reply, an observation that `diff --observe` reports as partial without
+restoring the label, a settled apply reaching no host; the operator gate is
+an owner-accepted infra row of lab-anysize on X126's build.

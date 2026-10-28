@@ -1969,9 +1969,10 @@ output, progress or continuation. A controller-stage block receives a stage
 whose every mutator refuses `lifecycle.state`
 `an observation may not authorize a host effect`. No run directory or run
 output is opened, and material an observation produces is cleared unread. An
-observation that hands over material, today the Ceph cluster and client blocks
-and the agent install and media blocks, is refused by the runner and reads
-unknown with that refusal as its reason.
+observation that hands over material, today the Ceph cluster and client blocks,
+is refused by the runner and reads unknown with that refusal as its reason;
+the agent install block's observation declares its administrator-access
+output only inside an operation, and the agent media block's declares none.
 
 **Material.** The Secret material an observation reads is the binding the
 owning apply froze, reopened read-only before the lock is taken, binding
@@ -2062,6 +2063,7 @@ projection claiming any other field is refused as above.
 | --- | --- | --- | --- |
 | `machine-libvirt-v1` | `Machine` | `spec.substrate.providerRef` | domain state; controller power |
 | `machine-libvirt-v1` | `InfraProvider` | `spec.libvirt.machineProfiles[].name`, `[].diskGiB`, `[].dataDisks[].name`, `[].dataDisks[].sizeGiB`, `[].dataDisks[].media` | missing disks |
+| `cluster-install-agent-v1` | `OpenShiftCluster` | `spec.nodes[].name`, `[].labels`, `[].taints` | declared labels and taints a node lacks |
 
 ## Bootstrap completion and GitOps readiness
 

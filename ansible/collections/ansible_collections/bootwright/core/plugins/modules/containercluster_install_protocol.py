@@ -66,6 +66,13 @@ options:
         real boolean true is recorded as a restore.
     type: bool
     required: false
+  placement:
+    description:
+      - What the placement read found, as bootwright.core.containercluster_install_placement
+        returns it. Its C(placement) is recorded as evidence, and a node named
+        in its C(unplaced) keeps the completion unproved.
+    type: dict
+    required: false
   observed:
     description:
       - Whether this publication is a read-only observation, which may report

@@ -1,6 +1,7 @@
 package agentinstall
 
 import (
+	"cmp"
 	"net/netip"
 	"slices"
 	"strconv"
@@ -419,6 +420,8 @@ type nodeProjection struct {
 	name            string
 	network         map[string]any
 	role            string
+	labels          map[string]string
+	taints          []Taint
 	rootDeviceHints map[string]any
 	requireTPM      bool
 	target          substrate.Target
@@ -509,6 +512,7 @@ func nodeProjections(catalog api.Catalog, cluster api.Object, contextName, contr
 		projections = append(projections, nodeProjection{
 			address: address, interfaces: target.Interfaces, machine: bound,
 			name: node.Get("name").Text(), network: network, role: node.Get("role").Text(),
+			labels: nodeLabels(node), taints: nodeTaints(node),
 			rootDeviceHints: hints, target: target, requireTPM: encryptedRole(cluster, node.Get("role").Text()),
 		})
 	}
@@ -538,11 +542,43 @@ func frozenNodes(nodes []nodeProjection) []Node {
 				},
 			},
 			Hardware: frozenHardware(node.target), RequireTPM: node.requireTPM,
-			Machine: node.machine.Name(), Name: node.name,
+			Labels: node.labels, Machine: node.machine.Name(), Name: node.name, Taints: node.taints,
 			StateReadSeconds: stateReadSeconds(node.target.Substrate), Physical: node.target.Physical, Substrate: node.target.Substrate,
 		})
 	}
 	return frozen
+}
+
+// InfraRoleLabel is the label an infra node carries unless it authors the key.
+const InfraRoleLabel = "node-role.kubernetes.io/infra"
+
+func nodeLabels(node api.Value) map[string]string {
+	var labels map[string]string
+	if node.Get("role").Text() == "infra" {
+		labels = map[string]string{InfraRoleLabel: ""}
+	}
+	for _, label := range node.Get("labels").Fields() {
+		if labels == nil {
+			labels = map[string]string{}
+		}
+		labels[label.Name] = label.Value.Text()
+	}
+	return labels
+}
+
+// nodeTaints keeps the first authored taint of each key and effect, sorted.
+func nodeTaints(node api.Value) []Taint {
+	var taints []Taint
+	for _, item := range node.Get("taints").Items() {
+		taint := Taint{Effect: item.Get("effect").Text(), Key: item.Get("key").Text(), Value: item.Get("value").Text()}
+		if !slices.ContainsFunc(taints, func(seen Taint) bool { return seen.Key == taint.Key && seen.Effect == taint.Effect }) {
+			taints = append(taints, taint)
+		}
+	}
+	slices.SortFunc(taints, func(x, y Taint) int {
+		return cmp.Or(strings.Compare(x.Key, y.Key), strings.Compare(x.Effect, y.Effect))
+	})
+	return taints
 }
 
 func nodeFirmware(declared *substrate.Firmware) *Firmware {

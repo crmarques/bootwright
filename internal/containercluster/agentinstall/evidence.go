@@ -134,8 +134,11 @@ type InstallEvidence struct {
 	// OwnMedia names the nodes among Media whose controller presents the image
 	// this cluster's media block published: a reported URL under its reserved
 	// publication path whose file has the published image's device and inode. Any other image is foreign, and no name here is outside Media.
-	OwnMedia      []string `json:"ownMedia"`
-	Postcondition bool     `json:"postcondition"`
+	OwnMedia []string `json:"ownMedia"`
+	// Placement is what each node declaring one carries of its declared label
+	// keys and taint keys, as the cluster answered.
+	Placement     []NodePlacement `json:"placement,omitempty"`
+	Postcondition bool            `json:"postcondition"`
 	// Powered names every node reported running, which is what tells a node
 	// that was never booted from one that may be installing now.
 	Powered []string `json:"powered"`
@@ -147,6 +150,42 @@ type InstallEvidence struct {
 	// installer's waits load that file themselves, never the kept copy.
 	Restored      bool     `json:"restored"`
 	VIPsNotProbed []string `json:"vipsNotProbed,omitempty"`
+}
+
+type NodePlacement struct {
+	Labels map[string]string `json:"labels"`
+	Name   string            `json:"name"`
+	Taints []Taint           `json:"taints"`
+}
+
+// Unplaced names every node the evidence does not show carrying its declared
+// labels and taints; other keys and taints are another manager's.
+func Unplaced(request InstallRequest, evidence InstallEvidence) []string {
+	var unplaced []string
+	for _, node := range request.Nodes {
+		if !placed(node) {
+			continue
+		}
+		index := slices.IndexFunc(evidence.Placement, func(seen NodePlacement) bool { return seen.Name == node.Name })
+		if index < 0 || !carries(node, evidence.Placement[index]) {
+			unplaced = append(unplaced, node.Name)
+		}
+	}
+	return unplaced
+}
+
+func carries(node Node, seen NodePlacement) bool {
+	for key, value := range node.Labels {
+		if observed, found := seen.Labels[key]; !found || observed != value {
+			return false
+		}
+	}
+	for _, taint := range node.Taints {
+		if !slices.Contains(seen.Taints, taint) {
+			return false
+		}
+	}
+	return true
 }
 
 // ValidateInstallPresence accepts evidence only when it proves the cluster
@@ -175,6 +214,9 @@ func ValidateInstallPresence(data []byte, request InstallRequest, digest string)
 	}
 	if len(evidence.Media) != 0 {
 		return refusal("lifecycle.state", "a node still presents the media it installed from", "")
+	}
+	if unplaced := Unplaced(request, evidence); len(unplaced) != 0 {
+		return refusal("lifecycle.state", "node "+unplaced[0]+" does not carry the labels and taints its request declares", "")
 	}
 	return nil
 }

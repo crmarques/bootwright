@@ -224,7 +224,7 @@ func automationFormats() map[string]automationFormat {
 		"os-install-anaconda-v21":   {class: formatMirrored},
 		"physical-erase-v6":         {class: formatMirrored},
 		"cluster-media-agent-v9":    {class: formatMirrored},
-		"cluster-install-agent-v9":  {class: formatMirrored},
+		"cluster-install-agent-v10": {class: formatMirrored},
 		"artifact-server-nginx-v2":  {class: formatMirrored},
 		"managed-service-v4":        {class: formatMirrored},
 		// Power is no plan block: each run binds its request to the power
@@ -260,6 +260,7 @@ func automationIdentities() map[string]automationFormat {
 		"bootwright.cluster-objects.owner-v1":     fixedBy(kindMark, "the domain an applied object's owner annotation is derived under", addon, network),
 		"bootwright.io/owner":                     fixedBy(kindMark, "the annotation key of an applied object's owner mark", addon, network),
 		"bootwright-":                             fixedBy(kindPlace, "the prefix of the server-side apply field manager and of the install's wildcard DNS label", addon, network, install),
+		"bootwright-cluster-install":              fixedBy(kindPlace, "the field manager of the JSON patch that places a completed cluster's node labels and taints", install),
 		"bootwright-owner":                        fixedBy(kindMark, "the key of the owner mark on a Ceph resource", core, ceph.ConsumerImplementation, ceph.SMBImplementation, ceph.ReplicationImplementation),
 		"bootwright:":                             fixedBy(kindMark, "the comment prefix that marks the cluster's authorized SSH key line as this owner's", core),
 		".bootwright-registry-":                   fixedBy(kindMark, "the anchor naming the registry credential this owner placed", core),

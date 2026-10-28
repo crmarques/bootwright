@@ -71,15 +71,27 @@ type Node struct {
 	// Hardware is what a physical node proves about itself before its boot
 	// erases what it holds. A node its substrate created carries none.
 	Hardware *Hardware `json:"hardware,omitempty"`
-	Machine  string    `json:"machine"`
-	Name     string    `json:"name"`
+	// Labels and Taints are the placement the node carries once installed,
+	// the infra role label included; taints are one per key and effect.
+	Labels  map[string]string `json:"labels,omitempty"`
+	Machine string            `json:"machine"`
+	Name    string            `json:"name"`
 	// Physical is operator-owned hardware: the installation erases what it
 	// already held, so the block consumes that authorization on apply.
-	Physical         bool   `json:"physical"`
-	RequireTPM       bool   `json:"requireTPM,omitempty"`
-	StateReadSeconds int    `json:"stateReadSeconds"`
-	Substrate        string `json:"substrate"`
+	Physical         bool    `json:"physical"`
+	RequireTPM       bool    `json:"requireTPM,omitempty"`
+	StateReadSeconds int     `json:"stateReadSeconds"`
+	Substrate        string  `json:"substrate"`
+	Taints           []Taint `json:"taints,omitempty"`
 }
+
+type Taint struct {
+	Effect string `json:"effect"`
+	Key    string `json:"key"`
+	Value  string `json:"value,omitempty"`
+}
+
+func placed(node Node) bool { return len(node.Labels) != 0 || len(node.Taints) != 0 }
 
 type Firmware struct {
 	BIOSAttributes []BIOSAttribute `json:"biosAttributes,omitempty"`

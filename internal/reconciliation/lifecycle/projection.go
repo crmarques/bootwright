@@ -35,6 +35,11 @@ func elementShape(shape *api.Shape) *api.Shape {
 	return shape.Element
 }
 
+// freeMap is a mapping whose keys are data, such as labels, handled whole.
+func freeMap(shape *api.Shape) bool {
+	return shape != nil && shape.Type == api.Mapping && shape.Open && len(shape.Fields) == 0
+}
+
 func nameKey(shape *api.Shape) string {
 	if shape == nil || shape.Type != api.Sequence {
 		return ""
@@ -119,7 +124,7 @@ func claimedPaths(value api.Value, shape *api.Shape, prefix string) []string {
 	switch {
 	case !value.Present():
 		return nil
-	case value.Type() == api.Mapping && shape != nil:
+	case value.Type() == api.Mapping && shape != nil && !freeMap(shape):
 		var paths []string
 		for _, field := range value.Fields() {
 			paths = append(paths, claimedPaths(field.Value, childShape(shape, field.Name), joinPath(prefix, field.Name))...)
@@ -186,7 +191,7 @@ func merge(into, fragment api.Value, shape *api.Shape, path string) (api.Value, 
 		return fragment, nil
 	case !fragment.Present():
 		return into, nil
-	case into.Type() == api.Mapping && fragment.Type() == api.Mapping:
+	case into.Type() == api.Mapping && fragment.Type() == api.Mapping && !freeMap(shape):
 		var fields []api.FieldValue
 		var conflicts []string
 		for _, name := range fieldNames(into, fragment) {
@@ -232,7 +237,7 @@ func without(value api.Value, shape *api.Shape, path string, conflicts []string)
 	switch {
 	case !value.Present() || slices.Contains(conflicts, path):
 		return api.Value{}
-	case value.Type() == api.Mapping:
+	case value.Type() == api.Mapping && !freeMap(shape):
 		var fields []api.FieldValue
 		for _, field := range value.Fields() {
 			if kept := without(field.Value, childShape(shape, field.Name), joinPath(path, field.Name), conflicts); kept.Present() {
@@ -258,7 +263,7 @@ func prune(declared, observed api.Value, shape *api.Shape, path string, unproven
 		return declared, nil
 	case !observed.Present():
 		return api.Value{}, []string{path}
-	case declared.Type() == api.Mapping && observed.Type() == api.Mapping:
+	case declared.Type() == api.Mapping && observed.Type() == api.Mapping && !freeMap(shape):
 		var fields []api.FieldValue
 		var dropped []string
 		for _, field := range declared.Fields() {
@@ -310,7 +315,7 @@ func union(first, second api.Value, shape *api.Shape) api.Value {
 		return second
 	case !second.Present():
 		return first
-	case first.Type() == api.Mapping && second.Type() == api.Mapping:
+	case first.Type() == api.Mapping && second.Type() == api.Mapping && !freeMap(shape):
 		var fields []api.FieldValue
 		for _, name := range fieldNames(first, second) {
 			fields = append(fields, api.FieldValue{Name: name, Value: union(first.Get(name), second.Get(name), childShape(shape, name))})
