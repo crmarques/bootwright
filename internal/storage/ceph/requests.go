@@ -474,9 +474,8 @@ func bindHosts(r *Request, c api.Catalog, cluster api.Object, contextName string
 			}
 		}
 	}
-	if len(r.Hosts) > 6 {
-		reason, remedy := clusterHostBudget(r.Cluster, len(r.Hosts))
-		return failure("lifecycle.unsupported", reason, remedy)
+	if len(r.Hosts) > maxClusterHosts {
+		return clusterBudgetFailure(r.Cluster, len(r.Hosts))
 	}
 	slices.SortFunc(r.Hosts, func(a, b Host) int { return strings.Compare(a.Name, b.Name) })
 	if len(r.Hosts) < 3 || r.Bootstrap == "" {

@@ -47,7 +47,12 @@ func executionFor(t *testing.T, r Request) lifecycle.Execution {
 
 func pinnedCatalog(t *testing.T, change func(api.Value) api.Value) api.Catalog {
 	t.Helper()
-	catalog := packageCatalog()
+	return pinnedCatalogOf(t, 3, change)
+}
+
+func pinnedCatalogOf(t *testing.T, hosts int, change func(api.Value) api.Value) api.Catalog {
+	t.Helper()
+	catalog := packageCatalogOf(hosts)
 	cluster, _ := catalog.Find(api.CephCluster, "example")
 	spec := cluster.Spec().WithPath(api.StringValue(PinnedTransport), "cephadm", "clusterSSH", "transport")
 	if change != nil {

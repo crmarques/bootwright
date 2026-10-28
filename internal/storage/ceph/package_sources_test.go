@@ -2,6 +2,7 @@ package ceph
 
 import (
 	"bytes"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -11,8 +12,10 @@ import (
 	"github.com/crmarques/bootwright/internal/secrets"
 )
 
-func packageCatalog() api.Catalog {
-	objects := poolRequestCatalog(3, 3).Objects()
+func packageCatalog() api.Catalog { return packageCatalogOf(3) }
+
+func packageCatalogOf(hosts int) api.Catalog {
+	objects := poolRequestCatalog(hosts, hosts).Objects()
 	objects = append(objects,
 		api.NewObject(api.MachineInstallProfile, "rhel", api.Value{}, requestMap(
 			"os", requestMap("family", "rhel", "version", "9.8", "architecture", "x86_64"),
@@ -232,8 +235,7 @@ func TestEveryCapabilityDeadlineCoversItsFrozenBudgets(t *testing.T) {
 		}
 	}
 	r.Action = "cluster"
-	r.Hosts = append(r.Hosts, r.Hosts...)
-	r.Hosts = append(r.Hosts, r.Hosts[0])
+	r.Hosts = slices.Repeat(r.Hosts[:1], 12)
 	if _, err := cephDeadline(r, "apply"); err == nil {
 		t.Fatal("silently clamped a budget beyond the run ceiling")
 	}

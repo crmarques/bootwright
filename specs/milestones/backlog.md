@@ -3237,6 +3237,8 @@ holding such a clause, the clauses pending and the work they enable.
   and the estate review's records.
 - [D194](#d194): clauses (1) to (7), addressed localnet bridges and the
   uplink rules (X196).
+- [D195](#d195): clauses (1) to (6), the Ceph cluster deadline as the only
+  host bound (X197).
 
 ### D1
 
@@ -5204,3 +5206,44 @@ names the bridge, and naming its uplink refuses with the bridge in the remedy.
 uplink, a VLAN or a bond, not only the install interface. (7) This revises
 D193 (4) for B885, now implemented, and takes [B740](#b740)'s
 post-installation half; its install-time bridges stay parked.
+
+### D195
+
+**session-pending** (2026-10-28, the owner; the clauses after the owner's
+words are taken by the session, pending the owner's review). The owner asked
+the session to "plan the implementation what is missing support and then
+implement" and said "the solution must be as good as possible in terms of
+well-designed architecture and ux". It splits [B890](m2.md#b890) from
+[B79](m2.md#b79), as [D170](#d170) split [B688](m2.md#b688), and authorizes it
+as slice X197 on M2, out of sequence. Taken by the session, pending the
+owner's review: (1) The fixed six-host count is removed: the
+[cluster execution budget](../ceph.md#cluster-execution-budget)'s apply
+deadline, (16 + n) × 660 s + 3720 s against the 21600 s run ceiling, is the
+only host bound. It admits eleven hosts (21540 s) and refuses twelve
+(22200 s); the build derives the count from the formula's constants, so the
+count is never restated. A raised fixed count (seven) was not taken, since it
+would invent a ceiling the deadline does not need, nor restructured or
+multi-run cluster blocks, which stay B79's. (2) One refusal: the refusal
+table's row names the host count, the deadline and the largest admitted count,
+before operation registration and secret custody for the CephCluster and its
+policies, pools and clients, and request planning and every block deadline
+refuse with the same text; it replaces both the six-host row and the separate
+deadline refusal. (3) Every other deadline or size that grows with the host
+count was checked at eleven hosts and none is smaller than this bound:
+observation (n + 3 calls, 9300 s), destruction (n + 2, 8640 s), a block other
+than the cluster (2n + 3, 16560 s), fixed host and service-unit deadlines,
+enrollment (each call admits at least one host within its worker budget, so n
+calls), the core-specification batch (35 of the worker's 128 documents in
+P1's physical shape with three disks per host), the frozen request (about
+22 KiB of 256 KiB) and the ready cluster evidence (about 24 KiB of 60 KiB). The review found the fixed 600 s ingress and
+single sign-on proof windows of a service unit serial over its placed hosts,
+so they can end a run `not-ready` from six placed hosts; that is recorded as
+[B891](m2.md#b891), not taken here.
+The physical retirement policy's decoding bound, six before, follows the
+cluster bound. (4) A CephFilesystem whose data pools and subvolume groups put
+its own apply past the ceiling, which at eleven hosts is more than six pools,
+or more than four pools and groups together, refuses at planning by its own
+name and fields instead of the cluster's text. (5) Evidence: in-tree planning
+goldens and the recording fake transport at seven hosts and at the bound; a
+live seven-guest libvirt run is the operator gate. (6) The 900 s readiness
+waits are unchanged; a shortfall the live run measures is its own item.

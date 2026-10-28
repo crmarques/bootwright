@@ -78,7 +78,7 @@ func DecodePhysicalRetirementRequest(data []byte) (PhysicalRetirementRequest, er
 		return r, err
 	}
 	previous := ""
-	if r.Cluster == "" || len(r.Hosts) == 0 || len(r.Hosts) > 6 {
+	if r.Cluster == "" || len(r.Hosts) == 0 || len(r.Hosts) > maxClusterHosts {
 		return r, physicalPolicyFailure()
 	}
 	for _, host := range r.Hosts {

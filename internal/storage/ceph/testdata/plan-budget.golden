@@ -1,0 +1,216 @@
+[
+  {
+    "blocks": [
+      {
+        "apply": 11280,
+        "destroy": 6000,
+        "id": "ceph-client-consumer",
+        "implementation": "storage-ceph-core-v3",
+        "observe": 6000
+      },
+      {
+        "apply": 18900,
+        "destroy": 6000,
+        "id": "ceph-cluster-example",
+        "implementation": "storage-ceph-core-v3",
+        "observe": 6660
+      },
+      {
+        "apply": 8365,
+        "destroy": 120,
+        "id": "ceph-host-example-node-1",
+        "implementation": "storage-ceph-host-v1",
+        "observe": 720
+      },
+      {
+        "apply": 8365,
+        "destroy": 120,
+        "id": "ceph-host-example-node-2",
+        "implementation": "storage-ceph-host-v1",
+        "observe": 720
+      },
+      {
+        "apply": 8365,
+        "destroy": 120,
+        "id": "ceph-host-example-node-3",
+        "implementation": "storage-ceph-host-v1",
+        "observe": 720
+      },
+      {
+        "apply": 8365,
+        "destroy": 120,
+        "id": "ceph-host-example-node-4",
+        "implementation": "storage-ceph-host-v1",
+        "observe": 720
+      },
+      {
+        "apply": 8365,
+        "destroy": 120,
+        "id": "ceph-host-example-node-5",
+        "implementation": "storage-ceph-host-v1",
+        "observe": 720
+      },
+      {
+        "apply": 8365,
+        "destroy": 120,
+        "id": "ceph-host-example-node-6",
+        "implementation": "storage-ceph-host-v1",
+        "observe": 720
+      },
+      {
+        "apply": 8365,
+        "destroy": 120,
+        "id": "ceph-host-example-node-7",
+        "implementation": "storage-ceph-host-v1",
+        "observe": 720
+      },
+      {
+        "id": "ceph-image-example",
+        "implementation": "storage-ceph-image-v1"
+      },
+      {
+        "apply": 11280,
+        "destroy": 6000,
+        "id": "ceph-policy-policy",
+        "implementation": "storage-ceph-core-v3",
+        "observe": 6000
+      },
+      {
+        "apply": 11280,
+        "destroy": 6000,
+        "id": "ceph-pool-volumes",
+        "implementation": "storage-ceph-core-v3",
+        "observe": 6000
+      },
+      {
+        "apply": 2280,
+        "destroy": 1380,
+        "id": "ceph-service-example-crash",
+        "implementation": "storage-ceph-core-v3",
+        "observe": 720
+      }
+    ],
+    "hosts": 7
+  },
+  {
+    "blocks": [
+      {
+        "apply": 16560,
+        "destroy": 8640,
+        "id": "ceph-client-consumer",
+        "implementation": "storage-ceph-core-v3",
+        "observe": 8640
+      },
+      {
+        "apply": 21540,
+        "destroy": 8640,
+        "id": "ceph-cluster-example",
+        "implementation": "storage-ceph-core-v3",
+        "observe": 9300
+      },
+      {
+        "apply": 8365,
+        "destroy": 120,
+        "id": "ceph-host-example-node-1",
+        "implementation": "storage-ceph-host-v1",
+        "observe": 720
+      },
+      {
+        "apply": 8365,
+        "destroy": 120,
+        "id": "ceph-host-example-node-10",
+        "implementation": "storage-ceph-host-v1",
+        "observe": 720
+      },
+      {
+        "apply": 8365,
+        "destroy": 120,
+        "id": "ceph-host-example-node-11",
+        "implementation": "storage-ceph-host-v1",
+        "observe": 720
+      },
+      {
+        "apply": 8365,
+        "destroy": 120,
+        "id": "ceph-host-example-node-2",
+        "implementation": "storage-ceph-host-v1",
+        "observe": 720
+      },
+      {
+        "apply": 8365,
+        "destroy": 120,
+        "id": "ceph-host-example-node-3",
+        "implementation": "storage-ceph-host-v1",
+        "observe": 720
+      },
+      {
+        "apply": 8365,
+        "destroy": 120,
+        "id": "ceph-host-example-node-4",
+        "implementation": "storage-ceph-host-v1",
+        "observe": 720
+      },
+      {
+        "apply": 8365,
+        "destroy": 120,
+        "id": "ceph-host-example-node-5",
+        "implementation": "storage-ceph-host-v1",
+        "observe": 720
+      },
+      {
+        "apply": 8365,
+        "destroy": 120,
+        "id": "ceph-host-example-node-6",
+        "implementation": "storage-ceph-host-v1",
+        "observe": 720
+      },
+      {
+        "apply": 8365,
+        "destroy": 120,
+        "id": "ceph-host-example-node-7",
+        "implementation": "storage-ceph-host-v1",
+        "observe": 720
+      },
+      {
+        "apply": 8365,
+        "destroy": 120,
+        "id": "ceph-host-example-node-8",
+        "implementation": "storage-ceph-host-v1",
+        "observe": 720
+      },
+      {
+        "apply": 8365,
+        "destroy": 120,
+        "id": "ceph-host-example-node-9",
+        "implementation": "storage-ceph-host-v1",
+        "observe": 720
+      },
+      {
+        "id": "ceph-image-example",
+        "implementation": "storage-ceph-image-v1"
+      },
+      {
+        "apply": 16560,
+        "destroy": 8640,
+        "id": "ceph-policy-policy",
+        "implementation": "storage-ceph-core-v3",
+        "observe": 8640
+      },
+      {
+        "apply": 16560,
+        "destroy": 8640,
+        "id": "ceph-pool-volumes",
+        "implementation": "storage-ceph-core-v3",
+        "observe": 8640
+      },
+      {
+        "apply": 2280,
+        "destroy": 1380,
+        "id": "ceph-service-example-crash",
+        "implementation": "storage-ceph-core-v3",
+        "observe": 720
+      }
+    ],
+    "hosts": 11
+  }
+]

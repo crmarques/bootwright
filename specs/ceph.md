@@ -399,7 +399,7 @@ links each matrix combination that this table refuses.
 | A native service whose auxiliary image is not selected | a CephCluster, or a CephPlacementPolicy, CephPool or CephClient whose `clusterRef` names it, declaring in `services` a service whose type needs an auxiliary image (an `alertmanager`, `alloy`, `grafana`, `ingress`, `loki`, `mgmt-gateway`, `node-exporter`, `nvmeof`, `oauth2-proxy`, `prometheus`, `promtail`, `smb` or `snmp-gateway` service) that `images` does not set, and that the previous row does not refuse; `<service>` is the first such service's qualified name in name order, `<family>` its `service_type`, `<name>` the first image it needs in name order that `images` does not set (only `keepalived` for an `ingress` with `spec.keepalive_only`) and `<cluster>` the CephCluster | `the <family> service <service> needs cephadm's container_image_<name>, and spec.images.<name> is not set; Bootwright keeps no default` | `set spec.images.<name> of CephCluster <cluster> to an image beneath its Entitlement registry, or remove <service> from its spec.services, together with its spec.serviceBindings entries` |
 | CephSMBResource objects whose samba images are not selected | a CephCluster, or a CephPlacementPolicy, CephPool or CephClient whose `clusterRef` names it, that a CephSMBResource of any resource type names in its `clusterRef` while `images` does not set both `samba` and `samba_metrics`, and that neither of the two previous rows refuses; `<smb>` is the first such CephSMBResource in name order, `<name>` is `samba` unless `images` sets it, else `samba_metrics`, and `<cluster>` the CephCluster | `CephSMBResource <smb> needs cephadm's container_image_<name>, and spec.images.<name> is not set; Bootwright keeps no default` | `set spec.images.<name> of CephCluster <cluster> to an image beneath its Entitlement registry, or remove every CephSMBResource whose spec.clusterRef is <cluster> from the selected Environment` |
 | An auxiliary image that no declared service needs | a CephCluster, or a CephPlacementPolicy, CephPool or CephClient whose `clusterRef` names it, setting `images.<name>` for an image that no service in `services` and no CephSMBResource naming it needs (per the auxiliary image table, with `samba` and `samba_metrics` for a CephSMBResource) and that none of the three previous rows refuses; `<name>` is the first such name in name order and `<cluster>` the CephCluster | `spec.images.<name> is set, but no declared service or CephSMBResource of CephCluster <cluster> needs cephadm's container_image_<name>` | `remove spec.images.<name> from CephCluster <cluster>` |
-| More than six Ceph hosts | a CephCluster or a CephPlacementPolicy, CephPool or CephClient naming it, whose topology declares more than six nodes | `CephCluster <cluster> declares <hosts> Ceph hosts, and Bootwright's cluster execution budget covers at most six hosts per cluster` | `declare at most six entries in spec.topology.nodes of CephCluster <cluster>; B79 tracks larger clusters` |
+| More Ceph hosts than the cluster run deadline admits | a CephCluster or a CephPlacementPolicy, CephPool or CephClient naming it, whose topology declares more nodes than the [cluster execution budget](#cluster-execution-budget) fits under the run ceiling; `<deadline>` is that budget's apply deadline for `<hosts>` hosts and `<most>` the largest host count it admits | `CephCluster <cluster> declares <hosts> Ceph hosts, whose cluster run deadline of <deadline> is past the 6h0m0s every adapter run is held to` | `declare at most <most> entries in spec.topology.nodes of CephCluster <cluster>; B79 tracks larger clusters` |
 | A distribution that core Ceph does not realize | a CephCluster, or a CephPlacementPolicy, CephPool or CephClient whose `clusterRef` names it, whose `distribution` selects the `oss` or `redhat` arm, an omitted `distribution` included, because omission selects `oss` ([distribution](api/ceph.md#cephcluster)) | `core Ceph realizes only the IBM Storage Ceph distribution` | `select spec.distribution.ibm` |
 
 The [`clusterSSH.transport` field rule](api/ceph.md) states what omission
@@ -597,15 +597,15 @@ The CephCluster's cluster block, the verifiedTunnel apply that bootstraps,
 enrolls and deploys the cluster, covers every host count in
 `spec.topology.nodes` that the selected native tools accept (D130), within
 the deadline bound below. Fewer than three hosts keep their existing refusal.
-Today more than six refuse before operation registration and secret custody,
-as a row of the [refusal table](#refusal-table) for the CephCluster and every
-CephPlacementPolicy, CephPool and CephClient naming it, with reason
-`CephCluster <cluster> declares <hosts> Ceph hosts, and Bootwright's cluster execution budget covers at most six hosts per cluster`
-and remedy
-`declare at most six entries in spec.topology.nodes of CephCluster <cluster>; B79 tracks larger clusters`.
+The deadline below is the only host bound: no fixed host count is added to it.
+A host count whose cluster deadline passes the run ceiling refuses before
+operation registration and secret custody, as a row of the
+[refusal table](#refusal-table) for the CephCluster and every
+CephPlacementPolicy, CephPool and CephClient naming it, and request planning
+and every block's deadline refuse it with the same reason and remedy.
 
-Not yet met: clusters of more than six hosts refuse; tracked as
-[B79](milestones/m2.md#b79).
+Not yet met: clusters of more hosts than the run ceiling fits under this
+budget refuse; tracked as [B79](milestones/m2.md#b79).
 
 The cluster block's deadline is at least the sum of the ceilings of the longest
 call sequence its run can make: every 660 s native call, the 1860 s bootstrap
@@ -675,13 +675,15 @@ each service's attempt identity; continuation never adopts a foreign service.
 Physical hosts may therefore select their distinct WWN devices in separate
 OSD specifications without multiplying bounded remote calls.
 Three hosts need 19 calls and 16260 s; six hosts need 22 calls and 18240 s,
-including P1's physical shape with twelve host-specific OSD specifications.
-The six-hour adapter ceiling, per-call budgets, input bounds and readiness
-proofs remain unchanged. A request whose deadline exceeds the ceiling refuses at
-planning, coded `lifecycle.unsupported`, with reason
-`CephCluster <cluster> needs a cluster run deadline of <deadline>, past the 6h0m0s every adapter run is held to`
-and remedy
-`declare fewer hosts in spec.topology.nodes of CephCluster <cluster>`.
+including P1's physical shape with twelve host-specific OSD specifications;
+seven need 23 calls and 18900 s; eleven need 27 calls and 21540 s, the most
+the 21600 s ceiling fits, and twelve would need 22200 s. The services call's
+documents do not enter the formula, so a host-specific OSD specification per
+selected disk keeps it. The six-hour adapter ceiling, per-call budgets, input
+bounds and readiness proofs remain unchanged. A request whose deadline exceeds
+the ceiling refuses at planning, coded `lifecycle.unsupported`, with the
+[refusal table](#refusal-table)'s row for more Ceph hosts than the cluster run
+deadline admits.
 
 Both readiness waits stay 900 s. A readiness timeout after the services call
 is recoverable: once cephadm has converged, the next apply observes a ready
@@ -711,12 +713,29 @@ has no forward or retirement exit today: only the orphan-acknowledged
 the hosts, their daemons, the claimed disks and their data.
 
 The budget changes no `partial-cluster` refusal. Observation, destruction,
-child blocks, host blocks and service units keep their deadlines; at six hosts
-the ones that grow with the hosts count 9 calls to observe the cluster, 8 to
-destroy it and 15 to apply a block other than the cluster.
+child blocks, host blocks and service units keep their deadlines; the ones that
+grow with the host count n take n + 3 calls to observe the cluster, n + 2 to
+destroy it and 2n + 3 to apply a block other than the cluster: 9, 8 and 15
+calls at six hosts, and 14, 13 and 25 (9300 s, 8640 s and 16560 s) at eleven,
+all under the ceiling. A CephFilesystem's apply adds one call per data pool and
+per subvolume group to its 2n + 3 and one more readiness wait when it declares
+a group, so at eleven hosts it fits six data pools without groups, or four
+pools and groups together. One past that refuses at planning, coded
+`lifecycle.unsupported`, with reason
+`CephFilesystem <filesystem> needs a run deadline of <deadline>, past the 6h0m0s every adapter run is held to: two native calls for each of the <hosts> Ceph hosts of CephCluster <cluster> and one for each of its <pools> data pools and <groups> subvolume groups`
+and remedy
+`declare fewer spec.dataPoolRefs or spec.subvolumeGroups on CephFilesystem <filesystem>, or fewer entries in spec.topology.nodes of CephCluster <cluster>`.
+Every enrollment call admits at least one host within its worker budget, so n
+calls enroll n hosts at any count. The services call submits at most the 128
+specifications the worker admits, and at eleven hosts P1's physical shape with
+three host-specific OSD specifications per host submits 35. At eleven hosts the
+frozen request and the ready cluster evidence stay well inside the 256 KiB
+request and 60 KiB evidence bounds, and the physical retirement policy admits
+the same host count as the cluster.
 
-The host bound and concurrent rounds are implemented under
-[B688](milestones/m2.md#b688); its live qualification remains outstanding.
+The concurrent rounds are implemented under [B688](milestones/m2.md#b688), and
+the deadline as the only host bound under [B890](milestones/m2.md#b890); the
+live qualification of both remains outstanding.
 
 ## Devices and destructive ownership
 

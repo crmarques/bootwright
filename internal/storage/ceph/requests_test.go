@@ -129,6 +129,13 @@ func TestClusterSSHTransportIsFrozenForClusterAndChildren(t *testing.T) {
 	}
 }
 
+func nodeAddress(node int) string {
+	if node >= 10 {
+		return fmt.Sprintf("192.0.2.%d", 100+node)
+	}
+	return fmt.Sprintf("192.0.2.%d", node)
+}
+
 func poolRequestCatalog(hostCount, osdHosts int) api.Catalog {
 	nodes := []api.Value{}
 	objects := []api.Object{}
@@ -142,7 +149,7 @@ func poolRequestCatalog(hostCount, osdHosts int) api.Catalog {
 		objects = append(objects, api.NewObject(api.Machine, name, api.Value{}, requestMap(
 			"substrate", requestMap("providerRef", "hypervisor", "libvirt", requestMap("profileRef", "guest")),
 			"os", requestMap("provided", false, "installProfileRef", "rhel"),
-			"network", requestMap("addresses", api.ListValue(requestMap("name", "ip", "address", fmt.Sprintf("192.0.2.%d", i)))),
+			"network", requestMap("addresses", api.ListValue(requestMap("name", "ip", "address", nodeAddress(i)))),
 			"access", requestMap("ssh", requestMap("addressRef", "ip", "user", "operator", "auth", requestMap("privateKeyRef", "fleet-key"))),
 		)))
 	}

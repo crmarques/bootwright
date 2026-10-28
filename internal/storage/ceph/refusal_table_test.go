@@ -37,10 +37,10 @@ func TestCephRefusalTableMatchesUnsupported(t *testing.T) {
 		return func(spec api.Value) api.Value { return spec.WithPath(api.StringValue(value), path...) }
 	}
 	cases := map[string]refusalCase{
-		"More than six Ceph hosts": {edits: map[string]func(api.Value) api.Value{"seven hosts": func(spec api.Value) api.Value {
+		"More Ceph hosts than the cluster run deadline admits": {edits: map[string]func(api.Value) api.Value{"twelve hosts": func(spec api.Value) api.Value {
 			nodes := spec.Get("topology", "nodes").Items()
-			return spec.WithPath(api.ListValue(slices.Repeat(nodes[:1], 7)...), "topology", "nodes")
-		}}, values: map[string]string{"<cluster>": "example", "<hosts>": "7"}},
+			return spec.WithPath(api.ListValue(slices.Repeat(nodes[:1], 12)...), "topology", "nodes")
+		}}, values: map[string]string{"<cluster>": "example", "<hosts>": "12", "<deadline>": "6h10m0s", "<most>": "11"}},
 		"A distribution that core Ceph does not realize": {edits: map[string]func(api.Value) api.Value{
 			"oss arm": func(spec api.Value) api.Value {
 				return spec.WithPath(requestMap("oss", api.MapValue()), "distribution")

@@ -160,12 +160,19 @@ func TestDeadlinesFitTheRunCeilingForThreeAndTheLargestAdmittedCluster(t *testin
 	}
 	maximum := r
 	maximum.Hosts = slices.Repeat(r.Hosts[:1], largest)
-	if deadline, err := cephDeadline(maximum, "apply"); err != nil || deadline > lifecycle.MaxDeadline || largest != 6 {
+	if deadline, err := cephDeadline(maximum, "apply"); err != nil || deadline != 21540*time.Second || largest != 11 || largest != maxClusterHosts {
 		t.Fatalf("the largest admitted cluster (%d hosts) takes %s: %v", largest, deadline, err)
 	}
-	for _, operation := range []string{"observe", "destroy"} {
-		if deadline, err := cephDeadline(maximum, operation); err != nil || deadline > lifecycle.MaxDeadline {
-			t.Fatalf("%s %s: %v", operation, deadline, err)
+	for operation, want := range map[string]time.Duration{"observe": 9300 * time.Second, "destroy": 8640 * time.Second} {
+		if deadline, err := cephDeadline(maximum, operation); err != nil || deadline != want {
+			t.Fatalf("%s %s, want %s: %v", operation, deadline, want, err)
+		}
+	}
+	for _, action := range []string{"pool", "client", "policy", "rbd", "settings"} {
+		child := maximum
+		child.Action = action
+		if deadline, err := cephDeadline(child, "apply"); err != nil || deadline != 16560*time.Second {
+			t.Fatalf("a %s block of the largest admitted cluster takes %s: %v", action, deadline, err)
 		}
 	}
 }
