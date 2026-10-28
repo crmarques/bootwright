@@ -8514,7 +8514,7 @@ Managed OS, Substrate, State reconciliation and Workspace. Delivered on
 A bare-metal Bootwright-installed Machine names its root disk by its
 `/dev/disk/by-id/wwn-0x` path, refused otherwise at plan, and `%pre` stops
 before any storage directive unless that path resolves to a whole disk
-([B840](backlog.md#b840) keeps the WWN and serial comparison). Every physical
+([B840](#x178--audit-lane-s-libvirt-host-evidence-routes-and-root-disk-identity) keeps the WWN and serial comparison). Every physical
 proof uses one MAC-set predicate, equality, excepting the management
 controller's host interface. Power commands refuse the controller Machine and
 a BMC reporting this host's own UUID or MACs, and an unpinned physical Machine
@@ -9034,6 +9034,36 @@ add-ons` stays with [B770](backlog.md#b770).
 **Guard tests:** the inherited-scope, context-free, cluster preflight service
 and golden tests, each proved by a seeded mismatch; the delivering commit
 records the gates.
+### X178 — Audit lane S: libvirt host evidence, routes and root disk identity
+
+**Items:** B845, B843 and B840.
+**Kind:** safety. **Owners:** Substrate and Managed OS. Delivered on
+2026-10-27 as lane S of the
+[audit remediation](backlog.md#lane-order-and-progress) under the owner's
+request to implement the remaining items, with D188's answer for B843; the
+lane parked B864 to B866.
+
+Libvirt network evidence carries the observed bridge MTU that planning
+already compares, and an MTU the host did not answer refuses with its own
+message. A broader host route through a gateway in the `main` table that
+covers a managed prefix is admitted with a warning naming the route, its
+gateway and the prefix, written to the adapter output before the first effect
+(B864 carries it to the run's diagnostics); identical, nested-narrower,
+on-link, blackhole, mixed-multipath and other-table routes refuse.
+
+A bare-metal Bootwright-installed Machine may name its root disk's `wwn` and
+`serialNumber` beside its by-id `deviceName`; selection refuses a `wwn` the
+path does not name and a serial outside its grammar, building the erase
+request refuses an erase target whose identity differs, and `%pre` reads the
+disk's sysfs WWN and serial and stops before storage on a mismatch or an
+unreadable value. NVMe root disks, an `eui.`-preferring SCSI `wwid`, a
+NUL-padded serial and a serial with internal spaces refuse. Request versions
+move: `os-install-anaconda-v18`, `kickstart-anaconda-v14` and
+`physical-erase-v3`.
+
+**Guard tests:** the libvirt route, evidence MTU, selection, erase-request,
+renderer and `%pre` shell tests, each proved by a seeded mismatch; the
+delivering commit records the gates.
 
 ## M3 independent in-tree completion
 

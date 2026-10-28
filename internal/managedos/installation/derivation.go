@@ -106,6 +106,7 @@ func installationFor(catalog api.Catalog, machine, profile api.Object, request R
 			installation.ExpectedMACs = append(installation.ExpectedMACs, declared.MACAddress)
 		}
 		installation.ExpectedMACs = SortedUnique(installation.ExpectedMACs)
+		installation.RootSerial, installation.RootWWN = request.Target.Hardware.SerialNumber, request.Target.Hardware.WWN
 	}
 	return installation, nil
 }

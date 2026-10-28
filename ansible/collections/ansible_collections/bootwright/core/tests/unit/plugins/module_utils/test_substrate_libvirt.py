@@ -10,6 +10,7 @@ import pytest
 from ansible_collections.bootwright.core.plugins.module_utils.substrate_libvirt import (
     MAX_OUTPUT,
     collisions,
+    host_conflicts,
     domain_metadata,
     domain_state,
     invoke,
@@ -849,6 +850,103 @@ def test_an_overlapping_route_identical_or_nested_refuses_naming_the_address():
     # The host's own address is a local route of the same table.
     found = collisions(host_answers(), managed("192.0.2.10/32"), set())[0]
     assert any(entry.startswith("route 192.0.2.10/32 dev eth0") for entry in found), found
+
+
+def routes_with(*extra, v6=None):
+    answers = {"/usr/sbin/ip -json -4 route show table all": (0, "[" + ",".join(extra) + "]", "")}
+    if v6 is not None:
+        answers["/usr/sbin/ip -json -6 route show table all"] = (0, "[" + v6 + "]", "")
+    return host_answers(**answers)
+
+
+def conflicts(runner, address, ours=()):
+    found, shadows, answered = host_conflicts(runner, managed(address), set(ours))
+    assert answered
+    return found, shadows
+
+
+# A summary route through a gateway, a VPN /8, covers the managed prefix without
+# holding any of it on the host: the managed network's connected route wins by
+# longest prefix, so only that route's hosts inside the prefix stop being
+# reached through it. It is admitted with a warning naming both.
+def test_a_broader_route_through_a_gateway_is_admitted_with_a_warning_naming_it():
+    vpn = '{"dst": "10.0.0.0/8", "gateway": "192.0.2.254", "dev": "tun0"}'
+    found, shadows = conflicts(routes_with(vpn), "10.1.0.1/24")
+    assert found == []
+    assert len(shadows) == 1
+    for named in ("route 10.0.0.0/8", "via 192.0.2.254", "dev tun0", "covers 10.1.0.0/24", "the hosts of 10.1.0.0/24", "bootwright-lab-guests"):
+        assert named in shadows[0], (named, shadows)
+    assert collisions(routes_with(vpn), managed("10.1.0.1/24"), set()) == ([], True)
+    summary = '{"dst": "2001:db8::/32", "gateway": "fe80::1", "dev": "tun0"}'
+    found, shadows = conflicts(routes_with(v6=summary), "2001:db8:1::1/64")
+    assert (found, len(shadows)) == ([], 1)
+    assert "route 2001:db8::/32 via fe80::1" in shadows[0]
+    multipath = '{"dst": "10.0.0.0/8", "dev": "", "nexthops": [{"gateway": "192.0.2.253", "dev": "eth0"}, {"gateway": "192.0.2.254", "dev": "tun0"}]}'
+    found, shadows = conflicts(routes_with(multipath), "10.1.0.1/24")
+    assert (found, len(shadows)) == ([], 1)
+    assert "via 192.0.2.253" in shadows[0]
+
+
+def test_an_identical_nested_or_on_link_broader_route_still_refuses():
+    for route, address in (
+        ('{"dst": "10.1.0.0/24", "gateway": "192.0.2.254", "dev": "tun0"}', "10.1.0.1/24"),
+        ('{"dst": "10.1.0.0/25", "gateway": "192.0.2.254", "dev": "tun0"}', "10.1.0.1/24"),
+        ('{"dst": "10.0.0.0/8", "dev": "tun0"}', "10.1.0.1/24"),
+        ('{"dst": "10.0.0.0/8", "dev": "tun0", "type": "blackhole"}', "10.1.0.1/24"),
+    ):
+        found, shadows = conflicts(routes_with(route), address)
+        assert shadows == [], route
+        assert len(found) == 1 and found[0].startswith("route 10."), (route, found)
+    found, shadows = conflicts(routes_with(v6='{"dst": "2001:db8::/32", "dev": "tun0"}'), "2001:db8:1::1/64")
+    assert (len(found), shadows) == (1, [])
+    # A gateway never excuses a route inside the prefix: it is not a summary of it.
+    found, shadows = conflicts(routes_with('{"dst": "10.1.0.0/16", "gateway": "192.0.2.254", "dev": "tun0"}'), "10.1.0.1/8")
+    assert (len(found), shadows) == (1, [])
+
+
+# Only a main-table route with a gateway on every hop is a summary the managed
+# connected route outranks: a policy rule, a strongSwan table 220 for one, can
+# select another table before main, and an on-link hop holds the prefix on the
+# host, so both still refuse.
+def test_a_broader_gateway_route_of_another_table_or_with_an_on_link_hop_refuses():
+    for route in (
+        '{"dst": "10.0.0.0/8", "gateway": "192.0.2.1", "dev": "eth0", "table": "220"}',
+        '{"dst": "10.0.0.0/8", "gateway": "192.0.2.1", "dev": "eth0", "table": "local"}',
+        '{"dst": "10.0.0.0/8", "nexthops": [{"dev": "eth1"}, {"gateway": "192.0.2.1", "dev": "eth0"}]}',
+        '{"dst": "10.0.0.0/8", "nexthops": [{"gateway": "192.0.2.1", "dev": "eth0"}, {"dev": "eth1"}]}',
+    ):
+        found, shadows = conflicts(routes_with(route), "10.1.0.1/24")
+        assert shadows == [], route
+        assert len(found) == 1 and found[0].startswith("route 10.0.0.0/8 dev eth"), (route, found)
+    named_main = '{"dst": "10.0.0.0/8", "gateway": "192.0.2.1", "dev": "eth0", "table": "main"}'
+    assert [len(part) for part in conflicts(routes_with(named_main), "10.1.0.1/24")] == [0, 1]
+
+
+def test_a_multipath_route_is_ours_only_when_every_hop_is():
+    split = '{"dst": "10.0.0.0/8", "nexthops": [{"gateway": "192.0.2.1", "dev": "virbr0"}, {"gateway": "192.0.2.2", "dev": "tun0"}]}'
+    found, shadows = conflicts(routes_with(split), "10.1.0.1/24", ours={"virbr0"})
+    assert found == [] and len(shadows) == 1 and "dev virbr0,tun0" in shadows[0], shadows
+    found, shadows = conflicts(routes_with(split.replace("tun0", "virbr1")), "10.1.0.1/24",
+                               ours={"virbr0", "virbr1"})
+    assert (found, shadows) == ([], [])
+    on_link = '{"dst": "10.1.0.0/24", "nexthops": [{"dev": "virbr0"}, {"dev": "eth1"}]}'
+    found = conflicts(routes_with(on_link), "10.1.0.1/24", ours={"virbr0"})[0]
+    assert len(found) == 1 and found[0].startswith("route 10.1.0.0/24 dev virbr0,eth1"), found
+
+
+def test_a_route_a_network_this_context_runs_holds_is_neither_a_collision_nor_a_shadow():
+    vpn = '{"dst": "10.0.0.0/8", "gateway": "192.0.2.254", "dev": "virbr0"}'
+    assert conflicts(routes_with(vpn), "10.1.0.1/24", ours={"virbr0"}) == ([], [])
+
+
+def test_the_host_observation_carries_the_shadows_and_the_evidence_never_does(tmp_path):
+    vpn = '{"dst": "10.0.0.0/8", "gateway": "192.0.2.254", "dev": "tun0"}'
+    request = {"networks": managed("10.1.0.1/24"), "packages": [], "poolName": "p", "poolPath": str(tmp_path / "pool"),
+               "services": [], "uri": "qemu:///system"}
+    observation = observe_host(routes_with(vpn), request)
+    assert (observation["collisions"], observation["collisionsAnswered"]) == ([], True)
+    assert len(observation["shadows"]) == 1 and "route 10.0.0.0/8" in observation["shadows"][0]
+    assert observe_host(host_answers(), request)["shadows"] == []
 
 
 def test_an_existing_link_of_the_bridges_name_refuses_naming_the_bridge():

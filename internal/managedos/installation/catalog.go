@@ -17,7 +17,7 @@ const Implementation = "os-install-anaconda-v1"
 // Kind is shared with the substrate; resolution also requires the implementation.
 const Kind = "Machine"
 
-const requestVersion = "os-install-anaconda-v17"
+const requestVersion = "os-install-anaconda-v18"
 
 // installationBudgets are the waits every installation this build plans
 // freezes. The installer takes minutes to write a disk; a physical server adds

@@ -379,8 +379,12 @@ def host_routes(runner):
 
     The local table holds a route for each address the host carries, so one
     listing covers addresses and routes alike. A default route overlaps every
-    prefix and collides with none, so it is left out. None means a listing did
-    not answer, which proves nothing.
+    prefix and collides with none, so it is left out. Each route is its prefix,
+    the devices of its hops and its gateways. The gateways are empty unless
+    the route is in the main table and every hop names one: a route of another
+    table, which a policy rule such as a VPN's may consult before main, or a
+    multipath route with an on-link hop, is never only a summary through a
+    gateway. None means a listing did not answer, which proves nothing.
     """
     routes = []
     for family, width in (("-4", 32), ("-6", 128)):
@@ -396,27 +400,40 @@ def host_routes(runner):
                     destination += "/" + str(width)
                 prefix = ipaddress.ip_network(destination, strict=False)
                 if prefix.prefixlen:
-                    routes.append((prefix, str(item.get("dev") or "")))
+                    hops = item.get("nexthops") or [item]
+                    if not isinstance(hops, list) or not all(isinstance(hop, dict) for hop in hops):
+                        return None
+                    devices = tuple(str(hop.get("dev") or "") for hop in hops)
+                    gateways = tuple(str(hop.get("gateway") or "") for hop in hops)
+                    main = str(item.get("table") or "main") == "main"
+                    routes.append((prefix, devices, ",".join(gateways) if main and all(gateways) else ""))
         except (ValueError, TypeError, AttributeError):
             return None
     return routes
 
 
-def collisions(runner, networks, ours):
-    """What on the host a managed network would collide with, before it is defined.
+def host_conflicts(runner, networks, ours):
+    """What on the host a managed network would collide with or shadow, before it is defined.
 
     A link of the managed bridge's name, or a route overlapping the managed
     prefix, identical or nested, collides unless a network this context owns
-    and runs holds it (`ours`, by bridge). The second value is whether the
-    host answered: a listing it did not answer proves nothing.
+    and runs holds it (`ours`, by bridge). A route through a gateway that is
+    strictly broader than the managed prefix, a VPN `/8` for one, in the main
+    table and with a gateway on every hop, does not collide: the managed
+    network's connected route wins by longest prefix, so only the hosts of the
+    managed prefix the summary route reached become unreachable through it. It
+    is reported as a shadow, a warning and no refusal. A broader route on-link,
+    with an on-link hop, or in another table still collides. A route counts as
+    ours only when every hop is on a bridge in `ours`. The last value is
+    whether the host answered: a listing it did not answer proves nothing.
     """
     managed = [network for network in networks if network.get("managed")]
     if not managed:
-        return [], True
+        return [], [], True
     links, routes = host_links(runner), host_routes(runner)
     if links is None or routes is None:
-        return [], False
-    found = []
+        return [], [], False
+    found, shadows = [], []
     for network in managed:
         name, bridge = str(network["name"]), str(network["bridge"])
         if bridge in links and bridge not in ours:
@@ -425,10 +442,23 @@ def collisions(runner, networks, ours):
         if not address:
             continue
         prefix = ipaddress.ip_network(address, strict=False)
-        for route, device in routes:
-            if device not in ours and route.version == prefix.version and route.overlaps(prefix):
+        for route, devices, gateway in routes:
+            if all(device in ours for device in devices) or route.version != prefix.version or not route.overlaps(prefix):
+                continue
+            device = ",".join(device for device in devices if device)
+            if gateway and route.prefixlen < prefix.prefixlen:
+                shadows.append(
+                    "route %s via %s dev %s covers %s: the connected route of attachment %s wins by longest prefix,"
+                    " so the hosts of %s are no longer reached through %s" % (route, gateway, device or "none", prefix, name, prefix, gateway))
+            else:
                 found.append("route %s dev %s, which overlaps %s: change the address of attachment %s" % (route, device or "none", prefix, name))
-    return sorted(set(found)), True
+    return sorted(set(found)), sorted(set(shadows)), True
+
+
+def collisions(runner, networks, ours):
+    """What would collide with a managed network, and whether the host answered."""
+    conflicts = host_conflicts(runner, networks, ours)
+    return conflicts[0], conflicts[2]
 
 
 def pool_target(runner, uri, name):
@@ -700,8 +730,10 @@ def observe_host(runner, request):
     only a restart converges, with the `guests` a restart would cut off and
     whether the hypervisor answered for them all; evidence never carries it,
     nor `collisions`, what a managed network would collide with on the host,
-    or `collisionsAnswered`, whether the host answered for its links and
-    routes.
+    `shadows`, the broader routes through a gateway whose hosts inside a
+    managed prefix the network's connected route takes over, which the apply
+    warns of and never refuses, or `collisionsAnswered`, whether the host
+    answered for its links and routes.
     Each managed network answered for reports `autostart`, whether it starts
     with the host, and `owned` only when its metadata names this context and
     that network. `poolAutostart` is whether the pool starts with the host and
@@ -736,7 +768,7 @@ def observe_host(runner, request):
             "state": unit_state(runner, service),
             "enabled": unit_enabled(runner, service),
         })
-    collided, probed = collisions(runner, request.get("networks") or [], ours)
+    collided, shadows, probed = host_conflicts(runner, request.get("networks") or [], ours)
     return {
         "collisions": collided,
         "collisionsAnswered": probed,
@@ -750,6 +782,7 @@ def observe_host(runner, request):
         "poolAutostart": pool["autostart"],
         "poolOwned": pool["owned"],
         "services": services,
+        "shadows": shadows,
         "uri": answers,
     }
 

@@ -233,7 +233,7 @@ func TestOnlyTheFirstRefusalAMachineMeetsIsReported(t *testing.T) {
 		reason, remediation string
 	}{
 		"a target before its network": {labCatalog(hinted, kernelNamed),
-			"a managed-OS installation selects its root disk by deviceName alone and cannot carry the other root-device hints the Machine declares",
+			"a managed-OS installation selects its root disk by deviceName, which a physical Machine's wwn and serialNumber may prove, and cannot carry the other root-device hints the Machine declares",
 			"remove spec.hardware.rootDevice.rotational from Machine/rhel-01"},
 		"a network before its profile": {labCatalog(kernelNamed, mirrored), kernel, kernelRemedy},
 		"a profile before its servers": {labCatalog(mirrored, servicesHost(), onServices),
@@ -327,7 +327,7 @@ func TestRequestRefusalsNameTheFieldThatDeclaresIt(t *testing.T) {
 // tooling list it once named must leave its input, and every frozen plan,
 // unchanged.
 func TestTheContentDigestIsPinned(t *testing.T) {
-	if digest := ContentDigest(); digest != "d339c0f634e1b4ff050fbd829222f74946c12819fe485eaf79ec60a8c39cdb8c" {
+	if digest := ContentDigest(); digest != "5a3c334ce7645b0d3c6b89718e3f1b82d1d93aaa919df0887c63feae57f2d818" {
 		t.Fatalf("content digest = %s", digest)
 	}
 }

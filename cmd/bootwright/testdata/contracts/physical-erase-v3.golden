@@ -1,6 +1,6 @@
-implementation: physical-erase-v2
-content-digest: 113f4c9344935427daef431adde39d923c74e78e96d78249400b692153b738f0
-request-version: physical-erase-v2
+implementation: physical-erase-v3
+content-digest: 1b08f18b6d5c6a556150256a79feaeb1b461324975eed0765e5399b6f4a76500
+request-version: physical-erase-v3
 automation-formats: none
 mark-formats: none
 proof-ids: bootwright.erase=1
@@ -101,6 +101,8 @@ request-schema:
   install.target.hardware.interfaces[].macAddress string
   install.target.hardware.interfaces[].name string
   install.target.hardware.rootDevice string omitempty
+  install.target.hardware.serialNumber string omitempty
+  install.target.hardware.wwn string omitempty
   install.target.hostKeyRef string omitempty
   install.target.hostKeyType string omitempty
   install.target.physical bool

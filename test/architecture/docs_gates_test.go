@@ -154,7 +154,7 @@ type docsSectionException struct {
 // ceiling its section's size that day. Each is split into named leaves the
 // index routes to; none may grow.
 var docsSectionExceptions = map[string]docsSectionException{
-	"specs/managed-os.md ## Installation":                       {ceiling: 104384, since: "2026-10-27"},
+	"specs/managed-os.md ## Installation":                       {ceiling: 88812, since: "2026-10-27"},
 	"specs/state-reconciliation.md ## Plan and execution":       {ceiling: 75242, since: "2026-10-27"},
 	"specs/ceph.md ## Resources, readiness and access":          {ceiling: 45216, since: "2026-10-27"},
 	"specs/contexts.md ## Storage, locking and publication":     {ceiling: 44625, since: "2026-10-27"},

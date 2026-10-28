@@ -13,7 +13,7 @@ import (
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
 )
 
-const EraseImplementation = "physical-erase-v2"
+const EraseImplementation = "physical-erase-v3"
 const eraseVariable = "bootwright_physical_erase"
 
 type EraseTarget struct {
@@ -92,6 +92,11 @@ func eraseRequest(machine api.Object, install Request) (EraseRequest, error) {
 			}
 			seen[index][identity] = true
 		}
+		if hardware := install.Target.Hardware; target.DeviceName == root && hardware != nil &&
+			(hardware.WWN != "" && eraseWWN(target.WWN) != eraseWWN(hardware.WWN) || hardware.SerialNumber != "" && target.SerialNumber != hardware.SerialNumber) {
+			return request, refusal("api.invariant", "physical erase's root target names another wwn or serialNumber than spec.substrate.baremetal.rootDevice declares for the same disk",
+				"make the root target of spec.hardware.eraseOnRemoval and spec.substrate.baremetal.rootDevice name the same wwn and serialNumber")
+		}
 		rootIncluded = rootIncluded || target.DeviceName == root
 		request.Targets = append(request.Targets, target)
 	}
@@ -101,6 +106,14 @@ func eraseRequest(machine api.Object, install Request) (EraseRequest, error) {
 	slices.SortFunc(request.Targets, func(a, b EraseTarget) int { return strings.Compare(a.DeviceName, b.DeviceName) })
 	request.Install.Private = &Publication{Path: install.Private.Path + "-erase", URL: install.Private.URL + "-erase", CertificateRef: install.Private.CertificateRef}
 	return request, nil
+}
+
+func eraseWWN(declared string) string {
+	lowered := strings.ToLower(declared)
+	if hex, found := strings.CutPrefix(lowered, "naa."); found {
+		return hex
+	}
+	return strings.TrimPrefix(lowered, "0x")
 }
 
 type EraseCoverage struct {

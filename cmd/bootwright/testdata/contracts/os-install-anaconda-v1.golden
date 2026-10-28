@@ -1,6 +1,6 @@
 implementation: os-install-anaconda-v1
-content-digest: d339c0f634e1b4ff050fbd829222f74946c12819fe485eaf79ec60a8c39cdb8c
-request-version: os-install-anaconda-v17
+content-digest: 5a3c334ce7645b0d3c6b89718e3f1b82d1d93aaa919df0887c63feae57f2d818
+request-version: os-install-anaconda-v18
 automation-formats: none
 mark-formats: none
 proof-ids: .bootwright-tree-identity, /etc/bootwright/registration.json
@@ -31,6 +31,8 @@ request-identity:
   target.domain
   target.uri
   target.hardware.rootDevice
+  target.hardware.serialNumber
+  target.hardware.wwn
   placement.machine
 request-schema:
   address string
@@ -116,6 +118,8 @@ request-schema:
   target.hardware.interfaces[].macAddress string
   target.hardware.interfaces[].name string
   target.hardware.rootDevice string omitempty
+  target.hardware.serialNumber string omitempty
+  target.hardware.wwn string omitempty
   target.hostKeyRef string omitempty
   target.hostKeyType string omitempty
   target.physical bool

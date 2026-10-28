@@ -507,3 +507,25 @@ func TestMachineEvidenceWithoutAnAnswerDecodesAsSilent(t *testing.T) {
 		t.Fatal("removal evidence that never said the hypervisor answered was accepted")
 	}
 }
+
+// A bridge MTU the host did not read publishes as zero, which is unknown, not
+// another MTU: it refuses saying so, and a different MTU refuses as a mismatch.
+func TestABridgeMTUTheHostDidNotReadRefusesAsUnanswered(t *testing.T) {
+	frozen := []Network{{Bridge: "br-storage", MTU: 9000, Name: "storage"}}
+	for observed, want := range map[int]string{
+		0:    "the provider host did not answer for a declared network bridge's MTU",
+		1500: "a declared network bridge does not carry its frozen MTU",
+		9000: "",
+	} {
+		err := matchNetworks([]NetworkEvidence{{Bridge: true, MTU: observed, Name: "storage"}}, frozen)
+		if want == "" {
+			if err != nil {
+				t.Fatalf("MTU %d: %v", observed, diagnostics.Of(err))
+			}
+			continue
+		}
+		if reported := diagnostics.Of(err); len(reported) != 1 || reported[0].Message != want {
+			t.Fatalf("MTU %d: %v", observed, reported)
+		}
+	}
+}

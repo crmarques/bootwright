@@ -181,4 +181,9 @@ def test_a_managed_network_that_collides_with_the_host_is_refused_before_any_def
             "ansible.builtin.file" in task or "ansible.builtin.template" in task
             or (argv_of(task)[:1] == ["/usr/bin/virsh"] and argv_of(task)[-1:] != ["version"]))
     )
-    assert running < observed < answered < collided < effect
+    warned = index_of(
+        tasks, lambda task: "ansible.builtin.debug" in task and "shadows" in str(task.get("loop")),
+        "warns of a broader route a managed network takes over",
+    )
+    assert "when" not in tasks[warned] or "shadows" not in str(tasks[warned]["when"])
+    assert running < observed < answered < collided < warned < effect

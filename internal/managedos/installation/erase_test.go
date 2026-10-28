@@ -153,6 +153,44 @@ func TestPhysicalEraseRequiresExactRootAndDistinctWholeTargets(t *testing.T) {
 	}
 }
 
+// The installation's %pre and the erase worker prove the same root disk, so an
+// erase root target naming another wwn or serial number than the Machine's
+// declared root identity refuses when its request is built; the WWN compares
+// without case or its 0x or naa. prefix, as the worker does.
+func TestPhysicalEraseRootTargetAgreesWithTheDeclaredRootIdentity(t *testing.T) {
+	const path = "/dev/disk/by-id/wwn-0x5000c500a1b2c3d4"
+	for name, test := range map[string]struct {
+		wwn, serial string
+		refused     bool
+	}{
+		"the same identity":               {"0x5000c500a1b2c3d4", "ZC1A2B3C", false},
+		"the same WWN in naa form":        {"naa.5000C500A1B2C3D4", "ZC1A2B3C", false},
+		"another WWN":                     {"0x5000c500a1b2c3d5", "ZC1A2B3C", true},
+		"another serial number":           {"0x5000c500a1b2c3d4", "ZC1A2B3D", true},
+		"a serial number in another case": {"0x5000c500a1b2c3d4", "zc1a2b3c", true},
+	} {
+		t.Run(name, func(t *testing.T) {
+			machine := server(api.MapValue(text("deviceName", path), text("wwn", "0x5000c500a1b2c3d4"), text("serialNumber", "ZC1A2B3C")))
+			hardware := machine.Spec().Get("hardware").With("eraseOnRemoval", api.MapValue(text("method", "logicalOverwrite"), field("targets", api.ListValue(
+				api.MapValue(text("deviceName", path), text("wwn", test.wwn), text("serialNumber", test.serial), number("sizeBytes", "8192")),
+				api.MapValue(text("deviceName", "/dev/disk/by-id/wwn-0x5000c500a1b2c3d9"), text("wwn", "0x5000c500a1b2c3d9"), text("serialNumber", "OTHER"), number("sizeBytes", "8192"))))))
+			machine = api.NewObject(api.Machine, machine.Name(), api.Value{}, machine.Spec().With("hardware", hardware))
+			install := requestOf(t, labCatalog(metalProvider(), machine, sshKeySecret(api.MapValue(field("generated", api.MapValue())))), machine.Name())
+			_, err := eraseRequest(machine, install)
+			if !test.refused {
+				if err != nil {
+					t.Fatal(diagnostics.Of(err))
+				}
+				return
+			}
+			expectRefusal(t, err, "api.invariant")
+			if !strings.Contains(diagnostics.Of(err)[0].Message, "root target names another wwn or serialNumber") {
+				t.Fatalf("refusal = %v", diagnostics.Of(err))
+			}
+		})
+	}
+}
+
 func TestPhysicalEraseOrdersAfterClaimAndBeforeInstallation(t *testing.T) {
 	input := planInput(reconciliation.Apply)
 	machine := eraseMachine()

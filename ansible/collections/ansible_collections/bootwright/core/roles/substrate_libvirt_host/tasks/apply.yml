@@ -170,6 +170,14 @@
       {{ substrate_libvirt_host_running.observation.collisions | join('; ') }}
     quiet: true
 
+# A broader route through a gateway, a VPN /8 for one, is admitted: the managed
+# network's connected route wins by longest prefix and only the summary route's
+# hosts inside the prefix stop being reached through it. The apply says so.
+- name: Warn of a broader host route whose hosts a managed network takes over
+  ansible.builtin.debug:
+    msg: 'warning: {{ item }}'
+  loop: '{{ substrate_libvirt_host_running.observation.shadows }}'
+
 # A pool carries no ownership metadata, so the directory it targets is what
 # makes it this provider's. A same-named pool targeting another directory is
 # foreign and the apply refuses before it defines, stops or starts anything.

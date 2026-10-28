@@ -273,10 +273,7 @@ Alias cell.
 | [B826](#b826) | new, 2026-10-26 (spec audit L4) | defect | Desired state | Admission enforces closed Entitlement arms, authored indexes, retired names and reserved-directory warning | Audit roadmap work; implemented only on an explicit lane request |
 | [B829](#b829) | new, 2026-10-26 (spec audit L7) | safety | Secrets | Work-area incarnation check, pipelined material payloads and fixed producer identity | Audit roadmap work; implemented only on an explicit lane request |
 | [B839](#b839) | new, 2026-10-26 (lane B) | safety | Substrate and Workspace | A shared host claim taken while a removal's effect runs refuses | Found closing B803; the window is the removal's effect itself |
-| [B840](#b840) | new, 2026-10-26 (lane B) | safety | Managed OS | `%pre` compares the resolved root disk's WWN and serial with the frozen values | The follow-up the F10-01 choice left after the by-id path rule |
-| [B843](#b843) | new, 2026-10-27 (lane J) | safety | Substrate | The libvirt route check and a broader route through a gateway | The "identical or nested" rule refuses a VPN summary route |
 | [B844](#b844) | new, 2026-10-27 (lane J) | safety | Infrastructure services | Contexts reaching one SSH host by different addresses conflict there | Q96's qualifier keys claims by declared address only |
-| [B845](#b845) | new, 2026-10-27 (lane J) | defect | Substrate | Libvirt network evidence accepts an observed MTU | Pre-existing defect found by lane J |
 | [B846](#b846) | new, 2026-10-27 (lane J) | defect | State reconciliation | `diff --observe` observes a lost block of a completed apply | Lane J's covered set not yet read by diff |
 | [B847](#b847) | new, 2026-10-27 (lane J) | defect | Infrastructure services | A zoned IPv6 SSH address refuses at plan, not at the record write | Found by lane J's review |
 | [B848](#b848) | new, 2026-10-27 (lane I) | enabling | Architecture | Cluster families publish the facts machine, controller and managed-service code reads | Found by the lane I review; each site reads its kind's own spec layout |
@@ -293,6 +290,9 @@ Alias cell.
 | [B861](#b861) | new, 2026-10-27 (lane Q3) | defect | Storage | Ceph request builders refuse each unresolved reference by name | Same defect class as B849, left by lane Q3 |
 | [B862](#b862) | new, 2026-10-27 (lane T) | defect | Verification tooling | The cluster selection cost test holds under `-race` | Pre-existing failure found by lane T |
 | [B863](#b863) | new, 2026-10-27 (lane T) | defect | CLI | `machine rsh` and `machine exec` take only the SSH flags they consume | Found by lane T |
+| [B864](#b864) | new, 2026-10-27 (lane S) | product | State reconciliation | An adapter's warning reaches the run's diagnostics | B843's shadowed-route warning reaches only the attempt output |
+| [B865](#b865) | new, 2026-10-27 (lane S) | defect | Machine | The physical erase worker refuses a non-ASCII disk attribute by its code | Pre-existing defect found by lane S's review |
+| [B866](#b866) | new, 2026-10-27 (lane S) | defect | Verification tooling | The Ceph host route probe alarm test is stable in parallel | Recurring flake seen by lanes S and R |
 
 ### B82
 
@@ -3289,28 +3289,6 @@ completion, or the removal holds the key exclusively for that window.
 **Exit evidence:** a test in which another context claims the key during the
 effect and refuses, and the removal completes.
 
-### B840
-
-**Owner:** Managed OS. **Kind:** safety. **Requires:** none. **Definition:**
-Needs definition. A bare-metal Bootwright-installed Machine names its root disk
-by its `/dev/disk/by-id/wwn-0x` path and `%pre` stops unless that path resolves
-to a whole disk (X165). **Outcome:** `wwn` and `serialNumber` may stand beside
-`deviceName` on bare metal, and `%pre` compares the resolved disk's WWN and
-serial with the frozen values, stopping before storage on a mismatch or an
-unreadable value. **Exit evidence:** a `%pre` test per mismatch and unreadable
-case, and the refusal-table rows moved with the admission change.
-
-### B843
-
-**Owner:** Substrate. **Kind:** safety. **Requires:** none.
-**Definition:** Needs definition. Lane J (X170) made the libvirt host apply
-refuse before `net-define` when a host route is identical to or nested with the
-managed prefix, as the spec words it; a broader summary route through a
-gateway (a VPN `/8` covering the prefix) also refuses. **Outcome:** the owner
-decides whether a broader route through a gateway is admitted, warned or
-refused. **Exit evidence:** the chosen rule in substrates.md and a collection
-unit test per case.
-
 ### B844
 
 **Owner:** Infrastructure services. **Kind:** safety. **Requires:** none.
@@ -3321,17 +3299,6 @@ the other by an address its controller does not declare, never conflict.
 **Outcome:** the spec names the case and either refuses it or proves one host
 identity before publishing. **Exit evidence:** a reservation test of two
 spellings of one host.
-
-### B845
-
-**Owner:** Substrate. **Kind:** defect. **Requires:** none. **Definition:**
-Specified. `observe_host` in the libvirt host role adds an `mtu` key to a
-network entry when the request carries an MTU, and
-`substrate_host_protocol.network_evidence` requires an exact key set, so
-publishing completion evidence for such a network raises `ValueError` (found
-by lane J, 2026-10-27; no unit test covers it). **Outcome:** the evidence
-admits the observed MTU, or the observation omits it. **Exit evidence:** a
-collection unit test publishing evidence for a network with an MTU.
 
 ### B846
 
@@ -3542,6 +3509,36 @@ SSH flags checked per group; `machine rsh` and `machine exec` still read all
 four `--ssh-*` flags although the spec says two are not consumed there (found
 by lane T). **Outcome:** the two commands refuse the SSH flags they ignore.
 **Exit evidence:** the inherited-scope test holds the per-command SSH lists.
+### B864
+
+**Owner:** State reconciliation. **Kind:** product. **Requires:** none.
+**Definition:** Needs definition. D188 admits a broader gateway route over a
+libvirt managed prefix with a warning, but adapters have no channel into a
+run's diagnostics: adapter records have exact member sets and lifecycle
+warnings come from Go at plan time, so the warning reaches only the retained
+attempt output (lane S, 2026-10-27). **Outcome:** an adapter reports a
+warning that the run's human and structured output carry, with its code
+registered (for example `substrate.shadowed-route`). **Exit evidence:** a run
+golden carrying the warning.
+
+### B865
+
+**Owner:** Machine. **Kind:** defect. **Requires:** none. **Definition:**
+Specified. `physical_erase_worker.py`'s `text()` and `disk_serial()` call
+`.decode("ascii")` on raw sysfs bytes, so a non-ASCII byte raises
+`UnicodeDecodeError` instead of the worker's `Refusal`; it still fails closed
+but outside the classified refusal codes. **Outcome:** a non-ASCII attribute
+refuses with its identity or serial code. **Exit evidence:** a worker test per
+attribute.
+
+### B866
+
+**Owner:** Verification tooling. **Kind:** defect. **Requires:** none.
+**Definition:** Specified.
+`test_ceph_host_route_probe.py::test_control_startup_alarm_cannot_escape_registration_cleanup`
+fails in parallel runs and passes serially (lanes S and R, 2026-10-27).
+**Outcome:** the test is deterministic under the parallel units run.
+**Exit evidence:** repeated parallel runs pass.
 
 ## Audit remediation (2026-10-26)
 
@@ -3602,7 +3599,7 @@ also updates this table.
 | 14 | N Race coverage (B841) | merged (X174) |
 | 15 | O Store bounds and run scratch (B572, B389) | merged (X176) |
 | 16 | Q3 Ceph object and replica refusals (B849, B838) | merged (X175) |
-| 17 | S Libvirt host evidence and routes (B845, B843, B840) | not started |
+| 17 | S Libvirt host evidence and routes (B845, B843, B840) | merged (X178) |
 | 18 | P Removal views and host claims (B846, B839, B844) | not started |
 | 19 | Q1 Unclaimed objects and references (B808, B826) | not started |
 | 20 | Q2 Family accessors and name bounds (B848, B850, B847) | not started |
@@ -5593,7 +5590,7 @@ replica-safety refusal (a pool of size N needs N+1 hosts) applies to every
 Ceph distribution ([B838](delivered.md#x175--audit-lane-q3-ceph-object-and-replica-refusals)). A broader host route through a gateway that
 covers a libvirt managed prefix is admitted with a warning naming the route
 and the in-prefix hosts it shadows; identical, nested-narrower and on-link
-broader routes refuse ([B843](#b843)). SSH-placed claims are also keyed by the
+broader routes refuse ([B843](delivered.md#x178--audit-lane-s-libvirt-host-evidence-routes-and-root-disk-identity)). SSH-placed claims are also keyed by the
 host's pinned SSH host-key fingerprint (`sshkey/<SHA256>/`), an additive key
 form under controller record version 3 ([B844](#b844)). `schema` and `version`
 drop `--context`, and structured help gains no `examples` or `available`

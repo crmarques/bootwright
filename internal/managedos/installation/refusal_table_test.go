@@ -76,6 +76,10 @@ func TestManagedOSRefusalTableMatchesUnsupported(t *testing.T) {
 		},
 		"A root-device hint other than deviceName": {labCatalog(rotational), "Machine/rhel-01",
 			map[string]string{"<machine>": "Machine/rhel-01", "<hints>": "spec.hardware.rootDevice.rotational"}},
+		"A root-device wwn naming another disk": {labCatalog(metalProvider(), server(api.MapValue(text("deviceName", "/dev/disk/by-id/wwn-0x5000c500a1b2c3d4"),
+			text("wwn", "0x5000c500a1b2c3d5")))), "Machine/metal-01", onMetal},
+		"A root-device serial number the installer cannot compare": {labCatalog(metalProvider(), server(api.MapValue(text("deviceName", "/dev/disk/by-id/wwn-0x5000c500a1b2c3d4"),
+			text("serialNumber", "ZC1A 2B3C")))), "Machine/metal-01", onMetal},
 		"An unverified fetch of private material": {labCatalog(metalProvider(), untrusting), "Machine/metal-01", onMetal},
 		"An unverified BMC leg for private delivery": {
 			labCatalog(metalProvider(), unverified, sshKeySecret(api.MapValue(field("generated", api.MapValue())))), "Machine/metal-01",
@@ -182,7 +186,7 @@ func refusalTable(t *testing.T) []refusalRow {
 	if err != nil {
 		t.Fatal(err)
 	}
-	const heading = "### Refusal table"
+	const heading = "## Refusal table"
 	lines := strings.Split(string(data), "\n")
 	start := slices.Index(lines, heading)
 	if start < 0 || slices.Contains(lines[start+1:], heading) {

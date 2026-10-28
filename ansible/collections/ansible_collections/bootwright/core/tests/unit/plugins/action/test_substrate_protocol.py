@@ -11,6 +11,7 @@ from ansible_collections.bootwright.core.plugins.action import (
     substrate_host_protocol,
     substrate_libvirt_machine_protocol,
 )
+from ansible_collections.bootwright.core.plugins.module_utils import substrate_libvirt
 from ansible_collections.bootwright.core.plugins.module_utils.substrate_libvirt import observe_host
 
 DIGEST = "a" * 64
@@ -143,6 +144,35 @@ def test_a_networks_identity_is_observed_but_never_reported_as_evidence():
             host_observation(networks=[{key: value for key, value in CARRIED.items() if key != "uuid"}]),
             DIGEST,
         )
+
+
+def test_a_networks_observed_mtu_is_published_as_evidence(monkeypatch, tmp_path):
+    """Go proves a declared MTU from the evidence, so an observed one is published."""
+    monkeypatch.setattr(substrate_libvirt, "bridge_mtu", lambda name: 9000)
+    request = {
+        "networks": [
+            {"name": "ext", "bridge": "br-ext", "managed": False, "mtu": 9000},
+            {"name": "plain", "bridge": "br-plain", "managed": False},
+        ],
+        "packages": [],
+        "poolName": "p",
+        "poolPath": str(tmp_path / "pool"),
+        "services": [],
+        "uri": "qemu:///system",
+    }
+    observation = host_observation(networks=observe_host(lambda argv, check_rc=False, environ_update=None: (0, "", ""), request)["networks"])
+    assert [entry.get("mtu") for entry in observation["networks"]] == [9000, None]
+    evidence = substrate_host_protocol.presence(observation, DIGEST)
+    assert [entry.get("mtu") for entry in evidence["networks"]] == [9000, None]
+    assert all(set(entry) - {"mtu"} == {"answered", "autostart", "bridge", "definition", "managed", "name", "owned", "state"}
+               for entry in evidence["networks"])
+    # An unreadable bridge MTU is observed as zero, which proves nothing to Go.
+    monkeypatch.setattr(substrate_libvirt, "bridge_mtu", lambda name: 0)
+    unread = substrate_host_protocol.presence(host_observation(networks=[dict(CARRIED, mtu=0)]), DIGEST)
+    assert unread["networks"][0]["mtu"] == 0
+    # The observation still has to carry the rest of the exact shape.
+    with pytest.raises(ValueError):
+        substrate_host_protocol.presence(host_observation(networks=[dict(CARRIED, mtu=9000, extra=1)]), DIGEST)
 
 
 def machine_observation(**overrides):

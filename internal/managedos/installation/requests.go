@@ -70,8 +70,10 @@ type Interface struct {
 // Hardware is what a physical machine proves about itself before anything it
 // holds is erased. A machine its substrate created carries none.
 type Hardware struct {
-	Interfaces []Interface `json:"interfaces"`
-	RootDevice string      `json:"rootDevice,omitempty"`
+	Interfaces   []Interface `json:"interfaces"`
+	RootDevice   string      `json:"rootDevice,omitempty"`
+	SerialNumber string      `json:"serialNumber,omitempty"`
+	WWN          string      `json:"wwn,omitempty"`
 }
 
 // Target is the realized machine this installation acts on, exactly as the

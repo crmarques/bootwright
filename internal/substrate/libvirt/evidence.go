@@ -242,6 +242,9 @@ func matchNetworks(observed []NetworkEvidence, frozen []Network) error {
 		if !entry.Bridge {
 			return refusal("lifecycle.state", "a declared network bridge is not present on the provider host", "")
 		}
+		if network.MTU != 0 && entry.MTU == 0 {
+			return refusal("lifecycle.state", "the provider host did not answer for a declared network bridge's MTU", "")
+		}
 		if network.MTU != 0 && entry.MTU != network.MTU {
 			return refusal("lifecycle.state", "a declared network bridge does not carry its frozen MTU", "")
 		}

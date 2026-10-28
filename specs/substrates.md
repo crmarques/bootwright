@@ -178,12 +178,24 @@ with the host.
 
 Before it defines a managed network, the apply reads the host's addresses,
 routes, IPv4 and IPv6, and link names. A link of the managed bridge's name that
-no owned network of this context runs, or a route that no owned network of
-this context holds and that overlaps the managed prefix, identical or nested,
-refuses `lifecycle.state` before any network is defined, naming the link or the
-route and the attachment's `bridge` or address as the field to change. A read
-the host does not answer proves nothing and refuses the same way, because
-libvirt's own collision checks are partial and come only once a network starts.
+no owned network of this context runs, or a route that no owned network of this
+context holds and that is identical to the managed prefix, nested inside it or
+broader than it and on-link (no gateway), refuses `lifecycle.state` before any
+network is defined, naming the link or the route and the attachment's `bridge`
+or address as the field to change. A route of the main table that is broader
+than the managed prefix and names a gateway on every hop, a VPN `/8` covering
+it for one, is admitted with a warning: the managed network's connected route
+wins by longest prefix, so only that route's hosts inside the prefix stop being
+reached through the gateway. The apply writes the warning to the adapter's
+output before it defines anything; it names the route, its gateway and device,
+the prefix and the attachment, and is no evidence and changes no outcome. Such
+a route in any other table still refuses, because a policy rule, a strongSwan
+table 220 for one, can select that table before main and send the host's
+traffic for the prefix through the gateway; so does a multipath route with an
+on-link hop. A route is held by an owned network only when every hop is on that
+network's bridge. A read the host does not answer proves nothing and refuses
+the same way, because libvirt's own collision checks are partial and come only
+once a network starts.
 
 A managed network carries the MTU its attachment declares and one IPv4 or IPv6
 prefix; a Machine's NICs attach, each in declared order, to the attachment its

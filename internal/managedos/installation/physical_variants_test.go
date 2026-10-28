@@ -15,8 +15,12 @@ import (
 )
 
 func physicalVariantCatalog(profile api.Object, hostType string) api.Catalog {
+	return physicalVariantCatalogOn(profile, hostType, api.MapValue(text("deviceName", "/dev/disk/by-id/wwn-0x5000c500a1b2c3d4")))
+}
+
+func physicalVariantCatalogOn(profile api.Object, hostType string, rootDevice api.Value) api.Catalog {
 	source := api.MapValue(field("generated", api.MapValue(text("keyType", hostType))))
-	objects := labCatalog(metalProvider(), server(api.MapValue(text("deviceName", "/dev/disk/by-id/wwn-0x5000c500a1b2c3d4"))), sshKeySecret(source), profile, rhelEntitlement(), fleetSecret(api.MapValue(field("generated", api.MapValue(text("keyType", "ecdsaP256")))))).Objects()
+	objects := labCatalog(metalProvider(), server(rootDevice), sshKeySecret(source), profile, rhelEntitlement(), fleetSecret(api.MapValue(field("generated", api.MapValue(text("keyType", "ecdsaP256")))))).Objects()
 	return api.NewCatalog(slices.DeleteFunc(objects, func(object api.Object) bool { return object.Kind() == api.Machine && object.Name() == "rhel-01" }))
 }
 
@@ -92,9 +96,14 @@ func TestPhysicalVariantRequestRetainsApplyDataLossAuthorization(t *testing.T) {
 func TestPhysicalHostVariantsRequestGolden(t *testing.T) {
 	profile := registeringProfile()
 	profile = profile.WithSpec(profile.Spec().WithPath(encryptionSecurity(true), "customizations", "security"))
-	request, _ := onlyRequest(t, physicalVariantCatalog(profile, "ecdsaP256"))
+	request, _ := onlyRequest(t, physicalVariantCatalogOn(profile, "ecdsaP256", api.MapValue(text("deviceName", "/dev/disk/by-id/wwn-0x5000c500a1b2c3d4"),
+		text("wwn", "0X5000C500A1B2C3D4"), text("serialNumber", "ZC1A2B3C"))))
 	if !request.fips() || request.Registration == nil || request.DiskEncryption == nil {
 		t.Fatal("combined physical variant lost a requested arm")
+	}
+	if hardware := request.Target.Hardware; hardware.WWN != "0x5000c500a1b2c3d4" || hardware.SerialNumber != "ZC1A2B3C" ||
+		!strings.Contains(request.Kickstart, "!= 'naa.5000c500a1b2c3d4'") || !strings.Contains(request.Kickstart, "!= 'ZC1A2B3C'") {
+		t.Fatalf("the root disk identity was not frozen and compared: %+v", hardware)
 	}
 	canonical, err := request.Canonical()
 	if err != nil {

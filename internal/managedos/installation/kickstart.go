@@ -12,7 +12,7 @@ import (
 	"github.com/crmarques/bootwright/internal/substrate"
 )
 
-const kickstartVersion = "kickstart-anaconda-v13"
+const kickstartVersion = "kickstart-anaconda-v14"
 
 // guestHostKeys are the keys a guest-agent installation generates here rather
 // than at first boot, so the republished copy is the key sshd presents. Each
@@ -109,6 +109,8 @@ type Installation struct {
 	Prefix        int
 	Repositories  []Repository
 	RootDevice    string
+	RootSerial    string
+	RootWWN       string
 	SELinux       string
 	Timezone      string
 	User          string
@@ -132,6 +134,12 @@ func RenderKickstart(input Installation) (string, error) {
 	if input.Physical && !durableRootDevice(input.RootDevice) {
 		return "", refusal("lifecycle.state", "a physical installation names no root disk by its /dev/disk/by-id/wwn-0x path to erase",
 			"set spec.hardware.rootDevice.deviceName to the disk's /dev/disk/by-id/wwn-0x path; a wwn-only selection is not yet supported")
+	}
+	if (input.RootWWN != "" || input.RootSerial != "") && !input.Physical ||
+		input.RootWWN != "" && "/dev/disk/by-id/wwn-"+input.RootWWN != input.RootDevice ||
+		input.RootSerial != "" && !rootSerial.MatchString(input.RootSerial) {
+		return "", refusal("lifecycle.state", "the root disk WWN or serial number this installation freezes is not one its %pre can compare with the disk its deviceName names",
+			"plan the installation again with this release")
 	}
 	if _, known := deliveredHostKeys[input.HostKeyType]; input.Channel == substrate.ChannelDeliveredKey && !known {
 		return "", refusal("lifecycle.state", "the delivered SSH host key type "+input.HostKeyType+" has no installed path",
@@ -227,6 +235,8 @@ var kickstartFields = []struct {
 	{"a package entry", "spec.customizations.packages.install of the install profile", kickstartPackage, func(i Installation) []string { return i.Packages }},
 	{"the package source", "spec.installer.anaconda.packageSource of the install profile", kickstartPackageSource, func(i Installation) []string { return []string{i.PackageSource} }},
 	{"the root device", "spec.hardware.rootDevice.deviceName of the Machine", kickstartToken, func(i Installation) []string { return []string{i.RootDevice} }},
+	{"the root disk serial number", "spec.substrate.baremetal.rootDevice.serialNumber of the Machine", kickstartToken, func(i Installation) []string { return []string{i.RootSerial} }},
+	{"the root disk WWN", "spec.substrate.baremetal.rootDevice.wwn of the Machine", kickstartToken, func(i Installation) []string { return []string{i.RootWWN} }},
 	{"the SELinux mode", "spec.customizations.security.selinux.mode of the install profile", kickstartToken, func(i Installation) []string { return []string{i.SELinux} }},
 	{"the time zone", "spec.customizations.localization.timezone of the install profile", kickstartToken, func(i Installation) []string { return []string{i.Timezone} }},
 	{"the install account", "the product-owned install account", kickstartToken, func(i Installation) []string { return []string{i.User} }},
@@ -686,7 +696,63 @@ func targetProofLines(input Installation) []string {
 			` is not a whole disk; refusing before any disk is touched.' >&2`,
 		"exit 1",
 		"fi")
+	lines = append(lines, rootIdentityLines(input)...)
 	return append(lines, "%end", "")
+}
+
+// rootIdentityLines read sysfs as the physical erase worker does; unreadable is a mismatch.
+func rootIdentityLines(input Installation) []string {
+	if input.RootWWN == "" && input.RootSerial == "" {
+		return nil
+	}
+	refuse := func(what string) []string {
+		return []string{`echo 'Bootwright: the declared root device ` + input.RootDevice + ` ` + what + `; refusing before any disk is touched.' >&2`, "exit 1", "fi"}
+	}
+	lines := []string{
+		`bootwright_identity() {`,
+		`local raw value='' byte start=0 end limit=259`,
+		`local -a bytes`,
+		`if [ "$2" = vpd ]; then limit=261; fi`,
+		`raw=$(od -An -v -tu1 -N "${limit}" -- "$1") || return 1`,
+		`read -r -a bytes <<< "${raw//$'\n'/ }"`,
+		`if [ "$2" = vpd ]; then`,
+		`if [ "${#bytes[@]}" -lt 5 ] || [ "${#bytes[@]}" -gt 260 ] || [ "${bytes[1]}" != 128 ] || [ $((bytes[2] * 256 + bytes[3])) != $((${#bytes[@]} - 4)) ]; then return 1; fi`,
+		`bytes=("${bytes[@]:4}")`,
+		`elif [ "${#bytes[@]}" -gt 258 ]; then return 1`,
+		`fi`,
+		`end=${#bytes[@]}`,
+		`while [ "${start}" -lt "${end}" ] && [[ " 9 10 11 12 13 32 " == *" ${bytes[start]} "* ]]; do start=$((start + 1)); done`,
+		`while [ "${end}" -gt "${start}" ] && [[ " 9 10 11 12 13 32 " == *" ${bytes[end - 1]} "* ]]; do end=$((end - 1)); done`,
+		`if [ "${end}" -eq "${start}" ] || [ $((end - start)) -gt 256 ]; then return 1; fi`,
+		`for byte in "${bytes[@]:start:end - start}"; do`,
+		`if [ "${byte}" -lt 32 ] || [ "${byte}" -gt 126 ]; then return 1; fi`,
+		`printf -v byte '%03o' "${byte}"`,
+		`printf -v byte "\\${byte}"`,
+		`value+="${byte}"`,
+		`done`,
+		`printf '%s\n' "${value}"`,
+		`}`,
+		`bootwright_disk="/sys/class/block/$(basename -- "${bootwright_root}")"`,
+	}
+	if input.RootWWN != "" {
+		lines = append(lines,
+			`bootwright_wwid="${bootwright_disk}/device/wwid"`,
+			`if [ -e "${bootwright_disk}/wwid" ]; then bootwright_wwid="${bootwright_disk}/wwid"; fi`,
+			`if ! bootwright_wwid=$(bootwright_identity "${bootwright_wwid}" text); then`)
+		lines = append(lines, refuse("reports no readable WWN")...)
+		lines = append(lines, `if [ "${bootwright_wwid}" != 'naa.`+strings.TrimPrefix(input.RootWWN, "0x")+`' ]; then`)
+		lines = append(lines, refuse("reports a WWN other than "+input.RootWWN)...)
+	}
+	if input.RootSerial != "" {
+		lines = append(lines,
+			`bootwright_serial="${bootwright_disk}/device/vpd_pg80" bootwright_form=vpd`,
+			`if [ -e "${bootwright_disk}/device/serial" ]; then bootwright_serial="${bootwright_disk}/device/serial" bootwright_form=text; fi`,
+			`if ! bootwright_serial=$(bootwright_identity "${bootwright_serial}" "${bootwright_form}"); then`)
+		lines = append(lines, refuse("reports no readable serial number")...)
+		lines = append(lines, `if [ "${bootwright_serial}" != '`+input.RootSerial+`' ]; then`)
+		lines = append(lines, refuse("reports a serial number other than "+input.RootSerial)...)
+	}
+	return lines
 }
 
 // agentFilterLines permit exactly the identity operation's reads and prove the

@@ -405,9 +405,9 @@ lowercase hexadecimal digits, the form
 [managed physical hosts](../ceph.md#devices-and-destructive-ownership) use
 for OSD paths. The installation erases that disk, and a kernel name such as
 `/dev/sda` moves with probe order, firmware and hot-added disks, so it refuses
-at `hardware.rootDevice.deviceName`, naming the by-id form. The
-installation's `%pre` resolves the name and stops before any storage directive
-unless it is a whole block device
+at `hardware.rootDevice.deviceName`, naming the by-id form. Its `%pre` stops
+before storage unless the name is a whole disk reporting any declared `wwn` and
+`serialNumber`
 ([physical installation](../managed-os.md#physical-installation)).
 
 ### Network configuration

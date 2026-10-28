@@ -539,7 +539,10 @@ func targetFor(catalog api.Catalog, machine api.Object, contextName, controllerM
 	// fixed, so its derived interfaces are deliberately left out of what the
 	// installation freezes.
 	if derived.Physical {
-		hardware := Hardware{RootDevice: derived.RootDeviceHints.DeviceName}
+		hardware := Hardware{RootDevice: derived.RootDeviceHints.DeviceName, SerialNumber: derived.RootDeviceHints.SerialNumber}
+		if derived.RootDeviceHints.WWN != "" {
+			hardware.WWN = "0x" + canonicalWWN(derived.RootDeviceHints.WWN)
+		}
 		for _, declared := range derived.Interfaces {
 			hardware.Interfaces = append(hardware.Interfaces, Interface{MACAddress: declared.MACAddress, Name: declared.Name})
 		}
@@ -551,6 +554,14 @@ func targetFor(catalog api.Catalog, machine api.Object, contextName, controllerM
 var durableRootPath = regexp.MustCompile(`^/dev/disk/by-id/wwn-0x[0-9a-f]{16}(?:[0-9a-f]{16})?$`)
 
 func durableRootDevice(path string) bool { return durableRootPath.MatchString(path) }
+
+var rootSerial = regexp.MustCompile(`^[A-Za-z0-9._:+/=-]{1,256}$`)
+
+func canonicalWWN(declared string) string {
+	return strings.TrimPrefix(strings.ToLower(declared), "0x")
+}
+
+var physicalRootIdentity = []string{"deviceName", "serialNumber", "wwn"}
 
 // refusedTarget says why this contract cannot install onto a Machine's
 // realized target, or nothing when it can. It is the one statement of that
@@ -565,16 +576,29 @@ func refusedTarget(machine api.Object, target substrate.Target, private bool) (r
 				" to the disk's /dev/disk/by-id/wwn-0x path, 16 or 32 lowercase hexadecimal digits; a kernel name such as /dev/sda is refused, and a wwn-only selection is not yet supported"
 	}
 	// The Kickstart selects its disk by name alone, so any other hint would be
-	// ignored and the disk it selected installed over regardless.
+	// ignored, but a physical %pre compares the wwn and serialNumber it carries.
+	carried := []string{"deviceName"}
+	if target.Physical {
+		carried = physicalRootIdentity
+	}
 	var uncarried []string
 	for _, name := range target.RootDeviceHints.Names() {
-		if name != "deviceName" {
+		if !slices.Contains(carried, name) {
 			uncarried = append(uncarried, substrate.RootDeviceHintPath(name))
 		}
 	}
 	if len(uncarried) != 0 {
-		return "a managed-OS installation selects its root disk by deviceName alone and cannot carry the other root-device hints the Machine declares",
+		return "a managed-OS installation selects its root disk by deviceName, which a physical Machine's wwn and serialNumber may prove, and cannot carry the other root-device hints the Machine declares",
 			"remove " + strings.Join(uncarried, ", ") + " from " + machine.Identity()
+	}
+	if wwn := target.RootDeviceHints.WWN; wwn != "" && "/dev/disk/by-id/wwn-0x"+canonicalWWN(wwn) != target.RootDeviceHints.DeviceName {
+		return "a physical installation proves its root disk by the wwn the Machine declares, and that wwn names another disk than its deviceName",
+			"set spec.substrate.baremetal.rootDevice.wwn on " + machine.Identity() + " to the WWN its spec.hardware.rootDevice.deviceName names, or remove it"
+	}
+	if serial := target.RootDeviceHints.SerialNumber; serial != "" && !rootSerial.MatchString(serial) {
+		return "a physical installation compares its root disk's serial number inside the installer, and the serialNumber the Machine declares is not one it can compare",
+			"set spec.substrate.baremetal.rootDevice.serialNumber on " + machine.Identity() +
+				" to the disk's serial number, at most 256 ASCII letters, digits and ._:+/=- characters, or remove it"
 	}
 	// A controller that fetches without verifying the artifact server boots
 	// whatever image answers, and the installer it boots is what receives the

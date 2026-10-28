@@ -451,7 +451,8 @@ func TestAVerifiedPhysicalInstallationDerivesAPrivateRequest(t *testing.T) {
 
 // The Kickstart selects its root disk by name alone, so a Machine declaring any
 // other hint refuses before registration on either arm, naming each field to
-// remove, rather than being installed onto a disk those hints did not select. A
+// remove, rather than being installed onto a disk those hints did not select;
+// only a physical Machine's wwn and serialNumber are carried, as proofs. A
 // physical Machine reaches this refusal before the delivered-key one, so its
 // remediation is the hint and not the key.
 func TestAnInstallationRefusesARootDeviceHintItCannotCarry(t *testing.T) {
@@ -468,9 +469,10 @@ func TestAnInstallationRefusesARootDeviceHintItCannotCarry(t *testing.T) {
 			[]api.Object{metalProvider(), server(api.MapValue(text("deviceName", "/dev/disk/by-id/wwn-0x5000c500a1b2c3d4"), text("model", "PERC H755")))},
 			"Machine/metal-01", "remove spec.hardware.rootDevice.model from Machine/metal-01",
 		},
-		"a physical wwn": {
-			[]api.Object{metalProvider(), server(api.MapValue(text("deviceName", "/dev/disk/by-id/wwn-0x5000c500a1b2c3d4"), text("wwn", "0x5000c500a1b2c3d4")))},
-			"Machine/metal-01", "remove spec.substrate.baremetal.rootDevice.wwn from Machine/metal-01",
+		"a physical hctl beside its wwn and serial": {
+			[]api.Object{metalProvider(), server(api.MapValue(text("deviceName", "/dev/disk/by-id/wwn-0x5000c500a1b2c3d4"), text("wwn", "0x5000c500a1b2c3d4"),
+				text("serialNumber", "ZC1A2B3C"), text("hctl", "0:0:0:0")))},
+			"Machine/metal-01", "remove spec.substrate.baremetal.rootDevice.hctl from Machine/metal-01",
 		},
 		"a guest's rotational": {
 			[]api.Object{onGuest(api.MapValue(text("deviceName", "/dev/vda"), field("rotational", api.BoolValue(false))))},
@@ -494,7 +496,7 @@ func TestAnInstallationRefusesARootDeviceHintItCannotCarry(t *testing.T) {
 			_, _, err := Requests(catalog, "controller", testContext)
 			expectRefusal(t, err, "lifecycle.unsupported")
 			reported := diagnostics.Of(err)[0]
-			if reported.Message != "a managed-OS installation selects its root disk by deviceName alone and cannot carry the other root-device hints the Machine declares" {
+			if reported.Message != "a managed-OS installation selects its root disk by deviceName, which a physical Machine's wwn and serialNumber may prove, and cannot carry the other root-device hints the Machine declares" {
 				t.Fatalf("message = %q", reported.Message)
 			}
 			if reported.Remediation != test.remediation {
@@ -512,6 +514,57 @@ func TestAnInstallationRefusesARootDeviceHintItCannotCarry(t *testing.T) {
 	request, _ := onlyRequest(t, labCatalog(onGuest(api.MapValue(text("deviceName", "/dev/vda")))))
 	if !strings.Contains(request.Kickstart, "ignoredisk --only-use=vda") {
 		t.Fatal("a guest naming its device alone was not installed onto it")
+	}
+}
+
+// A physical Machine's wwn and serialNumber stand beside its by-id deviceName
+// and are frozen, the wwn in its canonical 0x form, for the %pre to compare;
+// a wwn naming another disk than the path, or a serial number the %pre cannot
+// carry as one word, refuses before registration instead.
+func TestAPhysicalInstallationFreezesTheRootDiskIdentityItDeclares(t *testing.T) {
+	const path = "/dev/disk/by-id/wwn-0x5000c500a1b2c3d4"
+	for name, test := range map[string]struct {
+		hints               api.Value
+		wwn, serial, reason string
+	}{
+		"a wwn and serial":     {api.MapValue(text("deviceName", path), text("wwn", "0x5000c500a1b2c3d4"), text("serialNumber", "ZC1A2B3C")), "0x5000c500a1b2c3d4", "ZC1A2B3C", ""},
+		"an uppercase wwn":     {api.MapValue(text("deviceName", path), text("wwn", "0X5000C500A1B2C3D4")), "0x5000c500a1b2c3d4", "", ""},
+		"a wwn without its 0x": {api.MapValue(text("deviceName", path), text("wwn", "5000c500a1b2c3d4")), "0x5000c500a1b2c3d4", "", ""},
+		"a serial alone":       {api.MapValue(text("deviceName", path), text("serialNumber", "WD-WCC4N1234567")), "", "WD-WCC4N1234567", ""},
+		"another disk's wwn": {api.MapValue(text("deviceName", path), text("wwn", "0x5000c500a1b2c3d5")), "", "",
+			"a physical installation proves its root disk by the wwn the Machine declares, and that wwn names another disk than its deviceName"},
+		"a wwn in another form": {api.MapValue(text("deviceName", path), text("wwn", "naa.5000c500a1b2c3d4")), "", "",
+			"a physical installation proves its root disk by the wwn the Machine declares, and that wwn names another disk than its deviceName"},
+		"a serial with a space": {api.MapValue(text("deviceName", path), text("serialNumber", "ZC1A 2B3C")), "", "",
+			"a physical installation compares its root disk's serial number inside the installer, and the serialNumber the Machine declares is not one it can compare"},
+		"a serial with a quote": {api.MapValue(text("deviceName", path), text("serialNumber", "ZC1A'2B3C")), "", "",
+			"a physical installation compares its root disk's serial number inside the installer, and the serialNumber the Machine declares is not one it can compare"},
+		"a serial beyond its bound": {api.MapValue(text("deviceName", path), text("serialNumber", strings.Repeat("Z", 257))), "", "",
+			"a physical installation compares its root disk's serial number inside the installer, and the serialNumber the Machine declares is not one it can compare"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			catalog := physicalVariantCatalogOn(installProfile(), "ed25519", test.hints)
+			if test.reason != "" {
+				refused := Refusals(catalog)
+				if len(refused) != 1 || refused[0].Name != "metal-01" || refused[0].Reason != test.reason {
+					t.Fatalf("refusals = %+v", refused)
+				}
+				_, _, err := Requests(catalog, "controller", testContext)
+				expectRefusal(t, err, "lifecycle.unsupported")
+				return
+			}
+			if refused := Refusals(catalog); len(refused) != 0 {
+				t.Fatalf("a carried root disk identity was refused: %+v", refused)
+			}
+			request, _ := onlyRequest(t, catalog)
+			if hardware := request.Target.Hardware; hardware == nil || hardware.RootDevice != path || hardware.WWN != test.wwn || hardware.SerialNumber != test.serial {
+				t.Fatalf("frozen hardware = %+v", request.Target.Hardware)
+			}
+			if test.wwn != "" && !strings.Contains(request.Kickstart, "!= 'naa.5000c500a1b2c3d4'") ||
+				test.serial != "" && !strings.Contains(request.Kickstart, "!= '"+test.serial+"'") {
+				t.Fatal("the target proof does not compare the frozen root disk identity")
+			}
+		})
 	}
 }
 

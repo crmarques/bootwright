@@ -132,7 +132,7 @@ argument_specs:
           version:
             type: str
             required: true
-            choices: [os-install-anaconda-v17]
+            choices: [os-install-anaconda-v18]
       bootwright_os_install_material:
         type: dict
         required: true

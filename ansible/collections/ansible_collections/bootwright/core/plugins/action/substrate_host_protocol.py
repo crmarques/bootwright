@@ -18,7 +18,10 @@ MAX_SERVICES = 16
 # The observation carries each network's UUID so a definition can be offered
 # back to libvirt under the identity it already holds. Evidence stays narrower:
 # Go validates exactly the facts below, and rejects any field it does not know.
+# `mtu` is observed only for a network whose request declares one, and Go reads
+# it to prove the bridge carries its frozen MTU, so it is evidence when present.
 OBSERVED_NETWORK = {"answered", "autostart", "bridge", "definition", "managed", "name", "owned", "state", "uuid"}
+OPTIONAL_NETWORK = {"mtu"}
 OBSERVED_SERVICE = {"enabled", "name", "state"}
 
 
@@ -26,9 +29,9 @@ digest = adapter_protocol.request_digest
 
 
 def network_evidence(entry):
-    if set(entry) != OBSERVED_NETWORK:
+    if set(entry) - OPTIONAL_NETWORK != OBSERVED_NETWORK:
         raise ValueError("network evidence")
-    return {
+    evidence = {
         "answered": bool(entry["answered"]),
         "autostart": bool(entry["autostart"]),
         "bridge": bool(entry["bridge"]),
@@ -38,6 +41,9 @@ def network_evidence(entry):
         "owned": bool(entry["owned"]),
         "state": str(entry["state"]),
     }
+    if "mtu" in entry:
+        evidence["mtu"] = int(entry["mtu"])
+    return evidence
 
 
 def service_evidence(entry):
