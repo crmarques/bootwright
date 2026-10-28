@@ -35,6 +35,7 @@ import (
 
 func TestDispatchEveryApplicationCommand(t *testing.T) {
 	ssh := machine.SSHOptions{IdentityFile: "key.pem", User: "operator", AskSudoPassword: true, UserForProvisioned: true}
+	account := machine.SSHOptions{IdentityFile: "key.pem", User: "operator"}
 	tests := []struct {
 		path string
 		want any
@@ -67,8 +68,8 @@ func TestDispatchEveryApplicationCommand(t *testing.T) {
 		{"preflight all", environmentpreflight.AllPreflightRequest{ContextName: "example", DryRun: true, TrustOnFirstUse: true, SSH: ssh}},
 		{"cluster list", inspection.ListClustersRequest{ContextName: "example"}},
 		{"cluster info", inspection.ClusterInfoRequest{ContextName: "example", Names: []string{"demo"}, Secrets: true}},
-		{"cluster rsh", environmentaccess.ClusterRshRequest{ContextName: "example", Name: "demo", Node: "node-a", SSH: ssh}},
-		{"cluster exec", environmentaccess.ClusterExecRequest{ContextName: "example", Names: []string{"demo"}, Nodes: []string{"node-a"}, SSH: ssh, Command: []string{"get", "--help", ""}}},
+		{"cluster rsh", environmentaccess.ClusterRshRequest{ContextName: "example", Name: "demo", Node: "node-a", SSH: account}},
+		{"cluster exec", environmentaccess.ClusterExecRequest{ContextName: "example", Names: []string{"demo"}, Nodes: []string{"node-a"}, SSH: account, Command: []string{"get", "--help", ""}}},
 		{"preflight container-cluster", containerpreflight.PreflightRequest{ContextName: "example", Clusters: []string{"first", "second"}, DryRun: true, TrustOnFirstUse: true, SSH: ssh}},
 		{"preflight storage-cluster", storagepreflight.PreflightRequest{ContextName: "example", Clusters: []string{"first", "second"}, DryRun: true, TrustOnFirstUse: true, SSH: ssh}},
 		{"preflight add-ons", addonpreflight.PreflightRequest{ContextName: "example", Clusters: []string{"first", "second"}, SSH: ssh}},
@@ -81,8 +82,8 @@ func TestDispatchEveryApplicationCommand(t *testing.T) {
 		{"render installer", installation.RenderInstallerRequest{ContextName: "example", Clusters: []string{"first", "second"}, Sensitive: true}},
 		{"render storage", storagerendering.RenderArtifactsRequest{ContextName: "example", Clusters: []string{"first", "second"}}},
 		{"machine list", inventory.ListRequest{ContextName: "example", Clusters: []string{"first", "second"}, Power: true}},
-		{"machine rsh", machineaccess.RshRequest{ContextName: "example", Name: "demo", SSH: ssh}},
-		{"machine exec", machineaccess.ExecRequest{ContextName: "example", Names: []string{"demo"}, SSH: ssh, Command: []string{"get", "--help", ""}}},
+		{"machine rsh", machineaccess.RshRequest{ContextName: "example", Name: "demo", SSH: account}},
+		{"machine exec", machineaccess.ExecRequest{ContextName: "example", Names: []string{"demo"}, SSH: account, Command: []string{"get", "--help", ""}}},
 		{"machine trust", enrollment.EnrollRequest{ContextName: "example", Machines: []string{"demo"}, Replace: []string{"node-b"}, DryRun: true, SkipConfirmation: true}},
 		{"cluster oc", containeraccess.OCRequest{ContextName: "example", Name: "demo", Command: []string{"get", "--help", ""}}},
 		{"cluster kubectl", containeraccess.KubectlRequest{ContextName: "example", Name: "demo", Command: []string{"get", "--help", ""}}},

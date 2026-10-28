@@ -268,11 +268,7 @@ Alias cell.
 | [B799](#b799) | new, 2026-10-23 (M3 verification) | defect | Workspace | Setup interruption retries identify any remaining setup-lock holder | Pre-existing intermittent refusal; its cause is unproved |
 | [B857](#b857) | new, 2026-10-27 (lane I) | enabling | Desired state | The audit 5.7 operator tasks run on the reshaped API | B814's paper check was not run before X171 |
 | [B858](#b858) | new, 2026-10-27 (lane T) | product | CLI | `preflight infra`, `preflight all` and `render` with a path flag are defined and run | D188 ran `preflight clusters` as the union of two existing checks; these have no definition |
-| [B862](#b862) | new, 2026-10-27 (lane T) | defect | Verification tooling | The cluster selection cost test holds under `-race` | Pre-existing failure found by lane T |
-| [B863](#b863) | new, 2026-10-27 (lane T) | defect | CLI | `machine rsh` and `machine exec` take only the SSH flags they consume | Found by lane T |
 | [B864](#b864) | new, 2026-10-27 (lane S) | product | State reconciliation | An adapter's warning reaches the run's diagnostics | B843's shadowed-route warning reaches only the attempt output |
-| [B865](#b865) | new, 2026-10-27 (lane S) | defect | Machine | The physical erase worker refuses a non-ASCII disk attribute by its code | Pre-existing defect found by lane S's review |
-| [B866](#b866) | new, 2026-10-27 (lane S) | defect | Verification tooling | The Ceph host route probe alarm test is stable in parallel | Recurring flake seen by lanes S and R |
 | [B868](#b868) | new, 2026-10-27 (lane P) | safety | Infrastructure services | A controller reached by an undeclared address conflicts with its own claims | D188's host-key form does not cover the controller's unqualified keys |
 | [B869](#b869) | new, 2026-10-27 (lane P) | defect | Machine | The SSH arm parses the pinned known-hosts entry before it connects | Pre-existing defect found by lane P |
 | [B867](#b867) | new, 2026-10-27 (lane R review) | safety | Storage | The Ceph incarnation rule is confirmed on a live cluster | The monitor map's creation time was chosen without a live run |
@@ -2964,24 +2960,6 @@ with its refusals, diagnostics and goldens. **Exit evidence:** the three
 removed from the unavailable list and `wireStubs`, the report contracts in
 [cli/output.md](../cli/output.md), and the tests.
 
-### B862
-
-**Owner:** Verification tooling. **Kind:** defect. **Requires:** none.
-**Definition:** Specified. `TestClusterSelectionCostGrowsWithTheInputNotItsSquare`
-in `internal/environment` fails under `-race` on its allocation bound and
-passes without it; `make race` does not run that package (found by lane T,
-2026-10-27). **Outcome:** the test bounds what it means to bound under both
-modes, or skips its allocation bound under the race detector with the reason.
-**Exit evidence:** the package passes under `go test -race`.
-
-### B863
-
-**Owner:** CLI. **Kind:** defect. **Requires:** none. **Definition:**
-Specified. X177 made every command refuse the inherited flags it ignores, with
-SSH flags checked per group; `machine rsh` and `machine exec` still read all
-four `--ssh-*` flags although the spec says two are not consumed there (found
-by lane T). **Outcome:** the two commands refuse the SSH flags they ignore.
-**Exit evidence:** the inherited-scope test holds the per-command SSH lists.
 ### B864
 
 **Owner:** State reconciliation. **Kind:** product. **Requires:** none.
@@ -2993,25 +2971,6 @@ attempt output (lane S, 2026-10-27). **Outcome:** an adapter reports a
 warning that the run's human and structured output carry, with its code
 registered (for example `substrate.shadowed-route`). **Exit evidence:** a run
 golden carrying the warning.
-
-### B865
-
-**Owner:** Machine. **Kind:** defect. **Requires:** none. **Definition:**
-Specified. `physical_erase_worker.py`'s `text()` and `disk_serial()` call
-`.decode("ascii")` on raw sysfs bytes, so a non-ASCII byte raises
-`UnicodeDecodeError` instead of the worker's `Refusal`; it still fails closed
-but outside the classified refusal codes. **Outcome:** a non-ASCII attribute
-refuses with its identity or serial code. **Exit evidence:** a worker test per
-attribute.
-
-### B866
-
-**Owner:** Verification tooling. **Kind:** defect. **Requires:** none.
-**Definition:** Specified.
-`test_ceph_host_route_probe.py::test_control_startup_alarm_cannot_escape_registration_cleanup`
-fails in parallel runs and passes serially (lanes S and R, 2026-10-27).
-**Outcome:** the test is deterministic under the parallel units run.
-**Exit evidence:** repeated parallel runs pass.
 
 ### B868
 
@@ -3143,7 +3102,7 @@ also updates this table.
 | 23 | U Unrealized fields (B853 to B856) | merged (X184) |
 | 24 | N0 Remaining text to owning items (B805, B816, B820, B851) | merged (X182) |
 | 25 | V1 Ceph replica defaults and derived names (B859, B860, B861) | merged (X185) |
-| 26 | V2 Test and CLI defects (B862, B863, B865, B866) | not started |
+| 26 | V2 Test and CLI defects (B862, B863, B865, B866) | merged (X186) |
 | 27 | V3 Known-hosts and claim kinds (B869, B870, B871, B868) | not started |
 | 28 | W1 Preflight infra and all, render to a path (B858) | not started |
 | 29 | W2 Adapter warnings (B864) | not started |

@@ -162,7 +162,7 @@ func (s Services) invokeEnvironmentAccess(ctx context.Context, path string, valu
 			ContextName: values.text("context"),
 			Name:        values.text("name"),
 			Node:        values.text("node"),
-			SSH:         values.ssh(),
+			SSH:         values.sshAccount(),
 		}, s.EnvironmentAccess.ClusterRsh)
 		return commandResult{session: result}, err
 	case "cluster exec":
@@ -170,7 +170,7 @@ func (s Services) invokeEnvironmentAccess(ctx context.Context, path string, valu
 			ContextName: values.text("context"),
 			Names:       values.names("name"),
 			Nodes:       values.names("node"),
-			SSH:         values.ssh(),
+			SSH:         values.sshAccount(),
 			Command:     slices.Clone(args),
 		}, s.EnvironmentAccess.ClusterExec)
 		return commandResult{session: result}, err

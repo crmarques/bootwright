@@ -124,6 +124,10 @@ func (v *requestValues) ssh() machine.SSHOptions {
 	}
 }
 
+func (v *requestValues) sshAccount() machine.SSHOptions {
+	return machine.SSHOptions{IdentityFile: v.text("ssh-id-file"), User: v.text("ssh-user")}
+}
+
 func (v *requestValues) secretInput() secrets.Input {
 	var provided secrets.InputFields
 	for _, input := range []struct {

@@ -28,10 +28,12 @@ takes 21 s across workers instead of 86 s serially. It is not equivalent:
   `This process ... is multi-threaded, use of fork() may lead to deadlocks in
   the child`.
 - A process-directed signal can reach that thread. A test that signals itself
-  with `os.kill(os.getpid(), signal.SIGALRM)`, as
+  with `os.kill(os.getpid(), signal.SIGALRM)` then sees its handler run early
+  or late and fails in parallel only, intermittently. Signal the calling
+  thread with `signal.pthread_kill(threading.get_ident(), ...)`, as
   `test_control_startup_alarm_cannot_escape_registration_cleanup` in
-  `tests/unit/plugins/module_utils/test_ceph_host_route_probe.py` does, then
-  sees its handler run late and fails in parallel only, intermittently.
+  `tests/unit/plugins/module_utils/test_ceph_host_route_probe.py` does (B866):
+  a blocked signal then stays pending on that thread alone.
 
 The narrowed units suite therefore runs one file serially and reruns every
 parallel failure serially. A 2026-10-23 full run showed the locked ansible-test

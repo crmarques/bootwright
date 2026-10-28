@@ -23,10 +23,32 @@ class IdentityTests(unittest.TestCase):
             serial = b"EXAMPLE-ROOT-01"
             page.write_bytes(b"\x00\x80" + len(serial).to_bytes(2, "big") + serial)
             self.assertEqual(worker.disk_serial(node), serial.decode())
-            for data in (b"\x00\x80\x00\x20short", b"\x00\x83\x00\x01x", b"\x00\x80\x00\x01\xff"):
+            for data in (b"\x00\x80\x00\x20short", b"\x00\x83\x00\x01x"):
                 page.write_bytes(data)
-                with self.assertRaises((worker.Refusal, ValueError)):
+                with self.assertRaisesRegex(worker.Refusal, "disk-serial"):
                     worker.disk_serial(node)
+
+    def test_a_non_ascii_serial_refuses_with_the_serial_code(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            node = Path(temporary)
+            (node / "device").mkdir()
+            page = node / "device/vpd_pg80"
+            page.write_bytes(b"\x00\x80\x00\x01\xff")
+            with self.assertRaisesRegex(worker.Refusal, "disk-serial"):
+                worker.disk_serial(node)
+            page.unlink()
+            (node / "device/serial").write_bytes(b"EXAMPLE-\xff1\n")
+            with self.assertRaisesRegex(worker.Refusal, "disk-serial"):
+                worker.disk_serial(node)
+
+    def test_a_non_ascii_sysfs_attribute_refuses_with_the_identity_code(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            attribute = Path(temporary) / "wwid"
+            attribute.write_bytes(b"naa.\xff\n")
+            with self.assertRaisesRegex(worker.Refusal, "identity"):
+                worker.text(attribute)
+            attribute.write_bytes(b"naa.5000000000000001\n")
+            self.assertEqual(worker.text(attribute), "naa.5000000000000001")
 
     def test_duplicate_physical_mac_inventory_never_collapses_to_a_match(self):
         with tempfile.TemporaryDirectory() as temporary:
@@ -75,3 +97,29 @@ class IdentityTests(unittest.TestCase):
             swaps.write_text("Filename\tType\tSize\tUsed\tPriority\n/dev/foreign partition 1024 0 -2\n")
             with self.assertRaisesRegex(worker.Refusal, "active-swap"):
                 worker.unused([disk, child], proc)
+
+    def test_undecodable_usage_inventory_refuses_instead_of_raising(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            proc = Path(temporary) / "proc"
+            namespace = proc / "1/ns/mnt"
+            namespace.parent.mkdir(parents=True)
+            namespace.touch()
+            mounts, swaps = proc / "1/mountinfo", proc / "swaps"
+            mounts.write_text("1 0 0:1 / / rw - tmpfs tmpfs rw\n")
+            swaps.write_text("Filename\tType\tSize\tUsed\tPriority\n")
+            worker.unused([], proc)
+            for target, valid in ((mounts, mounts.read_bytes()), (swaps, swaps.read_bytes())):
+                target.write_bytes(valid + b"/mnt/caf\xc3\xa9\n")
+                with self.assertRaisesRegex(worker.Refusal, "usage-inventory"):
+                    worker.unused([], proc)
+                target.write_bytes(valid)
+
+    def test_a_non_numeric_diskseq_refuses_with_the_identity_code(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            attribute = Path(temporary) / "diskseq"
+            attribute.write_text("12\n")
+            self.assertEqual(worker.sequence_number(attribute), 12)
+            for data in (b"twelve\n", b"1 2\n", b"1_2\n", b"-3\n", b"\xff\n"):
+                attribute.write_bytes(data)
+                with self.assertRaisesRegex(worker.Refusal, "identity"):
+                    worker.sequence_number(attribute)

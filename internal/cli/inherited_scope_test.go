@@ -50,13 +50,13 @@ func TestInheritedFlagScopeIsTheFlagsEachCommandReads(t *testing.T) {
 	for _, spec := range commandCatalog() {
 		t.Run(spec.path, func(t *testing.T) {
 			reads := flagsReadBy(t, spec.path)
-			contextFree, sshFree := inheritedFlagScope(spec.path)
+			contextFree, sshFlags := inheritedFlagScope(spec.path)
 			if reads["context"] == contextFree {
 				t.Errorf("%s reads --context: %t, but is marked context-free: %t", spec.path, reads["context"], contextFree)
 			}
 			for _, name := range scopedFlags[1:] {
-				if reads[name] == sshFree {
-					t.Errorf("%s reads --%s: %t, but is marked SSH-free: %t", spec.path, name, reads[name], sshFree)
+				if want := slices.Contains(sshFlags, name); reads[name] != want {
+					t.Errorf("%s reads --%s: %t, but its SSH flags %v list it: %t", spec.path, name, reads[name], sshFlags, want)
 				}
 			}
 		})
@@ -66,20 +66,20 @@ func TestInheritedFlagScopeIsTheFlagsEachCommandReads(t *testing.T) {
 			t.Errorf("contextFreeCommands names %q, which the catalog does not list", path)
 		}
 	}
-	for path := range sshCommands {
+	for path := range sshFlagsByCommand {
 		if specFor(path).path != path {
-			t.Errorf("sshCommands names %q, which the catalog does not list", path)
+			t.Errorf("sshFlagsByCommand names %q, which the catalog does not list", path)
 		}
 	}
 }
 
 func TestACommandRefusesAnInheritedFlagItDoesNotRead(t *testing.T) {
 	for _, spec := range commandCatalog() {
-		contextFree, sshFree := inheritedFlagScope(spec.path)
+		contextFree, sshFlags := inheritedFlagScope(spec.path)
 		for _, name := range scopedFlags {
 			free := contextFree
 			if name != "context" {
-				free = sshFree
+				free = !slices.Contains(sshFlags, name)
 			}
 			after := append(strings.Fields(spec.path), scopedFlagArguments(name)...)
 			before := append(scopedFlagArguments(name), strings.Fields(spec.path)...)

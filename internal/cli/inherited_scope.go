@@ -1,18 +1,26 @@
 package cli
 
-import "strings"
+import (
+	"slices"
+	"strings"
+)
 
 const (
 	contextFreeAnnotation = "bootwright.contextFree"
-	sshFreeAnnotation     = "bootwright.sshFree"
+	sshFlagsAnnotation    = "bootwright.sshFlags"
 )
 
-var sshCommands = map[string]bool{
-	"preflight infra": true, "preflight clusters": true, "preflight container-cluster": true,
-	"preflight storage-cluster": true, "preflight add-ons": true, "preflight all": true,
-	"apply": true, "destroy": true,
-	"machine rsh": true, "machine exec": true, "cluster rsh": true, "cluster exec": true,
-}
+var (
+	allSSHFlags       = []string{"ssh-id-file", "ssh-user", "ssh-ask-sudo-password", "ssh-user-for-provisioned"}
+	accountSSHFlags   = []string{"ssh-id-file", "ssh-user"}
+	sshFlagsByCommand = map[string][]string{
+		"preflight infra": allSSHFlags, "preflight clusters": allSSHFlags, "preflight container-cluster": allSSHFlags,
+		"preflight storage-cluster": allSSHFlags, "preflight add-ons": allSSHFlags, "preflight all": allSSHFlags,
+		"apply": allSSHFlags, "destroy": allSSHFlags,
+		"machine rsh": accountSSHFlags, "machine exec": accountSSHFlags,
+		"cluster rsh": accountSSHFlags, "cluster exec": accountSSHFlags,
+	}
+)
 
 var contextFreeCommands = map[string]bool{
 	"context init": true, "context update": true, "context use": true, "context list": true,
@@ -23,8 +31,8 @@ var contextFreeCommands = map[string]bool{
 	"completion bash": true, "completion zsh": true, "completion fish": true, "completion powershell": true,
 }
 
-func inheritedFlagScope(path string) (contextFree, sshFree bool) {
-	return contextFreeCommands[path], !sshCommands[path]
+func inheritedFlagScope(path string) (contextFree bool, sshFlags []string) {
+	return contextFreeCommands[path], sshFlagsByCommand[path]
 }
 
 func acceptsFlag(commandAnnotations map[string]string, name string) bool {
@@ -32,7 +40,8 @@ func acceptsFlag(commandAnnotations map[string]string, name string) bool {
 	case name == "context":
 		return commandAnnotations[contextFreeAnnotation] != "true"
 	case strings.HasPrefix(name, "ssh-"):
-		return commandAnnotations[sshFreeAnnotation] != "true"
+		flags, scoped := commandAnnotations[sshFlagsAnnotation]
+		return !scoped || slices.Contains(strings.Split(flags, ","), name)
 	}
 	return true
 }

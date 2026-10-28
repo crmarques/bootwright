@@ -13,13 +13,15 @@ context-free commands, which refuse `--context`, are `setup`, `controller
 rebind`, `context` (every subcommand), `media` (every subcommand), `add-ons
 list`, `help`, `completion`, `version` and `schema`; only `apply`, `destroy`,
 `machine rsh`, `machine exec`, `cluster rsh`, `cluster exec` and every
-`preflight` check but `preflight controller` accept `--ssh-*`. A command
-resolves a taken global value only when its use case consumes it. An unused
-value grants no authority, performs no discovery or prompt, and changes no
-result; its syntax and context-independent safety checks still apply.
-`TestInheritedFlagScopeIsTheFlagsEachCommandReads` derives the flags each
-command reads from its dispatch and holds these lists, help and completion to
-them.
+`preflight` check but `preflight controller` accept `--ssh-*`; `machine rsh`,
+`machine exec`, `cluster rsh` and `cluster exec` accept only `--ssh-id-file`
+and `--ssh-user`, refuse the other two, and omit them from help and
+completion. A command resolves a taken global value only when its use case
+consumes it. An unused value grants no authority, performs no discovery or
+prompt, and changes no result; its syntax and context-independent safety
+checks still apply. `TestInheritedFlagScopeIsTheFlagsEachCommandReads` derives
+the flags each command reads from its dispatch and holds these lists, help and
+completion to them.
 
 | Flag | Type and default | Contract |
 | --- | --- | --- |

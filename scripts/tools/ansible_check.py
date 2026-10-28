@@ -97,8 +97,8 @@ def narrowed_units(
     across pytest-xdist workers, and any test that fails there runs again
     serially, which gives its verdict: a worker's threads take
     process-directed signals and make every fork a test performs one that may
-    deadlock, so a test that signals itself, as the route probe's alarm tests
-    do, fails there alone. A run that fails in parallel and passes on the
+    deadlock, so a test that signals its own process rather than its own
+    thread fails there alone. A run that fails in parallel and passes on the
     serial rerun is flaky: it prints FLAKY and exits FLAKY_STATUS, not 0.
     """
     collections = collection.parents[2]

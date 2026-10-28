@@ -94,13 +94,23 @@ def number_ioctl(fd, command):
     return value[0]
 
 
-def text(path):
+def text(path, code="identity"):
     with open(path, "rb") as stream:
         data = stream.read(258)
-    value = data.decode("ascii").strip()
+    try:
+        value = data.decode("ascii").strip()
+    except UnicodeDecodeError:
+        raise Refusal(code) from None
     if not value or len(value) > 256 or not value.isprintable():
-        raise Refusal("identity")
+        raise Refusal(code)
     return value
+
+
+def sequence_number(path):
+    value = text(path)
+    if not value.isdecimal():
+        raise Refusal("identity")
+    return int(value)
 
 
 def hardware(request, root=Path("/sys")):
@@ -115,7 +125,10 @@ def lines(path, limit=1024 * 1024):
         data = stream.read(limit + 1)
     if len(data) > limit:
         raise Refusal("usage-inventory")
-    return data.decode("ascii").splitlines()
+    try:
+        return data.decode("ascii").splitlines()
+    except UnicodeDecodeError:
+        raise Refusal("usage-inventory") from None
 
 
 def unused(nodes, proc=Path("/proc")):
@@ -167,14 +180,17 @@ def matches_wwn(observed, declared):
 def disk_serial(node):
     native = node / "device/serial"
     if native.exists():
-        return text(native)
+        return text(native, "disk-serial")
     # SCSI exposes the kernel's VPD page 0x80, rather than a serial text
     # attribute. Validate its complete length before decoding the payload.
     with (node / "device/vpd_pg80").open("rb") as source:
         data = source.read(261)
     if not 5 <= len(data) <= 260 or data[1] != 0x80 or int.from_bytes(data[2:4], "big") != len(data) - 4:
         raise Refusal("disk-serial")
-    value = data[4:].decode("ascii").strip()
+    try:
+        value = data[4:].decode("ascii").strip()
+    except UnicodeDecodeError:
+        raise Refusal("disk-serial") from None
     if not value or not value.isprintable():
         raise Refusal("disk-serial")
     return value
@@ -205,7 +221,7 @@ class BlockDisk:
 
     def prove(self, expected):
         before = number_ioctl(self.fd, BLKGETDISKSEQ)
-        if before != self.sequence or int(text(self.sys / "diskseq")) != before:
+        if before != self.sequence or sequence_number(self.sys / "diskseq") != before:
             raise Refusal("disk-replaced")
         if number_ioctl(self.fd, BLKGETSIZE64) != expected["sizeBytes"]:
             raise Refusal("disk-size")

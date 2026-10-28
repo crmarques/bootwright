@@ -115,14 +115,14 @@ func (s Services) invokeMachineAccess(ctx context.Context, path string, values *
 		result, err := invokeResult(ctx, values, machineaccess.RshRequest{
 			ContextName: values.text("context"),
 			Name:        values.text("name"),
-			SSH:         values.ssh(),
+			SSH:         values.sshAccount(),
 		}, s.MachineAccess.Rsh)
 		return commandResult{session: result}, err
 	case "machine exec":
 		result, err := invokeResult(ctx, values, machineaccess.ExecRequest{
 			ContextName: values.text("context"),
 			Names:       values.names("name"),
-			SSH:         values.ssh(),
+			SSH:         values.sshAccount(),
 			Command:     slices.Clone(args),
 		}, s.MachineAccess.Exec)
 		return commandResult{session: result}, err

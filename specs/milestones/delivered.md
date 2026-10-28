@@ -9259,6 +9259,28 @@ it, and the derived `mds.<filesystem>` refusal names `spec.mdsServiceRef`.
 `TestNVMeOFServiceUnitRefusesAnUnresolvedDerivedName`, each proved by a seeded
 mismatch; the delivering commit records the gates.
 
+### X186 — Audit lane V2: test, CLI and erase worker defects
+
+**Items:** B862, B863, B865 and B866.
+**Kind:** defect. **Owners:** Verification tooling, CLI and Machine.
+Delivered on 2026-10-28 as lane V2 of the
+[audit remediation](backlog.md#lane-order-and-progress) under the owner's
+request to implement the remaining items.
+
+The cluster selection cost test bounds allocation growth between 500 and 2000
+entries after a warm-up, with a generous absolute cap, so it holds under
+`-race`. `machine rsh`, `machine exec`, `cluster rsh` and `cluster exec` take
+only `--ssh-id-file` and `--ssh-user`, refuse the other SSH flags and omit
+them from help and completion. The physical erase worker refuses an
+undecodable or non-numeric disk attribute and an undecodable usage inventory
+with its own refusal codes instead of raising. The Ceph host route probe's
+alarm test signals its own blocked thread, so it is deterministic in parallel
+runs.
+
+**Guard tests:** `TestClusterSelectionCostGrowsWithTheInputNotItsSquare` under
+`-race`, the inherited-scope tests, the erase identity tests and repeated
+parallel runs of the probe test; the delivering commit records the gates.
+
 ## M3 independent in-tree completion
 
 The owner's 2026-10-23 request (D181) delivers the independent implementation

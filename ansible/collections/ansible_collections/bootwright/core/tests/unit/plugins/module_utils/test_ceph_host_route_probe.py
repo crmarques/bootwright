@@ -12,6 +12,7 @@ from pathlib import Path
 import signal
 import subprocess
 import sys
+import threading
 import time
 import types
 
@@ -514,7 +515,8 @@ def control_process(monkeypatch, program, startup_signal=False, proxy=False):
         process = actual(argv[:5] + [sys.executable, "-I", "-c", program], **arguments)
         children.append(process)
         if startup_signal:
-            os.kill(os.getpid(), signal.SIGALRM)
+            # Thread-directed: a process-directed signal can reach another thread, as a pytest-xdist worker has, and run the handler early.
+            signal.pthread_kill(threading.get_ident(), signal.SIGALRM)
         return process
 
     monkeypatch.setattr(PROBE.subprocess, "Popen", spawn)

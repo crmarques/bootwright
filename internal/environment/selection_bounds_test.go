@@ -41,34 +41,49 @@ func TestUnresolvedClusterListsAtMostSixteenDeclaredNames(t *testing.T) {
 }
 
 func TestClusterSelectionCostGrowsWithTheInputNotItsSquare(t *testing.T) {
-	const count = 2000
+	const small, large = 500, 2000
+	for _, row := range []struct {
+		name       string
+		unresolved bool
+	}{{"every entry unresolved", true}, {"every entry resolved", false}} {
+		t.Run(row.name, func(t *testing.T) {
+			smallBytes, largeBytes := selectionAllocation(t, small, row.unresolved), selectionAllocation(t, large, row.unresolved)
+			const factor, ceiling = large / small, 100 << 20
+			if largeBytes > ceiling {
+				t.Fatalf("selecting %d entries allocated %d bytes, over the %d byte safety net", large, largeBytes, ceiling)
+			}
+			if largeBytes > smallBytes*factor*3/2 {
+				t.Fatalf("selecting %d entries allocated %d bytes and %d entries %d bytes: growth %.1fx for %dx the input, want about %dx",
+					small, smallBytes, large, largeBytes, float64(largeBytes)/float64(smallBytes), factor, factor)
+			}
+		})
+	}
+}
+
+func selectionAllocation(t *testing.T, count int, unresolved bool) uint64 {
+	t.Helper()
 	declared, missing := clusterNames(count), []string{}
 	objects := []api.Object{}
 	for index, name := range declared {
 		objects = append(objects, selectionContainer(name, name+"-n"))
 		missing = append(missing, fmt.Sprintf("m%04d", index))
 	}
-	for _, row := range []struct {
-		name     string
-		selected []string
-		problems int
-	}{{"every entry unresolved", missing, 2 * count}, {"every entry resolved", declared, 0}} {
-		t.Run(row.name, func(t *testing.T) {
-			catalog := api.NewCatalog(append([]api.Object{selectionEnvironment("env", "containerClusters", row.selected)}, objects...))
-			runtime.GC()
-			var before, after runtime.MemStats
-			runtime.ReadMemStats(&before)
-			selection := environment.Select(catalog, nil, testClusterMembers)
-			runtime.ReadMemStats(&after)
-			if len(selection.Problems) != row.problems {
-				t.Fatalf("%d problems, want %d", len(selection.Problems), row.problems)
-			}
-			if allocated := after.TotalAlloc - before.TotalAlloc; allocated > 32<<20 {
-				t.Fatalf("selecting %d entries over %d clusters allocated %d bytes", len(row.selected), count, allocated)
-			}
-			runtime.KeepAlive(selection)
-		})
+	selected, problems := declared, 0
+	if unresolved {
+		selected, problems = missing, 2*count
 	}
+	catalog := api.NewCatalog(append([]api.Object{selectionEnvironment("env", "containerClusters", selected)}, objects...))
+	environment.Select(catalog, nil, testClusterMembers)
+	runtime.GC()
+	var before, after runtime.MemStats
+	runtime.ReadMemStats(&before)
+	selection := environment.Select(catalog, nil, testClusterMembers)
+	runtime.ReadMemStats(&after)
+	if len(selection.Problems) != problems {
+		t.Fatalf("%d problems, want %d", len(selection.Problems), problems)
+	}
+	runtime.KeepAlive(selection)
+	return after.TotalAlloc - before.TotalAlloc
 }
 
 func clusterNames(count int) []string {

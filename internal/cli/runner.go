@@ -92,13 +92,11 @@ func newCommandTree(r *Runner) (*cobra.Command, error) {
 		if spec.payload {
 			parent.Annotations["bootwright.payload"] = "true"
 		}
-		contextFree, sshFree := inheritedFlagScope(spec.path)
+		contextFree, sshFlags := inheritedFlagScope(spec.path)
 		if contextFree {
 			parent.Annotations[contextFreeAnnotation] = "true"
 		}
-		if sshFree {
-			parent.Annotations[sshFreeAnnotation] = "true"
-		}
+		parent.Annotations[sshFlagsAnnotation] = strings.Join(sshFlags, ",")
 		if !spec.implemented && !presentationCommand(spec.path) {
 			if !hasAvailableSubcommand(parent.Annotations["bootwright.command"]) {
 				parent.Short += " (unavailable)"
