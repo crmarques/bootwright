@@ -29,6 +29,7 @@ import (
 	machineref "github.com/crmarques/bootwright/internal/machine"
 	"github.com/crmarques/bootwright/internal/reconciliation"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
+	"github.com/crmarques/bootwright/internal/reconciliation/operationstore"
 )
 
 // TestLifecycleAdapterChild is the adapter these tests start, not a test of its
@@ -966,5 +967,42 @@ func TestNativeErrorOnlyReachesAnOptedInCallersDiagnostic(t *testing.T) {
 	}
 	if diagnostics.Of(named)[0].Message != "native acquisition failed" {
 		t.Fatal("mutated the caller's reusable diagnostic")
+	}
+}
+
+// A completed run hands its warnings to the request's Warn once, as an
+// attempt records them; a run that does not complete hands none, and a
+// warning of an unregistered code breaks the protocol like any other
+// malformed record.
+func TestACompletedRunHandsItsWarningsOnce(t *testing.T) {
+	const completion = `{"evidence":{"absent":false},"outcome":"changed","phase":"completed","warnings":[{"code":"substrate.shadowed-route","message":"route 10.0.0.0/8 via 192.0.2.1 covers 10.20.0.0/24"},{"code":"substrate.shadowed-route","message":"m","object":{"kind":"InfraProvider","name":"lab"}}]}`
+	run := func(script string) ([][]operationstore.Warning, lifecycle.RunResult, error) {
+		runner := sweepingRunner(t, func() *exec.Cmd { return exec.Command("/bin/sh", "-c", script) })
+		var output bytes.Buffer
+		request := adapterRequest(t, &output)
+		var handed [][]operationstore.Warning
+		request.Warn = func(_ context.Context, warnings []operationstore.Warning) { handed = append(handed, warnings) }
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		result, err := runner.Run(ctx, request)
+		return handed, result, err
+	}
+	handed, result, err := run(`printf '{"phase":"loaded"}\n' >&3; read -r reply <&4; printf '%s\n' '` + completion + `' >&3; exit 0`)
+	want := []operationstore.Warning{
+		{Code: "substrate.shadowed-route", Message: "route 10.0.0.0/8 via 192.0.2.1 covers 10.20.0.0/24"},
+		{Code: "substrate.shadowed-route", Message: "m", Object: &operationstore.WarningObject{Kind: "InfraProvider", Name: "lab"}},
+	}
+	if err != nil || result.Outcome != "changed" || len(handed) != 1 || len(handed[0]) != 2 || handed[0][0] != want[0] ||
+		handed[0][1].Message != "m" || *handed[0][1].Object != *want[1].Object {
+		t.Fatalf("handed %+v, result %+v (%v)", handed, result, err)
+	}
+	handed, _, err = run(`printf '{"phase":"loaded"}\n' >&3; read -r reply <&4; printf '%s\n' '` + completion + `' >&3; exit 2`)
+	if err == nil || len(handed) != 0 {
+		t.Fatalf("a failed exit handed %+v (%v)", handed, err)
+	}
+	unregistered := strings.Replace(completion, `"substrate.shadowed-route"`, `"substrate.unregistered"`, 1)
+	handed, _, err = run(`printf '{"phase":"loaded"}\n' >&3; read -r reply <&4; printf '%s\n' '` + unregistered + `' >&3; exit 0`)
+	if reported := diagnostics.Of(err); len(reported) != 1 || reported[0].Code != "lifecycle.unknown" || len(handed) != 0 {
+		t.Fatalf("an unregistered warning code reported %+v and handed %+v", reported, handed)
 	}
 }

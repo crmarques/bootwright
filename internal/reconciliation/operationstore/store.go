@@ -1025,12 +1025,12 @@ func (s *Store) RecordPreparation(ctx context.Context, id, block string, number 
 	return s.area.Replace(ctx, target, encoded, data)
 }
 
-func (s *Store) CompleteAttempt(ctx context.Context, id, block string, number int, outcome reconciliation.Outcome, effect reconciliation.EffectState, state reconciliation.BlockState, evidence json.RawMessage) error {
+func (s *Store) CompleteAttempt(ctx context.Context, id, block string, number int, outcome reconciliation.Outcome, effect reconciliation.EffectState, state reconciliation.BlockState, evidence json.RawMessage, warnings ...Warning) error {
 	name, err := reconciliation.FormatNumber(number)
 	if err != nil {
 		return err
 	}
-	return s.completeRecord(ctx, id, block, path.Join(id, "blocks", block, "attempt-"+name+".json"), number, 0, outcome, effect, state, evidence, nil)
+	return s.completeRecord(ctx, id, block, path.Join(id, "blocks", block, "attempt-"+name+".json"), number, 0, outcome, effect, state, evidence, nil, warnings)
 }
 
 // StartResolution allocates and durably records the resolution identity, naming
@@ -1095,7 +1095,7 @@ func (s *Store) CompleteResolution(ctx context.Context, id, block string, attemp
 		return err
 	}
 	target := path.Join(id, "blocks", block, "attempt-"+attemptName+"-resolution-"+name+".json")
-	return s.completeRecord(ctx, id, block, target, attempt, resolution, outcome, effect, state, evidence, failure)
+	return s.completeRecord(ctx, id, block, target, attempt, resolution, outcome, effect, state, evidence, failure, nil)
 }
 
 // LastResolution reads the last resolution allocated against one attempt and
@@ -1156,7 +1156,7 @@ func (s *Store) LastResolution(ctx context.Context, id, block string, attempt in
 	return record, true, nil
 }
 
-func (s *Store) completeRecord(ctx context.Context, id, block, target string, number, resolution int, outcome reconciliation.Outcome, effect reconciliation.EffectState, state reconciliation.BlockState, evidence json.RawMessage, failure *ObservationFailure) error {
+func (s *Store) completeRecord(ctx context.Context, id, block, target string, number, resolution int, outcome reconciliation.Outcome, effect reconciliation.EffectState, state reconciliation.BlockState, evidence json.RawMessage, failure *ObservationFailure, warnings []Warning) error {
 	data, found, err := s.area.Read(ctx, target, MaxAttemptBytes)
 	if err != nil {
 		return err
@@ -1177,10 +1177,7 @@ func (s *Store) completeRecord(ctx context.Context, id, block, target string, nu
 	}
 	record.Phase, record.Outcome, record.Effect, record.Updated = "observed", outcome, effect, updated
 	record.Evidence, record.Failure = evidence, failure
-	if err := validateAttempt(record); err != nil {
-		return err
-	}
-	encoded, err := encode(record, MaxAttemptBytes)
+	encoded, err := warnedRecord(record, warnings)
 	if err != nil {
 		return err
 	}
@@ -1193,6 +1190,22 @@ func (s *Store) completeRecord(ctx context.Context, id, block, target string, nu
 	}
 	current.State = state
 	return s.publishBlock(ctx, id, current)
+}
+
+func warnedRecord(record Attempt, warnings []Warning) ([]byte, error) {
+	if len(warnings) != 0 {
+		warned := record
+		warned.Warnings = slices.Clone(warnings)
+		if validateAttempt(warned) == nil {
+			if encoded, err := encode(warned, MaxAttemptBytes); err == nil {
+				return encoded, nil
+			}
+		}
+	}
+	if err := validateAttempt(record); err != nil {
+		return nil, err
+	}
+	return encode(record, MaxAttemptBytes)
 }
 
 // LastAttempt names the attempt an unresolved block is waiting on, so a

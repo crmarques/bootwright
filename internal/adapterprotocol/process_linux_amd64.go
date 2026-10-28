@@ -366,5 +366,5 @@ func (s *session) outcome() Ending {
 	case !s.completed || s.undelivered:
 		return Ending{Kind: NoResult}
 	}
-	return Ending{Kind: Completed, Outcome: s.result.Outcome, Evidence: slices.Clone(s.result.Evidence)}
+	return Ending{Kind: Completed, Outcome: s.result.Outcome, Evidence: slices.Clone(s.result.Evidence), Warnings: slices.Clone(s.result.Warnings)}
 }

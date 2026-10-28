@@ -28,9 +28,25 @@ type Record struct {
 	NativeError *NativeError
 	Evidence    json.RawMessage
 	Preparation json.RawMessage
+	Warnings    []Warning
 }
 
 type NativeError struct{ Coordinate, Cause string }
+
+type Warning struct {
+	Code    string         `json:"code"`
+	Message string         `json:"message"`
+	Object  *WarningObject `json:"object,omitempty"`
+}
+
+type WarningObject struct {
+	Kind string `json:"kind"`
+	Name string `json:"name"`
+}
+
+var warningCodes = []string{"substrate.shadowed-route"}
+
+func WarningCodes() []string { return slices.Clone(warningCodes) }
 
 // Admission names the runner a record stream is read for: which phases it
 // admits and how many records it reads.
@@ -54,6 +70,10 @@ const (
 	MaxNativeCause       = 1024
 	maxLifecycleRecords  = 64
 	maxControllerRecords = 132
+	MaxWarnings          = 16
+	MaxWarningMessage    = 1024
+	maxWarningKind       = 63
+	maxWarningName       = 253
 )
 
 // Records is the most records one run of the admission reads.
@@ -75,6 +95,7 @@ type phase struct {
 	source      Admission
 	detail      Admission
 	nativeError Admission
+	warnings    Admission
 }
 
 // phases is the one table of which runner admits which phase.
@@ -84,7 +105,7 @@ var phases = map[string]phase{
 	"prepared":  {members: []string{"phase", "preparation"}, admitted: Lifecycle | Controller},
 	"native":    {members: []string{"phase"}, admitted: Controller},
 	"continue":  {members: []string{"phase"}, admitted: Controller},
-	"completed": {members: []string{"evidence", "outcome", "phase"}, admitted: Lifecycle | Controller},
+	"completed": {members: []string{"evidence", "outcome", "phase"}, admitted: Lifecycle | Controller, warnings: Lifecycle},
 	"refused":   {members: []string{"phase", "reason"}, admitted: Lifecycle | Controller, source: Controller, detail: Lifecycle, nativeError: Lifecycle},
 }
 
@@ -266,6 +287,9 @@ func shape(members map[string]json.RawMessage, admission Admission) (Record, err
 	if _, named := members["nativeError"]; named && rule.nativeError&admission != 0 {
 		expected = append(slices.Clone(expected), "nativeError")
 	}
+	if _, named := members["warnings"]; named && rule.warnings&admission != 0 {
+		expected = append(slices.Clone(expected), "warnings")
+	}
 	if len(members) != len(expected) {
 		return Record{}, errRecord
 	}
@@ -284,6 +308,11 @@ func shape(members map[string]json.RawMessage, admission Admission) (Record, err
 		valid = text(members["outcome"], &record.Outcome) && (record.Outcome == "changed" || record.Outcome == "unchanged") &&
 			len(evidence) > 2 && evidence[0] == '{'
 		record.Evidence = evidence
+		if raw, named := members["warnings"]; named {
+			var ok bool
+			record.Warnings, ok = warnings(raw)
+			valid = valid && ok
+		}
 	case "refused":
 		valid = text(members["reason"], &record.Reason) && record.Reason != ""
 		if raw, named := members["source"]; named {
@@ -305,6 +334,86 @@ func shape(members map[string]json.RawMessage, admission Admission) (Record, err
 		return Record{}, errRecord
 	}
 	return record, nil
+}
+
+func warnings(raw json.RawMessage) ([]Warning, bool) {
+	var entries []json.RawMessage
+	if len(raw) == 0 || raw[0] != '[' || json.Unmarshal(raw, &entries) != nil || len(entries) == 0 || len(entries) > MaxWarnings {
+		return nil, false
+	}
+	found := make([]Warning, 0, len(entries))
+	for _, entry := range entries {
+		var members map[string]json.RawMessage
+		var warning Warning
+		var code, message string
+		if len(entry) == 0 || entry[0] != '{' || json.Unmarshal(entry, &members) != nil || json.Unmarshal(entry, &warning) != nil {
+			return nil, false
+		}
+		_, objected := members["object"]
+		if len(members) != 2 && !(objected && len(members) == 3) ||
+			!text(members["code"], &code) || !slices.Contains(warningCodes, code) ||
+			!text(members["message"], &message) || !printableText(message, MaxWarningMessage) {
+			return nil, false
+		}
+		warning.Object = nil
+		if objected {
+			object, ok := warningObject(members["object"])
+			if !ok {
+				return nil, false
+			}
+			warning.Object = object
+		}
+		found = append(found, warning)
+	}
+	return found, true
+}
+
+func warningObject(raw json.RawMessage) (*WarningObject, bool) {
+	var members map[string]json.RawMessage
+	if len(raw) == 0 || raw[0] != '{' || json.Unmarshal(raw, &members) != nil || len(members) != 2 {
+		return nil, false
+	}
+	object := &WarningObject{}
+	if !text(members["kind"], &object.Kind) || !text(members["name"], &object.Name) || !kindName(object.Kind) || !objectName(object.Name) {
+		return nil, false
+	}
+	return object, true
+}
+
+func printableText(value string, limit int) bool {
+	if strings.TrimSpace(value) == "" || len(value) > limit {
+		return false
+	}
+	for i := 0; i < len(value); i++ {
+		if value[i] < 0x20 || value[i] > 0x7e {
+			return false
+		}
+	}
+	return true
+}
+
+func kindName(value string) bool {
+	if value == "" || len(value) > maxWarningKind || value[0] < 'A' || value[0] > 'Z' {
+		return false
+	}
+	for _, c := range value {
+		if !(c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || c >= '0' && c <= '9') {
+			return false
+		}
+	}
+	return true
+}
+
+func objectName(value string) bool {
+	if value == "" || len(value) > maxWarningName || value[0] == '-' || value[0] == '.' || value[len(value)-1] == '-' || value[len(value)-1] == '.' {
+		return false
+	}
+	for _, c := range value {
+		if !(c >= 'a' && c <= 'z' || c >= '0' && c <= '9' || c == '-' || c == '.') {
+			return false
+		}
+	}
+	return true
 }
 
 func detailed(value string) bool {

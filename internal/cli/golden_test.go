@@ -764,6 +764,27 @@ func cliGoldens() []cliGolden {
 			}
 		}},
 		{golden: "cli-apply", args: "apply --yes", record: func(r *dispatchRecord) { r.result.lifecycleOperation = operation("done") }},
+		// An adapter's warning reaches standard error beside the result in
+		// text and the envelope's diagnostics in JSON, and status carries the
+		// latest attempt's the same way; the exit status stays the result's.
+		{golden: "cli-apply-warned", args: "apply --yes", record: func(r *dispatchRecord) {
+			r.result.lifecycleOperation = operation("done")
+			r.result.lifecycleOperation.Warnings = []diagnostics.Diagnostic{shadowedRoute()}
+		},
+			stderr: "  warning  InfraProvider/lab-libvirt\n" +
+				"    substrate.shadowed-route\n" +
+				"    route 10.0.0.0/8 via 192.0.2.1 dev eth0 covers 10.20.0.0/24: the connected route of\n" +
+				"    attachment lab wins by longest prefix, so the hosts of 10.20.0.0/24 are no longer reached\n" +
+				"    through 192.0.2.1\n"},
+		{golden: "cli-apply-warned-json", args: "apply --yes --output json", record: func(r *dispatchRecord) {
+			r.result.lifecycleOperation = operation("done")
+			r.result.lifecycleOperation.Warnings = []diagnostics.Diagnostic{shadowedRoute()}
+		}},
+		{golden: "cli-status-warned-json", args: "status --output json", record: func(r *dispatchRecord) {
+			result := status()
+			result.Warnings = []diagnostics.Diagnostic{shadowedRoute()}
+			r.result.lifecycleStatus = result
+		}},
 		{golden: "cli-destroy", args: "destroy --yes", record: func(r *dispatchRecord) {
 			r.result.lifecycleOperation = &lifecycle.OperationResult{
 				Context: lifecycle.ContextIdentity{Name: "lab", Revision: revision}, Verb: "destroy", Settled: true,
@@ -1406,4 +1427,10 @@ func untilPlanFixture(revision string) *lifecycle.PlanResult {
 		Until: "lab.gitops", Waves: 2, Widest: 1, Bound: 1, Startable: 1, Deferred: 1,
 		Receipt: lifecycle.Receipt{Operation: "none", Verb: "plan", State: "preview", Next: "apply"},
 	}
+}
+
+func shadowedRoute() diagnostics.Diagnostic {
+	return diagnostics.Diagnostic{Severity: "warning", Code: "substrate.shadowed-route",
+		Message: "route 10.0.0.0/8 via 192.0.2.1 dev eth0 covers 10.20.0.0/24: the connected route of attachment lab wins by longest prefix, so the hosts of 10.20.0.0/24 are no longer reached through 192.0.2.1",
+		Object:  &diagnostics.ObjectIdentity{APIVersion: "bootwright.io/v1alpha1", Kind: "InfraProvider", Name: "lab-libvirt"}}
 }

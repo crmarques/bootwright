@@ -223,6 +223,7 @@ type Attempt struct {
 	Evidence    json.RawMessage            `json:"evidence"`
 	Preparation json.RawMessage            `json:"preparation,omitempty"`
 	Failure     *ObservationFailure        `json:"failure,omitempty"`
+	Warnings    []Warning                  `json:"warnings,omitempty"`
 	Build       *Build                     `json:"build,omitempty"`
 	Started     string                     `json:"started"`
 	Updated     string                     `json:"updated"`
@@ -235,6 +236,23 @@ type ObservationFailure struct {
 	Message     string `json:"message"`
 	Remediation string `json:"remediation,omitempty"`
 }
+
+type Warning struct {
+	Code    string         `json:"code"`
+	Message string         `json:"message"`
+	Object  *WarningObject `json:"object,omitempty"`
+}
+
+type WarningObject struct {
+	Kind string `json:"kind"`
+	Name string `json:"name"`
+}
+
+const (
+	MaxWarnings       = 16
+	MaxWarningMessage = 1024
+	maxWarningObject  = 253
+)
 
 // Bounds of an ObservationFailure's fields, in bytes.
 const (
@@ -415,6 +433,9 @@ func validateAttempt(record Attempt) error {
 	if record.Failure != nil && !validFailure(record) {
 		return recordError("lifecycle attempt failure is invalid")
 	}
+	if !validWarnings(record) {
+		return recordError("lifecycle attempt warnings are invalid")
+	}
 	if record.Build != nil {
 		if err := validateBuild(*record.Build); err != nil {
 			return err
@@ -478,6 +499,36 @@ func validFailure(record Attempt) bool {
 		failure.Code != "" && len(failure.Code) <= MaxFailureCode &&
 		failure.Message != "" && len(failure.Message) <= MaxFailureText && len(failure.Remediation) <= MaxFailureText &&
 		utf8.ValidString(failure.Code) && utf8.ValidString(failure.Message) && utf8.ValidString(failure.Remediation)
+}
+
+func validWarnings(record Attempt) bool {
+	if record.Warnings == nil {
+		return true
+	}
+	if record.Resolution != 0 || len(record.Warnings) == 0 || len(record.Warnings) > MaxWarnings {
+		return false
+	}
+	for _, warning := range record.Warnings {
+		if !printable(warning.Code, MaxFailureCode) || !printable(warning.Message, MaxWarningMessage) {
+			return false
+		}
+		if object := warning.Object; object != nil && (!printable(object.Kind, maxWarningObject) || !printable(object.Name, maxWarningObject)) {
+			return false
+		}
+	}
+	return true
+}
+
+func printable(value string, limit int) bool {
+	if value == "" || len(value) > limit {
+		return false
+	}
+	for i := 0; i < len(value); i++ {
+		if value[i] < 0x20 || value[i] > 0x7e {
+			return false
+		}
+	}
+	return true
 }
 
 func validateTimestamps(values ...string) error {

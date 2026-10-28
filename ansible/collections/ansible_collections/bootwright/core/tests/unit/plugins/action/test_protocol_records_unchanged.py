@@ -136,6 +136,8 @@ CASES = {
         ("removal driver silent", completed(removed=True, observation=dict(HOST_GONE, poolAnswered=False))),
         ("observed gone", completed(observed=True, observation=HOST_GONE)),
         ("removal observed", completed(removed=True, observed=True, observation=HOST_GONE)),
+        ("shadowed route", completed(observation=HOST, shadows=["route 10.0.0.0/8 via 192.0.2.1 dev eth0 covers 10.20.0.0/24"])),
+        ("shadows not a list", completed(observation=HOST, shadows="not a list")),
     ],
     "substrate_libvirt_machine_protocol": common([]) + completions(
         {"observation": MACHINE, "power": "Off", "system": "uuid"},

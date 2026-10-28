@@ -378,6 +378,122 @@
     }
   },
   {
+    "case": "shadowed route",
+    "records": [
+      [
+        {
+          "phase": "completed",
+          "outcome": "changed",
+          "evidence": {
+            "absent": false,
+            "directory": true,
+            "firewallReady": {
+              "name": "bootwright-lab-host-firewalld-ready.service",
+              "answered": true,
+              "present": true,
+              "owned": true,
+              "enabled": true,
+              "ready": true,
+              "state": "active"
+            },
+            "hypervisor": true,
+            "networks": [
+              {
+                "answered": true,
+                "autostart": true,
+                "bridge": true,
+                "definition": true,
+                "managed": true,
+                "name": "n",
+                "owned": true,
+                "state": "active"
+              }
+            ],
+            "pool": "active",
+            "poolAnswered": true,
+            "poolAutostart": true,
+            "poolOwned": true,
+            "postcondition": true,
+            "request": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+            "services": [
+              {
+                "enabled": true,
+                "name": "virtnetworkd.service",
+                "state": "active"
+              }
+            ],
+            "uri": true
+          },
+          "warnings": [
+            {
+              "code": "substrate.shadowed-route",
+              "message": "route 10.0.0.0/8 via 192.0.2.1 dev eth0 covers 10.20.0.0/24"
+            }
+          ]
+        },
+        false
+      ]
+    ],
+    "result": {
+      "changed": false
+    }
+  },
+  {
+    "case": "shadows not a list",
+    "records": [
+      [
+        {
+          "phase": "completed",
+          "outcome": "changed",
+          "evidence": {
+            "absent": false,
+            "directory": true,
+            "firewallReady": {
+              "name": "bootwright-lab-host-firewalld-ready.service",
+              "answered": true,
+              "present": true,
+              "owned": true,
+              "enabled": true,
+              "ready": true,
+              "state": "active"
+            },
+            "hypervisor": true,
+            "networks": [
+              {
+                "answered": true,
+                "autostart": true,
+                "bridge": true,
+                "definition": true,
+                "managed": true,
+                "name": "n",
+                "owned": true,
+                "state": "active"
+              }
+            ],
+            "pool": "active",
+            "poolAnswered": true,
+            "poolAutostart": true,
+            "poolOwned": true,
+            "postcondition": true,
+            "request": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+            "services": [
+              {
+                "enabled": true,
+                "name": "virtnetworkd.service",
+                "state": "active"
+              }
+            ],
+            "uri": true
+          }
+        },
+        false
+      ]
+    ],
+    "result": {
+      "changed": false
+    }
+  },
+  {
     "case": "channel refused",
     "records": [
       [

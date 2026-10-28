@@ -237,6 +237,7 @@ type OperationResult struct {
 	// NextCommand is the exact command an operator runs for an operation that
 	// is paused, failed, unknown or running, and empty for any other result.
 	NextCommand string
+	Warnings    []diagnostics.Diagnostic
 	Receipt     Receipt
 }
 
@@ -378,4 +379,5 @@ type StatusResult struct {
 	// LogLocation is the host path of the reported operation's logs, presented
 	// to a human and absent from the structured result.
 	LogLocation string
+	Warnings    []diagnostics.Diagnostic
 }

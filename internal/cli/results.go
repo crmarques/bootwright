@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"io"
+	"slices"
 
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
 	"github.com/crmarques/bootwright/internal/secrets"
@@ -54,6 +55,9 @@ func (r *Runner) writeResult(ctx context.Context, command *cobra.Command, path s
 		return r.writeLifecycleInspection(ctx, command, path, result)
 	case "apply", "destroy":
 		if result.lifecycleOperation != nil {
+			if err := writeHumanDiagnostics(errOut, displayDiagnostics(result.lifecycleOperation.Warnings)); err != nil {
+				return true, err
+			}
 			return true, writeLifecycleOperation(out, result.lifecycleOperation)
 		}
 	case "validate":
@@ -162,6 +166,11 @@ func (r *Runner) writeLifecycleInspection(ctx context.Context, command *cobra.Co
 		}
 		return true, writeLifecyclePlan(out, result.lifecyclePlan)
 	case path == "status" && result.lifecycleStatus != nil:
+		if !selectedJSON(command) {
+			if err := writeHumanDiagnostics(r.config.ErrOut, displayDiagnostics(result.lifecycleStatus.Warnings)); err != nil {
+				return true, err
+			}
+		}
 		return true, writeLifecycleStatus(out, result.lifecycleStatus, selectedJSON(command))
 	case path == "diff" && result.lifecycleDiff != nil:
 		status, err := writeDiffStatus(ctx, out, result.lifecycleDiff, selectedJSON(command), boolValue(command.Flags(), "exit-code"), r.config.EncodeEffectiveYAML, r.config.EncodeEffectiveJSON)
@@ -224,7 +233,7 @@ func (r *Runner) writeExecutedLifecycle(path string, result commandResult, diagn
 	if err := writeLifecycleOperation(r.config.Out, result.lifecycleOperation); err != nil {
 		return true, err
 	}
-	return true, writeDiagnostics(r.config.Out, r.config.ErrOut, path, diagnostics, 1, false, nil)
+	return true, writeDiagnostics(r.config.Out, r.config.ErrOut, path, append(slices.Clone(result.lifecycleOperation.Warnings), diagnostics...), 1, false, nil)
 }
 
 // interruptedLifecycle reports an interrupt of an apply or destroy that
@@ -252,7 +261,7 @@ func (r *Runner) writeInterruptedLifecycle(path string, operation *lifecycle.Ope
 	if err := writeLifecycleOperation(r.config.Out, operation); err != nil {
 		return 1
 	}
-	interrupted := []diagnostic{{Severity: "error", Code: "runtime.interrupted", Message: "operation interrupted", Remediation: operation.NextCommand}}
+	interrupted := append(slices.Clone(operation.Warnings), diagnostic{Severity: "error", Code: "runtime.interrupted", Message: "operation interrupted", Remediation: operation.NextCommand})
 	if err := writeDiagnostics(r.config.Out, r.config.ErrOut, path, interrupted, 130, false, nil); err != nil {
 		return 1
 	}

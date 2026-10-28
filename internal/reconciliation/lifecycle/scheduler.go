@@ -27,6 +27,7 @@ type step struct {
 	unstarted bool
 	announced bool
 	position  int
+	warnings  []operationstore.Warning
 }
 
 // scheduler starts every block the frozen plan admits, up to the bound, and
@@ -74,13 +75,26 @@ type scheduler struct {
 	onlineProved  bool
 	onlineBlocked bool
 	preStopProved bool
+	warned        []positionedWarning
+}
+
+type positionedWarning struct {
+	position   int
+	diagnostic diagnostics.Diagnostic
 }
 
 // converge runs the operation's blocks until nothing more may start, and
 // reports whether it stopped at a stage or operator-stop boundary and what any
 // block that did not complete reported.
-func (s Service) converge(ctx context.Context, tx Transaction, store OperationStore, approved approved, logging *logBoundary, operation operationstore.Operation, plan reconciliation.Plan, states map[string]reconciliation.BlockState, material map[string]secrets.Material, selection reconciliation.Selection) (bool, error) {
-	return s.newScheduler(tx, store, approved, logging, operation, plan, states, material, selection).converge(ctx)
+func (s Service) converge(ctx context.Context, tx Transaction, store OperationStore, approved approved, logging *logBoundary, operation operationstore.Operation, plan reconciliation.Plan, states map[string]reconciliation.BlockState, material map[string]secrets.Material, selection reconciliation.Selection) (bool, []diagnostics.Diagnostic, error) {
+	run := s.newScheduler(tx, store, approved, logging, operation, plan, states, material, selection)
+	boundary, err := run.converge(ctx)
+	slices.SortStableFunc(run.warned, func(first, second positionedWarning) int { return first.position - second.position })
+	var warned []diagnostics.Diagnostic
+	for _, warning := range run.warned {
+		warned = append(warned, warning.diagnostic)
+	}
+	return boundary, warned, err
 }
 
 // observe resolves every unproved effect of an operation and starts nothing
@@ -289,6 +303,7 @@ func (c *scheduler) start(ctx context.Context, block reconciliation.Block, posit
 		var state reconciliation.BlockState
 		var err error
 		var unstarted, announced bool
+		var warnings []operationstore.Warning
 		if observing {
 			// The observation's durable transition is authoritative even when it
 			// reports a refusal, so the operation state matches the record; one
@@ -301,12 +316,13 @@ func (c *scheduler) start(ctx context.Context, block reconciliation.Block, posit
 		} else {
 			// An attempt that never started performed no effect; its block
 			// holds what its record reads, running when the start landed.
-			state, err = c.service.attempt(ctx, c.tx, c.store, c.approved, c.logging, c.operation, c.plan, block, c.material, position+1, len(c.plan.Blocks))
+			state, err = c.service.attempt(ctx, c.tx, c.store, c.approved, c.logging, c.operation, c.plan, block, c.material, position+1, len(c.plan.Blocks),
+				func(reported []operationstore.Warning) { warnings = reported })
 			if state == "" {
 				state, unstarted = c.durable(ctx, block.ID, prior), true
 			}
 		}
-		c.results <- step{block: block.ID, state: state, err: err, unstarted: unstarted, announced: announced, position: position + 1}
+		c.results <- step{block: block.ID, state: state, err: err, unstarted: unstarted, announced: announced, position: position + 1, warnings: warnings}
 	}()
 }
 
@@ -347,6 +363,7 @@ func (c *scheduler) settle(finished step) {
 		}
 	}
 	c.states[finished.block] = finished.state
+	c.warn(finished)
 	if finished.unstarted {
 		c.unstarted[finished.block] = true
 	}
@@ -411,4 +428,16 @@ func (c *scheduler) reported(block string) []diagnostics.Diagnostic {
 		message = "the attempt of the block " + block + " could not record its start, so it performed no effect"
 	}
 	return diagnostics.Of(failure("runtime.internal", message, ""))
+}
+
+func (c *scheduler) warn(finished step) {
+	if finished.position < 1 || finished.position > len(c.plan.Blocks) {
+		return
+	}
+	block := c.plan.Blocks[finished.position-1]
+	for _, warning := range finished.warnings {
+		if reported, ok := adapterWarning(c.plan, block, warning); ok {
+			c.warned = append(c.warned, positionedWarning{position: finished.position, diagnostic: reported})
+		}
+	}
 }

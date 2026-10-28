@@ -3,7 +3,9 @@ package adapterprotocol
 import (
 	"encoding/json"
 	"os"
+	"regexp"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
 )
@@ -346,4 +348,93 @@ func TestNativeErrorBoundsDecodedUTF8AndRefusesControls(t *testing.T) {
 		refuses(t, Lifecycle, record(value, `"selected"`), record(`"cause"`, value))
 	}
 	accepts(t, Lifecycle, record(`"literal \\ud800"`, `"selected"`))
+}
+
+func TestWarningsAreBoundedRegisteredLifecycleCompletionData(t *testing.T) {
+	completion := func(warnings string) string {
+		return `{"evidence":{"ready":true},"outcome":"changed","phase":"completed","warnings":` + warnings + `}`
+	}
+	shadow := `{"code":"substrate.shadowed-route","message":"route 10.0.0.0/8 via 192.0.2.1 dev eth0 covers 10.20.0.0/24"}`
+	records := accepts(t, Lifecycle,
+		completion(`[`+shadow+`]`),
+		completion(`[{"code":"substrate.shadowed-route","message":"m","object":{"kind":"InfraProvider","name":"lab-host.example"}}]`),
+		completion(`[`+strings.TrimSuffix(strings.Repeat(shadow+",", MaxWarnings), ",")+`]`),
+		completion(`[{"code":"substrate.shadowed-route","message":"`+strings.Repeat("x", MaxWarningMessage)+`"}]`),
+	)
+	if len(records) != 4 || len(records[0].Warnings) != 1 || records[0].Warnings[0].Code != "substrate.shadowed-route" ||
+		records[0].Warnings[0].Message != "route 10.0.0.0/8 via 192.0.2.1 dev eth0 covers 10.20.0.0/24" || records[0].Warnings[0].Object != nil ||
+		records[1].Warnings[0].Object == nil || *records[1].Warnings[0].Object != (WarningObject{Kind: "InfraProvider", Name: "lab-host.example"}) ||
+		len(records[2].Warnings) != MaxWarnings {
+		t.Fatalf("records = %+v", records)
+	}
+	refuses(t, Controller, completion(`[`+shadow+`]`))
+	refuses(t, Lifecycle,
+		`{"phase":"loaded","warnings":[`+shadow+`]}`,
+		`{"phase":"refused","reason":"remote-refusal","warnings":[`+shadow+`]}`,
+		completion(`[]`),
+		completion(`null`),
+		completion(shadow),
+		completion(`[null]`),
+		completion(`["substrate.shadowed-route"]`),
+		completion(`[`+strings.TrimSuffix(strings.Repeat(shadow+",", MaxWarnings+1), ",")+`]`),
+		completion(`[{"code":"substrate.unregistered","message":"m"}]`),
+		completion(`[{"code":"SUBSTRATE.SHADOWED-ROUTE","message":"m"}]`),
+		completion(`[{"code":"substrate.shadowed-route"}]`),
+		completion(`[{"message":"m"}]`),
+		completion(`[{"code":"substrate.shadowed-route","message":""}]`),
+		completion(`[{"code":"substrate.shadowed-route","message":"   "}]`),
+		completion(`[{"code":"substrate.shadowed-route","message":1}]`),
+		completion(`[{"code":"substrate.shadowed-route","message":"`+strings.Repeat("x", MaxWarningMessage+1)+`"}]`),
+		completion(`[{"code":"substrate.shadowed-route","message":"line\nnext"}]`),
+		completion(`[{"code":"substrate.shadowed-route","message":"\u001b[31m"}]`),
+		completion(`[{"code":"substrate.shadowed-route","message":"café"}]`),
+		completion(`[{"code":"substrate.shadowed-route","message":"m","remedy":"r"}]`),
+		completion(`[{"code":"substrate.shadowed-route","message":"m","object":null}]`),
+		completion(`[{"code":"substrate.shadowed-route","message":"m","object":{"kind":"InfraProvider"}}]`),
+		completion(`[{"code":"substrate.shadowed-route","message":"m","object":{"kind":"infraProvider","name":"lab"}}]`),
+		completion(`[{"code":"substrate.shadowed-route","message":"m","object":{"kind":"InfraProvider","name":"Lab"}}]`),
+		completion(`[{"code":"substrate.shadowed-route","message":"m","object":{"kind":"InfraProvider","name":"-lab"}}]`),
+		completion(`[{"code":"substrate.shadowed-route","message":"m","object":{"kind":"InfraProvider","name":"`+strings.Repeat("a", 254)+`"}}]`),
+		completion(`[{"code":"substrate.shadowed-route","message":"m","object":{"kind":"InfraProvider","name":"lab","uid":"x"}}]`),
+		completion(`[{"message":"m","code":"substrate.shadowed-route"}]`),
+	)
+	if got := WarningCodes(); !slices.Equal(got, []string{"substrate.shadowed-route"}) {
+		t.Fatalf("registered warning codes = %v", got)
+	}
+}
+
+const pythonDispatch = "../../ansible/collections/ansible_collections/bootwright/core/plugins/module_utils/adapter_protocol.py"
+
+// The collection's dispatch clips warnings to exactly what this decoder
+// admits, so a valid warning is never refused here and an invalid one is
+// dropped there first.
+func TestThePythonDispatchBoundsWarningsAsTheDecoderDoes(t *testing.T) {
+	data, err := os.ReadFile(pythonDispatch)
+	if err != nil {
+		t.Fatal(err)
+	}
+	source := string(data)
+	constant := func(name string) string {
+		match := regexp.MustCompile(`(?m)^` + name + ` = (.+)$`).FindStringSubmatch(source)
+		if match == nil {
+			t.Fatalf("%s declares no %s", pythonDispatch, name)
+		}
+		return match[1]
+	}
+	for name, want := range map[string]int{"MAX_WARNINGS": MaxWarnings, "MAX_WARNING_MESSAGE": MaxWarningMessage,
+		"MAX_WARNING_KIND": maxWarningKind, "MAX_WARNING_NAME": maxWarningName, "MAX_LINE": MaxLine} {
+		if got := constant(name); got != strconv.Itoa(want) {
+			t.Errorf("%s = %s in the dispatch, %d in the decoder", name, got, want)
+		}
+	}
+	var codes []string
+	for _, quoted := range regexp.MustCompile(`"([^"]+)"`).FindAllStringSubmatch(constant("WARNING_CODES"), -1) {
+		codes = append(codes, quoted[1])
+	}
+	if !slices.Equal(codes, warningCodes) {
+		t.Errorf("WARNING_CODES = %q in the dispatch, %q in the decoder", codes, warningCodes)
+	}
+	if got := constant("NAME"); got != `frozenset("abcdefghijklmnopqrstuvwxyz0123456789-.")` {
+		t.Errorf("the dispatch's object name alphabet is %s", got)
+	}
 }

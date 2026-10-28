@@ -7,7 +7,9 @@ import (
 	"path"
 	"slices"
 	"strconv"
+	"sync"
 
+	api "github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/controller"
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
 	"github.com/crmarques/bootwright/internal/diagnostics"
@@ -34,7 +36,7 @@ func recordingContext(ctx context.Context) context.Context { return context.With
 // that cannot start returns no state and the block keeps the one it had: a
 // pending block stays pending and a failed one it would have retried stays
 // failed, exactly as their records still say.
-func (s Service) attempt(ctx context.Context, tx Transaction, store OperationStore, approved approved, boundary *logBoundary, operation operationstore.Operation, plan reconciliation.Plan, block reconciliation.Block, material map[string]secrets.Material, position, total int) (reconciliation.BlockState, error) {
+func (s Service) attempt(ctx context.Context, tx Transaction, store OperationStore, approved approved, boundary *logBoundary, operation operationstore.Operation, plan reconciliation.Plan, block reconciliation.Block, material map[string]secrets.Material, position, total int, warn func([]operationstore.Warning)) (reconciliation.BlockState, error) {
 	capability, ok := s.capabilities.Resolve(block.Kind, block.Implementation)
 	if !ok {
 		return "", failure("lifecycle.state",
@@ -86,6 +88,7 @@ func (s Service) attempt(ctx context.Context, tx Transaction, store OperationSto
 	}
 	defer boundary.close(ctx, log)
 	s.report(ctx, ProgressEvent{Block: block.ID, Description: block.Description, Status: "running", Position: position, Total: total})
+	warnings := &warningCollector{}
 	result, runErr := s.invoke(ctx, tx, store, approved, boundary, operation, plan, block, material, proved, applyProved, preparations, log, number, 0, position, total, func(inner context.Context, execution Execution) (Result, error) {
 		if operation.Verb == reconciliation.Destroy {
 			execution.RetiredWithHosts = s.onlineRemoval(plan).retired[block.ID]
@@ -97,8 +100,10 @@ func (s Service) attempt(ctx context.Context, tx Transaction, store OperationSto
 			if err := s.keepBeforeRemoval(inner, tx, boundary, log, capability, execution); err != nil {
 				return Result{Outcome: reconciliation.OutcomeFailed}, err
 			}
+			execution.Warn = warnings.collect
 			return capability.Destroy(inner, execution)
 		}
+		execution.Warn = warnings.collect
 		return capability.Apply(inner, execution)
 	})
 	runErr = stageReading(runErr, block, operation.Verb, tx.Identity().Name)
@@ -121,8 +126,12 @@ func (s Service) attempt(ctx context.Context, tx Transaction, store OperationSto
 	if err != nil {
 		return reconciliation.BlockUnknown, err
 	}
-	if err := store.CompleteAttempt(recording, operation.ID, block.ID, number, outcome, effect, state, result.Evidence); err != nil {
+	warned := warnings.reported()
+	if err := store.CompleteAttempt(recording, operation.ID, block.ID, number, outcome, effect, state, result.Evidence, warned...); err != nil {
 		return reconciliation.BlockUnknown, err
+	}
+	if warn != nil && len(warned) != 0 {
+		warn(warned)
 	}
 	s.report(ctx, ProgressEvent{Block: block.ID, Description: block.Description, Status: string(state), Position: position, Total: total})
 	return state, runErr
@@ -794,4 +803,38 @@ func rereadBeforeRemoval(ctx context.Context, capability Capability, execution E
 		err = failure("lifecycle.state", "the retried removal read its target again and still could not tell its postcondition, so it performed no effect", "")
 	}
 	return Result{Outcome: reconciliation.OutcomeUnknown}, true, err
+}
+
+type warningCollector struct {
+	mutex  sync.Mutex
+	warned []operationstore.Warning
+}
+
+func (c *warningCollector) collect(_ context.Context, warnings []operationstore.Warning) {
+	c.mutex.Lock()
+	defer c.mutex.Unlock()
+	c.warned = append(c.warned, warnings[:min(len(warnings), operationstore.MaxWarnings-len(c.warned))]...)
+}
+
+func (c *warningCollector) reported() []operationstore.Warning {
+	c.mutex.Lock()
+	defer c.mutex.Unlock()
+	return slices.Clone(c.warned)
+}
+
+func adapterWarning(plan reconciliation.Plan, block reconciliation.Block, warning operationstore.Warning) (diagnostics.Diagnostic, bool) {
+	reported := diagnostics.Diagnostic{Severity: "warning", Message: warning.Message,
+		Object: &diagnostics.ObjectIdentity{APIVersion: api.APIVersion, Kind: block.Kind, Name: block.Object}}
+	switch warning.Code {
+	case "substrate.shadowed-route":
+		reported.Code = "substrate.shadowed-route"
+	default:
+		return diagnostics.Diagnostic{}, false
+	}
+	if named := warning.Object; named != nil && slices.ContainsFunc(plan.Blocks, func(planned reconciliation.Block) bool {
+		return planned.Kind == named.Kind && planned.Object == named.Name
+	}) {
+		reported.Object = &diagnostics.ObjectIdentity{APIVersion: api.APIVersion, Kind: warning.Object.Kind, Name: warning.Object.Name}
+	}
+	return reported, true
 }

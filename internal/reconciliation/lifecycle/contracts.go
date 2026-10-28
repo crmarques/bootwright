@@ -452,7 +452,7 @@ type OperationStore interface {
 	AdmitAttempt(context.Context, operationstore.Operation, reconciliation.Plan, string, bool) (func(), error)
 	StartAttempt(context.Context, string, string, operationstore.Build) (int, error)
 	RecordPreparation(context.Context, string, string, int, json.RawMessage) error
-	CompleteAttempt(context.Context, string, string, int, reconciliation.Outcome, reconciliation.EffectState, reconciliation.BlockState, json.RawMessage) error
+	CompleteAttempt(context.Context, string, string, int, reconciliation.Outcome, reconciliation.EffectState, reconciliation.BlockState, json.RawMessage, ...operationstore.Warning) error
 	LastAttempt(context.Context, string, string) (int, error)
 	StartResolution(context.Context, string, string, int, operationstore.Build) (int, error)
 	LastResolution(context.Context, string, string, int) (operationstore.Attempt, bool, error)
@@ -596,6 +596,7 @@ type Execution struct {
 	Stage    *ControllerStage
 	Log      func(context.Context, operationstore.LogRecord) error
 	Progress func(context.Context, string, string)
+	Warn     func(context.Context, []operationstore.Warning)
 	// Output retains what the adapter prints on its own standard output and
 	// error, for an operator to read when no structured event explains what a
 	// run did. An adapter hands it the process's streams and writes nothing

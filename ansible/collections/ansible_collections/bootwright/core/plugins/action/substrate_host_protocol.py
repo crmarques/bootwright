@@ -274,10 +274,25 @@ def concluded(arguments):
     return evidence, unreached("the provider host", verb, unmet)
 
 
+def shadowed(arguments):
+    """Each broader host route a managed network takes over, as a warning.
+
+    Only an apply reports them: the apply admits such a route and says so, and
+    a removal or observation has nothing to warn of.
+    """
+    if arguments.get("removed") or arguments.get("observed"):
+        return []
+    shadows = arguments.get("shadows")
+    if not isinstance(shadows, list):
+        return []
+    return [{"code": "substrate.shadowed-route", "message": shadow} for shadow in shadows if isinstance(shadow, str)]
+
+
 CAPABILITY = adapter_protocol.Capability(
     "provider host",
     "the provider host capability result could not be published",
     concluded,
+    warnings=shadowed,
 )
 
 

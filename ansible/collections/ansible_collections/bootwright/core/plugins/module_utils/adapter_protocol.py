@@ -25,6 +25,20 @@ HEX = frozenset("0123456789abcdef")
 # A refusal detail names a closed cause or a code site, never a value.
 DETAIL = frozenset("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_.:@-")
 MAX_DETAIL = 160
+# A completed record's warnings, bounded as the Go decoder admits them
+# (internal/adapterprotocol): registered codes only, at most MAX_WARNINGS,
+# each message printable ASCII of at most MAX_WARNING_MESSAGE bytes and an
+# optional object of a kind and a name. The dispatch drops or clips anything
+# else rather than failing the completion a warning only advises on.
+WARNING_CODES = ("substrate.shadowed-route",)
+MAX_WARNINGS = 16
+MAX_WARNING_MESSAGE = 1024
+MAX_WARNING_KIND = 63
+MAX_WARNING_NAME = 253
+NAME = frozenset("abcdefghijklmnopqrstuvwxyz0123456789-.")
+KIND = frozenset("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789")
+TRUNCATED = "..."
+MAX_LINE = 65536
 
 
 def request_digest(value):
@@ -63,11 +77,13 @@ class Capability:
     for one it refuses. An exception of a `passthrough` type fails the run with
     its own message, which names a cause the generic one would hide.
     `preparation` takes the arguments and returns the before-state a prepared
-    phase publishes, or raises ValueError for one it refuses.
+    phase publishes, or raises ValueError for one it refuses. `warnings` takes
+    a completion's arguments and returns the advisories its record carries,
+    each a mapping of `code`, `message` and optionally `object`.
     """
 
     def __init__(self, name, unpublished, completion, phases=PHASES, refusals=(), passthrough=(), detail=False, native_error=False,
-                 preparation=None):
+                 preparation=None, warnings=None):
         self.name = name
         self.unpublished = unpublished
         self.completion = completion
@@ -77,6 +93,7 @@ class Capability:
         self.detail = detail
         self.native_error = native_error
         self.preparation = preparation
+        self.warnings = warnings
 
 
 def refusal(arguments, refusals):
@@ -86,6 +103,81 @@ def refusal(arguments, refusals):
     if reason not in refusals:
         raise ValueError("refusal reason")
     return reason
+
+
+def clipped(message):
+    """A warning message as the record carries it, or None: printable ASCII, bounded, a cut marked."""
+    if not isinstance(message, str):
+        return None
+    text = "".join(character if " " <= character <= "~" else "?" for character in message).strip()
+    if len(text) > MAX_WARNING_MESSAGE:
+        text = text[:MAX_WARNING_MESSAGE - len(TRUNCATED)] + TRUNCATED
+    return text or None
+
+
+def kind_name(value):
+    return (isinstance(value, str) and 0 < len(value) <= MAX_WARNING_KIND and "A" <= value[0] <= "Z"
+            and not set(value) - KIND)
+
+
+def object_name(value):
+    return (isinstance(value, str) and 0 < len(value) <= MAX_WARNING_NAME and value[0] not in "-." and value[-1] not in "-."
+            and not set(value) - NAME)
+
+
+def warning(entry):
+    """One warning in the record's shape, or None for one the Go decoder would refuse."""
+    if not isinstance(entry, dict) or set(entry) - {"code", "message", "object"} or entry.get("code") not in WARNING_CODES:
+        return None
+    message = clipped(entry.get("message"))
+    if message is None:
+        return None
+    record = {"code": entry["code"], "message": message}
+    if "object" in entry:
+        named = entry["object"]
+        if not isinstance(named, dict) or set(named) != {"kind", "name"} or not kind_name(named["kind"]) or not object_name(named["name"]):
+            return None
+        record["object"] = {"kind": named["kind"], "name": named["name"]}
+    return record
+
+
+def counted(kept, dropped):
+    """Mark the last kept warning with how many were not reported."""
+    if dropped and kept:
+        suffix = " (%d more not reported)" % dropped
+        last = kept[-1]
+        last["message"] = last["message"][:MAX_WARNING_MESSAGE - len(suffix)] + suffix
+    return kept
+
+
+def warnings_of(arguments, capability):
+    """The warnings a completion reports: valid ones only, at most MAX_WARNINGS.
+
+    A warning only advises, so it never fails the completion it rides on: a
+    callable that raises or answers anything but a list yields none, and an
+    entry the Go decoder would refuse is dropped and counted.
+    """
+    if capability.warnings is None:
+        return []
+    try:
+        entries = capability.warnings(arguments)
+    except Exception:  # pylint: disable=broad-exception-caught
+        return []
+    if not isinstance(entries, list):
+        return []
+    valid = [record for record in (warning(entry) for entry in entries) if record is not None]
+    return counted(valid[:MAX_WARNINGS], len(entries) - min(len(valid), MAX_WARNINGS))
+
+
+def completed_record(outcome, evidence, reported):
+    """The completed record, carrying warnings only while its line stays within the channel's bound."""
+    record = {"phase": "completed", "outcome": outcome, "evidence": evidence}
+    if reported:
+        from ansible_collections.bootwright.core.plugins.module_utils.canonical_json import canonical
+        warned = dict(record, warnings=reported)
+        if len(canonical(warned)) + 1 <= MAX_LINE:
+            return warned
+    return record
 
 
 def handed(arguments, capability, emit):
@@ -126,7 +218,7 @@ def handed(arguments, capability, emit):
     evidence, failure = capability.completion(arguments)
     if failure is not None:
         return {"failed": True, "msg": failure}
-    emit({"phase": "completed", "outcome": outcome, "evidence": evidence})
+    emit(completed_record(outcome, evidence, warnings_of(arguments, capability)))
     return {"changed": False}
 
 

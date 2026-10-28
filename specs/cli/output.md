@@ -820,6 +820,16 @@ leaves out, and an `Unresolved <block>` section follows it for each block that
 carries `unresolved`, with its
 `Reason` and `Remedy`.
 
+An `apply` or `destroy` reports each warning its attempts' adapters returned
+with a completed result ([adapter warnings](../architecture.md#the-adapter-result-protocol))
+once per attempt as `warning` diagnostics, in the
+[diagnostic order](#diagnostic-taxonomy-and-order) beside any error: on
+standard error with the human result, or in the envelope's `diagnostics`,
+whether or not the operation completed. `status` reports those the latest
+attempt of each block recorded the same way, on standard error in text and in
+its envelope's `diagnostics` in JSON. A warning
+never changes a block's state, the result or the exit status.
+
 ### Diff results
 
 `diff` returns the comparison as one object whose fields are in this order, each
@@ -939,6 +949,7 @@ it to a variable.
 | `lifecycle.lease` | The context root lock or mutation lease cannot be safely acquired or recovered. |
 | `lifecycle.unknown` | A frozen block has an unresolved unknown effect outcome. |
 | `lifecycle.live` | A removal would take back state that is still in use, and refuses before registering. |
+| `substrate.shadowed-route` | A warning an adapter reported with its completed result: a libvirt host apply admitted a main-table route through a gateway that is broader than a managed network's prefix, whose hosts inside that prefix the network's connected route now takes over; it names the route, gateway, device, prefix and attachment, about the provider's InfraProvider. Never a refusal, and it changes no block's state. |
 | `lifecycle.surviving-consumer` | Informational: a `plan` of an apply names a consumer whose cluster would outlive a destroy of the context while consuming an effect that destroy retires, so that destroy refuses with `lifecycle.live`. Never a refusal. |
 | `lifecycle.adapter-running` | An adapter of the same context, or one whose record names no context, still holds its job lock, so no adapter of that context starts until it ends. |
 | `trust.identity` | SSH identity is missing, changed, contradictory, or not authorized. |

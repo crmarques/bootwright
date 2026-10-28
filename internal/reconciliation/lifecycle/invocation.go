@@ -86,6 +86,7 @@ type RunRequest struct {
 	Material       map[string]secrets.Material
 	Log            func(context.Context, operationstore.LogRecord) error
 	Progress       func(context.Context, string, string)
+	Warn           func(context.Context, []operationstore.Warning)
 	// Output receives the adapter process's own standard output and error.
 	Output prerequisites.RunOutput
 	// OutputRemediation is what a failure that output explains tells an
@@ -193,6 +194,7 @@ func RunFor(execution Execution, invocation Invocation) RunRequest {
 		Material:          lend(execution.Material, materials),
 		Log:               execution.Log,
 		Progress:          execution.Progress,
+		Warn:              execution.Warn,
 		Output:            execution.Output,
 		OutputRemediation: attemptOutputRemediation(execution),
 		Refusals:          maps.Clone(invocation.Refusals),

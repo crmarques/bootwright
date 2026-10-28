@@ -1574,6 +1574,71 @@ func TestPreparationIsPublishedOnceBeforeTheEffect(t *testing.T) {
 	}
 }
 
+// An attempt's completion carries its adapter's warnings in the same write as
+// its outcome. Warnings that would not hold or fit are left out, and the
+// outcome is recorded all the same; a resolution's record never carries any.
+func TestACompletionCarriesItsWarningsOrRecordsItsOutcomeWithoutThem(t *testing.T) {
+	ctx := context.Background()
+	store, _ := newStore(t)
+	many := make([]Warning, MaxWarnings+1)
+	shadow := Warning{Code: "substrate.shadowed-route", Message: "route 10.0.0.0/8 via 192.0.2.1 covers 10.20.0.0/24"}
+	for index := range many {
+		many[index] = shadow
+	}
+	evidence := json.RawMessage(`{"postcondition":true}`)
+	padded := json.RawMessage(`{"padding":"` + strings.Repeat("x", MaxAttemptBytes-2048) + `","postcondition":true}`)
+	big := make([]Warning, MaxWarnings)
+	for index := range big {
+		big[index] = Warning{Code: shadow.Code, Message: strings.Repeat("y", MaxWarningMessage)}
+	}
+	rows := []struct {
+		block    string
+		evidence json.RawMessage
+		warnings []Warning
+		kept     bool
+	}{
+		{"kept", evidence, []Warning{shadow, {Code: shadow.Code, Message: "m", Object: &WarningObject{Kind: "InfraProvider", Name: "lab"}}}, true},
+		{"too-many", evidence, many, false},
+		{"empty-message", evidence, []Warning{{Code: shadow.Code}}, false},
+		{"control", evidence, []Warning{{Code: shadow.Code, Message: "line\nnext"}}, false},
+		{"half-object", evidence, []Warning{{Code: shadow.Code, Message: "m", Object: &WarningObject{Kind: "InfraProvider"}}}, false},
+		{"oversized", padded, big, false},
+	}
+	var blocks []string
+	for _, row := range rows {
+		blocks = append(blocks, row.block)
+	}
+	plan := testPlan(t, blocks...)
+	operation := testOperation(t, plan)
+	if _, err := store.Index(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.Register(ctx, operation, plan); err != nil {
+		t.Fatal(err)
+	}
+	for _, row := range rows {
+		if _, err := store.StartAttempt(ctx, operation.ID, row.block, testBuild); err != nil {
+			t.Fatal(err)
+		}
+		if err := store.CompleteAttempt(ctx, operation.ID, row.block, 1, reconciliation.OutcomeChanged, reconciliation.EffectCompleted, reconciliation.BlockDone, row.evidence, row.warnings...); err != nil {
+			t.Fatalf("%s: warnings cost the outcome its record: %v", row.block, err)
+		}
+		record, err := store.Attempt(ctx, operation.ID, row.block, 1)
+		if err != nil || record.Phase != "observed" || !bytes.Equal(record.Evidence, row.evidence) {
+			t.Fatalf("%s: attempt record = %+v (%v)", row.block, record, err)
+		}
+		if kept := len(record.Warnings) != 0; kept != row.kept || kept && !slices.EqualFunc(record.Warnings, row.warnings, func(a, b Warning) bool {
+			return a.Code == b.Code && a.Message == b.Message && (a.Object == nil) == (b.Object == nil)
+		}) {
+			t.Fatalf("%s: recorded warnings %+v", row.block, record.Warnings)
+		}
+	}
+	resolution := Attempt{Version: 1, Block: "kept", Number: 1, Resolution: 1, Phase: "running", Warnings: []Warning{shadow}, Started: "2026-01-01T00:00:00Z", Updated: "2026-01-01T00:00:00Z"}
+	if err := validateAttempt(resolution); err == nil {
+		t.Fatal("a resolution's record carried warnings")
+	}
+}
+
 // Publishing a before-state used to sync the record it had just replaced, and
 // because Sync resolves every component of its path as a directory the record's
 // own name refused the whole attempt. That failed the first apply of a zeroed

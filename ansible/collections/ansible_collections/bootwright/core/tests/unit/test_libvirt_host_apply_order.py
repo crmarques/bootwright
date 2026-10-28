@@ -183,7 +183,21 @@ def test_a_managed_network_that_collides_with_the_host_is_refused_before_any_def
     )
     warned = index_of(
         tasks, lambda task: "ansible.builtin.debug" in task and "shadows" in str(task.get("loop")),
-        "warns of a broader route a managed network takes over",
+        "writes a broader route a managed network takes over to the attempt output",
     )
     assert "when" not in tasks[warned] or "shadows" not in str(tasks[warned]["when"])
     assert running < observed < answered < collided < warned < effect
+
+
+# A broader route a managed network takes over is admitted and reported as a
+# warning of the run: the completion hands the shadows the host carried before
+# any network was defined.
+def test_shadowed_routes_reach_the_completion_as_warnings():
+    tasks = apply_tasks()
+    completed = index_of(
+        tasks,
+        lambda task: (task.get("bootwright.core.substrate_host_protocol") or {}).get("phase") == "completed",
+        "publishes its completion",
+    )
+    arguments = tasks[completed]["bootwright.core.substrate_host_protocol"]
+    assert arguments["shadows"] == "{{ substrate_libvirt_host_running.observation.shadows }}"

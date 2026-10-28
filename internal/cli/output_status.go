@@ -193,7 +193,7 @@ func writeLifecycleStatus(out io.Writer, result *lifecycle.StatusResult, jsonMod
 	if jsonMode {
 		return writeEnvelope(out, commandEnvelope{
 			SchemaVersion: "v1alpha1", Command: "status", OK: true, ExitCode: 0,
-			Result: displayStatus(result), Diagnostics: []diagnostic{}, Logs: []string{},
+			Result: displayStatus(result), Diagnostics: displayDiagnostics(result.Warnings), Logs: []string{},
 		})
 	}
 	var text display

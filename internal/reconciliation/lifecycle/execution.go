@@ -1308,7 +1308,8 @@ func (s Service) run(ctx context.Context, tx Transaction, decided transition, bi
 	if err != nil {
 		return result, err
 	}
-	boundary, cause := s.converge(work, tx, store, located, logging, operation, plan, states, material, decided.selection)
+	boundary, warned, cause := s.converge(work, tx, store, located, logging, operation, plan, states, material, decided.selection)
+	result.Warnings = warned
 	logging.close(ctx, log)
 	final, terminal := s.finish(recordingContext(ctx), tx, store, operation, plan, states, boundary, logging.faulted(), result)
 	return final, withCause(logging.err(), withCause(cause, terminal))

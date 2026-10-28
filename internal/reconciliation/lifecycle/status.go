@@ -255,7 +255,7 @@ func (s Service) status(ctx context.Context, view View) (*StatusResult, *api.Cat
 		summary.Logs = []string{}
 	}
 	result.Lifecycle = summary
-	result.LogLocation = store.LogDirectory(operation.ID)
+	result.Warnings, result.LogLocation = attemptWarnings(ctx, store, operation.ID, plan, attempts), store.LogDirectory(operation.ID)
 	if result.Secrets.Bindings, err = bindingsHeld(view, operation); err != nil {
 		return nil, nil, err
 	}
@@ -270,6 +270,25 @@ func (s Service) status(ctx context.Context, view View) (*StatusResult, *api.Cat
 		return nil, nil, err
 	}
 	return result, selected, nil
+}
+
+func attemptWarnings(ctx context.Context, store OperationStore, operation string, plan reconciliation.Plan, attempts map[string]int) []diagnostics.Diagnostic {
+	var warned []diagnostics.Diagnostic
+	for _, block := range plan.Blocks {
+		if attempts[block.ID] < 1 {
+			continue
+		}
+		record, err := store.Attempt(ctx, operation, block.ID, attempts[block.ID])
+		if err != nil {
+			continue
+		}
+		for _, warning := range record.Warnings {
+			if reported, ok := adapterWarning(plan, block, warning); ok {
+				warned = append(warned, reported)
+			}
+		}
+	}
+	return warned
 }
 
 // bindingsHeld counts the Secret bindings the current operation's record

@@ -268,13 +268,13 @@ Alias cell.
 | [B799](#b799) | new, 2026-10-23 (M3 verification) | defect | Workspace | Setup interruption retries identify any remaining setup-lock holder | Pre-existing intermittent refusal; its cause is unproved |
 | [B857](#b857) | new, 2026-10-27 (lane I) | enabling | Desired state | The audit 5.7 operator tasks run on the reshaped API | B814's paper check was not run before X171 |
 | [B858](#b858) | new, 2026-10-27 (lane T) | product | CLI | `preflight infra`, `preflight all` and `render` with a path flag are defined and run | D188 ran `preflight clusters` as the union of two existing checks; these have no definition |
-| [B864](#b864) | new, 2026-10-27 (lane S) | product | State reconciliation | An adapter's warning reaches the run's diagnostics | B843's shadowed-route warning reaches only the attempt output |
 | [B868](#b868) | new, 2026-10-27 (lane P) | safety | Infrastructure services | A controller reached by an undeclared address conflicts with its own claims | D188's host-key form does not cover the controller's unqualified keys |
 | [B869](#b869) | new, 2026-10-27 (lane P) | defect | Machine | The SSH arm parses the pinned known-hosts entry before it connects | Pre-existing defect found by lane P |
 | [B867](#b867) | new, 2026-10-27 (lane R review) | safety | Storage | The Ceph incarnation rule is confirmed on a live cluster | The monitor map's creation time was chosen without a live run |
 | [B870](#b870) | new, 2026-10-27 (lane Q2) | enabling | Controller setup | A held cluster-media claim records its API kind | The one family kind left in the controller prerequisites |
 | [B872](#b872) | new, 2026-10-28 (lane V1) | defect | Storage | An NVMe-oF service with no pool refuses at plan | Pre-existing gap found by lane V1 |
 | [B873](#b873) | new, 2026-10-28 (lane V1) | defect | Storage | The plan builder's replica refusal names no distribution | Pre-existing wording found by lane V1 |
+| [B874](#b874) | new, 2026-10-28 (lane W2) | defect | Verification tooling | The Ceph native worker launcher test is stable in parallel | Flake seen by lane W2 |
 
 ### B82
 
@@ -2960,18 +2960,6 @@ with its refusals, diagnostics and goldens. **Exit evidence:** the three
 removed from the unavailable list and `wireStubs`, the report contracts in
 [cli/output.md](../cli/output.md), and the tests.
 
-### B864
-
-**Owner:** State reconciliation. **Kind:** product. **Requires:** none.
-**Definition:** Needs definition. D188 admits a broader gateway route over a
-libvirt managed prefix with a warning, but adapters have no channel into a
-run's diagnostics: adapter records have exact member sets and lifecycle
-warnings come from Go at plan time, so the warning reaches only the retained
-attempt output (lane S, 2026-10-27). **Outcome:** an adapter reports a
-warning that the run's human and structured output carry, with its code
-registered (for example `substrate.shadowed-route`). **Exit evidence:** a run
-golden carrying the warning.
-
 ### B868
 
 **Owner:** Infrastructure services. **Kind:** safety. **Requires:** none.
@@ -3033,6 +3021,15 @@ Specified. The plan builder's replica refusal in
 `internal/storage/ceph/resources.go` reads "IBM replication size", but D188
 applies the rule to every distribution. **Outcome:** the message names no
 distribution. **Exit evidence:** the refusal test pins the new text.
+
+### B874
+
+**Owner:** Verification tooling. **Kind:** defect. **Requires:** none.
+**Definition:** Specified.
+`test_ceph_native_worker.py::test_clean_supervisor_preserves_redacted_native_failure_through_each_launcher`
+failed in a parallel units run and passed serially (lane W2, 2026-10-28).
+**Outcome:** the test is deterministic under the parallel units run. **Exit
+evidence:** repeated parallel runs pass.
 
 ## Audit remediation (2026-10-26)
 
@@ -3105,7 +3102,7 @@ also updates this table.
 | 26 | V2 Test and CLI defects (B862, B863, B865, B866) | merged (X186) |
 | 27 | V3 Known-hosts and claim kinds (B869, B870, B871, B868) | not started |
 | 28 | W1 Preflight infra and all, render to a path (B858) | not started |
-| 29 | W2 Adapter warnings (B864) | not started |
+| 29 | W2 Adapter warnings (B864) | merged (X187) |
 
 To continue, take the first row not `merged`. If its branch exists, resume it:
 each finished item is a `wip` commit whose body names what remains, and the
@@ -5102,3 +5099,17 @@ park in one definition item ([B825](delivered.md#x177--audit-lane-t-inherited-fl
 its scratch under root-owned `/var/lib/bootwright-staging/runs` on the
 controller and SSH hosts, and the job directory and bound Secret files stay
 under `/run` ([B389](delivered.md#x176--audit-lane-o-store-bounds-and-run-scratch)).
+
+### D189
+
+**owner** (2026-10-28, the owner's answers while implementing the follow-up
+items): `preflight infra` runs the controller check and the
+infrastructure-services checks, `preflight all` runs controller,
+infrastructure and clusters as one report, and `render` with a path flag
+writes its output there ([B858](#b858)). An adapter reports warnings in an
+optional `warnings` member of its lifecycle result, carried into the run's
+diagnostics with registered codes ([B864](delivered.md#x187--audit-lane-w2-adapter-warnings)). A placement whose pinned
+host key is one of the controller's own sshd host keys, read from `/etc/ssh`,
+must use an address the controller Machine declares ([B868](#b868)). No
+operation registered by an earlier build is live, so the one-entry
+known-hosts rule holds for every run with no compatibility path.

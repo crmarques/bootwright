@@ -441,11 +441,18 @@ it through the acknowledged `prepared` record of
 [the adapter result protocol](architecture.md#the-adapter-result-protocol): its
 capability validates it, the runner records it, and only then is the adapter
 acknowledged, and only an apply's own attempt may. A resolution observation
-publishes none, because an observation authorizes no effect.
+publishes none, because an observation authorizes no effect. An attempt's
+record may also carry `warnings`, the bounded advisories its adapter's
+completed result reported, each a `code`, `message` and optional `object` of
+`kind` and `name`; they are written in the same write as its outcome, left out
+when they would not hold or fit the record's bound, and never on a
+resolution's record. They are presentation:
+the run reports them once and `status` reports the latest attempt's, and
+neither moves the attempt's outcome or its block's state.
 [The output contract](cli/output.md#private-operation-logs) owns the `logs/`
 tree.
 
-`replaces`, `failure` and `build` are optional members: each was added without
+`replaces`, `failure`, `warnings` and `build` are optional members: each was added without
 moving its record's version, because a record that omits one means what a
 record written before it meant. A member whose omission would mean anything
 else moves its record's version. An optional member is compatible one way only:

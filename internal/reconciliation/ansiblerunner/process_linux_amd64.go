@@ -399,6 +399,18 @@ func refusalNative(named error, native *adapterprotocol.NativeError) error {
 	return &diagnostics.Failure{Diagnostics: found, Usage: diagnostics.IsUsage(named)}
 }
 
+func warnings(reported []adapterprotocol.Warning) []operationstore.Warning {
+	recorded := make([]operationstore.Warning, 0, len(reported))
+	for _, warning := range reported {
+		entry := operationstore.Warning{Code: warning.Code, Message: warning.Message}
+		if warning.Object != nil {
+			entry.Object = &operationstore.WarningObject{Kind: warning.Object.Kind, Name: warning.Object.Name}
+		}
+		recorded = append(recorded, entry)
+	}
+	return recorded
+}
+
 func (j *lifecycleJudge) Spare() bool { return false }
 
 // Acknowledged records nothing: a lifecycle acknowledgement authorizes no
@@ -411,6 +423,9 @@ func (j *lifecycleJudge) result(ctx context.Context, ending adapterprotocol.Endi
 	remediation := j.request.OutputRemediation
 	switch ending.Kind {
 	case adapterprotocol.Completed:
+		if j.request.Warn != nil && len(ending.Warnings) != 0 {
+			j.request.Warn(ctx, warnings(ending.Warnings))
+		}
 		return lifecycle.RunResult{Outcome: ending.Outcome, Evidence: slices.Clone(ending.Evidence)}, nil
 	case adapterprotocol.Canceled:
 		return lifecycle.RunResult{}, ctx.Err()

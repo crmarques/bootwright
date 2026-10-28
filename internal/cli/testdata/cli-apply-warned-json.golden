@@ -1,0 +1,72 @@
+{
+  "schemaVersion": "v1alpha1",
+  "command": "apply",
+  "ok": true,
+  "exitCode": 0,
+  "result": {
+    "context": {
+      "name": "lab",
+      "mode": ""
+    },
+    "verb": "apply",
+    "steps": [],
+    "blocks": [
+      {
+        "id": "artifact-server-lab-artifacts",
+        "description": "serve artifacts for lab-artifacts on controller",
+        "stage": "infrastructure-services",
+        "state": "done",
+        "outcome": "",
+        "attempts": 0
+      },
+      {
+        "id": "substrate-host-lab-libvirt",
+        "description": "realize the libvirt host of lab-libvirt on controller",
+        "stage": "substrates",
+        "state": "done",
+        "outcome": "",
+        "attempts": 0
+      },
+      {
+        "id": "machine-rhel-01",
+        "description": "realize the virtual machine rhel-01 and its emulated BMC",
+        "stage": "machines",
+        "state": "done",
+        "outcome": "",
+        "attempts": 0
+      },
+      {
+        "id": "os-install-rhel-01",
+        "description": "install the operating system of rhel-01",
+        "stage": "machines",
+        "state": "done",
+        "outcome": "",
+        "attempts": 0
+      }
+    ],
+    "settled": false,
+    "recovered": "",
+    "next": "",
+    "receipt": {
+      "operation": "op-6f1c2a9e0b7d4c3f8a5e2d1b0c9f8e7a",
+      "verb": "apply",
+      "state": "done",
+      "next": "none"
+    }
+  },
+  "diagnostics": [
+    {
+      "severity": "warning",
+      "code": "substrate.shadowed-route",
+      "message": "route 10.0.0.0/8 via 192.0.2.1 dev eth0 covers 10.20.0.0/24: the connected route of attachment lab wins by longest prefix, so the hosts of 10.20.0.0/24 are no longer reached through 192.0.2.1",
+      "object": {
+        "apiVersion": "bootwright.io/v1alpha1",
+        "kind": "InfraProvider",
+        "name": "lab-libvirt"
+      }
+    }
+  ],
+  "logs": [
+    "contexts/lab/state/operations/op-6f1c2a9e0b7d4c3f8a5e2d1b0c9f8e7a/logs/operation.jsonl"
+  ]
+}

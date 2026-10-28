@@ -188,9 +188,14 @@ or address as the field to change. A route of the main table that is broader
 than the managed prefix and names a gateway on every hop, a VPN `/8` covering
 it for one, is admitted with a warning: the managed network's connected route
 wins by longest prefix, so only that route's hosts inside the prefix stop being
-reached through the gateway. The apply writes the warning to the adapter's
-output before it defines anything; it names the route, its gateway and device,
-the prefix and the attachment, and is no evidence and changes no outcome. Such
+reached through the gateway. The apply reports each such route, as the host
+carried it before any network was defined, as a `substrate.shadowed-route`
+[adapter warning](architecture.md#the-adapter-result-protocol) of its completed
+result, which the run's diagnostics and `status` carry; it names the route, its
+gateway and device, the prefix and the attachment, and is no evidence and
+changes no outcome. The apply also writes each to the adapter's output before it
+defines anything, so one that does not complete, and so reports none, still
+shows it there. Such
 a route in any other table still refuses, because a policy rule, a strongSwan
 table 220 for one, can select that table before main and send the host's
 traffic for the prefix through the gateway; so does a multipath route with an

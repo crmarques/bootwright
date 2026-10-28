@@ -178,3 +178,86 @@ def test_a_digest_that_is_not_64_lowercase_hex_is_refused(value):
     with pytest.raises(ValueError, match="digest"):
         adapter_protocol.request_digest(value)
     assert adapter_protocol.request_digest(DIGEST) == DIGEST
+
+
+def warned(entries):
+    return adapter_protocol.Capability("widget", "the widget capability result could not be published", completion,
+                                       warnings=lambda arguments: entries)
+
+
+COMPLETED = {"phase": "completed", "outcome": "changed", "digest": DIGEST, "proved": True}
+SHADOW = "substrate.shadowed-route"
+
+
+def test_a_completion_carries_its_registered_warnings_clipped_and_marked():
+    assert "warnings" not in published(COMPLETED)[1][0][0]
+    assert "warnings" not in published(COMPLETED, warned([]))[1][0][0]
+    entries = [{"code": SHADOW, "message": "route via \u00e9th0\n"},
+               {"code": SHADOW, "message": "x" * 2000, "object": {"kind": "InfraProvider", "name": "lab"}}]
+    entries += [{"code": SHADOW, "message": "more"}] * 20
+    result, records = published(COMPLETED, warned(entries))
+    assert result == {"changed": False}
+    reported = records[0][0]["warnings"]
+    assert len(reported) == adapter_protocol.MAX_WARNINGS
+    assert reported[0] == {"code": SHADOW, "message": "route via ?th0?"}
+    assert reported[1] == {"code": SHADOW, "message": "x" * (adapter_protocol.MAX_WARNING_MESSAGE - 3) + "...",
+                           "object": {"kind": "InfraProvider", "name": "lab"}}
+    assert reported[-1]["message"] == "more (6 more not reported)"
+    assert all(len(entry["message"]) <= adapter_protocol.MAX_WARNING_MESSAGE for entry in reported)
+
+
+@pytest.mark.parametrize("entry", [
+    {"code": "substrate.unregistered", "message": "m"},
+    {"code": SHADOW, "message": ""},
+    {"code": SHADOW, "message": "   "},
+    {"code": SHADOW, "message": 1},
+    {"code": SHADOW, "message": "m", "remedy": "r"},
+    {"code": SHADOW, "message": "m", "object": {"kind": "InfraProvider"}},
+    {"code": SHADOW, "message": "m", "object": {"kind": "infraProvider", "name": "lab"}},
+    {"code": SHADOW, "message": "m", "object": {"kind": "Infra-Provider", "name": "lab"}},
+    {"code": SHADOW, "message": "m", "object": {"kind": "K" * 64, "name": "lab"}},
+    {"code": SHADOW, "message": "m", "object": {"kind": "InfraProvider", "name": "Lab"}},
+    {"code": SHADOW, "message": "m", "object": {"kind": "InfraProvider", "name": "-lab"}},
+    {"code": SHADOW, "message": "m", "object": {"kind": "InfraProvider", "name": "lab."}},
+    {"code": SHADOW, "message": "m", "object": {"kind": "InfraProvider", "name": "a" * 254}},
+    {"code": SHADOW, "message": "m", "object": None},
+    SHADOW,
+])
+def test_a_warning_the_decoder_would_refuse_is_dropped_and_the_completion_still_published(entry):
+    result, records = published(COMPLETED, warned([entry, {"code": SHADOW, "message": "kept"}]))
+    assert result == {"changed": False}
+    assert records[0][0]["warnings"] == [{"code": SHADOW, "message": "kept (1 more not reported)"}]
+    result, records = published(COMPLETED, warned([entry]))
+    assert result == {"changed": False} and "warnings" not in records[0][0]
+
+
+def test_the_widest_object_the_decoder_admits_is_carried():
+    named = {"kind": "K" * 63, "name": "a" * 253}
+    records = published(COMPLETED, warned([{"code": SHADOW, "message": "m", "object": named}]))[1]
+    assert records[0][0]["warnings"][0]["object"] == named
+
+
+def raising(arguments):
+    raise RuntimeError("the capability's warning builder failed")
+
+
+@pytest.mark.parametrize("builder", [raising, lambda arguments: None, lambda arguments: {"code": SHADOW, "message": "m"},
+                                     lambda arguments: "substrate.shadowed-route"])
+def test_a_warning_builder_that_fails_yields_no_warnings_and_never_fails_the_completion(builder):
+    capability = adapter_protocol.Capability("widget", "unpublished", completion, warnings=builder)
+    result, records = published(COMPLETED, capability)
+    assert result == {"changed": False}
+    assert records[0][0] == {"phase": "completed", "outcome": "changed", "evidence": evidence(COMPLETED)}
+
+
+def test_warnings_that_would_overflow_the_line_are_left_out():
+    big = {"padding": "x" * 60000}
+
+    def padded(arguments):
+        return dict(evidence(arguments), **big), None
+
+    capability = adapter_protocol.Capability("widget", "unpublished", padded,
+                                             warnings=lambda arguments: [{"code": SHADOW, "message": "y" * 1000}] * 16)
+    result, records = published(COMPLETED, capability)
+    assert result == {"changed": False}
+    assert "warnings" not in records[0][0] and records[0][0]["evidence"]["padding"] == big["padding"]

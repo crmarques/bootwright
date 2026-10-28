@@ -9281,6 +9281,29 @@ runs.
 `-race`, the inherited-scope tests, the erase identity tests and repeated
 parallel runs of the probe test; the delivering commit records the gates.
 
+### X187 — Audit lane W2: adapter warnings
+
+**Items:** B864.
+**Kind:** product. **Owners:** State reconciliation and Substrate. Delivered on
+2026-10-28 as lane W2 of the
+[audit remediation](backlog.md#lane-order-and-progress) under the owner's
+request to implement the remaining items, with D189's answer; the lane parked
+B874.
+
+An adapter's `completed` lifecycle record may carry an optional `warnings`
+list of registered codes with bounded printable messages and an optional
+object; the decoder refuses anything else, and the shared Python dispatch
+drops a warning the decoder would refuse, so a warning never fails a completed
+effect. The attempt records its warnings with its outcome, appended across the
+runs of one apply or destroy and capped at 16, and `apply`, `destroy` and
+`status` report them as warning diagnostics that never change an outcome, a
+state or an exit status. The libvirt host apply reports a broader gateway route
+over a managed prefix as `substrate.shadowed-route` (B843).
+
+**Guard tests:** the decoder, dispatch, Python-to-Go bound, attempt-record,
+aggregation and apply and status golden tests, each proved by a seeded
+mismatch; the delivering commit records the gates.
+
 ## M3 independent in-tree completion
 
 The owner's 2026-10-23 request (D181) delivers the independent implementation

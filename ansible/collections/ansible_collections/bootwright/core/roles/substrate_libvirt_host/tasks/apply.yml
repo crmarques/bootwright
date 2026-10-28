@@ -170,9 +170,9 @@
       {{ substrate_libvirt_host_running.observation.collisions | join('; ') }}
     quiet: true
 
-# A broader route through a gateway, a VPN /8 for one, is admitted: the managed
-# network's connected route wins by longest prefix and only the summary route's
-# hosts inside the prefix stop being reached through it. The apply says so.
+# A broader route through a gateway is admitted; the completion reports it as
+# a warning of the run. It is also written here, so an apply that fails before
+# its completion still shows it in the attempt output.
 - name: Warn of a broader host route whose hosts a managed network takes over
   ansible.builtin.debug:
     msg: 'warning: {{ item }}'
@@ -478,4 +478,10 @@
          else 'unchanged' }}
     digest: '{{ bootwright_substrate_host_digest }}'
     observation: '{{ substrate_libvirt_host_after.observation }}'
+    # A broader route through a gateway, a VPN /8 for one, is admitted: the
+    # managed network's connected route wins by longest prefix and only the
+    # summary route's hosts inside the prefix stop being reached through it.
+    # Each one the host carried before any network was defined is reported as
+    # a substrate.shadowed-route warning of the run.
+    shadows: '{{ substrate_libvirt_host_running.observation.shadows }}'
   no_log: true

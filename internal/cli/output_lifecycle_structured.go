@@ -2,6 +2,7 @@ package cli
 
 import (
 	"io"
+	"slices"
 
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
 )
@@ -122,5 +123,5 @@ func displayOperation(result *lifecycle.OperationResult) operationPresentation {
 }
 
 func writeStructuredOperation(out io.Writer, path string, operation *lifecycle.OperationResult, reported []diagnostic, exitCode int) error {
-	return writeStructuredResult(out, path, displayOperation(operation), reported, operation.Logs, exitCode)
+	return writeStructuredResult(out, path, displayOperation(operation), append(slices.Clone(operation.Warnings), reported...), operation.Logs, exitCode)
 }

@@ -624,3 +624,23 @@ def test_an_observation_takes_no_removed_argument(monkeypatch):
         assert result["failed"] is True
         assert result["msg"].endswith("result could not be published")
     assert published == []
+
+
+def test_a_provider_host_apply_reports_each_shadowed_route_as_a_warning():
+    records = []
+
+    def record(value, acknowledge=False):
+        records.append(value)
+
+    shadow = "route 10.0.0.0/8 via 192.0.2.1 dev eth0 covers 10.20.0.0/24: the connected route of attachment lab wins by longest prefix"
+    arguments = {"phase": "completed", "outcome": "changed", "digest": DIGEST, "observation": host_observation(), "shadows": [shadow]}
+    assert substrate_host_protocol.adapter_protocol.publish(arguments, substrate_host_protocol.CAPABILITY, record) == {"changed": False}
+    assert records[-1]["warnings"] == [{"code": "substrate.shadowed-route", "message": shadow}]
+    records.clear()
+    substrate_host_protocol.adapter_protocol.publish(dict(arguments, shadows=[shadow, 7, None]), substrate_host_protocol.CAPABILITY, record)
+    assert records[-1]["warnings"] == [{"code": "substrate.shadowed-route", "message": shadow}]
+    for unwarned in ({"shadows": []}, {"shadows": None}, {"shadows": "not a list"}, {"shadows": {"a": shadow}},
+                     {"observed": True, "shadows": [shadow]}):
+        records.clear()
+        substrate_host_protocol.adapter_protocol.publish(dict(arguments, **unwarned), substrate_host_protocol.CAPABILITY, record)
+        assert records and "warnings" not in records[-1]
