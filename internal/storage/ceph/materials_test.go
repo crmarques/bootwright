@@ -224,7 +224,7 @@ func TestHostTrustComesFromOriginalCompletedInstallation(t *testing.T) {
 	r := coreRequest()
 	h := r.Hosts[0]
 	h.HostKeyRef = ""
-	frozen := installation.Request{Version: "os-install-anaconda-v18", Address: h.Address, Identity: installation.Identity{Context: "original", Object: h.Machine, Profile: "profile"}}
+	frozen := installation.Request{Version: "os-install-anaconda-v19", Address: h.Address, Identity: installation.Identity{Context: "original", Object: h.Machine, Profile: "profile"}}
 	request, err := frozen.Canonical()
 	if err != nil {
 		t.Fatal(err)
@@ -233,7 +233,7 @@ func TestHostTrustComesFromOriginalCompletedInstallation(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	raw, _ := json.Marshal(installation.Evidence{Address: h.Address, HostKey: string(hostPublicKey()), Image: true, Marker: string(marker), Network: true, NetworkReboot: true, Postcondition: true, Power: "On", Reachable: true, Request: "digest"})
+	raw, _ := json.Marshal(installation.Evidence{Address: h.Address, HostKey: string(hostPublicKey()), Image: true, Marker: string(marker), Network: true, NetworkReboot: true, Postcondition: true, Power: "On", Reachable: true, Request: "digest", Update: installation.UpdateEvidence{State: "none"}})
 	proof := lifecycle.BlockEvidence{Kind: "Machine", Object: h.Machine, Implementation: installation.Implementation, Verb: reconciliation.Apply, State: reconciliation.BlockDone, Evidence: raw, Block: reconciliation.Block{BlockDefinition: reconciliation.BlockDefinition{Kind: "Machine", Object: h.Machine, Implementation: installation.Implementation, Request: request}, RequestDigest: "digest"}}
 	e := lifecycle.Execution{ApplyOperation: "original", Operation: "destroy", Context: "renamed", ApplyProved: []lifecycle.BlockEvidence{proof}}
 	if _, err := provedHostKey(h, e, dependencyProofs{}); err != nil {
@@ -258,7 +258,7 @@ func TestHostTrustComesFromOriginalCompletedInstallation(t *testing.T) {
 func TestProvedHostKeyRequiresConvergedNetwork(t *testing.T) {
 	h := coreRequest().Hosts[0]
 	h.HostKeyRef = ""
-	frozen := installation.Request{Version: "os-install-anaconda-v18", Address: h.Address, Identity: installation.Identity{Context: "original", Object: h.Machine, Profile: "profile"}}
+	frozen := installation.Request{Version: "os-install-anaconda-v19", Address: h.Address, Identity: installation.Identity{Context: "original", Object: h.Machine, Profile: "profile"}}
 	request, err := frozen.Canonical()
 	if err != nil {
 		t.Fatal(err)
@@ -268,7 +268,7 @@ func TestProvedHostKeyRequiresConvergedNetwork(t *testing.T) {
 		t.Fatal(err)
 	}
 	execution := func(network, reboot bool) lifecycle.Execution {
-		raw, _ := json.Marshal(installation.Evidence{Address: h.Address, HostKey: string(hostPublicKey()), Image: true, Marker: string(marker), Network: network, NetworkReboot: reboot, Postcondition: true, Power: "On", Reachable: true, Request: "digest"})
+		raw, _ := json.Marshal(installation.Evidence{Address: h.Address, HostKey: string(hostPublicKey()), Image: true, Marker: string(marker), Network: network, NetworkReboot: reboot, Postcondition: true, Power: "On", Reachable: true, Request: "digest", Update: installation.UpdateEvidence{State: "none"}})
 		proof := lifecycle.BlockEvidence{Kind: "Machine", Object: h.Machine, Implementation: installation.Implementation, Verb: reconciliation.Apply, State: reconciliation.BlockDone, Evidence: raw, Block: reconciliation.Block{BlockDefinition: reconciliation.BlockDefinition{Kind: "Machine", Object: h.Machine, Implementation: installation.Implementation, Request: request}, RequestDigest: "digest"}}
 		return lifecycle.Execution{ApplyOperation: "original", Operation: "destroy", Context: "renamed", ApplyProved: []lifecycle.BlockEvidence{proof}}
 	}

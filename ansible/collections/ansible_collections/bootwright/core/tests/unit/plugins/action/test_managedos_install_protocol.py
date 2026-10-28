@@ -200,3 +200,79 @@ def test_a_registering_removal_publishes_only_a_released_registration(monkeypatc
     for read in ({"consumer": "", "state": "unregistered"}, {"consumer": CONSUMER, "state": "retained"}):
         with pytest.raises(ValueError, match="registration"):
             protocol.registration(read)
+
+
+KERNEL = "5.14.0-611.5.1.el9_7.x86_64"
+COMPLETE = {"kernel": KERNEL, "packages": 212, "rebooted": True, "release": "9.8", "state": "complete", "transaction": 3}
+NONE = {"kernel": "", "packages": 0, "rebooted": False, "release": "", "state": "none", "transaction": 0}
+
+
+# An installation updating within its release completes only with a complete
+# update; one that updates nothing records state none without reading the guest.
+def test_an_updating_installation_completes_only_with_a_complete_update():
+    for read in (dict(COMPLETE, state="upgraded", rebooted=False), dict(COMPLETE, state="pending", rebooted=False, transaction=0),
+                 dict(NONE, state="absent"), dict(NONE, state="foreign"), {}, None):
+        evidence, refused = protocol.completion(proved(updateRequired=True, update=read))
+        assert evidence["postcondition"] is False
+        assert refused is not None and refused.endswith("not proved: update")
+    evidence, refused = protocol.completion(proved(updateRequired="True", update=COMPLETE))
+    assert evidence["update"] == COMPLETE and evidence["postcondition"] is True and refused is None
+    unchanged = dict(COMPLETE, packages=0, rebooted=False, transaction=0)
+    assert protocol.completion(proved(updateRequired=True, update=unchanged))[0]["postcondition"] is True
+    for arguments in (proved(), proved(updateRequired=False), proved(update=NONE)):
+        evidence, refused = protocol.completion(arguments)
+        assert evidence["update"] == NONE and evidence["postcondition"] is True and refused is None
+    evidence, refused = protocol.completion(proved(update=COMPLETE))
+    assert evidence["postcondition"] is False and refused.endswith("not proved: update")
+    assert protocol.absence({"observation": {}}, DIGEST)["update"] == dict(NONE, state="")
+
+
+def test_an_observation_publishes_an_unfinished_update(monkeypatch):
+    for read in (dict(COMPLETE, state="upgraded", rebooted=False), dict(NONE, state="foreign"), {}):
+        result, published = run(dict(proved(updateRequired=True, update=read), phase="completed", outcome="unchanged", observed=True),
+                                monkeypatch)
+        assert result == {"changed": False}
+        assert published[0]["evidence"]["update"] == (read or dict(NONE, state="")) and published[0]["evidence"]["postcondition"] is False
+
+
+@pytest.mark.parametrize("read", [
+    dict(COMPLETE, state="installed"),
+    dict(COMPLETE, rebooted=False),
+    dict(COMPLETE, state="upgraded"),
+    dict(COMPLETE, release="9"),
+    dict(COMPLETE, release="9.08"),
+    dict(COMPLETE, kernel=""),
+    dict(COMPLETE, kernel="5.14 0"),
+    dict(COMPLETE, transaction=-1),
+    dict(COMPLETE, packages=True),
+    dict(COMPLETE, transaction="3"),
+    dict(COMPLETE, changed=True),
+    dict(NONE, release="9.8"),
+    dict(NONE, state="absent", packages=1),
+    {"state": "complete"},
+    "complete",
+], ids=repr)
+def test_a_malformed_update_is_never_published(read, monkeypatch):
+    with pytest.raises(ValueError, match="update"):
+        protocol.presence(proved(update=read, updateRequired=True), DIGEST)
+    result, published = run(dict(proved(update=read, updateRequired=True), phase="completed", outcome="changed"), monkeypatch)
+    assert result.get("failed") is True and not published
+
+
+@pytest.mark.parametrize("reason, detail", [
+    ("update-release-unavailable", None), ("update-release-mismatch", "9.6"), ("update-release-drift", "9.9@rhel-9-baseos"),
+    ("update-no-repository", None), ("update-foreign", None), ("update-unavailable", "metadata"), ("update-failed", "transaction"),
+])
+def test_each_update_refusal_is_named_with_its_detail(reason, detail, monkeypatch):
+    args = {"phase": "refused", "reason": reason}
+    if detail is not None:
+        args["detail"] = detail
+    result, published = run(args, monkeypatch)
+    assert result == {"changed": False}
+    assert published == [dict({"phase": "refused", "reason": reason}, **({"detail": detail} if detail else {}))]
+
+
+@pytest.mark.parametrize("detail", ["https://mirror.example.test/rhel", "9.9 from repo", "x" * 161, "cause\n"], ids=repr)
+def test_a_detail_outside_the_closed_set_is_never_published(detail, monkeypatch):
+    result, published = run({"phase": "refused", "reason": "update-failed", "detail": detail}, monkeypatch)
+    assert result == {"changed": False} and published == [{"phase": "refused", "reason": "update-failed"}]

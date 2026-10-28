@@ -11,6 +11,11 @@
         "sha256": "e8b0f3a61d9c2e47b5a803f6d1c94e27a0b6d3f81c5e9a24d7b0e3f6a19c5d82",
         "source": "file:///srv/images/rhel-9.8-x86_64-boot.iso",
         "added": "2026-09-20T08:15:00Z",
+        "release": {
+          "family": "Red Hat Enterprise Linux",
+          "version": "9.8",
+          "arch": "x86_64"
+        },
         "frozen": true,
         "reservedBy": [
           "lab-rhel",

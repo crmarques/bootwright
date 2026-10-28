@@ -173,7 +173,8 @@ SSH_OPTIONS = (
 URI = "ansible.builtin.uri"
 OUTCOME = ("{{ 'unchanged' if (managedos_install_anaconda_was_installed | bool)"
            " and not (managedos_install_anaconda_network_result.changed | default(true) | bool)"
-           " and not (managedos_install_anaconda_registration_result.registration.changed | default(false) | bool) else 'changed' }}")
+           " and not (managedos_install_anaconda_registration_result.registration.changed | default(false) | bool)"
+           " and not (managedos_install_anaconda_update_changed | default(false) | bool) else 'changed' }}")
 MARKER = '{"request":"' + "1" * 64 + '"}'
 
 

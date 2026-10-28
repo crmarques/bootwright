@@ -61,6 +61,7 @@ func Normalize(o api.Object, c api.Catalog) (api.Object, []api.Issue) {
 	if custom.Present() {
 		s = s.With("customizations", custom)
 	}
+	s = s.With("updates", s.Get("updates").Default("policy", api.StringValue(UpdateWithinRelease)))
 	s = s.With("proxy", infrastructureservices.NormalizeProxy(s.Get("proxy"), c))
 	if s.Has("ntp") {
 		s = s.With("ntp", infrastructureservices.NormalizeServerSelections(s.Get("ntp"), c, api.NTPServer))
@@ -99,6 +100,7 @@ func Validate(o api.Object, c api.Catalog) []api.Issue {
 	}
 	issues = add(issues, validateCustomizationEntries(custom)...)
 	issues = add(issues, validateSubscription(s, c)...)
+	issues = add(issues, validateUpdates(o, c)...)
 	issues = add(issues, validateServiceChoices(custom)...)
 	issues = add(issues, validateInstallerSources(o, c)...)
 	issues = add(issues, validateServedNames(o, c)...)
@@ -228,6 +230,56 @@ func validateSubscription(s api.Value, c api.Catalog) []api.Issue {
 		}
 	}
 	return issues
+}
+
+const (
+	UpdateWithinRelease = "withinRelease"
+	UpdateNone          = "none"
+)
+
+func UpdatesWithinRelease(profile api.Object) bool {
+	return profile.Spec().Get("updates", "policy").Text() != UpdateNone
+}
+
+var sealedBootPCRs = []string{"4", "8", "9"}
+
+func validateUpdates(o api.Object, c api.Catalog) []api.Issue {
+	if !UpdatesWithinRelease(o) {
+		return nil
+	}
+	s := o.Spec()
+	profile := o.Identity()
+	var issues []api.Issue
+	if !declaresUpdateSource(s, c) {
+		issues = add(issues, issue("$.spec.updates.policy",
+			profile+" updates within its release but declares no update source: no managed subscription and no enabled configured repository",
+			"set spec.updates.policy to none on "+profile+", or declare a managed spec.subscription or an enabled spec.customizations.repositories.configure entry"))
+	}
+	pcrs := s.Get("customizations", "security", "diskEncryption", "unlock", "tpm2", "pcrIds").Items()
+	if slices.ContainsFunc(pcrs, func(pcr api.Value) bool { return slices.Contains(sealedBootPCRs, pcr.Text()) }) {
+		issues = add(issues, issue("$.spec.customizations.security.diskEncryption.unlock.tpm2.pcrIds",
+			profile+" seals its root disk to PCR 4, 8 or 9, which measure the boot loader, its commands and the kernel an update within the release replaces, so the disk would not unlock after the update's reboot",
+			"remove 4, 8 and 9 from spec.customizations.security.diskEncryption.unlock.tpm2.pcrIds on "+profile+", or set spec.updates.policy to none on "+profile))
+	}
+	return issues
+}
+
+// An Entitlement missing from the graph or of another type is refused by its own reference check.
+func declaresUpdateSource(s api.Value, c api.Catalog) bool {
+	for _, repo := range s.Get("customizations", "repositories", "configure").Items() {
+		if !repo.Has("enabled") || repo.Get("enabled").Bool() {
+			return true
+		}
+	}
+	reference := s.Get("subscription", "entitlementRef")
+	if !reference.Present() {
+		return false
+	}
+	entitlement, found := c.Find(api.Entitlement, reference.Text())
+	if !found || entitlement.Spec().Get("type").Text() != "redhatRhel" {
+		return true
+	}
+	return entitlement.Spec().Get("rhsm", "management").Text() != "external"
 }
 
 // serviceOverlap refuses a service both enabled and disabled, which partial and

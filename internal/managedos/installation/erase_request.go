@@ -13,7 +13,7 @@ import (
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
 )
 
-const EraseImplementation = "physical-erase-v3"
+const EraseImplementation = "physical-erase-v4"
 const eraseVariable = "bootwright_physical_erase"
 
 type EraseTarget struct {

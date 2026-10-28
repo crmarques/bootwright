@@ -1,0 +1,112 @@
+---
+# The one restart of an installed machine, network convergence's and the update
+# within the release's: the proved installation is recorded before the
+# power-off, the machine is powered off, its installed disk is booted through
+# the substrate exactly as after the installer, and its boot id proves it did
+# start again. The caller names the boot it must leave behind and may narrow
+# the power-off and return waits within its frozen reboot budget.
+
+# The phase follows the proof of this installation's marker, so before the
+# power-off the attempt durably records that proof, and a later attempt
+# boots the installed disk of a machine that no longer answers rather than
+# install it again (Q66).
+- name: Record that this installation is proved and its disk boot intended
+  bootwright.core.managedos_install_protocol:
+    phase: prepared
+    marker: '{{ bootwright_os_install_material.marker }}'
+  when: not (managedos_install_anaconda_prepared | default(false) | bool)
+  no_log: true
+
+- name: Remember that this attempt recorded its before-state
+  ansible.builtin.set_fact:
+    managedos_install_anaconda_prepared: true
+  changed_when: false
+
+- name: Ask the machine to power off
+  ansible.builtin.include_tasks: guest.yml
+  vars:
+    managedos_install_anaconda_guest_command: '{{ managedos_install_anaconda_network_poweroff }}'
+
+- name: Stop at a machine that refused to power off
+  ansible.builtin.fail:
+    msg: >-
+      Machine {{ bootwright_os_install_request.identity.object }} did not accept the
+      request to power off
+      (ssh exit status {{ managedos_install_anaconda_guest.rc | default('none') }}:
+      {{ (managedos_install_anaconda_guest.stderr | default('') | string | bootwright.core.printable)[-512:] }});
+      repeat bootwright apply
+  when: managedos_install_anaconda_guest.rc | default(1) | int not in [0, 255]
+
+- name: Wait for the machine to power off
+  ansible.builtin.include_role:
+    name: bootwright.core.substrate_machine
+    tasks_from: state_read
+  vars:
+    bootwright_machine_arm: '{{ bootwright_os_install_request.target.substrate }}'
+    bootwright_machine_port: >-
+      {{ managedos_install_anaconda_port_access | combine({'media': false,
+         'retries': managedos_install_anaconda_reboot_poweroff_attempts | int,
+         'delay': bootwright_os_install_request.budgets.reboot.delaySeconds | int,
+         'expected_power': 'Off'}) }}
+
+- name: Retain the machine port answer
+  ansible.builtin.set_fact:
+    managedos_install_anaconda_powered_off: "{{ substrate_machine_port_result }}"
+  no_log: true
+
+# ansible-core keeps nothing of a failure under no_log but that it failed,
+# so what ended the wait is reported here, where no credential is.
+- name: Stop at a machine that did not power off within its budget
+  ansible.builtin.assert:
+    that:
+      - (managedos_install_anaconda_powered_off.power | default('')) == 'Off'
+    fail_msg: >-
+      Machine {{ bootwright_os_install_request.identity.object }} did not power off when
+      asked within its budget of {{ managedos_install_anaconda_reboot_poweroff_attempts | int }}
+      attempts {{ bootwright_os_install_request.budgets.reboot.delaySeconds | int }} seconds apart;
+      its management controller last answered
+      {{ ('power ' ~ (managedos_install_anaconda_powered_off.power | string | bootwright.core.printable)[:32])
+      if managedos_install_anaconda_powered_off.power is defined
+      else (managedos_install_anaconda_powered_off.msg | default('') | string | bootwright.core.printable)[:512] }};
+      repeat bootwright apply
+    quiet: true
+
+- name: Boot the installed disk of a machine this substrate created
+  ansible.builtin.include_role:
+    name: bootwright.core.substrate_machine
+    tasks_from: boot_disk
+  vars:
+    bootwright_machine_arm: '{{ bootwright_os_install_request.target.substrate }}'
+    bootwright_machine_port:
+      endpoint: '{{ managedos_install_anaconda_endpoint }}'
+      verify: '{{ managedos_install_anaconda_verify }}'
+      ca: '{{ managedos_install_anaconda_controller_ca }}'
+      user: '{{ bootwright_os_install_material.controllerUser }}'
+      password: '{{ bootwright_os_install_material.controllerPassword }}'
+      power_on: true
+
+- name: Wait for the restarted machine to answer on the key it reported
+  ansible.builtin.include_tasks: guest.yml
+  vars:
+    managedos_install_anaconda_guest_command: '{{ managedos_install_anaconda_network_boot_id }}'
+    managedos_install_anaconda_guest_retries: '{{ managedos_install_anaconda_reboot_return_attempts | int }}'
+    managedos_install_anaconda_guest_pause: '{{ bootwright_os_install_request.budgets.reboot.delaySeconds | int }}'
+
+- name: Stop at a restarted machine that did not answer
+  ansible.builtin.fail:
+    msg: >-
+      Machine {{ bootwright_os_install_request.identity.object }} did not answer at
+      {{ bootwright_os_install_request.address }} on the key it reported within
+      {{ (managedos_install_anaconda_reboot_return_attempts | int)
+      * (bootwright_os_install_request.budgets.reboot.delaySeconds | int) }}
+      seconds of its restart; its state is unknown: repeat bootwright apply, and if
+      {{ bootwright_os_install_request.identity.object }} stays unreachable, restore its
+      network from its console
+  when: managedos_install_anaconda_guest.rc | default(1) != 0
+
+- name: Stop at a machine that did not restart
+  ansible.builtin.fail:
+    msg: >-
+      Machine {{ bootwright_os_install_request.identity.object }} did not restart: it
+      reports the boot it had before it was powered off; repeat bootwright apply
+  when: (managedos_install_anaconda_guest.stdout | default('') | trim) == managedos_install_anaconda_reboot_before

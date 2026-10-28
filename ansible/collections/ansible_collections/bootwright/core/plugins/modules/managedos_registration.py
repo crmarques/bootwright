@@ -54,6 +54,9 @@ description:
   - C(registration-repositories) the subscription service did not accept
     spec.customizations.repositories.subscription of <profile>; correct the
     repository IDs in <profile>, then destroy and install Machine/<m> again.
+  - C(update-release-unavailable) the subscription service offers no release
+    <release> to Machine/<m>; set spec.os.version on <profile> to a release it
+    offers, or set spec.updates.policy to none, then destroy and apply again.
   - C(registration-unreachable) the installed system did not answer over its
     pinned SSH connection; start Machine/<m> with bootwright machine start
     --context <c> --name <m>, then run bootwright destroy --context <c> again.
@@ -113,6 +116,14 @@ options:
     type: list
     elements: str
     default: []
+  release:
+    description:
+      - The release a request updating within it sets with
+        C(subscription-manager release --set) after proving
+        C(subscription-manager release --list) offers it, before the
+        repositories; empty sets none. Register only.
+    type: str
+    default: ""
   timeout:
     description: Seconds the whole session may take, from 1 to 900.
     type: int
@@ -149,7 +160,8 @@ reason:
   returned: when ok is false
   type: str
   choices: [registration-foreign, registration-refused, registration-identity-collision, registration-input,
-            registration-unavailable, registration-repositories, registration-unreachable, transport]
+            registration-unavailable, registration-repositories, update-release-unavailable, registration-unreachable,
+            transport]
 cause:
   description: The closed cause of registration-unavailable or of a transport refusal.
   returned: when the reason has one
@@ -214,7 +226,7 @@ def check_arguments(params):
         for option in (entry[0] for entry in MATERIAL):
             if params.get(option) is not None:
                 raise ArgumentError(option + " is accepted only for the register operation")
-        for option in ("enable", "disable"):
+        for option in ("enable", "disable", "release"):
             if params.get(option):
                 raise ArgumentError(option + " is accepted only for the register operation")
     if not isinstance(params["request"], str) or not worker.DIGEST.fullmatch(params["request"]):
@@ -247,6 +259,9 @@ def payload_of(params):
         for option, key, name in MATERIAL:
             payload[key] = read_material(params[option], name)
         payload["enable"], payload["disable"] = worker.repositories(list(params["enable"] or []), list(params["disable"] or []))
+        payload["release"] = params.get("release") or ""
+        if not worker.RELEASE.fullmatch(payload["release"]) and payload["release"] != "":
+            raise worker.Refused("registration-input", detail="the release is not a <major>.<minor> release")
     return canonical(payload)
 
 
@@ -346,6 +361,7 @@ def main():
             "activation_key_file": {"type": "path"},
             "enable": {"type": "list", "elements": "str", "default": []},
             "disable": {"type": "list", "elements": "str", "default": []},
+            "release": {"type": "str", "default": ""},
             "timeout": {"type": "int", "default": 630},
         },
         required_if=[("operation", "register", ("organization_file", "activation_key_file"))],

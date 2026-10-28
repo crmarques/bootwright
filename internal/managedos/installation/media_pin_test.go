@@ -8,6 +8,7 @@ import (
 	api "github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/desiredstate/compilation"
 	"github.com/crmarques/bootwright/internal/diagnostics"
+	"github.com/crmarques/bootwright/internal/managedos"
 	"github.com/crmarques/bootwright/internal/reconciliation"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
 )
@@ -36,9 +37,13 @@ func (m *fixtureMedia) MediaRecords(context.Context) (map[string]MediaRecord, er
 // labRecords are the store records of the two images the lab fixture names.
 func labRecords() map[string]MediaRecord {
 	return map[string]MediaRecord{
-		bootImageName: {SHA256: bootDigest, Size: 1105199104, Observed: 1105199104},
-		dvdImageName:  {SHA256: dvdDigest, Size: 13107200000, Observed: 13107200000},
+		bootImageName: {SHA256: bootDigest, Size: 1105199104, Observed: 1105199104, Release: rhelRelease("9.8")},
+		dvdImageName:  {SHA256: dvdDigest, Size: 13107200000, Observed: 13107200000, Release: rhelRelease("9.8")},
 	}
+}
+
+func rhelRelease(version string) managedos.MediaRelease {
+	return managedos.MediaRelease{Family: "Red Hat Enterprise Linux", Version: version, Arch: "x86_64"}
 }
 
 func labMedia() *fixtureMedia { return &fixtureMedia{records: labRecords()} }
@@ -203,5 +208,115 @@ func TestPlanWithoutAMediaReaderRefusesAnInstallation(t *testing.T) {
 	plan, err := planWith(nil, labCatalog(provided))
 	if err != nil || len(plan.Definitions) != 0 {
 		t.Fatalf("a plan installing nothing = %+v (%v)", plan, diagnostics.Of(err))
+	}
+}
+
+func cdromProfile() api.Object {
+	profile := installProfile()
+	anaconda := profile.Spec().Get("installer", "anaconda").Without("packageSource")
+	return profile.WithSpec(profile.Spec().WithPath(anaconda, "installer", "anaconda"))
+}
+
+// A plan installs only the release its profile declares: the image it installs
+// packages from, the boot image of a profile with no package source and a
+// hosted tree's DVD, must name a Red Hat Enterprise Linux x86_64 release of
+// exactly spec.os.version, and the shared tree publication refuses its DVD
+// alike. A hosted tree's boot image is held to it only when its record names
+// a release, because a RHEL boot ISO carries no .treeinfo.
+func TestPlanRefusesAnImageThatIsNotTheDeclaredRelease(t *testing.T) {
+	const profile = "MachineInstallProfile/rhel-9-8"
+	for name, test := range map[string]struct {
+		release              managedos.MediaRelease
+		message, remediation string
+	}{
+		"no release": {managedos.MediaRelease{},
+			"the media store holds no release for %s, which this build reads from the image's .treeinfo when it is added",
+			"bootwright media delete --name %s, then bootwright media add --name %s with this build"},
+		"another family": {managedos.MediaRelease{Family: "CentOS Stream", Version: "9.8", Arch: "x86_64"},
+			"%s holds a CentOS Stream x86_64 release, and an installation installs only Red Hat Enterprise Linux on x86_64",
+			"import a Red Hat Enterprise Linux x86_64 image with bootwright media add and select it for " + profile},
+		"another arch": {managedos.MediaRelease{Family: "Red Hat Enterprise Linux", Version: "9.8", Arch: "aarch64"},
+			"%s holds a Red Hat Enterprise Linux aarch64 release, and an installation installs only Red Hat Enterprise Linux on x86_64",
+			"import a Red Hat Enterprise Linux x86_64 image with bootwright media add and select it for " + profile},
+		"another minor": {rhelRelease("9.6"),
+			"%s holds release 9.6 and " + profile + " declares spec.os.version 9.8",
+			"set spec.os.version on " + profile + " to 9.6, or import the 9.8 image"},
+	} {
+		for _, image := range []string{bootImageName, dvdImageName} {
+			t.Run(name+" "+image, func(t *testing.T) {
+				records := labRecords()
+				record := records[image]
+				record.Release = test.release
+				records[image] = record
+				want := strings.ReplaceAll(test.message, "%s", image)
+				remedy := strings.ReplaceAll(test.remediation, "%s", image)
+				plans := map[string]func() error{
+					"installation": func() error { _, err := planWith(&fixtureMedia{records: records}, labCatalog()); return err },
+				}
+				if image == bootImageName {
+					plans = map[string]func() error{
+						"cdrom installation": func() error {
+							_, err := planWith(&fixtureMedia{records: records}, labCatalog(cdromProfile()))
+							return err
+						},
+					}
+					if test.release.Present() {
+						plans["installation"] = func() error { _, err := planWith(&fixtureMedia{records: records}, labCatalog()); return err }
+					}
+				}
+				if image == dvdImageName {
+					plans["tree"] = func() error {
+						_, err := NewTree(nil).WithMedia(&fixtureMedia{records: records}).Plan(context.Background(), planInput(reconciliation.Apply))
+						return err
+					}
+				}
+				for plan, run := range plans {
+					reported := onlyDiagnostic(t, run())
+					if reported.Code != "lifecycle.state" || reported.Message != want || reported.Remediation != remedy ||
+						reported.Object == nil || reported.Object.Kind != string(api.MachineInstallProfile) || reported.Object.Name != "rhel-9-8" {
+						t.Fatalf("%s diagnostic = %+v, want %q remedied by %q for %s", plan, reported, want, remedy, profile)
+					}
+				}
+			})
+		}
+	}
+}
+
+// A RHEL boot ISO carries no .treeinfo, so a hosted tree's boot image with no
+// release plans, bounded by its DVD's release; one that names another release
+// still refuses.
+func TestAHostedTreeBootImageIsComparedOnlyWhenItNamesARelease(t *testing.T) {
+	records := labRecords()
+	record := records[bootImageName]
+	record.Release = managedos.MediaRelease{}
+	records[bootImageName] = record
+	if _, err := planWith(&fixtureMedia{records: records}, labCatalog()); err != nil {
+		t.Fatalf("a boot image with no release refused: %v", diagnostics.Of(err))
+	}
+	record.Release = rhelRelease("9.7")
+	records[bootImageName] = record
+	_, err := planWith(&fixtureMedia{records: records}, labCatalog())
+	if reported := onlyDiagnostic(t, err); reported.Message != bootImageName+" holds release 9.7 and MachineInstallProfile/rhel-9-8 declares spec.os.version 9.8" {
+		t.Fatalf("diagnostic = %+v", reported)
+	}
+}
+
+// The physical erase boots its image only to clear a disk, so it installs no
+// release and the release refusals stay the installation's.
+func TestTheEraseDoesNotRefuseTheImageRelease(t *testing.T) {
+	records := labRecords()
+	for name, record := range records {
+		record.Release = managedos.MediaRelease{}
+		records[name] = record
+	}
+	input := planInput(reconciliation.Apply)
+	catalog := labCatalog(metalProvider(), eraseMachine(), sshKeySecret(api.MapValue(field("generated", api.MapValue()))))
+	input.State = compilation.NewState(catalog, catalog, nil)
+	erase, err := NewErase(nil).WithMedia(&fixtureMedia{records: records}).Plan(context.Background(), input)
+	if err != nil || len(erase.Definitions) == 0 {
+		t.Fatalf("an erase of images with no release = %+v (%v)", erase, diagnostics.Of(err))
+	}
+	if _, err := New(nil).WithMedia(&fixtureMedia{records: records}).Plan(context.Background(), input); err == nil {
+		t.Fatal("the installation beside it planned images with no release")
 	}
 }

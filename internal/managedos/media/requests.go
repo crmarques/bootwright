@@ -1,5 +1,7 @@
 package media
 
+import "github.com/crmarques/bootwright/internal/managedos"
+
 // AddMediaRequest imports exactly one image into the host-wide store. The
 // store selects no context, so no request carries a context name.
 type AddMediaRequest struct {
@@ -45,6 +47,7 @@ type MediaRow struct {
 	SHA256     string
 	Source     string
 	Added      string
+	Release    managedos.MediaRelease
 	Frozen     bool
 	ReservedBy []string
 	Verified   string

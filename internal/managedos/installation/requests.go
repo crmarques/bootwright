@@ -192,6 +192,7 @@ type Request struct {
 	TLSCertificateRef string       `json:"tlsCertificateRef,omitempty"`
 	Tree              *Publication `json:"tree,omitempty"`
 	TreeMedia         *Media       `json:"treeMedia,omitempty"`
+	Update            *Update      `json:"update,omitempty"`
 	User              string       `json:"user"`
 	Version           string       `json:"version"`
 }
@@ -206,6 +207,11 @@ type Registration struct {
 	EntitlementRef   string                   `json:"entitlementRef"`
 	OrganizationRef  string                   `json:"organizationRef"`
 	Repositories     SubscriptionRepositories `json:"repositories"`
+}
+
+type Update struct {
+	Policy  string `json:"policy"`
+	Release string `json:"release"`
 }
 
 type SubscriptionRepositories struct {
@@ -223,6 +229,9 @@ func (r Request) Deadline() time.Duration {
 	deadline := r.Budgets.total() + time.Duration(r.Network.CheckpointSeconds)*time.Second + networkRollbackGrace + machineMediaMargin(r.Target.Substrate)
 	if r.Registration != nil {
 		deadline += registrationBound
+	}
+	if r.Update != nil {
+		deadline += updateBound + machineBootDisk(r.Target.Substrate)
 	}
 	return deadline
 }

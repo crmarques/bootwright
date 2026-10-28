@@ -496,7 +496,7 @@ unchanged.
 Each `media` entry of `media list` orders its fields as follows:
 
 ```json
-{"name":"rhel-9.8-x86_64-boot.iso","size":1045430272,"sha256":"e8b0f3a61d9c2e47b5a803f6d1c94e27a0b6d3f81c5e9a24d7b0e3f6a19c5d82","source":"file:///srv/images/rhel-9.8-x86_64-boot.iso","added":"2026-09-20T08:15:00Z","frozen":true,"reservedBy":["lab-rhel"],"verified":"ok","computed":"e8b0f3a61d9c2e47b5a803f6d1c94e27a0b6d3f81c5e9a24d7b0e3f6a19c5d82"}
+{"name":"rhel-9.8-x86_64-dvd.iso","size":1045430272,"sha256":"e8b0f3a61d9c2e47b5a803f6d1c94e27a0b6d3f81c5e9a24d7b0e3f6a19c5d82","source":"file:///srv/images/rhel-9.8-x86_64-dvd.iso","added":"2026-09-20T08:15:00Z","release":{"family":"Red Hat Enterprise Linux","version":"9.8","arch":"x86_64"},"frozen":true,"reservedBy":["lab-rhel"],"verified":"ok","computed":"e8b0f3a61d9c2e47b5a803f6d1c94e27a0b6d3f81c5e9a24d7b0e3f6a19c5d82"}
 ```
 
 `name`, `frozen` and `reservedBy` are always present. `size`, `sha256`,
@@ -504,7 +504,9 @@ Each `media` entry of `media list` orders its fields as follows:
 [record](../managed-os.md#media-store) could be read, and are omitted
 otherwise; with `name` they are that record: its name, its size in bytes, its
 hexadecimal SHA-256, its credential-free origin and its time of publication.
-`reservedBy` is the array of contexts that reserve the image, sorted and empty
+`release` is the record's `{family, version, arch}` read from the image's
+`.treeinfo` ([media store](../managed-os.md#media-store)), present only when
+the record holds one. `reservedBy` is the array of contexts that reserve the image, sorted and empty
 when none does, and `frozen` is `true` exactly when it is not empty. `verified`
 is `mismatch` when the bytes the store holds no longer have the size the record
 states and, with `--checksums`, also when their computed digest differs from
@@ -518,8 +520,9 @@ computed one. `reason` names why an image failed, and is present exactly when
 whether it verified.
 
 The human table shows the columns `NAME`, `SIZE`, `DIGEST`, `COMPUTED` (only
-with `--checksums`), `ADDED`, `RESERVED` and `STATE`, with the digests
-prefixed by `sha256:`. `SIZE`, `DIGEST` and `ADDED` show `-` for an image
+with `--checksums`), `ADDED`, `RELEASE`, `RESERVED` and `STATE`, with the digests
+prefixed by `sha256:`. `RELEASE` is the release's version and arch, such as
+`9.8 x86_64`, or `-`. `SIZE`, `DIGEST`, `ADDED` and `RELEASE` show `-` for an image
 whose record could not be read. `RESERVED` joins the reserving contexts with
 commas, or shows `-`. `STATE` is `verified` for an `ok` image; `mismatch` for a
 `mismatch` one, which `media add` replaces or `media delete` removes; `failed`

@@ -389,7 +389,12 @@ func (j *lifecycleJudge) unprepared(err error) error {
 	return failure("lifecycle.unknown", "the attempt's preparation could not be recorded", j.request.OutputRemediation)
 }
 
+type completedRefusal interface{ WithDetail(detail string) error }
+
 func refusalDetail(named error, detail string) error {
+	if completed, ok := named.(completedRefusal); ok && detail != "" {
+		return completed.WithDetail(detail)
+	}
 	found := diagnostics.Of(named)
 	if detail == "" || len(found) == 0 {
 		return named

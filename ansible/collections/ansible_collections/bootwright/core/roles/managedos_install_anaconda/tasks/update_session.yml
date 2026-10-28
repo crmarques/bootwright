@@ -1,0 +1,110 @@
+---
+# One session of the update worker, apply or complete, over the pinned fleet
+# connection guest.yml makes, option for option, as the registration worker's
+# is; test_update_session_is_the_guest_connection holds the two equal. Only
+# the operation, the request digest and the release reach the machine, on the
+# fixed worker's standard input. A refusal is named to the runner with its
+# detail, the version found, <found>@<repository> or the closed cause, and the
+# run fails.
+- name: Read the effective crypto policy on this connection's placement host
+  bootwright.core.ssh_key_policy:
+  register: managedos_install_anaconda_update_ssh_policy
+
+- name: Publish the guest's own host key for this one connection
+  ansible.builtin.copy:
+    content: '{{ bootwright_os_install_request.address }} {{ managedos_install_anaconda_host_key | trim }}'
+    dest: '{{ managedos_install_anaconda_scratch }}/known_hosts'
+    owner: root
+    group: root
+    mode: '0600'
+  changed_when: false
+
+- name: Write the one-connection client configuration
+  ansible.builtin.copy:
+    content: '{{ managedos_install_anaconda_update_ssh_policy.configuration }}'
+    dest: '{{ managedos_install_anaconda_scratch }}/ssh_config'
+    owner: root
+    group: root
+    mode: '0600'
+  changed_when: false
+
+- name: Name the algorithms the guest's key is accepted under
+  ansible.builtin.set_fact:
+    managedos_install_anaconda_update_host_key_algorithms: >-
+      {{ managedos_install_anaconda_host_key
+         | bootwright.core.host_key_algorithms(managedos_install_anaconda_update_ssh_policy.hostKeyAlgorithms) }}
+  changed_when: false
+
+- name: Run the update worker on the installed machine on that exact key
+  bootwright.core.managedos_update:
+    operation: '{{ managedos_install_anaconda_update_operation }}'
+    address: '{{ bootwright_os_install_request.address }}'
+    user: '{{ bootwright_os_install_request.user }}'
+    identity: '{{ bootwright_os_install_material.fleetIdentity }}'
+    ssh_config: '{{ managedos_install_anaconda_scratch }}/ssh_config'
+    known_hosts: '{{ managedos_install_anaconda_scratch }}/known_hosts'
+    host_key_algorithms: '{{ managedos_install_anaconda_update_host_key_algorithms }}'
+    policy_host_key_algorithms: '{{ managedos_install_anaconda_update_ssh_policy.hostKeyAlgorithms }}'
+    request: '{{ bootwright_os_install_digest }}'
+    release: "{{ bootwright_os_install_request['update'].release }}"
+    timeout: "{{ 1800 if managedos_install_anaconda_update_operation == 'apply' else 120 }}"
+  register: managedos_install_anaconda_update_answer
+  failed_when: false
+  changed_when: false
+  no_log: true
+
+- name: Remove the one-connection known-hosts file
+  ansible.builtin.file:
+    path: '{{ managedos_install_anaconda_scratch }}/known_hosts'
+    state: absent
+  changed_when: false
+
+- name: Remove the one-connection client configuration
+  ansible.builtin.file:
+    path: '{{ managedos_install_anaconda_scratch }}/ssh_config'
+    state: absent
+  changed_when: false
+
+- name: Name an update the machine or its update sources refused
+  bootwright.core.managedos_install_protocol:
+    phase: refused
+    reason: '{{ managedos_install_anaconda_update_answer.reason }}'
+    detail: >-
+      {{ managedos_install_anaconda_update_answer.detail | default('')
+         if managedos_install_anaconda_update_answer.reason in ['update-release-mismatch', 'update-release-drift']
+         else managedos_install_anaconda_update_answer.cause | default('') }}
+  when:
+    - not (managedos_install_anaconda_update_answer.ok | default(false) | bool)
+    - managedos_install_anaconda_update_answer.reason | default('') in managedos_install_anaconda_update_refusals
+  vars:
+    managedos_install_anaconda_update_refusals:
+      - update-release-mismatch
+      - update-release-drift
+      - update-no-repository
+      - update-foreign
+      - update-unavailable
+      - update-failed
+  no_log: true
+
+# The message names the Machine and the worker's closed vocabulary only: the
+# worker's detail and any other module output never reach it.
+- name: Refuse a machine its update within the release did not complete on
+  ansible.builtin.fail:
+    msg: >-
+      Machine {{ bootwright_os_install_request.identity.object }} was not
+      updated within its release:
+      {{ managedos_install_anaconda_update_reason }}{{ managedos_install_anaconda_update_cause }}
+  vars:
+    managedos_install_anaconda_update_reason: >-
+      {{ managedos_install_anaconda_update_answer.reason | default('')
+         if managedos_install_anaconda_update_answer.reason | default('') in
+         ['update-release-mismatch', 'update-release-drift', 'update-no-repository', 'update-foreign',
+          'update-unavailable', 'update-failed', 'transport']
+         else 'unexpected answer' }}
+    managedos_install_anaconda_update_cause: >-
+      {{ ' (' ~ managedos_install_anaconda_update_answer.cause ~ ')'
+         if managedos_install_anaconda_update_answer.cause | default('') in
+         ['metadata', 'download', 'resolution', 'transaction', 'timeout', 'history', 'tooling',
+          'session', 'host-key', 'exit', 'answer', 'unreachable']
+         else '' }}
+  when: not (managedos_install_anaconda_update_answer.ok | default(false) | bool)

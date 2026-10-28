@@ -31,6 +31,7 @@ CANONICAL_EXCEPTIONS = {
     "plugins/module_utils/ceph_package_worker.py": "the supervisor starts in a collection-free interpreter before the closed bundle exists",
     "plugins/module_utils/physical_erase_worker.py": "the erase RAM image carries its three files and no sibling module",
     "plugins/module_utils/managedos_rhsm_worker.py": "the guest worker is one source sent over standard input and run alone",
+    "plugins/module_utils/managedos_update_worker.py": "the guest worker is one source sent over standard input and run alone",
     "plugins/module_utils/ceph_native_object.py": "the signed policy keeps raw UTF-8 and Go's escapes, so it is not the ASCII canonical form",
     "plugins/module_utils/managedos_network.py": "renders display text with default=str, not canonical bytes",
     "plugins/filter/to_installer_yaml.py": "renders an indented installer document, not a canonical form",
@@ -39,6 +40,7 @@ CANONICAL_EXCEPTIONS = {
 PROCESS_EXCEPTIONS = {
     "plugins/module_utils/physical_erase_process.py": "the one runner of the erase RAM image, which carries no sibling module; the erase controller shares it",
     "plugins/module_utils/managedos_rhsm_worker.py": "the guest worker is one source sent over standard input and run alone",
+    "plugins/module_utils/managedos_update_worker.py": "the guest worker is one source sent over standard input and run alone",
     "plugins/module_utils/ceph_host_route_probe.py": "its source runs alone inside the frozen Ceph image, where it owns a probe child's group",
     "plugins/module_utils/ceph_tunnel.py": "os.execve replaces the proxy script with the fixed ssh client, so cancellation reaches ssh with no wrapper",
     "plugins/module_utils/controller_supervisor.py": "os.fork makes the playbook child of the controller-only supervisor, a subreaper owning every descendant",

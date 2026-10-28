@@ -12,7 +12,7 @@ import (
 	"github.com/crmarques/bootwright/internal/substrate"
 )
 
-const kickstartVersion = "kickstart-anaconda-v14"
+const kickstartVersion = "kickstart-anaconda-v15"
 
 // guestHostKeys are the keys a guest-agent installation generates here rather
 // than at first boot, so the republished copy is the key sshd presents. Each
@@ -107,6 +107,7 @@ type Installation struct {
 	Packages      []string
 	PackageSource string
 	Prefix        int
+	Release       string
 	Repositories  []Repository
 	RootDevice    string
 	RootSerial    string
@@ -234,6 +235,7 @@ var kickstartFields = []struct {
 	{"a time source", "the NTP server selections of the install profile or of spec.os.install.ntp on the Machine", kickstartListElement, func(i Installation) []string { return i.NTPServers }},
 	{"a package entry", "spec.customizations.packages.install of the install profile", kickstartPackage, func(i Installation) []string { return i.Packages }},
 	{"the package source", "spec.installer.anaconda.packageSource of the install profile", kickstartPackageSource, func(i Installation) []string { return []string{i.PackageSource} }},
+	{"the release", "spec.os.version of the install profile", kickstartToken, func(i Installation) []string { return []string{i.Release} }},
 	{"the root device", "spec.hardware.rootDevice.deviceName of the Machine", kickstartToken, func(i Installation) []string { return []string{i.RootDevice} }},
 	{"the root disk serial number", "spec.substrate.baremetal.rootDevice.serialNumber of the Machine", kickstartToken, func(i Installation) []string { return []string{i.RootSerial} }},
 	{"the root disk WWN", "spec.substrate.baremetal.rootDevice.wwn of the Machine", kickstartToken, func(i Installation) []string { return []string{i.RootWWN} }},
@@ -493,6 +495,7 @@ func postSection(input Installation) []string {
 	for _, repository := range input.Repositories {
 		lines = append(lines, repositoryFileLines(repository)...)
 	}
+	lines = append(lines, releaseVariableLines(input.Release)...)
 	lines = append(lines, []string{
 		"install -d -m 0750 /etc/sudoers.d",
 		"printf '%s\\n' '" + input.User + " ALL=(ALL) NOPASSWD: ALL' > /etc/sudoers.d/60-bootwright",
@@ -548,6 +551,18 @@ func repositoryFileLines(repository Repository) []string {
 		lines = append(lines, "proxy="+repository.Proxy)
 	}
 	return append(lines, "BOOTWRIGHT_REPOSITORY_EOF", "chmod 0644 "+path)
+}
+
+func releaseVariableLines(release string) []string {
+	if release == "" {
+		return nil
+	}
+	return []string{
+		"install -d -m 0755 /etc/dnf/vars",
+		"printf '%s\\n' '" + release + "' > " + ReleaseVariablePath,
+		"chown root:root " + ReleaseVariablePath,
+		"chmod 0644 " + ReleaseVariablePath,
+	}
 }
 
 func repoFlag(value bool) string {

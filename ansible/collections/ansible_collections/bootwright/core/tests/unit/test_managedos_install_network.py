@@ -49,13 +49,20 @@ DOCUMENT_REFERENCE = re.compile(r"network\.document(?!Path)")
 DOCUMENT = {"interfaces": [{"name": "bond0", "type": "bond", "state": "up", "description": SENTINEL}]}
 
 
+# The one restart network convergence shares with the update within the
+# release; its tasks are read where network.yml includes them.
+SHARED = ("reboot.yml",)
+
+
 def flattened(name):
-    """A task file's tasks in the order a play reaches them, each block opened."""
+    """A task file's tasks in the order a play reaches them, each block and shared include opened."""
     def opened(listed):
         for task in listed or []:
             if not isinstance(task, dict):
                 continue
             yield task
+            if task.get(INCLUDE) in SHARED:
+                yield from opened(LOADER.load_from_file(str(ROLE / "tasks" / task[INCLUDE]), trusted_as_template=True))
             for section in ("block", "rescue", "always"):
                 yield from opened(task.get(section))
     return list(opened(LOADER.load_from_file(str(ROLE / "tasks" / name), trusted_as_template=True)))
@@ -510,7 +517,11 @@ class Guest:
 
     def step(self, task):
         templar = Templar(loader=LOADER, variables=dict(self.scope, vars=self.scope))
-        if task.get(INCLUDE) == "guest.yml":
+        if task.get(INCLUDE) in SHARED:
+            for name, value in (task.get("vars") or {}).items():
+                self.scope[name] = templar.template(value)
+            self.perform(LOADER.load_from_file(str(ROLE / "tasks" / task[INCLUDE]), trusted_as_template=True), [])
+        elif task.get(INCLUDE) == "guest.yml":
             command = task["vars"][GUEST].rsplit("managedos_install_anaconda_network_", 1)[-1].strip(" }")
             self.ran.append(command)
             self.argv.setdefault(command, []).append([str(word) for word in templar.template(task["vars"][GUEST])])

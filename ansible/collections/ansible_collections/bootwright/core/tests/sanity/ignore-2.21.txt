@@ -31,6 +31,7 @@ plugins/modules/managedos_network_compare.py validate-modules:missing-gplv3-lice
 plugins/modules/managedos_registration.py validate-modules:missing-gplv3-license
 plugins/modules/managedos_tree_inspect.py validate-modules:missing-gplv3-license
 plugins/modules/managedos_tree_protocol.py validate-modules:missing-gplv3-license
+plugins/modules/managedos_update.py validate-modules:missing-gplv3-license
 plugins/modules/private_file.py validate-modules:missing-gplv3-license
 plugins/modules/redfish_boot.py validate-modules:missing-gplv3-license
 plugins/modules/redfish_system_inspect.py validate-modules:missing-gplv3-license

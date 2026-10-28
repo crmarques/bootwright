@@ -133,16 +133,33 @@ def fake_identity(path):
     return text if worker.UUID.fullmatch(text) else None
 
 
+LISTED = (b"+-------------------------------------------+\n          Available Releases\n"
+          b"+-------------------------------------------+\n9.6\n9.8\n10.0\n")
+
+
+class Capture:
+    """A recording `subscription-manager release --list`; answer is (code, output) or None for a timeout."""
+
+    def __init__(self, answer=(0, LISTED)):
+        self.calls = []
+        self.answer = answer
+
+    def __call__(self, argv, timeout):
+        self.calls.append((list(argv), timeout))
+        return self.answer
+
+
 class Setup:
-    def __init__(self, tmp_path, consumer=UNEW, error=None, code=0, effect=None, observe=None):
+    def __init__(self, tmp_path, consumer=UNEW, error=None, code=0, effect=None, observe=None, capture=None):
         tmp_path.mkdir(parents=True, exist_ok=True)
         self.cert = str(tmp_path / "cert.pem")
         self.directory = str(tmp_path / "etc")
         self.record = os.path.join(self.directory, "registration.json")
         self.bus = FakeBus(self.cert, consumer=consumer, error=error, observe=observe)
         self.run = Runner(code, effect)
+        self.capture = capture or Capture()
         self.guest = worker.Guest(cert=self.cert, record=self.record, directory=self.directory, owner=os.getuid(),
-                                  run=self.run, bus=lambda: self.bus, identity=fake_identity)
+                                  run=self.run, bus=lambda: self.bus, identity=fake_identity, capture=self.capture)
 
     def with_cert(self, consumer):
         with open(self.cert, "w", encoding="ascii") as handle:
@@ -165,7 +182,7 @@ class Setup:
     def call(self, operation, **values):
         payload = {"operation": operation, "request": DIGEST}
         if operation == "register":
-            payload.update({"organization": ORG, "activationKey": KEY, "enable": [], "disable": []})
+            payload.update({"organization": ORG, "activationKey": KEY, "enable": [], "disable": [], "release": ""})
         payload.update(values)
         output = io.StringIO()
         assert worker.main(stdin=io.BytesIO(json.dumps(payload).encode()), stdout=output, guest=self.guest) == 0
@@ -376,6 +393,55 @@ def test_repository_changes_disable_before_enable_and_purge_on_star(tmp_path):
         refused.with_record(U1)
         assert refused.call("register", enable=enable_list, disable=disable_list)[0] == {"ok": False, "reason": "registration-input"}
         assert refused.run.calls == [] and refused.bus.calls == []
+
+
+def owned_setup(path, **options):
+    setup = Setup(path, **options)
+    setup.with_cert(U1)
+    setup.with_record(U1)
+    return setup
+
+
+def test_a_release_is_proved_offered_and_set_before_the_repositories_on_every_run(tmp_path):
+    enable = ["rhel-9-for-x86_64-baseos-rpms"]
+    setup = owned_setup(tmp_path)
+    for attempt in range(2):
+        assert setup.call("register", enable=enable, release="9.8")[0]["ok"] is True, attempt
+    assert setup.capture.calls == [([SM, "release", "--list"], worker.RELEASE_CEILING)] * 2
+    assert setup.run.calls == [([SM, "release", "--set=9.8"], worker.RELEASE_CEILING),
+                               ([SM, "repos", "--enable=rhel-9-for-x86_64-baseos-rpms"], worker.REPOSITORIES_CEILING)] * 2
+    assert worker.REGISTER_CEILING + worker.REPOSITORIES_CEILING + 2 * worker.RELEASE_CEILING <= 750 - 30
+
+    fresh = Setup(tmp_path / "fresh")
+    assert fresh.call("register", release="10.0")[0]["result"]["state"] == "registered"
+    assert fresh.run.calls == [([SM, "release", "--set=10.0"], worker.RELEASE_CEILING)]
+
+    none = owned_setup(tmp_path / "none")
+    assert none.call("register", enable=enable)[0]["ok"] is True
+    assert none.capture.calls == [] and none.run.calls == [([SM, "repos", "--enable=rhel-9-for-x86_64-baseos-rpms"],
+                                                            worker.REPOSITORIES_CEILING)]
+
+
+@pytest.mark.parametrize("capture, code, expected", [
+    (Capture((0, b"9.6\n9.7\n")), 0, {"ok": False, "reason": "update-release-unavailable"}),
+    (Capture((0, b"Available Releases 9.8\n")), 0, {"ok": False, "reason": "update-release-unavailable"}),
+    (Capture((0, b"9.8\n" * (worker.MAX_RELEASES // 4 + 1))), 0, {"ok": False, "reason": "update-release-unavailable"}),
+    (Capture((1, b"9.8\n")), 0, {"ok": False, "reason": "registration-unavailable", "cause": "service"}),
+    (Capture(None), 0, {"ok": False, "reason": "registration-unavailable", "cause": "timeout"}),
+    (Capture(), 1, {"ok": False, "reason": "registration-unavailable", "cause": "service"}),
+], ids=["not-offered", "not-a-line", "unbounded", "list-failed", "list-timeout", "set-failed"])
+def test_a_release_the_service_does_not_offer_or_set_refuses_before_the_repositories(tmp_path, capture, code, expected):
+    setup = owned_setup(tmp_path, capture=capture, code=code)
+    answer, text = setup.call("register", enable=["rhel-9-for-x86_64-baseos-rpms"], release="9.8")
+    assert answer == expected and "Available" not in text
+    assert not any(call[0][1] == "repos" for call in setup.run.calls)
+
+
+@pytest.mark.parametrize("release", ["9", "9.08", "9.8.1", "9.8 ", "--set=9.8", 9.8, None])
+def test_a_release_outside_the_grammar_is_refused_before_any_call(tmp_path, release):
+    setup = owned_setup(tmp_path)
+    assert setup.call("register", release=release)[0] == {"ok": False, "reason": "registration-input"}
+    assert setup.capture.calls == [] and setup.run.calls == [] and setup.bus.calls == []
 
 
 def test_worker_answers_transport_for_any_unexpected_failure(tmp_path):

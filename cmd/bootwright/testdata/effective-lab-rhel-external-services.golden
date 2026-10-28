@@ -160,6 +160,8 @@ spec:
       - 198.51.100.0/24
   ntp:
     - serverRef: lab-ntp
+  updates:
+    policy: none
 ---
 apiVersion: bootwright.io/v1alpha1
 kind: NetworkConfig

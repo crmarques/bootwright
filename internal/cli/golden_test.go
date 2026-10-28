@@ -462,6 +462,7 @@ func cliGoldens() []cliGolden {
 		boot := media.MediaRow{
 			Name: "rhel-9.8-x86_64-boot.iso", Size: 1045430272, SHA256: "e8b0f3a61d9c2e47b5a803f6d1c94e27a0b6d3f81c5e9a24d7b0e3f6a19c5d82",
 			Source: "file:///srv/images/rhel-9.8-x86_64-boot.iso", Added: "2026-09-20T08:15:00Z", Frozen: true, ReservedBy: []string{"lab-rhel", "lab-sno"},
+			Release: managedos.MediaRelease{Family: "Red Hat Enterprise Linux", Version: "9.8", Arch: "x86_64"},
 		}
 		dvd := media.MediaRow{
 			Name: "rhel-9.8-x86_64-dvd.iso", Size: 13123217408, SHA256: "4c1f8e2b9d7a6c5e3f0b1a2d4e6f8a0c2b4d6e8f0a1c3e5b7d9f1a3c5e7b9d0f",

@@ -126,13 +126,24 @@ argument_specs:
           treeMedia:
             type: dict
             required: false
+          update:
+            type: dict
+            required: false
+            options:
+              policy:
+                type: str
+                required: true
+                choices: [withinRelease]
+              release:
+                type: str
+                required: true
           user:
             type: str
             required: true
           version:
             type: str
             required: true
-            choices: [os-install-anaconda-v18]
+            choices: [os-install-anaconda-v19]
       bootwright_os_install_material:
         type: dict
         required: true

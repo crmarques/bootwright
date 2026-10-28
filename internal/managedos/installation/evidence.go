@@ -30,6 +30,15 @@ type RegistrationEvidence struct {
 	State    string `json:"state"`
 }
 
+type UpdateEvidence struct {
+	Kernel      string `json:"kernel"`
+	Packages    int64  `json:"packages"`
+	Rebooted    bool   `json:"rebooted"`
+	Release     string `json:"release"`
+	State       string `json:"state"`
+	Transaction int64  `json:"transaction"`
+}
+
 // Evidence is the only result shape the installation adapter may return. It
 // records what a later consumer needs — the marker digest, the guest's host key
 // and the address it answered on — and nothing secret.
@@ -68,8 +77,9 @@ type Evidence struct {
 	// extracted from, empty when none.
 	TreeIdentity string `json:"treeIdentity"`
 	// TreeStaging belongs to the shared publisher; Work belongs to this machine.
-	TreeStaging bool `json:"treeStaging"`
-	Work        bool `json:"work"`
+	TreeStaging bool           `json:"treeStaging"`
+	Update      UpdateEvidence `json:"update"`
+	Work        bool           `json:"work"`
 }
 
 // published reports whether anything this installation leaves beneath the
@@ -120,6 +130,9 @@ func ValidatePresence(data []byte, request Request, digest, marker string) error
 	}
 	if request.Registration != nil && evidence.Registration.State != registrationOwned {
 		return refusal("lifecycle.state", "the installed machine is not registered with a subscription consumer this installation created", "")
+	}
+	if err := updatePresence(evidence.Update, request); err != nil {
+		return err
 	}
 	if evidence.Media != "" {
 		return refusal("lifecycle.state", "the installation left its virtual media inserted", "")
@@ -274,7 +287,30 @@ func ValidatePartial(data []byte, digest, marker string) error {
 			return refusal("lifecycle.state", "the installation evidence reports nothing this operation published", "")
 		}
 	}
-	return foreignRegistration(evidence)
+	if err := foreignRegistration(evidence); err != nil {
+		return err
+	}
+	return foreignUpdate(evidence)
+}
+
+func updatePresence(update UpdateEvidence, request Request) error {
+	if request.Update == nil {
+		if update.State != updateNone {
+			return refusal("lifecycle.state", "the installation evidence reports an update its request does not perform", "")
+		}
+		return nil
+	}
+	if update.State != updateComplete || update.Release != request.Update.Release {
+		return refusal("lifecycle.state", "the installed machine has not completed its update within release "+request.Update.Release, "")
+	}
+	return nil
+}
+
+func foreignUpdate(evidence Evidence) error {
+	if evidence.Update.State == updateForeign {
+		return refusal("lifecycle.state", "the installed machine holds an update record of another installation", "")
+	}
+	return nil
 }
 
 func foreignRegistration(evidence Evidence) error {
@@ -294,6 +330,9 @@ func decodeEvidence(data []byte, digest string) (Evidence, error) {
 	}
 	if !wellFormedRegistration(evidence.Registration) {
 		return Evidence{}, refusal("lifecycle.state", "the installation evidence reports a malformed registration", "")
+	}
+	if !wellFormedUpdate(evidence.Update) {
+		return Evidence{}, refusal("lifecycle.state", "the installation evidence reports a malformed update", "")
 	}
 	if evidence.Request != digest {
 		return Evidence{}, refusal("lifecycle.state", "the installation evidence names another request", "")
@@ -321,6 +360,17 @@ func wellFormedRegistration(registration RegistrationEvidence) bool {
 		return registrationConsumer.MatchString(registration.Consumer)
 	case "", registrationAbsent, registrationForeign, registrationRetained:
 		return registration.Consumer == ""
+	}
+	return false
+}
+
+func wellFormedUpdate(update UpdateEvidence) bool {
+	switch update.State {
+	case updatePending, updateUpgraded, updateComplete:
+		return updateRelease.MatchString(update.Release) && update.Transaction >= 0 && update.Packages >= 0 &&
+			update.Rebooted == (update.State == updateComplete && update.Transaction != 0) && updateKernel.MatchString(update.Kernel)
+	case "", updateNone, updateAbsent, updateForeign:
+		return update == UpdateEvidence{State: update.State}
 	}
 	return false
 }

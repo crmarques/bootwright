@@ -9332,7 +9332,7 @@ parser divergence and host-matching tests, the claim-kind record tests and
 `TestTheControllerReachedByAnUndeclaredAddressRefusesBeforeReservation`, each
 proved by a seeded mismatch; the delivering commit records the gates.
 
-### X189 — Audit lane W1: preflight infra and all, render to a path
+### X191 — Audit lane W1: preflight infra and all, render to a path
 
 **Items:** B858.
 **Kind:** product. **Owner:** CLI. Delivered on 2026-10-28 as lane W1 of the
