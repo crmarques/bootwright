@@ -379,6 +379,9 @@ def test_failure_cause_is_a_closed_reason_or_a_code_site_never_a_value():
             ceph_native_worker.result_bytes(value)
 
 
+LAUNCH_BUDGET = 120
+
+
 @pytest.mark.parametrize("phase", ["host_observe", "profile", "bootstrap"])
 def test_clean_supervisor_preserves_redacted_native_failure_through_each_launcher(phase):
     sources = ceph_core.Transport.native_sources()
@@ -395,9 +398,10 @@ def test_clean_supervisor_preserves_redacted_native_failure_through_each_launche
         source = ceph_core.bootstrap_launcher(supervisor, host)
     else:
         source = ceph_native_worker.launcher(supervisor) + "s['main']()"
-    payload = {"sources": sources, "payload": {"phase": phase}, "budget": 3}
-    result = subprocess.run([sys.executable, "-I", "-c", source, "3"], input=json.dumps(payload).encode(),
-                            capture_output=True, timeout=10, check=False)
+    # Compiling the whole shipped bundle shares the wall-clock budget; a loaded host must not turn this into native-timeout.
+    payload = {"sources": sources, "payload": {"phase": phase}, "budget": LAUNCH_BUDGET}
+    result = subprocess.run([sys.executable, "-I", "-c", source, str(LAUNCH_BUDGET)], input=json.dumps(payload).encode(),
+                            capture_output=True, timeout=LAUNCH_BUDGET + 30, check=False)
     assert result.returncode == 0 and result.stderr == b""
     value = json.loads(result.stdout)
     assert value["ok"] is False and value["reason"] == "native-refusal"

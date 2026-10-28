@@ -270,8 +270,6 @@ Alias cell.
 | [B867](#b867) | new, 2026-10-27 (lane R review) | safety | Storage | The Ceph incarnation rule is confirmed on a live cluster | The monitor map's creation time was chosen without a live run |
 | [B872](#b872) | new, 2026-10-28 (lane V1) | defect | Storage | An NVMe-oF service with no pool refuses at plan | Pre-existing gap found by lane V1 |
 | [B873](#b873) | new, 2026-10-28 (lane V1) | defect | Storage | The plan builder's replica refusal names no distribution | Pre-existing wording found by lane V1 |
-| [B874](#b874) | new, 2026-10-28 (lane W2) | defect | Verification tooling | The Ceph native worker launcher test is stable in parallel | Flake seen by lane W2 |
-| [B875](#b875) | new, 2026-10-28 (lane V3) | defect | Verification tooling | The enrollment observation test does not depend on worker order | Flake seen by lane V3 |
 | [B877](#b877) | new, 2026-10-28 (D190) | product | Managed OS, with Secrets | A managed registration with a Satellite or Capsule, and an update within the release from its content | D190 authorizes only the hosted subscription service; Satellite registration needs its trust, ownership and removal defined |
 
 ### B82
@@ -2970,24 +2968,6 @@ Specified. The plan builder's replica refusal in
 applies the rule to every distribution. **Outcome:** the message names no
 distribution. **Exit evidence:** the refusal test pins the new text.
 
-### B874
-
-**Owner:** Verification tooling. **Kind:** defect. **Requires:** none.
-**Definition:** Specified.
-`test_ceph_native_worker.py::test_clean_supervisor_preserves_redacted_native_failure_through_each_launcher`
-failed in a parallel units run and passed serially (lane W2, 2026-10-28).
-**Outcome:** the test is deterministic under the parallel units run. **Exit
-evidence:** repeated parallel runs pass.
-
-### B875
-
-**Owner:** Verification tooling. **Kind:** defect. **Requires:** none.
-**Definition:** Specified. `TestOnlyMachinesUsingContextTrustAreObserved`
-(`internal/trust/enrollment/service_test.go`) expects the concurrent
-observer's addresses in a fixed order and failed under load (lane V3,
-2026-10-28). **Outcome:** the test compares the observed set, not its order.
-**Exit evidence:** repeated `-race` runs under load pass.
-
 ### B877
 
 **Owner:** Managed OS, with Secrets. **Kind:** product. **Requires:** B876.
@@ -3073,6 +3053,8 @@ also updates this table.
 | 27 | V3 Known-hosts and claim kinds (B869, B870, B871, B868) | merged (X188) |
 | 28 | W1 Preflight infra and all, render to a path (B858) | merged (X191) |
 | 29 | W2 Adapter warnings (B864) | merged (X187) |
+| 30 | Y1 NVMe-oF pool and replica wording (B872, B873) | not started |
+| 31 | Y2 Parallel test flakes (B874, B875) | merged (X192) |
 
 To continue, take the first row not `merged`. If its branch exists, resume it:
 each finished item is a `wip` commit whose body names what remains, and the

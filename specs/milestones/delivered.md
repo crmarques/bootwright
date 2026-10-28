@@ -9358,6 +9358,24 @@ to; it drops the stub `--clusters` flag and manifest members until
 `TestUnavailableCommandsMatchTheStubWiring`, each proved by a seeded mismatch;
 the delivering commit records the gates.
 
+### X192 — Audit lane Y2: parallel test flakes
+
+**Items:** B874 and B875.
+**Kind:** defect. **Owner:** Verification tooling. Delivered on 2026-10-28 as
+lane Y2 of the [audit remediation](backlog.md#lane-order-and-progress) on the
+owner's request to implement them.
+
+The Ceph native worker launcher test gives the launched worker a 120-second
+budget, since compiling the shipped native bundle shares the wall-clock
+budget and a loaded host turned the expected refusal into a timeout; what the
+test proves is unchanged. The enrollment observation tests compare the sorted
+set of observed addresses, since the service observes from concurrent workers
+in no fixed order.
+
+**Guard tests:** the two tests under parallel load, which failed before the
+change (11 of 48 and 9 of 16 runs) and passed every run after it; the
+delivering commit records the gates.
+
 ## M3 independent in-tree completion
 
 The owner's 2026-10-23 request (D181) delivers the independent implementation

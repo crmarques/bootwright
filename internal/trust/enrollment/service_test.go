@@ -107,6 +107,14 @@ func (o *observer) Observe(_ context.Context, address string, _ int) (trust.Host
 	return trust.HostKey{Type: "ssh-ed25519", PublicKey: publicKey}, nil
 }
 
+// addresses is the set of endpoints observed so far, sorted, because the
+// service observes them from concurrent workers in no fixed order.
+func (o *observer) addresses() []string {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	return slices.Sorted(slices.Values(o.observed))
+}
+
 // events is the one ordered log the presenter and the prompt share, so a test
 // sees which of them an operator met first.
 type events struct{ log []string }
@@ -219,8 +227,8 @@ func TestOnlyMachinesUsingContextTrustAreObserved(t *testing.T) {
 			t.Fatalf("%s = %+v", test.machine, host)
 		}
 	}
-	if strings.Join(h.observer.observed, ",") != "192.0.2.10,192.0.2.11" {
-		t.Fatalf("observed %v", h.observer.observed)
+	if got := h.observer.addresses(); !slices.Equal(got, []string{"192.0.2.10", "192.0.2.11"}) {
+		t.Fatalf("observed %v", got)
 	}
 	if report.Recorded != 2 || len(h.trust.written) != 1 {
 		t.Fatalf("recorded = %d writes = %d", report.Recorded, len(h.trust.written))
@@ -478,8 +486,8 @@ func TestASelectionNamesOnlyTheMachinesItObserves(t *testing.T) {
 	if len(report.Hosts) != 1 || report.Hosts[0].Machine != "node-b" {
 		t.Fatalf("hosts = %+v", report.Hosts)
 	}
-	if strings.Join(h.observer.observed, ",") != "192.0.2.11" {
-		t.Fatalf("observed %v", h.observer.observed)
+	if got := h.observer.addresses(); !slices.Equal(got, []string{"192.0.2.11"}) {
+		t.Fatalf("observed %v", got)
 	}
 }
 
