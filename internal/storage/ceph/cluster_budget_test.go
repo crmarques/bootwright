@@ -222,7 +222,7 @@ func physicalCatalogOf(hosts, disks int) (api.Catalog, api.Object) {
 		services := object.Spec().Get("services").Items()[:2]
 		for node := 1; node <= hosts; node++ {
 			for disk := 0; disk < disks; disk++ {
-				path := fmt.Sprintf("/dev/disk/by-id/wwn-0x5%015x", node*16+disk)
+				path := fmt.Sprintf("/dev/disk/by-id/wwn-0x5%015x", node*64+disk)
 				services = append(services, requestMap("service_type", "osd", "service_id", fmt.Sprintf("data-%d-%d", node, disk), "placement", requestMap("hosts", api.StringList(fmt.Sprintf("node-%d", node))), "spec", requestMap("data_devices", requestMap("paths", api.StringList(path)))))
 			}
 		}

@@ -82,7 +82,7 @@ func DecodePhysicalRetirementRequest(data []byte) (PhysicalRetirementRequest, er
 		return r, physicalPolicyFailure()
 	}
 	for _, host := range r.Hosts {
-		if host.Machine <= previous || host.Name == "" || len(host.Devices) > 3 || len(host.EraseWWNs) > 16 || len(host.EraseWWNs) > 0 && !strictlySorted(host.EraseWWNs) {
+		if host.Machine <= previous || host.Name == "" || len(host.Devices) > maxPhysicalDevices || len(host.EraseWWNs) > maxEraseTargets || len(host.EraseWWNs) > 0 && !strictlySorted(host.EraseWWNs) {
 			return r, physicalPolicyFailure()
 		}
 		previous = host.Machine

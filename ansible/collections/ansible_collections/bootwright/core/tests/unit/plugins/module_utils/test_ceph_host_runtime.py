@@ -1542,3 +1542,76 @@ def test_physical_missing_completed_identity_cannot_relearn_a_replacement(reques
     with pytest.raises(ceph_native.Refusal, match="device-identity"):
         worker.device_identity()
     assert markers.records == retained
+
+
+# The Go planner admits as many disks per physical host as a Machine's 16 erase targets cover beside the root disk.
+PHYSICAL_DISKS_BOUND = 15
+
+
+def physical_disks_runtime(request_value, tmp_path, monkeypatch, disks):
+    """One physical host selecting several WWN disks, each with its own kernel name, serial and udev identity."""
+    host = request_value["hosts"][0]
+    host.update(physical=True, hardware=copy.deepcopy(PHYSICAL_HARDWARE))
+    wwns = ["0x50000000000001%02x" % disk for disk in range(disks)]
+    host["devices"] = [{"path": "/dev/disk/by-id/wwn-" + wwn, "wwn": wwn, "serial": "", "sizeBytes": 0} for wwn in wwns]
+    osd = request_value["services"].pop()
+    osd["placement"]["hosts"] = [h["name"] for h in request_value["hosts"][1:]]
+    service = {"service_type": "osd", "service_id": "physical", "placement": {"hosts": [host["name"]]},
+               "spec": {"data_devices": {"paths": [device["path"] for device in host["devices"]]}}}
+    request_value["services"].extend([osd, service])
+    kernel = {device["path"]: "/dev/nvme%dn1" % disk for disk, device in enumerate(host["devices"])}
+    state = {"/dev/nvme%dn1" % disk: {"path": "/dev/nvme%dn1" % disk, "type": "disk", "serial": "serial-%d" % disk, "size": 1 << 40, "rota": False,
+                                      "maj:min": "259:%d" % disk, "wwn": wwn, "ro": False, "rm": False} for disk, wwn in enumerate(wwns)}
+    monkeypatch.setattr(runtime, "physical_hardware", lambda host: None)
+    monkeypatch.setattr(runtime.os.path, "realpath", lambda path: kernel.get(path, path))
+    podman = Podman(request_value, present=True)
+
+    def command(argv, timeout, limit):
+        if argv[0] == "/usr/bin/lsblk":
+            return 0, json.dumps({"blockdevices": [state[argv[-1]]]}).encode()
+        if argv[0] == "/usr/bin/udevadm":
+            name = argv[-1].split("=", 1)[1]
+            disk = state[kernel.get(name, name)]
+            major, minor = disk["maj:min"].split(":")
+            return 0, ("MAJOR=%s\nMINOR=%s\nID_MODEL=SYNTHETIC_NVME\nID_SERIAL_SHORT=%s\nID_WWN=%s\n" % (major, minor, disk["serial"], disk["wwn"])).encode()
+        return podman(argv, timeout, limit)
+
+    worker, markers, unused = host_runtime(request_value, tmp_path, command)
+    seed_profile(markers, request_value)
+    probes = []
+
+    def contained(*args, **kwargs):
+        environment = json.loads(args[3][0])["environment"]
+        probes.append(environment)
+        return {"version": "ceph-host-device-id-v1", "deviceID": runtime.native_form(environment),
+                "dependencyInput": "ceph_volume.util.disk.UdevData.environment"}
+
+    monkeypatch.setattr(worker, "contained", contained)
+    return worker, markers, state, probes
+
+
+@pytest.mark.parametrize("disks", [3, 5, PHYSICAL_DISKS_BOUND])
+def test_physical_host_binds_every_selected_disk_in_one_device_identity_call(request_value, tmp_path, monkeypatch, disks):
+    worker, markers, state, probes = physical_disks_runtime(request_value, tmp_path, monkeypatch, disks)
+    assert worker.device_identity() == {"changed": True}
+    binding, rows = markers.records[runtime.BINDING]["devices"], markers.records[runtime.DEVICES]["devices"]
+    assert len(probes) == disks and len(binding) == len(rows) == disks
+    assert [row["path"] for row in rows] == [device["path"] for device in worker.host["devices"]]
+    assert [row["kernelPath"] for row in rows] == ["/dev/nvme%dn1" % disk for disk in range(disks)]
+    assert len({row["deviceID"] for row in rows}) == disks and all(row["wwn"] == device["wwn"] for row, device in zip(rows, worker.host["devices"]))
+    retained = copy.deepcopy(markers.records)
+    assert worker.device_identity() == {"changed": False} and markers.records == retained
+    assert worker.host_devices() == {"devices": rows}
+    state["/dev/nvme%dn1" % (disks - 1)]["serial"] = "replacement"
+    with pytest.raises(ceph_native.Refusal, match="^device-identity$"):
+        worker.host_devices()
+    assert markers.records == retained
+
+
+def test_physical_host_evidence_at_the_disk_bound_fits_its_decoder_with_the_longest_fields(request_value):
+    devices = [{"path": "/dev/disk/by-id/wwn-0x" + "%032x" % disk, "serial": "S" * 128, "deviceID": "D" * 512, "wwn": "0x" + "%032x" % disk,
+                "kernelPath": "/dev/nvme%dn1" % disk, "sizeBytes": (1 << 63) - 1, "rotational": False} for disk in range(PHYSICAL_DISKS_BOUND)]
+    evidence = {"version": runtime.EVIDENCE_VERSION, "request": "d" * 64, "host": "h" * 253, "owner": "o" * 253, "fsid": request_value["fsid"],
+                "image": IMAGE, "ready": True, "removed": False, "imageID": "c" * 64, "uid": 167, "gid": 167, "label": runtime.SHARED_LABEL,
+                "policySHA256": "f" * 64, "cephadmSHA256": "e" * 64, "planDigest": "a" * 64, "route": True, "devices": devices}
+    assert len(ceph_native.canonical(evidence)) <= 16000

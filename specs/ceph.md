@@ -679,7 +679,9 @@ including P1's physical shape with twelve host-specific OSD specifications;
 seven need 23 calls and 18900 s; eleven need 27 calls and 21540 s, the most
 the 21600 s ceiling fits, and twelve would need 22200 s. The services call's
 documents do not enter the formula, so a host-specific OSD specification per
-selected disk keeps it. The six-hour adapter ceiling, per-call budgets, input
+selected disk keeps it. Neither does a host's device count: each per-host call
+proves, binds or prepares all of its host's selected disks, so more disks lengthen
+calls, not the call sequence. The six-hour adapter ceiling, per-call budgets, input
 bounds and readiness proofs remain unchanged. A request whose deadline exceeds
 the ceiling refuses at planning, coded `lifecycle.unsupported`, with the
 [refusal table](#refusal-table)'s row for more Ceph hosts than the cluster run
@@ -728,7 +730,16 @@ and remedy
 Every enrollment call admits at least one host within its worker budget, so n
 calls enroll n hosts at any count. The services call submits at most the 128
 specifications the worker admits, and at eleven hosts P1's physical shape with
-three host-specific OSD specifications per host submits 35. At eleven hosts the
+three host-specific OSD specifications per host submits 35. Past 128 MON, MGR,
+OSD and MDS services, which one specification per disk passes from nine
+physical hosts of fifteen disks, planning refuses, coded
+`lifecycle.unsupported`, with reason
+`CephCluster <cluster> declares <services> MON, MGR, OSD and MDS services, past the 128 one services call submits`
+and remedy
+`list a host's disks in one OSD service of CephCluster <cluster> instead of one service per disk`.
+With one OSD service per host, eleven hosts of fifteen disks plan, and their
+frozen request, ready evidence, host evidence and physical retirement policy
+stay inside their bounds. At eleven hosts the
 frozen request and the ready cluster evidence stay well inside the 256 KiB
 request and 60 KiB evidence bounds, and the physical retirement policy admits
 the same host count as the cluster.
@@ -769,9 +780,27 @@ agree. This proves virtual presentation, with no physical qualification claim.
 
 Managed physical hosts use the same native explicit path selectors, restricted
 here to `/dev/disk/by-id/wwn-0x` plus 16 or 32 lowercase hexadecimal digits.
-At most three local whole disks per host are admitted; shared WWNs across hosts,
-partitions and multipath targets refuse. The request records WWN intent without
-inventing a serial or capacity. Original physical Machine presence evidence
+A physical host admits every distinct local whole disk its OSD services select,
+data, DB and WAL paths together, up to the most that its Machine's
+[erase policy](state-reconciliation.md#opt-in-physical-logical-overwrite) can cover beside the root disk: one fewer than
+that policy's target bound, 15 of 16. No call, round or deadline grows with the
+device count, since every per-host call proves all of its host's disks at once
+(the [cluster execution budget](#cluster-execution-budget)), so physical
+retirement's need for every selected disk in that policy is the binding bound.
+One disk past it refuses at request planning, coded `lifecycle.unsupported`,
+with reason
+`CephCluster <cluster> selects <disks> disks on physical Ceph host <host>, past the 15 that its Machine's eraseOnRemoval policy can cover beside the root disk within its 16 targets`
+and remedy
+`select at most 15 distinct WWN disks for host <host> across the data_devices, db_devices and wal_devices paths of the OSD services of CephCluster <cluster>`.
+Shared WWNs across hosts, partitions and multipath targets refuse at any count.
+The request records WWN intent without inventing a serial or capacity.
+
+Not yet met: a host's device-identity, device-proof, OSD-preparation and
+device-readback calls, and the cluster observation's per-OSD configuration
+reads, run per-disk or per-OSD native commands whose ceilings are not admitted
+against the call's 640 s worker budget, on virtual and physical hosts alike, so a slow host
+ends the call ambiguous rather than refusing by name; tracked as
+[B900](milestones/m2.md#b900). Original physical Machine presence evidence
 supplies the system UUID and complete MAC inventory; installed-host SSH proof
 remains mandatory. Before device binding, the host re-proves those hardware
 facts from bounded kernel inventory. An unreadable or changed inventory refuses.

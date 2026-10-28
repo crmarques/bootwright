@@ -9,6 +9,8 @@ import (
 	"github.com/crmarques/bootwright/internal/substrate"
 )
 
+const MaxEraseTargets = 16
+
 func validateErase(o api.Object, variant string) []api.Issue {
 	policy := o.Spec().Get("hardware", "eraseOnRemoval")
 	if !policy.Present() {
@@ -25,7 +27,7 @@ func validateErase(o api.Object, variant string) []api.Issue {
 	}
 	issues := []api.Issue{}
 	targets := policy.Get("targets").Items()
-	if len(targets) < 1 || len(targets) > 16 {
+	if len(targets) < 1 || len(targets) > MaxEraseTargets {
 		issues = append(issues, invariant(path+".targets", "logical overwrite requires 1 to 16 explicit whole disks", "list each disk once, including the root device"))
 	}
 	root, included := substrate.RootDevicePath(o), false

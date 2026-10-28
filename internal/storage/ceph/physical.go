@@ -1,11 +1,13 @@
 package ceph
 
 import (
+	"fmt"
 	"regexp"
 	"slices"
 	"strings"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
+	"github.com/crmarques/bootwright/internal/machine"
 	"github.com/crmarques/bootwright/internal/reconciliation"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
 )
@@ -15,6 +17,11 @@ var physicalKernelPath = regexp.MustCompile(`^/dev/(?:sd[a-z]+|nvme[0-9]+n[0-9]+
 var physicalSerial = regexp.MustCompile(`^[!-~]{1,128}$`)
 var hardwareUUID = regexp.MustCompile(`^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$`)
 var hardwareMAC = regexp.MustCompile(`^[0-9a-f]{2}(?::[0-9a-f]{2}){5}$`)
+
+const (
+	maxEraseTargets    = machine.MaxEraseTargets
+	maxPhysicalDevices = maxEraseTargets - 1
+)
 
 func physicalDevices(cluster api.Object, node string) ([]Device, error) {
 	paths := []string{}
@@ -40,14 +47,19 @@ func physicalDevices(cluster api.Object, node string) ([]Device, error) {
 	}
 	slices.Sort(paths)
 	paths = slices.Compact(paths)
-	if len(paths) > 3 {
-		return nil, failure("lifecycle.unsupported", "physical Ceph preparation admits at most three explicitly selected disks per host", "use a bounded data/DB/WAL allocation")
+	if len(paths) > maxPhysicalDevices {
+		return nil, physicalDeviceBudgetFailure(cluster.Name(), node, len(paths))
 	}
 	devices := []Device{}
 	for _, path := range paths {
 		devices = append(devices, Device{Path: path, WWN: strings.TrimPrefix(path, "/dev/disk/by-id/wwn-")})
 	}
 	return devices, nil
+}
+
+func physicalDeviceBudgetFailure(cluster, node string, disks int) error {
+	return failure("lifecycle.unsupported", fmt.Sprintf("CephCluster %s selects %d disks on physical Ceph host %s, past the %d that its Machine's eraseOnRemoval policy can cover beside the root disk within its %d targets", cluster, disks, node, maxPhysicalDevices, maxEraseTargets),
+		fmt.Sprintf("select at most %d distinct WWN disks for host %s across the data_devices, db_devices and wal_devices paths of the OSD services of CephCluster %s", maxPhysicalDevices, node, cluster))
 }
 
 func physicalHosts(hosts []Host) bool {

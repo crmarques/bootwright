@@ -319,3 +319,75 @@ def test_batch_readback_does_not_retry_beyond_reserved_command(native):
     assert len(reads) == 1 and len(inventory) == 3
     native.ceph = original
     assert native.enroll() == {"changed": False}
+
+
+# The Go planner's per-host disk bound for physical hosts: a Machine's 16 erase targets less its root disk.
+PHYSICAL_DISKS = 15
+
+
+def physical_disks(request, disks):
+    """Every host physical, each selecting its own WWN disks in one OSD service per host."""
+    services = [service for service in request["services"] if service["service_type"] != "osd"]
+    for number, host in enumerate(request["hosts"], start=1):
+        wwns = ["0x5%015x" % (number * 64 + disk) for disk in range(disks)]
+        host.update(physical=True, hardware={"uuid": "11111111-1111-4111-8111-1111111111%02d" % number, "macs": ["02:00:00:00:%02x:01" % number]})
+        host["devices"] = [{"path": "/dev/disk/by-id/wwn-" + wwn, "wwn": wwn, "serial": "", "sizeBytes": 0} for wwn in wwns]
+        services.append({"service_type": "osd", "service_id": "data-" + str(number), "placement": {"hosts": [host["name"]]},
+                         "spec": {"data_devices": {"paths": [device["path"] for device in host["devices"]]}}})
+    request["services"] = services
+
+
+@pytest.mark.parametrize("count,disks", [(3, 3), (3, 5), (3, PHYSICAL_DISKS), (BOUND, PHYSICAL_DISKS)])
+def test_osd_preparation_round_is_one_call_per_physical_host_whatever_its_disks(core_request, monkeypatch, tmp_path, count, disks):
+    grow_hosts(core_request, count)
+    core_request["clusterSSHTransport"] = "verifiedTunnel"
+    core.package_intent(core_request)
+    physical_disks(core_request, disks)
+    ceph_native.validate(core_request)
+    hosts = core_request["hosts"]
+    counts, lock, submitted = Counter(), threading.Lock(), []
+    barrier = threading.Barrier(count)
+
+    class Transport(core.ReadinessTransport):
+        def call(self, host, phase, private=None, **kwargs):
+            with lock:
+                counts[phase] += 1
+            if phase == "osd_prepare":
+                barrier.wait(timeout=5)
+            if phase == "prerequisites":
+                return {"name": host["name"], "owned": False, "exists": False,
+                        "recovery": staging.recovery_record(core_request, host["name"], "unclaimed")}
+            if phase == "bootstrap_state":
+                state = staging.recovery_record(core_request, host["name"], "unclaimed")
+                state["evidence"] = dict(core.observation(core_request), owned=False, exists=False, removed=False)
+                return state
+            if phase in ("tunnel_configure", "tunnel_mount"):
+                return {"changed": True}
+            if phase == "host_devices":
+                return {"devices": [{"host": host["name"], "path": device["path"], "serial": "S-" + device["wwn"], "deviceID": "NVME_" + device["wwn"],
+                                     "wwn": device["wwn"], "kernelPath": "/dev/nvme%dn1" % disk, "sizeBytes": 1 << 40, "rotational": False}
+                                    for disk, device in enumerate(host["devices"])]}
+            if phase == "services":
+                submitted.extend(kwargs["devices"])
+            if phase == "enroll":
+                return {"changed": True, "remaining": counts[phase] < count}
+            return super().call(host, phase, private, **kwargs)
+
+    clock = core.ReadinessClock()
+    transport = Transport(core_request, clock, ready_after=1)
+    monkeypatch.setattr(ceph_native, "supported_transport", lambda request: True)
+    ceph_core.execute(core_request, "apply", "d" * 64, transport, {"dashboard": str(tmp_path / "dashboard")}, now=clock.now, pause=clock.pause)
+    assert counts["osd_prepare"] == counts["host_devices"] == count and counts["devices"] == 2 * count and counts["services"] == 1
+    assert 10 + 5 + counts["enroll"] + counts["services"] == 16 + count
+    assert [(row["host"], row["path"]) for row in submitted] == [(host["name"], device["path"]) for host in hosts for device in host["devices"]]
+    assert len(submitted) == count * disks
+
+
+def test_worker_admits_every_selected_disk_of_a_physical_host_and_still_refuses_shared_wwns(core_request):
+    physical_disks(core_request, PHYSICAL_DISKS)
+    ceph_native.validate(core_request)
+    shared = copy.deepcopy(core_request)
+    shared["hosts"][1]["devices"][-1] = copy.deepcopy(shared["hosts"][0]["devices"][0])
+    shared["services"][-2]["spec"]["data_devices"]["paths"][-1] = shared["hosts"][0]["devices"][0]["path"]
+    with pytest.raises(ceph_native.Refusal):
+        ceph_native.validate(shared)

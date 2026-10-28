@@ -3239,6 +3239,8 @@ holding such a clause, the clauses pending and the work they enable.
   uplink rules (X196).
 - [D195](#d195): clauses (1) to (6), the Ceph cluster deadline as the only
   host bound (X197).
+- [D198](#d198): clauses (1) to (7), the physical Ceph host's disk bound
+  derived from its Machine's erase policy (X201).
 
 ### D1
 
@@ -5247,3 +5249,58 @@ name and fields instead of the cluster's text. (5) Evidence: in-tree planning
 goldens and the recording fake transport at seven hosts and at the bound; a
 live seven-guest libvirt run is the operator gate. (6) The 900 s readiness
 waits are unchanged; a shortfall the live run measures is its own item.
+
+### D198
+
+**session-pending** (2026-10-28, the owner; the clauses after the owner's
+words are taken by the session, pending the owner's review). The owner asked
+the session to "Plan and implement what is still missing" and said "the
+solution must be as good as possible in terms of well-designed architecture
+and ux". It defines [B888](m2.md#b888) as slice X201 on M2 and waives, for
+implementation only, its Requires of B688's live timing and an owner
+decision. Taken by the session, pending the owner's review: (1) Why three:
+X64 fixed the count as an input bound for one data, DB and WAL allocation; no
+budget, deadline or proof derives it, and no call, round or deadline counts
+devices: every per-host round makes one call per host that proves, binds or
+prepares all of its disks, and the services call takes every host's device
+identities at once. The cluster deadline therefore cannot bound the device
+count, and neither more calls nor a per-device term is added to it. (2) The
+binding bound is retirement: a physical host's every selected data, DB and WAL
+disk must be in its Machine's original `eraseOnRemoval` targets beside the
+root disk, and that policy admits 16 targets, so a host selecting more than 15
+could never be retired. The build derives the count as the Machine erase
+target bound less one (`machine.MaxEraseTargets`, now one constant for the
+Machine admission, the erase request and Ceph), so it is never restated.
+(3) One disk past it refuses at request planning, coded
+`lifecycle.unsupported`, naming the cluster, host and count, the bound and the
+erase policy, with a remedy to select at most 15 per host; the physical
+retirement policy's decoder follows the same bound and the erase-target bound.
+(4) Every destructive guarantee stays as before at any count: canonical WWN
+paths only, shared WWNs across hosts, partitions and multipath refused, WWN
+intent frozen without serial or capacity, binding and re-proof of every disk,
+erase receipts matched per disk, and the original erase policy covering each.
+The worker's request admission drops its physical three-disk check and keeps
+its 128-device per-host bound; Go owns the policy. (5) The services call
+submits at most the worker's 128 specifications; one OSD specification per
+disk passes that from nine hosts of fifteen disks, so planning past it
+refuses by name with a remedy to list a host's disks in one OSD service. With
+one service per host, eleven hosts of fifteen disks fit the frozen request
+(about 38 KiB of 256 KiB), the ready evidence, the 16000-byte host evidence at
+the longest admitted fields and the retirement policy. (6) Found and not
+taken: at their per-command ceilings, the device-identity call's per-disk
+commands need about 290 s a disk, the device proof about 120 to 180 s and
+the device readback 60 s, and the cluster observation reads each OSD's
+declared configuration keys at 60 s each, past the 640 s worker budget
+already at three disks and for virtual hosts alike; a
+slow host ends such a call ambiguous, its records intact for the next apply,
+rather than refusing by name. That is recorded as [B900](m2.md#b900), not
+taken, because it predates this bound and needs per-disk admission or batched
+probes in the worker. A build from before X201 refuses a frozen retirement
+policy of more than three disks per host as inconsistent, which is safe; no
+version moves under the pre-1.x rule. The Machine API has no parallel three-disk limit:
+libvirt's data-disk list and the 16-target erase policy are its only disk
+bounds. (7) Evidence: planning and binding tests at 3, 5 and 15 disks and the
+refusal at 16, retirement with five-disk hosts, the recording fake
+transport's OSD-preparation round at 3 to 15 disks and eleven hosts, and the
+worker's device identity at 3, 5 and 15 disks; a physical run with five or
+more WWN disks per host is the operator gate.

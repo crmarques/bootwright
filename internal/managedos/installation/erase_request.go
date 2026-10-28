@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
+	machineref "github.com/crmarques/bootwright/internal/machine"
 	"github.com/crmarques/bootwright/internal/reconciliation"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
 )
@@ -100,7 +101,7 @@ func eraseRequest(machine api.Object, install Request) (EraseRequest, error) {
 		rootIncluded = rootIncluded || target.DeviceName == root
 		request.Targets = append(request.Targets, target)
 	}
-	if !rootIncluded || len(request.Targets) > 16 {
+	if !rootIncluded || len(request.Targets) > machineref.MaxEraseTargets {
 		return request, refusal("api.invariant", "physical erase requires the approved hardware.rootDevice.deviceName among at most 16 explicit targets", "list the root disk and each data disk to erase")
 	}
 	slices.SortFunc(request.Targets, func(a, b EraseTarget) int { return strings.Compare(a.DeviceName, b.DeviceName) })

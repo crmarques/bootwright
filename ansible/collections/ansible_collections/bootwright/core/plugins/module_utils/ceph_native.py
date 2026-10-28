@@ -674,7 +674,7 @@ def validate_hosts(request):
             require(isinstance(hardware["uuid"], str) and SUBVOLUME_UUID.fullmatch(hardware["uuid"]) is not None)
             require(isinstance(hardware["macs"], list) and 1 <= len(hardware["macs"]) <= 32
                     and all(isinstance(m, str) and re.fullmatch(r"[0-9a-f]{2}(?::[0-9a-f]{2}){5}", m) for m in hardware["macs"])
-                    and hardware["macs"] == sorted(set(hardware["macs"])) and len(host["devices"]) <= 3)
+                    and hardware["macs"] == sorted(set(hardware["macs"])))
         paths = set()
         serials = set()
         for device in host["devices"]:

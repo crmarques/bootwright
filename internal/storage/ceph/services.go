@@ -3,6 +3,7 @@ package ceph
 import (
 	"cmp"
 	"encoding/json"
+	"fmt"
 	"slices"
 	"strings"
 
@@ -103,8 +104,14 @@ func projectServices(r *Request, cluster api.Object) error {
 		}
 		r.Services = append(r.Services, data)
 	}
+	if len(r.Services) > maxCoreServices {
+		return failure("lifecycle.unsupported", fmt.Sprintf("CephCluster %s declares %d MON, MGR, OSD and MDS services, past the %d one services call submits", cluster.Name(), len(r.Services), maxCoreServices),
+			fmt.Sprintf("list a host's disks in one OSD service of CephCluster %s instead of one service per disk", cluster.Name()))
+	}
 	return nil
 }
+
+const maxCoreServices = 128
 
 var delegatedFamilies = []string{"rgw", "ingress", "nfs", "nvmeof"}
 

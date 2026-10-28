@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"slices"
 	"strings"
 	"testing"
@@ -29,14 +30,22 @@ func retirementRecord(block reconciliation.Block, verb reconciliation.Verb, data
 
 func physicalRetirementFixture(t *testing.T) (PhysicalRetirementCapability, lifecycle.Execution, Request, map[string]PhysicalErasure) {
 	t.Helper()
-	catalog, object := physicalCatalog()
+	return physicalRetirementFixtureFrom(t, physicalCatalog)
+}
+
+func physicalRetirementFixtureFrom(t *testing.T, catalogOf func() (api.Catalog, api.Object)) (PhysicalRetirementCapability, lifecycle.Execution, Request, map[string]PhysicalErasure) {
+	t.Helper()
+	catalog, object := catalogOf()
 	cluster, err := baseRequest(catalog, object, "synthetic")
 	if err != nil {
 		t.Fatal(err)
 	}
 	request := physicalRetirementRequest(catalog, cluster)
 	for i := range request.Hosts {
-		request.Hosts[i].EraseWWNs = []string{request.Hosts[i].Devices[0].WWN}
+		request.Hosts[i].EraseWWNs = []string{}
+		for _, device := range request.Hosts[i].Devices {
+			request.Hosts[i].EraseWWNs = append(request.Hosts[i].EraseWWNs, device.WWN)
+		}
 	}
 	data, _ := request.Canonical()
 	block := retirementBlock(t, PhysicalRetirementBlockID(cluster.Cluster), string(api.CephCluster), cluster.Cluster, PhysicalRetirementImplementation, data)
@@ -48,7 +57,11 @@ func physicalRetirementFixture(t *testing.T) (PhysicalRetirementCapability, life
 		claim := retirementBlock(t, "claim-"+host.Machine, string(api.Machine), host.Machine, "machine-baremetal-v1", []byte(`{}`))
 		execution.ApplyProved = append(execution.ApplyProved, retirementRecord(claim, reconciliation.Apply, []byte(`{}`)))
 		cluster.Packages.Sources = append(cluster.Packages.Sources, PackageSource{Host: host.Name})
-		proofs[host.Machine] = PhysicalErasure{MACs: slices.Clone(identity.MACs), Targets: []Device{{WWN: host.Devices[0].WWN, Serial: "SYNTHETIC-" + host.Machine, SizeBytes: 1 << 40}}}
+		erasure := PhysicalErasure{MACs: slices.Clone(identity.MACs), Targets: []Device{}}
+		for disk, device := range host.Devices {
+			erasure.Targets = append(erasure.Targets, Device{WWN: device.WWN, Serial: syntheticSerial(host.Machine, disk), SizeBytes: 1 << 40})
+		}
+		proofs[host.Machine] = erasure
 	}
 	for _, host := range cluster.Hosts {
 		hostRequest := HostRequest{Version: HostVersion, Cluster: scopeOf(cluster), Host: host.Name}
@@ -57,8 +70,11 @@ func physicalRetirementFixture(t *testing.T) (PhysicalRetirementCapability, life
 		hostExecution := execution
 		hostExecution.Block = hostBlock
 		evidence := preparedEvidence(t, hostExecution, hostRequest, func(value *HostEvidence) {
-			value.Devices = []HostDevice{{Path: host.Devices[0].Path, WWN: host.Devices[0].WWN, Serial: "SYNTHETIC-" + host.Machine,
-				KernelPath: "/dev/sdb", DeviceID: "SYNTHETIC_" + host.Machine, SizeBytes: 1 << 40}}
+			value.Devices = []HostDevice{}
+			for disk, device := range host.Devices {
+				value.Devices = append(value.Devices, HostDevice{Path: device.Path, WWN: device.WWN, Serial: syntheticSerial(host.Machine, disk),
+					KernelPath: syntheticKernelPath(disk), DeviceID: "SYNTHETIC_" + syntheticSerial(host.Machine, disk), SizeBytes: 1 << 40})
+			}
 		})
 		execution.RemovalProved = append(execution.RemovalProved, lifecycle.RemovalEvidence{
 			Applied: retirementRecord(hostBlock, reconciliation.Apply, evidence), Removed: retirementRecord(hostBlock, reconciliation.Destroy, []byte(`{"pendingErase":true}`))})
@@ -76,6 +92,20 @@ func physicalRetirementFixture(t *testing.T) (PhysicalRetirementCapability, life
 		return proofs[applied.Object], true, nil
 	})
 	return capability, execution, cluster, proofs
+}
+
+func syntheticSerial(machine string, disk int) string {
+	if disk == 0 {
+		return "SYNTHETIC-" + machine
+	}
+	return fmt.Sprintf("SYNTHETIC-%s-%d", machine, disk)
+}
+
+func syntheticKernelPath(disk int) string {
+	if disk == 0 {
+		return "/dev/sdb"
+	}
+	return fmt.Sprintf("/dev/nvme%dn1", disk)
 }
 
 func TestPhysicalRetirementGoldenRequiresOriginalDiskBindingAndEveryCompleteReceipt(t *testing.T) {
