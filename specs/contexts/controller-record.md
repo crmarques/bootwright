@@ -76,13 +76,23 @@ Reservations record the host resources that locally hosted services claim,
 under the
 [Infrastructure services conflict contract](../infrastructure-services.md#host-reservations).
 Each entry contains the context name, capability kind, service name and a sorted
-unique key list, plus a shared marker present only on a shared claim; entries
-are ordered by context name then kind then service. A claim a block places on
+unique key list, plus a shared marker present only on a shared claim and a
+releasing marker present only on a claim whose removal re-proved its release
+before an effect (B839): it stays until the claim is released, by the
+completed removal or the holder's deletion, and while it stands a claim another context makes on a
+key that release guards refuses
+([host reservations](../infrastructure-services.md#host-reservations)); an
+earlier build refuses a record holding one as an unknown field. Entries are
+ordered by context name then kind then service. A claim a block places on
 an SSH host that is not the controller prefixes every key with
 `ssh/<address>:<port>/`, the SSH address as declared (an IP in canonical form,
 unbracketed, a DNS name without case or a final dot) and port its placement
-connects to; keys with two qualifiers, or one and none, never conflict, and
-keys with one qualifier conflict by their class's relation. Version 3 holds
+connects to; the same claim's keys are published again prefixed by
+`sshkey/SHA256:<digest>/`, the host key its placement Machine pins, in
+unpadded URL-safe base64 ([host reservations](../infrastructure-services.md#host-reservations));
+keys with two qualifiers, or one and none, never conflict, and
+keys with one qualifier conflict by their class's relation. The host-key form
+was added under version 3 (D188) as the address form was. Version 3 holds
 keys with or without the qualifier, side by side in one record: the qualifier
 was added under version 3 (Q96) without a version move, because every earlier
 entry is a valid unqualified claim, so a record an earlier build wrote reads
@@ -114,8 +124,12 @@ never hosted a service is unchanged.
 ## Bounds
 
 The state record is bounded to 4 MiB, with at most 4096 tool source
-identities, 4096 bindings and 256 reservations of at most 64 keys of 256 bytes
-each. Controller records allow nesting depth 16 and 32 fields per object;
+identities, 4096 bindings and 256 reservations of at most 128 keys of 256 bytes
+each: a claim holds at most 64 keys, and an SSH-placed claim publishes each in
+both its address and its host-key form (D188); an earlier build, whose
+bound was 64, refuses a record holding more. The 4 MiB state bound is reached
+before 256 reservations of 128 maximal keys, and a publication past it
+refuses as an encoding-limit state error, writing nothing. Controller records allow nesting depth 16 and 32 fields per object;
 other durable records keep their own bounds. An apply whose reservations would
 take the record past 256 entries refuses with `controller.conflict` before it
 publishes them, naming that bound, the entries it needs and those other

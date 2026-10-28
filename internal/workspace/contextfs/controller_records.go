@@ -30,8 +30,9 @@ const controllerVersionRemedy = freshInstallRemediation + " That fresh install a
 
 // ControllerRecordVersion is the private shared-host evidence format. Version 3
 // holds host identity, bindings, tool sources and areas, and reservations,
-// whose keys an SSH-placed claim qualifies by its host; the qualifier was added
-// under version 3 (Q96), since every earlier key is a valid unqualified claim.
+// whose keys an SSH-placed claim qualifies by its host's address and by its
+// pinned host key; both qualifiers were added under version 3 (Q96, D188),
+// since every earlier key is a valid unqualified claim.
 // The setup receipt lives in the setup subtree (D152).
 const ControllerRecordVersion = 3
 
@@ -40,7 +41,7 @@ const (
 	maxControllerToolSources     = 4096
 	maxControllerStages          = 32
 	maxControllerReservations    = 256
-	maxControllerReservationKeys = 64
+	maxControllerReservationKeys = prerequisites.MaxPublishedReservationKeys
 )
 
 type controllerHostRecord struct {

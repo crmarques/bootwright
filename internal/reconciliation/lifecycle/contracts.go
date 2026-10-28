@@ -72,7 +72,7 @@ type Transaction interface {
 	Reserve(context.Context, []prerequisites.HostReservation) error
 	Claim(context.Context, prerequisites.HostReservation) error
 	ReleaseReservations(context.Context) error
-	ReproveReservations(context.Context, func([]prerequisites.HostReservation) error) error
+	ReproveReservations(ctx context.Context, check func([]prerequisites.HostReservation) error, releasing func(prerequisites.HostReservation) bool) error
 	// ClientArea opens the shared host area one exact client closure a context
 	// selects is published into, creating and attributing it under a durable
 	// reservation. A sealed area reopens read-only.
@@ -529,10 +529,11 @@ type CapabilityPlan struct {
 // connects to, which name the host itself. It is never published, because two
 // contexts targeting one SSH host are not coordinated.
 type SSHReservation struct {
-	Machine     string
-	Address     string
-	Port        int
-	Reservation prerequisites.HostReservation
+	Machine       string
+	Address       string
+	Port          int
+	KnownHostsRef string
+	Reservation   prerequisites.HostReservation
 }
 
 // Execution lends bounded material for one frozen attempt and clears it afterward.

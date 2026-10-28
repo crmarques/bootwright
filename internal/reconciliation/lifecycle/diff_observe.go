@@ -101,7 +101,7 @@ func (r diffRead) observedBlocks() []reconciliation.Block {
 	if r.owning.ID == "" {
 		return nil
 	}
-	owned := reconciliation.OwnedSubset(r.owningPlan, r.owningStates).Blocks
+	owned := slices.Clone(coveredBy(r.owning, r.owningPlan, r.owningStates).Blocks)
 	if r.operation.Verb == reconciliation.Apply {
 		return owned
 	}

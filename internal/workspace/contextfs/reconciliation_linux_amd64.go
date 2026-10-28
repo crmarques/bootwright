@@ -461,6 +461,7 @@ func (t *lifecycleTransaction) Claim(ctx context.Context, reservation prerequisi
 				if held.Shared == reservation.Shared && slices.Equal(held.Keys, reservation.Keys) {
 					return nil
 				}
+				next[0].Releasing = held.Releasing
 				continue
 			}
 			next = append(next, held)
@@ -482,14 +483,31 @@ func (t *lifecycleTransaction) ReleaseReservations(ctx context.Context) error {
 	return t.publishReservations(ctx, nil, destroyRetry(t.identity.Name))
 }
 
-func (t *lifecycleTransaction) ReproveReservations(ctx context.Context, check func([]prerequisites.HostReservation) error) error {
+// ReproveReservations marks a selected claim releasing in the publication
+// that follows the admitting check, so no claim lands between the proof and
+// the mark. The mark is durable: a removal interrupted during its effect
+// leaves it, and only the claim's release or its replacement clears it.
+func (t *lifecycleTransaction) ReproveReservations(ctx context.Context, check func([]prerequisites.HostReservation) error, releasing func(prerequisites.HostReservation) bool) error {
 	if err := t.base.available(ctx); err != nil {
 		return err
 	}
 	if t.stored.data == nil {
 		return check(nil)
 	}
-	return check(cloneControllerState(t.stored.value).Reservations)
+	if err := check(cloneControllerState(t.stored.value).Reservations); err != nil || releasing == nil {
+		return err
+	}
+	value := cloneControllerState(t.stored.value)
+	marked := false
+	for index, reservation := range value.Reservations {
+		if reservation.Context == t.identity.Name && !reservation.Releasing && releasing(reservation) {
+			value.Reservations[index].Releasing, marked = true, true
+		}
+	}
+	if !marked {
+		return nil
+	}
+	return t.publishControllerState(ctx, value, t.stored.bundles, destroyRetry(t.identity.Name), checkpointBeforeReservation)
 }
 
 // Bind records this context's controller relationship on the prepared host.

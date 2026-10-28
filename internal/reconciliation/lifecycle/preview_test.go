@@ -3,6 +3,9 @@ package lifecycle
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/base64"
+	"encoding/binary"
 	"errors"
 	"path"
 	"reflect"
@@ -16,8 +19,11 @@ import (
 	"github.com/crmarques/bootwright/internal/desiredstate"
 	"github.com/crmarques/bootwright/internal/desiredstate/compilation"
 	"github.com/crmarques/bootwright/internal/diagnostics"
+	"github.com/crmarques/bootwright/internal/machine"
 	"github.com/crmarques/bootwright/internal/reconciliation"
 	"github.com/crmarques/bootwright/internal/reconciliation/operationstore"
+	"github.com/crmarques/bootwright/internal/secrets"
+	"github.com/crmarques/bootwright/internal/trust"
 )
 
 // A fresh plan previews the very decision a fresh apply registers. A preview
@@ -164,7 +170,38 @@ var sshEndpoints = map[string]struct {
 // sshClaim is one claim placed through a test Machine's SSH access.
 func sshClaim(machine string, reservation prerequisites.HostReservation) SSHReservation {
 	endpoint := sshEndpoints[machine]
-	return SSHReservation{Machine: machine, Address: endpoint.address, Port: endpoint.port, Reservation: reservation}
+	return SSHReservation{Machine: machine, Address: endpoint.address, Port: endpoint.port, KnownHostsRef: machine + "-known-hosts", Reservation: reservation}
+}
+
+// sshHostKeys is the host key each test Machine's known-hosts Secret pins:
+// services and alias reach one host, so they pin one key.
+var sshHostKeys = map[string]byte{"services": 1, "alias": 1, "storage": 2, "forwarded": 3, "loopback": 4, "declared": 5}
+
+// testHostKey is an ed25519 public key blob, in base64, named by one byte.
+func testHostKey(seed byte) string {
+	blob := binary.BigEndian.AppendUint32(nil, uint32(len("ssh-ed25519")))
+	blob = append(blob, "ssh-ed25519"...)
+	blob = binary.BigEndian.AppendUint32(blob, 32)
+	blob = append(blob, bytes.Repeat([]byte{seed}, 32)...)
+	return base64.StdEncoding.EncodeToString(blob)
+}
+
+// pinnedQualifier is the host-key qualifier of what a test Machine pins: the
+// SHA-256 digest of its key blob in unpadded URL-safe base64 (D188).
+func pinnedQualifier(machine string) string {
+	blob, _ := base64.StdEncoding.DecodeString(testHostKey(sshHostKeys[machine]))
+	digest := sha256.Sum256(blob)
+	return "sshkey/SHA256:" + base64.RawURLEncoding.EncodeToString(digest[:]) + "/"
+}
+
+// pinnedHostMaterial is each test Machine's bound known-hosts entry.
+func pinnedHostMaterial() map[string]secrets.Material {
+	material := map[string]secrets.Material{}
+	for machine, endpoint := range sshEndpoints {
+		line := trust.HostToken(endpoint.address, endpoint.port) + " ssh-ed25519 " + testHostKey(sshHostKeys[machine]) + "\n"
+		material[machine+"-known-hosts"] = secrets.NewMaterial(map[secrets.Part][]byte{secrets.ValuePart: []byte(line)})
+	}
+	return material
 }
 
 // sshSockets is two of one context's own services at one port, the first bound
@@ -263,9 +300,10 @@ func TestAPlanWhoseOwnSocketsConflictOnAnSSHHostNamesTheHost(t *testing.T) {
 }
 
 // An SSH host's claims are published beside the controller's (Q96): a claim on
-// an SSH host with every key qualified by that host's address and port, so two
-// contexts targeting one SSH host conflict there, and a claim on an SSH host
-// that is the controller as the controller's own.
+// an SSH host with every key qualified by that host's address and port, and
+// again by the host key its Machine pins (D188), so two contexts targeting one
+// SSH host conflict there, and a claim on an SSH host that is the controller
+// as the controller's own.
 func TestAnApplyPublishesItsSSHClaimsQualifiedByTheirHost(t *testing.T) {
 	h := newPlannedHarness(t, nestedDefinitions())
 	h.service.compiler = testCompiler{state: withControllerAddress()}
@@ -277,10 +315,14 @@ func TestAnApplyPublishesItsSSHClaimsQualifiedByTheirHost(t *testing.T) {
 		t.Fatal(err)
 	}
 	want := append(reservationOf("alpha"),
-		prerequisites.HostReservation{Context: testContextName, Kind: "proxy", Service: "gamma", Keys: []string{"ssh/192.0.2.10:22/socket:0.0.0.0:3128"}},
-		prerequisites.HostReservation{Context: testContextName, Kind: "dns", Service: "delta", Keys: []string{"ssh/192.0.2.20:22/socket:192.0.2.9:3128"}},
+		prerequisites.HostReservation{Context: testContextName, Kind: "proxy", Service: "gamma", Keys: []string{
+			"ssh/192.0.2.10:22/socket:0.0.0.0:3128", pinnedQualifier("services") + "socket:0.0.0.0:3128"}},
+		prerequisites.HostReservation{Context: testContextName, Kind: "dns", Service: "delta", Keys: []string{
+			"ssh/192.0.2.20:22/socket:192.0.2.9:3128", pinnedQualifier("storage") + "socket:192.0.2.9:3128"}},
 		prerequisites.HostReservation{Context: testContextName, Kind: "ntp", Service: "epsilon", Keys: []string{"path:/srv/ntp", "socket:192.0.2.1:123"}},
-		prerequisites.HostReservation{Context: testContextName, Kind: "proxy", Service: "zeta", Keys: []string{"ssh/192.0.2.10:2222/socket:0.0.0.0:3128", "ssh/192.0.2.10:2222/unit:bootwright-zeta"}},
+		prerequisites.HostReservation{Context: testContextName, Kind: "proxy", Service: "zeta", Keys: []string{
+			"ssh/192.0.2.10:2222/socket:0.0.0.0:3128", "ssh/192.0.2.10:2222/unit:bootwright-zeta",
+			pinnedQualifier("forwarded") + "socket:0.0.0.0:3128", pinnedQualifier("forwarded") + "unit:bootwright-zeta"}},
 	)
 	if !reflect.DeepEqual(h.workspace.reservations, want) {
 		t.Fatalf("published %+v, want %+v", h.workspace.reservations, want)
@@ -297,6 +339,45 @@ func TestAnSSHAddressTooLongToQualifyItsClaimsRefuses(t *testing.T) {
 	_, err := h.service.Plan(context.Background(), PlanRequest{ContextName: "lab"})
 	if reported := diagnostics.Of(err); len(reported) != 1 || reported[0].Code != "api.value" || !strings.Contains(reported[0].Message, "of Machine/services is too long") {
 		t.Fatalf("refusal = %+v (%v)", reported, err)
+	}
+}
+
+// A host-key qualified key that would pass the record's key bound refuses while
+// the context plans, naming the claim and the Machine it is placed on.
+func TestAClaimTooLongToKeyByItsHostKeyRefuses(t *testing.T) {
+	h := newPlannedHarness(t, nestedDefinitions())
+	h.capability.sshClaims = []SSHReservation{sshClaim("services", prerequisites.HostReservation{Context: testContextName, Kind: "proxy", Service: "gamma",
+		Keys: []string{"path:/srv/" + strings.Repeat("d", 256-machine.SSHHostKeyQualifierBytes-len("path:/srv/")+1)}})}
+	_, err := h.service.Plan(context.Background(), PlanRequest{ContextName: "lab"})
+	if reported := diagnostics.Of(err); len(reported) != 1 || reported[0].Code != "api.value" ||
+		!strings.Contains(reported[0].Message, "of proxy gamma, placed on Machine/services, is too long to be keyed by that host's SSH host key") {
+		t.Fatalf("refusal = %+v (%v)", reported, err)
+	}
+}
+
+// An SSH-placed claim is keyed by the host key its Machine pins before it is
+// published, so a known-hosts Secret that binds no readable key for the
+// address refuses the apply before anything is reserved or registered (B844).
+func TestAnSSHClaimWhosePinnedHostKeyCannotBeReadRefusesBeforeItIsPublished(t *testing.T) {
+	for name, material := range map[string]secrets.Material{
+		"no material":  secrets.NewMaterial(nil),
+		"another host": secrets.NewMaterial(map[secrets.Part][]byte{secrets.ValuePart: []byte("192.0.2.99 ssh-ed25519 " + testHostKey(1) + "\n")}),
+		"no key":       secrets.NewMaterial(map[secrets.Part][]byte{secrets.ValuePart: []byte("192.0.2.10 ssh-ed25519 AAAA\n")}),
+	} {
+		t.Run(name, func(t *testing.T) {
+			h := newPlannedHarness(t, nestedDefinitions())
+			h.capability.sshClaims = sshSockets("services", "storage")
+			h.binder.material["services-known-hosts"] = material
+			_, err := h.service.Apply(context.Background(), ApplyRequest{ContextName: "lab", SkipConfirmation: true})
+			if reported := diagnostics.Of(err); len(reported) != 1 || reported[0].Code != "trust.identity" ||
+				!strings.HasPrefix(reported[0].Message, "the SSH host key Secret services-known-hosts of Machine/services binds no readable host key") ||
+				reported[0].Remediation != "author access.ssh.knownHostsRef on Machine/services as one known-hosts entry for 192.0.2.10:22" {
+				t.Fatalf("refusal = %+v (%v)", reported, err)
+			}
+			if len(h.workspace.reservations) != 0 || currentOperation(t, h) != "" {
+				t.Fatalf("the refused apply published %+v or registered %s", h.workspace.reservations, currentOperation(t, h))
+			}
+		})
 	}
 }
 

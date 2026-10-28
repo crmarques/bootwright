@@ -264,13 +264,27 @@ func reservationsAreTheContextsOwn(t *testing.T, s Subject) {
 		succeeds(t, tx.ReproveReservations(ctx, func(held []prerequisites.HostReservation) error {
 			reproved = held
 			return nil
-		}), "a re-proof")
+		}, nil), "a re-proof")
 		if !slices.ContainsFunc(reproved, func(held prerequisites.HostReservation) bool {
 			return held.Context == s.Context && held.Service == claim[0].Service && slices.Equal(held.Keys, claim[0].Keys)
 		}) {
 			t.Fatalf("a re-proof read %+v, not the reservation just published", reproved)
 		}
-		refuses(t, tx.ReproveReservations(ctx, func([]prerequisites.HostReservation) error { return fmt.Errorf("refused") }), "a refusing re-proof")
+		refuses(t, tx.ReproveReservations(ctx, func([]prerequisites.HostReservation) error { return fmt.Errorf("refused") },
+			func(prerequisites.HostReservation) bool { return true }), "a refusing re-proof")
+		reserves(t, tx, s.Context, claim...)
+		succeeds(t, tx.ReproveReservations(ctx, func([]prerequisites.HostReservation) error { return nil },
+			func(held prerequisites.HostReservation) bool { return held.Service == claim[0].Service }), "a marking re-proof")
+		marked := claim[0]
+		marked.Releasing = true
+		reserves(t, tx, s.Context, marked)
+		moved := claim[0]
+		moved.Keys = []string{"socket:192.0.2.1:3129", "unit:bootwright-proxy"}
+		succeeds(t, tx.Claim(ctx, moved), "a claim replacing a releasing one")
+		moved.Releasing = true
+		reserves(t, tx, s.Context, moved)
+		succeeds(t, tx.Reserve(ctx, claim), "a replacing reservation")
+		reserves(t, tx, s.Context, claim...)
 	})
 	read(t, s, func(view lifecycle.View) { reserves(t, view, s.Context, claim...) })
 	planned := prerequisites.HostReservation{Context: s.Context, Kind: "substrate-physical", Service: "metal-01",
@@ -538,7 +552,7 @@ func reserves(t *testing.T, view lifecycle.View, context string, want ...prerequ
 		return reservation.Context != context
 	})
 	if !slices.EqualFunc(held, want, func(x, y prerequisites.HostReservation) bool {
-		return x.Context == y.Context && x.Kind == y.Kind && x.Service == y.Service && x.Shared == y.Shared && slices.Equal(x.Keys, y.Keys)
+		return x.Context == y.Context && x.Kind == y.Kind && x.Service == y.Service && x.Shared == y.Shared && x.Releasing == y.Releasing && slices.Equal(x.Keys, y.Keys)
 	}) {
 		t.Fatalf("reservations of %s = %+v, want %+v", context, held, want)
 	}

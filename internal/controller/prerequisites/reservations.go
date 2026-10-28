@@ -14,6 +14,8 @@ import (
 // controller record stores them (specs/contexts/controller-record.md, Bounds).
 const MaxReservationKeys = 64
 
+const MaxPublishedReservationKeys = 2 * MaxReservationKeys
+
 const MaxReservationKeyBytes = 256
 
 // Conflict is one exclusive key another context holds and the key of this
@@ -21,6 +23,7 @@ const MaxReservationKeyBytes = 256
 type Conflict struct {
 	Held, Wanted       HostReservation
 	HeldKey, WantedKey string
+	Releasing          bool
 }
 
 // Conflicts lists every exclusive key in held that conflicts with an exclusive
@@ -32,12 +35,21 @@ type Conflict struct {
 // shared claim conflicts with nothing but an exclusive holder of its bmc: key.
 func Conflicts(held, wanted []HostReservation) []Conflict {
 	var found []Conflict
+	reported := map[[6]string]bool{}
 	for _, holder := range held {
-		if holder.Shared {
+		if holder.Shared && !holder.Releasing {
 			continue
 		}
 		for _, heldKey := range holder.Keys {
-			if conflict, ok := firstConflict(holder, heldKey, wanted); ok {
+			conflict, ok := firstConflict(holder, heldKey, wanted)
+			if !ok {
+				continue
+			}
+			_, heldClaim := unqualified(conflict.HeldKey)
+			_, wantedClaim := unqualified(conflict.WantedKey)
+			identity := [6]string{holder.Context, holder.Kind, holder.Service, heldClaim, conflict.Wanted.Kind + "/" + conflict.Wanted.Service, wantedClaim}
+			if !reported[identity] {
+				reported[identity] = true
 				found = append(found, conflict)
 			}
 		}
@@ -46,9 +58,16 @@ func Conflicts(held, wanted []HostReservation) []Conflict {
 }
 
 func firstConflict(holder HostReservation, heldKey string, wanted []HostReservation) (Conflict, bool) {
+	guard, guardShared := "", false
+	if holder.Releasing {
+		guard, guardShared = releaseGuard(heldKey, holder.Shared)
+	}
 	for _, claim := range wanted {
 		for _, wantedKey := range claim.Keys {
-			if claim.Shared && !(strings.HasPrefix(wantedKey, "bmc:") && wantedKey == heldKey) {
+			if guard != "" && wantedKey == guard && claim.Shared == guardShared {
+				return Conflict{Held: holder, Wanted: claim, HeldKey: heldKey, WantedKey: wantedKey, Releasing: true}, true
+			}
+			if holder.Shared || claim.Shared && !(strings.HasPrefix(wantedKey, "bmc:") && wantedKey == heldKey) {
 				continue
 			}
 			if keysConflict(heldKey, wantedKey) {
@@ -68,15 +87,18 @@ func QualifiedKeys(qualifier string, keys []string) []string {
 }
 
 func unqualified(key string) (string, string) {
-	rest, found := strings.CutPrefix(key, "ssh/")
-	if !found {
-		return "", key
+	for _, form := range []string{"ssh/", "sshkey/"} {
+		rest, found := strings.CutPrefix(key, form)
+		if !found {
+			continue
+		}
+		host, unqualifiedKey, found := strings.Cut(rest, "/")
+		if !found {
+			return "", key
+		}
+		return form + host + "/", unqualifiedKey
 	}
-	host, key, found := strings.Cut(rest, "/")
-	if !found {
-		return "", "ssh/" + rest
-	}
-	return "ssh/" + host + "/", key
+	return "", key
 }
 
 func keysConflict(first, second string) bool {
@@ -133,6 +155,9 @@ var conflictKinds = map[string]api.Kind{
 // held key, so the remedy is that destroy or the field that chooses the key.
 // It is a function rather than a method so Conflict stays a plain value.
 func ConflictDiagnostic(c Conflict) diagnostics.Diagnostic {
+	if c.Releasing {
+		return releasingDiagnostic(c)
+	}
 	_, heldKey := unqualified(c.HeldKey)
 	class, _, _ := strings.Cut(heldKey, ":")
 	wantedPart := "the same " + class + " reservation"
@@ -143,11 +168,32 @@ func ConflictDiagnostic(c Conflict) diagnostics.Diagnostic {
 	message := "context " + c.Held.Context + " holds " + describeKey(c.HeldKey) + " for " + conflictObject(c.Held) +
 		", which conflicts with " + wantedPart + " that " + conflictObject(c.Wanted) + " of this context claims"
 	remediation := "run bootwright destroy --context " + c.Held.Context + " first" + conflictField(c.Wanted, class)
+	if host, _ := unqualified(c.HeldKey); strings.HasPrefix(host, "sshkey/") {
+		remediation += "; if the two contexts reach two hosts, give each its own SSH host key, since a pinned host key names one host"
+	}
 	diagnostic := diagnostics.Diagnostic{Severity: "error", Code: "controller.conflict", Message: message, Remediation: remediation}
 	if kind, ok := conflictKinds[c.Wanted.Kind]; ok {
 		diagnostic.Object = &diagnostics.ObjectIdentity{APIVersion: api.APIVersion, Kind: string(kind), Name: c.Wanted.Service}
 	}
 	return diagnostic
+}
+
+func releasingDiagnostic(c Conflict) diagnostics.Diagnostic {
+	message := "context " + c.Held.Context + " is removing " + releasedResource(c.HeldKey) + " that " + conflictObject(c.Held) +
+		" holds, so " + conflictObject(c.Wanted) + " of this context cannot claim it until that removal completes"
+	remediation := "complete that removal with bootwright destroy --context " + c.Held.Context + ", then repeat this operation"
+	diagnostic := diagnostics.Diagnostic{Severity: "error", Code: "controller.conflict", Message: message, Remediation: remediation}
+	if kind, ok := conflictKinds[c.Wanted.Kind]; ok {
+		diagnostic.Object = &diagnostics.ObjectIdentity{APIVersion: api.APIVersion, Kind: string(kind), Name: c.Wanted.Service}
+	}
+	return diagnostic
+}
+
+func releasedResource(key string) string {
+	if host, rest := unqualified(key); strings.HasPrefix(rest, "bmc:") {
+		return "the management controller endpoint" + onHost(host)
+	}
+	return describeKey(key)
 }
 
 func conflictObject(claim HostReservation) string {
@@ -157,16 +203,23 @@ func conflictObject(claim HostReservation) string {
 	return claim.Kind + " " + claim.Service
 }
 
+func onHost(host string) string {
+	if fingerprint, found := strings.CutPrefix(host, "sshkey/"); found {
+		return " on the SSH host whose pinned host key is " + strings.NewReplacer("-", "+", "_", "/").Replace(strings.TrimSuffix(fingerprint, "/"))
+	}
+	if host == "" {
+		return ""
+	}
+	endpoint := strings.TrimSuffix(strings.TrimPrefix(host, "ssh/"), "/")
+	if separator := strings.LastIndexByte(endpoint, ':'); strings.Count(endpoint, ":") > 1 {
+		endpoint = "[" + endpoint[:separator] + "]" + endpoint[separator:]
+	}
+	return " on the SSH host " + endpoint
+}
+
 func describeKey(key string) string {
 	host, key := unqualified(key)
-	on := ""
-	if host != "" {
-		endpoint := strings.TrimSuffix(strings.TrimPrefix(host, "ssh/"), "/")
-		if separator := strings.LastIndexByte(endpoint, ':'); strings.Count(endpoint, ":") > 1 {
-			endpoint = "[" + endpoint[:separator] + "]" + endpoint[separator:]
-		}
-		on = " on the SSH host " + endpoint
-	}
+	on := onHost(host)
 	class, value, _ := strings.Cut(key, ":")
 	switch class {
 	case "socket":
@@ -306,10 +359,21 @@ func releaseGuard(key string, shared bool) (string, bool) {
 	return "", false
 }
 
+func Releases(reservation HostReservation, kind, object string) bool {
+	return releasedBy(reservation, kind, object) && slices.ContainsFunc(reservation.Keys, func(key string) bool {
+		guard, _ := releaseGuard(key, reservation.Shared)
+		return guard != ""
+	})
+}
+
+func releasedBy(reservation HostReservation, kind, object string) bool {
+	return kind == "" || string(conflictKinds[reservation.Kind]) == kind && reservation.Service == object
+}
+
 func ReleaseFailure(held []HostReservation, contextName, kind, object string) error {
 	var found []diagnostics.Diagnostic
 	for _, conflict := range ReleaseConflicts(held, contextName) {
-		if kind != "" && (string(conflictKinds[conflict.Wanted.Kind]) != kind || conflict.Wanted.Service != object) {
+		if !releasedBy(conflict.Wanted, kind, object) {
 			continue
 		}
 		found = append(found, ReleaseDiagnostic(conflict))

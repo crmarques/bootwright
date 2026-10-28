@@ -1275,7 +1275,7 @@ func (s Service) run(ctx context.Context, tx Transaction, decided transition, bi
 			return nil, err
 		}
 	}
-	operation, plan, log, err := s.register(ctx, tx, store, decided, binding, record, located)
+	operation, plan, log, err := s.register(ctx, tx, store, decided, binding, material, record, located)
 	if err != nil {
 		return nil, err
 	}
@@ -1714,7 +1714,7 @@ func pendingRemains(plan reconciliation.Plan, states map[string]reconciliation.B
 // and claimed its directory in a transaction of its own, so it re-proves both
 // here and registers into that directory. Nothing is projected after the
 // registration: the evidence already protects the operation it names.
-func (s Service) register(ctx context.Context, tx Transaction, store OperationStore, decided transition, binding string, record *registering, located approved) (operationstore.Operation, reconciliation.Plan, *operationstore.Log, error) {
+func (s Service) register(ctx context.Context, tx Transaction, store OperationStore, decided transition, binding string, material map[string]secrets.Material, record *registering, located approved) (operationstore.Operation, reconciliation.Plan, *operationstore.Log, error) {
 	fail := func(err error) (operationstore.Operation, reconciliation.Plan, *operationstore.Log, error) {
 		return operationstore.Operation{}, reconciliation.Plan{}, nil, err
 	}
@@ -1742,7 +1742,7 @@ func (s Service) register(ctx context.Context, tx Transaction, store OperationSt
 		identity = allocated
 	}
 	closure := located.closure
-	if err := s.reserve(ctx, tx, decided); err != nil {
+	if err := s.reserve(ctx, tx, decided, material); err != nil {
 		return fail(err)
 	}
 	digest, err := decided.plan.Digest()
@@ -1856,17 +1856,27 @@ func (s Service) reprove(ctx context.Context, tx Transaction, store OperationSto
 // reserve claims the exclusive host resources the plan needs before any effect.
 // A destroy needs no new claim and releases at completion, so it refuses when
 // that release would strand another context's use of what it removes.
-func (s Service) reserve(ctx context.Context, tx Transaction, decided transition) error {
+func (s Service) reserve(ctx context.Context, tx Transaction, decided transition, material map[string]secrets.Material) error {
 	if decided.verb == reconciliation.Destroy {
 		return reproveRelease(ctx, tx, "", "")
 	}
-	return tx.Reserve(ctx, keepProved(tx.Controller().State.Reservations, tx.Identity().Name, decided.binding.reservations))
+	planned, err := hostKeyedReservations(decided.binding, material)
+	if err != nil {
+		return err
+	}
+	return tx.Reserve(ctx, keepProved(tx.Controller().State.Reservations, tx.Identity().Name, planned))
 }
 
 func reproveRelease(ctx context.Context, tx Transaction, kind, object string) error {
+	var releasing func(prerequisites.HostReservation) bool
+	if kind != "" {
+		releasing = func(reservation prerequisites.HostReservation) bool {
+			return prerequisites.Releases(reservation, kind, object)
+		}
+	}
 	return tx.ReproveReservations(ctx, func(held []prerequisites.HostReservation) error {
 		return prerequisites.ReleaseFailure(held, tx.Identity().Name, kind, object)
-	})
+	}, releasing)
 }
 
 func keepProved(held []prerequisites.HostReservation, contextName string, planned []prerequisites.HostReservation) []prerequisites.HostReservation {

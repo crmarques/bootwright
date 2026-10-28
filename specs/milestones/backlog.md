@@ -270,9 +270,6 @@ Alias cell.
 | [B816](#b816) | new, 2026-10-26 (spec audit P1-I) | safety | State reconciliation and Controller setup | Recovery refusals, partial-removal readings and host probes match the rules | Audit roadmap work; implemented only on an explicit lane request |
 | [B820](#b820) | new, 2026-10-26 (spec audit P2-B) | enabling | Agent guidance and Verification tooling | Section-level index rows and docs gates for budgets, reachability and history links | Audit roadmap work; implemented only on an explicit lane request |
 | [B829](#b829) | new, 2026-10-26 (spec audit L7) | safety | Secrets | Work-area incarnation check, pipelined material payloads and fixed producer identity | Audit roadmap work; implemented only on an explicit lane request |
-| [B839](#b839) | new, 2026-10-26 (lane B) | safety | Substrate and Workspace | A shared host claim taken while a removal's effect runs refuses | Found closing B803; the window is the removal's effect itself |
-| [B844](#b844) | new, 2026-10-27 (lane J) | safety | Infrastructure services | Contexts reaching one SSH host by different addresses conflict there | Q96's qualifier keys claims by declared address only |
-| [B846](#b846) | new, 2026-10-27 (lane J) | defect | State reconciliation | `diff --observe` observes a lost block of a completed apply | Lane J's covered set not yet read by diff |
 | [B847](#b847) | new, 2026-10-27 (lane J) | defect | Infrastructure services | A zoned IPv6 SSH address refuses at plan, not at the record write | Found by lane J's review |
 | [B848](#b848) | new, 2026-10-27 (lane I) | enabling | Architecture | Cluster families publish the facts machine, controller and managed-service code reads | Found by the lane I review; each site reads its kind's own spec layout |
 | [B850](#b850) | new, 2026-10-27 (lane I) | defect | Desired state | A derived Machine contact `<machine>.<domain>` is checked against DNS name lengths | Found by the lane I review; derived cluster names were bounded in X171 |
@@ -291,6 +288,8 @@ Alias cell.
 | [B864](#b864) | new, 2026-10-27 (lane S) | product | State reconciliation | An adapter's warning reaches the run's diagnostics | B843's shadowed-route warning reaches only the attempt output |
 | [B865](#b865) | new, 2026-10-27 (lane S) | defect | Machine | The physical erase worker refuses a non-ASCII disk attribute by its code | Pre-existing defect found by lane S's review |
 | [B866](#b866) | new, 2026-10-27 (lane S) | defect | Verification tooling | The Ceph host route probe alarm test is stable in parallel | Recurring flake seen by lanes S and R |
+| [B868](#b868) | new, 2026-10-27 (lane P) | safety | Infrastructure services | A controller reached by an undeclared address conflicts with its own claims | D188's host-key form does not cover the controller's unqualified keys |
+| [B869](#b869) | new, 2026-10-27 (lane P) | defect | Machine | The SSH arm parses the pinned known-hosts entry before it connects | Pre-existing defect found by lane P |
 
 ### B82
 
@@ -3142,40 +3141,6 @@ transfer free of material, and the media role still writes
 `install-config.yaml` with `copy: content:`; the Ceph outputs present no
 recapture identity.
 
-### B839
-
-**Owner:** Substrate and Workspace. **Kind:** safety. **Requires:** none.
-**Definition:** Needs definition. Since X165 a destroy re-proves under the
-root lock, immediately before each effect, that no other context holds a
-shared `bridge-use:` or `bmc:` key the effect releases. A shared claim still
-conflicts with nothing when another context takes it, so a context can claim
-the key while the removal's effect is running. **Outcome:** taking a shared
-claim refuses while a removal holding that key is between its re-proof and its
-completion, or the removal holds the key exclusively for that window.
-**Exit evidence:** a test in which another context claims the key during the
-effect and refuses, and the removal completes.
-
-### B844
-
-**Owner:** Infrastructure services. **Kind:** safety. **Requires:** none.
-**Definition:** Needs definition. Q96's qualifier (X170, D186) keys an
-SSH-placed claim by the SSH address as declared, so two contexts that reach one
-host by different addresses, or one by a controller address it declares and
-the other by an address its controller does not declare, never conflict.
-**Outcome:** the spec names the case and either refuses it or proves one host
-identity before publishing. **Exit evidence:** a reservation test of two
-spellings of one host.
-
-### B846
-
-**Owner:** State reconciliation. **Kind:** defect. **Requires:** none.
-**Definition:** Specified. X170 made one covered set (`coveredBy`) the
-definition of what a removal takes back, read by status ownership and
-realizations; `observedBlocks` in `diff_observe.go` still reads the owning
-apply's `OwnedSubset`, so `diff --observe` skips a lost block of a completed
-apply. **Outcome:** diff observes the covered set. **Exit evidence:** a diff
-test over a completed apply with a lost block record.
-
 ### B847
 
 **Owner:** Infrastructure services. **Kind:** defect. **Requires:** none.
@@ -3411,6 +3376,29 @@ fails in parallel runs and passes serially (lanes S and R, 2026-10-27).
 **Outcome:** the test is deterministic under the parallel units run.
 **Exit evidence:** repeated parallel runs pass.
 
+### B868
+
+**Owner:** Infrastructure services. **Kind:** safety. **Requires:** none.
+**Definition:** Needs definition. A placement that reaches the controller by
+an address the controller Machine declares publishes unqualified keys, while
+one that reaches the same host by an address it does not declare publishes
+`ssh/` and `sshkey/` keys, so the two never conflict (lane P, 2026-10-27; the
+spec states the limitation). **Outcome:** the controller's own claims also
+carry its pinned host-key form, or an undeclared address of the controller
+refuses. **Exit evidence:** a reservation test of the controller reached both
+ways.
+
+### B869
+
+**Owner:** Machine. **Kind:** defect. **Requires:** none. **Definition:**
+Specified. infrastructure-services.md's placement arms say the pinned
+known-hosts material is parsed before connection, but the Ansible SSH arm
+hands the Secret to OpenSSH unparsed; since X180 only a fresh apply's
+registration parses it, and only for placements that publish claims (found by
+lane P). **Outcome:** every SSH placement refuses material that is not one
+entry for its address and port before it connects. **Exit evidence:** a
+connection-path test per malformed shape.
+
 ## Audit remediation (2026-10-26)
 
 The [2026-10-26 spec audit](../../audits/spec/2026-10-26.md) ordered its
@@ -3471,7 +3459,7 @@ also updates this table.
 | 15 | O Store bounds and run scratch (B572, B389) | merged (X176) |
 | 16 | Q3 Ceph object and replica refusals (B849, B838) | merged (X175) |
 | 17 | S Libvirt host evidence and routes (B845, B843, B840) | merged (X178) |
-| 18 | P Removal views and host claims (B846, B839, B844) | not started |
+| 18 | P Removal views and host claims (B846, B839, B844) | merged (X180) |
 | 19 | Q1 Unclaimed objects and references (B808, B826) | merged (X179) |
 | 20 | Q2 Family accessors and name bounds (B848, B850, B847) | not started |
 | 21 | R Installer material (B829) | not started |
@@ -5463,7 +5451,7 @@ covers a libvirt managed prefix is admitted with a warning naming the route
 and the in-prefix hosts it shadows; identical, nested-narrower and on-link
 broader routes refuse ([B843](delivered.md#x178--audit-lane-s-libvirt-host-evidence-routes-and-root-disk-identity)). SSH-placed claims are also keyed by the
 host's pinned SSH host-key fingerprint (`sshkey/<SHA256>/`), an additive key
-form under controller record version 3 ([B844](#b844)). `schema` and `version`
+form under controller record version 3 ([B844](delivered.md#x180--audit-lane-p-removal-views-releasing-claims-and-host-key-claims)). `schema` and `version`
 drop `--context`, and structured help gains no `examples` or `available`
 ([B852](delivered.md#x177--audit-lane-t-inherited-flags-and-cluster-preflight), [B820](#b820)). `installer.templateClone` folds into
 [B99](m1.md#b99); `packageSource.mirror`, `packageSource.fromSubscription`,

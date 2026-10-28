@@ -675,6 +675,11 @@ func (v *testView) Claim(_ context.Context, reservation prerequisites.HostReserv
 	if err := v.killed("publish claim"); err != nil {
 		return err
 	}
+	for _, held := range v.workspace.reservations {
+		if held.Kind == reservation.Kind && held.Service == reservation.Service {
+			reservation.Releasing = held.Releasing
+		}
+	}
 	next := []prerequisites.HostReservation{reservation}
 	for _, held := range v.workspace.reservations {
 		if held.Kind != reservation.Kind || held.Service != reservation.Service {
@@ -696,11 +701,19 @@ func (v *testView) ReleaseReservations(context.Context) error {
 	return nil
 }
 
-func (v *testView) ReproveReservations(_ context.Context, check func([]prerequisites.HostReservation) error) error {
+func (v *testView) ReproveReservations(_ context.Context, check func([]prerequisites.HostReservation) error, releasing func(prerequisites.HostReservation) bool) error {
 	if err := v.killed("reprove reservations"); err != nil {
 		return err
 	}
-	return check(append(slices.Clone(v.workspace.reservations), v.workspace.foreign...))
+	if err := check(append(slices.Clone(v.workspace.reservations), v.workspace.foreign...)); err != nil || releasing == nil {
+		return err
+	}
+	for index, reservation := range v.workspace.reservations {
+		if releasing(reservation) {
+			v.workspace.reservations[index].Releasing = true
+		}
+	}
+	return nil
 }
 
 // killed asks the workspace's kill hook whether this publication may land.
@@ -1733,7 +1746,8 @@ func newPlannedHarness(t *testing.T, definitions []reconciliation.BlockDefinitio
 		},
 	}
 	capability := &testCapability{definitions: definitions, secrets: []string{"artifact-server-tls"}}
-	binder := &testBinder{material: map[string]secrets.Material{"artifact-server-tls": secrets.NewMaterial(nil)}}
+	binder := &testBinder{material: pinnedHostMaterial()}
+	binder.material["artifact-server-tls"] = secrets.NewMaterial(nil)
 	confirmer := &testConfirmer{}
 	presenter := &testPresenter{}
 	guard := &testGuard{}

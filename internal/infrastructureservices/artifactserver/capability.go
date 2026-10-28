@@ -76,7 +76,8 @@ func (c Capability) Plan(ctx context.Context, input lifecycle.PlanInput) (lifecy
 		}
 		if request.Placement.Connection != connectionLocal {
 			plan.SSHReservations = append(plan.SSHReservations, lifecycle.SSHReservation{
-				Machine: request.Placement.Machine, Address: request.Placement.Address, Port: request.Placement.Port, Reservation: claim,
+				Machine: request.Placement.Machine, Address: request.Placement.Address, Port: request.Placement.Port,
+				KnownHostsRef: request.Placement.KnownHostsRef, Reservation: claim,
 			})
 			continue
 		}

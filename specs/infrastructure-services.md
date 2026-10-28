@@ -88,7 +88,8 @@ configuration, agent, ambient `known_hosts` or user identity is consulted.
 
 Two contexts targeting one SSH host are coordinated by the
 [host reservations](#host-reservations) below, which an SSH host's blocks
-publish qualified by that host's declared address and port.
+publish qualified by that host's declared address and port, and again by the
+SSH host key its Machine pins.
 
 ## Host reservations
 
@@ -105,13 +106,13 @@ A reservation key is one of:
 | `unit:<name>` | One host service-manager unit and its container name. |
 | `path:<absolute path>` | One owned directory tree. |
 | `bridge:<name>` | One host bridge, whichever network defines it. |
-| `bridge-use:<name>` | A shared claim that an external libvirt attachment uses one host bridge. It conflicts with nothing at acquisition, and a removal that would release the exclusive `bridge:<name>` refuses `controller.conflict` while another context holds it, naming that context: when the destroy registers, and again under the root lock immediately before the removal's effect on the provider holding the bridge, so a claim made after registration refuses that effect with nothing performed. One an abandoned context held is released with every other key of that context when it is deleted (D38), so it strands a removal only while the using context exists. |
+| `bridge-use:<name>` | A shared claim that an external libvirt attachment uses one host bridge. It conflicts with nothing at acquisition, and a removal that would release the exclusive `bridge:<name>` refuses `controller.conflict` while another context holds it, naming that context: when the destroy registers, and again under the root lock immediately before the removal's effect on the provider holding the bridge, so a claim made after registration refuses that effect with nothing performed. The re-proof that admits the effect marks the holder's claim releasing in the same root-locked publication, and a claim of `bridge-use:<name>` by another context then refuses `controller.conflict` until the removal completes or the holder is deleted, naming the removing context, the bridge and its holder, with the remedy to complete that removal with `bootwright destroy --context <holder>`; an apply of the holder refuses while its destroy is incomplete, so only its completion or deletion clears the mark. The mark is durable, so an interrupted effect keeps refusing (`TestAClaimOnAKeyARemovalIsReleasingRefusesUntilTheRemovalCompletes`). One an abandoned context held is released with every other key of that context when it is deleted (D38), so it strands a removal only while the using context exists. |
 | `libvirt-network:<name>` | One libvirt network definition. |
 | `libvirt-pool:<name>` | One libvirt storage pool definition. |
 | `prefix:<masked prefix>` | One managed libvirt network's routed prefix, IPv4 or IPv6, written masked (`prefix:198.51.100.0/24`); it conflicts with every held prefix it overlaps, identical or nested, because the host routes each to its own bridge. |
 | `libvirt-domain:<name>` | One libvirt domain definition. |
 | `kubevirt-vm:<server>/<namespace>/<name>` | One KubeVirt VirtualMachine, by the host cluster's API server, namespace and name. |
-| `bmc:<host>:<port>/<system>` | One [physical machine](substrates.md#physical-machine-realization), named by its management-controller endpoint, normalized for the key alone as that page states (the port it names or else its scheme's default), and exact ComputerSystem, so two contexts of one controller store never drive one server. The claim serializes use; it is never ownership of the machine and authorizes nothing about it. An [emulated BMC's](substrates.md#machine-realization) machine block holds the same key shared: it conflicts with no other shared holder, its registration, which carries this Machine's installation, refuses `controller.conflict` while another context holds the key exclusively, and so does its release, re-proved like `bridge-use:<name>` immediately before the removal's effect. |
+| `bmc:<host>:<port>/<system>` | One [physical machine](substrates.md#physical-machine-realization), named by its management-controller endpoint, normalized for the key alone as that page states (the port it names or else its scheme's default), and exact ComputerSystem, so two contexts of one controller store never drive one server. The claim serializes use; it is never ownership of the machine and authorizes nothing about it. An [emulated BMC's](substrates.md#machine-realization) machine block holds the same key shared: it conflicts with no other shared holder, its registration, which carries this Machine's installation, refuses `controller.conflict` while another context holds the key exclusively, and so does its release, re-proved like `bridge-use:<name>` immediately before the removal's effect, which marks the shared claim releasing as it marks a bridge, so an exclusive claim of the key refuses until the removal completes. |
 | `bmc-system:<UUID>` | The same physical machine, named by the `UUID` its proof records in lower case, claimed once the proof records it and before any media is inserted, so a second spelling of one server's address refuses. A system that reports no `UUID` claims no such key. |
 | `media:<filename.iso>` | A shared claim on one image of the [media store](managed-os.md#media-store); it conflicts with nothing and blocks only that image's deletion or replacement while any context holds it. |
 
@@ -206,12 +207,40 @@ host's, is published with every key qualified by its SSH host,
 `ssh/<address>:<port>/<key>`, the address and port written as the host is
 named above with an IPv6 address unbracketed, and holds and releases those
 keys by the controller's conflict relation and release paths, compared only
-with keys of the same qualifier. Two contexts of one store targeting one SSH
-host therefore refuse each other's conflicting claims there. The host is
-named by its declared address only, so two contexts reaching one host by two
-addresses, or by a name and an address, are still not coordinated. A
-qualified key past the record's 256-byte key bound refuses `api.value` while
-the context plans, naming the Machine whose SSH address makes it long.
+with keys of the same qualifier. Every such key is also published qualified
+by the host key that Machine's `access.ssh.knownHostsRef` pins (D188),
+`sshkey/SHA256:<digest>/<key>`, the SHA-256 digest of the key blob in
+unpadded URL-safe base64 (`ssh-keygen -l` shows it with `+` for `-` and `/`
+for `_`), an additive key form under controller record version 3. Two
+contexts of one store targeting one SSH host therefore refuse each other's
+conflicting claims there, whether they reach it by one address or by two
+addresses, or a name and an address, that pin one host key; a diagnostic on
+the host-key form names the host by that fingerprint
+(`TestTwoSpellingsOfOneSSHHostConflictByItsPinnedHostKey`). A pinned host key
+names one host, so two hosts sharing one key, as a cloned image without
+regenerated keys gives, are one host and refuse each other's conflicting
+claims, and that refusal's remedy adds giving each host its own key. A key
+conflicting under both forms is one conflict and one diagnostic. The pinned key is
+read from the bound known-hosts material when the apply registers, and every
+SSH placement declares one ([placement](#placement-arms-and-credentials)):
+material that binds no readable key for the placement's address and port
+refuses `trust.identity` before anything is reserved or registered, naming
+the Secret and the Machine, so a claim is never published under its address
+alone. This enforces the one-entry rule of
+[addresses and access](api/machines.md#addresses-and-access) for a placement
+Machine whose blocks publish claims, at the apply's registration: a Secret
+holding several entries, a host list, a hashed host or a host token other
+than the placement's address and port refuses there
+(`TestAnSSHClaimWhosePinnedHostKeyCannotBeReadRefusesBeforeItIsPublished`).
+A qualified key past the record's 256-byte key bound refuses `api.value` while
+the context plans: under the address form naming the Machine whose SSH
+address makes it long, under the host-key form, whose qualifier is 58 bytes,
+naming the claim and its Machine
+(`TestAClaimTooLongToKeyByItsHostKeyRefuses`). A placement that reaches the
+controller by an address its controller Machine declares publishes the
+controller's own unqualified keys, while one that reaches the same host by an
+address the controller Machine does not declare publishes qualified keys, so
+those two still never conflict; the controller's own claims carry no host key.
 
 One claim's keys never conflict with each other, and
 no other key class is compared within a context, because one context's claims

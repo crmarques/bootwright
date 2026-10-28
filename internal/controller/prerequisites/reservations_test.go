@@ -141,3 +141,107 @@ func TestAReleaseConflictsWithAnotherContextsUse(t *testing.T) {
 		t.Fatalf("a context's own claims strand %+v", found)
 	}
 }
+
+// A releasing claim conflicts with exactly the claims its release re-proof
+// would refuse over: another context's shared use of its bridge, or an
+// exclusive holder of its emulated BMC endpoint. The same claims beside a
+// claim that is not releasing conflict with nothing (B839).
+func TestAReleasingClaimConflictsWithWhatItsReleaseGuards(t *testing.T) {
+	bridge := HostReservation{Context: "other", Kind: "substrate-host", Service: "lab", Keys: []string{"bridge:virbr-lab"}}
+	bmc := HostReservation{Context: "other", Kind: "substrate-machine-bmc", Service: "node-01", Keys: []string{"bmc:192.0.2.1:8000/node-01"}, Shared: true}
+	for name, test := range map[string]struct {
+		held     HostReservation
+		wanted   HostReservation
+		conflict bool
+	}{
+		"a bridge use":                      {held: bridge, wanted: HostReservation{Kind: "substrate-host-use", Service: "edge", Keys: []string{"bridge-use:virbr-lab"}, Shared: true}, conflict: true},
+		"another bridge's use":              {held: bridge, wanted: HostReservation{Kind: "substrate-host-use", Service: "edge", Keys: []string{"bridge-use:virbr-other"}, Shared: true}},
+		"an exclusive BMC holder":           {held: bmc, wanted: HostReservation{Kind: "substrate-physical", Service: "metal-01", Keys: []string{"bmc:192.0.2.1:8000/node-01"}}, conflict: true},
+		"a shared BMC holder":               {held: bmc, wanted: HostReservation{Kind: "substrate-machine-bmc", Service: "node-02", Keys: []string{"bmc:192.0.2.1:8000/node-01"}, Shared: true}},
+		"a bridge use on another SSH host":  {held: HostReservation{Context: "other", Kind: "substrate-host", Service: "lab", Keys: []string{"ssh/192.0.2.9:22/bridge:virbr-lab"}}, wanted: HostReservation{Kind: "substrate-host-use", Service: "edge", Keys: []string{"bridge-use:virbr-lab"}, Shared: true}},
+		"a bridge use on the same SSH host": {held: HostReservation{Context: "other", Kind: "substrate-host", Service: "lab", Keys: []string{"ssh/192.0.2.9:22/bridge:virbr-lab"}}, wanted: HostReservation{Kind: "substrate-host-use", Service: "edge", Keys: []string{"ssh/192.0.2.9:22/bridge-use:virbr-lab"}, Shared: true}, conflict: true},
+	} {
+		t.Run(name, func(t *testing.T) {
+			wanted := test.wanted
+			wanted.Context = "lab"
+			if conflicts := Conflicts([]HostReservation{test.held}, []HostReservation{wanted}); len(conflicts) != 0 {
+				t.Fatalf("a claim that is not releasing conflicts: %+v", conflicts)
+			}
+			releasing := test.held
+			releasing.Releasing = true
+			conflicts := Conflicts([]HostReservation{releasing}, []HostReservation{wanted})
+			if len(conflicts) > 0 != test.conflict || test.conflict && !conflicts[0].Releasing {
+				t.Fatalf("conflicts = %+v, want %t", conflicts, test.conflict)
+			}
+			if test.conflict {
+				diagnostic := ConflictDiagnostic(conflicts[0])
+				if diagnostic.Code != "controller.conflict" || !strings.HasPrefix(diagnostic.Message, "context other is removing ") ||
+					!strings.Contains(diagnostic.Message, "until that removal completes") || strings.Contains(diagnostic.Message, "192.0.2.1") {
+					t.Fatalf("diagnostic = %+v", diagnostic)
+				}
+			}
+		})
+	}
+}
+
+// A removal marks the claims of its effect's object that guard another
+// context's use, and only those; a whole-context removal names every one.
+func TestARemovalReleasesOnlyTheGuardingClaimsOfItsObject(t *testing.T) {
+	for name, test := range map[string]struct {
+		reservation  HostReservation
+		kind, object string
+		releases     bool
+	}{
+		"its bridge":                {reservation: HostReservation{Kind: "substrate-host", Service: "lab", Keys: []string{"bridge:virbr-lab", "libvirt-network:lab"}}, kind: "InfraProvider", object: "lab", releases: true},
+		"another provider's bridge": {reservation: HostReservation{Kind: "substrate-host", Service: "lab", Keys: []string{"bridge:virbr-lab"}}, kind: "InfraProvider", object: "edge"},
+		"a key that guards no use":  {reservation: HostReservation{Kind: "substrate-host", Service: "lab", Keys: []string{"libvirt-network:lab"}}, kind: "InfraProvider", object: "lab"},
+		"its shared BMC endpoint":   {reservation: HostReservation{Kind: "substrate-machine-bmc", Service: "node-01", Keys: []string{"bmc:192.0.2.1:8000/node-01"}, Shared: true}, kind: "Machine", object: "node-01", releases: true},
+		"an exclusive BMC endpoint": {reservation: HostReservation{Kind: "substrate-physical", Service: "node-01", Keys: []string{"bmc:192.0.2.1:8000/node-01"}}, kind: "Machine", object: "node-01"},
+		"a bridge use":              {reservation: HostReservation{Kind: "substrate-host-use", Service: "lab", Keys: []string{"bridge-use:virbr-lab"}, Shared: true}, kind: "InfraProvider", object: "lab"},
+		"a whole-context removal":   {reservation: HostReservation{Kind: "substrate-host", Service: "lab", Keys: []string{"bridge:virbr-lab"}}, releases: true},
+	} {
+		t.Run(name, func(t *testing.T) {
+			if got := Releases(test.reservation, test.kind, test.object); got != test.releases {
+				t.Fatalf("Releases = %t, want %t", got, test.releases)
+			}
+		})
+	}
+}
+
+// A host-key qualified key reads like an address-qualified one: it conflicts
+// by its class's relation with keys of its own qualifier only, guards a
+// release on its own host, prints the fingerprint in OpenSSH's form, and one
+// conflict under both forms is reported once (B844).
+func TestAHostKeyQualifiedKeyIsOneHostAcrossSpellings(t *testing.T) {
+	pinned, other := "sshkey/SHA256:ab-cd_ef/", "sshkey/SHA256:zz/"
+	if host, key := unqualified(pinned + "socket:0.0.0.0:3128"); host != pinned || key != "socket:0.0.0.0:3128" {
+		t.Fatalf("unqualified = %q %q", host, key)
+	}
+	if host, key := unqualified("sshkey/unterminated"); host != "" || key != "sshkey/unterminated" {
+		t.Fatalf("an unterminated qualifier read %q %q", host, key)
+	}
+	if !keysConflict(pinned+"socket:0.0.0.0:3128", pinned+"socket:192.0.2.10:3128") || keysConflict(pinned+"socket:0.0.0.0:3128", other+"socket:192.0.2.10:3128") ||
+		keysConflict(pinned+"socket:0.0.0.0:3128", "ssh/192.0.2.10:22/socket:192.0.2.10:3128") {
+		t.Fatal("host-key qualified sockets compare across qualifiers")
+	}
+	if got := describeKey(pinned + "bridge:virbr-lab"); got != "bridge virbr-lab on the SSH host whose pinned host key is SHA256:ab+cd/ef" {
+		t.Fatalf("describeKey = %q", got)
+	}
+	held := []HostReservation{
+		{Context: "lab", Kind: "substrate-host", Service: "lab", Keys: []string{"ssh/192.0.2.10:22/bridge:virbr-lab", pinned + "bridge:virbr-lab"}},
+		{Context: "other", Kind: "substrate-host-use", Service: "edge", Keys: []string{"ssh/kvm.example.test:22/bridge-use:virbr-lab", pinned + "bridge-use:virbr-lab"}, Shared: true},
+	}
+	if found := ReleaseConflicts(held, "lab"); len(found) != 1 || found[0].HeldKey != pinned+"bridge-use:virbr-lab" {
+		t.Fatalf("a release across two spellings = %+v", found)
+	}
+	wanted := []HostReservation{{Context: "lab", Kind: "proxy", Service: "b", Keys: []string{"ssh/192.0.2.10:22/socket:192.0.2.10:3128", pinned + "socket:192.0.2.10:3128"}}}
+	holder := []HostReservation{{Context: "other", Kind: "proxy", Service: "a", Keys: []string{"ssh/192.0.2.10:22/socket:0.0.0.0:3128", pinned + "socket:0.0.0.0:3128"}}}
+	conflicts := Conflicts(holder, wanted)
+	if len(conflicts) != 1 {
+		t.Fatalf("one conflict under both forms = %+v", conflicts)
+	}
+	keyed := ConflictDiagnostic(Conflict{Held: holder[0], Wanted: wanted[0], HeldKey: pinned + "socket:0.0.0.0:3128", WantedKey: pinned + "socket:192.0.2.10:3128"})
+	if !strings.HasSuffix(keyed.Remediation, "give each its own SSH host key, since a pinned host key names one host") {
+		t.Fatalf("remediation = %q", keyed.Remediation)
+	}
+}

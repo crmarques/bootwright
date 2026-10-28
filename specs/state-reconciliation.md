@@ -1930,10 +1930,11 @@ releases nothing and runs no lifecycle effect; the one store-internal effect
 it may make is the [cache-only rebuild](controller.md#the-controller-runtime)
 of this build's runtime.
 
-**Observed set.** It observes the owning apply's blocks its records show
-started: every block of `reconciliation.OwnedSubset` of that apply's plan under
-an apply, and under a removal only those the current removal names and has not
-recorded done. A block this executable plans differently from the build that
+**Observed set.** It observes what a removal of the owning apply would take
+back: a completed apply's whole frozen plan, so a lost block record drops no
+block, and an incomplete apply's blocks its records show started. Under an
+apply that is the whole set; under a removal only those the current removal
+names and has not recorded done. A block this executable plans differently from the build that
 froze it is not observed: it reads unknown with
 `this executable plans block <id> differently from the build that froze it, so its observation is not read`
 and the remedy `install <build>, which froze it, to observe it`. An object with

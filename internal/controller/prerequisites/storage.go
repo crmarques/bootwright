@@ -89,11 +89,12 @@ type ControllerBinding struct {
 // A shared claim is held by any number of contexts at once and conflicts with
 // nothing; it records that a resource is still in use rather than who owns it.
 type HostReservation struct {
-	Context string   `json:"context"`
-	Kind    string   `json:"kind"`
-	Service string   `json:"service"`
-	Keys    []string `json:"keys"`
-	Shared  bool     `json:"shared,omitempty"`
+	Context   string   `json:"context"`
+	Kind      string   `json:"kind"`
+	Service   string   `json:"service"`
+	Keys      []string `json:"keys"`
+	Shared    bool     `json:"shared,omitempty"`
+	Releasing bool     `json:"releasing,omitempty"`
 }
 
 type SetupEgress struct {

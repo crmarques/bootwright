@@ -17,6 +17,7 @@ import (
 	"github.com/crmarques/bootwright/internal/diagnostics"
 	"github.com/crmarques/bootwright/internal/machine"
 	"github.com/crmarques/bootwright/internal/reconciliation"
+	"github.com/crmarques/bootwright/internal/secrets"
 )
 
 // capabilityBinding is what the resolved capabilities together need before
@@ -24,6 +25,7 @@ import (
 // execution consumes.
 type capabilityBinding struct {
 	reservations []prerequisites.HostReservation
+	hostKeyed    []hostKeyedClaim
 	secrets      []string
 	// controller is the Machine this Environment selects. A first apply binds
 	// the context to the host it runs on under that name.
@@ -124,9 +126,17 @@ func (s Service) planFrom(ctx context.Context, view View, state *compilation.Sta
 	if err := refuseOwnSocketConflicts(state.Effective(), controller, binding.reservations, placed); err != nil {
 		return reconciliation.Plan{}, capabilityBinding{}, err
 	}
-	published, err := publishedSSHClaims(state.Effective(), controller, placed)
+	published, keyed, err := publishedSSHClaims(state.Effective(), controller, placed)
 	if err != nil {
 		return reconciliation.Plan{}, capabilityBinding{}, err
+	}
+	for _, claim := range keyed {
+		claim.reservation += len(binding.reservations)
+		binding.hostKeyed = append(binding.hostKeyed, claim)
+		if !slices.Contains(binding.secrets, claim.knownHostsRef) {
+			binding.secrets = append(binding.secrets, claim.knownHostsRef)
+			slices.Sort(binding.secrets)
+		}
 	}
 	binding.reservations = append(binding.reservations, published...)
 	definitions, err = s.dependOnStageTails(definitions)
@@ -186,25 +196,83 @@ func refuseOwnSocketConflicts(catalog api.Catalog, controller string, reservatio
 	return nil
 }
 
+type hostKeyedClaim struct {
+	reservation   int
+	keys          []string
+	machine       string
+	address       string
+	port          int
+	knownHostsRef string
+}
+
 // publishedSSHClaims qualifies each SSH-placed claim's keys by its host unless that host is the controller (Q96).
-func publishedSSHClaims(catalog api.Catalog, controller string, placed []SSHReservation) ([]prerequisites.HostReservation, error) {
+func publishedSSHClaims(catalog api.Catalog, controller string, placed []SSHReservation) ([]prerequisites.HostReservation, []hostKeyedClaim, error) {
 	own, _ := catalog.Find(api.Machine, controller)
 	published := make([]prerequisites.HostReservation, 0, len(placed))
+	var keyed []hostKeyedClaim
 	for _, claim := range placed {
 		reservation := claim.Reservation
 		reservation.Keys = slices.Clone(reservation.Keys)
-		if !machine.ReachesController(own, claim.Address, claim.Port) {
-			reservation.Keys = prerequisites.QualifiedKeys(machine.SSHReservationQualifier(claim.Address, claim.Port), reservation.Keys)
+		if machine.ReachesController(own, claim.Address, claim.Port) {
+			published = append(published, reservation)
+			continue
 		}
+		claimed := slices.Clone(reservation.Keys)
+		reservation.Keys = prerequisites.QualifiedKeys(machine.SSHReservationQualifier(claim.Address, claim.Port), reservation.Keys)
 		if slices.ContainsFunc(reservation.Keys, func(key string) bool { return len(key) > prerequisites.MaxReservationKeyBytes }) {
-			return nil, failure("api.value",
+			return nil, nil, failure("api.value",
 				"the SSH address "+claim.Address+" of Machine/"+claim.Machine+" is too long to qualify the host reservations "+
 					reservation.Kind+" "+reservation.Service+" publishes, which hold at most "+strconv.Itoa(prerequisites.MaxReservationKeyBytes)+" bytes each",
 				"reach Machine/"+claim.Machine+" by a shorter address")
 		}
+		if slices.ContainsFunc(claimed, func(key string) bool {
+			return len(key)+machine.SSHHostKeyQualifierBytes > prerequisites.MaxReservationKeyBytes
+		}) {
+			return nil, nil, failure("api.value",
+				"a host reservation key of "+reservation.Kind+" "+reservation.Service+", placed on Machine/"+claim.Machine+
+					", is too long to be keyed by that host's SSH host key as well, within the "+strconv.Itoa(prerequisites.MaxReservationKeyBytes)+" bytes each key holds",
+				"place "+reservation.Kind+" "+reservation.Service+" on the controller Machine, or give it a shorter name")
+		}
+		if claim.KnownHostsRef == "" {
+			return nil, nil, failure("lifecycle.state", "lifecycle placement requires a bound SSH host key",
+				"author access.ssh.knownHostsRef on Machine/"+claim.Machine)
+		}
+		keyed = append(keyed, hostKeyedClaim{reservation: len(published), keys: claimed,
+			machine: claim.Machine, address: claim.Address, port: claim.Port, knownHostsRef: claim.KnownHostsRef})
 		published = append(published, reservation)
 	}
-	return published, nil
+	return published, keyed, nil
+}
+
+func hostKeyedReservations(binding capabilityBinding, material map[string]secrets.Material) ([]prerequisites.HostReservation, error) {
+	reservations := slices.Clone(binding.reservations)
+	for _, claim := range binding.hostKeyed {
+		qualifier, err := pinnedHostQualifier(claim, material)
+		if err != nil {
+			reservation := reservations[claim.reservation]
+			return nil, failure("trust.identity",
+				"the SSH host key Secret "+claim.knownHostsRef+" of Machine/"+claim.machine+" binds no readable host key ("+firstMessage(err)+
+					"), so the host reservations "+reservation.Kind+" "+reservation.Service+" publishes there cannot name the host it pins",
+				"author access.ssh.knownHostsRef on Machine/"+claim.machine+" as one known-hosts entry for "+machine.SSHHost(claim.address, claim.port))
+		}
+		reservation := reservations[claim.reservation]
+		reservation.Keys = append(slices.Clone(reservation.Keys), prerequisites.QualifiedKeys(qualifier, claim.keys)...)
+		reservations[claim.reservation] = reservation
+	}
+	return reservations, nil
+}
+
+func pinnedHostQualifier(claim hostKeyedClaim, material map[string]secrets.Material) (string, error) {
+	bound, found := material[claim.knownHostsRef]
+	if !found {
+		return "", failure("access.unavailable", "the Secret is not bound", "")
+	}
+	value, found := bound.Part(secrets.ValuePart)
+	if !found || len(value) == 0 {
+		return "", failure("access.unavailable", "the Secret carries no material", "")
+	}
+	defer clear(value)
+	return machine.SSHHostKeyQualifier(string(value), claim.address, claim.port)
 }
 
 // hostClaims is every socket claim this context places on one host: through

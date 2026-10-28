@@ -8533,7 +8533,7 @@ and never reruns the installer (Q66).
 External libvirt attachments claim `bridge-use:<name>` and emulated BMCs a
 shared `bmc:` key; a destroy refuses, at registration and again under the
 root lock immediately before each effect, when it would take a key another
-context holds ([B839](backlog.md#b839) keeps the window during the effect).
+context holds ([B839](#x180--audit-lane-p-removal-views-releasing-claims-and-host-key-claims) keeps the window during the effect).
 Deletion names `bootwright diff` beside `status`, lists the exclusive keys it
 frees and warns of same-name reuse; D38 stands (Q67). Content digests moved
 for the OS installation, bare-metal and libvirt machine and host contracts,
@@ -9097,6 +9097,38 @@ which narrows [B861](backlog.md#b861) to derived names.
 **Guard tests:** the per-graph claim, converse claim, family claim, cost,
 scope and shared-diagnostic tests, each proved by a seeded mismatch; the
 delivering commit records the gates.
+
+### X180 — Audit lane P: removal views, releasing claims and host-key claims
+
+**Items:** B846, B839 and B844.
+**Kind:** safety. **Owners:** State reconciliation, Workspace and
+Infrastructure services. Delivered on 2026-10-27 as lane P of the
+[audit remediation](backlog.md#lane-order-and-progress) under the owner's
+request to implement the remaining items, with D188's answer for B844; the
+lane parked B868 and B869.
+
+`diff --observe` observes the covered set, so a lost block of a completed
+apply is observed. Before each removal block's effect, the claims of that
+block's object that guard another context's use (an exclusive `bridge:`, a
+shared `bmc:`) are marked releasing in the same controller-record publication
+as the re-proof; another context's claim the release would refuse over is
+refused with `controller.conflict` naming the removal to complete, the mark
+survives an interrupted effect, and only the release or the holder's
+replacing reservation clears it.
+
+SSH-placed claims are also published keyed by the placement's pinned host-key
+fingerprint (`sshkey/SHA256:<digest>/`) beside the `ssh/<address>:<port>/`
+form, under controller record version 3 (D186), so two contexts reaching one
+host by different addresses conflict; hosts sharing a key count as one. A
+placement whose known-hosts Secret is not one valid entry for its address and
+port refuses `trust.identity` before anything is reserved. A reservation may
+publish 128 keys. Builds before this lane refuse a record that holds a
+releasing mark or more than 64 keys in a reservation.
+
+**Guard tests:** `TestAnObservedDiffObservesACompletedApplysBlockWhoseRecordIsLost`,
+`TestAClaimOnAKeyARemovalIsReleasingRefusesUntilTheRemovalCompletes`,
+`TestTwoSpellingsOfOneSSHHostConflictByItsPinnedHostKey` and their siblings,
+each proved by a seeded mismatch; the delivering commit records the gates.
 
 ## M3 independent in-tree completion
 

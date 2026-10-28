@@ -112,3 +112,34 @@ func TestAClaimMadeAfterTheDestroyRegisteredRefusesTheRemovalsEffect(t *testing.
 		})
 	}
 }
+
+// The re-proof before a removal's effect marks the claim that effect releases,
+// so the mark is durable before the effect starts, and the completed removal
+// releases the marked claim with the rest (B839).
+func TestARemovalsEffectRunsWithItsReleasedClaimMarked(t *testing.T) {
+	guarded := definition("guarded")
+	guarded.Kind, guarded.Object = "InfraProvider", "lab"
+	definitions := []reconciliation.BlockDefinition{definition("alpha"), guarded}
+	ours := prerequisites.HostReservation{Context: testContextName, Kind: "substrate-host", Service: "lab", Keys: []string{"bridge:virbr-lab"}}
+	h := newPlannedHarness(t, definitions)
+	h.service.capabilities = sharedResolver{bound: []BoundCapability{
+		{Binding: CapabilityBinding{Kind: "ArtifactServer", Implementation: guarded.Implementation}, Capability: h.capability},
+		{Binding: CapabilityBinding{Kind: "InfraProvider", Implementation: guarded.Implementation}, Capability: h.capability},
+	}, plan: CapabilityPlan{Definitions: definitions, Reservations: []prerequisites.HostReservation{ours}}}
+	if _, err := apply(h); err != nil {
+		t.Fatalf("%#v", diagnostics.Of(err))
+	}
+	marked := map[string]bool{}
+	h.capability.destroyHold = func(block string) {
+		marked[block] = slices.ContainsFunc(h.workspace.reservations, func(held prerequisites.HostReservation) bool { return held.Releasing })
+	}
+	if _, err := destroy(h); err != nil {
+		t.Fatalf("%#v", diagnostics.Of(err))
+	}
+	if !marked["guarded"] {
+		t.Fatalf("the effect releasing the bridge ran with its claim unmarked: %v", marked)
+	}
+	if len(h.workspace.reservations) != 0 {
+		t.Fatalf("the completed removal kept %+v", h.workspace.reservations)
+	}
+}

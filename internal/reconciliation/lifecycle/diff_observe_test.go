@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"path"
 	"slices"
 	"strings"
 	"sync"
@@ -655,5 +656,20 @@ func TestAnObservedDiffReportsOneObservationCheckRow(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+// An observed diff reads what a removal of the owning apply would take back, so
+// a completed apply's block whose record is lost is still observed.
+func TestAnObservedDiffObservesACompletedApplysBlockWhoseRecordIsLost(t *testing.T) {
+	f, _, operation := observedFixture(t, "alpha", "bravo", "charlie")
+	lose(f.harness, path.Join(operation, "blocks", "bravo")+"/")
+	calls := len(f.capability.calls)
+	result := f.observe(t)
+	if got := slices.Sorted(slices.Values(f.capability.calls[calls:])); !slices.Equal(got, []string{"observe:alpha", "observe:bravo", "observe:charlie"}) {
+		t.Fatalf("calls = %v, want every block of the completed apply observed", got)
+	}
+	if side := objectOf(t, result, api.ArtifactServer, "bravo").Real; side.Source != sideObserved || side.State != sidePresent {
+		t.Fatalf("bravo reads %+v, want observed present", side)
 	}
 }

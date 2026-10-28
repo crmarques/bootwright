@@ -78,7 +78,8 @@ func (c HostCapability) Plan(ctx context.Context, input lifecycle.PlanInput) (li
 		}
 		for _, claim := range claims {
 			plan.SSHReservations = append(plan.SSHReservations, lifecycle.SSHReservation{
-				Machine: request.Placement.Machine, Address: request.Placement.Address, Port: request.Placement.Port, Reservation: claim,
+				Machine: request.Placement.Machine, Address: request.Placement.Address, Port: request.Placement.Port,
+				KnownHostsRef: request.Placement.KnownHostsRef, Reservation: claim,
 			})
 		}
 	}
@@ -182,7 +183,8 @@ func (c MachineCapability) Plan(ctx context.Context, input lifecycle.PlanInput) 
 		}
 		if !request.Placement.Local() {
 			plan.SSHReservations = append(plan.SSHReservations, lifecycle.SSHReservation{
-				Machine: request.Placement.Machine, Address: request.Placement.Address, Port: request.Placement.Port, Reservation: claim,
+				Machine: request.Placement.Machine, Address: request.Placement.Address, Port: request.Placement.Port,
+				KnownHostsRef: request.Placement.KnownHostsRef, Reservation: claim,
 			})
 			continue
 		}
