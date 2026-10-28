@@ -76,6 +76,32 @@ func TestAKnownHostsEntryBindsExactlyOneDeclaredTarget(t *testing.T) {
 	}
 }
 
+// OpenSSH matches a host token without case, so a declared name in any case
+// binds a lowercase entry, and an IP binds an entry naming it in another
+// spelling; another host or port still refuses.
+func TestAKnownHostsHostMatchesAsOpenSSHReadsIt(t *testing.T) {
+	trusted := key(t, 8)
+	suffix := " " + trusted.Type + " " + trusted.PublicKey + "\n"
+	for _, test := range []struct {
+		entry, address string
+		port           int
+		bound          bool
+	}{
+		{"host.example" + suffix, "Host.Example", 22, true},
+		{"[host.example]:2222" + suffix, "HOST.example", 2222, true},
+		{"2001:db8::1" + suffix, "2001:DB8::1", 22, true},
+		{"[2001:db8::1]:2222" + suffix, "2001:DB8:0::1", 2222, true},
+		{"2001:db8::2" + suffix, "2001:DB8::1", 22, false},
+		{"other.example" + suffix, "Host.Example", 22, false},
+		{"[host.example]:2222" + suffix, "Host.Example", 22, false},
+	} {
+		parsed, err := ParseKnownHostsLine(test.entry, test.address, test.port)
+		if test.bound != (err == nil) || test.bound && parsed != trusted {
+			t.Errorf("%q for %s:%d = %+v (%v), want bound %t", test.entry, test.address, test.port, parsed, err, test.bound)
+		}
+	}
+}
+
 // Every shape OpenSSH would accept for more than one host, or for a host this
 // Machine did not declare, is refused rather than reduced to something narrower.
 func TestAKnownHostsEntryRefusesEveryUnboundShape(t *testing.T) {
@@ -102,6 +128,50 @@ func TestAKnownHostsEntryRefusesEveryUnboundShape(t *testing.T) {
 			}
 			if got := code(t, err); got != "trust.identity" {
 				t.Fatalf("code = %q", got)
+			}
+		})
+	}
+}
+
+// OpenSSH trims and splits a known_hosts line at spaces and tabs only, so a
+// byte Go reads as white space and OpenSSH does not would let one parse see a
+// comment or a separator where ssh sees a host (B871): "\v#x,*" is a comment
+// to Go and a host list matching every host to ssh. Each such byte refuses;
+// spaces and tabs, where both read alike, are still accepted.
+func TestKnownHostsMaterialOpenSSHReadsOtherwiseRefuses(t *testing.T) {
+	trusted, attacker := key(t, 6), key(t, 7)
+	valid := trusted.Line("host.test", 22)
+	hidden := " " + attacker.Type + " " + attacker.PublicKey + "\n" + valid
+	for name, text := range map[string]string{
+		"a vertical tab before a wildcard list": "\v#x,*" + hidden,
+		"a form feed before a wildcard list":    "\f#x,*" + hidden,
+		"a next line before a wildcard list":    "\u0085#x,*" + hidden,
+		"a no-break space before a wildcard":    "\u00a0#x,*" + hidden,
+		"a carriage return ending the entry":    strings.TrimSuffix(valid, "\n") + "\r\n",
+		"a no-break space separating the host":  "host.test\u00a0" + trusted.Type + " " + trusted.PublicKey,
+		"a vertical tab separating the host":    "host.test\v" + trusted.Type + " " + trusted.PublicKey,
+		"a NUL inside the entry":                "host.test\x00 " + trusted.Type + " " + trusted.PublicKey,
+		"a delete byte in a comment":            valid + "# note\x7f\n",
+		"a non-ASCII comment after the key":     strings.TrimSuffix(valid, "\n") + " root@hôte\n",
+	} {
+		t.Run(name, func(t *testing.T) {
+			parsed, err := ParseKnownHostsLine(text, "host.test", 22)
+			if err == nil {
+				t.Fatalf("accepted %q as %+v", text, parsed)
+			}
+			if got := code(t, err); got != "trust.identity" {
+				t.Fatalf("code = %q", got)
+			}
+		})
+	}
+	for name, text := range map[string]string{
+		"tabs between fields":            "host.test\t" + trusted.Type + "\t" + trusted.PublicKey + "\tcomment\n",
+		"indented comment and entry":     " \t# pinned\n\t " + valid,
+		"blank lines of spaces and tabs": " \t\n" + valid + "\t \n",
+	} {
+		t.Run(name, func(t *testing.T) {
+			if parsed, err := ParseKnownHostsLine(text, "host.test", 22); err != nil || parsed != trusted {
+				t.Fatalf("parsed %q as %+v (%v)", text, parsed, err)
 			}
 		})
 	}

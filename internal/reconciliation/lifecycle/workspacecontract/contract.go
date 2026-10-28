@@ -552,7 +552,7 @@ func reserves(t *testing.T, view lifecycle.View, context string, want ...prerequ
 		return reservation.Context != context
 	})
 	if !slices.EqualFunc(held, want, func(x, y prerequisites.HostReservation) bool {
-		return x.Context == y.Context && x.Kind == y.Kind && x.Service == y.Service && x.Shared == y.Shared && x.Releasing == y.Releasing && slices.Equal(x.Keys, y.Keys)
+		return x.Context == y.Context && x.Kind == y.Kind && x.Service == y.Service && x.ObjectKind == y.ObjectKind && x.Shared == y.Shared && x.Releasing == y.Releasing && slices.Equal(x.Keys, y.Keys)
 	}) {
 		t.Fatalf("reservations of %s = %+v, want %+v", context, held, want)
 	}

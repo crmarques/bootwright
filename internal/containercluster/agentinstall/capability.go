@@ -51,7 +51,7 @@ func (c MediaCapability) Plan(ctx context.Context, input lifecycle.PlanInput) (l
 		plan.Secrets = append(plan.Secrets, request.SecretReferences()...)
 		plan.Reservations = append(plan.Reservations, prerequisites.HostReservation{
 			Context: input.Context.Name, Kind: prerequisites.ClusterMediaReservation,
-			Service: request.Identity.Cluster, Keys: request.ReservationKeys(),
+			Service: request.Identity.Cluster, ObjectKind: Kind, Keys: request.ReservationKeys(),
 		})
 	}
 	slices.Sort(plan.Secrets)

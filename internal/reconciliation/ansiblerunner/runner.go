@@ -11,6 +11,8 @@ import (
 	"github.com/crmarques/bootwright/internal/diagnostics"
 	machineref "github.com/crmarques/bootwright/internal/machine"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
+	"github.com/crmarques/bootwright/internal/secrets"
+	"github.com/crmarques/bootwright/internal/trust"
 )
 
 const maxMaterialBytes = 1 << 20
@@ -122,6 +124,40 @@ func variables(request lifecycle.RunRequest, paths map[string]string) (map[strin
 		request.Variable + "_digest":   request.Digest,
 		request.Variable + "_material": material,
 	}, nil
+}
+
+func checkHostKey(request lifecycle.RunRequest) (string, error) {
+	placement := request.Placement
+	if placement.Local() {
+		return "", nil
+	}
+	pinned := slices.IndexFunc(request.Materials, func(file lifecycle.MaterialFile) bool { return file.Name == "known_hosts" })
+	if placement.KnownHostsRef == "" || pinned < 0 || request.Materials[pinned].Secret != placement.KnownHostsRef || request.Materials[pinned].Part != secrets.ValuePart {
+		return "", failure("lifecycle.state", "an SSH placement connects only against the host key its own access.ssh.knownHostsRef binds",
+			"author access.ssh.knownHostsRef on Machine/"+placement.Machine)
+	}
+	bound, ok := request.Material[placement.KnownHostsRef]
+	if !ok {
+		return "", failure("secret.store", "a bound Secret this operation needs is not available to this attempt", lifecycle.ReopenBindings(request.Context, request.Repeat))
+	}
+	value, ok := bound.Part(secrets.ValuePart)
+	defer clear(value)
+	if !ok || len(value) == 0 || len(value) > maxMaterialBytes {
+		return "", failure("secret.part", "a bound Secret does not carry the part this operation needs", lifecycle.ReopenBindings(request.Context, request.Repeat))
+	}
+	key, err := trust.ParseKnownHostsLine(string(value), placement.Address, placement.Port)
+	if err != nil {
+		reason := err.Error()
+		if reported := diagnostics.Of(err); len(reported) != 0 {
+			reason = reported[0].Message
+		}
+		token := trust.HostToken(placement.Address, placement.Port)
+		return "", failure("trust.identity",
+			"the SSH host key Secret "+placement.KnownHostsRef+" of Machine/"+placement.Machine+" is not one known-hosts entry for "+token+
+				" ("+reason+"), so nothing connects to that host",
+			"author access.ssh.knownHostsRef on Machine/"+placement.Machine+" as one known-hosts entry for "+token)
+	}
+	return key.Line(placement.Address, placement.Port), nil
 }
 
 func materialBytes(request lifecycle.RunRequest) (map[string][]byte, error) {

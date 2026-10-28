@@ -80,6 +80,10 @@ func (r Runner) Run(ctx context.Context, request lifecycle.RunRequest) (lifecycl
 	if err := checkMaterials(request); err != nil {
 		return lifecycle.RunResult{}, err
 	}
+	pinned, err := checkHostKey(request)
+	if err != nil {
+		return lifecycle.RunResult{}, err
+	}
 	if err := checkIdentity(request); err != nil {
 		return lifecycle.RunResult{}, err
 	}
@@ -101,7 +105,7 @@ func (r Runner) Run(ctx context.Context, request lifecycle.RunRequest) (lifecycl
 	if err != nil {
 		return lifecycle.RunResult{}, failure("lifecycle.state", "private adapter staging storage is unavailable", "")
 	}
-	paths, err := r.materialize(job, request)
+	paths, err := r.materialize(job, request, pinned)
 	if err != nil {
 		return lifecycle.RunResult{}, err
 	}
@@ -221,10 +225,14 @@ func materialName(name string) bool {
 	return true
 }
 
-func (r Runner) materialize(job string, request lifecycle.RunRequest) (map[string]string, error) {
+func (r Runner) materialize(job string, request lifecycle.RunRequest, pinned string) (map[string]string, error) {
 	contents, err := materialBytes(request)
 	if err != nil {
 		return nil, err
+	}
+	if pinned != "" {
+		clear(contents["known_hosts"])
+		contents["known_hosts"] = []byte(pinned)
 	}
 	paths := map[string]string{}
 	for _, file := range request.Materials {

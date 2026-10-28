@@ -30,6 +30,7 @@ import (
 	"github.com/crmarques/bootwright/internal/reconciliation"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
 	"github.com/crmarques/bootwright/internal/reconciliation/operationstore"
+	"github.com/crmarques/bootwright/internal/secrets"
 )
 
 // TestLifecycleAdapterChild is the adapter these tests start, not a test of its
@@ -725,7 +726,7 @@ func TestARunOnAnSSHPlacementHandsItsAdapterTheGeneratedConfiguration(t *testing
 		if at := slices.Index(arguments, "-i"); at >= 0 && at+1 < len(arguments) {
 			job = filepath.Dir(arguments[at+1])
 		}
-		return exec.Command("/bin/sh", "-c", `cp -p "$1/ssh_config" "$1/inventory.json" "$2/" || exit 9; `+
+		return exec.Command("/bin/sh", "-c", `cp -p "$1/ssh_config" "$1/inventory.json" "$1/known_hosts" "$2/" || exit 9; `+
 			`printf '{"phase":"loaded"}\n' >&3; read -r reply <&4; `+
 			`printf '{"evidence":{"absent":false},"outcome":"changed","phase":"completed"}\n' >&3`, "sh", job, capture)
 	}
@@ -735,8 +736,12 @@ func TestARunOnAnSSHPlacementHandsItsAdapterTheGeneratedConfiguration(t *testing
 	request.Placement = placement
 	request.Materials = lifecycle.Materials(placement)
 	request.Material = sshRequest().Material
+	request.Material["host-key"] = secrets.NewMaterial(map[secrets.Part][]byte{secrets.ValuePart: []byte("# pinned\n\t" + pinnedKnownHosts + "\tservices\n")})
 	if _, err := runner.Run(context.Background(), request); err != nil {
 		t.Fatalf("the run on an SSH placement failed: %v (%s)", err, output.String())
+	}
+	if pinned, err := os.ReadFile(filepath.Join(capture, "known_hosts")); err != nil || string(pinned) != pinnedKnownHosts+"\n" {
+		t.Fatalf("ssh was handed known_hosts %q (%v), not the one entry validated", pinned, err)
 	}
 	info, err := os.Stat(filepath.Join(capture, "ssh_config"))
 	if err != nil || info.Mode().Perm() != 0600 {

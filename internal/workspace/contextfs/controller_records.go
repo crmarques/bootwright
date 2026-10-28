@@ -233,7 +233,7 @@ func validateControllerReservations(values []prerequisites.HostReservation) erro
 	previous := [3]string{}
 	claimed := map[string]string{}
 	for _, reservation := range values {
-		if !contextName(reservation.Context) || !contextName(reservation.Kind) || !contextName(reservation.Service) {
+		if !contextName(reservation.Context) || !contextName(reservation.Kind) || !contextName(reservation.Service) || reservation.ObjectKind != "" && (!objectKindName(reservation.ObjectKind) || prerequisites.ClaimKindNamesObject(reservation.Kind)) {
 			return state("controller host reservation identity is invalid")
 		}
 		current := [3]string{reservation.Context, reservation.Kind, reservation.Service}
@@ -266,6 +266,18 @@ func validateControllerReservations(values []prerequisites.HostReservation) erro
 		}
 	}
 	return nil
+}
+
+func objectKindName(value string) bool {
+	if len(value) > 63 || value[0] < 'A' || value[0] > 'Z' {
+		return false
+	}
+	for _, c := range []byte(value) {
+		if !(c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || c >= '0' && c <= '9') {
+			return false
+		}
+	}
+	return true
 }
 
 // maxControllerBundles bounds the tool areas a controller record holds.

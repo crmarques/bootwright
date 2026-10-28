@@ -145,7 +145,19 @@ var conflictKinds = map[string]api.Kind{
 	"dns":                   api.DNSServer,
 	"ntp":                   api.NTPServer,
 	"artifact-server":       api.ArtifactServer,
-	"cluster-media":         api.OpenShiftCluster,
+}
+
+func ClaimKindNamesObject(kind string) bool {
+	_, named := conflictKinds[kind]
+	return named
+}
+
+func claimObjectKind(claim HostReservation) (string, bool) {
+	if claim.ObjectKind != "" {
+		return claim.ObjectKind, true
+	}
+	kind, ok := conflictKinds[claim.Kind]
+	return string(kind), ok
 }
 
 // ConflictDiagnostic names the holding context, the key it holds, the holder's
@@ -172,8 +184,8 @@ func ConflictDiagnostic(c Conflict) diagnostics.Diagnostic {
 		remediation += "; if the two contexts reach two hosts, give each its own SSH host key, since a pinned host key names one host"
 	}
 	diagnostic := diagnostics.Diagnostic{Severity: "error", Code: "controller.conflict", Message: message, Remediation: remediation}
-	if kind, ok := conflictKinds[c.Wanted.Kind]; ok {
-		diagnostic.Object = &diagnostics.ObjectIdentity{APIVersion: api.APIVersion, Kind: string(kind), Name: c.Wanted.Service}
+	if kind, ok := claimObjectKind(c.Wanted); ok {
+		diagnostic.Object = &diagnostics.ObjectIdentity{APIVersion: api.APIVersion, Kind: kind, Name: c.Wanted.Service}
 	}
 	return diagnostic
 }
@@ -183,8 +195,8 @@ func releasingDiagnostic(c Conflict) diagnostics.Diagnostic {
 		" holds, so " + conflictObject(c.Wanted) + " of this context cannot claim it until that removal completes"
 	remediation := "complete that removal with bootwright destroy --context " + c.Held.Context + ", then repeat this operation"
 	diagnostic := diagnostics.Diagnostic{Severity: "error", Code: "controller.conflict", Message: message, Remediation: remediation}
-	if kind, ok := conflictKinds[c.Wanted.Kind]; ok {
-		diagnostic.Object = &diagnostics.ObjectIdentity{APIVersion: api.APIVersion, Kind: string(kind), Name: c.Wanted.Service}
+	if kind, ok := claimObjectKind(c.Wanted); ok {
+		diagnostic.Object = &diagnostics.ObjectIdentity{APIVersion: api.APIVersion, Kind: kind, Name: c.Wanted.Service}
 	}
 	return diagnostic
 }
@@ -197,8 +209,8 @@ func releasedResource(key string) string {
 }
 
 func conflictObject(claim HostReservation) string {
-	if kind, ok := conflictKinds[claim.Kind]; ok {
-		return string(kind) + "/" + claim.Service
+	if kind, ok := claimObjectKind(claim); ok {
+		return kind + "/" + claim.Service
 	}
 	return claim.Kind + " " + claim.Service
 }
@@ -367,7 +379,8 @@ func Releases(reservation HostReservation, kind, object string) bool {
 }
 
 func releasedBy(reservation HostReservation, kind, object string) bool {
-	return kind == "" || string(conflictKinds[reservation.Kind]) == kind && reservation.Service == object
+	claimed, _ := claimObjectKind(reservation)
+	return kind == "" || claimed == kind && reservation.Service == object
 }
 
 func ReleaseFailure(held []HostReservation, contextName, kind, object string) error {
@@ -393,8 +406,8 @@ func ReleaseDiagnostic(c Conflict) diagnostics.Diagnostic {
 		" of this context holds, through " + conflictObject(c.Held) + ", so this removal would take it from under that context"
 	diagnostic := diagnostics.Diagnostic{Severity: "error", Code: "controller.conflict", Message: message,
 		Remediation: "run bootwright destroy --context " + c.Held.Context + " first"}
-	if kind, ok := conflictKinds[c.Wanted.Kind]; ok {
-		diagnostic.Object = &diagnostics.ObjectIdentity{APIVersion: api.APIVersion, Kind: string(kind), Name: c.Wanted.Service}
+	if kind, ok := claimObjectKind(c.Wanted); ok {
+		diagnostic.Object = &diagnostics.ObjectIdentity{APIVersion: api.APIVersion, Kind: kind, Name: c.Wanted.Service}
 	}
 	return diagnostic
 }

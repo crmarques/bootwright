@@ -1,6 +1,7 @@
 package prerequisites
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/crmarques/bootwright/internal/diagnostics"
@@ -81,7 +82,6 @@ func TestAConflictRemedyNamesTheFieldThatChoosesTheKey(t *testing.T) {
 		{"ntp", "NTPServer/b", "run bootwright destroy --context alpha first, or change spec.bindAddress or spec.port on NTPServer/b", true},
 		{"artifact-server", "ArtifactServer/b", "run bootwright destroy --context alpha first, or change spec.bindAddress or a spec.listeners[].port on ArtifactServer/b", true},
 		{"os-install", "Machine/b", "run bootwright destroy --context alpha first", true},
-		{"cluster-media", "OpenShiftCluster/b", "run bootwright destroy --context alpha first", true},
 		{"substrate-physical", "Machine/b", "run bootwright destroy --context alpha first", true},
 		{"unnamed-kind", "unnamed-kind b", "run bootwright destroy --context alpha first", false},
 	} {
@@ -98,6 +98,42 @@ func TestAConflictRemedyNamesTheFieldThatChoosesTheKey(t *testing.T) {
 				t.Fatalf("diagnostic = %+v, want %q and %q", got, message, test.remediation)
 			}
 		})
+	}
+}
+
+// A claim names the object it reserves for by the API kind it records (B870),
+// so a cluster-media claim needs no family kind in this package; one an
+// earlier build held without that kind still conflicts, named by its claim
+// kind.
+func TestAClaimIsNamedByTheAPIKindItRecords(t *testing.T) {
+	recorded := HostReservation{Context: "alpha", Kind: ClusterMediaReservation, Service: "a", ObjectKind: "OpenShiftCluster", Keys: []string{"path:/var/lib/bootwright/media/a"}}
+	earlier := recorded
+	earlier.ObjectKind = ""
+	wanted := HostReservation{Context: "lab", Kind: ClusterMediaReservation, Service: "b", ObjectKind: "OpenShiftCluster", Keys: []string{"path:/var/lib/bootwright/media/a"}}
+	for name, test := range map[string]struct {
+		held   HostReservation
+		holder string
+	}{
+		"a recorded kind":             {recorded, "OpenShiftCluster/a"},
+		"a claim of an earlier build": {earlier, "cluster-media a"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			conflicts := Conflicts([]HostReservation{test.held}, []HostReservation{wanted})
+			if len(conflicts) != 1 {
+				t.Fatalf("conflicts = %+v", conflicts)
+			}
+			got := ConflictDiagnostic(conflicts[0])
+			message := "context alpha holds a path reservation for " + test.holder + ", which conflicts with the same path reservation that OpenShiftCluster/b of this context claims"
+			if got.Message != message || got.Object == nil || got.Object.Kind != "OpenShiftCluster" || got.Object.Name != "b" {
+				t.Fatalf("diagnostic = %+v, want %q", got, message)
+			}
+		})
+	}
+	unrecorded := wanted
+	unrecorded.ObjectKind = ""
+	if got := ConflictDiagnostic(Conflicts([]HostReservation{recorded}, []HostReservation{unrecorded})[0]); got.Object != nil ||
+		!strings.Contains(got.Message, "that cluster-media b of this context claims") {
+		t.Fatalf("a claim recording no kind was named %+v", got)
 	}
 }
 

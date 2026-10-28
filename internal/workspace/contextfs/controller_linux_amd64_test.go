@@ -589,6 +589,41 @@ func TestAVersion3RecordHoldsUnqualifiedAndSSHQualifiedKeys(t *testing.T) {
 	}
 }
 
+// A claim records the API kind of the object it reserves for as an additive
+// member under version 3 (B870, D186): a record that holds none reads as
+// before, one that holds a kind reads back as written, and a member that is
+// not an API kind name refuses.
+func TestAVersion3RecordHoldsTheAPIKindAClaimReservesFor(t *testing.T) {
+	value := syntheticControllerState(t)
+	value.Reservations = []prerequisites.HostReservation{
+		{Context: "lab", Kind: prerequisites.ClusterMediaReservation, Service: "sno", ObjectKind: "OpenShiftCluster", Keys: []string{"path:/var/lib/bootwright/media/sno"}},
+		{Context: "lab", Kind: "proxy", Service: "local-proxy", Keys: []string{"socket:0.0.0.0:3128"}},
+	}
+	encoded, err := encodeRecord(controllerRecord(value, nil), maxControllerState)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Contains(encoded, []byte(`"service":"sno","objectKind":"OpenShiftCluster","keys"`)) || bytes.Count(encoded, []byte(`"objectKind"`)) != 1 {
+		t.Fatalf("the record encodes %s", encoded)
+	}
+	decoded, _, err := decodeControllerRecord(encoded)
+	if err != nil || !reflect.DeepEqual(decoded, value) {
+		t.Fatalf("a claim's API kind read back as %+v (%#v)", decoded, diagnostics.Of(err))
+	}
+	for _, kind := range []string{"openShiftCluster", "Open-Shift", "OpenShift Cluster", "9Cluster", strings.Repeat("K", 64)} {
+		next := cloneControllerState(value)
+		next.Reservations[0].ObjectKind = kind
+		if err := validateControllerState(next, nil); err == nil {
+			t.Errorf("a claim recording the API kind %q was accepted", kind)
+		}
+	}
+	named := cloneControllerState(value)
+	named.Reservations[1].ObjectKind = "Proxy"
+	if err := validateControllerState(named, nil); err == nil {
+		t.Error("a claim whose capability kind names its object recorded an API kind as well")
+	}
+}
+
 func TestControllerDirectoryCreationInterruptionNeverAdoptsOrphan(t *testing.T) {
 	store, sources := fixture(t)
 	record := publish(t, store, "example", sources)

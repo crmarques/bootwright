@@ -37,6 +37,7 @@ type Options struct {
 	PlanInspection    PlanInspection
 	Readiness         Readiness
 	EffectBearing     EffectBearing
+	HostKeys          ControllerHostKeys
 	// Concurrency bounds how many of an operation's blocks run at once. It is
 	// how much this host is asked to do at the same time, never what the plan
 	// permits, so it is not frozen with the plan. Zero takes the default.

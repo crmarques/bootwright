@@ -8,6 +8,7 @@ import (
 	"github.com/crmarques/bootwright/internal/controller"
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
 	"github.com/crmarques/bootwright/internal/diagnostics"
+	"github.com/crmarques/bootwright/internal/trust"
 )
 
 type Inspector struct{}
@@ -43,4 +44,8 @@ func unsupported(ctx context.Context) error {
 
 func (Inspector) HardwareAddresses(ctx context.Context) ([]string, error) {
 	return nil, unsupported(ctx)
+}
+
+func (Inspector) SSHHostKeys(ctx context.Context) ([]trust.HostKey, error) {
+	return nil, ctx.Err()
 }

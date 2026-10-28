@@ -458,7 +458,7 @@ func (t *lifecycleTransaction) Claim(ctx context.Context, reservation prerequisi
 				continue
 			}
 			if held.Kind == reservation.Kind && held.Service == reservation.Service {
-				if held.Shared == reservation.Shared && slices.Equal(held.Keys, reservation.Keys) {
+				if held.Shared == reservation.Shared && held.ObjectKind == reservation.ObjectKind && slices.Equal(held.Keys, reservation.Keys) {
 					return nil
 				}
 				next[0].Releasing = held.Releasing

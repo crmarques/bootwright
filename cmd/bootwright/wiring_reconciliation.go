@@ -45,6 +45,7 @@ type lifecycleDependencies struct {
 	Workspace  lifecycle.Workspace
 	Inputs     lifecycle.Inputs
 	Host       lifecycle.HostIdentity
+	HostKeys   lifecycle.ControllerHostKeys
 	Guard      lifecycle.ExecutionGuard
 	Setup      lifecycle.SetupReader
 	Selection  contexts.SelectionStore
@@ -294,6 +295,7 @@ func wireLifecycle(deps lifecycleDependencies, controller controllerDependencies
 	options := lifecycleOptions(deps, clock, runner)
 	options.ApplyAdmission = fipsApplyAdmission(controller.Host, libvirtCapacityAdmission(deps.Capacity))
 	options.ListenerAdmission = firewallApplyAdmission(controller.Firewall)
+	options.HostKeys = deps.HostKeys
 	options.PlanInspection = fipsPlanInspection(controller.Host, firewallPlanInspection(controller.Firewall))
 	if binder != nil {
 		options.Readiness = statusReadiness(binder, lifecycleMedia(deps))

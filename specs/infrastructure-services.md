@@ -82,7 +82,29 @@ and the placement derivation refuses the same host before planning.
 unsupported and refuse before planning. The bound `knownHostsRef` material is parsed before
 connection under [the Machine host-key rules](api/machines.md#addresses-and-access);
 a changed, missing, corrupt or unparseable entry refuses before the connection,
-and an observed key mismatch refuses before any remote command. No SSH
+and an observed key mismatch refuses before any remote command. The adapter
+runner checks every SSH-placed run, of any operation, before it writes the
+job: material that is not exactly one valid entry for the placement's address
+and port, such as several entries, a hashed, listed, patterned or marked host,
+another host or port, or no decodable key of an accepted type, refuses
+`trust.identity` naming the Secret and the Machine, and a run whose pinned
+known-hosts file is not its placement's own `knownHostsRef` refuses
+`lifecycle.state`; no ssh reads either
+(`TestAnSSHPlacementRefusesKnownHostsNotOneEntryForItsHostBeforeItConnects`).
+The rule holds for every run, a continuation and a removal included, whatever
+build froze the operation: no run tolerates material an earlier build
+admitted, and an operation whose frozen Secret holds more than one entry
+refuses until its Secret is corrected and bound again. The host token
+compares as OpenSSH compares it, a name without case and an IP in its
+canonical form (`TestAKnownHostsHostMatchesAsOpenSSHReadsIt`), and ssh is
+handed only the validated entry, rewritten as one line for the placement's
+address and port, never the Secret's own bytes.
+The material is read as OpenSSH reads it, each line trimmed and split at
+spaces and tabs only: any other control character, a carriage return
+included, or any byte outside ASCII refuses, since a byte Go would read as
+white space and OpenSSH as part of a host could hide a second entry, such as
+`\v#x,*`, that ssh honours for every host
+(`TestKnownHostsMaterialOpenSSHReadsOtherwiseRefuses`). No SSH
 configuration, agent, ambient `known_hosts` or user identity is consulted.
 
 Two contexts targeting one SSH host are coordinated by the
@@ -167,7 +189,10 @@ A requested exclusive
 claim that conflicts with claims another context holds refuses with one
 `controller.conflict` diagnostic per held claim it conflicts with. Each names the holding context; the held key
 for `socket:`, `bridge:` and `prefix:` keys, and only the class for any other,
-so no private path prints; the holder's object; and this context's object. Its
+so no private path prints; the holder's object; and this context's object,
+each by the API kind its claim records, else the one its capability kind
+names, else by that capability kind and service
+([record](contexts/controller-record.md#record)). Its
 remedy is `bootwright destroy --context <holder>`, which releases the keys the
 holder still holds, or the field of this context's declaration that chooses
 the key (`TestEachConflictingHeldClaimIsItsOwnDiagnostic`). A
@@ -227,7 +252,8 @@ refuses `trust.identity` before anything is reserved or registered, naming
 the Secret and the Machine, so a claim is never published under its address
 alone. This enforces the one-entry rule of
 [addresses and access](api/machines.md#addresses-and-access) for a placement
-Machine whose blocks publish claims, at the apply's registration: a Secret
+Machine whose blocks publish claims at the apply's registration, as the
+adapter runner enforces it for every placement before it connects: a Secret
 holding several entries, a host list, a hashed host or a host token other
 than the placement's address and port refuses there
 (`TestAnSSHClaimWhosePinnedHostKeyCannotBeReadRefusesBeforeItIsPublished`).
@@ -236,10 +262,26 @@ the context plans: under the address form naming the Machine whose SSH
 address makes it long, under the host-key form, whose qualifier is 58 bytes,
 naming the claim and its Machine
 (`TestAClaimTooLongToKeyByItsHostKeyRefuses`). A placement that reaches the
-controller by an address its controller Machine declares publishes the
-controller's own unqualified keys, while one that reaches the same host by an
-address the controller Machine does not declare publishes qualified keys, so
-those two still never conflict; the controller's own claims carry no host key.
+controller at port `22` on an address its controller Machine declares
+publishes the controller's own unqualified keys. A placement whose blocks
+publish claims and that reaches the controller any other way refuses at the
+apply's registration: the controller's
+own SSH host keys are read, read-only and through held root-owned directories,
+from its sshd public key files `/etc/ssh/ssh_host_ed25519_key.pub`,
+`/etc/ssh/ssh_host_ecdsa_key.pub` and `/etc/ssh/ssh_host_rsa_key.pub`, and a
+placement whose pinned host key is one of them, reached at another address or
+port, refuses `lifecycle.state` before anything is reserved or registered,
+naming the addresses the controller Machine declares; its remedy is to reach
+the controller at port `22` on one of them, to declare the address on the
+controller Machine when the port is `22`, to place the work on the
+controller, or, when the placement host only shares the controller's keys as
+a clone does, to give it its own SSH host keys; an IPv6 address is named and
+compared as any other
+(`TestTheControllerReachedByAnUndeclaredAddressRefusesBeforeReservation`).
+A key file that is absent, unreadable, not a root-owned regular file that
+only root may write, or not one accepted public key gives no key and refuses
+nothing, so a controller without sshd host keys refuses no placement
+(`TestSSHHostKeysReadsOnlyTheControllersSafePublicKeyFiles`).
 
 One claim's keys never conflict with each other, and
 no other key class is compared within a context, because one context's claims

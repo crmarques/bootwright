@@ -172,7 +172,7 @@ func TestMediaPlanContributesOneBlockPerCluster(t *testing.T) {
 	if !slices.Equal(plan.Secrets, []string{"artifact-server-tls", "openshift-pull-secret", "sno-cluster-admin-ssh-key"}) {
 		t.Fatalf("secrets = %v", plan.Secrets)
 	}
-	if len(plan.Reservations) != 1 || plan.Reservations[0].Service != "sno" {
+	if len(plan.Reservations) != 1 || plan.Reservations[0].Service != "sno" || plan.Reservations[0].ObjectKind != "OpenShiftCluster" {
 		t.Fatalf("reservations = %+v", plan.Reservations)
 	}
 }

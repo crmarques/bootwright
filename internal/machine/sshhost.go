@@ -39,11 +39,29 @@ func SSHHostKeyQualifier(knownHosts, address string, port int) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	fingerprint := key.Fingerprint()
-	if len(fingerprint) != SSHHostKeyQualifierBytes-len("sshkey/")-len("/") {
+	qualifier, ok := HostKeyQualifier(key)
+	if !ok {
 		return "", placementFailure("trust.identity", "the known-hosts entry carries no SSH host key whose fingerprint can be read", "")
 	}
-	return "sshkey/" + strings.NewReplacer("+", "-", "/", "_").Replace(fingerprint) + "/", nil
+	return qualifier, nil
+}
+
+func HostKeyQualifier(key trust.HostKey) (string, bool) {
+	fingerprint := key.Fingerprint()
+	if len(fingerprint) != SSHHostKeyQualifierBytes-len("sshkey/")-len("/") {
+		return "", false
+	}
+	return "sshkey/" + strings.NewReplacer("+", "-", "/", "_").Replace(fingerprint) + "/", true
+}
+
+func DeclaredAddresses(controller api.Object) []string {
+	var addresses []string
+	for _, declared := range controller.Spec().Get("network", "addresses").Items() {
+		if value, _, _ := strings.Cut(declared.Get("address").Text(), "/"); value != "" {
+			addresses = append(addresses, value)
+		}
+	}
+	return addresses
 }
 
 // ReachesController reports an SSH endpoint that is the controller itself:
@@ -58,9 +76,8 @@ func ReachesController(controller api.Object, address string, port int) bool {
 	if parsed, err := netip.ParseAddr(host); host == "localhost" || err == nil && parsed.IsLoopback() {
 		return true
 	}
-	for _, declared := range controller.Spec().Get("network", "addresses").Items() {
-		value, _, _ := strings.Cut(declared.Get("address").Text(), "/")
-		if value != "" && sshAddress(value) == host {
+	for _, value := range DeclaredAddresses(controller) {
+		if sshAddress(value) == host {
 			return true
 		}
 	}

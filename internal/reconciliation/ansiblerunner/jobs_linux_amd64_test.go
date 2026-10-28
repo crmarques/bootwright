@@ -356,6 +356,100 @@ func TestAnUnsafeMaterialNameOrValueRefusesBeforeAnyJobExists(t *testing.T) {
 	}
 }
 
+// An SSH placement connects only against one valid known-hosts entry for its
+// own address and port (B869). Every other shape its bound Secret can carry
+// refuses trust.identity before the runner touches its run directories or
+// starts the adapter, whatever operation the run is for, so no ssh reads it.
+func TestAnSSHPlacementRefusesKnownHostsNotOneEntryForItsHostBeforeItConnects(t *testing.T) {
+	refused := map[string]string{
+		"several entries":                       pinnedKnownHosts + "\n" + pinnedKnownHosts,
+		"a second key type":                     pinnedKnownHosts + "\n[192.0.2.9]:2222 ecdsa-sha2-nistp256 AAAA",
+		"a hashed host":                         "|1|c2FsdHNhbHRzYWx0c2FsdHNhbHQ=|aGFzaGhhc2hoYXNoaGFzaGhhc2g= " + pinnedHostKey,
+		"a host list":                           "[192.0.2.9]:2222,[192.0.2.10]:2222 " + pinnedHostKey,
+		"a wildcard host":                       "[192.0.2.*]:2222 " + pinnedHostKey,
+		"a marker":                              "@cert-authority [192.0.2.9]:2222 " + pinnedHostKey,
+		"another host":                          "[192.0.2.10]:2222 " + pinnedHostKey,
+		"another port":                          "192.0.2.9 " + pinnedHostKey,
+		"no key":                                "[192.0.2.9]:2222 ssh-ed25519",
+		"an unaccepted type":                    "[192.0.2.9]:2222 ssh-dss AAAAB3NzaC1kc3MAAAA=",
+		"an undecodable key":                    "[192.0.2.9]:2222 ssh-ed25519 not-base64!",
+		"a mislabeled key":                      "[192.0.2.9]:2222 ssh-rsa AAAAC3NzaC1lZDI1NTE5AAAAIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+		"garbage":                               "\x00\xffnot a known-hosts entry",
+		"only comments":                         "# [192.0.2.9]:2222 " + pinnedHostKey + "\n\n",
+		"a vertical tab hiding a wildcard list": "\v#x,* " + pinnedHostKey + "\n" + pinnedKnownHosts,
+		"a no-break space hiding a wildcard":    "\u00a0#x,* " + pinnedHostKey + "\n" + pinnedKnownHosts,
+		"a carriage return ending the entry":    pinnedKnownHosts + "\r\n",
+	}
+	for name, value := range refused {
+		t.Run(name, func(t *testing.T) {
+			started := false
+			runner := sweepingRunner(t, func() *exec.Cmd { started = true; return completing() })
+			plantJob(t, runner.jobParent, jobPrefix+"4242")
+			before := trees(t, runner.jobParent, runner.scratchParent)
+			request := sshAdapterRequest(t, value)
+			_, err := runner.Run(context.Background(), request)
+			reported := diagnostics.Of(err)
+			if len(reported) != 1 || reported[0].Code != "trust.identity" || started ||
+				!strings.Contains(reported[0].Message, "Secret host-key of Machine/services is not one known-hosts entry for [192.0.2.9]:2222") ||
+				reported[0].Remediation != "author access.ssh.knownHostsRef on Machine/services as one known-hosts entry for [192.0.2.9]:2222" {
+				t.Fatalf("%+v (%v), started=%t", reported, err, started)
+			}
+			if after := trees(t, runner.jobParent, runner.scratchParent); !slices.Equal(after, before) {
+				t.Fatalf("the refused run changed its run directories from %v to %v", before, after)
+			}
+		})
+	}
+	unpinned := map[string]func(*lifecycle.RunRequest){
+		"no knownHostsRef": func(request *lifecycle.RunRequest) {
+			request.Placement.KnownHostsRef = ""
+			request.Materials = lifecycle.Materials(request.Placement)
+		},
+		"a known_hosts file of another Secret": func(request *lifecycle.RunRequest) {
+			request.Materials[slices.IndexFunc(request.Materials, func(file lifecycle.MaterialFile) bool { return file.Name == "known_hosts" })].Secret = "services-key"
+		},
+		"no known_hosts file": func(request *lifecycle.RunRequest) {
+			request.Materials = slices.DeleteFunc(request.Materials, func(file lifecycle.MaterialFile) bool { return file.Name == "known_hosts" })
+		},
+	}
+	for name, change := range unpinned {
+		t.Run(name, func(t *testing.T) {
+			started := false
+			runner := sweepingRunner(t, func() *exec.Cmd { started = true; return completing() })
+			request := sshAdapterRequest(t, pinnedKnownHosts)
+			change(&request)
+			_, err := runner.Run(context.Background(), request)
+			if code, _ := codeOf(err); code != "lifecycle.state" || started {
+				t.Fatalf("%v, started=%t", err, started)
+			}
+		})
+	}
+	for name, value := range map[string]string{
+		"one entry":                     pinnedKnownHosts,
+		"one entry among comments":      "# pinned for services\n\n" + pinnedKnownHosts + " services\n",
+		"one entry at the default port": "192.0.2.9 " + pinnedHostKey,
+	} {
+		t.Run(name, func(t *testing.T) {
+			request := sshAdapterRequest(t, value)
+			if name == "one entry at the default port" {
+				request.Placement.Port = 22
+			}
+			if _, err := checkHostKey(request); err != nil {
+				t.Fatalf("an accepted known-hosts entry was refused: %v", err)
+			}
+		})
+	}
+}
+
+func sshAdapterRequest(t *testing.T, knownHosts string) lifecycle.RunRequest {
+	t.Helper()
+	request := adapterRequest(t, &bytes.Buffer{})
+	request.Placement = sshRequest().Placement
+	request.Materials = lifecycle.Materials(request.Placement)
+	request.Material = material()
+	request.Material["host-key"] = secrets.NewMaterial(map[secrets.Part][]byte{secrets.ValuePart: []byte(knownHosts)})
+	return request
+}
+
 // Only the runner's own entries are swept: exact names, private directories of
 // its owner, whose lock and record are private regular files with one link. A
 // link is never followed, even to a stale-looking job it could reach, and a job
@@ -717,7 +811,7 @@ func trees(t *testing.T, parents ...string) []string {
 // confidential part of the material the run is lent refuses before anything is
 // written, while a public certificate or key does not.
 func TestNoMaterialValueEqualsBoundMaterialBytes(t *testing.T) {
-	for value, refused := range map[string]bool{"PRIVATE": true, "auth: PRIVATE;": true, "SSHKEY": true, "host ssh-ed25519 AAAA": true, "escalate\n": true, "CERTIFICATE": false, "public": false} {
+	for value, refused := range map[string]bool{"PRIVATE": true, "auth: PRIVATE;": true, "SSHKEY": true, pinnedKnownHosts: true, "escalate\n": true, "CERTIFICATE": false, "public": false} {
 		request := adapterRequest(t, &bytes.Buffer{})
 		request.Material = material()
 		request.MaterialValues = map[string]string{"fingerprint": value}

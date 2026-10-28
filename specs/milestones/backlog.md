@@ -268,13 +268,11 @@ Alias cell.
 | [B799](#b799) | new, 2026-10-23 (M3 verification) | defect | Workspace | Setup interruption retries identify any remaining setup-lock holder | Pre-existing intermittent refusal; its cause is unproved |
 | [B857](#b857) | new, 2026-10-27 (lane I) | enabling | Desired state | The audit 5.7 operator tasks run on the reshaped API | B814's paper check was not run before X171 |
 | [B858](#b858) | new, 2026-10-27 (lane T) | product | CLI | `preflight infra`, `preflight all` and `render` with a path flag are defined and run | D188 ran `preflight clusters` as the union of two existing checks; these have no definition |
-| [B868](#b868) | new, 2026-10-27 (lane P) | safety | Infrastructure services | A controller reached by an undeclared address conflicts with its own claims | D188's host-key form does not cover the controller's unqualified keys |
-| [B869](#b869) | new, 2026-10-27 (lane P) | defect | Machine | The SSH arm parses the pinned known-hosts entry before it connects | Pre-existing defect found by lane P |
 | [B867](#b867) | new, 2026-10-27 (lane R review) | safety | Storage | The Ceph incarnation rule is confirmed on a live cluster | The monitor map's creation time was chosen without a live run |
-| [B870](#b870) | new, 2026-10-27 (lane Q2) | enabling | Controller setup | A held cluster-media claim records its API kind | The one family kind left in the controller prerequisites |
 | [B872](#b872) | new, 2026-10-28 (lane V1) | defect | Storage | An NVMe-oF service with no pool refuses at plan | Pre-existing gap found by lane V1 |
 | [B873](#b873) | new, 2026-10-28 (lane V1) | defect | Storage | The plan builder's replica refusal names no distribution | Pre-existing wording found by lane V1 |
 | [B874](#b874) | new, 2026-10-28 (lane W2) | defect | Verification tooling | The Ceph native worker launcher test is stable in parallel | Flake seen by lane W2 |
+| [B875](#b875) | new, 2026-10-28 (lane V3) | defect | Verification tooling | The enrollment observation test does not depend on worker order | Flake seen by lane V3 |
 
 ### B82
 
@@ -2960,28 +2958,6 @@ with its refusals, diagnostics and goldens. **Exit evidence:** the three
 removed from the unavailable list and `wireStubs`, the report contracts in
 [cli/output.md](../cli/output.md), and the tests.
 
-### B868
-
-**Owner:** Infrastructure services. **Kind:** safety. **Requires:** none.
-**Definition:** Needs definition. A placement that reaches the controller by
-an address the controller Machine declares publishes unqualified keys, while
-one that reaches the same host by an address it does not declare publishes
-`ssh/` and `sshkey/` keys, so the two never conflict (lane P, 2026-10-27; the
-spec states the limitation). **Outcome:** the controller's own claims also
-carry its pinned host-key form, or an undeclared address of the controller
-refuses. **Exit evidence:** a reservation test of the controller reached both
-ways.
-
-### B869
-
-**Owner:** Machine. **Kind:** defect. **Requires:** none. **Definition:**
-Specified. infrastructure-services.md's placement arms say the pinned
-known-hosts material is parsed before connection, but the Ansible SSH arm
-hands the Secret to OpenSSH unparsed; since X180 only a fresh apply's
-registration parses it, and only for placements that publish claims (found by
-lane P). **Outcome:** every SSH placement refuses material that is not one
-entry for its address and port before it connects. **Exit evidence:** a
-connection-path test per malformed shape.
 ### B867
 
 **Owner:** Storage. **Kind:** safety. **Requires:** a live Ceph cluster run.
@@ -2994,17 +2970,6 @@ mon dump` reports stays the same across a monitor added and removed and a Ceph
 upgrade, and changes when the cluster is bootstrapped again under the same
 fsid; otherwise the rule moves to a value that does. **Exit evidence:** a
 ledger row from that live run.
-
-### B870
-
-**Owner:** Controller setup. **Kind:** enabling. **Requires:** none.
-**Definition:** Specified. `conflictKinds` in
-`internal/controller/prerequisites/reservations.go` maps the `cluster-media`
-claim to `api.OpenShiftCluster` because a held claim records no API kind, the
-one allowlisted family-kind use of the family-neutral rule (X183).
-**Outcome:** a claim records the kind of the object it reserves for, and the
-conflict diagnostic reads it. **Exit evidence:** the allowlist is empty and its
-ceiling is zero.
 
 ### B872
 
@@ -3030,6 +2995,15 @@ distribution. **Exit evidence:** the refusal test pins the new text.
 failed in a parallel units run and passed serially (lane W2, 2026-10-28).
 **Outcome:** the test is deterministic under the parallel units run. **Exit
 evidence:** repeated parallel runs pass.
+
+### B875
+
+**Owner:** Verification tooling. **Kind:** defect. **Requires:** none.
+**Definition:** Specified. `TestOnlyMachinesUsingContextTrustAreObserved`
+(`internal/trust/enrollment/service_test.go`) expects the concurrent
+observer's addresses in a fixed order and failed under load (lane V3,
+2026-10-28). **Outcome:** the test compares the observed set, not its order.
+**Exit evidence:** repeated `-race` runs under load pass.
 
 ## Audit remediation (2026-10-26)
 
@@ -3100,7 +3074,7 @@ also updates this table.
 | 24 | N0 Remaining text to owning items (B805, B816, B820, B851) | merged (X182) |
 | 25 | V1 Ceph replica defaults and derived names (B859, B860, B861) | merged (X185) |
 | 26 | V2 Test and CLI defects (B862, B863, B865, B866) | merged (X186) |
-| 27 | V3 Known-hosts and claim kinds (B869, B870, B871, B868) | not started |
+| 27 | V3 Known-hosts and claim kinds (B869, B870, B871, B868) | merged (X188) |
 | 28 | W1 Preflight infra and all, render to a path (B858) | not started |
 | 29 | W2 Adapter warnings (B864) | merged (X187) |
 
@@ -5110,6 +5084,6 @@ writes its output there ([B858](#b858)). An adapter reports warnings in an
 optional `warnings` member of its lifecycle result, carried into the run's
 diagnostics with registered codes ([B864](delivered.md#x187--audit-lane-w2-adapter-warnings)). A placement whose pinned
 host key is one of the controller's own sshd host keys, read from `/etc/ssh`,
-must use an address the controller Machine declares ([B868](#b868)). No
+must use an address the controller Machine declares ([B868](delivered.md#x188--audit-lane-v3-known-hosts-entries-claim-kinds-and-the-controller-host-key)). No
 operation registered by an earlier build is live, so the one-entry
 known-hosts rule holds for every run with no compatibility path.

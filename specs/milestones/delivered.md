@@ -9200,7 +9200,7 @@ controller tool selection, the FIPS prerequisite and managed-service cluster
 records iterate the registry and name no family kind; every example compiles
 to the same memberships, tools, FIPS demand and records as before. The
 family-neutral rule covers those package trees, and its one allowlisted use
-(the `cluster-media` claim's kind, [B870](backlog.md#b870)) is counted and
+(the `cluster-media` claim's kind, [B870](#x188--audit-lane-v3-known-hosts-entries-claim-kinds-and-the-controller-host-key)) is counted and
 can only shrink.
 
 A Machine whose derived contact `<machine>.<domain>` would exceed 253 bytes
@@ -9303,6 +9303,34 @@ over a managed prefix as `substrate.shadowed-route` (B843).
 **Guard tests:** the decoder, dispatch, Python-to-Go bound, attempt-record,
 aggregation and apply and status golden tests, each proved by a seeded
 mismatch; the delivering commit records the gates.
+
+### X188 — Audit lane V3: known-hosts entries, claim kinds and the controller host key
+
+**Items:** B869, B870, B871 and B868.
+**Kind:** safety. **Owners:** Machine, Controller setup and Infrastructure
+services. Delivered on 2026-10-28 as lane V3 of the
+[audit remediation](backlog.md#lane-order-and-progress) under the owner's
+request to implement the remaining items, with D189's answers; the lane parked
+B875.
+
+Every SSH run, continuations, removals and power runs included, refuses
+before it stages anything when its pinned known-hosts Secret is not exactly
+one valid entry for its address and port, and ssh reads only the one line
+rendered from the parsed key. Known-hosts parsing refuses control characters
+but tab and newline, DEL and non-ASCII bytes, splits on space and tab only,
+and matches host names without case and addresses in canonical form, as
+OpenSSH reads them. A held `cluster-media` claim records the API kind it
+reserves for, so the family-neutral allowlist is empty; a controller record
+holding one stays unreadable to earlier builds until the claim is released.
+At an apply's registration, a claim-publishing placement whose pinned key is
+one of the controller's own sshd host keys, read from `/etc/ssh` through a
+read-only port, must reach the controller at port 22 on an address it
+declares.
+
+**Guard tests:** the runner's known-hosts refusal and rendering tests, the
+parser divergence and host-matching tests, the claim-kind record tests and
+`TestTheControllerReachedByAnUndeclaredAddressRefusesBeforeReservation`, each
+proved by a seeded mismatch; the delivering commit records the gates.
 
 ## M3 independent in-tree completion
 

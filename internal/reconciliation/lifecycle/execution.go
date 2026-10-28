@@ -1861,7 +1861,15 @@ func (s Service) reserve(ctx context.Context, tx Transaction, decided transition
 	if decided.verb == reconciliation.Destroy {
 		return reproveRelease(ctx, tx, "", "")
 	}
-	planned, err := hostKeyedReservations(decided.binding, material)
+	var controllerKeys []string
+	if len(decided.binding.hostKeyed) != 0 {
+		keys, err := controllerKeyQualifiers(ctx, s.options.HostKeys)
+		if err != nil {
+			return err
+		}
+		controllerKeys = keys
+	}
+	planned, err := hostKeyedReservations(decided.binding, material, controllerKeys)
 	if err != nil {
 		return err
 	}

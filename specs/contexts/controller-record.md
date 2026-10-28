@@ -76,7 +76,25 @@ Reservations record the host resources that locally hosted services claim,
 under the
 [Infrastructure services conflict contract](../infrastructure-services.md#host-reservations).
 Each entry contains the context name, capability kind, service name and a sorted
-unique key list, plus a shared marker present only on a shared claim and a
+unique key list, plus `objectKind`, the API kind of the object the claim
+reserves for, present on a claim whose capability kind does not name it (a
+`cluster-media` claim records its cluster family kind), which a
+[conflict diagnostic](../infrastructure-services.md#host-reservations) names
+the claim's object by. It is added under version 3 without a version move, as
+the releasing marker was (B839), so no controller needs a fresh install: a
+claim an earlier build published records none, still conflicts and is named
+by its capability kind and service, and its next apply records it
+(`TestAClaimIsNamedByTheAPIKindItRecords`,
+`TestAClaimRecordsItsAPIKindOverOneAnEarlierBuildHeld`); a value that is not
+an API kind name, an upper-case letter then at most 62 letters and digits,
+refuses the record, and an earlier build, whose decoder refuses a member it
+does not declare, refuses a record holding one. The member persists for the
+claim's life, so once an apply records a `cluster-media` claim no earlier
+build reads that host's controller record, for any context, until that claim
+is released; a claim whose capability kind already names its object (a
+`proxy` claim, say) holding the member refuses the record
+(`TestAVersion3RecordHoldsTheAPIKindAClaimReservesFor`). Each entry also holds
+a shared marker present only on a shared claim and a
 releasing marker present only on a claim whose removal re-proved its release
 before an effect (B839): it stays until the claim is released, by the
 completed removal or the holder's deletion, and while it stands a claim another context makes on a

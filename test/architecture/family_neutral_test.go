@@ -92,12 +92,10 @@ type excusedUse struct {
 // package, by "<file>: <use>", with its occurrence count; the total may never
 // exceed familyKindAllowlistCeiling.
 func familyKindAllowlist() map[string]excusedUse {
-	return map[string]excusedUse{
-		"internal/controller/prerequisites/reservations.go: api.OpenShiftCluster": {1, "a held cluster-media claim records no API kind, so its conflict diagnostic names the claimant's kind from this table"},
-	}
+	return map[string]excusedUse{}
 }
 
-const familyKindAllowlistCeiling = 1
+const familyKindAllowlistCeiling = 0
 
 // familyKindNames lists each cluster family kind or family-owned child kind a
 // source names, as an API constant or as a string literal equal to its name.

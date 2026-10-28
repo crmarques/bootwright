@@ -544,9 +544,10 @@ what needs its derivations (`containercluster.FactsOf`): the controller tools,
 the virtual IPs, the endpoints and the node names. Machine target and
 admission, the controller's tool, host-package and FIPS selection and the
 managed-service name records iterate the registry through these accessors and
-name no family kind, which the same test holds; the one exception it lists is
-the controller's claim table, since a held `cluster-media` claim records no API
-kind.
+name no family kind, which the same test holds with an empty allowlist whose
+ceiling is zero: a `cluster-media` claim records the API kind of the cluster it
+reserves for ([controller record](contexts/controller-record.md#record)), and
+the controller's conflict diagnostics read it.
 
 ## Graph validation
 

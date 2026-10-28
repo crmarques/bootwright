@@ -15,6 +15,7 @@ import (
 	"github.com/crmarques/bootwright/internal/secrets"
 	"github.com/crmarques/bootwright/internal/secrets/custody"
 	"github.com/crmarques/bootwright/internal/secrets/secretstore"
+	"github.com/crmarques/bootwright/internal/trust"
 )
 
 // BeginInvocation gives concurrent adapters one live execution scope. Its release
@@ -152,6 +153,10 @@ type CredentialRebinder interface {
 
 type HostIdentity interface {
 	Identity(context.Context) (controller.InstalledHostIdentity, error)
+}
+
+type ControllerHostKeys interface {
+	SSHHostKeys(context.Context) ([]trust.HostKey, error)
 }
 
 // AutomationIdentity is the content identity of the embedded automation and

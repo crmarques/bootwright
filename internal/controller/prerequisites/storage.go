@@ -90,16 +90,17 @@ const (
 // service claims. Workspace stores the keys and compares them through
 // Conflicts, which reads no key beyond its class, a socket's address and port,
 // and a prefix; only the owning capability knows what a key means. Setup
-// reserves nothing.
+// reserves nothing. ObjectKind is the API kind of the object a claim names.
 // A shared claim is held by any number of contexts at once and conflicts with
 // nothing; it records that a resource is still in use rather than who owns it.
 type HostReservation struct {
-	Context   string   `json:"context"`
-	Kind      string   `json:"kind"`
-	Service   string   `json:"service"`
-	Keys      []string `json:"keys"`
-	Shared    bool     `json:"shared,omitempty"`
-	Releasing bool     `json:"releasing,omitempty"`
+	Context    string   `json:"context"`
+	Kind       string   `json:"kind"`
+	Service    string   `json:"service"`
+	ObjectKind string   `json:"objectKind,omitempty"`
+	Keys       []string `json:"keys"`
+	Shared     bool     `json:"shared,omitempty"`
+	Releasing  bool     `json:"releasing,omitempty"`
 }
 
 type SetupEgress struct {

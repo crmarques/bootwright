@@ -622,10 +622,9 @@ here; its placement refuses before planning under the
 Machines that are only cluster nodes, storage nodes or session targets keep
 any account.
 
-The `knownHostsRef` Secret, an access credential, resolves to UTF-8 text. Blank lines and
-lines starting with `#` are ignored; exactly one data line remains,
-`<host> <type> <key>` optionally followed by a comment, and a second data line
-is invalid. Its host token is the effective SSH address for port `22`, or
+The `knownHostsRef` Secret, an access credential, is ASCII split at spaces
+and tabs only. Blank and `#` lines are ignored; exactly one data line remains,
+`<host> <type> <key>` optionally followed by a comment. Its host token is the effective SSH address for port `22`, or
 `[<address>]:<port>` otherwise. Markers, patterns, hashed hosts and
 comma-separated hosts are invalid. The key is
 boundedly decoded, its type matches the algorithm token, and the consumer

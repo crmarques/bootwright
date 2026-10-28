@@ -366,6 +366,33 @@ func TestReservationsRefuseAnotherContextsKeys(t *testing.T) {
 	}
 }
 
+// A claim an earlier build published records no API kind; the next claim of
+// it records one (B870), since a claim that differs only in its kind is not
+// held exactly.
+func TestAClaimRecordsItsAPIKindOverOneAnEarlierBuildHeld(t *testing.T) {
+	ctx := context.Background()
+	store, record := lifecycleFixture(t)
+	reserveFixture(t, store, record)
+	earlier := prerequisites.HostReservation{Context: record.Name, Kind: prerequisites.ClusterMediaReservation, Service: "sno", Keys: []string{"path:/var/lib/bootwright/media/sno"}}
+	if err := store.MutateLifecycle(ctx, "example", func(tx lifecycle.Transaction) error { return tx.Reserve(ctx, []prerequisites.HostReservation{earlier}) }); err != nil {
+		t.Fatal(err)
+	}
+	recorded := earlier
+	recorded.ObjectKind = "OpenShiftCluster"
+	if err := store.MutateLifecycle(ctx, "example", func(tx lifecycle.Transaction) error { return tx.Claim(ctx, recorded) }); err != nil {
+		t.Fatal(err)
+	}
+	err := store.ReadController(ctx, "", func(view prerequisites.StorageView) error {
+		if !reflect.DeepEqual(view.State.Reservations, []prerequisites.HostReservation{recorded}) {
+			t.Fatalf("reservations = %+v", view.State.Reservations)
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
 // A wildcard bind holds its port on every address, so it and a socket at any
 // other address on that port refuse each other across contexts.
 func TestAWildcardSocketReservationRefusesEveryAddressAtItsPort(t *testing.T) {

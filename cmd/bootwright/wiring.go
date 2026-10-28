@@ -122,7 +122,7 @@ func localServiceDependencies(process processDependencies) (serviceDependencies,
 		Media:            localMediaDependencies(repository, process.Confirmer, process.LifecycleProgress, process.MediaPresenter, process.AmbientRoute, files),
 		Lifecycle: lifecycleDependencies{
 			Workspace: repository, Inputs: contexts.Inputs{Repository: repository, Selection: account},
-			Host: hostlinux.New(), Guard: runtimeGuard(controllerPorts.Python), Setup: controllerPorts.Setup, Selection: account,
+			Host: hostlinux.New(), HostKeys: hostlinux.New(), Guard: runtimeGuard(controllerPorts.Python), Setup: controllerPorts.Setup, Selection: account,
 			Presenter: process.LifecyclePresenter, Progress: process.LifecycleProgress,
 			Confirmer: process.Confirmer, Executable: process.Executable,
 			Media: repository,

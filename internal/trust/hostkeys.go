@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/binary"
+	"net/netip"
 	"strconv"
 	"strings"
 	"unicode/utf8"
@@ -117,7 +118,7 @@ func ParseAuthorizedKey(line string) (HostKey, error) {
 // more than one host is refused, so one declared target, port and key is bound
 // before anything is observed.
 func ParseKnownHostsLine(text, address string, port int) (HostKey, error) {
-	fields, err := keyFields(text)
+	fields, err := knownHostsFields(text)
 	if err != nil {
 		return HostKey{}, err
 	}
@@ -132,7 +133,7 @@ func ParseKnownHostsLine(text, address string, port int) (HostKey, error) {
 		return HostKey{}, failure("a hashed known-hosts host cannot be bound to a declared address", "")
 	case strings.ContainsAny(host, ",*?!"):
 		return HostKey{}, failure("a known-hosts pattern or host list is not one bound host key", "")
-	case host != HostToken(address, port):
+	case hostTokenKey(host) != hostTokenKey(HostToken(address, port)):
 		return HostKey{}, failure("the known-hosts entry names another host than this Machine's SSH address",
 			"author the entry for "+HostToken(address, port))
 	}
@@ -160,6 +161,47 @@ func keyFields(text string) ([]string, error) {
 		return nil, failure("the SSH host key material carries no entry", "")
 	}
 	return strings.Fields(data), nil
+}
+
+func hostTokenKey(token string) string {
+	if inner, port, bracketed := strings.Cut(strings.TrimPrefix(token, "["), "]:"); bracketed && strings.HasPrefix(token, "[") {
+		return "[" + hostAddressKey(inner) + "]:" + port
+	}
+	return hostAddressKey(token)
+}
+
+func hostAddressKey(address string) string {
+	if parsed, err := netip.ParseAddr(address); err == nil {
+		return parsed.Unmap().String()
+	}
+	return strings.ToLower(address)
+}
+
+func knownHostsFields(text string) ([]string, error) {
+	if len(text) > maxLineBytes || !utf8.ValidString(text) {
+		return nil, failure("the SSH host key is not bounded UTF-8 text", "")
+	}
+	for index := 0; index < len(text); index++ {
+		if c := text[index]; c != '\t' && c != '\n' && (c < 0x20 || c >= 0x7f) {
+			return nil, failure("the known-hosts material holds a control character or a non-ASCII byte, which OpenSSH reads otherwise",
+				"author the entry in ASCII, separated by spaces or tabs, with lines ended by a newline alone")
+		}
+	}
+	var data string
+	for _, raw := range strings.Split(text, "\n") {
+		line := strings.Trim(raw, " \t")
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		if data != "" {
+			return nil, failure("the SSH host key material carries more than one entry", "")
+		}
+		data = line
+	}
+	if data == "" {
+		return nil, failure("the SSH host key material carries no entry", "")
+	}
+	return strings.FieldsFunc(data, func(c rune) bool { return c == ' ' || c == '\t' }), nil
 }
 
 // qualify accepts a key only when its recorded type is one this product pins

@@ -203,6 +203,8 @@ type hostKeyedClaim struct {
 	address       string
 	port          int
 	knownHostsRef string
+	controller    string
+	declared      []string
 }
 
 // publishedSSHClaims qualifies each SSH-placed claim's keys by its host unless that host is the controller (Q96).
@@ -238,13 +240,14 @@ func publishedSSHClaims(catalog api.Catalog, controller string, placed []SSHRese
 				"author access.ssh.knownHostsRef on Machine/"+claim.Machine)
 		}
 		keyed = append(keyed, hostKeyedClaim{reservation: len(published), keys: claimed,
-			machine: claim.Machine, address: claim.Address, port: claim.Port, knownHostsRef: claim.KnownHostsRef})
+			machine: claim.Machine, address: claim.Address, port: claim.Port, knownHostsRef: claim.KnownHostsRef,
+			controller: controller, declared: machine.DeclaredAddresses(own)})
 		published = append(published, reservation)
 	}
 	return published, keyed, nil
 }
 
-func hostKeyedReservations(binding capabilityBinding, material map[string]secrets.Material) ([]prerequisites.HostReservation, error) {
+func hostKeyedReservations(binding capabilityBinding, material map[string]secrets.Material, controllerKeys []string) ([]prerequisites.HostReservation, error) {
 	reservations := slices.Clone(binding.reservations)
 	for _, claim := range binding.hostKeyed {
 		qualifier, err := pinnedHostQualifier(claim, material)
@@ -255,11 +258,47 @@ func hostKeyedReservations(binding capabilityBinding, material map[string]secret
 					"), so the host reservations "+reservation.Kind+" "+reservation.Service+" publishes there cannot name the host it pins",
 				"author access.ssh.knownHostsRef on Machine/"+claim.machine+" as one known-hosts entry for "+machine.SSHHost(claim.address, claim.port))
 		}
+		if slices.Contains(controllerKeys, qualifier) {
+			return nil, undeclaredControllerAddress(claim)
+		}
 		reservation := reservations[claim.reservation]
 		reservation.Keys = append(slices.Clone(reservation.Keys), prerequisites.QualifiedKeys(qualifier, claim.keys)...)
 		reservations[claim.reservation] = reservation
 	}
 	return reservations, nil
+}
+
+func undeclaredControllerAddress(claim hostKeyedClaim) error {
+	declared := "it declares no address"
+	if len(claim.declared) != 0 {
+		declared = "it declares " + strings.Join(claim.declared, ", ")
+	}
+	remediation := "reach Machine/" + claim.controller + " at port 22 on an address it declares, "
+	if claim.port == 22 {
+		remediation += "declare " + claim.address + " on Machine/" + claim.controller + ", "
+	}
+	return failure("lifecycle.state",
+		"Machine/"+claim.machine+" reaches the controller, whose SSH host key its access.ssh.knownHostsRef pins, at "+machine.SSHHost(claim.address, claim.port)+
+			", which is not port 22 at an address the controller Machine/"+claim.controller+" declares ("+declared+
+			"), so its claims would not meet the controller's own",
+		remediation+"place the work on Machine/"+claim.controller+", or give Machine/"+claim.machine+" its own SSH host keys")
+}
+
+func controllerKeyQualifiers(ctx context.Context, keys ControllerHostKeys) ([]string, error) {
+	if keys == nil {
+		return nil, nil
+	}
+	found, err := keys.SSHHostKeys(ctx)
+	if err != nil {
+		return nil, err
+	}
+	var qualifiers []string
+	for _, key := range found {
+		if qualifier, ok := machine.HostKeyQualifier(key); ok {
+			qualifiers = append(qualifiers, qualifier)
+		}
+	}
+	return qualifiers, nil
 }
 
 func pinnedHostQualifier(claim hostKeyedClaim, material map[string]secrets.Material) (string, error) {

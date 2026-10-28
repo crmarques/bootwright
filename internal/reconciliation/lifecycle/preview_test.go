@@ -165,6 +165,7 @@ var sshEndpoints = map[string]struct {
 }{
 	"services": {"192.0.2.10", 22}, "storage": {"192.0.2.20", 22}, "alias": {"192.0.2.10", 22},
 	"forwarded": {"192.0.2.10", 2222}, "loopback": {"127.0.0.1", 22}, "declared": {"192.0.2.1", 22},
+	"ipv6": {"fd00::10", 22},
 }
 
 // sshClaim is one claim placed through a test Machine's SSH access.
@@ -175,7 +176,7 @@ func sshClaim(machine string, reservation prerequisites.HostReservation) SSHRese
 
 // sshHostKeys is the host key each test Machine's known-hosts Secret pins:
 // services and alias reach one host, so they pin one key.
-var sshHostKeys = map[string]byte{"services": 1, "alias": 1, "storage": 2, "forwarded": 3, "loopback": 4, "declared": 5}
+var sshHostKeys = map[string]byte{"services": 1, "alias": 1, "storage": 2, "forwarded": 3, "loopback": 4, "declared": 5, "ipv6": 6}
 
 // testHostKey is an ed25519 public key blob, in base64, named by one byte.
 func testHostKey(seed byte) string {
@@ -372,6 +373,68 @@ func TestAnSSHClaimWhosePinnedHostKeyCannotBeReadRefusesBeforeItIsPublished(t *t
 			if reported := diagnostics.Of(err); len(reported) != 1 || reported[0].Code != "trust.identity" ||
 				!strings.HasPrefix(reported[0].Message, "the SSH host key Secret services-known-hosts of Machine/services binds no readable host key") ||
 				reported[0].Remediation != "author access.ssh.knownHostsRef on Machine/services as one known-hosts entry for 192.0.2.10:22" {
+				t.Fatalf("refusal = %+v (%v)", reported, err)
+			}
+			if len(h.workspace.reservations) != 0 || currentOperation(t, h) != "" {
+				t.Fatalf("the refused apply published %+v or registered %s", h.workspace.reservations, currentOperation(t, h))
+			}
+		})
+	}
+}
+
+type controllerKeys []byte
+
+func (k controllerKeys) SSHHostKeys(context.Context) ([]trust.HostKey, error) {
+	var keys []trust.HostKey
+	for _, seed := range k {
+		keys = append(keys, trust.HostKey{Type: "ssh-ed25519", PublicKey: testHostKey(seed)})
+	}
+	return keys, nil
+}
+
+// The controller reached both ways (B868): a placement whose pinned host key
+// is one of the controller's own sshd keys must reach it at port 22 on an
+// address the controller Machine declares, where its claims are the
+// controller's own; by any other address it refuses before anything is
+// reserved or registered, naming the declared addresses. A controller with no
+// readable sshd key refuses nothing.
+func TestTheControllerReachedByAnUndeclaredAddressRefusesBeforeReservation(t *testing.T) {
+	claim := prerequisites.HostReservation{Context: testContextName, Kind: "ntp", Service: "epsilon", Keys: []string{"socket:192.0.2.1:123"}}
+	for name, tc := range map[string]struct {
+		machine string
+		keys    controllerKeys
+		want    []prerequisites.HostReservation
+		refused string
+		remedy  string
+	}{
+		"at a declared address": {machine: "declared", keys: controllerKeys{5}, want: []prerequisites.HostReservation{claim}},
+		"by an undeclared address": {machine: "services", keys: controllerKeys{9, 1},
+			refused: "Machine/services reaches the controller, whose SSH host key its access.ssh.knownHostsRef pins, at 192.0.2.10:22, which is not port 22 at an address the controller Machine/controller declares (it declares controller.lab.example.test, 192.0.2.1), so its claims would not meet the controller's own",
+			remedy:  "reach Machine/controller at port 22 on an address it declares, declare 192.0.2.10 on Machine/controller, place the work on Machine/controller, or give Machine/services its own SSH host keys"},
+		"by an undeclared IPv6 address": {machine: "ipv6", keys: controllerKeys{6},
+			refused: "Machine/ipv6 reaches the controller, whose SSH host key its access.ssh.knownHostsRef pins, at [fd00::10]:22, which is not port 22 at an address the controller Machine/controller declares (it declares controller.lab.example.test, 192.0.2.1), so its claims would not meet the controller's own",
+			remedy:  "reach Machine/controller at port 22 on an address it declares, declare fd00::10 on Machine/controller, place the work on Machine/controller, or give Machine/ipv6 its own SSH host keys"},
+		"at a forwarded port": {machine: "forwarded", keys: controllerKeys{3},
+			refused: "Machine/forwarded reaches the controller, whose SSH host key its access.ssh.knownHostsRef pins, at 192.0.2.10:2222, which is not port 22 at an address the controller Machine/controller declares (it declares controller.lab.example.test, 192.0.2.1), so its claims would not meet the controller's own",
+			remedy:  "reach Machine/controller at port 22 on an address it declares, place the work on Machine/controller, or give Machine/forwarded its own SSH host keys"},
+		"by an undeclared address of a controller with no sshd key": {machine: "services", want: []prerequisites.HostReservation{{
+			Context: testContextName, Kind: "ntp", Service: "epsilon", Keys: []string{"ssh/192.0.2.10:22/socket:192.0.2.1:123", pinnedQualifier("services") + "socket:192.0.2.1:123"}}}},
+	} {
+		t.Run(name, func(t *testing.T) {
+			h := newPlannedHarness(t, nestedDefinitions())
+			h.service.compiler = testCompiler{state: withControllerAddress()}
+			h.service.options.HostKeys = tc.keys
+			h.capability.sshClaims = []SSHReservation{sshClaim(tc.machine, claim)}
+			_, err := h.service.Apply(context.Background(), ApplyRequest{ContextName: "lab", SkipConfirmation: true})
+			if tc.refused == "" {
+				if err != nil || !reflect.DeepEqual(h.workspace.reservations, tc.want) {
+					t.Fatalf("published %+v (%v), want %+v", h.workspace.reservations, err, tc.want)
+				}
+				return
+			}
+			reported := diagnostics.Of(err)
+			if len(reported) != 1 || reported[0].Code != "lifecycle.state" || reported[0].Message != tc.refused ||
+				reported[0].Remediation != tc.remedy {
 				t.Fatalf("refusal = %+v (%v)", reported, err)
 			}
 			if len(h.workspace.reservations) != 0 || currentOperation(t, h) != "" {

@@ -36,13 +36,18 @@ func sshRequest() lifecycle.RunRequest {
 	return request
 }
 
+const (
+	pinnedHostKey    = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+	pinnedKnownHosts = "[192.0.2.9]:2222 " + pinnedHostKey
+)
+
 func material() map[string]secrets.Material {
 	return map[string]secrets.Material{
 		"artifact-server-tls": secrets.NewMaterial(map[secrets.Part][]byte{
 			secrets.CertificatePart: []byte("CERTIFICATE"), secrets.PrivateKeyPart: []byte("PRIVATE"),
 		}),
 		"services-key":  secrets.NewMaterial(map[secrets.Part][]byte{secrets.PrivateKeyPart: []byte("SSHKEY")}),
-		"host-key":      secrets.NewMaterial(map[secrets.Part][]byte{secrets.ValuePart: []byte("host ssh-ed25519 AAAA")}),
+		"host-key":      secrets.NewMaterial(map[secrets.Part][]byte{secrets.ValuePart: []byte(pinnedKnownHosts)}),
 		"services-sudo": secrets.NewMaterial(map[secrets.Part][]byte{secrets.PasswordPart: []byte("escalate\n")}),
 	}
 }
