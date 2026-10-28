@@ -295,8 +295,7 @@ type RealizationStatus string
 
 const (
 	// RealizationUnsupported is an object this executable does not realize: no
-	// capability claims its kind, its capability refuses it, or it is a managed
-	// service retained installOnly.
+	// capability claims its kind, or its capability refuses it.
 	RealizationUnsupported RealizationStatus = "unsupported"
 	// RealizationPending is an object this context has not realized: nothing
 	// names it, its blocks have not started, or a removal took it back or

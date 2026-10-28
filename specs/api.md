@@ -51,11 +51,7 @@ proves each row warned and refused at `plan`.
 | --- | --- | --- |
 | InfraProvider | `spec.vsphere` | [B99](milestones/m1.md#b99) |
 | InfraProvider | `spec.kubevirt` | [B87](milestones/m1.md#b87) |
-| MachineInstallProfile | `spec.installer.templateClone` | [B853](milestones/backlog.md#b853) |
-| MachineInstallProfile | `spec.installer.anaconda.packageSource.mirror` | [B854](milestones/backlog.md#b854) |
-| MachineInstallProfile | `spec.installer.anaconda.packageSource.fromSubscription` | [B854](milestones/backlog.md#b854) |
-| MachineInstallProfile | `spec.customizations.ssh.initialPassword` | [B855](milestones/backlog.md#b855) |
-| ArtifactServer | `spec.retention: installOnly` | [B856](milestones/backlog.md#b856) |
+| MachineInstallProfile | `spec.installer.templateClone` | [B99](milestones/m1.md#b99) |
 | Registry | `spec.management: managed` | [B68](milestones/m1.md#b68) |
 | LoadBalancer | `spec.management: managed` | [B100](milestones/backlog.md#b100) |
 | OpenShiftCluster | `spec.distribution.type: okd` | [B748](milestones/backlog.md#b748) |
@@ -391,6 +387,9 @@ These rules govern every new kind, field, arm, enum value and reference.
 | Machine | `spec.hardware.nics[].macAddress` | `spec.substrate.baremetal.nics[]` or `spec.substrate.vsphere.nics[]`, each naming its NIC with `nicRef`. |
 | Machine | `spec.os.install.rootDeviceHints` | `spec.hardware.rootDevice` for `deviceName`, `model`, `vendor`, `minSizeGigabytes` and `rotational`; `spec.substrate.baremetal.rootDevice` for `wwn`, `hctl` and `serialNumber`. |
 | Machine | `spec.network.interfaceAttachments` | `spec.substrate.libvirt.interfaceAttachments` or `spec.substrate.kubevirt.interfaceAttachments`. |
+| MachineInstallProfile | `spec.installer.anaconda.packageSource.mirror` | Nothing: omit `packageSource` to install from the boot media, or select `packageSource.hostedTree` ([installer arms](api/machines.md#installer-arms)); repositories the installed system uses stay in `spec.customizations.repositories.configure`. |
+| MachineInstallProfile | `spec.installer.anaconda.packageSource.fromSubscription` | `packageSource.hostedTree` or the boot media for the packages, and `spec.subscription.entitlementRef` to register the installed system after its marker is proved ([registration](managed-os.md#registration)). |
+| MachineInstallProfile | `spec.customizations.ssh.initialPassword` | Nothing: the installed system locks root and authorizes the public half of `spec.remoteMachinesAccessKey` on the `bootwright` account ([installation](managed-os.md#installation)). |
 | InfraProvider | `spec.libvirt.bmcEmulationDefaults` | `spec.libvirt.bmcEmulation`. |
 | InfraProvider | `spec.libvirt.bmcEmulation.enabled`, `spec.libvirt.bmcEmulation.protocol`, `spec.libvirt.bmcEmulation.emulator` | Nothing: the emulated BMC always runs, speaks Redfish and is sushy-tools. |
 | InfraProvider | `spec.vsphere.nodeNetworking` | The cluster's `spec.install.platform.vsphere.nodeNetworking` ([platform union](api/openshift-clusters.md#platform-union-and-derivation)). |
@@ -427,7 +426,7 @@ each replacement.
 | Machine | `spec.substrate.baremetal.bmc.virtualMedia.tls.trust: disable-verification`, `spec.substrate.baremetal.bmc.virtualMedia.tls.trust: import-certificate` | `disableVerification` and `importCertificate`, respectively. |
 | InfraProvider | `spec.baremetal.defaults.bmc.virtualMedia.tls.trust: disable-verification`, `spec.baremetal.defaults.bmc.virtualMedia.tls.trust: import-certificate` | `disableVerification` and `importCertificate`, respectively. |
 | CephCluster | `spec.cephadm.clusterSSH.transport: verified-tunnel` | `verifiedTunnel`. |
-| ArtifactServer | `spec.retention: install-only` | `installOnly`. |
+| ArtifactServer | `spec.retention: install-only`, `spec.retention: installOnly` | `persistent`, the only retention: a managed artifact server keeps its published content until destroy. |
 | CephClient | `spec.access: read-only`, `spec.access: read-write` | `readOnly` and `readWrite`, respectively. |
 | CephPool | `spec.role: cephfs-metadata`, `spec.role: cephfs-data` | `cephfsMetadata` and `cephfsData`, respectively. |
 | Entitlement | `spec.type: redhat-rhel`, `spec.type: redhat-ceph`, `spec.type: ibm-storage-ceph` | `redhatRhel`, `redhatCeph` and `ibmStorageCeph`, respectively. |

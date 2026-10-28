@@ -139,16 +139,14 @@ validate refuses any other source, naming the import that fixes it. The
 profile an installed Machine selects names its `redfishVirtualMedia`
 endpoint, on every substrate, because the installer image is always booted
 through it. A profile selecting
-`initialPassword`, `mirror` or `templateClone` refuses before
-registration. These shapes carry secret bytes or effects this contract does not
-prove. A profile selecting `subscription` with a `managed` `redhatRhel`
+`templateClone` refuses before registration ([B99](milestones/m1.md#b99)).
+`packageSource.mirror`, `packageSource.fromSubscription` and
+`ssh.initialPassword` are [retired](api.md#retired-fields). A profile selecting `subscription` with a `managed` `redhatRhel`
 Entitlement is admitted on virtual and physical Machines, as
-[Registration](#registration) states. A profile selecting `fromSubscription` refuses too, because it
-registers inside the installer, where a failed registration cannot be retried
-without installing again. FIPS and root-disk encryption are admitted on virtual
+[Registration](#registration) states. FIPS and root-disk encryption are admitted on virtual
 and physical Machines under the key and disk boundaries in
-[FIPS mode](#fips-mode) and [Root-disk encryption](#root-disk-encryption). A profile enabling `ssh.passwordAuthentication` refuses too, because no
-password can be set while `initialPassword` is refused. A Machine whose
+[FIPS mode](#fips-mode) and [Root-disk encryption](#root-disk-encryption). A profile enabling `ssh.passwordAuthentication` refuses too, because
+this executable sets no password on an installed system. A Machine whose
 profile configures a repository refuses while its effective proxy names a
 Proxy with `spec.connection.auth` or `spec.connection.trustBundleRef`, because
 a `.repo` file carries a proxy URL and nothing else; it refuses the same way,
@@ -1496,10 +1494,7 @@ the length of that many bytes in base64url without padding.
 | A VLAN install interface on a managed libvirt network | on a `libvirt` provider, a `vlan` install interface while `spec.network.attachmentRef` names a `management: managed` attachment | `a managed libvirt network gives its host an untagged address on <bridge>, so the controller cannot reach the VLAN install address of <machine>` | `attach <machine> to an external bridge whose host carries VLAN <id>, or install over an untagged interface` |
 | Two owners of the installed name servers | a network with DNS server selections whose composed native document also authors `dns-resolver.config.server` | `the installed name servers of <machine> are its network's DNS server selections, and its native dns-resolver.config.server declares them a second time` | `remove dns-resolver.config.server from the network of <machine>, or remove its DNS server selections` |
 | Another installer | a profile's `spec.installer` without `anaconda`, such as `templateClone` | `this executable installs an operating system only through the anaconda installer, which the install profile does not select` | `select spec.installer.anaconda on <profile>` |
-| A package mirror | a profile's `spec.installer.anaconda.packageSource.mirror` | `the install profile selects spec.installer.anaconda.packageSource.mirror, which carries secret bytes or effects this executable does not prove` | `remove spec.installer.anaconda.packageSource.mirror from <profile>` |
-| Packages from a subscription | a profile's `spec.installer.anaconda.packageSource.fromSubscription` | `the install profile selects spec.installer.anaconda.packageSource.fromSubscription, which registers inside the installer, where a failed registration cannot be retried without installing again` | `remove spec.installer.anaconda.packageSource.fromSubscription from <profile>, to install from its boot media or from spec.installer.anaconda.packageSource.hostedTree` |
-| An initial password | a profile's `spec.customizations.ssh.initialPassword` | `the install profile selects spec.customizations.ssh.initialPassword, which carries secret bytes or effects this executable does not prove` | `remove spec.customizations.ssh.initialPassword from <profile>` |
-| Password authentication | a profile's `spec.customizations.ssh.passwordAuthentication: true` | `the install profile enables spec.customizations.ssh.passwordAuthentication, but no password can be set while spec.customizations.ssh.initialPassword is refused` | `set spec.customizations.ssh.passwordAuthentication to false on <profile>` |
+| Password authentication | a profile's `spec.customizations.ssh.passwordAuthentication: true` | `the install profile enables spec.customizations.ssh.passwordAuthentication, but this executable sets no password on an installed system` | `set spec.customizations.ssh.passwordAuthentication to false on <profile>` |
 | An Ed25519 delivered host key under FIPS | a FIPS profile on a delivered-key Machine whose host-key Secret generates Ed25519, the default included | `a FIPS-mode installation refuses Ed25519 keys, and the delivered host key <secret> generates one` | `declare spec.source.generated.keyType as ecdsaP256, ecdsaP384, ecdsaP521 or rsa on <secret>` |
 | An Ed25519 fleet key under FIPS | a profile's `spec.customizations.security.fips.enabled: true` while the Environment's `spec.remoteMachinesAccessKey.keyRef` names a Secret whose `spec.source.generated.keyType` is `ed25519`, the default included | `a FIPS-mode installation refuses Ed25519 keys, and the fleet key <secret> generates one` | `declare spec.source.generated.keyType as ecdsaP256, ecdsaP384, ecdsaP521 or rsa on <secret>` |
 | A hostname artifact endpoint under disk encryption | a profile selecting `spec.customizations.security.diskEncryption` whose `spec.installer.anaconda.redfishVirtualMedia.artifactServerEndpoint` resolves to a URL whose host is not an IP literal | `the installer fetches the recovery passphrase before it configures name resolution, so the artifact server endpoint of <profile> must be addressed by IP` | `select an artifact server endpoint whose address is an IP literal in spec.installer.anaconda.redfishVirtualMedia.artifactServerEndpoint on <profile>` |

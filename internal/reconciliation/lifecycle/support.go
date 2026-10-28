@@ -57,11 +57,10 @@ func unclaimedRemediation(identity string) string {
 
 // Bearing is the unclaimed refusal's reason and a listed service's placement.
 type Bearing struct {
-	Reason      string
-	Remedy      string
-	Shared      bool
-	Machine     string
-	InstallOnly bool
+	Reason  string
+	Remedy  string
+	Shared  bool
+	Machine string
 }
 
 // EffectBearing is every domain root's predicate, composed, so the engine

@@ -156,7 +156,7 @@ func TestLabRHELExampleSelectsControllerDependenciesFromDesiredState(t *testing.
 		t.Fatal("the installed guest did not derive the fleet account", access)
 	}
 	anaconda := requireObject(t, effective, api.MachineInstallProfile, "rhel-9-8").Spec().Get("installer", "anaconda")
-	if anaconda.Get("imageRef").Text() != "rhel-9-8-boot" || !anaconda.Has("packageSource", "hostedTree") || anaconda.Has("packageSource", "fromSubscription") {
+	if anaconda.Get("imageRef").Text() != "rhel-9-8-boot" || !anaconda.Has("packageSource", "hostedTree") {
 		t.Fatal("the install profile is not the secret-free hosted-tree shape", anaconda)
 	}
 	for _, service := range []struct {

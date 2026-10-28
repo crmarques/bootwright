@@ -192,21 +192,11 @@ func grammarIssue(field string, grammar kickstartGrammar) api.Issue {
 
 func validateSubscription(s api.Value, c api.Catalog) []api.Issue {
 	var issues []api.Issue
-	anaconda := s.Get("installer", "anaconda")
 	subscription := s.Get("subscription")
-	fromSubscription := anaconda.Get("packageSource", "fromSubscription")
-	if subscription.Present() && fromSubscription.Present() {
-		issues = add(issues, subscriptionConflict())
-	}
-	for _, entry := range []struct {
-		value api.Value
-		path  string
-	}{{subscription, "$.spec.subscription"}, {fromSubscription, "$.spec.installer.anaconda.packageSource.fromSubscription"}} {
-		if ref := entry.value.Get("entitlementRef"); ref.Present() {
-			if entitlement, ok := c.Find(api.Entitlement, ref.Text()); ok && entitlement.Spec().Get("type").Text() != "redhatRhel" {
-				issues = add(issues, reference(entry.path+".entitlementRef", "OS registration requires a redhatRhel Entitlement",
-					"select an Entitlement of type redhatRhel in "+strings.TrimPrefix(entry.path, "$.")+".entitlementRef"))
-			}
+	if ref := subscription.Get("entitlementRef"); ref.Present() {
+		if entitlement, ok := c.Find(api.Entitlement, ref.Text()); ok && entitlement.Spec().Get("type").Text() != "redhatRhel" {
+			issues = add(issues, reference("$.spec.subscription.entitlementRef", "OS registration requires a redhatRhel Entitlement",
+				"select an Entitlement of type redhatRhel in spec.subscription.entitlementRef"))
 		}
 	}
 	subRepos := s.Get("customizations", "repositories", "subscription")
@@ -216,7 +206,7 @@ func validateSubscription(s api.Value, c api.Catalog) []api.Issue {
 			issues = add(issues, issue("$.spec.customizations.repositories.subscription", "subscription repositories require enable or disable entries",
 				"add enable or disable entries, or remove spec.customizations.repositories.subscription"))
 		}
-		if !subscription.Present() && !fromSubscription.Present() {
+		if !subscription.Present() {
 			issues = add(issues, issue("$.spec.customizations.repositories.subscription", "subscription repositories require a registration entitlement",
 				"set spec.subscription, or remove spec.customizations.repositories.subscription"))
 		}
@@ -238,13 +228,6 @@ func validateSubscription(s api.Value, c api.Catalog) []api.Issue {
 		}
 	}
 	return issues
-}
-
-// subscriptionConflict refuses two registrations of one installation, which
-// partial and complete validation both report.
-func subscriptionConflict() api.Issue {
-	return issue("$.spec.subscription", "top-level subscription cannot accompany installation fromSubscription",
-		"remove spec.subscription or spec.installer.anaconda.packageSource.fromSubscription")
 }
 
 // serviceOverlap refuses a service both enabled and disabled, which partial and
@@ -291,11 +274,6 @@ func validateInstallerSources(o api.Object, c api.Catalog) []api.Issue {
 					break
 				}
 			}
-		}
-	}
-	for i, repo := range anaconda.Get("packageSource", "mirror", "repositories").Items() {
-		if !RepositoryID(repo.Get("id").Text()) {
-			issues = add(issues, grammarIssue(fmt.Sprintf("$.spec.installer.anaconda.packageSource.mirror.repositories[%d].id", i), repositoryGrammar))
 		}
 	}
 	if hosted := anaconda.Get("packageSource", "hostedTree"); hosted.Present() {
@@ -455,7 +433,7 @@ func validateCloneCustomizations(o api.Object) []api.Issue {
 	}
 	custom := o.Spec().Get("customizations")
 	issues := []api.Issue{}
-	for _, path := range [][]string{{"localization"}, {"ssh", "initialPassword"}, {"packages"}, {"security", "selinux"}, {"security", "firewall"}, {"security", "fips"}, {"security", "diskEncryption"}} {
+	for _, path := range [][]string{{"localization"}, {"packages"}, {"security", "selinux"}, {"security", "firewall"}, {"security", "fips"}, {"security", "diskEncryption"}} {
 		if custom.Get(path...).Present() {
 			field := "spec.customizations." + strings.Join(path, ".")
 			issues = add(issues, issue("$."+field, "template clone forbids Anaconda-only customization", "remove "+field))

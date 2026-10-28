@@ -21,13 +21,13 @@ func TestStatusSummarizesOnlyManagedServices(t *testing.T) {
 	catalog := api.NewCatalog([]api.Object{
 		object(api.Proxy, "egress", "management", "managed", "machineRef", "services"),
 		object(api.DNSServer, "names", "management", "external"),
-		object(api.ArtifactServer, "media", "management", "managed", "machineRef", "controller", "retention", "installOnly"),
+		object(api.ArtifactServer, "media", "management", "managed", "machineRef", "controller"),
 		object(api.NTPServer, "time", "management", "managed", "machineRef", "services"),
 		object(api.Machine, "services", "management", "managed"),
 	})
 	got := serviceSummaries(catalog, []string{string(api.Proxy), string(api.ArtifactServer)}, domainEffects)
 	want := []ServiceSummary{
-		{Kind: "ArtifactServer", Name: "media", Machine: "controller", Status: "unsupported"},
+		{Kind: "ArtifactServer", Name: "media", Machine: "controller", Status: "pending"},
 		{Kind: "NTPServer", Name: "time", Machine: "services", Status: "unsupported"},
 		{Kind: "Proxy", Name: "egress", Machine: "services", Status: "pending"},
 	}

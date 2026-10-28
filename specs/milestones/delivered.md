@@ -9213,6 +9213,28 @@ facts tests, `TestAnOverlongDerivedContactIsTheMachinesOnlyDiagnostic` and
 `TestAZonedSSHAddressRefusesAtValidate`, each proved by a seeded mismatch; the
 delivering commit records the gates.
 
+### X184 — Audit lane U: retired unrealized fields
+
+**Items:** B853, B854, B855 and B856.
+**Kind:** product. **Owners:** Managed OS and Infrastructure services.
+Delivered on 2026-10-27 as lane U of the
+[audit remediation](backlog.md#lane-order-and-progress) under the owner's
+request to implement the remaining items, with D188's answer.
+
+`packageSource.mirror`, `packageSource.fromSubscription`,
+`ssh.initialPassword` and ArtifactServer retention `installOnly` (and its
+older `install-only` spelling) are retired: each refuses, also under
+`spec.defaults.<Kind>`, with a remedy naming its replacement (`hostedTree` or
+the boot media with `customizations.repositories.configure` and
+`spec.subscription.entitlementRef`, the key-based access to the `bootwright`
+account, `persistent`). Their unrealized rows, plan refusals and code paths
+are gone. `installer.templateClone` stays admitted, warned `api.unrealized`
+and refused at plan, and its realization joins [B99](m1.md#b99).
+
+**Guard tests:** `TestRetiredInstallAndRetentionSpellingsRefuseWithTheirReplacement`
+and the refusals golden rows for each spelling, authored and under kind
+defaults; the delivering commit records the gates.
+
 ## M3 independent in-tree completion
 
 The owner's 2026-10-23 request (D181) delivers the independent implementation

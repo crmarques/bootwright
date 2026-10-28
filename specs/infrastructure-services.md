@@ -38,8 +38,8 @@ Each row is one refusal of a managed service capability.
 `Unsupported` to every row except the endpoint-address bound, which only a
 Proxy, DNSServer or NTPServer declares, and
 `TestManagedServiceRefusalTableMatchesUnsupported` holds the Proxy, DNSServer
-and NTPServer capabilities' to every row except installOnly retention and the
-artifact socket bound, which only an ArtifactServer declares. Reason and
+and NTPServer capabilities' to every row except the artifact socket bound,
+which only an ArtifactServer declares. Reason and
 remedy are the diagnostic's message and remediation (`lifecycle.unsupported` on
 the refused service), in which `<server>` is the refused service, `<machine>`
 its placement Machine and `<proxy>` the Proxy that Machine selects. A placement
@@ -48,7 +48,6 @@ rows never refuse a service placed there.
 
 | Refusal | Path | Reason | Remedy |
 | --- | --- | --- | --- |
-| Install-only retention | `spec.retention: installOnly` on a managed `ArtifactServer` | `this executable serves no managed artifact server with installOnly retention` | `declare spec.retention: persistent on <server>, or omit it` |
 | Managed Proxy egress | `spec.proxy.proxyRef` of the placement `Machine` names a managed `Proxy` | `this executable acquires a managed service's image only directly or through an external Proxy that is already ready, and <machine>, where <server> runs, selects the managed <proxy> in spec.proxy.proxyRef` | `select direct: {} or an external Proxy in spec.proxy on <machine>, or place <server> on another Machine` |
 | Proxy authentication | `spec.connection.auth.proxyAuthRef` on the external `Proxy` the placement `Machine` selects | `this executable acquires a managed service's image through no authenticated proxy, and <proxy>, which <machine> selects for <server>, sets spec.connection.auth.proxyAuthRef` | `select direct: {} or an external Proxy that needs no authentication in spec.proxy on <machine>` |
 | Private trust | `spec.connection.trustBundleRef` on the external `Proxy` the placement `Machine` selects | `this executable acquires a managed service's image with the host's system trust store alone, and <proxy>, which <machine> selects for <server>, sets spec.connection.trustBundleRef` | `select direct: {} or an external Proxy without spec.connection.trustBundleRef in spec.proxy on <machine>` |
@@ -300,8 +299,8 @@ Image acquisition uses the placement Machine's normalized
 [proxy choice](api/machines.md#machine-proxy) and no ambient proxy variable;
 a managed, authenticated or private-trust Proxy refuses before registration, as
 the [refusal table](#refusal-table) states.
-`retention: installOnly` is unsupported and refuses, as the
-[refusal table](#refusal-table) states.
+`retention` admits `persistent` alone: the server keeps its published content
+until destroy, and `installOnly` is [retired](api.md#retired-values).
 
 **Owned host state.** The capability owns exactly one content root per service,
 one server configuration, one unit definition and, when any listener is HTTPS,

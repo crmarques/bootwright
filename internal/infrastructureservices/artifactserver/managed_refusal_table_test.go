@@ -14,7 +14,7 @@ import (
 )
 
 // artifactOnlyRows are the refusal-table rows only an ArtifactServer declares.
-var artifactOnlyRows = map[string]bool{"Install-only retention": true, "Artifact sockets beyond the host reservation": true}
+var artifactOnlyRows = map[string]bool{"Artifact sockets beyond the host reservation": true}
 
 // networkOnlyRows are the refusal-table rows only a Proxy, DNSServer or
 // NTPServer declares.

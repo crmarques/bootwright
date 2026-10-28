@@ -67,7 +67,7 @@ func TestCloneRestrictionsAndProviderBinding(t *testing.T) {
 	if issues := Validate(profile, c); len(issues) > 0 {
 		t.Fatal(issues)
 	}
-	for _, path := range [][]string{{"localization"}, {"ssh", "initialPassword"}, {"packages"}, {"security", "selinux"}, {"security", "firewall"}, {"security", "fips"}, {"security", "diskEncryption"}} {
+	for _, path := range [][]string{{"localization"}, {"packages"}, {"security", "selinux"}, {"security", "firewall"}, {"security", "fips"}, {"security", "diskEncryption"}} {
 		t.Run(strings.Join(path, "/"), func(t *testing.T) {
 			s := profile.Spec().WithPath(m(), append([]string{"customizations"}, path...)...)
 			if issues := ValidateAuthored(profile.WithSpec(s), c); len(issues) == 0 {
@@ -364,12 +364,9 @@ func TestEveryManagedOSAdmissionRefusalNamesItsRemedy(t *testing.T) {
 		issues []api.Issue
 		field  string
 	}{
-		"OS family":              {Validate(profile(func(s api.Value) api.Value { return s.WithPath(api.StringValue("debian"), "os", "family") }), api.Catalog{}), "$.spec.os.family"},
-		"repository key missing": {Validate(custom(m("repositories", m("configure", list(m("id", "custom", "baseURL", "https://example.test/repo"))))), api.Catalog{}), "$.spec.customizations.repositories.configure[0].gpgKeyURL"},
-		"repository key URL":     {Validate(custom(m("repositories", m("configure", list(m("id", "repo", "gpgKeyURL", "ftp://example.test/key"))))), api.Catalog{}), "$.spec.customizations.repositories.configure[0].gpgKeyURL"},
-		"two registrations": {Validate(profile(func(s api.Value) api.Value {
-			return s.With("subscription", m("entitlementRef", "rhel")).WithPath(m("entitlementRef", "rhel"), "installer", "anaconda", "packageSource", "fromSubscription")
-		}), api.Catalog{}), "$.spec.subscription"},
+		"OS family":                         {Validate(profile(func(s api.Value) api.Value { return s.WithPath(api.StringValue("debian"), "os", "family") }), api.Catalog{}), "$.spec.os.family"},
+		"repository key missing":            {Validate(custom(m("repositories", m("configure", list(m("id", "custom", "baseURL", "https://example.test/repo"))))), api.Catalog{}), "$.spec.customizations.repositories.configure[0].gpgKeyURL"},
+		"repository key URL":                {Validate(custom(m("repositories", m("configure", list(m("id", "repo", "gpgKeyURL", "ftp://example.test/key"))))), api.Catalog{}), "$.spec.customizations.repositories.configure[0].gpgKeyURL"},
 		"a non-RHEL entitlement":            {Validate(profile(func(s api.Value) api.Value { return s.With("subscription", m("entitlementRef", "ceph")) }), api.NewCatalog([]api.Object{obj(api.Entitlement, "ceph", m("type", "redhatCeph"))})), "$.spec.subscription.entitlementRef"},
 		"empty subscription repositories":   {Validate(registered(m()), api.Catalog{}), "$.spec.customizations.repositories.subscription"},
 		"unregistered repositories":         {Validate(custom(m("repositories", m("subscription", m("enable", api.StringList("repo"))))), api.Catalog{}), "$.spec.customizations.repositories.subscription"},
@@ -393,9 +390,6 @@ func TestEveryManagedOSAdmissionRefusalNamesItsRemedy(t *testing.T) {
 		"a clone customization":             {ValidateAuthored(clone.WithSpec(clone.Spec().With("customizations", m("packages", m()))), api.Catalog{}), "$.spec.customizations.packages"},
 		"partial external RHSM detail":      {ValidatePartial(rhel(m("management", "external", "satellite", m())), api.Catalog{}), "$.spec.rhsm.satellite"},
 		"partial service overlap":           {ValidatePartial(custom(m("services", m("enabled", api.StringList("sshd"), "disabled", api.StringList("sshd")))), api.Catalog{}), "$.spec.customizations.services"},
-		"partial two registrations": {ValidatePartial(profile(func(s api.Value) api.Value {
-			return s.With("subscription", m("entitlementRef", "rhel")).WithPath(m("entitlementRef", "rhel"), "installer", "anaconda", "packageSource", "fromSubscription")
-		}), api.Catalog{}), "$.spec.subscription"},
 	}
 	for name, test := range cases {
 		t.Run(name, func(t *testing.T) {
@@ -541,30 +535,6 @@ func TestASubscriptionRepositoryIDMayBeAPattern(t *testing.T) {
 		m("repositories", m("subscription", m("enable", api.StringList("rhel-9-for-x86_64-*"), "disable", api.StringList("rhel-9-for-x86_64-supplementary-rpms"))))))
 	if issues := Validate(o, api.Catalog{}); len(issues) != 0 {
 		t.Fatalf("subscription repository patterns were refused: %#v", issues)
-	}
-}
-
-// A mirror repository ID follows the configured-repository ID rule before the
-// mirror arm is supported, so the arm cannot later carry an ID its Kickstart
-// directive could not.
-func TestAMirrorRepositoryIDIsAKickstartToken(t *testing.T) {
-	mirror := func(id string) []api.Issue {
-		o := anaconda()
-		o = o.WithSpec(o.Spec().WithPath(m("baseURL", "https://mirror.example.test/os",
-			"repositories", list(m("id", "base", "baseURL", "https://mirror.example.test/base"), m("id", id, "baseURL", "https://mirror.example.test/x"))),
-			"installer", "anaconda", "packageSource", "mirror"))
-		return Validate(o, api.Catalog{})
-	}
-	const field = "$.spec.installer.anaconda.packageSource.mirror.repositories[1].id"
-	for _, id := range []string{"a b", "x/y", "a@b"} {
-		issues := mirror(id)
-		if len(issues) != 1 || issues[0].Code != "api.value" || issues[0].Field != field ||
-			issues[0].Message != repositoryGrammar.message || !strings.Contains(issues[0].Remediation, strings.TrimPrefix(field, "$.")) {
-			t.Fatalf("mirror repository ID %q: refusal = %#v, want one api.value at %s", id, issues, field)
-		}
-	}
-	if issues := mirror("extras"); len(issues) != 0 {
-		t.Fatalf("mirror repository ID extras was refused: %#v", issues)
 	}
 }
 

@@ -148,7 +148,7 @@ A managed ArtifactServer accepts these fields after `management`:
 | --- | --- | --- | --- |
 | `machineRef` | string | yes | Global placement Machine. |
 | `bindAddress` | string | no | IP literal; derived as the [deployment defaults](#proxy-dns-ntp-and-registry-deployment) state. |
-| `retention` | string | no | `persistent` by default, or `installOnly`. |
+| `retention` | string | no | `persistent`, the default and only value: published content is kept until destroy. `installOnly` is [retired](../api.md#retired-values). |
 | `tls` | object | conditional | Required when any effective listener uses HTTPS; forbidden for HTTP-only listeners. |
 | `tls.secretRef` | string | with TLS | `tlsCertificate` Secret supplying certificate and key. A [generated](secrets.md#generated-source) Secret derives its `ipAddresses` and `dnsNames` from these HTTPS endpoints; an authored list names the address of every HTTPS endpoint, or that endpoint refuses at `$.spec.endpoints[i]` naming the Secret and the address. Effect material: the server serves it. |
 | `tls.minVersion` | string | no | `TLSv1.2` by default, or `TLSv1.3`. |
@@ -177,8 +177,9 @@ ArtifactServer followed by required scalar `endpointRef` to one of its
 endpoints. Neither is inferred from available services or endpoint count.
 No consumer accepts an external ArtifactServer, because each publishes into the
 server it selects; selecting one refuses at `serverRef`. Each consumer declares
-whether it requires persistent retention or HTTP package serving. It must
-satisfy those requirements after kind defaults have supplied any omitted fields.
+whether it requires HTTP package serving; every server retains its content
+as `persistent`. It must satisfy
+those requirements after kind defaults have supplied any omitted fields.
 
 ## LoadBalancer
 

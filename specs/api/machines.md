@@ -692,7 +692,7 @@ The `anaconda` arm contains:
 | `imageRef` | string | yes | Global `MachineImage`. |
 | `redfishVirtualMedia.artifactServerEndpoint.serverRef` | string | with endpoint block | Global managed ArtifactServer; required and never inferred. |
 | `redfishVirtualMedia.artifactServerEndpoint.endpointRef` | string | with endpoint block | Endpoint name on the selected managed ArtifactServer. |
-| `packageSource` | object | no | Exactly one of `mirror`, `fromSubscription`, or `hostedTree`. |
+| `packageSource` | object | no | Absent installs from the boot media; otherwise exactly `hostedTree`. |
 
 `redfishVirtualMedia` is optional in the standalone install-profile shape. If
 its endpoint block is present, both `serverRef` and `endpointRef` are required.
@@ -700,15 +700,11 @@ Every installation boots its installer through Redfish virtual media, so graph
 validation requires that complete endpoint whenever a Bootwright-installed
 Machine selects the profile, on any substrate.
 
-The optional package-source arms are exact:
+The optional package source is exact. `mirror` and `fromSubscription` are
+[retired](../api.md#retired-fields): a mirror's repositories belong to
+`customizations.repositories.configure`, and registration belongs to top-level
+`subscription`.
 
-- `mirror` has required HTTP(S) `baseURL` and optional `repositories[]`, each
-  with required `id` and HTTP(S) `baseURL`. Each `baseURL` holds no fragment
-  and no quote, and each `id` follows the
-  [configured-repository ID rule](#customizations).
-- `fromSubscription` has required `entitlementRef` to a `redhatRhel`
-  `Entitlement`. It cannot be combined with top-level `subscription` because it
-  already registers during installation.
 - `hostedTree` has required `fromMedia` naming a DVD image of the media store
   as `local-media:<filename.iso>` only, under the same grammar as
   [`bootMedia`](#machineimage) and distinct from the boot image's `bootMedia`,
@@ -764,8 +760,7 @@ separate cluster proxy and NTP choices and does not inherit Machine fields.
 | `localization.keyboard` | string | no | `us` | Kickstart token. |
 | `localization.timezone` | string | no | `UTC` | Kickstart token. |
 | `localization.additionalLocales` | array of strings | no | `[]` | Unique Kickstart tokens. |
-| `ssh.passwordAuthentication` | boolean | no | `false` | `true` is refused until a password can be set, because `initialPassword` is refused. |
-| `ssh.initialPassword.secretRef` | string | no | — | `usernamePassword` `Secret`. Effect material. |
+| `ssh.passwordAuthentication` | boolean | no | `false` | `true` is refused: the installation sets no password, and the `bootwright` account is reached by the key of `remoteMachinesAccessKey` ([retired](../api.md#retired-fields): `ssh.initialPassword`). |
 | `packages.install` | array of strings | no | `[]` | Unique entries, each a package name, glob or `@group`; no whitespace, quote or `#`, and no leading `%` or `-`. |
 | `packages.excludeDocs` | boolean | no | `false` | Exclude package documentation. |
 | `packages.installWeakDeps` | boolean | no | OS/package-manager default | Absence is distinct from `false`. |
@@ -790,8 +785,7 @@ with no fragment and no quote, optional `displayName` defaulting to `id`,
 `enabled` defaulting `true`, `gpgCheck` defaulting `true`, and optional
 `gpgKeyURL`. IDs are unique and are what dnf accepts in a repository ID, 1 to
 239 ASCII letters, digits, `-`, `_`, `.` or `:`, and neither `.` nor `..`, since
-each names its `.repo` file's section and file; Anaconda mirror repository IDs
-follow the same rule; subscription repository IDs are printable ASCII with no
+each names its `.repo` file's section and file; subscription repository IDs are printable ASCII with no
 whitespace, quote, slash, backslash, `#` or comma, not starting with `%`. `displayName` is one line of UTF-8
 text with no control character. `gpgKeyURL` accepts HTTP(S) or `file:///`
 with no quote, backslash or `#`; it is required while GPG checking is enabled.
@@ -800,8 +794,7 @@ The installation writes each entry as the installed system's own
 `enabled`, `gpgcheck`, `gpgkey` and the effective proxy; a configured
 repository is never an install source. A subscription
 repository block sets at least one of `enable` and `disable` and requires a
-registration entitlement from either top-level `subscription` or Anaconda
-`fromSubscription`. The subscription repositories are frozen in the
+registration entitlement from top-level `subscription`. The subscription repositories are frozen in the
 installation request, so a repository edit is another installation, and an
 Entitlement whose `spec.rhsm.management` is `external` refuses them at
 installation, because they are applied only to a registration the installation

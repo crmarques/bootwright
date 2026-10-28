@@ -103,7 +103,7 @@ func TestAuthoredKickstartValuesAreRefusedBeforePlan(t *testing.T) {
 }
 
 // labHostedTree is the lab install profile's package source, replaced by a
-// mirror in the rows that need one.
+// retired spelling in the rows that need one.
 const labHostedTree = `        hostedTree:
           fromMedia: local-media:rhel-9.8-x86_64-dvd.iso
 
@@ -112,14 +112,9 @@ const labHostedTree = `        hostedTree:
             endpointRef: ip-http
 `
 
-// Each field that names a Kickstart repository or a Kickstart device carries
-// its grammar, not only the rule it shares with others: a mirror's base URL
-// and each of its repositories' base URLs refuse a fragment, and a bound
-// interface name is a Linux interface name.
+// A field that names a Kickstart device carries its grammar, not only the rule
+// it shares with others: a bound interface name is a Linux interface name.
 func TestEveryKickstartBoundFieldCarriesItsGrammar(t *testing.T) {
-	mirror := func(baseURL, repositoryURL string) exampleEdit {
-		return exampleEdit{labProfile, labHostedTree, "        mirror:\n          baseURL: \"" + baseURL + "\"\n          repositories:\n            - id: appstream\n              baseURL: \"" + repositoryURL + "\"\n"}
-	}
 	binding := exampleEdit{"infra/machines/metal-01.yaml", "    installAddressRef: ip\n",
 		"    installAddressRef: ip\n\n    interfaceBinding:\n      - nicRef: eno1\n        interfaceName: \"eno1\\nnetwork --bootproto=dhcp\"\n"}
 	cases := map[string]struct {
@@ -127,10 +122,6 @@ func TestEveryKickstartBoundFieldCarriesItsGrammar(t *testing.T) {
 		edit                exampleEdit
 		code, object, field string
 	}{
-		"a mirror base URL ending the line": {"lab-rhel", mirror("https://mirror.example.test/os#frag", "https://mirror.example.test/appstream"),
-			"api.value", "MachineInstallProfile/rhel-9-8", "$.spec.installer.anaconda.packageSource.mirror.baseURL"},
-		"a mirror repository base URL ending the line": {"lab-rhel", mirror("https://mirror.example.test/os", "https://mirror.example.test/appstream#frag"),
-			"api.value", "MachineInstallProfile/rhel-9-8", "$.spec.installer.anaconda.packageSource.mirror.repositories[0].baseURL"},
 		"a bound interface name holding a directive": {"lab-baremetal", binding,
 			"api.value", "Machine/metal-01", "$.spec.network.interfaceBinding[0].interfaceName"},
 	}
@@ -185,6 +176,37 @@ func TestAGeneratedSecretParameterHoldingNULIsRefused(t *testing.T) {
 	} {
 		t.Run(test.field, func(t *testing.T) {
 			requireRefusal(t, editedExample(t, "lab-rhel", test.edit), "api.invariant", test.object, test.field)
+		})
+	}
+}
+
+// Each retired spelling of the managed-OS install profile and the artifact
+// server refuses where it was authored and under its kind's defaults, naming
+// its replacement as the remedy.
+func TestRetiredInstallAndRetentionSpellingsRefuseWithTheirReplacement(t *testing.T) {
+	const server = "infra/components/artifact-server.yaml"
+	mirror := exampleEdit{labProfile, labHostedTree, "        mirror:\n          baseURL: https://mirror.lab.example.test/rhel\n"}
+	subscription := exampleEdit{labProfile, labHostedTree, "        fromSubscription:\n          entitlementRef: rhel\n"}
+	password := exampleEdit{labProfile, "      passwordAuthentication: false\n", "      passwordAuthentication: false\n\n      initialPassword:\n        secretRef: root-password\n"}
+	retention := func(value string) exampleEdit {
+		return exampleEdit{server, "retention: persistent", "retention: " + value}
+	}
+	cases := map[string]struct {
+		edit                        exampleEdit
+		code, object, field, remedy string
+	}{
+		"a package mirror":             {mirror, "api.field", "MachineInstallProfile/rhel-9-8", "$.spec.installer.anaconda.packageSource.mirror", "packageSource.hostedTree"},
+		"packages from a subscription": {subscription, "api.field", "MachineInstallProfile/rhel-9-8", "$.spec.installer.anaconda.packageSource.fromSubscription", "spec.subscription.entitlementRef"},
+		"an initial password":          {password, "api.field", "MachineInstallProfile/rhel-9-8", "$.spec.customizations.ssh.initialPassword", "remoteMachinesAccessKey"},
+		"installOnly retention":        {retention("installOnly"), "api.value", "ArtifactServer/lab-artifacts", "$.spec.retention", "persistent"},
+		"install-only retention":       {retention("install-only"), "api.value", "ArtifactServer/lab-artifacts", "$.spec.retention", "persistent"},
+	}
+	for name, test := range cases {
+		t.Run(name, func(t *testing.T) {
+			diagnostic := requireRefusal(t, editedExample(t, "lab-rhel", test.edit), test.code, test.object, test.field)
+			if !strings.Contains(diagnostic.Message, "retired") || !strings.Contains(diagnostic.Remediation, test.remedy) {
+				t.Fatalf("refusal = %q / %q, want a retired spelling naming %q", diagnostic.Message, diagnostic.Remediation, test.remedy)
+			}
 		})
 	}
 }

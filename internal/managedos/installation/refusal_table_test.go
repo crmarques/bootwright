@@ -33,11 +33,6 @@ type refusalCase struct {
 // either side fails here.
 func TestManagedOSRefusalTableMatchesUnsupported(t *testing.T) {
 	customizations := installProfile().Spec().Get("customizations")
-	anaconda := func(source api.Value) api.Object {
-		return installProfile(field("installer", api.MapValue(field("anaconda", api.MapValue(
-			text("imageRef", "rhel-9-8-boot"), field("packageSource", source),
-		)))))
-	}
 	untrusting := server(api.MapValue(text("deviceName", "/dev/disk/by-id/wwn-0x5000c500a1b2c3d4")))
 	untrusting = untrusting.WithSpec(untrusting.Spec().WithPath(api.StringValue(substrate.TrustDisableVerification),
 		"substrate", "baremetal", "bmc", "virtualMedia", "tls", "trust"))
@@ -88,12 +83,6 @@ func TestManagedOSRefusalTableMatchesUnsupported(t *testing.T) {
 		"Another installer": {labCatalog(installProfile(field("installer", api.MapValue(field("templateClone", api.MapValue(
 			field("seed", api.MapValue(field("cloudInit", api.MapValue()))),
 		)))))), "Machine/rhel-01", onProfile},
-		"A package mirror": {labCatalog(anaconda(api.MapValue(field("mirror", api.MapValue(
-			text("baseURL", "https://example.test/os")))))), "Machine/rhel-01", onProfile},
-		"Packages from a subscription": {labCatalog(anaconda(api.MapValue(field("fromSubscription", api.MapValue(
-			text("entitlementRef", "rhel")))))), "Machine/rhel-01", onProfile},
-		"An initial password": {labCatalog(installProfile(field("customizations", customizations.With("ssh", api.MapValue(
-			field("initialPassword", api.MapValue(text("secretRef", "root-password")))))))), "Machine/rhel-01", onProfile},
 		"Password authentication": {labCatalog(installProfile(field("customizations", customizations.With("ssh", api.MapValue(
 			field("passwordAuthentication", api.BoolValue(true))))))), "Machine/rhel-01", onProfile},
 

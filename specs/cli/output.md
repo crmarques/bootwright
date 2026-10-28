@@ -771,9 +771,8 @@ The cluster, resource and shared rows share one realization vocabulary. Each
 object the current operation's frozen plan names reads what all of that
 object's blocks prove, whatever its declaration now says:
 
-- `unsupported`: no capability of this executable claims the kind, its
-  capability refuses the object, or it is a managed service retained
-  `installOnly`;
+- `unsupported`: no capability of this executable claims the kind, or its
+  capability refuses the object;
 - `pending`: this context has not realized it: nothing names it, its blocks
   have not started, or a removal took it back or released it; the next apply
   realizes it;

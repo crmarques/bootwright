@@ -137,9 +137,6 @@ func validateRescueArtifactEndpoint(selection api.Value, catalog api.Catalog) []
 		return []api.Issue{{Code: "api.invariant", Field: "$.serverRef", Message: message, Remediation: remediation}}
 	}
 	spec := component.Spec()
-	if retention := spec.Get("retention").Text(); retention != "" && retention != "persistent" {
-		return issue("rescue requires a persistent artifact server", "set spec.retention to persistent on "+component.Identity())
-	}
 	machine, found := catalog.Find(api.Machine, spec.Get("machineRef").Text())
 	if found && !machine.Spec().Get("os", "provided").Bool() {
 		return issue("rescue artifact server requires an OS-ready Machine", "set spec.machineRef on "+component.Identity()+" to a Machine with os.provided: true")

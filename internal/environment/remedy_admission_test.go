@@ -43,11 +43,11 @@ func rescueEnvironment(version string, endpoint api.Value) api.Object {
 	))
 }
 
-func artifactServer(retention, machineRef string) api.Object {
+func artifactServer(machineRef string) api.Object {
 	spec := []api.FieldValue{
 		text("management", "managed"),
 		field("endpoints", api.ListValue(api.MapValue(text("name", "e")))),
-		text("retention", retention),
+		text("retention", "persistent"),
 	}
 	if machineRef != "" {
 		spec = append(spec, text("machineRef", machineRef))
@@ -89,12 +89,8 @@ func TestEveryEnvironmentRefusalNamesItsStep(t *testing.T) {
 		{"rescue on another RHEL version", rescueEnvironment("10.1", api.Value{}), []api.Object{media("local-media:rhel-10.1-x86_64-boot.iso")}, "$.spec.lifecycle.rescue",
 			"no rescue journey exists yet, so no lifecycle can use a rescue declaration",
 			"remove spec.lifecycle.rescue from Environment/lab"},
-		{"ephemeral artifact server", rescueEnvironment("", endpoint), []api.Object{media("local-media:rhel-9.8-x86_64-boot.iso"), artifactServer("ephemeral", "")},
-			"$.spec.lifecycle.rescue.artifactServerEndpoint.serverRef",
-			"rescue requires a persistent artifact server",
-			"set spec.retention to persistent on ArtifactServer/artifacts"},
 		{"artifact server on a Machine without an OS", rescueEnvironment("", endpoint),
-			[]api.Object{media("local-media:rhel-9.8-x86_64-boot.iso"), artifactServer("persistent", "host"), api.NewObject(api.Machine, "host", api.Value{}, api.MapValue(
+			[]api.Object{media("local-media:rhel-9.8-x86_64-boot.iso"), artifactServer("host"), api.NewObject(api.Machine, "host", api.Value{}, api.MapValue(
 				field("os", api.MapValue(field("provided", api.BoolValue(false)))),
 			))},
 			"$.spec.lifecycle.rescue.artifactServerEndpoint.serverRef",

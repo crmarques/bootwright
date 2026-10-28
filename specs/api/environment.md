@@ -477,7 +477,7 @@ contains exactly these required fields in order:
 | --- | --- | --- |
 | `imageRef` | string | `MachineImage` containing RHEL Anaconda boot media. |
 | `os` | object | Exact `{family: rhel, version: <non-empty>, architecture}` tuple. |
-| `artifactServerEndpoint` | object | Required `{serverRef, endpointRef}` selecting a persistent managed ArtifactServer directly; both references are required. |
+| `artifactServerEndpoint` | object | Required `{serverRef, endpointRef}` selecting a managed ArtifactServer directly; both references are required. |
 
 The selected artifact server must run on a Machine with `os.provided: true` so
 it remains reachable after managed machines shut down. Validation checks the

@@ -31,8 +31,5 @@ func ValidatePartial(o api.Object, c api.Catalog) []api.Issue {
 			issues = add(issues, serviceOverlap())
 		}
 	}
-	if o.Spec().Has("subscription") && o.Spec().Has("installer", "anaconda", "packageSource", "fromSubscription") {
-		issues = add(issues, subscriptionConflict())
-	}
 	return issues
 }

@@ -14,14 +14,6 @@ import (
 	"github.com/crmarques/bootwright/internal/substrate"
 )
 
-// unsupportedSelections are the profile choices that carry secret bytes or
-// effects this contract does not prove. A selected one refuses before
-// registration rather than installing part of what was declared.
-var unsupportedSelections = [][]string{
-	{"installer", "anaconda", "packageSource", "mirror"},
-	{"customizations", "ssh", "initialPassword"},
-}
-
 // refusedProfile says why a profile selects what this contract cannot
 // install, or nothing when it can.
 func refusedProfile(profile api.Object) (reason, remediation string) {
@@ -30,19 +22,8 @@ func refusedProfile(profile api.Object) (reason, remediation string) {
 		return "this executable installs an operating system only through the anaconda installer, which the install profile does not select",
 			"select spec.installer.anaconda on " + profile.Identity()
 	}
-	if spec.Has("installer", "anaconda", "packageSource", "fromSubscription") {
-		return "the install profile selects spec.installer.anaconda.packageSource.fromSubscription, which registers inside the installer, where a failed registration cannot be retried without installing again",
-			"remove spec.installer.anaconda.packageSource.fromSubscription from " + profile.Identity() + ", to install from its boot media or from spec.installer.anaconda.packageSource.hostedTree"
-	}
-	for _, path := range unsupportedSelections {
-		if spec.Has(path...) {
-			field := "spec." + strings.Join(path, ".")
-			return "the install profile selects " + field + ", which carries secret bytes or effects this executable does not prove",
-				"remove " + field + " from " + profile.Identity()
-		}
-	}
 	if spec.Get("customizations", "ssh", "passwordAuthentication").Bool() {
-		return "the install profile enables spec.customizations.ssh.passwordAuthentication, but no password can be set while spec.customizations.ssh.initialPassword is refused",
+		return "the install profile enables spec.customizations.ssh.passwordAuthentication, but this executable sets no password on an installed system",
 			"set spec.customizations.ssh.passwordAuthentication to false on " + profile.Identity()
 	}
 	return "", ""

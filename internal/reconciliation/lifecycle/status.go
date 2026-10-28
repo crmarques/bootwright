@@ -493,7 +493,7 @@ func serviceSummaries(catalog api.Catalog, claimed []string, bearing EffectBeari
 			continue
 		}
 		status := RealizationUnsupported
-		if slices.Contains(claimed, string(kind)) && !effect.InstallOnly {
+		if slices.Contains(claimed, string(kind)) {
 			status = RealizationPending
 		}
 		out = append(out, ServiceSummary{Kind: string(kind), Name: object.Name(), Machine: effect.Machine, Status: status})

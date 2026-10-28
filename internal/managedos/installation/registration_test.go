@@ -166,21 +166,6 @@ func TestRegistrationRefusalsNameTheEntitlementField(t *testing.T) {
 	}
 }
 
-func TestFromSubscriptionStillRefusesWithItsReason(t *testing.T) {
-	profile := installProfile(field("installer", api.MapValue(field("anaconda", api.MapValue(
-		text("imageRef", "rhel-9-8-boot"),
-		field("redfishVirtualMedia", installProfile().Spec().Get("installer", "anaconda", "redfishVirtualMedia")),
-		field("packageSource", api.MapValue(field("fromSubscription", api.MapValue(text("entitlementRef", "rhel"))))),
-	)))))
-	want := []lifecycle.Refusal{{Kind: "Machine", Name: "rhel-01",
-		Reason:      "the install profile selects spec.installer.anaconda.packageSource.fromSubscription, which registers inside the installer, where a failed registration cannot be retried without installing again",
-		Remediation: "remove spec.installer.anaconda.packageSource.fromSubscription from MachineInstallProfile/rhel-9-8, to install from its boot media or from spec.installer.anaconda.packageSource.hostedTree",
-	}}
-	if refused := Refusals(labCatalog(profile, rhelEntitlement())); !slices.Equal(refused, want) {
-		t.Fatalf("refusals = %+v, want %+v", refused, want)
-	}
-}
-
 func TestSubscriptionIsAdmittedOnAVirtualMachine(t *testing.T) {
 	if refused := Refusals(labCatalog(registeringProfile(), rhelEntitlement())); len(refused) != 0 {
 		t.Fatalf("refusals = %+v, want none", refused)

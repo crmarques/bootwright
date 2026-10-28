@@ -258,27 +258,18 @@ func TestEgressFollowsThePlacementMachineProxyChoice(t *testing.T) {
 	}
 }
 
-// This capability reports only the artifact servers it cannot realize. Objects
-// of kinds no capability claims are the engine's refusal, not this one's.
+// This capability reports only the managed artifact servers it cannot realize.
+// Objects of kinds no capability claims, and external servers, are not its
+// refusals.
 func TestUnsupportedArtifactServersAreListedInCanonicalOrder(t *testing.T) {
 	cluster := api.NewObject(api.OpenShiftCluster, "sno", api.Value{}, api.MapValue())
 	managedProxy := api.NewObject(api.Proxy, "lab-proxy", api.Value{}, api.MapValue(text("management", "managed")))
-	external := api.NewObject(api.ArtifactServer, "published", api.Value{}, api.MapValue(
-		text("management", "external"), text("retention", "installOnly"),
-	))
-	installOnly := api.NewObject(api.ArtifactServer, "temp", api.Value{}, api.MapValue(
-		text("management", "managed"), text("retention", "installOnly"),
-	))
-	found := lifecycle.Identities(Refusals(catalogOf(controller(), cluster, managedProxy, external, installOnly, artifactServer())))
-	if !slices.Equal(found, []string{"ArtifactServer/temp"}) {
+	external := api.NewObject(api.ArtifactServer, "published", api.Value{}, api.MapValue(text("management", "external")))
+	refusedGraph, values, _ := placementRowGraph("Private trust", placedArtifactServer)
+	graph := catalogOf(append(refusedGraph.Objects(), cluster, managedProxy, external)...)
+	found := lifecycle.Identities(Refusals(graph))
+	if !slices.Equal(found, []string{values["<server>"]}) {
 		t.Fatalf("unsupported = %v", found)
-	}
-	want := []lifecycle.Refusal{{
-		Kind: "ArtifactServer", Name: "temp", Reason: "this executable serves no managed artifact server with installOnly retention",
-		Remediation: "declare spec.retention: persistent on ArtifactServer/temp, or omit it",
-	}}
-	if refused := Refusals(catalogOf(controller(), installOnly)); !slices.Equal(refused, want) {
-		t.Fatalf("refusals = %+v, want %+v", refused, want)
 	}
 	if len(Refusals(catalogOf(controller(), artifactServer()))) != 0 {
 		t.Fatal("a supported graph reported unsupported objects")

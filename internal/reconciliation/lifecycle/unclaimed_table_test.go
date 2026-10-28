@@ -22,8 +22,7 @@ import (
 // composition does, so the engine's tests read the domains' own answers.
 func domainEffects(object api.Object) (Bearing, bool) {
 	if reason, bears := infrastructureservices.EffectBearing(object); bears {
-		machine, installOnly := infrastructureservices.Placement(object)
-		return Bearing{Reason: reason, Remedy: infrastructureservices.UnclaimedRemedy(object), Shared: true, Machine: machine, InstallOnly: installOnly}, true
+		return Bearing{Reason: reason, Remedy: infrastructureservices.UnclaimedRemedy(object), Shared: true, Machine: infrastructureservices.Placement(object)}, true
 	}
 	for _, predicate := range []func(api.Object) (string, bool){
 		substrate.EffectBearing, managedos.EffectBearing, containercluster.EffectBearing,

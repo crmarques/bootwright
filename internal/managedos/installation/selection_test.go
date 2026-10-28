@@ -166,39 +166,21 @@ func TestAProfileWithoutAPackageSourceInstallsFromItsMedia(t *testing.T) {
 	}
 }
 
-// Every profile arm that carries secret bytes or effects this contract cannot
-// prove is refused before registration, through the Machine that selects it,
-// saying what the profile selects and naming the field to change on it.
+// A profile without the anaconda arm is refused before registration, through
+// the Machine that selects it, saying what the install profile lacks and
+// naming the field to select on it.
 func TestUnsupportedNamesEveryProfileArmThisContractRefuses(t *testing.T) {
 	customizations := installProfile().Spec().Get("customizations")
-	selected := func(field string) [2]string {
-		return [2]string{"the install profile selects " + field + ", which carries secret bytes or effects this executable does not prove",
-			"remove " + field + " from MachineInstallProfile/rhel-9-8"}
-	}
 	for name, test := range map[string]struct {
 		profile api.Object
 		refusal [2]string
 	}{
-		"from subscription": {installProfile(field("installer", api.MapValue(field("anaconda", api.MapValue(
-			text("imageRef", "rhel-9-8-boot"),
-			field("packageSource", api.MapValue(field("fromSubscription", api.MapValue(text("entitlementRef", "rhel"))))),
-		))))), [2]string{
-			"the install profile selects spec.installer.anaconda.packageSource.fromSubscription, which registers inside the installer, where a failed registration cannot be retried without installing again",
-			"remove spec.installer.anaconda.packageSource.fromSubscription from MachineInstallProfile/rhel-9-8, to install from its boot media or from spec.installer.anaconda.packageSource.hostedTree",
-		}},
-		"mirror": {installProfile(field("installer", api.MapValue(field("anaconda", api.MapValue(
-			text("imageRef", "rhel-9-8-boot"),
-			field("packageSource", api.MapValue(field("mirror", api.MapValue(text("baseURL", "https://example.test/os"))))),
-		))))), selected("spec.installer.anaconda.packageSource.mirror")},
 		"template clone": {installProfile(field("installer", api.MapValue(field("templateClone", api.MapValue(
 			field("seed", api.MapValue(field("cloudInit", api.MapValue()))),
 		))))), [2]string{
 			"this executable installs an operating system only through the anaconda installer, which the install profile does not select",
 			"select spec.installer.anaconda on MachineInstallProfile/rhel-9-8",
 		}},
-		"initial password": {installProfile(field("customizations", customizations.With("ssh", api.MapValue(
-			field("initialPassword", api.MapValue(text("secretRef", "root-password"))),
-		)))), selected("spec.customizations.ssh.initialPassword")},
 	} {
 		t.Run(name, func(t *testing.T) {
 			unsupported := lifecycle.Identities(Refusals(labCatalog(test.profile)))
@@ -668,7 +650,7 @@ func TestAFrozenRequestOfAnyOtherVersionRefuses(t *testing.T) {
 	}
 }
 
-// No password can be set while initialPassword is refused, so a profile that
+// This executable sets no password on an installed system, so a profile that
 // enables password authentication would install a system that cannot honor
 // it; it refuses before registration through the Machine.
 func TestPasswordAuthenticationTrueRefuses(t *testing.T) {
@@ -676,7 +658,7 @@ func TestPasswordAuthenticationTrueRefuses(t *testing.T) {
 		field("passwordAuthentication", api.BoolValue(true)),
 	))))
 	want := []lifecycle.Refusal{{Kind: "Machine", Name: "rhel-01",
-		Reason:      "the install profile enables spec.customizations.ssh.passwordAuthentication, but no password can be set while spec.customizations.ssh.initialPassword is refused",
+		Reason:      "the install profile enables spec.customizations.ssh.passwordAuthentication, but this executable sets no password on an installed system",
 		Remediation: "set spec.customizations.ssh.passwordAuthentication to false on MachineInstallProfile/rhel-9-8"}}
 	if refused := Refusals(labCatalog(profile)); !slices.Equal(refused, want) {
 		t.Fatalf("refusals = %+v, want %+v", refused, want)

@@ -40,7 +40,7 @@ func infrastructureServiceSchema(kind Kind) *Shape {
 	case ArtifactServer:
 		listener := named(record(required("name", nonempty()), required("protocol", enumeration("http", "https")), required("port", port())))
 		endpoint := named(record(required("name", nonempty()), field("url", url()), field("listenerRef", nestedIn(Scope{Noun: "listener", Entries: []string{"listeners"}})), field("addressRef", nestedIn(Scope{Noun: "address", Owner: []string{"machineRef"}, Kind: Machine, Entries: []string{"network", "addresses"}}))))
-		fields = append(fields, field("retention", enumeration("persistent", "installOnly")), field("tls", record(required("secretRef", secret("tlsCertificate")), field("minVersion", enumeration("TLSv1.2", "TLSv1.3")))), field("listeners", nonemptyArray(listener)), field("endpoints", endpoint))
+		fields = append(fields, field("retention", enumeration("persistent")), field("tls", record(required("secretRef", secret("tlsCertificate")), field("minVersion", enumeration("TLSv1.2", "TLSv1.3")))), field("listeners", nonemptyArray(listener)), field("endpoints", endpoint))
 		managed = append(managed, "retention", "tls", "listeners")
 	case Registry:
 		fields = append(fields, field("url", lexical("registry")), field("credentialsRef", secret("usernamePassword", "dockerConfigJson")), field("trustBundleRef", secret("caBundle")))

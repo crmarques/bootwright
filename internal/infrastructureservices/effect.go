@@ -16,6 +16,6 @@ func UnclaimedRemedy(object api.Object) string {
 	return "declare spec.management: external on " + object.Identity() + " to use a " + string(object.Kind()) + " the operator runs, or remove it from the selected Environment"
 }
 
-func Placement(object api.Object) (machine string, installOnly bool) {
-	return object.Spec().Get("machineRef").Text(), object.Spec().Get("retention").Text() == "installOnly"
+func Placement(object api.Object) string {
+	return object.Spec().Get("machineRef").Text()
 }

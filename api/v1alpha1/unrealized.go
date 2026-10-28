@@ -16,11 +16,7 @@ type Unrealized struct {
 var unrealized = []Unrealized{
 	{InfraProvider, "$.spec.vsphere", "", "B99"},
 	{InfraProvider, "$.spec.kubevirt", "", "B87"},
-	{MachineInstallProfile, "$.spec.installer.templateClone", "", "B853"},
-	{MachineInstallProfile, "$.spec.installer.anaconda.packageSource.mirror", "", "B854"},
-	{MachineInstallProfile, "$.spec.installer.anaconda.packageSource.fromSubscription", "", "B854"},
-	{MachineInstallProfile, "$.spec.customizations.ssh.initialPassword", "", "B855"},
-	{ArtifactServer, "$.spec.retention", "installOnly", "B856"},
+	{MachineInstallProfile, "$.spec.installer.templateClone", "", "B99"},
 	{Registry, "$.spec.management", "managed", "B68"},
 	{LoadBalancer, "$.spec.management", "managed", "B100"},
 	{OpenShiftCluster, "$.spec.distribution.type", "okd", "B748"},

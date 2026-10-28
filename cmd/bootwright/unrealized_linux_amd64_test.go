@@ -38,24 +38,11 @@ func patchedSources(t *testing.T, sources desiredstate.Sources, suffix, old, rep
 // row of the table: the admissible projection declares most, and an edited
 // example each of the rest.
 func unrealizedFixtures(t *testing.T) map[string]desiredstate.Sources {
-	const profile, server, cluster = "infra/os/rhel-9-8.yaml", "infra/components/artifact-server.yaml", "clusters/sno/cluster.yaml"
-	hostedTree := "      packageSource:\n        hostedTree:\n          fromMedia: local-media:rhel-9.8-x86_64-dvd.iso\n\n          artifactServerEndpoint:\n            serverRef: lab-artifacts\n            endpointRef: ip-http\n"
-	secret := func(name, kind string) string {
-		return "apiVersion: bootwright.io/v1alpha1\nkind: Secret\nmetadata:\n  name: " + name + "\n\nspec:\n  type: " + kind + "\n"
-	}
+	const cluster = "clusters/sno/cluster.yaml"
 	return map[string]desiredstate.Sources{
 		"the admissible projection": admissibleExampleSources(t, true),
 		"an enabled playbook": patchedSources(t, admissibleExampleSources(t, true), "extras.yaml",
 			"      - ceph-multidc-01\n\n  enabled: false\n", "      - ceph-multidc-01\n\n  enabled: true\n", nil),
-		"a package mirror": patchedSources(t, exampleDirectory(t, "lab-rhel"), profile, hostedTree,
-			"      packageSource:\n        mirror:\n          baseURL: https://mirror.lab.example.test/rhel\n", nil),
-		"packages from a subscription": patchedSources(t, exampleDirectory(t, "lab-rhel"), profile, hostedTree,
-			"      packageSource:\n        fromSubscription:\n          entitlementRef: rhel\n",
-			map[string]string{"rhel-entitlement.yaml": "apiVersion: bootwright.io/v1alpha1\nkind: Entitlement\nmetadata:\n  name: rhel\n\nspec:\n  type: redhatRhel\n\n  rhsm:\n    management: external\n"}),
-		"an initial password": patchedSources(t, exampleDirectory(t, "lab-rhel"), profile, "      passwordAuthentication: false\n",
-			"      passwordAuthentication: false\n\n      initialPassword:\n        secretRef: root-password\n",
-			map[string]string{"root-password.yaml": secret("root-password", "usernamePassword")}),
-		"installOnly retention": patchedSources(t, exampleDirectory(t, "lab-rhel"), server, "retention: persistent", "retention: installOnly", nil),
 		"a disconnected cluster": patchedSources(t, patchedSources(t, exampleDirectory(t, "lab-features"), "clusters/features/cluster.yaml",
 			"    mode: connected\n", "    mode: disconnected\n", nil), "clusters/features/cluster.yaml", "          endpointRef: ip-https\n\n    # pullSecretRef",
 			"          endpointRef: ip-https\n\n      bootArtifacts:\n        artifactServerEndpoint:\n          serverRef: lab-artifacts\n          endpointRef: ip-https\n\n    # pullSecretRef", nil),

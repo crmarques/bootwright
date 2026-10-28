@@ -14,19 +14,14 @@ import (
 )
 
 // Refusals refuses every artifact server this capability cannot realize, with
-// its reason and remedy: its own retention row, then the placement and
-// reservation rows it shares with the managed network services. Kinds no
+// its reason and remedy: the placement and reservation rows it shares with
+// the managed network services. Kinds no
 // capability claims at all are the engine's own refusal, not this one's.
 func Refusals(catalog api.Catalog) []lifecycle.Refusal {
 	var found []lifecycle.Refusal
 	for _, server := range catalog.OfKind(api.ArtifactServer) {
 		if server.Spec().Get("management").Text() != "managed" {
 			continue
-		}
-		if server.Spec().Get("retention").Text() == "installOnly" {
-			found = append(found, lifecycle.RefusalOf(server,
-				"this executable serves no managed artifact server with installOnly retention",
-				"declare spec.retention: persistent on "+server.Identity()+", or omit it"))
 		}
 		found = append(found, managedservice.PlacementRefusals(catalog, server)...)
 		found = append(found, managedservice.ReservationRefusals(catalog, server)...)

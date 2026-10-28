@@ -266,10 +266,6 @@ Alias cell.
 | [B797](#b797) | new, 2026-10-21 (X56) | product | Storage | A StorageObjectBucket's declared policy changes after completion | A completed bucket refuses `object-bucket-identity` on a changed policy; a day-2 update is a state-contract change no milestone needs |
 | [B798](#b798) | new, 2026-10-23 (M3 verification) | defect | Verification tooling | The full Ansible unit gate selects its intended worker mode explicitly | Pre-existing tooling behavior outside the requested product change |
 | [B799](#b799) | new, 2026-10-23 (M3 verification) | defect | Workspace | Setup interruption retries identify any remaining setup-lock holder | Pre-existing intermittent refusal; its cause is unproved |
-| [B853](#b853) | new, 2026-10-27 (lane I) | product | Managed OS | The `templateClone` installer is realized or retired | Admitted and refused at plan; no milestone names it |
-| [B854](#b854) | new, 2026-10-27 (lane I) | product | Managed OS | Anaconda `packageSource.mirror` and `fromSubscription` are realized or retired | Admitted and refused at plan; no milestone names them |
-| [B855](#b855) | new, 2026-10-27 (lane I) | product | Managed OS | An install profile's `ssh.initialPassword` is realized or retired | Admitted and refused at plan; no milestone names it |
-| [B856](#b856) | new, 2026-10-27 (lane I) | product | Infrastructure services | An ArtifactServer's `installOnly` retention is realized or retired | Admitted and refused at plan; no milestone names it |
 | [B857](#b857) | new, 2026-10-27 (lane I) | enabling | Desired state | The audit 5.7 operator tasks run on the reshaped API | B814's paper check was not run before X171 |
 | [B858](#b858) | new, 2026-10-27 (lane T) | product | CLI | `preflight infra`, `preflight all` and `render` with a path flag are defined and run | D188 ran `preflight clusters` as the union of two existing checks; these have no definition |
 | [B859](#b859) | new, 2026-10-27 (lane Q3) | defect | Storage | Pool admission honours the cluster's default replica pair | Pre-existing defect found by lane Q3 |
@@ -2935,60 +2931,6 @@ evidence:** parallel interruption/retry probes and a justified release fix,
 considering an explicit unlock before close without weakening exclusion or
 adding a retry that conceals a live owner.
 
-### B853
-
-**Owner:** Managed OS. **Kind:** product. **Requires:** none. **Definition:**
-Needs definition. `MachineInstallProfile.spec.installer.templateClone` is
-admitted by the closed schema, warned `api.unrealized` and refused at plan
-([Admitted but unrealized](../api.md#admitted-but-unrealized), the "Another
-installer" row of [managed-os.md](../managed-os.md)); X171 left the field
-without an item. The vSphere arm that would select it is
-[B99](m1.md#b99)'s. **Outcome:** the owner decides whether a template clone
-installs a Machine, with its refusal row, tests and the field record in
-[api/machines.md](../api/machines.md#refused-arms), or whether the field is
-retired with a replacement in `api/v1alpha1/retired.go`. **Exit evidence:**
-the chosen path's tests, and the field's row removed from the unrealized
-table and `UnrealizedDeclarations`.
-
-### B854
-
-**Owner:** Managed OS. **Kind:** product. **Requires:** none. **Definition:**
-Needs definition. `spec.installer.anaconda.packageSource.mirror` and
-`spec.installer.anaconda.packageSource.fromSubscription` are admitted, warned
-`api.unrealized` and refused at plan (the "A package mirror" and "Packages from
-a subscription" rows of [managed-os.md](../managed-os.md)); the arm that works
-is `hostedTree`. A mirror carries secret bytes or effects this executable does
-not prove, and a subscription registers inside the installer, where a failed
-registration cannot be retried without installing again. **Outcome:** the owner
-decides, for each of the two, whether to realize it with a proof of those
-effects or to retire it. **Exit evidence:** the chosen path's tests and the two
-rows removed from the unrealized table and `UnrealizedDeclarations`.
-
-### B855
-
-**Owner:** Managed OS. **Kind:** product. **Requires:** none. **Definition:**
-Needs definition. `spec.customizations.ssh.initialPassword` is admitted, warned
-`api.unrealized` and refused at plan (the "An initial password" row of
-[managed-os.md](../managed-os.md)), and `passwordAuthentication: true` refuses
-until a password can be set. **Outcome:** the owner decides whether an install
-profile sets an initial password, with custody for its secret bytes and the
-`passwordAuthentication` row relaxed, or retires the field. **Exit evidence:**
-the chosen path's tests and the row removed from the unrealized table and
-`UnrealizedDeclarations`.
-
-### B856
-
-**Owner:** Infrastructure services. **Kind:** product. **Requires:** none.
-**Definition:** Needs definition. `ArtifactServer.spec.retention: installOnly`
-is admitted, warned `api.unrealized` and refused at plan (the "Install-only
-retention" row of
-[infrastructure-services.md](../infrastructure-services.md#refusal-table)).
-**Outcome:** the owner decides whether a managed artifact server removes its
-content when its installs finish, with the removal's effect proved, or retires
-the value and leaves `persistent` the only retention. **Exit evidence:** the
-chosen path's tests and the row removed from the unrealized table and
-`UnrealizedDeclarations`.
-
 ### B857
 
 **Owner:** Desired state. **Kind:** enabling. **Requires:** none.
@@ -3220,7 +3162,7 @@ also updates this table.
 | 20 | Q2 Family accessors and name bounds (B848, B850, B847) | merged (X183) |
 | 21 | R Installer material (B829) | merged (X181) |
 | 22 | T Context-free commands and preflight (B852, B825) | merged (X177) |
-| 23 | U Unrealized fields (B853 to B856) | not started |
+| 23 | U Unrealized fields (B853 to B856) | merged (X184) |
 | 24 | N0 Remaining text to owning items (B805, B816, B820, B851) | merged (X182) |
 
 To continue, take the first row not `merged`. If its branch exists, resume it:

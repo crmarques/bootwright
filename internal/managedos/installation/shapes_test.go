@@ -224,9 +224,9 @@ func TestOnlyTheFirstRefusalAMachineMeetsIsReported(t *testing.T) {
 		api.MapValue(text("deviceName", "/dev/vda"), field("rotational", api.BoolValue(false))), "hardware", "rootDevice"))
 	kernelNamed := networkWith(declaredInterface("enp1s0", "ethernet"), declaredInterface("eth0", "ethernet"))
 	kernel, kernelRemedy := kernelReason("eth0")
-	mirrored := installProfile()
-	mirrored = mirrored.WithSpec(mirrored.Spec().WithPath(api.MapValue(field("mirror", api.MapValue(
-		text("baseURL", "https://example.test/os")))), "installer", "anaconda", "packageSource"))
+	passworded := installProfile(field("customizations", installProfile().Spec().Get("customizations").With("ssh", api.MapValue(
+		field("passwordAuthentication", api.BoolValue(true)),
+	))))
 	onServices := artifactServer(text("machineRef", "services"), text("bindAddress", "192.0.2.2"))
 	for name, test := range map[string]struct {
 		catalog             api.Catalog
@@ -235,10 +235,10 @@ func TestOnlyTheFirstRefusalAMachineMeetsIsReported(t *testing.T) {
 		"a target before its network": {labCatalog(hinted, kernelNamed),
 			"a managed-OS installation selects its root disk by deviceName, which a physical Machine's wwn and serialNumber may prove, and cannot carry the other root-device hints the Machine declares",
 			"remove spec.hardware.rootDevice.rotational from Machine/rhel-01"},
-		"a network before its profile": {labCatalog(kernelNamed, mirrored), kernel, kernelRemedy},
-		"a profile before its servers": {labCatalog(mirrored, servicesHost(), onServices),
-			"the install profile selects spec.installer.anaconda.packageSource.mirror, which carries secret bytes or effects this executable does not prove",
-			"remove spec.installer.anaconda.packageSource.mirror from MachineInstallProfile/rhel-9-8"},
+		"a network before its profile": {labCatalog(kernelNamed, passworded), kernel, kernelRemedy},
+		"a profile before its servers": {labCatalog(passworded, servicesHost(), onServices),
+			"the install profile enables spec.customizations.ssh.passwordAuthentication, but this executable sets no password on an installed system",
+			"set spec.customizations.ssh.passwordAuthentication to false on MachineInstallProfile/rhel-9-8"},
 	} {
 		t.Run(name, func(t *testing.T) {
 			want := []lifecycle.Refusal{{Kind: "Machine", Name: "rhel-01", Reason: test.reason, Remediation: test.remediation}}
