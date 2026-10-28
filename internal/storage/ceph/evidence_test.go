@@ -9,8 +9,10 @@ import (
 	"github.com/crmarques/bootwright/internal/reconciliation"
 )
 
+const monmapCreatedAt = "2026-01-01T00:00:00.000000Z"
+
 func readyEvidence(r Request) Evidence {
-	e := Evidence{Version: EvidenceVersion, Request: "digest", Action: r.Action, Owner: r.Owner, FSID: r.FSID, Owned: true, Exists: true, Ready: true, Health: "HEALTH_OK", Hosts: hostNames(r), Monitors: hostNames(r), MGRActive: "node-1", MGRStandbys: []string{"node-2"}, MonAddrs: []MonitorAddress{}, OSDs: []OSDEvidence{}, Daemons: []UnitDaemon{}}
+	e := Evidence{Version: EvidenceVersion, Request: "digest", Action: r.Action, Owner: r.Owner, FSID: r.FSID, Owned: true, Exists: true, Ready: true, Health: "HEALTH_OK", Incarnation: monmapCreatedAt, Hosts: hostNames(r), Monitors: hostNames(r), MGRActive: "node-1", MGRStandbys: []string{"node-2"}, MonAddrs: []MonitorAddress{}, OSDs: []OSDEvidence{}, Daemons: []UnitDaemon{}}
 	for i, h := range r.Hosts {
 		e.OSDs = append(e.OSDs, OSDEvidence{Host: h.Name, Path: "/dev/vdb", ID: i, UUID: "osd-" + h.Name})
 		if r.Action == "cluster" {

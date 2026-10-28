@@ -75,7 +75,7 @@ func (b *testBinder) ReadProduced(ctx context.Context, request custody.ReadProdu
 	}
 	key := request.Block + "/" + request.Name
 	value, found := b.produced[key]
-	return secretstore.ProducedMaterial{Material: secrets.NewMaterial(map[secrets.Part][]byte{secrets.ValuePart: []byte(value)}), Unproved: b.unproved[key]}, found, nil
+	return secretstore.ProducedMaterial{Material: secrets.NewMaterial(map[secrets.Part][]byte{secrets.ValuePart: []byte(value)}), Unproved: b.unproved[key], Identity: b.identities[key]}, found, nil
 }
 
 func lendingHarness(t *testing.T) (*harness, *lendingCapability) {

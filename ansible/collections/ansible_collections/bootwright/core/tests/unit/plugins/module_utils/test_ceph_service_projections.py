@@ -213,11 +213,14 @@ def test_observed_owned_partial_resumes_services_without_rebootstrap(projection_
             for kind in ("mon", "mgr")
         ],
         ("osd", "metadata"): [], ("osd", "dump"): {"osds": []},
-        ("mon", "dump"): {"mons": [{"name": intent["monID"], "public_addrs": {
+        ("mon", "dump"): {"fsid": worker.request["fsid"], "created": "2026-01-01T00:00:00.000000+0000", "mons": [{"name": intent["monID"], "public_addrs": {
             "addrvec": [{"type": "v2", "addr": worker.request["monIP"] + ":3300/0"}]}}]},
     }
 
+    asked = []
+
     def ceph(*args, **kwargs):
+        asked.append(args)
         return copy.deepcopy(answers[args]) if args in answers else original(*args, **kwargs)
 
     def forbidden_bootstrap(*args, **kwargs):
@@ -230,6 +233,7 @@ def test_observed_owned_partial_resumes_services_without_rebootstrap(projection_
     worker.dashboard_observation = lambda: {"url": "", "certificateSHA256": "", "reachable": False}
     before = copy.deepcopy((worker.markers.records, worker.markers.writes, daemons, effects))
     evidence = worker.observe()
+    assert asked.count(("mon", "dump")) == 1 and evidence["monAddrs"] and evidence["incarnation"] == "2026-01-01T00:00:00.000000Z"
     assert evidence["owned"] and evidence["exists"] and evidence["partial"]
     assert not evidence["ready"]
     assert (worker.markers.records, worker.markers.writes, daemons, effects) == before

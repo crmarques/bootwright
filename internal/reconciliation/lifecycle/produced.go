@@ -7,6 +7,7 @@ import (
 	"github.com/crmarques/bootwright/internal/diagnostics"
 	"github.com/crmarques/bootwright/internal/reconciliation"
 	"github.com/crmarques/bootwright/internal/reconciliation/operationstore"
+	"github.com/crmarques/bootwright/internal/secrets"
 	"github.com/crmarques/bootwright/internal/secrets/custody"
 	"github.com/crmarques/bootwright/internal/secrets/secretstore"
 )
@@ -36,7 +37,11 @@ func (s Service) publishProduced(ctx context.Context, tx Transaction, producer r
 			return secretstore.Failure("declaration", "a block offered produced material under an invalid or repeated name")
 		}
 		names[output.Name] = true
-		outputs = append(outputs, secretstore.ProducedInput{Name: output.Name, Material: output.Material, Unproved: unproved})
+		identity := output.Identity
+		if unproved {
+			identity = ""
+		}
+		outputs = append(outputs, secretstore.ProducedInput{Name: output.Name, Material: output.Material, Unproved: unproved, Identity: identity})
 	}
 	return tx.Secrets(ctx, func(selected secretstore.Context, area secretstore.Area) error {
 		if !unproved {
@@ -52,11 +57,21 @@ func (s Service) publishProduced(ctx context.Context, tx Transaction, producer r
 func (s Service) sameProducer(ctx context.Context, selected secretstore.Context, area secretstore.Area, producer reconciliation.Block, produced []Produced) error {
 	capability, found := s.capabilities.Resolve(producer.Kind, producer.Implementation)
 	identifier, identifies := capability.(ProducedIdentifier)
+	identifies = found && identifies
 	reader, reads := s.binder.(ProducedBinder)
-	if !found || !identifies || !reads {
+	if !reads {
 		return nil
 	}
+	presented := func(recorded, name string, material secrets.Material) (string, error) {
+		if recorded != "" || !identifies {
+			return recorded, nil
+		}
+		return identifier.ProducedIdentity(producer, name, material)
+	}
 	for _, output := range produced {
+		if !identifies && output.Identity == "" {
+			continue
+		}
 		held, exists, err := reader.ReadProducedInArea(ctx, selected, area, producer.ID, output.Name)
 		if err != nil {
 			return err
@@ -65,16 +80,16 @@ func (s Service) sameProducer(ctx context.Context, selected secretstore.Context,
 			held.Material.Clear()
 			continue
 		}
-		before, err := identifier.ProducedIdentity(producer, output.Name, held.Material)
+		before, err := presented(held.Identity, output.Name, held.Material)
 		held.Material.Clear()
 		if err != nil {
 			return err
 		}
-		after, err := identifier.ProducedIdentity(producer, output.Name, output.Material)
+		after, err := presented(output.Identity, output.Name, output.Material)
 		if err != nil {
 			return err
 		}
-		if before != after {
+		if before != "" && before != after {
 			return failure("lifecycle.state",
 				"the "+output.Name+" block "+producer.ID+" recaptured presents another identity ("+after+") than the one custody holds ("+before+"), so it does not replace it",
 				"find what replaced the effect "+producer.ID+" proved; this context's records name the original")

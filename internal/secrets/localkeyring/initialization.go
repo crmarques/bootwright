@@ -207,7 +207,7 @@ func (i *Implementation) resumeInitialization(ctx context.Context, selected secr
 		}
 	}
 	selector := secretstore.Selector{SelectorVersion: secretstore.RecordVersion, Context: selected.Name, Backend: i.Backend(), Generation: attempt.Generation}
-	index := indexRecord{FormatVersion: formatVersion, Algorithm: algorithm, Selector: selector, ActiveKey: attempt.KeyID, Keys: []storedKey{{ID: attempt.KeyID, Seals: ledger.Seals}}, Versions: []storedVersion{}, Current: []secretstore.Current{}, Bindings: []secretstore.Binding{}, Produced: []secretstore.Produced{}}
+	index := indexRecord{FormatVersion: formatVersion, Algorithm: algorithm, Selector: selector, MinReader: readerVersion, ActiveKey: attempt.KeyID, Keys: []storedKey{{ID: attempt.KeyID, Seals: ledger.Seals}}, Versions: []storedVersion{}, Current: []secretstore.Current{}, Bindings: []secretstore.Binding{}, Produced: []secretstore.Produced{}}
 	if !freshLedger {
 		seals, err := i.reserveInitializationSeal(ctx, selected, area, attempt.KeyID, key)
 		if err != nil {

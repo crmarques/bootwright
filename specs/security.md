@@ -157,10 +157,20 @@ file; a file transfer to a remote host carries no material.
 The adapter configuration enables pipelining
 (`TestRemotePlacedTasksRunWithPipelining`), and the runner refuses a material
 value equal to, or containing, a confidential part of the material it lends
-(`TestNoMaterialValueEqualsBoundMaterialBytes`).
-
-Not yet met: no test holds a remote file transfer free of material; tracked as
-[B829](milestones/backlog.md#b829).
+(`TestNoMaterialValueEqualsBoundMaterialBytes`). A role writes a file that
+carries lent material with `bootwright.core.private_file`, whose argument holds
+the bytes and which stages them owner-only beside the destination, sets their
+mode and renames them over it, refusing a link there, removing its own stage on
+failure and the stages of the same destination an interrupted run left; it
+never runs `async`. The adapter configuration pipelines the controller-local
+connection too. No task of a role's tasks or handlers, or of a playbook, that
+transfers a file (`copy`, `unarchive` or `assemble` without `remote_src`,
+`template`, `script`, `synchronize`, under any of their names) reads lent
+material, through a file, template, unvault or pipe lookup or the bytes a slurp
+of a lent file registered, directly or through a role variable, or names a lent
+file as its source, and a template named by a variable that resolves to no
+checked role template is refused (`test_no_file_transfer_carries_lent_material`,
+`test_no_playbook_transfer_carries_lent_material`).
 
 A managed-OS registration's organization and
 activation key are read from their lent material files by the controller

@@ -269,7 +269,6 @@ Alias cell.
 | [B805](#b805) | new, 2026-10-26 (spec audit P0-F) | safety | Secrets and State reconciliation | Secret references declare a class; a rotated access credential has a recorded removal exit | Audit roadmap work; implemented only on an explicit lane request |
 | [B816](#b816) | new, 2026-10-26 (spec audit P1-I) | safety | State reconciliation and Controller setup | Recovery refusals, partial-removal readings and host probes match the rules | Audit roadmap work; implemented only on an explicit lane request |
 | [B820](#b820) | new, 2026-10-26 (spec audit P2-B) | enabling | Agent guidance and Verification tooling | Section-level index rows and docs gates for budgets, reachability and history links | Audit roadmap work; implemented only on an explicit lane request |
-| [B829](#b829) | new, 2026-10-26 (spec audit L7) | safety | Secrets | Work-area incarnation check, pipelined material payloads and fixed producer identity | Audit roadmap work; implemented only on an explicit lane request |
 | [B847](#b847) | new, 2026-10-27 (lane J) | defect | Infrastructure services | A zoned IPv6 SSH address refuses at plan, not at the record write | Found by lane J's review |
 | [B848](#b848) | new, 2026-10-27 (lane I) | enabling | Architecture | Cluster families publish the facts machine, controller and managed-service code reads | Found by the lane I review; each site reads its kind's own spec layout |
 | [B850](#b850) | new, 2026-10-27 (lane I) | defect | Desired state | A derived Machine contact `<machine>.<domain>` is checked against DNS name lengths | Found by the lane I review; derived cluster names were bounded in X171 |
@@ -290,6 +289,7 @@ Alias cell.
 | [B866](#b866) | new, 2026-10-27 (lane S) | defect | Verification tooling | The Ceph host route probe alarm test is stable in parallel | Recurring flake seen by lanes S and R |
 | [B868](#b868) | new, 2026-10-27 (lane P) | safety | Infrastructure services | A controller reached by an undeclared address conflicts with its own claims | D188's host-key form does not cover the controller's unqualified keys |
 | [B869](#b869) | new, 2026-10-27 (lane P) | defect | Machine | The SSH arm parses the pinned known-hosts entry before it connects | Pre-existing defect found by lane P |
+| [B867](#b867) | new, 2026-10-27 (lane R review) | safety | Storage | The Ceph incarnation rule is confirmed on a live cluster | The monitor map's creation time was chosen without a live run |
 
 ### B82
 
@@ -3089,58 +3089,6 @@ F17-07's acceptance-row templates, which ride with the first M3b and M4b
 acceptance baselines; the optional structured help fields `examples` and
 `available`.
 
-### B829
-
-**Owner:** Secrets. **Kind:** safety. **Requires:** B817; owner decision
-[Q116](#audit-remediation-decisions) for its part. **Definition:** Specified. Batch L7 of
-the [2026-10-26 spec audit](../../audits/spec/2026-10-26.md); findings
-R2-05-07, F11-09, F11-11, R2-04-05, R2-04-06, R2-04-07, R2-04-08, F16-10,
-V2-08. Material leaves custody only by the paths
-[security.md](../security.md) names.
-
-**Specs:** security.md names the lent-file adapter channel and the pipelined
-module-payload hop; [secrets.md](../secrets.md),
-[contexts.md](../contexts.md) and
-[openshift-clusters.md](../openshift-clusters.md) state the installer work
-area's incarnation check; [state-reconciliation.md](../state-reconciliation.md)
-states that a recapture keeps the producer identity. Each has a Not yet met
-line here.
-
-**Work:**
-
-- R2-04-06: the media build receipt records the context directory's
-  registry device and inode; a media build or the D124 kubeconfig hand-over
-  over an area another incarnation built refuses before any effect, naming the
-  area; the orphan confirmation names the work areas it abandons.
-- R2-04-07: set pipelining for remote-placed tasks (beside
-  `ANSIBLE_REMOTE_TEMP` in `internal/adapterprotocol/process_linux_amd64.go`
-  or in `ansible/ansible.cfg`), with a structural test asserting it.
-- R2-04-08: custody publication compares the recaptured producer identity
-  (cluster authority, principal) and refuses `lifecycle.state` on a mismatch.
-- R2-04-05: the `registry_pull_secret` filter EXAMPLES consume lent files
-  inline instead of through `set_fact`; a runner or contract test that no
-  `MaterialValues` entry equals bound material bytes.
-- Waits for [Q116](#audit-remediation-decisions): a per-user selector on `cluster info
-  --secrets` and the matching [B489](m2.md#b489) amendment.
-
-**Exit evidence:** tests: the hand-over never captures a kubeconfig from an
-area the current context did not build; a recreated context refuses an
-earlier incarnation's area; a replaced custody entry with another identity
-refuses between attempts; the pipelining assertion passes; the Not yet met
-lines are removed; `make check`.
-
-**Partly delivered** on 2026-10-26 by X166: the media work area carries its
-context incarnation (device, inode and birth time), a build, destroy or
-hand-over over another incarnation's area refuses; ssh pipelining is set; a
-recapture whose kubeconfig identity (server, decoded authority, principal)
-differs refuses; the lent-part filter refuses a value containing a
-confidential part; `cluster info --object-user` reveals one user's keys
-(D183, Q116). **Remains:** the orphan confirmation names the work areas only
-as a class, not each area and its Machine; no test holds a remote file
-transfer free of material, and the media role still writes
-`install-config.yaml` with `copy: content:`; the Ceph outputs present no
-recapture identity.
-
 ### B847
 
 **Owner:** Infrastructure services. **Kind:** defect. **Requires:** none.
@@ -3398,6 +3346,18 @@ registration parses it, and only for placements that publish claims (found by
 lane P). **Outcome:** every SSH placement refuses material that is not one
 entry for its address and port before it connects. **Exit evidence:** a
 connection-path test per malformed shape.
+### B867
+
+**Owner:** Storage. **Kind:** safety. **Requires:** a live Ceph cluster run.
+**Definition:** Specified. Found in the lane R review of B829 on 2026-10-27.
+A Ceph output's recapture identity detects a cluster bootstrapped again under
+the same fsid by the monitor map's creation time
+([produced material custody](../state-reconciliation.md#produced-material-custody)),
+chosen without a live run. **Outcome:** a live run shows that the time `ceph
+mon dump` reports stays the same across a monitor added and removed and a Ceph
+upgrade, and changes when the cluster is bootstrapped again under the same
+fsid; otherwise the rule moves to a value that does. **Exit evidence:** a
+ledger row from that live run.
 
 ## Audit remediation (2026-10-26)
 
@@ -3420,7 +3380,7 @@ decision stay open while its other parts land.
 | A Harness and guards | B800 (X161), B801 (X161) | none | none | Q62, Q63, Q64 |
 | B Physical targets and shared hosts | B802 (X165), B803 (X165) | B801 | D, E, G, I | Q65, Q66, Q67 |
 | C Storage retirement | B804 (X167), B835 (X167) | none | F, G | Q68 |
-| D Credentials and trust | [B805](#b805), B817 (X166), [B829](#b829), B831 (X166) | none | B | Q70, Q97, Q98, Q99, Q100, Q101, Q116 |
+| D Credentials and trust | [B805](#b805), B817 (X166), [B829](delivered.md#x181--audit-lane-r-private-installer-material-and-recapture-identity), B831 (X166) | none | B | Q70, Q97, Q98, Q99, Q100, Q101, Q116 |
 | E Store durability and controller records | B806 (X164), B836 (X164), B832 (X164) | B801 | B, J | none |
 | F Truthful admission | B807 (X168) | none | C, I | Q71 |
 | G Extension architecture | [B808](delivered.md#x179--audit-lane-q1-per-object-claims-and-nested-references), B811 (X169), B809 (X169), B810 (X169), B812 (X169) | B800 to B807 | B, C, I, J, K | Q72, Q73, Q74, Q75 |
@@ -3462,7 +3422,7 @@ also updates this table.
 | 18 | P Removal views and host claims (B846, B839, B844) | merged (X180) |
 | 19 | Q1 Unclaimed objects and references (B808, B826) | merged (X179) |
 | 20 | Q2 Family accessors and name bounds (B848, B850, B847) | not started |
-| 21 | R Installer material (B829) | not started |
+| 21 | R Installer material (B829) | merged (X181) |
 | 22 | T Context-free commands and preflight (B852, B825) | merged (X177) |
 | 23 | U Unrealized fields (B853 to B856) | not started |
 | 24 | N0 Remaining text to owning items (B805, B816, B820, B851) | not started |
@@ -3541,7 +3501,7 @@ blocks.
 | Q113 | Do managed services keep image.local and image.public with the stated precedence, or collapse to one image reference? | (a) Keep both; the precedence now stated is the contract, no schema change.; (b) One image reference; schema, admission, kind defaults, examples and goldens change, mirroring left to registry policy (B69). | **Answered by D183: a.** a now; b only together with the registry-policy design. | [B827](delivered.md#x171--audit-lane-i-api-shape-and-grammar) | answered by [D183](#d183) |
 | Q114 | Does the API adopt one public name limit for all kinds, or keep per-kind limits derived from block prefixes? | (a) One 47-byte limit stated once, new block prefixes at most 16 bytes with a test; tightens Machine, InfraProvider, Proxy, DNS, NTP and export names.; (b) Hash long names into block identities; one rule without shortening names, less readable run trees.; (c) Keep per-kind limits in one api.md table linked from each kind. | **Answered by D183: b.** a with an architecture test on prefix length; ask with B814's V2-19 name-limit question. | [B827](delivered.md#x171--audit-lane-i-api-shape-and-grammar) | answered by [D183](#d183) |
 | Q115 | Are the reserved CustomPlaybook shape and ClusterAddon.spec.steps refused at admission instead of validated? | (a) Refuse an authored CustomPlaybook naming B102; lexical rules stay in the deferred page; normalization code removed.; (b) a plus refuse ClusterAddon.spec.steps naming B90, letting B90 redefine steps.; (c) Keep validating both reserved shapes. | **Answered by D183: c.** a; b only if the owner agrees B90 may redefine steps. | [B828](delivered.md#x171--audit-lane-i-api-shape-and-grammar) | answered by [D183](#d183) |
-| Q116 | Do object-user S3 keys leave cluster info --secrets for a per-user selector? | (a) Add --object-user <u> emitting only that user's keys; --secrets alone reveals only the dashboard password; B489 amended.; (b) A new raw single-credential export command for object users.; (c) Keep the current reveal and document the handoff risk. | **Answered by D183: a.** a, a new public flag closing B489's sensitive-output gate; ask with B817's R2-04-02. | [B829](#b829) | answered by [D183](#d183) |
+| Q116 | Do object-user S3 keys leave cluster info --secrets for a per-user selector? | (a) Add --object-user <u> emitting only that user's keys; --secrets alone reveals only the dashboard password; B489 amended.; (b) A new raw single-credential export command for object users.; (c) Keep the current reveal and document the handoff risk. | **Answered by D183: a.** a, a new public flag closing B489's sensitive-output gate; ask with B817's R2-04-02. | [B829](delivered.md#x181--audit-lane-r-private-installer-material-and-recapture-identity) | answered by [D183](#d183) |
 | Q117 | Is --authorize data-loss bound to the reviewed consuming steps when --yes or non-interactive input suppresses review? | (a) Require --authorize data-loss=<digest of consuming blocks and targets> under --yes; a stale digest refuses before registration.; (b) Keep the bare token; the cli.md wording fix already applied is the whole change. | **Answered by D183: a.** b unless the owner wants hardening; a changes a public flag form under D153 clause 2. | [B830](delivered.md#x170--audit-lane-j-reconciliation-rules) | answered by [D183](#d183) |
 | Q118 | Does the last GitOps package wait for every block that reaches its cluster's API, or only the add-ons-stage blocks requiring the installation? | (a) Widen to every block reaching the cluster, whatever its stage; planning edges change and need a cycle check.; (b) Keep the narrowed set now stated, naming the excluded cross-stage blocks. | **Answered by D183: new item B837.** b now; settle with the pending Q48 and Q60 answers. | [B830](delivered.md#x170--audit-lane-j-reconciliation-rules), [B837](delivered.md#x171--audit-lane-i-api-shape-and-grammar) | answered by [D183](#d183) |
 

@@ -280,6 +280,9 @@ func TestObjectUserObservationCapturesOnlyItsOutput(t *testing.T) {
 	if err != nil || observation.Effect != reconciliation.EffectCompleted || len(observation.Produced) != 1 || observation.Produced[0].Name != ObjectUserOutput {
 		t.Fatalf("the user observation returned %+v (%v)", observation, diagnostics.Of(err))
 	}
+	if want := "cluster fsid " + runtime.FSID + " created " + monmapCreatedAt + " as object user app-writer"; observation.Produced[0].Identity != want {
+		t.Fatalf("the user observation presents %q, want %q", observation.Produced[0].Identity, want)
+	}
 	lifecycle.ClearProduced(observation.Produced)
 	if want := []lifecycle.OutputFile{{Name: "object-user", Variable: "object-user"}}; !reflect.DeepEqual(runner.request.Outputs, want) {
 		t.Fatalf("the user observation ran with outputs %+v", runner.request.Outputs)

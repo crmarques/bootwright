@@ -349,7 +349,7 @@ func TestSSOEvidence(t *testing.T) {
 		t.Fatalf("a gateway without oauth2-proxy is %s (%+v)", effect, diagnostics.Of(err))
 	}
 	members := map[string]json.RawMessage{}
-	if err := json.Unmarshal(evidenceBytes(t, ready), &members); err != nil || len(members) != 23 {
+	if err := json.Unmarshal(evidenceBytes(t, ready), &members); err != nil || len(members) != 24 {
 		t.Fatalf("ready SSO evidence has %d members (%v)", len(members), err)
 	}
 	members["specializations"] = json.RawMessage(`["synthetic-seam"]`)

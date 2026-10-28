@@ -70,6 +70,10 @@ class Markers:
         self.writes.append(name)
 
 
+# The creation time of the monitor map these doubles answer with.
+MONMAP_CREATED = "2026-01-01T00:00:00.000000+0000"
+
+
 def worker(core_request, answers, markers=None):
     calls = []
 
@@ -91,9 +95,12 @@ def worker(core_request, answers, markers=None):
     markers = markers or Markers()
     if isinstance(markers, Markers):
         markers.published.setdefault(ceph_native.DEVICE_IDENTITIES, identities(core_request))
+    answers.setdefault(("mon", "dump"), {"mons": []})
+    if isinstance(answers[("mon", "dump")], dict):
+        answers[("mon", "dump")].setdefault("fsid", core_request["fsid"])
+        answers[("mon", "dump")].setdefault("created", MONMAP_CREATED)
     if core_request["action"] == "cluster":
         # Phase tests that do not exercise the dashboard see it not yet enabled.
-        answers.setdefault(("mon", "dump"), {"mons": []})
         answers.setdefault(("mgr", "services"), {})
         answers.setdefault(("config-key", "ls"), [])
     kind = ceph_native_resources.ResourceWorker if core_request["action"] in ceph_native_resources.ACTIONS else ceph_native.Worker
@@ -139,11 +146,11 @@ def identities(core_request, form="{serial}"):
 
 
 def observation(core_request, ready=False):
-    return {"version": "ceph-core-evidence-v11", "request": "", "action": core_request["action"], "owner": core_request["owner"], "fsid": core_request["fsid"],
+    return {"version": "ceph-core-evidence-v12", "request": "", "action": core_request["action"], "owner": core_request["owner"], "fsid": core_request["fsid"],
             "owned": True, "exists": ready, "ready": ready, "removed": not ready, "partial": False, "health": "HEALTH_OK" if ready else "",
             "hosts": [h["name"] for h in core_request["hosts"]] if ready else [], "monitors": [], "monAddrs": [], "mgrActive": "", "mgrStandbys": [],
             "osds": [], "resource": {"id": "", "path": ""}, "client": "", "dashboard": dict(EMPTY_DASHBOARD),
-            "endpoint": {"certificateSHA256": "", "reachable": False}, "daemons": [], "sso": ""}
+            "endpoint": {"certificateSHA256": "", "reachable": False}, "daemons": [], "sso": "", "incarnation": "2026-01-01T00:00:00.000000Z"}
 
 
 def failing_command(core_request, applied):
@@ -2398,3 +2405,32 @@ def test_missing_live_fips_refuses_before_package_host_inspection(monkeypatch):
     monkeypatch.setattr(ceph_packages, "actual_platform", lambda: pytest.fail("reached package inspection"))
     with pytest.raises(ceph_native.NativeFailure, match="fips-policy"):
         ceph_packages.host_admission(request)
+
+
+def test_a_cluster_bootstrapped_again_under_the_same_fsid_presents_another_incarnation(core_request):
+    """Evidence carries the monitor map's creation time in one UTC form, so a
+    rendering change between releases keeps it and a re-bootstrap that reuses
+    the fsid changes it."""
+    def incarnation(created):
+        native, unused = worker(core_request, {("mon", "dump"): {"fsid": core_request["fsid"], "created": created}})
+        value, dump = native.monmap_incarnation()
+        assert dump["created"] == created
+        return value
+
+    same = {"2026-01-01T00:00:00.000000+0000", "2026-01-01 00:00:00.000000", "2026-01-01T00:00:00Z",
+            "2026-01-01T05:30:00.000000+05:30", "2025-12-31T19:00:00.000000123-05:00"}
+    assert {incarnation(created) for created in same} == {"2026-01-01T00:00:00.000000Z"}
+    assert incarnation("2026-02-01 09:30:00.250000") == "2026-02-01T09:30:00.250000Z"
+    for dump in ({"fsid": "00000000-0000-4000-8000-000000000000", "created": "2026-01-01T00:00:00Z"},
+                 {"fsid": core_request["fsid"], "created": None}, {"fsid": core_request["fsid"], "created": "yesterday"},
+                 {"fsid": core_request["fsid"], "created": "2026-01-01T00:00:00Z\n"},
+                 {"fsid": core_request["fsid"], "created": "2026-13-01T00:00:00Z"},
+                 {"fsid": core_request["fsid"], "created": "2026-01-01T00:00:00+24:00"}):
+        native, unused = worker(core_request, {("mon", "dump"): dump})
+        with pytest.raises(ceph_native.Refusal, match="^native-output$"):
+            native.monmap_incarnation()
+    value = dict(observation(core_request, ready=True), request="d" * 64)
+    assert ceph_core.evidence(copy.deepcopy(value), "d" * 64, core_request)["incarnation"] == "2026-01-01T00:00:00.000000Z"
+    for bad in ("not a time", 7, None, "2026-01-01T00:00:00.000000+0000", "2026-01-01 00:00:00.000000"):
+        with pytest.raises(ceph_native.Refusal, match="^evidence$"):
+            ceph_core.evidence(dict(value, incarnation=bad), "d" * 64, core_request)

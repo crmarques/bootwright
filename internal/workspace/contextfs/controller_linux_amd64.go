@@ -7,6 +7,7 @@ import (
 	"context"
 	"errors"
 	"slices"
+	"strings"
 	"syscall"
 
 	"github.com/crmarques/bootwright/internal/controller"
@@ -446,6 +447,37 @@ func (t *transaction) hostReservations(ctx context.Context, name string, shared 
 	}
 	slices.Sort(keys)
 	return slices.Compact(keys), nil
+}
+
+// InstallerWorkAreas names each cluster media and controller-local managed-OS
+// installation claim the controller record holds for one context, with the
+// Machine the context is bound to, where such claims are placed. It names no
+// path, because a path key may carry a private value.
+func (t *transaction) InstallerWorkAreas(ctx context.Context, name string) ([]contexts.WorkArea, error) {
+	if err := t.available(ctx); err != nil {
+		return nil, err
+	}
+	stored, err := readControllerStored(ctx, t.root, t.registry)
+	if err != nil || stored.data == nil {
+		return nil, err
+	}
+	machine := ""
+	for _, binding := range stored.value.Bindings {
+		if binding.Context == name {
+			machine = binding.Machine
+		}
+	}
+	kinds := map[string]string{prerequisites.ClusterMediaReservation: "cluster", prerequisites.OSInstallReservation: "machine"}
+	areas := []contexts.WorkArea{}
+	for _, reservation := range stored.value.Reservations {
+		if kind, named := kinds[reservation.Kind]; named && reservation.Context == name {
+			areas = append(areas, contexts.WorkArea{Kind: kind, Object: reservation.Service, Machine: machine})
+		}
+	}
+	slices.SortFunc(areas, func(a, b contexts.WorkArea) int {
+		return strings.Compare(a.Kind+"\x00"+a.Object, b.Kind+"\x00"+b.Object)
+	})
+	return areas, nil
 }
 
 // dropContextClaims removes what the controller record holds for a context

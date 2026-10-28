@@ -148,12 +148,13 @@
   when: bootwright_artifact_server_material.certificate | default('') | length > 0
   register: infra_artifact_server_nginx_tls_directory
 
+# The serving material reaches the execution host inside the module's own
+# argument, so it crosses a remote connection only in the pipelined module
+# payload and never in a file transfer.
 - name: Publish the serving certificate
-  ansible.builtin.copy:
-    src: '{{ bootwright_artifact_server_material.certificate }}'
-    dest: '{{ infra_artifact_server_nginx_tls_dir }}/server.crt'
-    owner: root
-    group: root
+  bootwright.core.private_file:
+    content: "{{ lookup('ansible.builtin.file', bootwright_artifact_server_material.certificate, rstrip=false) }}"
+    path: '{{ infra_artifact_server_nginx_tls_dir }}/server.crt'
     mode: '0644'
   when: bootwright_artifact_server_material.certificate | default('') | length > 0
   register: infra_artifact_server_nginx_certificate
@@ -161,12 +162,9 @@
   diff: false
 
 - name: Publish the serving private key
-  ansible.builtin.copy:
-    src: '{{ bootwright_artifact_server_material.privateKey }}'
-    dest: '{{ infra_artifact_server_nginx_tls_dir }}/server.key'
-    owner: root
-    group: root
-    mode: '0600'
+  bootwright.core.private_file:
+    content: "{{ lookup('ansible.builtin.file', bootwright_artifact_server_material.privateKey, rstrip=false) }}"
+    path: '{{ infra_artifact_server_nginx_tls_dir }}/server.key'
   when: bootwright_artifact_server_material.privateKey | default('') | length > 0
   register: infra_artifact_server_nginx_key
   no_log: true

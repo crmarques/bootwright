@@ -274,6 +274,9 @@ lists the requirements each storage family emits:
   evidence may carry an `endpoint` member whose lowercase SHA-256 is present
   exactly when the endpoint answered, and readiness needs that answer; every
   other unit's evidence carries no endpoint. Every ceph-core evidence carries
+  an `incarnation` member, the monitor map's creation time that `ceph mon dump`
+  reports, in the UTC form `YYYY-MM-DDTHH:MM:SS.ffffffZ`, or `""` while no
+  cluster exists. Every ceph-core evidence carries
   an `sso` member, `""` or `"oauth2"`; only a management gateway unit with an
   oauth2-proxy may report `"oauth2"`, and its readiness needs it. Before a fresh apply registers, the bound certificate
   must name the gateway's `virtual_ip` (an IP address entry) or, without one,

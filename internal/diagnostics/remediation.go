@@ -48,7 +48,8 @@ var defaultRemediations = map[string]string{
 	"secret.store.implementation":  "configure the Secret store implementation the message names",
 	"secret.store.key-unavailable": "make the Secret store key or unlock session available and repeat the command",
 	"secret.store.conflict":        "repeat the command once the concurrent change has finished",
-	"secret.store.corrupt":         "restore the Secret store state the message names from a backup",
+	"secret.store.corrupt":         "if a newer Bootwright build used this store, run that build, because the store is then intact; otherwise restore the Secret store state the message names from a backup",
+	"secret.store.newer":           "run the Bootwright build that wrote the Secret store, or a newer one; the store is intact, so do not restore or purge it",
 	"secret.store.crypto":          "repeat the command; if it fails again the host's randomness or key material is unusable",
 	"secret.store.limit":           "reduce the Secret material, input or metadata to within the bound the message names",
 

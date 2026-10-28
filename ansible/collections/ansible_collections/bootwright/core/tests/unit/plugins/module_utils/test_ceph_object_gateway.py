@@ -678,7 +678,7 @@ def observation(request, ready, daemons=(), resource=None):
             "ready": ready, "removed": False, "partial": not ready, "health": "HEALTH_OK", "hosts": [h["name"] for h in request["hosts"]],
             "monitors": [], "monAddrs": [], "mgrActive": "", "mgrStandbys": [], "osds": [], "resource": resource or {"id": "", "path": ""},
             "client": "", "dashboard": {"url": "", "certificateSHA256": "", "reachable": False},
-            "endpoint": {"certificateSHA256": "", "reachable": ready}, "daemons": list(daemons), "sso": ""}
+            "endpoint": {"certificateSHA256": "", "reachable": ready}, "daemons": list(daemons), "sso": "", "incarnation": "2026-01-01T00:00:00.000000Z"}
 
 
 class Transport:

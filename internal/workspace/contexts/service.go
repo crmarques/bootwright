@@ -614,20 +614,38 @@ func (s Service) Current(ctx context.Context, _ CurrentRequest) (*CurrentResult,
 // its directory, so its confirmation names none.
 func deleteAction(plan DeletionPlan) string {
 	custody := " any custodied cluster kubeconfig (export it first with bootwright cluster kubeconfig --context " + plan.Context + " --name <cluster>)"
+	left := retained(plan.WorkAreas)
 	switch {
 	case plan.Abandons == AbandonsUnlisted && plan.Lost:
-		return "delete with orphaned objects that cannot be listed (" + plan.Reason + ")" + retained
+		return "delete with orphaned objects that cannot be listed (" + plan.Reason + ")" + left
 	case plan.Abandons == AbandonsUnlisted:
-		return "delete with orphaned objects that cannot be listed (" + plan.Reason + "), removing" + custody + retained
+		return "delete with orphaned objects that cannot be listed (" + plan.Reason + "), removing" + custody + left
 	case plan.Abandons == AbandonsOwned:
 		return "delete, abandoning the objects bootwright status --context " + plan.Context + " and bootwright diff --context " +
-			plan.Context + " list, freeing the exclusive keys the plan names, and removing" + custody + retained
+			plan.Context + " list, freeing the exclusive keys the plan names, and removing" + custody + left
 	}
 	return "delete"
 }
 
-const retained = ", and leaving on their hosts the native-side material those objects retain outside the keyring" +
-	" (Ceph keys and bootstrap material, erase custody and installer work areas), which goes only with them"
+func retained(areas []WorkArea) string {
+	held := "Ceph keys and bootstrap material, erase custody and any installer work area"
+	if len(areas) != 0 {
+		held = "Ceph keys and bootstrap material, erase custody and the installer work areas and media of " + DescribeWorkAreas(areas)
+	}
+	return ", and leaving on their hosts the native-side material those objects retain outside the keyring (" + held + "), which goes only with them"
+}
+
+func DescribeWorkAreas(areas []WorkArea) string {
+	named := make([]string, 0, len(areas))
+	for _, area := range areas {
+		machine := "the controller Machine"
+		if area.Machine != "" {
+			machine = "Machine " + area.Machine
+		}
+		named = append(named, area.Kind+" "+area.Object+" on "+machine)
+	}
+	return strings.Join(named, "; ")
+}
 
 func (s Service) Delete(ctx context.Context, request DeleteRequest) (*DeleteResult, error) {
 	if err := s.ready(ctx); err != nil {
@@ -760,6 +778,9 @@ func (s Service) decideDeletion(ctx context.Context, tx Transaction, record Reco
 	}
 	plan.Reservations = reservations
 	if plan.Exclusive, err = tx.ExclusiveHostReservations(ctx, record.Name); err != nil {
+		return DeletionPlan{}, err
+	}
+	if plan.WorkAreas, err = tx.InstallerWorkAreas(ctx, record.Name); err != nil {
 		return DeletionPlan{}, err
 	}
 	return plan, nil

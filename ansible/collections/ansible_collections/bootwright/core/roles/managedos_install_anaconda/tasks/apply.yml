@@ -217,20 +217,20 @@
       ansible.builtin.include_tasks: private.yml
       when: managedos_install_anaconda_delivers_private | bool
 
+    # The rendered kickstart reaches the execution host inside the module's own
+    # argument, never in a file transfer.
     - name: Render the frozen kickstart with the values this attempt derived
-      ansible.builtin.copy:
+      bootwright.core.private_file:
         content: >-
           {{ bootwright_os_install_request.kickstart
              | replace('@@BOOTWRIGHT_MARKER@@', bootwright_os_install_material.marker)
              | replace('@@BOOTWRIGHT_AUTHORIZED_KEY@@', bootwright_os_install_material.authorizedKey)
              | replace('@@BOOTWRIGHT_PRIVATE_URL@@', managedos_install_anaconda_private_url)
              | replace('@@BOOTWRIGHT_ARTIFACT_CERTIFICATE@@', managedos_install_anaconda_certificate) }}
-        dest: '{{ managedos_install_anaconda_work }}/ks.cfg'
-        owner: root
-        group: root
-        mode: '0600'
+        path: '{{ managedos_install_anaconda_work }}/ks.cfg'
       changed_when: true
       no_log: true
+      diff: false
 
     - name: Create the published image directory
       ansible.builtin.file:

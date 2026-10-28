@@ -63,7 +63,12 @@ func (p *ContextPlanPresenter) PresentDeletion(ctx context.Context, plan context
 		if len(plan.Exclusive) != 0 {
 			freed = strings.Join(plan.Exclusive, ", ")
 		}
+		areas := "none"
+		if len(plan.WorkAreas) != 0 {
+			areas = "left in place with the material their installations were given: " + contexts.DescribeWorkAreas(plan.WorkAreas)
+		}
 		fields = append(fields,
+			field{Label: "Work areas", Value: areas},
 			field{Label: "Freed keys", Value: freed + "; another context may then claim a resource an abandoned object still uses, such as the management controller of a powered-off Machine"},
 			field{Label: "Same name", Value: "remove the abandoned objects by hand before bootwright context init --name " + plan.Context +
 				" again, because that name reads them as its own, and never reuse " + plan.Context + " on another controller that shares a provider host"},

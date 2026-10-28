@@ -777,7 +777,7 @@ def evidence_value(action, identifier):
             "exists": True, "ready": True, "removed": False, "partial": False, "health": "HEALTH_OK", "hosts": [], "monitors": [], "monAddrs": [],
             "mgrActive": "", "mgrStandbys": [], "osds": [], "resource": {"id": identifier, "path": ""}, "client": "",
             "dashboard": {"url": "", "certificateSHA256": "", "reachable": False}, "endpoint": {"certificateSHA256": "", "reachable": False}, "daemons": [],
-            "sso": ""}
+            "sso": "", "incarnation": "2026-01-01T00:00:00.000000Z"}
 
 
 def test_policy_evidence_carries_rule_id():

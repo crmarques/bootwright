@@ -30,7 +30,7 @@ const lostAction = "delete with orphaned objects that cannot be listed (its dire
 
 const unreadableAction = "delete with orphaned objects that cannot be listed (its mutation evidence cannot be read), removing any custodied cluster kubeconfig (export it first with bootwright cluster kubeconfig --context example --name <cluster>)" + retainedAction
 
-const retainedAction = ", and leaving on their hosts the native-side material those objects retain outside the keyring (Ceph keys and bootstrap material, erase custody and installer work areas), which goes only with them"
+const retainedAction = ", and leaving on their hosts the native-side material those objects retain outside the keyring (Ceph keys and bootstrap material, erase custody and any installer work area), which goes only with them"
 
 const environmentInput = `apiVersion: bootwright.io/v1alpha1
 kind: Environment
@@ -74,6 +74,7 @@ type repository struct {
 	emptyCallback  bool
 	confirmed      string
 	reservations   map[string][]string
+	workAreas      map[string][]contexts.WorkArea
 	deletion       string
 	lost           string
 	controller     []string
@@ -338,6 +339,11 @@ func (tx transaction) ExclusiveHostReservations(_ context.Context, name string) 
 	return slices.DeleteFunc(slices.Clone(tx.r.reservations[name]), func(key string) bool { return strings.HasPrefix(key, "media:") }), nil
 }
 
+func (tx transaction) InstallerWorkAreas(_ context.Context, name string) ([]contexts.WorkArea, error) {
+	tx.requireLock()
+	return slices.Clone(tx.r.workAreas[name]), nil
+}
+
 func (tx transaction) Delete(ctx context.Context, record contexts.Record) error {
 	tx.requireWrite()
 	if err := tx.r.step(ctx, "delete"); err != nil {
@@ -392,7 +398,8 @@ func (c confirmer) Confirm(ctx context.Context, action, name string) error {
 	if c.r.confirming != nil {
 		c.r.confirming()
 	}
-	if name == "" || action != "update" && action != "delete" && action != orphanAction && action != unreadableAction && !lost {
+	named := len(c.r.workAreas) != 0 && strings.HasPrefix(action, "delete, abandoning")
+	if name == "" || action != "update" && action != "delete" && action != orphanAction && action != unreadableAction && !lost && !named {
 		c.r.t.Fatal("unexpected confirmation request", action, name)
 	}
 	if len(c.r.calls) == 0 || c.r.calls[len(c.r.calls)-1] != "present" {

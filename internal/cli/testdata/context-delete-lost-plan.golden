@@ -5,6 +5,7 @@
     Keyring          already gone with its directory
     Reservations     unit:retired
     Owned objects    cannot be listed: its directory is gone
+    Work areas       none
     Freed keys       none; another context may then claim a resource an abandoned object still
                      uses, such as the management controller of a powered-off Machine
     Same name        remove the abandoned objects by hand before bootwright context init --name

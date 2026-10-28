@@ -960,8 +960,12 @@ acknowledged deletion also leaves in place each
 installations keep on their artifact server's placement Machine, which holds
 the material those installations were given, and the rest of the context's
 [native-side retention](secrets.md#native-side-retention) on the hosts it lives
-on. Its confirmation names those areas and that retention beside the custodied
-access.
+on. Its confirmation and its plan name each area that cluster media or a
+controller-local managed-OS installation still claims in the controller record,
+by the cluster or Machine whose installation keeps it and the Machine the
+context is bound to, never by a path, which may carry a private value, and that
+retention beside the custodied access (`TestADeletionNamesEachInstallerWorkAreaAndItsMachine`,
+`TestTheOrphanedDeletionInventoryGolden`).
 
 Deletion also drops what the controller record holds for the context: its
 [host binding](#controller-relationship-and-host-binding) and every host
@@ -973,10 +977,6 @@ still holds such a resource on the host is left in place, as abandonment
 states. The orphan confirmation names the exclusive keys the deletion frees
 and warns that another context may then claim a resource an abandoned object
 still uses, such as the management controller of a powered-off Machine.
-
-Not yet met: the orphan confirmation names the installer work areas only as a
-class of the native-side retention it leaves, not each area and its Machine;
-tracked as [B829](milestones/backlog.md#b829).
 
 After proof and ordinary confirmation, durably mark the exact context deleting
 before removing any file or claim. Remove only verified objects through bounded

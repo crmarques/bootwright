@@ -122,7 +122,7 @@ func (c Capability) Plan(ctx context.Context, input lifecycle.PlanInput) (lifecy
 			continue
 		}
 		plan.Reservations = append(plan.Reservations, prerequisites.HostReservation{
-			Context: input.Context.Name, Kind: "os-install", Service: request.Identity.Object, Keys: request.ReservationKeys(),
+			Context: input.Context.Name, Kind: prerequisites.OSInstallReservation, Service: request.Identity.Object, Keys: request.ReservationKeys(),
 		})
 	}
 	if claim, held := mediaReservation(input.Context.Name, media); held {

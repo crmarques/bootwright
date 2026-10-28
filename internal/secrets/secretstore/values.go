@@ -90,6 +90,7 @@ type Produced struct {
 	Name     string `json:"name"`
 	Version  string `json:"version"`
 	Unproved bool   `json:"unproved,omitempty"`
+	Identity string `json:"identity,omitempty"`
 }
 
 // ProducedInput is one output a block offers for custody. Material is bounded
@@ -99,6 +100,7 @@ type ProducedInput struct {
 	Name     string
 	Material secrets.Material
 	Unproved bool
+	Identity string
 }
 
 // ProducedMaterial is one produced entry's material as custody holds it, and
@@ -107,6 +109,7 @@ type ProducedInput struct {
 type ProducedMaterial struct {
 	Material secrets.Material
 	Unproved bool
+	Identity string
 }
 
 type Key struct {

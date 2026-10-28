@@ -82,7 +82,7 @@ def render(config, pull_secret, trust_bundles=()):
         material.update(("trustBundle%d" % index, str(path)) for index, path in enumerate(trust_bundles))
     variables = dict(written[0].get("vars") or {})
     variables.update(bootwright_cluster_media_request=request, bootwright_cluster_media_material=material)
-    return Templar(loader=LOADER, variables=variables).template(written[0]["ansible.builtin.copy"]["content"])
+    return Templar(loader=LOADER, variables=variables).template(written[0]["bootwright.core.private_file"]["content"])
 
 
 def plain_strings(node):

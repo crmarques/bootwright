@@ -101,6 +101,7 @@ type Transaction interface {
 	// reserves for one context. Delete releases them with the context.
 	HostReservations(context.Context, string) ([]string, error)
 	ExclusiveHostReservations(context.Context, string) ([]string, error)
+	InstallerWorkAreas(context.Context, string) ([]WorkArea, error)
 	Delete(context.Context, Record) error
 	Commit(context.Context, Registry) error
 }

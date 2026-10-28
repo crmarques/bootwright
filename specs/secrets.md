@@ -477,8 +477,18 @@ JSON containing `keyId`, `nonce` and `ciphertext`. Its authenticated header
 selects the exact backend and binds metadata to the expected context. Resolve
 only catalog implementations; backend selection cannot authorize acquisition
 or effects beyond the current command. Unsupported IDs refuse before session
-acquisition. The encrypted metadata contains `activeKey`, `keys`, `versions`,
-`current`, `bindings` and `produced`.
+acquisition. The encrypted metadata contains `minReader`, `activeKey`, `keys`,
+`versions`, `current`, `bindings` and `produced`. `minReader` is the oldest
+reader version that can read it, written by every publication as the writing
+build's reader version (1 now) and absent from metadata earlier builds wrote; a
+reader checks it before decoding the rest, and metadata naming a newer reader
+refuses `secret.store.newer`, saying the store is intact and naming the newer
+build as its remedy, never a restore or purge
+(`TestMetadataForANewerReaderRefusesAsNewerNotCorrupt`). A member a newer build
+adds raises `minReader` rather than `formatVersion`. A build older than this
+guard reads metadata with a member it does not know as `secret.store.corrupt`;
+that store is intact too, and the remedy is the newer build
+([version skew](../.agents/knowledge/keyring-reader-version-skew.md)).
 
 Each key record stores `id` and committed `seals`; presentation derives its
 active/retired state. Each immutable version stores `id`, a `sequence` of at
@@ -490,7 +500,10 @@ summary is `name` (its entry's), `type` `opaque`, `source` `produced` and a
 `sequence` is 1 and it holds one `value` part of one byte up to the part bound.
 `produced` is always present, `[]` when empty, and holds `block`, `name` and
 `version` entries, each with the optional member `unproved`, written only as
-`true`, sorted by block and then name, unique on that pair. A
+`true`, and the optional member `identity`, the non-secret identity its
+producer presented ([produced material custody](state-reconciliation.md#produced-material-custody)),
+one line of printable ASCII of at most 512 bytes that an unproved entry never
+carries, sorted by block and then name, unique on that pair. A
 produced version is reached through exactly the one entry whose block and name
 its fingerprint covers, never through a current mapping or a binding.
 

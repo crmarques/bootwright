@@ -14,6 +14,7 @@ def test_media_scopes_the_controller_route_and_secret_writer():
     assert routed[0]["no_log"] is True
     writer = next(task for task in tasks if task["name"] == "Write the install configuration with its bound material")
     assert writer["no_log"] is True
-    assert writer["ansible.builtin.copy"]["mode"] == "0600"
-    assert "registry_pull_secret" in writer["ansible.builtin.copy"]["content"]
-    assert "installer_proxy_credentials" in writer["ansible.builtin.copy"]["content"]
+    assert writer["diff"] is False
+    assert "mode" not in writer["bootwright.core.private_file"]
+    assert "registry_pull_secret" in writer["bootwright.core.private_file"]["content"]
+    assert "installer_proxy_credentials" in writer["bootwright.core.private_file"]["content"]

@@ -260,11 +260,11 @@ def test_a_host_scope_never_carries_settings():
 
 
 def evidence_of(request, ready, resource=None):
-    return {"version": "ceph-core-evidence-v11", "request": "d" * 64, "action": request["action"], "owner": request["owner"], "fsid": request["fsid"],
+    return {"version": "ceph-core-evidence-v12", "request": "d" * 64, "action": request["action"], "owner": request["owner"], "fsid": request["fsid"],
             "owned": True, "exists": True, "ready": ready, "removed": False, "partial": not ready, "health": "HEALTH_OK",
             "hosts": [h["name"] for h in request["hosts"]], "monitors": [], "monAddrs": [], "mgrActive": "", "mgrStandbys": [], "osds": [],
             "resource": resource or {"id": "", "path": ""}, "client": "", "dashboard": {"url": "", "certificateSHA256": "", "reachable": False},
-            "endpoint": {"certificateSHA256": "", "reachable": False}, "daemons": [], "sso": ""}
+            "endpoint": {"certificateSHA256": "", "reachable": False}, "daemons": [], "sso": "", "incarnation": "2026-01-01T00:00:00.000000Z"}
 
 
 def test_core_execute_dispatches_the_settings_phase(monkeypatch):

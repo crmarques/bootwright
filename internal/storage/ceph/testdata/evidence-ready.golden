@@ -19,6 +19,7 @@
     "node-2",
     "node-3"
   ],
+  "incarnation": "2026-01-01T00:00:00.000000Z",
   "mgrActive": "node-1",
   "mgrStandbys": [
     "node-2"
@@ -73,5 +74,5 @@
     "path": ""
   },
   "sso": "",
-  "version": "ceph-core-evidence-v11"
+  "version": "ceph-core-evidence-v12"
 }

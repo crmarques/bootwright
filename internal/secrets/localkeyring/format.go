@@ -22,19 +22,21 @@ import (
 )
 
 const (
-	formatVersion    = 4
-	algorithm        = "AES-256-GCM"
-	selectorPath     = secretstore.RecordPath
-	selectorMaximum  = 64 << 10
-	indexMaximum     = 8 << 20
-	ledgerMaximum    = 64 << 10
-	partMaximum      = 2 << 20
-	maxBindings      = 4096
-	maxPhysicalItems = 32768
-	maxIndexItems    = indexMaximum
-	maxSeals         = uint64(1 << 20)
-	gcmNonceSize     = 12
-	gcmTagSize       = 16
+	formatVersion       = 4
+	readerVersion       = 1
+	algorithm           = "AES-256-GCM"
+	selectorPath        = secretstore.RecordPath
+	selectorMaximum     = 64 << 10
+	indexMaximum        = 8 << 20
+	ledgerMaximum       = 64 << 10
+	partMaximum         = 2 << 20
+	maxBindings         = 4096
+	maxProducedIdentity = 512
+	maxPhysicalItems    = 32768
+	maxIndexItems       = indexMaximum
+	maxSeals            = uint64(1 << 20)
+	gcmNonceSize        = 12
+	gcmTagSize          = 16
 )
 
 var rawBase64 = base64.RawURLEncoding.Strict()
@@ -53,6 +55,7 @@ type indexRecord struct {
 	FormatVersion int                    `json:"-"`
 	Algorithm     string                 `json:"-"`
 	Selector      secretstore.Selector   `json:"-"`
+	MinReader     int                    `json:"minReader,omitempty"`
 	ActiveKey     string                 `json:"activeKey"`
 	Keys          []storedKey            `json:"keys"`
 	Versions      []storedVersion        `json:"versions"`

@@ -714,16 +714,25 @@ identity refuses `lifecycle.state` rather than replacing the entry. An
 installation's `kubeconfig` presents its cluster's server, the digest of its
 decoded authority and its client certificate's subject as principal
 (`TestARecaptureOfAnotherIdentityRefusesBetweenAttempts`,
-`TestAKubeconfigsIdentityIsItsServerAuthorityAndPrincipal`); a Ceph output's
-principal is the one its frozen request names, which its validation already
-holds every capture to. An entry custody marks unproved is replaced by a proved
-capture whatever it presents.
+`TestAKubeconfigsIdentityIsItsServerAuthorityAndPrincipal`). A Ceph output
+(`client`, `object-user`, and the `dashboard` of a `ceph-cluster-<name>`
+block) presents as authority its cluster's fsid, which its evidence holds to
+the frozen request's, and the creation time of the cluster's monitor map, which
+its evidence reports in one UTC form, and as principal the one
+its frozen request names, which its validation holds every capture to; custody
+records that identity with the entry, so a recapture of another cluster's
+material under the same principal refuses, and the detection of a cluster
+bootstrapped again under the same fsid relies on that creation time
+(`TestEveryCephOutputPresentsItsClusterFSIDAndPrincipal`,
+`TestARecordedRecaptureIdentityRefusesAnotherBetweenAttempts`). An entry
+recorded with no identity is replaced and records the one presented; a
+recapture that presents none keeps the recorded one. An entry
+custody marks unproved is replaced by a proved capture whatever it presents.
 
-Not yet met: only an installation's `kubeconfig` presents an identity for
-publication to compare; the Ceph outputs (`client`, `dashboard`,
-`object-user`, `ceph-cluster-<name>`) present none, so a recapture of another
-cluster's material under the same principal replaces the entry; tracked as
-[B829](milestones/backlog.md#b829).
+Not yet met: no live run has confirmed that the monitor map's creation time
+stays the same across a monitor added or removed and a Ceph upgrade, and
+changes on a new bootstrap under the same fsid; tracked as
+[B867](milestones/backlog.md#b867).
 
 ### Block transitions
 

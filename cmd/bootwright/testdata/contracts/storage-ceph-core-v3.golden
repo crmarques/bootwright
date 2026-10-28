@@ -1,5 +1,5 @@
 implementation: storage-ceph-core-v3
-content-digest: 7300a5453b2362f16e2410722def564d187fdca0f20aae43a0ee7acc0b563047
+content-digest: b45816b0e39eb9b680d80d167890315c54201b929107f7bd3882146d1e63e3ab
 request-version: ceph-core-v33
 automation-formats: -custody-v1, ceph-bootstrap-recovery-v1, ceph-bootstrap-state-v1, ceph-client-auth-v1, ceph-cluster-device-identities-v2, ceph-dashboard-port-attempt-v1, ceph-dashboard-port-repair-v1, ceph-dashboard-redeploy-v1, ceph-dashboard-user-v1, ceph-device-identities-v2, ceph-filesystem-attempt-v1, ceph-host-cache-v1, ceph-native-teardown-v1, ceph-osd-device-intent-v1, ceph-physical-device-binding-v1, ceph-policy-attempt-v1, ceph-pool-attempt-v2, ceph-rbd-image-attempt-v1, ceph-registry-v1, ceph-runtime-profile-v3, ceph-service-inputs-v1, ceph-subvolume-attempt-v1, ceph-subvolume-group-attempt-v1, ceph-tunnel-custody-v1, ceph-tunnel-redeploy-v1, ceph-tunnel-relabel-v1, ceph-tunnel-stage-v1, ceph-tunnel-v3
 mark-formats: .bootwright-registry-, bootwright-owner, bootwright:
@@ -305,6 +305,7 @@ evidence-schema:
   fsid string
   health string
   hosts []string
+  incarnation string
   mgrActive string
   mgrStandbys []string
   monAddrs []struct ceph.MonitorAddress

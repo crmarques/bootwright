@@ -918,6 +918,7 @@ it to a variable.
 | `secret.store.key-unavailable` | The secret store key or unlock session is unavailable. |
 | `secret.store.conflict` | Secret storage changed during the operation or refuses the requested access. |
 | `secret.store.corrupt` | Stored secret state is invalid, incomplete or not attributable. |
+| `secret.store.newer` | Stored secret metadata names a newer reader than this build; the store is intact and the build that wrote it reads it. |
 | `secret.store.crypto` | Secret encryption randomness or key material is unusable. |
 | `secret.store.limit` | A secret material, input, metadata or recovery bound was exceeded. |
 | `media.store` | Media identity, integrity, import, publication, or deletion failed. |

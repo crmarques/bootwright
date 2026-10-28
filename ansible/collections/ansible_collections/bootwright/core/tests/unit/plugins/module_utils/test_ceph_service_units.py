@@ -702,11 +702,11 @@ def test_dispatch_runs_the_unit_phase_only_over_a_supported_transport(monkeypatc
 
 
 def observation(request, ready, daemons=()):
-    return {"version": "ceph-core-evidence-v11", "request": "", "action": "service", "owner": OWNER, "fsid": FSID, "owned": True, "exists": True,
+    return {"version": "ceph-core-evidence-v12", "request": "", "action": "service", "owner": OWNER, "fsid": FSID, "owned": True, "exists": True,
             "ready": ready, "removed": False, "partial": not ready, "health": "HEALTH_OK", "hosts": [h["name"] for h in request["hosts"]],
             "monitors": [], "monAddrs": [], "mgrActive": "", "mgrStandbys": [], "osds": [], "resource": {"id": "", "path": ""}, "client": "",
             "dashboard": {"url": "", "certificateSHA256": "", "reachable": False}, "endpoint": {"certificateSHA256": "", "reachable": False},
-            "daemons": list(daemons), "sso": ""}
+            "daemons": list(daemons), "sso": "", "incarnation": "2026-01-01T00:00:00.000000Z"}
 
 
 class Transport:

@@ -94,6 +94,13 @@ type DeletionPlan struct {
 	Abandons     Abandonment
 	Reason       string
 	Lost         bool
+	WorkAreas    []WorkArea
+}
+
+type WorkArea struct {
+	Kind    string
+	Object  string
+	Machine string
 }
 
 type UseResult struct{ Context Summary }

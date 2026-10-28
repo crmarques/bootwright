@@ -37,8 +37,11 @@ func (s *session) Produce(ctx context.Context, block string, outputs []secretsto
 		if err := ctx.Err(); err != nil {
 			return nil, err
 		}
-		entry := secretstore.Produced{Block: block, Name: output.Name, Unproved: output.Unproved}
+		entry := secretstore.Produced{Block: block, Name: output.Name, Unproved: output.Unproved, Identity: output.Identity}
 		existing, found := producedEntry(next, block, output.Name)
+		if found && entry.Identity == "" {
+			entry.Identity = existing.Identity
+		}
 		if found && output.Unproved {
 			results[position] = existing
 			continue
@@ -50,8 +53,8 @@ func (s *session) Produce(ctx context.Context, block string, outputs []secretsto
 				return nil, err
 			}
 			if equal {
-				if existing.Unproved {
-					existing.Unproved = false
+				if existing.Unproved || output.Identity != "" && existing.Identity != output.Identity {
+					existing.Unproved, existing.Identity = false, output.Identity
 					setProduced(&next, existing)
 					proved = true
 				}
@@ -127,7 +130,7 @@ func (s *session) ReadProduced(ctx context.Context, block, name string) (secrets
 	if err != nil {
 		return secretstore.ProducedMaterial{}, false, err
 	}
-	return secretstore.ProducedMaterial{Material: material, Unproved: entry.Unproved}, true, nil
+	return secretstore.ProducedMaterial{Material: material, Unproved: entry.Unproved, Identity: entry.Identity}, true, nil
 }
 
 // validateProducedInputs admits one block's outputs by name, each carrying
@@ -138,8 +141,8 @@ func validateProducedInputs(block string, outputs []secretstore.ProducedInput) e
 	}
 	names := make(map[string]bool, len(outputs))
 	for _, output := range outputs {
-		if !validName(output.Name) || names[output.Name] {
-			return secretstore.Failure("declaration", "produced material names an invalid or duplicated output")
+		if !validName(output.Name) || names[output.Name] || !validProducedIdentity(output.Identity) || output.Unproved && output.Identity != "" {
+			return secretstore.Failure("declaration", "produced material names an invalid or duplicated output or identity")
 		}
 		names[output.Name] = true
 		value, present := output.Material.Part(secrets.ValuePart)
@@ -164,9 +167,21 @@ func producedEntry(index indexRecord, block, name string) (secretstore.Produced,
 func setProduced(index *indexRecord, entry secretstore.Produced) {
 	for i := range index.Produced {
 		if index.Produced[i].Block == entry.Block && index.Produced[i].Name == entry.Name {
-			index.Produced[i].Version, index.Produced[i].Unproved = entry.Version, entry.Unproved
+			index.Produced[i].Version, index.Produced[i].Unproved, index.Produced[i].Identity = entry.Version, entry.Unproved, entry.Identity
 			return
 		}
 	}
 	index.Produced = append(index.Produced, entry)
+}
+
+func validProducedIdentity(identity string) bool {
+	if len(identity) > maxProducedIdentity {
+		return false
+	}
+	for i := 0; i < len(identity); i++ {
+		if identity[i] < 0x20 || identity[i] > 0x7e {
+			return false
+		}
+	}
+	return true
 }

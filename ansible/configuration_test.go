@@ -33,6 +33,9 @@ func TestRemotePlacedTasksRunWithPipelining(t *testing.T) {
 	if value, ok := configured(t, "ssh_connection", "pipelining"); !ok || value != "True" {
 		t.Fatalf("ansible.cfg sets ssh_connection pipelining to %q, so a module payload is written to a remote temporary file", value)
 	}
+	if value, ok := configured(t, "connection", "pipelining"); !ok || value != "True" {
+		t.Fatalf("ansible.cfg sets connection pipelining to %q, so a controller-local module payload is written to a temporary file", value)
+	}
 }
 
 // ansible-core only warns by default when it loads a collection whose

@@ -31,7 +31,7 @@ func formatFourIndex() (indexRecord, secretstore.Selector) {
 		return []storedPart{{Part: secrets.ValuePart, BlobID: fixedID("blob-", blob), KeyID: fixedID("key-", key), Generation: fixedID("gen-", 2), Size: size}}
 	}
 	return indexRecord{
-		FormatVersion: formatVersion, Algorithm: algorithm, Selector: selector, ActiveKey: fixedID("key-", 2),
+		FormatVersion: formatVersion, Algorithm: algorithm, Selector: selector, MinReader: readerVersion, ActiveKey: fixedID("key-", 2),
 		Keys: []storedKey{{ID: fixedID("key-", 1), Seals: 4}, {ID: fixedID("key-", 2), Seals: 3}},
 		Versions: []storedVersion{
 			{ID: fixedID("ver-", 1), Sequence: 2, Declaration: summary("registry-token", "token", "contextStore", ""), Parts: part(1, 2, 24)},
@@ -40,7 +40,7 @@ func formatFourIndex() (indexRecord, secretstore.Selector) {
 		},
 		Current:  []secretstore.Current{{Name: "registry-token", Version: fixedID("ver-", 1)}},
 		Bindings: []secretstore.Binding{{ID: fixedID("bind-", 1), Versions: []string{fixedID("ver-", 2)}}},
-		Produced: []secretstore.Produced{{Block: producedBlock, Name: producedName, Version: fixedID("ver-", 3)}},
+		Produced: []secretstore.Produced{{Block: producedBlock, Name: producedName, Version: fixedID("ver-", 3), Identity: "cluster fsid 1b0d3c1e-1111-4a4a-8b8b-000000000001 created 2026-01-01T00:00:00.000000+0000 as client.lab"}},
 	}, selector
 }
 
@@ -169,4 +169,46 @@ func TestTheCatalogRefusesTheV3Identity(t *testing.T) {
 	if implementation, err := secretstore.NewCatalog(New()).Reopen("local-keyring-v4"); err != nil || implementation == nil {
 		t.Fatalf("the v4 identity was refused: %v", err)
 	}
+}
+
+// Metadata a newer build wrote for newer readers refuses secret.store.newer,
+// saying the store is intact, before strict decoding would call it corrupt;
+// metadata that names no reader, as earlier builds wrote it, or this build's
+// reader still decodes.
+func TestMetadataForANewerReaderRefusesAsNewerNotCorrupt(t *testing.T) {
+	index, selector := formatFourIndex()
+	current, err := encodeCanonical(index, indexMaximum)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := decodeIndexPlaintext(current); err != nil {
+		t.Fatalf("this build's metadata is refused: %v", err)
+	}
+	index.MinReader = 0
+	legacy, err := encodeCanonical(index, indexMaximum)
+	if err != nil || bytes.Contains(legacy, []byte("minReader")) {
+		t.Fatalf("metadata with no reader names one: %s (%v)", legacy, err)
+	}
+	if decoded, err := decodeIndexPlaintext(legacy); err != nil || validateIndex(withHeader(decoded, selector), selector) != nil {
+		t.Fatalf("metadata an earlier build wrote is refused: %v", err)
+	}
+	negative, err := decodeIndexPlaintext(bytes.Replace(current, []byte(`"minReader":1,`), []byte(`"minReader":-1,`), 1))
+	if err != nil || negative.MinReader != -1 || validateIndex(withHeader(negative, selector), selector) == nil {
+		t.Fatalf("metadata naming a negative reader validated (%v)", err)
+	}
+	newer := bytes.Replace(current, []byte(`"minReader":1,`), []byte(`"minReader":2,`), 1)
+	newer = bytes.Replace(newer, []byte(`"produced":[`), []byte(`"futureMember":true,"produced":[`), 1)
+	if bytes.Equal(newer, current) {
+		t.Fatal("the fixture names no reader to raise")
+	}
+	_, err = decodeIndexPlaintext(newer)
+	if reported := diagnostics.Of(err); len(reported) != 1 || reported[0].Code != "secret.store.newer" || !strings.Contains(reported[0].Message, "intact") ||
+		!strings.Contains(reported[0].Remediation, "do not restore or purge") {
+		t.Fatalf("metadata for a newer reader = %#v", reported)
+	}
+}
+
+func withHeader(index indexRecord, selector secretstore.Selector) indexRecord {
+	index.FormatVersion, index.Algorithm, index.Selector = formatVersion, algorithm, selector
+	return index
 }

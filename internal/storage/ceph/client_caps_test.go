@@ -160,3 +160,48 @@ func TestUnchangedRequestContinuesAfterImpactText(t *testing.T) {
 		t.Fatalf("the frozen client scope rendered %q", got)
 	}
 }
+
+// Each Ceph output presents its recapture identity: the cluster's fsid and
+// the creation time of its monitor map, which only a new bootstrap changes, as
+// authority, and the one principal the request owns. A cluster bootstrapped
+// again under the same fsid, or the same principal under another cluster,
+// presents another identity, and evidence that names no incarnation presents
+// none (B829).
+func TestEveryCephOutputPresentsItsClusterFSIDAndPrincipal(t *testing.T) {
+	r := runtimeRequest()
+	r.Client = &Client{Access: "readWrite", Name: "consumer", Pool: "volumes"}
+	r.ObjectUser = &ObjectUser{Name: "app-writer"}
+	identify := func(request Request, incarnation string, names ...string) ([]lifecycle.Produced, error) {
+		t.Helper()
+		e := readyEvidence(request)
+		e.Incarnation = incarnation
+		produced := make([]lifecycle.Produced, 0, len(names))
+		for _, name := range names {
+			produced = append(produced, lifecycle.Produced{Name: name})
+		}
+		return produced, identifyProduced(produced, request, evidenceBytes(t, e))
+	}
+	produced, err := identify(r, monmapCreatedAt, ClientOutput, ObjectUserOutput, DashboardOutput)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for index, principal := range []string{"client.consumer", "object user app-writer", "dashboard user admin"} {
+		if want := "cluster fsid " + r.FSID + " created " + monmapCreatedAt + " as " + principal; produced[index].Identity != want {
+			t.Fatalf("%s presents %q, want %q", produced[index].Name, produced[index].Identity, want)
+		}
+	}
+	rebootstrapped, err := identify(r, "2026-02-01T09:30:00.250000Z", ClientOutput)
+	if err != nil || rebootstrapped[0].Identity == produced[0].Identity {
+		t.Fatalf("a cluster bootstrapped again under the same fsid presented %q (%v)", rebootstrapped[0].Identity, err)
+	}
+	other := r
+	other.FSID = "00000000-0000-4000-8000-000000000000"
+	if again, err := identify(other, monmapCreatedAt, ClientOutput); err != nil || again[0].Identity == produced[0].Identity {
+		t.Fatalf("the same principal under another cluster presented %q (%v)", again[0].Identity, err)
+	}
+	for _, incarnation := range []string{"", "yesterday"} {
+		if _, err := identify(r, incarnation, ClientOutput); err == nil {
+			t.Fatalf("evidence with incarnation %q presented an identity", incarnation)
+		}
+	}
+}

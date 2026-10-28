@@ -487,6 +487,10 @@ func (c Capability) mutate(ctx context.Context, e lifecycle.Execution, operation
 		lifecycle.ClearProduced(result.Produced)
 		return lifecycle.Result{Outcome: reconciliation.OutcomeUnknown}, err
 	}
+	if err := identifyProduced(result.Produced, r, result.Evidence); err != nil {
+		lifecycle.ClearProduced(result.Produced)
+		return lifecycle.Result{Outcome: reconciliation.OutcomeUnknown}, err
+	}
 	return lifecycle.Result{Outcome: outcome, Evidence: result.Evidence, Produced: result.Produced}, nil
 }
 func (c Capability) Observe(ctx context.Context, e lifecycle.Execution) (lifecycle.Observation, error) {
@@ -517,6 +521,9 @@ func (c Capability) observe(ctx context.Context, e lifecycle.Execution, removal 
 		lifecycle.ClearProduced(result.Produced)
 		result.Produced = nil
 	} else if err := validateProduced(result.Produced, r, true); err != nil {
+		lifecycle.ClearProduced(result.Produced)
+		return unknown, err
+	} else if err := identifyProduced(result.Produced, r, result.Evidence); err != nil {
 		lifecycle.ClearProduced(result.Produced)
 		return unknown, err
 	}

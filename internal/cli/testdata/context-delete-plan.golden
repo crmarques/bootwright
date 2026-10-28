@@ -8,6 +8,8 @@
     Owned objects    abandoned unmanaged; bootwright status --context retired and bootwright
                      diff --context retired list them, diff also what the selected input no
                      longer declares
+    Work areas       left in place with the material their installations were given: cluster
+                     sno on Machine controller; machine rhel-01 on Machine controller
     Freed keys       libvirt-domain:bootwright-lab-rhel-01, socket:192.0.2.1:8000; another
                      context may then claim a resource an abandoned object still uses, such as
                      the management controller of a powered-off Machine

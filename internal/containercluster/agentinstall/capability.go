@@ -50,7 +50,7 @@ func (c MediaCapability) Plan(ctx context.Context, input lifecycle.PlanInput) (l
 		plan.Definitions = append(plan.Definitions, definition)
 		plan.Secrets = append(plan.Secrets, request.SecretReferences()...)
 		plan.Reservations = append(plan.Reservations, prerequisites.HostReservation{
-			Context: input.Context.Name, Kind: "cluster-media",
+			Context: input.Context.Name, Kind: prerequisites.ClusterMediaReservation,
 			Service: request.Identity.Cluster, Keys: request.ReservationKeys(),
 		})
 	}

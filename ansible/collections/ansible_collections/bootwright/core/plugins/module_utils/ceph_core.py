@@ -217,7 +217,7 @@ def evidence(value, request_digest, request=None):
     if isinstance(value, dict) and value.get("version") == ceph_host_runtime.EVIDENCE_VERSION:
         return host_evidence(value, request_digest, request)
     fields = {"version", "request", "action", "fsid", "owner", "owned", "exists", "ready", "removed", "partial", "health", "hosts", "monitors", "monAddrs",
-              "mgrActive", "mgrStandbys", "osds", "resource", "client", "dashboard", "endpoint", "daemons", "sso"}
+              "mgrActive", "mgrStandbys", "osds", "resource", "client", "dashboard", "endpoint", "daemons", "sso", "incarnation"}
     ceph_native.require(isinstance(value, dict) and set(value) in (fields, fields | {"specializations"}), "evidence")
     ceph_native.require("specializations" not in value or specialization_ids(value["specializations"]), "evidence")
     ceph_native.require(value["version"] == ceph_native.EVIDENCE_VERSION and value["request"] == request_digest and ceph_native.digest(request_digest),
@@ -235,6 +235,8 @@ def evidence(value, request_digest, request=None):
     for field in ("hosts", "monitors", "mgrStandbys"):
         ceph_native.require(isinstance(value[field], list) and len(value[field]) <= 128 and all(ceph_native.named(n) for n in value[field]), "evidence")
         ceph_native.require(len(set(value[field])) == len(value[field]), "evidence")
+    incarnation = value["incarnation"]
+    ceph_native.require(incarnation == "" or isinstance(incarnation, str) and ceph_native.INCARNATION.fullmatch(incarnation) is not None, "evidence")
     for field in ("mgrActive", "client"):
         ceph_native.require(value[field] == "" or ceph_native.named(value[field]), "evidence")
     resource = value["resource"]

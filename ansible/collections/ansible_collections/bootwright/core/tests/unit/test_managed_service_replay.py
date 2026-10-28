@@ -149,7 +149,7 @@ def publishers(tasks, role):
         return lambda task: (task.get("ansible.builtin.template") or {}).get("src") == source
 
     def copying(leaf):
-        return lambda task: str((task.get("ansible.builtin.copy") or {}).get("dest", "")).endswith(leaf)
+        return lambda task: str((task.get("bootwright.core.private_file") or {}).get("path", "")).endswith(leaf)
 
     predicates = {"configuration": templating(SERVICES[role]["configuration"]), "unit": templating(SERVICES[role]["unitSource"]),
                   "certificate": copying("/server.crt"), "key": copying("/server.key")}
@@ -157,6 +157,8 @@ def publishers(tasks, role):
 
 
 def destination(task):
+    if "bootwright.core.private_file" in task:
+        return task["bootwright.core.private_file"]["path"]
     return (task.get("ansible.builtin.copy") or task.get("ansible.builtin.template"))["dest"]
 
 

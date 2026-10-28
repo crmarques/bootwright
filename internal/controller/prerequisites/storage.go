@@ -81,6 +81,11 @@ type ControllerBinding struct {
 	Tools      string `json:"tools,omitempty"`
 }
 
+const (
+	ClusterMediaReservation = "cluster-media"
+	OSInstallReservation    = "os-install"
+)
+
 // HostReservation records the host resources one context's locally hosted
 // service claims. Workspace stores the keys and compares them through
 // Conflicts, which reads no key beyond its class, a socket's address and port,

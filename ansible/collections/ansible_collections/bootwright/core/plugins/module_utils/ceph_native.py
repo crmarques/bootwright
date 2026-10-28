@@ -77,7 +77,7 @@ SUBVOLUME_PATH = re.compile(r"/volumes/(?:_nogroup|[A-Za-z0-9][A-Za-z0-9_.-]{0,1
 CORE_PHASES = frozenset(("prerequisites", "claim", "devices", "osd_prepare", "tunnel_preflight", "authorize", "bootstrap", "tunnel_configure", "tunnel_mount",
                          "cache", "enroll", "license", "services", "dashboard", "dashboard_read", "observe", "bootstrap_state", "host_state", "destroy"))
 CORE_READ_ONLY_PHASES = frozenset(("prerequisites", "devices", "tunnel_preflight", "observe", "bootstrap_state", "host_state", "dashboard_read"))
-EVIDENCE_VERSION = "ceph-core-evidence-v11"
+EVIDENCE_VERSION = "ceph-core-evidence-v12"
 # The specialization ids the last dispatched phase's worker applied; the remote wrapper reads it once per process.
 APPLIED = []
 DASHBOARD_USER = "admin"
@@ -103,6 +103,11 @@ MANAGER_FAILURES = ("native-command", "native-timeout", "native-output")
 # Health checks that never block day-0 readiness: call-home egress is the operator's network, not the cluster's state.
 TOLERATED_HEALTH = frozenset(("CHA_ERROR_SENDING_REPORT",))
 HEALTH_CHECK = re.compile(r"[A-Z][A-Z0-9_]{0,63}\Z")
+# When the monitor map was created, as `ceph mon dump` renders it, and the one
+# UTC form evidence carries, so a rendering change between releases moves no
+# identity (B867 confirms the value on a live cluster).
+MONMAP_CREATED = re.compile(r"([0-9]{4}-[0-9]{2}-[0-9]{2})[T ]([0-9]{2}:[0-9]{2}:[0-9]{2})(?:\.([0-9]{1,9}))?(Z|[+-][0-9]{2}:?[0-9]{2})?\Z")
+INCARNATION = re.compile(r"[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{6}Z\Z")
 PENDING_DAEMON = re.compile(r"(mon|mgr)\.[a-zA-Z0-9][a-zA-Z0-9_.-]{0,127}\Z")
 # Each admitted daemon type: (executor, host rule identity|request|service, counted toward readiness, image rule).
 DAEMON_TYPES = {
@@ -148,6 +153,24 @@ def supported_transport(request):
 def tunnel_helpers():
     from ansible_collections.bootwright.core.plugins.module_utils import ceph_tunnel, ceph_tunnel_staging
     return ceph_tunnel, ceph_tunnel_staging
+
+
+def monmap_time(created):
+    """A monitor map creation time in one UTC form; a rendering with no offset is UTC."""
+    match = MONMAP_CREATED.fullmatch(created) if isinstance(created, str) else None
+    require(match is not None, "native-output")
+    day, clock, fraction, zone = match.groups()
+    offset = datetime.timedelta()
+    if zone not in (None, "Z"):
+        hours, minutes = int(zone[1:3]), int(zone[-2:])
+        require(hours <= 23 and minutes <= 59, "native-output")
+        offset = datetime.timedelta(hours=hours, minutes=minutes) * (1 if zone[0] == "+" else -1)
+    try:
+        moment = datetime.datetime.strptime(day + "T" + clock, "%Y-%m-%dT%H:%M:%S")
+    except ValueError:
+        require(False, "native-output")
+    moment = moment.replace(microsecond=int((fraction or "0")[:6].ljust(6, "0"))) - offset
+    return moment.strftime("%Y-%m-%dT%H:%M:%S.%fZ")
 
 
 class Refusal(ValueError):
@@ -3573,9 +3596,9 @@ class Worker:
             url = ""
         return {"url": url, "certificateSHA256": self.dashboard_certificate(), "reachable": False}
 
-    def monitor_addresses(self, expected):
+    def monitor_addresses(self, expected, dump=None):
         """Each monitor's public v2 address from the monitor map, keyed by its declared host."""
-        dump = self.ceph("mon", "dump")
+        dump = self.ceph("mon", "dump") if dump is None else dump
         require(isinstance(dump, dict) and isinstance(dump.get("mons"), list) and len(dump["mons"]) <= 128, "native-output")
         result = []
         for monitor in dump["mons"]:
@@ -3589,12 +3612,18 @@ class Worker:
         require(len({item["host"] for item in result}) == len(result), "native-output")
         return sorted(result, key=lambda item: item["host"])
 
+    def monmap_incarnation(self):
+        """The creation time of this cluster's monitor map in its one UTC form, with the map it was read from."""
+        dump = self.ceph("mon", "dump")
+        require(isinstance(dump, dict) and dump.get("fsid") == self.request["fsid"], "native-output")
+        return monmap_time(dump.get("created")), dump
+
     def empty_evidence(self):
         return {"version": EVIDENCE_VERSION, "request": "", "action": self.request["action"], "fsid": self.request["fsid"],
                 "owner": self.request["owner"], "owned": self.markers.owned(), "exists": False, "ready": False, "removed": False, "partial": False,
                 "health": "", "hosts": [], "monitors": [], "monAddrs": [], "mgrActive": "", "mgrStandbys": [], "osds": [],
                 "resource": {"id": "", "path": ""}, "client": "", "dashboard": {"url": "", "certificateSHA256": "", "reachable": False},
-                "endpoint": {"certificateSHA256": "", "reachable": False}, "daemons": [], "sso": ""}
+                "endpoint": {"certificateSHA256": "", "reachable": False}, "daemons": [], "sso": "", "incarnation": ""}
 
     def observe(self):
         if self.recovery_enabled() and self.request["action"] == "cluster" and self.markers.read("bootstrap-enrollment.json") is None:
@@ -3646,7 +3675,7 @@ class Worker:
     def observe_cluster(self, evidence, daemons):
         pending = []
         self.prove_cluster_policy()
-        evidence["exists"] = True
+        evidence["exists"], (evidence["incarnation"], monmap) = True, self.monmap_incarnation()
         self.prove_registry()
         self.provider_registry_absent()
         if self.request["clusterSSHTransport"] == "verifiedTunnel":
@@ -3735,7 +3764,7 @@ class Worker:
         ready = self.observe_osds(evidence, running, ready)
         ready = self.observe_resource(evidence, ready)
         if self.request["action"] == "cluster":
-            evidence["monAddrs"] = self.monitor_addresses(expected_mons)
+            evidence["monAddrs"] = self.monitor_addresses(expected_mons, monmap)
             evidence["dashboard"] = self.dashboard_observation()
         evidence["removed"] = evidence["owned"] and not evidence["exists"]
         # A manager container this host is restarting is unfinished work, named beside the blocking health checks.

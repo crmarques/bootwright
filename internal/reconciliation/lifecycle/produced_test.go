@@ -548,3 +548,49 @@ func TestARecaptureOfAnotherIdentityRefusesBetweenAttempts(t *testing.T) {
 		t.Fatalf("custody %v after a recapture of the same identity", kept(h))
 	}
 }
+
+// A producer that presents its output's identity beside the material, as a
+// Ceph output presents its cluster's fsid and principal, has custody record
+// it: a recapture presenting another refuses lifecycle.state and leaves the
+// original, one presenting the same replaces the bytes, and an entry recorded
+// with no identity is replaced and records the one presented.
+func TestARecordedRecaptureIdentityRefusesAnotherBetweenAttempts(t *testing.T) {
+	observed := func(value, identity string) []Observation {
+		return []Observation{{Effect: reconciliation.EffectCompleted, Evidence: json.RawMessage(`{"ok":true}`),
+			Produced: []Produced{{Name: "client", Identity: identity, Material: secrets.NewMaterial(map[secrets.Part][]byte{secrets.ValuePart: []byte(value)})}}}}
+	}
+	pending := func(identity string) *harness {
+		h := newHarness(t, "install")
+		h.capability.outcomes = []Result{{Outcome: reconciliation.OutcomeUnknown}}
+		if _, err := apply(h); err == nil {
+			t.Fatal("an unknown outcome completed")
+		}
+		h.binder.produced = map[string]string{"install/client": "first"}
+		h.binder.identities = map[string]string{"install/client": identity}
+		return h
+	}
+	h := pending("cluster fsid a as client.lab")
+	h.capability.observations = observed("other cluster", "cluster fsid b as client.lab")
+	_, err := apply(h)
+	if reported := diagnostics.Of(err); len(reported) == 0 || reported[0].Code != "lifecycle.state" || !strings.Contains(reported[0].Message, "another identity (cluster fsid b as client.lab)") {
+		t.Fatalf("a recapture of another identity = %v", err)
+	}
+	if !slices.Equal(kept(h), []string{"install/client=first"}) || h.binder.identities["install/client"] != "cluster fsid a as client.lab" || blockState(t, h, "install") == reconciliation.BlockDone {
+		t.Fatalf("custody %v and block %s after a refused recapture", kept(h), blockState(t, h, "install"))
+	}
+	h.capability.observations = observed("rotated", "cluster fsid a as client.lab")
+	if _, err := apply(h); err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Equal(kept(h), []string{"install/client=rotated"}) {
+		t.Fatalf("custody %v after a recapture of the same identity", kept(h))
+	}
+	h = pending("")
+	h.capability.observations = observed("recorded", "cluster fsid b as client.lab")
+	if _, err := apply(h); err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Equal(kept(h), []string{"install/client=recorded"}) || h.binder.identities["install/client"] != "cluster fsid b as client.lab" {
+		t.Fatalf("custody %v recorded identity %q over an entry with none", kept(h), h.binder.identities["install/client"])
+	}
+}

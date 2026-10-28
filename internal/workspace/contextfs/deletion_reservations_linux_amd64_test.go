@@ -126,3 +126,57 @@ func TestReservationsPastTheRecordBoundRefuseBeforePublication(t *testing.T) {
 		t.Fatalf("reservations at the bound refused: %#v", diagnostics.Of(err))
 	}
 }
+
+// An abandoning deletion names each installer work area the context's cluster
+// media or controller-local managed-OS installations still claim, by its
+// object and the Machine the context is bound to, and no other kind of claim,
+// no path and no other context's area.
+func TestADeletionNamesEachInstallerWorkAreaAndItsMachine(t *testing.T) {
+	ctx := context.Background()
+	store, record := lifecycleFixture(t)
+	_, sources := fixture(t)
+	publish(t, store, "second", sources)
+	reserveFixture(t, store, record)
+	claim := func(name, kind, service string, keys ...string) prerequisites.HostReservation {
+		return prerequisites.HostReservation{Context: name, Kind: kind, Service: service, Keys: keys}
+	}
+	reserve := func(name string, claims ...prerequisites.HostReservation) {
+		t.Helper()
+		if err := store.MutateLifecycle(ctx, name, func(tx lifecycle.Transaction) error { return tx.Reserve(ctx, claims) }); err != nil {
+			t.Fatalf("reserving for %s failed: %#v", name, diagnostics.Of(err))
+		}
+	}
+	reserve(record.Name,
+		claim(record.Name, prerequisites.ClusterMediaReservation, "sno", "path:/var/lib/bootwright-clusters/"+record.Name+"/sno", "path:/srv/artifacts/private/sno"),
+		claim(record.Name, prerequisites.ClusterMediaReservation, "compact", "path:/var/lib/bootwright-clusters/"+record.Name+"/compact"),
+		claim(record.Name, prerequisites.OSInstallReservation, "rhel-01", "path:/srv/artifacts/private/rhel-01"),
+		claim(record.Name, "substrate-machine", "rhel-01", "unit:bootwright-bmc-rhel-01"))
+	reserve("second", claim("second", prerequisites.ClusterMediaReservation, "other", "path:/var/lib/bootwright-clusters/second/other"))
+	if err := store.MutateLifecycle(ctx, record.Name, func(tx lifecycle.Transaction) error {
+		return tx.Bind(ctx, "controller", syntheticHost(t))
+	}); err != nil {
+		t.Fatalf("binding %s failed: %#v", record.Name, diagnostics.Of(err))
+	}
+	const machine = "controller"
+	var areas []contexts.WorkArea
+	var foreign error
+	if err := store.Inspect(ctx, record.Name, func(tx contexts.Transaction) error {
+		var err error
+		areas, err = tx.InstallerWorkAreas(ctx, record.Name)
+		_, foreign = tx.InstallerWorkAreas(ctx, "second")
+		return err
+	}); err != nil {
+		t.Fatalf("reading the work areas failed: %#v", diagnostics.Of(err))
+	}
+	want := []contexts.WorkArea{
+		{Kind: "cluster", Object: "compact", Machine: machine},
+		{Kind: "cluster", Object: "sno", Machine: machine},
+		{Kind: "machine", Object: "rhel-01", Machine: machine},
+	}
+	if !slices.Equal(areas, want) {
+		t.Fatalf("the deletion names %+v, want %+v", areas, want)
+	}
+	if foreign == nil {
+		t.Fatal("a deletion of one context read another context's work areas")
+	}
+}

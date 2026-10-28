@@ -56,7 +56,7 @@ func (r *fleetRunner) Run(_ context.Context, run lifecycle.RunRequest) (lifecycl
 		return lifecycle.RunResult{}, err
 	}
 	evidence := ceph.Evidence{
-		Action: request.Action, Exists: true, FSID: request.FSID, Health: "HEALTH_OK", Hosts: fleetHosts, MGRActive: fleetHosts[0], MGRStandbys: fleetHosts[1:2],
+		Action: request.Action, Exists: true, FSID: request.FSID, Health: "HEALTH_OK", Hosts: fleetHosts, Incarnation: "2026-01-01T00:00:00.000000Z", MGRActive: fleetHosts[0], MGRStandbys: fleetHosts[1:2],
 		Monitors: fleetHosts, OSDs: []ceph.OSDEvidence{}, Owned: true, Owner: request.Owner, Ready: true, Request: run.Digest, Version: ceph.EvidenceVersion,
 		MonAddrs: []ceph.MonitorAddress{}, Daemons: []ceph.UnitDaemon{},
 	}

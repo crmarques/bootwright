@@ -513,6 +513,13 @@ func (d *deletionTransaction) ExclusiveHostReservations(ctx context.Context, nam
 	return d.tx.ExclusiveHostReservations(ctx, name)
 }
 
+func (d *deletionTransaction) InstallerWorkAreas(ctx context.Context, name string) ([]contexts.WorkArea, error) {
+	if err := d.scoped(name); err != nil {
+		return nil, err
+	}
+	return d.tx.InstallerWorkAreas(ctx, name)
+}
+
 func (d *deletionTransaction) Delete(ctx context.Context, record contexts.Record) error {
 	if err := d.scoped(record.Name); err != nil {
 		return err

@@ -1297,6 +1297,7 @@ type testBinder struct {
 	// Withdraw before anything changes.
 	produced    map[string]string
 	unproved    map[string]bool
+	identities  map[string]string
 	journal     []string
 	produceErr  error
 	withdrawErr error
@@ -1384,6 +1385,10 @@ func (b *testBinder) Produce(ctx context.Context, selected secretstore.Context, 
 	if unproved == nil {
 		unproved = map[string]bool{}
 	}
+	identities := maps.Clone(b.identities)
+	if identities == nil {
+		identities = map[string]string{}
+	}
 	result := make([]secretstore.Produced, 0, len(request.Outputs))
 	for _, output := range request.Outputs {
 		key := request.Block + "/" + output.Name
@@ -1395,6 +1400,9 @@ func (b *testBinder) Produce(ctx context.Context, selected secretstore.Context, 
 		value, _ := output.Material.Part(secrets.ValuePart)
 		next[key] = string(value)
 		clear(value)
+		if output.Identity != "" {
+			identities[key] = output.Identity
+		}
 		if output.Unproved {
 			unproved[key] = true
 		} else {
@@ -1402,7 +1410,7 @@ func (b *testBinder) Produce(ctx context.Context, selected secretstore.Context, 
 		}
 		result = append(result, entry)
 	}
-	if maps.Equal(next, b.produced) && maps.Equal(unproved, b.unproved) {
+	if maps.Equal(next, b.produced) && maps.Equal(unproved, b.unproved) && maps.Equal(identities, b.identities) {
 		return result, nil
 	}
 	if b.kill != nil {
@@ -1420,7 +1428,7 @@ func (b *testBinder) Produce(ctx context.Context, selected secretstore.Context, 
 	if slices.ContainsFunc(request.Outputs, func(output secretstore.ProducedInput) bool { return output.Unproved }) {
 		event = "produce unproved "
 	}
-	b.produced, b.unproved = next, unproved
+	b.produced, b.unproved, b.identities = next, unproved, identities
 	b.journal = append(b.journal, event+request.Block)
 	return result, nil
 }
@@ -1477,7 +1485,7 @@ func (b *testBinder) Withdraw(ctx context.Context, selected secretstore.Context,
 	if err := publishLent(area); err != nil {
 		return false, err
 	}
-	b.produced, b.unproved = nil, nil
+	b.produced, b.unproved, b.identities = nil, nil, nil
 	b.journal = append(b.journal, "withdraw")
 	return true, nil
 }

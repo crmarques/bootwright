@@ -237,25 +237,23 @@
   changed_when: false
   no_log: true
 
+# The controller's material reaches the substrate host inside the module's own
+# argument, so it crosses a remote connection only in the pipelined module
+# payload and never in a file transfer.
 - name: Publish the controller's authentication file
-  ansible.builtin.copy:
+  bootwright.core.private_file:
     content: >-
       {{ lookup("ansible.builtin.file", bootwright_substrate_machine_material.controllerUser)
          }}:{{ substrate_libvirt_machine_hash.stdout | trim }}
-    dest: '{{ substrate_libvirt_machine_state }}/htpasswd'
-    owner: root
-    group: root
-    mode: '0600'
+    path: '{{ substrate_libvirt_machine_state }}/htpasswd'
   register: substrate_libvirt_machine_credentials
   no_log: true
+  diff: false
 
 - name: Publish the controller's serving certificate and private key
-  ansible.builtin.copy:
-    src: '{{ item.source }}'
-    dest: '{{ substrate_libvirt_machine_state }}/{{ item.name }}'
-    owner: root
-    group: root
-    mode: '0600'
+  bootwright.core.private_file:
+    content: "{{ lookup('ansible.builtin.file', item.source, rstrip=false) }}"
+    path: '{{ substrate_libvirt_machine_state }}/{{ item.name }}'
   loop:
     - {source: '{{ bootwright_substrate_machine_material.controllerCertificate }}', name: tls.crt}
     - {source: '{{ bootwright_substrate_machine_material.controllerPrivateKey }}', name: tls.key}

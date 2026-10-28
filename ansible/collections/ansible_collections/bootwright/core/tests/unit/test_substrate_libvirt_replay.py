@@ -308,7 +308,7 @@ def publisher(tasks, file):
     if file in ("tls.crt", "tls.key"):
         return only(tasks, lambda task: task.get("register") == "substrate_libvirt_machine_tls", "publishes the TLS files")
     if file == "htpasswd":
-        return only(tasks, lambda task: str((task.get("ansible.builtin.copy") or {}).get("dest", "")).endswith("/htpasswd"),
+        return only(tasks, lambda task: str((task.get("bootwright.core.private_file") or {}).get("path", "")).endswith("/htpasswd"),
                     "publishes the authentication file")
     source = {"conf.py": "emulator.conf.j2", "unit": "unit.container.j2"}[file]
     return only(tasks, lambda task: (task.get("ansible.builtin.template") or {}).get("src") == source, "publishes " + source)
@@ -341,7 +341,7 @@ def publish_credentials(material, found, password="password"):
     observe, read, derive, publish = credential_steps(load(MACHINE, "apply.yml"))
     variables = machine_scope(material, password)
     templar = Templar(loader=LOADER, variables=variables)
-    destination = templar.template(publish["ansible.builtin.copy"]["dest"])
+    destination = templar.template(publish["bootwright.core.private_file"]["path"])
     assert templar.template(observe["ansible.builtin.stat"]["path"]) == destination
     assert templar.template(read["ansible.builtin.slurp"]["src"]) == destination
     variables[observe["register"]] = {"changed": False, "stat": {"exists": False} if found is None else REGULAR}
@@ -359,7 +359,7 @@ def publish_credentials(material, found, password="password"):
         env={"PYTHONPATH": str(material)},
     )
     variables[derive["register"]] = {"stdout": derived.stdout.decode()}
-    return str(Templar(loader=LOADER, variables=variables).template(publish["ansible.builtin.copy"]["content"]))
+    return str(Templar(loader=LOADER, variables=variables).template(publish["bootwright.core.private_file"]["content"]))
 
 
 def slurped(content):
@@ -421,6 +421,8 @@ NO_CONTAINER = {"changed": False, "rc": 125, "stdout": ""}
 
 
 def destination(task):
+    if "bootwright.core.private_file" in task:
+        return task["bootwright.core.private_file"]["path"]
     return (task.get("ansible.builtin.copy") or task.get("ansible.builtin.template"))["dest"]
 
 

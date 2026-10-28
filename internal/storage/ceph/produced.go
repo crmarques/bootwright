@@ -28,6 +28,29 @@ type clientCredential struct {
 	Key    string            `json:"key"`
 }
 
+func identifyProduced(produced []lifecycle.Produced, r Request, evidence []byte) error {
+	if len(produced) == 0 {
+		return nil
+	}
+	e, err := decodeEvidence(evidence)
+	if err != nil || e.Incarnation == "" || !validIncarnation(e.Incarnation) {
+		return evidenceFailure()
+	}
+	for i := range produced {
+		principal := ""
+		switch {
+		case produced[i].Name == ClientOutput && r.Client != nil:
+			principal = "client." + r.Client.Name
+		case produced[i].Name == ObjectUserOutput && r.ObjectUser != nil:
+			principal = "object user " + r.ObjectUser.Name
+		case produced[i].Name == DashboardOutput:
+			principal = "dashboard user " + DashboardUser
+		}
+		produced[i].Identity = "cluster fsid " + r.FSID + " created " + e.Incarnation + " as " + principal
+	}
+	return nil
+}
+
 // validateProduced confines a native auth result to the one least-privilege
 // principal this request owns. The value is never returned as diagnostics.
 func validateProduced(produced []lifecycle.Produced, r Request, present bool) error {

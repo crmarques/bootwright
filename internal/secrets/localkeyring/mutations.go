@@ -424,6 +424,7 @@ func (s *session) publish(ctx context.Context, next *indexRecord, plain []plainP
 	if err := publicationFits(*next, plain, publication.id); err != nil {
 		return err
 	}
+	next.MinReader = readerVersion
 	plaintext, err := encodeCanonical(*next, indexMaximum)
 	if err != nil {
 		return err

@@ -10,7 +10,7 @@ import (
 	"github.com/crmarques/bootwright/internal/reconciliation"
 )
 
-const EvidenceVersion = "ceph-core-evidence-v11"
+const EvidenceVersion = "ceph-core-evidence-v12"
 
 const DashboardPort = "8443"
 
@@ -79,6 +79,7 @@ type Evidence struct {
 	FSID            string            `json:"fsid"`
 	Health          string            `json:"health"`
 	Hosts           []string          `json:"hosts"`
+	Incarnation     string            `json:"incarnation"`
 	MGRActive       string            `json:"mgrActive"`
 	MGRStandbys     []string          `json:"mgrStandbys"`
 	MonAddrs        []MonitorAddress  `json:"monAddrs"`
@@ -106,10 +107,10 @@ func decodeEvidence(data []byte) (Evidence, error) {
 		return e, err
 	}
 	fields, err := reconciliation.DecodeEvidence[map[string]json.RawMessage](data, 60*1024, "Ceph members")
-	if err != nil || len(fields) != 23 && (len(fields) != 24 || !validSpecializationsMember(fields)) {
+	if err != nil || len(fields) != 24 && (len(fields) != 25 || !validSpecializationsMember(fields)) {
 		return Evidence{}, evidenceFailure()
 	}
-	required := []string{"version", "request", "action", "fsid", "owner", "owned", "exists", "ready", "removed", "partial", "health", "hosts", "monitors", "monAddrs", "mgrActive", "mgrStandbys", "osds", "resource", "client", "dashboard", "endpoint", "daemons", "sso"}
+	required := []string{"version", "request", "action", "fsid", "owner", "owned", "exists", "ready", "removed", "partial", "health", "hosts", "monitors", "monAddrs", "mgrActive", "mgrStandbys", "osds", "resource", "client", "dashboard", "endpoint", "daemons", "sso", "incarnation"}
 	for _, key := range required {
 		v, ok := fields[key]
 		if !ok || string(v) == "null" {
@@ -232,6 +233,12 @@ func validEndpoint(e Evidence, r Request) bool {
 		return false
 	}
 	return !e.Endpoint.Reachable || !tls || digest != ""
+}
+
+var monmapCreated = regexp.MustCompile(`^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{6}Z$`)
+
+func validIncarnation(value string) bool {
+	return value == "" || monmapCreated.MatchString(value)
 }
 
 func validSSO(e Evidence, r Request) bool {
@@ -444,7 +451,7 @@ func EvaluateEvidence(data []byte, r Request, digest string, removal bool) (reco
 	if err != nil {
 		return reconciliation.EffectUnknown, err
 	}
-	if e.Version != EvidenceVersion || e.Request != digest || digest == "" || e.Action != r.Action || e.Owner != r.Owner || r.Owner == "" || e.FSID != r.FSID || r.FSID == "" || !validateScope(e, r) || !validDashboard(e, r) || !validEndpoint(e, r) || !validSSO(e, r) {
+	if e.Version != EvidenceVersion || e.Request != digest || digest == "" || e.Action != r.Action || e.Owner != r.Owner || r.Owner == "" || e.FSID != r.FSID || r.FSID == "" || !validateScope(e, r) || !validDashboard(e, r) || !validEndpoint(e, r) || !validSSO(e, r) || !validIncarnation(e.Incarnation) {
 		return reconciliation.EffectUnknown, evidenceFailure()
 	}
 	if e.Ready && (!e.Owned || !e.Exists || e.Partial || e.Removed) || e.Removed && (!e.Owned || e.Exists || e.Ready || e.Partial) || e.Partial && (!e.Owned || !e.Exists || e.Ready || e.Removed) {

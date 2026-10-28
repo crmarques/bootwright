@@ -8550,7 +8550,7 @@ delivering commit records the gates.
 cluster. Delivered on 2026-10-26 as lane D of the
 [audit remediation](backlog.md#lane-order-and-progress) under D182, with
 D183's answers to Q70, Q97 to Q101 and Q116; the lane also partly delivered
-[B805](backlog.md#b805) and [B829](backlog.md#b829), which stay open.
+[B805](backlog.md#b805) and [B829](#x181--audit-lane-r-private-installer-material-and-recapture-identity), which stay open.
 
 Every Secret reference names its class, access credential or effect
 material, and `--authorize rebind=<secret>` presents a rotated access
@@ -8567,7 +8567,7 @@ identity metadata; `media add --from-url-file` keeps a signed URL off argv;
 a custody-marked copy. The media work area carries its context incarnation
 (device, inode and birth time), and build, destroy and the D124 hand-over
 refuse another incarnation's area; a kubeconfig recapture compares server,
-authority and principal ([B829](backlog.md#b829) keeps the rest). A root-owned
+authority and principal ([B829](#x181--audit-lane-r-private-installer-material-and-recapture-identity) keeps the rest). A root-owned
 install re-executes by its proved absolute path, the elevated child proves it
 runs the supervisor's file, and every sudo-started root invocation refuses
 variables outside a named set, unsetting PAM session variables; a host whose
@@ -9129,6 +9129,38 @@ releasing mark or more than 64 keys in a reservation.
 `TestAClaimOnAKeyARemovalIsReleasingRefusesUntilTheRemovalCompletes`,
 `TestTwoSpellingsOfOneSSHHostConflictByItsPinnedHostKey` and their siblings,
 each proved by a seeded mismatch; the delivering commit records the gates.
+
+### X181 — Audit lane R: private installer material and recapture identity
+
+**Items:** B829.
+**Kind:** safety. **Owners:** Secrets, Workspace and Storage. Delivered on
+2026-10-27 as lane R of the
+[audit remediation](backlog.md#lane-order-and-progress) under the owner's
+request to implement the remaining items; the lane parked B867.
+
+A secret-bearing file (the media `install-config.yaml`, the artifact server's
+certificate and key, the libvirt controller's htpasswd and TLS files, the
+managed-OS kickstart) is written by `private_file`: its bytes travel only as a
+`no_log` module argument, and it stages owner-only beside the destination,
+fsyncs and renames, refuses a link or non-regular destination and sweeps its
+own stale stages. A structural test refuses any role, handler, playbook or
+variable file whose file transfer carries lent material, and pipelining covers
+the local connection. A context deletion's confirmation names each installer
+work area by cluster or machine and Machine.
+
+Each Ceph output records the identity that produced it: the cluster fsid, the
+monitor map's creation time in one UTC form (`ceph-core-evidence-v12`) and
+the principal; custody refuses another identity between attempts and keeps a
+recorded one a recapture does not present. That the creation time changes only
+on a new bootstrap waits for a live run ([B867](backlog.md#b867)). The keyring
+index records the reader version its contents need (`minReader`), so a store
+written for a newer reader refuses `secret.store.newer` instead of
+`secret.store.corrupt`; builds before this lane read such a store as corrupt,
+and the store is intact.
+
+**Guard tests:** the `private_file`, transfer-rule, work-area, incarnation,
+recapture-identity and keyring reader tests, each proved by a seeded
+mismatch; the delivering commit records the gates.
 
 ## M3 independent in-tree completion
 

@@ -39,6 +39,7 @@ type OutputFile struct {
 type Produced struct {
 	Name     string
 	Material secrets.Material
+	Identity string
 }
 
 // ClearProduced clears every output's material.

@@ -116,11 +116,19 @@ func TestContextConfigurationMatchesItsGolden(t *testing.T) {
 // realized still owns that object, so neither the deletion refusal nor the
 // orphan confirmation names the selected input as the inventory: each names
 // bootwright diff --context beside status, which lists what the input dropped,
-// and the plan names the exclusive keys the deletion frees (B803).
+// and the plan names the exclusive keys the deletion frees (B803). The
+// confirmation names each installer work area it leaves, by its object and
+// Machine (B829).
 func TestTheOrphanedDeletionInventoryGolden(t *testing.T) {
 	r := existingRepository(t)
 	r.evidence["example"] = []byte(`{"version":1,"operation":"applied","ownership":"retained"}`)
-	r.reservations = map[string][]string{"example": {"bmc:192.0.2.1:8000/1", "libvirt-domain:bootwright-example-rhel-01", "media:rhel-9.iso"}}
+	r.reservations = map[string][]string{"example": {"bmc:192.0.2.1:8000/1", "libvirt-domain:bootwright-example-rhel-01", "media:rhel-9.iso",
+		"path:/srv/artifacts/private/sno", "path:/var/lib/bootwright-clusters/example/compact", "path:/var/lib/bootwright-clusters/example/sno"}}
+	r.workAreas = map[string][]contexts.WorkArea{"example": {
+		{Kind: "cluster", Object: "compact", Machine: "controller"},
+		{Kind: "cluster", Object: "sno", Machine: "controller"},
+		{Kind: "machine", Object: "rhel-01"},
+	}}
 	edited := desiredstate.Sources{Roots: []string{"/synthetic/input"}, Files: []desiredstate.SourceFile{
 		desiredstate.NewSourceFile("/synthetic/input/environment.yaml", []byte(environmentInput)),
 	}}

@@ -107,9 +107,9 @@ func (i *Implementation) open(ctx context.Context, selected secretstore.Context,
 		return nil, err
 	}
 	defer clear(plaintext)
-	var index indexRecord
-	if decodeCanonical(plaintext, indexMaximum, maxIndexItems, &index) != nil {
-		return nil, secretstore.Failure("store.corrupt", "decrypted secret metadata is invalid")
+	index, err := decodeIndexPlaintext(plaintext)
+	if err != nil {
+		return nil, err
 	}
 	index.FormatVersion, index.Algorithm, index.Selector = formatVersion, algorithm, selector
 	if validateIndex(index, selector) != nil || index.ActiveKey != wrapped.KeyID {
@@ -375,7 +375,7 @@ func entryNames(ctx context.Context, area secretstore.Area, directory string) (m
 }
 
 func validateIndex(index indexRecord, selector secretstore.Selector) error {
-	if index.FormatVersion != formatVersion || index.Algorithm != algorithm || index.Selector != selector || !validID(index.ActiveKey, "key-") || index.Keys == nil || index.Versions == nil || index.Current == nil || index.Bindings == nil || index.Produced == nil || len(index.Keys) == 0 || len(index.Versions) > secrets.MaxVersions || len(index.Bindings) > maxBindings || len(index.Produced) > secrets.MaxVersions {
+	if index.FormatVersion != formatVersion || index.MinReader < 0 || index.Algorithm != algorithm || index.Selector != selector || !validID(index.ActiveKey, "key-") || index.Keys == nil || index.Versions == nil || index.Current == nil || index.Bindings == nil || index.Produced == nil || len(index.Keys) == 0 || len(index.Versions) > secrets.MaxVersions || len(index.Bindings) > maxBindings || len(index.Produced) > secrets.MaxVersions {
 		return errors.New("invalid index header")
 	}
 	keys := make(map[string]storedKey, len(index.Keys))
@@ -464,7 +464,7 @@ func validateIndex(index indexRecord, selector secretstore.Selector) error {
 func validateProduced(entries []secretstore.Produced, versions map[string]storedVersion, referenced map[string]bool) error {
 	for position, entry := range entries {
 		version, exists := versions[entry.Version]
-		if !exists || !validName(entry.Block) || !validName(entry.Name) || referenced[entry.Version] || version.Declaration != producedDeclaration(entry.Block, entry.Name) || version.Sequence != 1 || len(version.Parts) != 1 || version.Parts[0].Size < 1 {
+		if !exists || !validName(entry.Block) || !validName(entry.Name) || !validProducedIdentity(entry.Identity) || entry.Unproved && entry.Identity != "" || referenced[entry.Version] || version.Declaration != producedDeclaration(entry.Block, entry.Name) || version.Sequence != 1 || len(version.Parts) != 1 || version.Parts[0].Size < 1 {
 			return errors.New("invalid produced entry")
 		}
 		if position > 0 && compareProduced(entries[position-1], entry) >= 0 {
