@@ -12,9 +12,12 @@ import (
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
 	co "github.com/crmarques/bootwright/internal/addons/clusterobjects"
+	"github.com/crmarques/bootwright/internal/machine"
 )
 
 var update = flag.Bool("update", false, "rewrite networking goldens")
+
+var noMachines = api.NewCatalog(nil)
 
 func matchesGolden(t *testing.T, name string, data []byte, terminated bool) {
 	t.Helper()
@@ -129,7 +132,7 @@ func clusterFixture() api.Object {
 	return api.NewObject(api.OpenShiftCluster, "cluster", mapping(), mapping(field("distribution", mapping(field("release", mapping(field("version", text("4.21.15")))))), field("nodes", api.ListValue(mapping(field("name", text("node-a")), field("machineRef", text("machine-a"))), mapping(field("name", text("node-b")), field("machineRef", text("machine-b"))))), field("networking", mapping(field("secondaryNetworks", api.ListValue(network("tenant-a", "10"), network("tenant-b", "20")))))))
 }
 func TestNetworkRequestGolden(t *testing.T) {
-	request, err := renderRequest(clusterFixture(), "controller")
+	request, err := renderRequest(clusterFixture(), noMachines, "controller")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -161,5 +164,84 @@ func TestNetworkRequestGolden(t *testing.T) {
 	}
 	if len(program.Checks) != 2 {
 		t.Fatal(program.Checks)
+	}
+}
+
+func addressedFixture(hostAddresses string) (api.Object, api.Catalog) {
+	machineObject := func(name string, addresses ...api.Value) api.Object {
+		uplink := mapping(field("name", text("eth1")), field("type", text("ethernet")), field("mtu", api.IntegerValue("9000")))
+		install := mapping(field("name", text("eth0")), field("type", text("ethernet")))
+		return api.NewObject(api.Machine, name, mapping(), mapping(field("network", mapping(field("inline", mapping(field("nmstate", mapping(field("interfaces", api.ListValue(install, uplink)))))), field("addresses", api.ListValue(addresses...))))))
+	}
+	address := func(name, ip, iface string) api.Value {
+		return mapping(field("name", text(name)), field("address", text(ip)), field("interface", text(iface)))
+	}
+	uplink := mapping(field("interface", text("eth1")), field("bridge", text("br-tenant")))
+	if hostAddresses != "" {
+		uplink = uplink.With("hostAddresses", text(hostAddresses))
+	}
+	network := mapping(field("name", text("tenant")), field("topology", text("Localnet")), field("uplink", uplink), field("vlan", api.IntegerValue("10")), field("ipam", mapping(field("mode", text("Disabled")))), field("namespaceSelector", mapping(field("matchLabels", mapping(field("tenant", text("tenant")))))))
+	cluster := api.NewObject(api.OpenShiftCluster, "cluster", mapping(), mapping(field("distribution", mapping(field("release", mapping(field("version", text("4.21.15")))))), field("nodes", api.ListValue(mapping(field("name", text("node-a")), field("machineRef", text("machine-a"))), mapping(field("name", text("node-b")), field("machineRef", text("machine-b"))))), field("networking", mapping(field("secondaryNetworks", api.ListValue(network))))))
+	return cluster, api.NewCatalog([]api.Object{
+		machineObject("machine-a", address("host-0", "198.51.100.10/24", "eth0"), address("host-4", "198.51.100.11/24", "eth1"), address("host-6", "2001:db8:1::11/64", "eth1")),
+		machineObject("machine-b", address("host-0", "198.51.100.12/24", "eth0")),
+	})
+}
+
+func TestAddressedBridgeRequestGolden(t *testing.T) {
+	cluster, catalog := addressedFixture("bridge")
+	request, err := renderRequest(cluster, catalog, "controller")
+	if err != nil {
+		t.Fatal(err)
+	}
+	data, err := request.Canonical()
+	if err != nil {
+		t.Fatal(err)
+	}
+	matchesGolden(t, "addressed-bridge", data, false)
+}
+
+func TestHostAddressesNoneRendersTheAddresslessBridge(t *testing.T) {
+	cluster, catalog := addressedFixture("")
+	want, err := renderRequest(cluster, api.NewCatalog(nil), "controller")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, placement := range []string{"", "none"} {
+		cluster, catalog = addressedFixture(placement)
+		got, err := renderRequest(cluster, catalog, "controller")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !bytes.Equal(got.Program, want.Program) {
+			t.Fatalf("hostAddresses %q changed the program of an addressed uplink", placement)
+		}
+	}
+}
+
+func TestAddressedBridgePolicyShape(t *testing.T) {
+	cluster, catalog := addressedFixture("bridge")
+	networks := cluster.Spec().Get("networking", "secondaryNetworks").Items()
+	policy := func(machineName string) []api.Value {
+		bound, _ := catalog.Find(api.Machine, machineName)
+		native, issues := machine.ComposeNetwork(bound, catalog)
+		if len(issues) > 0 {
+			t.Fatal(issues)
+		}
+		return nodePolicy(machineName, networks, native).Body.Get("spec", "desiredState", "interfaces").Items()
+	}
+	b := policy("machine-b")
+	if len(b) != 1 || b[0].Get("bridge", "port").Len() != 1 {
+		t.Fatalf("a node with no uplink address renders the plain bridge: %v", b)
+	}
+	a := policy("machine-a")
+	if len(a) != 3 || a[0].Get("type").Text() != "ovs-bridge" || a[1].Get("type").Text() != "ovs-interface" || a[2].Get("name").Text() != "eth1" {
+		t.Fatalf("an addressed node renders bridge, bridge interface and restated uplink in name order: %v", a)
+	}
+	if a[0].Get("bridge", "port").Len() != 2 || a[1].Get("copy-mac-from").Text() != "eth1" || a[1].Get("ipv4", "address").Len() != 1 || a[1].Get("ipv6", "address").Len() != 1 {
+		t.Fatalf("bridge interface: %v", a[1])
+	}
+	if a[2].Get("ipv4", "enabled").Bool() || a[2].Get("ipv6", "enabled").Bool() || a[2].Get("ipv4", "address").Present() {
+		t.Fatalf("restated uplink: %v", a[2])
 	}
 }

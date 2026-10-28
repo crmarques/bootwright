@@ -94,6 +94,7 @@ type OVNGateway struct {
 }
 type SecondaryNetwork struct {
 	Name, UplinkInterface, UplinkBridge string
+	HostAddresses                       bool
 	Subnets                             []netip.Prefix
 }
 type Rendered struct {

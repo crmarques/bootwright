@@ -1015,6 +1015,16 @@ network's name, and waits for `NetworkCreated`; OVN-Kubernetes renders a
 `NetworkAttachmentDefinition` of the same name into every namespace the
 network's selector matches, so pods and VMs attach by that name.
 
+On a bridge whose networks declare `uplink.hostAddresses: bridge`, the node's
+policy also lists the bridge's internal port among the bridge's ports, holds an
+`ovs-interface` of the bridge's name with DHCP and autoconf off carrying exactly
+the static addresses that node's Machine declares on the uplink, the uplink's
+declared MTU and `copy-mac-from` the uplink, so neighbours keep the node's
+hardware address, and restates the uplink with both address families disabled.
+This is the shape OpenShift documents for `br-ex`; nothing else of the node's
+network changes. A node that declares no address on the uplink gets the bridge
+as under `none`, without the internal port.
+
 Every object is created through the
 [cluster object program](add-ons.md#the-cluster-object-program) under its
 [ownership receipts](add-ons.md#ownership-receipts), a foreign object of the

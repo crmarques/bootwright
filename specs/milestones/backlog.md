@@ -2522,7 +2522,9 @@ Install-time `ovs-bridge`, `ovs-interface` and `linux-bridge` interfaces in a
 node's `networkConfig`, and a customized `br-ex` through the documented
 MachineConfig writing `/etc/nmstate/openshift/<host>.yml`. Parked on
 2026-10-20 (D172). **Definition needs:** a live test of `nmstatectl gc` and the
-live image with each.
+live image with each. On 2026-10-28 (D194) [B889](m3.md#b889) took the
+post-installation half, a node address moved onto a localnet's bridge by the
+cluster network block; the install-time bridges stay parked here.
 
 ### B741
 
@@ -3233,6 +3235,8 @@ holding such a clause, the clauses pending and the work they enable.
   or Capsule and its release pin (X194).
 - [D193](#d193): clauses (1) to (5), the built-in `kubevirt` package (X195)
   and the estate review's records.
+- [D194](#d194): clauses (1) to (7), addressed localnet bridges and the
+  uplink rules (X196).
 
 ### D1
 
@@ -5174,3 +5178,29 @@ their definitions, and this request closes none of their questions:
 [B731](m3.md#b731) and B732 for KubeVirt nodes on a host the context builds,
 [B740](#b740) for a host address on a localnet bridge and [B785](#b785) for
 the ACM cluster-backup component.
+
+### D194
+
+**session-pending** (2026-10-28, the owner; the clauses after the owner's
+words are taken by the session, pending the owner's review). Answering D193's
+review, the owner stated that each of their networks is one VLAN, that a
+second VLAN per network "would break my environment setup (outside bootwright
+control)", and asked: "plan the implementation what is missing support and
+then implement ... the solution must be as good as possible in terms of
+well-designed architecture and ux". It authorizes [B889](m3.md#b889) and
+[B885](m3.md#b885) as slice X196 on M3, out of sequence. Taken by the
+session, pending the owner's review: (1) a node address on a localnet's VLAN is
+declared, never inferred: `uplink.hostAddresses: bridge`, default `none`, and
+an addressed uplink without it keeps refusing, its remedy naming `bridge`. (2)
+The address stays a Machine fact on the uplink interface: the installer
+configures it there, because the agent installer refuses a bridge, and the
+cluster network block moves it onto the bridge; no address kind is added to
+the cluster. (3) The bridge's interface takes the bridge's name, the uplink's
+declared MTU and `copy-mac-from` the uplink, OpenShift's documented `br-ex`
+shape. (4) DHCP or autoconf on such an uplink, and a route naming it as its
+next-hop interface, refuse; routes are never rewritten. (5) A MetalLB pool
+names the bridge, and naming its uplink refuses with the bridge in the remedy.
+(6) [B885](m3.md#b885)'s uplink rule covers every interface built on the
+uplink, a VLAN or a bond, not only the install interface. (7) This revises
+D193 (4) for B885, now implemented, and takes [B740](#b740)'s
+post-installation half; its install-time bridges stay parked.

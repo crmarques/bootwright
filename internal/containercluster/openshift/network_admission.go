@@ -72,6 +72,7 @@ func ValidateNetworkIntent(o api.Object, c api.Catalog) []api.Issue {
 	seen := map[string]string{}
 	uplinks := map[string]string{}
 	bridges := map[string]string{}
+	placements := map[string]hostPlacement{}
 	for i, n := range o.Spec().Get("networking", "secondaryNetworks").Items() {
 		base := fmt.Sprintf("$.spec.networking.secondaryNetworks[%d]", i)
 		name := n.Get("name").Text()
@@ -96,6 +97,14 @@ func ValidateNetworkIntent(o api.Object, c api.Catalog) []api.Issue {
 			issues = append(issues, invariantRemediation(base+".uplink.interface", "bridge "+bridge+" selects multiple uplink interfaces", "use one interface for every network sharing a bridge"))
 		}
 		bridges[bridge] = iface
+		placement := hostPlacement{network: name, bridge: n.Get("uplink", "hostAddresses").Text() == "bridge"}
+		if placement.bridge && bridge == "br-ex" {
+			issues = append(issues, invariantRemediation(base+".uplink.hostAddresses", "secondary network "+name+" asks br-ex to carry host addresses, which OVN-Kubernetes manages on the install interface", "use a dedicated bridge and uplink interface, or omit uplink.hostAddresses"))
+		}
+		if other, ok := placements[bridge]; ok && other.bridge != placement.bridge {
+			issues = append(issues, invariantRemediation(base+".uplink.hostAddresses", "secondary networks "+other.network+" and "+name+" share bridge "+bridge+" but differ in uplink.hostAddresses", "set the same uplink.hostAddresses on every network sharing a bridge"))
+		}
+		placements[bridge] = placement
 		for _, label := range n.Get("namespaceSelector", "matchLabels").Fields() {
 			if !api.ValidLexical("kubernetes-label-key", label.Name) || !api.ValidLexical("kubernetes-label-value", label.Value.Text()) {
 				issues = append(issues, invariantRemediation(base+".namespaceSelector.matchLabels", "namespace selector has an invalid label key or value", "use valid Kubernetes label keys and values"))
@@ -113,6 +122,12 @@ func ValidateNetworkIntent(o api.Object, c api.Catalog) []api.Issue {
 	}
 	return issues
 }
+
+type hostPlacement struct {
+	network string
+	bridge  bool
+}
+
 func defaultRouteInterface(native api.Value, familyBits int) string {
 	interfaces := defaultRouteInterfaces(native, familyBits)
 	if len(interfaces) == 1 {
@@ -152,9 +167,13 @@ func validateNetworkUplink(n api.Value, index int, bound api.Object, native api.
 	name := n.Get("name").Text()
 	iface := n.Get("uplink", "interface").Text()
 	bridge := n.Get("uplink", "bridge").Text()
+	onBridge := n.Get("uplink", "hostAddresses").Text() == "bridge"
 	mtuInterface := iface
 	if bridge == "br-ex" {
 		mtuInterface = install
+		if n.Has("vlan") && interfaceType(native, install) == "vlan" {
+			issues = append(issues, invariantRemediation(base+".vlan", fmt.Sprintf("network %s tags VLAN %s on br-ex, which node %s builds on VLAN interface %s", name, n.Get("vlan").Text(), bound.Name(), install), "give the network its own bridge over an addressless VLAN interface"))
+		}
 	} else {
 		found := false
 		for _, nic := range native.Get("interfaces").Items() {
@@ -165,14 +184,28 @@ func validateNetworkUplink(n api.Value, index int, bound api.Object, native api.
 			if !slices.Contains([]string{"ethernet", "bond", "vlan"}, nic.Get("type").Text()) || slices.Contains([]string{"absent", "ignore"}, nic.Get("state").Text()) {
 				issues = append(issues, invariantRemediation(base+".uplink.interface", "uplink "+iface+" is not an active ethernet, bond or vlan on Machine/"+bound.Name(), "choose an active ethernet, bond or vlan interface"))
 			}
+			static, dynamic := false, false
 			for _, family := range []string{"ipv4", "ipv6"} {
-				if nic.Get(family, "address").Len() > 0 || nic.Get(family, "dhcp").Bool() || nic.Get(family, "autoconf").Bool() {
-					issues = append(issues, invariantRemediation(base+".uplink.interface", "uplink "+iface+" carries an address on Machine/"+bound.Name(), "choose an addressless interface"))
-				}
+				static = static || nic.Get(family, "address").Len() > 0
+				dynamic = dynamic || nic.Get(family, "dhcp").Bool() || nic.Get(family, "autoconf").Bool()
+			}
+			switch {
+			case dynamic && onBridge:
+				issues = append(issues, invariantRemediation(base+".uplink.interface", "uplink "+iface+" of network "+name+" is addressed by DHCP or autoconf on Machine/"+bound.Name()+", which cannot move onto bridge "+bridge, "declare static addresses on "+iface+" in network.addresses, or choose an addressless interface and omit uplink.hostAddresses"))
+			case dynamic:
+				issues = append(issues, invariantRemediation(base+".uplink.interface", "uplink "+iface+" carries an address on Machine/"+bound.Name(), "choose an addressless interface"))
+			case static && !onBridge:
+				issues = append(issues, invariantRemediation(base+".uplink.interface", "uplink "+iface+" carries an address on Machine/"+bound.Name(), "choose an addressless interface, or set uplink.hostAddresses: bridge to move its addresses onto bridge "+bridge))
+			}
+			if onBridge && routesVia(native, iface) {
+				issues = append(issues, invariantRemediation(base+".uplink.interface", "uplink "+iface+" of network "+name+" is the next-hop interface of a route on Machine/"+bound.Name()+", which leaves it once bridge "+bridge+" carries its addresses", "remove the route, or choose an interface no route names"))
 			}
 		}
 		if !found || iface == install || reservedOVNInterface(iface) {
 			issues = append(issues, invariantRemediation(base+".uplink.interface", "uplink "+iface+" is missing, reserved or the install interface on Machine/"+bound.Name(), "declare an addressless dedicated interface on every node, or use bridge br-ex"))
+		}
+		if other := interfaceBuiltOn(native, iface); other != "" {
+			issues = append(issues, invariantRemediation(base+".uplink.interface", fmt.Sprintf("uplink %s of network %s carries interface %s on node %s", iface, name, other, bound.Name()), "use an addressless VLAN interface of "+iface+" as the uplink"))
 		}
 		for _, nic := range native.Get("interfaces").Items() {
 			if nic.Get("name").Text() == bridge {
@@ -184,6 +217,40 @@ func validateNetworkUplink(n api.Value, index int, bound api.Object, native api.
 		issues = append(issues, invariantRemediation(base+".mtu", "secondary network "+name+" MTU exceeds its uplink MTU on Machine/"+bound.Name(), fmt.Sprintf("set mtu to at most %d", interfaceMTU(native, mtuInterface))))
 	}
 	return issues
+}
+
+func interfaceType(native api.Value, name string) string {
+	for _, nic := range native.Get("interfaces").Items() {
+		if nic.Get("name").Text() == name {
+			return nic.Get("type").Text()
+		}
+	}
+	return ""
+}
+
+func routesVia(native api.Value, name string) bool {
+	for _, route := range native.Get("routes", "config").Items() {
+		if route.Get("state").Text() != "absent" && route.Get("next-hop-interface").Text() == name {
+			return true
+		}
+	}
+	return false
+}
+
+func interfaceBuiltOn(native api.Value, name string) string {
+	for _, nic := range native.Get("interfaces").Items() {
+		if slices.Contains([]string{"absent", "ignore"}, nic.Get("state").Text()) {
+			continue
+		}
+		other := nic.Get("name").Text()
+		if nic.Get("type").Text() == "vlan" && nic.Get("vlan", "base-iface").Text() == name || slices.Contains(nic.Get("link-aggregation", "port").Strings(), name) {
+			return other
+		}
+		if other == name && nic.Get("controller").Text() != "" {
+			return nic.Get("controller").Text()
+		}
+	}
+	return ""
 }
 func validateNetworkIPAM(n api.Value, base string) []api.Issue {
 	issues := []api.Issue{}

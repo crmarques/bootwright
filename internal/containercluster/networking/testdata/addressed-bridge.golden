@@ -1,0 +1,311 @@
+{
+  "budgetSeconds": 1800,
+  "cluster": "cluster",
+  "placement": {
+    "connection": "local",
+    "machine": "controller"
+  },
+  "producedInputs": [
+    {
+      "kind": "OpenShiftCluster",
+      "object": "cluster",
+      "output": "kubeconfig"
+    }
+  ],
+  "program": {
+    "checks": [
+      {
+        "condition": {
+          "apiVersion": "k8s.ovn.org/v1",
+          "failOn": [
+            {
+              "reason": "SyncError",
+              "status": "False",
+              "type": "NetworkCreated"
+            }
+          ],
+          "kind": "ClusterUserDefinedNetwork",
+          "name": "tenant",
+          "namespace": "",
+          "namespaced": false,
+          "status": "True",
+          "type": "NetworkCreated"
+        }
+      }
+    ],
+    "steps": [
+      {
+        "kind": "wait",
+        "wait": [
+          {
+            "condition": {
+              "apiVersion": "apiextensions.k8s.io/v1",
+              "kind": "CustomResourceDefinition",
+              "name": "nodenetworkconfigurationpolicies.nmstate.io",
+              "namespace": "",
+              "namespaced": false,
+              "status": "True",
+              "type": "Established"
+            }
+          }
+        ]
+      },
+      {
+        "create": {
+          "apiVersion": "nmstate.io/v1",
+          "body": {
+            "apiVersion": "nmstate.io/v1",
+            "kind": "NodeNetworkConfigurationPolicy",
+            "metadata": {
+              "name": "bootwright-node-a"
+            },
+            "spec": {
+              "desiredState": {
+                "interfaces": [
+                  {
+                    "bridge": {
+                      "allow-extra-patch-ports": true,
+                      "options": {
+                        "mcast-snooping-enable": true,
+                        "stp": false
+                      },
+                      "port": [
+                        {
+                          "name": "eth1"
+                        },
+                        {
+                          "name": "br-tenant"
+                        }
+                      ]
+                    },
+                    "name": "br-tenant",
+                    "state": "up",
+                    "type": "ovs-bridge"
+                  },
+                  {
+                    "copy-mac-from": "eth1",
+                    "ipv4": {
+                      "address": [
+                        {
+                          "ip": "198.51.100.11",
+                          "prefix-length": 24
+                        }
+                      ],
+                      "dhcp": false,
+                      "enabled": true
+                    },
+                    "ipv6": {
+                      "address": [
+                        {
+                          "ip": "2001:db8:1::11",
+                          "prefix-length": 64
+                        }
+                      ],
+                      "autoconf": false,
+                      "dhcp": false,
+                      "enabled": true
+                    },
+                    "mtu": 9000,
+                    "name": "br-tenant",
+                    "state": "up",
+                    "type": "ovs-interface"
+                  },
+                  {
+                    "ipv4": {
+                      "enabled": false
+                    },
+                    "ipv6": {
+                      "enabled": false
+                    },
+                    "name": "eth1",
+                    "state": "up",
+                    "type": "ethernet"
+                  }
+                ],
+                "ovn": {
+                  "bridge-mappings": [
+                    {
+                      "bridge": "br-tenant",
+                      "localnet": "tenant",
+                      "state": "present"
+                    }
+                  ]
+                }
+              },
+              "nodeSelector": {
+                "kubernetes.io/hostname": "node-a"
+              }
+            }
+          },
+          "desiredDigest": "6243d46caaccc960fa5004b36667ed982470af5a6f5877addc11371911225f7b",
+          "kind": "NodeNetworkConfigurationPolicy",
+          "name": "bootwright-node-a",
+          "namespace": "",
+          "namespaced": false
+        },
+        "kind": "create"
+      },
+      {
+        "create": {
+          "apiVersion": "nmstate.io/v1",
+          "body": {
+            "apiVersion": "nmstate.io/v1",
+            "kind": "NodeNetworkConfigurationPolicy",
+            "metadata": {
+              "name": "bootwright-node-b"
+            },
+            "spec": {
+              "desiredState": {
+                "interfaces": [
+                  {
+                    "bridge": {
+                      "allow-extra-patch-ports": true,
+                      "options": {
+                        "mcast-snooping-enable": true,
+                        "stp": false
+                      },
+                      "port": [
+                        {
+                          "name": "eth1"
+                        }
+                      ]
+                    },
+                    "name": "br-tenant",
+                    "state": "up",
+                    "type": "ovs-bridge"
+                  }
+                ],
+                "ovn": {
+                  "bridge-mappings": [
+                    {
+                      "bridge": "br-tenant",
+                      "localnet": "tenant",
+                      "state": "present"
+                    }
+                  ]
+                }
+              },
+              "nodeSelector": {
+                "kubernetes.io/hostname": "node-b"
+              }
+            }
+          },
+          "desiredDigest": "9acbfb01b07d2cc82a8bc71585ca2a1d6ef7edb98554df74b62e8502ac27a10d",
+          "kind": "NodeNetworkConfigurationPolicy",
+          "name": "bootwright-node-b",
+          "namespace": "",
+          "namespaced": false
+        },
+        "kind": "create"
+      },
+      {
+        "kind": "wait",
+        "wait": [
+          {
+            "condition": {
+              "apiVersion": "apiextensions.k8s.io/v1",
+              "kind": "CustomResourceDefinition",
+              "name": "clusteruserdefinednetworks.k8s.ovn.org",
+              "namespace": "",
+              "namespaced": false,
+              "status": "True",
+              "type": "Established"
+            }
+          },
+          {
+            "condition": {
+              "apiVersion": "nmstate.io/v1",
+              "failOn": [
+                {
+                  "status": "True",
+                  "type": "Degraded"
+                },
+                {
+                  "reason": "NoMatchingNode",
+                  "status": "True",
+                  "type": "Ignored"
+                }
+              ],
+              "kind": "NodeNetworkConfigurationPolicy",
+              "name": "bootwright-node-a",
+              "namespace": "",
+              "namespaced": false,
+              "status": "True",
+              "type": "Available"
+            }
+          },
+          {
+            "condition": {
+              "apiVersion": "nmstate.io/v1",
+              "failOn": [
+                {
+                  "status": "True",
+                  "type": "Degraded"
+                },
+                {
+                  "reason": "NoMatchingNode",
+                  "status": "True",
+                  "type": "Ignored"
+                }
+              ],
+              "kind": "NodeNetworkConfigurationPolicy",
+              "name": "bootwright-node-b",
+              "namespace": "",
+              "namespaced": false,
+              "status": "True",
+              "type": "Available"
+            }
+          }
+        ]
+      },
+      {
+        "create": {
+          "apiVersion": "k8s.ovn.org/v1",
+          "body": {
+            "apiVersion": "k8s.ovn.org/v1",
+            "kind": "ClusterUserDefinedNetwork",
+            "metadata": {
+              "name": "tenant"
+            },
+            "spec": {
+              "namespaceSelector": {
+                "matchLabels": {
+                  "tenant": "tenant"
+                }
+              },
+              "network": {
+                "localnet": {
+                  "ipam": {
+                    "mode": "Disabled"
+                  },
+                  "physicalNetworkName": "tenant",
+                  "role": "Secondary",
+                  "vlan": {
+                    "access": {
+                      "id": 10
+                    },
+                    "mode": "Access"
+                  }
+                },
+                "topology": "Localnet"
+              }
+            }
+          },
+          "desiredDigest": "b3dc49685e6fff0be1cabfea7953a117658c33e150ece48a4286657aeba085a5",
+          "kind": "ClusterUserDefinedNetwork",
+          "name": "tenant",
+          "namespace": "",
+          "namespaced": false
+        },
+        "kind": "create"
+      }
+    ],
+    "version": "cluster-objects-v2"
+  },
+  "tool": {
+    "compatibility": "openshift",
+    "kind": "openshift-clients",
+    "version": "4.21.15"
+  },
+  "version": "cluster-network-request-v2"
+}

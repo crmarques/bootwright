@@ -156,7 +156,13 @@ func interfaceNetworks(pool api.MetalLBPool, f addons.ClusterFacts, field string
 		if !found {
 			add("api.invariant", field, fmt.Sprintf("interface %s of pool %s is not declared on node %s of OpenShiftCluster/%s", iface, pool.Name, node.Machine, f.Name), fmt.Sprintf("declare %s on every node of %s, or omit l2.interface", iface, f.Name))
 		} else if !addressed {
-			add("api.invariant", field, fmt.Sprintf("interface %s of pool %s carries no %s address on node %s", iface, pool.Name, f.Family, node.Machine), fmt.Sprintf("assign %s an address in the pool's subnet on every node through network.addresses", iface))
+			declared := iface
+			for _, network := range f.SecondaryNetworks {
+				if network.HostAddresses && network.UplinkBridge == iface {
+					declared = network.UplinkInterface
+				}
+			}
+			add("api.invariant", field, fmt.Sprintf("interface %s of pool %s carries no %s address on node %s", iface, pool.Name, f.Family, node.Machine), fmt.Sprintf("assign %s an address in the pool's subnet on every node through network.addresses", declared))
 		}
 	}
 	if len(f.NodeNetworks) == 0 {
@@ -166,7 +172,10 @@ func interfaceNetworks(pool api.MetalLBPool, f addons.ClusterFacts, field string
 		networks = []netip.Prefix{shared}
 	}
 	for _, network := range f.SecondaryNetworks {
-		if iface == network.UplinkInterface || iface == network.UplinkBridge {
+		switch {
+		case network.HostAddresses && iface == network.UplinkInterface:
+			add("api.invariant", field, fmt.Sprintf("interface %s of pool %s is the uplink of secondary network %s, whose bridge %s carries its node addresses", iface, pool.Name, network.Name, network.UplinkBridge), "set l2.interface to "+network.UplinkBridge)
+		case !network.HostAddresses && (iface == network.UplinkInterface || iface == network.UplinkBridge):
 			add("api.invariant", field, fmt.Sprintf("interface %s of pool %s is the uplink of secondary network %s, which carries no host address", iface, pool.Name, network.Name), "name an interface that carries a node address, or omit l2.interface")
 		}
 	}

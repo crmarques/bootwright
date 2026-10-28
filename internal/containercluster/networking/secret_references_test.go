@@ -10,7 +10,7 @@ import (
 // its frozen request reports none, and a request this build cannot read is
 // refused rather than reported as having none.
 func TestTheNetworkReportsNoSecretReferences(t *testing.T) {
-	request, err := renderRequest(clusterFixture(), "controller")
+	request, err := renderRequest(clusterFixture(), noMachines, "controller")
 	if err != nil {
 		t.Fatal(err)
 	}

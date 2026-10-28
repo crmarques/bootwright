@@ -386,7 +386,8 @@ physical network and of the attachment definition workloads select.
 | --- | --- | --- | --- |
 | `topology` | string | yes | `Localnet`. |
 | `uplink.bridge` | string | yes | `br-ex`, sharing the default bridge, or a new OVS bridge name: 1 to 15 bytes of letters, digits, `_`, `.`, `+` or `-`. |
-| `uplink.interface` | string | with a new bridge | An addressless `ethernet`, `bond` or `vlan` every node declares, other than its install interface. |
+| `uplink.interface` | string | with a new bridge | An `ethernet`, `bond` or `vlan` every node declares, other than its install interface: addressless, unless `uplink.hostAddresses` is `bridge`. |
+| `uplink.hostAddresses` | string | no | `none` (default): the uplink carries no node address. `bridge`: the static addresses each node declares on the uplink move onto the bridge, below. Only with a new bridge; the same on every network sharing that bridge. |
 | `vlan` | integer | no | Access VLAN `1..4094`; distinct among networks sharing an uplink. |
 | `mtu` | integer | no | `576..65536`, at least `1280` with an IPv6 subnet, at most the uplink interface's declared MTU. |
 | `ipam.mode` | string | no | `Disabled` (default) or `Enabled`. |
@@ -397,6 +398,28 @@ physical network and of the attachment definition workloads select.
 
 A cluster that declares a secondary network needs a binding that
 selects a package or add-on providing `nmstate`.
+
+With `uplink.hostAddresses: bridge`, one VLAN carries both the node and the
+network's workloads, the way the machine network carries both through `br-ex`.
+Each node's Machine declares its address on the uplink, as on any other
+interface; the installer configures it there, and after installation the
+[cluster network block](../openshift-clusters.md#post-installation-network-configuration)
+moves it onto the bridge's own interface, named after the bridge. From then on
+the bridge, not the uplink, is the node's interface on that network, so a
+[MetalLB pool](addons.md#package-metallb) announcing there names the bridge in
+`l2.interface`, and an egress IP in its subnet leaves through it. Because the
+move leaves the uplink addressless, admission refuses at `uplink.interface` an
+uplink a node addresses by DHCP or autoconf, and one that a route of the node
+names as its `next-hop-interface`; with `none`, an uplink a node addresses
+refuses there too, naming `bridge` in its remedy.
+
+Two uplinks refuse because their frames would not reach the network: a `vlan`
+on `br-ex` where a node's install interface is itself a `vlan` interface,
+because OVN-Kubernetes builds `br-ex` on that interface and the access tag
+would ride inside its tag, refuses at `vlan`; and an `uplink.interface` that is
+the `base-iface` of a `vlan` interface or a port of a bond the node declares,
+its install interface's included, because the bridge would take that interface
+away from the interface built on it, refuses at `uplink.interface`.
 
 ## Security
 

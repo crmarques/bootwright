@@ -10,7 +10,7 @@ import (
 )
 
 func TestNetworkAdapterFixtureMatchesRenderedProgram(t *testing.T) {
-	program, err := Render(clusterFixture())
+	program, err := Render(clusterFixture(), noMachines)
 	if err != nil {
 		t.Fatal(err)
 	}

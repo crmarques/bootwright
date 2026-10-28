@@ -68,7 +68,7 @@ func AddonFacts(catalog api.Catalog, name string) addons.ClusterFacts {
 	gateway := spec.Get("networking", "ovnKubernetesConfig", "gatewayConfig")
 	facts.Gateway = addons.OVNGateway{RoutingViaHost: gateway.Get("routingViaHost").Bool(), IPForwarding: gateway.Get("ipForwarding").Text()}
 	for _, network := range spec.Get("networking", "secondaryNetworks").Items() {
-		entry := addons.SecondaryNetwork{Name: network.Get("name").Text(), UplinkInterface: network.Get("uplink", "interface").Text(), UplinkBridge: network.Get("uplink", "bridge").Text()}
+		entry := addons.SecondaryNetwork{Name: network.Get("name").Text(), UplinkInterface: network.Get("uplink", "interface").Text(), UplinkBridge: network.Get("uplink", "bridge").Text(), HostAddresses: network.Get("uplink", "hostAddresses").Text() == "bridge"}
 		if network.Get("ipam", "mode").Text() == "Enabled" {
 			for _, raw := range network.Get("ipam", "subnets").Strings() {
 				if p, e := netip.ParsePrefix(raw); e == nil {
@@ -80,8 +80,30 @@ func AddonFacts(catalog api.Catalog, name string) addons.ClusterFacts {
 		facts.SecondaryNetworks = append(facts.SecondaryNetworks, entry)
 	}
 	slices.SortFunc(facts.SecondaryNetworks, func(a, b addons.SecondaryNetwork) int { return cmp.Compare(a.Name, b.Name) })
+	for _, network := range facts.SecondaryNetworks {
+		if network.HostAddresses {
+			for i := range facts.NodeNetworks {
+				facts.NodeNetworks[i] = moveToBridge(facts.NodeNetworks[i], network)
+			}
+		}
+	}
 
 	return facts
+}
+
+func moveToBridge(node addons.NodeNetwork, network addons.SecondaryNetwork) addons.NodeNetwork {
+	if slices.ContainsFunc(node.Interfaces, func(nic addons.NodeInterface) bool { return nic.Name == network.UplinkBridge }) {
+		return node
+	}
+	node.Interfaces = slices.Clone(node.Interfaces)
+	for i, nic := range node.Interfaces {
+		if nic.Name == network.UplinkInterface {
+			node.Interfaces[i].Addresses = nil
+			node.Interfaces = append(node.Interfaces, addons.NodeInterface{Name: network.UplinkBridge, Type: "ovs-interface", Addresses: nic.Addresses})
+			break
+		}
+	}
+	return node
 }
 
 func uniquePrefixes(prefixes []netip.Prefix) []netip.Prefix {

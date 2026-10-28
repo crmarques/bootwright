@@ -191,6 +191,9 @@ func TestPoolInterfaceAndNetworkRefusalFields(t *testing.T) {
 		{"secondary bridge", func(f *addons.ClusterFacts, _ *api.Value) {
 			f.SecondaryNetworks = []addons.SecondaryNetwork{{Name: "tenant", UplinkBridge: "eth1"}}
 		}, "uplink of secondary network tenant", ".l2.interface"},
+		{"uplink of an addressed bridge", func(f *addons.ClusterFacts, _ *api.Value) {
+			f.SecondaryNetworks = []addons.SecondaryNetwork{{Name: "tenant", UplinkInterface: "eth1", UplinkBridge: "br-tenant", HostAddresses: true}}
+		}, "whose bridge br-tenant carries its node addresses", ".l2.interface"},
 		{"host routing", func(f *addons.ClusterFacts, _ *api.Value) { f.Gateway.RoutingViaHost = false }, "needs gatewayConfig.routingViaHost: true", ".l2.interface"},
 		{"forwarding", func(f *addons.ClusterFacts, _ *api.Value) { f.Gateway.IPForwarding = "Restricted" }, "needs gatewayConfig.ipForwarding: Global", ".l2.interface"},
 		{"endpoint", func(f *addons.ClusterFacts, _ *api.Value) {

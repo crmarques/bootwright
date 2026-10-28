@@ -46,7 +46,7 @@ func (c Capability) Plan(ctx context.Context, input lifecycle.PlanInput) (lifecy
 		if input.Controller != "" && input.Controller != controller {
 			return plan, fmt.Errorf("cluster network controller differs from operation controller")
 		}
-		request, err := renderRequest(cluster, controller)
+		request, err := renderRequest(cluster, catalog, controller)
 		if err != nil {
 			return plan, err
 		}
@@ -77,8 +77,8 @@ func (c Capability) Plan(ctx context.Context, input lifecycle.PlanInput) (lifecy
 	}
 	return plan, nil
 }
-func renderRequest(cluster api.Object, controller string) (Request, error) {
-	program, err := Render(cluster)
+func renderRequest(cluster api.Object, catalog api.Catalog, controller string) (Request, error) {
+	program, err := Render(cluster, catalog)
 	if err != nil {
 		return Request{}, err
 	}
@@ -97,7 +97,7 @@ func (c Capability) Unsupported(state *compilation.State) []lifecycle.Refusal {
 		if cluster.Spec().Get("networking", "secondaryNetworks").Len() == 0 {
 			continue
 		}
-		if _, err := Render(cluster); err != nil {
+		if _, err := Render(cluster, state.Effective()); err != nil {
 			result = append(result, lifecycle.RefusalOf(cluster, err.Error(), "reduce or correct the secondary-network declarations"))
 		}
 	}

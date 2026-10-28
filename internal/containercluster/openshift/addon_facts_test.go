@@ -1,6 +1,7 @@
 package openshift
 
 import (
+	"fmt"
 	"net/netip"
 	"reflect"
 	"slices"
@@ -249,6 +250,84 @@ func TestAddonFactsClusterShapes(t *testing.T) {
 				if len(node.Interfaces) != 1 || len(node.Interfaces[0].Addresses) != 1 || node.Interfaces[0].Addresses[0].Addr().Is4() == tc.ipv6 {
 					t.Fatalf("node network: %+v", node)
 				}
+			}
+		})
+	}
+}
+
+func TestMetalLBPoolNamesTheBridgeThatCarriesTheUplinkAddresses(t *testing.T) {
+	cluster, catalog := fixture("libvirt", 1, false)
+	node, _ := catalog.Find(api.Machine, "node-0")
+	network := node.Spec().Get("network")
+	inline := network.Get("inline").With("nmstate", m("interfaces", list(m("name", "eth0", "type", "ethernet"), m("name", "eth1", "type", "ethernet")), "routes", m("config", list(m("destination", "0.0.0.0/0", "next-hop-interface", "eth0", "next-hop-address", "192.0.2.1")))))
+	primary := m("name", "primary", "interface", "eth0", "address", "192.0.2.10/24")
+	objectsWith := func(addresses ...api.Value) []api.Object {
+		bound := node.WithSpec(node.Spec().With("network", network.With("inline", inline).With("addresses", list(addresses...))))
+		objects := []api.Object{bound}
+		for _, o := range catalog.Objects() {
+			if o.Kind() != api.Machine {
+				objects = append(objects, o)
+			}
+		}
+		return objects
+	}
+	addressed := objectsWith(primary, m("name", "secondary", "interface", "eth1", "address", "203.0.113.10/24"))
+	registry := addonpackages.Builtin()
+	for _, test := range []struct {
+		name          string
+		hostAddresses string
+		bridges       int
+		iface         string
+		message       string
+		remedy        string
+		objects       []api.Object
+	}{
+		{"bridge of a Bridge network", "bridge", 1, "br-storage", "", "", addressed},
+		{"bridge shared by two Bridge networks", "bridge", 2, "br-storage", "", "", addressed},
+		{"uplink of a Bridge network", "bridge", 1, "eth1", "is the uplink of secondary network storage0, whose bridge br-storage carries its node addresses", "set l2.interface to br-storage", addressed},
+		{"bridge of a Bridge network over an addressless uplink", "bridge", 1, "br-storage", "interface br-storage of pool services carries no ipv4 address", "assign eth1 an address in the pool's subnet", objectsWith(primary)},
+		{"bridge of a None network", "none", 1, "br-storage", "is the uplink of secondary network storage0, which carries no host address", "name an interface that carries a node address", addressed},
+		{"uplink of a None network", "", 1, "eth1", "which carries no host address", "name an interface that carries a node address", addressed},
+	} {
+		objects := test.objects
+		t.Run(test.name, func(t *testing.T) {
+			networks := []api.Value{}
+			for i := range test.bridges {
+				uplink := m("interface", "eth1", "bridge", "br-storage")
+				if test.hostAddresses != "" {
+					uplink = uplink.With("hostAddresses", api.StringValue(test.hostAddresses))
+				}
+				networks = append(networks, m("name", fmt.Sprintf("storage%d", i), "uplink", uplink, "ipam", m("mode", "Disabled")))
+			}
+			cluster, _ := Normalize(cluster, api.NewCatalog(objects))
+			cluster = cluster.WithSpec(cluster.Spec().WithPath(m("routingViaHost", true, "ipForwarding", "Global"), "networking", "ovnKubernetesConfig", "gatewayConfig").WithPath(list(networks...), "networking", "secondaryNetworks"))
+			binding := obj(api.ClusterAddonBinding, "load-balancer", m("clusterRef", cluster.Name(), "packages", m("metallb", m("subscription", m("channel", "example-channel", "startingCSV", "metallb-operator.v0.0.0"), "pools", list(m("name", "services", "addresses", api.StringList("203.0.113.128-203.0.113.135"), "l2", m("interface", test.iface)))))))
+			binding, _ = addons.NormalizePackages(binding, registry)
+			effective := api.NewCatalog(append(slices.Clone(objects), cluster, binding))
+			facts := AddonFacts(effective, cluster.Name())
+			issues := addons.ValidateWithRegistry(binding, effective, registry, facts)
+			if test.message == "" {
+				if len(issues) > 0 {
+					t.Fatal(issues)
+				}
+				bridges := 0
+				for _, nic := range facts.NodeNetworks[0].Interfaces {
+					if nic.Name == "br-storage" && nic.Type == "ovs-interface" && len(nic.Addresses) == 1 && nic.Addresses[0] == netip.MustParsePrefix("203.0.113.10/24") {
+						bridges++
+					}
+					if nic.Name == "eth1" && len(nic.Addresses) != 0 {
+						t.Fatalf("the uplink keeps its addresses: %+v", nic)
+					}
+				}
+				if bridges != 1 {
+					t.Fatalf("node facts carry %d bridge interfaces: %+v", bridges, facts.NodeNetworks[0].Interfaces)
+				}
+				return
+			}
+			if !slices.ContainsFunc(issues, func(issue api.Issue) bool {
+				return issue.Field == "$.spec.packages.metallb.pools[0].l2.interface" && strings.Contains(issue.Message, test.message) && strings.Contains(issue.Remediation, test.remedy)
+			}) {
+				t.Fatalf("refusal: %+v", issues)
 			}
 		})
 	}

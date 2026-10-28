@@ -91,6 +91,33 @@ check, so it installs on platform `none` (R4:C22, medium confidence).
   address and does not route replies, so it is never a MetalLB announcing
   interface (inference; B729 re-verifies the addressed-NIC path).
 
+## Addressed localnet bridges
+
+A localnet whose VLAN also carries the nodes declares
+[`uplink.hostAddresses: bridge`](../../specs/api/openshift-clusters.md#secondary-networks):
+the addresses a Machine declares on the uplink move onto the bridge's internal
+interface, and a pool or an egress IP in that subnet leaves through the bridge.
+OpenShift 4.21 documents these facts for an egress IP on a secondary NIC
+(OVN-Kubernetes network plugin, "Configuring an egress IP address", section
+9.1.3,
+[docs.redhat.com](https://docs.redhat.com/en/documentation/openshift_container_platform/4.21/html/ovn-kubernetes_network_plugin/configuring-egress-ips-ovn)):
+
+- Egress IPs on a secondary NIC need IP forwarding on that NIC; the cluster-wide
+  `gatewayConfig.ipForwarding: Global` covers it.
+- The egress interface is chosen by the longest-prefix match of the egress IP
+  over the host interfaces' addresses, and that interface's routes are copied
+  from the main routing table.
+- The feature is documented for bare metal only, and a node takes egress IPs
+  only when labeled `k8s.ovn.org/egress-assignable`.
+
+UNVERIFIED, re-verified by [B729](../../specs/milestones/m3.md#b729)'s run
+(nothing here is read from documentation):
+
+- That an egress IP leaves through an OVS bridge's internal interface on a
+  secondary bridge, where the documentation speaks of a NIC.
+- That NMState moves the address from the uplink to the bridge's interface in
+  one transaction without its connectivity probe rolling the change back.
+
 ## Pool creation
 
 MetalLB validates its configuration resources with webhooks served by its

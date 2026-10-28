@@ -2,11 +2,13 @@
 package networking
 
 import (
+	"cmp"
 	"fmt"
 	"slices"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
 	co "github.com/crmarques/bootwright/internal/addons/clusterobjects"
+	"github.com/crmarques/bootwright/internal/machine"
 )
 
 func field(name string, v api.Value) api.FieldValue { return api.FieldValue{Name: name, Value: v} }
@@ -23,7 +25,7 @@ func crd(name string) co.Check {
 }
 
 // Render returns a create-only program with NNCP readiness before any CUDN.
-func Render(cluster api.Object) (co.Program, error) {
+func Render(cluster api.Object, catalog api.Catalog) (co.Program, error) {
 	networks := cluster.Spec().Get("networking", "secondaryNetworks").Items()
 	program := co.Program{Version: co.Version, Steps: []co.Step{}, Checks: []co.Check{}}
 	if len(networks) == 0 {
@@ -33,7 +35,11 @@ func Render(cluster api.Object) (co.Program, error) {
 	networkPhase := co.Phase{Gate: []co.Check{crd("clusteruserdefinednetworks.k8s.ovn.org")}}
 	for _, node := range cluster.Spec().Get("nodes").Items() {
 		name := node.Get("name").Text()
-		policy := nodePolicy(name, networks)
+		var native api.Value
+		if bound, found := catalog.Find(api.Machine, node.Get("machineRef").Text()); found {
+			native, _ = machine.ComposeNetwork(bound, catalog)
+		}
+		policy := nodePolicy(name, networks, native)
 		policies.Objects = append(policies.Objects, policy)
 		check := condition(policy.Ref, "Available")
 		check.Condition.FailOn = []co.Failure{{Type: "Degraded", Status: "True"}, {Type: "Ignored", Status: "True", Reason: "NoMatchingNode"}}
@@ -58,7 +64,7 @@ func Render(cluster api.Object) (co.Program, error) {
 	}
 	return program, nil
 }
-func nodePolicy(node string, networks []api.Value) co.Object {
+func nodePolicy(node string, networks []api.Value, native api.Value) co.Object {
 	interfaces := []api.Value{}
 	mappings := []api.Value{}
 	seen := map[string]bool{}
@@ -68,21 +74,56 @@ func nodePolicy(node string, networks []api.Value) co.Object {
 		iface := uplink.Get("interface").Text()
 		if iface != "" && !seen[bridge] {
 			seen[bridge] = true
-			interfaces = append(interfaces, mapping(field("name", text(bridge)), field("type", text("ovs-bridge")), field("state", text("up")), field("bridge", mapping(field("allow-extra-patch-ports", api.BoolValue(true)), field("options", mapping(field("stp", api.BoolValue(false)), field("mcast-snooping-enable", api.BoolValue(true)))), field("port", api.ListValue(mapping(field("name", text(iface)))))))))
+			ports := []api.Value{mapping(field("name", text(iface)))}
+			if nic, addressed := addressedInterface(native, iface); addressed && uplink.Get("hostAddresses").Text() == "bridge" {
+				ports = append(ports, mapping(field("name", text(bridge))))
+				interfaces = append(interfaces, bridgeInterface(bridge, nic), restatedUplink(nic))
+			}
+			interfaces = append(interfaces, mapping(field("name", text(bridge)), field("type", text("ovs-bridge")), field("state", text("up")), field("bridge", mapping(field("allow-extra-patch-ports", api.BoolValue(true)), field("options", mapping(field("stp", api.BoolValue(false)), field("mcast-snooping-enable", api.BoolValue(true)))), field("port", api.ListValue(ports...))))))
 		}
 		mappings = append(mappings, mapping(field("localnet", network.Get("name")), field("bridge", text(bridge)), field("state", text("present"))))
 	}
 	slices.SortFunc(interfaces, func(a, b api.Value) int {
-		if a.Get("name").Text() < b.Get("name").Text() {
-			return -1
-		}
-		return 1
+		return cmp.Or(cmp.Compare(a.Get("name").Text(), b.Get("name").Text()), cmp.Compare(a.Get("type").Text(), b.Get("type").Text()))
 	})
 	desired := mapping(field("ovn", mapping(field("bridge-mappings", api.ListValue(mappings...)))))
 	if len(interfaces) > 0 {
 		desired = desired.With("interfaces", api.ListValue(interfaces...))
 	}
 	return object("nmstate.io/v1", "NodeNetworkConfigurationPolicy", "bootwright-"+node, mapping(field("nodeSelector", mapping(field("kubernetes.io/hostname", text(node)))), field("desiredState", desired)))
+}
+
+func addressedInterface(native api.Value, name string) (api.Value, bool) {
+	for _, nic := range native.Get("interfaces").Items() {
+		if nic.Get("name").Text() == name {
+			return nic, nic.Get("ipv4", "address").Len()+nic.Get("ipv6", "address").Len() > 0
+		}
+	}
+	return api.Value{}, false
+}
+
+func bridgeInterface(bridge string, uplink api.Value) api.Value {
+	nic := mapping(field("name", text(bridge)), field("type", text("ovs-interface")), field("state", text("up")), field("copy-mac-from", uplink.Get("name")), field("ipv4", addressFamily(uplink.Get("ipv4", "address"), false)), field("ipv6", addressFamily(uplink.Get("ipv6", "address"), true)))
+	if uplink.Has("mtu") {
+		nic = nic.With("mtu", uplink.Get("mtu"))
+	}
+	return nic
+}
+
+func addressFamily(addresses api.Value, autoconf bool) api.Value {
+	if addresses.Len() == 0 {
+		return mapping(field("enabled", api.BoolValue(false)))
+	}
+	family := mapping(field("enabled", api.BoolValue(true)), field("dhcp", api.BoolValue(false)))
+	if autoconf {
+		family = family.With("autoconf", api.BoolValue(false))
+	}
+	return family.With("address", addresses)
+}
+
+func restatedUplink(uplink api.Value) api.Value {
+	disabled := mapping(field("enabled", api.BoolValue(false)))
+	return mapping(field("name", uplink.Get("name")), field("type", uplink.Get("type")), field("state", text("up")), field("ipv4", disabled), field("ipv6", disabled))
 }
 func userNetwork(n api.Value) co.Object {
 	ipam := n.Get("ipam")

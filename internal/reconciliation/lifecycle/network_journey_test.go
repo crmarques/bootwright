@@ -89,7 +89,7 @@ func networkJourney(t *testing.T) (*lifecycle.CapabilityJourney, *networkAdapter
 		field("networking", api.MapValue(field("secondaryNetworks", api.ListValue(api.MapValue(
 			field("name", api.StringValue("tenant")), field("uplink", api.MapValue(field("bridge", api.StringValue("br-ex")))), field("namespaceSelector", api.MapValue(field("matchLabels", api.MapValue(field("tenant", api.StringValue("yes"))))))))))),
 	))
-	program, err := networking.Render(cluster)
+	program, err := networking.Render(cluster, api.NewCatalog(nil))
 	if err != nil {
 		t.Fatal(err)
 	}
