@@ -36,12 +36,19 @@ func domainEffects(object api.Object) (Bearing, bool) {
 	return Bearing{}, false
 }
 
+// claimsKinds is a build whose implementations claim every object of their
+// bound kinds.
+func claimsKinds(kinds []string) func(api.Object) bool {
+	return func(object api.Object) bool { return slices.Contains(kinds, string(object.Kind())) }
+}
+
 // unclaimedCase is a selected graph one row of the unclaimed-object table
 // refuses, the kinds this build claims, and the object and kind its row names.
 type unclaimedCase struct {
 	catalog api.Catalog
 	claimed []string
 	object  api.Object
+	claims  func(api.Object) bool
 }
 
 // TestUnclaimedObjectTableMatchesTheEngine holds the engine's refusal of what
@@ -64,13 +71,15 @@ func TestUnclaimedObjectTableMatchesTheEngine(t *testing.T) {
 	bare := machine("bare", false)
 	tune := playbook("tune", true)
 	cases := map[string]unclaimedCase{
-		"An unclaimed effect-bearing kind": {api.NewCatalog([]api.Object{storage}), []string{"Machine"}, storage},
+		"An unclaimed effect-bearing kind": {api.NewCatalog([]api.Object{storage}), []string{"Machine"}, storage, nil},
 		"An unclaimed managed service": {api.NewCatalog([]api.Object{proxy, managed(api.Proxy, "upstream", "external")}),
-			nil, proxy},
+			nil, proxy, nil},
 		"An unclaimed managed Registry or LoadBalancer": {api.NewCatalog([]api.Object{managed(api.Registry, "mirror", "managed"), managed(api.LoadBalancer, "edge", "external")}),
-			nil, managed(api.Registry, "mirror", "managed")},
-		"A Machine to install with no capability": {api.NewCatalog([]api.Object{bare, machine("ready", true)}), nil, bare},
-		"An enabled CustomPlaybook":               {api.NewCatalog([]api.Object{tune, playbook("idle", false)}), nil, tune},
+			nil, managed(api.Registry, "mirror", "managed"), nil},
+		"A Machine to install with no capability": {api.NewCatalog([]api.Object{bare, machine("ready", true)}), nil, bare, nil},
+		"An enabled CustomPlaybook":               {api.NewCatalog([]api.Object{tune, playbook("idle", false)}), nil, tune, nil},
+		"An unclaimed object of a claimed kind": {api.NewCatalog([]api.Object{storage}), []string{string(api.CephCluster)}, storage,
+			func(api.Object) bool { return false }},
 	}
 	data, err := os.ReadFile(transitionSpec)
 	if err != nil {
@@ -89,10 +98,14 @@ func TestUnclaimedObjectTableMatchesTheEngine(t *testing.T) {
 				return strings.NewReplacer("<kind>", string(test.object.Kind()), "<object>", test.object.Identity()).Replace(text)
 			}
 			want := []Refusal{RefusalOf(test.object, expand(specCode(t, row[2])), expand(specCode(t, row[3])))}
-			if got := Unrealizable(test.catalog, test.claimed, domainEffects); !reflect.DeepEqual(got, want) {
+			claims := test.claims
+			if claims == nil {
+				claims = claimsKinds(test.claimed)
+			}
+			if got := Unrealizable(test.catalog, test.claimed, claims, domainEffects); !reflect.DeepEqual(got, want) {
 				t.Fatalf("the engine refuses %+v, the table %+v", got, want)
 			}
-			if got := Unrealizable(test.catalog, []string{string(test.object.Kind())}, domainEffects); len(got) != 0 {
+			if got := Unrealizable(test.catalog, []string{string(test.object.Kind())}, claimsKinds([]string{string(test.object.Kind())}), domainEffects); len(got) != 0 {
 				t.Fatalf("a claimed kind is still refused: %+v", got)
 			}
 		})

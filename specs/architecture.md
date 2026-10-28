@@ -1136,11 +1136,19 @@ implementations claim objects by: the InfraProvider arm, an OpenShiftCluster's
 `spec.implementation`. Each binding names the capability family it realizes,
 and bindings of one family are alternatives. Every selected object of a block
 family is claimed by exactly one bound implementation or refused by its
-domain's refusal table: two bindings of one family that plan blocks for one
-object refuse before registration with `lifecycle.unsupported`, naming both
-implementations, and an effect-bearing object of a kind no binding claims is
-refused by the [unclaimed-object table](state-reconciliation.md#stages-and-the-pause-boundary).
-`TestEveryExampleObjectIsClaimedOncePerFamily` holds every example to this.
+domain's refusal table: two bindings of one family that plan blocks for, or
+claim, one object refuse before registration with `lifecycle.unsupported`,
+naming both implementations. Every implementation lists, once per selected
+graph and independently of planning, the objects it claims: those it plans
+blocks for, and those its own rule realizes with no block, such as a
+bare-metal InfraProvider realized only through its Machines; an object its
+capability refuses is not claimed. An effect-bearing object that no bound
+implementation claims and no refusal table names is refused by the
+[unclaimed-object table](state-reconciliation.md#stages-and-the-pause-boundary),
+whether or not its kind is bound.
+`TestEveryExampleObjectIsClaimedOncePerFamily` holds every example to this,
+every planned block of an effect-bearing object to its implementation's
+claim, and every claim to a block or a named no-block rule.
 Outside its owning implementation or substrate package, the API schema that
 declares the arms, composition and its domain's admission refusals,
 production code reaches an arm's or an implementation's specifics only through
@@ -1148,11 +1156,7 @@ a capability the owner publishes, such as a substrate-declared media delivery
 mode. `TestNoProductionCodeBranchesOnAnArmOrImplementationOutsideItsOwner`
 rejects any other arm constant, arm value or arm field path and any other
 package's implementation identity constant or value, except where its exact
-allowlist, which only shrinks, names the item that removes the use. Not yet
-met: the engine checks per kind, not per object, that a binding claims an
-effect-bearing object, so one of a claimed kind that no binding plans and no
-refusal names is left out silently; tracked as
-[B808](milestones/backlog.md#b808).
+allowlist, which only shrinks, names the item that removes the use.
 
 Each domain contract names the facts and authored arms its implementations
 select on. When an operation is

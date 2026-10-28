@@ -226,10 +226,6 @@ func Validate(o api.Object, c api.Catalog) []api.Issue {
 			path := fmt.Sprintf("$.spec.vsphere.machineProfiles[%d]", index)
 			if !profile.Has("failureDomainRef") && len(domains) > 1 {
 				issues = add(issues, issue(path+".failureDomainRef", "multiple failure domains require an explicit profile selection"))
-			} else if profile.Has("failureDomainRef") {
-				if _, ok := findNamed(arm.Get("failureDomains"), "name", profile.Get("failureDomainRef").Text()); !ok {
-					issues = add(issues, reference(path+".failureDomainRef", "profile failure domain must name a domain on this provider"))
-				}
 			}
 		}
 	}

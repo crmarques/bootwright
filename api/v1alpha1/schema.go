@@ -30,6 +30,7 @@ type Shape struct {
 	Reference    []Kind
 	Category     Category
 	Nested       ReferenceClass
+	Scope        *Scope
 	SecretTypes  []string
 	Arms         []string
 	AllowEmpty   bool
@@ -90,9 +91,6 @@ func defaulted(name string, s *Shape, value Value) Field {
 	return Field{Name: name, Shape: s, Default: value}
 }
 func ref(kind ...Kind) *Shape { return &Shape{Type: String, MinLength: 1, Reference: kind} }
-func nestedRef() *Shape       { return &Shape{Type: String, MinLength: 1, Nested: NestedReference} }
-func endpointRef() *Shape     { return &Shape{Type: String, MinLength: 1, Nested: EndpointReference} }
-func serviceRef() *Shape      { return &Shape{Type: String, MinLength: 1, Nested: NativeServiceReference} }
 func externalRef() *Shape     { return &Shape{Type: String, MinLength: 1, Nested: ExternalReference} }
 func external(s *Shape) *Shape {
 	s.Nested = ExternalReference

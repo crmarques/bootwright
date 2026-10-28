@@ -364,7 +364,7 @@ func referenceRefusals() []diagnosticTuple {
 func expandedRefusals() []diagnosticTuple {
 	return append(referenceRefusals(),
 		diagnosticTuple{"api.invariant", "CephConsumer", "acceptance-external-export", laterServiceRefusal},
-		diagnosticTuple{"api.invariant", "CephNVMeoFSubsystem", "acceptance-nvmeof", "$.spec.serviceRef"},
+		diagnosticTuple{"api.reference", "CephNVMeoFSubsystem", "acceptance-nvmeof", "$.spec.serviceRef"},
 		diagnosticTuple{"api.deferred", "CustomPlaybook", "acceptance-playbook", laterServiceRefusal},
 		diagnosticTuple{"api.unrealized", "InfraProvider", "acceptance-vsphere", "$.spec.vsphere"},
 		diagnosticTuple{"api.unrealized", "MachineInstallProfile", "acceptance-clone", "$.spec.installer.templateClone"},

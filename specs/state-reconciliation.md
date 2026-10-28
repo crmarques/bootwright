@@ -1071,31 +1071,29 @@ rules, so what starts never depends on which running block completes first. A se
 
 A fresh `plan` and a fresh `apply` refuse, whatever stages are selected and
 before registration, every selected object this executable cannot realize: an
-effect-bearing object of a kind no capability claims, such as a storage or
-add-on object or a managed `Registry`, an enabled `CustomPlaybook`, and every
-shape a capability reports unsupported. Each object is its own
-`lifecycle.unsupported` diagnostic, whose object is the refused one and which
-carries the reason its capability gives, or that no capability claims its kind,
-and the remedy, so `plan` says why as `apply` does; an object refused for two
-reasons is two diagnostics. An object two implementations of one capability
-family both plan blocks for is refused the same way, after planning and before
-registration in a fresh plan of either verb, naming both implementations,
-because binding order never decides which one realizes it. A frozen plan
+effect-bearing object no implementation
+[claims](architecture.md#implementation-selection), such as a managed
+`Registry` or an enabled `CustomPlaybook`, and every shape a capability reports
+unsupported. Each refused object is its own `lifecycle.unsupported`
+diagnostic, with the reason its capability gives, or that nothing claims it,
+and the remedy, so `plan` says why as `apply` does; one refused for two
+reasons is two diagnostics. An object two implementations of one family both
+plan blocks for is refused the same way after planning, naming both, because
+binding order never decides which one realizes it. A frozen plan
 requires a resolved implementation for every block; a removal planned from a
 frozen plan is never refused this way.
 
 Which add-on kinds select an effect is owned by
-[add-ons](add-ons.md#built-in-packages-and-selection). The engine consequence
-is that only a `ClusterAddonBinding` is an effect-bearing kind that the add-on
-capability claims, and what it cannot realize it reports as
+[add-ons](add-ons.md#built-in-packages-and-selection): the add-on capability
+claims a `ClusterAddonBinding` and reports what it cannot realize as
 [add-on refusals](add-ons.md#refusal-table).
 
-The engine's own refusals, of objects no capability of this executable claims,
-are the rows below, and `TestUnclaimedObjectTableMatchesTheEngine` holds
-`Unrealizable` to them. An external managed service and a Machine whose
-operating system is provided are inputs and are never refused. Whether an
-object bears an effect is its own domain's predicate, which composition hands
-the engine, so the engine names no kind or field of a domain itself. Each
+The engine's own refusals, of objects nothing claims or refuses, are the rows
+below, and `TestUnclaimedObjectTableMatchesTheEngine` holds
+`Unrealizable` to them. An external service and a Machine whose operating
+system is provided are inputs, never refused. Whether an
+object bears an effect is its domain's predicate, which composition hands the
+engine, so it names no domain kind or field. Each
 reason and remedy is the diagnostic's message and remediation, in which
 `<kind>` is the refused object's kind and `<object>` its identity;
 `examples/machines/lab-rhel` is the supported shape the remedy names.
@@ -1106,8 +1104,9 @@ reason and remedy is the diagnostic's message and remediation, in which
 | An unclaimed effect-bearing kind | an InfraProvider, OpenShiftCluster, storage or add-on object of a kind no capability claims | `no capability of this executable realizes the <kind> kind` | `remove <object> from the selected Environment, or use an example within the supported shape such as examples/machines/lab-rhel` |
 | An unclaimed managed service | a `management: managed` Proxy, DNSServer, NTPServer or ArtifactServer of a kind no capability claims | `no capability of this executable manages the <kind> kind` | `remove <object> from the selected Environment, or use an example within the supported shape such as examples/machines/lab-rhel` |
 | An unclaimed managed Registry or LoadBalancer | a `management: managed` Registry or LoadBalancer, which no capability claims | `no capability of this executable manages the <kind> kind` | `declare spec.management: external on <object> to use a <kind> the operator runs, or remove it from the selected Environment` |
-| A Machine to install with no capability | a Machine with `spec.os.provided: false` while no capability claims Machine | `no capability of this executable realizes a Machine whose operating system is not provided` | `remove <object> from the selected Environment, or use an example within the supported shape such as examples/machines/lab-rhel` |
-| An enabled CustomPlaybook | a CustomPlaybook with `spec.enabled: true` while no capability claims CustomPlaybook | `no capability of this executable runs an enabled CustomPlaybook` | `remove <object> from the selected Environment, or use an example within the supported shape such as examples/machines/lab-rhel` |
+| A Machine to install with no capability | a Machine with `spec.os.provided: false`, its kind unbound | `no capability of this executable realizes a Machine whose operating system is not provided` | `remove <object> from the selected Environment, or use an example within the supported shape such as examples/machines/lab-rhel` |
+| An enabled CustomPlaybook | a CustomPlaybook with `spec.enabled: true`, its kind unbound | `no capability of this executable runs an enabled CustomPlaybook` | `remove <object> from the selected Environment, or use an example within the supported shape such as examples/machines/lab-rhel` |
+| An unclaimed object of a claimed kind | an effect-bearing object of a bound kind none claims | `no implementation of this executable claims <object>` | `remove <object> from the selected Environment, or use an example within the supported shape such as examples/machines/lab-rhel` |
 
 A fresh `apply` also refuses, once it has bound the Secrets
 its plan names and before registration, any bound material a capability proves

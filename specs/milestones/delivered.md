@@ -8643,7 +8643,7 @@ records the gates.
 cluster and Desired state. Delivered on 2026-10-26 as lane G of the
 [audit remediation](backlog.md#lane-order-and-progress) under D182, with
 D183's answers to Q72 to Q75; the lane also partly delivered
-[B808](backlog.md#b808), and moved B810's package split and coverage-page
+[B808](#x179--audit-lane-q1-per-object-claims-and-nested-references), and moved B810's package split and coverage-page
 renames into [B814](#x171--audit-lane-i-api-shape-and-grammar).
 
 Implementation selection is enforced: two implementations of one family
@@ -8722,7 +8722,7 @@ Add-ons, Storage, Infrastructure services and Architecture. Delivered on
 2026-10-27 as lane I of the
 [audit remediation](backlog.md#lane-order-and-progress) under D182, with D183's
 answers to Q77 to Q88, Q105 to Q107, Q110 to Q115 and Q118 and D185's names;
-the lane also partly delivered [B826](backlog.md#b826) and parked B848 to B856.
+the lane also partly delivered [B826](#x179--audit-lane-q1-per-object-claims-and-nested-references) and parked B848 to B856.
 B810's package split and coverage-page renames, which X169 moved into B814, are
 delivered here.
 
@@ -9063,6 +9063,39 @@ move: `os-install-anaconda-v18`, `kickstart-anaconda-v14` and
 
 **Guard tests:** the libvirt route, evidence MTU, selection, erase-request,
 renderer and `%pre` shell tests, each proved by a seeded mismatch; the
+delivering commit records the gates.
+
+### X179 — Audit lane Q1: per-object claims and nested references
+
+**Items:** B808 and B826.
+**Kind:** defect. **Owners:** Architecture and Desired state. Delivered on
+2026-10-27 as lane Q1 of the
+[audit remediation](backlog.md#lane-order-and-progress) under the owner's
+request to implement the remaining items.
+
+Each implementation names, once per selected graph, the objects it realizes
+through its blocks or through a rule that plans none (a bare-metal
+InfraProvider, a ClusterAddonBinding), and refused objects stay owned by their
+refusal tables: an effect-bearing object that nothing claims and nothing
+refuses is refused, and so is one two implementations of a family claim.
+Implementations claim only what they plan or explicitly own, which the example
+corpus proves in both directions.
+
+Every nested, endpoint and native-service reference field declares in the
+schema where it resolves (the referring object, an object it references, a
+sibling record, every topology node's Machine or the bootstrap node's) and
+compiles through the shared `api.reference` diagnostic; owner admissions keep
+only checks beyond existence. A nested reference adds nothing when its owner
+is unresolved, refused at the field that names it, or required and absent, and
+the message echoes the authored value only when it is a valid name. Ceph
+`serviceRef`, `mdsServiceRef`, `serviceBindings[].serviceRef` and the
+bootstrap `nodeRef` and `addressRef` move from `api.invariant` to
+`api.reference`, and `cephadm.addressRef` refuses at its own field. On a
+compiled graph the plan-time lookups of these references can no longer miss,
+which narrows [B861](backlog.md#b861) to derived names.
+
+**Guard tests:** the per-graph claim, converse claim, family claim, cost,
+scope and shared-diagnostic tests, each proved by a seeded mismatch; the
 delivering commit records the gates.
 
 ## M3 independent in-tree completion

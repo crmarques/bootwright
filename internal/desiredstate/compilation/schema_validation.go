@@ -54,6 +54,66 @@ func validateString(record *objectRecord, value api.Value, shape *api.Shape, pat
 			validateReference(record, value.Text(), shape, path, catalog, sink)
 		}
 	}
+	if shape.Scope != nil && value.Text() != "" && references && record != nil {
+		validateNested(record, value.Text(), shape.Scope, path, catalog, sink)
+	}
+}
+
+func validateNested(record *objectRecord, name string, scope *api.Scope, path string, catalog api.Catalog, sink *diagnosticSink) {
+	enclosing := path[:max(strings.LastIndexByte(path, '.'), 0)]
+	owners, resolved := scope.Owners(record.object, valueAt(record.object.Value(), enclosing), catalog)
+	if !resolved {
+		return
+	}
+	dependency := nestedDependency{field: record.sourceField(path)}
+	switch {
+	case scope.Sibling != "":
+		dependency.owner = record.sourceField(enclosing + "." + scope.Sibling)
+	case len(scope.Owner) > 0 && len(scope.Each) == 0:
+		dependency.owner = record.sourceField("$.spec." + strings.Join(scope.Owner, "."))
+	case len(scope.Each) == 0:
+		dependency.entries = "$.spec." + strings.Join(scope.Entries, ".")
+	}
+	declared := "spec." + strings.Join(scope.Entries, ".")
+	named, reference := " named "+name, name
+	if !nestedName(name) {
+		named, reference = " of the authored name", "it"
+	}
+	for _, owner := range owners {
+		switch matches := countOf(owner.Names, name); {
+		case matches == 0:
+			sink.issue(record, api.Issue{Code: "api.reference", Field: path, Message: "no " + scope.Noun + named + " is declared on " + owner.Object.Identity(),
+				Remediation: "correct the reference to name an entry of " + declared + " on " + owner.Object.Identity() + ", or declare " + reference + " there"})
+		case matches > 1:
+			sink.issue(record, api.Issue{Code: "api.reference", Field: path, Message: "the" + named + " is ambiguous: it names " + strconv.Itoa(matches) + " entries of " + declared + " on " + owner.Object.Identity(),
+				Remediation: "give the entries of " + declared + " on " + owner.Object.Identity() + " distinct names"})
+		default:
+			continue
+		}
+		sink.nested = append(sink.nested, dependency)
+	}
+}
+
+func nestedName(name string) bool {
+	if len(name) > 253 {
+		return false
+	}
+	for _, segment := range strings.Split(name, ".") {
+		if !api.ValidLexical("name", segment) {
+			return false
+		}
+	}
+	return true
+}
+
+func countOf(names []string, name string) int {
+	count := 0
+	for _, candidate := range names {
+		if candidate == name {
+			count++
+		}
+	}
+	return count
 }
 
 func retiredValue(record *objectRecord, path, value string) (api.RetiredValue, bool) {

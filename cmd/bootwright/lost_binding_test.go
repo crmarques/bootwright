@@ -13,6 +13,7 @@ import (
 	"testing"
 	"time"
 
+	api "github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/cli"
 	"github.com/crmarques/bootwright/internal/reconciliation"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
@@ -34,6 +35,8 @@ func (removableCapabilities) Resolve(kind, implementation string) (lifecycle.Cap
 type removableCapability struct{}
 
 var errNotReached = errors.New("a refused transition reached a capability effect")
+
+func (removableCapability) Claimed(api.Catalog) []string { return nil }
 
 func (removableCapability) Plan(context.Context, lifecycle.PlanInput) (lifecycle.CapabilityPlan, error) {
 	return lifecycle.CapabilityPlan{}, errNotReached

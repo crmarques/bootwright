@@ -420,22 +420,8 @@ func unsupportedFailure(refused []Refusal) error {
 	return &diagnostics.Failure{Diagnostics: reported}
 }
 
-// unsupportedRefusals is every refusal of a selected object this executable
-// cannot realize, in canonical order: what each bound capability reports
-// within its own kinds, and every effect-bearing object no capability claims.
-// It is pure, so status reads the same list a plan refuses.
 func (s Service) unsupportedRefusals(state *compilation.State) []Refusal {
-	var refused []Refusal
-	for _, bound := range s.capabilities.Bindings() {
-		capability, ok := s.capabilities.Resolve(bound.Kind, bound.Implementation)
-		if !ok {
-			continue
-		}
-		if reporter, ok := capability.(UnsupportedReporter); ok {
-			refused = append(refused, reporter.Unsupported(state)...)
-		}
-	}
-	return SortRefusals(append(refused, Unrealizable(state.Effective(), s.capabilityKinds(), s.options.EffectBearing)...))
+	return Unsupported(s.capabilities, state, s.options.EffectBearing)
 }
 
 const supportedExample = "examples/machines/lab-rhel"

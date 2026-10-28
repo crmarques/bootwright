@@ -191,7 +191,6 @@ func (a *admission) nvmeofSubsystemService(cluster api.Object, spec api.Value) {
 	service, ok := NativeService(cluster, textOf(spec, "serviceRef"))
 	switch {
 	case !ok:
-		a.issue("api.invariant", "$.spec.serviceRef", "spec.serviceRef resolves to no declared native service of CephCluster "+cluster.Name(), "add a spec.services entry with service_type nvmeof to CephCluster "+cluster.Name()+" and set spec.serviceRef to its qualified name nvmeof.<service_id>")
 		return
 	case textOf(service, "service_type") != "nvmeof":
 		a.issue("api.invariant", "$.spec.serviceRef", "spec.serviceRef must name an nvmeof service; it names a "+textOf(service, "service_type")+" service", "set spec.serviceRef to the qualified name nvmeof.<service_id> of a declared nvmeof service")

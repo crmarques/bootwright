@@ -228,7 +228,6 @@ func TestEveryAdmissionRuleRemediationNamesWhatToChange(t *testing.T) {
 			return o.WithSpec(o.Spec().With("distribution", m("type", "okd", "release", m("version", "4.21.15"))).With("security", m("fips", m("enabled", true)))), c
 		}},
 		{"prefixLength without address", "$.spec.install.endpoints.api.prefixLength", "prefix length requires an address", []string{"spec.install.endpoints.api.address", "spec.install.endpoints.api.prefixLength"}, install("kubevirt", "install.endpoints.api", m("source", m("type", "external"), "prefixLength", api.IntegerValue("24")))},
-		{"unknown bind address", "$.spec.install.endpoints.api.source.bindAddressRef", "bind address must resolve", []string{"spec.install.endpoints.api.source.bindAddressRef", "bindAddresses[].name"}, loadBalancer("missing")},
 		{"ambiguous bind address", "$.spec.install.endpoints.api.source.bindAddressRef", "explicit selection", []string{"spec.install.endpoints.api.source.bindAddressRef", "bindAddresses[].name"}, loadBalancer("")},
 	}
 	for _, tc := range cases {
@@ -250,5 +249,11 @@ func TestEveryAdmissionRuleRemediationNamesWhatToChange(t *testing.T) {
 				t.Fatalf("rule %q did not fire at %s: %v", tc.message, tc.field, Validate(o, c))
 			}
 		})
+	}
+	o, c := loadBalancer("missing")()
+	for _, issue := range Validate(o, c) {
+		if issue.Field == "$.spec.install.endpoints.api.source.bindAddressRef" {
+			t.Fatalf("an unknown bind address, which the shared reference check reports, was refused again: %v", issue)
+		}
 	}
 }

@@ -32,7 +32,10 @@ func validateLibvirtAttachmentMTUs(o, provider api.Object, native api.Value) []a
 			entry, _ := namedValueBy(attachments, "interface", name)
 			reference = entry.Get("attachmentRef").Text()
 		}
-		attachment, _ := namedValue(provider.Spec().Get("networkAttachments"), reference)
+		attachment, found := namedValue(provider.Spec().Get("networkAttachments"), reference)
+		if reference != "" && !found {
+			return 65536
+		}
 		if mtu, ok := substrate.AttachmentMTU(attachment); ok {
 			return mtu
 		}

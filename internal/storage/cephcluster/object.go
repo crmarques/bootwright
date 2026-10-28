@@ -47,7 +47,6 @@ func (a *admission) gatewayService(cluster api.Object, spec api.Value) {
 	service, ok := NativeService(cluster, ref)
 	switch {
 	case !ok:
-		a.issue("api.invariant", "$.spec.serviceRef", "spec.serviceRef resolves to no declared native service of CephCluster "+cluster.Name(), "add a spec.services entry with service_type rgw to CephCluster "+cluster.Name()+" and set spec.serviceRef to its qualified name rgw.<service_id>")
 	case textOf(service, "service_type") != "rgw":
 		a.issue("api.invariant", "$.spec.serviceRef", "spec.serviceRef must name an rgw service; it names a "+textOf(service, "service_type")+" service", "set spec.serviceRef to the qualified name rgw.<service_id> of a declared rgw service")
 	default:

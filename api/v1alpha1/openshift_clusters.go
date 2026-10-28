@@ -3,7 +3,7 @@ package v1alpha1
 func init() { register(OpenShiftCluster, openShiftClusterSchema) }
 
 func clusterEndpoint() *Shape {
-	source := record(defaulted("type", enumeration("installer", "external", "loadBalancer", "node"), StringValue("installer")), field("loadBalancerRef", ref(LoadBalancer)), field("bindAddressRef", nestedRef()))
+	source := record(defaulted("type", enumeration("installer", "external", "loadBalancer", "node"), StringValue("installer")), field("loadBalancerRef", ref(LoadBalancer)), field("bindAddressRef", nestedIn(Scope{Noun: "bind address", Sibling: "loadBalancerRef", Kind: LoadBalancer, Entries: []string{"bindAddresses"}})))
 	for _, kind := range []string{"installer", "external", "node"} {
 		source.Suppress = append(source.Suppress, Suppression{Field: "type", Value: StringValue(kind), Fields: []string{"loadBalancerRef", "bindAddressRef"}})
 	}

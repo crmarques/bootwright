@@ -29,12 +29,12 @@ func machineBMCSchema() *Shape {
 }
 
 func machineSubstrateSchema() *Shape {
-	macs := &Shape{Type: Sequence, Atomic: true, NameKey: "nicRef", Element: record(required("nicRef", nestedRef()), required("macAddress", lexical("mac")))}
-	attachments := &Shape{Type: Sequence, Atomic: true, NameKey: "interface", Element: record(required("interface", lexical("ifname")), required("attachmentRef", nestedRef()))}
+	macs := &Shape{Type: Sequence, Atomic: true, NameKey: "nicRef", Element: record(required("nicRef", nestedIn(Scope{Noun: "hardware NIC", Entries: []string{"hardware", "nics"}})), required("macAddress", lexical("mac")))}
+	attachments := &Shape{Type: Sequence, Atomic: true, NameKey: "interface", Element: record(required("interface", lexical("ifname")), required("attachmentRef", nestedIn(Scope{Noun: "network attachment", Owner: []string{"substrate", "providerRef"}, Kind: InfraProvider, Entries: []string{"networkAttachments"}})))}
 	baremetal := record(field("bmc", machineBMCSchema()), field("nics", macs), field("rootDevice", record(field("wwn", nonempty()), field("hctl", nonempty()), field("serialNumber", nonempty()))))
-	libvirt := record(field("profileRef", nestedRef()), field("interfaceAttachments", attachments))
-	kubevirt := record(field("profileRef", nestedRef()), field("interfaceAttachments", attachments))
-	vsphere := record(field("profileRef", nestedRef()), field("nics", macs))
+	libvirt := record(field("profileRef", nestedIn(Scope{Noun: "machine profile", Owner: []string{"substrate", "providerRef"}, Kind: InfraProvider, Within: []string{"libvirt"}, Entries: []string{"libvirt", "machineProfiles"}})), field("interfaceAttachments", attachments))
+	kubevirt := record(field("profileRef", nestedIn(Scope{Noun: "machine profile", Owner: []string{"substrate", "providerRef"}, Kind: InfraProvider, Within: []string{"kubevirt"}, Entries: []string{"kubevirt", "machineProfiles"}})), field("interfaceAttachments", attachments))
+	vsphere := record(field("profileRef", nestedIn(Scope{Noun: "machine profile", Owner: []string{"substrate", "providerRef"}, Kind: InfraProvider, Within: []string{"vsphere"}, Entries: []string{"vsphere", "machineProfiles"}})), field("nics", macs))
 	arms := choice(field("baremetal", baremetal), field("libvirt", libvirt), field("kubevirt", kubevirt), field("vsphere", vsphere))
 	arms.AllowEmpty = true
 	arms.Fields = append([]Field{field("providerRef", ref(InfraProvider))}, arms.Fields...)
@@ -42,16 +42,16 @@ func machineSubstrateSchema() *Shape {
 }
 
 func machineSchema() *Shape {
-	ssh := record(field("addressRef", nestedRef()), field("port", port()), field("user", lexical("posix-user")), required("auth", atomic(choice(field("operatorIdentity", record()), field("privateKeyRef", secret("sshKeyPair")), field("passwordRef", secret("usernamePassword"))))), field("sudoPasswordRef", secret("usernamePassword")), field("knownHostsRef", secret("opaque")))
+	ssh := record(field("addressRef", nestedIn(Scope{Noun: "address", Entries: []string{"network", "addresses"}})), field("port", port()), field("user", lexical("posix-user")), required("auth", atomic(choice(field("operatorIdentity", record()), field("privateKeyRef", secret("sshKeyPair")), field("passwordRef", secret("usernamePassword"))))), field("sudoPasswordRef", secret("usernamePassword")), field("knownHostsRef", secret("opaque")))
 	access := choice(field("local", boolean()), field("ssh", ssh))
 	access.AllowEmpty = true
 	access.Fields = append(access.Fields, field("rootLogin", enumeration("keep", "revoke")))
 	network := choice(field("configRef", ref(NetworkConfig)), field("inline", machineNetworkSchema()))
 	network.AllowEmpty = true
 	network.Fields = append(network.Fields,
-		field("attachmentRef", nestedRef()),
-		field("installAddressRef", nestedRef()), field("addresses", named(record(required("name", nonempty()), required("address", lexical("address")), field("interface", lexical("ifname"))))),
-		field("interfaceBinding", &Shape{Type: Sequence, Atomic: true, NameKey: "nicRef", Element: record(required("nicRef", nestedRef()), required("interfaceName", lexical("ifname")))}), field("overrides", native()))
+		field("attachmentRef", nestedIn(Scope{Noun: "network attachment", Owner: []string{"substrate", "providerRef"}, Kind: InfraProvider, Entries: []string{"networkAttachments"}})),
+		field("installAddressRef", nestedIn(Scope{Noun: "address", Entries: []string{"network", "addresses"}})), field("addresses", named(record(required("name", nonempty()), required("address", lexical("address")), field("interface", lexical("ifname"))))),
+		field("interfaceBinding", &Shape{Type: Sequence, Atomic: true, NameKey: "nicRef", Element: record(required("nicRef", nestedIn(Scope{Noun: "hardware NIC", Entries: []string{"hardware", "nics"}})), required("interfaceName", lexical("ifname")))}), field("overrides", native()))
 	return record(
 		field("placement", record(field("site", name()))),
 		field("substrate", machineSubstrateSchema()),
@@ -69,7 +69,7 @@ func machineNetworkSchema() *Shape {
 func machineProfileSchema(variant string) *Shape {
 	fields := []Field{required("name", nonempty()), defaulted("cpu", integer("0", "1024"), IntegerValue("0")), defaulted("memoryMiB", integer("0", "16777216"), IntegerValue("0")), defaulted("diskGiB", integer("0", "65536"), IntegerValue("0"))}
 	if variant == "vsphere" {
-		fields = append(fields, field("template", nonempty()), field("failureDomainRef", nestedRef()))
+		fields = append(fields, field("template", nonempty()), field("failureDomainRef", nestedIn(Scope{Noun: "failure domain", Entries: []string{"vsphere", "failureDomains"}})))
 	}
 	if variant != "kubevirt" {
 		disk := record(required("name", name()), required("sizeGiB", integer("1", "65536")))

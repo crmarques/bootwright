@@ -427,6 +427,17 @@ func ProvidersOn(catalog api.Catalog, arm string) []api.Object {
 	return found
 }
 
+// HostedOn lists the Machines the providers of one arm realize.
+func HostedOn(catalog api.Catalog, arm string) []string {
+	var hosted []string
+	for _, provider := range ProvidersOn(catalog, arm) {
+		for _, machine := range HostedMachines(catalog, provider.Name()) {
+			hosted = append(hosted, machine.Identity())
+		}
+	}
+	return hosted
+}
+
 // Unrealized is one selected object this executable cannot realize, why, and
 // what the operator changes.
 type Unrealized struct {

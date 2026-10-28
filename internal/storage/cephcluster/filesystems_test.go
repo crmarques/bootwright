@@ -40,7 +40,6 @@ func TestFilesystemMDSServiceRefMustResolveToMDSOfSameName(t *testing.T) {
 		catalog              api.Catalog
 	}{
 		{"osd.data", mismatch, mismatchRemedy, catalog},
-		{"mds.files", "CephCluster storage declares no native service mds.files", "add a spec.services entry with service_type mds and service_id files to CephCluster storage", fixtureCatalog()},
 		{"mds.other", mismatch, mismatchRemedy, withFilesystemServices(t, fixtureCatalog(), mdsService("other"))},
 	} {
 		changed := fs.WithSpec(fs.Spec().With("mdsServiceRef", api.StringValue(tt.ref)))
@@ -51,6 +50,9 @@ func TestFilesystemMDSServiceRefMustResolveToMDSOfSameName(t *testing.T) {
 		if tt.ref != "mds.files" && strings.Contains(found[0].Message+found[0].Remediation, tt.ref) {
 			t.Fatalf("%s: the refusal echoed the authored value", tt.ref)
 		}
+	}
+	if found := issuesAt(admitted(fixtureCatalog(), fs), "$.spec.mdsServiceRef"); len(found) != 0 {
+		t.Fatalf("an undeclared mds service, which the shared reference check reports, was refused again: %#v", found)
 	}
 }
 

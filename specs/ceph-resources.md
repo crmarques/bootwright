@@ -693,8 +693,9 @@ CephCluster's `spec.services` entry with `service_type: mds` and
 before any effect:
 
 - `metadata.name` starting with a digit, since its MDS `service_id` cannot;
-- an authored `mdsServiceRef` other than `mds.<filesystem>`, or a cluster that
-  declares no native service `mds.<filesystem>`;
+- an authored `mdsServiceRef` other than `mds.<filesystem>` (a cluster that
+  declares no native service `mds.<filesystem>` refuses as an unresolved
+  [native-service reference](api.md#references), `api.reference`);
 - a `metadataPoolRef` of another cluster or without role `cephfsMetadata`,
   or a data pool of another cluster or without role `cephfsData`; repeated
   data pools; several data pools without exactly one `default: true` (a sole

@@ -96,14 +96,10 @@ func TestUnrealizedTableMatchesUnsupported(t *testing.T) {
 		t.Errorf("api.md Admitted but unrealized rows = %q, want %q", got, want)
 	}
 	resolver := buildCapabilities(systemClock{}, exampleControllerPorts(t), exampleMediaRecords{})
-	var claimed []string
-	for _, binding := range resolver.Bindings() {
-		claimed = append(claimed, binding.Kind)
-	}
 	declared := map[string]bool{}
 	for name, sources := range unrealizedFixtures(t) {
 		state, report := compileAcceptance(t, sources)
-		refusals := append(productionUnsupported(t, state), lifecycle.Unrealizable(state.Effective(), claimed, effectBearing)...)
+		refusals := lifecycle.Unsupported(resolver, state, effectBearing)
 		for _, declaration := range api.UnrealizedDeclarations() {
 			for _, object := range state.Effective().Objects() {
 				if !declaration.DeclaredBy(object) {

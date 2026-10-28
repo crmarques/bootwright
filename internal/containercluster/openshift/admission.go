@@ -507,7 +507,7 @@ func endpointAddress(o api.Object, endpoint api.Value, c api.Catalog, path strin
 			var ok bool
 			address, ok = named(addresses, ref.Text())
 			if !ok {
-				return api.Value{}, source, []api.Issue{reference(path+".source.bindAddressRef", "bind address must resolve inside the selected load balancer", "set "+path+".source.bindAddressRef to a bindAddresses[].name on the selected LoadBalancer")}
+				return api.Value{}, source, nil
 			}
 		} else if addresses.Len() == 1 {
 			address = addresses.Items()[0]

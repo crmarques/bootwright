@@ -89,14 +89,6 @@ func exampleControllerPorts(t *testing.T) controllerDependencies {
 	return ports
 }
 
-func claimedKinds(resolver capabilityResolver) []string {
-	kinds := make([]string, 0, len(resolver))
-	for _, binding := range resolver.Bindings() {
-		kinds = append(kinds, binding.Kind)
-	}
-	return kinds
-}
-
 func TestLabRHELExampleSelectsControllerDependenciesFromDesiredState(t *testing.T) {
 	sources := labExampleSources(t)
 	if len(sources.Files) != labExampleFiles {
@@ -184,7 +176,7 @@ func TestLabRHELExampleSelectsControllerDependenciesFromDesiredState(t *testing.
 func TestLabRHELExampleIsRealizableInFull(t *testing.T) {
 	state, _ := compileAcceptance(t, labExampleSources(t))
 	resolver := buildCapabilities(systemClock{}, exampleControllerPorts(t), exampleMediaRecords{})
-	if unsupported := lifecycle.Unrealizable(state.Effective(), claimedKinds(resolver), effectBearing); len(unsupported) != 0 {
+	if unsupported := lifecycle.Unsupported(resolver, state, effectBearing); len(unsupported) != 0 {
 		t.Fatalf("the example declares objects no capability claims: %v", unsupported)
 	}
 	for _, capability := range []lifecycle.UnsupportedReporter{libvirt.NewHost(nil), installation.New(nil)} {

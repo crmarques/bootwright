@@ -316,6 +316,10 @@ func TestAnObjectWithoutAProjectorFallsBackToTheAppliedSide(t *testing.T) {
 
 type plainObserver struct{ observer *projectingCapability }
 
+func (p plainObserver) Claimed(catalog api.Catalog) []string {
+	return p.observer.Claimed(catalog)
+}
+
 func (p plainObserver) Plan(ctx context.Context, input PlanInput) (CapabilityPlan, error) {
 	return p.observer.Plan(ctx, input)
 }

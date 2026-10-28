@@ -97,7 +97,7 @@ func storageClusterSchema() *Shape {
 		defaulted("management", enumeration("managed", "external"), StringValue("managed")),
 		field("distribution", cephDistributionSchema()), field("release", lexical("native-version")), field("packageVersion", lexical("native-version")), field("packageRepository", lexical("package-repository")), field("packageRepositoryTrustBundleRef", secret("caBundle")), field("packageRepositoryKey", lexical("package-repository-key")), field("nfsGanesha", record(required("packageVersion", lexical("native-version")))), field("image", record(field("base", lexical("registry-base")), field("version", lexical("native-version")))), field("images", cephAuxiliaryImages()),
 		field("entitlementRef", ref(Entitlement)),
-		field("cephadm", record(field("addressRef", nestedRef()), field("ansible", record(field("packageVersion", lexical("native-version")))), field("clusterSSH", record(field("user", lexical("posix-user")), field("keyRef", secret("sshKeyPair")), field("transport", enumeration("native", "verifiedTunnel")))), required("bootstrap", record(required("nodeRef", nestedRef()), field("addressRef", nestedRef()), field("singleHostDefaults", boolean()))))),
+		field("cephadm", record(field("addressRef", nestedIn(Scope{Noun: "address", Each: []string{"topology", "nodes"}, Owner: []string{"machineRef"}, Kind: Machine, Entries: []string{"network", "addresses"}})), field("ansible", record(field("packageVersion", lexical("native-version")))), field("clusterSSH", record(field("user", lexical("posix-user")), field("keyRef", secret("sshKeyPair")), field("transport", enumeration("native", "verifiedTunnel")))), required("bootstrap", record(required("nodeRef", nestedIn(Scope{Noun: "topology node", Entries: []string{"topology", "nodes"}})), field("addressRef", nestedIn(Scope{Noun: "address", Each: []string{"topology", "nodes"}, Select: []string{"cephadm", "bootstrap", "nodeRef"}, Owner: []string{"machineRef"}, Kind: Machine, Entries: []string{"network", "addresses"}})), field("singleHostDefaults", boolean()))))),
 		field("networks", record(field("publicCIDRs", set(cidr())), field("clusterCIDRs", set(cidr())))), field("security", record(field("fips", record(field("enabled", boolean()))), field("cephx", record(required("keyType", enumeration("aes", "aes256k")))))), field("config", config), field("mgrModules", set(nonempty())), field("services", nonemptyArray(array(storageNativeService()))), field("serviceBindings", storageServiceBindings()),
 		field("topology", record(required("nodes", nonemptyArray(named(record(required("name", name()), field("fqdn", dns()), required("machineRef", ref(Machine)), field("site", name()), field("labels", set(nonempty())), field("location", stringsMap()))))), field("stretch", record(required("failureDomain", nonempty()), field("dataSites", set(name())), field("tiebreaker", record(field("node", text()), field("site", text()))), defaulted("ruleName", nonempty(), StringValue("stretch-rule")))))),
 	)
@@ -130,7 +130,7 @@ func storageFilesystemSchema() *Shape {
 	dataPool := &Shape{Alternatives: []*Shape{ref(CephPool), record(required("name", ref(CephPool)), field("default", boolean()))}}
 	mds := record(field("activeCount", integer("1", "256")), field("standbyReplay", boolean()), field("standbyCountWanted", integer("0", "2147483647")))
 	group := record(required("name", nonempty()), field("poolLayoutRef", ref(CephPool)), field("mode", nonempty()), field("uid", integer("0", "2147483647")), field("gid", integer("0", "2147483647")), field("sizeBytes", integer("1", "9223372036854775807")))
-	return record(required("clusterRef", ref(CephCluster)), field("mdsServiceRef", serviceRef()), required("metadataPoolRef", ref(CephPool)), required("dataPoolRefs", nonemptyArray(array(dataPool))), field("mds", mds), field("subvolumeGroups", named(group)))
+	return record(required("clusterRef", ref(CephCluster)), field("mdsServiceRef", nativeServiceOf("clusterRef")), required("metadataPoolRef", ref(CephPool)), required("dataPoolRefs", nonemptyArray(array(dataPool))), field("mds", mds), field("subvolumeGroups", named(group)))
 }
 
 func storageSubvolumeSchema() *Shape {
@@ -138,7 +138,7 @@ func storageSubvolumeSchema() *Shape {
 }
 
 func storageObjectGatewaySchema() *Shape {
-	return record(required("clusterRef", ref(CephCluster)), required("serviceRef", serviceRef()), required("realm", name()), required("zoneGroup", name()), required("zone", name()), field("pools", record(field("indexPoolRef", ref(CephPool)), field("dataPoolRef", ref(CephPool)), field("dataExtraPoolRef", ref(CephPool)))), field("endpoint", record(field("fqdn", dns()))))
+	return record(required("clusterRef", ref(CephCluster)), required("serviceRef", nativeServiceOf("clusterRef")), required("realm", name()), required("zoneGroup", name()), required("zone", name()), field("pools", record(field("indexPoolRef", ref(CephPool)), field("dataPoolRef", ref(CephPool)), field("dataExtraPoolRef", ref(CephPool)))), field("endpoint", record(field("fqdn", dns()))))
 }
 
 func storageObjectUserSchema() *Shape {

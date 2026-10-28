@@ -137,9 +137,6 @@ func validateEndpoint(selection api.Value, c api.Catalog, kind api.Kind, ref, fi
 		if !resolved.Has("endpointRef") {
 			return []api.Issue{reference(field+".endpointRef", "managed service selection requires an endpointRef unless exactly one endpoint exists", "set endpointRef to an endpoint of "+service.Identity())}
 		}
-		if !hasNamed(service.Spec().Get("endpoints"), resolved.Get("endpointRef").Text()) {
-			return []api.Issue{reference(field+".endpointRef", "endpoint reference must resolve on the selected service", "set endpointRef to an endpoint of "+service.Identity())}
-		}
 	}
 	return nil
 }
@@ -185,5 +182,5 @@ func ValidateArtifactEndpoint(selection api.Value, c api.Catalog, field string, 
 		}
 		return nil
 	}
-	return []api.Issue{reference(field+".endpointRef", "artifact endpoint does not exist on the selected ArtifactServer", "set endpointRef to an endpoint declared on "+service.Identity())}
+	return nil
 }

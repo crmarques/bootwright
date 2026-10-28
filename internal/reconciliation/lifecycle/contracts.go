@@ -194,6 +194,9 @@ type RuntimeLock struct {
 // never schedules another domain's work or writes lifecycle state.
 type Capability interface {
 	Plan(context.Context, PlanInput) (CapabilityPlan, error)
+	// Claimed lists, independently of planning, the identities of the selected
+	// objects it realizes, by its blocks or by a rule that needs none.
+	Claimed(api.Catalog) []string
 	// Removal reads one frozen block as the removal of what it created. It is
 	// part of the port rather than an optional extra, because a block left out
 	// would be removed under the authorization its apply acknowledged instead

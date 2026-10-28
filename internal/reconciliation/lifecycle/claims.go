@@ -11,28 +11,31 @@ type claims struct {
 }
 
 func (c *claims) record(bound CapabilityBinding, definitions []reconciliation.BlockDefinition) {
+	for _, definition := range definitions {
+		c.hold(bound, definition.Kind, definition.Object)
+	}
+}
+
+func (c *claims) hold(bound CapabilityBinding, kind, name string) {
 	if c.holders == nil {
 		c.holders = map[string]string{}
 	}
-	family := bound.family()
-	for _, definition := range definitions {
-		key := family + "\x00" + definition.Kind + "\x00" + definition.Object
-		holder, held := c.holders[key]
-		if !held {
-			c.holders[key] = bound.Implementation
-			continue
-		}
-		if holder == bound.Implementation {
-			continue
-		}
-		identity := definition.Kind + "/" + definition.Object
-		c.refused = append(c.refused, Refusal{
-			Kind: definition.Kind, Name: definition.Object,
-			Reason: "two implementations of this executable claim " + identity + ": " + holder + " and " + bound.Implementation,
-			Remediation: "remove " + identity + " from the selected Environment, or use an example within the supported shape such as " + supportedExample +
-				"; each object is realized by exactly one implementation",
-		})
+	key := bound.family() + "\x00" + kind + "\x00" + name
+	holder, held := c.holders[key]
+	if !held {
+		c.holders[key] = bound.Implementation
+		return
 	}
+	if holder == bound.Implementation {
+		return
+	}
+	identity := kind + "/" + name
+	c.refused = append(c.refused, Refusal{
+		Kind: kind, Name: name,
+		Reason: "two implementations of this executable claim " + identity + ": " + holder + " and " + bound.Implementation,
+		Remediation: "remove " + identity + " from the selected Environment, or use an example within the supported shape such as " + supportedExample +
+			"; each object is realized by exactly one implementation",
+	})
 }
 
 func (c *claims) failure() error {

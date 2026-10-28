@@ -98,7 +98,6 @@ func TestServiceTransportAndLocalReferences(t *testing.T) {
 		{"TLS missing", api.ArtifactServer, m("listeners", list(m("name", "https", "protocol", "https", "port", api.IntegerValue("8443"))))},
 		{"HTTP TLS", api.ArtifactServer, m("tls", m("secretRef", "tls"), "listeners", list(m("name", "http", "protocol", "http", "port", api.IntegerValue("8080"))))},
 		{"duplicate port", api.ArtifactServer, m("listeners", list(m("name", "a", "protocol", "http", "port", api.IntegerValue("8080")), m("name", "b", "protocol", "http", "port", api.IntegerValue("8080"))))},
-		{"missing endpoint contact", api.Proxy, m("implementation", "squid", "endpoints", list(m("name", "external", "addressRef", "unknown")))},
 		{"unnamed bind addresses", api.LoadBalancer, m("implementation", "haproxy", "bindAddresses", list(m("address", "192.0.2.1"), m("address", "192.0.2.2")))},
 		{"DNS port", api.DNSServer, m("implementation", "dnsmasq", "port", api.IntegerValue("5353"))},
 		{"empty image", api.Proxy, m("implementation", "squid", "image", m())},

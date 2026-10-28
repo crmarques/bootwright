@@ -69,7 +69,9 @@ func TestGatewayRequiresBoundRGWService(t *testing.T) {
 		t.Fatalf("bound gateway refused: %#v", issues)
 	}
 	gateway, changed := editGateway(t, catalog, "serviceRef", "rgw.absent")
-	exactlyOne(t, Validate(gateway, changed), "$.spec.serviceRef", "spec.serviceRef resolves to no declared native service of CephCluster storage", "add a spec.services entry with service_type rgw to CephCluster storage and set spec.serviceRef to its qualified name rgw.<service_id>")
+	if found := issuesAt(Validate(gateway, changed), "$.spec.serviceRef"); len(found) != 0 {
+		t.Fatalf("an undeclared service, which the shared reference check reports, was refused again: %#v", found)
+	}
 	gateway, changed = editGateway(t, gatewayCatalog(t, mdsService("files")), "serviceRef", "mds.files")
 	exactlyOne(t, Validate(gateway, changed), "$.spec.serviceRef", "spec.serviceRef must name an rgw service; it names a mds service", "set spec.serviceRef to the qualified name rgw.<service_id> of a declared rgw service")
 	second := secondGateway("serviceRef", "rgw.objects")

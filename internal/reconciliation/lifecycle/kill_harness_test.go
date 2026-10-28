@@ -15,6 +15,7 @@ import (
 	"testing"
 	"time"
 
+	api "github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
 	"github.com/crmarques/bootwright/internal/desiredstate"
 	"github.com/crmarques/bootwright/internal/reconciliation"
@@ -155,6 +156,10 @@ func (h *killHost) RequiresOnlineRemoval(block reconciliation.Block) bool {
 }
 
 func (*killHost) ProbesQuiescence() bool { return true }
+
+func (h *killHost) Claimed(catalog api.Catalog) []string {
+	return plannedKinds(h.definitions, catalog)
+}
 
 func (h *killHost) Plan(context.Context, PlanInput) (CapabilityPlan, error) {
 	return CapabilityPlan{

@@ -292,7 +292,7 @@ func (r *run) validateEffective(catalog api.Catalog) bool {
 				r.ds.issue(record, issue)
 			}
 		}
-		r.ds.retractReferences(start, end, refused)
+		r.ds.retractNested(start, r.ds.retractReferences(start, end, refused))
 		for _, declaration := range api.UnrealizedDeclarations() {
 			if declaration.DeclaredBy(record.object) {
 				r.ds.issue(record, unrealizedIssue(declaration, record.object))

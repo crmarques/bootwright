@@ -229,13 +229,11 @@ func TestServiceAdmissionRemediesAreExact(t *testing.T) {
 		{"DNS port", "$.spec.port", "set spec.port to 53 or omit it", ValidatePartial(obj(api.DNSServer, "", m("port", api.IntegerValue("5353"))), api.Catalog{})},
 		{"NTP port", "$.spec.port", "spec.port", ValidatePartial(obj(api.NTPServer, "", m("port", api.IntegerValue("1123"))), api.Catalog{})},
 		{"OS", "$.spec.machineRef", "spec.machineRef", admit(managedService(api.Proxy, proxy), unprovided)},
-		{"unknown address", "$.spec.endpoints[0].addressRef", "spec.network.addresses", admit(managedService(api.Proxy, consumerSpec(api.Proxy, m("name", "egress", "addressRef", "missing"))), host)},
 		{"DNS name", "$.spec.endpoints[0].addressRef", "addressRef", admit(managedService(api.DNSServer, consumerSpec(api.DNSServer, m("name", "resolver", "addressRef", "fqdn"))), host)},
 		{"bind", "$.spec.endpoints[0].addressRef", "spec.bindAddress", admit(managedService(api.Proxy, proxy.With("bindAddress", api.StringValue("192.0.2.11"))), host)},
 		{"wildcard", "$.spec.endpoints", "spec.endpoints", admit(managedService(api.Proxy, consumerSpec(api.Proxy)), host)},
 		{"listener", "$.spec.listeners[0]", "listenerRef: https", admit(managedService(api.ArtifactServer, m("tls", m("secretRef", "serving"))), host)},
 		{"image tag", "$.spec.image.public", "spec.image.public", ValidatePartial(obj(api.Proxy, "", m("image", m("public", "registry.example.test/squid:6.10"))), api.Catalog{})},
-		{"listener reference", "$.spec.endpoints[0].listenerRef", "spec.listeners", admit(managedService(api.ArtifactServer, m("bindAddress", "192.0.2.10", "listeners", list(m("name", "http", "protocol", "http", "port", api.IntegerValue("8080"))), "endpoints", list(m("name", "packages", "listenerRef", "missing", "addressRef", "ip")))), host)},
 		{"duplicate port", "$.spec.listeners[1].port", "spec.listeners[1]", ValidateAuthored(managedService(api.ArtifactServer, m("listeners", list(m("name", "a", "protocol", "http", "port", api.IntegerValue("8080")), m("name", "b", "protocol", "http", "port", api.IntegerValue("8080"))))), api.Catalog{})},
 		{"missing TLS", "$.spec.tls", "spec.tls.secretRef", Validate(managedService(api.ArtifactServer, m("bindAddress", "192.0.2.10", "listeners", list(m("name", "https", "protocol", "https", "port", api.IntegerValue("8443"))))), api.NewCatalog([]api.Object{host}))},
 		{"HTTP TLS", "$.spec.tls", "remove spec.tls", ValidateAuthored(managedService(api.ArtifactServer, m("tls", m("secretRef", "serving"), "listeners", list(m("name", "http", "protocol", "http", "port", api.IntegerValue("8080"))))), api.Catalog{})},
@@ -265,5 +263,22 @@ func TestAMistypedServerRefIsOnlyAReferenceProblem(t *testing.T) {
 	if len(issues) != 1 || issues[0].Code != "api.reference" || issues[0].Field != "$.spec.artifactServerEndpoint.serverRef" ||
 		!mentionsAll(issues[0].Message, "ArtifactServer/mirror", "external") || !mentionsAll(issues[0].Remediation, "spec.artifactServerEndpoint.serverRef", "ArtifactServer/mirror", "management: managed") {
 		t.Fatalf("an external serverRef = %#v, want one reference refusal naming the server and management: managed", issues)
+	}
+}
+
+// An endpoint's address and listener resolve through the shared
+// unresolved-reference diagnostic, so admission adds no refusal of its own.
+func TestServiceAdmissionLeavesUnresolvedEntriesToTheSharedCheck(t *testing.T) {
+	host := consumerHost(true, consumerAddresses()...)
+	for name, row := range map[string]struct {
+		field  string
+		object api.Object
+	}{
+		"address":  {"$.spec.endpoints[0].addressRef", managedService(api.Proxy, consumerSpec(api.Proxy, m("name", "egress", "addressRef", "missing")))},
+		"listener": {"$.spec.endpoints[0].listenerRef", managedService(api.ArtifactServer, m("bindAddress", "192.0.2.10", "listeners", list(m("name", "http", "protocol", "http", "port", api.IntegerValue("8080"))), "endpoints", list(m("name", "packages", "listenerRef", "missing", "addressRef", "ip"))))},
+	} {
+		if found := refusalsAt(admit(row.object, host), row.field); len(found) != 0 {
+			t.Errorf("%s: admission refuses %v, which the shared reference check reports", name, found)
+		}
 	}
 }

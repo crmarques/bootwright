@@ -349,7 +349,8 @@ func resolveBindings(o api.Object, c api.Catalog, native api.Value) (api.Value, 
 	bindings := o.Spec().Get("network", "interfaceBinding")
 	provider, found := Provider(o, c)
 	required := found && substrate.RealizesPhysicalNICs(provider) && o.Spec().Get("os", "provided").Present() && !o.Spec().Get("os", "provided").Bool()
-	if !bindings.Present() && required {
+	derived := !bindings.Present() && required
+	if derived {
 		values := []api.Value{}
 		for _, iface := range interfaces {
 			if iface.Get("type").Text() == "ethernet" && !unavailableInterface(iface) {
@@ -363,7 +364,7 @@ func resolveBindings(o api.Object, c api.Catalog, native api.Value) (api.Value, 
 	for index, binding := range bindings.Items() {
 		field := fmt.Sprintf("$.spec.network.interfaceBinding[%d]", index)
 		nicName, interfaceName := binding.Get("nicRef").Text(), binding.Get("interfaceName").Text()
-		if _, ok := namedValue(o.Spec().Get("hardware", "nics"), nicName); !ok {
+		if _, ok := namedValue(o.Spec().Get("hardware", "nics"), nicName); derived && !ok {
 			issues = appendIssues(issues, reference(field+".nicRef", "NIC binding requires one declared hardware NIC; author an explicit complete binding when names differ", "set nicRef to a hardware NIC in hardware.nics, and author a complete binding when NIC and interface names differ"))
 		}
 		position := interfaceIndex(interfaces, interfaceName)

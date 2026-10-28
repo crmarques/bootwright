@@ -56,10 +56,6 @@ func (a *admission) mdsServiceRef(cluster api.Object) {
 	name := a.object.Name()
 	if ref.Text() != "mds."+name {
 		a.issue("api.invariant", "$.spec.mdsServiceRef", "spec.mdsServiceRef must name the mds service whose service_id is this filesystem's name, mds."+name, "set spec.mdsServiceRef to mds."+name+" and declare that service in CephCluster "+cluster.Name()+"'s spec.services")
-		return
-	}
-	if _, ok := NativeService(cluster, "mds."+name); !ok {
-		a.issue("api.invariant", "$.spec.mdsServiceRef", "CephCluster "+cluster.Name()+" declares no native service mds."+name, "add a spec.services entry with service_type mds and service_id "+name+" to CephCluster "+cluster.Name())
 	}
 }
 

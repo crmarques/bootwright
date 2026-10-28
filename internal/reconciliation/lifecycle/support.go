@@ -3,8 +3,10 @@ package lifecycle
 import (
 	"cmp"
 	"slices"
+	"strings"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
+	"github.com/crmarques/bootwright/internal/desiredstate/compilation"
 )
 
 // Refusal is one selected object this executable cannot realize, why, and what
@@ -66,23 +68,57 @@ type Bearing struct {
 // names no kind or field of a domain itself.
 type EffectBearing func(api.Object) (Bearing, bool)
 
-// Unrealizable refuses each selected effect-bearing object of an unclaimed kind.
-func Unrealizable(catalog api.Catalog, claimed []string, bearing EffectBearing) []Refusal {
+// Unrealizable refuses each selected effect-bearing object claimed rejects.
+func Unrealizable(catalog api.Catalog, kinds []string, claimed func(api.Object) bool, bearing EffectBearing) []Refusal {
 	if bearing == nil {
 		return nil
 	}
 	var found []Refusal
 	for _, object := range catalog.Objects() {
-		if slices.Contains(claimed, string(object.Kind())) {
+		effect, bears := bearing(object)
+		if !bears || claimed != nil && claimed(object) {
 			continue
 		}
-		if effect, bears := bearing(object); bears {
-			remedy := effect.Remedy
-			if remedy == "" {
-				remedy = unclaimedRemediation(object.Identity())
-			}
-			found = append(found, RefusalOf(object, effect.Reason, remedy))
+		reason, remedy := effect.Reason, effect.Remedy
+		if slices.Contains(kinds, string(object.Kind())) {
+			reason = "no implementation of this executable claims " + object.Identity()
 		}
+		if remedy == "" {
+			remedy = unclaimedRemediation(object.Identity())
+		}
+		found = append(found, RefusalOf(object, reason, remedy))
 	}
 	return SortRefusals(found)
+}
+
+// Unsupported is every report, double claim within a family and unclaimed
+// effect-bearing object, in canonical order; status reads it too.
+func Unsupported(resolver CapabilityResolver, state *compilation.State, bearing EffectBearing) []Refusal {
+	catalog := state.Effective()
+	var refused []Refusal
+	var kinds []string
+	var held claims
+	covered := map[string]bool{}
+	for _, bound := range resolver.Bindings() {
+		capability, ok := resolver.Resolve(bound.Kind, bound.Implementation)
+		if !ok {
+			continue
+		}
+		if !slices.Contains(kinds, bound.Kind) {
+			kinds = append(kinds, bound.Kind)
+		}
+		if reporter, ok := capability.(UnsupportedReporter); ok {
+			refused = append(refused, reporter.Unsupported(state)...)
+		}
+		for _, identity := range capability.Claimed(catalog) {
+			covered[identity] = true
+			kind, name, _ := strings.Cut(identity, "/")
+			held.hold(bound, kind, name)
+		}
+	}
+	for _, identity := range Identities(refused) {
+		covered[identity] = true
+	}
+	refused = append(refused, held.refused...)
+	return SortRefusals(append(refused, Unrealizable(catalog, kinds, func(object api.Object) bool { return covered[object.Identity()] }, bearing)...))
 }

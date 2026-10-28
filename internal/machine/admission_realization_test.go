@@ -294,10 +294,10 @@ func TestAProviderlessMachineAuthorsItsBareMetalArm(t *testing.T) {
 	if issues := admission(arm("eno1", "https://bastion-bmc.example.test/redfish/v1/Systems/1"), environment); len(issues) != 0 {
 		t.Fatalf("a provider-less bare-metal arm was refused: %#v", issues)
 	}
-	if issues := admission(arm("eno9", "https://bastion-bmc.example.test/redfish/v1/Systems/1"), environment); !slices.ContainsFunc(issues, func(issue api.Issue) bool {
-		return issue.Code == "api.reference" && issue.Field == "$.spec.substrate.baremetal.nics[0].nicRef"
+	if issues := admission(arm("eno9", "https://bastion-bmc.example.test/redfish/v1/Systems/1"), environment); slices.ContainsFunc(issues, func(issue api.Issue) bool {
+		return issue.Field == "$.spec.substrate.baremetal.nics[0].nicRef"
 	}) {
-		t.Fatalf("an unresolved NIC was admitted: %#v", issues)
+		t.Fatalf("an unresolved NIC, which the shared reference check reports, was refused again: %#v", issues)
 	}
 	if issues := admission(arm("eno1", "https://bastion-bmc.example.test/redfish/v1"), environment); !slices.ContainsFunc(issues, func(issue api.Issue) bool {
 		return issue.Code == "api.invariant" && issue.Field == "$.spec.substrate.baremetal.bmc.address"
@@ -343,8 +343,8 @@ func TestABaremetalMachineSelectsNoAttachment(t *testing.T) {
 		t.Fatalf("a bare-metal Machine without an attachment was refused: %v", issues)
 	}
 	named := server.WithSpec(server.Spec().WithPath(api.StringValue("missing"), "network", "attachmentRef"))
-	if issues := admission(named, objects...); len(issues) != 1 || issues[0].Code != "api.reference" || issues[0].Field != "$.spec.network.attachmentRef" {
-		t.Fatalf("an unresolved attachmentRef: %#v", issues)
+	if issues := admission(named, objects...); len(issues) != 0 {
+		t.Fatalf("an unresolved attachmentRef, which the shared reference check reports, was refused again: %#v", issues)
 	}
 }
 
@@ -372,9 +372,9 @@ func TestAMACNamesOneDeclaredHardwareNIC(t *testing.T) {
 		edited := server.WithSpec(server.Spec().WithPath(nics, "substrate", "baremetal", "nics"))
 		return validateHardware(edited, catalog, substrate.ArmBaremetal)
 	}
-	requireOneIssue(t, edit(list(m("nicRef", "eth9", "macAddress", "02:00:00:00:00:09"))), api.Issue{Code: "api.reference", Field: "$.spec.substrate.baremetal.nics[0].nicRef",
-		Message:     "a MAC must name a declared hardware NIC",
-		Remediation: "set spec.substrate.baremetal.nics[0].nicRef to the name of a spec.hardware.nics entry"})
+	if issues := edit(list(m("nicRef", "eth9", "macAddress", "02:00:00:00:00:09"))); len(issues) != 0 {
+		t.Fatalf("an unresolved nicRef, which the shared reference check reports, was refused again: %v", issues)
+	}
 	requireOneIssue(t, edit(list(m("nicRef", "eth0", "macAddress", "02:00:00:00:00:01"), m("nicRef", "eth0", "macAddress", "02:00:00:00:00:02"))), api.Issue{Code: "api.invariant", Field: "$.spec.substrate.baremetal.nics[1].nicRef",
 		Message:     "each hardware NIC has one MAC",
 		Remediation: "remove the repeated spec.substrate.baremetal.nics[1] entry"})
@@ -403,7 +403,7 @@ func TestAVirtualMachineBindsNoNICAndNamesAProviderProfile(t *testing.T) {
 		Remediation: "remove spec.network.interfaceBinding from Machine/guest"})
 	unknown := installOn("192.0.2.11/24")
 	unknown = unknown.WithSpec(unknown.Spec().WithPath(api.StringValue("missing"), "substrate", "libvirt", "profileRef"))
-	requireOneIssue(t, validateSubstrate(unknown, provider, substrate.ArmLibvirt), api.Issue{Code: "api.reference", Field: "$.spec.substrate.libvirt.profileRef",
-		Message:     "profile must name a machine profile on the selected provider",
-		Remediation: "set spec.substrate.libvirt.profileRef to the name of a machineProfiles entry of the selected provider"})
+	if issues := validateSubstrate(unknown, provider, substrate.ArmLibvirt); len(issues) != 0 {
+		t.Fatalf("an unresolved profileRef, which the shared reference check reports, was refused again: %v", issues)
+	}
 }

@@ -24,7 +24,9 @@ identities `substrate-host-libvirt-v1` and `machine-libvirt-v1`, and
 `baremetal` selects `machine-baremetal-v1`. A provider host block
 is planned for every libvirt `InfraProvider` in the selected graph, and a
 machine block for every Machine on any realized provider whose effective
-`os.provided` is `false`. Provided Machines are never realized. A vSphere or
+`os.provided` is `false`. A bare-metal `InfraProvider` plans no block of its
+own: `machine-baremetal-v1` claims it, realized only through its Machines.
+Provided Machines are never realized. A vSphere or
 KubeVirt provider, and every non-provided Machine on one, refuses before
 operation registration with one diagnostic per unsupported object, which names
 the object, why it is refused (a Machine's names its provider) and the remedy,

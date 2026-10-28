@@ -5,7 +5,7 @@ func storageNVMeoFSubsystemSchema() *Shape {
 	listeners.NameKey = "host"
 	namespaces := nonemptyArray(array(record(required("nsid", integer("1", "4294967294")), required("imageRef", ref(CephRBDImage)))))
 	namespaces.NameKey = "nsid"
-	return record(required("clusterRef", ref(CephCluster)), required("serviceRef", serviceRef()), required("nqn", nonempty()), required("listeners", listeners), required("hosts", nonemptyArray(set(nonempty()))), required("namespaces", namespaces))
+	return record(required("clusterRef", ref(CephCluster)), required("serviceRef", nativeServiceOf("clusterRef")), required("nqn", nonempty()), required("listeners", listeners), required("hosts", nonemptyArray(set(nonempty()))), required("namespaces", namespaces))
 }
 
 func storageNVMeoFServiceSpec() *Shape {

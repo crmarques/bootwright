@@ -101,6 +101,14 @@ type fleetMachines struct {
 	consumes []string
 }
 
+func (*fleetMachines) Claimed(catalog api.Catalog) []string {
+	var claimed []string
+	for _, machine := range catalog.OfKind(api.Machine) {
+		claimed = append(claimed, machine.Identity())
+	}
+	return claimed
+}
+
 func (*fleetMachines) Plan(context.Context, lifecycle.PlanInput) (lifecycle.CapabilityPlan, error) {
 	return lifecycle.CapabilityPlan{Definitions: []reconciliation.BlockDefinition{}}, nil
 }

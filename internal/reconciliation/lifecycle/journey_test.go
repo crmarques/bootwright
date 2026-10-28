@@ -1096,6 +1096,22 @@ func (c *testCapability) Plan(_ context.Context, input PlanInput) (CapabilityPla
 
 func (c *testCapability) Unsupported(*compilation.State) []Refusal { return c.unsupported }
 
+// Claimed holds every object of a kind the double plans blocks of, as a
+// capability bound to that kind would.
+func (c *testCapability) Claimed(catalog api.Catalog) []string {
+	return plannedKinds(c.definitions, catalog)
+}
+
+func plannedKinds(definitions []reconciliation.BlockDefinition, catalog api.Catalog) []string {
+	var claimed []string
+	for _, object := range catalog.Objects() {
+		if slices.ContainsFunc(definitions, func(definition reconciliation.BlockDefinition) bool { return definition.Kind == string(object.Kind()) }) {
+			claimed = append(claimed, object.Identity())
+		}
+	}
+	return claimed
+}
+
 func (c *testCapability) next(outcomes *[]Result) Result {
 	c.mutex.Lock()
 	defer c.mutex.Unlock()

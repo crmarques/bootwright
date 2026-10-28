@@ -68,6 +68,8 @@ func (d contractDouble) doubleDefinition(request contractDoubleRequest) (reconci
 	}, nil
 }
 
+func (contractDouble) Claimed(api.Catalog) []string { return nil }
+
 func (d contractDouble) Plan(_ context.Context, input lifecycle.PlanInput) (lifecycle.CapabilityPlan, error) {
 	definition, err := d.doubleDefinition(contractDoubleRequest{Context: input.Context.Name, Controller: input.Controller})
 	if err != nil {

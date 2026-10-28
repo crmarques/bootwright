@@ -8,6 +8,7 @@ import (
 	"sync"
 	"testing"
 
+	api "github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/containercluster/agentinstall"
 	"github.com/crmarques/bootwright/internal/diagnostics"
 	"github.com/crmarques/bootwright/internal/reconciliation"
@@ -153,6 +154,10 @@ func (c clusterCapabilities) pick(block reconciliation.Block) lifecycle.Capabili
 		return c.media
 	}
 	return c.install
+}
+
+func (c clusterCapabilities) Claimed(catalog api.Catalog) []string {
+	return c.install.Claimed(catalog)
 }
 
 func (c clusterCapabilities) Plan(ctx context.Context, input lifecycle.PlanInput) (lifecycle.CapabilityPlan, error) {

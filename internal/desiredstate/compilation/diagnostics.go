@@ -19,6 +19,11 @@ type diagnosticSink struct {
 	undecodable map[string]bool
 	excluded    map[string]string
 	secrets     []string
+	nested      []nestedDependency
+}
+
+type nestedDependency struct {
+	field, owner, entries string
 }
 
 // Comparable keys retain shared strings rather than re-encoding whole
@@ -65,13 +70,47 @@ func (d *diagnosticSink) add(item diagnostics.Diagnostic) bool {
 // retractReferences drops the unresolved-reference diagnostics a record's
 // schema pass produced at fields its own object's invariants then refused, so
 // the invariant is the field's only diagnostic.
-func (d *diagnosticSink) retractReferences(start, end int, refused map[string]bool) {
+func (d *diagnosticSink) retractReferences(start, end int, refused map[string]bool) int {
 	if len(refused) == 0 {
-		return
+		return end
 	}
 	kept := d.items[:start]
 	for i, item := range d.items[start:] {
 		if start+i < end && item.Code == "api.reference" && refused[item.Field] {
+			end--
+			continue
+		}
+		kept = append(kept, item)
+	}
+	d.items = kept
+	return end
+}
+
+func (d *diagnosticSink) retractNested(start, end int) {
+	dependencies := d.nested
+	d.nested = nil
+	if len(dependencies) == 0 {
+		return
+	}
+	dependent := func(item diagnostics.Diagnostic) bool {
+		for _, dependency := range dependencies {
+			if dependency.field != item.Field {
+				continue
+			}
+			for _, other := range d.items[start:] {
+				switch {
+				case dependency.owner != "" && other.Field == dependency.owner && (other.Code == "api.invariant" || other.Code == "api.reference"):
+					return true
+				case dependency.entries != "" && other.Code == "api.required" && (other.Field == dependency.entries || strings.HasPrefix(dependency.entries, other.Field+".")):
+					return true
+				}
+			}
+		}
+		return false
+	}
+	kept := d.items[:start]
+	for i, item := range d.items[start:] {
+		if start+i < end && item.Code == "api.reference" && dependent(item) {
 			continue
 		}
 		kept = append(kept, item)

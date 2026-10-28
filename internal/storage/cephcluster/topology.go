@@ -131,35 +131,9 @@ func (a *admission) clusterAccess(ceph api.Value) {
 	}
 	bootstrap := ceph.Get("cephadm", "bootstrap")
 	if name := textOf(bootstrap, "nodeRef"); name != "" && ceph.Get("topology", "nodes").Len() > 0 {
-		if node, ok := lookupNode(a.object, name); !ok {
-			a.invalid("$.spec.cephadm.bootstrap.nodeRef", "bootstrap node must resolve to one storage topology node", "set spec.cephadm.bootstrap.nodeRef to one name declared in spec.topology.nodes")
-		} else {
-			if !nativeMember(a.object, "mon", textOf(node, "name")) {
-				a.invalid("$.spec.cephadm.bootstrap.nodeRef", "bootstrap node must be eligible for the declared MON service", "select a bootstrap node included by the MON service placement or expand that placement")
-			}
-			if machine, ok := a.catalog.Find(api.Machine, textOf(node, "machineRef")); ok {
-				a.machineAddress(machine, textOf(bootstrap, "addressRef"), "$.spec.cephadm.bootstrap.addressRef")
-			}
+		if node, ok := lookupNode(a.object, name); ok && !nativeMember(a.object, "mon", textOf(node, "name")) {
+			a.invalid("$.spec.cephadm.bootstrap.nodeRef", "bootstrap node must be eligible for the declared MON service", "select a bootstrap node included by the MON service placement or expand that placement")
 		}
-	}
-	for i, node := range ceph.Get("topology", "nodes").Items() {
-		if machine, ok := a.catalog.Find(api.Machine, textOf(node, "machineRef")); ok && ceph.Has("cephadm", "addressRef") {
-			a.machineAddress(machine, textOf(ceph, "cephadm", "addressRef"), indexed("$.spec.topology.nodes", i)+".machineRef")
-		}
-	}
-}
-func (a *admission) machineAddress(machine api.Object, name, field string) {
-	if name == "" || machine.Spec().Get("network", "addresses").Len() == 0 {
-		return
-	}
-	count := 0
-	for _, address := range machine.Spec().Get("network", "addresses").Items() {
-		if textOf(address, "name") == name {
-			count++
-		}
-	}
-	if count != 1 {
-		a.invalid(field, "address reference must resolve to one address on the bound Machine", "set this address reference to a network and address declared on the bound Machine")
 	}
 }
 

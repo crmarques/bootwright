@@ -22,7 +22,7 @@ func infrastructureServiceSchema(kind Kind) *Shape {
 		managed = append(managed, "bindAddress")
 	}
 	if kind != ArtifactServer && kind != LoadBalancer {
-		fields = append(fields, field("port", port()), field("endpoints", named(record(required("name", nonempty()), required("addressRef", nestedRef())))))
+		fields = append(fields, field("port", port()), field("endpoints", named(record(required("name", nonempty()), required("addressRef", nestedIn(Scope{Noun: "address", Owner: []string{"machineRef"}, Kind: Machine, Entries: []string{"network", "addresses"}}))))))
 		managed = append(managed, "port", "endpoints")
 	}
 	switch kind {
@@ -39,7 +39,7 @@ func infrastructureServiceSchema(kind Kind) *Shape {
 		managed = append(managed, "upstreamSources")
 	case ArtifactServer:
 		listener := named(record(required("name", nonempty()), required("protocol", enumeration("http", "https")), required("port", port())))
-		endpoint := named(record(required("name", nonempty()), field("url", url()), field("listenerRef", nestedRef()), field("addressRef", nestedRef())))
+		endpoint := named(record(required("name", nonempty()), field("url", url()), field("listenerRef", nestedIn(Scope{Noun: "listener", Entries: []string{"listeners"}})), field("addressRef", nestedIn(Scope{Noun: "address", Owner: []string{"machineRef"}, Kind: Machine, Entries: []string{"network", "addresses"}}))))
 		fields = append(fields, field("retention", enumeration("persistent", "installOnly")), field("tls", record(required("secretRef", secret("tlsCertificate")), field("minVersion", enumeration("TLSv1.2", "TLSv1.3")))), field("listeners", nonemptyArray(listener)), field("endpoints", endpoint))
 		managed = append(managed, "retention", "tls", "listeners")
 	case Registry:
@@ -63,15 +63,15 @@ func infrastructureServiceSchema(kind Kind) *Shape {
 
 func proxySelection() *Shape {
 	selection := choice(field("proxyRef", ref(Proxy)), field("direct", record()))
-	selection.Fields = append(selection.Fields, field("endpointRef", endpointRef()), field("noProxy", set(nonempty())))
+	selection.Fields = append(selection.Fields, field("endpointRef", endpointOf("proxyRef", Proxy)), field("noProxy", set(nonempty())))
 	return atomic(selection)
 }
 
 func serverSelections(kind Kind) *Shape {
-	return set(record(required("serverRef", ref(kind)), field("endpointRef", endpointRef())))
+	return set(record(required("serverRef", ref(kind)), field("endpointRef", endpointOf("serverRef", kind))))
 }
 
 func registrySelections() *Shape {
-	mirror := atomic(record(required("registryRef", ref(Registry)), field("endpointRef", endpointRef())))
+	mirror := atomic(record(required("registryRef", ref(Registry)), field("endpointRef", endpointOf("registryRef", Registry))))
 	return record(field("mirror", mirror), field("imageDigestSources", array(record(required("source", lexical("registry")), required("mirrors", nonemptyArray(array(lexical("registry")))), field("sourcePolicy", enumeration("NeverContactSource", "AllowContactingSource"))))))
 }

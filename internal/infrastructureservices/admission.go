@@ -123,11 +123,6 @@ func Validate(o api.Object, c api.Catalog) []api.Issue {
 	if o.Kind() != api.ArtifactServer {
 		return issues
 	}
-	for index, endpoint := range value.Get("endpoints").Items() {
-		if endpoint.Get("listenerRef").Present() && !hasNamed(value.Get("listeners"), endpoint.Get("listenerRef").Text()) {
-			issues = add(issues, reference(fmt.Sprintf("$.spec.endpoints[%d].listenerRef", index), "artifact endpoint listener must name a listener on this ArtifactServer", "set listenerRef to a name in spec.listeners"))
-		}
-	}
 	if placed {
 		issues = add(issues, validateCertificateCoverage(value, machine, c)...)
 	}
@@ -220,7 +215,6 @@ func validatePlacement(kind api.Kind, value api.Value, machine api.Object) []api
 		}
 		field, ref := fmt.Sprintf("$.spec.endpoints[%d].addressRef", index), endpoint.Get("addressRef").Text()
 		if !hasNamed(machine.Spec().Get("network", "addresses"), ref) {
-			issues = add(issues, reference(field, "endpoint address must name an address on its placement Machine", "set addressRef to an entry name in spec.network.addresses of "+machine.Identity()))
 			continue
 		}
 		resolved := machineAddress(machine, ref)

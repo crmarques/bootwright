@@ -13,7 +13,7 @@ func storageNativeService() *Shape {
 func storageServiceBindings() *Shape {
 	secrets := nonemptyArray(array(record(required("path", nonempty()), required("secretRef", secret("opaque", "token", "usernamePassword", "tlsCertificate", "sshKeyPair", "caBundle")))))
 	secrets.NameKey = "path"
-	bindings := array(record(required("serviceRef", serviceRef()), required("secrets", secrets)))
+	bindings := array(record(required("serviceRef", nativeServiceOf()), required("secrets", secrets)))
 	bindings.NameKey = "serviceRef"
 	return bindings
 }

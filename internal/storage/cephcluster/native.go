@@ -549,9 +549,6 @@ func (a *admission) nativeBindings(ceph api.Value, partial bool) {
 		}
 		refs[ref] = true
 		service, found := NativeService(a.object, ref)
-		if !partial && !found {
-			a.invalid(field+".serviceRef", "service binding must resolve to one declared native service", "set serviceRef to the qualified identity of one entry in spec.services")
-		}
 		refusal := ""
 		if found {
 			refusal = noBindingRefusal(a.object, service)
@@ -573,7 +570,7 @@ func (a *admission) nativeBindings(ceph api.Value, partial bool) {
 			}
 			paths = append(paths, pointer)
 		}
-		if refusal == "" && (found || !partial) {
+		if refusal == "" && found {
 			a.bindingLeaves(binding, service, field, partial)
 		}
 	}

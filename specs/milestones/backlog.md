@@ -267,10 +267,8 @@ Alias cell.
 | [B798](#b798) | new, 2026-10-23 (M3 verification) | defect | Verification tooling | The full Ansible unit gate selects its intended worker mode explicitly | Pre-existing tooling behavior outside the requested product change |
 | [B799](#b799) | new, 2026-10-23 (M3 verification) | defect | Workspace | Setup interruption retries identify any remaining setup-lock holder | Pre-existing intermittent refusal; its cause is unproved |
 | [B805](#b805) | new, 2026-10-26 (spec audit P0-F) | safety | Secrets and State reconciliation | Secret references declare a class; a rotated access credential has a recorded removal exit | Audit roadmap work; implemented only on an explicit lane request |
-| [B808](#b808) | new, 2026-10-26 (spec audit P1-A) | enabling | Architecture | Engine claim check, implementation fitness test and a shared Capability-port contract suite | Audit roadmap work; implemented only on an explicit lane request |
 | [B816](#b816) | new, 2026-10-26 (spec audit P1-I) | safety | State reconciliation and Controller setup | Recovery refusals, partial-removal readings and host probes match the rules | Audit roadmap work; implemented only on an explicit lane request |
 | [B820](#b820) | new, 2026-10-26 (spec audit P2-B) | enabling | Agent guidance and Verification tooling | Section-level index rows and docs gates for budgets, reachability and history links | Audit roadmap work; implemented only on an explicit lane request |
-| [B826](#b826) | new, 2026-10-26 (spec audit L4) | defect | Desired state | Admission enforces closed Entitlement arms, authored indexes, retired names and reserved-directory warning | Audit roadmap work; implemented only on an explicit lane request |
 | [B829](#b829) | new, 2026-10-26 (spec audit L7) | safety | Secrets | Work-area incarnation check, pipelined material payloads and fixed producer identity | Audit roadmap work; implemented only on an explicit lane request |
 | [B839](#b839) | new, 2026-10-26 (lane B) | safety | Substrate and Workspace | A shared host claim taken while a removal's effect runs refuses | Found closing B803; the window is the removal's effect itself |
 | [B844](#b844) | new, 2026-10-27 (lane J) | safety | Infrastructure services | Contexts reaching one SSH host by different addresses conflict there | Q96's qualifier keys claims by declared address only |
@@ -2971,62 +2969,6 @@ exit (D183, Q70), classified through each capability's Secret references.
 **Remains:** classifying the KubeVirt `kubeconfigRef` and the vCenter login
 when those arms exist ([B87](m1.md#b87), [B99](m1.md#b99)).
 
-### B808
-
-**Owner:** Architecture. **Kind:** enabling. **Requires:** B800 to B807
-(Phase 0). **Definition:** Specified. Roadmap step P1-A of the
-[2026-10-26 spec audit](../../audits/spec/2026-10-26.md); findings F06-01,
-F06-03, F06-04, F06-08, F06-12. The engine refuses an object that no bound
-implementation, or more than one, claims, and a fitness test keeps arm and
-implementation constants inside their owners.
-
-**Specs:** [architecture](../architecture.md#implementation-selection) states
-the per-domain selector and the double-claim refusal,
-[adding an implementation](../architecture.md#adding-an-implementation-of-an-existing-capability)
-holds the touch list, and the unqualified "policy never branches on
-implementation" rule; [state reconciliation](../state-reconciliation.md) makes
-the effect-bearing predicate domain-owned;
-[substrates](../substrates.md#selection-and-refusal) names its selector. The
-Not yet met lines there point here.
-
-**Work:**
-
-- F06-01 (Medium): an engine claim check that refuses, before registration,
-  an object claimed by two bindings with a diagnostic naming both
-  implementations, and an object claimed by none through its domain's refusal
-  table; a test with a synthetic overlapping binding.
-- F06-03 (Medium): a `test/architecture` rule rejecting `substrate.Arm*` and
-  implementation-identity constants, literals and arm field paths outside
-  `internal/substrate`, the owning implementation packages, `cmd/bootwright`
-  and admission files; an exact allowlist seeded from today's uses
-  (`agentinstall` pushed.go, `internal/cli/lifecycle_actions.go`, machine,
-  managed OS), each row naming the item that removes it, which only shrinks;
-  a fixture comparing `substrate.ArmKubeVirt` in a non-allowlisted
-  containercluster file fails; architecture.md names the test.
-- F06-04 (Medium): a shared contract suite for the lifecycle Capability port
-  (failure, unknown outcome, cancellation, replay, removal) run by every
-  implementation and one synthetic double.
-- F06-08 (Low): domain roots export the effect-bearing predicate,
-  `cmd/bootwright` injects it, `support.go` and `status.go` use it, and
-  `internal/reconciliation/lifecycle` imports no domain package;
-  `TestUnclaimedObjectTableMatchesTheEngine` still passes.
-- F06-12 (Low): record one heading convention (Selection, Implementations,
-  Refusal table) in the spec-writing guidance page, applied on each domain
-  page's next edit; a test fails when `substrate.Realized()` differs from the
-  arms the composition root binds.
-
-**Exit evidence:** the claim-check and fitness tests above pass and fail on
-their fixtures; the P1-A roadmap exit holds; `make check` passes.
-
-**Partly delivered** on 2026-10-26 by X169: two implementations of one family
-claiming one object refuse before registration, a fitness test keeps arm and
-implementation identities in their owners (its allowlist is empty), the
-capability contract suite proves cancellation and replay over a synthetic
-double, and each domain exports its effect-bearing predicate. **Remains:** the
-"claimed by no implementation" check is per kind, not per object, because
-bare-metal InfraProviders plan no block, ClusterAddonBinding blocks are keyed
-by package and cluster, and refused KubeVirt objects plan no block.
-
 ### B816
 
 **Owner:** State reconciliation and Controller setup. **Kind:** safety.
@@ -3147,82 +3089,6 @@ indexed as history), F15-07, F16-03's link and R2-02-05 above. **Remains:**
 F17-07's acceptance-row templates, which ride with the first M3b and M4b
 acceptance baselines; the optional structured help fields `examples` and
 `available`.
-
-### B826
-
-**Owner:** Desired state. **Kind:** defect. **Requires:** owner decisions
-[Q110](#audit-remediation-decisions) and [Q111](#audit-remediation-decisions) for their parts only.
-**Definition:** Specified. Batch L4 of the
-[2026-10-26 spec audit](../../audits/spec/2026-10-26.md); findings F03-02,
-F03-04, F03-05, F03-06, F03-07, F03-09, R2-05-05, R2-05-09. Admission enforces
-the grammar rules [api.md](../api.md) now states.
-
-**Specs:** api.md states the single-value field rule, the reference-class
-table, the Retired fields table, the closed Entitlement discriminator and
-authored list indexes, each with a Not yet met line here;
-[api/input.md](../api/input.md) states the `secrets` directory warning;
-[api/secrets.md](../api/secrets.md) lists the permitted arms per type;
-[api/ceph.md](../api/ceph.md) documents the Ceph nested references and
-the required `callHome`.
-
-**Work:**
-
-- F03-02 (Medium): validate warns, naming only the directory, when a skipped
-  `secrets` directory holds YAML (a bounded walk within the entry ceilings,
-  no file read), and the unresolved-Secret remedy names it; the code row in
-  [cli/output.md](../cli/output.md); fixture tests.
-- F03-04: remove `bmcEmulationDefaults.enabled`, `.protocol` and `.emulator`,
-  `install.method` and `baremetal.boot.method` from `api/v1alpha1`, the
-  schema, examples and goldens, and their rows in
-  [api/machines.md](../api/machines.md) and
-  [api/openshift-clusters.md](../api/openshift-clusters.md); service
-  `implementation` stays required, `lifecycle.rescue` stays (D29).
-- R2-05-05: `entitlementSchema` refuses `registry` on redhat-rhel and
-  `license` on either Red Hat type with `api.field` naming the permitted
-  arms; kind defaults never introduce them; the `license.accept: false`
-  default applies to ibm-storage-ceph only.
-- R2-05-09: ClusterAddonBinding diagnostics report authored indexes
-  (`internal/addons/admission.go`).
-- F03-07: a schema test that a `Ref` field is a reference shape and a
-  reference shape has the suffix; `cephadm.addressRef`, `bootstrap.node` and
-  `bootstrap.addressRef` become typed nested references.
-- F03-09: the unknown-field remedy names the replacement from data in
-  `api/v1alpha1` backing api.md's Retired fields table.
-- Waits for [Q110](#audit-remediation-decisions): `render effective --origins` and
-  any `schema` or `explain` command.
-- Waits for [Q111](#audit-remediation-decisions): api.md's enablement sentence, and
-  presence blocks for `fips` and `firewall` if chosen.
-
-**Sequencing with [B814](delivered.md#x171--audit-lane-i-api-shape-and-grammar):** F03-09's retired-path data lands first, in
-B814's slice 1, because every B814 rename refuses through it; F03-07's
-`bootstrap.node` becomes `bootstrap.nodeRef` with the CephCluster flatten in
-slice 3; `install.method` leaves with Q81's `install.agent` arm in slice 2.
-The rest runs in B814's step 7 together with [B827](delivered.md#x171--audit-lane-i-api-shape-and-grammar), since both edit
-the libvirt `bmcEmulationDefaults` block. D183 answered Q110 (a and b) and
-Q111 (a): `render effective --origins` and the advisory `bootwright schema
---format json-schema` come last, on the final shapes, with a test that every
-example validates alike under both; `fips` and `firewall` keep their
-booleans.
-
-**Exit evidence:** tests: YAML under `secrets/` warns; `registry` on
-redhat-rhel and `license` on redhat-ceph refuse; an Environment default of
-`license.accept: true` admits a redhat-rhel Entitlement with no license arm;
-an out-of-order `addonConfigs` fault reports index 1; a retired path names its
-replacement; the five fields are absent from schemas and examples; api.md's
-Not yet met lines removed; `make check`.
-
-**Partly delivered** on 2026-10-27 by X171: F03-02, F03-04, F03-05, F03-06,
-F03-09, R2-05-05 and R2-05-09, the Entitlement arms, authored list indexes,
-the skipped `secrets` directory warning, the retired-name data, the removed
-single-value fields, F03-07's Ref-suffix schema test with the 26 reference
-fields it typed (`cephadm.addressRef`, `cephadm.bootstrap.nodeRef` and
-`bootstrap.addressRef` among them), `render effective --origins` and `bootwright
-schema --format json-schema`, with D183's answers to Q110 (a, b) and Q111 (a);
-Q110 (c) was not chosen, so there is no `explain` command. **Remains:**
-nested, endpoint and native-service references are typed but still resolved by
-each owner's admission, not by the shared unresolved-reference diagnostic and
-its suppression rules; [api.md](../api.md#references) keeps the Not yet met
-line that points here.
 
 ### B829
 
@@ -3491,6 +3357,11 @@ theirs, so a reference that escapes compile-time resolution reads as the
 distribution refusal. **Outcome:** every Ceph request builder refuses an
 unresolved reference by name. **Exit evidence:** a test per builder.
 
+Narrowed on 2026-10-27 by X179: a compiled graph resolves every `Ref` field,
+nested ones included, so only lookups by a derived name (`nvmeof.<id>`,
+`mds.<filesystem>`) and the `backend_service` lookup in `services.go` can
+still miss at plan time.
+
 ### B862
 
 **Owner:** Verification tooling. **Kind:** defect. **Requires:** none.
@@ -3564,9 +3435,9 @@ decision stay open while its other parts land.
 | D Credentials and trust | [B805](#b805), B817 (X166), [B829](#b829), B831 (X166) | none | B | Q70, Q97, Q98, Q99, Q100, Q101, Q116 |
 | E Store durability and controller records | B806 (X164), B836 (X164), B832 (X164) | B801 | B, J | none |
 | F Truthful admission | B807 (X168) | none | C, I | Q71 |
-| G Extension architecture | [B808](#b808), B811 (X169), B809 (X169), B810 (X169), B812 (X169) | B800 to B807 | B, C, I, J, K | Q72, Q73, Q74, Q75 |
+| G Extension architecture | [B808](delivered.md#x179--audit-lane-q1-per-object-claims-and-nested-references), B811 (X169), B809 (X169), B810 (X169), B812 (X169) | B800 to B807 | B, C, I, J, K | Q72, Q73, Q74, Q75 |
 | H Cross-build continuation | B813 (X163) | B801 | none | Q76 |
-| I API shape and grammar | B814 (X171), [B826](#b826), B827 (X171), B828 (X171), B824 (X171), B821 (X171), B837 (X171) | B808 | B, F, G | Q77, Q78, Q79, Q80, Q81, Q82, Q83, Q84, Q85, Q86, Q87, Q88, Q105, Q106, Q107, Q110, Q111, Q112, Q113, Q114, Q115, Q118 |
+| I API shape and grammar | B814 (X171), [B826](delivered.md#x179--audit-lane-q1-per-object-claims-and-nested-references), B827 (X171), B828 (X171), B824 (X171), B821 (X171), B837 (X171) | B808 | B, F, G | Q77, Q78, Q79, Q80, Q81, Q82, Q83, Q84, Q85, Q86, Q87, Q88, Q105, Q106, Q107, Q110, Q111, Q112, Q113, Q114, Q115, Q118 |
 | J Reconciliation rules | [B816](#b816), B830 (X170) | B800 to B807 | E, G | Q92, Q93, Q94, Q95, Q96, Q117, Q118 |
 | K Language and adapter contracts | B818 (X162), B834 (X162) | none | G | none |
 | L Corpus structure and skills | B815 (X173), B819 (X173), [B820](#b820), B822 (X173) | B801; B822 after B813 and B818 | none | Q89, Q90, Q91, Q102, Q103 |
@@ -3601,7 +3472,7 @@ also updates this table.
 | 16 | Q3 Ceph object and replica refusals (B849, B838) | merged (X175) |
 | 17 | S Libvirt host evidence and routes (B845, B843, B840) | merged (X178) |
 | 18 | P Removal views and host claims (B846, B839, B844) | not started |
-| 19 | Q1 Unclaimed objects and references (B808, B826) | not started |
+| 19 | Q1 Unclaimed objects and references (B808, B826) | merged (X179) |
 | 20 | Q2 Family accessors and name bounds (B848, B850, B847) | not started |
 | 21 | R Installer material (B829) | not started |
 | 22 | T Context-free commands and preflight (B852, B825) | merged (X177) |
@@ -3676,8 +3547,8 @@ blocks.
 | Q107 | Is StorageExport (a per-consumer Data Foundation attachment) renamed, and does its shape change? | (a) Rename to StorageAttachment or StorageConsumer with per-protocol arms, drop spec.type, move external details to StorageCluster's external arm (B107).; (b) Rename the kind and fdf.storageExportRef only; keep spec.type unless api.md's union list is amended.; (c) Keep the name with the clarification now in api/ceph.md. | **Answered by D183: b.** b at least, keeping the D173 decomposition; ask with B814's storage naming questions. | [B824](delivered.md#x171--audit-lane-i-api-shape-and-grammar) | answered by [D183](#d183) |
 | Q108 | Should status add Secret and media readiness hints to nextSteps? | (a) Add read-only rows for missing or stale Secrets and missing media, with remedies before plan or apply, as a separate item.; (b) Keep status as now narrowed; operators use secret check and media list. | **Answered by D183: a.** b now; a only as its own UX item. | [B825](delivered.md#x177--audit-lane-t-inherited-flags-and-cluster-preflight) | answered by [D183](#d183) |
 | Q109 | Accept an opt-in bootwright diff --exit-code (exit 3 on any differing or unknown object, default unchanged)? | (a) Add the flag, its commands.md row, an exit-status row and an amended ok/exitCode rule.; (b) No flag; document a stable JSON summary field as the drift signal. | **Answered by D183: a.** b costs nothing; a is the common convention and needs acceptance as a new public flag under D153 clause 2. | [B825](delivered.md#x177--audit-lane-t-inherited-flags-and-cluster-preflight) | answered by [D183](#d183) |
-| Q110 | Which schema-discovery commands or flags does the CLI gain? | (a) render effective --origins marks each leaf authored, defaults.<Kind>, built-in or derived, with a golden.; (b) a plus bootwright schema --format json-schema as an advisory export.; (c) a and b plus bootwright explain with per-field docs in Go, a second owner of field meaning.; (d) Defer all. | **Answered by D183: a and b.** a first; b optional; c only if the owner wants Go as the single source of field docs. | [B826](#b826) | answered by [D183](#d183) |
-| Q111 | Is a plain enabled boolean allowed for a featureless switch, or do presence blocks replace them? | (a) api.md allows a plain boolean when the feature has no settings and omission equals the stated default (fips, firewall); no schema change.; (b) Presence blocks only: fips: {} and firewall: {} replace the booleans in schema, examples and goldens. | **Answered by D183: a.** a. | [B826](#b826) | answered by [D183](#d183) |
+| Q110 | Which schema-discovery commands or flags does the CLI gain? | (a) render effective --origins marks each leaf authored, defaults.<Kind>, built-in or derived, with a golden.; (b) a plus bootwright schema --format json-schema as an advisory export.; (c) a and b plus bootwright explain with per-field docs in Go, a second owner of field meaning.; (d) Defer all. | **Answered by D183: a and b.** a first; b optional; c only if the owner wants Go as the single source of field docs. | [B826](delivered.md#x179--audit-lane-q1-per-object-claims-and-nested-references) | answered by [D183](#d183) |
+| Q111 | Is a plain enabled boolean allowed for a featureless switch, or do presence blocks replace them? | (a) api.md allows a plain boolean when the feature has no settings and omission equals the stated default (fips, firewall); no schema change.; (b) Presence blocks only: fips: {} and firewall: {} replace the booleans in schema, examples and goldens. | **Answered by D183: a.** a. | [B826](delivered.md#x179--audit-lane-q1-per-object-claims-and-nested-references) | answered by [D183](#d183) |
 | Q112 | Which one-value mechanics of the libvirt arm and managed services stop being authored, and is managed-service implementation optional? | (a) libvirt uri becomes optional with a materialized default and bmcEmulationDefaults is renamed; implementation stays required.; (b) As a, and implementation becomes optional with a materialized default while a kind has one implementation. | **Answered by D183: a.** a: explicit implementation selection stays, unless the owner prefers b. | [B827](delivered.md#x171--audit-lane-i-api-shape-and-grammar) | answered by [D183](#d183) |
 | Q113 | Do managed services keep image.local and image.public with the stated precedence, or collapse to one image reference? | (a) Keep both; the precedence now stated is the contract, no schema change.; (b) One image reference; schema, admission, kind defaults, examples and goldens change, mirroring left to registry policy (B69). | **Answered by D183: a.** a now; b only together with the registry-policy design. | [B827](delivered.md#x171--audit-lane-i-api-shape-and-grammar) | answered by [D183](#d183) |
 | Q114 | Does the API adopt one public name limit for all kinds, or keep per-kind limits derived from block prefixes? | (a) One 47-byte limit stated once, new block prefixes at most 16 bytes with a test; tightens Machine, InfraProvider, Proxy, DNS, NTP and export names.; (b) Hash long names into block identities; one rule without shortening names, less readable run trees.; (c) Keep per-kind limits in one api.md table linked from each kind. | **Answered by D183: b.** a with an architecture test on prefix length; ask with B814's V2-19 name-limit question. | [B827](delivered.md#x171--audit-lane-i-api-shape-and-grammar) | answered by [D183](#d183) |

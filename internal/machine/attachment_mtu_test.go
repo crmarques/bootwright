@@ -19,7 +19,7 @@ func TestLibvirtInterfaceAttachmentsCoverNICsAndBoundGuestMTU(t *testing.T) {
 		"complete":       {entries, native, ""},
 		"missing":        {list(entries.Items()[0]), native, "cover every"},
 		"duplicate":      {list(entries.Items()[0], entries.Items()[0]), native, "attached once"},
-		"unknown":        {list(entries.Items()[0], m("interface", "eth1", "attachmentRef", "absent")), native, "matching arm"},
+		"unknown":        {list(entries.Items()[0], m("interface", "eth1", "attachmentRef", "absent")), native, ""},
 		"oversized":      {entries, native.With("interfaces", list(native.Get("interfaces").Items()[0].With("mtu", api.IntegerValue("9000")), native.Get("interfaces").Items()[1])), "above its attachment"},
 		"bond oversized": {entries, native.With("interfaces", list(append(native.Get("interfaces").Items(), m("name", "bond0", "type", "bond", "mtu", api.IntegerValue("9000"), "link-aggregation", m("port", api.StringList("eth0", "eth1"))))...)), "above its attachment"},
 	} {

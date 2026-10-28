@@ -269,8 +269,11 @@ func TestNVMeoFListenersMustCoverEveryGateway(t *testing.T) {
 	if len(issues) != 1 {
 		t.Fatalf("an explicit 4420 refused: %#v", issues)
 	}
-	for ref, message := range map[string]string{"nvmeof.absent": "resolves to no declared native service", "mon": "must name an nvmeof service; it names a mon service"} {
-		requireNVMeoFIssue(t, subsystemIssues(t, nvmeofSubsystem("a", "serviceRef", ref)), "$.spec.serviceRef", message, "")
+	requireNVMeoFIssue(t, subsystemIssues(t, nvmeofSubsystem("a", "serviceRef", "mon")), "$.spec.serviceRef", "must name an nvmeof service; it names a mon service", "")
+	for _, issue := range subsystemIssues(t, nvmeofSubsystem("a", "serviceRef", "nvmeof.absent")) {
+		if issue.Field == "$.spec.serviceRef" {
+			t.Fatalf("an undeclared service, which the shared reference check reports, was refused again: %#v", issue)
+		}
 	}
 }
 

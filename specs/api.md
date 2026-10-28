@@ -290,10 +290,15 @@ it: a field whose name ends in `Ref` or `Refs` is a typed reference of one of
 these classes, and a reference field outside the exceptions above ends in
 `Ref` or `Refs`.
 
-Not yet met: a nested, endpoint or native-service reference, such as
-`cephadm.bootstrap.nodeRef`, is resolved by its owner's admission rather than
-by the shared unresolved-reference diagnostic and its suppression rules;
-tracked as [B826](milestones/backlog.md#b826).
+A nested, endpoint or native-service reference resolves through the same
+`api.reference` diagnostic and suppression rules as an object reference: its
+schema names the owner whose entries it names, and
+`TestEveryNestedReferenceNamesWhereItResolves` holds every registered schema to
+it. One naming no entry of its owner is refused at the field, naming the owner,
+and echoes the authored value only when it is a name; while that owner does not
+resolve or decode, while its object refuses the field naming that owner, or
+while a required field leaves the entries absent, that other diagnostic is the
+only one, and no kind's admission resolves such a reference again.
 
 ### Unions
 

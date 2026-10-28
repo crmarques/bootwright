@@ -52,7 +52,10 @@ func TestTypedSelectionsAndEndpointNormalization(t *testing.T) {
 					t.Fatal(issues)
 				}
 			}
-			for _, invalid := range []api.Value{m(), m(ref, "unknown"), m(ref, "many"), m(ref, "one", "endpointRef", "unknown"), m(ref, "external", "endpointRef", "x")} {
+			if issues := validate(m(ref, "one", "endpointRef", "unknown")); len(issues) != 0 {
+				t.Fatalf("an unresolved endpointRef, which the shared reference check reports, was reported again: %v", issues)
+			}
+			for _, invalid := range []api.Value{m(), m(ref, "unknown"), m(ref, "many"), m(ref, "external", "endpointRef", "x")} {
 				if issues := validate(invalid); len(issues) == 0 {
 					t.Fatalf("invalid selection admitted: %v", invalid)
 				}
@@ -113,10 +116,13 @@ func TestArtifactEndpointSelectionAndHTTPContent(t *testing.T) {
 	if issues := ValidateArtifactEndpoint(selection, c, "$.selection", true); len(issues) > 0 {
 		t.Fatal(issues)
 	}
-	for _, invalid := range []api.Value{m("endpointRef", "packages"), m("serverRef", "artifact"), m("serverRef", "external", "endpointRef", "media"), m("serverRef", "artifact", "endpointRef", "media"), m("serverRef", "artifact", "endpointRef", "unknown")} {
+	for _, invalid := range []api.Value{m("endpointRef", "packages"), m("serverRef", "artifact"), m("serverRef", "external", "endpointRef", "media"), m("serverRef", "artifact", "endpointRef", "media")} {
 		if issues := ValidateArtifactEndpoint(invalid, c, "$.selection", true); len(issues) == 0 {
 			t.Fatalf("invalid artifact selection accepted: %v", invalid)
 		}
+	}
+	if issues := ValidateArtifactEndpoint(m("serverRef", "artifact", "endpointRef", "unknown"), c, "$.selection", true); len(issues) != 0 {
+		t.Fatalf("an unresolved endpointRef, which the shared reference check reports, was reported again: %v", issues)
 	}
 	if issues := ValidateArtifactEndpoint(selection, api.Catalog{}, "$.selection", false); len(issues) != 0 {
 		t.Fatalf("an unresolved serverRef, which the schema reference check reports, was reported again: %v", issues)

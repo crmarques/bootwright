@@ -321,11 +321,6 @@ func validateSubstrate(o, provider api.Object, variant string) []api.Issue {
 		if provided.Present() && !provided.Bool() && !profileRef.Present() {
 			issues = appendIssues(issues, invariant(path, "virtual installation requires a provider-local machine profile", "set "+path[2:]+" to a machine profile of the selected provider"))
 		}
-		if profileRef.Present() {
-			if _, ok := namedValue(provider.Spec().Get(variant, "machineProfiles"), profileRef.Text()); !ok {
-				issues = appendIssues(issues, reference(path, "profile must name a machine profile on the selected provider", "set "+path[2:]+" to the name of a machineProfiles entry of the selected provider"))
-			}
-		}
 	}
 	if (variant == substrate.ArmLibvirt || variant == substrate.ArmKubeVirt) && s.Has("network", "interfaceBinding") {
 		issues = appendIssues(issues, invariant("$.spec.network.interfaceBinding", "a "+variant+" provider creates every interface of this Machine, so there is no hardware NIC to bind",
@@ -400,7 +395,7 @@ func validateInstallNetwork(o api.Object, c api.Catalog, provider api.Object, fo
 	if found && variant == substrate.ArmLibvirt && len(compositionIssues) == 0 {
 		issues = appendIssues(issues, validateDomainInterfaces(o, c, native, configured)...)
 	}
-	if len(compositionIssues) == 0 {
+	if _, declared := namedValue(o.Spec().Get("network", "addresses"), o.Spec().Get("network", "installAddressRef").Text()); len(compositionIssues) == 0 && (declared || !o.Spec().Has("network", "installAddressRef")) {
 		address, selectionIssues := selectInstallAddress(o, c, false)
 		issues = appendIssues(issues, selectionIssues...)
 		if address.Present() {
@@ -469,11 +464,6 @@ func validateAccess(o api.Object, c api.Catalog) []api.Issue {
 	provided := s.Get("os", "provided")
 	if local := s.Get("access", "local"); local.Present() && (!local.Bool() || !provided.Bool()) {
 		issues = appendIssues(issues, invariant("$.spec.access.local", "local access must be true and requires an OS-ready Machine", "remove spec.access.local, or set it to true on an OS-ready Machine"))
-	}
-	if ssh := s.Get("access", "ssh"); ssh.Present() {
-		if _, ok := namedValue(s.Get("network", "addresses"), ssh.Get("addressRef").Text()); ssh.Has("addressRef") && !ok {
-			issues = appendIssues(issues, reference("$.spec.access.ssh.addressRef", "SSH address must name a Machine contact or assignment", "set spec.access.ssh.addressRef to the name of an entry in spec.network.addresses"))
-		}
 	}
 	if s.Get("access", "rootLogin").Text() == "revoke" && (installed(o) || !successorLogin(o, c)) {
 		issues = appendIssues(issues, invariant("$.spec.access.rootLogin", "revoking root login requires a managed storage-cluster non-root successor login", "remove spec.access.rootLogin, or make this Machine a node of a managed CephCluster whose spec.cephadm.clusterSSH names a non-root user and a keyRef"))
@@ -625,9 +615,6 @@ func validateHardware(o api.Object, c api.Catalog, variant string) []api.Issue {
 	for i, entry := range substrate.MachineMACs(o).Items() {
 		path := fmt.Sprintf("$.spec.substrate.%s.nics[%d]", arm, i)
 		nicRef := entry.Get("nicRef").Text()
-		if _, ok := namedValue(o.Spec().Get("hardware", "nics"), nicRef); !ok {
-			issues = appendIssues(issues, reference(path+".nicRef", "a MAC must name a declared hardware NIC", "set "+path[2:]+".nicRef to the name of a spec.hardware.nics entry"))
-		}
 		if bound[nicRef] {
 			issues = appendIssues(issues, invariant(path+".nicRef", "each hardware NIC has one MAC", "remove the repeated "+path[2:]+" entry"))
 		}
@@ -679,7 +666,7 @@ func validateAttachments(o, provider api.Object, native api.Value) []api.Issue {
 	check := func(ref api.Value, path string) {
 		if ref.Present() {
 			a, ok := namedValue(provider.Spec().Get("networkAttachments"), ref.Text())
-			if !ok || !a.Has(variant) {
+			if ok && !a.Has(variant) {
 				issues = appendIssues(issues, reference(path, "attachment must name a matching arm on the selected provider", "set "+path[2:]+" to a networkAttachments entry of the selected provider that has this provider's arm"))
 			}
 		}
