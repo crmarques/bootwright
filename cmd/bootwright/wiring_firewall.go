@@ -2,7 +2,9 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"slices"
+	"strings"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/controller"
@@ -96,6 +98,14 @@ func inspectControllerSockets(ctx context.Context, inspector firewall.Inspector,
 	return firewall.CheckSockets(ctx, inspector, sockets)
 }
 
+func socketTarget(socket firewall.Socket) string {
+	address := socket.Address
+	if strings.Contains(address, ":") {
+		address = "[" + address + "]"
+	}
+	return fmt.Sprintf("%s %s:%d/%s", socket.Object, address, socket.Port, socket.Protocol)
+}
+
 func firewallPreflight(inspector firewall.Inspector) prerequisites.ListenerChecks {
 	return func(ctx context.Context, catalog api.Catalog, name string) ([]prerequisites.Check, error) {
 		checks, err := inspectControllerSockets(ctx, inspector, catalog, name)
@@ -114,7 +124,7 @@ func firewallPreflight(inspector firewall.Inspector) prerequisites.ListenerCheck
 			} else {
 				observed += "; " + firewall.ManualRemedy
 			}
-			rows = append(rows, prerequisites.Check{ID: "listener-firewall", Required: check.Socket.Object + " inbound socket", Observed: observed, Status: status, Scope: prerequisites.ContextScope})
+			rows = append(rows, prerequisites.Check{ID: "listener-firewall", Required: check.Socket.Object + " inbound socket", Observed: observed, Status: status, Scope: prerequisites.ContextScope, Target: socketTarget(check.Socket)})
 		}
 		return rows, nil
 	}

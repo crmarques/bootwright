@@ -96,3 +96,18 @@ func TestWildcardListenerWithoutEndpointRemainsAnUnknownSocket(t *testing.T) {
 	}
 	t.Fatal("wildcard listener with no endpoint disappeared from firewall inspection")
 }
+
+func TestSocketTargetNamesTheObjectAddressPortAndProtocol(t *testing.T) {
+	for _, row := range []struct {
+		socket firewall.Socket
+		want   string
+	}{
+		{firewall.Socket{Object: "DNSServer/dns", Address: "192.0.2.53", Port: 53, Protocol: "udp"}, "DNSServer/dns 192.0.2.53:53/udp"},
+		{firewall.Socket{Object: "DNSServer/dns", Address: "192.0.2.53", Port: 53, Protocol: "tcp"}, "DNSServer/dns 192.0.2.53:53/tcp"},
+		{firewall.Socket{Object: "ArtifactServer/a", Address: "2001:db8::1", Port: 8443, Protocol: "tcp"}, "ArtifactServer/a [2001:db8::1]:8443/tcp"},
+	} {
+		if got := socketTarget(row.socket); got != row.want {
+			t.Errorf("target %q, want %q", got, row.want)
+		}
+	}
+}

@@ -1,0 +1,6 @@
+  ✓ Artifacts rendered
+
+    Input            /work/inputs
+    Output           /work/artifacts
+    Effective state  /work/artifacts/effective-state.yaml
+    Objects          4

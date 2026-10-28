@@ -59,8 +59,8 @@ COMPOSED = {
     "managedos_install_anaconda/tasks/boot.yml": [
         ("baremetal", "pre_boot"), ("libvirt", "pre_boot"), ("baremetal", "boot_media"), ("libvirt", "boot_media")],
     "managedos_install_anaconda/tasks/identity.yml": [("baremetal", "identity_read"), ("libvirt", "identity_read")],
+    "managedos_install_anaconda/tasks/network.yml": [("baremetal", "boot_disk"), ("libvirt", "boot_disk")],
     "managedos_install_anaconda/tasks/proved_boot.yml": [("baremetal", "boot_disk"), ("libvirt", "boot_disk")],
-    "managedos_install_anaconda/tasks/reboot.yml": [("baremetal", "boot_disk"), ("libvirt", "boot_disk")],
 }
 
 # The substrate's one machine port dispatcher, which every consumer includes,
@@ -75,8 +75,8 @@ MEDIA_READS = {"containercluster_install_agent/tasks/boot.yml", "containercluste
                "managedos_install_anaconda/tasks/observe.yml"}
 READS = MEDIA_READS | {
     "managedos_install_anaconda/tasks/await.yml",
+    "managedos_install_anaconda/tasks/network.yml",
     "managedos_install_anaconda/tasks/proved_boot.yml",
-    "managedos_install_anaconda/tasks/reboot.yml",
     "substrate_libvirt_machine/tasks/apply.yml",
     "substrate_libvirt_machine/tasks/observe.yml",
     "substrate_libvirt_machine/tasks/pre_boot.yml",
@@ -140,10 +140,10 @@ ASKED = {
     ("managedos_install_anaconda/tasks/await.yml", "baremetal", "boot_disk"): {BAREMETAL + "_disk_power_on": True},
     ("managedos_install_anaconda/tasks/boot.yml", "libvirt", "boot_media"): {
         LIBVIRT + "_boot_installer_powers_off": True},
+    ("managedos_install_anaconda/tasks/network.yml", "libvirt", "boot_disk"): {LIBVIRT + "_disk_power_on": True},
+    ("managedos_install_anaconda/tasks/network.yml", "baremetal", "boot_disk"): {BAREMETAL + "_disk_power_on": True},
     ("managedos_install_anaconda/tasks/proved_boot.yml", "libvirt", "boot_disk"): {LIBVIRT + "_disk_power_on": True},
     ("managedos_install_anaconda/tasks/proved_boot.yml", "baremetal", "boot_disk"): {BAREMETAL + "_disk_power_on": True},
-    ("managedos_install_anaconda/tasks/reboot.yml", "libvirt", "boot_disk"): {LIBVIRT + "_disk_power_on": True},
-    ("managedos_install_anaconda/tasks/reboot.yml", "baremetal", "boot_disk"): {BAREMETAL + "_disk_power_on": True},
 }
 
 ENDPOINTS = {

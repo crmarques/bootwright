@@ -31,7 +31,7 @@ func (s Service) Validate(ctx context.Context, request ValidateRequest) (*Report
 }
 
 func (s Service) RenderEffective(ctx context.Context, request EffectiveRequest) (*EffectiveResult, error) {
-	state, report, err := s.compile(ctx, request.ContextName, nil)
+	state, report, err := s.compile(ctx, request.ContextName, request.Files)
 	if err != nil {
 		return nil, err
 	}

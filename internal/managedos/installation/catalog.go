@@ -17,7 +17,7 @@ const Implementation = "os-install-anaconda-v1"
 // Kind is shared with the substrate; resolution also requires the implementation.
 const Kind = "Machine"
 
-const requestVersion = "os-install-anaconda-v19"
+const requestVersion = "os-install-anaconda-v18"
 
 // installationBudgets are the waits every installation this build plans
 // freezes. The installer takes minutes to write a disk; a physical server adds
@@ -103,19 +103,6 @@ const networkRollbackGrace = 30 * time.Second
 
 // registrationBound covers the worker's 630 s session or its 300 s unregistration, its policy read and inspection.
 const registrationBound = 15 * time.Minute
-
-// updateBound covers the 1800 s update session, the 600 s reboot, the 120 s release set, the
-// 120 s completion session and the 60 s second marker read; the disk boot has its own bound.
-const updateBound = 45 * time.Minute
-
-const updateRebootBound = 600 * time.Second
-
-func machineBootDisk(arm string) time.Duration {
-	if bounds, ok := substrate.MachineBoundsFor(arm); ok {
-		return bounds.BootDisk
-	}
-	return substrate.LibvirtBootDiskBound
-}
 
 // frozenTooling is the tooling closure an earlier build named here, which the
 // controller stage now owns. It stays in the content digest unchanged, so

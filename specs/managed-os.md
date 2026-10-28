@@ -46,21 +46,6 @@ frozen. A mismatch, an over-bound image, a non-regular source or an interrupted
 transfer publishes nothing. A mismatch names the image, its origin and both
 the expected and the computed digest.
 
-After the digest, `media add` reads the image's release from its `/.treeinfo`:
-the file at the root of the ISO 9660 image's Joliet directory, read from the
-staged bytes through the add's own descriptor, at most 1 MiB, never mounting
-the image or executing anything from it. The record gains the optional member
-`release`, `{family, version, arch}`, the `family`, `version` and `arch` keys
-of that file's `[general]` section, each one line of at most 128 printable
-bytes. An image with no Joliet directory, no `/.treeinfo`, a larger or
-fragmented one, or a `[general]` section missing any of the three keys, or one
-its strict reading refuses (a repeated section or key, a value continued onto
-another line), is published with no `release`; `media add` never refuses for
-it, and refuses only when it cannot read back its own staged bytes, as the
-store's failure. Source:
-[productmd treeinfo 1.0](https://release-engineering.github.io/productmd/treeinfo-1.0.html),
-whose `[general]` keys equal `[release] name` and `version` and `[tree] arch`.
-
 A failed download names its own cause: a redirect, with its status and its
 target without the query; the name that did not resolve; the certificate the
 system trust store refused and, where the verifier says, why; the connection
@@ -84,8 +69,7 @@ command's lock keeps the stage it verified against its `--sha256`, so repeating
 it publishes that image without acquiring it again.
 
 `media list` reads only records and file metadata, and names the contexts
-that reserve each image separately from whether the image verified, and the
-release each record holds.
+that reserve each image separately from whether the image verified.
 `--checksums` opens every listed image under the shared root lock, releases
 it, and then reads each image in full through the descriptor it opened, so no
 other command refuses as busy while it reads; it reports each computed digest
@@ -117,28 +101,7 @@ naming `bootwright media add --name <filename.iso>`; one the store lists as
 failed, naming its cause, or whose record names no SHA-256 and positive size,
 naming `bootwright media delete` and `media add`; one whose bytes no longer
 have the size its record names; and one whose MachineImage `checksum` declares
-another digest than the record. For the image an installation installs
-packages from, the boot image of a profile with no `packageSource` and a
-hosted tree's DVD, it also refuses, naming the image and the
-`MachineInstallProfile`: a record with no `release`,
-`the media store holds no release for <image>, which this build reads from the
-image's .treeinfo when it is added`, remedied by `bootwright media delete
---name <image>, then bootwright media add --name <image> with this build`; a
-release `family` other than `Red Hat Enterprise Linux`, or an `arch` other
-than `x86_64`, `<image> holds a <family> <arch> release, and an installation
-installs only Red Hat Enterprise Linux on x86_64`, remedied by `import a Red
-Hat Enterprise Linux x86_64 image with bootwright media add and select it for
-<profile>`; and a release `version` other than the
-profile's `spec.os.version`, `<image> holds release <found> and
-<profile> declares spec.os.version <declared>`, remedied by `set
-spec.os.version on <profile> to <found>, or import the <declared> image`. A
-hosted tree's boot image is refused only by the family, arch and version
-refusals, and only when its record names a release: a RHEL boot ISO carries
-no `.treeinfo`, so it is accepted without one, bounded by the installed system's `VERSION_ID` that
-[update within release](#update-within-release) proves. A plan therefore never
-installs one minor under a profile declaring another.
-
-Each apply attempt reads the size and SHA-256
+another digest than the record. Each apply attempt reads the size and SHA-256
 again before the image's first use and refuses a changed entry through a named
 refusal, whose remedy takes the context back, imports the image again and
 applies: an installation names its boot image's for its Machine, and the
@@ -182,11 +145,7 @@ through it. A profile selecting
 Entitlement is admitted on virtual and physical Machines, as
 [Registration](#registration) states. FIPS and root-disk encryption are admitted on virtual
 and physical Machines under the key and disk boundaries in
-[FIPS mode](#fips-mode) and [Root-disk encryption](#root-disk-encryption).
-Every installation installs the profile's exact `spec.os.version`, which each
-image it boots or installs from names ([media store](#media-store)), and, by
-default, updates it within that release, as
-[Update within release](#update-within-release) states. A profile enabling `ssh.passwordAuthentication` refuses too, because
+[FIPS mode](#fips-mode) and [Root-disk encryption](#root-disk-encryption). A profile enabling `ssh.passwordAuthentication` refuses too, because
 this executable sets no password on an installed system. A Machine whose
 profile configures a repository refuses while its effective proxy names a
 Proxy with `spec.connection.auth` or `spec.connection.trustBundleRef`, because
@@ -261,9 +220,7 @@ encrypted root disk, `subscription-manager` for a profile that registers
 Machine whose identity channel is the guest agent; the profile's enabled and
 disabled services; SELinux and firewall as selected; and a `%post` that writes
 the install marker, establishes the host key its identity channel requires,
-writes the regional formats, the configured repositories and, for a profile
-updating `withinRelease`, the release variable
-([Update within release](#update-within-release)), writes the
+writes the regional formats and the configured repositories, writes the
 sudoers and SSH daemon drop-ins, and removes every retained copy of the
 Kickstart, preceded, for an encrypted root disk, by a second `%post` that binds
 it to the TPM2. The marker is
@@ -501,12 +458,7 @@ the media work and each read's own time, and the
 makes to the machine's BMC, 1 hour 17 minutes 20 seconds, which is 4 hours
 50 minutes 50 seconds for these budgets and within the runner's ceiling. A
 registering request adds 15 minutes for its
-[registration](#registration), 5 hours 5 minutes 50 seconds for these budgets,
-and a request updating `withinRelease` adds 45 minutes for its
-[update](#update-within-release) and the bound of its reboot's disk boot, 6
-minutes on a virtual Machine: 5 hours 41 minutes 50 seconds without a
-registration and 5 hours 56 minutes 50 seconds with one, within the 6-hour
-ceiling. Those
+[registration](#registration), 5 hours 5 minutes 50 seconds for these budgets. Those
 calls are the pre-boot power read, the insert, the power-off, boot selection
 and power-on that boot the installer, the eject, disk selection and power-on
 that boot the installed system, the eject the verification repeats, and the
@@ -538,14 +490,11 @@ FIPS mode, as [FIPS mode](#fips-mode) states, and, when the profile selects
 `diskEncryption`, the root filesystem proved on a TPM2-bound LUKS device, as
 [Root-disk encryption](#root-disk-encryption) states, and, when the request
 registers, a registration this installation owns, as
-[Registration](#registration) states, and, when the request updates
-`withinRelease`, a `complete` update with the release proved, as
-[Update within release](#update-within-release) states. The evidence records the marker
+[Registration](#registration) states. The evidence records the marker
 digest, the host public key, the address, whether that connection was accepted,
 the network result, `fips`, whether the installed system proved FIPS mode,
 `rootEncryption`, whether it proved its root disk encrypted, and
-`registration`, the consumer and the ownership state the worker read, and
-`update`, what the update did; a later consumer that
+`registration`, the consumer and the ownership state the worker read; a later consumer that
 connects to the Machine binds that key, never a first-use answer from the
 network. An observation proves completion the same way, because it is what
 resolves an interrupted apply: an observation that proves the marker and the
@@ -558,14 +507,12 @@ connection yet is converging rather than failed.
 A Machine whose guest already answers with the frozen marker
 boots no installer but still converges its
 [network](#network-convergence) and, when the request registers, its
-[registration](#registration), and resumes an
-[update](#update-within-release) its record names unfinished; it reports `completed` with the same
+[registration](#registration); it reports `completed` with the same
 evidence, and outcome `unchanged` only when the network marker names this
 request from an earlier boot, the running network matches its declaration and
 the registration worker reported its registration unchanged.
 An apply that booted the installer, that applied, rolled back or restarted
-the network, that registered or adopted a registration, or that ran or
-resumed an update, reports `changed`. The installer answer is
+the network, or that registered or adopted a registration, reports `changed`. The installer answer is
 the first identity read's, frozen before the boot, never the marker the
 installer has written by completion. The only
 differences it converges are its own published content, an ejection it did
@@ -624,13 +571,11 @@ marker with a network not yet converged, rolled back, mismatched or drifted is
 a positive partial realization; network convergence never yields no effect.
 The frozen marker with an `absent` or `pending` registration is a positive
 partial realization too, and a `foreign` registration stays unknown, as
-[Registration](#registration) states; so is an update record that is absent,
-`pending` or `upgraded` for a request updating `withinRelease`, and a foreign
-one stays unknown, as [Update within release](#update-within-release) states. Over the pinned fleet
+[Registration](#registration) states. Over the pinned fleet
 connection, when it answers, the observation also reads the network marker,
 the boot ID and `nmstatectl show --json`, and compares the running network
 with its declaration, and, for a registering request, inspects the
-registration, and for a request updating `withinRelease`, the update. A
+registration. A
 private completion, of a delivered key or an encrypted root disk, has nothing
 published beneath its private subtree, neither its private material nor the
 image; that subtree left on a powered-off guest
@@ -1097,9 +1042,7 @@ included, unlocks unattended through the TPM. A disk that cannot unlock waits
 on the console, because `systemd-cryptsetup` waits without a timeout
 ([crypttab(5)](https://man7.org/linux/man-pages/man5/crypttab.5.html)), until
 the identity budget fails the apply. Recovery is the console with the recovery
-passphrase. An update within the release reboots the disk after it may have
-replaced the boot loader and the kernel, so `pcrIds` holding 4, 8 or 9 refuses
-beside it ([Update within release](#update-within-release)).
+passphrase.
 
 ### Registration
 
@@ -1168,8 +1111,7 @@ registration is foreign, refuses `registration-foreign` and is left registered.
 **Repositories.** The worker applies the repositories, when the request names any, in one
 `subscription-manager repos` call, every `--disable` first, then every
 `--enable`; `*` in `disable` disables every repository. They are applied on
-every apply, so they converge. A request updating `withinRelease` sets the
-release before that call ([Update within release](#update-within-release)).
+every apply, so they converge.
 
 **Values.** The organization and the activation key are each one line of 1 to
 255 printable ASCII characters without whitespace; another value refuses
@@ -1244,10 +1186,76 @@ refusal of that invocation, whose command keeps it beside the tokens the plan
 requires, as [the command contract](cli/commands.md) states.
 
 **Bound.** The deadline of a registering request adds 15 minutes for the
-registration, the worker's whole session being bounded at 630 seconds, 750
-when it also sets the release for an
-[update within release](#update-within-release), whose bound allows the 120
-seconds more, and its unregistration at 300 seconds.
+registration, the worker's whole session being bounded at 630 seconds and its
+unregistration at 300 seconds.
+
+### Shared package-tree publication
+
+For a hosted package source, Managed OS plans one block per context and
+referenced install profile in the `machines` stage. It realizes the
+`MachineInstallProfile` publication under the tree implementation and request
+version (`TreeImplementation` in `internal/managedos/installation/tree.go`);
+each machine installation requires that profile
+publication alongside its own Machine realization and referenced services.
+An installation uses the request version `requestVersion` in
+`internal/managedos/installation/catalog.go`. Profiles using
+a URL package source contribute no publication block.
+
+The request freezes only context and profile identity, artifact-server
+placement, publication path and URL, serving certificate reference, and the
+source media name, exact SHA-256 and size. It carries no machine identity,
+Kickstart, completion marker or machine key. Conflicting source pins for the
+same publication path refuse. This block alone owns and exclusively claims
+the tree path; installation waits carry no tree claim.
+
+**Publication and replay.** The complete tree lives at `os/<profile>/tree/`,
+copied from the frozen DVD with its `.treeinfo` and repositories intact.
+Extraction uses `os/<profile>/tree.staging`; the source pin is proved before
+extraction, and `.bootwright-tree-identity` contains its SHA-256 before an
+atomic rename publishes the tree. A complete matching tree is reused.
+Incomplete staging or a tree without a complete marker is this owner's
+partial effect and is cleared before extraction. A different nonempty source
+identity is drift and stays unknown during apply resolution. Consumers read
+the completed tree without mutating it, proving only that its source identity
+is the frozen DVD's.
+
+An apply refuses, before it extracts or changes anything, through a named
+refusal for its `MachineInstallProfile`: `media-changed-tree` when the DVD is
+no longer a regular file of the frozen size and SHA-256, whose remedy is the
+[media store's](#media-store); and `tree-source-drift` when a tree at the
+path names another source identity, whose remedy takes the context back,
+which withdraws that tree, then applies.
+
+**Evidence and continuation.** The evidence version
+(`TreeEvidenceVersion` in `internal/managedos/installation/tree.go`) binds the
+frozen request digest and reports
+complete tree, source identity, content and staging presence, absence and
+postcondition. A complete tree with matching source identity, content present
+and no staging proves completion; no content or staging proves no effect;
+unfinished owned publication proves partial effect. Malformed evidence,
+another request or version, or a different source identity proves no apply
+completion. A continuation reuses the exact frozen source and publication;
+unknown outcomes are observed before any consumer starts.
+
+**Inverse.** Once every consumer is removed, destroy withdraws `.treeinfo`
+before deleting the rest of the tree and its staging area, then proves both
+absent. An intact matching publication with no staging proves a removal had
+no effect; unfinished removal content proves a partial removal. Complete absence is
+completion, including when publication never completed or no consumer ever
+started. Removal proves the exact frozen context-owned path and its safe
+ancestors, and may withdraw this owned publication even when its source
+identity has drifted; changed payload bytes grant no ownership of another path
+and do not strand teardown. Contradictory evidence remains unknown. The empty
+profile directory is removed without recursively deleting unrelated siblings.
+Removal consumes no data-loss authorization. Its
+quiescence follows the consumers under the lifecycle removal gate.
+
+The new block, installation request version and libvirt path versions change
+frozen plans. Retire live contexts with the build that applied them before
+setup with this build, then start fresh. An old incomplete apply cannot
+silently continue across these changes. A moved automation digest alone
+freezes no block differently, so an apply continues across it once `setup` has
+run ([dependency safety](state-reconciliation.md#dependency-safety-during-recovery)).
 
 ### Physical removal
 
@@ -1428,226 +1436,6 @@ The [physical acceptance template](../docs/acceptance.md#physical-qualification-
 records each arm's result on a registered clean build. Host qualification and
 B70 erase evidence feed [B485](milestones/m2.md#b485)'s complete physical Ceph
 matrix; each retains its own operator exit.
-
-## Update within release
-
-A profile whose `spec.updates.policy` is `withinRelease`, the default, updates
-the installed system inside its `os-install-<machine>` block: every installed
-package moves to the newest version its update sources offer within the
-release, the profile's `spec.os.version`, and the system reboots when anything
-changed. The release is installed from media that names it
-([media store](#media-store)) and never left. `none` installs the media's
-packages and updates nothing. The update is installation work: an apply after
-it completed never updates again, because day-2 operation is
-[out of scope](project.md#design-priorities-and-non-goals).
-
-**Admission.** An update source is a registration this installation performs,
-a `managed` `redhatRhel` Entitlement in `spec.subscription`, or at least one
-`spec.customizations.repositories.configure` entry with `enabled: true`. A
-profile updating `withinRelease` with neither refuses at
-`spec.updates.policy` with `MachineInstallProfile/<profile> updates within its
-release but declares no update source: no managed subscription and no enabled
-configured repository`, remedied by `set spec.updates.policy to none on
-<profile>, or declare a managed spec.subscription or an enabled
-spec.customizations.repositories.configure entry`. An `external` Entitlement
-alone is no source, because this executable neither registers nor proves it.
-A profile updating `withinRelease` whose
-`spec.customizations.security.diskEncryption.unlock.tpm2.pcrIds` holds 4, 8 or
-9 refuses at that path with `MachineInstallProfile/<profile> seals its root
-disk to PCR 4, 8 or 9, which measure the boot loader, its commands and the
-kernel an update within the release replaces, so the disk would not unlock
-after the update's reboot`, remedied by `remove 4, 8 and 9 from
-spec.customizations.security.diskEncryption.unlock.tpm2.pcrIds on <profile>,
-or set spec.updates.policy to none on <profile>`.
-
-**Frozen request.** The installation request freezes `update`, `{policy,
-release}`, omitted for `none`; it moves the installation request version
-(`requestVersion` in `internal/managedos/installation/catalog.go`). A change
-of either changes the request and so the marker, so it is another
-installation: the context is taken back with `bootwright destroy` and applied
-again, as for [registration](#registration).
-
-**Release variable.** The `%post` of a profile updating `withinRelease` writes
-`/etc/dnf/vars/releasever` holding the release and a newline, mode 0644 owned
-by root:root, so `$releasever` in every repository URL, configured or
-subscription, expands to the minor, such as `9.8`, rather than the major dnf
-derives from the installed `redhat-release`. The file stays on the installed
-system. Source: [dnf configuration reference](https://dnf.readthedocs.io/en/latest/conf_ref.html),
-repo variables.
-
-**Effect.** After the installed system's network converged, its FIPS and
-root-encryption proofs passed and, when it registers, its registration and
-repositories converged, one fixed worker runs as root through `sudo -n` over
-the pinned fleet connection, built option for option as the registration
-worker is:
-
-1. With a registration, the registration worker sets the release before its
-   `subscription-manager repos` call, with `subscription-manager release
-   --set=<release>`, on every apply, after proving that `subscription-manager
-   release --list` offers it; one that does not refuses
-   `update-release-unavailable`.
-2. It proves that `VERSION_ID` in the installed system's `/etc/os-release`
-   equals the release, else refuses `update-release-mismatch`.
-3. It resolves, and downloads, with the guest's own dnf and without applying
-   it, the transaction `dnf upgrade` would run, never with `--nogpgcheck`,
-   `--allowerasing` or `--repofrompath`: no enabled repository refuses
-   `update-no-repository`, and a transaction that would move `redhat-release`
-   to a version other than the release refuses `update-release-drift`, naming
-   the repository that offers it.
-4. It runs `dnf upgrade --refresh --assumeyes
-   --comment=bootwright:<request digest>`.
-5. When the transaction changed at least one package, the installation asks
-   the installed system to power off over the pinned connection and boots its
-   installed disk through the substrate, as the
-   [network restart](#network-convergence) does, waits for its identity
-   channel, proves the marker and host key again and, when the profile enables
-   `fips`, the [FIPS proof](#fips-mode) again.
-6. It proves `VERSION_ID` equals the release again.
-
-Sources: [subscription-manager(8)](https://www.mankier.com/8/subscription-manager),
-`release`, which sets the sticky minor release `--list` offers, and the
-[dnf command reference](https://dnf.readthedocs.io/en/latest/command_ref.html),
-`upgrade`, `--refresh` and `--comment`. dnf reads the proxy the `.repo` file
-carries ([derived installation](#derived-installation)); registration and its
-subscription repositories stay direct-only.
-
-**Ownership and continuation.** The worker keeps the root-only 0600 record
-`/etc/bootwright/update.json`, naming the request digest, the dnf history
-transaction once there is one, and a state: `pending`, written before the
-upgrade; `upgraded`, once dnf succeeded; `complete`, after the reboot and the
-proofs. A retry resumes from the state it reads: `pending` runs the upgrade
-again, `upgraded` reboots when the transaction changed a package and proves,
-and `complete` does nothing. A record naming another request digest, or one that
-is not a root-only regular file of that closed form, refuses `update-foreign`
-and changes nothing. An observation reads the record,
-`VERSION_ID` and the history transaction carrying the comment, changing
-nothing: with the frozen marker, an absent, `pending` or `upgraded` record is a
-positive partial realization the next apply converges, and a foreign one stays
-unknown ([unknown resolution](#unknown-resolution)).
-
-**Evidence and completion.** The evidence records `update.state` (`none` or
-`complete`; an observation also reads `absent`, `pending`, `upgraded` or
-`foreign`, and leaves it empty when it read nothing), `update.release`, `update.transaction` (the dnf history ID, `0`
-when nothing changed), `update.packages` (the number of packages it changed),
-`update.rebooted` and `update.kernel` (the running kernel after it). An
-installation updating `withinRelease` completes only with `complete` and the
-release proved; one with `none` records state `none` and nothing else.
-
-**Refusals.** The worker names each refusal to the runner, which reports it
-with the message and remedy Go owns, `<release>` being the frozen release and
-`<cause>` the worker's closed reason, `metadata`, `download` or `timeout` for
-`update-unavailable` and `resolution`, `transaction`, `timeout`, `history` or
-`tooling` for `update-failed`, never a URL or a repository credential:
-
-| Refusal | Message | Remedy |
-| --- | --- | --- |
-| `update-release-unavailable` | `the subscription service offers no release <release> to Machine/<machine>` | `set spec.os.version on <profile> to a release the subscription service offers, or set spec.updates.policy to none, then run bootwright destroy --context <context> and apply again` |
-| `update-release-mismatch` | `Machine/<machine> reports VERSION_ID <found>, and its installation declares release <release>` | `run bootwright destroy --context <context>, make the update sources of <profile> offer release <release> alone, and apply again` |
-| `update-release-drift` | `the update of Machine/<machine> would move redhat-release to <found> from repository <repository>, outside release <release>` | `pin repository <repository> of <profile> to release <release> or disable it, then run bootwright destroy --context <context> and apply again` |
-| `update-no-repository` | `Machine/<machine> has no enabled repository to update release <release> from` | `enable a repository for <profile> or set spec.updates.policy to none, then run bootwright destroy --context <context> and apply again` |
-| `update-foreign` | `Machine/<machine> holds an update record of another installation` | `run bootwright destroy --context <context> and apply again` |
-| `update-unavailable` | `a repository did not answer while Machine/<machine> updated within release <release>: <cause>` | `restore the route from Machine/<machine> to its update sources, then run bootwright apply --context <context> again` |
-| `update-failed` | `the package transaction of Machine/<machine> failed while it updated within release <release>: <cause>` | `run bootwright apply --context <context> again once the update sources of <profile> offer a consistent transaction, or run bootwright destroy --context <context> and set spec.updates.policy to none` |
-
-A worker that did not answer over its connection, or a session that failed,
-fails the apply with `Machine <machine> was not updated within its release:
-<reason>`, and the effect is resolved by observation.
-
-**Bound.** The deadline of a request updating `withinRelease` adds 45 minutes
-([Budgets](#budgets)), the worker's whole session being bounded at 1800
-seconds and the reboot's return, from the power-off request until the
-installed system answers again, at 600 seconds, a quarter of the frozen reboot
-budget for the power-off and the rest for the answer; they also cover the 120
-seconds the registration worker's session gains to set the release, the
-completion step's 120-second session and the marker's second read. The
-deadline adds the bound of the reboot's disk boot as well. The worker starts the
-upgrade only with at least 900 seconds of its session left, else it refuses
-`update-unavailable` with cause `timeout`, nothing started and the record
-unchanged.
-
-**Removal.** Nothing beyond the [inverse](#inverse): the updated packages leave
-with the Machine's disks.
-
-**Scenarios.**
-
-| Update source | Behavior |
-| --- | --- |
-| Hosted subscription, standard repositories | The release is set, so the subscription repositories serve that minor. |
-| Hosted subscription, EUS, E4S or AUS | The operator names those repository IDs in `repositories.subscription`; no rule pairs a minor with a stream ([D163](milestones/backlog.md#d163)). |
-| Internal mirror in `repositories.configure` | `$releasever` expands to the minor; a snapshot mirror pins by content; the drift refusal catches a mirror of another minor. |
-| `external` Entitlement | Only configured repositories count; with none the profile refuses. |
-| Disconnected, DVD or `hostedTree` only | No update source, so `none` is required. |
-| Satellite | Refused before registration today ([B877](milestones/backlog.md#b877)). |
-| `templateClone` qcow2 | Refused today ([B99](milestones/m1.md#b99)); steps 2 to 6 read no installer media. |
-| Provided Machine | Out of scope: Bootwright installs no operating system on it. |
-
-## Shared package-tree publication
-
-For a hosted package source, Managed OS plans one block per context and
-referenced install profile in the `machines` stage. It realizes the
-`MachineInstallProfile` publication under the tree implementation and request
-version (`TreeImplementation` in `internal/managedos/installation/tree.go`);
-each machine installation requires that profile
-publication alongside its own Machine realization and referenced services.
-An installation uses the request version `requestVersion` in
-`internal/managedos/installation/catalog.go`. Profiles using
-a URL package source contribute no publication block.
-
-The request freezes only context and profile identity, artifact-server
-placement, publication path and URL, serving certificate reference, and the
-source media name, exact SHA-256 and size. It carries no machine identity,
-Kickstart, completion marker or machine key. Conflicting source pins for the
-same publication path refuse. This block alone owns and exclusively claims
-the tree path; installation waits carry no tree claim.
-
-**Publication and replay.** The complete tree lives at `os/<profile>/tree/`,
-copied from the frozen DVD with its `.treeinfo` and repositories intact.
-Extraction uses `os/<profile>/tree.staging`; the source pin is proved before
-extraction, and `.bootwright-tree-identity` contains its SHA-256 before an
-atomic rename publishes the tree. A complete matching tree is reused.
-Incomplete staging or a tree without a complete marker is this owner's
-partial effect and is cleared before extraction. A different nonempty source
-identity is drift and stays unknown during apply resolution. Consumers read
-the completed tree without mutating it, proving only that its source identity
-is the frozen DVD's.
-
-An apply refuses, before it extracts or changes anything, through a named
-refusal for its `MachineInstallProfile`: `media-changed-tree` when the DVD is
-no longer a regular file of the frozen size and SHA-256, whose remedy is the
-[media store's](#media-store); and `tree-source-drift` when a tree at the
-path names another source identity, whose remedy takes the context back,
-which withdraws that tree, then applies.
-
-**Evidence and continuation.** The evidence version
-(`TreeEvidenceVersion` in `internal/managedos/installation/tree.go`) binds the
-frozen request digest and reports
-complete tree, source identity, content and staging presence, absence and
-postcondition. A complete tree with matching source identity, content present
-and no staging proves completion; no content or staging proves no effect;
-unfinished owned publication proves partial effect. Malformed evidence,
-another request or version, or a different source identity proves no apply
-completion. A continuation reuses the exact frozen source and publication;
-unknown outcomes are observed before any consumer starts.
-
-**Inverse.** Once every consumer is removed, destroy withdraws `.treeinfo`
-before deleting the rest of the tree and its staging area, then proves both
-absent. An intact matching publication with no staging proves a removal had
-no effect; unfinished removal content proves a partial removal. Complete absence is
-completion, including when publication never completed or no consumer ever
-started. Removal proves the exact frozen context-owned path and its safe
-ancestors, and may withdraw this owned publication even when its source
-identity has drifted; changed payload bytes grant no ownership of another path
-and do not strand teardown. Contradictory evidence remains unknown. The empty
-profile directory is removed without recursively deleting unrelated siblings.
-Removal consumes no data-loss authorization. Its
-quiescence follows the consumers under the lifecycle removal gate.
-
-The new block, installation request version and libvirt path versions change
-frozen plans. Retire live contexts with the build that applied them before
-setup with this build, then start fresh. An old incomplete apply cannot
-silently continue across these changes. A moved automation digest alone
-freezes no block differently, so an apply continues across it once `setup` has
-run ([dependency safety](state-reconciliation.md#dependency-safety-during-recovery)).
 
 ## Refusal table
 

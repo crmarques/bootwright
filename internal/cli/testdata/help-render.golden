@@ -1,8 +1,14 @@
   bootwright / render
       Render external-tool artifacts. Without --input-dir or --output-dir, print this help.
       Context-free rendering requires both paths and conflicts with --context and --sensitive.
-      Context-backed rendering requires --output-dir and --sensitive. This command is
-      recognized but not implemented.
+      Context-backed rendering requires --output-dir and --sensitive. It writes
+      effective-state.yaml, the normalized effective desired state, into the output directory
+      instead of standard output, creating the directory when it is absent, and prints where it
+      wrote. It replaces an earlier file of that name only when that is a regular file. With
+      --sensitive it writes mode 0600 under a 0700 directory it creates, and refuses an
+      existing output directory another account owns or that its group or others can write. The
+      installer and storage artifacts of render installer and render storage join it when those
+      commands exist.
 
   Usage
     bootwright render [flags]
@@ -14,7 +20,6 @@
   storage     Render storage artifacts (unavailable)
 
   Command flags
-      --clusters    Select comma-separated cluster names (default: all)
       --input-dir   Read a context-free input file or directory
       --output-dir  Write artifacts to the selected directory
       --sensitive   Authorize sensitive artifact materialization
@@ -28,3 +33,6 @@
       -o, --output  Select output mode (values: text, json, yaml) · default text
       --progress    Select progress animation (values: auto, always, never) · default auto
       --width       Set presentation width (0: automatic) · default 0
+
+  Examples
+    bootwright render --input-dir ./input --output-dir ./artifacts

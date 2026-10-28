@@ -58,11 +58,11 @@ func TestUsageJSONRespectsLocalFlagOwnership(t *testing.T) {
 		json bool
 	}{
 		{[]string{"render", "--output", "json", "effective", "--unknown"}, true},
-		{[]string{"render", "--output=json", "effective", "--clusters", "demo"}, true},
+		{[]string{"render", "--output=json", "effective", "--output-dir", "demo"}, true},
 		{[]string{"render", "--output", "json", "effective", "--output", "text", "--unknown"}, false},
 		{[]string{"render", "--output", "text", "effective", "--output", "json", "--unknown"}, true},
-		{[]string{"render", "--clusters", "--output=json", "effective"}, false},
-		{[]string{"render", "--clusters", "demo", "--output=json", "effective"}, true},
+		{[]string{"render", "--output-dir", "--output=json", "effective"}, false},
+		{[]string{"render", "--output-dir", "demo", "--output=json", "effective"}, true},
 	} {
 		code, out, errOut, record := runRecorded(test.args)
 		if code != 2 || record.calls != 0 {

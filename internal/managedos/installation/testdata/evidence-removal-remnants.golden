@@ -23,13 +23,5 @@
   "treeContent": false,
   "treeIdentity": "",
   "treeStaging": true,
-  "update": {
-    "kernel": "",
-    "packages": 0,
-    "rebooted": false,
-    "release": "",
-    "state": "",
-    "transaction": 0
-  },
   "work": true
 }

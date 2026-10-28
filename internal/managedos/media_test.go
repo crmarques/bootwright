@@ -94,9 +94,6 @@ func TestMediaRecordsRefuseNoncanonicalAndUnprovableValues(t *testing.T) {
 		"reordered fields":    []byte(`{"name":"rhel-9.7-x86_64-boot.iso","version":1,"size":1388429312,"sha256":"` + strings.Repeat("a", 64) + `","source":"file:///x","added":"2026-09-15T09:00:00Z"}` + "\n"),
 		"unknown field":       append(append([]byte{}, canonical[:len(canonical)-2]...), []byte(`,"extra":1}`+"\n")...),
 		"wrong version":       []byte(strings.Replace(string(canonical), `"version":1`, `"version":2`, 1)),
-		"an empty release":    append(append([]byte{}, canonical[:len(canonical)-2]...), []byte(`,"release":{}}`+"\n")...),
-		"a partial release":   append(append([]byte{}, canonical[:len(canonical)-2]...), []byte(`,"release":{"family":"x","version":"9.8","arch":""}}`+"\n")...),
-		"an open release":     append(append([]byte{}, canonical[:len(canonical)-2]...), []byte(`,"release":{"family":"x","version":"9.8","arch":"y","variant":"z"}}`+"\n")...),
 	} {
 		if _, err := DecodeMediaRecord(data, entry.Name); err == nil {
 			t.Errorf("%s was accepted", name)
@@ -109,10 +106,6 @@ func TestMediaRecordsRefuseNoncanonicalAndUnprovableValues(t *testing.T) {
 		"absent origin":    {Name: entry.Name, Size: 1, SHA256: entry.SHA256, Added: "y"},
 		"control in text":  {Name: entry.Name, Size: 1, SHA256: entry.SHA256, Source: "x\ny", Added: "y"},
 		"uppercase digest": {Name: entry.Name, Size: 1, SHA256: strings.ToUpper(entry.SHA256), Source: "x", Added: "y"},
-		"partial release":  {Name: entry.Name, Size: 1, SHA256: entry.SHA256, Source: "x", Added: "y", Release: MediaRelease{Family: "x", Version: "9.8"}},
-		"control release":  {Name: entry.Name, Size: 1, SHA256: entry.SHA256, Source: "x", Added: "y", Release: MediaRelease{Family: "x\ty", Version: "9.8", Arch: "x86_64"}},
-		"long release":     {Name: entry.Name, Size: 1, SHA256: entry.SHA256, Source: "x", Added: "y", Release: MediaRelease{Family: strings.Repeat("x", MaxMediaReleaseValue+1), Version: "9.8", Arch: "x86_64"}},
-		"spaced release":   {Name: entry.Name, Size: 1, SHA256: entry.SHA256, Source: "x", Added: "y", Release: MediaRelease{Family: "x", Version: " 9.8", Arch: "x86_64"}},
 	} {
 		if _, err := EncodeMediaRecord(broken); err == nil {
 			t.Errorf("%s was encoded", name)

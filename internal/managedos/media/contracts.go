@@ -117,7 +117,6 @@ type Stage interface {
 	// Verify re-reads an adopted stage in full, holding no root lock, and
 	// reports the bytes it holds now.
 	Verify(context.Context) (Staged, error)
-	ReadAt([]byte, int64) (int, error)
 	// Retain keeps a filled, unpublished stage beside the record it would have
 	// published, so a repeated add publishes it without acquiring it again.
 	Retain(context.Context, []byte) error

@@ -64,17 +64,6 @@ options:
         the registration its installation created was not removed. It is
         reached only for a Machine whose apply proved its install marker,
         which precedes registration.
-      - C(update-release-unavailable), C(update-release-mismatch),
-        C(update-release-drift), C(update-no-repository), C(update-foreign),
-        C(update-unavailable) and C(update-failed) name an update within the
-        release the update or registration worker refused.
-    type: str
-    required: false
-  detail:
-    description:
-      - Fixed text completing a refusal, never a value outside the closed
-        character set the runner accepts. An update refusal names the
-        version found, C(<found>@<repository>) or its closed cause.
     type: str
     required: false
   outcome:
@@ -162,21 +151,6 @@ options:
         unregisters proves one C(unregistered), C(absent) or C(retained). A
         removal that does not unregister reads no registration and sets it
         false.
-    type: bool
-    required: false
-  update:
-    description:
-      - What the update within the release did or what an observation read,
-        C(state) C(none), C(absent), C(pending), C(upgraded), C(complete) or
-        C(foreign), with C(release), C(transaction), C(packages),
-        C(rebooted) and C(kernel) set only for a record's states.
-    type: dict
-    required: false
-  updateRequired:
-    description:
-      - Whether the frozen request updates within its release, so a
-        completion proves a complete update; any other completion proves
-        state C(none).
     type: bool
     required: false
   privateDelivery:

@@ -22,10 +22,10 @@ func TestOperationBoundaryIsLazyForInformationalMalformedAndUnavailablePaths(t *
 		"__bootwright_complete context", "__bootwright_complete_no_desc render",
 		"context init --name example -f one -f two", "context delete --name example --purge=false",
 		"validate --output json --unknown", "render effective -f input", "render --output json",
-		"add-ons list", "preflight all",
+		"add-ons list",
 		"preflight add-ons",
 		"cluster oc --name example get pods",
-		"render --output-dir artifacts --sensitive", "render installer", "render storage",
+		"render installer", "render storage",
 	} {
 		t.Run(invocation, func(t *testing.T) {
 			begins := 0
@@ -49,7 +49,7 @@ func TestOperationBoundaryOwnsContextAndCleanupForEveryImplementedPath(t *testin
 		[]string{"secret", "show", "--name", "example", "--part", "value"}, []string{"secret", "delete", "--name", "example"},
 		[]string{"secret", "encryption", "init"}, []string{"secret", "encryption", "status"}, []string{"secret", "encryption", "rotate"},
 		[]string{"media", "add", "--name", "example.iso", "--from-file", "image.iso"}, []string{"media", "list"}, []string{"media", "delete", "--name", "example.iso"},
-		[]string{"setup"}, []string{"setup", "--dry-run"}, []string{"preflight", "controller"}, []string{"preflight", "storage-cluster"}, []string{"preflight", "container-cluster"},
+		[]string{"setup"}, []string{"setup", "--dry-run"}, []string{"preflight", "controller"}, []string{"preflight", "storage-cluster"}, []string{"preflight", "container-cluster"}, []string{"preflight", "clusters"}, []string{"preflight", "infra"}, []string{"preflight", "all"},
 		[]string{"plan"}, []string{"status"}, []string{"apply", "--yes"}, []string{"destroy", "--yes"},
 		[]string{"machine", "list"}, []string{"cluster", "list"}, []string{"cluster", "info"}, []string{"machine", "rsh", "--name", "example"},
 		[]string{"machine", "exec", "--name", "example", "uptime"},

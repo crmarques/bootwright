@@ -1,0 +1,6 @@
+Infrastructure preflight  synthetic
+  passed  controller  controller.host-packages: podman, nmstate
+  passed  DNSServer/dns 192.0.2.53:53/udp  controller.listener-firewall: DNSServer/dns 192.0.2.53:53/udp: open (interface virbr0, zone libvirt); the zone admits the socket
+  passed  controller  capacity.memory: available capacity covers declared guests and reserve
+    Required 1024 bytes; available 4096; reserve 1024; deficit 0
+  Summary  3 passed, 0 failed, 0 unknown, 0 pending

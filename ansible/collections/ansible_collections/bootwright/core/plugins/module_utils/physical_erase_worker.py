@@ -25,7 +25,7 @@ CHUNK = 1024 * 1024
 BLKGETSIZE64 = 0x80081272
 BLKGETDISKSEQ = 0x80081280
 BLKFLSBUF = 0x1261
-VERSION = "physical-erase-v4"
+VERSION = "physical-erase-v3"
 
 
 class Refusal(Exception):

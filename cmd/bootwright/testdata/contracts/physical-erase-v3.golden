@@ -1,6 +1,6 @@
-implementation: physical-erase-v4
-content-digest: 687d33f09d2a827059017f6a42e46ddb87f90c631f1556315911b7a3b6b49d07
-request-version: physical-erase-v4
+implementation: physical-erase-v3
+content-digest: 1b08f18b6d5c6a556150256a79feaeb1b461324975eed0765e5399b6f4a76500
+request-version: physical-erase-v3
 automation-formats: none
 mark-formats: none
 proof-ids: bootwright.erase=1
@@ -117,9 +117,6 @@ request-schema:
   install.treeMedia.name string
   install.treeMedia.sha256 string
   install.treeMedia.size int64
-  install.update *struct installation.Update omitempty
-  install.update.policy string
-  install.update.release string
   install.user string
   install.version string
   installDigest string

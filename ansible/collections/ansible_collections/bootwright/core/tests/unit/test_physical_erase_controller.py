@@ -108,7 +108,7 @@ class ControllerTests(unittest.TestCase):
             try:
                 for name in ("host-key", "host-key.pub", "ks.cfg", "ssh_config", "known_hosts"):
                     (instance.root / name).write_text("private")
-                evidence = {"version": "physical-erase-v4", "request": "a" * 64, "prepared": True, "removed": True, "receipt": {"state": "complete"}}
+                evidence = {"version": "physical-erase-v3", "request": "a" * 64, "prepared": True, "removed": True, "receipt": {"state": "complete"}}
                 real_unlink = Path.unlink
 
                 def interrupted(path, **kwargs):

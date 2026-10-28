@@ -3,7 +3,6 @@
       DIGEST    sha256:e8b0f3a61d9c2e47b5a803f6d1c94e27a0b6d3f81c5e9a24d7b0e3f6a19c5d82
       COMPUTED  sha256:e8b0f3a61d9c2e47b5a803f6d1c94e27a0b6d3f81c5e9a24d7b0e3f6a19c5d82
       ADDED     2026-09-20T08:15:00Z
-      RELEASE   9.8 x86_64
       RESERVED  lab-rhel,lab-sno
       STATE     verified
 
@@ -12,6 +11,5 @@
       DIGEST    sha256:4c1f8e2b9d7a6c5e3f0b1a2d4e6f8a0c2b4d6e8f0a1c3e5b7d9f1a3c5e7b9d0f
       COMPUTED  sha256:0d9b7e5c3a1f9d7b5e3c1a0f8e6d4b2c0a8f6e4d2a1b0f3e5c6a7d9b2e8f1c4a
       ADDED     2026-09-21T10:02:41Z
-      RELEASE   -
       RESERVED  -
       STATE     mismatch

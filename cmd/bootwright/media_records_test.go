@@ -15,8 +15,6 @@ import (
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
 )
 
-var exampleRelease = managedos.MediaRelease{Family: "Red Hat Enterprise Linux", Version: "9.8", Arch: "x86_64"}
-
 // exampleMediaRecords answers the records a host media store holding every
 // image the shipped examples name would publish, so their plans freeze fixed
 // sizes and digests. without names one image the store does not hold.
@@ -24,8 +22,8 @@ type exampleMediaRecords struct{ without string }
 
 func (r exampleMediaRecords) MediaRecords(context.Context) (map[string]installation.MediaRecord, error) {
 	records := map[string]installation.MediaRecord{
-		"rhel-9.8-x86_64-boot.iso": {SHA256: strings.Repeat("0123456789abcdef", 4), Size: 1105199104, Observed: 1105199104, Release: exampleRelease},
-		"rhel-9.8-x86_64-dvd.iso":  {SHA256: strings.Repeat("fedcba9876543210", 4), Size: 13107200000, Observed: 13107200000, Release: exampleRelease},
+		"rhel-9.8-x86_64-boot.iso": {SHA256: strings.Repeat("0123456789abcdef", 4), Size: 1105199104, Observed: 1105199104},
+		"rhel-9.8-x86_64-dvd.iso":  {SHA256: strings.Repeat("fedcba9876543210", 4), Size: 13107200000, Observed: 13107200000},
 	}
 	delete(records, r.without)
 	return records, nil
@@ -125,9 +123,9 @@ func TestProductionLifecycleWiringReadsTheMediaStore(t *testing.T) {
 	if reader := lifecycleMedia(lifecycleDependencies{}); reader != nil {
 		t.Fatalf("a lifecycle without a store reads %#v", reader)
 	}
-	shelf := &mediaShelf{entry: managedos.MediaEntry{Name: "rhel-9.8-x86_64-boot.iso", Size: 9, SHA256: strings.Repeat("a", 64), Release: exampleRelease}}
+	shelf := &mediaShelf{entry: managedos.MediaEntry{Name: "rhel-9.8-x86_64-boot.iso", Size: 9, SHA256: strings.Repeat("a", 64)}}
 	records, err := storeMediaRecords{store: shelf}.MediaRecords(context.Background())
-	want := installation.MediaRecord{SHA256: strings.Repeat("a", 64), Size: 9, Observed: 9, Release: exampleRelease}
+	want := installation.MediaRecord{SHA256: strings.Repeat("a", 64), Size: 9, Observed: 9}
 	if err != nil || len(records) != 1 || records["rhel-9.8-x86_64-boot.iso"] != want {
 		t.Fatalf("records = %+v (%v)", records, err)
 	}

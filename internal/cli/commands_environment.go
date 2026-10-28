@@ -13,7 +13,10 @@ import (
 )
 
 func infrastructurePreflightCommand() commandSpec {
-	return commandSpec{path: "preflight infra", short: "Check infrastructure readiness", flags: preflightFlags()}
+	return available(commandSpec{path: "preflight infra", short: "Check infrastructure readiness", flags: []flagSpec{dryRunFlag()},
+		long: "Check the readiness of the infrastructure the Environment declares: the controller checks of preflight controller for the selected context, including the firewall admission of the controller's managed service sockets, and the capacity of the hosts that hold the context's Machines." +
+			" It reports only what it observes: external services, a Registry or LoadBalancer and managed services on other Machines are not checked, and apply checks them itself." +
+			" It takes no cluster selection and no SSH or trust options, because it observes the controller and the local hosts only."})
 }
 
 func clustersPreflightCommand() commandSpec {
@@ -24,7 +27,10 @@ func clustersPreflightCommand() commandSpec {
 }
 
 func allPreflightCommand() commandSpec {
-	return commandSpec{path: "preflight all", short: "Check all prerequisites", flags: []flagSpec{dryRunFlag(), trustFlag()}}
+	return available(commandSpec{path: "preflight all", short: "Check all prerequisites", flags: []flagSpec{dryRunFlag(), trustFlag()},
+		long: "Check the readiness of the whole selected context in one report: the checks of preflight infra, which include those of preflight controller, and of preflight clusters." +
+			" The SSH and trust-on-first-use options apply to the CephCluster checks; the other checks take none." +
+			" The add-on prerequisite checks of preflight add-ons are not part of it."})
 }
 
 func environmentClusterCommands() []commandSpec {
@@ -64,8 +70,8 @@ func clusterExecCommand() commandSpec {
 }
 
 type EnvironmentPreflightService interface {
-	PreflightInfrastructure(context.Context, environmentpreflight.InfrastructurePreflightRequest) error
-	PreflightAll(context.Context, environmentpreflight.AllPreflightRequest) error
+	PreflightInfrastructure(context.Context, environmentpreflight.InfrastructurePreflightRequest) (*environmentpreflight.Report, error)
+	PreflightAll(context.Context, environmentpreflight.AllPreflightRequest) (*environmentpreflight.Report, error)
 }
 
 type ClustersPreflightService interface {
@@ -83,28 +89,27 @@ type EnvironmentAccessService interface {
 	ClusterExec(context.Context, environmentaccess.ClusterExecRequest) (*machine.SessionResult, error)
 }
 
-func (s Services) invokeEnvironmentPreflight(ctx context.Context, path string, values *requestValues, args []string) error {
+func (s Services) invokeEnvironmentPreflight(ctx context.Context, path string, values *requestValues, args []string) (commandResult, error) {
 	if s.EnvironmentPreflight == nil {
-		return errMissingService
+		return commandResult{}, errMissingService
 	}
 	switch path {
 	case "preflight infra":
-		return invokeRequest(ctx, values, environmentpreflight.InfrastructurePreflightRequest{
-			ContextName:     values.text("context"),
-			Clusters:        values.names("clusters"),
-			DryRun:          values.boolean("dry-run"),
-			TrustOnFirstUse: values.boolean("trust-on-first-use"),
-			SSH:             values.ssh(),
+		report, err := invokeResult(ctx, values, environmentpreflight.InfrastructurePreflightRequest{
+			ContextName: values.text("context"),
+			DryRun:      values.boolean("dry-run"),
 		}, s.EnvironmentPreflight.PreflightInfrastructure)
+		return commandResult{storagePreflight: report}, err
 	case "preflight all":
-		return invokeRequest(ctx, values, environmentpreflight.AllPreflightRequest{
+		report, err := invokeResult(ctx, values, environmentpreflight.AllPreflightRequest{
 			ContextName:     values.text("context"),
 			DryRun:          values.boolean("dry-run"),
 			TrustOnFirstUse: values.boolean("trust-on-first-use"),
 			SSH:             values.ssh(),
 		}, s.EnvironmentPreflight.PreflightAll)
+		return commandResult{storagePreflight: report}, err
 	default:
-		return errors.New("command has no application dispatch")
+		return commandResult{}, errors.New("command has no application dispatch")
 	}
 }
 

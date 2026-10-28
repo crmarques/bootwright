@@ -59,6 +59,10 @@ func writeStoragePreflight(out, errOut io.Writer, command string, report *prefli
 		title = "Container-cluster preflight"
 	case "clusters":
 		title = "Cluster preflight"
+	case "infra":
+		title = "Infrastructure preflight"
+	case "all":
+		title = "Environment preflight"
 	}
 	if _, err := fmt.Fprintf(out, "%s  %s\n", title, result.Context); err != nil {
 		return err
@@ -89,7 +93,7 @@ func writeStoragePreflight(out, errOut io.Writer, command string, report *prefli
 }
 
 func (r *Runner) writeNegativeReadinessResults(command *cobra.Command, path string, result commandResult, diagnostics []diagnostic) (bool, error) {
-	if slices.Contains([]string{"preflight storage-cluster", "preflight container-cluster", "preflight clusters"}, path) && result.storagePreflight != nil {
+	if slices.Contains([]string{"preflight storage-cluster", "preflight container-cluster", "preflight clusters", "preflight infra", "preflight all"}, path) && result.storagePreflight != nil {
 		return true, writeStoragePreflight(r.config.Out, r.config.ErrOut, path, result.storagePreflight, diagnostics, 1, selectedJSON(command))
 	}
 	return r.writeNegativeSecretCheck(command, path, result, diagnostics)

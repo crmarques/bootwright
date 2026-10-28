@@ -25,6 +25,7 @@ var defaultRemediations = map[string]string{
 	"api.selection":       "select the Environment that includes the object, or remove the object",
 
 	"cli.not-implemented": "run bootwright help <command> to see which forms this build runs",
+	"render.publish":      "choose an --output-dir this account can write that holds no link or other non-regular file at the artifact's name",
 	"runtime.encode":      "repeat the command; a repeated failure is a Bootwright defect to report",
 	"runtime.log":         "make the context's log directory writable by the invoking user and repeat the command",
 	"runtime.interrupted": "repeat the command",

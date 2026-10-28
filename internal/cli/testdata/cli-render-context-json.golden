@@ -1,0 +1,13 @@
+{
+  "schemaVersion": "v1alpha1",
+  "command": "render",
+  "ok": true,
+  "exitCode": 0,
+  "result": {
+    "outputDir": "/work/artifacts",
+    "effectiveStatePath": "/work/artifacts/effective-state.yaml",
+    "objects": 4
+  },
+  "diagnostics": [],
+  "logs": []
+}

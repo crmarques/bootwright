@@ -133,7 +133,6 @@ func installProfile(fields ...api.FieldValue) api.Object {
 			)))),
 		)))),
 		field("ntp", api.ListValue(api.MapValue(text("serverRef", "lab-ntp"), text("endpointRef", "ip")))),
-		field("updates", api.MapValue(text("policy", "none"))),
 		field("customizations", api.MapValue(
 			field("localization", api.MapValue(
 				text("language", "en_US.UTF-8"), text("keyboard", "us"), text("timezone", "Etc/UTC"),

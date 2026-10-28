@@ -159,8 +159,8 @@ def test_every_bare_metal_include_passes_its_bundle():
         ("managedos_install_anaconda/tasks/await.yml", "boot_disk"),
         ("managedos_install_anaconda/tasks/boot.yml", "boot_media"),
         ("managedos_install_anaconda/tasks/boot.yml", "pre_boot"),
+        ("managedos_install_anaconda/tasks/network.yml", "boot_disk"),
         ("managedos_install_anaconda/tasks/proved_boot.yml", "boot_disk"),
-        ("managedos_install_anaconda/tasks/reboot.yml", "boot_disk"),
     ])
 
 

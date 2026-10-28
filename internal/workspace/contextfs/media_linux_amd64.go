@@ -673,7 +673,7 @@ func (s *mediaStage) claim(ctx context.Context) error {
 		s.release()
 		return err
 	}
-	file, err := openRelative(s.dir, s.name, syscall.O_RDWR|syscall.O_CREAT|syscall.O_EXCL, 0600)
+	file, err := openRelative(s.dir, s.name, syscall.O_WRONLY|syscall.O_CREAT|syscall.O_EXCL, 0600)
 	if errors.Is(err, syscall.EEXIST) {
 		s.release()
 		return acquiringFailure(s.image)
@@ -900,24 +900,6 @@ func (s *mediaStage) Verify(ctx context.Context) (media.Staged, error) {
 	s.staged, s.measured = &media.Staged{Size: size, SHA256: digest}, after
 	s.mismatch = size != s.adopted.Size || digest != s.adopted.SHA256
 	return *s.staged, nil
-}
-
-func (s *mediaStage) ReadAt(buffer []byte, offset int64) (int, error) {
-	if s.closed || s.staged == nil || s.mismatch {
-		return 0, state("media stage is not a filled or verified stage")
-	}
-	if offset < 0 || offset > s.staged.Size || int64(len(buffer)) > s.staged.Size-offset {
-		return 0, state("media stage read lies outside the bytes it measured")
-	}
-	n, err := s.file.ReadAt(buffer, offset)
-	if n == len(buffer) {
-		return n, nil
-	}
-	if errno, found := storeErrno(err); found {
-		return n, mediaFailure("the staged image could not be read back from the media store: "+errnoText(errno),
-			"inspect the filesystem that holds /var/lib/bootwright/media (its kernel log names the device error), then repeat the command")
-	}
-	return n, state("media staging file changed after it was measured")
 }
 
 // Retain keeps this filled, unpublished stage for the add's repetition: still

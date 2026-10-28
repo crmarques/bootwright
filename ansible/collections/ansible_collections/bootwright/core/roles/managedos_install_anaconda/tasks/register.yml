@@ -2,9 +2,7 @@
 # Registration runs once the installed machine's network converged and its FIPS
 # and root-encryption proofs passed, over the pinned fleet connection guest.yml
 # makes, option for option; test_register_session_is_the_guest_connection holds
-# the two equal. A request updating within its release also sets that release
-# before the repositories, which its update bound allows 120 more seconds for.
-# The organization and activation key are lent as files whose
+# the two equal. The organization and activation key are lent as files whose
 # paths only the controller module reads: their values reach the machine only
 # on the fixed worker's standard input, never a task variable.
 - name: Read the effective crypto policy on this connection's placement host
@@ -51,8 +49,7 @@
     activation_key_file: '{{ bootwright_os_install_material.rhsmActivationKey }}'
     enable: '{{ bootwright_os_install_request.registration.repositories.enable }}'
     disable: '{{ bootwright_os_install_request.registration.repositories.disable }}'
-    release: "{{ bootwright_os_install_request['update'].release if 'update' in bootwright_os_install_request else '' }}"
-    timeout: "{{ 750 if 'update' in bootwright_os_install_request else 630 }}"
+    timeout: 630
   register: managedos_install_anaconda_registration_result
   failed_when: false
   changed_when: false

@@ -673,22 +673,14 @@ optional. Validation is lexical only.
 | Field | Type | Required | Rule |
 | --- | --- | --- | --- |
 | `spec.os.family` | string | yes | `rhel`, accepted case-insensitively and normalized to lowercase `rhel` in effective state. |
-| `spec.os.version` | string | yes | The exact release `<major>.<minor>`, two decimal numbers without leading zeros, a lone `0` minor admitted, such as `9.8` or `10.0`; any other value, a major-only `9` included, refuses at admission. Every installed image names it ([media store](../managed-os.md#media-store)). |
+| `spec.os.version` | string | yes | Non-empty. |
 | `spec.os.architecture` | string | yes | `x86_64`. |
-| `spec.updates.policy` | string | no | `withinRelease` (default) or `none`. `withinRelease` updates every installed package at installation, after registration, to the newest its update sources offer within `spec.os.version`, then reboots when anything changed; `none` installs the media's packages alone ([update within release](../managed-os.md#update-within-release)). `spec.updates` is closed. |
 | `spec.installer.anaconda` | object | union | Anaconda arm below. |
 | `spec.installer.templateClone` | object | union | A [refused arm](#refused-arms). |
 | `spec.subscription.entitlementRef` | string | no | Global `Entitlement` of type `redhatRhel`; registers the installed system with the hosted subscription service and unregisters it on destroy ([managed OS](../managed-os.md#registration)). |
 | `spec.proxy` | choice object | no | External Proxy choice; omission uses direct access. |
 | `spec.ntp` | array of selections | no | NTPServer selections; omission leaves the native OS default. |
 | `spec.customizations` | object | no | Closed customization groups below. |
-
-The version is a release identity, never a compatibility rule: no field pairs
-it with a repository, an update stream or another component
-([D163](../milestones/backlog.md#d163)). `withinRelease` needs an update
-source and refuses at admission without one, and refuses beside a TPM2 policy
-that seals the boot measurements an update changes, as
-[update within release](../managed-os.md#update-within-release) states.
 
 ### Installer arms
 

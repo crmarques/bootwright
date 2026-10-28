@@ -209,8 +209,6 @@ spec:
   ntp:
     - serverRef: lab-ntp
       endpointRef: ip
-  updates:
-    policy: none
 ---
 apiVersion: bootwright.io/v1alpha1
 kind: NetworkConfig

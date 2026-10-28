@@ -1,0 +1,47 @@
+{
+  "schemaVersion": "v1alpha1",
+  "command": "preflight infra",
+  "ok": true,
+  "exitCode": 0,
+  "result": {
+    "context": "synthetic",
+    "target": "infra",
+    "checks": [
+      {
+        "id": "controller.host-packages",
+        "target": "controller",
+        "status": "passed",
+        "reason": "podman, nmstate"
+      },
+      {
+        "id": "controller.listener-firewall",
+        "target": "DNSServer/dns 192.0.2.53:53/udp",
+        "status": "passed",
+        "reason": "DNSServer/dns 192.0.2.53:53/udp: open (interface virbr0, zone libvirt); the zone admits the socket"
+      },
+      {
+        "id": "capacity.memory",
+        "target": "controller",
+        "status": "passed",
+        "reason": "available capacity covers declared guests and reserve",
+        "capacity": {
+          "resource": "memory",
+          "unit": "bytes",
+          "required": 1024,
+          "available": 4096,
+          "reserve": 1024,
+          "deficit": 0,
+          "observed": true
+        }
+      }
+    ],
+    "summary": {
+      "passed": 3,
+      "failed": 0,
+      "unknown": 0,
+      "pending": 0
+    }
+  },
+  "diagnostics": [],
+  "logs": []
+}

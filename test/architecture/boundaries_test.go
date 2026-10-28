@@ -55,6 +55,7 @@ func packageRoles() map[string]packageRole {
 		"internal/controller/stagelocal":           adapterRole,
 		"internal/reconciliation/ansiblerunner":    adapterRole,
 		"internal/managedos/medialocal":            adapterRole,
+		"internal/nativeartifacts/renderlocal":     adapterRole,
 		"internal/machine/sshlocal":                adapterRole,
 		"internal/storage/preflightlocal":          adapterRole,
 		"internal/containercluster/preflightlocal": adapterRole,
@@ -179,6 +180,11 @@ func applicationDependencies() map[string][]string {
 		"internal/storage/preflight":          {"internal/substrate/capacity"},
 		// Cluster preflight is the union of the container and storage checks.
 		"internal/environment/clusterpreflight": {"internal/containercluster/preflight", "internal/storage/preflight", "internal/substrate/capacity"},
+		// Infrastructure and whole-environment preflight add the controller's
+		// checks to the cluster union and share its merge rules.
+		"internal/environment/preflight": {"internal/controller/prerequisites", "internal/environment/clusterpreflight", "internal/substrate/capacity"},
+		// Rendering compiles the effective state it writes.
+		"internal/nativeartifacts/rendering": {"internal/desiredstate/compilation"},
 		// Cluster access resolves a name in the compiled graph before it reads
 		// the custody the install block filled.
 		"internal/containercluster/access": {"internal/desiredstate/compilation"},
@@ -527,7 +533,11 @@ func effectGrants() map[string][]string {
 		// arguments, environment and terminal and lists completion's paths. It
 		// only binds entropy and the media proxy selector, and holds no
 		// os/signal, since privilege.Begin is the one signal subscription.
-		"cmd/bootwright": {"crypto/rand.Read", "io", modulePath + "internal/cli", "net/http.Request", "os", "syscall", "unsafe"},
+		// The render adapter publishes one file into the output directory the
+		// operator names, through a held handle on that directory and a
+		// temporary file beside it, and replaces only a regular file.
+		"internal/nativeartifacts/renderlocal": {"crypto/rand", "os", "syscall"},
+		"cmd/bootwright":                       {"crypto/rand.Read", "io", modulePath + "internal/cli", "net/http.Request", "os", "syscall", "unsafe"},
 	}
 }
 

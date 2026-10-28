@@ -180,6 +180,8 @@ func writeAdditionalStructuredResult(out io.Writer, command *cobra.Command, path
 			Type: escapeDisplayLine(i.Type), Store: componentStatus{ID: escapeDisplayLine(i.Store.ID), InterfaceVersion: i.Store.InterfaceVersion, StateVersion: i.Store.StateVersion, ConfigVersion: i.Store.ConfigVersion},
 			KeyCustody: componentStatus{ID: escapeDisplayLine(i.KeyCustody.ID), InterfaceVersion: i.KeyCustody.InterfaceVersion, StateVersion: i.KeyCustody.StateVersion, ConfigVersion: i.KeyCustody.ConfigVersion},
 		}, ActiveKey: escapeDisplayLine(m.ActiveKey), Changed: m.Changed, RetiredKeys: displayNames(m.RetiredKeys), ReencryptedVersions: m.ReencryptedVersions, ReencryptedParts: m.ReencryptedParts}
+	case path == "render" && validRender(result.rendered):
+		shown = displayRender(result.rendered)
 	case path == "setup" && validSetupDownload(result.controller):
 		r := result.controller
 		download := setupDownloadPresentation{Directory: escapeDisplayLine(r.Export.Directory), Outcome: escapeDisplayLine(r.Outcome), Files: []downloadFilePresentation{}, Next: escapeDisplayLine(r.Next)}

@@ -69,19 +69,8 @@ func completeEvidence(request Request, digest, marker string) json.RawMessage {
 		Address: request.Address, HostKey: "ssh-ed25519 AAAAHOST", Image: true, Marker: marker,
 		Postcondition: true, Power: "On", Reachable: true, Request: digest, Tree: request.Tree != nil,
 		TreeIdentity: treeIdentity(request), Network: true, NetworkReboot: true, NetworkDifferences: []string{},
-		Update: completedUpdate(request),
 	})
 	return data
-}
-
-// completedUpdate is the update a completion of the request proves: none, or
-// complete on its release after a rebooting transaction.
-func completedUpdate(request Request) UpdateEvidence {
-	if request.Update == nil {
-		return UpdateEvidence{State: updateNone}
-	}
-	return UpdateEvidence{Kernel: "5.14.0-611.5.1.el9_7.x86_64", Packages: 212, Rebooted: true, Release: request.Update.Release,
-		State: updateComplete, Transaction: 3}
 }
 
 // treeIdentity is the identity a tree extracted from the request's frozen

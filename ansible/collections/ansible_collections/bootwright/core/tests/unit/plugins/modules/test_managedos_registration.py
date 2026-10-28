@@ -63,7 +63,7 @@ def params(paths, operation="register", **values):
              "ssh_config": paths["ssh_config"], "known_hosts": paths["known_hosts"],
              "host_key_algorithms": "ecdsa-sha2-nistp256", "policy_host_key_algorithms": "ecdsa-sha2-nistp256,rsa-sha2-512",
              "request": DIGEST, "organization_file": paths["organization"], "activation_key_file": paths["activation"],
-             "enable": ["rhel-9-for-x86_64-baseos-rpms"], "disable": ["*"], "release": "", "timeout": 630}
+             "enable": ["rhel-9-for-x86_64-baseos-rpms"], "disable": ["*"], "timeout": 630}
     if operation != "register":
         value.update(organization_file=None, activation_key_file=None, enable=[], disable=[])
     value.update(values)
@@ -91,13 +91,7 @@ def test_never_puts_payload_values_in_argv_env_or_errors(tmp_path, monkeypatch):
     call = popen.calls[0]
     stdin = json.loads(call["stdin"])
     assert stdin == {"activationKey": KEY, "disable": ["*"], "enable": ["rhel-9-for-x86_64-baseos-rpms"],
-                     "operation": "register", "organization": ORG, "release": "", "request": DIGEST}
-    released = FakePopen(stdout=encoded(ANSWER))
-    module.execute(params(paths, release="9.8", timeout=750), run=session(tmp_path, released, monkeypatch))
-    assert json.loads(released.calls[0]["stdin"])["release"] == "9.8" and released.calls[0]["options"]["timeout"] == 750
-    refused_release = module.execute(params(paths, release="9.08"), run=session(tmp_path, released, monkeypatch))
-    assert refused_release == {"changed": False, "ok": False, "reason": "registration-input",
-                               "detail": "the release is not a <major>.<minor> release"} and len(released.calls) == 1
+                     "operation": "register", "organization": ORG, "request": DIGEST}
     for sentinel in (ORG, KEY):
         assert not any(sentinel in word for word in call["argv"])
         assert not any(sentinel in value for value in call["options"]["env"].values())
@@ -237,10 +231,8 @@ def test_registration_session_intersects_pinned_algorithms_with_placement_policy
      {"changed": False, "ok": False, "reason": "registration-unavailable", "cause": "service"}),
     (FakePopen(stdout=encoded({"ok": False, "reason": "registration-foreign"})),
      {"changed": False, "ok": False, "reason": "registration-foreign"}),
-    (FakePopen(stdout=encoded({"ok": False, "reason": "update-release-unavailable"})),
-     {"changed": False, "ok": False, "reason": "update-release-unavailable"}),
 ], ids=["timeout", "start-failure", "output-overrun", "changed-key", "unverified-key", "unreachable", "exit", "non-json", "unknown-reason", "extra-key",
-        "wrong-cause", "missing-cause", "wrong-state", "bad-consumer", "oversized", "unavailable", "foreign", "release-unavailable"])
+        "wrong-cause", "missing-cause", "wrong-state", "bad-consumer", "oversized", "unavailable", "foreign"])
 def test_module_accepts_only_the_closed_worker_answer(tmp_path, monkeypatch, popen, expected):
     paths = files(tmp_path)
     assert module.execute(params(paths), run=session(tmp_path, popen, monkeypatch)) == expected
@@ -252,7 +244,6 @@ def test_module_accepts_only_the_closed_worker_answer(tmp_path, monkeypatch, pop
     ({"activation_key_file": "/x"}, "activation_key_file is accepted only for the register operation"),
     ({"enable": ["a"]}, "enable is accepted only for the register operation"),
     ({"disable": ["*"]}, "disable is accepted only for the register operation"),
-    ({"release": "9.8"}, "release is accepted only for the register operation"),
     ({"request": "ABC"}, "request is not 64 lowercase hexadecimal characters"),
     ({"timeout": 901}, "timeout is not between 1 and 900 seconds"),
 ])

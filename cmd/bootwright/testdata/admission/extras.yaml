@@ -104,9 +104,6 @@ spec:
     version: '9.99'
     architecture: x86_64
 
-  updates:
-    policy: none
-
   installer:
     templateClone:
       seed:

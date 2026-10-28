@@ -180,12 +180,12 @@ func (s controllerSpy) Rebind(ctx context.Context, request prerequisites.RebindR
 
 type environmentSpy struct{ record *dispatchRecord }
 
-func (s environmentSpy) PreflightInfrastructure(ctx context.Context, request environmentpreflight.InfrastructurePreflightRequest) error {
-	return s.record.called(ctx, "preflight infra", request)
+func (s environmentSpy) PreflightInfrastructure(ctx context.Context, request environmentpreflight.InfrastructurePreflightRequest) (*environmentpreflight.Report, error) {
+	return s.record.result.storagePreflight, s.record.called(ctx, "preflight infra", request)
 }
 
-func (s environmentSpy) PreflightAll(ctx context.Context, request environmentpreflight.AllPreflightRequest) error {
-	return s.record.called(ctx, "preflight all", request)
+func (s environmentSpy) PreflightAll(ctx context.Context, request environmentpreflight.AllPreflightRequest) (*environmentpreflight.Report, error) {
+	return s.record.result.storagePreflight, s.record.called(ctx, "preflight all", request)
 }
 
 func (s environmentSpy) ListClusters(ctx context.Context, request inspection.ListClustersRequest) (*inspection.ListResult, error) {
@@ -256,8 +256,8 @@ func (s lifecycleSpy) Destroy(ctx context.Context, request lifecycle.DestroyRequ
 
 type artifactsSpy struct{ record *dispatchRecord }
 
-func (s artifactsSpy) Render(ctx context.Context, request artifactrendering.RenderRequest) error {
-	return s.record.called(ctx, "render", request)
+func (s artifactsSpy) Render(ctx context.Context, request artifactrendering.RenderRequest) (*artifactrendering.Result, error) {
+	return s.record.result.rendered, s.record.called(ctx, "render", request)
 }
 
 type installerSpy struct{ record *dispatchRecord }

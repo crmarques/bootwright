@@ -148,8 +148,8 @@ CONTROLLER_FILES = {
     "managedos_install_anaconda/tasks/apply.yml",
     "managedos_install_anaconda/tasks/await.yml",
     "managedos_install_anaconda/tasks/boot.yml",
+    "managedos_install_anaconda/tasks/network.yml",
     "managedos_install_anaconda/tasks/observe.yml",
-    "managedos_install_anaconda/tasks/reboot.yml",
     "substrate_baremetal_machine/tasks/apply.yml",
     "substrate_baremetal_machine/tasks/boot_disk.yml",
     "substrate_baremetal_machine/tasks/boot_media.yml",
@@ -693,7 +693,6 @@ SCOPE = dict({
                                       "budgets": {"installer": {"attempts": 180, "delaySeconds": 20},
                                                   "reboot": {"attempts": 60, "delaySeconds": 10}}},
     "bootwright_substrate_machine_request": {"identity": {"object": "rhel-01"}},
-    "managedos_install_anaconda_reboot_poweroff_attempts": 60,
     "bootwright_substrate_physical_request": {"identity": {"object": "metal"}, "controller": {"endpoint": ENDPOINT}},
     "containercluster_install_agent_node": {"machine": "sno-01"},
 }, **{"%s_%s_endpoint" % (role, entry): ENDPOINT

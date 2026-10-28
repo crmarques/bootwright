@@ -195,8 +195,6 @@ func TestCompletionRequiresTheFleetAccountToAnswer(t *testing.T) {
 		Address: request.Address, HostKey: "ssh-ed25519 AAAAHOST", Image: true, Marker: "{}",
 		Postcondition: true, Power: "On", Reachable: true, Request: "digest",
 		Network: true, NetworkReboot: true, NetworkDifferences: []string{},
-
-		Update: UpdateEvidence{State: updateNone},
 	}
 	if err := ValidatePresence(encode(t, complete), request, "digest", "{}"); err != nil {
 		t.Fatalf("a reachable installation was refused: %v", err)
@@ -230,8 +228,6 @@ func TestPresenceRequiresTheTreeTheOperationFroze(t *testing.T) {
 		Address: request.Address, HostKey: "ssh-ed25519 AAAAHOST", Image: true, Marker: string(marker),
 		Postcondition: true, Power: "On", Reachable: true, Request: "digest", Tree: true, TreeContent: true,
 		TreeIdentity: dvdDigest, Network: true, NetworkReboot: true, NetworkDifferences: []string{},
-
-		Update: UpdateEvidence{State: updateNone},
 	}
 	if err := ValidatePresence(encode(t, complete), request, "digest", string(marker)); err != nil {
 		t.Fatalf("the frozen tree was refused: %v", err)
@@ -257,8 +253,6 @@ func TestPresenceOfAPrivateInstallationRequiresItsImageWithdrawn(t *testing.T) {
 		Address: private.Address, HostKey: "ssh-ed25519 AAAAHOST", Marker: "{}",
 		Postcondition: true, Power: "On", Reachable: true, Request: "digest",
 		Network: true, NetworkReboot: true, NetworkDifferences: []string{},
-
-		Update: UpdateEvidence{State: updateNone},
 	}
 	if err := ValidatePresence(encode(t, withdrawn), private, "digest", "{}"); err != nil {
 		t.Fatalf("a private installation that withdrew everything was refused: %v", diagnostics.Of(err))
@@ -310,8 +304,6 @@ func TestPresenceRequiresTheNetworkProvedAfterAReboot(t *testing.T) {
 		Address: request.Address, HostKey: "ssh-ed25519 AAAAHOST", Image: true, Marker: "{}",
 		Postcondition: true, Power: "On", Reachable: true, Request: "digest",
 		Network: true, NetworkReboot: true, NetworkDifferences: []string{},
-
-		Update: UpdateEvidence{State: updateNone},
 	}
 	if err := ValidatePresence(encode(t, complete), request, "digest", "{}"); err != nil {
 		t.Fatalf("a converged installation was refused: %v", diagnostics.Of(err))

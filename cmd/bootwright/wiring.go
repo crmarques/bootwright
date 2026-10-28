@@ -11,10 +11,14 @@ import (
 	"github.com/crmarques/bootwright/internal/controller/hostlinux"
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
 	"github.com/crmarques/bootwright/internal/controller/privilege"
+	"github.com/crmarques/bootwright/internal/desiredstate/encoding"
 	"github.com/crmarques/bootwright/internal/environment/clusterpreflight"
+	environmentpreflight "github.com/crmarques/bootwright/internal/environment/preflight"
 	machineaccess "github.com/crmarques/bootwright/internal/machine/access"
 	"github.com/crmarques/bootwright/internal/machine/power"
 	"github.com/crmarques/bootwright/internal/managedos/media"
+	artifactrendering "github.com/crmarques/bootwright/internal/nativeartifacts/rendering"
+	"github.com/crmarques/bootwright/internal/nativeartifacts/renderlocal"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
 	"github.com/crmarques/bootwright/internal/secrets/material"
 	"github.com/crmarques/bootwright/internal/secrets/secretstore"
@@ -155,9 +159,13 @@ func assembleServices(deps serviceDependencies) cli.Services {
 	services.MachinePower, services.MachineTrust = machine.MachinePower, machine.MachineTrust
 	services.ClusterAccess = wireClusterAccess(services.DesiredState, secrets.binder, deps.Selection)
 	services.EnvironmentInspection = wireInspection(services.DesiredState, reconciler, secrets.binder, deps.Selection)
-	services.StoragePreflight = wireStoragePreflight(services.DesiredState, reconciler, deps)
+	storagePreflight := wireStoragePreflight(services.DesiredState, reconciler, deps)
+	services.StoragePreflight = storagePreflight
 	services.ContainerPreflight = wireContainerPreflight(services.DesiredState, reconciler, deps)
-	services.ClustersPreflight = clusterpreflight.Service{Graph: effectiveGraph{state: services.DesiredState}, Selection: currentSelection(deps.Selection), Container: services.ContainerPreflight, Storage: services.StoragePreflight}
+	clusters := clusterpreflight.Service{Graph: effectiveGraph{state: services.DesiredState}, Selection: currentSelection(deps.Selection), Container: services.ContainerPreflight, Storage: services.StoragePreflight}
+	services.ClustersPreflight = clusters
+	services.Artifacts = artifactrendering.Service{Compiler: services.DesiredState, Encode: encoding.YAML, Files: renderlocal.Files{}}
+	services.EnvironmentPreflight = environmentpreflight.Service{Graph: effectiveGraph{state: services.DesiredState}, Selection: currentSelection(deps.Selection), Controller: services.Controller, Capacity: storagePreflight, Clusters: clusters}
 	return services
 }
 

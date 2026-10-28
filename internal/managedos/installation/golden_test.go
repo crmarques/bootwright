@@ -190,7 +190,6 @@ func TestTheFrozenRequestsMatchTheirGoldens(t *testing.T) {
 		"lab-rhel-ssh-placed": sshPlaced, "lab-rhel-site-services": siteServicesCatalog(),
 		"lab-rhel-encrypted":  labCatalog(encryptingProfile()),
 		"lab-rhel-registered": labCatalog(registeringProfile(), rhelEntitlement()),
-		"lab-rhel-updated":    labCatalog(updatingProfile(), rhelEntitlement()),
 	} {
 		t.Run(name, func(t *testing.T) {
 			request := pinnedRequest(t, catalog)
@@ -219,11 +218,6 @@ func TestEvidenceMatchesItsGoldens(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	updated := pinnedRequest(t, labCatalog(updatingProfile(), rhelEntitlement()))
-	updatedMarker, err := MarkerFor(updated, digest)
-	if err != nil {
-		t.Fatal(err)
-	}
 	for name, test := range map[string]struct {
 		evidence Evidence
 		validate func([]byte) error
@@ -236,21 +230,8 @@ func TestEvidenceMatchesItsGoldens(t *testing.T) {
 				Address: request.Address, HostKey: "ssh-ed25519 AAAAHOST", Image: true, Marker: string(marker),
 				Postcondition: true, Power: "On", Reachable: true, Request: digest, Tree: true, TreeContent: true,
 				TreeIdentity: dvdDigest, Network: true, NetworkReboot: true, NetworkDifferences: []string{},
-				Update: UpdateEvidence{State: updateNone},
 			},
 			func(data []byte) error { return ValidatePresence(data, request, digest, string(marker)) },
-		},
-		// presence() after an apply that updated within its release: the
-		// worker recorded the update complete after the reboot it needed.
-		"completed-updated": {
-			Evidence{
-				Address: updated.Address, HostKey: "ssh-ed25519 AAAAHOST", Image: true, Marker: string(updatedMarker),
-				Postcondition: true, Power: "On", Reachable: true, Request: digest, Tree: true, TreeContent: true,
-				TreeIdentity: dvdDigest, Network: true, NetworkReboot: true, NetworkDifferences: []string{},
-				Registration: RegistrationEvidence{Consumer: "11111111-2222-4333-8444-555555555555", State: registrationOwned},
-				Update:       completedUpdate(updated),
-			},
-			func(data []byte) error { return ValidatePresence(data, updated, digest, string(updatedMarker)) },
 		},
 		// absence() once every published path is gone.
 		"removed": {

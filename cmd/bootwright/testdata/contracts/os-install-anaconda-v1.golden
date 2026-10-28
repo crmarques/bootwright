@@ -1,9 +1,9 @@
 implementation: os-install-anaconda-v1
-content-digest: 78300882f36ab168b9e0d2b2a199bf5974f54a07bd4d227ba5e66d719d5fa7e8
-request-version: os-install-anaconda-v19
+content-digest: 5a3c334ce7645b0d3c6b89718e3f1b82d1d93aaa919df0887c63feae57f2d818
+request-version: os-install-anaconda-v18
 automation-formats: none
 mark-formats: none
-proof-ids: .bootwright-tree-identity, /etc/bootwright/registration.json, /etc/bootwright/update.json
+proof-ids: .bootwright-tree-identity, /etc/bootwright/registration.json
 fixed-places: /etc/bootwright, /run/bootwright, /var/lib/bootwright-install, /var/lib/bootwright-install/, bootwright-network-apply.service
 effect-pins:
   os
@@ -134,9 +134,6 @@ request-schema:
   treeMedia.name string
   treeMedia.sha256 string
   treeMedia.size int64
-  update *struct installation.Update omitempty
-  update.policy string
-  update.release string
   user string
   version string
 evidence-schema:
@@ -163,11 +160,4 @@ evidence-schema:
   treeContent bool
   treeIdentity string
   treeStaging bool
-  update struct installation.UpdateEvidence
-  update.kernel string
-  update.packages int64
-  update.rebooted bool
-  update.release string
-  update.state string
-  update.transaction int64
   work bool

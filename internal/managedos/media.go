@@ -26,47 +26,18 @@ const (
 	MaxMediaName = 250
 	// MaxMediaOrigin bounds each text field of a record, the credential-free
 	// origin among them.
-	MaxMediaOrigin       = 512
-	MaxMediaReleaseValue = 128
+	MaxMediaOrigin = 512
 )
 
 // MediaEntry is one image of the host-wide installer media store: its name, the
 // exact bytes it holds, the credential-free origin it was acquired from and
 // when it was published. It carries no secret and no private path.
 type MediaEntry struct {
-	Name    string       `json:"name"`
-	Size    int64        `json:"size"`
-	SHA256  string       `json:"sha256"`
-	Source  string       `json:"source"`
-	Added   string       `json:"added"`
-	Release MediaRelease `json:"release,omitzero"`
-}
-
-type MediaRelease struct {
-	Family  string `json:"family"`
-	Version string `json:"version"`
-	Arch    string `json:"arch"`
-}
-
-func (r MediaRelease) Present() bool { return r != MediaRelease{} }
-
-func ValidMediaRelease(release MediaRelease) bool {
-	if !release.Present() {
-		return true
-	}
-	return validReleaseValue(release.Family) && validReleaseValue(release.Version) && validReleaseValue(release.Arch)
-}
-
-func validReleaseValue(value string) bool {
-	if value == "" || len(value) > MaxMediaReleaseValue || strings.TrimSpace(value) != value {
-		return false
-	}
-	for index := range len(value) {
-		if value[index] < 0x20 || value[index] > 0x7e {
-			return false
-		}
-	}
-	return true
+	Name   string `json:"name"`
+	Size   int64  `json:"size"`
+	SHA256 string `json:"sha256"`
+	Source string `json:"source"`
+	Added  string `json:"added"`
 }
 
 // ValidMediaName admits one portable ASCII basename ending in a lowercase
@@ -131,7 +102,7 @@ func ValidMediaEntry(entry MediaEntry) bool {
 	if !ValidMediaName(entry.Name) || entry.Size < 0 || entry.Size > MaxMediaBytes {
 		return false
 	}
-	if !safeMediaText(entry.Source) || !safeMediaText(entry.Added) || !ValidMediaRelease(entry.Release) {
+	if !safeMediaText(entry.Source) || !safeMediaText(entry.Added) {
 		return false
 	}
 	return entry.Source != "" && entry.Added != ""

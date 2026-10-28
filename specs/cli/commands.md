@@ -13,7 +13,8 @@ context-free commands, which refuse `--context`, are `setup`, `controller
 rebind`, `context` (every subcommand), `media` (every subcommand), `add-ons
 list`, `help`, `completion`, `version` and `schema`; only `apply`, `destroy`,
 `machine rsh`, `machine exec`, `cluster rsh`, `cluster exec` and every
-`preflight` check but `preflight controller` accept `--ssh-*`; `machine rsh`,
+`preflight` check but `preflight controller` and `preflight infra` accept
+`--ssh-*`; `machine rsh`,
 `machine exec`, `cluster rsh` and `cluster exec` accept only `--ssh-id-file`
 and `--ssh-user`, refuse the other two, and omit them from help and
 completion. A command resolves a taken global value only when its use case
@@ -116,32 +117,26 @@ The three `media` commands follow the host-wide
 | --- | --- | --- | --- |
 | `bootwright validate` | repeatable `-f, --file <file-or-dir>` | validation summary with admission counts, exclusions and advisories | read the supplied input, or the selected context's input when `-f` is omitted; no write |
 | `bootwright preflight controller` | none | [baseline or explicit-context controller readiness](../controller.md#the-setup-flow), including the acquisition route it resolved | bounded local observation; no state publication |
-| `bootwright preflight infra` | `--clusters <list>` default all; `--dry-run` false; `--trust-on-first-use=<bool>` default `true` | readiness checks of the infrastructure-services stage's kinds (Proxy, DNSServer, NTPServer, ArtifactServer, Registry and LoadBalancer) and of the substrates (InfraProvider and its Machines) | observe unless `--dry-run`, which is local-only |
-| `bootwright preflight clusters` | same flags as `preflight infra` | container and storage cluster checks | observe unless `--dry-run` |
+| `bootwright preflight infra` | `--dry-run` false | [controller and host capacity checks](output.md#infrastructure-and-environment-preflight) | observe unless `--dry-run`, which is local-only |
+| `bootwright preflight clusters` | `--clusters <list>` default all; `--dry-run` false; `--trust-on-first-use=<bool>` default `true` | container and storage cluster checks | observe unless `--dry-run` |
 | `bootwright preflight container-cluster` | `--clusters`, `--dry-run`, with OpenShiftCluster-only selection | container-cluster readiness checks | observe unless `--dry-run` |
-| `bootwright preflight storage-cluster` | same flags as `preflight infra`, with CephCluster-only selection | storage-cluster readiness checks | observe unless `--dry-run` |
+| `bootwright preflight storage-cluster` | same flags as `preflight clusters`, with CephCluster-only selection | storage-cluster readiness checks | observe unless `--dry-run` |
 | `bootwright preflight add-ons` | `--clusters <list>` default all OpenShiftClusters | add-on prerequisite checks | bounded observation |
-| `bootwright preflight all` | `--dry-run` false; `--trust-on-first-use=<bool>` default `true` | all controller, infrastructure, cluster, storage, and add-on checks | observe unless `--dry-run` |
+| `bootwright preflight all` | `--dry-run` false; `--trust-on-first-use=<bool>` default `true` | the checks of `preflight infra` and `preflight clusters`, [one report](output.md#infrastructure-and-environment-preflight); add-on checks join with [B770](../milestones/backlog.md#b770) | observe unless `--dry-run` |
 | `bootwright plan` | `--stage <list>` default all stages; `--until <cluster>.<package>` | next legal full-context plan or exact continuation point, with the steps each block waits for, how wide the plan is and how many blocks this build starts at a time, and the blocks a stage or `--until` selection would start | none |
 | `bootwright status` | none | controller setup readiness, lifecycle state, and next safe commands; beside no operation it also names each declared Secret whose material is missing or stale and each named installer image the media store lacks, with the remedy command ahead of `plan`, from keyring metadata and media records alone; it checks neither Secret material nor image bytes, which `secret check` and `media list --checksums` report | read local state, keyring metadata and media records under shared locks |
 | `bootwright diff` | `--observe` false; `--exit-code` false | each object's desired state beside what the context's apply realized, from its records or, with `--observe`, read live, as a [comparison](../cli.md#desired-and-realized-state-comparison) | read local state; with `--observe`, a bounded read-only observation of each block the context's apply realized, on the host that block froze, after the store-internal [cache-only rebuild](../controller.md#the-controller-runtime) of this build's runtime when its directory is missing |
-| `bootwright render` | `--input-dir <file-or-dir>`; `--output-dir <dir>`; `--clusters <list>` default all; `--sensitive` false | whole external-tool artifact manifest, or render help when neither path flag is supplied | local artifact writes only |
+| `bootwright render` | `--input-dir <file-or-dir>`; `--output-dir <dir>`; `--sensitive` false | the [effective-state file](../cli.md#validation-preflight-and-rendering) written to `--output-dir` and its path, or render help when neither path flag is supplied | local artifact writes only |
 | `bootwright render effective` | `--origins` false | normalized effective desired state and object counts; with `--origins`, the [origin of each effective field](../cli.md#effective-field-origins) instead of the YAML | none |
 | `bootwright render installer` | `--clusters <list>` default all OpenShiftClusters; `--sensitive` false | installer artifact manifest | local placeholder files and optional sensitive files |
 | `bootwright render storage` | `--clusters <list>` default all CephClusters | storage artifact manifest | local native files or scripts only; never execution |
 | `bootwright apply` | repeatable `--authorize <token>[=<digest>][,<token>...]`; `--stage <list>` default all stages; `--until <cluster>.<package>`; `--yes` false | completed full apply, a pause at the selected stage boundary or after the named add-on instance, exact continued state, or a settled result when the declared state is already realized | complete planned mutation, or none when it settles, beyond completing an operation's interrupted finalization (its record, releases and evidence) |
 | `bootwright destroy` | repeatable `--authorize <token>[=<digest>][,<token>...]`; repeatable `--unregistered <machine>[,<machine>...]`; `--yes` false | completed full destroy, exact continued state, or a settled result when the context owns nothing | complete planned removal, or none when it settles, beyond completing an operation's interrupted finalization (its record, releases and evidence) or releasing what an interrupted registration left, and the [housekeeping](../state-reconciliation.md#context-mutation-evidence) of the operation claims that hold nothing; over an apply that did not complete, it first proves the outcome of every effect it takes back |
 
-Not yet met: `preflight infra`, `preflight all`,
-`preflight add-ons`, `render` with a path flag, `render installer` and `render
-storage` run no use case and answer `cli.not-implemented`; their
-contracts are intent: `render installer` is tracked as
-[B52](../milestones/m7.md#b52), `render storage` as
-[B55](../milestones/m7.md#b55), `preflight add-ons` as
-[B770](../milestones/backlog.md#b770) and the others as
-[B858](../milestones/backlog.md#b858). `render effective`, `preflight
-controller`, `preflight clusters`, `preflight container-cluster` and `preflight
-storage-cluster` are available.
+Not yet met: `preflight add-ons`, `render installer` and `render storage` run no use case
+and answer `cli.not-implemented`; their contracts are intent, tracked as
+[B770](../milestones/backlog.md#b770), [B52](../milestones/m7.md#b52) and
+[B55](../milestones/m7.md#b55). Every other command here is available.
 `TestUnavailableCommandsMatchTheStubWiring` holds this list.
 
 ### Resource, access, and general commands

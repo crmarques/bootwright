@@ -9332,6 +9332,32 @@ parser divergence and host-matching tests, the claim-kind record tests and
 `TestTheControllerReachedByAnUndeclaredAddressRefusesBeforeReservation`, each
 proved by a seeded mismatch; the delivering commit records the gates.
 
+### X189 — Audit lane W1: preflight infra and all, render to a path
+
+**Items:** B858.
+**Kind:** product. **Owner:** CLI. Delivered on 2026-10-28 as lane W1 of the
+[audit remediation](backlog.md#lane-order-and-progress) under the owner's
+request to implement the remaining items, with D189's answer.
+
+`preflight infra` reports the controller checks, including the sockets of the
+managed services and emulated management controllers the controller hosts,
+and host capacity; it observes no external service, Registry, LoadBalancer or
+managed service on another Machine, which apply checks at its own boundary.
+`preflight all` merges it with `preflight clusters` as one report under the
+same rules (worse status wins, one check per target and id, one side's error
+cancels the other) and refuses SSH options with no CephCluster before any
+check runs. `render` with `--output-dir` writes `effective-state.yaml` there
+through a held directory handle, atomically, refusing a link or non-regular
+file at the target, an output inside the input or over the input file, and,
+with `--sensitive`, an existing directory another account owns or can write
+to; it drops the stub `--clusters` flag and manifest members until
+[B52](m7.md#b52) and [B55](m7.md#b55). `preflight add-ons` stays with
+[B770](backlog.md#b770).
+
+**Guard tests:** the merge, service, file-safety and golden tests and
+`TestUnavailableCommandsMatchTheStubWiring`, each proved by a seeded mismatch;
+the delivering commit records the gates.
+
 ## M3 independent in-tree completion
 
 The owner's 2026-10-23 request (D181) delivers the independent implementation

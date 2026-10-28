@@ -12,6 +12,7 @@ type ValidateRequest struct {
 
 type EffectiveRequest struct {
 	ContextName string
+	Files       []string
 	Origins     bool
 }
 

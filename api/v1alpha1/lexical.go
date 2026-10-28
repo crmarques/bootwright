@@ -21,7 +21,6 @@ var imageTagPattern = regexp.MustCompile(`^[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}$`)
 var cliVersionPattern = regexp.MustCompile(`^(?:latest|v?[0-9][A-Za-z0-9._+-]*)$`)
 var clusterReleasePattern = regexp.MustCompile(`^[0-9]+\.[0-9]+\.[0-9]+(?:[-+][A-Za-z0-9][A-Za-z0-9._+-]*)?$`)
 var packageVersionPattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._+~^:-]{0,95}$`)
-var osReleasePattern = regexp.MustCompile(`^[1-9][0-9]*\.(?:0|[1-9][0-9]*)$`)
 
 // ociPathComponentPattern is one repository path component of the OCI
 // distribution grammar, outside of which container runtimes refuse to pull.
@@ -125,8 +124,6 @@ func ValidLexical(rule, value string) bool {
 		return value != "latest" && (imageTagPattern.MatchString(value) || strings.HasPrefix(strings.ToLower(value), "sha256:") && digestPattern.MatchString(value))
 	case "cluster-release":
 		return len(value) <= 96 && clusterReleasePattern.MatchString(value)
-	case "os-release":
-		return len(value) <= 64 && osReleasePattern.MatchString(value)
 	case "cli-version":
 		return len(strings.TrimPrefix(value, "v")) <= 95 && cliVersionPattern.MatchString(value)
 	case "package-version":

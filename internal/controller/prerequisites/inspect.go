@@ -110,38 +110,38 @@ func (s Service) inspect(ctx context.Context, view SetupView, stored StorageView
 }
 
 func (i *inspection) declare(host HostInspector, lock RuntimeLock) {
-	checks := []Check{{"host", familyRequirement, "unverified", "unverified", HostScope}}
+	checks := []Check{{"host", familyRequirement, "unverified", "unverified", HostScope, ""}}
 	if !i.dryRun {
-		checks = append(checks, Check{"installed-host", "verified local identity", "unverified", "unverified", HostScope})
+		checks = append(checks, Check{"installed-host", "verified local identity", "unverified", "unverified", HostScope, ""})
 		if _, reports := host.(FIPSInspector); reports {
-			checks = append(checks, Check{"fips-mode", "the host's FIPS mode", "unverified", "unverified", HostScope})
+			checks = append(checks, Check{"fips-mode", "the host's FIPS mode", "unverified", "unverified", HostScope, ""})
 		}
 	}
 	baseline, _ := BaselineHostRequirements("")
 	checks = append(checks,
-		Check{"python-runtime", runtimeRequirement(lock), "unverified", "unverified", HostScope},
-		Check{"host-packages", strings.Join(baseline, ", "), "unverified", "unverified", HostScope},
-		Check{"setup-state", setupComplete, "unverified", "unverified", HostScope})
+		Check{"python-runtime", runtimeRequirement(lock), "unverified", "unverified", HostScope, ""},
+		Check{"host-packages", strings.Join(baseline, ", "), "unverified", "unverified", HostScope, ""},
+		Check{"setup-state", setupComplete, "unverified", "unverified", HostScope, ""})
 	if len(i.toolRequests) != 0 {
-		checks = append(checks, Check{"target-tools", i.toolSummary(), "unverified", "unverified", ContextScope})
+		checks = append(checks, Check{"target-tools", i.toolSummary(), "unverified", "unverified", ContextScope, ""})
 	}
 	if i.native.LibvirtClient {
-		checks = append(checks, Check{"libvirt-client", closureRequirement("libvirt-client"), "unverified", "unverified", ContextScope})
+		checks = append(checks, Check{"libvirt-client", closureRequirement("libvirt-client"), "unverified", "unverified", ContextScope, ""})
 	}
 	if i.native.Hypervisor {
-		checks = append(checks, Check{"hypervisor", closureRequirement("hypervisor"), "unverified", "unverified", ContextScope})
+		checks = append(checks, Check{"hypervisor", closureRequirement("hypervisor"), "unverified", "unverified", ContextScope, ""})
 	}
 	if i.native.InstallerMedia {
-		checks = append(checks, Check{"installer-media", closureRequirement("installer-media"), "unverified", "unverified", ContextScope})
+		checks = append(checks, Check{"installer-media", closureRequirement("installer-media"), "unverified", "unverified", ContextScope, ""})
 	}
 	if i.native.NMState {
-		checks = append(checks, Check{"nmstate", closureRequirement("nmstate"), "unverified", "unverified", ContextScope})
+		checks = append(checks, Check{"nmstate", closureRequirement("nmstate"), "unverified", "unverified", ContextScope, ""})
 	}
 	if i.native.IPUtils {
-		checks = append(checks, Check{"iputils", closureRequirement("iputils"), "unverified", "unverified", ContextScope})
+		checks = append(checks, Check{"iputils", closureRequirement("iputils"), "unverified", "unverified", ContextScope, ""})
 	}
 	if i.stored.Context.Name != "" {
-		checks = append(checks, Check{"controller-binding", i.selection.MachineName(), "unverified", "unverified", ContextScope})
+		checks = append(checks, Check{"controller-binding", i.selection.MachineName(), "unverified", "unverified", ContextScope, ""})
 	}
 	i.report.Checks = checks
 }
@@ -188,7 +188,7 @@ func (s Service) admit(ctx context.Context, current *inspection, settle func(Che
 		observed += " (like " + strings.Join(release.Like, " ") + ")"
 	}
 	refuse := func(err error) error {
-		settle(Check{"host", familyRequirement, observed, "not-ready", HostScope})
+		settle(Check{"host", familyRequirement, observed, "not-ready", HostScope, ""})
 		return err
 	}
 	if !admittedFamily(release) {
@@ -201,7 +201,7 @@ func (s Service) admit(ctx context.Context, current *inspection, settle func(Che
 	if err := s.ports.Packages.Qualify(ctx); err != nil {
 		return refuse(err)
 	}
-	settle(Check{"host", familyRequirement, observed, "ready", HostScope})
+	settle(Check{"host", familyRequirement, observed, "ready", HostScope, ""})
 	if warning := untestedRelease(release, s.ports.Lock.Tested); warning != nil {
 		current.report.Warnings = append(current.report.Warnings, *warning)
 	}
@@ -349,7 +349,7 @@ func (s Service) settleRuntime(ctx context.Context, current *inspection, settle 
 	case ctx.Err() != nil:
 		return ctx.Err()
 	case errors.Is(err, ErrGlibcBelowFloor):
-		settle(Check{"python-runtime", required, "glibc below " + lock.GlibcFloor, "not-ready", HostScope})
+		settle(Check{"python-runtime", required, "glibc below " + lock.GlibcFloor, "not-ready", HostScope, ""})
 		return failure("controller.unsupported", "this host's glibc is older than "+lock.GlibcFloor+", which the locked controller wheels need",
 			"run Bootwright on a host whose glibc is "+lock.GlibcFloor+" or newer")
 	case errors.Is(err, ErrNoPythonInterpreter):
@@ -364,7 +364,7 @@ func (s Service) settleRuntime(ctx context.Context, current *inspection, settle 
 			return missingErr
 		}
 		if len(missing) == 0 {
-			settle(Check{"python-runtime", required, "no installed interpreter qualifies", "not-ready", HostScope})
+			settle(Check{"python-runtime", required, "no installed interpreter qualifies", "not-ready", HostScope, ""})
 			return err
 		}
 		current.candidates, current.python = missing, missing[0]
@@ -405,7 +405,7 @@ func (s Service) settleWheels(ctx context.Context, current *inspection) error {
 }
 
 func (i *inspection) runtimeCheck(required string) Check {
-	check := Check{"python-runtime", required, "", "not-ready", HostScope}
+	check := Check{"python-runtime", required, "", "not-ready", HostScope, ""}
 	interpreter := i.interpreter
 	switch {
 	case interpreter.Path == "":
@@ -460,7 +460,7 @@ func (i *inspection) settleSetupState(lock RuntimeLock, settle func(Check)) {
 	if observed == setupComplete {
 		status = "ready"
 	}
-	settle(Check{"setup-state", setupComplete, observed, status, HostScope})
+	settle(Check{"setup-state", setupComplete, observed, status, HostScope, ""})
 }
 
 // ready is host readiness: everything context-independent setup owns.

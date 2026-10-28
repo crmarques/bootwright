@@ -2,7 +2,7 @@
 - name: Validate the frozen installation request
   ansible.builtin.assert:
     that:
-      - bootwright_os_install_request.version == 'os-install-anaconda-v19'
+      - bootwright_os_install_request.version == 'os-install-anaconda-v18'
       - bootwright_os_install_request.identity.context is match('^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$')
       - bootwright_os_install_request.identity.object is match('^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$')
       - managedos_install_anaconda_work == '/var/lib/bootwright-install/'
@@ -84,12 +84,6 @@
       when:
         - managedos_install_anaconda_reachable.rc | default(1) == 0
         - bootwright_os_install_request.registration is defined
-
-    - name: Read the installed machine's update within its release the same way an apply proves it
-      ansible.builtin.include_tasks: update_observe.yml
-      when:
-        - managedos_install_anaconda_reachable.rc | default(1) == 0
-        - "'update' in bootwright_os_install_request"
 
   always:
     - name: Remove private connection files
@@ -195,6 +189,4 @@
     registrationRequired: >-
       {{ bootwright_os_install_request.registration is defined
          and (not (managedos_install_anaconda_observes_removal | bool) or managedos_install_anaconda_unregisters | bool) }}
-    update: '{{ managedos_install_anaconda_update | default({}) }}'
-    updateRequired: "{{ 'update' in bootwright_os_install_request }}"
   no_log: true

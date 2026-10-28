@@ -1,9 +1,8 @@
 """A proved installation records its disk-boot intent and is never installed again.
 
-Before the network restart or the update's reboot powers the machine off,
-roles/managedos_install_anaconda/tasks/reboot.yml, which both include,
-publishes the before-state that names this installation's marker, once per
-attempt. A later attempt of the same apply is told the
+Before the network restart powers the machine off, roles/managedos_install_anaconda/
+tasks/network.yml publishes the before-state that names this installation's
+marker, once per attempt. A later attempt of the same apply is told the
 installation is proved (bootwright_os_install_material.installationProved,
 internal/managedos/installation), and apply.yml then boots the installed disk
 of a powered-off machine that does not answer and reads its identity, before
@@ -40,9 +39,7 @@ def named(tasks, name):
 
 
 def test_the_intent_is_recorded_before_the_power_off():
-    for name in ("network.yml", "update.yml"):
-        assert sum(task.get("ansible.builtin.include_tasks") == "reboot.yml" for task in flattened(loaded(name))) == 1, name
-    tasks = list(flattened(loaded("reboot.yml")))
+    tasks = list(flattened(loaded("network.yml")))
     recorded = tasks.index(named(tasks, "Record that this installation is proved and its disk boot intended"))
     powered = tasks.index(named(tasks, "Ask the machine to power off"))
     assert recorded < powered

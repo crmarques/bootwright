@@ -14,7 +14,7 @@ var (
 	allSSHFlags       = []string{"ssh-id-file", "ssh-user", "ssh-ask-sudo-password", "ssh-user-for-provisioned"}
 	accountSSHFlags   = []string{"ssh-id-file", "ssh-user"}
 	sshFlagsByCommand = map[string][]string{
-		"preflight infra": allSSHFlags, "preflight clusters": allSSHFlags, "preflight container-cluster": allSSHFlags,
+		"preflight clusters": allSSHFlags, "preflight container-cluster": allSSHFlags,
 		"preflight storage-cluster": allSSHFlags, "preflight add-ons": allSSHFlags, "preflight all": allSSHFlags,
 		"apply": allSSHFlags, "destroy": allSSHFlags,
 		"machine rsh": accountSSHFlags, "machine exec": accountSSHFlags,

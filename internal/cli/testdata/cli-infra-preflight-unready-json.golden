@@ -1,0 +1,55 @@
+{
+  "schemaVersion": "v1alpha1",
+  "command": "preflight infra",
+  "ok": false,
+  "exitCode": 1,
+  "result": {
+    "context": "synthetic",
+    "target": "infra",
+    "checks": [
+      {
+        "id": "controller.host-packages",
+        "target": "controller",
+        "status": "passed",
+        "reason": "podman, nmstate"
+      },
+      {
+        "id": "controller.listener-firewall",
+        "target": "DNSServer/dns 192.0.2.53:53/udp",
+        "status": "failed",
+        "reason": "required DNSServer/dns inbound socket; observed DNSServer/dns 192.0.2.53:53/udp: closed (interface virbr0, zone libvirt)",
+        "next": "run bootwright apply --context synthetic --stage controller"
+      },
+      {
+        "id": "capacity.memory",
+        "target": "controller",
+        "status": "passed",
+        "reason": "available capacity covers declared guests and reserve",
+        "capacity": {
+          "resource": "memory",
+          "unit": "bytes",
+          "required": 1024,
+          "available": 4096,
+          "reserve": 1024,
+          "deficit": 0,
+          "observed": true
+        }
+      }
+    ],
+    "summary": {
+      "passed": 2,
+      "failed": 1,
+      "unknown": 0,
+      "pending": 0
+    }
+  },
+  "diagnostics": [
+    {
+      "severity": "error",
+      "code": "preflight.failed",
+      "message": "infrastructure readiness is not proved; inspect the failed, unknown and pending checks",
+      "remediation": "resolve the reported prerequisites and repeat preflight infra"
+    }
+  ],
+  "logs": []
+}

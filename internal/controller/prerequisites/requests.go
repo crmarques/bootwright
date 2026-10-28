@@ -38,6 +38,7 @@ type Check struct {
 	Observed string
 	Status   string
 	Scope    string
+	Target   string
 }
 
 // Summary is what the operator reads beside a check: the observation when it

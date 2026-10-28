@@ -7,11 +7,11 @@
   Commands
   COMMAND             PURPOSE
   add-ons             Check add-on prerequisites (unavailable)
-  all                 Check all prerequisites (unavailable)
+  all                 Check all prerequisites
   clusters            Check selected cluster readiness
   container-cluster   Check OpenShiftCluster readiness
   controller          Check controller prerequisites
-  infra               Check infrastructure readiness (unavailable)
+  infra               Check infrastructure readiness
   storage-cluster     Check CephCluster readiness
 
   Common flags

@@ -13,10 +13,6 @@ The record is written pending before the service is asked, so a reply lost
 between the service and the record is adopted by the next run instead of
 looking foreign. Anything else is foreign and left registered.
 
-A request updating within its release names that release: before the
-repositories the worker proves `subscription-manager release --list` offers
-it and sets it with `subscription-manager release --set`, on every run.
-
 The answer is one line of JSON carrying only closed reasons, states and the
 consumer UUID; no service text, no secret and no traceback leaves the worker.
 Only the standard library is imported at load; dbus and rhsm.certificate are
@@ -44,27 +40,23 @@ REGISTER_INTERFACE = "com.redhat.RHSM1.Register"
 REGISTER_CEILING = 300
 REPOSITORIES_CEILING = 300
 UNREGISTER_CEILING = 300
-RELEASE_CEILING = 60
-MAX_RELEASES = 65536
 MAX_INPUT = 65536
 MAX_RECORD = 4096
 MAX_REPLY = 1 << 20
 MAX_CERTIFICATE = 65536
 MAX_REPOSITORIES = 256
 REASONS = ("registration-foreign", "registration-refused", "registration-identity-collision",
-           "registration-input", "registration-unavailable", "registration-repositories",
-           "update-release-unavailable", "transport")
+           "registration-input", "registration-unavailable", "registration-repositories", "transport")
 CAUSES = {"registration-unavailable": ("service", "timeout", "tooling", "unregister")}
 STATES = {"register": ("registered", "adopted", "unchanged"),
           "unregister": ("unregistered", "absent", "retained"),
           "inspect": ("owned", "pending", "absent", "foreign")}
 OWNED_STATES = frozenset(("registered", "adopted", "unchanged", "owned"))
-KEYS = {"register": frozenset(("operation", "request", "organization", "activationKey", "enable", "disable", "release")),
+KEYS = {"register": frozenset(("operation", "request", "organization", "activationKey", "enable", "disable")),
         "unregister": frozenset(("operation", "request")),
         "inspect": frozenset(("operation", "request"))}
 UUID = re.compile(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}")
 DIGEST = re.compile(r"[0-9a-f]{64}")
-RELEASE = re.compile(r"(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)")
 SECRET = re.compile(rb"[\x21-\x7e]{1,255}")
 REPOSITORY = re.compile(r"[^\s\"'/\\#,%][^\s\"'/\\#,]{0,254}")
 PRINTABLE = re.compile(r"[\x21-\x7e]+")
@@ -175,28 +167,6 @@ def bounded_run(argv, timeout):
     return completed.returncode
 
 
-def bounded_capture(argv, timeout):
-    """The exit code and at most MAX_RELEASES + 1 bytes of a fixed native command's output, or None on timeout."""
-    try:
-        # A fixed argv on the guest; no AnsibleModule runs there.
-        # pylint: disable-next=ansible-bad-function
-        completed = subprocess.run(argv, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
-                                   env=dict(ENVIRONMENT), cwd="/", timeout=timeout, check=False)
-    except subprocess.TimeoutExpired:
-        return None
-    except FileNotFoundError:
-        raise Refused("registration-unavailable", "tooling") from None
-    return completed.returncode, completed.stdout[:MAX_RELEASES + 1]
-
-
-def offered(output):
-    """The releases a release --list output names, one per line; its table frame and title are not releases."""
-    if len(output) > MAX_RELEASES:
-        return frozenset()
-    lines = output.decode("ascii", "replace").splitlines()
-    return frozenset(line.strip() for line in lines if RELEASE.fullmatch(line.strip()))
-
-
 def classify(error):
     """A closed refusal for a D-Bus error; the service's text is matched, never carried."""
     name = error.get_dbus_name()
@@ -248,7 +218,7 @@ class Guest:
     """The installed machine's registration state; every dependency is injectable."""
 
     def __init__(self, cert=CONSUMER_CERT, record=RECORD, directory=RECORD_DIRECTORY, owner=0,
-                 run=bounded_run, bus=load_dbus, identity=consumer_identity, capture=bounded_capture):
+                 run=bounded_run, bus=load_dbus, identity=consumer_identity):
         self.cert = cert
         self.record = record
         self.directory = directory
@@ -256,7 +226,6 @@ class Guest:
         self.run = run
         self.bus = bus
         self.identity = identity
-        self.capture = capture
 
     def certificate(self):
         """Whether a consumer certificate is present, and its consumer UUID when it names one."""
@@ -375,21 +344,6 @@ class Guest:
         if code != 0:
             raise Refused("registration-repositories")
 
-    def release(self, release):
-        """Prove the subscription service offers the release, then make it the sticky minor release."""
-        listed = self.capture([SUBSCRIPTION_MANAGER, "release", "--list"], RELEASE_CEILING)
-        if listed is None:
-            raise Refused("registration-unavailable", "timeout")
-        if listed[0] != 0:
-            raise Refused("registration-unavailable", "service")
-        if release not in offered(listed[1]):
-            raise Refused("update-release-unavailable")
-        code = self.run([SUBSCRIPTION_MANAGER, "release", "--set=" + release], RELEASE_CEILING)
-        if code is None:
-            raise Refused("registration-unavailable", "timeout")
-        if code != 0:
-            raise Refused("registration-unavailable", "service")
-
 
 def result(changed, consumer, state, enable=(), disable=()):
     return {"changed": changed, "consumer": consumer or "", "owned": state in OWNED_STATES,
@@ -414,8 +368,6 @@ def register_operation(guest, payload):
             raise Refused("transport")
         guest.write(common, request)
         state = "registered"
-    if payload["release"]:
-        guest.release(payload["release"])
     guest.repositories(enable, disable)
     return result(state != "unchanged", common, state, enable, disable)
 
@@ -471,8 +423,6 @@ def parse_request(data):
         payload["organization"] = text_secret(payload["organization"], "organization")
         payload["activationKey"] = text_secret(payload["activationKey"], "activation key")
         payload["enable"], payload["disable"] = repositories(payload["enable"], payload["disable"])
-        if not isinstance(payload["release"], str) or not (payload["release"] == "" or RELEASE.fullmatch(payload["release"])):
-            raise Refused("registration-input", detail="the release is not a <major>.<minor> release")
     return payload
 
 

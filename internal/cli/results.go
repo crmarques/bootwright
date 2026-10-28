@@ -45,7 +45,7 @@ func (r *Runner) writeResult(ctx context.Context, command *cobra.Command, path s
 		if result.addOns != nil {
 			return true, writeAddOns(out, path, result.addOns, selectedStructured(command))
 		}
-	case "preflight storage-cluster", "preflight container-cluster", "preflight clusters":
+	case "preflight storage-cluster", "preflight container-cluster", "preflight clusters", "preflight infra", "preflight all":
 		if result.storagePreflight != nil {
 			return true, writeStoragePreflight(out, errOut, path, result.storagePreflight, nil, 0, selectedJSON(command))
 		}
@@ -117,6 +117,10 @@ func (r *Runner) writeResult(ctx context.Context, command *cobra.Command, path s
 	case "secret encryption status":
 		if validEncryptionStatus(result.encryptionStatus) {
 			return true, writeEncryptionStatus(out, path, result.encryptionStatus, selectedJSON(command))
+		}
+	case "render":
+		if validRender(result.rendered) {
+			return true, writeRender(out, result.rendered)
 		}
 	case "render effective":
 		if result.effective != nil {

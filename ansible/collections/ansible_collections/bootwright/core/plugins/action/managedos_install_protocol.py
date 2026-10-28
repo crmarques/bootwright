@@ -20,9 +20,7 @@ from ansible_collections.bootwright.core.plugins.module_utils.controller_channel
 # each one the runner reports as the installation's own diagnostic for its
 # Machine: those of the target's pre-boot proof (internal/substrate,
 # preboot.go), and that of a boot image that no longer has the size and
-# SHA-256 the operation froze (internal/managedos/installation, selection.go),
-# and those of the update within the release (update.go), whose detail names
-# the version found, the repository offering it or the closed cause.
+# SHA-256 the operation froze (internal/managedos/installation, selection.go).
 # The tree image is the shared package-tree publication's to prove.
 REFUSALS = ("hardware-mismatch", "identity-mismatch", "machine-running", "tpm-absent", "foreign-installation")
 MEDIA_REFUSALS = ("media-changed-boot",)
@@ -33,18 +31,6 @@ REGISTRATION_REFUSALS = (
     "registration-input", "registration-foreign", "registration-refused", "registration-identity-collision",
     "registration-unavailable", "registration-repositories", "registration-unreachable",
 )
-UPDATE_REFUSALS = (
-    "update-release-unavailable", "update-release-mismatch", "update-release-drift", "update-no-repository",
-    "update-foreign", "update-unavailable", "update-failed",
-)
-# The update states: a record's, a none request's and an unread or foreign
-# one's; only a record's names a release, a transaction and a kernel.
-UPDATE_STATES = ("", "none", "absent", "pending", "upgraded", "complete", "foreign")
-RECORD_STATES = ("pending", "upgraded", "complete")
-UPDATE_KEYS = frozenset(("kernel", "packages", "rebooted", "release", "state", "transaction"))
-RELEASE = re.compile(r"(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)")
-KERNEL = re.compile(r"[A-Za-z0-9._+~-]{1,128}")
-EMPTY_UPDATE = {"kernel": "", "packages": 0, "rebooted": False, "release": "", "state": "", "transaction": 0}
 # The ownership states the registration worker reads or a removal leaves; only
 # an owned, a pending or an unregistered registration names its consumer.
 REGISTRATION_STATES = ("", "owned", "pending", "absent", "foreign", "unregistered", "retained")
@@ -109,35 +95,6 @@ def registration(value):
     return {"consumer": consumer, "state": state}
 
 
-def update(value, required=True):
-    """The update the worker reported, or none read; the same rules as Go's decode.
-
-    A request that updates nothing reads nothing and records state none.
-    """
-    if value in (None, "", {}):
-        return dict(EMPTY_UPDATE, state="" if required else "none")
-    if not isinstance(value, dict) or set(value) != UPDATE_KEYS or value["state"] not in UPDATE_STATES:
-        raise ValueError("update")
-    state = value["state"]
-    if state not in RECORD_STATES:
-        if value != dict(EMPTY_UPDATE, state=state):
-            raise ValueError("update")
-        return dict(value)
-    counts = all(type(value[key]) is int and value[key] >= 0 for key in ("packages", "transaction"))  # pylint: disable=unidiomatic-typecheck
-    if (not counts or not isinstance(value["release"], str) or not RELEASE.fullmatch(value["release"])
-            or not isinstance(value["kernel"], str) or not KERNEL.fullmatch(value["kernel"])
-            or value["rebooted"] is not (state == "complete" and value["transaction"] != 0)):
-        raise ValueError("update")
-    return dict(value)
-
-
-def update_proved(evidence, arguments):
-    """A complete update for a request updating within its release, none for any other."""
-    if flag(arguments.get("updateRequired")):
-        return evidence["update"]["state"] == "complete"
-    return evidence["update"]["state"] == "none"
-
-
 def presence(arguments, request_digest):
     """The evidence a completion proves.
 
@@ -173,7 +130,6 @@ def presence(arguments, request_digest):
         "treeContent": bool(observation.get("treeContent")),
         "treeIdentity": tree_identity(observation.get("treeIdentity")),
         "treeStaging": bool(observation.get("treeStaging")),
-        "update": update(arguments.get("update"), flag(arguments.get("updateRequired"))),
         "work": bool(observation.get("work")),
     }
     evidence["postcondition"] = bool(
@@ -185,7 +141,6 @@ def presence(arguments, request_digest):
         and (evidence["fips"] or not flag(arguments.get("fipsRequired")))
         and (evidence["rootEncryption"] or not flag(arguments.get("rootEncryptionRequired")))
         and (evidence["registration"]["state"] == "owned" or not flag(arguments.get("registrationRequired")))
-        and update_proved(evidence, arguments)
     )
     return evidence
 
@@ -205,8 +160,7 @@ def released(evidence, arguments):
     return evidence["registration"]["state"] in RELEASED_STATES or not flag(arguments.get("registrationRequired"))
 
 
-def unproved(evidence, private_delivery=False, fips_required=False, encryption_required=False, registration_required=False,
-             update_required=False):
+def unproved(evidence, private_delivery=False, fips_required=False, encryption_required=False, registration_required=False):
     """What a completion proof still lacks, named for the same reason."""
     names = [name for name in ("marker", "hostKey", "address") if not evidence[name]]
     if evidence["media"]:
@@ -228,8 +182,6 @@ def unproved(evidence, private_delivery=False, fips_required=False, encryption_r
         names.append("rootEncryption")
     if registration_required and evidence["registration"]["state"] != "owned":
         names.append("registration")
-    if evidence["update"]["state"] != ("complete" if update_required else "none"):
-        names.append("update")
     return names
 
 
@@ -258,7 +210,6 @@ def absence(arguments, request_digest):
         "treeContent": False,
         "treeIdentity": "",
         "treeStaging": False,
-        "update": dict(EMPTY_UPDATE),
         "work": False,
     }
     evidence["postcondition"] = bool(gone and released(evidence, arguments))
@@ -278,7 +229,6 @@ def completion(arguments):
         unmet = unproved(
             evidence, flag(arguments.get("privateDelivery")), flag(arguments.get("fipsRequired")),
             flag(arguments.get("rootEncryptionRequired")), flag(arguments.get("registrationRequired")),
-            flag(arguments.get("updateRequired")),
         )
         verb = "not proved"
     if publishes(evidence, arguments.get("observed")):
@@ -300,8 +250,7 @@ CAPABILITY = adapter_protocol.Capability(
     "the installation capability result could not be published",
     completion,
     phases=adapter_protocol.PREPARING_PHASES,
-    refusals=REFUSALS + MEDIA_REFUSALS + POLICY_REFUSALS + FIPS_REFUSALS + ENCRYPTION_REFUSALS + REGISTRATION_REFUSALS + UPDATE_REFUSALS,
-    detail=True,
+    refusals=REFUSALS + MEDIA_REFUSALS + POLICY_REFUSALS + FIPS_REFUSALS + ENCRYPTION_REFUSALS + REGISTRATION_REFUSALS,
     preparation=preparation,
 )
 PHASES = CAPABILITY.phases

@@ -23,13 +23,5 @@
   "treeContent": true,
   "treeIdentity": "fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210",
   "treeStaging": false,
-  "update": {
-    "kernel": "",
-    "packages": 0,
-    "rebooted": false,
-    "release": "",
-    "state": "none",
-    "transaction": 0
-  },
   "work": false
 }

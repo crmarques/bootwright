@@ -69,10 +69,9 @@ through from an ambiguous tier or silently selects the default.
 
 ## Rendering
 
-Context-free render requires both path flags and writes placeholder-bearing
-portable artifacts after loading and validating the desired-state file or
-directory named by `--input-dir`. `render installer` and `render storage` write
-to their context-owned artifact roots.
+The whole `render` is [specified](../cli.md#validation-preflight-and-rendering).
+`render installer` and `render storage` write to their context-owned artifact
+roots.
 
 ## Preflight
 

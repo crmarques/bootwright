@@ -74,7 +74,7 @@ func (r storeMediaRecords) MediaRecords(ctx context.Context) (map[string]install
 			return err
 		}
 		for _, entry := range entries {
-			records[entry.Name] = installation.MediaRecord{SHA256: entry.SHA256, Size: entry.Size, Observed: entry.Observed, Failure: entry.Failure, Release: entry.Release}
+			records[entry.Name] = installation.MediaRecord{SHA256: entry.SHA256, Size: entry.Size, Observed: entry.Observed, Failure: entry.Failure}
 		}
 		return nil
 	})

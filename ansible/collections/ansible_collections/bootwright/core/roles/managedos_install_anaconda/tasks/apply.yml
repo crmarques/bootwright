@@ -2,7 +2,7 @@
 - name: Validate the frozen installation request
   ansible.builtin.assert:
     that:
-      - bootwright_os_install_request.version == 'os-install-anaconda-v19'
+      - bootwright_os_install_request.version == 'os-install-anaconda-v18'
       - bootwright_os_install_request.identity.context is match('^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$')
       - bootwright_os_install_request.identity.object is match('^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$')
       - managedos_install_anaconda_work == '/var/lib/bootwright-install/'
@@ -17,9 +17,6 @@
       - bootwright_os_install_request.network.markerPath == '/etc/bootwright/network-marker.json'
       - bootwright_os_install_request.network.checkpointSeconds | int > 0
       - bootwright_os_install_request.network.document is mapping
-      - "'update' not in bootwright_os_install_request
-        or (bootwright_os_install_request['update'].policy == 'withinRelease'
-            and bootwright_os_install_request['update'].release is match('^(0|[1-9][0-9]*)[.](0|[1-9][0-9]*)$'))"
     quiet: true
   no_log: true
 
@@ -711,7 +708,6 @@
           - registration-identity-collision
           - registration-unavailable
           - registration-repositories
-          - update-release-unavailable
       no_log: true
 
     # The message names the Machine and the worker's closed vocabulary only:
@@ -727,8 +723,7 @@
           {{ managedos_install_anaconda_registration_result.reason | default('')
              if managedos_install_anaconda_registration_result.reason | default('') in
              ['registration-input', 'registration-foreign', 'registration-refused', 'registration-identity-collision',
-              'registration-unavailable', 'registration-repositories', 'update-release-unavailable',
-              'registration-unreachable', 'transport']
+              'registration-unavailable', 'registration-repositories', 'registration-unreachable', 'transport']
              else 'unexpected answer' }}
         managedos_install_anaconda_registration_cause: >-
           {{ ' (' ~ managedos_install_anaconda_registration_result.cause ~ ')'
@@ -738,10 +733,6 @@
       when:
         - bootwright_os_install_request.registration is defined
         - not (managedos_install_anaconda_registration_result.ok | default(false) | bool)
-
-    - name: Update the installed machine within its release after its registration
-      ansible.builtin.include_tasks: update.yml
-      when: "'update' in bootwright_os_install_request"
 
     - name: Prove everything this installation publishes is in place
       bootwright.core.managedos_install_inspect:
@@ -765,8 +756,7 @@
     outcome: >-
       {{ 'unchanged' if (managedos_install_anaconda_was_installed | bool)
       and not (managedos_install_anaconda_network_result.changed | default(true) | bool)
-      and not (managedos_install_anaconda_registration_result.registration.changed | default(false) | bool)
-      and not (managedos_install_anaconda_update_changed | default(false) | bool) else 'changed' }}
+      and not (managedos_install_anaconda_registration_result.registration.changed | default(false) | bool) else 'changed' }}
     digest: '{{ bootwright_os_install_digest }}'
     observation: '{{ managedos_install_anaconda_after.observation }}'
     marker: '{{ managedos_install_anaconda_marker }}'
@@ -787,6 +777,4 @@
     rootEncryptionRequired: "{{ bootwright_os_install_request.diskEncryption is defined }}"
     registration: '{{ managedos_install_anaconda_registration | default({}) }}'
     registrationRequired: "{{ bootwright_os_install_request.registration is defined }}"
-    update: '{{ managedos_install_anaconda_update | default({}) }}'
-    updateRequired: "{{ 'update' in bootwright_os_install_request }}"
   no_log: true

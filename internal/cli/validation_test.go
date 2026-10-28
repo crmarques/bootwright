@@ -27,7 +27,7 @@ func TestFlagRelationshipsAndFormats(t *testing.T) {
 		{"machine restart --name demo --output json", false}, {"machine restart --name demo --output json --yes", true},
 		{"machine trust --output json", false}, {"machine trust --output json --dry-run", true}, {"machine trust --output json --yes", true}, {"machine trust --name one,two --replace two", true}, {"machine trust --name one --replace two", false},
 		{"cluster info --secrets", false}, {"cluster info --name demo --secrets", true}, {"cluster info --secrets=false", true},
-		{"preflight infra --clusters=", true}, {"preflight infra --clusters=,", false}, {"render storage --clusters=,", false}, {"machine list --clusters=,", true}, {"machine trust --name=, --replace=,", true}, {"machine trust --name=", true},
+		{"preflight clusters --clusters=", true}, {"preflight clusters --clusters=,", false}, {"render storage --clusters=,", false}, {"machine list --clusters=,", true}, {"machine trust --name=, --replace=,", true}, {"machine trust --name=", true},
 		{"machine list --power-status", true}, {"machine list --power-status --output json", true}, {"machine list --power-status --short", false}, {"machine list --power-status --short=false", true},
 		{"version --context=", false}, {"version --context=bad.name", false}, {"apply --ssh-user=account", true}, {"apply --ssh-user=Account", false}, {"apply --ssh-user-for-provisioned", false}, {"apply --ssh-user=account --ssh-user-for-provisioned", true}, {"apply --ssh-ask-sudo-password --output=json", false}, {"apply --ssh-ask-sudo-password=false --output=json", true},
 		{"setup --wheel-mirror file:///srv/wheels", true}, {"setup --wheel-mirror https://mirror.example/wheels --dry-run", true}, {"setup --wheel-mirror http://mirror.example/wheels", false}, {"setup --wheel-mirror https://user@mirror.example/wheels", false}, {"setup --wheel-mirror https://mirror.example:8443/wheels", false}, {"setup --wheel-mirror https://mirror.example/wheels?token=x", false}, {"setup --wheel-mirror file://host/srv/wheels", false}, {"setup --wheel-mirror wheels", false}, {"setup --wheel-mirror ftp://mirror.example/wheels", false},
@@ -73,7 +73,7 @@ func parsedCommand(t *testing.T, args []string) *cobra.Command {
 }
 
 func TestResolvedValuesAndDefaults(t *testing.T) {
-	command := parsedCommand(t, []string{"preflight", "infra", "--clusters", " one, two,one, ", "--ssh-user", " account "})
+	command := parsedCommand(t, []string{"preflight", "clusters", "--clusters", " one, two,one, ", "--ssh-user", " account "})
 	if stringValue(command.Flags(), "clusters") != "one,two" || stringValue(command.Flags(), "ssh-user") != "account" || !boolValue(command.Flags(), "trust-on-first-use") || stringValue(command.Flags(), "output") != "text" {
 		t.Fatal("preflight normalized values or defaults")
 	}

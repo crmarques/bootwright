@@ -1,13 +1,17 @@
   bootwright / preflight infra
-      Check infrastructure readiness. This command is recognized but not implemented.
+      Check the readiness of the infrastructure the Environment declares: the controller checks
+      of preflight controller for the selected context, including the firewall admission of the
+      controller's managed service sockets, and the capacity of the hosts that hold the
+      context's Machines. It reports only what it observes: external services, a Registry or
+      LoadBalancer and managed services on other Machines are not checked, and apply checks
+      them itself. It takes no cluster selection and no SSH or trust options, because it
+      observes the controller and the local hosts only.
 
   Usage
     bootwright preflight infra [flags]
 
   Command flags
-      --clusters            Select comma-separated cluster names (default: all)
-      --dry-run             Limit work to the command's dry-run boundary
-      --trust-on-first-use  Observe unknown SSH keys without accepting them · default true
+      --dry-run  Limit work to the command's dry-run boundary
 
   Common flags
       --ascii       Use ASCII status markers
@@ -19,5 +23,5 @@
       --progress    Select progress animation (values: auto, always, never) · default auto
       --width       Set presentation width (0: automatic) · default 0
 
-  More detail
-    Use --help --detail full to include SSH overrides.
+  Examples
+    bootwright preflight infra --context lab --output json

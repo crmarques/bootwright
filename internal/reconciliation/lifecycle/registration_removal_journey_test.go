@@ -60,10 +60,6 @@ func (r *registeringRunner) Run(ctx context.Context, run lifecycle.RunRequest) (
 		if r.request.Registration != nil {
 			evidence.Registration = installation.RegistrationEvidence{Consumer: registeredConsumer, State: "owned"}
 		}
-		evidence.Update = installation.UpdateEvidence{State: "none"}
-		if r.request.Update != nil {
-			evidence.Update = installation.UpdateEvidence{Kernel: "5.14.0-611.5.1.el9_7.x86_64", Release: r.request.Update.Release, State: "complete"}
-		}
 	case "destroy":
 		if run.MaterialValues["unregister"] == "skip" {
 			break

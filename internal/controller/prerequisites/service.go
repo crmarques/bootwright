@@ -84,7 +84,7 @@ func (s Service) Check(ctx context.Context, request CheckRequest) (*Report, erro
 			}
 			code, remedy := "", ""
 			for _, row := range checks {
-				check := Check{ID: "listener-firewall", Required: row.Required, Observed: row.Observed, Status: row.Status, Scope: ContextScope}
+				check := Check{ID: "listener-firewall", Required: row.Required, Observed: row.Observed, Status: row.Status, Scope: ContextScope, Target: row.Target}
 				result.Checks = append(result.Checks, check)
 				s.report(ctx, result, checkEvent(ReadinessPhase, check))
 				if row.Status != "ready" && code != "preflight.failed" {
@@ -300,14 +300,14 @@ func checkEvent(phase string, check Check) ProgressEvent {
 }
 
 func unverified(id, required, scope string) Check {
-	return Check{id, required, "not verified", "not-ready", scope}
+	return Check{id, required, "not verified", "not-ready", scope, ""}
 }
 
 func readiness(id, required string, ready bool, scope string) Check {
 	if ready {
-		return Check{id, required, required, "ready", scope}
+		return Check{id, required, required, "ready", scope, ""}
 	}
-	return Check{id, required, "missing or unverified", "not-ready", scope}
+	return Check{id, required, "missing or unverified", "not-ready", scope, ""}
 }
 
 func setupCommand() string { return "run " + setupInvocation }

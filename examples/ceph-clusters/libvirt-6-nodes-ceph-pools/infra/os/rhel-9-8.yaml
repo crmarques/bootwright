@@ -9,9 +9,6 @@ spec:
     version: '9.8'
     architecture: x86_64
 
-  updates:
-    policy: none
-
   installer:
     anaconda:
       imageRef: rhel-9-8-boot

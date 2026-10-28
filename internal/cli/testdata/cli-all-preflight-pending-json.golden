@@ -1,0 +1,60 @@
+{
+  "schemaVersion": "v1alpha1",
+  "command": "preflight all",
+  "ok": false,
+  "exitCode": 1,
+  "result": {
+    "context": "synthetic",
+    "target": "all",
+    "checks": [
+      {
+        "id": "controller.host-packages",
+        "target": "controller",
+        "status": "pending",
+        "reason": "dry-run would check controller.host-packages on controller"
+      },
+      {
+        "id": "controller.listener-firewall",
+        "target": "DNSServer/dns 192.0.2.53:53/udp",
+        "status": "pending",
+        "reason": "dry-run would check controller.listener-firewall on DNSServer/dns 192.0.2.53:53/udp"
+      },
+      {
+        "id": "capacity.memory",
+        "target": "controller",
+        "status": "pending",
+        "reason": "dry-run would check capacity.memory on controller",
+        "capacity": {
+          "resource": "memory",
+          "unit": "bytes",
+          "required": 1024,
+          "available": 4096,
+          "reserve": 1024,
+          "deficit": 0,
+          "observed": true
+        }
+      },
+      {
+        "id": "resolution.api",
+        "target": "api.sno.example.test",
+        "status": "pending",
+        "reason": "dry-run would check resolution.api on api.sno.example.test"
+      }
+    ],
+    "summary": {
+      "passed": 0,
+      "failed": 0,
+      "unknown": 0,
+      "pending": 4
+    }
+  },
+  "diagnostics": [
+    {
+      "severity": "error",
+      "code": "preflight.unknown",
+      "message": "environment readiness is not proved; inspect the failed, unknown and pending checks",
+      "remediation": "resolve the reported prerequisites and repeat preflight all"
+    }
+  ],
+  "logs": []
+}

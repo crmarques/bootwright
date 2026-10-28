@@ -130,19 +130,14 @@ func lineDiff(want, got string) string {
 // The record published beside each installer image is read back only in its
 // exact canonical form, so its bytes are compared with their golden and read
 // back through DecodeMediaRecord for the image it names.
-// A record holds a release only when the image's .treeinfo names one, so both
-// forms have a golden.
 func TestMediaRecordMatchesItsGolden(t *testing.T) {
-	released := validEntry()
-	released.Release = MediaRelease{Family: "Red Hat Enterprise Linux", Version: "9.7", Arch: "x86_64"}
-	for golden, entry := range map[string]MediaEntry{"media-record": validEntry(), "media-record-release": released} {
-		data, err := EncodeMediaRecord(entry)
-		if err != nil {
-			t.Fatal(err)
-		}
-		matchesGolden(t, golden, data, true)
-		if read, err := DecodeMediaRecord(data, entry.Name); err != nil || read != entry {
-			t.Fatalf("the media record read back as %+v (%v)", read, err)
-		}
+	entry := validEntry()
+	data, err := EncodeMediaRecord(entry)
+	if err != nil {
+		t.Fatal(err)
+	}
+	matchesGolden(t, "media-record", data, true)
+	if read, err := DecodeMediaRecord(data, entry.Name); err != nil || read != entry {
+		t.Fatalf("the media record read back as %+v (%v)", read, err)
 	}
 }

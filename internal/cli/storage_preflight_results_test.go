@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/crmarques/bootwright/internal/diagnostics"
+	storagepreflight "github.com/crmarques/bootwright/internal/storage/preflight"
 )
 
 func TestStoragePreflightUnknownWritesOneCompleteJSONResult(t *testing.T) {
@@ -55,5 +56,23 @@ func TestClustersPreflightHumanFailureKeepsBothKindsOfChecksUnderOneDiagnostic(t
 	exit := New(Config{Out: &out, ErrOut: &errOut, Services: dispatchSpies(record)}).Run(context.Background(), []string{"preflight", "clusters", "--dry-run"})
 	if exit != 1 || !strings.HasPrefix(out.String(), "Cluster preflight  synthetic\n") || !strings.Contains(out.String(), "resolution.api") || !strings.Contains(out.String(), "capacity.memory") || strings.Count(errOut.String(), "preflight.unknown") != 1 {
 		t.Fatalf("%d %q %q", exit, out.String(), errOut.String())
+	}
+}
+
+func TestInfrastructureAndEnvironmentPreflightHumanFailureKeepEveryCheckUnderOneDiagnostic(t *testing.T) {
+	for _, row := range []struct {
+		args, title string
+		report      *storagepreflight.Report
+		code        string
+	}{
+		{"preflight infra", "Infrastructure preflight  synthetic\n", infraPreflightReport(true), "preflight.failed"},
+		{"preflight all --dry-run", "Environment preflight  synthetic\n", allPreflightReport(true), "preflight.unknown"},
+	} {
+		record := &dispatchRecord{result: commandResult{storagePreflight: row.report}, err: diagnostics.NewFailureWithRemediation(row.code, "readiness is not proved", "", "resolve the reported prerequisites")}
+		var out, errOut bytes.Buffer
+		exit := New(Config{Out: &out, ErrOut: &errOut, Services: dispatchSpies(record)}).Run(context.Background(), strings.Fields(row.args))
+		if exit != 1 || !strings.HasPrefix(out.String(), row.title) || strings.Count(out.String(), "\n  ") < len(row.report.Checks) || strings.Count(errOut.String(), row.code) != 1 {
+			t.Fatalf("%s: %d %q %q", row.args, exit, out.String(), errOut.String())
+		}
 	}
 }

@@ -484,8 +484,38 @@ render help and succeeds when neither `--input-dir` nor `--output-dir` is
 supplied. It uses the selected human, JSON or YAML help representation and
 performs no command work. The path flags
 otherwise follow their [relationships](cli/commands.md#flag-relationships-and-safeguards).
-What the artifact renderers write, and the Environment preflight families'
-dry-run and host-key detail, are [deferred](deferred/cli-access-and-rendering.md).
+
+With a path flag `render` writes `effective-state.yaml`, the canonical YAML
+`render effective` prints, into `--output-dir` instead of standard output and
+reports `inputDir` (context-free only), `outputDir`, `effectiveStatePath` and
+the `objects` count. Context-free it reads `--input-dir`, a file or directory
+as `validate -f` does; context-backed it reads the selected context's input and
+requires `--sensitive`. A compile failure writes nothing. An absent output
+directory is created, mode `0755`, or `0700` with `--sensitive`, and may be a
+link to a directory. Every later step works through one held handle on that
+directory, never a path walked again: the file is published atomically, a
+synced temporary file created exclusively beside it and renamed, mode `0644`,
+or `0600` with `--sensitive`, and replaces an earlier regular file of that name;
+the directory is synced and a failed sync is a failure. The effective state
+holds no secret value (`render effective` prints the same bytes), so
+`--sensitive` changes the modes and one check until the sensitive installer
+artifacts of [B52](milestones/m7.md#b52) exist: with it the output directory
+must be owned by the invoking account and not be group- or other-writable
+unless sticky. A path that exists as a link or any other non-regular file, an
+output path that is a file, an output directory that is or lies inside
+`--input-dir` (compared after resolving links) and an input that is the file
+render would write are `render.publish` refusals before any write. A failure
+after the directory was created removes the directories render made, if still
+empty, and names the operating-system error
+(`TestPublishRefusesWhatItWouldReplaceThroughALink`,
+`TestPublishRefusesASensitiveArtifactInADirectoryOthersCanChangeOrNotOwnedHere`,
+`TestPublishLeavesNothingBehindWhenTheContextEndsBeforeTheRename`,
+`TestRenderRefusesAnOutputInsideTheInput`,
+`TestRenderRefusesAnInputThatIsTheFileItWouldWrite`). `--clusters` and the installer and
+storage members of the manifest return with B52 and
+[B55](milestones/m7.md#b55). What those two renderers write, and the Environment
+preflight families' dry-run and host-key detail, are
+[deferred](deferred/cli-access-and-rendering.md).
 `render effective` is the read-only exception: text mode emits canonical
 effective YAML, and either structured mode places the complete canonical effective-state
 array in `result.effectiveState`, alongside admission `counts`; neither mode

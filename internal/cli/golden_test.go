@@ -27,6 +27,7 @@ import (
 	"github.com/crmarques/bootwright/internal/machine/power"
 	"github.com/crmarques/bootwright/internal/managedos"
 	"github.com/crmarques/bootwright/internal/managedos/media"
+	artifactrendering "github.com/crmarques/bootwright/internal/nativeartifacts/rendering"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
 	"github.com/crmarques/bootwright/internal/secrets"
 	"github.com/crmarques/bootwright/internal/secrets/custody"
@@ -461,7 +462,6 @@ func cliGoldens() []cliGolden {
 		boot := media.MediaRow{
 			Name: "rhel-9.8-x86_64-boot.iso", Size: 1045430272, SHA256: "e8b0f3a61d9c2e47b5a803f6d1c94e27a0b6d3f81c5e9a24d7b0e3f6a19c5d82",
 			Source: "file:///srv/images/rhel-9.8-x86_64-boot.iso", Added: "2026-09-20T08:15:00Z", Frozen: true, ReservedBy: []string{"lab-rhel", "lab-sno"},
-			Release: managedos.MediaRelease{Family: "Red Hat Enterprise Linux", Version: "9.8", Arch: "x86_64"},
 		}
 		dvd := media.MediaRow{
 			Name: "rhel-9.8-x86_64-dvd.iso", Size: 13123217408, SHA256: "4c1f8e2b9d7a6c5e3f0b1a2d4e6f8a0c2b4d6e8f0a1c3e5b7d9f1a3c5e7b9d0f",
@@ -594,6 +594,23 @@ func cliGoldens() []cliGolden {
 		{golden: "cli-clusters-preflight-pending-json", args: "preflight clusters --context synthetic --dry-run --output json", code: 1, record: func(r *dispatchRecord) {
 			r.result.storagePreflight = clustersPreflightReport(true)
 			r.err = diagnostics.NewFailureWithRemediation("preflight.unknown", "cluster readiness is not proved; inspect the failed, unknown and pending checks", "", "resolve the reported prerequisites and repeat preflight clusters")
+		}},
+
+		{golden: "cli-render", args: "render --input-dir inputs --output-dir artifacts", record: func(r *dispatchRecord) { r.result.rendered = renderedArtifacts(false) }},
+		{golden: "cli-render-json", args: "render --input-dir inputs --output-dir artifacts --output json", record: func(r *dispatchRecord) { r.result.rendered = renderedArtifacts(false) }},
+		{golden: "cli-render-context-json", args: "render --output-dir artifacts --sensitive --context synthetic --output json", record: func(r *dispatchRecord) { r.result.rendered = renderedArtifacts(true) }},
+
+		{golden: "cli-infra-preflight", args: "preflight infra --context synthetic", record: func(r *dispatchRecord) { r.result.storagePreflight = infraPreflightReport(false) }},
+		{golden: "cli-infra-preflight-json", args: "preflight infra --context synthetic --output json", record: func(r *dispatchRecord) { r.result.storagePreflight = infraPreflightReport(false) }},
+		{golden: "cli-infra-preflight-unready-json", args: "preflight infra --context synthetic --output json", code: 1, record: func(r *dispatchRecord) {
+			r.result.storagePreflight = infraPreflightReport(true)
+			r.err = diagnostics.NewFailureWithRemediation("preflight.failed", "infrastructure readiness is not proved; inspect the failed, unknown and pending checks", "", "resolve the reported prerequisites and repeat preflight infra")
+		}},
+		{golden: "cli-all-preflight", args: "preflight all --context synthetic", record: func(r *dispatchRecord) { r.result.storagePreflight = allPreflightReport(false) }},
+		{golden: "cli-all-preflight-json", args: "preflight all --context synthetic --output json", record: func(r *dispatchRecord) { r.result.storagePreflight = allPreflightReport(false) }},
+		{golden: "cli-all-preflight-pending-json", args: "preflight all --context synthetic --dry-run --output json", code: 1, record: func(r *dispatchRecord) {
+			r.result.storagePreflight = allPreflightReport(true)
+			r.err = diagnostics.NewFailureWithRemediation("preflight.unknown", "environment readiness is not proved; inspect the failed, unknown and pending checks", "", "resolve the reported prerequisites and repeat preflight all")
 		}},
 
 		// Controller reports: an unpresented dry-run plan in text and JSON, a
@@ -1293,7 +1310,7 @@ func TestEveryAvailableCommandHasAGolden(t *testing.T) {
 	}
 	jsonContracts := []string{
 		"add-ons list",
-		"validate", "preflight storage-cluster", "preflight clusters", "render effective", "status", "diff",
+		"validate", "preflight storage-cluster", "preflight clusters", "preflight infra", "preflight all", "render", "render effective", "status", "diff",
 		"secret check", "secret list", "secret info", "secret encryption status", "machine trust", "setup",
 		"machine list", "machine info", "machine start", "machine stop", "machine restart", "media list", "cluster list", "cluster info",
 	}
@@ -1388,6 +1405,40 @@ func clustersPreflightReport(pending bool) *storagepreflight.Report {
 	if pending {
 		report.Checks[1].Status, report.Checks[1].Reason = "pending", "dry-run would check capacity.memory on controller"
 		report.Summary = storagepreflight.Summary{Pending: 2}
+	}
+	return report
+}
+
+func renderedArtifacts(contextBacked bool) *artifactrendering.Result {
+	result := &artifactrendering.Result{InputPath: "/work/inputs", OutputDirectory: "/work/artifacts", EffectiveStatePath: "/work/artifacts/effective-state.yaml", Objects: 4}
+	if contextBacked {
+		result.InputPath = ""
+	}
+	return result
+}
+
+func infraPreflightReport(unready bool) *storagepreflight.Report {
+	report := &storagepreflight.Report{Context: "synthetic", Target: "infra", Checks: []storagepreflight.Check{
+		{ID: "controller.host-packages", Target: "controller", Status: "passed", Reason: "podman, nmstate"},
+		{ID: "controller.listener-firewall", Target: "DNSServer/dns 192.0.2.53:53/udp", Status: "passed", Reason: "DNSServer/dns 192.0.2.53:53/udp: open (interface virbr0, zone libvirt); the zone admits the socket"},
+		successfulStoragePreflight().Checks[0],
+	}, Summary: storagepreflight.Summary{Passed: 3}}
+	if unready {
+		report.Checks[1].Status, report.Checks[1].Reason, report.Checks[1].Next = "failed", "required DNSServer/dns inbound socket; observed DNSServer/dns 192.0.2.53:53/udp: closed (interface virbr0, zone libvirt)", "run bootwright apply --context synthetic --stage controller"
+		report.Summary = storagepreflight.Summary{Passed: 2, Failed: 1}
+	}
+	return report
+}
+
+func allPreflightReport(pending bool) *storagepreflight.Report {
+	report := &storagepreflight.Report{Context: "synthetic", Target: "all"}
+	report.Checks = append(append([]storagepreflight.Check{}, infraPreflightReport(false).Checks[:3]...), clustersPreflightReport(false).Checks[0])
+	report.Summary = storagepreflight.Summary{Passed: 4}
+	if pending {
+		for index := range report.Checks {
+			report.Checks[index].Status, report.Checks[index].Reason = "pending", "dry-run would check "+report.Checks[index].ID+" on "+report.Checks[index].Target
+		}
+		report.Summary = storagepreflight.Summary{Pending: 4}
 	}
 	return report
 }

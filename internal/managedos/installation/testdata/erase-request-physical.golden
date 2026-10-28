@@ -135,9 +135,9 @@
       "size": 0
     },
     "user": "bootwright",
-    "version": "os-install-anaconda-v19"
+    "version": "os-install-anaconda-v18"
   },
-  "installDigest": "664e3a1ac858fcbe6fd66d4aa5c03737dd4cfd542b396f8b46b790ac3d56ed1e",
+  "installDigest": "7f9591f522eacfbcf77122ae49834e9cb775e2d2b0ecfe93f3d71d39fae800a0",
   "network": "network --bootproto=static --device=enp1s0 --ip=198.51.100.41 --netmask=255.255.255.0 --hostname=metal-01.lab.example.test --onboot=on --activate --gateway=198.51.100.1 --nameserver=192.0.2.1\n",
   "targets": [
     {
@@ -147,5 +147,5 @@
       "wwn": "wwn-example"
     }
   ],
-  "version": "physical-erase-v4"
+  "version": "physical-erase-v3"
 }

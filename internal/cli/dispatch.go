@@ -13,6 +13,7 @@ import (
 	"github.com/crmarques/bootwright/internal/machine/inventory"
 	"github.com/crmarques/bootwright/internal/machine/power"
 	"github.com/crmarques/bootwright/internal/managedos/media"
+	artifactrendering "github.com/crmarques/bootwright/internal/nativeartifacts/rendering"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
 	"github.com/crmarques/bootwright/internal/secrets/custody"
 	"github.com/crmarques/bootwright/internal/secrets/encryption"
@@ -35,6 +36,7 @@ type commandResult struct {
 	current          *contexts.CurrentResult
 	deletion         *contexts.DeleteResult
 	effective        *compilation.EffectiveResult
+	rendered         *artifactrendering.Result
 	controller       *prerequisites.Report
 	rebind           *prerequisites.RebindResult
 	storagePreflight *storagepreflight.Report
@@ -104,7 +106,7 @@ func (s Services) invoke(ctx context.Context, path string, flags *pflag.FlagSet,
 	case "preflight clusters":
 		return s.invokeClustersPreflight(ctx, path, &values, args)
 	case "preflight infra", "preflight all":
-		return commandResult{}, s.invokeEnvironmentPreflight(ctx, path, &values, args)
+		return s.invokeEnvironmentPreflight(ctx, path, &values, args)
 	case "cluster list", "cluster info", "cluster keyring":
 		return s.invokeEnvironmentInspection(ctx, path, &values, args)
 	case "cluster rsh", "cluster exec":
@@ -118,7 +120,7 @@ func (s Services) invoke(ctx context.Context, path string, flags *pflag.FlagSet,
 	case "plan", "status", "diff", "apply", "destroy":
 		return s.invokeLifecycle(ctx, path, &values, args)
 	case "render":
-		return commandResult{}, s.invokeArtifacts(ctx, path, &values, args)
+		return s.invokeArtifacts(ctx, path, &values, args)
 	case "render installer":
 		return commandResult{}, s.invokeInstaller(ctx, path, &values, args)
 	case "render storage":

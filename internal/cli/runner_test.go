@@ -61,7 +61,7 @@ func TestHelpPrecedenceAndClosedSyntax(t *testing.T) {
 	}{
 		{"", 0}, {"help", 0}, {"completion", 0}, {"context", 2}, {"secret encryption", 2}, {"context --help", 0}, {"--help context init", 0}, {"help context init", 0},
 		{"context init --name= --help", 0}, {"context init -f a -f b --help", 0}, {"secret show --part invalid --help", 0}, {"status --output invalid --help", 0}, {"machine list --short --output json --help", 0}, {"machine list --help --output invalid", 0},
-		{"render --output json", 0}, {"render --clusters one --output json", 0}, {"render --output invalid", 2}, {"render --input-dir= --help", 0},
+		{"render --output json", 0}, {"render --sensitive --output json", 0}, {"render --output invalid", 2}, {"render --input-dir= --help", 0},
 		{"version --help=false", 0}, {"version --help=invalid", 2}, {"render effective --input-dir input", 2},
 		{"example --help", 2}, {"help example", 2}, {"container-cluster --help", 2}, {"help container-cluster", 2}, {"clu list", 2}, {"VERSION", 2}, {"--version", 2}, {"version --format json", 2}, {"__complete", 2}, {"__completeNoDesc", 2}, {"help __bootwright_complete", 2},
 		{"version --", 2}, {"version --help --bad", 2}, {"machine list --short invalid --help", 0}, {"machine list --short=invalid --help", 2}, {"version -vh", 2},

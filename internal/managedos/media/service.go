@@ -111,9 +111,6 @@ func (s Service) Add(ctx context.Context, request AddMediaRequest) (*MutationRes
 	if err != nil {
 		return nil, err
 	}
-	if entry.Release, err = managedos.ReadMediaRelease(stage, entry.Size); err != nil {
-		return nil, err
-	}
 	record, err := managedos.EncodeMediaRecord(entry)
 	if err != nil {
 		return nil, err
@@ -488,7 +485,7 @@ func (s Service) List(ctx context.Context, request ListMediaRequest) (*ListResul
 			}
 			row := MediaRow{
 				Name: image.Name, Size: image.Size, SHA256: image.SHA256, Source: image.Source, Added: image.Added,
-				Release: image.Release, Frozen: len(reserving) != 0, ReservedBy: reserving,
+				Frozen: len(reserving) != 0, ReservedBy: reserving,
 			}
 			if image.Failure != "" {
 				row.Verified, row.Failure = "failed", image.Failure

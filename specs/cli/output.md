@@ -248,7 +248,7 @@ Successful result objects have stable top-level fields:
 | `preflight infra`, `preflight clusters`, `preflight container-cluster`, `preflight storage-cluster`, `preflight add-ons`, `preflight all` | `context`, `target`, `checks`, `summary` |
 | `status` | `context`, `setupChecks`, `desired`, `clusters`, `storageClusters`, `shared`, `secrets`, `readiness`, `nextSteps`, `lifecycle`, `handoff`, `contradictions` |
 | `diff` | `context`, `operation`, `input`, `plan`, `observed`, `blocks`, `objects`, `summary` |
-| `render` | `inputDir`, `outputDir`, `effectiveStatePath`, `lockPath`, `inventoryPath`, `varsPath`, `installer`, `storage` |
+| `render` | optional `inputDir`, `outputDir`, `effectiveStatePath`, `objects` |
 | `render effective` | `counts`, `effectiveState`, and with `--origins` `origins` |
 | `render installer` | `clusters` |
 | `render storage` | `clusters` |
@@ -496,7 +496,7 @@ unchanged.
 Each `media` entry of `media list` orders its fields as follows:
 
 ```json
-{"name":"rhel-9.8-x86_64-dvd.iso","size":1045430272,"sha256":"e8b0f3a61d9c2e47b5a803f6d1c94e27a0b6d3f81c5e9a24d7b0e3f6a19c5d82","source":"file:///srv/images/rhel-9.8-x86_64-dvd.iso","added":"2026-09-20T08:15:00Z","release":{"family":"Red Hat Enterprise Linux","version":"9.8","arch":"x86_64"},"frozen":true,"reservedBy":["lab-rhel"],"verified":"ok","computed":"e8b0f3a61d9c2e47b5a803f6d1c94e27a0b6d3f81c5e9a24d7b0e3f6a19c5d82"}
+{"name":"rhel-9.8-x86_64-boot.iso","size":1045430272,"sha256":"e8b0f3a61d9c2e47b5a803f6d1c94e27a0b6d3f81c5e9a24d7b0e3f6a19c5d82","source":"file:///srv/images/rhel-9.8-x86_64-boot.iso","added":"2026-09-20T08:15:00Z","frozen":true,"reservedBy":["lab-rhel"],"verified":"ok","computed":"e8b0f3a61d9c2e47b5a803f6d1c94e27a0b6d3f81c5e9a24d7b0e3f6a19c5d82"}
 ```
 
 `name`, `frozen` and `reservedBy` are always present. `size`, `sha256`,
@@ -504,9 +504,7 @@ Each `media` entry of `media list` orders its fields as follows:
 [record](../managed-os.md#media-store) could be read, and are omitted
 otherwise; with `name` they are that record: its name, its size in bytes, its
 hexadecimal SHA-256, its credential-free origin and its time of publication.
-`release` is the record's `{family, version, arch}` read from the image's
-`.treeinfo` ([media store](../managed-os.md#media-store)), present only when
-the record holds one. `reservedBy` is the array of contexts that reserve the image, sorted and empty
+`reservedBy` is the array of contexts that reserve the image, sorted and empty
 when none does, and `frozen` is `true` exactly when it is not empty. `verified`
 is `mismatch` when the bytes the store holds no longer have the size the record
 states and, with `--checksums`, also when their computed digest differs from
@@ -520,9 +518,8 @@ computed one. `reason` names why an image failed, and is present exactly when
 whether it verified.
 
 The human table shows the columns `NAME`, `SIZE`, `DIGEST`, `COMPUTED` (only
-with `--checksums`), `ADDED`, `RELEASE`, `RESERVED` and `STATE`, with the digests
-prefixed by `sha256:`. `RELEASE` is the release's version and arch, such as
-`9.8 x86_64`, or `-`. `SIZE`, `DIGEST`, `ADDED` and `RELEASE` show `-` for an image
+with `--checksums`), `ADDED`, `RESERVED` and `STATE`, with the digests
+prefixed by `sha256:`. `SIZE`, `DIGEST` and `ADDED` show `-` for an image
 whose record could not be read. `RESERVED` joins the reserving contexts with
 commas, or shows `-`. `STATE` is `verified` for an `ok` image; `mismatch` for a
 `mismatch` one, which `media add` replaces or `media delete` removes; `failed`
@@ -545,6 +542,61 @@ adds `Retained`, and one that removes only such a stage shows its name and
 `Retained` alone. A presentation that cannot be written refuses the command
 before it prompts. The result of `media delete` names the image and, when its
 record could be read, the size and digest that record stated.
+
+## Infrastructure and environment preflight
+
+`preflight infra` reports, as one storage-preflight report with `target`
+`infra`, the readiness of the selected context's shared infrastructure from
+observation the other checks already make; it takes no `--clusters`, no
+`--trust-on-first-use` and no SSH overrides, because it observes the controller
+and its local hosts only. Its checks are:
+
+- every check `preflight controller` reports for the selected context, as
+  `controller.<check>` with target `controller`: `ready` is `passed`,
+  `not-ready` is `failed` and any other status is `unknown`, and a failed or
+  unknown one carries the command that settles it in `next`. The context's
+  `listener-firewall` rows are the services' checks: the runtime firewall
+  admission of each non-loopback socket of a managed Proxy, DNSServer, NTPServer
+  or ArtifactServer the controller hosts, and of each local emulated
+  management-controller socket, each with the typed target
+  `<Kind>/<name> <address>:<port>/<protocol>` so two sockets of one object stay
+  two checks;
+- the `capacity.*` checks of the host capacity budget for every Machine the
+  context's substrates project, the same checks `preflight container-cluster`
+  and `preflight storage-cluster` report for the hosts of their nodes;
+
+It reports only what it observes. Observed: the controller's checks, including
+the sockets of the managed Proxy, DNSServer, NTPServer and ArtifactServer the
+controller hosts and of local emulated management controllers, and the capacity
+of the hosts that hold Machines. Not observed, and so neither passed nor listed:
+an external service, a Registry or LoadBalancer, and a managed service placed on
+a Machine other than the controller. `apply` checks those at its own effect
+boundary, as it does whether a service's port is free and what an artifact
+server's host holds; no preflight check probes them. With `--dry-run` no
+process runs: the controller checks collapse into one pending
+`controller.readiness` check and every capacity check is pending.
+
+`preflight all` reports, with `target` `all`, the checks of `preflight infra`,
+which include those of `preflight controller`, and of `preflight clusters` with
+no cluster selection. The add-on checks of `preflight add-ons` join
+it with [B770](../milestones/backlog.md#b770). `preflight infra` and
+`preflight clusters` merge, and the two reports of each follow the rules of
+[`preflight clusters`](#json-output): one list in target and check order; a check both
+report once, at its worse status, the infrastructure one kept at equal
+severity; the summary counts the merged list; one diagnostic,
+`preflight.failed` or `preflight.unknown`, naming the command in its
+remediation. Errors come in this order, each the command's only output: the
+selected context, its effective graph, and for `preflight all` the SSH rule
+below, all before any check runs; then an error that stops a set of checks
+before it reports, which stops the other sets, and when several stop, the first
+in the order controller checks, capacity checks, cluster checks is the one
+reported; a controller check that is not ready is its rows, and one that errors
+with every row ready is the error. `--trust-on-first-use` and the SSH overrides
+reach the CephCluster checks alone, with the same `cli.usage` refusal, given
+before any check runs, when no CephCluster is declared
+(`TestInfrastructureReportsTheControllerAndCapacityChecksAndNothingItDoesNotObserve`,
+`TestAllRefusesSSHOverridesNoCephClusterReachesBeforeAnyCheckRuns`,
+`TestAllMergesInfrastructureAndClusterChecks`).
 
 ## Cluster discovery
 
@@ -908,6 +960,7 @@ it to a variable.
 | `api.unrealized` | A warning: valid authored state declares something this build admits but no capability realizes, so `plan` refuses it with `lifecycle.unsupported`; it names the path and the tracking item ([admitted but unrealized](../api.md#admitted-but-unrealized)). |
 | `cli.usage` | Arguments or flags do not match this contract. |
 | `cli.not-implemented` | The command is defined but its application use case is not available. |
+| `render.publish` | A rendered artifact could not be safely published: its directory or file is unusable, exists as a non-regular file, or overlaps the input. |
 | `runtime.encode` | A trustworthy result could not be encoded. |
 | `runtime.log` | A required private operation log could not be safely maintained. |
 | `runtime.interrupted` | An operating-system interrupt canceled the command. |

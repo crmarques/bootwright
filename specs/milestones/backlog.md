@@ -267,13 +267,11 @@ Alias cell.
 | [B798](#b798) | new, 2026-10-23 (M3 verification) | defect | Verification tooling | The full Ansible unit gate selects its intended worker mode explicitly | Pre-existing tooling behavior outside the requested product change |
 | [B799](#b799) | new, 2026-10-23 (M3 verification) | defect | Workspace | Setup interruption retries identify any remaining setup-lock holder | Pre-existing intermittent refusal; its cause is unproved |
 | [B857](#b857) | new, 2026-10-27 (lane I) | enabling | Desired state | The audit 5.7 operator tasks run on the reshaped API | B814's paper check was not run before X171 |
-| [B858](#b858) | new, 2026-10-27 (lane T) | product | CLI | `preflight infra`, `preflight all` and `render` with a path flag are defined and run | D188 ran `preflight clusters` as the union of two existing checks; these have no definition |
 | [B867](#b867) | new, 2026-10-27 (lane R review) | safety | Storage | The Ceph incarnation rule is confirmed on a live cluster | The monitor map's creation time was chosen without a live run |
 | [B872](#b872) | new, 2026-10-28 (lane V1) | defect | Storage | An NVMe-oF service with no pool refuses at plan | Pre-existing gap found by lane V1 |
 | [B873](#b873) | new, 2026-10-28 (lane V1) | defect | Storage | The plan builder's replica refusal names no distribution | Pre-existing wording found by lane V1 |
 | [B874](#b874) | new, 2026-10-28 (lane W2) | defect | Verification tooling | The Ceph native worker launcher test is stable in parallel | Flake seen by lane W2 |
 | [B875](#b875) | new, 2026-10-28 (lane V3) | defect | Verification tooling | The enrollment observation test does not depend on worker order | Flake seen by lane V3 |
-| [B877](#b877) | new, 2026-10-28 (D190) | product | Managed OS, with Secrets | A managed registration with a Satellite or Capsule, and an update within the release from its content | D190 authorizes only the hosted subscription service; Satellite registration needs its trust, ownership and removal defined |
 
 ### B82
 
@@ -2942,23 +2940,6 @@ questions and wrong assumptions. **Exit evidence:** the results in a dated
 record under `audits/`, and an item for each shape or remedy the run shows
 misleads.
 
-### B858
-
-**Owner:** CLI. **Kind:** product. **Requires:** none. **Definition:** Needs
-definition. [`bootwright preflight infra`, `preflight all` and `render` with a
-path flag](../cli/commands.md#inspect-and-lifecycle-commands) are recognized,
-answer `cli.not-implemented` and have no definition beyond a row each.
-[B825](delivered.md#x177--audit-lane-t-inherited-flags-and-cluster-preflight) closed with `preflight clusters` running as the union of
-`preflight container-cluster` and `preflight storage-cluster`
-([D188](#d188)); `preflight add-ons` stays with [B770](#b770).
-**Outcome:** the owner defines the checks of `preflight infra` (the
-infrastructure-services kinds and the substrates), of `preflight all` (every
-family's checks, with their ordering and one combined report) and of `render`
-with a path flag (the artifacts it writes and its refusals), and each runs
-with its refusals, diagnostics and goldens. **Exit evidence:** the three
-removed from the unavailable list and `wireStubs`, the report contracts in
-[cli/output.md](../cli/output.md), and the tests.
-
 ### B867
 
 **Owner:** Storage. **Kind:** safety. **Requires:** a live Ceph cluster run.
@@ -3005,19 +2986,6 @@ evidence:** repeated parallel runs pass.
 observer's addresses in a fixed order and failed under load (lane V3,
 2026-10-28). **Outcome:** the test compares the observed set, not its order.
 **Exit evidence:** repeated `-race` runs under load pass.
-
-### B877
-
-**Owner:** Managed OS, with Secrets. **Kind:** product. **Requires:** B876.
-**Definition:** Needs definition: the Satellite registration route, the
-trust of `spec.rhsm.satellite.trustBundleRef`, the consumer's ownership and
-removal, and how `contentBaseURL` and the Satellite's content views meet the
-[update within release](../managed-os.md#update-within-release). Today an
-Entitlement selecting `spec.rhsm.satellite` refuses before registration, as
-the [refusal table](../managed-os.md#refusal-table) states. **Outcome:** a
-managed registration with a Satellite or Capsule, updated within the declared
-release from its content. **Exit evidence:** ownership, replay and removal
-tests and an operator-run rehearsal against a Satellite.
 
 ## Audit remediation (2026-10-26)
 
@@ -3089,7 +3057,7 @@ also updates this table.
 | 25 | V1 Ceph replica defaults and derived names (B859, B860, B861) | merged (X185) |
 | 26 | V2 Test and CLI defects (B862, B863, B865, B866) | merged (X186) |
 | 27 | V3 Known-hosts and claim kinds (B869, B870, B871, B868) | merged (X188) |
-| 28 | W1 Preflight infra and all, render to a path (B858) | not started |
+| 28 | W1 Preflight infra and all, render to a path (B858) | merged (X189) |
 | 29 | W2 Adapter warnings (B864) | merged (X187) |
 
 To continue, take the first row not `merged`. If its branch exists, resume it:
@@ -5094,33 +5062,10 @@ under `/run` ([B389](delivered.md#x176--audit-lane-o-store-bounds-and-run-scratc
 items): `preflight infra` runs the controller check and the
 infrastructure-services checks, `preflight all` runs controller,
 infrastructure and clusters as one report, and `render` with a path flag
-writes its output there ([B858](#b858)). An adapter reports warnings in an
+writes its output there ([B858](delivered.md#x189--audit-lane-w1-preflight-infra-and-all-render-to-a-path)). An adapter reports warnings in an
 optional `warnings` member of its lifecycle result, carried into the run's
 diagnostics with registered codes ([B864](delivered.md#x187--audit-lane-w2-adapter-warnings)). A placement whose pinned
 host key is one of the controller's own sshd host keys, read from `/etc/ssh`,
 must use an address the controller Machine declares ([B868](delivered.md#x188--audit-lane-v3-known-hosts-entries-claim-kinds-and-the-controller-host-key)). No
 operation registered by an earlier build is live, so the one-entry
 known-hosts rule holds for every run with no compatibility path.
-
-### D190
-
-**owner** (2026-10-28, the owner's request and answers about updates within
-the declared release). The request: "when bootwright provision a rhel
-machine, does it update the package for that target rhel version? for
-instance, if user declare it want a machine with rhel 9.8, bootwright must
-install that OS version with the media/iso/qcow provided that must run a
-update command with distro package manage to update all package version, but
-keeping machine in the specificed version (9.8) ... handle all variation
-scenarios, with subscriptions, all kind of image medias, internal satellite,
-etc...". After the session's plan the owner answered "Proceed with this
-session's recommendations", accepting: (1) updates are on by default
-(`spec.updates.policy: withinRelease`) and refuse when the profile declares no
-update source; (2) `spec.os.version` is always an exact `<major>.<minor>`,
-never major-only; (3) `withinRelease` beside TPM2 disk-encryption `pcrIds`
-holding 4, 8 or 9 refuses at admission. This authorizes
-[B876](m1.md#b876) as slice X189 on M1 alone, out of sequence; the contract
-is [update within release](../managed-os.md#update-within-release). It closes
-the pre-existing defect that no code reads `spec.os.version`. Satellite
-registration is not authorized and is parked as [B877](#b877). The operator
-chooses repository IDs and update streams; no rule pairs a minor with a
-stream ([D163](#d163)).

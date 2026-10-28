@@ -5,7 +5,6 @@ import (
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
 	machineref "github.com/crmarques/bootwright/internal/machine"
-	"github.com/crmarques/bootwright/internal/managedos"
 	"github.com/crmarques/bootwright/internal/reconciliation"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
 )
@@ -33,7 +32,6 @@ type MediaRecord struct {
 	SHA256         string
 	Size, Observed int64
 	Failure        string
-	Release        managedos.MediaRelease
 }
 
 // MediaRecords reads every image the host media store publishes, keyed by its
