@@ -58,8 +58,10 @@ Once per host, from the repository root:
 5. Media, once per host, for the RHEL cases:
 
    ```sh
-   ./bin/bootwright media add --name rhel-9.8-x86_64-boot.iso --from-file /path/to/rhel-9.8-x86_64-boot.iso
-   ./bin/bootwright media add --name rhel-9.8-x86_64-dvd.iso --from-file /path/to/rhel-9.8-x86_64-dvd.iso
+   BOOT_ISO='' # Absolute path to your RHEL 9.8 x86_64 boot ISO.
+   DVD_ISO=''  # Absolute path to your RHEL 9.8 x86_64 DVD ISO.
+   ./bin/bootwright media add --name rhel-9.8-x86_64-boot.iso --from-file "${BOOT_ISO:?Set BOOT_ISO to the boot ISO path}"
+   ./bin/bootwright media add --name rhel-9.8-x86_64-dvd.iso --from-file "${DVD_ISO:?Set DVD_ISO to the DVD ISO path}"
    ./bin/bootwright media list --checksums
    ```
 
@@ -77,22 +79,46 @@ Once per host, from the repository root:
 ## Render a case
 
 ```sh
-e2e/render.sh <case> [--values FILE]... [--set KEY=VALUE]... [--out-dir DIR]
+CASE=lab-rhel
+IN="$HOME/bootwright-e2e/$CASE"
+e2e/render.sh "$CASE" --out-dir "$IN"
+./bin/bootwright validate -f "$IN"
 ```
 
-The case's `values.yaml` describes every input; `--set` and `--values`
-override it in order. The output defaults to `~/bootwright-e2e/<case>`. A
+The case's `values.yaml` describes every input; its runbook gives the complete
+commands for each toggle. To use a local values file, set its path and render:
+
+```sh
+VALUES_FILE='' # Absolute path to your local values YAML file.
+e2e/render.sh "$CASE" --values "${VALUES_FILE:?Set VALUES_FILE to your values file}" --out-dir "$IN"
+./bin/bootwright validate -f "$IN"
+```
+
+`--set` and `--values` override defaults in order. The output defaults to
+`~/bootwright-e2e/` followed by the case name. A
 render replaces only an empty directory or an earlier render, and never writes
 inside the repository. A two-context case renders one input directory per
-context below the output. Check each with
-`./bin/bootwright validate -f <dir>`.
+context below the output; use its runbook's validation commands for those
+subdirectories.
 
 Context import freezes the rendered input. To change it, destroy, render
-again, then run `context update --name <context> --input-dir <dir>`.
+again, then update the retained context using its name and rendered input:
+
+```sh
+C=lab-rhel
+./bin/bootwright context update --name "$C" --input-dir "$IN"
+```
 
 ## Conventions
 
-Runbooks run from the repository root with `./bin/bootwright` and set `C` to
+Run shell blocks in Bash from the repository root, in the runbook's order.
+Edit only the variable assignments marked for your run or observed values;
+an empty required variable refuses at the command that needs it. Keep the
+same shell so later blocks retain those variables, and run only the sections
+for the toggles you enabled. Credentials requested by `secret set` are entered
+at its hidden prompt, never in a shell variable or command line.
+
+Runbooks use `./bin/bootwright` and set `C` to
 the context name, `IN` to the rendered directory and `A` to the host address.
 Every mutation shows its plan and asks for confirmation unless it is given
 `--yes`.
@@ -107,7 +133,13 @@ An interrupted destroy continues with `destroy`, never `apply`.
 
 Destroy lists the guests to stop first, and under `Stop after online cleanup`
 those it still needs running. When it refuses or pauses, stop the guests it
-names and repeat it. With `--yes` or without a terminal, `--authorize` takes
-the plan digest it prints (`data-loss=<digest>`). Verify the removal before
-`context delete --purge`, which deletes only local state and Secrets. Media
-stays reserved until no context uses it.
+names and repeat it. For a plan that requires data-loss authorization, an
+invocation with `--yes` or without a terminal needs the printed plan digest:
+
+```sh
+DATA_LOSS_DIGEST='' # Copy the digest from the reviewed removal plan.
+./bin/bootwright destroy --context "$C" --authorize "data-loss=${DATA_LOSS_DIGEST:?Set DATA_LOSS_DIGEST from the removal plan}" --yes
+```
+
+Verify removal before deleting the context, which deletes only local state
+and Secrets. Media stays reserved until no context uses it.

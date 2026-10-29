@@ -96,7 +96,8 @@ rule does not narrow a broader grant the zone already holds.
 
 ```sh
 e2e/render.sh lab-network-variants
-C=lab-network-variants; IN=~/bootwright-e2e/lab-network-variants
+C="lab-network-variants"
+IN="$HOME/bootwright-e2e/lab-network-variants"
 A=$(ip -4 route get 192.0.2.1 | sed -n 's/.* src \([0-9.]*\).*/\1/p')
 ./bin/bootwright validate -f "$IN"
 ./bin/bootwright context init --name "$C" --input-dir "$IN"
@@ -109,7 +110,7 @@ A=$(ip -4 route get 192.0.2.1 | sed -n 's/.* src \([0-9.]*\).*/\1/p')
 ```
 
 The plan shows the group `converge-network` and, for each Machine, the impacts
-`configure-network <machine>` and `restart <machine>`. The services answer on
+`configure-network` and `restart`, each followed by the Machine name. The services answer on
 the host address `A`:
 
 ```sh
@@ -162,8 +163,8 @@ its guest-only VLAN, the default and 192.0.2.0/24 routes, the search
 
 B326, the reboot. The convergence power-cycled each Machine after the marker
 was written, so the marker's `bootId` differs from the running one while the
-declared network is up; `diff --observe` then reads every Machine realized,
-and `machine info` shows the lifecycle evidence `network` and `networkReboot`
+declared network is up; `./bin/bootwright diff --context "$C" --observe` then reads every Machine realized,
+and the Machine info command shows the lifecycle evidence `network` and `networkReboot`
 true:
 
 ```sh
@@ -176,9 +177,10 @@ true:
 Interruptions, during the first apply of Run (B74 and B326):
 
 - Interrupted install (B74): press Ctrl-C once during an installer wait, then
-  repeat `apply --context "$C" --yes`. The install replays and completes.
+  repeat `./bin/bootwright apply --context "$C" --yes`. The install replays and completes.
 - Interrupted convergence (B326): press Ctrl-C once while progress shows
-  `converge-network` for a Machine, then run `status` and repeat `apply`. The
+  `converge-network` for a Machine, then run `./bin/bootwright status --context "$C"` and repeat
+  `./bin/bootwright apply --context "$C" --yes`. The
   status shows the convergence unfinished, never realized, and the apply
   converges it; repeat the final-network and reboot checks of Verify.
 
@@ -199,7 +201,7 @@ libvirt bridge qualifies only active-backup bonding, and bond bond0 of nv-bond
 declares mode 802.3ad". The other modes are qualified on physical hosts
 ([B78](../../specs/milestones/m1.md#b78)).
 
-Drift (B326). Lower the MTU of one guest-only VLAN. `diff --observe` reads
+Drift (B326). Lower the MTU of one guest-only VLAN. `./bin/bootwright diff --context "$C" --observe` reads
 `Machine/nv-bond` partial and names the block, not the field, so read the
 running MTU from the guest; restoring 1400 reads realized. Observation
 repairs nothing:
@@ -223,12 +225,15 @@ power-on, before the OS boots:
 
 Optional bond failover, not part of the acceptance: take the first port's link
 down on the host and record whether `/proc/net/bonding/bond0` shows `nic1`
-active and the Machine still answers `machine exec`. `<MAC of nic0>` is the
-first interface `domiflist` lists:
+active and the Machine still answers the exec command. Set the MAC from the first interface in the earlier `domiflist` output:
 
 ```sh
-virsh --connect qemu:///system domif-setlink bootwright-lab-network-variants-nv-bond <MAC of nic0> down
+# Copy nic0's MAC from domiflist; do not use another interface.
+NIC0_MAC=''
+: "${NIC0_MAC:?Set NIC0_MAC from domiflist}"
+virsh --connect qemu:///system domif-setlink bootwright-lab-network-variants-nv-bond "${NIC0_MAC:?Set NIC0_MAC from domiflist}" down
 ./bin/bootwright machine exec --context "$C" --name nv-bond -- cat /proc/net/bonding/bond0
+virsh --connect qemu:///system domif-setlink bootwright-lab-network-variants-nv-bond "${NIC0_MAC:?Set NIC0_MAC from domiflist}" up
 ```
 
 Record each result as a row of the [acceptance ledger](../../docs/acceptance.md):
@@ -246,7 +251,7 @@ under the context name `nv-cutoff`:
 
 ```sh
 e2e/render.sh lab-network-variants --set name=nv-cutoff --set single=true --set cutoff=true --out-dir ~/bootwright-e2e/lab-network-variants-cutoff
-R=nv-cutoff
+R="nv-cutoff"
 ./bin/bootwright validate -f ~/bootwright-e2e/lab-network-variants-cutoff
 ./bin/bootwright context init --name "$R" --input-dir ~/bootwright-e2e/lab-network-variants-cutoff
 ./bin/bootwright secret generate --context "$R"
@@ -259,7 +264,7 @@ R=nv-cutoff
 The last apply fails after NetworkManager's rollback, with partial evidence
 and the remedy "the declared network of Machine/nv-bond cannot change under
 this apply: run bootwright destroy, which erases the Machines this context
-installed". Record the evidence, then repeat `apply`: it fails the same way.
+installed". Record the evidence, then repeat `./bin/bootwright apply --context "$R" --yes`: it fails the same way.
 Recovery is destroy only. Render the corrected declaration, show that it
 converges, and clean up:
 

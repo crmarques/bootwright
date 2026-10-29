@@ -22,7 +22,7 @@ item run. `security.fips` and `security.tpm2` only rehearse
 
 | `--set` | Default | Effect | Needs |
 | --- | --- | --- | --- |
-| `security.fips=true` | `false` | FIPS cluster; the fleet and cluster keys become ECDSA P-256 | a FIPS-mode controller (`cat /proc/sys/crypto/fips_enabled` prints `1`); otherwise `plan` and `preflight controller` refuse `controller.unsupported` |
+| `security.fips=true` | `false` | FIPS cluster; the fleet and cluster keys become ECDSA P-256 | a FIPS-mode controller (`cat /proc/sys/crypto/fips_enabled` prints `1`); otherwise `./bin/bootwright plan --context "$C"` and `./bin/bootwright preflight controller --context "$C"` refuse `controller.unsupported` |
 | `security.tpm2=true` | `false` | TPM2-bound LUKS on the node's installation disk | nothing; the profile already carries `tpm: {}` |
 | `addons.nmstate=true` | `false` | binding `lab-sno-nmstate`: Kubernetes NMState operator and instance | `addons.subscriptions.nmstate.channel` and `.startingCSV` |
 | `addons.metallb=true` | `false` | binding `lab-sno-metallb`: MetalLB operator, instance and layer 2 pool `services` | `addons.subscriptions.metallb.channel` and `.startingCSV` |
@@ -41,7 +41,7 @@ a single node has no virtual IPs and MetalLB never serves the API or ingress.
   `~/pull-secret.json` with mode `0600`, `jq`, and an `oc` matching
   `openshift.version` installed independently of Bootwright. There is no RHEL
   media: the agent ISO is built from the release.
-- Capacity, which the apply gate and `preflight container-cluster` count
+- Capacity, which the apply gate and `./bin/bootwright preflight container-cluster --context "$C"` count
   ([capacity admission](../../specs/substrates.md#capacity-admission)): the
   guest plus the provider's `capacityReserve` (1 CPU, 2 GiB, 10 GiB) need 9
   host CPUs not reserved by other libvirt domains, 18 GiB of `MemAvailable` in
@@ -59,15 +59,19 @@ a single node has no virtual IPs and MetalLB never serves the API or ingress.
   its history and that `make check` passed on it:
 
   ```sh
-  B=$(./bin/bootwright version -o json | jq -r .result.commit)
+  B="$(./bin/bootwright version -o json | jq -r .result.commit)"
   ./bin/bootwright version
   git log --oneline -E --grep='^Refs:.*X11[1-5]' "$B"
   git log --oneline -E --grep='^Refs:.*X13[48]' "$B"
   ```
 
-  `version` reads `Source clean`; the first listing's `Refs:` lines name each
-  of X111 to X115 (`git log -1 --format=%B <sha>` shows them), and the second
-  X134 and X138.
+  `./bin/bootwright version` reads `Source clean`; the first listing's `Refs:` lines name each
+  of X111 to X115 (the full commit-message listing below shows them), and the second
+  X134 and X138:
+
+  ```sh
+  git log --format=%B -E --grep='^Refs:.*X11[1-5]' "$B"
+  ```
 - Earlier builds (B61): `./bin/bootwright context list` names every context
   and the build that registered each unfinished operation. Before installing
   this build, destroy every lab-sno context an earlier build applied, with the
@@ -96,14 +100,52 @@ of [Verify](#verify)), and use them for the add-on runs.
 
 ## Run
 
+Choose the feature flags here. Leave both add-ons off for B61. For an enabled
+add-on, copy its channel and CSV from Verify step 2 for the same release.
+These are editable scalar values; keep boolean values `true` or `false`:
+
 ```sh
-e2e/render.sh lab-sno                      # add --set toggles for the run
-C=lab-sno; IN=~/bootwright-e2e/lab-sno
-A=$(ip -4 route get 192.0.2.1 | sed -n 's/.* src \([0-9.]*\).*/\1/p')
+FIPS_ENABLED="false"
+PULL_SECRET_FILE="$HOME/pull-secret.json"
+TPM2_ENABLED="false"
+NMSTATE_ENABLED="false"
+METALLB_ENABLED="false"
+NMSTATE_CHANNEL=""
+NMSTATE_CSV=""
+METALLB_CHANNEL=""
+METALLB_CSV=""
+```
+
+Render the selected flags (also reuse this block after changing them):
+
+```sh
+if [ "$NMSTATE_ENABLED" = "true" ]; then
+    : "${NMSTATE_CHANNEL:?Set NMSTATE_CHANNEL from the same-release package manifest}" \
+      "${NMSTATE_CSV:?Set NMSTATE_CSV to currentCSV for the selected channel}"
+fi &&
+if [ "$METALLB_ENABLED" = "true" ]; then
+    : "${METALLB_CHANNEL:?Set METALLB_CHANNEL from the same-release package manifest}" \
+      "${METALLB_CSV:?Set METALLB_CSV to currentCSV for the selected channel}"
+fi &&
+e2e/render.sh lab-sno \
+  --set "security.fips=$FIPS_ENABLED" --set "security.tpm2=$TPM2_ENABLED" \
+  --set "addons.nmstate=$NMSTATE_ENABLED" --set "addons.metallb=$METALLB_ENABLED" \
+  --set "addons.subscriptions.nmstate.channel=$NMSTATE_CHANNEL" \
+  --set "addons.subscriptions.nmstate.startingCSV=$NMSTATE_CSV" \
+  --set "addons.subscriptions.metallb.channel=$METALLB_CHANNEL" \
+  --set "addons.subscriptions.metallb.startingCSV=$METALLB_CSV"
+```
+
+Continue after rendering with context import and the staged apply:
+
+```sh
+C="lab-sno"
+IN="$HOME/bootwright-e2e/lab-sno"
+A="$(ip -4 route get 192.0.2.1 | sed -n 's/.* src \([0-9.]*\).*/\1/p')"
 ./bin/bootwright validate -f "$IN"
 ./bin/bootwright setup --yes
 ./bin/bootwright context init --name "$C" --input-dir "$IN"
-./bin/bootwright secret set --context "$C" --name openshift-pull-secret --value-file ~/pull-secret.json
+./bin/bootwright secret set --context "$C" --name openshift-pull-secret --value-file "${PULL_SECRET_FILE:?Set PULL_SECRET_FILE to the private pull-secret JSON file}"
 ./bin/bootwright secret generate --context "$C"
 ./bin/bootwright secret check --context "$C"
 ./bin/bootwright plan --context "$C"
@@ -140,11 +182,17 @@ the record or the route to add; it must pass before the last apply. Then:
 ```
 
 Allow over an hour: image build, boot, bootstrap wait, installation wait,
-release. Record each phase's duration as the progress lines print it (`status
---detail full` repeats them) and the release installed. The apply names a
+release. Record each phase's duration as the progress lines print it (`./bin/bootwright status --detail full --context "$C"` repeats them) and the release installed. The apply names a
 private operation-log directory before effects start; keep it as evidence.
 
 ## Verify
+
+These editable namespace values come from the rendered add-on bindings:
+
+```sh
+NMSTATE_NAMESPACE="openshift-nmstate"
+METALLB_NAMESPACE="metallb-system"
+```
 
 1. State and access:
 
@@ -155,13 +203,15 @@ private operation-log directory before effects start; keep it as evidence.
    ./bin/bootwright cluster info --context "$C" --name sno
    ./bin/bootwright diff --context "$C" --observe
    ./bin/bootwright apply --context "$C" --yes      # settles: boots nothing, contacts no cluster
-   umask 077; KUBECONFIG=$(mktemp); export KUBECONFIG
+   umask 077
+   KUBECONFIG="$(mktemp)"
+   export KUBECONFIG
    ./bin/bootwright cluster kubeconfig --context "$C" --name sno > "$KUBECONFIG"
    oc version; oc get nodes; oc get clusterversion; oc get co
    ```
 
    `oc` is the independent client. B61 wants one Ready node, the release equal
-   to `openshift.version` and a clean `diff --observe`.
+   to `openshift.version` and a clean `./bin/bootwright diff --observe --context "$C"`.
 
 2. First-run facts, recorded for B61 and B462: the `openshift-client-linux`
    archive Bootwright fetched carried the release stamp (the controller stage
@@ -186,50 +236,50 @@ private operation-log directory before effects start; keep it as evidence.
    | nmstate | `oc get csv,installplan,subscription -n openshift-nmstate`: the CSV equals `startingCSV`, one InstallPlan approved; `oc get nmstate`; `oc get deploy -n openshift-nmstate` (the webhook Deployment's name); `oc get nns` |
    | metallb | `oc get csv,installplan -n metallb-system`; `oc get metallb,ipaddresspool,l2advertisement -n metallb-system`; the pool `services` holds eight addresses |
 
-   For B755 and B757 also record `diff --observe` reporting no drift, the
+   For B755 and B757 also record `./bin/bootwright diff --observe --context "$C"` reporting no drift, the
    build commit, the release minor, the channel and `startingCSV`, and the
    phase durations. The checks below re-verify the facts each section lists;
    they are this runbook's reading of those facts, unverified on a cluster
    until the first run records them.
 
-   B755 (`<ns>` is `openshift-nmstate`):
+   B755 (the rendered namespace is `openshift-nmstate`):
 
    - `--ignore-not-found` classifies only NotFound:
      `oc get nmstate no-such-instance --ignore-not-found; echo $?` prints no
      object and `0`, while `oc get no-such-kind x --ignore-not-found; echo $?`
      fails with a nonzero status (a missing kind is not NotFound).
    - The InstallPlan's owner reference:
-     `oc get installplan -n <ns> -o jsonpath='{.items[*].metadata.ownerReferences[*].kind}'`
+     `oc get installplan -n "$NMSTATE_NAMESPACE" -o jsonpath='{.items[*].metadata.ownerReferences[*].kind}'`
      names `Subscription`.
-   - `oc create --field-manager` records the manager:
-     `oc get subscription -n <ns> -o yaml --show-managed-fields` shows
+   - Creation with an explicit field manager records the manager:
+     `oc get subscription -n "$NMSTATE_NAMESPACE" -o yaml --show-managed-fields` shows
      Bootwright's manager in `metadata.managedFields`.
    - Whether `ResolutionFailed` can be transient on a Subscription of a ready
      catalog: during the approval wait, repeat
-     `oc get subscription -n <ns> -o jsonpath='{range .items[*].status.conditions[*]}{.type}={.status}{"\n"}{end}'`
+     `oc get subscription -n "$NMSTATE_NAMESPACE" -o jsonpath='{range .items[*].status.conditions[*]}{.type}={.status}{"\n"}{end}'`
      and record whether `ResolutionFailed=True` ever appears and then clears.
-   - The webhook Deployment's name: `oc get deploy -n <ns>` lists
+   - The webhook Deployment's name: `oc get deploy -n "$NMSTATE_NAMESPACE"` lists
      `nmstate-webhook`, the name the readiness check uses.
 
-   B757 (`<ns>` is `metallb-system`):
+   B757 (the rendered namespace is `metallb-system`):
 
    - The InstallPlan lists only the MetalLB CSV:
-     `oc get installplan -n <ns> -o jsonpath='{.items[*].spec.clusterServiceVersionNames}'`.
+     `oc get installplan -n "$METALLB_NAMESPACE" -o jsonpath='{.items[*].spec.clusterServiceVersionNames}'`.
    - The installed CSV supports all namespaces only and declares
      disconnected support:
-     `oc get csv -n <ns> -o jsonpath='{.items[*].spec.installModes}'` shows
+     `oc get csv -n "$METALLB_NAMESPACE" -o jsonpath='{.items[*].spec.installModes}'` shows
      `AllNamespaces` alone supported, and
-     `oc get csv -n <ns> -o jsonpath='{.items[*].metadata.annotations}'`
+     `oc get csv -n "$METALLB_NAMESPACE" -o jsonpath='{.items[*].metadata.annotations}'`
      shows the disconnected feature annotation; record its exact key and
      value.
    - The webhook refuses no pool or advertisement create once `MetalLB`
      reports `Available`: the apply creates the pool and advertisement after
      that readiness without a refusal (its progress and operation log show
-     each object created once), and `oc get events -n <ns>` shows no webhook
+     each object created once), and `oc get events -n "$METALLB_NAMESPACE"` shows no webhook
      denial.
-   - `oc get ipaddresspool services -n <ns> -o yaml` shows
+   - `oc get ipaddresspool services -n "$METALLB_NAMESPACE" -o yaml` shows
      `status.assignedIPv4` after the Service of step 4.
-   - `oc get servicel2status -n <ns>` names the announcing node.
+   - `oc get servicel2status -n "$METALLB_NAMESPACE"` names the announcing node.
 
 4. MetalLB Service (B757), in a namespace Bootwright does not own:
 
@@ -246,8 +296,29 @@ private operation-log directory before effects start; keep it as evidence.
 
 ## Acceptance drills
 
-Interrupt with Ctrl-C at the named phase, let the command exit, run `status`,
-then repeat `apply --context "$C" --yes`; a failed block is retried and an
+For each forced-process interruption below, identify the apply process in a
+second terminal. Set the editable PID from that listing and verify its command
+line belongs to this run before sending the signal; never reuse an old PID:
+
+```sh
+ps -eo pid,args
+BOOTWRIGHT_PID=""
+: "${BOOTWRIGHT_PID:?Set BOOTWRIGHT_PID to the observed apply process PID for this run}"
+case "${BOOTWRIGHT_PID:?Set BOOTWRIGHT_PID to the observed apply process PID for this run}" in
+    ''|0*|1|*[!0-9]*) printf '%s\n' 'Refusing an invalid process PID' >&2; exit 1 ;;
+esac
+ps -p "${BOOTWRIGHT_PID:?Set BOOTWRIGHT_PID to the observed apply process PID for this run}" -o pid,args
+```
+
+Review that process line. Only at the drill phase, after confirming it is
+this run's apply process, send the signal in a separate paste:
+
+```sh
+kill -9 "${BOOTWRIGHT_PID:?Set BOOTWRIGHT_PID to the observed apply process PID for this run}"
+```
+
+Interrupt with Ctrl-C at the named phase, let the command exit, run `./bin/bootwright status --context "$C"`,
+then repeat `./bin/bootwright apply --context "$C" --yes`; a failed block is retried and an
 unknown outcome is observed before any retry. Keep the input, Secrets and build
 unchanged ([build changes](../../docs/operator-guide.md#changing-the-build-between-runs)).
 A drill that cannot reach its phase in one install needs a fresh destroy and run.
@@ -261,22 +332,22 @@ template states, and link it from the Rows rule of the
 1. Interrupt during the image build; the next apply rebuilds.
 2. Interrupt during the bootstrap wait; continue.
 3. Interrupt during the installation wait; continue.
-4. `kill -9` the `bootwright` process during the installation wait. The next
-   `status` shows the block `unknown`; the next `apply` resolves it by
+4. Stop the `bootwright` process with the guarded kill command above during the installation wait. The next
+   `./bin/bootwright status --context "$C"` shows the block `unknown`; the next `./bin/bootwright apply --context "$C" --yes` resolves it by
    observation.
-5. A settled `apply` boots nothing; the kubeconfig export and `oc` reads are
+5. A settled `./bin/bootwright apply --context "$C" --yes` boots nothing; the kubeconfig export and `oc` reads are
    Verify step 1.
 6. Destroy while the guest runs and confirm the refusal naming the stop, then
    stop and complete (see [Destroy](#destroy)). The completed destroy proves the
    domain's ownership metadata survived the emulator's boot selection and insert.
 
-**B462** (a second short install after B61's destroy): start `apply`, poll
+**B462** (a second short install after B61's destroy): start `./bin/bootwright apply --context "$C" --yes`, poll
 `sudo KUBECONFIG=/var/lib/bootwright-clusters/lab-sno/sno/auth/kubeconfig oc get clusterversion`
-and `kill -9` the `bootwright` process once it reports `Available=True` and
-before the apply records the block done. Then `machine stop`, `destroy`, and
-interrupt it once `status` shows the media block removed; run
-`cluster kubeconfig --context "$C" --name sno > /dev/null` and expect one
-`access.unproved` warning on standard error. Repeat `destroy` to completion. If
+and stop the `bootwright` process with the guarded kill command above once it reports `Available=True` and
+before the apply records the block done. Then `./bin/bootwright machine stop --context "$C" --name sno-01 --yes`, `./bin/bootwright destroy --context "$C" --authorize data-loss`, and
+interrupt it once `./bin/bootwright status --context "$C"` shows the media block removed; run
+`./bin/bootwright cluster kubeconfig --context "$C" --name sno > /dev/null` and expect one
+`access.unproved` warning on standard error. Repeat `./bin/bootwright destroy --context "$C" --authorize data-loss` to completion. If
 the race is missed, record B462 as not reached and repeat on the next install.
 
 **B755** and **B757**. With their first run, add the `Add-on row` template to
@@ -284,25 +355,74 @@ the [acceptance ledger](../../docs/acceptance.md), as B755's acceptance-row
 template states, and link it from the Rows rule of the
 [add-on coverage page](../../specs/add-on-coverage.md#acceptance-profiles).
 
-**B755** (`addons.nmstate`, after the default run is destroyed; render with the
-add-on, then `context update --name "$C" --input-dir "$IN" --yes`):
+**B755** (`addons.nmstate`, after the default run is destroyed). Copy the
+channel and exact CSV from Verify step 2 for this release, then render and
+update the retained context:
+
+```sh
+NMSTATE_ENABLED="true"
+METALLB_ENABLED="false"
+NMSTATE_CHANNEL=""
+NMSTATE_CSV=""
+if [ "$NMSTATE_ENABLED" = "true" ]; then
+    : "${NMSTATE_CHANNEL:?Set NMSTATE_CHANNEL from the same-release package manifest}" \
+      "${NMSTATE_CSV:?Set NMSTATE_CSV to currentCSV for the selected channel}"
+fi &&
+if [ "$METALLB_ENABLED" = "true" ]; then
+    : "${METALLB_CHANNEL:?Set METALLB_CHANNEL from the same-release package manifest}" \
+      "${METALLB_CSV:?Set METALLB_CSV to currentCSV for the selected channel}"
+fi &&
+e2e/render.sh lab-sno \
+  --set "security.fips=$FIPS_ENABLED" --set "security.tpm2=$TPM2_ENABLED" \
+  --set "addons.nmstate=$NMSTATE_ENABLED" --set "addons.metallb=$METALLB_ENABLED" \
+  --set "addons.subscriptions.nmstate.channel=$NMSTATE_CHANNEL" \
+  --set "addons.subscriptions.nmstate.startingCSV=$NMSTATE_CSV" \
+  --set "addons.subscriptions.metallb.channel=$METALLB_CHANNEL" \
+  --set "addons.subscriptions.metallb.startingCSV=$METALLB_CSV"
+./bin/bootwright context update --name "$C" --input-dir "$IN" --yes
+```
 
 ```sh
 ./bin/bootwright apply --context "$C" --yes --until sno.nmstate
 ```
 
 Interrupt during object creation, during the approval wait and during the
-readiness wait, continuing each time with `apply`; the repeat reports every
-object `unchanged`. Then `diff --observe` reports no drift, a repeated `apply`
+readiness wait, continuing each time with `./bin/bootwright apply --context "$C" --yes`; the repeat reports every
+object `unchanged`. Then `./bin/bootwright diff --observe --context "$C"` reports no drift, a repeated `./bin/bootwright apply --context "$C" --yes`
 contacts no cluster, and on a final fresh run interrupted during readiness,
-`machine stop --name sno-01 --yes` (the cluster API is then unreachable) and
-`destroy` complete by retirement.
+`./bin/bootwright machine stop --name sno-01 --yes --context "$C"` (the cluster API is then unreachable) and
+`./bin/bootwright destroy --context "$C" --authorize data-loss` complete by retirement.
 
-**B757** (`addons.metallb`, same procedure): interrupt during the approval
-wait, and between the `MetalLB` resource and the pools, continuing each with
-`apply` (every object `unchanged`); then Verify step 4, `diff --observe`, and a
-fresh `destroy` completing by retirement. With both toggles on, `--until
-sno.nmstate` stops after NMState so its drills run before MetalLB starts, and
+**B757** (`addons.metallb`, same procedure). Copy the choices from Verify
+step 2, then render and update after destroying the preceding run:
+
+```sh
+NMSTATE_ENABLED="false"
+METALLB_ENABLED="true"
+METALLB_CHANNEL=""
+METALLB_CSV=""
+if [ "$NMSTATE_ENABLED" = "true" ]; then
+    : "${NMSTATE_CHANNEL:?Set NMSTATE_CHANNEL from the same-release package manifest}" \
+      "${NMSTATE_CSV:?Set NMSTATE_CSV to currentCSV for the selected channel}"
+fi &&
+if [ "$METALLB_ENABLED" = "true" ]; then
+    : "${METALLB_CHANNEL:?Set METALLB_CHANNEL from the same-release package manifest}" \
+      "${METALLB_CSV:?Set METALLB_CSV to currentCSV for the selected channel}"
+fi &&
+e2e/render.sh lab-sno \
+  --set "security.fips=$FIPS_ENABLED" --set "security.tpm2=$TPM2_ENABLED" \
+  --set "addons.nmstate=$NMSTATE_ENABLED" --set "addons.metallb=$METALLB_ENABLED" \
+  --set "addons.subscriptions.nmstate.channel=$NMSTATE_CHANNEL" \
+  --set "addons.subscriptions.nmstate.startingCSV=$NMSTATE_CSV" \
+  --set "addons.subscriptions.metallb.channel=$METALLB_CHANNEL" \
+  --set "addons.subscriptions.metallb.startingCSV=$METALLB_CSV"
+./bin/bootwright context update --name "$C" --input-dir "$IN" --yes
+./bin/bootwright apply --context "$C" --yes
+```
+
+Interrupt during the approval wait, and between the `MetalLB` resource and the pools, continuing each with
+`./bin/bootwright apply --context "$C" --yes` (every object `unchanged`); then Verify step 4, `./bin/bootwright diff --observe --context "$C"`, and a
+fresh `./bin/bootwright destroy --context "$C" --authorize data-loss` completing by retirement. With both toggles on, `./bin/bootwright apply --context "$C" --yes --until sno.nmstate` stops after NMState so its drills run before MetalLB starts, and
 the final destroy covers both rows.
 
 ## Destroy
@@ -320,6 +440,5 @@ destroy removes the guest, disks, media, the installer work area, the managed
 services and the network; the context releases its custodied kubeconfig only
 when it completes. Delete the context only after that, and keep it (skip the
 last command) when you re-render for an add-on run: render again, then
-`context update` as above. Afterwards remove the resolver drop-in
-(`sudo rm /etc/systemd/resolved.conf.d/bootwright-e2e.conf` and restart
-`systemd-resolved`), the exported kubeconfig and the rendered directory.
+`./bin/bootwright context update --name "$C" --input-dir "$IN" --yes` as above. Afterwards remove the resolver drop-in
+(`sudo rm /etc/systemd/resolved.conf.d/bootwright-e2e.conf` and `sudo systemctl restart systemd-resolved`), the exported kubeconfig and the rendered directory.

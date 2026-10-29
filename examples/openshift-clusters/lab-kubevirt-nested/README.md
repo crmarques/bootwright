@@ -26,9 +26,9 @@ no accepted run.
 - The storage class `nested-guest-storage`, whose StorageProfile offers
   `ReadWriteMany`, is an operator prerequisite on the host: no package of this
   profile provides one.
-- `bootwright machine stop --name child-01,child-02,child-03` stops the
-  child's VMs through a token minted from the host's custodied access before
-  `destroy`, which removes the child before the host.
+- Stop the child Machines `child-01`, `child-02` and `child-03` before
+  destroy. Their power operations use a token minted from the host's custodied
+  access; destroy then removes the child before the host.
 - Replace `example-channel` and the `*.v0.0.0` CSVs in `add-ons/binding.yaml`
   with what the selected release's catalog serves; passing validation does not
   prove those versions exist. All names and addresses are fixtures.

@@ -11,8 +11,16 @@ The export's own access is `NONE`. Its first client entry denies
 `198.51.100.13` (`rhel-03`) and its second grants read-write to the rest of
 `198.51.100.0/24`, because NFS-Ganesha applies the first entry that matches a
 client. Every entry uses `root_squash`, so an allowed client writes as the
-subvolume's owner, never root:
-`setpriv --reuid=2000 --regid=2000 --clear-groups -- cp <file> <mount>/`.
+subvolume's owner (uid and gid 2000), never root. The
+[NFS check](../../../e2e/lab-3-nodes-ceph/runbook.md#nfs-b478) supplies the full
+client setup and access checks. On the allowed client, copy a local file into
+the mounted export using its owner identity:
+
+```sh
+SOURCE_FILE='' # Path to the source file on the allowed client.
+NFS_MOUNT=''   # Path where that client mounted the export.
+setpriv --reuid=2000 --regid=2000 --clear-groups -- cp -- "${SOURCE_FILE:?Set SOURCE_FILE to the client source file}" "${NFS_MOUNT:?Set NFS_MOUNT to the client export mount}/"
+```
 
 ## Worth noting
 

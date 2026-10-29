@@ -23,7 +23,7 @@ It accepts [B720](../../specs/milestones/m3.md#b720) (TPM2),
 lab-features row of [B728](../../specs/milestones/m3.md#b728), one ledger row
 per item run. [B722](../../specs/milestones/m3.md#b722) (FIPS) needs a
 controller whose `cat /proc/sys/crypto/fips_enabled` prints `1`, which this
-host is not: `security.fips=true` renders and validates but `plan` refuses
+host is not: `security.fips=true` renders and validates but `./bin/bootwright plan --context "$C"` refuses
 `controller.unsupported` here. Serving certificates
 ([B723](../../specs/milestones/m3.md#b723)) are not specified for install time
 and are not in this case. The accepted [lab-sno](../lab-sno/runbook.md) and
@@ -60,9 +60,8 @@ bridge.
 
 The mirror (B724), which you operate:
 
-- It serves `<mirror.url>/<mirror.releaseRepository>` with the release payload
-  of `openshift.version` and `<mirror.url>/<mirror.componentRepository>` with its
-  component images, mirrored by digest (for example with `oc-mirror`). The two
+- Its release repository serves the payload of `openshift.version`, and its
+  component repository serves that release's component images, mirrored by digest (for example with `oc-mirror`). The two
   repositories are separate; a release mirrored only to one leaves nodes
   fetching components from `quay.io` past the mirror.
 - Its certificate chains to a CA you save as a PEM file, the `mirror-ca` Secret.
@@ -88,7 +87,7 @@ here:
 sudo ip -6 addr add 2001:db8:1::1/128 dev lo
 ```
 
-Render with `--set networks.ipv6.controllerAddress=2001:db8:1::1`. The managed
+Use the complete IPv6 render in Run. The managed
 network has `forward: none`: the guests reach the controller services and
 nothing else, and everything outward goes through the proxy. Keep
 `dhcp: false` and `autoconf: false` on the nodes; this is IPv6 single stack, not
@@ -96,17 +95,62 @@ dual stack.
 
 ## Run
 
+Set boolean flags to `true` or `false`. Keep the defaults for the combined
+feature run. For a mirror run, obtain its three values from the registry's
+published digest mappings; they may stay empty when the mirror is disabled.
+The IPv6 address is the lab address configured in Prepare:
+
 ```sh
-M="--set mirror.url=<registry host> --set mirror.releaseRepository=<path> --set mirror.componentRepository=<path>"
-e2e/render.sh lab-3-nodes-ocp-features $M            # add --set ipv6=true ... for B725
-C=lab-3-nodes-ocp-features; IN=~/bootwright-e2e/lab-3-nodes-ocp-features
-A=$(ip -4 route get 192.0.2.1 | sed -n 's/.* src \([0-9.]*\).*/\1/p')   # the controller address; IPv6: 2001:db8:1::1
+IPV6="false"
+IPV6_CONTROLLER_ADDRESS="2001:db8:1::1"
+MIRROR_ENABLED="true"
+PROXY_ENABLED="true"
+TPM2_ENABLED="true"
+FIPS_ENABLED="false"
+PULL_SECRET_FILE="$HOME/pull-secret.json"
+MIRROR_HOST=""
+MIRROR_RELEASE_REPOSITORY=""
+MIRROR_COMPONENT_REPOSITORY=""
+MIRROR_CA_FILE="$HOME/mirror-ca.pem"
+MIRROR_AUTH_FILE="$HOME/mirror-auth.json"
+```
+
+This complete render consumes those flags. Select the IPv6 branch by setting
+`IPV6="true"`; the mirror guards run only when it is enabled:
+
+```sh
+if [ "$MIRROR_ENABLED" = "true" ]; then
+    : "${MIRROR_HOST:?Set MIRROR_HOST to the registry hostname, optionally with port}" \
+      "${MIRROR_RELEASE_REPOSITORY:?Set MIRROR_RELEASE_REPOSITORY to the release repository path}" \
+      "${MIRROR_COMPONENT_REPOSITORY:?Set MIRROR_COMPONENT_REPOSITORY to the component repository path}"
+fi &&
+if [ "$IPV6" = "true" ]; then
+    A="${IPV6_CONTROLLER_ADDRESS:?Set IPV6_CONTROLLER_ADDRESS to the address configured in Prepare}"
+else
+    A="$(ip -4 route get 192.0.2.1 | sed -n 's/.* src \([0-9.]*\).*/\1/p')"
+fi &&
+e2e/render.sh lab-3-nodes-ocp-features \
+  --set "ipv6=$IPV6" --set "networks.ipv6.controllerAddress=$IPV6_CONTROLLER_ADDRESS" \
+  --set "mirror.enabled=$MIRROR_ENABLED" --set "proxy.enabled=$PROXY_ENABLED" \
+  --set "security.tpm2=$TPM2_ENABLED" --set "security.fips=$FIPS_ENABLED" \
+  --set "mirror.url=$MIRROR_HOST" \
+  --set "mirror.releaseRepository=$MIRROR_RELEASE_REPOSITORY" \
+  --set "mirror.componentRepository=$MIRROR_COMPONENT_REPOSITORY"
+```
+
+Continue with the selected render and controller address:
+
+```sh
+C="lab-3-nodes-ocp-features"
+IN="$HOME/bootwright-e2e/lab-3-nodes-ocp-features"
 ./bin/bootwright validate -f "$IN"
 ./bin/bootwright setup --yes
 ./bin/bootwright context init --name "$C" --input-dir "$IN"
-./bin/bootwright secret set --context "$C" --name openshift-pull-secret --value-file ~/pull-secret.json
-./bin/bootwright secret set --context "$C" --name mirror-ca --certificate-file ~/mirror-ca.pem
-./bin/bootwright secret set --context "$C" --name mirror-credentials --value-file ~/mirror-auth.json
+./bin/bootwright secret set --context "$C" --name openshift-pull-secret --value-file "${PULL_SECRET_FILE:?Set PULL_SECRET_FILE to the private pull-secret JSON file}"
+if [ "$MIRROR_ENABLED" = "true" ]; then
+    ./bin/bootwright secret set --context "$C" --name mirror-ca --certificate-file "${MIRROR_CA_FILE:?Set MIRROR_CA_FILE to the mirror CA PEM file}"
+    ./bin/bootwright secret set --context "$C" --name mirror-credentials --value-file "${MIRROR_AUTH_FILE:?Set MIRROR_AUTH_FILE to the private mirror authentication JSON file}"
+fi
 ./bin/bootwright secret generate --context "$C"
 ./bin/bootwright secret check --context "$C"
 ./bin/bootwright plan --context "$C"
@@ -115,13 +159,19 @@ A=$(ip -4 route get 192.0.2.1 | sed -n 's/.* src \([0-9.]*\).*/\1/p')   # the co
 ./bin/bootwright apply --context "$C" --stage infrastructure-services --yes
 ```
 
-Skip the two mirror Secrets when `mirror.enabled=false`. The services answer on
-`$A`:
+The mirror Secrets are imported only when enabled. Probe the services using
+the address family selected above; an empty artifact root answers 404:
 
 ```sh
-curl -sk "https://$A:8443/" -o /dev/null -w '%{http_code}\n'     # 404 on an empty root; IPv6: https://[$A]:8443/
-dig @"$A" +short api.features.e2e.example.test                    # the API VIP; IPv6: dig -6 @"$A" AAAA ...
-dig @"$A" +short test.apps.features.e2e.example.test              # the ingress VIP
+if [ "$IPV6" = "true" ]; then
+    curl -gsk "https://[$A]:8443/" -o /dev/null -w '%{http_code}\n'
+    dig -6 @"$A" AAAA +short api.features.e2e.example.test
+    dig -6 @"$A" AAAA +short test.apps.features.e2e.example.test
+else
+    curl -sk "https://$A:8443/" -o /dev/null -w '%{http_code}\n'
+    dig @"$A" +short api.features.e2e.example.test
+    dig @"$A" +short test.apps.features.e2e.example.test
+fi
 chronyd -Q -t 10 "server $A iburst port 123"
 ```
 
@@ -149,7 +199,9 @@ cluster does not select refuses before the build.
 ./bin/bootwright cluster info --context "$C" --name features
 ./bin/bootwright diff --context "$C" --observe
 ./bin/bootwright apply --context "$C" --yes      # settles: boots nothing, contacts no cluster
-umask 077; KUBECONFIG=$(mktemp); export KUBECONFIG
+umask 077
+KUBECONFIG="$(mktemp)"
+export KUBECONFIG
 ./bin/bootwright cluster kubeconfig --context "$C" --name features > "$KUBECONFIG"
 oc get nodes -o wide; oc get clusterversion; oc get co
 ```
@@ -158,10 +210,22 @@ Three Ready schedulable masters and the declared release. Then per item:
 
 | Item | Check |
 | --- | --- |
-| B720 | `oc debug node/master-0 -- chroot /host lsblk -f` shows a `crypto_LUKS` root, and `chroot /host clevis luks list -d <that partition>` a `tpm2` pin; repeat on `master-1`, `master-2` |
-| B721 | `oc get proxy/cluster -o yaml`: `httpProxy` and `httpsProxy` are `http://<controller address>:3128`, `noProxy` lists the machine network, `.features.e2e.example.test` and `.e2e.example.test`, `trustedCA` is set. The managed proxy keeps no access log (`access_log none`), so prove the route in the [proxy check](#proxy-route) below |
+| B720 | `oc debug node/master-0 -- chroot /host lsblk -f` shows a `crypto_LUKS` root, and the complete partition check below shows a `tpm2` pin; repeat on `master-1`, `master-2` |
+| B721 | `oc get proxy/cluster -o yaml`: `httpProxy` and `httpsProxy` are the controller address in `$A` on HTTP port 3128, `noProxy` lists the machine network, `.features.e2e.example.test` and `.e2e.example.test`, `trustedCA` is set. The managed proxy keeps no access log (`access_log none`), so prove the route in the [proxy check](#proxy-route) below |
 | B724 | `oc get imagedigestmirrorset -o yaml` lists both mappings; `oc get secret pull-secret -n openshift-config -o jsonpath='{.data.\.dockerconfigjson}' \| base64 -d \| jq '.auths \| keys'` includes the mirror host; `oc get cm user-ca-bundle -n openshift-config` carries the mirror CA; with the proxy on, the mirror's own access log shows the release and component pulls arriving from the controller's address (the proxy egress), never from the node addresses |
-| B725, B703 | `ip -6 addr show virbr-e2e` carries `2001:db8:2::1/64` and no IPv4 address; `oc get nodes -o wide` shows IPv6 internal addresses; `oc get network.config cluster -o jsonpath='{.status.clusterNetwork} {.status.serviceNetwork}'` is `fd00:10:128::/56` and `fd00:172:30::/112`; `curl -gk "https://[2001:db8:2::70]:6443/version"` answers; `diff --observe` reports the managed network without drift |
+| B725, B703 | `ip -6 addr show virbr-e2e` carries `2001:db8:2::1/64` and no IPv4 address; `oc get nodes -o wide` shows IPv6 internal addresses; `oc get network.config cluster -o jsonpath='{.status.clusterNetwork} {.status.serviceNetwork}'` is `fd00:10:128::/56` and `fd00:172:30::/112`; `curl -gk "https://[2001:db8:2::70]:6443/version"` answers; `./bin/bootwright diff --observe --context "$C"` reports the managed network without drift |
+
+Read the encrypted partition from each node's `lsblk -f` output before
+checking its pin. Repeat this block with the node and partition observed for
+`master-0`, `master-1` and `master-2`; never infer the partition number:
+
+```sh
+NODE="master-0"
+oc debug "node/$NODE" -- chroot /host lsblk -f
+LUKS_PARTITION="" # Copy the observed crypto_LUKS root partition path.
+: "${LUKS_PARTITION:?Set LUKS_PARTITION to the observed encrypted root partition}"
+oc debug "node/$NODE" -- chroot /host clevis luks list -d "${LUKS_PARTITION:?Set LUKS_PARTITION to the observed encrypted root partition}"
+```
 
 ### Proxy route
 
@@ -181,15 +245,17 @@ already on `master-0`; take the unit from `systemctl list-units 'bootwright-*'`:
 
 ```sh
 oc debug node/master-0 -- chroot /host crictl pull registry.access.redhat.com/ubi9/ubi-minimal
-sudo systemctl stop <proxy unit>
+PROXY_UNIT="" # Copy the managed proxy unit name from the listing above.
+: "${PROXY_UNIT:?Set PROXY_UNIT to the observed managed proxy systemd unit}"
+sudo systemctl stop "${PROXY_UNIT:?Set PROXY_UNIT to the observed managed proxy systemd unit}"
 oc debug node/master-0 -- chroot /host crictl rmi registry.access.redhat.com/ubi9/ubi-minimal
 oc debug node/master-0 -- chroot /host crictl pull registry.access.redhat.com/ubi9/ubi-minimal   # fails
-sudo systemctl start <proxy unit>
+sudo systemctl start "${PROXY_UNIT:?Set PROXY_UNIT to the observed managed proxy systemd unit}"
 oc debug node/master-0 -- chroot /host crictl pull registry.access.redhat.com/ubi9/ubi-minimal
 ./bin/bootwright diff --context "$C" --observe
 ```
 
-Record both results and that `diff --observe` reports the proxy without drift.
+Record both results and that `./bin/bootwright diff --observe --context "$C"` reports the proxy without drift.
 
 ### TPM2 unlock
 
@@ -202,8 +268,29 @@ until it is Ready again, with no console passphrase.
 
 ## Acceptance drills
 
-Interrupt with Ctrl-C at the named phase, let the command exit, run `status`,
-then repeat `apply --context "$C" --yes`; a failed block is retried and an
+For each forced-process interruption below, identify the apply process in a
+second terminal. Set the editable PID from that listing and verify its command
+line belongs to this run before sending the signal; never reuse an old PID:
+
+```sh
+ps -eo pid,args
+BOOTWRIGHT_PID=""
+: "${BOOTWRIGHT_PID:?Set BOOTWRIGHT_PID to the observed apply process PID for this run}"
+case "${BOOTWRIGHT_PID:?Set BOOTWRIGHT_PID to the observed apply process PID for this run}" in
+    ''|0*|1|*[!0-9]*) printf '%s\n' 'Refusing an invalid process PID' >&2; exit 1 ;;
+esac
+ps -p "${BOOTWRIGHT_PID:?Set BOOTWRIGHT_PID to the observed apply process PID for this run}" -o pid,args
+```
+
+Review that process line. Only at the drill phase, after confirming it is
+this run's apply process, send the signal in a separate paste:
+
+```sh
+kill -9 "${BOOTWRIGHT_PID:?Set BOOTWRIGHT_PID to the observed apply process PID for this run}"
+```
+
+Interrupt with Ctrl-C at the named phase, let the command exit, run `./bin/bootwright status --context "$C"`,
+then repeat `./bin/bootwright apply --context "$C" --yes`; a failed block is retried and an
 unknown outcome is observed before any retry. Keep the input, Secrets and build
 unchanged ([build changes](../../docs/operator-guide.md#changing-the-build-between-runs)).
 Each item's row repeats the
@@ -212,10 +299,10 @@ on this topology:
 
 1. Interrupt after the first node boots and continue; only the others boot.
 2. Interrupt during the bootstrap wait and during the installation wait; continue
-   each. One `kill -9` of `bootwright` in the installation wait: `status` shows
-   the block `unknown` and the next `apply` resolves it by observation.
-3. A settled `apply`, three Ready masters read through the exported kubeconfig.
-4. Destroy refused while the guests run, then completed after `machine stop`.
+   each. One forced stop using the guarded kill command above in the installation wait: `./bin/bootwright status --context "$C"` shows
+   the block `unknown` and the next `./bin/bootwright apply --context "$C" --yes` resolves it by observation.
+3. A settled `./bin/bootwright apply --context "$C" --yes`, three Ready masters read through the exported kubeconfig.
+4. Destroy refused while the guests run, then completed after `./bin/bootwright machine stop --context "$C" --name features-01,features-02,features-03 --yes`.
 
 Record for each item row the build commit, the release minor, each phase's
 duration, the drills' outcomes and the item's check from Verify. The IPv6 row
@@ -235,7 +322,7 @@ stalled-node and aged-image drills belong to B66, not here.
 The first destroy refuses while the masters run and names the stop. Repeat it
 to continue a partial removal and delete the context only after it completes.
 Then remove the resolver drop-in (`sudo rm /etc/systemd/resolved.conf.d/bootwright-e2e.conf`
-and restart `systemd-resolved`), the `lo` address of
+and `sudo systemctl restart systemd-resolved`), the `lo` address of
 the IPv6 variant (`sudo ip -6 addr del 2001:db8:1::1/128 dev lo`), the
 mirror's controller grant if you added one, the exported
 kubeconfig and the rendered directory.

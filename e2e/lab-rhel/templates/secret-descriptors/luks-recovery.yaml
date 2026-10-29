@@ -8,5 +8,6 @@ spec:
   type: token
 
   source:
-    contextStore: {}
+    generated:
+      bytes: 32
 {{- end }}

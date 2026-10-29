@@ -38,23 +38,42 @@ disks.
 
 ## Run
 
+Set the feature switches below for this run. Updating within the release
+requires `REGISTER=true`.
+
 ```sh
-e2e/render.sh lab-rhel --set security.fips=true      # the toggles of this run
-C=lab-rhel; IN=~/bootwright-e2e/lab-rhel
+FIPS=true
+TPM2=false
+REGISTER=false
+UPDATE_WITHIN_RELEASE=false
+C=lab-rhel
+IN="$HOME/bootwright-e2e/lab-rhel"
+MACHINE=rhel-01
+e2e/render.sh lab-rhel --out-dir "$IN" \
+  --set "security.fips=$FIPS" --set "security.tpm2=$TPM2" \
+  --set "registration.enabled=$REGISTER" \
+  --set "registration.updateWithinRelease=$UPDATE_WITHIN_RELEASE"
 A=$(ip -4 route get 192.0.2.1 | sed -n 's/.* src \([0-9.]*\).*/\1/p')   # the host address
 umask 077; D=$(mktemp -d)                        # private scratch for this run
 ./bin/bootwright validate -f "$IN"
 ./bin/bootwright context init --name "$C" --input-dir "$IN"
 ./bin/bootwright secret generate --context "$C"
-./bin/bootwright secret set --context "$C" --name luks-recovery --value-stdin   # tpm2
-./bin/bootwright secret set --context "$C" --name rhsm-org --value-stdin        # registration
-./bin/bootwright secret set --context "$C" --name rhsm-key --value-stdin        # registration
+if [ "$REGISTER" = true ]; then
+  ./bin/bootwright secret set --context "$C" --name rhsm-org --value-stdin
+  ./bin/bootwright secret set --context "$C" --name rhsm-key --value-stdin
+fi
 ./bin/bootwright secret check --context "$C"
 ./bin/bootwright plan --context "$C"
 ./bin/bootwright apply --context "$C" --stage controller --yes
 ./bin/bootwright preflight controller --context "$C"
 ./bin/bootwright apply --context "$C" --stage infrastructure-services --yes
 ```
+
+With `security.tpm2=true`, `secret generate` also creates `luks-recovery`
+from 32 random bytes, encoded as a 43-character base64url passphrase. Keep
+the value used for installation for recovery; never renew or replace it while
+the guest exists. The [recovery drill](#recovery-passphrase-b77) reads the
+stored value into a private file.
 
 The services answer on the host address `A`:
 
@@ -79,22 +98,20 @@ while the installation runs, inspect, and repeat the apply until it completes:
 ```sh
 ./bin/bootwright status --context "$C"
 ./bin/bootwright machine list --context "$C" --power-status
-./bin/bootwright machine exec --context "$C" --name rhel-01 -- cat /etc/os-release
-./bin/bootwright machine exec --context "$C" --name rhel-01 -- chronyc sources
-./bin/bootwright machine exec --context "$C" --name rhel-01 -- getent hosts controller.e2e.example.test
+./bin/bootwright machine exec --context "$C" --name "$MACHINE" -- cat /etc/os-release
+./bin/bootwright machine exec --context "$C" --name "$MACHINE" -- chronyc sources
+./bin/bootwright machine exec --context "$C" --name "$MACHINE" -- getent hosts controller.e2e.example.test
 ./bin/bootwright diff --context "$C" --observe
 ./bin/bootwright apply --context "$C" --yes      # settles without contacting the guest
 ```
 
-Below, `<exec>` is `./bin/bootwright machine exec --context "$C" --name rhel-01 --`.
-
 ### FIPS: B75
 
-```text
-<exec> fips-mode-setup --check
-<exec> cat /proc/cmdline
-<exec> sudo update-crypto-policies --show
-<exec> ssh-keygen -lf /etc/ssh/ssh_host_ecdsa_key.pub
+```sh
+./bin/bootwright machine exec --context "$C" --name "$MACHINE" -- fips-mode-setup --check
+./bin/bootwright machine exec --context "$C" --name "$MACHINE" -- cat /proc/cmdline
+./bin/bootwright machine exec --context "$C" --name "$MACHINE" -- sudo update-crypto-policies --show
+./bin/bootwright machine exec --context "$C" --name "$MACHINE" -- ssh-keygen -lf /etc/ssh/ssh_host_ecdsa_key.pub
 ./bin/bootwright secret show --context "$C" --name bootwright-machine-key --part public-key
 ```
 
@@ -104,23 +121,29 @@ The reboot drill repeats them.
 
 ### TPM2: B77
 
-```text
-<exec> lsblk -f
-<exec> sudo clevis luks list -d <root partition>
+```sh
+./bin/bootwright machine exec --context "$C" --name "$MACHINE" -- lsblk -f
 ```
 
-Require a `crypto_LUKS` root partition, written `<root partition>`
-(`/dev/vda3` on the default layout), and a `tpm2` pin.
+Set the variable from that output before checking its TPM2 binding:
+
+```sh
+ROOT_PARTITION=''
+./bin/bootwright machine exec --context "$C" --name "$MACHINE" -- sudo clevis luks list -d "${ROOT_PARTITION:?Set ROOT_PARTITION to the guest crypto_LUKS partition}"
+```
+
+Set `ROOT_PARTITION` to the guest's `crypto_LUKS` root partition from
+`lsblk` above (`/dev/vda3` on the default layout). Require a `tpm2` pin.
 
 ### Registration: B76
 
-```text
-<exec> sudo subscription-manager status
-<exec> sudo subscription-manager identity
+```sh
+./bin/bootwright machine exec --context "$C" --name "$MACHINE" -- sudo subscription-manager status
+./bin/bootwright machine exec --context "$C" --name "$MACHINE" -- sudo subscription-manager identity
 ```
 
 Require `Overall Status: Registered` (or `Disabled` under Simple Content
-Access) and record the `system identity` UUID as `<consumer>`; the console's
+Access) and record the `system identity` UUID; the console's
 inventory lists the system under that UUID. Unregistration is checked in
 [Destroy](#destroy).
 
@@ -128,12 +151,12 @@ inventory lists the system under that UUID. Unregistration is checked in
 
 With `registration.updateWithinRelease=true`:
 
-```text
-<exec> cat /etc/dnf/vars/releasever
-<exec> sudo subscription-manager release --show
-<exec> sudo cat /etc/bootwright/update.json
-<exec> sudo dnf history list
-<exec> sudo dnf check-update
+```sh
+./bin/bootwright machine exec --context "$C" --name "$MACHINE" -- cat /etc/dnf/vars/releasever
+./bin/bootwright machine exec --context "$C" --name "$MACHINE" -- sudo subscription-manager release --show
+./bin/bootwright machine exec --context "$C" --name "$MACHINE" -- sudo cat /etc/bootwright/update.json
+./bin/bootwright machine exec --context "$C" --name "$MACHINE" -- sudo dnf history list
+./bin/bootwright machine exec --context "$C" --name "$MACHINE" -- sudo dnf check-update
 ```
 
 Require `9.8` in the release variable, `Release: 9.8`, an update record whose
@@ -147,9 +170,9 @@ owns these files.
 
 ### Reboot: B75, B77
 
-```text
-./bin/bootwright machine restart --context "$C" --name rhel-01 --yes
-<exec> uptime      # restart returns at power-on; repeat until SSH answers
+```sh
+./bin/bootwright machine restart --context "$C" --name "$MACHINE" --yes
+./bin/bootwright machine exec --context "$C" --name "$MACHINE" -- uptime      # restart returns at power-on; repeat until SSH answers
 ```
 
 With fips, repeat the five FIPS reads: `fips-mode-setup --check`, `fips=1` in
@@ -162,18 +185,21 @@ unattended TPM2 unlock; repeat `lsblk -f`.
 Unlock with the recovery passphrase, kept in the private scratch file and fed
 on standard input, never typed or shown:
 
-```text
+```sh
 ./bin/bootwright secret show --context "$C" --name luks-recovery --part value > "$D/recovery"
-<exec> sudo cryptsetup open --test-passphrase -v <root partition> < "$D/recovery"
+./bin/bootwright machine exec --context "$C" --name "$MACHINE" -- sudo cryptsetup open --test-passphrase -v "${ROOT_PARTITION:?Set ROOT_PARTITION to the guest crypto_LUKS partition}" < "$D/recovery"
 rm -f "$D/recovery"
-printf 'wrong\n' | <exec> sudo cryptsetup open --test-passphrase -v <root partition>
+printf 'wrong\n' | ./bin/bootwright machine exec --context "$C" --name "$MACHINE" -- sudo cryptsetup open --test-passphrase -v "${ROOT_PARTITION:?Set ROOT_PARTITION to the guest crypto_LUKS partition}"
 ```
 
 Require `Key slot <n> unlocked.` and exit 0 (cryptsetup reads a non-terminal
 standard input up to its first newline), then `No key available with this
 passphrase.` for the wrong one. If the TPM2 unlock ever fails at boot, the
-same passphrase unlocks at the guest console
-(`virsh --connect qemu:///system console bootwright-lab-rhel-rhel-01`).
+same passphrase unlocks at the guest console:
+
+```sh
+virsh --connect qemu:///system console "bootwright-$C-$MACHINE"
+```
 
 ### Manual unregistration: B76
 
@@ -183,16 +209,17 @@ path for a guest that cannot answer
 registration reads:
 
 ```sh
-./bin/bootwright machine stop --context "$C" --name rhel-01 --yes
+./bin/bootwright machine stop --context "$C" --name "$MACHINE" --yes
 ./bin/bootwright destroy --context "$C" --authorize data-loss
 ```
 
 The destroy must refuse `registration-unreachable`, naming
-`--unregistered`. Remove `<consumer>` with the subscription service's own
-tools (the console's inventory, Remove system), confirm it is gone, then:
+`--unregistered`. Remove the recorded consumer UUID with the subscription
+service's own tools (the console's inventory, Remove system), confirm it is
+gone, then:
 
 ```sh
-./bin/bootwright destroy --context "$C" --unregistered rhel-01 --authorize data-loss
+./bin/bootwright destroy --context "$C" --unregistered "$MACHINE" --authorize data-loss
 ./bin/bootwright status --context "$C"
 ./bin/bootwright context delete --name "$C" --purge --yes
 ```
@@ -202,10 +229,12 @@ complete with no domain or disk of the context left.
 
 ## Destroy
 
-```text
+```sh
 ./bin/bootwright destroy --context "$C" --authorize data-loss
-<exec> sudo subscription-manager identity       # registration: must say the system is not registered
-./bin/bootwright machine stop --context "$C" --name rhel-01 --yes
+if [ "$REGISTER" = true ]; then
+  ./bin/bootwright machine exec --context "$C" --name "$MACHINE" -- sudo subscription-manager identity
+fi
+./bin/bootwright machine stop --context "$C" --name "$MACHINE" --yes
 ./bin/bootwright destroy --context "$C" --authorize data-loss
 ./bin/bootwright status --context "$C"
 virsh --connect qemu:///system list --all
@@ -216,5 +245,5 @@ rm -rf "$D"
 The first destroy unregisters a registered guest while it runs, then pauses
 and names the stop; without registration it refuses at once, naming the same
 stop. With registration, the guest must no longer be registered, and
-`<consumer>` must be gone from the console's inventory. Media stays for the
-next case.
+the recorded consumer UUID must be gone from the console's inventory. Media
+stays for the next case.

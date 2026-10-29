@@ -58,7 +58,7 @@ Destroy every lab-sno or other context that still owns `virbr-e2e` first (B66
 requires a completed lab-sno apply to be destroyed before a fresh expanded
 apply), and free the ports of the host preparation.
 
-The apply gate and `preflight container-cluster` refuse `capacity.*` before
+The apply gate and `./bin/bootwright preflight container-cluster --context "$C"` refuse `capacity.*` before
 registration when the host lacks the figures above. The masters keep
 OpenShift's 16 GiB control-plane minimum. Guests on the managed bridge reach the
 controller services through firewalld's `trusted` zone, so no firewall rule is
@@ -66,14 +66,38 @@ needed ([host preparation](../README.md#prepare-the-host)).
 
 ## Run
 
+Choose the default B66 run with MetalLB off, or enable it and copy the
+same-release channel and CSV described in Inputs. Edit only these values:
+
 ```sh
-e2e/render.sh lab-3-nodes-ocp --set addons.metallb=false     # or set the metallb subscription
-C=lab-3-nodes-ocp; IN=~/bootwright-e2e/lab-3-nodes-ocp
-A=$(ip -4 route get 192.0.2.1 | sed -n 's/.* src \([0-9.]*\).*/\1/p')
+METALLB_ENABLED="false"
+PULL_SECRET_FILE="$HOME/pull-secret.json"
+METALLB_CHANNEL=""
+METALLB_CSV=""
+```
+
+Render the selected values:
+
+```sh
+if [ "$METALLB_ENABLED" = "true" ]; then
+    : "${METALLB_CHANNEL:?Set METALLB_CHANNEL from the same-release package manifest}" \
+      "${METALLB_CSV:?Set METALLB_CSV to currentCSV for the selected channel}"
+fi &&
+e2e/render.sh lab-3-nodes-ocp --set "addons.metallb=$METALLB_ENABLED" \
+  --set "addons.subscriptions.metallb.channel=$METALLB_CHANNEL" \
+  --set "addons.subscriptions.metallb.startingCSV=$METALLB_CSV"
+```
+
+Continue after rendering with context import and the staged apply:
+
+```sh
+C="lab-3-nodes-ocp"
+IN="$HOME/bootwright-e2e/lab-3-nodes-ocp"
+A="$(ip -4 route get 192.0.2.1 | sed -n 's/.* src \([0-9.]*\).*/\1/p')"
 ./bin/bootwright validate -f "$IN"
 ./bin/bootwright setup --yes
 ./bin/bootwright context init --name "$C" --input-dir "$IN"
-./bin/bootwright secret set --context "$C" --name openshift-pull-secret --value-file ~/pull-secret.json
+./bin/bootwright secret set --context "$C" --name openshift-pull-secret --value-file "${PULL_SECRET_FILE:?Set PULL_SECRET_FILE to the private pull-secret JSON file}"
 ./bin/bootwright secret generate --context "$C"
 ./bin/bootwright secret check --context "$C"
 ./bin/bootwright plan --context "$C"
@@ -123,7 +147,9 @@ phase's duration as the progress lines print it, and the release installed.
 ./bin/bootwright cluster info --context "$C" --name compact
 ./bin/bootwright diff --context "$C" --observe
 ./bin/bootwright apply --context "$C" --yes      # settles: boots nothing, contacts no cluster
-umask 077; KUBECONFIG=$(mktemp); export KUBECONFIG
+umask 077
+KUBECONFIG="$(mktemp)"
+export KUBECONFIG
 ./bin/bootwright cluster kubeconfig --context "$C" --name compact > "$KUBECONFIG"
 oc get nodes                                   # three Ready masters, schedulable
 oc get clusterversion; oc get co
@@ -135,7 +161,25 @@ curl -kI https://198.51.100.51                 # the ingress router
 `openshift.version`. The VIPs belong to the masters, not the host: `ip -br addr
 show virbr-e2e` must not list either.
 
-With MetalLB on (the optional B757 row), also:
+For the optional B757 row, after destroying the default run, use the channel
+and exact CSV read from the same-release package manifest in Inputs. Render
+with these editable values, then continue at the context import block in
+Run, after its render block:
+
+```sh
+METALLB_ENABLED="true"
+METALLB_CHANNEL=""
+METALLB_CSV=""
+if [ "$METALLB_ENABLED" = "true" ]; then
+    : "${METALLB_CHANNEL:?Set METALLB_CHANNEL from the same-release package manifest}" \
+      "${METALLB_CSV:?Set METALLB_CSV to currentCSV for the selected channel}"
+fi &&
+e2e/render.sh lab-3-nodes-ocp --set "addons.metallb=$METALLB_ENABLED" \
+  --set "addons.subscriptions.metallb.channel=$METALLB_CHANNEL" \
+  --set "addons.subscriptions.metallb.startingCSV=$METALLB_CSV"
+```
+
+With MetalLB on, also:
 
 ```sh
 oc get csv,installplan -n metallb-system        # one approved InstallPlan, the declared CSV
@@ -153,24 +197,44 @@ the API and ingress still answer on their VIPs afterwards.
 
 ## Acceptance drills
 
-Interrupt with Ctrl-C at the named phase, let the command exit, run `status`,
-then repeat `apply --context "$C" --yes`; a failed block is retried and an
+For each forced-process interruption below, identify the apply process in a
+second terminal. Set the editable PID from that listing and verify its command
+line belongs to this run before sending the signal; never reuse an old PID:
+
+```sh
+ps -eo pid,args
+BOOTWRIGHT_PID=""
+: "${BOOTWRIGHT_PID:?Set BOOTWRIGHT_PID to the observed apply process PID for this run}"
+case "${BOOTWRIGHT_PID:?Set BOOTWRIGHT_PID to the observed apply process PID for this run}" in
+    ''|0*|1|*[!0-9]*) printf '%s\n' 'Refusing an invalid process PID' >&2; exit 1 ;;
+esac
+ps -p "${BOOTWRIGHT_PID:?Set BOOTWRIGHT_PID to the observed apply process PID for this run}" -o pid,args
+```
+
+Review that process line. Only at the drill phase, after confirming it is
+this run's apply process, send the signal in a separate paste:
+
+```sh
+kill -9 "${BOOTWRIGHT_PID:?Set BOOTWRIGHT_PID to the observed apply process PID for this run}"
+```
+
+Interrupt with Ctrl-C at the named phase, let the command exit, run `./bin/bootwright status --context "$C"`,
+then repeat `./bin/bootwright apply --context "$C" --yes`; a failed block is retried and an
 unknown outcome is observed before any retry. Keep the input, Secrets and build
 unchanged ([build changes](../../docs/operator-guide.md#changing-the-build-between-runs)).
 
 B66, in this order, each on a build that contains X116 to X119:
 
-1. Staged fresh apply and `preflight container-cluster` passing (Run).
-2. Interrupt after the first node boots, as soon as `machine list --context
-   "$C" --power-status` shows one guest on. Repeat `apply`: only the nodes still
+1. Staged fresh apply and `./bin/bootwright preflight container-cluster --context "$C"` passing (Run).
+2. Interrupt after the first node boots, as soon as `./bin/bootwright machine list --context "$C" --power-status` shows one guest on. Repeat `./bin/bootwright apply --context "$C" --yes`: only the nodes still
    needing boot receive media and power actions, and the running node continues
    installing. If every guest is already on, record that and use the next fresh
    install.
 3. Interrupt during the bootstrap wait; continue. Interrupt during the
-   installation wait; continue. Then `kill -9` the `bootwright` process during
-   the installation wait: `status` shows the block `unknown`, and the next
-   `apply` resolves it by observation.
-4. A settled `apply`, then Verify: three Ready masters through the exported
+   installation wait; continue. Then stop the `bootwright` process with the guarded kill command above during
+   the installation wait: `./bin/bootwright status --context "$C"` shows the block `unknown`, and the next
+   `./bin/bootwright apply --context "$C" --yes` resolves it by observation.
+4. A settled `./bin/bootwright apply --context "$C" --yes`, then Verify: three Ready masters through the exported
    kubeconfig and the API answering on its VIP from the controller.
 5. Stalled node (B260), on a separate fresh apply: after the masters boot, stop
    one that is not the rendezvous host and let the bootstrap wait fail:
@@ -204,10 +268,9 @@ record the result.
 ```
 
 The first destroy refuses while the masters run and names the stop; an
-installer that cannot shut down needs `machine stop --force`. A complete destroy
+installer that cannot shut down needs `./bin/bootwright machine stop --context "$C" --name compact-01,compact-02,compact-03 --force --yes`. A complete destroy
 removes the guests, disks, media, the installer work area, the services and the
 network. Repeat it to continue a partial removal; delete the context only after
 it completes. Then remove the resolver drop-in
-(`sudo rm /etc/systemd/resolved.conf.d/bootwright-e2e.conf` and restart
-`systemd-resolved`), the exported kubeconfig and the rendered
+(`sudo rm /etc/systemd/resolved.conf.d/bootwright-e2e.conf` and `sudo systemctl restart systemd-resolved`), the exported kubeconfig and the rendered
 directory.
