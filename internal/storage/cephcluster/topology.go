@@ -293,6 +293,7 @@ func (a *admission) stretch(ceph api.Value) {
 			a.invalid(indexed("$.spec.services", i)+".placement", "the "+kind+" service places on the stretch tiebreaker "+tiebreaker+", which runs a MON alone", "narrow this service's placement to data-site nodes")
 		}
 	}
+	a.stretchServices(ceph, sites)
 	for i, node := range ceph.Get("topology", "nodes").Items() {
 		if site := textOf(node, "site"); textOf(node, "name") != tiebreaker && !slices.Contains(sites, site) {
 			a.invalid(indexed("$.spec.topology.nodes", i)+".site", "a stretch node occupies one of the two data sites, or is the tiebreaker", "place this node's Machine at one of spec.topology.stretch.dataSites")

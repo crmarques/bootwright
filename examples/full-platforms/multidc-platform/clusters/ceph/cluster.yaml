@@ -92,7 +92,7 @@ spec:
           - osd
           - mds
           - rgw
-          - ingress
+          - ingress-site-a
           - prometheus
           - grafana
           - alertmanager
@@ -112,7 +112,7 @@ spec:
           - osd
           - mds
           - rgw
-          - ingress
+          - ingress-site-a
           - prometheus
           - grafana
           - alertmanager
@@ -129,7 +129,7 @@ spec:
           - osd
           - mds
           - rgw
-          - ingress
+          - ingress-site-a
 
         location:
           datacenter: site-a
@@ -146,7 +146,7 @@ spec:
           - osd
           - mds
           - rgw
-          - ingress
+          - ingress-site-b
           - prometheus
           - grafana
           - alertmanager
@@ -166,7 +166,7 @@ spec:
           - osd
           - mds
           - rgw
-          - ingress
+          - ingress-site-b
           - prometheus
           - grafana
           - alertmanager
@@ -183,7 +183,7 @@ spec:
           - osd
           - mds
           - rgw
-          - ingress
+          - ingress-site-b
 
         location:
           datacenter: site-b
@@ -218,7 +218,7 @@ spec:
           - node-04.ceph-multidc-01.clusters.example.com
           - node-05.ceph-multidc-01.clusters.example.com
 
-        count: 2
+        count: 3
 
     - service_type: osd
       service_id: data
@@ -299,10 +299,10 @@ spec:
         rgw_frontend_port: 8080
 
     - service_type: ingress
-      service_id: rgw.odf-all
+      service_id: rgw.odf-all-site-a
 
       placement:
-        label: ingress
+        label: ingress-site-a
 
       spec:
         backend_service: rgw.odf-all
@@ -315,6 +315,23 @@ spec:
         virtual_interface_networks:
           - 198.51.100.0/25
 
+    - service_type: ingress
+      service_id: rgw.odf-all-site-b
+
+      placement:
+        label: ingress-site-b
+
+      spec:
+        backend_service: rgw.odf-all
+        virtual_ip: 198.51.100.60/25
+        frontend_port: 443
+        monitor_port: 1967
+        first_virtual_router_id: 44
+        ssl: true
+
+        virtual_interface_networks:
+          - 198.51.100.0/25
+
   serviceBindings:
     - serviceRef: grafana
 
@@ -322,7 +339,16 @@ spec:
         - path: /spec/initial_admin_password
           secretRef: ceph-multidc-01-grafana-admin
 
-    - serviceRef: ingress.rgw.odf-all
+    - serviceRef: ingress.rgw.odf-all-site-a
+
+      secrets:
+        - path: /spec/ssl_cert
+          secretRef: ceph-multidc-01-rgw-all-tls
+
+        - path: /spec/ssl_key
+          secretRef: ceph-multidc-01-rgw-all-tls
+
+    - serviceRef: ingress.rgw.odf-all-site-b
 
       secrets:
         - path: /spec/ssl_cert

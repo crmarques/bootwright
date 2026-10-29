@@ -145,7 +145,7 @@ func (a *admission) nativeServiceGraph(ceph api.Value) {
 		field := indexed("$.spec.services", i)
 		if backend, ok := a.ingressBackend(service, field); ok {
 			name := NativeServiceName(backend)
-			if _, taken := fronts[name]; taken {
+			if _, taken := fronts[name]; taken && (!a.object.Spec().Has("topology", "stretch") || textOf(backend, "service_type") != "rgw") {
 				a.issue("api.invariant", field+".spec.backend_service", "one ingress serves each backend service in this build", "remove the second ingress for this backend")
 			} else {
 				fronts[name] = i

@@ -292,3 +292,72 @@ func TestAStretchHostRequestCarriesTheStretchScopeGolden(t *testing.T) {
 		t.Fatalf("%+v %v", decoded.Cluster.Stretch, err)
 	}
 }
+
+func stretchGatewayCatalog(t *testing.T, ingresses bool, extra ...api.Value) api.Catalog {
+	t.Helper()
+	catalog, _ := tiebreakerCatalog(func(m, c api.Value) (api.Value, api.Value) {
+		services := append(append(c.Get("services").Items(), extra...), requestMap("service_type", "rgw", "service_id", "objects", "placement", requestMap("hosts", api.StringList("node-1", "node-2", "node-3", "node-4"))))
+		if ingresses {
+			for i, site := range [][]string{{"node-1", "node-2"}, {"node-3", "node-4"}} {
+				services = append(services, requestMap("service_type", "ingress", "service_id", fmt.Sprintf("rgw.objects-%d", i), "placement", requestMap("hosts", api.StringList(site...)),
+					"spec", requestMap("backend_service", "rgw.objects", "virtual_ip", fmt.Sprintf("192.0.2.%d/24", 50+i), "frontend_port", 443, "monitor_port", 1967, "ssl", true, "first_virtual_router_id", 50+i)))
+			}
+			c = c.WithPath(api.ListValue(tlsBinding("ingress.rgw.objects-0", "gateway-tls"), tlsBinding("ingress.rgw.objects-1", "gateway-tls")), "serviceBindings")
+		}
+		services[1] = requestMap("service_type", "mgr", "placement", requestMap("hosts", api.StringList("node-1", "node-2", "node-3", "node-4")))
+		services[2] = services[2].WithPath(api.StringList("/dev/vdb", "/dev/vdc"), "spec", "data_devices", "paths")
+		return m, c.WithPath(api.ListValue(services...), "services")
+	})
+	objects := slices.DeleteFunc(catalog.Objects(), func(o api.Object) bool { return o.Kind() == api.InfraProvider })
+	disks := api.ListValue(requestMap("name", "data", "sizeGiB", 1), requestMap("name", "more", "sizeGiB", 1))
+	objects = append(objects, api.NewObject(api.InfraProvider, "hypervisor", api.Value{}, requestMap("libvirt", requestMap("machineProfiles", api.ListValue(requestMap("name", "guest", "dataDisks", disks))))))
+	return api.NewCatalog(append(objects, objectGateway("objects", "endpoint", requestMap("fqdn", "s3.example.test"))))
+}
+
+func TestAStretchGatewayFreezesOneIngressPerDataSiteAndResolvesToEveryFrontDoor(t *testing.T) {
+	catalog := stretchGatewayCatalog(t, true)
+	r := gatewayOf(t, gatewayBlock(t, catalog))
+	if r.Stretch == nil || len(r.Gateway.Documents) != 3 || gatewayTLSSecret(r.Gateway) != "gateway-tls" || len(r.Gateway.Bindings) != 4 {
+		t.Fatalf("the stretch gateway froze %d documents and bindings %+v", len(r.Gateway.Documents), r.Gateway.Bindings)
+	}
+	for i, want := range []string{"ingress.rgw.objects-0", "ingress.rgw.objects-1"} {
+		var document struct {
+			ServiceID string `json:"service_id"`
+		}
+		if json.Unmarshal(r.Gateway.Documents[i+1], &document) != nil || "ingress."+document.ServiceID != want {
+			t.Fatalf("ingress document %d is %s", i+1, r.Gateway.Documents[i+1])
+		}
+	}
+	gateway, _ := catalog.Find(api.CephObjectGateway, "objects")
+	cluster, _ := catalog.Find(api.CephCluster, "example")
+	exported, err := exportGateway(catalog, cluster, gateway, r)
+	if err != nil || !slices.Equal(exported.Addresses, []string{"192.0.2.50", "192.0.2.51"}) || exported.Port != 443 || !exported.TLS || exported.CertificateRef != "gateway-tls" {
+		t.Fatalf("the export reaches %+v (%v)", exported, diagnostics.Of(err))
+	}
+	direct := stretchGatewayCatalog(t, false)
+	gateway, _ = direct.Find(api.CephObjectGateway, "objects")
+	cluster, _ = direct.Find(api.CephCluster, "example")
+	exported, err = exportGateway(direct, cluster, gateway, gatewayOf(t, gatewayBlock(t, direct)))
+	if err != nil || len(exported.Addresses) != 4 || exported.TLS {
+		t.Fatalf("a direct stretch gateway exports %+v (%v)", exported, diagnostics.Of(err))
+	}
+}
+
+func TestAStretchConsumerExportCarriesTheTiebreakerMONAndEveryFrontDoor(t *testing.T) {
+	catalog := stretchGatewayCatalog(t, true, mdsRequestService("files"))
+	pool := func(name, role string) api.Object {
+		return childOf(api.CephPool, name, "role", role, "replicated", requestMap("size", 4, "minSize", 2))
+	}
+	objects := append(catalog.Objects(), pool("fs-meta", "cephfsMetadata"), pool("fs-data", "cephfsData"), pool("block", "rbd"), filesystemOf(),
+		childOf(api.CephConsumer, "consumer", "dataFoundation", requestMap("rbdPoolRef", "block", "filesystemRef", "files", "cephxKeyType", "aes", "objectGatewayRef", "objects")))
+	state := api.NewCatalog(objects)
+	plan, err := NewConsumer(nil).Plan(context.Background(), lifecycle.PlanInput{Verb: reconciliation.Apply, Context: lifecycle.ContextIdentity{Name: "synthetic"}, Controller: "controller",
+		State: compilation.NewState(state, state, nil)})
+	if err != nil || len(plan.Definitions) != 1 {
+		t.Fatalf("the stretch consumer did not plan: %+v", diagnostics.Of(err))
+	}
+	r, err := DecodeConsumerRequest(plan.Definitions[0].Request)
+	if err != nil || r.Monitors["tie"] != tieAddress || len(r.Monitors) != 5 || len(r.MonitoringHosts) != 4 || slices.Contains(r.MonitoringHosts, tieAddress) || r.Gateway == nil || !slices.Equal(r.Gateway.Addresses, []string{"192.0.2.50", "192.0.2.51"}) {
+		t.Fatalf("the stretch export %+v (%v)", r, err)
+	}
+}

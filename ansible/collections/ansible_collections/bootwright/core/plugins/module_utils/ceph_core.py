@@ -1068,14 +1068,12 @@ def wait_unit(request, request_digest, bootstrap, transport, now, pause, *, priv
         pause(min(READINESS_INTERVAL, remaining))
 
 
-def ingress_firewall(request, transport, found, now):
-    """Before the first effect of an apply: each host of the ingress proves, read-only, that an active firewall passes VRRP and the client
-    port. One native call of the block's Go deadline covers every host's check."""
-    if found is None:
-        return
+def ingress_firewall(request, transport, fronts, now):
+    """Before the first effect of an apply: each host of each ingress, one per data site on a stretch cluster, proves, read-only, that an
+    active firewall passes VRRP and the client port. One native call of the block's Go deadline covers every host's check."""
     hosts = {host["name"]: host for host in request["hosts"]}
     deadline = now() + FIREWALL_WINDOW
-    for name in found[0]["placement"]["hosts"]:
+    for name in [name for found in fronts for name in found[0]["placement"]["hosts"]]:
         remaining = deadline - now()
         ceph_native.require(remaining > 0, "not-ready")
         result = transport.call(hosts[name], "ingress_firewall", timeout=min(FIREWALL_CALL, remaining))
@@ -1193,7 +1191,7 @@ def execute_unit(request, operation, request_digest, transport, bootstrap, *, no
     if operation == "apply":
         transport.call(bootstrap, "prerequisites")
         if request["action"] == "service":
-            ingress_firewall(request, transport, ceph_native_units.frontend(request), now)
+            ingress_firewall(request, transport, [found for found in (ceph_native_units.frontend(request),) if found is not None], now)
         bound = transport.unit_material("unit") if bound_unit else {}
         for phase in phases:
             produced = transport.call(bootstrap, phase, bound) if bound and phase == "unit" else transport.call(bootstrap, phase)
@@ -1274,7 +1272,7 @@ def execute_gateway(request, operation, request_digest, transport, bootstrap, *,
     changed = False
     if operation == "apply":
         transport.call(bootstrap, "prerequisites")
-        ingress_firewall(request, transport, ceph_native_object.frontend(request), now)
+        ingress_firewall(request, transport, ceph_native_object.frontends(request), now)
         for phase in ceph_native_object.APPLY_PHASES:
             private = transport.gateway_material(True) if seen and phase == "gateway_service" else None
             produced = transport.call(bootstrap, phase, private) if private else transport.call(bootstrap, phase)

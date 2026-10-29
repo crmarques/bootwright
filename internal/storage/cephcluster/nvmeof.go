@@ -55,7 +55,7 @@ func (a *admission) nvmeofRecord(service api.Value, field string, placed []api.V
 		return
 	}
 	if a.object.Spec().Has("topology", "stretch") {
-		a.deferred(field, "NVMe-oF gateways on a stretch cluster need the stretch capacity gate", "this nvmeof service from spec.services", "B487")
+		a.deferred(field, "NVMe-oF gateways on a stretch cluster need at least four Ceph nodes per data site, a profile Bootwright has not qualified", "this nvmeof service from spec.services", "B935")
 	}
 	if len(placed) == 1 {
 		a.issue("api.invariant", field+".placement", "a gateway group with one gateway raises the NVMEOF_SINGLE_GATEWAY health warning, so the cluster never reports HEALTH_OK", "select at least two declared storage hosts in this nvmeof placement")

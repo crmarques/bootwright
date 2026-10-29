@@ -209,7 +209,8 @@ of each block identity.
 The endpoint FQDN is the gateway's endpoint identity. It is unique across the
 graph, against every storage node hostname and every other gateway's FQDN,
 and it is not published to DNS. The terminating service is the ingress whose
-`spec.backend_service` is the bound rgw service, else that rgw service; an
+`spec.backend_service` is the bound rgw service (on a stretch cluster each of
+its per-site ingresses, all bound to one Secret), else that rgw service; an
 HTTPS terminating service needs its `/spec/ssl_cert` and `/spec/ssl_key`
 bindings ([native services](ceph-native-api.md)). A terminating service with
 TLS needs `spec.endpoint`: the certificate must name its FQDN, and readiness
@@ -1506,7 +1507,9 @@ one consumer while the cluster stays is B491's.
 
 An attached gateway contributes its endpoint FQDN and terminating addresses to
 all retained managed DNS services, which already serve the retained graph's
-machine and cluster names. The addresses are the fronting ingress virtual IP,
+machine and cluster names. The addresses are the fronting ingress virtual IP
+(on a stretch cluster, the virtual IPs of its
+[per-site ingresses](ceph.md#stretch-services-and-front-doors)),
 or the public-network addresses of the RGW placement when no ingress fronts
 it. Direct RGW placement must put a daemon on every eligible host; a smaller
 count requires an ingress VIP because native scheduling does not freeze which

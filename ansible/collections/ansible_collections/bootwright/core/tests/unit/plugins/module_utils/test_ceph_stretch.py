@@ -33,7 +33,7 @@ def request():
         hosts.append({"name": "node-" + str(i), "machine": "machine-" + str(i), "address": "192.0.2." + str(i), "user": "operator", "port": 22,
                       "devices": devices, "labels": [], "location": location, "sshKeyRef": "fleet-key"})
     names = [host["name"] for host in hosts]
-    value = {"controller": "controller", "version": "ceph-core-v35", "action": "cluster", "cluster": "example", "owner": "apply-123", "fsid": FSID,
+    value = {"controller": "controller", "version": "ceph-core-v36", "action": "cluster", "cluster": "example", "owner": "apply-123", "fsid": FSID,
              "image": "registry.example.test/ceph@sha256:" + "a" * 64, "cephadm": {"path": "/usr/sbin/cephadm", "packageVersion": "20.2.1-405.el9cp"},
              "release": "synthetic-release", "ansiblePackageVersion": "synthetic-ansible", "packageRepository": "https://packages.example.test/native",
              "packageRepositoryKey": "https://packages.example.test/keys/ibm.asc", "bootstrap": "node-1", "monIP": "192.0.2.1",
@@ -204,7 +204,7 @@ def test_a_cluster_without_stretch_takes_no_location_and_a_host_scope_carries_th
     ceph_native.validate(value)
     scope = {key: item for key, item in request().items() if key != "action"}
     ceph_native.validate_scope(scope)
-    assert staging.recovery_scope(dict(scope, version="ceph-core-v35")) == staging.recovery_scope(request())
+    assert staging.recovery_scope(dict(scope, version="ceph-core-v36")) == staging.recovery_scope(request())
     without = {key: item for key, item in scope.items() if key != "stretch"}
     with pytest.raises(ceph_native.Refusal):
         ceph_native.validate_scope(without)

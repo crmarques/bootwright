@@ -58,14 +58,19 @@ func GatewayDNSAddresses(catalog api.Catalog, gateway api.Object) ([]string, err
 		return nil, fmt.Errorf("%s has no retained storage cluster", gateway.Identity())
 	}
 	ref := gateway.Spec().Get("serviceRef").Text()
+	vips := []string{}
 	for _, service := range cluster.Spec().Get("services").Items() {
 		if service.Get("service_type").Text() == "ingress" && service.Get("spec", "backend_service").Text() == ref {
 			vip, err := netip.ParsePrefix(service.Get("spec", "virtual_ip").Text())
 			if err != nil {
 				return nil, fmt.Errorf("%s has no valid ingress virtual IP", gateway.Identity())
 			}
-			return []string{vip.Addr().Unmap().String()}, nil
+			vips = append(vips, vip.Addr().Unmap().String())
 		}
+	}
+	if len(vips) != 0 {
+		slices.Sort(vips)
+		return slices.Compact(vips), nil
 	}
 	service, found := NativeService(cluster, ref)
 	if !found {

@@ -6,7 +6,8 @@ commit, then its rgw document and the ingress that fronts it applied as one `orc
 store creates the shared `.rgw.root` pool when it is absent (src/rgw/driver/rados/config/impl.h:93,
 src/rgw/driver/rados/rgw_tools.cc:24-52), so the pool is proved absent or claimed through monitor commands, and the
 claim is written, before the first radosgw-admin call; no radosgw-admin call runs while the pool is absent, so a
-recorded realm that is gone refuses with no effect. The gateway's record is written only after every name proof
+recorded realm that is gone refuses with no effect. On a stretch cluster the claiming gateway creates the pool itself, on the stretch rule at
+4/2, before that first call, and one ingress fronts the rgw service at each data site. The gateway's record is written only after every name proof
 passes, before its first create, so a refused name leaves no record. A realm, zone group or zone of the gateway's
 names is adopted only under this operation's attempt record. The gateway never reads or creates an object user. A TLS service's
 `ssl_cert` and `ssl_key` are bound Secret leaves: the documents are normalized and recorded with fixed placeholders, the leaves are spliced into
@@ -53,6 +54,9 @@ PHASES = frozenset(APPLY_PHASES + ("ingress_firewall",))
 RADOSGW_ADMIN = "/usr/bin/radosgw-admin"
 RGW_ROOT = ".rgw.root"
 ROOT_CLAIM = "rgw-root.json"
+# A zone pool's PG count (clampPGs in internal/storage/ceph), which the Go PG budget counts for `.rgw.root` too; the autoscaler moves it.
+ROOT_PGS = 32
+STRETCH_SIZE, STRETCH_MIN_SIZE = 4, 2
 # cephadm's RGWSpec members the gateway realizes (src/python-common/ceph/deployment/service_spec.py, RGWSpec).
 RGW_MEMBERS = frozenset(("certificate_source", "only_bind_port_on_networks", "rgw_exit_timeout_secs", "rgw_frontend_port", "rgw_frontend_type",
                          "rgw_realm", "rgw_zone", "rgw_zonegroup", "ssl"))
@@ -69,7 +73,7 @@ PLACEMENT = "default-placement"
 # RGWSpec.get_port: 443 with ssl, else 80 (IBM python3-ceph-common 20.2.1 service_spec.py:1888-1909).
 HTTP_PORT = 80
 HTTPS_PORT = 443
-PENDING = re.compile(r"(?:(?:rgw|http|tls)@rgw|tls@ingress|default@realm)\.[A-Za-z0-9][A-Za-z0-9_.-]{0,127}\Z")
+PENDING = re.compile(r"(?:(?:rgw|http|tls|site)@rgw|tls@ingress|default@realm|stretch@)\.[A-Za-z0-9][A-Za-z0-9_.-]{0,127}\Z")
 MEMBERS = frozenset(("bindings", "dataExtraPool", "dataPool", "documents", "endpoint", "indexPool", "name", "realm", "zone", "zoneGroup", "zonePools"))
 KINDS = ("realm", "zonegroup", "zone")
 LISTS = {"realm": "realms", "zonegroup": "zonegroups", "zone": "zones"}
@@ -158,20 +162,20 @@ def validate_ingress(spec, backend):
 
 
 def validate_bindings(gateway, documents):
-    """No binding, or both leaves of the one TLS service, one Secret each, with an endpoint its certificate names."""
+    """No binding, or both leaves of each TLS service, the one TLS service or every per-site ingress, all of one Secret, with an endpoint its
+    certificate names."""
     bindings = gateway["bindings"]
-    require(isinstance(bindings, list) and len(bindings) in (0, 2))
+    secure = [ceph_native_units.service_name(document) for document in documents if document["spec"].get("ssl") is True]
+    require(isinstance(bindings, list) and len(bindings) == 2 * len(secure))
     for binding in bindings:
         require(isinstance(binding, dict) and set(binding) == {"path", "secretRef", "serviceRef"} and binding["path"] in LEAVES)
         require(named(binding["secretRef"]) and isinstance(binding["serviceRef"], str))
-    secure = [ceph_native_units.service_name(document) for document in documents if document["spec"].get("ssl") is True]
     if not bindings:
-        require(not secure)
         return
     require(bindings == sorted(bindings, key=lambda binding: (binding["serviceRef"], binding["path"])))
-    require({binding["path"] for binding in bindings} == set(LEAVES))
-    require(len({binding["serviceRef"] for binding in bindings}) == 1 and len({binding["secretRef"] for binding in bindings}) == 1)
-    require(secure == [bindings[0]["serviceRef"]] and gateway["endpoint"] != "")
+    require(all({binding["path"] for binding in bindings if binding["serviceRef"] == name} == set(LEAVES) for name in secure))
+    require(len({binding["secretRef"] for binding in bindings}) == 1)
+    require(sorted({binding["serviceRef"] for binding in bindings}) == sorted(secure) and gateway["endpoint"] != "")
 
 
 def validate_document(document, kind, request, hosts):
@@ -205,16 +209,29 @@ def validate(request, hosts):
     endpoint = gateway["endpoint"]
     require(isinstance(endpoint, str) and (endpoint == "" or len(endpoint) <= 253 and all(label(part) for part in endpoint.split("."))))
     documents = gateway["documents"]
-    require(isinstance(documents, list) and 1 <= len(documents) <= 2)
+    stretch = request.get("stretch")
+    require(isinstance(documents, list) and 1 <= len(documents) <= (1 + len(stretch["dataSites"]) if stretch else 2))
     validate_document(documents[0], "rgw", request, hosts)
     validate_spec(documents[0]["spec"], gateway)
-    if len(documents) == 2:
-        validate_document(documents[1], "ingress", request, hosts)
-        validate_ingress(documents[1]["spec"], documents[0])
+    for ingress in documents[1:]:
+        validate_document(ingress, "ingress", request, hosts)
+        validate_ingress(ingress["spec"], documents[0])
         require(documents[0]["spec"].get("ssl") is not True)
+        require(all(ingress["spec"].get(member) == documents[1]["spec"].get(member) for member in ("frontend_port", "ssl")))
         auxiliary = request.get("auxiliary", [])
         require(isinstance(auxiliary, list) and set(IMAGES) <= {entry.get("name") for entry in auxiliary if isinstance(entry, dict)})
+    if stretch is not None and len(documents) > 1:
+        sites = [{site_of(request, name) for name in ingress["placement"]["hosts"]} for ingress in documents[1:]]
+        require(len(sites) == len(stretch["dataSites"]) and all(len(held) == 1 for held in sites)
+                and sorted(site for held in sites for site in held) == stretch["dataSites"])
     validate_bindings(gateway, documents)
+
+
+def site_of(request, name):
+    """A host's data site on a stretch cluster: its failure-domain location, empty for the tiebreaker."""
+    host = next((host for host in request["hosts"] if host["name"] == name), None)
+    require(host is not None)
+    return host["location"].get(request["stretch"]["failureDomain"], "")
 
 
 def display_name(value):
@@ -412,10 +429,9 @@ def s3_exchange(address, number, method, path, query, body, pair, region, *, pin
             answer if 200 <= response.status < 300 else None)
 
 
-def frontend(request):
-    """The ingress that fronts the gateway and its client port, the ingress frontend port; None without one."""
-    documents = request["gateway"]["documents"]
-    return (documents[1], documents[1]["spec"]["frontend_port"]) if len(documents) == 2 else None
+def frontends(request):
+    """Each ingress that fronts the gateway, one per data site on a stretch cluster, with its client port, the ingress frontend port."""
+    return [(document, document["spec"]["frontend_port"]) for document in request["gateway"]["documents"][1:]]
 
 
 def material(request, phase, private):
@@ -486,16 +502,16 @@ class ObjectWorker(ceph_native_units.UnitWorker):
         return "gateway-" + self.gateway()["name"]
 
     def ingress_frontend(self):
-        return frontend(self.request)
+        """The ingress whose placement holds this host; per-site ingresses hold disjoint hosts."""
+        return next((found for found in frontends(self.request) if self.host["name"] in found[0]["placement"]["hosts"]), None)
 
-    def bound_service(self):
-        bindings = self.gateway()["bindings"]
-        return bindings[0]["serviceRef"] if bindings else None
+    def bound_services(self):
+        return sorted({binding["serviceRef"] for binding in self.gateway()["bindings"]})
 
     def unit_groups(self):
-        """Each document; the TLS service's holds the placeholders, so the SDK, the records and every comparison see no leaf."""
-        bound = self.bound_service()
-        return [[dict(document, spec=dict(document["spec"], **BOUND)) if ceph_native_units.service_name(document) == bound else document]
+        """Each document; a TLS service's holds the placeholders, so the SDK, the records and every comparison see no leaf."""
+        bound = self.bound_services()
+        return [[dict(document, spec=dict(document["spec"], **BOUND)) if ceph_native_units.service_name(document) in bound else document]
                 for document in self.gateway()["documents"]]
 
     def leaves(self):
@@ -507,7 +523,7 @@ class ObjectWorker(ceph_native_units.UnitWorker):
 
     def splice(self, value):
         """The apply stream's copy of one normalized document, the bound leaves in place of their placeholders; never recorded."""
-        if ceph_native_units.service_name(value) != self.bound_service():
+        if ceph_native_units.service_name(value) not in self.bound_services():
             return value
         spec = value.get("spec")
         require(isinstance(spec, dict) and all(spec.get(member) == placeholder for member, placeholder in BOUND.items()), "native-output")
@@ -516,9 +532,13 @@ class ObjectWorker(ceph_native_units.UnitWorker):
         return dict(value, spec=dict(spec, ssl_cert=bound["gatewayCertificate"], ssl_key=bound["gatewayKey"]))
 
     def tls_specs(self, stored):
-        """The stored TLS service in placeholder form: its leaves omitted, or equal to the bound ones; any other leaf is not this Secret's."""
-        bound = self.bound_service()
-        value = stored.get(bound) if bound is not None else None
+        """Each stored TLS service in placeholder form: its leaves omitted, or equal to the bound ones; any other leaf is not this Secret's."""
+        for bound in self.bound_services():
+            stored = self.tls_spec(stored, bound)
+        return stored
+
+    def tls_spec(self, stored, bound):
+        value = stored.get(bound)
         spec = value.get("spec") if isinstance(value, dict) else None
         if not isinstance(spec, dict):
             return stored
@@ -673,7 +693,8 @@ class ObjectWorker(ceph_native_units.UnitWorker):
         return ids["zone"] in identities(value.get("zones")) and value.get("master_zone") == ids["zone"]
 
     def gateway_zone(self):
-        """Every proof before any write; the claim before any radosgw-admin call; the record once no name refuses; then realm, zone group and zone."""
+        """Every proof before any write; the claim, and on a stretch cluster `.rgw.root` on the stretch rule, before any radosgw-admin call; the
+        record once no name refuses; then realm, zone group and zone."""
         self.owned_cluster()
         self.ingress_images()
         self.verify_tool()
@@ -685,14 +706,60 @@ class ObjectWorker(ceph_native_units.UnitWorker):
         ids = self.foreign_check(names)
         if not present:
             self.markers.write(ROOT_CLAIM, self.root_claim())
+        changed = self.stretch_root()
         self.markers.write(self.record("intent"), self.intent())
         self.markers.write(self.record("tool"), {"sha256": digest})
-        changed = self.master_zone(names, ids)
+        changed = self.master_zone(names, ids) or changed
         if not self.member(ids):
             self.radosgw("zonegroup", "add", *self.site("realm", "zonegroup", "zone"), "--master", json_result=False)
             changed = True
             require(self.member(ids), "not-ready")
         return {"changed": changed}
+
+    def stretch_root(self):
+        """On a stretch cluster, under this cluster's claim and before any radosgw-admin call: `.rgw.root` exists on the stretch rule, created
+        here when absent, because radosgw-admin would create it on the default rule; then size 4, min_size 2 and the rgw application. A
+        claimed `.rgw.root` on another rule refuses stretch-pools and is never moved."""
+        if "stretch" not in self.request:
+            return False
+        require(self.markers.read(ROOT_CLAIM) == self.root_claim(), "ownership")
+        rule = self.rule_dump(self.request["stretch"]["rule"])["rule_id"]
+        changed = False
+        if self.root_entry() is None:
+            self.ceph("osd", "pool", "create", RGW_ROOT, str(ROOT_PGS), str(ROOT_PGS), "replicated", self.request["stretch"]["rule"],
+                      "--autoscale_mode", "on", json_result=False)
+            changed = True
+        entry = self.root_entry()
+        require(entry is not None, "not-ready")
+        require(entry.get("crush_rule") == rule, "stretch-pools")
+        for field, wanted in (("size", STRETCH_SIZE), ("min_size", STRETCH_MIN_SIZE)):
+            if entry.get(field) != wanted:
+                self.ceph("osd", "pool", "set", RGW_ROOT, field, str(wanted), json_result=False)
+                changed = True
+        if "rgw" not in (entry.get("application_metadata") or {}):
+            self.ceph("osd", "pool", "application", "enable", RGW_ROOT, "rgw", json_result=False)
+            changed = True
+        require(self.stretch_root_ready(), "not-ready")
+        return changed
+
+    def root_entry(self):
+        entries = [entry for entry in self.pools() if isinstance(entry, dict) and entry.get("pool_name") == RGW_ROOT]
+        require(len(entries) <= 1, "native-output")
+        return entries[0] if entries else None
+
+    def stretch_root_ready(self):
+        """Read-only: off a stretch cluster nothing; on one, `.rgw.root` on the stretch rule at 4/2, else stretch-pools for another rule."""
+        if "stretch" not in self.request:
+            return True
+        entry = self.root_entry()
+        if entry is None:
+            self.pending("stretch@" + RGW_ROOT)
+            return False
+        require(entry.get("crush_rule") == self.rule_dump(self.request["stretch"]["rule"])["rule_id"], "stretch-pools")
+        held = (entry.get("size"), entry.get("min_size")) == (STRETCH_SIZE, STRETCH_MIN_SIZE)
+        if not held:
+            self.pending("stretch@" + RGW_ROOT)
+        return held
 
     def proved_records(self):
         """The owned cluster, this gateway's record and all three recorded IDs, each still listed under its name."""
@@ -806,14 +873,17 @@ class ObjectWorker(ceph_native_units.UnitWorker):
         documents = self.gateway()["documents"]
         backend = self.gateway_daemons([row for row in running if row["service_name"] == services[0]])
         ingress, reachable = True, backend
-        if len(documents) == 2:
-            ingress = self.ingress_daemons(documents[1], [row for row in running if row["service_name"] == services[1]])
-            reachable = self.endpoint_ready(documents[1])
-        tls = self.bound_service() is not None
+        if len(documents) > 1:
+            fronted = [self.ingress_daemons(document, [row for row in running if row["service_name"] == name])
+                       for document, name in zip(documents[1:], services[1:])]
+            answered = [self.endpoint_ready(document) for document in documents[1:]]
+            ingress, reachable = all(fronted), all(answered)
+        root = self.stretch_root_ready()
+        tls = bool(self.bound_services())
         evidence["endpoint"] = {"certificateSHA256": self.leaf_digest() if tls and reachable else "", "reachable": reachable}
         evidence["daemons"] = sorted(({"host": row["hostname"], "name": row["daemon_type"] + "." + row["daemon_id"], "service": row["service_name"]}
                                       for row in running), key=lambda item: item["name"])[:ceph_native_units.MAX_DAEMONS]
-        return ready and owned and proved and backend and ingress and reachable
+        return ready and owned and proved and backend and ingress and reachable and root
 
     def observe_gateway(self, evidence, ids, specs):
         """Read-only: the recorded IDs, the zone's pools and placement, membership, the committed period and every service record."""
@@ -857,6 +927,9 @@ class ObjectWorker(ceph_native_units.UnitWorker):
         if len(started) != count:
             ready = False
             self.pending("rgw@" + service)
+        if "stretch" in self.request and {site_of(self.request, row["hostname"]) for row in started} != set(self.request["stretch"]["dataSites"]):
+            ready = False
+            self.pending("site@" + service)
         for row in started:
             address = self.daemon_address(row, number)
             blocked = "http" if address is None else self.secured(address, number) if secure else None if answers(address, number) else "http"

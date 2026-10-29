@@ -248,13 +248,17 @@ func gatewayBindings(cluster api.Object, services ...string) []GatewayBinding {
 	return out
 }
 
-func frontingIngress(cluster api.Object, backend string) (api.Value, bool) {
+func frontingIngresses(cluster api.Object, backend string) []api.Value {
+	out := []api.Value{}
 	for _, svc := range cluster.Spec().Get("services").Items() {
 		if svc.Get("service_type").Text() == "ingress" && svc.Get("spec", "backend_service").Text() == backend {
-			return svc, true
+			out = append(out, svc)
 		}
 	}
-	return api.Value{}, false
+	slices.SortFunc(out, func(a, b api.Value) int {
+		return strings.Compare(cephcluster.NativeServiceName(a), cephcluster.NativeServiceName(b))
+	})
+	return out
 }
 
 func placementPool(gateway api.Value, suffix string) string {
@@ -290,7 +294,7 @@ func gatewayRequest(c api.Catalog, cluster, gateway api.Object, base Request) (R
 		return Request{}, err
 	}
 	documents, bound := []json.RawMessage{document}, []string{cephcluster.NativeServiceName(svc)}
-	if ingress, found := frontingIngress(cluster, cephcluster.NativeServiceName(svc)); found {
+	for _, ingress := range frontingIngresses(cluster, cephcluster.NativeServiceName(svc)) {
 		fronting, err := unitDocumentOf(cluster, ingress, rgwIngressSpecOf)
 		if err != nil {
 			return Request{}, err

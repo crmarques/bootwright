@@ -521,9 +521,9 @@ topology; this section owns what the plan derives and realizes (D196).
   this request enabled it. Readiness requires the `verified` stage and every
   stage's postcondition observed again; observation reports the member, and
   `bootwright diff --observe` reports a cluster whose observed stretch state
-  lacks a stage or no longer holds one as partial realization. A
-  service-created pool off the rule or protection keeps the cluster
-  partial; [B487](milestones/m2.md#b487) qualifies each service's pools.
+  lacks a stage or no longer holds one as partial realization. A pool off
+  the rule or protection keeps the cluster partial, whoever created it; the
+  [qualified services](#stretch-services-and-front-doors) create none.
   Every block's frozen cluster scope carries the stretch block, so host,
   SMB, consumer and replication blocks prove the same bootstrap scope.
 
@@ -535,6 +535,65 @@ retiring the whole cluster; tracked as [B920](milestones/m2.md#b920).
 Not yet met: destroy never retires a cluster with a provided tiebreaker,
 because no block removes that Machine, so it refuses by the surviving-host
 rule; tracked as [B892](milestones/m2.md#b892).
+
+### Stretch services and front doors
+
+A stretch cluster realizes the services its storage consumers need (D203):
+MON, MGR, OSD, the derived crash collector, MDS for CephFS, RGW with its
+front doors, and the [CephConsumer](ceph-resources.md#cephconsumer) export.
+Other services keep their ordinary admission and claim no site-loss
+behaviour. NVMe-oF refuses, because IBM requires at least four Ceph nodes per
+data site
+([NVMe-oF in stretch](https://www.ibm.com/docs/en/storage-ceph/9.9.1?topic=cluster-configuring-nvme-in-stretch)),
+and so do an NFS service, a CephNFSExport and a CephSMBResource, whose
+stretch behaviour has no qualified profile.
+
+- **Placement.** Services keep native placement (`hosts`, `label`,
+  `host_pattern`, `count`, `count_per_host`); a service's sites are those of
+  its resolved hosts, so no site field exists. An `mgr`, `mds` or `rgw`
+  service's resolved hosts exclude the tiebreaker and include a host at each
+  data site, and a `count` set without `count_per_host` exceeds its hosts at
+  either data site, so every choice cephadm can make places a daemon at
+  each.
+- **Pools.** A qualified service creates no pool off the stretch rule:
+  `.mgr` moves at `stretch-enabled`, a filesystem's pools are CephPools, and
+  a gateway's zone pools are created on the rule. `.rgw.root`, which any
+  radosgw-admin call would create on the default rule, is created by the
+  gateway that claims it, after its claim and before any radosgw-admin call,
+  with `osd pool create .rgw.root 32 32 replicated <ruleName>
+  --autoscale_mode on`, then size 4 and min_size 2 and the `rgw`
+  application. A claimed `.rgw.root` on another
+  rule refuses `stretch-pools`, and the gateway's readiness requires it on
+  the rule at 4/2.
+- **Front doors.** An `rgw` service is reached directly or through one
+  ingress per data site. Directly, a daemon runs on every placed host and the
+  endpoint FQDN resolves to every rgw host's public address at both sites,
+  for an operator-owned load balancer or DNS or a declared DNSServer's
+  records ([attached gateway DNS](ceph-resources.md#attached-gateway-dns)).
+  Behind ingresses, each is placed only at its own data site with its own
+  `virtual_ip`, both carry the same `frontend_port`, `ssl` and bound
+  certificate Secret, and the endpoint resolves to both virtual IPs. An rgw
+  ingress whose hosts span both data sites is a stretched VIP and refuses, as
+  does an `rgw` service behind a single ingress, because a floating L2
+  address does not survive the loss of its site.
+- **Readiness.** The gateway is ready when its placement count of rgw
+  daemons runs on the frozen image, at both data sites, each answering on its
+  frontend port, and, behind ingresses, each ingress's haproxy and keepalived
+  daemons run and each virtual IP answers, over TLS with the bound leaf.
+  Client I/O through each site during a site loss is
+  [B488](milestones/m2.md#b488)'s operator evidence.
+- **Consumer export.** The export of a stretch cluster carries every MON,
+  the tiebreaker's included, every manager host at both sites and the
+  gateway's endpoint addresses. Data Foundation external mode against a
+  stretched cluster is owner-run acceptance under B488; Bootwright records no
+  compatibility rule for it (D163).
+
+Not yet met: NVMe-oF has no stretch profile of at least four nodes per data
+site; tracked as [B935](milestones/m2.md#b935).
+Not yet met: NFS and SMB have no stretch profiles; tracked as
+[B936](milestones/m2.md#b936).
+Not yet met: observability and management services claim no site-loss
+placement on a stretch cluster; tracked as [B937](milestones/m2.md#b937).
 
 ## Bootstrap identity and continuation
 

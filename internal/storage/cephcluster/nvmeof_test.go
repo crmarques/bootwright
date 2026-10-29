@@ -209,11 +209,11 @@ func TestNVMeoFListenerPortsCollideInTheEndpointRegistry(t *testing.T) {
 	requireNoIssues(t, issuesUnder(nvmeofClusterIssues(t, nvmeofService("block", nvmeofHosts("node-1", "node-2")), disjoint), "$.spec.services[5]"))
 }
 
-func TestNVMeoFOnStretchClusterDefersToB487(t *testing.T) {
+func TestNVMeoFOnAStretchClusterRefusesUntilItsProfile(t *testing.T) {
 	cluster, catalog := nvmeofCatalog(t)
 	stretched := cluster.WithSpec(cluster.Spec().WithPath(m("dataSites", api.StringList("site-a", "site-b"), "tiebreaker", m("site", "site-b")), "topology", "stretch"))
 	issues := Validate(stretched, replace(catalog, stretched))
-	requireNVMeoFIssue(t, issues, nvmeofField, "NVMe-oF gateways on a stretch cluster need the stretch capacity gate", "remove this nvmeof service from spec.services; B487 delivers it")
+	requireNVMeoFIssue(t, issues, nvmeofField, "NVMe-oF gateways on a stretch cluster need at least four Ceph nodes per data site", "remove this nvmeof service from spec.services; B935 delivers it")
 }
 
 func TestNVMeoFSubsystemNQNGrammar(t *testing.T) {

@@ -372,7 +372,8 @@ func exportGateway(catalog api.Catalog, cluster, gateway api.Object, base Reques
 	portDeclared := service.Has("spec", "rgw_frontend_port")
 	certificate := ""
 	terminating := cephcluster.NativeServiceName(service)
-	if ingress, found := frontingIngress(cluster, cephcluster.NativeServiceName(service)); found {
+	if ingresses := frontingIngresses(cluster, cephcluster.NativeServiceName(service)); len(ingresses) != 0 {
+		ingress := ingresses[0]
 		terminating = cephcluster.NativeServiceName(ingress)
 		tls = ingress.Get("spec", "ssl").Bool()
 		port = int(positiveOr(ingress.Get("spec", "frontend_port"), 80))

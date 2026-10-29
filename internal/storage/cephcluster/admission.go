@@ -160,6 +160,10 @@ func Validate(object api.Object, catalog api.Catalog) []api.Issue {
 		a.deferred("$.spec", "this storage resource family requires its later qualified service slice", "this CephConsumer from the input", "parked item B107")
 		return a.issues
 	}
+	if message, remedy, refused := stretchedChildRefusal(object.Kind()); refused && owner.Spec().Has("topology", "stretch") {
+		a.invalid("$.spec.clusterRef", message, remedy)
+		return a.issues
+	}
 	switch object.Kind() {
 	case api.CephPlacementPolicy:
 		if !owner.Spec().Has("topology", "stretch") {

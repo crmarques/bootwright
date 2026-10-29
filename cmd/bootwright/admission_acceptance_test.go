@@ -356,12 +356,15 @@ func referenceRefusals() []diagnosticTuple {
 
 // expandedRefusals adds what the acceptance extras contribute to the
 // reference's: one more refused storage family, the NVMe-oF subsystem whose
-// gateway service only the admissible projection declares, and the warning
-// every CustomPlaybook raises because it cannot execute.
+// gateway service only the admissible projection declares, the SMB resources
+// a stretch cluster refuses, and the warning every CustomPlaybook raises
+// because it cannot execute.
 func expandedRefusals() []diagnosticTuple {
 	return append(referenceRefusals(),
 		diagnosticTuple{"api.invariant", "CephConsumer", "acceptance-external-export", laterServiceRefusal},
 		diagnosticTuple{"api.reference", "CephNVMeoFSubsystem", "acceptance-nvmeof", "$.spec.serviceRef"},
+		diagnosticTuple{"api.invariant", "CephSMBResource", "acceptance-smb-users", "$.spec.clusterRef"},
+		diagnosticTuple{"api.invariant", "CephSMBResource", "acceptance-smb", "$.spec.clusterRef"},
 		diagnosticTuple{"api.deferred", "CustomPlaybook", "acceptance-playbook", laterServiceRefusal},
 		diagnosticTuple{"api.unrealized", "InfraProvider", "acceptance-vsphere", "$.spec.vsphere"},
 		diagnosticTuple{"api.unrealized", "MachineInstallProfile", "acceptance-clone", "$.spec.installer.templateClone"},

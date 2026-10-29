@@ -432,7 +432,9 @@ requires at least two independent Ceph clusters and is a different profile
 from one stretched cluster. Site-local VIPs require an explicitly qualified
 front-door/DNS or load-balancer arrangement: a routed inter-site link does not
 make a floating L2 VIP work across sites. External traffic management remains
-operator-owned unless a separately specified Bootwright capability owns it.
+operator-owned unless a separately specified Bootwright capability owns it;
+the [stretch front doors](ceph.md#stretch-services-and-front-doors) are
+per-site ingresses or that operator-owned arrangement.
 
 IBM's stretch overview says stretch mode cannot be exited, while
 [changing stretch mode](https://www.ibm.com/docs/en/storage-ceph/9.9.1?topic=mode-changing-stretch)

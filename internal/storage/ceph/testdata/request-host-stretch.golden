@@ -257,7 +257,7 @@
       "tiebreaker": "tie",
       "tiebreakerSite": "site-c"
     },
-    "version": "ceph-core-v35"
+    "version": "ceph-core-v36"
   },
   "host": "tie",
   "version": "ceph-host-v10"

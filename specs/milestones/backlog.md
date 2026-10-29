@@ -3328,6 +3328,8 @@ holding such a clause, the clauses pending and the work they enable.
   read back and refused (X199).
 - [D201](#d201): clauses (1) to (11), OpenShift on KubeVirt Machines over an
   external host (X130).
+- [D203](#d203): clauses (1) to (7), stretch service placement and front
+  doors (X200).
 
 ### D1
 
@@ -5710,3 +5712,60 @@ those VIPs unprobed and the runbook asks the operator to prove them free;
 (11) The install request moves to `cluster-install-agent-v11`, adding
 `portTools` and `nodes[].portPinned` and admitting the controller kind `api`;
 a v10 record refuses by name (D142), and the media request is unchanged.
+
+### D203
+
+**session-pending** (2026-10-28, the owner; the clauses after the owner's
+words are taken by the session, pending the owner's review). The owner asked
+the session to "Plan and implement what is still missing" and said "the
+solution must be as good as possible in terms of well-designed architecture
+and ux". It authorizes [B487](m2.md#b487) as slice X200 and
+[B892](m2.md#b892) as slice X203 on M2, out of sequence, and is the dated
+waiver of their Requires on B486's acceptance and B487's qualified service
+items, for implementation only. It answers the stretch services brief's
+B487-Q1 to Q3 and closes [B316](m2.md#b316)'s remainder. Taken by the
+session, pending the owner's review, for B487
+([stretch services](../ceph.md#stretch-services-and-front-doors)): (1) The
+consumers' set qualifies first: MON, MGR, OSD and the derived crash
+collector, MDS for CephFS, RGW with its front doors and the CephConsumer
+export Data Foundation's external mode reads (Q1 (a)). NVMe-oF refuses on a
+stretch cluster, because IBM requires at least four Ceph nodes per data site
+and the reference profile has three; its profile is [B935](m2.md#b935). An
+NFS service, a CephNFSExport and a CephSMBResource of a stretch cluster
+refuse until their own profiles ([B936](m2.md#b936)). Observability and
+management services keep their ordinary admission and claim no site-loss
+behaviour ([B937](m2.md#b937)). (2) Placement keeps native labels and
+selectors and adds no field (Q2 (a)+(c)): a service's sites are those of its
+resolved hosts, which resolve to the Environment's sites, so B316 needs no
+service-placement field and closes. An `mgr`, `mds` or `rgw` service's
+resolved hosts exclude the tiebreaker and include a host at each data site,
+and a `count` without `count_per_host` exceeds its hosts at either data
+site, so every placement cephadm may choose holds a daemon at each; a direct
+`rgw` service places a daemon on every host (the attached-gateway rule). (3)
+A qualified service creates no pool off the stretch rule. `.rgw.root`, which
+radosgw-admin creates on the default rule when absent, is created by the
+gateway holding its claim, after the claim and before any radosgw-admin call,
+on the stretch rule at 32 PGs with the autoscaler on, then set to 4/2 with
+the `rgw` application; a claimed `.rgw.root` on another rule refuses
+`stretch-pools` and is never moved; the gateway's readiness requires it on
+the rule at 4/2. No Bootwright effect moves a pool another tool created.
+(4) RGW front doors (Q3 (a), admitting (b)): direct, every rgw host's public
+address behind an operator-owned load balancer or DNS, or a declared
+DNSServer's records; or exactly one ingress per data site, each placed only at
+its site with its own virtual IP and the same `frontend_port`, `ssl` and bound
+Secret, the endpoint resolving to both virtual IPs. An rgw ingress whose hosts
+span both data sites is a stretched VIP and refuses, as does an rgw backend
+behind one ingress. (5) The gateway's readiness requires its rgw daemons at
+both data sites, each answering on its frontend port, and behind ingresses
+every ingress's daemons and every virtual IP answering, over TLS with the
+bound leaf; client I/O during a site loss is B488's operator evidence. (6) The
+consumer export carries every MON, the tiebreaker's included, every manager
+host and the gateway's endpoint addresses; Data Foundation external mode
+against a stretched cluster is owner-run acceptance under
+[B488](m2.md#b488) only, and no compatibility rule is recorded (D163). (7) The
+gateway's request admits several ingress documents and the `.rgw.root`
+effect, so the core request moves to `ceph-core-v36`; older records refuse by
+name (D142). Exit evidence: admission tests per rule and their neighbours,
+gateway-worker fakes for `.rgw.root` placement, per-site ingress readiness
+and site coverage, and a consumer export planned over a stretch cluster; the
+operator gate is B488's emulated rehearsal of the reference profile.

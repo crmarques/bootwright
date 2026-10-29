@@ -459,7 +459,13 @@ checks:
   domain, equal to its site, the tiebreaker none, and a cluster without
   stretch none; a CephPlacementPolicy of a stretch cluster and a CephPool
   `placementPolicyRef` naming one refuse, and a pool's protection is `4/2`
-  ([stretch topology](../ceph.md#stretch-topology)).
+  ([stretch topology](../ceph.md#stretch-topology)); and
+- on a stretch cluster, each `mgr`, `mds` and `rgw` service's resolved hosts
+  reach both data sites and its `count` exceeds its hosts at either site;
+  each rgw ingress's hosts lie at one data site, and an `rgw` service has no
+  ingress or one per data site, alike in port, TLS and bound Secret; an
+  `nvmeof` or `nfs` service, a CephNFSExport and a CephSMBResource refuse
+  ([stretch services](../ceph.md#stretch-services-and-front-doors)).
 
 A FIPS cluster admits a provided Machine, whose FIPS mode its host block
 observes ([frozen release and trust](../ceph.md#frozen-release-and-trust));

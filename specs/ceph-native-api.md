@@ -555,8 +555,7 @@ in the host firewall
 ([`get_port_start`](https://github.com/ceph/ceph/blob/v20.2.1/src/python-common/ceph/deployment/service_spec.py#L1672-L1673),
 [cephadm](https://github.com/ceph/ceph/blob/v20.2.1/src/cephadm/cephadm.py#L888-L899), [firewall](https://github.com/ceph/ceph/blob/v20.2.1/src/cephadm/cephadm.py#L978-L983)).
 On a cluster that declares `topology.stretch`, an nvmeof service refuses at
-its entry until [B487](milestones/m2.md#b487) delivers the stretch capacity
-gate, independently of the stretch deferral itself.
+its entry ([stretch services](ceph.md#stretch-services-and-front-doors)).
 
 ### Observability and management gateway records
 
@@ -738,7 +737,8 @@ Empty resolved placement, impossible counts, unsupported combinations of
 selectors, or missing failure-domain capacity refuse before effects. A host
 outage changes observed availability, not desired membership or authorization.
 Stretch rules apply to resolved placement, including MON-only tiebreaker
-constraints and service-specific data-site counts.
+constraints and service-specific data-site counts
+([stretch services](ceph.md#stretch-services-and-front-doors)).
 
 ## Secret bindings
 

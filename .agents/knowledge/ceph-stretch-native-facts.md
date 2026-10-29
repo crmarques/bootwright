@@ -93,7 +93,12 @@ from the selected build before the item is accepted:
   `id`, `name`, `type` and `children` IDs.
 - Whether a pool a service creates after `enable_stretch_mode` (`.nfs`,
   `.smb`, `.rgw.root`) lands on the stretch rule at 4/2: X199's observation
-  keeps the cluster partial when one does not (B487).
+  keeps the cluster partial when one does not. X200 therefore never lets a
+  service create one: the gateway creates `.rgw.root` itself on the rule
+  before any radosgw-admin call, and NFS and SMB refuse on a stretch cluster
+  ([stretch services](../../specs/ceph.md#stretch-services-and-front-doors)).
+  Whether `osd pool set <pool> size 4` is accepted on a pool created in
+  stretch mode is unverified the same way, for B488 to read.
 - `enable_stretch_mode` is assumed to need every MON located and exactly two
   buckets of the failure domain, which is why X199 activates only after the
   cluster is otherwise ready and checks the two buckets and every pool's
