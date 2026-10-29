@@ -1,8 +1,8 @@
   bootwright / media add
       Import one installer image into this host's media store, where every context shares it. A
       download requires --sha256 and follows no redirect. A URL whose query carries a signature
-      is a credential: give it with --from-url-file <path> or --from-url-file - rather than on
-      the command line; --from-url-file - requires --yes. Replacing a stored image needs
+      is a credential: --from-url refuses any query, so give it with --from-url-file <path> or
+      --from-url-file -; --from-url-file - requires --yes. Replacing a stored image needs
       ordinary confirmation; --yes skips it.
 
   Usage

@@ -468,7 +468,10 @@ the named file, opened under the invoking account like an image file, or from
 standard input for `-`: exactly one line of at most 16 KiB, an optional final
 line feed removed. A URL whose query carries a signature is a credential
 (D183, Q99), so it belongs in that file or on standard input, never on the
-argument vector; the URL a file holds is validated as `--from-url` is, and no
+argument vector: `--from-url` with a query, even an empty one after `?`, is
+`cli.usage` with exit `2` before anything is read or contacted, naming
+`--from-url-file <path|->` as the remedy and not the URL. The URL a file holds
+is validated as `--from-url` is except that it may carry a query, and no
 output names it. Standard input is refused, before anything is read, under a
 sudo policy that would log it, as a Secret's standard input is, and without
 `--yes`, since standard input then cannot answer a replacement's confirmation. A plain `http://` URL, URL userinfo, a fragment, a control

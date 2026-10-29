@@ -108,8 +108,9 @@ Passwords, tokens, pull secrets, private keys, kubeconfigs, provider and
 management-controller credentials, credential-bearing URLs, generated secret
 material, and outputs containing them are sensitive. A URL whose query carries
 a signature is a credential (D183, Q99): `media add` takes one through
-`--from-url-file <path|->` rather than the argument vector, records only its
-scheme, host and path, and names it in no output. The
+`--from-url-file <path|->` and refuses a `--from-url` carrying any query
+([flag safeguards](cli/commands.md#flag-relationships-and-safeguards)),
+records only its scheme, host and path, and names it in no output. The
 [Secret schema](api/secrets.md#secret) owns source declarations and defaults;
 desired state never carries secret values.
 

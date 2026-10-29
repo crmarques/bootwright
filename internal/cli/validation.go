@@ -400,9 +400,12 @@ func validateMediaSource(flags *pflag.FlagSet) string {
 	if err != nil || parsed.Scheme != "https" || parsed.Opaque != "" || parsed.Hostname() == "" || parsed.User != nil || parsed.Fragment != "" {
 		return "--from-url must be an HTTPS URL without userinfo or fragment"
 	}
+	if parsed.RawQuery != "" || parsed.ForceQuery {
+		return "--from-url must not carry a query; pass a signed URL through --from-url-file <path|->"
+	}
 	origin := &url.URL{Scheme: parsed.Scheme, Host: parsed.Host, Path: parsed.Path, RawPath: parsed.RawPath}
 	if len(origin.String()) > media.MaxMediaOrigin {
-		return "--from-url must name a scheme, host and path of at most " + strconv.Itoa(media.MaxMediaOrigin) + " bytes; its query is never recorded"
+		return "--from-url must name a scheme, host and path of at most " + strconv.Itoa(media.MaxMediaOrigin) + " bytes"
 	}
 	return ""
 }

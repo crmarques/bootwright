@@ -122,27 +122,29 @@ func TestMediaURLBoundaries(t *testing.T) {
 	origin := "https://example.invalid/"
 	longest := origin + strings.Repeat("a", media.MaxMediaOrigin-len(origin))
 	for value, want := range map[string]string{
-		"https://account@example.invalid/image.iso":    "--from-url must be an HTTPS URL without userinfo or fragment",
-		"file:///image.iso":                            "--from-url must be an HTTPS URL without userinfo or fragment",
-		"https:///image.iso":                           "--from-url must be an HTTPS URL without userinfo or fragment",
-		"https://[invalid/image.iso":                   "--from-url must be an HTTPS URL without userinfo or fragment",
-		"http://example.invalid/image.iso":             "--from-url must be an HTTPS URL without userinfo or fragment",
-		"https://example.invalid/image.iso#part":       "--from-url must be an HTTPS URL without userinfo or fragment",
-		"https:image.iso":                              "--from-url must be an HTTPS URL without userinfo or fragment",
-		longest + "a":                                  "--from-url must name a scheme, host and path of at most 512 bytes; its query is never recorded",
-		"https://example.invalid/ima\x1bge.iso":        "--from-url must not contain a control character",
-		"https://example.invalid/image.iso?sig=\u007f": "--from-url must not contain a control character",
+		"https://account@example.invalid/image.iso":                "--from-url must be an HTTPS URL without userinfo or fragment",
+		"file:///image.iso":                                        "--from-url must be an HTTPS URL without userinfo or fragment",
+		"https:///image.iso":                                       "--from-url must be an HTTPS URL without userinfo or fragment",
+		"https://[invalid/image.iso":                               "--from-url must be an HTTPS URL without userinfo or fragment",
+		"http://example.invalid/image.iso":                         "--from-url must be an HTTPS URL without userinfo or fragment",
+		"https://example.invalid/image.iso#part":                   "--from-url must be an HTTPS URL without userinfo or fragment",
+		"https:image.iso":                                          "--from-url must be an HTTPS URL without userinfo or fragment",
+		longest + "a":                                              "--from-url must name a scheme, host and path of at most 512 bytes",
+		"https://example.invalid/ima\x1bge.iso":                    "--from-url must not contain a control character",
+		"https://example.invalid/image.iso?sig=\u007f":             "--from-url must not contain a control character",
+		"https://example.invalid/image.iso?X-Amz-Signature=secret": "--from-url must not carry a query; pass a signed URL through --from-url-file <path|->",
+		"https://example.invalid/image.iso?":                       "--from-url must not carry a query; pass a signed URL through --from-url-file <path|->",
 	} {
 		args := []string{"media", "add", "--name", "image.iso", "--from-url", value, "--sha256", strings.Repeat("a", 64)}
 		code, _, errOut, record := runRecorded(args)
-		if code != 2 || record.calls != 0 || !strings.Contains(strings.Join(strings.Fields(errOut), " "), want) {
+		if code != 2 || record.calls != 0 || !strings.Contains(strings.Join(strings.Fields(errOut), " "), want) || strings.Contains(errOut, "secret") {
 			t.Errorf("--from-url %q: code=%d calls=%d err=%q, want exit 2 naming %q", value, code, record.calls, errOut, want)
 		}
 	}
-	for _, value := range []string{longest, "https://example.invalid/image.iso?X-Amz-Signature=" + strings.Repeat("b", 600)} {
-		args := []string{"media", "add", "--name", "image.iso", "--from-url", value, "--sha256", strings.Repeat("a", 64)}
+	for _, args := range [][]string{{"--from-url", longest}, {"--from-url-file", "signed-url.txt"}, {"--from-url-file", "-", "--yes"}} {
+		args = append([]string{"media", "add", "--name", "image.iso", "--sha256", strings.Repeat("a", 64)}, args...)
 		if code, _, errOut, record := runRecorded(args); code == 2 || record.calls != 1 {
-			t.Errorf("--from-url of %d bytes: code=%d calls=%d err=%q, want it dispatched", len(value), code, record.calls, errOut)
+			t.Errorf("%q: code=%d calls=%d err=%q, want it dispatched", args, code, record.calls, errOut)
 		}
 	}
 }
