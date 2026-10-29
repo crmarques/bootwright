@@ -1,8 +1,10 @@
 package power
 
 import (
+	"cmp"
 	"crypto/sha256"
 	"encoding/hex"
+	"maps"
 	"slices"
 	"strconv"
 	"strings"
@@ -22,15 +24,19 @@ const maxReadingBytes = 64 << 10
 // ReadTarget names one Machine, the controller its reading comes from, and the
 // operation-scoped files that controller's account and trust bundle are written
 // to. Each target carries its own variable names because one run reads many
-// controllers and no two may resolve to the same material. CAVariable is set
-// only for a controller that declares a bundle.
+// controllers and no two may resolve to the same material. CAVariable and the
+// pinned variables are set only when there is a bundle or a recorded pin.
 type ReadTarget struct {
-	Arm              string `json:"arm"`
-	CAVariable       string `json:"caVariable,omitempty"`
-	Controller       Access `json:"controller"`
-	Object           string `json:"object"`
-	PasswordVariable string `json:"passwordVariable,omitempty"`
-	UserVariable     string `json:"userVariable"`
+	Arm                  string `json:"arm"`
+	CAVariable           string `json:"caVariable,omitempty"`
+	Controller           Access `json:"controller"`
+	Object               string `json:"object"`
+	PasswordVariable     string `json:"passwordVariable,omitempty"`
+	PinnedSerialVariable string `json:"pinnedSerialVariable,omitempty"`
+	PinnedUUIDVariable   string `json:"pinnedUUIDVariable,omitempty"`
+	UserVariable         string `json:"userVariable"`
+
+	pin machine.HardwareIdentity
 }
 
 // ReadSurvey is the complete frozen intent for one bounded reading: every
@@ -61,12 +67,12 @@ func ReadContentDigest() string {
 }
 
 // readSurveysFor groups the selected Machines by the host that reaches their
-// management controllers, so one bounded run answers for every Machine behind
-// the same host. A Machine this context resolves no reachable controller for
-// is left out of the survey rather than refused: an inspection reports the
-// readings it has, and one unresolvable controller never denies the rest. A
-// realization that cannot be read is not such a Machine, so it refuses.
-func readSurveysFor(catalog api.Catalog, contextName string, names []string, realized realizations) ([]ReadSurvey, error) {
+// management controllers, and hosted ones by host namespace, so one run
+// answers for every Machine behind the same host. A Machine with no reachable
+// controller is left out rather than refused, never denying the rest; a
+// realization or pin that cannot be read refuses.
+func readSurveysFor(catalog api.Catalog, contextName string, names []string, realized realizations,
+	pinned func(string) (machine.HardwareIdentity, error)) ([]ReadSurvey, error) {
 	controllerMachine, err := lifecycle.ControllerMachine(catalog)
 	if err != nil {
 		return nil, err
@@ -78,7 +84,7 @@ func readSurveysFor(catalog api.Catalog, contextName string, names []string, rea
 			continue
 		}
 		managed, err := managedTarget(catalog, object, contextName, controllerMachine)
-		if err != nil || managed.Controller.HostCluster != "" {
+		if err != nil {
 			continue
 		}
 		if !managed.Physical {
@@ -94,10 +100,25 @@ func readSurveysFor(catalog api.Catalog, contextName string, names []string, rea
 		if err != nil {
 			continue
 		}
-		survey := grouped[placement.Machine]
+		key := placement.Machine
+		if controller.HostCluster != "" {
+			key += "\x00" + controller.HostCluster + "\x00" + hostedNamespace(controller)
+		}
+		survey := grouped[key]
 		survey.Context, survey.Placement, survey.Version = contextName, placement, ReadImplementation
 		index := strconv.Itoa(len(survey.Targets))
 		target := ReadTarget{Arm: managed.Port, Controller: controller, Object: object.Name(), UserVariable: "controllerUser" + index}
+		if substrate.PortPinned(managed.Port) && pinned != nil {
+			if target.pin, err = pinned(object.Name()); err != nil {
+				return nil, err
+			}
+			if target.pin.UUID != "" {
+				target.PinnedUUIDVariable = "pinnedUUIDBase64" + index
+			}
+			if target.pin.Serial != "" {
+				target.PinnedSerialVariable = "pinnedSerialBase64" + index
+			}
+		}
 		if _, password := substrate.ControllerCredential(managed.Port); password != "" {
 			target.PasswordVariable = "controllerPassword" + index
 		}
@@ -105,14 +126,16 @@ func readSurveysFor(catalog api.Catalog, contextName string, names []string, rea
 			target.CAVariable = "controllerCA" + index
 		}
 		survey.Targets = append(survey.Targets, target)
-		grouped[placement.Machine] = survey
+		grouped[key] = survey
 	}
 	surveys := make([]ReadSurvey, 0, len(grouped))
 	for _, survey := range grouped {
 		surveys = append(surveys, survey)
 	}
 	slices.SortFunc(surveys, func(x, y ReadSurvey) int {
-		return strings.Compare(x.Placement.Machine, y.Placement.Machine)
+		return cmp.Or(strings.Compare(x.Placement.Machine, y.Placement.Machine),
+			strings.Compare(x.Targets[0].Controller.HostCluster, y.Targets[0].Controller.HostCluster),
+			strings.Compare(hostedNamespace(x.Targets[0].Controller), hostedNamespace(y.Targets[0].Controller)))
 	})
 	return surveys, nil
 }
@@ -126,7 +149,7 @@ func readMaterials(survey ReadSurvey) []lifecycle.MaterialFile {
 	for index, target := range survey.Targets {
 		position := strconv.Itoa(index)
 		user, password := substrate.ControllerCredential(target.Arm)
-		files = append(files, lifecycle.MaterialFile{Name: "bmc-user-" + position, Part: user, Secret: target.Controller.CredentialsRef, Variable: target.UserVariable})
+		files = append(files, lifecycle.MaterialFile{Name: "bmc-user-" + position, Part: user, Secret: credentialSecret(target.Controller), Variable: target.UserVariable})
 		if password != "" {
 			files = append(files, lifecycle.MaterialFile{Name: "bmc-password-" + position, Part: password, Secret: target.Controller.CredentialsRef, Variable: target.PasswordVariable})
 		}
@@ -138,13 +161,32 @@ func readMaterials(survey ReadSurvey) []lifecycle.MaterialFile {
 	return files
 }
 
+func readValues(survey ReadSurvey) map[string]string {
+	values := map[string]string{}
+	for index, target := range survey.Targets {
+		maps.Copy(values, target.pin.PinValues(strconv.Itoa(index)))
+	}
+	if len(values) == 0 {
+		return nil
+	}
+	return values
+}
+
+func unanswered(survey ReadSurvey) map[string]string {
+	readings := make(map[string]string, len(survey.Targets))
+	for _, target := range survey.Targets {
+		readings[target.Object] = machine.PowerUnknown
+	}
+	return readings
+}
+
 // readReferences names every declaration one survey needs bound: each
 // controller's account and trust bundle, and the placement host's own access.
 func readReferences(survey ReadSurvey) []string {
 	references := survey.Placement.SecretReferences()
 	for _, target := range survey.Targets {
-		for _, reference := range []string{target.Controller.CredentialsRef, target.Controller.TrustBundleRef} {
-			if reference != "" && !slices.Contains(references, reference) {
+		for _, reference := range credentialReferences(target.Controller) {
+			if !slices.Contains(references, reference) {
 				references = append(references, reference)
 			}
 		}

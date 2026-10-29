@@ -153,6 +153,7 @@ func assembleServices(deps serviceDependencies) cli.Services {
 		Confirmer: deps.Confirmer, Session: deps.SessionConfirmer, Reporter: deps.Reporter,
 		Selection: deps.Selection, Streams: deps.Streams, Terminal: deps.Terminal,
 		Home: deps.Home, Owner: deps.Owner, Files: deps.Files, Stager: deps.Controller.Stager,
+		Custody: secrets.binder,
 	})
 	services.MachineInventory, services.MachineAccess = machine.MachineInventory, machine.MachineAccess
 	services.EnvironmentAccess = machine.EnvironmentAccess

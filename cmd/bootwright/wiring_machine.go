@@ -6,6 +6,7 @@ import (
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/cli"
+	"github.com/crmarques/bootwright/internal/containercluster/agentinstall"
 	"github.com/crmarques/bootwright/internal/controller/hostlinux"
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
 	"github.com/crmarques/bootwright/internal/desiredstate/compilation"
@@ -19,6 +20,9 @@ import (
 	"github.com/crmarques/bootwright/internal/reconciliation"
 	"github.com/crmarques/bootwright/internal/reconciliation/ansiblerunner"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
+	"github.com/crmarques/bootwright/internal/secrets"
+	"github.com/crmarques/bootwright/internal/secrets/custody"
+	"github.com/crmarques/bootwright/internal/secrets/secretstore"
 	"github.com/crmarques/bootwright/internal/substrate/baremetal"
 	"github.com/crmarques/bootwright/internal/substrate/kubevirt"
 	"github.com/crmarques/bootwright/internal/substrate/libvirt"
@@ -45,6 +49,7 @@ type machineDependencies struct {
 	Owner     func() (int, error)
 	Files     operatorFiles
 	Stager    prerequisites.AutomationStager
+	Custody   hostCustody
 }
 
 // wireMachine binds Machine inspection, explicit access and power. Inspection
@@ -58,7 +63,8 @@ func wireMachine(deps machineDependencies) cli.Services {
 	client := sshlocal.New(deps.Home, deps.Owner, sessionFiles(deps.Files))
 	runner := ansiblerunner.New(operationPlaybook(), deps.Stager)
 	powered := power.New(deps.State, machineRealization{reconciler: deps.Lifecycle}, machineIdentities{reconciler: deps.Lifecycle},
-		deps.Lifecycle, runner, runner.BeginInvocation, deps.Confirmer, deps.Reporter, selection)
+		deps.Lifecycle, runner, runner.BeginInvocation, deps.Confirmer, deps.Reporter, selection).
+		WithHostAccess(hostedAccess{lender: kubevirt.NewLender(runner), custody: deps.Custody})
 	sessions := machineaccess.New(deps.State, selection, machineaccess.Options{
 		Lender: deps.Lifecycle, Ownership: evidence, Evidence: machineHostKeys{reconciler: deps.Lifecycle},
 		Trust: deps.Trust, Observer: client, Confirmer: deps.Session, Launcher: client,
@@ -254,4 +260,26 @@ func (provedIdentities) PinnedIdentity(name string, proved []lifecycle.BlockEvid
 		}
 	}
 	return pinnedIdentity(name, own)
+}
+
+type hostCustody interface {
+	ReadProduced(context.Context, custody.ReadProducedRequest) (secretstore.ProducedMaterial, bool, error)
+}
+
+type hostedAccess struct {
+	lender  kubevirt.Lender
+	custody hostCustody
+}
+
+func (a hostedAccess) LendHostAccess(ctx context.Context, lend power.HostLend) (secrets.Material, error) {
+	execution := kubevirt.UtilityExecution(lifecycle.Execution{
+		Context: lend.Runtime.Context.Name, Launch: lend.Runtime.Launch, Output: lend.Runtime.Output,
+		Block: reconciliation.Block{BlockDefinition: reconciliation.BlockDefinition{Kind: string(api.Machine), Object: lend.Machine}, RequestDigest: lend.Digest},
+	}, lend.Cluster, a.administrator)
+	return a.lender.LendHostAccess(ctx, execution, lend.Cluster, lend.Namespace, lend.Placement, lend.Deadline)
+}
+
+func (a hostedAccess) administrator(ctx context.Context, contextName, cluster string) (secrets.Material, bool, bool, error) {
+	read, found, err := a.custody.ReadProduced(ctx, custody.ReadProducedRequest{ContextName: contextName, Block: agentinstall.InstallBlockID(cluster), Name: agentinstall.KubeconfigOutput})
+	return read.Material, found, read.Unproved, err
 }

@@ -2,11 +2,13 @@ package power
 
 import (
 	"context"
+	"time"
 
 	"github.com/crmarques/bootwright/internal/desiredstate/compilation"
 	"github.com/crmarques/bootwright/internal/diagnostics"
 	"github.com/crmarques/bootwright/internal/machine"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
+	"github.com/crmarques/bootwright/internal/secrets"
 )
 
 type CurrentSelection func(context.Context) (string, error)
@@ -50,6 +52,21 @@ type Runtime interface {
 // this is the same path a physical server takes.
 type Runner interface {
 	Run(context.Context, lifecycle.RunRequest) (lifecycle.RunResult, error)
+}
+
+// HostAccess mints through a lend run one run's hosted KubeVirt access.
+type HostAccess interface {
+	LendHostAccess(context.Context, HostLend) (secrets.Material, error)
+}
+
+type HostLend struct {
+	Runtime   lifecycle.Runtime
+	Cluster   string
+	Namespace string
+	Machine   string
+	Placement machine.Placement
+	Digest    string
+	Deadline  time.Duration
 }
 
 // Confirmer is the confirmation capability the composition supplies. Power

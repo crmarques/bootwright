@@ -54,7 +54,7 @@ func selected() []string { return []string{"controller", "guest", "host", "metal
 // that reaches it, so the Machines behind one host are answered by one run and
 // a Machine this context reaches no controller for is simply left out.
 func TestASurveyGroupsEveryReachableControllerByTheHostThatReachesIt(t *testing.T) {
-	surveys, err := readSurveysFor(catalog(), "lab", selected(), realized())
+	surveys, err := readSurveysFor(catalog(), "lab", selected(), realized(), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -87,7 +87,7 @@ func TestASurveyGroupsEveryReachableControllerByTheHostThatReachesIt(t *testing.
 // An emulated controller exists only while the Machine that owns it does, so a
 // reading asks the evidence exactly as a power verb does.
 func TestASurveyLeavesOutAnEmulatedControllerThatIsNotRealized(t *testing.T) {
-	surveys, err := readSurveysFor(catalog(), "lab", selected(), nil)
+	surveys, err := readSurveysFor(catalog(), "lab", selected(), nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -118,7 +118,7 @@ func TestAReadingFollowsTheMachineBlockNotTheInstallation(t *testing.T) {
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			states := map[string]machine.OwnershipState{"guest": test.state}
-			surveys, err := readSurveysFor(catalog(), "lab", []string{"guest"}, realizedAs(states))
+			surveys, err := readSurveysFor(catalog(), "lab", []string{"guest"}, realizedAs(states), nil)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -146,7 +146,7 @@ func TestAReadingFollowsTheMachineBlockNotTheInstallation(t *testing.T) {
 	unread := errors.New("the current operation cannot be read")
 	if _, err := readSurveysFor(catalog(), "lab", selected(), func(string) (machine.OwnershipState, bool, error) {
 		return machine.OwnershipState{}, false, unread
-	}); !errors.Is(err, unread) {
+	}, nil); !errors.Is(err, unread) {
 		t.Fatalf("an unreadable realization reported %v", err)
 	}
 }

@@ -240,8 +240,8 @@ func automationFormats() map[string]automationFormat {
 		"managed-service-v4":                    {class: formatMirrored},
 		// Power is no plan block: each run binds its request to the power
 		// content digest these implementations feed, and nothing is retained.
-		"machine-power-v3":      {class: formatMirrored},
-		"machine-power-read-v3": {class: formatMirrored},
+		"machine-power-v4":      {class: formatMirrored},
+		"machine-power-read-v4": {class: formatMirrored},
 
 		"controller-prerequisites-v6": {class: formatController, reason: "the controller stage's request, which setup applies and no plan block retains"},
 	}

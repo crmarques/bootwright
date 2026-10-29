@@ -72,11 +72,6 @@ func controllerFor(catalog api.Catalog, object api.Object, contextName, controll
 	if err != nil {
 		return "", Access{}, machine.Placement{}, false, err
 	}
-	if target.Controller.HostCluster != "" {
-		return "", Access{}, machine.Placement{}, false, failure("access.unavailable",
-			"power operations do not yet reach a KubeVirt Machine whose provider is hosted by OpenShiftCluster/"+target.Controller.HostCluster,
-			"stop its VirtualMachine through that cluster's API, then repeat the command that needed it stopped")
-	}
 	if !target.Physical {
 		admitted, err := reachable(realized, object.Name())
 		if err != nil {
@@ -132,6 +127,7 @@ func endpointFor(target substrate.Target, controllerMachine string) (Access, mac
 	return Access{
 		CredentialsRef: target.Controller.CredentialsRef,
 		Endpoint:       target.Controller.Endpoint,
+		HostCluster:    target.Controller.HostCluster,
 		TLSVerify:      target.Controller.TLSVerify,
 		TrustBundleRef: target.Controller.TrustBundleRef,
 	}, placement, target.Physical, nil

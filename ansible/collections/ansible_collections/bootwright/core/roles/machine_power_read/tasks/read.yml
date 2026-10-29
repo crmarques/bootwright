@@ -6,7 +6,7 @@
 - name: Validate the frozen reading survey
   ansible.builtin.assert:
     that:
-      - bootwright_machine_power_read_request.version == 'machine-power-read-v3'
+      - bootwright_machine_power_read_request.version == 'machine-power-read-v4'
       - bootwright_machine_power_read_request.targets | length > 0
       - bootwright_machine_power_read_digest is match('[0-9a-f]{64}')
     quiet: true

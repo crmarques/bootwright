@@ -1,0 +1,20 @@
+{
+  "arm": "kubevirt",
+  "controller": {
+    "credentialsRef": "",
+    "endpoint": "kubevirt:nested/node-0-094f15ed",
+    "hostCluster": "host",
+    "tlsVerify": true
+  },
+  "force": false,
+  "identity": {
+    "context": "lab",
+    "object": "node-0"
+  },
+  "placement": {
+    "connection": "local",
+    "machine": "controller"
+  },
+  "verb": "restart",
+  "version": "machine-power-v4"
+}

@@ -650,20 +650,16 @@ func (c MachineCapability) Quiescent(ctx context.Context, probe lifecycle.Probe)
 		return lifecycle.Quiescence{}, err
 	}
 	stop := "bootwright machine stop --context " + execution.Context + " --name " + request.Identity.Object
-	remedy := ""
-	if request.HostCluster != "" {
-		stop, remedy = "", "stop VirtualMachine "+request.Namespace+"/"+request.Name+" through the API of OpenShiftCluster/"+request.HostCluster
-	}
 	result, err := c.run(ctx, execution, "observe", request)
 	if err != nil {
-		return lifecycle.Quiescence{State: lifecycle.Unproved, Reason: "its VirtualMachineInstance could not be read", Stop: stop, Remedy: remedy}, nil
+		return lifecycle.Quiescence{State: lifecycle.Unproved, Reason: "its VirtualMachineInstance could not be read", Stop: stop}, nil
 	}
 	evidence, err := decodeMachineEvidence(result.Evidence, execution.Block.RequestDigest)
 	switch {
 	case err != nil || !evidence.Answered:
-		return lifecycle.Quiescence{State: lifecycle.Unproved, Reason: "the host cluster did not answer for its VirtualMachineInstance", Stop: stop, Remedy: remedy}, nil
+		return lifecycle.Quiescence{State: lifecycle.Unproved, Reason: "the host cluster did not answer for its VirtualMachineInstance", Stop: stop}, nil
 	case evidence.Instance != "":
-		return lifecycle.Quiescence{State: lifecycle.Live, Reason: "its VirtualMachineInstance is " + evidence.Instance, Stop: stop, Remedy: remedy}, nil
+		return lifecycle.Quiescence{State: lifecycle.Live, Reason: "its VirtualMachineInstance is " + evidence.Instance, Stop: stop}, nil
 	}
 	return lifecycle.Quiescence{State: lifecycle.Quiescent, Reason: "its VirtualMachineInstance is absent"}, nil
 }

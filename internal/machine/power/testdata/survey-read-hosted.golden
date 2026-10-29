@@ -1,0 +1,36 @@
+{
+  "context": "lab",
+  "placement": {
+    "connection": "local",
+    "machine": "controller"
+  },
+  "targets": [
+    {
+      "arm": "kubevirt",
+      "controller": {
+        "credentialsRef": "",
+        "endpoint": "kubevirt:nested/node-0-094f15ed",
+        "hostCluster": "host",
+        "tlsVerify": true
+      },
+      "object": "node-0",
+      "pinnedSerialVariable": "pinnedSerialBase640",
+      "pinnedUUIDVariable": "pinnedUUIDBase640",
+      "userVariable": "controllerUser0"
+    },
+    {
+      "arm": "kubevirt",
+      "controller": {
+        "credentialsRef": "",
+        "endpoint": "kubevirt:nested/node-1-302063a4",
+        "hostCluster": "host",
+        "tlsVerify": true
+      },
+      "object": "node-1",
+      "pinnedSerialVariable": "pinnedSerialBase641",
+      "pinnedUUIDVariable": "pinnedUUIDBase641",
+      "userVariable": "controllerUser1"
+    }
+  ],
+  "version": "machine-power-read-v4"
+}

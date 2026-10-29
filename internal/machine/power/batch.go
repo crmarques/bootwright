@@ -79,6 +79,9 @@ func (s Service) resolveOne(ctx context.Context, catalog api.Catalog, contextNam
 	if err := refuseTemplateValues(contextName, command, frozen); err != nil {
 		return target{}, err
 	}
+	if frozen.Controller.HostCluster != "" && s.access == nil {
+		return target{}, refusedOn(name, "this executable lends no access to OpenShiftCluster/"+frozen.Controller.HostCluster+", which hosts Machine/"+name+", so no power request was sent", "")
+	}
 	object, _ := catalog.Find(api.Machine, name)
 	resolved := target{frozen: frozen, physical: physical}
 	if physical || substrate.PortPinned(frozen.Arm) {

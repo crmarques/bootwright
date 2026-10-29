@@ -6,7 +6,7 @@
 - name: Validate the frozen power request
   ansible.builtin.assert:
     that:
-      - bootwright_machine_power_request.version == 'machine-power-v3'
+      - bootwright_machine_power_request.version == 'machine-power-v4'
       - bootwright_machine_power_request.arm is string
       - bootwright_machine_power_request.verb in ['start', 'stop', 'restart']
       - bootwright_machine_power_digest is match('[0-9a-f]{64}')

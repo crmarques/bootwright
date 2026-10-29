@@ -745,7 +745,10 @@ read-only or unrecorded execution may run one and take its output, which the
 runner refuses for every other operation; a quiescence probe borrows produced
 entries as the removal it gates does. The KubeVirt arm on a host this context
 builds is the one such consumer
-([KubeVirt machine realization](substrates.md#kubevirt-machine-realization)).
+([KubeVirt machine realization](substrates.md#kubevirt-machine-realization)),
+and a [machine power command](cli.md#machine-power-operations), which
+registers no operation, lends for its own run the same way from the proved
+entry custody holds.
 
 Not yet met: no live run has confirmed that the monitor map's creation time
 stays the same across a monitor added or removed and a Ceph upgrade, and

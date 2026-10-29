@@ -34,6 +34,9 @@ argument_specs:
                   endpoint:
                     type: str
                     required: true
+                  hostCluster:
+                    type: str
+                    required: false
                   tlsVerify:
                     type: bool
                     required: true
@@ -46,13 +49,19 @@ argument_specs:
               passwordVariable:
                 type: str
                 required: false
+              pinnedSerialVariable:
+                type: str
+                required: false
+              pinnedUUIDVariable:
+                type: str
+                required: false
               userVariable:
                 type: str
                 required: true
           version:
             type: str
             required: true
-            choices: [machine-power-read-v3]
+            choices: [machine-power-read-v4]
       bootwright_machine_power_read_material:
         type: dict
         required: true

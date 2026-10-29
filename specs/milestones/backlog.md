@@ -3338,6 +3338,8 @@ holding such a clause, the clauses pending and the work they enable.
   realized (X203).
 - [D206](#d206): clauses (1) to (6), the consumer and replication bindings
   of a stretch cluster with a provided tiebreaker (X205).
+- [D207](#d207): clauses (1) to (10), power and the live reading of KubeVirt
+  Machines on a host the context builds and the reading's pin (X206).
 
 ### D1
 
@@ -5481,7 +5483,7 @@ record and with its own, and a mismatch refuses. Each VirtualMachine claims
 remainder).
 (13) New items: [B905](#b905), [B906](#b906), [B907](#b907),
 [B908](m3.md#b908) (peer VM placement), [B909](#b909) (UserDefinedNetwork
-attachments, refused by the arm until then) and [B910](m1.md#b910), the live power read's
+attachments, refused by the arm until then) and [B910](m3.md#b910), the live power read's
 pin; the port's own cluster and UID pin, which the slice's review found
 missing, is delivered with it.
 
@@ -6037,3 +6039,58 @@ nothing, record each retirement and record the cluster's only once the
 tiebreaker reports its footprint absent, with the binding, decode and
 surviving-host refusal tests; the operator gate is B488's emulated rehearsal
 destroying such a cluster with its consumer export.
+
+### D207
+
+**session-pending** (2026-10-29, the owner; the clauses after the owner's
+words are taken by the session, pending the owner's review). The owner asked
+the session to "Plan and implement what is still missing". It answers
+[B930](m3.md#b930)'s open questions and specifies it, and fixes how
+[B910](m3.md#b910) is met; X206 implements both, and X207 fixes
+[B950](m1.md#b950), which blocked both. Taken by the session, pending the
+owner's review:
+(1) A power command (`machine start`, `stop`, `restart`, `stop --force`) or
+the power reading on a KubeVirt Machine whose provider names
+`hostClusterRef` registers no operation; inside its bounded runtime, after
+every resolution and the confirmation and before its own run, it runs the
+arm's `lend` (operation `lend` of `substrate-host-kubevirt-v1`, request
+`substrate-access-kubevirt-v1`, unchanged) as an unrecorded, read-only
+execution bound to that run's request digest, and lends the minted
+token-only kubeconfig to that one run, clearing it on every return. No
+record, evidence, log, result or frozen request carries the token.
+(2) The lend run alone is handed the host installation's administrator
+kubeconfig, read from the context's custody entry `cluster-install-<cluster>`,
+`kubeconfig`, under custody's shared lock, the read `diff --observe` makes;
+only that entry of the provider's host cluster is lent, and only proved: a
+missing or unproved entry refuses a power command `access.unavailable`
+naming the apply that completes the host, and leaves a reading `unknown`.
+(3) A destroy part way through leaves the entry readable: custody withdraws it
+only when the host installation's removal completes, which the inverted edges
+order after every hosted Machine's removal, so it is held while any hosted
+VirtualMachine may exist.
+(4) The power run states a deadline, the arm's power bound plus two state
+reads and 300 s for the run itself (1260 s), and a reading one state read per
+Machine and the same 300 s; each lend's
+lifetime is that deadline plus 600 s, as [D202](#d202) (3) sets.
+(5) A reading groups hosted Machines by placement host, host cluster and
+namespace, so one lend serves one reading run; a lend that fails, or a run
+that ends unanswered, leaves that group's Machines `unknown`, never absent, and every other
+group still reads; a cancellation still ends the reading.
+(6) Every hosted verb is held to the Machine's pin as an external one is, so a
+swapped cluster or another VirtualMachine refuses `identity-mismatch` before
+any power request, and the refusal's remedy names the provider's
+`kubeconfigRef` or `hostClusterRef`, not a BMC address.
+(7) B910: each reading target of a pinned port names its own material values
+(`pinnedUUIDVariable`, `pinnedSerialVariable`) carrying its Machine's pin,
+which the read passes to the port; a Machine whose block recorded none, or
+whose host refuses the pin, reads `unknown`.
+(8) The requests move to `machine-power-v4` (adding `controller.hostCluster`)
+and `machine-power-read-v4` (adding it and the pin variables); power is no
+plan block and retains nothing, so no record refuses.
+(9) A hosted Machine's quiescence refusal names `bootwright machine stop`, as
+an external one's does.
+(10) A KubeVirt pin is read from the current apply alone, so while a destroy
+is the context's current operation a KubeVirt power command refuses
+`identity-mismatch`; [B951](m1.md#b951) records it. Exit evidence: the
+hosted power, reading, lend and pin tests and goldens; the operator gates are
+the lab-kubevirt and lab-kubevirt-nested runs.

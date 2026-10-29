@@ -105,7 +105,7 @@ def scope(tmp_path, observation=None, pin_uuid=None, pin_serial=None, physical=T
             "identity": {"context": "lab", "object": "metal"},
             "placement": {"machine": "controller"},
             "verb": "stop",
-            "version": "machine-power-v3",
+            "version": "machine-power-v4",
         },
     }))
     variables = dict(LOADER.load_from_file(str(ROLE / "defaults" / "main.yml"), trusted_as_template=True))

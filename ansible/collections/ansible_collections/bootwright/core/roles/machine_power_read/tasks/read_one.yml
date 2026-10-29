@@ -16,6 +16,12 @@
         {{ bootwright_machine_power_read_material[machine_power_read_target.caVariable]
            if machine_power_read_target.caVariable | default('') | length > 0 else '' }}
       media: false
+      pinned_uuid_base64: >-
+        {{ bootwright_machine_power_read_material[machine_power_read_target.pinnedUUIDVariable]
+           if machine_power_read_target.pinnedUUIDVariable | default('') | length > 0 else '' }}
+      pinned_serial_base64: >-
+        {{ bootwright_machine_power_read_material[machine_power_read_target.pinnedSerialVariable]
+           if machine_power_read_target.pinnedSerialVariable | default('') | length > 0 else '' }}
 
 - name: Retain the reading in survey order
   ansible.builtin.set_fact:

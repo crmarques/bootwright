@@ -8,12 +8,19 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
+	"github.com/crmarques/bootwright/internal/containercluster/agentinstall"
+	"github.com/crmarques/bootwright/internal/diagnostics"
 	"github.com/crmarques/bootwright/internal/machine"
 	machineaccess "github.com/crmarques/bootwright/internal/machine/access"
+	"github.com/crmarques/bootwright/internal/machine/power"
 	"github.com/crmarques/bootwright/internal/managedos/installation"
 	"github.com/crmarques/bootwright/internal/reconciliation"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
+	"github.com/crmarques/bootwright/internal/secrets"
+	"github.com/crmarques/bootwright/internal/secrets/custody"
+	"github.com/crmarques/bootwright/internal/secrets/secretstore"
 	"github.com/crmarques/bootwright/internal/substrate/baremetal"
 	"github.com/crmarques/bootwright/internal/substrate/kubevirt"
 	"github.com/crmarques/bootwright/internal/substrate/libvirt"
@@ -153,5 +160,87 @@ func TestTrustEnrollmentPresentsOnTheProcessStandardOutput(t *testing.T) {
 	}
 	if trustOptions(machineDependencies{}, nil).Presenter != nil {
 		t.Fatal("a process without standard output bound a presenter")
+	}
+}
+
+// hostCustodyStub holds one produced entry, recording each read.
+type hostCustodyStub struct {
+	reads    []custody.ReadProducedRequest
+	entry    secretstore.ProducedMaterial
+	found    bool
+	material []secrets.Material
+}
+
+func (c *hostCustodyStub) ReadProduced(_ context.Context, request custody.ReadProducedRequest) (secretstore.ProducedMaterial, bool, error) {
+	c.reads = append(c.reads, request)
+	entry := c.entry
+	entry.Material = secrets.NewMaterial(map[secrets.Part][]byte{secrets.ValuePart: []byte("administrator-kubeconfig")})
+	c.material = append(c.material, entry.Material)
+	return entry, c.found, nil
+}
+
+// lendRunner answers each run with answer, as the access role does.
+type lendRunner struct {
+	runs   []lifecycle.RunRequest
+	answer func(lifecycle.RunRequest) lifecycle.RunResult
+}
+
+func (r *lendRunner) Run(_ context.Context, invoked lifecycle.RunRequest) (lifecycle.RunResult, error) {
+	r.runs = append(r.runs, invoked)
+	return r.answer(invoked), nil
+}
+
+// lent answers a lend with the evidence and the one output the access role
+// leaves.
+func lendAnswer(invoked lifecycle.RunRequest) lifecycle.RunResult {
+	var request kubevirt.LendRequest
+	_ = json.Unmarshal(invoked.Canonical, &request)
+	evidence, _ := json.Marshal(kubevirt.LendEvidence{ExpirationSeconds: request.ExpirationSeconds, Postcondition: true, Request: invoked.Digest,
+		Server: "https://api.host.example.test:6443", Version: "substrate-access-kubevirt-evidence-v1"})
+	return lifecycle.RunResult{Outcome: "unchanged", Evidence: evidence, Produced: []lifecycle.Produced{{Name: "kubeconfig",
+		Material: secrets.NewMaterial(map[secrets.Part][]byte{secrets.ValuePart: []byte("token-kubeconfig")})}}}
+}
+
+// A power run on a hosted Machine borrows the host installation's proved
+// administrator kubeconfig for its lend run alone, bound to the power
+// request's digest, and clears it; a missing or unproved entry lends nothing
+// and names the apply that completes the host.
+func TestAHostedPowerLendBorrowsOnlyTheHostsProvedKubeconfig(t *testing.T) {
+	lend := power.HostLend{Runtime: lifecycle.Runtime{Context: lifecycle.ContextIdentity{Name: "lab"}}, Cluster: "host", Namespace: "nested",
+		Machine: "node-0", Placement: machine.Placement{Machine: "controller", Connection: "local"}, Digest: strings.Repeat("c", 64), Deadline: 16 * time.Minute}
+	held, runner := &hostCustodyStub{found: true}, &lendRunner{answer: lendAnswer}
+	lent, err := hostedAccess{lender: kubevirt.NewLender(runner), custody: held}.LendHostAccess(context.Background(), lend)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if value, _ := lent.Part(secrets.ValuePart); string(value) != "token-kubeconfig" {
+		t.Fatalf("lent %q", value)
+	}
+	if len(held.reads) != 1 || held.reads[0] != (custody.ReadProducedRequest{ContextName: "lab", Block: agentinstall.InstallBlockID("host"), Name: agentinstall.KubeconfigOutput}) {
+		t.Fatalf("custody reads %+v", held.reads)
+	}
+	if len(runner.runs) != 1 || runner.runs[0].Implementation != kubevirt.HostImplementation || runner.runs[0].Operation != lifecycle.LendOperation ||
+		runner.runs[0].Digest != lend.Digest || !runner.runs[0].ReadOnly || !runner.runs[0].Unrecorded || runner.runs[0].Deadline == 0 {
+		t.Fatalf("lend runs %+v", runner.runs)
+	}
+	if material := runner.runs[0].Material; len(material) != 1 || len(runner.runs[0].Materials) != 1 || runner.runs[0].Materials[0].Variable != "kubeconfig" {
+		t.Fatalf("the lend run was handed %d materials over %+v", len(material), runner.runs[0].Materials)
+	}
+	if value, _ := held.material[0].Part(secrets.ValuePart); strings.Trim(string(value), "\x00") != "" {
+		t.Fatal("the administrator kubeconfig outlived its lend")
+	}
+	for name, stub := range map[string]*hostCustodyStub{"missing": {}, "unproved": {found: true, entry: secretstore.ProducedMaterial{Unproved: true}}} {
+		runner := &lendRunner{answer: lendAnswer}
+		_, err := hostedAccess{lender: kubevirt.NewLender(runner), custody: stub}.LendHostAccess(context.Background(), lend)
+		if found := diagnostics.Of(err); len(found) != 1 || found[0].Code != "access.unavailable" || !strings.Contains(found[0].Remediation, "bootwright apply --context lab") || len(runner.runs) != 0 {
+			t.Fatalf("%s: %+v (%v) after %d runs", name, found, err, len(runner.runs))
+		}
+		if value, _ := stub.material[0].Part(secrets.ValuePart); strings.Trim(string(value), "\x00") != "" {
+			t.Fatalf("%s: a refused entry was not cleared", name)
+		}
+	}
+	borrow := kubevirt.UtilityExecution(lifecycle.Execution{Context: "lab"}, "host", hostedAccess{custody: held}.administrator).LendProduced
+	if _, err := borrow(context.Background(), lifecycle.ProducedInput{Kind: "OpenShiftCluster", Object: "other", Output: "kubeconfig"}); err == nil {
+		t.Fatal("a power lend borrowed another cluster's kubeconfig")
 	}
 }

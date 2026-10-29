@@ -33,6 +33,7 @@ type Service struct {
 	confirmer   Confirmer
 	reporter    Reporter
 	selection   CurrentSelection
+	access      HostAccess
 }
 
 // New binds a power service. begin is the power runner's invocation scope,
@@ -43,6 +44,11 @@ func New(state EffectiveState, realization Realization, identities Identities, r
 		state: state, realization: realization, identities: identities, runtime: runtime, runner: runner,
 		begin: begin, confirmer: confirmer, reporter: reporter, selection: selection,
 	}
+}
+
+func (s Service) WithHostAccess(access HostAccess) Service {
+	s.access = access
+	return s
 }
 
 // realized asks the Realization port about the Machines of one context, for
@@ -92,7 +98,7 @@ func (s Service) Read(ctx context.Context, contextName string, names []string) (
 	if err != nil {
 		return nil, err
 	}
-	surveys, err := readSurveysFor(effective.Effective, name, names, s.realized(ctx, name))
+	surveys, err := readSurveysFor(effective.Effective, name, names, s.realized(ctx, name), s.pinned(ctx, name))
 	if err != nil {
 		return nil, err
 	}
@@ -133,8 +139,21 @@ func (s Service) Read(ctx context.Context, contextName string, names []string) (
 	return readings, nil
 }
 
+func (s Service) pinned(ctx context.Context, contextName string) func(string) (machine.HardwareIdentity, error) {
+	if s.identities == nil {
+		return nil
+	}
+	return func(name string) (machine.HardwareIdentity, error) {
+		proved, found, err := s.identities.ProvedIdentity(ctx, contextName, name)
+		if err != nil || !found {
+			return machine.HardwareIdentity{}, err
+		}
+		return proved, nil
+	}
+}
+
 // observe runs one bounded reading against every controller a single host
-// reaches, inside the runtime the whole survey shares.
+// reaches; a hosted survey whose lend or run fails reads unknown alone.
 func (s Service) observe(ctx context.Context, runtime lifecycle.Runtime, frozen ReadSurvey, step lifecycle.ProgressEvent) (map[string]string, error) {
 	canonical, err := frozen.Canonical()
 	if err != nil {
@@ -147,7 +166,23 @@ func (s Service) observe(ctx context.Context, runtime lifecycle.Runtime, frozen 
 	if err != nil {
 		return nil, err
 	}
-	run, err := s.runner.Run(ctx, readInvocation(runtime, frozen, canonical, digest, s.readGroups(step)))
+	request := readInvocation(runtime, frozen, canonical, digest, s.readGroups(step))
+	if access := frozen.Targets[0].Controller; access.HostCluster != "" {
+		request.Deadline = readDeadline(frozen)
+		material, release, err := s.lend(ctx, runtime, access, frozen.Targets[0].Object, frozen.Placement, digest, request.Deadline)
+		defer release()
+		if err != nil {
+			if ctx.Err() != nil {
+				return nil, ctx.Err()
+			}
+			return unanswered(frozen), nil
+		}
+		request.Material = material
+	}
+	run, err := s.runner.Run(ctx, request)
+	if err != nil && ctx.Err() == nil && frozen.Targets[0].Controller.HostCluster != "" {
+		return unanswered(frozen), nil
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -248,10 +283,7 @@ func (s Service) execute(ctx context.Context, name string, resolved target, posi
 	if err != nil {
 		return nil, err
 	}
-	references := append([]string{frozen.Controller.CredentialsRef}, frozen.Placement.SecretReferences()...)
-	if frozen.Controller.TrustBundleRef != "" {
-		references = append(references, frozen.Controller.TrustBundleRef)
-	}
+	references := append(credentialReferences(frozen.Controller), frozen.Placement.SecretReferences()...)
 	var result, retained *Result
 	err = s.runtime.WithRuntime(ctx, lifecycle.RuntimeRequest{ContextName: name, Secrets: references, RetainOutput: true}, func(inner context.Context, runtime lifecycle.Runtime) error {
 		retained = &Result{Machine: frozen.Identity.Object, LogLocation: runtime.LogLocation, Logs: slices.Clone(runtime.Logs)}
@@ -284,6 +316,15 @@ func (s Service) run(ctx context.Context, runtime lifecycle.Runtime, resolved ta
 	frozen := resolved.frozen
 	request := invocation(runtime, frozen, canonical, digest, resolved.pin, s.groups(step, frozen.Force))
 	physicalProofs(&request, resolved)
+	if frozen.Controller.HostCluster != "" {
+		request.Deadline = powerDeadline(frozen.Arm)
+		material, release, err := s.lend(ctx, runtime, frozen.Controller, frozen.Identity.Object, frozen.Placement, digest, request.Deadline)
+		defer release()
+		if err != nil {
+			return Evidence{}, err
+		}
+		request.Material = material
+	}
 	run, err := s.runner.Run(ctx, request)
 	if err != nil {
 		return Evidence{}, err
@@ -401,6 +442,7 @@ func readInvocation(runtime lifecycle.Runtime, frozen ReadSurvey, canonical []by
 		Canonical:      canonical,
 		Placement:      frozen.Placement,
 		Materials:      append(readMaterials(frozen), lifecycle.Materials(frozen.Placement)...),
+		MaterialValues: readValues(frozen),
 		Launch:         runtime.Launch,
 		Material:       runtime.Material,
 		Output:         runtime.Output,
@@ -411,7 +453,7 @@ func readInvocation(runtime lifecycle.Runtime, frozen ReadSurvey, canonical []by
 func invocation(runtime lifecycle.Runtime, frozen Request, canonical []byte, digest string, pin machine.HardwareIdentity,
 	progress func(context.Context, string, string)) lifecycle.RunRequest {
 	user, password := substrate.ControllerCredential(frozen.Arm)
-	materials := []lifecycle.MaterialFile{{Name: "bmc-user", Part: user, Secret: frozen.Controller.CredentialsRef, Variable: "controllerUser"}}
+	materials := []lifecycle.MaterialFile{{Name: "bmc-user", Part: user, Secret: credentialSecret(frozen.Controller), Variable: "controllerUser"}}
 	if password != "" {
 		materials = append(materials, lifecycle.MaterialFile{Name: "bmc-password", Part: password, Secret: frozen.Controller.CredentialsRef, Variable: "controllerPassword"})
 	}
@@ -488,7 +530,11 @@ const identityMismatch = "identity-mismatch"
 // run's retained output alone, which the remedy points at.
 func identityRefusal(frozen Request, output string) error {
 	identity := string(api.Machine) + "/" + frozen.Identity.Object
-	remediation := "correct spec.substrate.baremetal.bmc.address on " + identity + ", or run bootwright destroy --context " +
+	correct := "correct spec.substrate.baremetal.bmc.address on " + identity
+	if substrate.PortPinned(frozen.Arm) {
+		correct = "correct the kubeconfigRef or hostClusterRef of " + identity + "'s provider so it reaches the cluster that Machine was realized on"
+	}
+	remediation := correct + ", or run bootwright destroy --context " +
 		frozen.Identity.Context + " and bootwright apply --context " + frozen.Identity.Context + " so the machine is proved again"
 	if output != "" {
 		remediation += "; " + output + " for both identities"

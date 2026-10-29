@@ -20,6 +20,9 @@ argument_specs:
               endpoint:
                 type: str
                 required: true
+              hostCluster:
+                type: str
+                required: false
               tlsVerify:
                 type: bool
                 required: true
@@ -42,7 +45,7 @@ argument_specs:
           version:
             type: str
             required: true
-            choices: [machine-power-v3]
+            choices: [machine-power-v4]
       bootwright_machine_power_material:
         type: dict
         required: true

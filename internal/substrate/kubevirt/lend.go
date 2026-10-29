@@ -134,3 +134,26 @@ func lentAccess(ctx context.Context, lender HostAccess, execution *lifecycle.Exe
 	execution.Material[lentKubeconfig] = material
 	return []lifecycle.MaterialFile{{Name: "host-kubeconfig", Part: secrets.ValuePart, Secret: lentKubeconfig, Variable: "kubeconfig"}}, material.Clear, nil
 }
+
+type HostCustody func(ctx context.Context, contextName, cluster string) (secrets.Material, bool, bool, error)
+
+// UtilityExecution lends a run outside any operation only the proved custodied kubeconfig of cluster.
+func UtilityExecution(execution lifecycle.Execution, cluster string, read HostCustody) lifecycle.Execution {
+	execution.LendProduced = func(ctx context.Context, input lifecycle.ProducedInput) (secrets.Material, error) {
+		if read == nil || input != HostProducedInput(cluster) {
+			return secrets.Material{}, refusal("lifecycle.state", "a run outside an operation may borrow only the administrator kubeconfig of the host cluster it reaches", "")
+		}
+		material, found, unproved, err := read(ctx, execution.Context, cluster)
+		if err != nil || !found || unproved {
+			material.Clear()
+			if err != nil {
+				return secrets.Material{}, err
+			}
+			return secrets.Material{}, refusal("access.unavailable",
+				"this context holds no proved administrator kubeconfig for OpenShiftCluster/"+cluster+", whose KubeVirt Machines are reached through it",
+				"bootwright apply --context "+execution.Context+" completes that cluster's installation")
+		}
+		return material, nil
+	}
+	return execution
+}

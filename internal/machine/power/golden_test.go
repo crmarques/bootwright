@@ -202,7 +202,7 @@ func TestPowerRequestsMatchTheirGoldens(t *testing.T) {
 		"survey-read-bundles": {goldenCatalog(bundled), []string{"metal", "rack", "zero"}},
 	} {
 		t.Run(name, func(t *testing.T) {
-			surveys, err := readSurveysFor(test.catalog, "lab", test.names, nil)
+			surveys, err := readSurveysFor(test.catalog, "lab", test.names, nil, nil)
 			if err != nil || len(surveys) != 1 || len(surveys[0].Targets) != len(test.names) {
 				t.Fatalf("surveys = %+v (%v), want one host reading %d controllers", surveys, err, len(test.names))
 			}

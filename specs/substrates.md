@@ -934,10 +934,26 @@ removal mints again; the evidence (`substrate-access-kubevirt-evidence-v1`)
 names the server and the granted lifetime. A host the lend cannot reach leaves
 the block unknown, never absent, as every unanswered host does.
 
-Not yet met: `bootwright machine` power commands refuse, and the power reading
-omits, a Machine on a host this context builds, so the operator stops its
-VirtualMachines through the host's API before a destroy; tracked as
-[B930](milestones/m3.md#b930).
+A [power command or the power reading](#identity-and-power-operations) on
+such a Machine runs outside any operation, so it takes its access the same
+way, through no operation of its own ([D207](milestones/backlog.md#d207)):
+inside the command's bounded runtime and before its power or reading run, it
+runs the same `lend` as an unrecorded, read-only execution bound to that run's
+request digest, borrowing the host installation's administrator kubeconfig
+from the context's custody (block `cluster-install-<cluster>`, output
+`kubeconfig`, read under custody's shared lock as `diff --observe` reads it),
+and lends the minted kubeconfig to that one run, clearing it when the run
+returns. Only a proved entry is lent; a missing or unproved one refuses a
+power command `access.unavailable`, naming the apply that completes the host.
+Custody keeps the entry until the host installation's removal completes,
+which follows the removal of every Machine the host runs, so the entry stays
+readable while any of their VirtualMachines may exist. A power run's deadline
+is the arm's power bound plus two state reads and 300 s for the run itself
+(1260 s), and a reading's one state read per Machine and the same 300 s; a
+reading runs and lends once per host namespace, and a lend that fails, or a
+run that ends unanswered, leaves that namespace's Machines `unknown`, never
+absent, without denying any other reading. Every verb, `--force` included, is held to the pin
+below.
 
 **Provider proof.** The block `substrate-host-<provider>`, implementation
 `substrate-host-kubevirt-v1`, proves the host before any Machine of the
@@ -1043,9 +1059,10 @@ only the machine block creates and records. The upload DataVolume carries an
 owner reference to the pinned VirtualMachine and is this Machine's only
 through it.
 
-Not yet met: the live power read (`machine_power_read`) carries no pin, so it
-reads a KubeVirt Machine's power as unknown; tracked as
-[B910](milestones/m1.md#b910). The machine must be off, by a positive `NotFound` of its
+The live power read (`machine_power_read`) passes the same pin: each read
+target of a pinned port names the values that carry its own Machine's pin,
+so the read reports the power of a Machine whose block recorded one, and
+reads `unknown` for one that recorded none or whose pin the host refuses. The machine must be off, by a positive `NotFound` of its
 VirtualMachineInstance, before any media write. `media_insert` takes the
 image file as `image_path` and the controller's `virtctl` as `virtctl`; it
 creates the upload DataVolume `<vm>-media`, blank with `source.upload`, sized

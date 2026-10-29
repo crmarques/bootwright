@@ -21,11 +21,12 @@ type Identity struct {
 }
 
 // Access is the management endpoint the Machine's arm reaches it through, the
-// declaration whose credential answers it, and how its transport is verified.
-// No material is named here.
+// declaration or host cluster whose credential answers it, and how its
+// transport is verified. No material is named here.
 type Access struct {
 	CredentialsRef string `json:"credentialsRef"`
 	Endpoint       string `json:"endpoint"`
+	HostCluster    string `json:"hostCluster,omitempty"`
 	// TLSVerify and TrustBundleRef carry the Machine's declared trust to the
 	// adapter: a controller whose certificate an internal authority issued is
 	// verified against the bundle naming that authority alone, one with no
