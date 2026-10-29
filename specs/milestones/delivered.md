@@ -10007,3 +10007,19 @@ mode-0600 file in the run's private scratch directory, read with
 `--password-file` and deleted on the next line. No runbook types or pipes a
 credential any more, so an elevated `set` never meets sudo's I/O log
 [refusal](../secrets.md#acquisition-and-commands).
+
+### X224 — Kickstart Bash free of template delimiters
+
+**Item:** B972 (opened and delivered on 2026-10-29 for the owner's report of
+lab-rhel `plan` refusing `Machine/rhel-01` because its kickstart holds `{#`).
+**Kind:** defect. **Owner:** Managed OS.
+
+The encrypted-root `%pre` measured the recovery passphrase with
+`${#bootwright_recovery}` and the physical root-disk identity function counted
+bytes with `${#bytes[@]}`, so the plan guard against template delimiters
+refused every TPM2-encrypted or WWN- or serial-checked installation. The
+passphrase class now carries its 8-to-256 bound, and the identity function
+counts with `set --` and `$#`; both refuse exactly what they refused before.
+The request goldens now pass the plan guard, which
+`TestTheFrozenRequestsMatchTheirGoldens` and
+`TestPhysicalHostVariantsRequestGolden` hold.

@@ -147,8 +147,8 @@ func TestDiskEncryptionPreScriptProvesATPMBeforeAnyDiskIsTouched(t *testing.T) {
 		"if [ ! -c /dev/tpmrm0 ]; then",
 		"cat > /tmp/bootwright-artifact-ca.pem <<'BOOTWRIGHT_ARTIFACT_CA_EOF'",
 		"bootwright_recovery=$(curl --fail --silent --show-error --cacert /tmp/bootwright-artifact-ca.pem '@@BOOTWRIGHT_PRIVATE_URL@@/recovery')",
-		"bootwright_class='^[]!$%&(-[^-~]+$'",
-		"if [ ${#bootwright_recovery} -lt 8 ] || [ ${#bootwright_recovery} -gt 256 ] || [[ ! ${bootwright_recovery} =~ ${bootwright_class} ]]; then",
+		"bootwright_class='^[]!$%&(-[^-~]{8,256}$'",
+		"if [[ ! ${bootwright_recovery} =~ ${bootwright_class} ]]; then",
 		`printf '%s%s\n' 'autopart --type=lvm --encrypted --luks-version=luks2 --passphrase=' "${bootwright_recovery}" > /tmp/bootwright-storage.ks`,
 		"unset bootwright_recovery",
 	}
@@ -164,7 +164,7 @@ func TestDiskEncryptionPreScriptProvesATPMBeforeAnyDiskIsTouched(t *testing.T) {
 		t.Fatal("the kickstart traces its commands")
 	}
 	for _, line := range pre {
-		if strings.Contains(line, "${bootwright_recovery}") && !strings.HasPrefix(line, "if [ ${#bootwright_recovery}") && !strings.HasPrefix(line, "printf '%s%s") {
+		if strings.Contains(line, "${bootwright_recovery}") && !strings.HasPrefix(line, "if [[ ! ${bootwright_recovery} =~") && !strings.HasPrefix(line, "printf '%s%s") {
 			t.Fatalf("the %%pre reads the passphrase in %q", line)
 		}
 	}

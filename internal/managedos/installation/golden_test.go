@@ -53,6 +53,16 @@ func matchesGolden(t *testing.T, name string, canonical []byte) {
 	}
 }
 
+// passesTheTemplateGuard plans a frozen request through the guard every plan
+// applies, which refuses a template delimiter in any string Bootwright derives.
+func passesTheTemplateGuard(t *testing.T, canonical []byte) {
+	t.Helper()
+	definition := reconciliation.BlockDefinition{Kind: "Machine", Object: "rhel-01", Request: canonical}
+	if err := lifecycle.RefuseTemplateDelimiters(testContext, []reconciliation.BlockDefinition{definition}); err != nil {
+		t.Errorf("the plan guard refuses the request: %v", diagnostics.Of(err))
+	}
+}
+
 // firstDifference quotes both texts around the first byte they differ at,
 // which locates a change inside one long line such as an embedded document.
 func firstDifference(want, got string) string {
@@ -200,6 +210,7 @@ func TestTheFrozenRequestsMatchTheirGoldens(t *testing.T) {
 				t.Fatalf("freezing: %v", diagnostics.Of(err))
 			}
 			matchesGolden(t, "request-"+name, canonical)
+			passesTheTemplateGuard(t, canonical)
 			if _, err := DecodeRequest(canonical); err != nil {
 				t.Fatalf("decoding: %v", diagnostics.Of(err))
 			}

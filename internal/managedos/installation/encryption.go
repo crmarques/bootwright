@@ -139,8 +139,8 @@ func encryptionPreLines(input Installation) []string {
 	}
 	lines = append(lines, recoveryFetchLines()...)
 	return append(lines,
-		"bootwright_class='^[]!$%&(-[^-~]+$'",
-		"if [ ${#bootwright_recovery} -lt 8 ] || [ ${#bootwright_recovery} -gt 256 ] || [[ ! ${bootwright_recovery} =~ ${bootwright_class} ]]; then",
+		"bootwright_class='^[]!$%&(-[^-~]{8,256}$'",
+		"if [[ ! ${bootwright_recovery} =~ ${bootwright_class} ]]; then",
 		"echo 'Bootwright: the recovery passphrase this installation fetched is not 8 to 256 printable characters free of spaces, quotes, backslashes and #; refusing before any disk is touched.' >&2",
 		"exit 1",
 		"fi",
