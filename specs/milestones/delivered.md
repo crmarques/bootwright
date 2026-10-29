@@ -9505,3 +9505,23 @@ artifact server and freeze the media block's request identity. The native
 provider descriptor, media/state proof and bounds remain B87 dependencies;
 production selection continues to refuse that provider. B731's synthetic
 lab-kubevirt input and runbook are prepared and validated, with no live claim.
+
+### X208 — Specification audit follow-up and implementation plan
+
+**Item:** B952 (opened and delivered on 2026-10-29 for the owner's request to
+prepare an implementation plan and preserve the review).
+**Kind:** enabling. **Owners:** Architecture and Agent guidance.
+
+The [dated review](../../audits/spec/2026-10-29-follow-up/review.md), its
+232-finding ledger and the
+[implementation plan](../../audits/spec/2026-10-29-follow-up/implementation-plan.md)
+are preserved together. The plan maps all 18 incomplete catalog findings and
+the eight carried safety or validation items to proposed work packages,
+dependencies, required decisions and exit evidence. Existing milestone items
+keep their state; the planning deliverable activates no implementation slice
+and grants no effect authority.
+
+The preservation uses repository-relative links and retains the review's
+baseline and verification limits. Its delivering commit records document and
+coverage checks, the independent plan review and integration gate results.
+No product behavior or contract changes.
