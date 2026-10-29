@@ -965,7 +965,7 @@
       "title": "The glossary defines seven terms but not the most overloaded core terms",
       "section": "S4",
       "status": "resolved",
-      "evidence": "specs/glossary.md:35-78; audits/spec/2026-10-26.md:409",
+      "evidence": "specs/glossary.md:35-78; audits/spec/001/report-final.md:409",
       "remaining": "Overloaded qualified forms now have owner links in a standalone glossary. Audit narrative permits keeping the full ~40-term table in the audit; not all forty terms need copying."
     },
     {
@@ -2158,7 +2158,7 @@
   "quality_review": {
     "review_date": "2026-10-29",
     "head": "4510d73b6",
-    "report": "quality-assessment.md",
+    "report": "report.md#quality-assessment",
     "scope": "185 resolved findings and 29 explicit decisions; original dispositions unchanged",
     "catalog_reviewed": 214,
     "method": "Catalog-level consideration of all addressed entries, with selected implementation, test, contract and decision inspection identified in the report; no per-finding quality score or universal code-audit claim.",

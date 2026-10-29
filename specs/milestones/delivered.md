@@ -8268,7 +8268,7 @@ matrix acceptance and M2d/M2e's physical/stretch gates remain open.
 **Item:** B592 (opened on 2026-10-14 by the X91 audit). **Kind:** enabling.
 **Owners:** Architecture and Agent guidance. Delivered on 2026-10-26 at the
 owner's request to apply the
-[2026-10-26 spec audit](../../audits/spec/2026-10-26.md) to the specs and
+[2026-10-26 spec audit](../../audits/spec/001/report-final.md) to the specs and
 skills and to park the rest of its roadmap.
 
 The specs, glossary and skills now state what the code does where they had
@@ -9512,9 +9512,9 @@ lab-kubevirt input and runbook are prepared and validated, with no live claim.
 prepare an implementation plan and preserve the review).
 **Kind:** enabling. **Owners:** Architecture and Agent guidance.
 
-The [dated review](../../audits/spec/2026-10-29-follow-up/review.md), its
+The [dated review](../../audits/spec/001/follow-up/report.md), its
 232-finding ledger and the
-[implementation plan](../../audits/spec/2026-10-29-follow-up/implementation-plan.md)
+[implementation plan](../../audits/spec/001/follow-up/implementation-plan.md)
 are preserved together. The plan maps all 18 incomplete catalog findings and
 the eight carried safety or validation items to proposed work packages,
 dependencies, required decisions and exit evidence. Existing milestone items
@@ -9532,9 +9532,9 @@ No product behavior or contract changes.
 evaluate the quality of the addressed audit work).
 **Kind:** enabling. **Owners:** Architecture and Agent guidance.
 
-The [follow-up report](../../audits/spec/2026-10-29-follow-up/review.md) now
+The [follow-up report](../../audits/spec/001/follow-up/report.md) now
 summarizes remediation quality and links a
-[detailed assessment](../../audits/spec/2026-10-29-follow-up/quality-assessment.md).
+[detailed assessment](../../audits/spec/001/follow-up/report.md).
 It distinguishes implementation and failure-path regression evidence from
 accepted decisions, interim documentation and unrun operational qualification.
 All 214 addressed or decision entries received catalog-level consideration;
@@ -9544,3 +9544,23 @@ selected implementation and test paths received deeper inspection. The original
 The delivering commit records link and catalog checks, independent assessment
 review and integration gate results. This documentation change makes no product
 or contract change and runs no live acceptance.
+
+### X210 — Numbered audit archive and consolidated follow-up
+
+**Item:** B954 (opened and delivered on 2026-10-29 for the owner's request to
+adopt the reorganized audit directory and improve the follow-up format).
+**Kind:** enabling. **Owners:** Architecture and Agent guidance.
+
+The [audit convention](../../audits/README.md) adopts one numbered directory
+per topic and one undated follow-up directory. The
+[specification audit archive](../../audits/spec/001/README.md) retains its
+source reports and now has one human report for disposition, quality,
+remaining work and verification; the plan, structured ledger and evidence
+remain separate. Local audit guidance makes the convention discoverable.
+
+Relocation updates inbound and internal links while preserving the original
+assessment baselines, all 232 finding dispositions and all 18 proposed work
+packages. Historical source evidence is checked at its audited baseline;
+archival path normalization changes no finding. The delivering commit records
+link and preservation checks, independent format review and integration gates.
+No product behavior, contract or milestone implementation state changes.

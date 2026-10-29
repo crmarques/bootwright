@@ -2936,7 +2936,7 @@ adding a retry that conceals a live owner.
 **Owner:** Desired state. **Kind:** enabling. **Requires:** none.
 **Definition:** Specified. B814's Work 5 named the operator-task check of
 section 5.7 of the
-[2026-10-26 spec audit](../../audits/spec/2026-10-26.md); X171 landed the
+[2026-10-26 spec audit](../../audits/spec/001/report-final.md); X171 landed the
 reshaped API without it. **Outcome:** the eight tasks of that section (declare
 an environment from an empty directory, fix a wrong-class reference, predict an
 omitted field's effective value, select an unsupported implementation, narrow
@@ -3059,7 +3059,7 @@ probe tests and a live run.
 
 ## Audit remediation (2026-10-26)
 
-The [2026-10-26 spec audit](../../audits/spec/2026-10-26.md) ordered its
+The [2026-10-26 spec audit](../../audits/spec/001/report-final.md) ordered its
 recommendations into a roadmap (its section 14). Slice X160 corrected the
 specs and skills where no owner decision or code was needed; every remaining
 recommendation is parked above as [B800](delivered.md#x161--audit-lane-a-harness-and-guards) to [B836](delivered.md#x164--audit-lane-e-store-durability-and-controller-records), one item per

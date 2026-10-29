@@ -1,14 +1,14 @@
 # Implementation plan for the specification-audit remainder
 
 Date: 2026-10-29. Baseline: `78d982988a3de0d78bbbab91e4edeb34a1a4adb8`.
-The [review](review.md) and [232-finding ledger](findings.json) supply the
+The [review](report.md) and [232-finding ledger](findings.json) supply the
 assessment. This plan covers all 17 partial findings, the one open finding,
 and the deferred safety and validation work named in the executive summary.
 
 The requested deliverable is this plan and a persistent review. The work
 packages below are proposed implementation units, not active slices or
 permission to run effects. Their W and A labels are local to this plan.
-[Milestones](../../../specs/milestones.md#scope-rules) remain the authority
+[Milestones](../../../../specs/milestones.md#scope-rules) remain the authority
 for delivery state and authorization. The 29 explicit owner dispositions in
 the review remain settled unless the owner changes them.
 
@@ -65,7 +65,7 @@ choice should name the relevant B/X items and amend the owning spec.
 
 ### W01 — Prove shared-host network quiescence
 
-**Carrier:** [B567](../../../specs/milestones/backlog.md#b567).
+**Carrier:** [B567](../../../../specs/milestones/backlog.md#b567).
 **Owner:** Substrate, with State reconciliation. **Class:** safety.
 **Ready after:** A1 and a named safety slice.
 
@@ -79,7 +79,7 @@ cannot lock an operator's independent libvirt client.
 
 Primary touch points: `internal/substrate/libvirt/capability.go`, the
 `substrate_libvirt_host` role and shared substrate modules, the owning
-[removal contract](../../../specs/substrates.md#provider-host-realization).
+[removal contract](../../../../specs/substrates.md#provider-host-realization).
 **Exit:** tests prove an unreadable inventory, running foreign guest, stopped
 foreign guest under A1, and continuation all refuse without a destructive
 call; an unused owned network removes successfully. A deliberate guard
@@ -88,7 +88,7 @@ on an explicitly authorized emulated host before recording live acceptance.
 
 ### W02 — Give owned resources a persistent context incarnation
 
-**Carrier:** [B568](../../../specs/milestones/backlog.md#b568).
+**Carrier:** [B568](../../../../specs/milestones/backlog.md#b568).
 **Owners:** Workspace, Substrate, Infrastructure services and Managed OS.
 **Class:** safety. **Ready after:** W01 and A2; co-design with W06.
 
@@ -112,7 +112,7 @@ changed effect. Keep the existing orphan warning until the full path qualifies.
 
 ### W03 — Continue partially enrolled Ceph clusters
 
-**Carrier:** [B659](../../../specs/milestones/m2.md#b659).
+**Carrier:** [B659](../../../../specs/milestones/m2.md#b659).
 **Owner:** Storage. **Class:** safety because recovery changes effect proofs.
 **Ready after:** A3 and the applicable identity contract from W02.
 
@@ -131,7 +131,7 @@ artifacts; the item stays awaiting acceptance until that evidence is accepted.
 
 ### W04 — Provide a supported partial-OSD recovery exit
 
-**Carrier:** [B662](../../../specs/milestones/m2.md#b662).
+**Carrier:** [B662](../../../../specs/milestones/m2.md#b662).
 **Owners:** Storage and device ownership. **Class:** safety.
 **Ready after:** A4 and the agreed receipt/device identity contracts.
 
@@ -151,7 +151,7 @@ supported recovery claim closes.
 
 ### W05 — Remove owned storage while hosts survive
 
-**Carrier:** [B491](../../../specs/milestones/m2.md#b491).
+**Carrier:** [B491](../../../../specs/milestones/m2.md#b491).
 **Owners:** Storage and State reconciliation. **Class:** safety.
 **Ready after:** A5 and applicable W02/W04 proofs; use existing online ordering.
 
@@ -171,7 +171,7 @@ consumer-retirement rehearsals; each family records its own acceptance scope.
 
 ### W06 — Restore complete stores without reusing rolled-back seal state
 
-**Carrier:** [B103](../../../specs/milestones/backlog.md#b103).
+**Carrier:** [B103](../../../../specs/milestones/backlog.md#b103).
 **Owners:** Workspace and Secrets. **Class:** safety.
 **Ready after:** A2/A6 and a named restore definition; W02 defines logical identity.
 
@@ -196,7 +196,7 @@ contract and its operator gate; improving a warning alone cannot close B103.
 **Findings:** F02-01, F02-06, F06-01, F06-12, F12-04.
 **Owners:** Architecture, Machine, Add-ons and State reconciliation.
 **Carrier:** new bounded documentation item; coordinate the adjacent
-[B884](../../../specs/milestones/m4.md#b884) corrections without marking it done
+[B884](../../../../specs/milestones/m4.md#b884) corrections without marking it done
 unless both of its stated defects are fixed.
 
 Replace the obsolete Ceph selector, finish the BMC wording, define add-on,
@@ -213,7 +213,7 @@ such as a selector schema path; do not add string-matching tests for prose edits
 ### W08 — Complete the adapter schemas covered by the audit
 
 **Finding:** V2-15. **Carrier:** the argument-schema portion of
-[B431](../../../specs/milestones/backlog.md#b431).
+[B431](../../../../specs/milestones/backlog.md#b431).
 **Owners:** each affected adapter. **Class:** enabling unless behavior changes.
 
 Declare the request members and auxiliary digest/scratch variables entry points
@@ -337,8 +337,8 @@ gates and a focused before/after review, not new tests that mirror sentences.
 ### W15 — Supply acceptance templates and truthful example status
 
 **Findings:** F17-07 and R2-05-08.
-**Carriers:** template clauses of [B61](../../../specs/milestones/m3.md#b61)
-and [B755](../../../specs/milestones/m4.md#b755); a new example-index item if needed.
+**Carriers:** template clauses of [B61](../../../../specs/milestones/m3.md#b61)
+and [B755](../../../../specs/milestones/m4.md#b755); a new example-index item if needed.
 **Owners:** Verification documentation, Container cluster and Add-ons.
 
 Add the two blank row templates from the existing gate requirements now, and
@@ -355,7 +355,7 @@ projection's consistency check. B61/B755 remain awaiting their operator gates.
 
 ### W16 — Run the eight authoring tasks and act on the results
 
-**Carrier:** [B857](../../../specs/milestones/backlog.md#b857).
+**Carrier:** [B857](../../../../specs/milestones/backlog.md#b857).
 **Owner:** Desired state and operator experience.
 **Ready after:** baseline preparation; repeat after approved W10–W13 changes.
 
@@ -376,7 +376,7 @@ decide A7, and rerun affected tasks against the final implemented shape.
 ### W17 — Complete access-credential semantics with the vSphere arm
 
 **Finding:** R2-04-01 remainder.
-**Carrier:** [B99](../../../specs/milestones/m1.md#b99).
+**Carrier:** [B99](../../../../specs/milestones/m1.md#b99).
 **Owners:** Substrate and Secrets. **Class:** safety for binding/rebind behavior.
 
 Specify `credentialsRef` as access material in the deferred arm now; preserve
@@ -394,7 +394,7 @@ The audit finding remains partial until those runtime conditions are delivered.
 
 ### W18 — Qualify Ceph recapture identity on native artifacts
 
-**Carrier:** [B867](../../../specs/milestones/backlog.md#b867).
+**Carrier:** [B867](../../../../specs/milestones/backlog.md#b867).
 **Owner:** Storage. **Ready after:** an explicitly authorized disposable live
 cluster and an agreed evidence procedure.
 
@@ -441,7 +441,7 @@ These do not change the review's 232-finding count.
 
 For each promoted package, record the outcome and any owner decisions in its
 owning milestone before implementation. Use a task worktree and coherent
-commits under [code implementation](../../../.agents/skills/code-implementation/SKILL.md).
+commits under [code implementation](../../../../.agents/skills/code-implementation/SKILL.md).
 Read the owning spec and symptom-indexed knowledge; verify current paths and
 line references against the implementation baseline rather than copying this
 snapshot's line numbers blindly.
@@ -456,8 +456,9 @@ runtime tests for prose.
 
 Maintain a disposition table linked from each delivering record: original
 finding, actual change or explicit decision, commits, exact commands/results,
-remaining carrier and operator gate. Keep this review immutable as its dated
-baseline; write subsequent closure evidence in a new dated record or the
-owning milestone. Finish by rechecking all 18 incomplete IDs and all eight
+remaining carrier and operator gate. Keep the review's assessment date and
+commit explicit. Subsequent reassessments update this undated follow-up in a
+new commit, preserving earlier versions in Git; delivery evidence remains in
+the owning milestone. Finish by rechecking all 18 incomplete IDs and all eight
 carried safety/validation items. Completion requires no silent deferrals and
 no unrun gate represented as passed.
