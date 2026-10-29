@@ -1,0 +1,85 @@
+{{- $smb := and .Values.ceph.services.smb .Values.ceph.services.file -}}
+{{- $nfs := and .Values.ceph.services.nfs .Values.ceph.services.file -}}
+apiVersion: bootwright.io/v1alpha1
+kind: MachineInstallProfile
+metadata:
+  name: rhel
+
+spec:
+  os:
+    family: rhel
+    version: {{ .Values.rhel.version | quote }}
+    architecture: x86_64
+
+  updates:
+    policy: none
+
+  installer:
+    anaconda:
+      imageRef: rhel-boot
+
+      redfishVirtualMedia:
+        artifactServerEndpoint:
+          serverRef: lab-artifacts
+          endpointRef: ip-https
+
+      packageSource:
+        hostedTree:
+          fromMedia: local-media:{{ .Values.rhel.dvdMedia }}
+
+          artifactServerEndpoint:
+            serverRef: lab-artifacts
+            endpointRef: ip-http
+
+  ntp:
+    - serverRef: lab-ntp
+      endpointRef: ip
+
+  customizations:
+    localization:
+      language: en_US.UTF-8
+      formats: en_US.UTF-8
+      keyboard: us
+      timezone: Etc/UTC
+
+    ssh:
+      passwordAuthentication: false
+
+    packages:
+      installWeakDeps: false
+      excludeDocs: true
+
+      install:
+        - chrony
+        - qemu-guest-agent
+        - podman
+        - lvm2
+        - python3
+{{- if $nfs }}
+        - nfs-utils
+{{- end }}
+{{- if $smb }}
+        - cifs-utils
+        - samba-client
+{{- end }}
+{{- if .Values.ceph.services.nvmeof }}
+        - nvme-cli
+{{- end }}
+
+    services:
+      enabled:
+        - chronyd
+        - qemu-guest-agent
+        - sshd
+
+    security:
+      selinux:
+        mode: enforcing
+
+    repositories:
+      configure:
+        - id: {{ .Values.ceph.repository.id }}
+          displayName: {{ .Values.ceph.repository.displayName }}
+          baseURL: {{ .Values.ceph.repository.baseURL }}
+          gpgCheck: true
+          gpgKeyURL: {{ .Values.ceph.repository.gpgKeyURL }}

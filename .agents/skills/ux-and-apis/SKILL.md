@@ -23,7 +23,8 @@ journeys.
 - `validate` rejects a value the only implementation refuses; no default always
   refuses at plan time.
 - A declared flag is read; an unimplemented one is refused, never ignored.
-- A runbook or case in `e2e/` runs as written against the current build.
+- A runbook lives in its e2e case, `e2e/<case>/runbook.md`, and runs as
+  written against the current build.
 
 ## Design and review
 
@@ -52,7 +53,7 @@ assertions otherwise.
 4. Change the type in `api/v1alpha1`, the kind page and its semantic owner
    together, and decide whether adding the field moves any frozen request.
 5. Update the effective-output goldens golden-first, and every tracked example
-   the change makes invalid or newly expressible; keep runbooks runnable.
+   the change makes invalid or newly expressible; keep e2e cases runnable.
 6. A field that reaches a frozen request follows the contract check in the
    [Go reference](../code-implementation/references/go.md#contract-versions-and-content-digests).
 7. Name in the report the downstream input charts the item lists; never edit

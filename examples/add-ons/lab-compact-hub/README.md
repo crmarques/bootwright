@@ -30,5 +30,3 @@ remains open and requires the accepted compact-cluster baseline.
 - All addresses and names are synthetic; the topology substitutions are
   lab-compact's. Remaining version, permission and credential checks are
   recorded in B766.
-
-Runbook: [e2e/runbooks/lab-compact-hub.md](../../../e2e/runbooks/lab-compact-hub.md).

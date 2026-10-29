@@ -1,0 +1,51 @@
+apiVersion: bootwright.io/v1alpha1
+kind: OpenShiftCluster
+metadata:
+  name: sno
+
+spec:
+  distribution:
+    type: openshift
+
+    release:
+      version: {{ .Values.openshift.version }}
+
+  install:
+    mode: connected
+
+    endpoints:
+      api:
+        source:
+          type: node
+
+      ingress:
+        source:
+          type: node
+
+    agent:
+      redfishVirtualMedia:
+        artifactServerEndpoint:
+          serverRef: lab-artifacts
+          endpointRef: ip-https
+
+    ntp:
+      - serverRef: lab-ntp
+        endpointRef: ip
+
+  nodes:
+    - name: master-0
+      role: controlPlane
+      machineRef: sno-01
+{{- if or .Values.security.fips .Values.security.tpm2 }}
+
+  security:
+{{- if .Values.security.fips }}
+    fips:
+      enabled: true
+{{- end }}
+{{- if .Values.security.tpm2 }}
+    diskEncryption:
+      unlock:
+        tpm2: {}
+{{- end }}
+{{- end }}

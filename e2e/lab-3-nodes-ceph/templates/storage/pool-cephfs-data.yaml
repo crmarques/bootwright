@@ -1,0 +1,14 @@
+{{- if .Values.ceph.services.file }}
+apiVersion: bootwright.io/v1alpha1
+kind: CephPool
+metadata:
+  name: cephfs-data
+
+spec:
+  clusterRef: ceph-e2e
+  role: cephfsData
+
+  replicated:
+    size: 2
+    minSize: 2
+{{- end }}

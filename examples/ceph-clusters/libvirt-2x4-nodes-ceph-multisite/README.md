@@ -35,5 +35,3 @@ and all operator acceptance are unrun.
   Secret `ibm-registry`. The Entitlement `license.accept: true` is a
   placeholder; review IBM's terms before use. Release coordinates are the
   three-node example's authored choices.
-
-Runbook: [e2e/runbooks/libvirt-2x4-nodes-ceph-multisite.md](../../../e2e/runbooks/libvirt-2x4-nodes-ceph-multisite.md).

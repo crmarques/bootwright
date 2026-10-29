@@ -1,0 +1,79 @@
+# Default input of the lab-network-variants case. Override keys with
+# e2e/render.sh --set or a --values file.
+
+host:
+  # The controller address the managed services bind and the guests reach;
+  # "auto" takes this host's default-route source address at render time.
+  address: auto
+  domain: e2e.example.test
+
+  upstreamDNS:
+    - 1.1.1.1
+
+  upstreamNTP:
+    - 162.159.200.1
+
+  # The NAT network Bootwright creates for the bond guest. The three guests
+  # each take a /26, so cidr and prefix here are the bond network's; the
+  # VLAN networks follow below.
+  bridge: virbr-e2e
+  cidr: 198.51.100.0/26
+  gateway: 198.51.100.1
+  prefix: 26
+
+# Media names as added with `bootwright media add --name`.
+rhel:
+  version: "9.8"
+  bootMedia: rhel-9.8-x86_64-boot.iso
+  dvdMedia: rhel-9.8-x86_64-dvd.iso
+
+guest:
+  cpu: 2
+  memoryMiB: 4096
+  diskGiB: 40
+
+# The VLAN guests attach to this bridge, which the runbook makes and Bootwright
+# never creates or removes. Its VLAN legs hold each VLAN network's gateway.
+externalBridge: br-nv
+
+# Install interface of each guest: nv-bond installs on bond0 over nic0 and
+# nic1 (on the managed network above), nv-vlan on nic0.<id> over nic0 and
+# nv-vlanBond on bond0.<id> over bond0 over nic0 and nic1.
+vlan:
+  id: 120
+  cidr: 198.51.100.64/26
+  gateway: 198.51.100.65
+  address: 198.51.100.71
+
+vlanBond:
+  id: 130
+  cidr: 198.51.100.128/26
+  gateway: 198.51.100.129
+  address: 198.51.100.141
+
+bond:
+  address: 198.51.100.11
+  # A libvirt Machine admits only active-backup.
+  mode: active-backup
+
+# The rest of each declared network, reached only by convergence after the
+# install: a second address on a guest-only VLAN with its own MTU, and an
+# extra route through the install gateway.
+converge:
+  vlanId: 140
+  prefix: 24
+  mtu: 1400
+  extraRoute: 192.0.2.0/24
+  bondAddress: 203.0.113.11
+  vlanAddress: 203.0.113.12
+  vlanBondAddress: 203.0.113.13
+  # With cutoff, the next hop nobody answers.
+  cutoffHop: 203.0.113.254
+
+# The Environment name is the context name. The cut-off drill renders the
+# single-Machine context nv-cutoff: single keeps only nv-bond on the managed
+# network, and cutoff adds a route that sends the controller's replies out the
+# guest-only VLAN to the hop above, which nobody answers.
+name: lab-network-variants
+single: false
+cutoff: false

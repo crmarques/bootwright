@@ -1,0 +1,12 @@
+{{- if .Values.registration.enabled }}
+apiVersion: bootwright.io/v1alpha1
+kind: Secret
+metadata:
+  name: rhsm-org
+
+spec:
+  type: opaque
+
+  source:
+    contextStore: {}
+{{- end }}

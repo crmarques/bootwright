@@ -1,0 +1,11 @@
+apiVersion: bootwright.io/v1alpha1
+kind: Environment
+metadata:
+  name: rehearsal-substrate
+
+spec:
+  domains:
+    base: {{ .Values.host.domain }}
+
+  controller:
+    machineRef: controller

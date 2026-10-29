@@ -1,0 +1,12 @@
+{{- if .Values.mirror.enabled }}
+apiVersion: bootwright.io/v1alpha1
+kind: Registry
+metadata:
+  name: lab-mirror
+
+spec:
+  management: external
+  url: {{ required "mirror.enabled is true: set mirror.url to the mirror registry host" .Values.mirror.url }}
+  credentialsRef: mirror-credentials
+  trustBundleRef: mirror-ca
+{{- end }}

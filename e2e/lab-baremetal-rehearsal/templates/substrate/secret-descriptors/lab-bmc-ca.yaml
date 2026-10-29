@@ -1,0 +1,12 @@
+apiVersion: bootwright.io/v1alpha1
+kind: Secret
+metadata:
+  name: lab-bmc-ca
+
+spec:
+  type: caBundle
+
+  source:
+    generated:
+      commonName: e2e rehearsal authority
+      validityDays: 3650

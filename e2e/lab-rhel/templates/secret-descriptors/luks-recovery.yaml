@@ -1,0 +1,12 @@
+{{- if .Values.security.tpm2 }}
+apiVersion: bootwright.io/v1alpha1
+kind: Secret
+metadata:
+  name: luks-recovery
+
+spec:
+  type: token
+
+  source:
+    contextStore: {}
+{{- end }}

@@ -37,5 +37,3 @@ and removes the cluster in-tree. The API validates the profile.
 - Operator inputs: `host-kubeconfig`, `openshift-pull-secret`, the generated
   `kubevirt-cluster-admin-ssh-key`, and host capacity, CDI, StorageProfile and
   upload storage for the three guests. All names and addresses are fixtures.
-
-Runbook: [e2e/runbooks/lab-kubevirt-external.md](../../../e2e/runbooks/lab-kubevirt-external.md).

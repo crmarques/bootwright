@@ -28,4 +28,4 @@ No live execution or operator acceptance is claimed.
   `luks-recovery`, and `ibm-registry`; RHEL 9.8 boot and DVD ISOs. The
   Entitlement `license.accept: true` is a placeholder; review IBM's terms.
 
-Runbook: [e2e/runbooks/libvirt-3-nodes-ceph-host-variants.md](../../../e2e/runbooks/libvirt-3-nodes-ceph-host-variants.md).
+Run it with the e2e [`lab-3-nodes-ceph-host-variants`](../../../e2e/lab-3-nodes-ceph-host-variants/runbook.md) case.

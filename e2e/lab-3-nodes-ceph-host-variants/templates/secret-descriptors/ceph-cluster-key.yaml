@@ -1,0 +1,12 @@
+apiVersion: bootwright.io/v1alpha1
+kind: Secret
+metadata:
+  name: ceph-cluster-key
+
+spec:
+  type: sshKeyPair
+
+  source:
+    generated:
+      keyType: ecdsaP256
+      comment: ceph-cluster-key

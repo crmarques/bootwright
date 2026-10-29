@@ -1,0 +1,31 @@
+{{- $net := ternary .Values.networks.ipv6 .Values.networks.ipv4 .Values.ipv6 }}
+apiVersion: bootwright.io/v1alpha1
+kind: Machine
+metadata:
+  name: features-02
+
+spec:
+  substrate:
+    providerRef: lab-libvirt
+    libvirt:
+      profileRef: master
+
+  hardware:
+    rootDevice:
+      deviceName: /dev/vda
+
+  os:
+    provided: false
+
+  network:
+    configRef: lab-guests
+    attachmentRef: lab-guests
+    installAddressRef: ip
+
+    addresses:
+      - name: fqdn
+        address: features-02.{{ .Values.host.domain }}
+
+      - name: ip
+        address: {{ index $net.masters 1 }}/{{ $net.prefix }}
+        interface: enp1s0

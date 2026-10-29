@@ -1,8 +1,0 @@
-apiVersion: v2
-name: bootwright-e2e
-description: >-
-  End-to-end Bootwright cases on one libvirt host. e2e/render.sh renders one
-  case, selected by the value `case`, into a Bootwright input directory.
-type: application
-version: 0.1.0
-appVersion: v1alpha1

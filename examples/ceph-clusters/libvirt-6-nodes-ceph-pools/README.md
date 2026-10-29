@@ -28,5 +28,3 @@ RBD images (`replicated-disk`, `ec42-disk`, `ec22-disk`).
 - Required inputs: the IBM entitlement key for Secret `ibm-registry` and RHEL
   media. The Entitlement `license.accept: true` is a placeholder; review IBM's
   terms before use. Replace documentation addresses for your environment.
-
-Runbook: [e2e/runbooks/libvirt-6-nodes-ceph-pools.md](../../../e2e/runbooks/libvirt-6-nodes-ceph-pools.md).

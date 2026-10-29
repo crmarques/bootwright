@@ -1,0 +1,24 @@
+{{- if .Values.addons.metallb }}
+{{- $set := .Values.addons.subscriptions.metallb }}
+apiVersion: bootwright.io/v1alpha1
+kind: ClusterAddonBinding
+metadata:
+  name: lab-sno-metallb
+
+spec:
+  clusterRef: sno
+
+  packages:
+    metallb:
+      subscription:
+        channel: {{ required "set addons.subscriptions.metallb.channel" $set.channel | quote }}
+        startingCSV: {{ required "set addons.subscriptions.metallb.startingCSV" $set.startingCSV | quote }}
+
+      pools:
+        - name: services
+
+          addresses:
+{{- range .Values.addons.metallbPool }}
+            - {{ . }}
+{{- end }}
+{{- end }}

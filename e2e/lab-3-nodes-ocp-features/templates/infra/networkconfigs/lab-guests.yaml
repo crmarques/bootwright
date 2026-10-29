@@ -1,0 +1,51 @@
+{{- $net := ternary .Values.networks.ipv6 .Values.networks.ipv4 .Values.ipv6 }}
+apiVersion: bootwright.io/v1alpha1
+kind: NetworkConfig
+metadata:
+  name: lab-guests
+
+spec:
+  machineNetwork:
+    - cidr: {{ $net.cidr }}
+
+  dns:
+    - serverRef: lab-dns
+      endpointRef: ip
+
+  nmstate:
+    interfaces:
+      - name: enp1s0
+        type: ethernet
+        state: up
+        mtu: 1500
+{{- if .Values.ipv6 }}
+
+        ipv4:
+          enabled: false
+
+        ipv6:
+          enabled: true
+          dhcp: false
+          autoconf: false
+{{- else }}
+
+        ipv4:
+          enabled: true
+          dhcp: false
+
+        ipv6:
+          enabled: false
+{{- end }}
+
+    dns-resolver:
+      config:
+        search:
+          - {{ .Values.host.domain }}
+
+    routes:
+      config:
+        - destination: {{ if .Values.ipv6 }}::/0{{ else }}0.0.0.0/0{{ end }}
+          next-hop-address: {{ $net.gateway }}
+          next-hop-interface: enp1s0
+          table-id: 254
+          metric: 100

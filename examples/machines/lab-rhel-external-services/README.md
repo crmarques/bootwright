@@ -37,7 +37,3 @@ The input is split like lab-rhel's: [environment](environment.yaml),
   media, and the three external services. Run one lab at a time; other examples
   reuse the guest network, artifact server and BMC sockets. On a FIPS-mode
   controller choose `rsa` or `ecdsaP256` for `bootwright-machine-key`.
-
-Runbook: [e2e/runbooks/lab-rhel-external-services.md](../../../e2e/runbooks/lab-rhel-external-services.md).
-The templated e2e [`rhel` case](../../../e2e/README.md#case-rhel) covers the same
-scenario with its own inputs.

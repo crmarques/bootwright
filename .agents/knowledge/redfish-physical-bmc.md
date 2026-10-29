@@ -294,11 +294,11 @@ server is unproved.
   [the serving-certificate check](../../internal/infrastructureservices/artifactserver/tls.go)
   require. A plain `openssl req -x509` with a distribution's default
   configuration marks the certificate `CA:TRUE` (observed with OpenSSL 3.5 on
-  Fedora), so set the extensions explicitly. The
-  [lab-baremetal runbook's](../../e2e/runbooks/lab-baremetal.md) invocation
-  sets `basicConstraints`, `keyUsage` and `extendedKeyUsage` with `-addext`;
-  its output passed the material check with OpenSSL 3.5.8 on Fedora, and it
-  has not been run on a RHEL 9 host.
+  Fedora), so set the extensions explicitly: `-newkey rsa:2048` with
+  `-addext basicConstraints=critical,CA:FALSE`,
+  `-addext keyUsage=critical,digitalSignature,keyEncipherment` and
+  `-addext extendedKeyUsage=serverAuth` passed the material check with OpenSSL
+  3.5.8 on Fedora, and has not been run on a RHEL 9 host.
 - A `keyType` for generation follows only if the check fails.
 
 **The fetch record.** The artifact server's unit journal holds one line per

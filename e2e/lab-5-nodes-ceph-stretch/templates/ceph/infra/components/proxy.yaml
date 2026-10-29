@@ -1,0 +1,13 @@
+# The proxy the lab-5-nodes-ceph-stretch-arbiter context manages on this
+# host.
+apiVersion: bootwright.io/v1alpha1
+kind: Proxy
+metadata:
+  name: lab-proxy
+
+spec:
+  management: external
+
+  connection:
+    httpProxy: http://{{ include "address" . }}:3128
+    httpsProxy: http://{{ include "address" . }}:3128

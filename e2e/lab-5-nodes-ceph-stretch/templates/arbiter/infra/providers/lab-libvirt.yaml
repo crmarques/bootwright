@@ -1,0 +1,38 @@
+# This context owns the guest network; lab-5-nodes-ceph-stretch attaches to it.
+apiVersion: bootwright.io/v1alpha1
+kind: InfraProvider
+metadata:
+  name: lab-libvirt
+
+spec:
+  libvirt:
+    capacityReserve:
+      cpu: 1
+      memoryMiB: 2048
+      diskGiB: 10
+
+    machineRef: controller
+
+    bmcEmulation:
+      bindAddress: 127.0.0.1
+      port: {{ .Values.ports.arbiter.bmc }}
+      certificateRef: lab-bmc-tls
+
+      auth:
+        credentialsRef: lab-bmc-credentials
+
+    machineProfiles:
+      - name: arbiter
+        cpu: {{ .Values.size.arbiter.cpu }}
+        memoryMiB: {{ .Values.size.arbiter.memoryMiB }}
+        diskGiB: {{ .Values.size.arbiter.diskGiB }}
+        tpm: {}
+
+  networkAttachments:
+    - name: lab-guests
+
+      libvirt:
+        bridge: {{ .Values.host.bridge }}
+        management: managed
+        address: {{ .Values.host.gateway }}/{{ .Values.host.prefix }}
+        forward: nat

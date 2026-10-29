@@ -27,4 +27,4 @@ prerequisites to the consuming M3d run.
 - Replace the documentation IPv6 prefixes consistently, including certificate
   SANs, VIPs, gateway and Machine addresses.
 
-Runbook: [e2e/runbooks/lab-features-ipv6.md](../../../e2e/runbooks/lab-features-ipv6.md).
+Run it with the e2e [`lab-3-nodes-ocp-features`](../../../e2e/lab-3-nodes-ocp-features/runbook.md) case.

@@ -1,0 +1,141 @@
+{{- $v := .Values -}}
+{{- $s := $v.ceph.services -}}
+{{- $dom := $v.host.domain -}}
+{{- $data := concat $v.sites.dc1 $v.sites.dc2 -}}
+# Native stretch over three simulated sites: two MONs and two OSD hosts in
+# each data site, a MON-only tiebreaker on a provided Machine in the third.
+# ceph-01 and ceph-03 carry a MGR and the admin keyring (_admin), so either
+# site can administer the cluster while the other is down; ceph-02 and
+# ceph-04 carry the optional MDS and RGW.
+apiVersion: bootwright.io/v1alpha1
+kind: CephCluster
+metadata:
+  name: ceph-stretch
+
+spec:
+  management: managed
+
+  distribution:
+    ibm:
+      callHome: enabled
+
+      packages:
+        source: vendor
+
+  release: {{ $v.ceph.release }}
+  packageVersion: {{ $v.ceph.packageVersion }}
+
+  image:
+    base: {{ $v.ceph.image.base }}
+    version: {{ $v.ceph.image.version }}
+
+  entitlementRef: ibm-ceph
+
+  cephadm:
+    addressRef: ip
+
+    ansible:
+      packageVersion: {{ $v.ceph.ansiblePackageVersion }}
+
+    clusterSSH:
+      user: bootwright
+      keyRef: ceph-cluster-key
+      transport: verifiedTunnel
+
+    bootstrap:
+      nodeRef: ceph-01
+      addressRef: ip
+
+  networks:
+    publicCIDRs:
+      - {{ $v.host.cidr }}
+
+  config:
+    osd:
+      osd_memory_target_autotune: 'false'
+      osd_memory_target: '{{ $v.size.osdMemoryTargetBytes }}'
+
+  services:
+    - service_type: mon
+
+      placement:
+        count: 5
+        label: ceph-mon
+
+    # One manager per data site.
+    - service_type: mgr
+
+      placement:
+        label: ceph-mgr
+
+    - service_type: osd
+      service_id: data
+
+      placement:
+        label: ceph-osd
+
+      spec:
+        data_devices:
+          paths:
+            - /dev/sda
+{{- if $s.file }}
+
+    # One MDS per data site.
+    - service_type: mds
+      service_id: files
+
+      placement:
+        label: ceph-gateway
+{{- end }}
+{{- if $s.object }}
+
+    # One gateway per data site, reached directly at both sites' addresses.
+    - service_type: rgw
+      service_id: objects
+
+      placement:
+        label: ceph-gateway
+
+      spec:
+        rgw_frontend_port: 8080
+{{- end }}
+
+  topology:
+    stretch:
+      failureDomain: datacenter
+
+      dataSites:
+        - dc1
+        - dc2
+
+      tiebreaker:
+        node: arbiter-01
+        site: {{ $v.sites.tiebreaker }}
+
+      ruleName: stretch-rule
+
+    nodes:
+{{- range $i, $name := $data }}
+      - name: {{ $name }}
+        fqdn: {{ $name }}.{{ $dom }}
+        machineRef: {{ $name }}
+        site: {{ include "site" (dict "root" $ "name" $name) }}
+
+        labels:
+          - ceph-mon
+          - ceph-osd
+{{- if eq (mod $i 2) 0 }}
+          - _admin
+          - ceph-mgr
+{{- else }}
+          - ceph-gateway
+{{- end }}
+
+{{ end }}
+      - name: arbiter-01
+        fqdn: arbiter-01.{{ $dom }}
+        machineRef: arbiter-01
+        site: {{ $v.sites.tiebreaker }}
+
+        labels:
+          - ceph-mon

@@ -1,0 +1,61 @@
+# Default input of the lab-sno case. Override keys with e2e/render.sh --set
+# or a --values file.
+
+host:
+  # The controller address the managed services bind and the guest reaches;
+  # "auto" takes this host's default-route source address at render time.
+  address: auto
+  domain: e2e.example.test
+
+  upstreamDNS:
+    - 1.1.1.1
+
+  upstreamNTP:
+    - 162.159.200.1
+
+  # The NAT network Bootwright creates for the guest.
+  bridge: virbr-e2e
+  cidr: 198.51.100.0/24
+  gateway: 198.51.100.1
+  prefix: 24
+
+openshift:
+  version: 4.21.15
+
+guest:
+  address: 198.51.100.31
+  cpu: 8
+  memoryMiB: 16384
+  diskGiB: 120
+
+# fips installs the cluster in FIPS mode and needs a FIPS-mode controller
+# (cat /proc/sys/crypto/fips_enabled prints 1); tpm2 encrypts the node's
+# installation disk, unlocked by the guest TPM2. Both are rehearsals here:
+# B722 and B720 qualify on three nodes.
+security:
+  fips: false
+  tpm2: false
+
+# Add-ons installed after the cluster. An enabled package needs its OLM channel
+# and exact CSV, which no default can supply: read them from
+#   oc get packagemanifest <package> -n openshift-marketplace -o json
+# (status.channels[].name and .currentCSV) on a cluster of the same release.
+# Packages: kubernetes-nmstate-operator for nmstate, metallb-operator for metallb.
+addons:
+  nmstate: false
+  metallb: false
+
+  subscriptions:
+    nmstate:
+      channel: ""
+      startingCSV: ""
+
+    metallb:
+      channel: ""
+      startingCSV: ""
+
+  # The MetalLB layer 2 pool for LoadBalancer Services: inside host.cidr and
+  # outside the guest address and the gateway. With no VIPs on a single node
+  # the pool never holds the API or ingress.
+  metallbPool:
+    - 198.51.100.200-198.51.100.207

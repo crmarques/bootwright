@@ -1,0 +1,48 @@
+{{- $letters := list "a" "b" "c" "d" "e" "f" "g" -}}
+{{- if gt (int .Values.guest.osdDisks) (len $letters) -}}
+{{- fail "guest.osdDisks is at most 7: a libvirt profile declares at most 7 data disks" -}}
+{{- end -}}
+apiVersion: bootwright.io/v1alpha1
+kind: InfraProvider
+metadata:
+  name: lab-libvirt
+
+spec:
+  libvirt:
+    capacityReserve:
+      cpu: 1
+      memoryMiB: 2048
+      diskGiB: 10
+
+    machineRef: controller
+
+    bmcEmulation:
+      bindAddress: 127.0.0.1
+      port: 8000
+      certificateRef: lab-bmc-tls
+
+      auth:
+        credentialsRef: lab-bmc-credentials
+
+    machineProfiles:
+      - name: ceph
+        cpu: {{ .Values.guest.cpu }}
+        memoryMiB: {{ .Values.guest.memoryMiB }}
+        diskGiB: {{ .Values.guest.diskGiB }}
+        tpm: {}
+
+        dataDisks:
+{{- range $i := until (int .Values.guest.osdDisks) }}
+          - name: ceph-data-{{ add $i 1 }}
+            sizeGiB: {{ $.Values.guest.osdDiskGiB }}
+            media: ssd
+{{- end }}
+
+  networkAttachments:
+    - name: lab-guests
+
+      libvirt:
+        bridge: {{ .Values.host.bridge }}
+        management: managed
+        address: {{ .Values.host.gateway }}/{{ .Values.host.prefix }}
+        forward: nat

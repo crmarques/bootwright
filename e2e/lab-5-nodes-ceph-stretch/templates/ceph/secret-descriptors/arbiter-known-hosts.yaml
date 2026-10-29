@@ -1,0 +1,12 @@
+# One known_hosts line for arbiter-01's SSH address, read from the host
+# through the lab-5-nodes-ceph-stretch-arbiter context (runbook.md, Prepare).
+apiVersion: bootwright.io/v1alpha1
+kind: Secret
+metadata:
+  name: arbiter-known-hosts
+
+spec:
+  type: opaque
+
+  source:
+    contextStore: {}

@@ -1,0 +1,86 @@
+apiVersion: bootwright.io/v1alpha1
+kind: NetworkConfig
+metadata:
+  name: lab-guests
+
+spec:
+  machineNetwork:
+    - cidr: {{ .Values.host.cidr }}
+    - cidr: {{ .Values.clusterNetwork.cidr }}
+
+  dns:
+    - serverRef: lab-dns
+      endpointRef: ip
+
+  nmstate:
+    interfaces:
+      - name: nic0
+        type: ethernet
+        state: up
+        controller: bond0
+
+        ipv4:
+          enabled: false
+
+        ipv6:
+          enabled: false
+
+      - name: nic1
+        type: ethernet
+        state: up
+        controller: bond0
+
+        ipv4:
+          enabled: false
+
+        ipv6:
+          enabled: false
+
+      - name: bond0
+        type: bond
+        state: up
+
+        link-aggregation:
+          mode: active-backup
+
+          options:
+            miimon: 100
+
+          port:
+            - nic0
+            - nic1
+
+        ipv4:
+          enabled: true
+          dhcp: false
+
+        ipv6:
+          enabled: false
+
+      - name: bond0.{{ .Values.clusterNetwork.vlan }}
+        type: vlan
+        state: up
+
+        vlan:
+          base-iface: bond0
+          id: {{ .Values.clusterNetwork.vlan }}
+
+        ipv4:
+          enabled: true
+          dhcp: false
+
+        ipv6:
+          enabled: false
+
+    dns-resolver:
+      config:
+        search:
+          - {{ .Values.host.domain }}
+
+    routes:
+      config:
+        - destination: 0.0.0.0/0
+          next-hop-address: {{ .Values.host.gateway }}
+          next-hop-interface: bond0
+          table-id: 254
+          metric: 100

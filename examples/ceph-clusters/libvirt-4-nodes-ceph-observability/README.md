@@ -31,5 +31,3 @@ No live execution or operator acceptance is claimed.
 - Also required: RHEL 9.8 boot and DVD ISOs and the IBM entitlement key for
   `ibm-registry`. The Entitlement `license.accept: true` is a placeholder;
   review IBM's terms before use.
-
-Runbook: [e2e/runbooks/libvirt-4-nodes-ceph-observability.md](../../../e2e/runbooks/libvirt-4-nodes-ceph-observability.md).

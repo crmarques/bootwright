@@ -1,0 +1,15 @@
+{{- if .Values.ceph.services.block }}
+apiVersion: bootwright.io/v1alpha1
+kind: CephPlacementPolicy
+metadata:
+  name: ssd-hosts
+
+spec:
+  clusterRef: ceph-e2e
+  ruleName: ssd-hosts
+  crushDeviceClass: ssd
+
+  replicated:
+    size: 2
+    minSize: 2
+{{- end }}

@@ -36,5 +36,3 @@ No live run or owner acceptance is claimed.
 - Required inputs: RHEL 9.8 media, the IBM entitlement key (Ceph and gateway
   image) for Secret `ibm-registry`. The Entitlement `license.accept: true` is
   a placeholder; review IBM's terms before use.
-
-Runbook: [e2e/runbooks/libvirt-5-nodes-ceph-nvmeof.md](../../../e2e/runbooks/libvirt-5-nodes-ceph-nvmeof.md).

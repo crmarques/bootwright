@@ -269,7 +269,7 @@ Alias cell.
 | [B857](#b857) | new, 2026-10-27 (lane I) | enabling | Desired state | The audit 5.7 operator tasks run on the reshaped API | B814's paper check was not run before X171 |
 | [B867](#b867) | new, 2026-10-27 (lane R review) | safety | Storage | The Ceph incarnation rule is confirmed on a live cluster | The monitor map's creation time was chosen without a live run |
 | [B881](#b881) | new, 2026-10-28 (X190 review) | safety | State reconciliation, with Substrate | A cancelled or deadline-ended firmware power cycle still forces its machine off | The adapter supervisor kills the worker with no grace; a grace changes every adapter's termination |
-| [B882](#b882) | new, 2026-10-28 (owner request: the e2e stretch case) | product | Storage, with Machine and Managed OS | A Ceph host on a provided-OS Machine, such as one another context installed | Core Ceph binds only hosts it installed, with one fleet key and its own installation's host-key proof |
+| [B882](#b882) | new, 2026-10-28 (owner request: the e2e stretch case); narrowed 2026-10-29 | product | Storage, with Machine and Managed OS | A provided-OS Machine as a Ceph data, manager or gateway host | Planning admits a provided Machine only as the stretch tiebreaker (D204) |
 | [B905](#b905) | new, 2026-10-28 (D197) | product | Substrate and Managed OS | A Bootwright-installed operating system on a KubeVirt Machine | B87 realizes installer-provisioned Machines; an installation needs an identity channel and seeds the arm does not define |
 | [B906](#b906) | new, 2026-10-28 (D197) | product | Substrate, with Add-ons | A KubeVirt profile's persistent vTPM state is proved migratable on a declared state class | The current target declares no vTPM; the state class is host-wide and set on HyperConverged |
 | [B907](#b907) | new, 2026-10-28 (D197) | product | Substrate | KubeVirt Machines boot with EFI Secure Boot | Whether the agent image boots under KubeVirt Secure Boot is unverified |
@@ -2979,16 +2979,14 @@ and observes the ForceOff.
 **Owner:** Storage, with Machine and Managed OS. **Kind:** product.
 **Requires:** none. **Definition:** Needs definition: how a
 [provided-OS](../api/machines.md#machine) Machine joins a managed CephCluster
-as a host. Today `bindHosts` (`internal/storage/ceph/requests.go`) refuses it
-with `lifecycle.unsupported`: every topology node must be installed by the
-context on a realized provider, all hosts share one fleet key, and host trust
-reads this context's installation proof. Open: the host-key proof and package
-prerequisites for a host Bootwright did not install, a per-host access key,
-and removal that leaves the operating system. **Outcome:** the e2e
-`stretch-ceph` case applies with `arbiter-01` installed by the
-`stretch-arbiter` context ([e2e](../../e2e/README.md#case-stretch)).
-**Exit evidence:** a planning test admitting a provided-OS node with its own
-key, a host-trust test, and an owner-run `stretch-ceph` apply and destroy.
+as an OSD, manager or gateway host. A provided Machine joins only as the
+[stretch tiebreaker](../ceph.md#stretch-topology), which the e2e
+[lab-5-nodes-ceph-stretch](../../e2e/lab-5-nodes-ceph-stretch/runbook.md)
+case runs; any other provided node refuses at plan. Open: device and erase
+claims on a host Bootwright did not install, its package prerequisites, and
+removal that leaves the operating system. **Outcome:** a provided-OS Machine
+carries OSDs in a managed cluster. **Exit evidence:** planning and host-trust
+tests and an owner-run apply and destroy.
 
 ### B905
 

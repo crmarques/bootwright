@@ -1,0 +1,24 @@
+apiVersion: bootwright.io/v1alpha1
+kind: Environment
+metadata:
+  name: lab-5-nodes-ceph-stretch
+
+spec:
+  domains:
+    base: {{ .Values.host.domain }}
+
+  controller:
+    machineRef: controller
+
+  remoteMachinesAccessKey:
+    keyRef: bootwright-machine-key
+
+  sites:
+    - name: dc1
+      description: Data site one
+
+    - name: dc2
+      description: Data site two
+
+    - name: {{ .Values.sites.tiebreaker }}
+      description: Tiebreaker site

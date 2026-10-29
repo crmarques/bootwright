@@ -29,5 +29,3 @@ prerequisites to the consuming M3d run.
   with the channel and CSV the selected release's catalog serves, e.g. with
   `oc get packagemanifest metallb-operator -n openshift-marketplace`; passing
   validation does not prove those versions exist.
-
-Runbook: [e2e/runbooks/lab-networks.md](../../../e2e/runbooks/lab-networks.md).

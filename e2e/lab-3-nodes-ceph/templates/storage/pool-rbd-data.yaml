@@ -1,0 +1,17 @@
+{{- if .Values.ceph.services.block }}
+apiVersion: bootwright.io/v1alpha1
+kind: CephPool
+metadata:
+  name: rbd-data
+
+spec:
+  clusterRef: ceph-e2e
+  role: rbd
+
+  replicated:
+    size: 2
+    minSize: 2
+
+  autoscale:
+    mode: 'on'
+{{- end }}

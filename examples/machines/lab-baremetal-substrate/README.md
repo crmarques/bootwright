@@ -29,4 +29,4 @@ hardware.
   physical context first, since destroying this substrate deletes the virtual
   disk.
 
-Runbook: [e2e/runbooks/lab-baremetal-substrate.md](../../../e2e/runbooks/lab-baremetal-substrate.md).
+Run it with the e2e [`lab-baremetal-rehearsal`](../../../e2e/lab-baremetal-rehearsal/runbook.md) case.

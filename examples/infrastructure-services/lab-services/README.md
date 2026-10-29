@@ -22,7 +22,3 @@ units.
   and NTP `upstreamSources` (`192.0.2.123`) with reachable upstreams chosen
   independently of these services.
 - No Machine disks exist, so removal does not need `--authorize data-loss`.
-
-Runbook: [e2e/runbooks/lab-services.md](../../../e2e/runbooks/lab-services.md).
-The templated e2e [`rhel` case](../../../e2e/README.md#case-rhel) covers the same
-scenario with its own inputs.

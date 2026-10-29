@@ -28,6 +28,4 @@ subvolume's owner, never root:
 - Removal while hosts survive is owned by
   [B491](../../../specs/milestones/m2.md#b491).
 
-Runbook: [e2e/runbooks/libvirt-3-nodes-ceph-nfs.md](../../../e2e/runbooks/libvirt-3-nodes-ceph-nfs.md).
-The templated e2e [`ceph` case](../../../e2e/README.md#case-ceph) covers the same
-scenario with its own inputs.
+Run it with the e2e [`lab-3-nodes-ceph`](../../../e2e/lab-3-nodes-ceph/runbook.md) case.

@@ -1,0 +1,16 @@
+# Stretch fixes every pool at size 4, min 2 on the stretch rule.
+apiVersion: bootwright.io/v1alpha1
+kind: CephPool
+metadata:
+  name: rbd-data
+
+spec:
+  clusterRef: ceph-stretch
+  role: rbd
+
+  replicated:
+    size: 4
+    minSize: 2
+
+  autoscale:
+    mode: 'on'

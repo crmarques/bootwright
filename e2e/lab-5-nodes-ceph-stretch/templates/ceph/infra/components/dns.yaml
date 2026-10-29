@@ -1,0 +1,10 @@
+# The DNS server the lab-5-nodes-ceph-stretch-arbiter context manages on
+# this host.
+apiVersion: bootwright.io/v1alpha1
+kind: DNSServer
+metadata:
+  name: lab-dns
+
+spec:
+  management: external
+  address: {{ include "address" . }}

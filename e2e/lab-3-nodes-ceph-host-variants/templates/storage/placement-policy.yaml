@@ -1,0 +1,15 @@
+apiVersion: bootwright.io/v1alpha1
+kind: CephPlacementPolicy
+metadata:
+  name: ssd-hosts
+
+# No pool selects ssd-hosts with placementPolicyRef, so this policy only
+# creates the CRUSH rule on the cluster.
+spec:
+  clusterRef: ceph-e2e
+  ruleName: ssd-hosts
+  crushDeviceClass: ssd
+
+  replicated:
+    size: 2
+    minSize: 2

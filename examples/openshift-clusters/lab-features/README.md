@@ -28,4 +28,4 @@ prerequisites to the consuming M3d run.
   disconnected installs. The IPv6 variant is
   [lab-features-ipv6](../lab-features-ipv6/).
 
-Runbook: [e2e/runbooks/lab-features.md](../../../e2e/runbooks/lab-features.md).
+Run it with the e2e [`lab-3-nodes-ocp-features`](../../../e2e/lab-3-nodes-ocp-features/runbook.md) case.

@@ -1,0 +1,26 @@
+apiVersion: bootwright.io/v1alpha1
+kind: Machine
+metadata:
+  name: rehearsal-01
+
+spec:
+  substrate:
+    providerRef: lab-libvirt
+    libvirt:
+      profileRef: rhel
+
+  os:
+    provided: false
+
+  network:
+    attachmentRef: lab-guests
+
+    inline:
+      machineNetwork:
+        - cidr: {{ .Values.host.cidr }}
+
+      nmstate:
+        interfaces:
+          - name: enp1s0
+            type: ethernet
+            state: up

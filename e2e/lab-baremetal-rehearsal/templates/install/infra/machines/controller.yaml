@@ -1,0 +1,19 @@
+apiVersion: bootwright.io/v1alpha1
+kind: Machine
+metadata:
+  name: controller
+
+spec:
+  os:
+    provided: true
+
+  proxy:
+    direct: {}
+
+  network:
+    addresses:
+      - name: ip
+        address: {{ include "address" . }}
+
+  access:
+    local: true

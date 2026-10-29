@@ -1,0 +1,56 @@
+# Default input of the lab-3-nodes-ocp case. Override keys with e2e/render.sh
+# --set or a --values file.
+
+host:
+  # The controller address the managed services bind and the guests reach;
+  # "auto" takes this host's default-route source address at render time.
+  address: auto
+  domain: e2e.example.test
+
+  upstreamDNS:
+    - 1.1.1.1
+
+  upstreamNTP:
+    - 162.159.200.1
+
+  # The NAT network Bootwright creates for the guests.
+  bridge: virbr-e2e
+  cidr: 198.51.100.0/24
+  gateway: 198.51.100.1
+  prefix: 24
+
+openshift:
+  version: 4.21.15
+
+# Three schedulable control-plane masters, no workers.
+guest:
+  addresses:
+    - 198.51.100.41
+    - 198.51.100.42
+    - 198.51.100.43
+  cpu: 6
+  memoryMiB: 16384
+  diskGiB: 120
+
+# The installer holds both virtual IPs with keepalived on the masters; they sit
+# inside host.cidr, apart from every guest, the gateway and the MetalLB pool.
+vips:
+  api: 198.51.100.50
+  ingress: 198.51.100.51
+
+# MetalLB serves LoadBalancer Services only: its pool never holds the API or
+# ingress VIPs. An enabled add-on needs its OLM channel and exact CSV, which no
+# default can supply: read them from
+#   oc get packagemanifest metallb-operator -n openshift-marketplace -o json
+# (status.channels[].name and .currentCSV) on a cluster of the same release, or
+# set addons.metallb=false.
+addons:
+  metallb: true
+
+  subscriptions:
+    metallb:
+      channel: ""
+      startingCSV: ""
+
+  metallbPool:
+    - 198.51.100.200-198.51.100.207

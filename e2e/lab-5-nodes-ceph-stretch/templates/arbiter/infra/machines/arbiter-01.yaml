@@ -1,0 +1,32 @@
+# Installed here and handed, with its RHEL, to lab-5-nodes-ceph-stretch as the
+# provided stretch tiebreaker.
+apiVersion: bootwright.io/v1alpha1
+kind: Machine
+metadata:
+  name: arbiter-01
+
+spec:
+  substrate:
+    providerRef: lab-libvirt
+    libvirt:
+      profileRef: arbiter
+
+  hardware:
+    rootDevice:
+      deviceName: /dev/vda
+
+  os:
+    provided: false
+    installProfileRef: rhel
+
+  network:
+    configRef: lab-guests
+    installAddressRef: ip
+
+    addresses:
+      - name: fqdn
+        address: arbiter-01.{{ .Values.host.domain }}
+
+      - name: ip
+        address: {{ index .Values.addresses "arbiter-01" }}/{{ .Values.host.prefix }}
+        interface: enp1s0

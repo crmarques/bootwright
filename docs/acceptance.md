@@ -73,8 +73,11 @@ with `--set DEFAULT`, around the Redfish check.
 
 [B484](../specs/milestones/m2.md#b484)'s owner gate is one row per profile of
 the [profile catalog](../specs/ceph-coverage.md#profile-catalog), each on a
-clean build that descends from B484's acceptance baseline. The run follows
-the profile's runbook, `e2e/runbooks/<profile directory>.md`. Copy this
+clean build that descends from B484's acceptance baseline. The run applies
+the profile's example input (P5's through the e2e
+[`lab-3-nodes-ceph-host-variants`](../e2e/lab-3-nodes-ceph-host-variants/runbook.md)
+case) and takes the
+[measured budget](../specs/ceph-coverage.md#measured-budget) readings. Copy this
 template into the ledger and replace
 every `<...>`:
 

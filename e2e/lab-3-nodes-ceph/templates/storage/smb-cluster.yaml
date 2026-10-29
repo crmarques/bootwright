@@ -1,0 +1,26 @@
+{{- if (and .Values.ceph.services.smb .Values.ceph.services.file) }}
+apiVersion: bootwright.io/v1alpha1
+kind: CephSMBResource
+metadata:
+  name: files-smb
+
+spec:
+  clusterRef: ceph-e2e
+
+  native:
+    resource_type: ceph.smb.cluster
+    cluster_id: files
+    auth_mode: user
+    clustering: always
+
+    user_group_settings:
+      - source_type: resource
+        ref: files
+
+    placement:
+      count: 2
+
+      hosts:
+        - rhel-02.{{ .Values.host.domain }}
+        - rhel-03.{{ .Values.host.domain }}
+{{- end }}

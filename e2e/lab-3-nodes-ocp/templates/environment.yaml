@@ -1,0 +1,14 @@
+apiVersion: bootwright.io/v1alpha1
+kind: Environment
+metadata:
+  name: lab-3-nodes-ocp
+
+spec:
+  domains:
+    base: {{ .Values.host.domain }}
+
+  controller:
+    machineRef: controller
+
+  remoteMachinesAccessKey:
+    keyRef: bootwright-machine-key

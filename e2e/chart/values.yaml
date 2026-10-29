@@ -1,5 +1,0 @@
-# Set by e2e/render.sh; every input lives in e2e/input.yaml.
-case: ""
-
-host:
-  detectedAddress: ""

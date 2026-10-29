@@ -1,0 +1,7 @@
+apiVersion: bootwright.io/v1alpha1
+kind: MachineImage
+metadata:
+  name: rhel-boot
+
+spec:
+  bootMedia: local-media:{{ .Values.rhel.bootMedia }}

@@ -1,0 +1,17 @@
+apiVersion: bootwright.io/v1alpha1
+kind: Environment
+metadata:
+  name: lab-3-nodes-ceph-host-variants
+
+spec:
+  domains:
+    base: {{ .Values.host.domain }}
+
+  controller:
+    machineRef: controller
+
+  remoteMachinesAccessKey:
+    keyRef: bootwright-machine-key
+
+  storageClusters:
+    - ceph-e2e

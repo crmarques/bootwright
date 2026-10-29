@@ -1,0 +1,11 @@
+{{- if .Values.ceph.services.object }}
+apiVersion: bootwright.io/v1alpha1
+kind: CephObjectBucket
+metadata:
+  name: s3-canary-bucket
+
+spec:
+  clusterRef: ceph-stretch
+  objectGatewayRef: objects
+  ownerRef: s3-canary
+{{- end }}

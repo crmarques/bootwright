@@ -27,7 +27,3 @@ four Secrets are generated locally. It is the three-guest form of
   media, and reachable upstream DNS and time sources replacing the
   placeholders. Run one lab per host; service sockets and `virbr-lab` overlap
   with other examples. FIPS-mode controllers need an RSA or P-256 fleet SSH key.
-
-Runbook: [e2e/runbooks/lab-rhel-3-nodes.md](../../../e2e/runbooks/lab-rhel-3-nodes.md).
-The templated e2e [`rhel` case](../../../e2e/README.md#case-rhel) covers the same
-scenario with its own inputs.

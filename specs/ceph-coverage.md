@@ -224,8 +224,10 @@ real hardware; emulated results do not substitute for it.
 
 Each profile is a public example directory `libvirt-<n>-nodes-ceph-<profile>/`
 under `examples/`, where `<n>` counts its Ceph hosts (`2x4` for two clusters
-of four), with one runbook `e2e/runbooks/<directory>.md` under
-[`e2e/`](../e2e/README.md). The catalog follows these rules:
+of four). A profile's [matrix row](../docs/acceptance.md#ceph-matrix-row) is
+recorded from its example input, P5's through the e2e
+[`lab-3-nodes-ceph-host-variants`](../e2e/lab-3-nodes-ceph-host-variants/runbook.md)
+case. The catalog follows these rules:
 
 - Every Ceph daemon placement follows IBM's
   [colocation page](https://www.ibm.com/docs/en/storage-ceph/9.9.1?topic=recommendations-colocation)
@@ -277,7 +279,7 @@ per topology node.
 | P0 core (B476 only, not counted) | [libvirt-3-nodes-ceph/](../examples/ceph-clusters/libvirt-3-nodes-ceph/) | none: B476's profile, shown for reference | 3: MON 3, MGR 2, OSD 3 | 11, 11, 8 (sum 30) | none | public | 8 GiB (B476's values, fixed OSD memory target) | 3 | 12 | 24 | 24 | 180+240 | IBM entitlement | [B476](milestones/delivered.md#x94--post-destroy-cluster-inspection) |
 | P1 pools (representative larger) | [libvirt-6-nodes-ceph-pools/](../examples/ceph-clusters/libvirt-6-nodes-ceph-pools/) | Hosts and native bootstrap (public and cluster networks); Devices and OSDs (two drive groups, HDD data with DB on SSD, device classes, encrypted OSDs, TPM2 variant if B475 qualifies it); CRUSH and pools (replicated 3/2, EC 4+2 RBD data pool with overwrites and replicated metadata on six hosts, EC 2+2, device-class rule, quota, compression, autoscale bounds, RBD images) | 6: MON 5 on h1-h5 (3 if B472 records a narrower MON range), MGR 2 on h1 and h2, OSD 12 (2 per host) | h1, h2 16; h3-h5 13; h6 10 (sum 81) | none | public, cluster | h1, h2 18; h3-h5 15; h6 12 GiB; 4 vCPU; 60 root, 40 SSD, 40 HDD and 10 SSD (DB) GiB | 6 | 24 | 93 | 60 | 360+540 | IBM entitlement | [B81](milestones/m2.md#b81), [B475](milestones/m2.md#b475), [B326](milestones/m1.md#b326); OD22's budget item |
 | P2 services | [libvirt-6-nodes-ceph-services/](../examples/ceph-clusters/libvirt-6-nodes-ceph-services/) | CephFS (replicated metadata, replicated and EC 2+2 data, layouts, MDS active and standby-replay, subvolume groups and subvolumes); RGW (realm, zonegroup and zone, two RGW daemons, TLS, ingress VIP, users and buckets); NFS (multi-active count 2 over 3 candidate hosts, ingress, CephFS export, RGW user export); SMB (user mode, clustered count 2 if B482 supports it, two shares on distinct subvolumes); Access and handoff (CephFS, S3, NFS and SMB client evidence) | 6: h1, h2 MON, MGR, OSD and MDS; h3 MON, OSD and RGW; h4, h5 OSD and NFS (candidates h4-h6); h6 OSD and RGW; SMB and ingress placement as B482 and B477 qualify | h1, h2 14; h3 9; h4, h5 5+?; h6 6 (sum 53+) | 1 client (RHEL 9.8, DVD packages per family) | public (VIPs in it) | h1, h2 16; h3 11; h4, h5, h6 12 GiB; client 4 GiB; Ceph 4 vCPU, client 2; Ceph 60 root and 60 SSD GiB, client 40 root GiB | 7 | 26 | 83 | 83 | 400+360 | AD only if B482 qualifies AD mode (operator-declared) | [B492](milestones/m2.md#b492), [B477](milestones/m2.md#b477), [B478](milestones/m2.md#b478), [B482](milestones/m2.md#b482), [B489](milestones/m2.md#b489); OD22's budget item |
-| P3 observability | [libvirt-4-nodes-ceph-observability/](../examples/ceph-clusters/libvirt-4-nodes-ceph-observability/) | Observability and management (Prometheus, Grafana, Alertmanager, node and Ceph exporters, retention, alerts, SNMP gateway, management gateway with a keepalive-only ingress VIP, OAuth2 SSO through oauth2-proxy with roles, TLS, log collection with Loki and Alloy) | 4: h1, h2 MON, MGR and OSD; h3 MON and OSD; h4 OSD and the observability stack; management gateway and oauth2-proxy placement as B479 qualifies | h1, h2 11; h3 8; h4 5 (base sum 35; extra service allowances in runbook) | none | public (VIP in it) | h1, h2 16; h3 10; h4 20 GiB; 4 vCPU; 60 root (h4 80) and 80 data GiB | 4 | 16 | 62 | 62 | 260+320 | an OIDC IdP of a kind IBM names and an SNMP receiver, both operator-provided | [B479](milestones/m2.md#b479); OD22's budget item |
+| P3 observability | [libvirt-4-nodes-ceph-observability/](../examples/ceph-clusters/libvirt-4-nodes-ceph-observability/) | Observability and management (Prometheus, Grafana, Alertmanager, node and Ceph exporters, retention, alerts, SNMP gateway, management gateway with a keepalive-only ingress VIP, OAuth2 SSO through oauth2-proxy with roles, TLS, log collection with Loki and Alloy) | 4: h1, h2 MON, MGR and OSD; h3 MON and OSD; h4 OSD and the observability stack; management gateway and oauth2-proxy placement as B479 qualifies | h1, h2 11; h3 8; h4 5 (base sum 35; the two gateway and proxy hosts add 3 GiB each and h4 13 GiB as qualification allowances, not vendor minima) | none | public (VIP in it) | h1, h2 16; h3 10; h4 20 GiB; 4 vCPU; 60 root (h4 80) and 80 data GiB | 4 | 16 | 62 | 62 | 260+320 | an OIDC IdP of a kind IBM names and an SNMP receiver, both operator-provided | [B479](milestones/m2.md#b479); OD22's budget item |
 | P4 NVMe-oF | [libvirt-5-nodes-ceph-nvmeof/](../examples/ceph-clusters/libvirt-5-nodes-ceph-nvmeof/) | NVMe-oF (one gateway group, 2 gateways for HA, listeners, subsystems and NQNs, namespaces on owned RBD images, host NQN authorization, DH-HMAC-CHAP only if OD13 admits it, initiator failover); iSCSI (refusal only: Bootwright does not realize the iSCSI gateway) | 5: h1, h2 MON, MGR and OSD; h3 MON and OSD; h4, h5 OSD and NVMe-oF gateway | h1, h2 11; h3 8; h4, h5 13 (sum 56) | 1 initiator client (RHEL 9.8, nvme-cli) | public | h1, h2 13; h3 10; h4, h5 15 GiB and 8 vCPU; others 4 vCPU; client 4 GiB, 2 vCPU; 60 root and 60 data GiB, client 40 root GiB | 6 | 30 | 70 | 60 | 340+300 | tested host CPU: Intel 64, 6th generation or later, AVX-512; evidence, never an admission gate | [B480](milestones/m2.md#b480), [B481](milestones/delivered.md#x58--iscsi-refusal); OD22's budget item |
 | P5 host variants | [libvirt-3-nodes-ceph-host-variants/](../examples/ceph-clusters/libvirt-3-nodes-ceph-host-variants/) | Host and security variants (active-backup bond over 2 NICs, VLAN carrying the cluster network over the bond, final NMState, RHSM registration, FIPS without OSPP, CephX key type, LUKS root with TPM2 unlock and recovery, reboot access); Devices and OSDs (one explicit data disk); CRUSH and pools (explicit 2/2 replicated pool) | 3: MON 3, MGR 2, OSD 3 | 11, 11, 8 (sum 30) | none | public (bond), cluster (VLAN on the bond) | 13, 13, 10 GiB; 4 vCPU; 60 root and 80 data GiB; 2 NICs | 3 | 12 | 36 | 24 | 180+240 | Red Hat registration credentials (operator Secret) | [B326](milestones/m1.md#b326), [B74](milestones/m1.md#b74), [B75](milestones/m1.md#b75), [B76](milestones/m1.md#b76), [B77](milestones/m1.md#b77), [B346](milestones/m1.md#b346) |
 | P6 disconnected (also the B484 core) | [libvirt-3-nodes-ceph-disconnected/](../examples/ceph-clusters/libvirt-3-nodes-ceph-disconnected/) | Disconnected supply (controller-local mirror registry, CA and pull-secret custody, every image the profile deploys, no public route); Hosts and native bootstrap (single public network); Devices and OSDs (one explicit data disk); CRUSH and pools (explicit 2/2 replicated pool); Access and handoff (minimal pool client) | 3: MON 3, MGR 2, OSD 3, and the auxiliary services B493 qualifies (at least the monitoring set and ingress) | 11, 11, 8 plus auxiliaries (sum 30+) | none | public with `forward: none` | 20 GiB each (2 GiB OS and provisional auxiliary headroom); 4 vCPU; 60 root and 80 data GiB | 3 | 12 | 60 | 24 | 180+240 | externally prepared mirror with all images, signed RPM closure and publisher key; local locked wheels via setup --download-only/--wheel-mirror | [B493](milestones/m2.md#b493) |
@@ -293,33 +295,29 @@ the [B81](milestones/m2.md#b81) and [B492](milestones/m2.md#b492) resources
 that fit them: a placement policy, an RBD pool placed by it, an RBD image,
 replicated CephFS metadata and data pools, an `mds` service of two daemons
 bound to a filesystem with one active rank, one standby and a subvolume group,
-a subvolume in that group and the pool client. Its
-[runbook](../e2e/runbooks/libvirt-3-nodes-ceph-block-file.md) follows the profile
-runbook sections and records RBD and CephFS data checks with the administrator
-keyring, MDS failover, interruption and continuation, replay, changed-intent
-refusal and retirement with the hosts. Erasure-coded pools and the larger
+a subvolume in that group and the pool client. The e2e
+[`lab-3-nodes-ceph`](../e2e/lab-3-nodes-ceph/runbook.md) case rehearses it.
+Erasure-coded pools and the larger
 CephFS shapes stay with P1 and P2.
 
 The [three-node object example](../examples/ceph-clusters/libvirt-3-nodes-ceph-object/README.md)
 and the [three-node NFS example](../examples/ceph-clusters/libvirt-3-nodes-ceph-nfs/README.md)
-are outside this catalog and claim no B484 row; their runbooks,
-[object](../e2e/runbooks/libvirt-3-nodes-ceph-object.md) and
-[NFS](../e2e/runbooks/libvirt-3-nodes-ceph-nfs.md), are inputs to
-[P2's](../e2e/runbooks/libvirt-6-nodes-ceph-services.md). The object
-example binds a CephObjectGateway to an rgw service of two
+are outside this catalog and claim no B484 row; the e2e
+[`lab-3-nodes-ceph`](../e2e/lab-3-nodes-ceph/runbook.md) case rehearses both.
+The object example binds a CephObjectGateway to an rgw service of two
 daemons that terminate TLS themselves with a generated `tlsCertificate` Secret
-naming the gateway's endpoint, over the eight derived zone pools. Its runbook
-records an HTTPS status line from each daemon through the endpoint name with
+naming the gateway's endpoint, over the eight derived zone pools. Its
+acceptance records an HTTPS status line from each daemon through the endpoint name with
 the bound certificate as trust anchor, a failed name check through a host
 address, and one RGW daemon stopped and started while the other answers. The
 NFS example serves a subvolume through a direct `nfs` service and one export
 whose own access is `NONE`, with a denied client address listed before the
-allowed client network. Its runbook records an NFSv4 mount, write and read
+allowed client network. Its acceptance records an NFSv4 mount, write and read
 from an allowed guest and a refused mount from the denied guest.
 
 P2 authors synthetic auxiliary image coordinates for offline planning. Its
-runbook requires operator-selected authenticated images of the chosen release
-and records their resolved digests before live qualification. All P2 operator
+live qualification requires operator-selected authenticated images of the
+chosen release and records their resolved digests first. All P2 operator
 runs and ingress acceptance remain unrun.
 
 `TestIngressFixturesPlanWithSelectedImages` applies an RGW ingress on two
@@ -333,48 +331,12 @@ variants without the images and asserts the [refusal](ceph.md#refusal-table)
 of a native service whose auxiliary image is not selected. P2 keeps TLS
 ingress, VIP failover, multi-active NFS and the client guest.
 
-### Profile runbooks
+### Measured budget
 
-Each P1 to P7 runbook, `e2e/runbooks/<directory>.md` named after its example
-directory, has these `##` headings, each once and in this order.
-Other headings may sit between them:
-
-1. `## Budget and prerequisites`: the catalog row's numbers (IBM per guest and
-   declared), external dependencies, the 4 GiB controller reserve, and for an
-   NVMe-oF profile the provider CPU checks `grep -c avx512f /proc/cpuinfo` and
-   `grep -m1 'model name' /proc/cpuinfo`.
-2. `## Initial setup`
-3. `## IBM entitlement`: both as the
-   [three-node runbook](../e2e/runbooks/libvirt-3-nodes-ceph.md) does.
-4. `## Create the context`: `validate` with its exact files-seen and
-   objects-decoded counts, `context init`, `context update`, `context use`,
-   `secret generate`, `secret set` and `secret check`.
-5. `## Apply by stage`: controller, infrastructure-services and substrates, machines,
-   then clusters, with the per-guest read-only checks before clusters. The memory
-   sampler below runs during `apply --stage clusters`.
-6. `## Validate the cluster`: `cluster info` and read-only native checks (`-s`,
-   `health detail`, `orch ls`, `orch ps`, `osd tree`, `osd pool ls detail`, and the
-   family's own list commands with its redaction filters), never a
-   secret-bearing export.
-7. `## Client access`: the family item's own client evidence, run from the
-   client guest or through `cluster exec`.
-8. `## Failover`: stop the declared gateway or daemon host with
-   `bootwright machine stop`, then record native health and the client result
-   within a stated timeout, and the declared recovery action. A profile without
-   a gateway runs the one-node outage of the three-node example here.
-9. `## Interruption and continuation`: one Ctrl-C of `apply --stage clusters`
-   after the first Ceph block starts, `status`, the same command again, and
-   the record that it continued the same operation.
-10. `## Replay`: `apply` on the done context settles without effect.
-11. `## Check that changed intent is refused`
-12. `## Measured budget`: the commands below and every measured budget field
-    of the [Ceph matrix row](../docs/acceptance.md#ceph-matrix-row), by name.
-13. `## Cleanup`: `destroy --authorize data-loss` refused while hosts run,
-    `machine stop` of the whole group, destroy again, and the absence checks.
-
-Measured budget commands are operator-run and read-only. Run them before the
-first apply (a), after `apply --stage clusters` (b), and after the client and
-failover checks (c):
+A [Ceph matrix row](../docs/acceptance.md#ceph-matrix-row) records every
+measured budget field by name. The commands are operator-run and read-only.
+Run them before the first apply (a), after `apply --stage clusters` (b), and
+after the client and failover checks (c):
 
 ```text
 nproc
@@ -392,10 +354,6 @@ The memory sampler starts in a second terminal just before
 ```text
 while sleep 10; do date +%s; grep MemAvailable /proc/meminfo; done > "$ev/memavailable-clusters.txt"
 ```
-
-`TestCephProfileRunbooksHaveRequiredSections` checks the runbook of each
-linked P1 to P7 example for these headings and for every measured budget field name in its
-`## Measured budget` section.
 
 ## Stretch constraints
 
@@ -570,8 +528,7 @@ An omitted transport is no combination: it selects `verifiedTunnel`, as the
 combination rows using BMC-installed hosts and real disks, on the
 [B78 host foundation](managed-os.md#physical-host-qualification) with B70 erase
 evidence. The [three-host physical example](../examples/ceph-clusters/physical-3-nodes-ceph/)
-and its [runbook](../e2e/runbooks/physical-3-nodes-ceph.md) supply the base
-installation and storage trajectory. Expand its authored
+supplies the base installation and storage trajectory. Expand its authored
 hosts, devices and native services to each catalog profile's required shape.
 
 | Physical profile | Required coverage beyond the common host foundation |
@@ -629,5 +586,4 @@ full P7/B484 qualification is not claimed. Its two clusters each declare
 51 GiB (16+16+11+8); the separate client adds 4 GiB. The authored total is
 106 GiB under OD21 (b); no reduced-memory variant is qualified. The 4 GiB
 controller reserve is additional. The client is realized in a separate
-machine-only context, as
-[its runbook](../e2e/runbooks/libvirt-2x4-nodes-ceph-multisite.md) describes.
+machine-only context.

@@ -1,0 +1,36 @@
+# The stretch tiebreaker, whose RHEL the lab-5-nodes-ceph-stretch-arbiter
+# context installed, so this context installs nothing here. Ceph dials it as the cluster SSH user
+# with this context's fleet key, whose public half the operator authorizes
+# on the host, and verifies the host key the arbiter-known-hosts Secret pins.
+# The operatorIdentity arm serves operator sessions only.
+apiVersion: bootwright.io/v1alpha1
+kind: Machine
+metadata:
+  name: arbiter-01
+
+spec:
+  placement:
+    site: {{ .Values.sites.tiebreaker }}
+
+  os:
+    provided: true
+
+  network:
+    addresses:
+      - name: fqdn
+        address: arbiter-01.{{ .Values.host.domain }}
+
+      - name: ip
+        address: {{ index .Values.addresses "arbiter-01" }}
+
+  access:
+    ssh:
+      addressRef: ip
+      port: 22
+      user: bootwright
+      knownHostsRef: arbiter-known-hosts
+
+      auth:
+        operatorIdentity: {}
+
+    rootLogin: keep

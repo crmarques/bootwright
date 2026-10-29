@@ -1,0 +1,103 @@
+{{- $net := ternary .Values.networks.ipv6 .Values.networks.ipv4 .Values.ipv6 }}
+apiVersion: bootwright.io/v1alpha1
+kind: OpenShiftCluster
+metadata:
+  name: features
+
+spec:
+  distribution:
+    type: openshift
+
+    release:
+      version: {{ .Values.openshift.version }}
+
+  install:
+    mode: connected
+
+    endpoints:
+      api:
+        address: {{ $net.vips.api }}
+
+        source:
+          type: installer
+
+      ingress:
+        address: {{ $net.vips.ingress }}
+
+        source:
+          type: installer
+
+    agent:
+      redfishVirtualMedia:
+        artifactServerEndpoint:
+          serverRef: lab-artifacts
+          endpointRef: ip-https
+
+    ntp:
+      - serverRef: lab-ntp
+        endpointRef: ip
+{{- if .Values.proxy.enabled }}
+
+    proxy:
+      proxyRef: lab-proxy
+      endpointRef: ip
+
+      noProxy:
+        - '*.{{ .Values.host.domain }}'
+{{- end }}
+{{- if .Values.mirror.enabled }}
+
+    registries:
+      mirror:
+        registryRef: lab-mirror
+
+      imageDigestSources:
+        - source: quay.io/openshift-release-dev/ocp-release
+
+          mirrors:
+            - {{ .Values.mirror.url }}/{{ required "mirror.enabled is true: set mirror.releaseRepository to the repository on the mirror holding the release payload" .Values.mirror.releaseRepository }}
+
+        - source: quay.io/openshift-release-dev/ocp-v4.0-art-dev
+
+          mirrors:
+            - {{ .Values.mirror.url }}/{{ required "mirror.enabled is true: set mirror.componentRepository to the repository on the mirror holding the component images" .Values.mirror.componentRepository }}
+
+    additionalTrustBundleRefs:
+      - mirror-ca
+{{- end }}
+
+  nodes:
+    - name: master-0
+      role: controlPlane
+      machineRef: features-01
+
+    - name: master-1
+      role: controlPlane
+      machineRef: features-02
+
+    - name: master-2
+      role: controlPlane
+      machineRef: features-03
+{{- if or .Values.security.tpm2 .Values.security.fips }}
+
+  security:
+{{- if .Values.security.fips }}
+    fips:
+      enabled: true
+{{- end }}
+{{- if .Values.security.tpm2 }}
+    diskEncryption:
+      unlock:
+        tpm2: {}
+{{- end }}
+{{- end }}
+{{- if .Values.ipv6 }}
+
+  networking:
+    clusterNetwork:
+      - cidr: {{ $net.clusterNetwork.cidr }}
+        hostPrefix: {{ $net.clusterNetwork.hostPrefix }}
+
+    serviceNetwork:
+      - {{ $net.serviceNetwork }}
+{{- end }}

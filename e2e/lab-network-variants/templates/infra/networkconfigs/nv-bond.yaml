@@ -1,0 +1,99 @@
+apiVersion: bootwright.io/v1alpha1
+kind: NetworkConfig
+metadata:
+  name: nv-bond
+
+spec:
+  machineNetwork:
+    - cidr: {{ .Values.host.cidr }}
+
+  dns:
+    - serverRef: lab-dns
+      endpointRef: ip
+
+  nmstate:
+    interfaces:
+      - name: nic0
+        type: ethernet
+        state: up
+        controller: bond0
+
+        ipv4:
+          enabled: false
+
+        ipv6:
+          enabled: false
+
+      - name: nic1
+        type: ethernet
+        state: up
+        controller: bond0
+
+        ipv4:
+          enabled: false
+
+        ipv6:
+          enabled: false
+
+      - name: bond0
+        type: bond
+        state: up
+
+        link-aggregation:
+          mode: {{ .Values.bond.mode }}
+
+          options:
+            miimon: 100
+
+          port:
+            - nic0
+            - nic1
+
+        ipv4:
+          enabled: true
+          dhcp: false
+
+        ipv6:
+          enabled: false
+
+      - name: bond0.{{ .Values.converge.vlanId }}
+        type: vlan
+        state: up
+
+        vlan:
+          base-iface: bond0
+          id: {{ .Values.converge.vlanId }}
+
+        ipv4:
+          enabled: true
+          dhcp: false
+
+        ipv6:
+          enabled: false
+
+    dns-resolver:
+      config:
+        search:
+          - {{ .Values.host.domain }}
+
+    routes:
+      config:
+        - destination: 0.0.0.0/0
+          next-hop-address: {{ .Values.host.gateway }}
+          next-hop-interface: bond0
+          table-id: 254
+          metric: 100
+
+        - destination: {{ .Values.converge.extraRoute }}
+          next-hop-address: {{ .Values.host.gateway }}
+          next-hop-interface: bond0
+          table-id: 254
+          metric: 200
+{{- if .Values.cutoff }}
+
+        - destination: {{ .Values.host.gateway }}/32
+          next-hop-address: {{ .Values.converge.cutoffHop }}
+          next-hop-interface: bond0.{{ .Values.converge.vlanId }}
+          table-id: 254
+          metric: 300
+{{- end }}

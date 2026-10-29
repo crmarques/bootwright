@@ -1,0 +1,37 @@
+apiVersion: bootwright.io/v1alpha1
+kind: NetworkConfig
+metadata:
+  name: lab-metal
+
+spec:
+  machineNetwork:
+    - cidr: {{ .Values.host.cidr }}
+
+  dns:
+    - serverRef: lab-dns
+      endpointRef: ip
+
+  nmstate:
+    interfaces:
+      - name: {{ .Values.install.nicName }}
+        type: ethernet
+        state: up
+
+        ipv4:
+          enabled: true
+          dhcp: false
+
+        ipv6:
+          enabled: false
+
+    dns-resolver:
+      config:
+        search:
+          - {{ .Values.host.domain }}
+
+    routes:
+      config:
+        - destination: 0.0.0.0/0
+          next-hop-address: {{ .Values.host.gateway }}
+          next-hop-interface: {{ .Values.install.nicName }}
+          table-id: 254

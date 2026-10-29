@@ -39,4 +39,4 @@ same input is rehearsed without hardware against the
   NIC name and MAC, root-device hint, BMC account (`lab-bmc-credentials`) and
   issuing CA (`lab-bmc-ca`), and a server whose selected disk may be erased.
 
-Runbook: [e2e/runbooks/lab-baremetal.md](../../../e2e/runbooks/lab-baremetal.md).
+Rehearse it without hardware with the e2e [`lab-baremetal-rehearsal`](../../../e2e/lab-baremetal-rehearsal/runbook.md) case.

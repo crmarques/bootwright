@@ -1,0 +1,21 @@
+{{- if .Values.ceph.services.object }}
+apiVersion: bootwright.io/v1alpha1
+kind: Secret
+metadata:
+  name: rgw-objects-tls
+
+spec:
+  type: tlsCertificate
+
+  source:
+    generated:
+      commonName: s3.{{ .Values.host.domain }}
+
+      dnsNames:
+        - s3.{{ .Values.host.domain }}
+
+      ipAddresses:
+        - {{ .Values.ceph.objectVIP }}
+
+      validityDays: 3650
+{{- end }}

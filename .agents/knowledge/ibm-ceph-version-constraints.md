@@ -13,8 +13,7 @@ evidence inventory.
 ## Current authored example
 
 The [three-node declaration](../../examples/ceph-clusters/libvirt-3-nodes-ceph/storage/cluster.yaml)
-and its [runbook](../../e2e/runbooks/libvirt-3-nodes-ceph.md)
-are the owners of these selections as of 2026-10-18:
+is the owner of these selections as of 2026-10-18:
 
 | Coordinate | Authored value |
 | --- | --- |
@@ -28,7 +27,8 @@ names the RHEL 10 image repository in its embedded
 `cephadmlib/constants.py`. Container base, guest OS and native RPM build are
 separate coordinates; that default names an image repository only. A release
 table tag is not evidence that a repository/tag pair exists. Follow the
-runbook's authenticated metadata check and operator-owned immutable selection;
+e2e [`lab-3-nodes-ceph`](../../e2e/lab-3-nodes-ceph/runbook.md) case's
+authenticated metadata check and operator-owned immutable selection;
 the moving release alias `v9.9.2` and the eventual frozen digest do not qualify a
 release.
 

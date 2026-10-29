@@ -1,0 +1,46 @@
+apiVersion: bootwright.io/v1alpha1
+kind: InfraProvider
+metadata:
+  name: lab-libvirt
+
+spec:
+  libvirt:
+    capacityReserve:
+      cpu: 1
+      memoryMiB: 2048
+      diskGiB: 10
+
+    machineRef: controller
+
+    bmcEmulation:
+      bindAddress: 127.0.0.1
+      port: 8000
+      certificateRef: lab-bmc-tls
+
+      auth:
+        credentialsRef: lab-bmc-credentials
+
+    machineProfiles:
+      - name: rhel
+        cpu: {{ .Values.guest.cpu }}
+        memoryMiB: {{ .Values.guest.memoryMiB }}
+        diskGiB: {{ .Values.guest.diskGiB }}
+        tpm: {}
+
+  networkAttachments:
+    - name: nv-lab
+
+      libvirt:
+        bridge: {{ .Values.host.bridge }}
+        management: managed
+        address: {{ .Values.host.gateway }}/{{ .Values.host.prefix }}
+        forward: nat
+
+{{- if not .Values.single }}
+
+    - name: nv-trunk
+
+      libvirt:
+        bridge: {{ .Values.externalBridge }}
+        management: external
+{{- end }}

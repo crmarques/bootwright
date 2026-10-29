@@ -1,0 +1,44 @@
+# Default input of the lab-rhel case. Override keys with e2e/render.sh --set
+# or a --values file.
+
+host:
+  # The controller address the managed services bind and the guest reaches;
+  # "auto" takes this host's default-route source address at render time.
+  address: auto
+  domain: e2e.example.test
+
+  upstreamDNS:
+    - 1.1.1.1
+
+  upstreamNTP:
+    - 162.159.200.1
+
+  # The NAT network Bootwright creates for the guest.
+  bridge: virbr-e2e
+  cidr: 198.51.100.0/24
+  gateway: 198.51.100.1
+  prefix: 24
+
+# Media names as added with `bootwright media add --name`.
+rhel:
+  version: "9.8"
+  bootMedia: rhel-9.8-x86_64-boot.iso
+  dvdMedia: rhel-9.8-x86_64-dvd.iso
+
+guest:
+  address: 198.51.100.11
+  cpu: 2
+  memoryMiB: 4096
+  diskGiB: 40
+
+# fips installs the guest in FIPS mode; tpm2 encrypts its root disk, unlocked
+# by the guest TPM2, with the luks-recovery passphrase as recovery.
+security:
+  fips: false
+  tpm2: false
+
+# Register with Red Hat Subscription Management from the rhsm-org and rhsm-key
+# Secrets; updateWithinRelease then updates to the newest 9.8 packages.
+registration:
+  enabled: false
+  updateWithinRelease: false

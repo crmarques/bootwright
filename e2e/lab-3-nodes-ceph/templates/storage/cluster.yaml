@@ -1,0 +1,327 @@
+{{- $c := .Values.ceph -}}
+{{- $s := $c.services -}}
+{{- $dom := .Values.host.domain -}}
+{{- $nfs := and $s.nfs $s.file -}}
+{{- $smb := and $s.smb $s.file -}}
+{{- $letters := list "a" "b" "c" "d" "e" "f" "g" -}}
+apiVersion: bootwright.io/v1alpha1
+kind: CephCluster
+metadata:
+  name: ceph-e2e
+
+spec:
+  management: managed
+
+  distribution:
+    ibm:
+      callHome: {{ $c.callHome }}
+
+      packages:
+        source: vendor
+
+  release: {{ $c.release }}
+  packageVersion: {{ $c.packageVersion }}
+
+  image:
+    base: {{ $c.image.base }}
+    version: {{ $c.image.version }}
+
+  entitlementRef: ibm-ceph
+
+  cephadm:
+    addressRef: ip
+
+    ansible:
+      packageVersion: {{ $c.ansiblePackageVersion }}
+
+    clusterSSH:
+      user: bootwright
+      keyRef: ceph-cluster-key
+      transport: verifiedTunnel
+
+    bootstrap:
+      nodeRef: rhel-01
+      addressRef: ip
+
+  networks:
+    publicCIDRs:
+      - {{ .Values.host.cidr }}
+
+  config:
+    global:
+      osd_pool_default_size: '2'
+      osd_pool_default_min_size: '2'
+
+    osd:
+      osd_memory_target_autotune: 'false'
+      osd_memory_target: '2147483648'
+
+  services:
+    - service_type: mon
+
+      placement:
+        count: 3
+        label: ceph-core
+
+    - service_type: mgr
+
+      placement:
+        count: 2
+        label: ceph-core
+
+    - service_type: osd
+      service_id: data
+
+      placement:
+        label: ceph-core
+
+      spec:
+        data_devices:
+          paths:
+{{- range $i := until (int .Values.guest.osdDisks) }}
+            - /dev/sd{{ index $letters $i }}
+{{- end }}
+{{- if $s.file }}
+
+    - service_type: mds
+      service_id: files
+
+      placement:
+        count: 2
+        label: ceph-core
+{{- end }}
+{{- if $s.object }}
+
+    - service_type: rgw
+      service_id: objects
+
+      placement:
+        count: 2
+
+        hosts:
+          - rhel-01.{{ $dom }}
+          - rhel-02.{{ $dom }}
+
+      spec:
+        rgw_frontend_port: 8081
+        ssl: false
+
+    - service_type: ingress
+      service_id: rgw.objects
+
+      placement:
+        count: 2
+
+        hosts:
+          - rhel-02.{{ $dom }}
+          - rhel-03.{{ $dom }}
+
+      spec:
+        backend_service: rgw.objects
+        virtual_ip: {{ $c.objectVIP }}/{{ .Values.host.prefix }}
+        frontend_port: 443
+        monitor_port: 9043
+        ssl: true
+        certificate_source: inline
+        first_virtual_router_id: 60
+{{- end }}
+{{- if $nfs }}
+
+    - service_type: nfs
+      service_id: shares
+
+      placement:
+        count: 1
+
+        hosts:
+          - rhel-01.{{ $dom }}
+{{- end }}
+{{- if $s.observability }}
+
+    - service_type: prometheus
+
+      placement:
+        hosts:
+          - rhel-03.{{ $dom }}
+
+      spec:
+        retention_time: 7d
+        retention_size: 5GB
+        port: 9095
+
+    - service_type: alertmanager
+
+      placement:
+        hosts:
+          - rhel-03.{{ $dom }}
+
+    - service_type: grafana
+
+      placement:
+        hosts:
+          - rhel-02.{{ $dom }}
+
+      spec:
+        anonymous_access: false
+        protocol: https
+
+    - service_type: node-exporter
+
+      placement:
+        hosts:
+          - rhel-01.{{ $dom }}
+          - rhel-02.{{ $dom }}
+          - rhel-03.{{ $dom }}
+
+      spec:
+        port: 9100
+
+    - service_type: ceph-exporter
+
+      placement:
+        hosts:
+          - rhel-01.{{ $dom }}
+          - rhel-02.{{ $dom }}
+          - rhel-03.{{ $dom }}
+
+      spec:
+        prio_limit: 5
+        stats_period: 10
+
+    - service_type: mgmt-gateway
+
+      placement:
+        hosts:
+          - rhel-01.{{ $dom }}
+          - rhel-02.{{ $dom }}
+
+      spec:
+        port: 9443
+        virtual_ip: {{ $c.managementVIP }}
+        enable_auth: false
+
+    - service_type: ingress
+      service_id: mgmt
+
+      placement:
+        hosts:
+          - rhel-01.{{ $dom }}
+          - rhel-02.{{ $dom }}
+
+      spec:
+        backend_service: mgmt-gateway
+        keepalive_only: true
+        virtual_ip: {{ $c.managementVIP }}
+
+    - service_type: loki
+
+      placement:
+        hosts:
+          - rhel-03.{{ $dom }}
+
+      spec:
+        port: 3100
+
+    - service_type: alloy
+
+      placement:
+        hosts:
+          - rhel-01.{{ $dom }}
+          - rhel-02.{{ $dom }}
+          - rhel-03.{{ $dom }}
+{{- end }}
+{{- if $s.nvmeof }}
+
+    - service_type: nvmeof
+      service_id: nvme-config.primary
+
+      placement:
+        hosts:
+          - rhel-02.{{ $dom }}
+          - rhel-03.{{ $dom }}
+
+      spec:
+        pool: nvme-config
+        group: primary
+        enable_auth: false
+{{- end }}
+
+  topology:
+    nodes:
+{{- range $n := until 3 }}
+      - name: rhel-0{{ add $n 1 }}
+        fqdn: rhel-0{{ add $n 1 }}.{{ $dom }}
+        machineRef: rhel-0{{ add $n 1 }}
+
+        labels:
+          - ceph-core
+{{ end }}
+{{- if or $s.object $smb $s.observability $s.nvmeof }}
+  images:
+{{- if $s.object }}
+    haproxy:
+      base: {{ $c.images.haproxy.base }}
+      version: {{ $c.images.haproxy.version }}
+{{ end }}
+{{- if or $s.object $s.observability }}
+    keepalived:
+      base: {{ $c.images.keepalived.base }}
+      version: {{ $c.images.keepalived.version }}
+{{ end }}
+{{- if $smb }}
+    samba:
+      base: {{ $c.images.samba.base }}
+      version: {{ $c.images.samba.version }}
+
+    samba_metrics:
+      base: {{ $c.images.samba_metrics.base }}
+      version: {{ $c.images.samba_metrics.version }}
+{{ end }}
+{{- if $s.observability }}
+{{- range $name := list "prometheus" "alertmanager" "grafana" "node_exporter" "nginx" "loki" "alloy" }}
+{{- $image := index $c.images $name }}
+    {{ $name }}:
+      base: {{ $image.base }}
+      version: {{ $image.version }}
+
+{{ end }}
+{{- end }}
+{{- if $s.nvmeof }}
+    nvmeof:
+      base: {{ $c.images.nvmeof.base }}
+      version: {{ $c.images.nvmeof.version }}
+{{- end }}
+{{- end }}
+{{- if or $s.object $s.observability }}
+
+  serviceBindings:
+{{- if $s.object }}
+    - serviceRef: ingress.rgw.objects
+
+      secrets:
+        - path: /spec/ssl_cert
+          secretRef: rgw-objects-tls
+
+        - path: /spec/ssl_key
+          secretRef: rgw-objects-tls
+{{- end }}
+{{- if $s.observability }}
+{{- if $s.object }}
+
+{{ end }}
+    - serviceRef: grafana
+
+      secrets:
+        - path: /spec/initial_admin_password
+          secretRef: grafana-admin
+
+    - serviceRef: mgmt-gateway
+
+      secrets:
+        - path: /spec/ssl_cert
+          secretRef: management-tls
+
+        - path: /spec/ssl_key
+          secretRef: management-tls
+{{- end }}
+{{- end }}

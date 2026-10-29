@@ -1708,7 +1708,7 @@ CPython 3.14.
 ### X38 — the real-host run of 2026-10-05
 
 **Owner:** State reconciliation; run by the operator, who ran
-[lab-rhel](../../e2e/runbooks/lab-rhel.md#run-it) end to end on a host and
+[lab-rhel](../../e2e/lab-rhel/runbook.md#run) end to end on a host and
 accepted its [ledger row](../../docs/acceptance.md#ledger) the same day.
 **Items:** B49, B72. **Decisions:** D58.
 
@@ -6307,7 +6307,7 @@ checks. Exact measurements, package-preview exceptions and applicability notes
 are retained locally.
 
 **Outcome, B19, B20, B270, B276 and B277:** D154 accepted the
-[lab-rhel journey](../../e2e/runbooks/lab-rhel.md#run-it), including
+[lab-rhel journey](../../e2e/lab-rhel/runbook.md#run), including
 service and machine access, clock and running-disk checks, restart, settled
 replay, live-resource destroy refusal, stopped-resource removal, fresh apply,
 host-restart recovery and absence checks. The JSON privilege cases returned

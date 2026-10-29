@@ -1,0 +1,35 @@
+{{- if (and .Values.ceph.services.nfs .Values.ceph.services.file) }}
+apiVersion: bootwright.io/v1alpha1
+kind: CephNFSExport
+metadata:
+  name: docs
+
+spec:
+  clusterRef: ceph-e2e
+  serviceID: shares
+  subvolumeRef: docs
+
+  native:
+    pseudo: /docs
+    access_type: NONE
+    squash: root_squash
+
+    protocols:
+      - 4
+
+    fsal:
+      name: CEPH
+
+    clients:
+      - access_type: NONE
+        squash: root_squash
+
+        addresses:
+          - {{ index .Values.guest.addresses 2 }}
+
+      - access_type: RW
+        squash: root_squash
+
+        addresses:
+          - {{ .Values.host.cidr }}
+{{- end }}

@@ -32,6 +32,4 @@ release qualification remain open in [M2](../../../specs/milestones/m2.md#m2b).
   `license.accept: true` is a placeholder; review IBM's terms before use.
 - Replace the placeholder controller, DNS forwarder and NTP addresses.
 
-Runbook: [e2e/runbooks/libvirt-3-nodes-ceph.md](../../../e2e/runbooks/libvirt-3-nodes-ceph.md).
-The templated e2e [`ceph` case](../../../e2e/README.md#case-ceph) covers the same
-scenario with its own inputs.
+Run it with the e2e [`lab-3-nodes-ceph`](../../../e2e/lab-3-nodes-ceph/runbook.md) case.

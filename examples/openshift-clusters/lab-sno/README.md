@@ -27,6 +27,4 @@ the current implementation limits.
   from a private file). The BMC credentials and TLS, artifact-server TLS and
   node SSH key are generated.
 
-Runbook: [e2e/runbooks/lab-sno.md](../../../e2e/runbooks/lab-sno.md).
-The templated e2e [`sno` case](../../../e2e/README.md#case-sno) covers the same
-scenario with its own inputs.
+Run it with the e2e [`lab-sno`](../../../e2e/lab-sno/runbook.md) case.

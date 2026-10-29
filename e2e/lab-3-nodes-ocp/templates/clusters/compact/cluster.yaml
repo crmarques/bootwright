@@ -1,0 +1,50 @@
+apiVersion: bootwright.io/v1alpha1
+kind: OpenShiftCluster
+metadata:
+  name: compact
+
+spec:
+  distribution:
+    type: openshift
+
+    release:
+      version: {{ .Values.openshift.version }}
+
+  install:
+    mode: connected
+
+    endpoints:
+      api:
+        address: {{ .Values.vips.api }}
+
+        source:
+          type: installer
+
+      ingress:
+        address: {{ .Values.vips.ingress }}
+
+        source:
+          type: installer
+
+    agent:
+      redfishVirtualMedia:
+        artifactServerEndpoint:
+          serverRef: lab-artifacts
+          endpointRef: ip-https
+
+    ntp:
+      - serverRef: lab-ntp
+        endpointRef: ip
+
+  nodes:
+    - name: master-0
+      role: controlPlane
+      machineRef: compact-01
+
+    - name: master-1
+      role: controlPlane
+      machineRef: compact-02
+
+    - name: master-2
+      role: controlPlane
+      machineRef: compact-03

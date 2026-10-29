@@ -1,0 +1,90 @@
+# Default input of the lab-5-nodes-ceph-stretch case. Override keys with
+# e2e/render.sh --set or a --values file. The case renders two inputs:
+# <out>/arbiter for context lab-5-nodes-ceph-stretch-arbiter and <out>/ceph
+# for context lab-5-nodes-ceph-stretch.
+
+host:
+  # The controller address the managed services bind and the guests reach;
+  # "auto" takes this host's default-route source address at render time.
+  address: auto
+  domain: e2e.example.test
+
+  upstreamDNS:
+    - 1.1.1.1
+
+  upstreamNTP:
+    - 162.159.200.1
+
+  # The NAT network the arbiter context creates; the ceph context attaches.
+  bridge: virbr-e2e
+  cidr: 198.51.100.0/24
+  gateway: 198.51.100.1
+  prefix: 24
+
+# Media names as added with `bootwright media add --name`.
+rhel:
+  version: "9.8"
+  bootMedia: rhel-9.8-x86_64-boot.iso
+  dvdMedia: rhel-9.8-x86_64-dvd.iso
+
+# Each context's artifact server and emulated BMC on this host. The arbiter
+# context also serves DNS, NTP and the proxy for both.
+ports:
+  ceph:
+    https: 8443
+    http: 8080
+    bmc: 8000
+
+  arbiter:
+    https: 8444
+    http: 8081
+    bmc: 8001
+
+# Three simulated sites: dc1 and dc2 hold the data hosts, dc3 the tiebreaker.
+sites:
+  dc1: [ceph-01, ceph-02]
+  dc2: [ceph-03, ceph-04]
+  tiebreaker: dc3
+
+addresses:
+  ceph-01: 198.51.100.61
+  ceph-02: 198.51.100.62
+  ceph-03: 198.51.100.63
+  ceph-04: 198.51.100.64
+  arbiter-01: 198.51.100.65
+
+# Guest sizes. A data host runs a MON, an OSD (and on ceph-01/ceph-03 a MGR);
+# the arbiter runs a MON alone.
+size:
+  data:
+    cpu: 2
+    memoryMiB: 4096
+    diskGiB: 25
+    osdDiskGiB: 15
+
+  arbiter:
+    cpu: 2
+    memoryMiB: 2048
+    diskGiB: 20
+
+  # Per-OSD memory target in bytes; Bootwright admits 2 GiB at least. Idle
+  # OSDs stay well below it.
+  osdMemoryTargetBytes: "2147483648"
+
+# IBM Storage Ceph coordinates.
+ceph:
+  release: 9.9.2.0
+  packageVersion: 20.2.2-349.el9cp
+  ansiblePackageVersion: 5.0.3-1.el9cp
+
+  image:
+    base: cp.icr.io/cp/ibm-ceph/ceph-9-rhel10
+    version: v9.9.2-26947
+
+  # The stretch services beyond RBD. file adds an MDS and a CephFS on
+  # ceph-02 and ceph-04; object adds an RGW gateway there, reached directly.
+  # Either needs data hosts of 6 GiB (size.data.memoryMiB=6144): 28 GiB of
+  # available memory across both contexts instead of 20.
+  services:
+    file: false
+    object: false

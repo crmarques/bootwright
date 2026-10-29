@@ -1,0 +1,75 @@
+{{- if not .Values.single }}
+apiVersion: bootwright.io/v1alpha1
+kind: NetworkConfig
+metadata:
+  name: nv-vlan
+
+spec:
+  machineNetwork:
+    - cidr: {{ .Values.vlan.cidr }}
+
+  dns:
+    - serverRef: lab-dns
+      endpointRef: ip
+
+  nmstate:
+    interfaces:
+      - name: nic0
+        type: ethernet
+        state: up
+
+        ipv4:
+          enabled: false
+
+        ipv6:
+          enabled: false
+
+      - name: nic0.{{ .Values.vlan.id }}
+        type: vlan
+        state: up
+
+        vlan:
+          base-iface: nic0
+          id: {{ .Values.vlan.id }}
+
+        ipv4:
+          enabled: true
+          dhcp: false
+
+        ipv6:
+          enabled: false
+
+      - name: nic0.{{ .Values.converge.vlanId }}
+        type: vlan
+        state: up
+
+        vlan:
+          base-iface: nic0
+          id: {{ .Values.converge.vlanId }}
+
+        ipv4:
+          enabled: true
+          dhcp: false
+
+        ipv6:
+          enabled: false
+
+    dns-resolver:
+      config:
+        search:
+          - {{ .Values.host.domain }}
+
+    routes:
+      config:
+        - destination: 0.0.0.0/0
+          next-hop-address: {{ .Values.vlan.gateway }}
+          next-hop-interface: nic0.{{ .Values.vlan.id }}
+          table-id: 254
+          metric: 100
+
+        - destination: {{ .Values.converge.extraRoute }}
+          next-hop-address: {{ .Values.vlan.gateway }}
+          next-hop-interface: nic0.{{ .Values.vlan.id }}
+          table-id: 254
+          metric: 200
+{{- end }}

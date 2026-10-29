@@ -39,5 +39,3 @@ addresses, disk names, WWNs, media and credentials.
   adapted to this shape in a private copy; physical qualification is unrun.
   P7's RGW multisite stays blocked by
   [B483](../../../specs/milestones/m2.md#b483).
-
-Runbook: [e2e/runbooks/physical-3-nodes-ceph.md](../../../e2e/runbooks/physical-3-nodes-ceph.md).

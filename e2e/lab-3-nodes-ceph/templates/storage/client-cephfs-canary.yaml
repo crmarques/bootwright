@@ -1,0 +1,11 @@
+{{- if .Values.ceph.services.file }}
+apiVersion: bootwright.io/v1alpha1
+kind: CephClient
+metadata:
+  name: cephfs-canary
+
+spec:
+  clusterRef: ceph-e2e
+  subvolumeRef: cephfs-canary
+  access: readWrite
+{{- end }}

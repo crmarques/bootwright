@@ -38,5 +38,3 @@ acceptance remains open.
   selected channel's `currentCSV` and confirm the catalog source from:
 
   `oc get packagemanifest odf-operator -n openshift-marketplace -o yaml`
-
-Runbook: [e2e/runbooks/lab-compact-df.md](../../../e2e/runbooks/lab-compact-df.md).

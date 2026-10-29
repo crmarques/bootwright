@@ -34,6 +34,4 @@ every Secret is generated locally in its context.
   not download them), hardware virtualization, and free service sockets. Run
   one of these labs at a time: other examples reuse the bridge and sockets.
 
-Runbook: [e2e/runbooks/lab-rhel.md](../../../e2e/runbooks/lab-rhel.md).
-The templated e2e [`rhel` case](../../../e2e/README.md#case-rhel) covers the same
-scenario with its own inputs.
+Run it with the e2e [`lab-rhel`](../../../e2e/lab-rhel/runbook.md) case.

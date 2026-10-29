@@ -1,0 +1,16 @@
+{{- if .Values.proxy.enabled }}
+apiVersion: bootwright.io/v1alpha1
+kind: Proxy
+metadata:
+  name: lab-proxy
+
+spec:
+  management: managed
+  machineRef: controller
+  implementation: squid
+  port: 3128
+
+  endpoints:
+    - name: ip
+      addressRef: ip
+{{- end }}

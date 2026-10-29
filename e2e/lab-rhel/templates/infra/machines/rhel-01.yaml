@@ -1,0 +1,30 @@
+apiVersion: bootwright.io/v1alpha1
+kind: Machine
+metadata:
+  name: rhel-01
+
+spec:
+  substrate:
+    providerRef: lab-libvirt
+    libvirt:
+      profileRef: rhel
+
+  hardware:
+    rootDevice:
+      deviceName: /dev/vda
+
+  os:
+    provided: false
+    installProfileRef: rhel
+
+  network:
+    configRef: lab-guests
+    installAddressRef: ip
+
+    addresses:
+      - name: fqdn
+        address: rhel-01.{{ .Values.host.domain }}
+
+      - name: ip
+        address: {{ .Values.guest.address }}/{{ .Values.host.prefix }}
+        interface: enp1s0

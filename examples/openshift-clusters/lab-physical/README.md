@@ -31,5 +31,3 @@ prerequisites to the consuming M3d run.
   prerequisites before the real-hardware row. Removal ejects media and deletes
   Bootwright-owned delivery state but retains the operating system and data on
   the disks.
-
-Runbook: [e2e/runbooks/lab-physical.md](../../../e2e/runbooks/lab-physical.md).

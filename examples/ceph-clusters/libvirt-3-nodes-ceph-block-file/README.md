@@ -32,6 +32,4 @@ OSD hosts than this lab has and belong to the larger catalog profiles.
   [B489](../../../specs/milestones/m2.md#b489); removal while hosts survive by
   [B491](../../../specs/milestones/m2.md#b491).
 
-Runbook: [e2e/runbooks/libvirt-3-nodes-ceph-block-file.md](../../../e2e/runbooks/libvirt-3-nodes-ceph-block-file.md).
-The templated e2e [`ceph` case](../../../e2e/README.md#case-ceph) covers the same
-scenario with its own inputs.
+Run it with the e2e [`lab-3-nodes-ceph`](../../../e2e/lab-3-nodes-ceph/runbook.md) case.

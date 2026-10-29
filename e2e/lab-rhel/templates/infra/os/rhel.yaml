@@ -1,0 +1,80 @@
+{{- $register := .Values.registration.enabled -}}
+apiVersion: bootwright.io/v1alpha1
+kind: MachineInstallProfile
+metadata:
+  name: rhel
+
+spec:
+  os:
+    family: rhel
+    version: {{ .Values.rhel.version | quote }}
+    architecture: x86_64
+
+  updates:
+    policy: {{ if and $register .Values.registration.updateWithinRelease }}withinRelease{{ else }}none{{ end }}
+
+  installer:
+    anaconda:
+      imageRef: rhel-boot
+
+      redfishVirtualMedia:
+        artifactServerEndpoint:
+          serverRef: lab-artifacts
+          endpointRef: ip-https
+
+      packageSource:
+        hostedTree:
+          fromMedia: local-media:{{ .Values.rhel.dvdMedia }}
+
+          artifactServerEndpoint:
+            serverRef: lab-artifacts
+            endpointRef: ip-http
+
+  ntp:
+    - serverRef: lab-ntp
+      endpointRef: ip
+
+  customizations:
+    localization:
+      language: en_US.UTF-8
+      formats: en_US.UTF-8
+      keyboard: us
+      timezone: Etc/UTC
+
+    ssh:
+      passwordAuthentication: false
+
+    packages:
+      installWeakDeps: false
+      excludeDocs: true
+
+      install:
+        - chrony
+        - qemu-guest-agent
+
+    services:
+      enabled:
+        - chronyd
+        - qemu-guest-agent
+        - sshd
+
+    security:
+      selinux:
+        mode: enforcing
+{{- if .Values.security.fips }}
+
+      fips:
+        enabled: true
+{{- end }}
+{{- if .Values.security.tpm2 }}
+
+      diskEncryption:
+        unlock:
+          tpm2: {}
+        recoveryPassphraseRef: luks-recovery
+{{- end }}
+{{- if $register }}
+
+  subscription:
+    entitlementRef: rhel-rhsm
+{{- end }}

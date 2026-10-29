@@ -24,8 +24,8 @@ make build
 ./bin/bootwright validate -f examples/machines/lab-rhel
 ```
 
-Then follow the [lab-rhel runbook](e2e/runbooks/lab-rhel.md), which installs
-one RHEL guest from
+Then run the e2e [`lab-rhel`](e2e/lab-rhel/runbook.md) case, which installs
+one RHEL guest like
 [`examples/machines/lab-rhel`](examples/machines/lab-rhel/README.md) through an
 emulated Redfish BMC on a single host. The
 [examples index](examples/README.md) describes the others.

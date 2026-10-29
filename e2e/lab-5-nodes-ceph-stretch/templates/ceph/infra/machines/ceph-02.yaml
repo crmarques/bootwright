@@ -1,0 +1,1 @@
+{{ include "dataMachine" (dict "root" $ "name" "ceph-02") }}

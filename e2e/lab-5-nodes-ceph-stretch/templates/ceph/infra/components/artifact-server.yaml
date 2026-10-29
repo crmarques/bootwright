@@ -1,0 +1,31 @@
+apiVersion: bootwright.io/v1alpha1
+kind: ArtifactServer
+metadata:
+  name: lab-artifacts
+
+spec:
+  management: managed
+  machineRef: controller
+  retention: persistent
+
+  tls:
+    secretRef: artifact-server-tls
+    minVersion: TLSv1.2
+
+  listeners:
+    - name: https
+      protocol: https
+      port: {{ .Values.ports.ceph.https }}
+
+    - name: http
+      protocol: http
+      port: {{ .Values.ports.ceph.http }}
+
+  endpoints:
+    - name: ip-https
+      listenerRef: https
+      addressRef: ip
+
+    - name: ip-http
+      listenerRef: http
+      addressRef: ip

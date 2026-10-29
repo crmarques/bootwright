@@ -1,0 +1,12 @@
+apiVersion: bootwright.io/v1alpha1
+kind: Secret
+metadata:
+  name: sno-cluster-admin-ssh-key
+
+spec:
+  type: sshKeyPair
+
+  source:
+    generated:
+      keyType: {{ if .Values.security.fips }}ecdsaP256{{ else }}ed25519{{ end }}
+      comment: sno-cluster-admin

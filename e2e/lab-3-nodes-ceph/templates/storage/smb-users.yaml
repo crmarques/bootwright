@@ -1,0 +1,23 @@
+{{- if (and .Values.ceph.services.smb .Values.ceph.services.file) }}
+apiVersion: bootwright.io/v1alpha1
+kind: CephSMBResource
+metadata:
+  name: files-users
+
+spec:
+  clusterRef: ceph-e2e
+
+  native:
+    resource_type: ceph.smb.usersgroups
+    users_groups_id: files
+
+    values:
+      users:
+        - name: smbuser
+
+      groups: []
+
+  secrets:
+    - path: /values/users/0/password
+      secretRef: files-smb-user
+{{- end }}

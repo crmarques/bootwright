@@ -1,0 +1,47 @@
+{{- if not .Values.single }}
+apiVersion: bootwright.io/v1alpha1
+kind: Machine
+metadata:
+  name: nv-vlan
+
+spec:
+  substrate:
+    providerRef: lab-libvirt
+    libvirt:
+      profileRef: rhel
+
+  hardware:
+    rootDevice:
+      deviceName: /dev/vda
+
+  os:
+    provided: false
+    installProfileRef: rhel
+
+    install:
+      ntp:
+        - serverRef: lab-ntp
+          endpointRef: ip
+
+  network:
+    configRef: nv-vlan
+    attachmentRef: nv-trunk
+    installAddressRef: ip
+
+    addresses:
+      - name: fqdn
+        address: nv-vlan.{{ .Values.host.domain }}
+
+      - name: ip
+        address: {{ .Values.vlan.address }}/{{ .Values.host.prefix }}
+        interface: nic0.{{ .Values.vlan.id }}
+
+      - name: guest
+        address: {{ .Values.converge.vlanAddress }}/{{ .Values.converge.prefix }}
+        interface: nic0.{{ .Values.converge.vlanId }}
+
+    overrides:
+      interfaces:
+        - name: nic0.{{ .Values.converge.vlanId }}
+          mtu: {{ .Values.converge.mtu }}
+{{- end }}

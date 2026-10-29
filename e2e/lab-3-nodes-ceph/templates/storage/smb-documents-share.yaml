@@ -1,0 +1,22 @@
+{{- if (and .Values.ceph.services.smb .Values.ceph.services.file) }}
+apiVersion: bootwright.io/v1alpha1
+kind: CephSMBResource
+metadata:
+  name: smb-documents
+
+spec:
+  clusterRef: ceph-e2e
+  smbClusterRef: files-smb
+  subvolumeRef: smb-documents
+
+  native:
+    resource_type: ceph.smb.share
+    share_id: documents
+    readonly: false
+
+    cephfs:
+      volume: files
+      subvolumegroup: apps
+      subvolume: smb-documents
+      path: /
+{{- end }}

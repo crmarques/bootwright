@@ -36,5 +36,3 @@ validation and planning only; no live acceptance is claimed.
 - Required inputs: `mirror-ca` and the `ibm-registry` account for the mirror
   (not necessarily IBM's), RHEL 9.8 boot and DVD ISOs, local DNS and NTP. The
   Entitlement `license.accept: true` is a placeholder; review IBM's terms.
-
-Runbook: [e2e/runbooks/libvirt-3-nodes-ceph-disconnected.md](../../../e2e/runbooks/libvirt-3-nodes-ceph-disconnected.md).

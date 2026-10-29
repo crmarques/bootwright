@@ -16,27 +16,36 @@ import (
 	"github.com/crmarques/bootwright/internal/reconciliation"
 )
 
-func baremetalReadme(t *testing.T) string {
+func baremetalRunbook(t *testing.T) string {
 	t.Helper()
 	examplePath(t, "lab-baremetal")
-	content, err := os.ReadFile(filepath.Join("..", "..", "e2e", "runbooks", "lab-baremetal.md"))
+	content, err := os.ReadFile(filepath.Join("..", "..", "e2e", "lab-baremetal-rehearsal", "runbook.md"))
 	if err != nil {
 		t.Fatal(err)
 	}
 	return string(content)
 }
 
-// The README's fetch-failure command reads the journal of the unit the
-// artifact server request names for the context the README creates, so an
-// operator sees the access log rather than an empty journal of no unit.
-func TestLabBaremetalReadmeReadsTheArtifactServerUnitsJournal(t *testing.T) {
-	readme := baremetalReadme(t)
-	created := regexp.MustCompile(`bootwright context init --name (\S+)`).FindStringSubmatch(readme)
-	if created == nil {
-		t.Fatal("the README creates no context")
+// The rehearsal's fetch-failure command reads the journal of the unit the
+// artifact server request names for the install context, the one that imports
+// the BMC CA, so an operator sees the access log rather than an empty journal
+// of no unit.
+func TestLabBaremetalRunbookReadsTheArtifactServerUnitsJournal(t *testing.T) {
+	runbook := baremetalRunbook(t)
+	trusting := regexp.MustCompile(`bootwright secret set --context (\S+) --name lab-bmc-ca `).FindStringSubmatch(runbook)
+	if trusting == nil {
+		t.Fatal("the runbook imports the BMC CA into no context")
+	}
+	name := strings.Trim(trusting[1], `"`)
+	if variable, ok := strings.CutPrefix(name, "$"); ok {
+		assigned := regexp.MustCompile(`(?m)(?:^|[;\s])` + regexp.QuoteMeta(variable) + `=(\S+)`).FindStringSubmatch(runbook)
+		if assigned == nil {
+			t.Fatalf("the runbook never assigns %s", name)
+		}
+		name = strings.TrimSuffix(assigned[1], ";")
 	}
 	input := baremetalInput(t, reconciliation.Apply)
-	input.Context.Name = created[1]
+	input.Context.Name = name
 	resolver := buildCapabilities(systemClock{}, exampleControllerPorts(t), exampleMediaRecords{})
 	var units []string
 	for _, binding := range resolver.Bindings() {
@@ -61,40 +70,13 @@ func TestLabBaremetalReadmeReadsTheArtifactServerUnitsJournal(t *testing.T) {
 	if len(units) != 1 {
 		t.Fatalf("artifact server units = %v", units)
 	}
-	named := regexp.MustCompile(`journalctl -u (\S+)`).FindAllStringSubmatch(readme, -1)
+	named := regexp.MustCompile(`journalctl -u (\S+)`).FindAllStringSubmatch(runbook, -1)
 	if len(named) == 0 {
-		t.Fatal("the README names no unit journal")
+		t.Fatal("the runbook names no unit journal")
 	}
 	for _, match := range named {
 		if !slices.Contains(units, match[1]) {
-			t.Fatalf("the README reads the journal of %s, not of the planned unit %s", match[1], units[0])
-		}
-	}
-}
-
-// The README's RSA serving certificate is a leaf: a self-signed openssl req
-// -x509 certificate is CA:TRUE under the default configuration, and the
-// secret store and the artifact server refuse a CA as a serving certificate.
-func TestLabBaremetalReadmeServingCertificateIsALeaf(t *testing.T) {
-	var commands []string
-	for _, line := range strings.Split(baremetalReadme(t), "\n") {
-		if strings.HasPrefix(line, "openssl req ") {
-			commands = append(commands, line)
-		}
-	}
-	if len(commands) == 0 {
-		t.Fatal("the README makes no serving certificate")
-	}
-	for _, command := range commands {
-		for _, extension := range []string{
-			"-addext basicConstraints=critical,CA:FALSE",
-			"-addext keyUsage=critical,digitalSignature,keyEncipherment",
-			"-addext extendedKeyUsage=serverAuth",
-			"-newkey rsa:2048",
-		} {
-			if !strings.Contains(command, extension) {
-				t.Fatalf("the README's certificate command lacks %q: %s", extension, command)
-			}
+			t.Fatalf("the runbook reads the journal of %s, not of the planned unit %s", match[1], units[0])
 		}
 	}
 }

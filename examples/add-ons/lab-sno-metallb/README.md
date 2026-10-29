@@ -29,6 +29,4 @@ identities are synthetic. Operator acceptance is pending.
   and destroy retires the add-on with the cluster without deleting its
   Kubernetes objects through the cluster API.
 
-Runbook: [e2e/runbooks/lab-sno-metallb.md](../../../e2e/runbooks/lab-sno-metallb.md).
-The templated e2e [`sno` case](../../../e2e/README.md#case-sno) covers the same
-scenario with its own inputs.
+Run it with the e2e [`lab-sno`](../../../e2e/lab-sno/runbook.md) case.

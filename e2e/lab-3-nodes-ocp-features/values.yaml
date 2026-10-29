@@ -1,0 +1,88 @@
+# Default input of the lab-3-nodes-ocp-features case. Override keys with
+# e2e/render.sh --set or a --values file. The mirror keys have no default and
+# the render fails until they are set (or mirror.enabled is false).
+
+host:
+  # The IPv4 controller address the managed services bind and the guests reach;
+  # "auto" takes this host's default-route source address at render time. With
+  # ipv6 the services bind networks.ipv6.controllerAddress instead.
+  address: auto
+  domain: e2e.example.test
+
+  upstreamDNS:
+    - 1.1.1.1
+
+  upstreamNTP:
+    - 162.159.200.1
+
+  # The managed libvirt network carries one family: the one ipv6 selects.
+  bridge: virbr-e2e
+
+# false: IPv4 single stack on a NAT network. true: IPv6 only, on an isolated
+# network (forward none) with one IPv6 prefix; the guests reach the controller
+# services and, through the managed proxy, everything else.
+ipv6: false
+
+networks:
+  ipv4:
+    cidr: 198.51.100.0/24
+    gateway: 198.51.100.1
+    prefix: 24
+    masters:
+      - 198.51.100.61
+      - 198.51.100.62
+      - 198.51.100.63
+    vips:
+      api: 198.51.100.70
+      ingress: 198.51.100.71
+
+  ipv6:
+    # An IPv6 address the controller holds and the guests reach through the
+    # network's gateway, outside cidr (for example one added to lo). It has no
+    # default: the render fails while ipv6 is true and this is empty.
+    controllerAddress: ""
+    cidr: 2001:db8:2::/64
+    gateway: 2001:db8:2::1
+    prefix: 64
+    masters:
+      - 2001:db8:2::61
+      - 2001:db8:2::62
+      - 2001:db8:2::63
+    vips:
+      api: 2001:db8:2::70
+      ingress: 2001:db8:2::71
+    clusterNetwork:
+      cidr: fd00:10:128::/56
+      hostPrefix: 64
+    serviceNetwork: fd00:172:30::/112
+
+openshift:
+  version: 4.21.15
+
+# Three schedulable control-plane masters with an emulated TPM, no workers.
+guest:
+  cpu: 8
+  memoryMiB: 16384
+  diskGiB: 120
+
+# tpm2 encrypts the installation disks, unlocked by the guest TPM2 (B720). fips
+# installs a FIPS cluster (B722) and needs a FIPS-mode controller
+# (cat /proc/sys/crypto/fips_enabled prints 1), which most hosts are not.
+security:
+  tpm2: true
+  fips: false
+
+# The installation proxy (B721): the managed Proxy on the controller, port 3128.
+proxy:
+  enabled: true
+
+# The external mirror (B724). url is the registry host as the nodes pull it
+# (name or address, optionally :port); the two repositories are the paths on it
+# that hold the release payload and the component images. None has a default:
+# they are the operator's mirror. The mirror-credentials Secret holds Docker
+# configuration JSON with an entry for url; mirror-ca its trust bundle.
+mirror:
+  enabled: true
+  url: ""
+  releaseRepository: ""
+  componentRepository: ""

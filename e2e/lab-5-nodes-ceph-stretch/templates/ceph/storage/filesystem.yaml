@@ -1,0 +1,13 @@
+{{- if .Values.ceph.services.file }}
+apiVersion: bootwright.io/v1alpha1
+kind: CephFilesystem
+metadata:
+  name: files
+
+spec:
+  clusterRef: ceph-stretch
+  metadataPoolRef: cephfs-metadata
+
+  dataPoolRefs:
+    - cephfs-data
+{{- end }}

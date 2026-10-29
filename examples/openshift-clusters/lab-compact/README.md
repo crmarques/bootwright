@@ -27,6 +27,4 @@ remains open and requires B61's accepted [lab-sno](../lab-sno/) row.
 - Operator input: the OpenShift pull secret. The BMC credentials and TLS,
   artifact-server TLS and node SSH key are generated.
 
-Runbook: [e2e/runbooks/lab-compact.md](../../../e2e/runbooks/lab-compact.md).
-The templated e2e [`compact` case](../../../e2e/README.md#case-compact) covers the same
-scenario with its own inputs.
+Run it with the e2e [`lab-3-nodes-ocp`](../../../e2e/lab-3-nodes-ocp/runbook.md) case.

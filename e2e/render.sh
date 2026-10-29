@@ -2,18 +2,23 @@
 #
 # Render one end-to-end case into a Bootwright input directory.
 #
-#     e2e/render.sh rhel
-#     e2e/render.sh sno --set security.fips=true --out-dir ~/bootwright-e2e/sno-fips
-#     e2e/render.sh ceph --values ~/bootwright-e2e/my-input.yaml
+#     e2e/render.sh lab-rhel
+#     e2e/render.sh lab-rhel --set security.fips=true --out-dir ~/bootwright-e2e/lab-rhel-fips
+#     e2e/render.sh lab-3-nodes-ceph --values ~/bootwright-e2e/my-ceph.yaml
 #
-# e2e/input.yaml is always applied first; each --values file and --set
-# overrides it in order. host.address "auto" takes the source address of this
-# host's default route. The output directory is replaced on every run and
-# defaults to ~/bootwright-e2e/<case>.
+# A case is a directory beside this script holding values.yaml (its default
+# input) and templates/ (one Bootwright object per file, laid out as the input
+# directory). Each --values file and --set overrides values.yaml in order.
+# host.address "auto" takes the source address of this host's default route.
+# The output defaults to ~/bootwright-e2e/<case>; a render replaces only an
+# empty directory or an earlier render, never anything inside the repository.
 set -euo pipefail
 
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-cases=(rhel ceph sno stretch stretch-arbiter stretch-ceph compact)
+cases=()
+for dir in "$here"/*/; do
+  [[ -f "$dir/values.yaml" && -d "$dir/templates" ]] && cases+=("$(basename "$dir")")
+done
 
 usage() {
   cat <<EOF
@@ -57,11 +62,6 @@ done
 
 command -v helm >/dev/null || { echo "render.sh: helm is required" >&2; exit 1; }
 
-detected="$(ip -4 route get 192.0.2.1 2>/dev/null | sed -n 's/.* src \([0-9.]*\).*/\1/p')"
-stream="$(helm template e2e "$here/chart" --values "$here/input.yaml" "${overrides[@]}" \
-  --set "case=$case_name" --set "host.detectedAddress=$detected")"
-
-# Only an empty directory or one an earlier render marked is ever replaced.
 abs_out="$(realpath -m -- "$out_dir")"
 marker=".bootwright-e2e-render"
 repo="$(realpath -m -- "$here/..")"
@@ -80,49 +80,48 @@ if [[ -e "$abs_out" ]]; then
     echo "render.sh: refusing to replace $abs_out: not empty and not an earlier render" >&2
     exit 1
   fi
-  rm -rf -- "$abs_out"
 fi
-mkdir -p -- "$abs_out"
-: >"$abs_out/$marker"
 
-# Every document opens with "# bw-path: <relative file>", the file it is
-# written to: one document per file, never outside the output directory.
-paths="$(printf '%s\n' "$stream" | sed -n 's/^# bw-path: //p')"
-[[ -n "$paths" ]] || { echo "render.sh: no bw-path markers in the render" >&2; exit 1; }
-if duplicate="$(sort <<<"$paths" | uniq -d | grep .)"; then
-  echo "render.sh: two documents name $duplicate" >&2
+work="$(mktemp -d)"
+trap 'rm -rf -- "$work"' EXIT
+mkdir -- "$work/chart"
+cp -R -- "$here/$case_name/templates" "$here/$case_name/values.yaml" "$work/chart/"
+printf 'apiVersion: v2\nname: %s\nversion: 0.1.0\n' "$case_name" >"$work/chart/Chart.yaml"
+
+detected="$(ip -4 route get 192.0.2.1 2>/dev/null | sed -n 's/.* src \([0-9.]*\).*/\1/p')"
+helm template "$case_name" "$work/chart" "${overrides[@]}" \
+  --set "host.detectedAddress=$detected" --output-dir "$work/out" >/dev/null
+
+# Helm writes each non-empty template under <case>/templates/ with a "# Source:"
+# header; keep the documents, one blank line at most between lines. The render
+# is assembled in the work directory and replaces the output only once whole.
+rendered="$work/out/$case_name/templates"
+staged="$work/input"
+[[ -d "$rendered" ]] || { echo "render.sh: the case rendered no object" >&2; exit 1; }
+while IFS= read -r -d '' file; do
+  relative="${file#"$rendered"/}"
+  mkdir -p -- "$staged/$(dirname -- "$relative")"
+  awk '
+    /^# Source:/ { next }
+    /^---$/ && !started { next }
+    /^[[:space:]]*$/ { blank = started; next }
+    {
+      if (blank) print ""
+      print
+      started = 1
+      blank = 0
+    }
+  ' "$file" >"$staged/$relative"
+done < <(find "$rendered" -type f -name '*.yaml' -print0)
+
+if grep -rn '{{' "$staged" >/dev/null; then
+  echo "render.sh: template syntax survived the render of $case_name" >&2
   exit 1
 fi
-while IFS= read -r path; do
-  if [[ ! "$path" =~ ^[a-z0-9][a-z0-9./-]*\.yaml$ || "$path" == *..* ]]; then
-    echo "render.sh: unsafe bw-path: $path" >&2
-    exit 1
-  fi
-  mkdir -p -- "$abs_out/$(dirname -- "$path")"
-done <<<"$paths"
+: >"$staged/$marker"
 
-printf '%s\n' "$stream" | awk -v out="$abs_out" '
-  /^# Source:/ || /^---$/ { next }
-  /^# bw-path: / {
-    if (file != "") close(file)
-    file = out "/" $3
-    started = 0
-    blank = 0
-    next
-  }
-  file == "" { next }
-  /^[[:space:]]*$/ { blank = started; next }
-  {
-    if (blank) print "" > file
-    print > file
-    started = 1
-    blank = 0
-  }
-'
-
-if grep -rn '{{' "$abs_out" >/dev/null; then
-  echo "render.sh: template syntax survived the render in $abs_out" >&2
-  exit 1
-fi
+rm -rf -- "$abs_out"
+mkdir -p -- "$(dirname -- "$abs_out")"
+cp -R -- "$staged" "$abs_out"
 
 echo "render.sh: $case_name rendered to $abs_out"

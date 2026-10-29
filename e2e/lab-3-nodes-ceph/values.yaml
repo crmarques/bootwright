@@ -1,0 +1,130 @@
+# Default input of the lab-3-nodes-ceph case. Override keys with e2e/render.sh
+# --set or a --values file.
+
+host:
+  # The controller address the managed services bind and the guests reach;
+  # "auto" takes this host's default-route source address at render time.
+  address: auto
+  domain: e2e.example.test
+
+  upstreamDNS:
+    - 1.1.1.1
+
+  upstreamNTP:
+    - 162.159.200.1
+
+  # The NAT network Bootwright creates for the guests.
+  bridge: virbr-e2e
+  cidr: 198.51.100.0/24
+  gateway: 198.51.100.1
+  prefix: 24
+
+# Media names as added with `bootwright media add --name`.
+rhel:
+  version: "9.8"
+  bootMedia: rhel-9.8-x86_64-boot.iso
+  dvdMedia: rhel-9.8-x86_64-dvd.iso
+
+# rhel-01 to rhel-03, in this order. Each guest gets osdDisks virtual SSDs of
+# osdDiskGiB GiB (at most 7), one OSD each.
+guest:
+  addresses:
+    - 198.51.100.11
+    - 198.51.100.12
+    - 198.51.100.13
+
+  cpu: 4
+  memoryMiB: 8192
+  diskGiB: 40
+  osdDisks: 1
+  osdDiskGiB: 30
+
+# IBM Storage Ceph. A release moves these together: release, packageVersion,
+# ansiblePackageVersion, image, callHome and the auxiliary images below.
+ceph:
+  release: 9.9.2.0
+  packageVersion: 20.2.2-349.el9cp
+  ansiblePackageVersion: 5.0.3-1.el9cp
+
+  # enabled for 20.2.x builds (9.9.1.2, 9.9.2.0); disabled for 20.1.0-221
+  # (9.9.0.3), whose Call Home is opt-in.
+  callHome: enabled
+
+  image:
+    base: cp.icr.io/cp/ibm-ceph/ceph-9-rhel10
+    version: v9.9.2-26947
+
+  # The guests' package repository for the release's RPMs.
+  repository:
+    id: ibm-storage-ceph-9
+    displayName: IBM Storage Ceph 9 packages
+    baseURL: https://public.dhe.ibm.com/ibmdl/export/pub/storage/ceph/9/rhel9/x86_64/
+    gpgKeyURL: https://public.dhe.ibm.com/ibmdl/export/pub/storage/ceph/RPM-GPG-KEY-IBM-CEPH
+
+  # Each service group may be switched off to save memory. nfs and smb export
+  # CephFS subvolumes, so they render only with file. nvmeof needs AVX-512 on
+  # the host CPU.
+  services:
+    block: true
+    file: true
+    object: true
+    nfs: true
+    smb: true
+    observability: true
+    nvmeof: false
+
+  # The object ingress and the management gateway VIPs, inside host.cidr and
+  # outside every guest. Neither has a DNS record.
+  objectVIP: 198.51.100.60
+  managementVIP: 198.51.100.62
+
+  # Auxiliary images, authored as digests of the build above (D171). Move them
+  # together with ceph.image.
+  images:
+    haproxy:
+      base: cp.icr.io/cp/ibm-ceph/haproxy-rhel10
+      version: sha256:59d020dd7a02ad25248ae3766914f5bc5a241de77c2257fcad7124c13eea82f1
+
+    keepalived:
+      base: cp.icr.io/cp/ibm-ceph/keepalived-rhel10
+      version: sha256:4ade24fea1bf11cc0c2e88af631597f21bc586562da3001ea15b8d10e0860694
+
+    samba:
+      base: cp.icr.io/cp/ibm-ceph/samba-server-rhel10
+      version: sha256:3b8f9164c478d267427e51e0b387c9e32ae3566e3a2078471e16d44ac6807cf1
+
+    samba_metrics:
+      base: cp.icr.io/cp/ibm-ceph/samba-metrics-rhel10
+      version: sha256:090f5d43981a51923b593da36b9010d43d67264691a625ff2b92005676574f29
+
+    prometheus:
+      base: cp.icr.io/cp/ibm-ceph/prometheus
+      version: sha256:f4d613a79bebcb4deeb0b5f9b1f231ba8046572978207abe242bc7c9cf589789
+
+    alertmanager:
+      base: cp.icr.io/cp/ibm-ceph/prometheus-alertmanager
+      version: sha256:7331dd1e3aabe689ae45470e560472dc39aeeea611c3c479e266bae9140243ed
+
+    grafana:
+      base: cp.icr.io/cp/ibm-ceph/grafana-rhel10
+      version: sha256:12006a7f211b2bf24893e39f7e5ea208b8d641d1dd9c9b562a0c502663484141
+
+    node_exporter:
+      base: cp.icr.io/cp/ibm-ceph/prometheus-node-exporter
+      version: sha256:4d4e3433d212042b07534c042d512bf1f8c65a43823b20e6f1b05da5cd88f0ba
+
+    nginx:
+      base: cp.icr.io/cp/ibm-ceph/nginx-126-rhel10
+      version: sha256:c7ba454e04aab177e3d2e283e679412dc90477d77848715ebabd3db9af4b45af
+
+    loki:
+      base: cp.icr.io/cp/ibm-ceph/logging-loki-rhel8
+      version: sha256:e7e4c7c372a02aa2fbab9a0f3af48475f0df860164551e8562565983576dc61c
+
+    alloy:
+      base: cp.icr.io/cp/ibm-ceph/alloy-rhel10
+      version: sha256:4f645e6ee02545ceb29cd01fb42e2d9de03e1e48e509281898a325cc72d14b85
+
+    nvmeof:
+      base: cp.icr.io/cp/ibm-ceph/nvmeof-rhel10
+      version: sha256:4727ed1dd465b8d0064d8da6064b32f39068fca558fea9a78c3d65f41923b226

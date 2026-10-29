@@ -29,5 +29,3 @@ acceptance is claimed, and the accepted [lab-sno](../lab-sno/) and
   arbiter until B717 is defined.
 - Addresses, zone, certificate SANs, upstreams and the release pin are
   synthetic. The pull secret is operator-supplied.
-
-Runbook: [e2e/runbooks/lab-anysize.md](../../../e2e/runbooks/lab-anysize.md).

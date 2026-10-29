@@ -1,0 +1,81 @@
+# Default input of the lab-3-nodes-ceph-host-variants case, profile P5: bonded
+# VLAN networking, managed RHSM registration, FIPS, AES CephX and a
+# TPM2-encrypted root with recovery. Override keys with e2e/render.sh --set or
+# a --values file.
+
+host:
+  # The controller address the managed services bind and the guests reach;
+  # "auto" takes this host's default-route source address at render time.
+  address: auto
+  domain: e2e.example.test
+
+  upstreamDNS:
+    - 1.1.1.1
+
+  upstreamNTP:
+    - 162.159.200.1
+
+  # The NAT network Bootwright creates for the guests. Both guest NICs join it.
+  bridge: virbr-e2e
+  cidr: 198.51.100.0/24
+  gateway: 198.51.100.1
+  prefix: 24
+
+# The Ceph cluster network: VLAN id on the bond, carried over the same bridge.
+# It is not routed and has no gateway.
+clusterNetwork:
+  cidr: 203.0.113.0/24
+  prefix: 24
+  vlan: 140
+
+# Media names as added with `bootwright media add --name`.
+rhel:
+  version: "9.8"
+  bootMedia: rhel-9.8-x86_64-boot.iso
+  dvdMedia: rhel-9.8-x86_64-dvd.iso
+
+# rhel-01 to rhel-03, in this order. address is on the bond (public network),
+# clusterAddress on its VLAN. The 13/13/10 GiB memory is IBM's per-guest
+# figures for the colocated daemons plus 2 GiB of operating-system headroom.
+guest:
+  cpu: 4
+  diskGiB: 60
+  osdDiskGiB: 80
+
+  nodes:
+    - address: 198.51.100.11
+      clusterAddress: 203.0.113.11
+      memoryMiB: 13312
+
+    - address: 198.51.100.12
+      clusterAddress: 203.0.113.12
+      memoryMiB: 13312
+
+    - address: 198.51.100.13
+      clusterAddress: 203.0.113.13
+      memoryMiB: 10240
+
+# IBM Storage Ceph. A release moves these together: release, packageVersion,
+# ansiblePackageVersion, image and callHome.
+ceph:
+  release: 9.9.2.0
+  packageVersion: 20.2.2-349.el9cp
+  ansiblePackageVersion: 5.0.3-1.el9cp
+
+  # enabled for 20.2.x builds (9.9.1.2, 9.9.2.0); disabled for 20.1.0-221
+  # (9.9.0.3), whose Call Home is opt-in.
+  callHome: enabled
+
+  image:
+    base: cp.icr.io/cp/ibm-ceph/ceph-9-rhel10
+    version: v9.9.2-26947
+
+  # The guests' package repository for the release's RPMs.
+  repository:
+    id: ibm-storage-ceph-9
+    displayName: IBM Storage Ceph 9 packages
+    baseURL: https://public.dhe.ibm.com/ibmdl/export/pub/storage/ceph/9/rhel9/x86_64/
+    gpgKeyURL: https://public.dhe.ibm.com/ibmdl/export/pub/storage/ceph/RPM-GPG-KEY-IBM-CEPH
+
+  # OSD memory target in bytes; a target, not a process cap.
+  osdMemoryTarget: "4294967296"

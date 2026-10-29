@@ -35,4 +35,4 @@ are documentation examples.
   package tree on `192.0.2.1`. It shares service sockets with
   [lab-rhel](../lab-rhel/README.md), so run one lab per host.
 
-Runbook: [e2e/runbooks/libvirt-network-variants.md](../../../e2e/runbooks/libvirt-network-variants.md).
+Run it with the e2e [`lab-network-variants`](../../../e2e/lab-network-variants/runbook.md) case.

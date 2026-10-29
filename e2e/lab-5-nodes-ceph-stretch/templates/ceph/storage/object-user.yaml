@@ -1,0 +1,11 @@
+{{- if .Values.ceph.services.object }}
+apiVersion: bootwright.io/v1alpha1
+kind: CephObjectUser
+metadata:
+  name: s3-canary
+
+spec:
+  clusterRef: ceph-stretch
+  objectGatewayRef: objects
+  displayName: Stretch site-loss canary
+{{- end }}

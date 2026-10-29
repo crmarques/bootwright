@@ -1,0 +1,16 @@
+{{- if .Values.addons.nmstate }}
+{{- $set := .Values.addons.subscriptions.nmstate }}
+apiVersion: bootwright.io/v1alpha1
+kind: ClusterAddonBinding
+metadata:
+  name: lab-sno-nmstate
+
+spec:
+  clusterRef: sno
+
+  packages:
+    nmstate:
+      subscription:
+        channel: {{ required "set addons.subscriptions.nmstate.channel" $set.channel | quote }}
+        startingCSV: {{ required "set addons.subscriptions.nmstate.startingCSV" $set.startingCSV | quote }}
+{{- end }}

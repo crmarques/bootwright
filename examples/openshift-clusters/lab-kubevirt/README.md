@@ -39,5 +39,3 @@ profile; its live run on an external host is B731's operator gate.
 - Operator inputs: `host-kubeconfig`, `openshift-pull-secret`, the generated
   `kubevirt-cluster-admin-ssh-key`, and host capacity, CDI, StorageProfile and
   upload storage for the five guests. All names and addresses are fixtures.
-
-Runbook: [e2e/runbooks/lab-kubevirt.md](../../../e2e/runbooks/lab-kubevirt.md).

@@ -1,0 +1,39 @@
+apiVersion: bootwright.io/v1alpha1
+kind: Machine
+metadata:
+  name: metal-01
+
+spec:
+  substrate:
+    providerRef: lab-metal
+
+    baremetal:
+      bmc:
+        address: {{ .Values.install.systemURL }}
+
+      nics:
+        - nicRef: {{ .Values.install.nicName }}
+          macAddress: {{ .Values.install.nicMAC }}
+
+  os:
+    provided: false
+    installProfileRef: rhel
+
+    install:
+      hostKeyRef: metal-01-host-key
+
+  hardware:
+    nics:
+      - name: {{ .Values.install.nicName }}
+
+    rootDevice:
+      deviceName: /dev/vda
+
+  network:
+    configRef: lab-metal
+    installAddressRef: ip
+
+    addresses:
+      - name: ip
+        address: {{ .Values.install.address }}/{{ .Values.host.prefix }}
+        interface: {{ .Values.install.nicName }}

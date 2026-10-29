@@ -32,7 +32,6 @@ const (
 	cephCoverageSpec  = "../../specs/ceph-coverage.md"
 	cephStorageSpec   = "../../specs/ceph.md"
 	cephAcceptanceDoc = "../../docs/acceptance.md"
-	cephRunbookDir    = "../../e2e/runbooks"
 	cephMatrixDir     = "testdata/matrix"
 )
 
@@ -43,8 +42,6 @@ var (
 	cephRefusalColumns   = []string{"Refusal", "Path", "Reason", "Remedy"}
 	cephFeatureColumns   = []string{"Family", "Required coverage and qualification boundary", "Work"}
 	cephCorePhrases      = []string{"single public network", "one explicit data disk", "explicit 2/2 replicated pool", "minimal pool client"}
-	cephRunbookHeadings  = []string{"## Budget and prerequisites", "## Initial setup", "## IBM entitlement", "## Create the context", "## Apply by stage", "## Validate the cluster", "## Client access", "## Failover", "## Interruption and continuation", "## Replay", "## Check that changed intent is refused", "## Measured budget", "## Cleanup"}
-	cephLedgerFields     = []string{"Guests", "Declared vCPU", "Declared RAM GiB", "Declared disk GiB", "MemAvailable at (a)/(b)/(c)", "Minimum MemAvailable during clusters stage", "Allocated vs apparent disk bytes", "Per-guest balloon RSS", "Daemons by type", "Clusters-stage wall time", "OOM kills"}
 	cephExampleLinkRegex = regexp.MustCompile(`^\[([^\]/]+)/\]\(\.\./examples/ceph-clusters/([^/)]+)/\)$`)
 )
 
@@ -543,135 +540,6 @@ func markdownSection(t *testing.T, path, heading string, maxLevel int) string {
 		}
 	}
 	return strings.Join(lines[start+1:end], "\n")
-}
-
-func outsideFences(readme string) []string {
-	var kept []string
-	fenced := false
-	for _, line := range strings.Split(readme, "\n") {
-		if strings.HasPrefix(line, "```") {
-			fenced = !fenced
-			continue
-		}
-		if !fenced {
-			kept = append(kept, line)
-		}
-	}
-	return kept
-}
-
-// runbookViolations reports each required heading a runbook misses, repeats or
-// misorders, and each ledger field its measured budget section omits.
-func runbookViolations(readme string) []string {
-	var violations []string
-	lines := outsideFences(readme)
-	previous := -1
-	for _, heading := range cephRunbookHeadings {
-		var at []int
-		for index, line := range lines {
-			if line == heading {
-				at = append(at, index)
-			}
-		}
-		switch {
-		case len(at) == 0:
-			violations = append(violations, "missing "+heading)
-		case len(at) > 1:
-			violations = append(violations, "repeated "+heading)
-		case at[0] < previous:
-			violations = append(violations, "misordered "+heading)
-		default:
-			previous = at[0]
-		}
-	}
-	budget := slices.Index(lines, "## Measured budget")
-	if budget < 0 {
-		return violations
-	}
-	var section []string
-	for _, line := range lines[budget+1:] {
-		if strings.HasPrefix(line, "## ") {
-			break
-		}
-		section = append(section, line)
-	}
-	for _, field := range cephLedgerFields {
-		if !strings.Contains(strings.Join(section, "\n"), field) {
-			violations = append(violations, "the measured budget omits "+field)
-		}
-	}
-	return violations
-}
-
-func synthesizedRunbook(skip string, omitField string) string {
-	var readme strings.Builder
-	for _, heading := range cephRunbookHeadings {
-		if heading == skip {
-			continue
-		}
-		readme.WriteString(heading + "\n\ntext\n\n")
-		if heading == "## Measured budget" {
-			for _, field := range cephLedgerFields {
-				if field != omitField {
-					readme.WriteString(field + " <n>\n")
-				}
-			}
-		}
-	}
-	return readme.String()
-}
-
-func inOrder(t *testing.T, section string, names []string) {
-	t.Helper()
-	offset := 0
-	for _, name := range names {
-		at := strings.Index(section[offset:], "`"+name+"`")
-		if at < 0 {
-			t.Errorf("the section does not name `%s` after offset %d", name, offset)
-			continue
-		}
-		offset += at
-	}
-}
-
-func TestCephProfileRunbooksHaveRequiredSections(t *testing.T) {
-	inOrder(t, markdownSection(t, cephCoverageSpec, "### Profile runbooks", 3), cephRunbookHeadings)
-	acceptance := markdownSection(t, cephAcceptanceDoc, "## Ceph matrix row", 2)
-	for _, field := range cephLedgerFields {
-		if !strings.Contains(acceptance, "`"+field+"`") {
-			t.Errorf("the Ceph matrix row section does not name `%s`", field)
-		}
-	}
-	t.Run("checker", func(t *testing.T) {
-		if got := runbookViolations(synthesizedRunbook("", "")); len(got) != 0 {
-			t.Errorf("a complete runbook reports %q", got)
-		}
-		if got := runbookViolations(synthesizedRunbook("## Replay", "")); len(got) != 1 {
-			t.Errorf("a runbook without ## Replay reports %q, want one violation", got)
-		}
-		if got := runbookViolations(synthesizedRunbook("", cephLedgerFields[4])); len(got) != 1 {
-			t.Errorf("a runbook without a measured budget field reports %q, want one violation", got)
-		}
-	})
-	checked := 0
-	for _, profile := range linkedProfiles(t) {
-		if profile.id == "P0" {
-			continue
-		}
-		checked++
-		examplePath(t, profile.dir)
-		data, err := os.ReadFile(filepath.Join(cephRunbookDir, profile.dir+".md"))
-		if err != nil {
-			t.Errorf("%s: %v", profile.id, err)
-			continue
-		}
-		if violations := runbookViolations(string(data)); len(violations) != 0 {
-			t.Errorf("%s: runbook %s.md: %q", profile.id, profile.dir, violations)
-		}
-	}
-	if checked == 0 {
-		t.Log("no linked P1-P7 profile yet; only the checker ran")
-	}
 }
 
 func hostBlockIDs(definitions []reconciliation.BlockDefinition, cluster string) []string {

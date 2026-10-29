@@ -33,5 +33,3 @@ stays open until its owner accepts the applicable ledger rows.
   Entitlement `license.accept: true` is a placeholder; review IBM's terms.
 - Client tools to install: `ceph-common`, `nfs-utils`, `cifs-utils`,
   `samba-client`, `curl` and an S3 client.
-
-Runbook: [e2e/runbooks/libvirt-6-nodes-ceph-services.md](../../../e2e/runbooks/libvirt-6-nodes-ceph-services.md).

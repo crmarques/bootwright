@@ -1,0 +1,21 @@
+{{- if .Values.ceph.services.observability }}
+apiVersion: bootwright.io/v1alpha1
+kind: Secret
+metadata:
+  name: management-tls
+
+spec:
+  type: tlsCertificate
+
+  source:
+    generated:
+      commonName: management.{{ .Values.host.domain }}
+
+      dnsNames:
+        - management.{{ .Values.host.domain }}
+
+      ipAddresses:
+        - {{ .Values.ceph.managementVIP }}
+
+      validityDays: 365
+{{- end }}

@@ -1,0 +1,11 @@
+{{- if .Values.ceph.services.block }}
+apiVersion: bootwright.io/v1alpha1
+kind: CephClient
+metadata:
+  name: rbd-canary
+
+spec:
+  clusterRef: ceph-e2e
+  poolRef: rbd-data
+  access: readWrite
+{{- end }}

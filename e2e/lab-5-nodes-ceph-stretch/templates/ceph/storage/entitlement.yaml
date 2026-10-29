@@ -1,0 +1,14 @@
+apiVersion: bootwright.io/v1alpha1
+kind: Entitlement
+metadata:
+  name: ibm-ceph
+
+spec:
+  type: ibmStorageCeph
+
+  registry:
+    url: cp.icr.io
+    credentialsRef: ibm-registry
+
+  license:
+    accept: true
