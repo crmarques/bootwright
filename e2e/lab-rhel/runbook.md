@@ -27,8 +27,8 @@ and the guest size.
 ## Prepare
 
 The [host preparation](../README.md#prepare-the-host), the RHEL 9.8 boot and
-DVD ISOs added as media, and for registration an RHSM organization ID and
-activation key and access to the
+DVD ISOs added as media, and for registration the RHSM organization ID and
+activation key [secret files](../README.md#prepare-the-host) and access to the
 [Red Hat Hybrid Cloud Console](https://console.redhat.com/insights/inventory)
 to read and remove the guest's consumer. The
 [capacity gate](../../specs/substrates.md#capacity-admission) counts the guest
@@ -46,6 +46,8 @@ FIPS=true
 TPM2=false
 REGISTER=false
 UPDATE_WITHIN_RELEASE=false
+RHSM_ORG_FILE="$HOME/rhel-org.txt"            # with REGISTER=true
+RHSM_KEY_FILE="$HOME/rhel-activation-key.txt" # with REGISTER=true
 C=lab-rhel
 IN="$HOME/bootwright-e2e/lab-rhel"
 MACHINE=rhel-01
@@ -59,9 +61,8 @@ umask 077; D=$(mktemp -d)                        # private scratch for this run
 ./bin/bootwright context init --name "$C" --input-dir "$IN"
 ./bin/bootwright secret generate --context "$C"
 if [ "$REGISTER" = true ]; then
-  { IFS= read -rsp 'RHSM organization ID: ' v; echo >&2; printf '%s' "$v"; } |
-    ./bin/bootwright secret set --context "$C" --name rhsm-org --value-stdin --yes
-  ./bin/bootwright secret set --context "$C" --name rhsm-key --value-stdin --yes
+  ./bin/bootwright secret set --context "$C" --name rhsm-org --value-file "${RHSM_ORG_FILE:?Set RHSM_ORG_FILE to the RHSM organization ID file}" --yes
+  ./bin/bootwright secret set --context "$C" --name rhsm-key --value-file "${RHSM_KEY_FILE:?Set RHSM_KEY_FILE to the RHSM activation key file}" --yes
 fi
 ./bin/bootwright secret check --context "$C"
 ./bin/bootwright plan --context "$C"

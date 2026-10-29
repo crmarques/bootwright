@@ -50,7 +50,7 @@ VIPs, upstreams, the release and the guest size.
 ## Prepare
 
 The [host preparation](../README.md#prepare-the-host), a pull secret saved as
-`~/pull-secret.json` with mode `0600`, an `oc` matching `openshift.version`
+`~/openshift-pull-secret` with mode `0600`, an `oc` matching `openshift.version`
 installed independently of Bootwright, and the capacity of the opening
 paragraph. Free the ports of the host preparation. Guests on the managed bridge
 reach the controller services through firewalld's `trusted` zone, so no host
@@ -107,7 +107,7 @@ MIRROR_ENABLED="true"
 PROXY_ENABLED="true"
 TPM2_ENABLED="true"
 FIPS_ENABLED="false"
-PULL_SECRET_FILE="$HOME/pull-secret.json"
+PULL_SECRET_FILE="$HOME/openshift-pull-secret"
 MIRROR_HOST=""
 MIRROR_RELEASE_REPOSITORY=""
 MIRROR_COMPONENT_REPOSITORY=""
@@ -146,10 +146,10 @@ IN="$HOME/bootwright-e2e/lab-3-nodes-ocp-features"
 ./bin/bootwright validate -f "$IN"
 ./bin/bootwright setup --yes
 ./bin/bootwright context init --name "$C" --input-dir "$IN"
-./bin/bootwright secret set --context "$C" --name openshift-pull-secret --value-file "${PULL_SECRET_FILE:?Set PULL_SECRET_FILE to the private pull-secret JSON file}"
+./bin/bootwright secret set --context "$C" --name openshift-pull-secret --value-file "${PULL_SECRET_FILE:?Set PULL_SECRET_FILE to the private pull-secret JSON file}" --yes
 if [ "$MIRROR_ENABLED" = "true" ]; then
-    ./bin/bootwright secret set --context "$C" --name mirror-ca --certificate-file "${MIRROR_CA_FILE:?Set MIRROR_CA_FILE to the mirror CA PEM file}"
-    ./bin/bootwright secret set --context "$C" --name mirror-credentials --value-file "${MIRROR_AUTH_FILE:?Set MIRROR_AUTH_FILE to the private mirror authentication JSON file}"
+    ./bin/bootwright secret set --context "$C" --name mirror-ca --certificate-file "${MIRROR_CA_FILE:?Set MIRROR_CA_FILE to the mirror CA PEM file}" --yes
+    ./bin/bootwright secret set --context "$C" --name mirror-credentials --value-file "${MIRROR_AUTH_FILE:?Set MIRROR_AUTH_FILE to the private mirror authentication JSON file}" --yes
 fi
 ./bin/bootwright secret generate --context "$C"
 ./bin/bootwright secret check --context "$C"

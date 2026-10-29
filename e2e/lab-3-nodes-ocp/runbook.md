@@ -51,7 +51,7 @@ for the pure B66 row.
 ## Prepare
 
 The [host preparation](../README.md#prepare-the-host), a pull secret saved as
-`~/pull-secret.json` with mode `0600`, and an `oc` matching `openshift.version`
+`~/openshift-pull-secret` with mode `0600`, and an `oc` matching `openshift.version`
 installed independently of Bootwright. No RHEL media is needed.
 
 Destroy every lab-sno or other context that still owns `virbr-e2e` first (B66
@@ -71,7 +71,7 @@ same-release channel and CSV described in Inputs. Edit only these values:
 
 ```sh
 METALLB_ENABLED="false"
-PULL_SECRET_FILE="$HOME/pull-secret.json"
+PULL_SECRET_FILE="$HOME/openshift-pull-secret"
 METALLB_CHANNEL=""
 METALLB_CSV=""
 ```
@@ -97,7 +97,7 @@ A="$(ip -4 route get 192.0.2.1 | sed -n 's/.* src \([0-9.]*\).*/\1/p')"
 ./bin/bootwright validate -f "$IN"
 ./bin/bootwright setup --yes
 ./bin/bootwright context init --name "$C" --input-dir "$IN"
-./bin/bootwright secret set --context "$C" --name openshift-pull-secret --value-file "${PULL_SECRET_FILE:?Set PULL_SECRET_FILE to the private pull-secret JSON file}"
+./bin/bootwright secret set --context "$C" --name openshift-pull-secret --value-file "${PULL_SECRET_FILE:?Set PULL_SECRET_FILE to the private pull-secret JSON file}" --yes
 ./bin/bootwright secret generate --context "$C"
 ./bin/bootwright secret check --context "$C"
 ./bin/bootwright plan --context "$C"

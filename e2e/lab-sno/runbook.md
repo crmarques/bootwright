@@ -38,7 +38,7 @@ a single node has no virtual IPs and MetalLB never serves the API or ingress.
 
 - The [host preparation](../README.md#prepare-the-host) (ports 53, 123, 3128,
   8080, 8443 and loopback 8000 free), a pull secret saved as
-  `~/pull-secret.json` with mode `0600`, `jq`, and an `oc` matching
+  `~/openshift-pull-secret` with mode `0600`, `jq`, and an `oc` matching
   `openshift.version` installed independently of Bootwright. There is no RHEL
   media: the agent ISO is built from the release.
 - Capacity, which the apply gate and `./bin/bootwright preflight container-cluster --context "$C"` count
@@ -106,7 +106,7 @@ These are editable scalar values; keep boolean values `true` or `false`:
 
 ```sh
 FIPS_ENABLED="false"
-PULL_SECRET_FILE="$HOME/pull-secret.json"
+PULL_SECRET_FILE="$HOME/openshift-pull-secret"
 TPM2_ENABLED="false"
 NMSTATE_ENABLED="false"
 METALLB_ENABLED="false"
@@ -145,7 +145,7 @@ A="$(ip -4 route get 192.0.2.1 | sed -n 's/.* src \([0-9.]*\).*/\1/p')"
 ./bin/bootwright validate -f "$IN"
 ./bin/bootwright setup --yes
 ./bin/bootwright context init --name "$C" --input-dir "$IN"
-./bin/bootwright secret set --context "$C" --name openshift-pull-secret --value-file "${PULL_SECRET_FILE:?Set PULL_SECRET_FILE to the private pull-secret JSON file}"
+./bin/bootwright secret set --context "$C" --name openshift-pull-secret --value-file "${PULL_SECRET_FILE:?Set PULL_SECRET_FILE to the private pull-secret JSON file}" --yes
 ./bin/bootwright secret generate --context "$C"
 ./bin/bootwright secret check --context "$C"
 ./bin/bootwright plan --context "$C"

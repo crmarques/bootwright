@@ -65,12 +65,28 @@ Once per host, from the repository root:
    ./bin/bootwright media list --checksums
    ```
 
-6. Capacity. Close other workloads until `grep MemAvailable /proc/meminfo`
+6. Secret files, for the cases that use them. Runbooks read every credential
+   from a file, never from standard input; change the variable when yours is
+   elsewhere. A value or password file must be yours with mode `0600` or
+   `0400` ([input files](../specs/secrets.md#acquisition-and-commands)):
+
+   | Default path | Variable | Content | Cases |
+   | --- | --- | --- | --- |
+   | `~/rhel-org.txt` | `RHSM_ORG_FILE` | RHSM organization ID with no final line feed: an `opaque` value is stored byte for byte | lab-rhel with registration, lab-3-nodes-ceph-host-variants |
+   | `~/rhel-activation-key.txt` | `RHSM_KEY_FILE` | RHSM activation key | lab-rhel with registration, lab-3-nodes-ceph-host-variants |
+   | `~/ibm-ceph-registry.txt` | `IBM_REGISTRY_FILE` | `cp:<entitlement key>` for `cp.icr.io`, or the key alone | the Ceph cases |
+   | `~/openshift-pull-secret` | `PULL_SECRET_FILE` | OpenShift pull-secret JSON | the OpenShift cases |
+
+   ```sh
+   chmod 600 ~/rhel-org.txt ~/rhel-activation-key.txt ~/ibm-ceph-registry.txt ~/openshift-pull-secret
+   ```
+
+7. Capacity. Close other workloads until `grep MemAvailable /proc/meminfo`
    and `df -h /var/lib/libvirt` cover the case's row above. A Ceph case
    reports the same checks with `preflight storage-cluster` and an OpenShift
    case with `preflight container-cluster`; a RHEL-only case learns them
    from `apply`, which refuses before any effect.
-7. Guest access to the host services needs no firewall rule: Bootwright puts
+8. Guest access to the host services needs no firewall rule: Bootwright puts
    each managed bridge in firewalld's `trusted` zone
    ([provider host](../specs/substrates.md#provider-host-realization)). A case
    that uses a bridge you create gives its rule in Prepare
@@ -116,12 +132,11 @@ Edit only the variable assignments marked for your run or observed values;
 an empty required variable refuses at the command that needs it. Keep the
 same shell so later blocks retain those variables, and run only the sections
 for the toggles you enabled. Credentials never enter a runbook shell variable
-or a command line. A token or password is typed at the hidden prompt of
-`secret set`; an `opaque` value, which a terminal cannot carry
-[byte for byte](../specs/secrets.md#acquisition-and-commands), is piped from
-a hidden `read` in the same pipeline, which adds no line feed. Each
-standard-input `secret set` passes `--yes`, so rerunning the block replaces
-the value instead of refusing.
+or a command line: every `secret set` reads a
+[secret file](#prepare-the-host) or one the case wrote, and passes `--yes`, so
+rerunning the block replaces the value instead of asking. The IBM key is
+copied without its `cp:` prefix to a mode-0600 file in the run's private
+scratch directory `D`, which `secret set` reads and the next line deletes.
 
 Runbooks use `./bin/bootwright` and set `C` to
 the context name, `IN` to the rendered directory and `A` to the host address.

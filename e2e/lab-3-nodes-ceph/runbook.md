@@ -66,7 +66,8 @@ and a fresh apply.
 ## Prepare
 
 The [host preparation](../README.md#prepare-the-host), the RHEL 9.8 boot and
-DVD ISOs added as media, and an IBM entitlement key for `cp.icr.io`. The
+DVD ISOs added as media, and the IBM entitlement key
+[secret file](../README.md#prepare-the-host) for `cp.icr.io`. The
 rendered Entitlement carries `license.accept: true`; accepting the IBM license
 terms is your act. With every group on, 8 GiB guests are tight; leave the
 host and its services about 4 GiB beyond the gate below. Free ports as in the
@@ -92,6 +93,7 @@ OBSERVABILITY_ENABLED="true"
 NVMEOF_ENABLED="false" # Enable only after the AVX-512 prerequisite passes.
 VALUES_FILE='' # Optional private YAML file with all release coordinates and image digests.
 SMB_PASSWORD_FILE='' # Existing mode-0600 file containing the SMB password, needed only with file and smb.
+IBM_REGISTRY_FILE="$HOME/ibm-ceph-registry.txt"
 # A release override file changes release values; these switches take precedence.
 if [ -n "$VALUES_FILE" ]; then
     e2e/render.sh lab-3-nodes-ceph --values "$VALUES_FILE" \
@@ -114,12 +116,16 @@ else
 fi
 C="lab-3-nodes-ceph"; IN="$HOME/bootwright-e2e/lab-3-nodes-ceph"
 A=$(ip -4 route get 192.0.2.1 | sed -n 's/.* src \([0-9.]*\).*/\1/p')   # the host address
+D=$(mktemp -d)                                                         # private scratch for this run
 ./bin/bootwright validate -f "$IN"
 ./bin/bootwright context init --name "$C" --input-dir "$IN"
 ./bin/bootwright secret generate --context "$C"
-./bin/bootwright secret set --context "$C" --name ibm-registry --username cp --password-stdin --yes
+install -m 0600 /dev/null "$D/ibm-password"
+cut -d: -f2- "${IBM_REGISTRY_FILE:?Set IBM_REGISTRY_FILE to the IBM entitlement key file}" > "$D/ibm-password"
+./bin/bootwright secret set --context "$C" --name ibm-registry --username cp --password-file "$D/ibm-password" --yes
+rm -f "$D/ibm-password"
 if [ "$FILE_ENABLED" = "true" ] && [ "$SMB_ENABLED" = "true" ]; then
-    ./bin/bootwright secret set --context "$C" --name files-smb-user --value-file "${SMB_PASSWORD_FILE:?Set SMB_PASSWORD_FILE to the protected SMB password file}"
+    ./bin/bootwright secret set --context "$C" --name files-smb-user --value-file "${SMB_PASSWORD_FILE:?Set SMB_PASSWORD_FILE to the protected SMB password file}" --yes
 fi
 ./bin/bootwright secret check --context "$C"
 ./bin/bootwright plan --context "$C"

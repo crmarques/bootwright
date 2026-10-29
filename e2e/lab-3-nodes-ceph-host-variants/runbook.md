@@ -59,27 +59,34 @@ a tampered boot ([managed-OS contract](../../specs/managed-os.md)).
 ## Prepare
 
 The [host preparation](../README.md#prepare-the-host), the RHEL 9.8 boot and
-DVD ISOs added as media, an IBM entitlement key for `cp.icr.io` (the rendered
+DVD ISOs added as media, the IBM entitlement key, RHSM organization ID and
+activation key [secret files](../README.md#prepare-the-host) (the rendered
 Entitlement carries `license.accept: true`; accepting the IBM license terms is
-your act), the RHSM organization ID and activation key, and a recovery
-passphrase, and the capacity of the opening paragraph: the apply gate refuses
+your act), a recovery passphrase in a mode-0600 file, and the capacity of the opening paragraph: the apply gate refuses
 before registration below it. Console access to the guests is needed for the recovery and bond drills;
 use the complete console command in [Bond failover, reboot and recovery](#bond-failover-reboot-and-recovery). Evidence stays outside the repository, in the private directory `ev`.
 
 ## Run
 
 ```sh
+IBM_REGISTRY_FILE="$HOME/ibm-ceph-registry.txt"
+RHSM_ORG_FILE="$HOME/rhel-org.txt"
+RHSM_KEY_FILE="$HOME/rhel-activation-key.txt"
+LUKS_RECOVERY_FILE='' # Absolute path to your mode-0600 root recovery passphrase file.
 e2e/render.sh lab-3-nodes-ceph-host-variants
 C="lab-3-nodes-ceph-host-variants"; IN="$HOME/bootwright-e2e/lab-3-nodes-ceph-host-variants"
 ev=~/bootwright-e2e/evidence-$C; install -d -m 0700 "$ev"
+D=$(mktemp -d)                          # private scratch for this run
 ./bin/bootwright validate -f "$IN"      # 28 files seen, 28 objects decoded
 ./bin/bootwright context init --name "$C" --input-dir "$IN"
 ./bin/bootwright secret generate --context "$C"
-./bin/bootwright secret set --context "$C" --name ibm-registry --username cp --password-stdin --yes
-{ IFS= read -rsp 'RHSM organization ID: ' v; echo >&2; printf '%s' "$v"; } |
-  ./bin/bootwright secret set --context "$C" --name rhsm-org --value-stdin --yes
-./bin/bootwright secret set --context "$C" --name rhsm-key --value-stdin --yes
-./bin/bootwright secret set --context "$C" --name luks-recovery --value-stdin --yes
+install -m 0600 /dev/null "$D/ibm-password"
+cut -d: -f2- "${IBM_REGISTRY_FILE:?Set IBM_REGISTRY_FILE to the IBM entitlement key file}" > "$D/ibm-password"
+./bin/bootwright secret set --context "$C" --name ibm-registry --username cp --password-file "$D/ibm-password" --yes
+rm -f "$D/ibm-password"
+./bin/bootwright secret set --context "$C" --name rhsm-org --value-file "${RHSM_ORG_FILE:?Set RHSM_ORG_FILE to the RHSM organization ID file}" --yes
+./bin/bootwright secret set --context "$C" --name rhsm-key --value-file "${RHSM_KEY_FILE:?Set RHSM_KEY_FILE to the RHSM activation key file}" --yes
+./bin/bootwright secret set --context "$C" --name luks-recovery --value-file "${LUKS_RECOVERY_FILE:?Set LUKS_RECOVERY_FILE to the recovery passphrase file}" --yes
 ./bin/bootwright secret check --context "$C"
 ./bin/bootwright plan --context "$C"
 ```

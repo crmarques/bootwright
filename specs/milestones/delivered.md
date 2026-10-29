@@ -9990,3 +9990,20 @@ replaces the value; the [e2e conventions](../../e2e/README.md#conventions)
 state both. The refusal says the Secret "has type" its type instead of
 building an article, and `TestTerminalStdinPromptsForTokensAndPasswordsAndRefusesOpaque`
 holds its message.
+
+### X223 — Runbook credentials from files
+
+**Item:** B971 (opened and delivered on 2026-10-29 at the owner's request that
+the e2e runbooks read credentials from files instead of standard input).
+**Kind:** enabling. **Owner:** e2e cases.
+
+The [host preparation](../../e2e/README.md#prepare-the-host) names one secret
+file per operator-held credential, with its runbook variable and default path
+under the home directory. Every runbook `secret set` reads a file and passes
+`--yes`. RHSM organization ID, activation key, pull secret and the
+host-variants recovery passphrase go to `--value-file`; the IBM entitlement
+key, held as `cp:<key>` or the key alone, is copied without its prefix to a
+mode-0600 file in the run's private scratch directory, read with
+`--password-file` and deleted on the next line. No runbook types or pipes a
+credential any more, so an elevated `set` never meets sudo's I/O log
+[refusal](../secrets.md#acquisition-and-commands).

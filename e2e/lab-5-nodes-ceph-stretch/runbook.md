@@ -45,7 +45,8 @@ BMC 8001; `CTX_CEPH` serves 8443, 8080 and BMC 8000.
 ## Prepare
 
 The [host preparation](../README.md#prepare-the-host), the RHEL 9.8 boot and
-DVD ISOs added as media, an IBM entitlement key for `cp.icr.io` (the rendered
+DVD ISOs added as media, the IBM entitlement key
+[secret file](../README.md#prepare-the-host) for `cp.icr.io` (the rendered
 Entitlement accepts the IBM license; that acceptance is your act), and
 `ssh-keyscan`, `dig` and `python3` on the host, plus the AWS CLI with the
 object toggle. The [capacity gate](../../specs/substrates.md#capacity-admission)
@@ -70,6 +71,7 @@ renders; do not reset them between stages. Either service requires at least
 CEPH_FILE="false"
 CEPH_OBJECT="false"
 DATA_MEMORY_MIB="4096"
+IBM_REGISTRY_FILE="$HOME/ibm-ceph-registry.txt"
 ```
 
 Render and import with those choices:
@@ -90,7 +92,10 @@ umask 077; D=$(mktemp -d)
 ./bin/bootwright context init --name "$CTX_CEPH" --input-dir "$IN/ceph"
 ./bin/bootwright secret generate --context "$CTX_ARB"
 ./bin/bootwright secret generate --context "$CTX_CEPH"
-./bin/bootwright secret set --context "$CTX_CEPH" --name ibm-registry --username cp --password-stdin --yes
+install -m 0600 /dev/null "$D/ibm-password"
+cut -d: -f2- "${IBM_REGISTRY_FILE:?Set IBM_REGISTRY_FILE to the IBM entitlement key file}" > "$D/ibm-password"
+./bin/bootwright secret set --context "$CTX_CEPH" --name ibm-registry --username cp --password-file "$D/ibm-password" --yes
+rm -f "$D/ibm-password"
 ```
 
 Build the arbiter context completely. `CTX_CEPH` depends on its network, its
@@ -119,7 +124,7 @@ cluster's cephadm expects. Then hand `arbiter-01` over to `CTX_CEPH`
    ssh-keyscan -t ed25519 198.51.100.65 > "$D/arbiter.known_hosts"
    ssh-keygen -lf "$D/arbiter.known_hosts"
    ./bin/bootwright machine exec --context "$CTX_ARB" --name arbiter-01 -- ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub
-   ./bin/bootwright secret set --context "$CTX_CEPH" --name arbiter-known-hosts --value-file "$D/arbiter.known_hosts"
+   ./bin/bootwright secret set --context "$CTX_CEPH" --name arbiter-known-hosts --value-file "$D/arbiter.known_hosts" --yes
    ```
 
 2. Authorize `CTX_CEPH`'s fleet key for the cluster SSH user `bootwright`,

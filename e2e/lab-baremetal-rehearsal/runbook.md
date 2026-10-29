@@ -134,8 +134,8 @@ C=lab-baremetal
 ./bin/bootwright validate -f "$IN/install"
 ./bin/bootwright context init --name "$C" --input-dir "$IN/install"
 ./bin/bootwright secret generate --context "$C"
-./bin/bootwright secret set --context "$C" --name lab-bmc-ca --certificate-file "$X/ca.pem"
-./bin/bootwright secret set --context "$C" --name lab-bmc-credentials --username admin --password-file "$X/password"
+./bin/bootwright secret set --context "$C" --name lab-bmc-ca --certificate-file "$X/ca.pem" --yes
+./bin/bootwright secret set --context "$C" --name lab-bmc-credentials --username admin --password-file "$X/password" --yes
 ./bin/bootwright secret check --context "$C"
 ./bin/bootwright plan --context "$C"
 ./bin/bootwright apply --context "$C" --stage controller --authorize data-loss
