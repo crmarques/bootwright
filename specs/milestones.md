@@ -129,7 +129,8 @@ Slices with an item `in progress`.
   (`ID | Alias | Kind | Owner | Outcome | Requires | Definition | Delivery`)
   and one `### B<n>` detail section per item holding its bounded outcome,
   exit evidence and any deferral reason. Kind is `product`, `safety`, `defect` or
-  `enabling`.
+  `enabling`. A byte budget on the opening plus row-and-section routing is the
+  design that replaces per-page cards: page size sets no reading cost.
 - A moved item keeps its ID, and its row and section move with a dated Alias
   note. A split keeps the ID on the part that stays and gives each part split
   out a new B whose Alias names its source and date (a split made by the

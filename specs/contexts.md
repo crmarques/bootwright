@@ -237,8 +237,8 @@ The 4096-name bound applies to active or reserved contexts, not past creations.
 A `registry.json` of version 5, which every build before the setup v2
 cut-over wrote, refuses every access with `context.state`, "/var/lib/bootwright
 holds a store an earlier Bootwright build wrote (registry version 5), which
-this build does not read or convert", and the fresh-install remedy: "with the
-build that wrote it, destroy each environment (bootwright destroy --context
+this build does not read or convert", and the fresh-install remedy: "with a
+build that reads it, destroy each environment (bootwright destroy --context
 <name>) and delete each context (bootwright context delete --name <name>
 --purge); then, as root, remove /var/lib/bootwright and
 /var/lib/bootwright-staging and run bootwright setup with this build. Never remove /var/lib/bootwright while
@@ -876,9 +876,9 @@ their inventory, `destroy` as the way to remove them before deletion, and the
 acknowledged deletion. `status` lists only the objects the selected input
 declares ([B578](milestones/backlog.md#b578)), while `diff` also lists what
 the owning apply realized that the selected input no longer declares; the
-deletion plan and the orphan confirmation list, from readable evidence, every
-object the context's frozen operations realized, whether or not the selected
-input still declares it.
+deletion plan and the orphan confirmation name those two commands as the
+listing of the abandoned objects, with the keys they free and the native-side
+material the objects retain on their hosts.
 
 Only the explicit orphan acknowledgement defined by that guard waives the
 disposal verdict. Over missing, corrupt or unsupported evidence in a present
@@ -1046,8 +1046,8 @@ warning above included, which its result then does not repeat. A deletion's prom
 plan naming the context, its selected input revision, the keyring with every
 secret version it holds (or, for a lost context whose directory is gone, that
 its keyring already went with it) and the host reservations it removes, and what it
-abandons: nothing, the objects the context's frozen operations realized, or
-objects that cannot be listed and why. A command that would prompt without a
+abandons: nothing, the objects the `status` and `diff` commands list for the
+context, or objects that cannot be listed and why. A command that would prompt without a
 plan presenter refuses with `context.state` rather than ask.
 
 Every context-backed command that needs desired state (validate, render,

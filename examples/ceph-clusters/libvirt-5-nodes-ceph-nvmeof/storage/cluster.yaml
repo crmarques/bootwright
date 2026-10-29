@@ -89,6 +89,8 @@ spec:
       version: '1.6'
 
   topology:
+    # Each fqdn overrides the composed <node>.<cluster>.<storage domain> name
+    # to match the Machine hostname.
     nodes:
       - name: rhel-01
         fqdn: rhel-01.lab.example.test

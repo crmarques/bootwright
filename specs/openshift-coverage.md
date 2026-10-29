@@ -123,7 +123,7 @@ Qualification names the tier and the run that proves the row.
 | KubeVirt image delivery | upload DataVolume, `virtctl image-upload --no-create`, SATA `cdrom` with `bootOrder: 2` | [substrates](substrates.md), [boot media](openshift-clusters.md#boot-media) | none | [B87](milestones/m1.md#b87), [B88](milestones/m3.md#b88) | M3e | fake-port tests; lab-kubevirt push drill |
 | KubeVirt node network | `bridge` binding to a `Localnet` CUDN with IPAM disabled or a `bridge` NAD | [substrates](substrates.md) | `networkAttachments[].kubevirt.networkRef` | [B87](milestones/m1.md#b87) | M1g | preflight tests; lab-kubevirt |
 | KubeVirt cluster on derived `none` | an external layer-4 load balancer and DNS | [container clusters](openshift-clusters.md) | `external` or `loadBalancer` sources | [B88](milestones/m3.md#b88) | M3e | goldens; lab-kubevirt-external validation (Q19 (a): no run) |
-| KubeVirt cluster on authored `baremetal` | keepalived on shared layer 2; a Localnet network with `ipam.mode: Disabled` filters by MAC alone (4.22), and a bridge NAD needs `macspoofchk` off | [container clusters](openshift-clusters.md) | `platform.baremetal`, `installer` sources | [B88](milestones/m3.md#b88) | M3e | goldens; [B731](milestones/m3.md#b731) |
+| KubeVirt cluster on authored `baremetal` | keepalived on shared layer 2; a Localnet network with `ipam.mode: Disabled` filters by MAC alone, and a bridge NAD needs `macspoofchk` off | [container clusters](openshift-clusters.md) | `platform.baremetal`, `installer` sources | [B88](milestones/m3.md#b88) | M3e | goldens; [B731](milestones/m3.md#b731) |
 | Host cluster through `kubeconfigRef` | a materialized kubeconfig and a verified server | [substrates](substrates.md), [security](security.md) | `spec.kubevirt.kubeconfigRef` | [B87](milestones/m1.md#b87) | M1g | negative kubeconfig tests; lab-kubevirt |
 | Host cluster the context builds | a minted ServiceAccount token per run and nested edges | [substrates](substrates.md#kubevirt-machine-realization) | `spec.kubevirt.hostClusterRef` | [B732](milestones/m3.md#b732) | M3e | lending, edge and lifecycle journeys in-tree; lab-kubevirt-nested |
 | KubeVirt removal | VMI absent, delete with `preconditions.uid`, VM, DataVolumes and claims proved absent | [substrates](substrates.md) | none | [B87](milestones/m1.md#b87), [B88](milestones/m3.md#b88) | M3e | adapter suites; lab-kubevirt destroy |
@@ -138,9 +138,8 @@ Every row covers create, observe, continuation of byte-identical input,
 failed and ambiguous effects, readiness, access custody and removal. A changed
 declaration over a completed apply is destroyed and applied again (D153).
 
-Not yet met: every row whose item is open; the earliest are tracked as
-[B61](milestones/m3.md#b61), [B66](milestones/m3.md#b66) and
-[B714](milestones/m3.md#b714).
+A row names its item beside it; the item's milestone page holds whether the
+row is delivered and its acceptance state.
 
 ## Acceptance profiles
 

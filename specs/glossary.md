@@ -1,8 +1,7 @@
 # Glossary
 
-Each term has one meaning and one owner page. A word marked "qualified" is
-written with a modifier wherever two of its senses can meet; a bare use means
-nothing. A new term enters this page with its owner link in the same change.
+Each term has one meaning and one owner page. A word marked "qualified" takes
+its modifier wherever two of its senses can meet; elsewhere context decides. A new term enters this page with its owner link in the same change.
 
 ## Core terms
 
@@ -24,6 +23,13 @@ nothing. A new term enters this page with its owner link in the same change.
   service is a shared service kind, managed or external, such as `Proxy` or
   `DNSServer` ([infrastructure services](infrastructure-services.md)). The
   `infrastructure-services` stage token names the service layer.
+- **Block** and **step**: a block is the plan node, one frozen unit of the
+  plan ([state reconciliation](state-reconciliation.md#plan-and-execution)); a
+  step is a block as a preview or result presents it, numbered by its place in
+  plan order, and `steps` is the public JSON name of that list
+  ([output](cli/output.md#lifecycle-and-status-results)). An add-on
+  `spec.steps` entry is an add-on step ([add-ons](api/addons.md#steps)), never a
+  block.
 - **Reservation**: a host-wide claim, such as a socket, BMC, media or machine,
   that refuses a conflicting context
   ([host reservations](infrastructure-services.md#host-reservations)).

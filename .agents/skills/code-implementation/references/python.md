@@ -26,10 +26,8 @@ Each file runs at exactly one site; know which before editing it.
 - Action plugins run on the controller, in the runtime venv the
   [controller](../../../../specs/controller.md) builds from the locked runtime.
 - Modules and the module utilities they import run on the managed host under
-  its own interpreter, which may be as old as the managed-host floor
-  (`REMOTE_PYTHON_FLOOR` in
-  `ansible/collections/ansible_collections/bootwright/core/tests/unit/test_remote_python_floor.py`,
-  pinned by `scripts/tools/ansible-check-floor-interpreter.json`). Start every
+  its own interpreter, which may be as old as the managed-host
+  [floor](../../../../specs/architecture.md#language-responsibility). Start every
   such file with `from __future__ import annotations`, use no syntax or library
   call the floor lacks, and import nothing beyond the standard library,
   `ansible.module_utils` and the collection except a library the target system

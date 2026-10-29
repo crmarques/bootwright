@@ -8,7 +8,7 @@ import (
 	"github.com/crmarques/bootwright/internal/diagnostics"
 )
 
-const retiredRemedy = "destroy this context's effects with the Bootwright build that created it, then run bootwright context delete --name <context> --purge and create the context again"
+const retiredRemedy = "destroy this context's effects with a Bootwright build that opens this store, or abandon them with bootwright context delete --name <context> --purge --allow-orphans, then create the context again"
 
 // A store whose persisted backend this build's catalog no longer carries is
 // refused by every access with the identity it read and the way out, before

@@ -59,15 +59,17 @@ bind, `check`, `show` and the bounded machine commands read only keyring
 versions.
 
 `set --name` accepts only a declared contextStore Secret and these exact flags,
-and stores the parts each type holds:
+and stores the parts each type holds; the Generated column says whether the
+type can use a [generated source](api/secrets.md#generated-source):
 
-| Type | Input | Parts |
-| --- | --- | --- |
-| opaque, token, dockerConfigJson | One of `--value-file` or `--value-stdin` | value |
-| usernamePassword | `--username` and one of `--password-file` or `--password-stdin` | username, password |
-| caBundle | `--certificate-file` | certificate |
-| tlsCertificate | `--certificate-file` and `--private-key-file` | certificate, private-key |
-| sshKeyPair | `--private-key-file`, optional `--public-key-file` | private-key, public-key |
+| Type | Input | Parts | Generated |
+| --- | --- | --- | --- |
+| opaque, dockerConfigJson | One of `--value-file` or `--value-stdin` | value | no |
+| token | One of `--value-file` or `--value-stdin` | value | yes |
+| usernamePassword | `--username` and one of `--password-file` or `--password-stdin` | username, password | yes |
+| caBundle | `--certificate-file` | certificate | yes |
+| tlsCertificate | `--certificate-file` and `--private-key-file` | certificate, private-key | yes |
+| sshKeyPair | `--private-key-file`, optional `--public-key-file` | private-key, public-key | yes |
 
 A flag set that does not fit the declared type, including an inapplicable flag
 supplied explicitly empty or false, refuses with `secret.input` naming the
@@ -597,8 +599,9 @@ A `store.json` that names a backend this
 build's catalog lacks, `local-keyring-v3` included, refuses every access,
 `secret encryption init` included, with `secret.store.implementation` before
 any session, naming that backend and the remedy: destroy the context's effects
-with the Bootwright build that created it, then `bootwright context delete
---name <context> --purge` and create the context again.
+with a Bootwright build that opens the store, or abandon them with
+`bootwright context delete --name <context> --purge --allow-orphans`, then
+create the context again.
 
 Threat exclusions remain root, the same OS identity, process memory and theft
 of the full store with its keys. Keys share the local filesystem custody

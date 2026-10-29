@@ -119,8 +119,8 @@ apply. A record of any other version is not read, and no build converts one.
 A controller read and every context transaction refuse with `context.state`,
 "controller evidence version N is unsupported: this build reads version 3 only
 and converts none", and the same fresh-install remedy a registry version 5
-names ([contexts](../contexts.md#storage-locking-and-publication)): with the
-build that wrote the record, destroy each environment and delete each context,
+names ([contexts](../contexts.md#storage-locking-and-publication)): with a
+build that reads the record, destroy each environment and delete each context,
 then, as root, remove `/var/lib/bootwright` and `/var/lib/bootwright-staging`
 and run `bootwright setup`. No command rebuilds the record alone: it is
 published by the first binding of an apply on a root that holds none, and a

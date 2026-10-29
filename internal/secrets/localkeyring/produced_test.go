@@ -163,7 +163,7 @@ func TestTheCatalogRefusesTheV3Identity(t *testing.T) {
 	_, err := secretstore.NewCatalog(New()).Reopen("local-keyring-v3")
 	found := diagnostics.Of(err)
 	if len(found) != 1 || found[0].Code != "secret.store.implementation" || !strings.Contains(found[0].Message, "local-keyring-v3") ||
-		found[0].Remediation != "destroy this context's effects with the Bootwright build that created it, then run bootwright context delete --name <context> --purge and create the context again" {
+		found[0].Remediation != "destroy this context's effects with a Bootwright build that opens this store, or abandon them with bootwright context delete --name <context> --purge --allow-orphans, then create the context again" {
 		t.Fatalf("the v3 identity was refused as %+v", found)
 	}
 	if implementation, err := secretstore.NewCatalog(New()).Reopen("local-keyring-v4"); err != nil || implementation == nil {

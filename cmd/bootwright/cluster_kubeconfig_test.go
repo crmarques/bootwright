@@ -23,7 +23,7 @@ const snoKubeconfig = "apiVersion: v1\nclusters:\n- cluster:\n    server: https:
 
 // retiredRemedy is how every access to a keyring this build no longer opens
 // tells the operator out.
-const retiredRemedy = "destroy this context's effects with the Bootwright build that created it, then run bootwright context delete --name <context> --purge and create the context again"
+const retiredRemedy = "destroy this context's effects with a Bootwright build that opens this store, or abandon them with bootwright context delete --name <context> --purge --allow-orphans, then create the context again"
 
 // producedCustody is what the lifecycle and the reveal reach of the composed
 // custody service.

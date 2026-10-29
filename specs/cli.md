@@ -657,8 +657,8 @@ next: <apply|continue-apply|destroy|continue-destroy|resolve|none>
 ```
 
 The receipt's `next:` holds an action token, not a command, and `bootwright
-resolve` is no verb. A result's `Next` field and the steps `status` offers
-name the command the token maps to:
+resolve` is no verb. An `apply` or `destroy` result's `Next` field and
+the steps `status` offers name the command the token maps to:
 
 | Token | Command |
 | --- | --- |
@@ -703,8 +703,8 @@ which is also how that verb completes a
 [finalization](state-reconciliation.md#lifecycle-unit). A settled verb reports
 `done` and `none` too, over the completed operation it proved, or over `none`
 when the context owns no operation at all. A completed apply admits a later
-destroy, but naming it as the next action instructs an operator to undo what
-just succeeded; the verbs a context admits are what `plan` reports. `apply`
+destroy, but naming it next invites undoing what just succeeded; the verbs a
+context admits are what `plan` reports. `apply`
 appears only as the previewed verb of a pure plan, and `destroy` only as that
 or as what a failed destroy calls for. Where `status` offers a next step it
 offers the command the token maps to in the table above, a command this

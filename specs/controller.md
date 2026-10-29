@@ -883,9 +883,9 @@ taking every runtime's lock first so it never removes one in use, and
 proceeds. Because the discard removes every runtime and the wheel cache, the
 plan treats them as absent: its `runtime` row counts every locked wheel as one
 to download, and setup fetches, builds and publishes the runtime before the
-receipt names it. A launch refuses `controller.state`, "the controller setup
-record was written by another Bootwright build", with the remedy `run
-bootwright setup`. A future setup-format change therefore never leaves setup
+receipt names it. A launch refuses as the
+[setup subtree](contexts/controller-record.md#the-setup-subtree) states. A
+future setup-format change therefore never leaves setup
 unable to heal its own state, but the discard also removes the previous
 runtime: an operation registered under the discarded closure continues only
 through its registering build's setup, which fetches its wheels again and so

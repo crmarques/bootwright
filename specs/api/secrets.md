@@ -123,7 +123,7 @@ Parameters are flat and type-scoped:
 | `comment` | string | `sshKeyPair` | no | omitted | UTF-8 within the [part byte limit](../secrets.md#acquisition-and-commands); no leading/trailing whitespace, no control character (newline, tab and NUL included), no Unicode line or paragraph separator, no double quote and no backslash, so the key stays on its quoted Kickstart line. |
 | `bytes` | integer | `token` | no | `32` | Token entropy in bytes; inclusive range `16..1024`. |
 
-`opaque` and `dockerConfigJson` cannot use `generated`. A parameter not
+A type the [type table](../secrets.md#acquisition-and-commands) does not mark generated cannot use `generated`. A parameter not
 consumed by the selected type is rejected. A generated `tlsCertificate` that
 authors neither `dnsNames` nor `ipAddresses` derives both from what its
 consumers serve it at: every address of an HTTPS endpoint of an

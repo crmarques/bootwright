@@ -12,6 +12,10 @@ that plans one block per service object.
 
 ## Selection and refusal
 
+The selector follows the [domain template](architecture.md#implementation-selection):
+the service kind with its `spec.implementation`, which an ArtifactServer lacks
+and an external service forbids ([API](api/infrastructure-services.md)).
+
 A managed service becomes a block only when its placement Machine has effective
 `os.provided: true` and the service's declared requirements hold; admission
 refuses a placement Machine without it at `$.spec.machineRef`

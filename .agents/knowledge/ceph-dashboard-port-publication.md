@@ -65,3 +65,14 @@ An unchanged completed Bootwright apply is also a lifecycle no-op; a new
 automation build alone does not repair an already completed cluster. See
 [continuation after a fix](continuation-after-a-fix.md) for the boundary between
 continuation and completed operations.
+
+## Native firewall opening
+
+Upstream cephadm at v20.2.1 opens each deployed daemon's TCP endpoint ports
+with `firewall-cmd --permanent --add-port` in firewalld's default zone and then
+reloads when `firewalld.service` is enabled and running
+([cephadm.py](https://github.com/ceph/ceph/blob/v20.2.1/src/cephadm/cephadm.py#L976-L983),
+[firewalld.py](https://github.com/ceph/ceph/blob/v20.2.1/src/cephadm/cephadmlib/firewalld.py#L84-L119),
+[serve.py](https://github.com/ceph/ceph/blob/v20.2.1/src/pybind/mgr/cephadm/serve.py#L1371-L1383)).
+It never opens VRRP for keepalived, which has no firewalld service form
+([ingress.py](https://github.com/ceph/ceph/blob/v20.2.1/src/cephadm/cephadmlib/daemons/ingress.py#L150-L160)).

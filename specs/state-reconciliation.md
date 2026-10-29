@@ -2103,8 +2103,8 @@ drivers and other capabilities contribute typed readiness evidence, but cannot
 declare the complete environment ready themselves.
 
 A [GitOps bootstrap object](add-ons.md#the-gitops-bootstrap-object) is an
-owned object of the apply, created after every other block that reaches its
-cluster. It hands that cluster to GitOps without waiting for the predicate
+owned object of the apply, created after the blocks the
+[last-package rule](add-ons.md#built-in-packages-and-selection) names. It hands that cluster to GitOps without waiting for the predicate
 over the whole environment, as the
 [project's handoff paragraph](project.md#lifecycle-and-handoff) allows
 (pending the owner's Q60 under [D173](milestones/backlog.md#d173)), and

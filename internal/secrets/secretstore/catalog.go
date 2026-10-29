@@ -77,7 +77,7 @@ func (c *ImplementationCatalog) Reopen(backend string) (SecretStoreImplementatio
 	}
 	return nil, diagnostics.NewFailureWithRemediation("secret.store.implementation",
 		"this context's secret store is "+backend+", which this Bootwright build cannot open", "",
-		"destroy this context's effects with the Bootwright build that created it, then run bootwright context delete --name <context> --purge and create the context again")
+		"destroy this context's effects with a Bootwright build that opens this store, or abandon them with bootwright context delete --name <context> --purge --allow-orphans, then create the context again")
 }
 
 func validSelection(s Selection) bool {

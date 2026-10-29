@@ -76,6 +76,29 @@ cause is reported, not fixed. Codex runs project hooks only once the project's
 `.codex/` layer and the hook are trusted (`/hooks`), and skips the hook again
 after it changes until it is re-trusted.
 
+## Change classes
+
+One line per class, naming only the owner to follow and the guard to run; the
+linked page owns the rule.
+
+- Spec or guidance: the [conventions](../../../../specs/index.md#conventions);
+  `make docs-check`.
+- Go: [Go engineering](go.md); the changed package's tests.
+- Ansible: [Ansible engineering](ansible.md); `./scripts/ansible-check --suite units`.
+- Durable format or contract version:
+  [contract versions](go.md#contract-versions-and-content-digests) and the
+  [`Contract:` line](git-integration.md#contract-line).
+- API kind or field: the [kind catalog](../../../../specs/api.md#kind-catalog),
+  the [ux-and-apis](../../ux-and-apis/SKILL.md) skill, and the example goldens
+  `TestEveryExampleEffectiveStateMatchesItsGolden` and
+  `TestEveryExampleObjectIsClaimedOncePerFamily`.
+- Example: `bin/bootwright validate --file <example>` and the example tests
+  above.
+- Knowledge page: the closing paragraphs of the
+  [knowledge index](../../../knowledge/index.md).
+- Milestone bookkeeping:
+  [milestones-and-knowledge](../../milestones-and-knowledge/SKILL.md).
+
 ## Recording
 
 A commit body names the tier commands that ran and their results. An

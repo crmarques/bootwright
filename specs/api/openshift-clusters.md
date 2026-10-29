@@ -2,7 +2,8 @@
 
 `OpenShiftCluster` owns OpenShift and OKD install intent: references, endpoint and
 artifact selections, security and network defaults. OKD is a distribution
-variant of this kind (`spec.distribution.type: okd`), not a kind of its own, so
+variant of this kind (`spec.distribution.type: okd`), not a kind of its own
+([D183](../milestones/backlog.md#d183), Q77; the kind's name, [D185](../milestones/backlog.md#d185)), so
 B748's OKD arm is a value of this field. The kind is the `containerCluster`
 category's member of the [cluster family registry](../api.md#cluster-family-registry):
 the Environment selects it through `spec.containerClusters`, and the general

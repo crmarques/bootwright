@@ -104,9 +104,8 @@ The operator reads a channel's CSV from the PackageManifest
 `kubevirt-hyperconverged` in `openshift-marketplace`; Red Hat's documentation
 names the channel `stable` and a CSV `kubevirt-hyperconverged-operator.v4.<y>.<z>`
 of the release, and Bootwright registers neither (D163). The objects and the
-`HyperConverged` manifest are those of Red Hat's OpenShift Container Platform
-4.21 "Virtualization > Installing" sections 4.3.3 and 4.3.4, whose source and
-open facts are in
+`HyperConverged` manifest are those of Red Hat's OpenShift Virtualization
+installation documentation, whose release, sections and open facts are in
 [knowledge](../.agents/knowledge/olm-v0-exact-install.md#openshift-virtualization).
 The `HyperConverged` object is the singleton the operator reconciles and
 carries no field: the documented manifest has an empty `spec`. Readiness is

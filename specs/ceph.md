@@ -63,6 +63,18 @@ core services are explicit; omitted optional service families are absent and
 bootstrap suppresses their automatic deployment. Unavoidable generated helpers
 still have planned effects, images, dependencies and a derived owner.
 
+## Selection and refusal
+
+The selector follows the [domain template](architecture.md#implementation-selection).
+A `CephCluster`'s `spec.management` selects: `managed` selects the
+implementations whose block families [the plan](#plan-and-prerequisites)
+freezes, and an `external` cluster selects none here. An effect-bearing Ceph
+object that no bound implementation claims refuses by the
+[unclaimed-object table](state-reconciliation.md#stages-and-the-pause-boundary),
+and the combinations the release does not support refuse as the
+[unsupported combinations](ceph-coverage.md#unsupported-combinations) list.
+`TestEveryExampleObjectIsClaimedOncePerFamily` holds every example to the claim.
+
 ## Frozen release and trust
 
 A plan binds exact package, cephadm and tool coordinates, schema identity,
@@ -205,6 +217,61 @@ key file and IBM's from the acquired one, before the transaction checks them.
 Cluster removal retains shared host packages, publisher keys and the pulled
 image. Actual installation and interruption qualification remains
 [B79](milestones/m2.md#b79) work.
+
+Each host-preparation block derives account, code and crypto-policy facts from
+the exact immutable image pulled with the original registry binding. Its
+contained probes have no network, credential mounts, inherited image
+environment, hooks, automatic health checks or image volumes. Image code and
+host RPM payloads are independently authenticated and bound to their frozen
+artifacts; equality between different selected artifacts is not a version
+compatibility gate. Installed RPM metadata agreement alone is not publisher
+authentication, and an operator report cannot create a runtime authority.
+The same contained image's SDK normalizes only the frozen core ServiceSpec
+documents, including the code-owned protected MGR mount. These native defaults
+are retained for exact stored-service comparison; Bootwright does not invent
+or copy the provider's defaults. A held empty mount manifest disables Podman's
+implicit host subscription copies before any probe starts.
+Each probe's inspected configuration must prove the original image/user/code,
+closed environment, read-only root, exact mounts, private namespaces, empty
+effective/bounding capabilities and bounded resources before starting or
+removing its original container. Creation flags alone supply no such proof.
+The closed environment pins the hostname and its `HOSTNAME`, because Podman
+adds one to a started container that sets none, so the proof before the start
+and the one before removal read the same five variables. Exact mounts are the
+requested read-only relabelled binds with only the propagation and `nosuid`,
+`nodev`, `rbind` options Podman records beside them, and without `z` once the
+start has relabelled the source. Podman's inspection reports no sysctls, so
+they are the one setting proved from Podman's recorded create command, which
+must name exactly the requested ones.
+Image facts do not qualify the actual native SSH route or running MGR mounts.
+The route probe exercises the authenticated provider SSH class inside the same
+immutable image, under the host's inherited crypto policy, using only fresh
+synthetic keys and loopback listeners in a private network namespace.
+Correct-key forwarding must succeed; changed-key, unknown-target,
+unavailable-proxy and missing-configuration cases must refuse with no direct
+contact or remote effect. The host block records the result with its runtime
+profile after exact container absence; an operator report cannot substitute
+for it. These bounded cases do not qualify real guest forwarding policy or
+running MGR restart/failover.
+Probe cleanup proves each returned original container ID absent; a lost
+creation reply retains uncertainty, without adopting a matching label or name.
+Implementation is `ceph_host_runtime.py`, a session-free module the worker
+ships; the complete live consumer and qualification remain
+[B79](milestones/m2.md#b79) and [B80](milestones/m2.md#b80).
+
+The package phase authenticates inherited crypto-policies roots from the
+frozen RHEL DVD and lends completed original generator/profile facts to a
+descriptor-bound predefined OpenSSH-server policy alias resolver. Image
+provenance never substitutes for that host-OS proof.
+
+The host block's contained probe derives each selected SCSI SSD's complete
+native device identifier through the exact image's SDK, using the host's udev
+properties bound to the proved path, device number, serial, size and
+nonrotational presentation; a virtio disk yields its serial form. It records
+the identities before OSD realization. Later health checks compare the
+complete identifiers and original OSD identities, and prove the SSD class; a
+guessed serial projection or prefix-stripping comparison never proves the
+device. A missing or contradicting identity record refuses.
 
 ## Plan and prerequisites
 

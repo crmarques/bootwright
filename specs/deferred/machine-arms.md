@@ -26,7 +26,7 @@ arms for OpenShift nodes; the realization contracts they need are stated in
 | `spec.vsphere.vcenters[].server` | string | yes | vCenter server name or address. |
 | `spec.vsphere.vcenters[].port` | integer | no | `0..65535`; zero/absence leaves the native default. |
 | `spec.vsphere.vcenters[].datacenters` | array of strings | yes | Non-empty datacenter inventory names. |
-| `spec.vsphere.vcenters[].credentialsRef` | string | yes | `usernamePassword` `Secret`. |
+| `spec.vsphere.vcenters[].credentialsRef` | string | yes | `usernamePassword` `Secret`, an access credential in the [class](../secrets.md#immutable-binding-and-contexts) a rotated login rebinds through; its capability Secret reference lands with [B99](../milestones/m1.md#b99). |
 | `spec.vsphere.vcenters[].disableCertificateVerification` | boolean | no | Defaults `false`. |
 | `spec.vsphere.failureDomains` | array | yes | Non-empty set keyed by `name`. |
 | `spec.vsphere.failureDomains[].name` | string | yes | Provider-local failure-domain name. |
@@ -64,8 +64,10 @@ they are never combined.
 
 ## Profile and attachment fields
 
-These fields of the common [machine profile](../api/machines.md#machine-profiles-and-network-attachments)
-and network-attachment shapes apply only to the refused arms:
+The vSphere `machineProfiles[]` entry adds `template` and `failureDomainRef`
+to the common [machine profile](../api/machines.md#machine-profiles-and-network-attachments)
+shape, and the network-attachment arms below extend its attachment shape; they
+apply only to the refused arms:
 
 | Field | Type | Required | Default | Rule |
 | --- | --- | --- | --- | --- |

@@ -36,8 +36,8 @@ closes M2b's exit.
 
 Native manager-to-host SSH must enforce pinned host keys, including a negative
 wrong-key test through actual manager connection, reconnect and failover paths.
-The [upstream Tentacle connection](https://github.com/ceph/ceph/blob/v20.2.1/src/pybind/mgr/cephadm/ssh.py#L161)
-disables that verification; controller-to-host verification
+The upstream Tentacle connection disables that verification
+([lessons](../.agents/knowledge/ibm-ceph-native-ssh.md)); controller-to-host verification
 alone cannot qualify this independent native channel. No authored exception
 can disable verification. `native` stays refused.
 The approved [verifiedTunnel target](ceph-native-api.md#verified-native-orchestration-transport)
@@ -72,60 +72,9 @@ redirects, uncredentialed bypass, local mutual-TLS access, a registry trust
 bundle that verifies, one that does not, and none, and a package repository
 trust bundle that verifies, one that does not, and none.
 
-Each host-preparation block derives account, code and crypto-policy facts from
-the exact immutable image pulled with the original registry binding. Its
-contained probes have no network, credential mounts, inherited image
-environment, hooks, automatic health checks or image volumes. Image code and
-host RPM payloads are independently authenticated and bound to their frozen
-artifacts; equality between different selected artifacts is not a version
-compatibility gate. Installed RPM metadata agreement alone is not publisher
-authentication, and an operator report cannot create a runtime authority.
-The same contained image's SDK normalizes only the frozen core ServiceSpec
-documents, including the code-owned protected MGR mount. These native defaults
-are retained for exact stored-service comparison; Bootwright does not invent
-or copy the provider's defaults. A held empty mount manifest disables Podman's
-implicit host subscription copies before any probe starts.
-Each probe's inspected configuration must prove the original image/user/code,
-closed environment, read-only root, exact mounts, private namespaces, empty
-effective/bounding capabilities and bounded resources before starting or
-removing its original container. Creation flags alone supply no such proof.
-The closed environment pins the hostname and its `HOSTNAME`, because Podman
-adds one to a started container that sets none, so the proof before the start
-and the one before removal read the same five variables. Exact mounts are the
-requested read-only relabelled binds with only the propagation and `nosuid`,
-`nodev`, `rbind` options Podman records beside them, and without `z` once the
-start has relabelled the source. Podman's inspection reports no sysctls, so
-they are the one setting proved from Podman's recorded create command, which
-must name exactly the requested ones.
-Image facts do not qualify the actual native SSH route or running MGR mounts.
-The route probe exercises the authenticated provider SSH class inside the same
-immutable image, under the host's inherited crypto policy, using only fresh
-synthetic keys and loopback listeners in a private network namespace.
-Correct-key forwarding must succeed; changed-key, unknown-target,
-unavailable-proxy and missing-configuration cases must refuse with no direct
-contact or remote effect. The host block records the result with its runtime
-profile after exact container absence; an operator report cannot substitute
-for it. These bounded cases do not qualify real guest forwarding policy or
-running MGR restart/failover.
-Probe cleanup proves each returned original container ID absent; a lost
-creation reply retains uncertainty, without adopting a matching label or name.
-Implementation is `ceph_host_runtime.py`, a session-free module the worker
-ships; the complete live consumer and qualification remain
-[B79](milestones/m2.md#b79) and [B80](milestones/m2.md#b80).
-
-The package phase authenticates inherited crypto-policies roots from the
-frozen RHEL DVD and lends completed original generator/profile facts to a
-descriptor-bound predefined OpenSSH-server policy alias resolver. Image
-provenance never substitutes for that host-OS proof.
-
-The host block's contained probe derives each selected SCSI SSD's complete
-native device identifier through the exact image's SDK, using the host's udev
-properties bound to the proved path, device number, serial, size and
-nonrotational presentation; a virtio disk yields its serial form. It records
-the identities before OSD realization. Later health checks compare the
-complete identifiers and original OSD identities, and prove the SSD class; a
-guessed serial projection or prefix-stripping comparison never proves the
-device. A missing or contradicting identity record refuses.
+The host-preparation probes, their closed environment and exact mounts, the
+route probe and the device-identity record belong to
+[storage](ceph.md#frozen-release-and-trust).
 
 The attempt records and adoption rules of pools, placement policies, images,
 filesystems and subvolumes belong to
@@ -421,11 +370,8 @@ failover from a VIP.
 Guest firewalls: when `firewalld.service` is enabled and running, upstream
 cephadm opens each deployed daemon's TCP endpoint ports with
 `firewall-cmd --permanent --add-port` in firewalld's default zone and then
-reloads ([cephadm.py](https://github.com/ceph/ceph/blob/v20.2.1/src/cephadm/cephadm.py#L976-L983),
-[firewalld.py](https://github.com/ceph/ceph/blob/v20.2.1/src/cephadm/cephadmlib/firewalld.py#L84-L119),
-[serve.py](https://github.com/ceph/ceph/blob/v20.2.1/src/pybind/mgr/cephadm/serve.py#L1371-L1383)),
-and it never opens VRRP for keepalived, which has no firewalld service form
-([ingress.py](https://github.com/ceph/ceph/blob/v20.2.1/src/cephadm/cephadmlib/daemons/ingress.py#L150-L160)).
+reloads, and it never opens VRRP for keepalived, which has no firewalld service
+form ([source anchors](../.agents/knowledge/ceph-dashboard-port-publication.md#native-firewall-opening)).
 Whether a managed guest runs firewalld depends on its install profile.
 Bootwright owns no host firewall: an ingress refuses `ingress-firewall` before
 effects when an ingress host's active firewalld would drop VRRP or the client
@@ -473,16 +419,13 @@ certificate. Local dashboard roles and users stay parked
 
 Monitoring and the management gateway ([B479](milestones/m2.md#b479)) follow the
 [native records](ceph-native-api.md#observability-and-management-gateway-records).
-Three upstream v20.2.1 mechanics shape them.
-[`PrometheusService.config`](https://github.com/ceph/ceph/blob/v20.2.1/src/pybind/mgr/cephadm/services/monitoring.py#L480-L489)
-enables the prometheus manager module and the monitor respawns the active
-manager, so the module is the declared service's derived effect. The
-[gateway](https://github.com/ceph/ceph/blob/v20.2.1/src/pybind/mgr/cephadm/services/mgmt_gateway.py#L54-L78)
-keeps the first certificate pair it stores, and a generated certificate's IP
-SAN is the bare `virtual_ip`, so one gateway owns one pair, and a bound pair
-travels in the first apply and is proved from the served leaf.
-[certmgr](https://github.com/ceph/ceph/blob/v20.2.1/doc/cephadm/certmgr.rst)
-does not renew user-provided certificates. The `cephadm.workarounds` list stays
+Three upstream mechanics shape them. Enabling the prometheus service enables
+the prometheus manager module and the monitor respawns the active manager, so
+the module is the declared service's derived effect. The gateway keeps the
+first certificate pair it stores, and a generated certificate's IP SAN is the
+bare `virtual_ip`, so one gateway owns one pair, and a bound pair travels in
+the first apply and is proved from the served leaf. certmgr does not renew
+user-provided certificates. The `cephadm.workarounds` list stays
 retired: the management gateway needed no provider-defect specialization.
 Acceptance rows record the tested coordinates as evidence, never as an
 allowlist. See [the lessons](../.agents/knowledge/ibm-ceph-monitoring.md).

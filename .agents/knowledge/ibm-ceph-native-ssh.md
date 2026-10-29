@@ -149,3 +149,7 @@ and fixed `errorClass`/`socketError` categories; keep native exception text and
 endpoint details private. Source inspection and synthetic rebinding establish
 this probe lifecycle requirement. Actual-image and host acceptance still
 require the complete behavioral route proof for the operator's selection.
+
+The upstream Tentacle v20.2.1 connection
+([ssh.py](https://github.com/ceph/ceph/blob/v20.2.1/src/pybind/mgr/cephadm/ssh.py#L161))
+carries the same disabled verification as the downstream archive.

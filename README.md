@@ -1,14 +1,7 @@
 # Bootwright
 
-Bootwright is a declarative orchestrator for provisioning and bootstrapping a
-cloud platform from scratch until it is ready for GitOps tools to take over
-ongoing platform management. Users describe one complete environment:
-substrate, machines and their operating systems, infrastructure services,
-container and storage clusters and bootstrap integrations. Bootwright
-validates and freezes that intent, orders dependencies, drives qualified native
-tools through controlled adapters and verifies each selected outcome. Lifecycle
-initiation, confirmation and irreversible authorization stay explicit operator
-actions.
+Bootwright is a declarative orchestrator that provisions and bootstraps a cloud
+platform from scratch until GitOps tools can take over.
 
 **Scope:** [project](specs/project.md) owns the product scope and non-goals.
 

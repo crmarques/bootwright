@@ -33,8 +33,8 @@ on those pages gates its milestone ([scope rules](milestones.md#scope-rules)):
 - OpenShift container clusters ([M3](milestones/m3.md));
 - IBM Ceph storage ([M2](milestones/m2.md)); and
 - cluster-bound integrations through built-in add-ons, first MetalLB, IBM
-  Fusion Data Foundation, Red Hat Advanced Cluster Management, Argo CD and
-  GitLab ([M4](milestones/m4.md)), then custom add-ons ([B90](milestones/m4.md#b90)).
+  Fusion Data Foundation, Red Hat Advanced Cluster Management, Red Hat
+  OpenShift GitOps (Argo CD) and GitLab ([M4](milestones/m4.md)), then custom add-ons ([B90](milestones/m4.md#b90)).
 
 The **extension envelope** is what the design must not preclude and no
 milestone gates on: OKD clusters ([B748](milestones/backlog.md#b748)), the
@@ -78,8 +78,9 @@ resources, without co-managing Bootwright-owned resources. Downstream day-2
 resources are those that no owned-object evidence
 ([add-ons](add-ons.md#gitops-handoff-evidence)) lists. Handoff does not
 transfer, adopt or reclaim ownership, so an owned object stays as applied and
-a change to it is a destroy followed by a fresh apply; upgrades and approvals
-of owned operator subscriptions stay outside Bootwright's scope
+a change to it is a destroy followed by a fresh apply
+([D153](milestones/backlog.md#d153)); upgrades and approvals of owned operator
+subscriptions stay outside Bootwright's scope
 ([B106](milestones/backlog.md#b106)). An optional
 [GitOps bootstrap object](add-ons.md#the-gitops-bootstrap-object) hands one
 cluster to GitOps earlier, once every other block of the `add-ons` stage that

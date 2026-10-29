@@ -6722,6 +6722,71 @@ An operator-run M2b journey demonstrates authored artifact acquisition and
 execution plus an invalid selection's native error; it does not certify every
 version or combination. Update the owning specs and examples with delivery.
 
+#### Moved from M2 B79
+
+The candidate-delivery narrative the M2 page held for [B79](m2.md#b79), moved verbatim when the item was reduced to its outcome, exit evidence and remaining scope.
+
+**Candidate delivery:** versioned core requests bind the original completed
+RHEL DVD publication and lend only its public TLS certificate to the package
+consumer. Exact signed IBM roots, the complete dependency closure and RPM
+inventory are frozen before installation, with replay against the retained
+decision. Downloads, metadata expansion and the remote worker have separate
+bounds; interrupted startup and execution terminate the owned process group.
+Host-independent boundary tests and an independent static review pass.
+[X70](delivered.md#x70--ceph-through-the-ordinary-staged-apply) delivered D143's
+ordinary image resolution and host preparation as B512 and B518. B476's
+accepted run under [X94](delivered.md#x94--post-destroy-cluster-inspection)
+subsequently exercised installation, the entitled image and `verifiedTunnel`,
+with outage/recovery on the minimal virtual profile. That acceptance
+supersedes the unrun status of those paths. The M2b contract, negative and
+fault qualification below now passes in-tree; broader full-M2 qualification
+remains open. Transport `native` remains refused.
+
+Guest image pulls now use an invocation-local mutual-TLS broker: the native
+engine receives no entitlement or registry bearer credential. Synthetic tests
+cover same-authority authentication, rejected foreign realms and manifest
+redirects, one HTTPS blob-delivery hop without registry credentials under the
+[storage contract](../ceph.md#bootstrap-identity-and-continuation),
+uncredentialed proxy bypass and bounded teardown. B615's accepted operator
+journey supplies the required native acquisition evidence under
+[X99](delivered.md#x99--operator-selected-ceph-artifacts-and-m2b-completion).
+
+Candidate tunnel manifests now bind the validated public identity and hash only
+nonsecret configuration/code. Root-only retained originals, descriptor bindings
+for materialized copies and direct private equality replace private key and MGR
+keyring hashes. Read-only mount proofs refuse alternate aliases to the retained
+area; the provider parser independently proves private/public correspondence.
+The candidate SELinux transition requires an exact code-owned qualified label,
+which D143 retires with its registry
+([X70](delivered.md#x70--ceph-through-the-ordinary-staged-apply)). Lost MGR
+redeployment responses permit exact-result observation without repeating
+deployment. B476 adds successful runtime and outage/recovery evidence for its
+accepted profile; these boundary tests and that run do not complete the
+remaining label, mount and fault qualification. Native registry-file custody
+journals only frozen scope and descriptor metadata. Candidate client custody
+retains the generated original before native `auth add`, journals frozen scope
+and descriptor metadata, and compares native key/caps privately; read-only recapture also refuses
+contradictory authorization journals. Legacy key-hash bindings refuse. B476
+accepted generated-client creation and retirement with all owned virtual hosts;
+custody interruption and native cleanup while hosts survive remain unqualified.
+Candidate pre-enrollment recovery now classifies original prepared, seed,
+configured and mounted states, retains original bootstrap outputs and fences
+each attempted native effect. Exact observed results settle lost replies without repeated
+effects; read-only classification performs no Bootwright custody or relabel
+writes. Direct bounded filesystem/systemd/Podman observation replaces provider
+`cephadm ls`, which has confirmed native logging/logrotate side effects.
+Protected named-ancestry replacement tests and script-disabled RPM verification
+cover the candidate; actual guest/runtime probe purity and the complete touch
+closure remain gates. The shipped core role's task and argument admission now
+accepts the current frozen request version; a Go-to-role boundary regression
+covers every operation so stale version assertions cannot block a valid request
+before native gates. Per-host and per-service intent/completion records now
+settle matching lost replies; selected native ServiceSpec defaults are frozen
+for exact readback. OSD attempts retain exact virtual disk and owned partial
+LVM/OSD UUID membership. Pool setters retain numeric-pool identity and RBD init
+retries only that same owned pool. Injected failures exercise these M2b paths;
+physical and advanced OSD continuation remain outside this minimal scope.
+
 ### X101 — Version specializations and IBM Storage Ceph 9.9.0.x readiness
 
 **Owner:** Storage, with Container clusters. An enabling slice of
@@ -7360,7 +7425,8 @@ changed.
 **Owner:** Storage, with CLI. A product slice of [M2c](m2.md#m2c) whose other
 items are still open: this record covers B627, the one item of X57 that
 completed, and X57's [B479](m2.md#b479), [B489](m2.md#b489) and
-[B686](m2.md#b686) stay on the M2 page with what each has delivered in-tree.
+[B686](m2.md#b686) stay on the M2 page, with B479's in-tree narrative moved
+to the end of this record.
 B627 was a follow-up of [X101](#x101--version-specializations-and-ibm-storage-ceph-990x-readiness):
 the registry, the seams and the refusal coordinate carried the applied
 specialization ids, but the Ceph block evidence did not, so an operator could
@@ -7420,6 +7486,128 @@ later move to `ceph-core-v26` is B479's. There is no older-version reader, so an
 incomplete operation or context planned by an earlier build is finished or
 destroyed with that build. The collection change moves the Ceph automation
 digest, which alone needs a rebuild and an apply to continue.
+
+#### Moved from M2 B479
+
+The closure and in-tree delivery narrative the M2 page held for [B479](m2.md#b479), moved verbatim when the item was reduced to its outcome, exit evidence and remaining gates.
+
+**Closed (D159):** closed native records for prometheus, alertmanager, grafana,
+node-exporter, ceph-exporter, snmp-gateway, mgmt-gateway and its keepalive-only
+ingress arm; secrets only through binding rows; the prometheus module and crash
+are derived; the workarounds are retired; realization as monitoring and gateway
+unit types; tracing, node-proxy, agent and container refuse; log collection
+admits loki with alloy or promtail as native service types (D161, OD6 (d1));
+oauth2-proxy SSO as D161 records it, realized by the gated lane X57-L10-sso. **Open:** none; D164
+answered OD28 (a): every monitoring, gateway and oauth2-proxy image is authored
+under `spec.images`; the session's reading of one release's image is
+[research](../../.agents/knowledge/ibm-ceph-auxiliary-images.md), not a
+default. D160 answered OD2 (a) and parked the direct-dashboard certificate and
+local roles.
+
+Narrowed on 2026-10-12 (D143 clause 7, pending the owner's review): dashboard
+enablement, the initial administrator credential and the self-signed
+certificate move to
+[X70](delivered.md#x70--ceph-through-the-ordinary-staged-apply). Certificates
+with SANs or a CA, local roles, OAuth2/SSO, the monitoring stack, the
+management gateway and ingress remain.
+
+The `cephadm.workarounds` enum is retired (X57): the field is gone and an
+authored list refuses with its reason, and the multidc example plans without
+it. A future dependency on a provider defect becomes a registered
+specialization (D162, X101), never a list in desired state.
+
+**Delivered in-tree (X57):** the closed native records and their admission for
+prometheus, alertmanager, grafana, node-exporter, ceph-exporter, snmp-gateway
+and mgmt-gateway, with the secret material only through binding rows and the
+refusal of a network on a ceph-exporter or snmp-gateway document; the
+monitoring unit and the management gateway unit in the native worker (the
+image-setting check, the foreign-service refusal before the credential, and the
+gateway's certificate SANs proved against its virtual IPs); the gateway's
+keepalive-only ingress arm; the derived prometheus module; and the gateway and
+NFS endpoints reported in `cluster info`. Its evidence is offline: admission,
+planning, worker and cluster-info tests, the collection's unit tests and the
+refusal tables. Each monitoring and gateway service plans once its image is
+authored under `spec.images` (D164 OD28 (a)) and refuses at planning,
+naming the field, without it. oauth2-proxy SSO (OD7) is delivered below; this
+item awaits operator acceptance for its live rows; [B689](m2.md#b689) is delivered
+in-tree and retains its own log-query gate. The direct
+dashboard certificate, local roles and users, the manager exporter without a
+Prometheus service and cephadm-signed certificate sources are parked as
+[B682](backlog.md#b682) to [B685](backlog.md#b685). Crash collection is a
+derived service unit, which [B686](m2.md#b686) owns. **Remaining (owner's live rows,
+under [B484](m2.md#b484)):** scraped metrics, a fired and routed alert, an
+authenticated management gateway and dashboard, a rejected unauthorized access
+and gateway failure, each with an owner-accepted ledger row.
+
+**Delivered in-tree (X57, lane X57-L10-sso):** oauth2-proxy single sign-on in
+the management gateway unit (OD7, D161). Planning no longer refuses an
+`oauth2-proxy` service: it is a native service type whose closed record holds
+`allowlist_domains`, `client_id`, `https_address`, `oidc_issuer_url`,
+`provider_display_name` and `redirect_url` (an authored `scope` or
+`email_domains` refuses), and it joins the one
+`ceph-service-<cluster>-mgmt-gateway` unit as its last document. Its client and
+cookie secrets, TLS pair and identity provider CA bundle are bound leaves
+lent to the apply phase only; the CA bundle (a `caBundle` binding, required for
+the entry and refused without it) reaches the container only through the one
+admitted `custom_configs` entry at `/etc/pki/tls/certs/oauth2-proxy-idp-ca.pem`
+(another entry, another path or inline content refuses), and
+`ssl_insecure_skip_verify` stays always refused. The worker's placeholder for
+`cookie_secret` is 32 bytes so that the frozen image's SDK accepts the
+normalized spec, and a bound `cookie_secret` that cephadm's length rule refuses
+(16, 24 or 32 bytes) refuses `material` before any effect. After the apply,
+each proxy host proves read-only from the deployed daemon's rendered
+configuration (arguments, environment and the mounted `--config` file, read
+without following links) that no identity provider certificate verification is
+skipped and, with a bundle, that the CA mount holds exactly it; a skip or a
+line that cannot be proved refuses the new named refusal `sso-unverified`, the
+lane's one post-effect refusal, and the dashboard single sign-on is never
+enabled through an unproved proxy. Then the bootstrap host runs
+`dashboard sso enable oauth2` once `ceph orch ps` lists a running proxy and
+only when `mgr/dashboard/sso_oauth2` is not already true, and reads the option
+back; readiness reads that option and evidence gains `sso` (`""` or
+`"oauth2"`). Destroy adds no SSO disable (B491 owns per-resource removal,
+OD2). The Ceph core request moved from `ceph-core-v26` to `ceph-core-v27` and
+the evidence from `ceph-core-evidence-v8` to `ceph-core-evidence-v9` (both
+classified `formatMirrored`; the content-digest, evidence-ready and
+`storage-ceph-core-v3` contract goldens moved and `request-cluster-sso` is
+new), so an incomplete operation or context planned or recorded by an earlier
+build is finished or destroyed with that build; no older reader is added.
+Evidence is offline: admission, planning, worker and evidence tests with
+mutation checks, the request goldens, the collection's unit, sanity,
+integration and lint suites and a review whose one blocking
+finding (the placeholder failing cephadm's spec validation) is fixed in the
+lane. **Remaining (owner's live rows, under [B484](m2.md#b484)):** a browser sign-in
+through the management gateway to the dashboard with a public-CA and a
+private-CA identity provider, a rejected unauthorized sign-in, an
+`sso-unverified` refusal against a deployed proxy, and the readiness turn
+after the proxy is removed, each with an owner-accepted ledger row.
+**Acceptance baseline:** the commit that integrates this lane's merge of X57
+on main.
+
+**Delivered in-tree (X57, lanes X57-L3b-log-collection and int-ready-v4a):** log
+collection (OD6 (d1), D161). `loki`, `alloy` and `promtail` are native
+singleton service types (`service_id` forbidden) with a closed record that holds
+only a port; `alloy` takes the same record because its build's signature was
+not read, so a build whose `alloy` spec differs refuses natively. Two graph
+rules apply: an `alloy` or `promtail` agent without a declared `loki` refuses at
+its `service_type`, and `alloy` beside `promtail` refuses at the `promtail`
+entry; `loki` alone is admitted. The listener registry reserves the fixed
+listeners cephadm always binds, `loki` on 3100 (HTTP) and 8080 (gRPC) and
+`promtail` on 9080, and an authored `alloy` port only, so a collision refuses at
+admission instead of failing to bind at deploy time. Planning adds the three
+types to the one monitoring unit and to the core request's delegated member, each
+as a port-only document; the image of each is authored under `spec.images`
+and frozen by digest (D164), and an unauthored one refuses at planning naming the
+field. Whether the selected build's cephadm knows a type is its own answer: an
+unknown type surfaces as `nativeError` before any write, with no seam, variant
+call or version check. Evidence is offline: admission, planning and worker
+tests with mutation checks, the request goldens and the collection's unit
+tests. The Ceph core request moved from `ceph-core-v23` on main to
+`ceph-core-v26` (with B686's and B489's moves below), so an incomplete
+operation or context planned by an earlier build is finished or destroyed with
+that build. [B689](m2.md#b689) delivers the derived file-logging configuration
+in-tree. The "log query when selected" row remains the owner's live gate;
+no log delivery is claimed from unit tests alone.
 
 ### X111 — M3b controller and release recovery
 
@@ -7898,6 +8086,9 @@ removed);
 
 **Constraints left behind:** none. No frozen request version moved.
 
+**Audit of 2026-10-20:** an audit of M3b's and M3c's in-tree work confirmed 31
+findings, fixed on `m3` before any operator gate ran.
+
 #### B712
 
 Each cluster installation holds `container-cluster-install`; media builds
@@ -8042,6 +8233,67 @@ exclude Secret values.
 and
 `ansible/collections/ansible_collections/bootwright/core/tests/unit/test_cluster_objects_programs.py`.
 No live Kubernetes API acceptance is claimed.
+
+#### Moved from M4 B83
+
+The implementation pointers the M4 page held for [B83](m4.md#b83), moved verbatim when the item was reduced to its outcome and exit evidence.
+
+**Implementation pointers:**
+- A new lifecycle-capability package under `internal/addons` (planned name:
+  the instance package) in the six-file shape of
+  `internal/containercluster/agentinstall` (capability, contracts, requests,
+  evidence, catalog and selection files; tool location, controller placement,
+  produced input, deadline from frozen budgets, evidence validation,
+  `UnresolvedReporter`).
+- The catalog file: `Implementation = "addon-instance-v1"`,
+  `requestVersion = "addon-instance-request-v1"`,
+  `evidenceVersion = "addon-instance-evidence-v1"`, `ContentDigest()` over the
+  contract constants, `BlockID(package, cluster)`, `Object(cluster, package)`.
+- Request (canonical JSON, frozen with `reconciliation.Freeze`, read with
+  `reconciliation.ThawVersion`): `version`, `cluster`, `package`, `binding`,
+  `placement` (controller arm), `tool` (`openshift-clients` at the cluster's
+  exact release), `budgetSeconds`, `program` ([B750](delivered.md#b750)'s section),
+  `secrets` (Secret declaration names, from [B753](m4.md#b753)), `producedInputs`
+  (a list of producer kind, object and output, the installation block's
+  `kubeconfig` first; a package's produced Secret placements add theirs,
+  [B760](m4.md#b760)); the kubeconfig's bytes are never a request member.
+- Evidence (closed, at most 64 KiB, `reconciliation.DecodeEvidence`):
+  `version`, `request` (the block's request digest), `postcondition`, the
+  program evidence fragment of B750 (receipts, OLM facts, checks), and
+  `retired` on removal.
+- Observation readings: completed (every owned object present, own and equal,
+  every dependent Subscription at its expected CSV, `installedCSV` equal to
+  `startingCSV` and `Succeeded`, every check satisfied in one read, gate
+  objects read only as checks); no effect (every program object positively
+  absent); partial (some own objects present, none foreign, the rest absent,
+  not ready or not equal to the declared body; the observation names an own
+  object that differs, never its differing field, as
+  [observation and continuation](../add-ons.md#observation-and-continuation)
+  states); unknown (a foreign object, a failed read, another installed
+  CSV), explained by `UnresolvedReporter` naming the object or CSV with the
+  remedy "destroy and apply again".
+- `cmd/bootwright/wiring_reconciliation.go`: one `boundCapability` for
+  `ClusterAddonBinding`/`addon-instance-v1`; `operationPlaybook()` entries for
+  `addon-instance-v1/apply` and `/observe` only; composition binds the
+  registry, the `ClusterFacts` derivation and B64's produced input.
+- `internal/reconciliation/lifecycle/support.go`: `ClusterAddon` and
+  `ClusterAddonProfile` leave `effectKinds()`.
+- `internal/controller/tools.go`: tool selection reads the instance function
+  (packages' `provides`, the `kubevirt` token).
+- A thin role (planned name: the add-on instance role) whose `apply` and
+  `observe` entry points assert the request version and include B751's shared
+  role entry points; playbooks under a new add-ons playbook directory; argument
+  specs admitting exactly the request.
+- `cmd/bootwright/contract_versions_test.go` (`contractVersions()` entry,
+  golden, `automationFormats()` classifications),
+  `cmd/bootwright/capability_contract_test.go` (row), the playbook-binding
+  exemption for retirement-only removal if the binding test requires a destroy
+  playbook, `test/architecture/boundaries_test.go` (package role, comment
+  ceiling, dependencies).
+- The multidc example's README refusal list changes reason for its bindings
+  (authored add-ons now refuse through the add-on refusal table); its counts
+  do not move. The lab-sno-nmstate example is [B735](m4.md#b735)'s.
+- Contract versions that move: new identities only; no existing digest.
 
 ### X140 — Built-in package listing
 

@@ -22,7 +22,7 @@ const (
 // remedy is a fresh install, never a conversion.
 const (
 	freshInstallMessage     = "/var/lib/bootwright holds a store an earlier Bootwright build wrote (registry version 5), which this build does not read or convert"
-	freshInstallRemediation = "with the build that wrote it, destroy each environment (bootwright destroy --context <name>) and delete each context " +
+	freshInstallRemediation = "with a build that reads it, destroy each environment (bootwright destroy --context <name>) and delete each context " +
 		"(bootwright context delete --name <name> --purge); then, as root, remove /var/lib/bootwright and /var/lib/bootwright-staging and run bootwright setup " +
 		"with this build. Never remove /var/lib/bootwright while services it manages run."
 	cutOverRegistryVersion = 5

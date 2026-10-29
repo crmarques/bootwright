@@ -768,7 +768,9 @@ New logic goes to the first row whose placement question it answers yes.
 
 A Python site is where its code runs: the controller runtime for action
 plugins, a managed host for modules and shipped workers, and a native image
-for its scripts.
+for its scripts. A module runs under the managed-host Python floor, 3.9, which
+`test_remote_python_floor.py` holds; a shipped worker runs as
+`/usr/bin/python3` and imports only the standard library.
 [Python guidance](../.agents/skills/code-implementation/references/python.md)
 owns the idioms of each. Controller and managed-host code encodes canonical JSON
 only in `module_utils/canonical_json.py`, starts processes only in
@@ -1186,6 +1188,15 @@ mode. `TestNoProductionCodeBranchesOnAnArmOrImplementationOutsideItsOwner`
 rejects any other arm constant, arm value or arm field path and any other
 package's implementation identity constant or value, except where its exact
 allowlist, which only shrinks, names the item that removes the use.
+
+Each domain's selection section follows one template: Selector, the authored
+values its implementations claim objects by; Implementations, their identity
+and block families; Supported shape; Refusal table; and Test.
+[Substrates](substrates.md#selection-and-refusal),
+[OpenShift clusters](openshift-clusters.md#selection-and-refusal),
+[Ceph](ceph.md#selection-and-refusal) and
+[infrastructure services](infrastructure-services.md#selection-and-refusal)
+are written to it.
 
 Each domain contract names the facts and authored arms its implementations
 select on. When an operation is
