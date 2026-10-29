@@ -8268,7 +8268,7 @@ matrix acceptance and M2d/M2e's physical/stretch gates remain open.
 **Item:** B592 (opened on 2026-10-14 by the X91 audit). **Kind:** enabling.
 **Owners:** Architecture and Agent guidance. Delivered on 2026-10-26 at the
 owner's request to apply the
-[2026-10-26 spec audit](../../audits/spec/001/report-final.md) to the specs and
+[2026-10-26 spec audit](../../audits/specs/001/report-final.md) to the specs and
 skills and to park the rest of its roadmap.
 
 The specs, glossary and skills now state what the code does where they had
@@ -9512,9 +9512,9 @@ lab-kubevirt input and runbook are prepared and validated, with no live claim.
 prepare an implementation plan and preserve the review).
 **Kind:** enabling. **Owners:** Architecture and Agent guidance.
 
-The [dated review](../../audits/spec/001/follow-up/report.md), its
+The [dated review](../../audits/specs/001/follow-up/001/report-codex.md), its
 232-finding ledger and the
-[implementation plan](../../audits/spec/001/follow-up/implementation-plan.md)
+[implementation plan](../../audits/specs/001/follow-up/001/report-codex.md)
 are preserved together. The plan maps all 18 incomplete catalog findings and
 the eight carried safety or validation items to proposed work packages,
 dependencies, required decisions and exit evidence. Existing milestone items
@@ -9532,9 +9532,9 @@ No product behavior or contract changes.
 evaluate the quality of the addressed audit work).
 **Kind:** enabling. **Owners:** Architecture and Agent guidance.
 
-The [follow-up report](../../audits/spec/001/follow-up/report.md) now
+The [follow-up report](../../audits/specs/001/follow-up/001/report-codex.md) now
 summarizes remediation quality and links a
-[detailed assessment](../../audits/spec/001/follow-up/report.md).
+[detailed assessment](../../audits/specs/001/follow-up/001/report-codex.md).
 It distinguishes implementation and failure-path regression evidence from
 accepted decisions, interim documentation and unrun operational qualification.
 All 214 addressed or decision entries received catalog-level consideration;
@@ -9553,7 +9553,7 @@ adopt the reorganized audit directory and improve the follow-up format).
 
 The [audit convention](../../audits/README.md) adopts one numbered directory
 per topic and one undated follow-up directory. The
-[specification audit archive](../../audits/spec/001/README.md) retains its
+[specification audit archive](../../audits/specs/001/README.md) retains its
 source reports and now has one human report for disposition, quality,
 remaining work and verification; the plan, structured ledger and evidence
 remain separate. Local audit guidance makes the convention discoverable.
@@ -9564,3 +9564,21 @@ packages. Historical source evidence is checked at its audited baseline;
 archival path normalization changes no finding. The delivering commit records
 link and preservation checks, independent format review and integration gates.
 No product behavior, contract or milestone implementation state changes.
+
+### X211 — Single-file numbered audit follow-up
+
+**Item:** B955 (opened and delivered on 2026-10-29 for the owner's request to
+unify all follow-up content in one named report).
+**Kind:** enabling. **Owners:** Architecture and Agent guidance.
+
+The [Codex follow-up](../../audits/specs/001/follow-up/001/report-codex.md)
+contains the assessment, implementation plan, complete findings, embedded
+structured ledger and verbatim retained check output. The specification audit
+uses the requested `specs` topic directory; navigation and the
+[audit convention](../../audits/README.md) now use numbered follow-up rounds
+and one file per reviewer. The separate follow-up artifacts are removed.
+
+All 232 finding dispositions, all 18 work packages and the original assessment
+baselines are preserved. This is an editorial consolidation, not a new product
+assessment. The delivering commit records preservation and link checks,
+independent review and integration gate results.

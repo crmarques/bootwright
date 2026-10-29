@@ -15,7 +15,4 @@ when checking historical evidence.
 
 ## Follow-up
 
-- [Assessment: completion, quality and finding evidence](follow-up/report.md)
-- [Implementation plan](follow-up/implementation-plan.md)
-- [Structured finding ledger](follow-up/findings.json)
-- [Retained documentation-check output](follow-up/evidence/docs-check.txt)
+- [Follow-up 001 by Codex: assessment, implementation plan, findings and evidence](follow-up/001/report-codex.md)

@@ -1,9 +1,8 @@
 # Audits
 
-Keep each audit and its follow-up together under `audits/<topic>/<NNN>/`.
-Number audits independently within each topic, starting at `001`; the next
-specification audit after `spec/001` is `spec/002`. An audit number identifies
-one source audit, not each later reassessment of its findings.
+Keep each audit and its follow-ups under `audits/<topic>/<NNN>/`. Specification
+audits use the topic `specs`. Number audits independently within each topic,
+starting at `001`; the next specification audit is `specs/002`.
 
 ## Directory format
 
@@ -13,78 +12,59 @@ audits/<topic>/<NNN>/
   report-final.md
   report-<reviewer>.md
   follow-up/
-    report.md
-    implementation-plan.md
-    findings.json
-    evidence/
-      docs-check.txt
+    001/
+      report-<reviewer>.md
 ```
 
-Use one undated `follow-up/` directory. Keep assessment dates and reviewed
-commits in the documents, and record subsequent revisions in Git. Do not
-create a new dated folder for each reassessment.
+Use numbered follow-up rounds beneath one undated `follow-up/` directory.
+Number rounds independently within each audit, starting at `001`; a subsequent
+reassessment uses the next number. A reviewer's follow-up is one self-contained
+Markdown file, such as `audits/specs/001/follow-up/001/report-codex.md`. Its
+assessment, plan, finding ledger and retained evidence belong in that file,
+with no companion plan, JSON or log files.
 
-| File | Owns |
-| --- | --- |
-| Audit `README.md` | Navigation to source reports and follow-up artifacts. Link to conclusions instead of repeating status counts or quality judgments. |
-| `report-final.md` | The source audit's consolidated findings and original scope. |
-| `report-<reviewer>.md` | Each retained contributor report, named by reviewer. Keep the original observations distinguishable from the consolidated report. |
-| `follow-up/report.md` | The human assessment of finding disposition, remediation quality, remaining risks and verification limits, followed by the full finding appendix. |
-| `follow-up/findings.json` | The structured finding ledger, including stable finding IDs, dispositions, evidence and assessment metadata. Keep its data consistent with the report. |
-| `follow-up/implementation-plan.md` | Proposed work, dependencies, decisions and exit evidence for remaining findings. Link to milestone items for current delivery state. |
-| `follow-up/evidence/` | Retained check output and other supporting artifacts cited by the assessment. |
-
-Create only the artifacts that exist for the audit's current stage; the
-layout does not require empty reviewer reports or evidence files.
+The audit `README.md` provides navigation. Source reports retain the original
+audit findings, scope and contributor observations. Follow-up reports assess
+those findings at explicitly identified dates and commits. Create only the
+reports that exist; the layout requires no empty placeholders.
 
 ## Follow-up report format
 
-Open with the audit reference, assessment date, assessed commit and scope.
-When completion and quality were assessed at different commits, identify
-both. Distinguish an editorial update from a fresh reassessment of code.
+Open with the source audit, follow-up number, reviewer, assessment date,
+assessed commits and scope. Identify different completion and quality
+baselines separately. Distinguish editorial consolidation from a fresh code
+assessment. Provide section links in this reading order:
 
-Use this reading order:
+1. **Executive summary:** disposition counts, consequential remaining work
+   and a quality judgment bounded by the evidence inspected.
+2. **Remaining work:** open/partial findings and carried limitations.
+3. **Quality assessment:** implementation, tests, maintainability, decisions,
+   documentation corrections and operational limits; state sampling depth.
+4. **Implementation plan:** work packages, dependencies, decisions, milestone
+   carriers and exit evidence.
+5. **Verification and limits:** commands, results and relevant execution
+   conditions. Distinguish failures, skips and unrun checks from passes.
+6. **Complete findings:** one disposition and qualification per source ID.
+7. **Structured ledger and retained output:** embed JSON and original check
+   output in labeled fenced appendices; expandable sections keep them readable.
 
-1. **Executive summary:** completion counts, the most consequential remaining
-   work and an overall quality judgment bounded by the evidence inspected.
-2. **Remaining work:** open and partial findings, carried limitations and
-   links to the implementation plan and milestone items.
-3. **Quality of addressed work:** implementation and test evidence,
-   maintainability, accepted decisions, documentation-only corrections and
-   operational qualification limits. State the depth of sampling.
-4. **Verification and limits:** exact commands, results, assessed baselines
-   and links to retained evidence. Keep failures, skips and unrun checks
-   distinguishable from passes.
-5. **Full findings:** one disposition for every source finding ID, with its
-   evidence and any remaining qualification. Reconcile counts and IDs with
-   the structured ledger.
+Keep the human findings and embedded ledger consistent. Identify the command,
+date and assessed commit for each retained output. Historical output remains
+verbatim and is distinguished from checks of later document edits.
 
-Define disposition terms in the report. Closure at an accepted documentation
-or decision scope does not imply implemented behavior or live acceptance.
-The source audit's findings remain identifiable even when a later decision
-changes the accepted remedy.
+## Revisions and ownership
 
-## Revisions and evidence
+Correct a report in a new commit; Git preserves its earlier revisions. A new
+assessment round gets the next follow-up number and records what was rechecked.
+Keep older baselines explicit for claims not reassessed. A move or format edit
+changes no finding disposition and supplies no fresh product evidence.
 
-Update the same follow-up files in a new commit when a reassessment changes
-their conclusions. Record what was reviewed, its commit and its date; keep
-older assessed baselines explicit for any claims not rechecked. Git preserves
-the preceding versions. A move, rename or report-format edit changes no
-finding disposition and supplies no fresh evidence about product behavior.
-
-Retain source reports as the original audit record. Fix relocation links
-without silently rewriting their historical observations as current findings.
-
-For each retained check output, the report records the command, assessed
-commit, outcome and relevant execution conditions. Give new evidence files
-descriptive names such as `docs-check-<short-commit>.txt`; retain existing
-names when their baseline is already identified. Different baselines should
-not share an ambiguous output file.
-
-Milestone pages own current delivery status. Audit assessments are judgments
-at their stated baselines, and an implementation plan does not activate work
-or authorize effects.
+Retain source reports as historical records. Repair relocation links without
+rewriting their observations as current findings. Closure at an accepted
+documentation or decision scope does not imply implementation or live acceptance.
+Milestones own current delivery status; a plan authorizes no implementation
+or effects.
 
 ## Audit index
 
-- [Specification audit 001](spec/001/README.md)
+- [Specification audit 001](specs/001/README.md)
