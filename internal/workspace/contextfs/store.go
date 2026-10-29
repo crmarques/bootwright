@@ -6,6 +6,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"io"
+	"time"
 
 	"github.com/crmarques/bootwright/internal/workspace/contexts"
 )
@@ -43,6 +44,7 @@ type Store struct {
 	// type: a store that has it judges its explicit root as the production
 	// root on that filesystem.
 	rootFilesystem func() int64
+	rootWait       time.Duration
 }
 
 func New(options Options) *Store {

@@ -29,7 +29,7 @@ func (l *leasedLifecycle) shared(ctx context.Context, call func(context.Context)
 	if err := t.base.available(ctx); err != nil {
 		return err
 	}
-	if err := lock(t.base.root); err != nil {
+	if err := awaitRoot(ctx, t.base.store, t.base.root, syscall.LOCK_EX); err != nil {
 		return err
 	}
 	defer syscall.Flock(int(t.base.root.file.Fd()), syscall.LOCK_UN)
@@ -137,7 +137,7 @@ func (l *leasedLifecycle) inspect(ctx context.Context, call func(context.Context
 	}
 	l.mutex.Lock()
 	defer l.mutex.Unlock()
-	if err := lockShared(l.base.root); err != nil {
+	if err := awaitRoot(ctx, l.base.store, l.base.root, syscall.LOCK_SH); err != nil {
 		return err
 	}
 	defer syscall.Flock(int(l.base.root.file.Fd()), syscall.LOCK_UN)

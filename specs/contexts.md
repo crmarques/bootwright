@@ -360,7 +360,7 @@ with empty revision and Environment-directory strings; no input is invented.
 Reservation, manifest and keyring formats are versioned independently. Mutation
 evidence follows the Reconciliation-owned closed record contract.
 
-Two advisory locks guard the store, and neither is ever waited for:
+Two advisory locks guard the store:
 
 - the host-wide **root lock** on the verified, never-replaced root inode,
   shared for a read and exclusive for any command that may publish; and
@@ -392,7 +392,7 @@ standard input holds none while it reads, then takes the exclusive root lock
 and the lease to write and re-proves its
 [replacement decision](secrets.md#acquisition-and-commands) there. A command
 that cannot take the lock or lease refuses with `lifecycle.lease` and a retry
-remedy; no lock or lease is ever waited for or taken over. A lease is held
+remedy; no lock or lease is ever taken over. A lease is held
 only once its stage collection, layout verification and reservation check
 succeed; a lease that refuses is released at once. `setup`
 [selects no context](controller.md#the-setup-flow), so it
@@ -430,23 +430,22 @@ exclusive root lock, then retains the context's exclusive lease throughout its
 effects. Readers and other contexts may proceed. Context identity, inputs and
 mutation evidence remain scoped to that lease; short root transactions refresh
 the registry and shared controller state before reservation, binding, secret
-or tool publication. Those short root transactions wait for no lock either:
-one that cannot take the root lock because another command holds it refuses
+or tool publication. Only those transactions and its bundle reads wait for the
+root lock, each up to the bound below and ending on cancellation; one
+operation's waits queue, so its Nth concurrent wait may last N bounds. No root
+holder waits for a lock, so none deadlocks. Past the bound they refuse
 `lifecycle.lease`. The block it served then records `failed` when none of its
 effect ran, and `unknown` once some may have, such as the custody publication
 of what a proved effect produced, which keeps that material as
 [produced material custody](state-reconciliation.md#produced-material-custody)
 and D124 keep it: the next invocation of either verb observes the block again
-and captures what that proves before any inverse runs. A command that prompts
-holds no root lock while it waits for its answer, so no prompt refuses them.
+and captures what that proves before any inverse runs.
 Another context's bindings and reservations are preserved;
 changes to this operation's own binding, reservations, host identity or retained
 dependency sources refuse. Bundle reads take short shared root locks and retain
 shared directory leases; publication holds an exclusive bundle lease until
 sealing. Retirement refuses while any reader holds the bundle, and a later
-retry completes it. Bounded runs retain a shared context lease, excluding a
-lifecycle mutation of that context while allowing independent contexts to run.
-Within this boundary, Workspace
+retry completes it. Within this boundary, Workspace
 supplies the operation area, the mutation-evidence replacement primitive and
 the reservation publication; Reconciliation owns what they contain and when
 they advance. It also lends a transaction-scoped secrets area, re-proving the
@@ -613,6 +612,7 @@ Secrets limits additionally bound their trees.
 | Installer media stages at once, live, retained or abandoned | 16 | `maxStagedMedia` in `internal/workspace/contextfs/media_linux_amd64.go` |
 | [Setup runs](contexts/controller-record.md#the-setup-subtree) the setup subtree keeps | 8 | `maxSetupRuns` in `internal/workspace/contextfs/setup_runs_linux_amd64.go` |
 | [Bounded runs](cli/output.md#bounded-run-output) one context's runs area keeps | 16 | `maxBoundedRuns` in `internal/workspace/contextfs/runs_linux_amd64.go` |
+| In-operation root lock wait | 1 minute | `rootLockWait` in `internal/workspace/contextfs/files_linux_amd64.go` |
 
 `TestDocumentedBoundsMatchCode` compares each value with its code, and each
 deadline with the one its runner passes to `context.WithTimeout`: the lifecycle

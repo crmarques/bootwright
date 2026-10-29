@@ -12,6 +12,7 @@ import (
 	"slices"
 	"strings"
 	"syscall"
+	"time"
 	"unsafe"
 
 	"github.com/crmarques/bootwright/internal/diagnostics"
@@ -21,6 +22,9 @@ import (
 const (
 	storeCapacityRemediation = "free space, or raise the quota, on the filesystem that holds /var/lib/bootwright, then repeat the command"
 	storeDeviceRemediation   = "inspect the filesystem that holds /var/lib/bootwright (its kernel log names the device error), then repeat the command"
+	rootLockPoll             = 10 * time.Millisecond
+	maxRootLockPoll          = 250 * time.Millisecond
+	rootLockWait             = time.Minute
 )
 
 // storeErrno finds the kernel's answer inside a store failure. Only the errno
@@ -889,6 +893,48 @@ func lock(dir *directory) error {
 		return state("context state is held by another mutator")
 	}
 	return dir.verify()
+}
+
+func rootWait(s *Store) time.Duration {
+	if s != nil && s.rootWait > 0 {
+		return s.rootWait
+	}
+	return rootLockWait
+}
+
+func awaitRoot(ctx context.Context, s *Store, dir *directory, how int) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if err := dir.verify(); err != nil {
+		return err
+	}
+	bounded, cancel := context.WithTimeout(ctx, rootWait(s))
+	defer cancel()
+	for delay := rootLockPoll; ; delay = min(2*delay, maxRootLockPoll) {
+		err := syscall.Flock(int(dir.file.Fd()), how|syscall.LOCK_NB)
+		if err == nil {
+			break
+		}
+		if !errors.Is(err, syscall.EWOULDBLOCK) {
+			return state("context state is held by another mutator")
+		}
+		timer := time.NewTimer(delay)
+		select {
+		case <-bounded.Done():
+			timer.Stop()
+			if err := ctx.Err(); err != nil {
+				return err
+			}
+			return busy("context state stayed held by another command for the whole root lock wait")
+		case <-timer.C:
+		}
+	}
+	if err := dir.verify(); err != nil {
+		syscall.Flock(int(dir.file.Fd()), syscall.LOCK_UN)
+		return err
+	}
+	return nil
 }
 
 func lockShared(dir *directory) error {
