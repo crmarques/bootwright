@@ -43,9 +43,11 @@ BOOT = "bootwright.core.redfish_boot"
 READ = "bootwright.core.redfish_system_read"
 
 SUBSTRATES = {"libvirt": "substrate_libvirt_machine", "baremetal": "substrate_baremetal_machine"}
-# The arms whose port no consumer composes yet, by the item that composes it:
-# an agent installation's pushed boot reaches KubeVirt's port under B88.
-UNCOMPOSED = {"kubevirt": ("substrate_kubevirt_machine", "B88")}
+# The arms these cases do not render, by the file that does: a managed-OS
+# installation refuses a KubeVirt Machine before registration, and the agent
+# installation's pushed, pinned composition of KubeVirt's port is rendered
+# against that arm's argument specs in test_containercluster_kubevirt_port.py.
+UNCOMPOSED = {"kubevirt": ("substrate_kubevirt_machine", "test_containercluster_kubevirt_port.py")}
 PORT = {"pre_boot", "boot_media", "boot_disk", "identity_read", "state_read", "media_insert", "media_eject", "power"}
 LIFECYCLE = {"apply", "observe", "destroy"}
 INSTALLATIONS = ("containercluster_install_agent", "managedos_install_anaconda")

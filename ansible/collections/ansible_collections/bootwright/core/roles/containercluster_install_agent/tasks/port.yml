@@ -6,6 +6,9 @@
     quiet: true
     fail_msg: The node's operation is no substrate machine port entry point; plan again with this release.
 
+# A pinned port is handed the identity its Machine's own block recorded at
+# every entry point, and a pushed image's file, the controller's client that
+# transfers it and the media identity it is recognized by in place of a link.
 - name: Invoke the selected substrate machine port
   ansible.builtin.include_role:
     name: bootwright.core.substrate_machine
@@ -14,6 +17,7 @@
     bootwright_machine_arm: '{{ containercluster_install_agent_node.substrate }}'
     bootwright_machine_port: >-
       {{ containercluster_install_agent_port_access
+         | combine(containercluster_install_agent_node_pin if containercluster_install_agent_node.portPinned | default(false) else {})
          | combine(containercluster_install_agent_port_arguments[containercluster_install_agent_port_operation]) }}
     containercluster_install_agent_port_access:
       endpoint: '{{ containercluster_install_agent_node.controller.endpoint }}'
@@ -23,14 +27,13 @@
       verify: '{{ containercluster_install_agent_node.controller.tlsVerify }}'
 
     containercluster_install_agent_port_arguments:
-      state_read:
-        media: true
+      state_read: >-
+        {{ {'media': true, 'media_identity': bootwright_cluster_install_request.imageIdentity}
+           if (bootwright_cluster_install_request.deliveryKind | default('fetch')) == 'push' else {'media': true} }}
 
-      media_insert:
-        image_url_file: '{{ bootwright_run_scratch }}/cluster-insert-{{ containercluster_install_agent_index }}'
-        private: '{{ containercluster_install_agent_node.physical }}'
-        trust: '{{ containercluster_install_agent_node.controller.virtualMedia.trust }}'
-        certificate: '{{ bootwright_cluster_install_material.artifactCertificate | default("") }}'
+      media_insert: >-
+        {{ containercluster_install_agent_pushed_insert if (bootwright_cluster_install_request.deliveryKind | default('fetch')) == 'push'
+           else containercluster_install_agent_fetched_insert }}
 
       media_eject:
         certificate: '{{ bootwright_cluster_install_material.artifactCertificate | default("") }}'
@@ -39,6 +42,21 @@
 
       power:
         power: 'off'
+
+    containercluster_install_agent_node_pin:
+      pinned_uuid_base64: "{{ bootwright_cluster_install_material['pinnedUUIDBase64Node' ~ containercluster_install_agent_index] | default('') }}"
+      pinned_serial_base64: "{{ bootwright_cluster_install_material['pinnedSerialBase64Node' ~ containercluster_install_agent_index] | default('') }}"
+
+    containercluster_install_agent_fetched_insert:
+      image_url_file: '{{ bootwright_run_scratch }}/cluster-insert-{{ containercluster_install_agent_index }}'
+      private: '{{ containercluster_install_agent_node.physical }}'
+      trust: '{{ containercluster_install_agent_node.controller.virtualMedia.trust }}'
+      certificate: '{{ bootwright_cluster_install_material.artifactCertificate | default("") }}'
+
+    containercluster_install_agent_pushed_insert:
+      image_path: '{{ bootwright_cluster_install_request.image.path }}'
+      virtctl: '{{ bootwright_cluster_install_material.virtctl }}'
+      media_identity: '{{ bootwright_cluster_install_request.imageIdentity }}'
 
 - name: Retain the substrate port answer for this node
   ansible.builtin.set_fact:

@@ -274,6 +274,8 @@ Alias cell.
 | [B906](#b906) | new, 2026-10-28 (D197) | product | Substrate, with Add-ons | A KubeVirt profile's persistent vTPM state is proved migratable on a declared state class | The current target declares no vTPM; the state class is host-wide and set on HyperConverged |
 | [B907](#b907) | new, 2026-10-28 (D197) | product | Substrate | KubeVirt Machines boot with EFI Secure Boot | Whether the agent image boots under KubeVirt Secure Boot is unverified |
 | [B909](#b909) | new, 2026-10-28 (D197) | product | Substrate | KubeVirt interfaces on a namespaced UserDefinedNetwork | The arm realizes Localnet ClusterUserDefinedNetwork and bridge NetworkAttachmentDefinition attachments; no profile needs a UDN |
+| [B925](#b925) | new, 2026-10-28 (D201) | safety | Substrate and Container cluster | A released KubeVirt node's image claim is ejected live where the host enables declarative hotplug | The eject leaves the claim until the node next stops, which security records; live removal is an optional specialization no profile needs yet |
+| [B927](#b927) | new, 2026-10-28 (D201) | product | Container cluster and Substrate | An installer VIP on a KubeVirt attachment is proved free before a fresh boot | The pre-boot ARP probe reaches only a managed libvirt bridge on the controller; a KubeVirt attachment is reported unprobed and the operator proves its VIPs free |
 
 ### B82
 
@@ -3033,6 +3035,30 @@ NetworkAttachmentDefinition before registration. **Outcome:** a KubeVirt
 interface on a UDN. **Exit evidence:** selection and proof tests and a live
 attachment.
 
+### B925
+
+**Owner:** Substrate and Container cluster. **Kind:** safety. **Requires:**
+[B88](m3.md#b88). **Definition:** Needs definition: [Q20](m3.md#m3a-open-decisions)
+option (b). Where the host's HyperConverged enables `declarativeHotplugVolumes`,
+as the provider proof would read it, the eject also unplugs the media volume
+from the running instance, so the claim holding the image, which embeds the
+pull secret, is released without waiting for the next stop; a specialization
+keyed on that observed gate, never on a release label (D163). Today the claim
+stays until the instance next stops ([security](../security.md#network-remote-systems-and-privilege)).
+**Outcome:** a released node holds no image claim. **Exit evidence:** proof and
+eject tests over a fake host with and without the gate, and a live eject.
+
+### B927
+
+**Owner:** Container cluster and Substrate. **Kind:** product. **Requires:**
+[B88](m3.md#b88). **Definition:** Needs definition: how the installation
+proves an installer VIP of a KubeVirt cluster free before a fresh boot, from
+the controller's route to the attachment's layer 2 or from the host, and what
+refuses when it cannot. Today the VIP evidence names those addresses as not
+probed ([container clusters](../openshift-clusters.md#installation)).
+**Outcome:** a VIP another host answers refuses before boot. **Exit evidence:**
+probe tests and a live run.
+
 ## Audit remediation (2026-10-26)
 
 The [2026-10-26 spec audit](../../audits/spec/2026-10-26.md) ordered its
@@ -3300,6 +3326,8 @@ holding such a clause, the clauses pending and the work they enable.
   completes (X126).
 - [D200](#d200): clauses (1) to (12), how stretch activation is realized,
   read back and refused (X199).
+- [D201](#d201): clauses (1) to (11), OpenShift on KubeVirt Machines over an
+  external host (X130).
 
 ### D1
 
@@ -5623,3 +5651,62 @@ Exit evidence: the request and evidence goldens, the stage, interruption,
 drift, foreign-state and frozen-intent tests over the scripted monitor, the
 controller order test and the refusal-table row; the operator gate is B488's
 emulated rehearsal of the reference profile.
+
+### D201
+
+**session-pending** (2026-10-28, the owner; the clauses after the owner's
+words are taken by the session, pending the owner's review). The owner asked
+the session to "Plan and implement what is still missing" and said "the
+solution must be as good as possible in terms of well-designed architecture
+and ux". It answers [Q19](m3.md#m3a-open-decisions) and
+[Q20](m3.md#m3a-open-decisions) and closes the questions left in
+[B88](m3.md#b88)'s `Specified` definition, and implements B88 and
+[B731](m3.md#b731)'s in-tree part as the planned slice X130; B88's Requires on
+[B66](m3.md#b66)'s accepted row is waived for implementation only, the
+acceptance staying B66's operator gate. Taken by the session, pending the
+owner's review:
+(1) Q19 (a): B731 is one operator run, of lab-kubevirt on authored
+`baremetal` with installer VIPs, which OpenShift's own keepalived and haproxy
+serve on the nodes' shared layer 2; this slice adds that example. The
+derived-`none` lab-kubevirt-external variant stays in projection goldens and
+validation and gets no row.
+(2) Q20 (a): a KubeVirt release removes the media volume and deletes the
+upload DataVolume by UID; the claim that held the image stays bound until the
+node's VirtualMachine next stops, no node is restarted to release it, and
+[security](../security.md#network-remote-systems-and-privilege) records the
+exposure. Option (b), a live eject keyed on the observed declarative hotplug
+gate, is [B925](#b925).
+(3) The installation lends each node's controller credential by the parts the
+arm's `ControllerCredential` fact names: for KubeVirt the kubeconfig's value
+alone as the port's `user` file, with no password or trust-bundle material,
+and a pushed cluster lends no artifact certificate.
+(4) A node on a pinned port carries the identity its Machine's block recorded
+in the original apply (`ApplyProved`, else the attempt's `Proved`) to every
+entry point of every operation, apply, removal and observation; an apply that
+finds no record refuses before the adapter runs, and a removal or observation
+passes what it has, the port refusing an unpinned node with nothing changed.
+The frozen node says so (`portPinned`), so the role names no arm.
+(5) The install request freezes the clients a pushing arm's port runs
+(`portTools`): `virtctl` with the Environment's controller-stage intent, which
+an apply's attempt locates in the proved closure, since only its push runs it; a `latest` intent resolves to the
+one release that closure holds, and to nothing when it holds none or several.
+(6) A pushed node is handed the image file in the work area, `virtctl` and the
+media identity in place of a link, so no link is minted, proved, retired or
+swept; it presents this cluster's own image when its port reports the volume
+its own, carrying that identity. The boot requires the image a regular file at
+the frozen path.
+(7) The node ceiling is [B714](m3.md#b714)'s derived bound over the KubeVirt
+arm's published bounds: eight nodes; a larger cluster refuses naming it. A
+nine-node hub waits for B731's measured bounds, [B926](m3.md#b926).
+(8) Node placement ([D199](#d199)) composes unchanged: it is read and written
+through the installed cluster's API, whatever arm realized the nodes.
+(9) The cluster's removal composes the arm's: the install inverse ejects
+through the pinned port, and each Machine's inverse, which the plan orders
+after it and gates on the instance being absent, proves the VirtualMachine,
+both DataVolumes and every claim absent.
+(10) The pre-boot VIP probe reaches no KubeVirt attachment; the evidence names
+those VIPs unprobed and the runbook asks the operator to prove them free;
+[B927](#b927) records a probe.
+(11) The install request moves to `cluster-install-agent-v11`, adding
+`portTools` and `nodes[].portPinned` and admitting the controller kind `api`;
+a v10 record refuses by name (D142), and the media request is unchanged.

@@ -8,15 +8,31 @@
 # nothing. The substrate's dispatch ends in a terminal fail for an arm it has
 # no machine port for, and the proof's refusal comes before the media is
 # inserted, rather than inserting it and booting nothing.
+# A pushed cluster publishes nothing: its image is the file its media block
+# left in the work area, which each node's port transfers itself.
+- name: Read the pushed image the media block left in the work area
+  ansible.builtin.stat:
+    path: '{{ bootwright_cluster_install_request.image.path }}'
+    follow: false
+    get_checksum: false
+  register: containercluster_install_agent_pushed_image
+  when: (bootwright_cluster_install_request.deliveryKind | default('fetch')) == 'push'
+
+- name: Decide whether this cluster has an image for its nodes to boot
+  ansible.builtin.set_fact:
+    containercluster_install_agent_image_ready: >-
+      {{ (containercluster_install_agent_pushed_image.stat.isreg | default(false))
+         if (bootwright_cluster_install_request.deliveryKind | default('fetch')) == 'push' else containercluster_install_agent_url | length > 0 }}
+
 - name: Retain a missing boot image as a typed node refusal
   ansible.builtin.set_fact:
     containercluster_install_agent_lifecycle_refusal: media-missing
-  when: containercluster_install_agent_url | length == 0
+  when: not (containercluster_install_agent_image_ready | bool)
 
 - name: Refuse to boot a node whose cluster published no image
   ansible.builtin.assert:
     that:
-      - containercluster_install_agent_url | length > 0
+      - containercluster_install_agent_image_ready | bool
     fail_msg: >-
       this cluster has published no boot image, so there is nothing for its
       nodes to boot; repeat the apply so its media block publishes one
@@ -86,70 +102,75 @@
               pinned_serial_base64: >-
                 {{ bootwright_cluster_install_material['pinnedSerialBase64Node' ~ containercluster_install_agent_index] | default('') }}
 
-        - name: Publish a fresh private link for this insert
-          bootwright.core.containercluster_media_token:
-            request: '{{ bootwright_cluster_install_request }}'
-            source: '{{ containercluster_install_agent_url }}'
-            operation: publish
-          register: containercluster_install_agent_token
-          no_log: true
+        # A fetching node is handed a link of its own; a pushed node is handed
+        # the file, so it has no link to publish, prove or retire.
+        - name: Publish and prove this insert's own link
+          when: not ((bootwright_cluster_install_request.deliveryKind | default('fetch')) == 'push')
+          block:
+            - name: Publish a fresh private link for this insert
+              bootwright.core.containercluster_media_token:
+                request: '{{ bootwright_cluster_install_request }}'
+                source: '{{ containercluster_install_agent_url }}'
+                operation: publish
+              register: containercluster_install_agent_token
+              no_log: true
 
-        - name: Keep this attempt's private insert token for release
-          ansible.builtin.set_fact:
-            containercluster_install_agent_insert_tokens: >-
-              {{ containercluster_install_agent_insert_tokens | default({})
-                 | combine({containercluster_install_agent_node.machine: containercluster_install_agent_token.url}) }}
-          no_log: true
+            - name: Keep this attempt's private insert token for release
+              ansible.builtin.set_fact:
+                containercluster_install_agent_insert_tokens: >-
+                  {{ containercluster_install_agent_insert_tokens | default({})
+                     | combine({containercluster_install_agent_node.machine: containercluster_install_agent_token.url}) }}
+              no_log: true
 
-        - name: Prove the insert image through the verified serving listener
-          ansible.builtin.uri:
-            url: '{{ containercluster_install_agent_token.url }}'
-            method: GET
-            headers:
-              Range: bytes=0-0
-            ca_path: '{{ bootwright_cluster_install_material.artifactCertificate }}'
-            validate_certs: true
-            use_proxy: false
-            follow_redirects: none
-            status_code: [200, 206]
-            timeout: 30
-          register: containercluster_install_agent_token_probe
-          failed_when: false
-          changed_when: false
-          no_log: true
+            - name: Prove the insert image through the verified serving listener
+              ansible.builtin.uri:
+                url: '{{ containercluster_install_agent_token.url }}'
+                method: GET
+                headers:
+                  Range: bytes=0-0
+                ca_path: '{{ bootwright_cluster_install_material.artifactCertificate }}'
+                validate_certs: true
+                use_proxy: false
+                follow_redirects: none
+                status_code: [200, 206]
+                timeout: 30
+              register: containercluster_install_agent_token_probe
+              failed_when: false
+              changed_when: false
+              no_log: true
 
-        - name: Retire a link the serving listener did not prove
-          bootwright.core.containercluster_media_token:
-            request: '{{ bootwright_cluster_install_request }}'
-            source: '{{ containercluster_install_agent_url }}'
-            image: '{{ containercluster_install_agent_token.url }}'
-            operation: remove
-          when: containercluster_install_agent_token_probe.status | default(-1) | int not in [200, 206]
-          no_log: true
+            - name: Retire a link the serving listener did not prove
+              bootwright.core.containercluster_media_token:
+                request: '{{ bootwright_cluster_install_request }}'
+                source: '{{ containercluster_install_agent_url }}'
+                image: '{{ containercluster_install_agent_token.url }}'
+                operation: remove
+              when: containercluster_install_agent_token_probe.status | default(-1) | int not in [200, 206]
+              no_log: true
 
-        - name: Retain an unproved private listener as a typed node refusal
-          ansible.builtin.set_fact:
-            containercluster_install_agent_lifecycle_refusal: private-delivery
-          when: containercluster_install_agent_token_probe.status | default(-1) | int not in [200, 206]
+            - name: Retain an unproved private listener as a typed node refusal
+              ansible.builtin.set_fact:
+                containercluster_install_agent_lifecycle_refusal: private-delivery
+              when: containercluster_install_agent_token_probe.status | default(-1) | int not in [200, 206]
 
-        - name: Refuse an insert whose private image cannot be fetched
-          ansible.builtin.assert:
-            that: containercluster_install_agent_token_probe.status | default(-1) | int in [200, 206]
-            fail_msg: >-
-              the private insert image could not be fetched through the artifact listener:
-              {{ 'serving certificate verification against Secret ' ~ bootwright_cluster_install_request.tlsCertificateRef ~ ' failed'
-                 if (containercluster_install_agent_token_probe.msg | default('')) is search('CERTIFICATE_VERIFY_FAILED|certificate verify failed')
-                 else ('listener status ' ~ (containercluster_install_agent_token_probe.status | default(-1) | string))
-                 if containercluster_install_agent_token_probe.status | default(-1) | int != -1
-                 else 'the connection failed before a status line was received' }}
-            quiet: true
+            - name: Refuse an insert whose private image cannot be fetched
+              ansible.builtin.assert:
+                that: containercluster_install_agent_token_probe.status | default(-1) | int in [200, 206]
+                fail_msg: >-
+                  the private insert image could not be fetched through the artifact listener:
+                  {{ 'serving certificate verification against Secret ' ~ bootwright_cluster_install_request.tlsCertificateRef ~ ' failed'
+                     if (containercluster_install_agent_token_probe.msg | default('')) is search('CERTIFICATE_VERIFY_FAILED|certificate verify failed')
+                     else ('listener status ' ~ (containercluster_install_agent_token_probe.status | default(-1) | string))
+                     if containercluster_install_agent_token_probe.status | default(-1) | int != -1
+                     else 'the connection failed before a status line was received' }}
+                quiet: true
 
-        - name: Keep this node's private insert URL in invocation scratch
-          ansible.builtin.copy:
-            content: '{{ containercluster_install_agent_token.url }}'
-            dest: '{{ bootwright_run_scratch }}/cluster-insert-{{ containercluster_install_agent_index }}'
-            mode: '0600'
-          no_log: true
+            - name: Keep this node's private insert URL in invocation scratch
+              ansible.builtin.copy:
+                content: '{{ containercluster_install_agent_token.url }}'
+                dest: '{{ bootwright_run_scratch }}/cluster-insert-{{ containercluster_install_agent_index }}'
+                mode: '0600'
+              no_log: true
 
         - name: Insert through the selected substrate machine port
           ansible.builtin.include_tasks: port.yml
@@ -185,13 +206,17 @@
             tasks_from: boot_media
           vars:
             bootwright_machine_arm: '{{ containercluster_install_agent_node.substrate }}'
-            bootwright_machine_port:
-              endpoint: '{{ containercluster_install_agent_node.controller.endpoint }}'
-              verify: '{{ containercluster_install_agent_node.controller.tlsVerify }}'
-              ca: '{{ containercluster_install_agent_ca }}'
-              user: '{{ containercluster_install_agent_user }}'
-              password: '{{ containercluster_install_agent_password }}'
-              installer_powers_off: false
+            # A pinned port is handed the identity its Machine's block recorded.
+            bootwright_machine_port: >-
+              {{ {'endpoint': containercluster_install_agent_node.controller.endpoint,
+                  'verify': containercluster_install_agent_node.controller.tlsVerify,
+                  'ca': containercluster_install_agent_ca, 'user': containercluster_install_agent_user,
+                  'password': containercluster_install_agent_password, 'installer_powers_off': false}
+                 | combine({'pinned_uuid_base64':
+                               bootwright_cluster_install_material['pinnedUUIDBase64Node' ~ containercluster_install_agent_index] | default(''),
+                             'pinned_serial_base64':
+                               bootwright_cluster_install_material['pinnedSerialBase64Node' ~ containercluster_install_agent_index] | default('')}
+                           if containercluster_install_agent_node.portPinned | default(false) else {}) }}
 
       # A step the timeout stopped fails with ansible-core's own message, so the
       # budget is named here; any other failure stays a failure, and its own
@@ -257,6 +282,7 @@
             image: '{{ containercluster_install_agent_token.url }}'
             operation: remove
           when:
+            - not ((bootwright_cluster_install_request.deliveryKind | default('fetch')) == 'push')
             - containercluster_install_agent_insertion.msg is defined
             - containercluster_install_agent_after_insert.media is defined
             - containercluster_install_agent_token.url.split('/')[-2] not in (containercluster_install_agent_after_insert.media | string)

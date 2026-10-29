@@ -78,7 +78,9 @@ type Node struct {
 	Name    string            `json:"name"`
 	// Physical is operator-owned hardware: the installation erases what it
 	// already held, so the block consumes that authorization on apply.
-	Physical         bool    `json:"physical"`
+	Physical bool `json:"physical"`
+	// PortPinned nodes carry their Machine's recorded identity to every entry point.
+	PortPinned       bool    `json:"portPinned,omitempty"`
 	RequireTPM       bool    `json:"requireTPM,omitempty"`
 	StateReadSeconds int     `json:"stateReadSeconds"`
 	Substrate        string  `json:"substrate"`
@@ -186,17 +188,19 @@ type InstallRequest struct {
 	Image        Publication    `json:"image"`
 	// ImageIdentity is the media block's request digest for pushed delivery,
 	// used to recognize this installation's media, rather than a file checksum.
-	ImageIdentity     string               `json:"imageIdentity,omitempty"`
-	Nodes             []Node               `json:"nodes"`
-	Placement         machineref.Placement `json:"placement"`
-	PublicationRoot   Publication          `json:"publicationRoot"`
-	Release           Release              `json:"release"`
-	Rendezvous        string               `json:"rendezvous"`
-	TLSCertificateRef string               `json:"tlsCertificateRef"`
-	Tool              Tool                 `json:"tool"`
-	Version           string               `json:"version"`
-	VIPs              []VIP                `json:"vips"`
-	WorkRoot          string               `json:"workRoot"`
+	ImageIdentity string               `json:"imageIdentity,omitempty"`
+	Nodes         []Node               `json:"nodes"`
+	Placement     machineref.Placement `json:"placement"`
+	// PortTools are the controller clients the nodes' ports run.
+	PortTools         []Tool      `json:"portTools,omitempty"`
+	PublicationRoot   Publication `json:"publicationRoot"`
+	Release           Release     `json:"release"`
+	Rendezvous        string      `json:"rendezvous"`
+	TLSCertificateRef string      `json:"tlsCertificateRef"`
+	Tool              Tool        `json:"tool"`
+	Version           string      `json:"version"`
+	VIPs              []VIP       `json:"vips"`
+	WorkRoot          string      `json:"workRoot"`
 }
 
 // MediaBudgets bound the media block's one long phase in wall-clock time: the
@@ -310,7 +314,7 @@ func DecodeInstallRequest(data []byte) (InstallRequest, error) {
 		return InstallRequest{}, refusal("lifecycle.state", "the frozen installation has no bounded node rounds", "plan the installation again")
 	}
 	for _, node := range request.Nodes {
-		if node.StateReadSeconds <= 0 || node.StateReadSeconds > 3600 || (node.ControllerKind != "emulated" && node.ControllerKind != "physical") {
+		if node.StateReadSeconds <= 0 || node.StateReadSeconds > 3600 || !slices.Contains([]string{"api", "emulated", "physical"}, node.ControllerKind) {
 			return InstallRequest{}, refusal("lifecycle.state", "the frozen installation node has no bounded controller kind", "plan the installation again")
 		}
 	}

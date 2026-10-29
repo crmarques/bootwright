@@ -1,6 +1,6 @@
 implementation: cluster-install-agent-v1
-content-digest: 4388da141e26f3cf4bc3842fff42e2a43b276f44b0ab0449105b0e43e6c7ebc4
-request-version: cluster-install-agent-v10
+content-digest: b903ad706a74058b49446df8d5f3cb5f4eaba86de55049125b6bad91f1306152
+request-version: cluster-install-agent-v11
 automation-formats: none
 mark-formats: none
 proof-ids: .bootwright-booted, /.bootwright-booted, bootwright/containercluster/identity/v2
@@ -69,6 +69,7 @@ request-schema:
   nodes[].machine string
   nodes[].name string
   nodes[].physical bool
+  nodes[].portPinned bool omitempty
   nodes[].requireTPM bool omitempty
   nodes[].stateReadSeconds int
   nodes[].substrate string
@@ -84,6 +85,10 @@ request-schema:
   placement.port int omitempty
   placement.privateKeyRef string omitempty
   placement.user string omitempty
+  portTools []struct agentinstall.Tool omitempty
+  portTools[].compatibility string
+  portTools[].kind string
+  portTools[].version string
   publicationRoot struct agentinstall.Publication
   publicationRoot.path string
   publicationRoot.url string

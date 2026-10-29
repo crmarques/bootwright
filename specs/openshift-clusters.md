@@ -113,7 +113,6 @@ their diagnostic carries the refused field's path.
 | A node with an install profile | `spec.os.installProfileRef` on a node's Machine | `a declared node selects an install profile, so two installations would write its disk` | `remove spec.os.installProfileRef from <machine> or drop it from <cluster>` |
 | A node on an unrealized substrate | a node's Machine whose provider declares a substrate this executable does not realize | `a declared node is on a substrate this executable does not realize` | `correct <cluster>` |
 | A KubeVirt node on a nested host | a node's KubeVirt provider names `hostClusterRef` | `a declared node's KubeVirt provider names hostClusterRef` | `select kubeconfigRef on <provider>` |
-| A node on a substrate that pushes its image | a node's Machine on a realized provider whose arm takes pushed delivery (`kubevirt`) | `a declared node's substrate pushes its boot image, which this executable's agent installation does not boot yet` | `correct <cluster>` |
 | A node whose emulated BMC port does not allocate | a virtual node whose provider's `spec.libvirt.bmcEmulation.port` plus the node's position among that provider's Machines is past 65535 | `node <node> (<machine>): the Machine's emulated BMC port does not allocate` | `correct spec.libvirt.bmcEmulation.port on <provider>` |
 | A node's provider with no emulated BMC credential | a virtual node whose provider declares no `spec.libvirt.bmcEmulation.auth.credentialsRef` | `node <node> (<machine>): the provider declares no emulated BMC credential` | `set spec.libvirt.bmcEmulation.auth.credentialsRef on <provider>` |
 | A physical node with an HTTP BMC | a physical node's BMC uses HTTP | `a physical node's private boot image requires an HTTPS management controller` | `set spec.substrate.baremetal.bmc.address on <machine> to an HTTPS ComputerSystem endpoint` |
@@ -128,10 +127,8 @@ table and its test change in that commit:
 
 - [B723](milestones/m3.md#b723) lifts the serving-certificate row.
 - [B69](milestones/m3.md#b69) lifts the disconnected-cluster row.
-- [B88](milestones/m3.md#b88) lifts the pushed-image row for a node on a
-  KubeVirt provider, and [B733](milestones/m3.md#b733) the unrealized-substrate
-  row for a node on a vSphere provider and the multi-node `vsphere` platform
-  row.
+- [B733](milestones/m3.md#b733) lifts the unrealized-substrate row for a node
+  on a vSphere provider and the multi-node `vsphere` platform row.
 - [B743](milestones/backlog.md#b743) lifts the row for a node off the artifact
   server's host, and [B748](milestones/backlog.md#b748) the OKD row.
 
@@ -156,7 +153,9 @@ nodes at a time behind emulated BMCs and sixteen behind physical ones,
 and a cluster takes the smallest fan-out among its nodes. With the budgets
 below a cluster fits the 6-hour ceiling with up to 28 nodes behind emulated
 BMCs, and with `16 × floor(9,000 / (1,800 + m))` physical nodes, where
-`m` is the physical round margin, at least 32 while `m` is at most 45 minutes.
+`m` is the physical round margin, at least 32 while `m` is at most 45 minutes,
+and with up to 8 nodes on KubeVirt Machines, whose arm publishes a 2,400-second
+boot allowance and a 1,020-second round margin for four nodes a round.
 Each round that boots a node whose Machine declares `enforce`
 [firmware](substrates.md#physical-firmware) adds that arm's firmware bound to
 the boot budget, at most one per round, so fewer such nodes fit.
@@ -193,14 +192,38 @@ These rules are evidence of what the 4.20 to 4.22 agent installer accepts and
 does, not a support statement
 ([knowledge](../.agents/knowledge/kubevirt-agent-node-boot.md)).
 
-Not yet met: a node on a KubeVirt provider refuses as a node whose substrate
-pushes its image; a nested host is refused by lifecycle selection. Admission
-checks the homogeneous arm, attachment kinds and endpoint sources, installer
-input projections have offline goldens, and [B87](milestones/m1.md#b87)
-delivers the target, the port and its bounds; the installation's pushed boot
-through that port, which lends the kubeconfig by the arm's credential parts
-and passes each node's pin to every entry point it calls, is tracked as
-[B88](milestones/m3.md#b88).
+The port is lent and pinned per node. The installation lends each node's
+controller credential by the parts its arm's `ControllerCredential` fact names,
+for KubeVirt the provider's kubeconfig as the port's `user` file and no password
+or trust bundle, and a node whose arm's port is pinned (`PortPinned`) carries,
+under its position, the cluster and VirtualMachine identity its Machine's
+block recorded in the original apply, to every entry point every operation of
+this block calls: pre-boot, insert, boot, the state reads, eject and disk boot,
+in an apply, a removal and an observation alike. An apply that finds no such
+record for a pinned node refuses before the adapter runs, and an entry point
+handed none refuses `identity-mismatch` with nothing changed
+([KubeVirt machine realization](substrates.md#kubevirt-machine-realization)).
+The install request freezes the controller client the port runs, `virtctl` as
+the Environment's controller stage installs it, and the attempt locates it
+there.
+
+Pushed boot, release and removal. A pushed node is handed the image file in
+the work area, the controller's `virtctl` and the media identity the install
+request froze, the media block's request digest, so no link is minted, proved,
+retired or swept for it, and the boot requires that file in place. It presents
+this cluster's own image when its port reports the media volume its machine
+presents as that Machine's own, by the arm's ownership proof, carrying that
+identity; any other volume is foreign. Its release removes the media volume and
+deletes the upload DataVolume; the claim that held the image stays bound under
+`kubernetes.io/pvc-protection` until the instance next stops, because the
+running instance still mounts it, and no node is restarted to release it
+([security](security.md#network-remote-systems-and-privilege)). Its disk boot
+makes no request, the installed disk being first in its persistent boot order.
+The installation's inverse ejects the same way, and each Machine's own removal,
+which the plan orders after it and gates on the instance being absent, proves
+the VirtualMachine, every DataVolume and every claim absent, so the cluster's
+removal composes the arm's removal proof. The pre-boot VIP probe reaches no
+KubeVirt attachment, so the evidence names those VIPs unprobed.
 
 Not yet met: a node on a vSphere provider refuses as a node on an unrealized
 substrate, and a multi-node `vsphere` cluster refuses as several nodes on
@@ -481,11 +504,10 @@ exception applies; what bounds its confidentiality is the destination's own
 access control: whoever can read claims in the KubeVirt provider's namespace,
 or browse the vSphere staging datastore, can read the pull secret the image
 embeds, and on vSphere the vCenter password when the cluster declares one,
-until that node's media is released. A push-only cluster that selects
+until that node's media is released, and on KubeVirt until the node's
+VirtualMachine next stops after that release
+([security](security.md#network-remote-systems-and-privilege)). A push-only cluster that selects
 `agent.redfishVirtualMedia` refuses at admission, naming the field to remove.
-
-Not yet met: the media block always publishes through an artifact server;
-tracked as [B88](milestones/m3.md#b88).
 
 **Reservations.** `path:` for the work area and `path:` for the private
 publication subtree, so a second context refuses rather than taking either.
@@ -638,8 +660,8 @@ block, once every provable link is removed, so that tampering with the
 reserved path is never hidden. The sweep reports only how many links it
 removed, kept and refused, and a refusal names those counts to the operator.
 Observation never retires a link.
-The token appears in no request, evidence, progress output or log. A node
-presents this cluster's own image when the scheme and host of the image its
+The token appears in no request, evidence, progress output or log. A fetching
+node presents this cluster's own image when the scheme and host of the image its
 BMC reports are the media block's publication's, and its path names a
 file beneath `private/clusters/<cluster>/` that is the same file, by device and
 inode, as the media block's published image; any other image is foreign. The

@@ -542,7 +542,14 @@ exception is endpoint-scoped and refuses wherever the transfer carries a
 cluster's private material. A pushed image leaves the controller only to those
 verified endpoints, and its destination's access control is recorded as inside
 the trust boundary of what it embeds
-([container clusters](openshift-clusters.md#boot-media)).
+([container clusters](openshift-clusters.md#boot-media)). On KubeVirt that boundary
+outlives the release: the eject deletes the upload DataVolume, but the claim
+that held the image, and with it the pull secret and installer state the image
+embeds, stays bound until the node's VirtualMachine next stops, so whoever can
+read claims in the provider's namespace can read it until then. Bootwright
+restarts no node to shorten that window; the operator's first `machine stop`
+of each node, or the cluster's removal, releases the claim, and the Machine's
+removal proves it absent.
 
 Not yet met: no vSphere connection exists; tracked as
 [B99](milestones/m1.md#b99).

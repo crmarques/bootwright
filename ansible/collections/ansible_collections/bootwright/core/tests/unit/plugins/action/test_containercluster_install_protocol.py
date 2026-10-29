@@ -426,9 +426,12 @@ def test_every_boot_effect_sits_under_the_skip():
     boot = tasks("boot.yml")
     skip = boot_skip()
     assert boot[-1] == skip
-    assert len(boot[:-1]) == 2
-    assert boot[0]["ansible.builtin.set_fact"] == {"containercluster_install_agent_lifecycle_refusal": "media-missing"}
-    assert "ansible.builtin.assert" in boot[1]
+    # Before the skip only reads and decisions run: the pushed image's stat,
+    # whether an image is ready, its typed refusal and the gate on it.
+    assert len(boot[:-1]) == 4
+    assert set(boot[0]) >= {"ansible.builtin.stat"} and "containercluster_install_agent_image_ready" in boot[1]["ansible.builtin.set_fact"]
+    assert boot[2]["ansible.builtin.set_fact"] == {"containercluster_install_agent_lifecycle_refusal": "media-missing"}
+    assert "ansible.builtin.assert" in boot[3]
     inside = list(beneath(skip["block"]))
     roles = [task['ansible.builtin.include_role']['tasks_from'] for task in inside if 'ansible.builtin.include_role' in task]
     assert roles == ['pre_boot', 'boot_media']

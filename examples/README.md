@@ -35,7 +35,8 @@ end-to-end cases that cover some of these scenarios with their own inputs.
 | `openshift-clusters/` | [lab-features](openshift-clusters/lab-features/README.md) | Prepare TPM2 encryption, proxy and external mirror acceptance. |
 | `openshift-clusters/` | [lab-features-ipv6](openshift-clusters/lab-features-ipv6/README.md) | Prepare the IPv6-only installation-feature variant. |
 | `openshift-clusters/` | [lab-networks](openshift-clusters/lab-networks/README.md) | Prepare localnet secondary networking and two MetalLB pool paths. |
-| `openshift-clusters/` | [lab-kubevirt-external](openshift-clusters/lab-kubevirt-external/README.md) | Prepare three OpenShift control-plane nodes on an existing virtualization host with external endpoints and private pushed media (the coverage variant lab-kubevirt-external); planning refuses the KubeVirt provider until [B87](../specs/milestones/m1.md#b87). |
+| `openshift-clusters/` | [lab-kubevirt](openshift-clusters/lab-kubevirt/README.md) | Install three OpenShift control-plane nodes and two workers on an existing virtualization host with installer VIPs and an image pushed to each guest (B731's lab-kubevirt profile). |
+| `openshift-clusters/` | [lab-kubevirt-external](openshift-clusters/lab-kubevirt-external/README.md) | The same on three control-plane nodes behind external endpoints on the derived `none` platform (the coverage variant lab-kubevirt-external). |
 | `openshift-clusters/` | [lab-physical](openshift-clusters/lab-physical/README.md) | Prepare five physical OpenShift targets with verified private media delivery. |
 | `add-ons/` | [lab-sno-nmstate](add-ons/lab-sno-nmstate/README.md) | Install the Kubernetes NMState Operator on single-node OpenShift. |
 | `add-ons/` | [lab-sno-metallb](add-ons/lab-sno-metallb/README.md) | Install MetalLB and an eight-address layer 2 pool on single-node OpenShift. |

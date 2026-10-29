@@ -44,10 +44,14 @@
     tasks_from: boot_disk
   vars:
     bootwright_machine_arm: '{{ containercluster_install_agent_node.substrate }}'
-    bootwright_machine_port:
-      endpoint: '{{ containercluster_install_agent_node.controller.endpoint }}'
-      verify: '{{ containercluster_install_agent_node.controller.tlsVerify }}'
-      ca: '{{ containercluster_install_agent_ca }}'
-      user: '{{ containercluster_install_agent_user }}'
-      password: '{{ containercluster_install_agent_password }}'
-      power_on: false
+    # A pinned port is handed the identity its Machine's block recorded.
+    bootwright_machine_port: >-
+      {{ {'endpoint': containercluster_install_agent_node.controller.endpoint,
+          'verify': containercluster_install_agent_node.controller.tlsVerify,
+          'ca': containercluster_install_agent_ca, 'user': containercluster_install_agent_user,
+          'password': containercluster_install_agent_password, 'power_on': false}
+         | combine({'pinned_uuid_base64':
+                       bootwright_cluster_install_material['pinnedUUIDBase64Node' ~ containercluster_install_agent_index] | default(''),
+                     'pinned_serial_base64':
+                       bootwright_cluster_install_material['pinnedSerialBase64Node' ~ containercluster_install_agent_index] | default('')}
+                   if containercluster_install_agent_node.portPinned | default(false) else {}) }}

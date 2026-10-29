@@ -163,9 +163,6 @@ func unsupportedReason(catalog api.Catalog, cluster api.Object) (reason, remedia
 		if provider, ok := machine.Provider(bound, catalog); ok && substrate.NamesHostCluster(provider) {
 			return "a declared node's KubeVirt provider names hostClusterRef", "select kubeconfigRef on " + provider.Identity()
 		}
-		if provider, ok := machine.Provider(bound, catalog); ok && substrate.IsRealized(provider) && substrate.DeliveryOf(substrate.Variant(provider)) == substrate.DeliveryPush {
-			return "a declared node's substrate pushes its boot image, which this executable's agent installation does not boot yet", "correct " + cluster.Identity()
-		}
 		target, err := substrate.TargetFor(catalog, bound, cluster.Name(), controllerMachine)
 		if err != nil {
 			reason, remedy := nodeTargetRefusal(catalog, bound, err)
@@ -359,6 +356,9 @@ func requestFor(catalog api.Catalog, cluster api.Object, controllerMachine, cont
 	if err := bindPushedMedia(mediaRequest, needs, &installRequest); err != nil {
 		return empty(err)
 	}
+	if installRequest.PortTools, err = portTools(catalog, nodes); err != nil {
+		return empty(err)
+	}
 
 	if len(installRequest.Endpoints) == 0 {
 		return empty(refusalAt("api.required", "$.spec.install.endpoints", "the cluster resolves no endpoint address for its controller to reach",
@@ -547,6 +547,7 @@ func frozenNodes(nodes []nodeProjection) []Node {
 			Hardware: frozenHardware(node.target), RequireTPM: node.requireTPM,
 			Labels: node.labels, Machine: node.machine.Name(), Name: node.name, Taints: node.taints,
 			StateReadSeconds: stateReadSeconds(node.target.Substrate), Physical: node.target.Physical, Substrate: node.target.Substrate,
+			PortPinned: substrate.PortPinned(node.target.Substrate),
 		})
 	}
 	return frozen

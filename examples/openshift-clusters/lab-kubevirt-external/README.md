@@ -4,14 +4,14 @@ A synthetic preparation profile for [B731](../../../specs/milestones/m3.md#b731)
 a variant of the [coverage profiles](../../../specs/openshift-coverage.md#acceptance-profiles):
 three `controlPlane` nodes and no workers on guests of an existing OpenShift
 Virtualization host, with external API and ingress endpoints and the derived
-`none` installer platform. It is not the baremetal-VIP lab-kubevirt profile
-Q19 ranks first, and it claims no accepted run.
+`none` installer platform. It is not the
+[lab-kubevirt](../lab-kubevirt/README.md) profile B731 runs (Q19 (a)); its
+platform is covered in-tree by projection goldens, and it claims no accepted
+run.
 
 [B87](../../../specs/milestones/m1.md#b87) realizes the provider and its
-guests in-tree; the cluster installation still refuses nodes whose image is
-pushed until [B88](../../../specs/milestones/m3.md#b88) boots them, so this
-profile does not run yet. Do not bypass the refusal. The API validates the
-profile.
+guests and [B88](../../../specs/milestones/m3.md#b88) pushes, boots, releases
+and removes the cluster in-tree. The API validates the profile.
 
 ## Worth noting
 

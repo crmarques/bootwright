@@ -125,15 +125,27 @@ lab-features-ipv6:
   ntp-lab-ntp
   proxy-lab-proxy
   substrate-host-lab-libvirt
+lab-kubevirt:
+  cluster-install-kubevirt
+  cluster-media-kubevirt
+  controller-prerequisites
+  dns-lab-dns
+  machine-kubevirt-01
+  machine-kubevirt-02
+  machine-kubevirt-03
+  machine-kubevirt-04
+  machine-kubevirt-05
+  ntp-lab-ntp
+  substrate-host-lab-kubevirt
 lab-kubevirt-external:
+  cluster-install-kubevirt
+  cluster-media-kubevirt
   controller-prerequisites
   dns-lab-dns
   machine-kubevirt-01
   machine-kubevirt-02
   machine-kubevirt-03
   ntp-lab-ntp
-  refused OpenShiftCluster/cluster-install-agent-v1 lifecycle.unsupported
-  refused OpenShiftCluster/cluster-media-agent-v1 lifecycle.unsupported
   substrate-host-lab-kubevirt
 lab-networks:
   addon-metallb-networks

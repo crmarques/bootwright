@@ -24,7 +24,9 @@
     containercluster_install_agent_index: '{{ bootwright_node_index }}'
     containercluster_install_agent_node: '{{ bootwright_cluster_install_request.nodes[bootwright_node_index | int] }}'
     containercluster_install_agent_user: "{{ bootwright_cluster_install_material['controllerUserNode' ~ bootwright_node_index] }}"
-    containercluster_install_agent_password: "{{ bootwright_cluster_install_material['controllerPasswordNode' ~ bootwright_node_index] }}"
+    containercluster_install_agent_password: >-
+      {{ '' if bootwright_cluster_install_request.nodes[bootwright_node_index | int].portPinned | default(false)
+         else bootwright_cluster_install_material['controllerPasswordNode' ~ bootwright_node_index] }}
     containercluster_install_agent_ca: "{{ bootwright_cluster_install_material['controllerCANode' ~ bootwright_node_index] | default('') }}"
     containercluster_install_agent_before: '{{ hostvars[bootwright_controller_host].containercluster_install_agent_before }}'
     containercluster_install_agent_state: '{{ hostvars[bootwright_controller_host].containercluster_install_agent_state }}'
@@ -75,7 +77,9 @@
     containercluster_install_agent_index: '{{ bootwright_node_index }}'
     containercluster_install_agent_node: '{{ bootwright_cluster_install_request.nodes[bootwright_node_index | int] }}'
     containercluster_install_agent_user: "{{ bootwright_cluster_install_material['controllerUserNode' ~ bootwright_node_index] }}"
-    containercluster_install_agent_password: "{{ bootwright_cluster_install_material['controllerPasswordNode' ~ bootwright_node_index] }}"
+    containercluster_install_agent_password: >-
+      {{ '' if bootwright_cluster_install_request.nodes[bootwright_node_index | int].portPinned | default(false)
+         else bootwright_cluster_install_material['controllerPasswordNode' ~ bootwright_node_index] }}
     containercluster_install_agent_ca: "{{ bootwright_cluster_install_material['controllerCANode' ~ bootwright_node_index] | default('') }}"
     containercluster_install_agent_before: '{{ hostvars[bootwright_controller_host].containercluster_install_agent_before }}'
     containercluster_install_agent_state: '{{ hostvars[bootwright_controller_host].containercluster_install_agent_state }}'
@@ -126,7 +130,9 @@
     containercluster_install_agent_index: '{{ bootwright_node_index }}'
     containercluster_install_agent_node: '{{ bootwright_cluster_install_request.nodes[bootwright_node_index | int] }}'
     containercluster_install_agent_user: "{{ bootwright_cluster_install_material['controllerUserNode' ~ bootwright_node_index] }}"
-    containercluster_install_agent_password: "{{ bootwright_cluster_install_material['controllerPasswordNode' ~ bootwright_node_index] }}"
+    containercluster_install_agent_password: >-
+      {{ '' if bootwright_cluster_install_request.nodes[bootwright_node_index | int].portPinned | default(false)
+         else bootwright_cluster_install_material['controllerPasswordNode' ~ bootwright_node_index] }}
     containercluster_install_agent_ca: "{{ bootwright_cluster_install_material['controllerCANode' ~ bootwright_node_index] | default('') }}"
     containercluster_install_agent_before: '{{ hostvars[bootwright_controller_host].containercluster_install_agent_before }}'
     containercluster_install_agent_state: '{{ hostvars[bootwright_controller_host].containercluster_install_agent_state }}'
@@ -177,7 +183,9 @@
     containercluster_install_agent_index: '{{ bootwright_node_index }}'
     containercluster_install_agent_node: '{{ bootwright_cluster_install_request.nodes[bootwright_node_index | int] }}'
     containercluster_install_agent_user: "{{ bootwright_cluster_install_material['controllerUserNode' ~ bootwright_node_index] }}"
-    containercluster_install_agent_password: "{{ bootwright_cluster_install_material['controllerPasswordNode' ~ bootwright_node_index] }}"
+    containercluster_install_agent_password: >-
+      {{ '' if bootwright_cluster_install_request.nodes[bootwright_node_index | int].portPinned | default(false)
+         else bootwright_cluster_install_material['controllerPasswordNode' ~ bootwright_node_index] }}
     containercluster_install_agent_ca: "{{ bootwright_cluster_install_material['controllerCANode' ~ bootwright_node_index] | default('') }}"
     containercluster_install_agent_before: '{{ hostvars[bootwright_controller_host].containercluster_install_agent_before }}'
     containercluster_install_agent_state: '{{ hostvars[bootwright_controller_host].containercluster_install_agent_state }}'

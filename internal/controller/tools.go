@@ -46,7 +46,7 @@ func SelectToolsWithRegistry(catalog api.Catalog, registry addons.Registry) ([]T
 	if err != nil {
 		return nil, err
 	}
-	virtctl := ToolRequest{Kind: "virtctl", Version: versions["virtctl"], Compatibility: "kubevirt", Mirror: downloads.Get("virtctlMirror").Text()}
+	virtctl := virtctlRequest(versions, downloads)
 	result := []ToolRequest{}
 	for _, cluster := range catalog.OfCategory(api.ContainerClusterCategory) {
 		facts, _ := containercluster.FactsOf(cluster.Kind())
@@ -107,6 +107,27 @@ func SelectToolsWithRegistry(catalog api.Catalog, registry addons.Registry) ([]T
 		return nil, selectionFailure(environments[0], "controller.unsupported", "", "target tool selection exceeds its bounded closure")
 	}
 	return result, nil
+}
+
+func virtctlRequest(versions map[string]string, downloads api.Value) ToolRequest {
+	return ToolRequest{Kind: "virtctl", Version: versions["virtctl"], Compatibility: "kubevirt", Mirror: downloads.Get("virtctlMirror").Text()}
+}
+
+// ProviderTool is the client of one kind the selected Environment's
+// controller stage installs for a provider's arm, which that arm's port runs.
+func ProviderTool(catalog api.Catalog, kind string) (ToolRequest, error) {
+	environments := catalog.OfKind(api.Environment)
+	if len(environments) != 1 {
+		return ToolRequest{}, selectionFailure(api.Object{}, "api.invariant", "", "tool selection requires exactly one effective Environment")
+	}
+	versions, err := targetToolVersions(environments[0])
+	if err != nil {
+		return ToolRequest{}, err
+	}
+	if kind == "virtctl" {
+		return virtctlRequest(versions, environments[0].Spec().Get("downloads")), nil
+	}
+	return ToolRequest{Kind: kind, Version: versions[kind]}, nil
 }
 
 func targetToolVersions(environment api.Object) (map[string]string, error) {

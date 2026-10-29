@@ -1,0 +1,125 @@
+{
+  "budgets": {
+    "bootSeconds": 2400,
+    "bootstrapSeconds": 5400,
+    "fanOut": 4,
+    "installSeconds": 5400,
+    "roundMarginSeconds": 1020
+  },
+  "deliveryKind": "push",
+  "endpoints": [
+    {
+      "address": "198.51.100.10",
+      "name": "api-int.kubevirt.lab.example.test"
+    },
+    {
+      "address": "198.51.100.10",
+      "name": "api.kubevirt.lab.example.test"
+    },
+    {
+      "address": "198.51.100.11",
+      "name": "console-openshift-console.apps.kubevirt.lab.example.test"
+    }
+  ],
+  "identity": {
+    "block": "cluster-install-kubevirt",
+    "cluster": "kubevirt",
+    "context": "lab"
+  },
+  "image": {
+    "path": "/var/lib/bootwright-clusters/lab/kubevirt/agent.iso",
+    "url": ""
+  },
+  "imageIdentity": "9e23ca17849da208324778cdc262cad1f7c501f41e10e8e3bc092930171db02b",
+  "nodes": [
+    {
+      "address": "198.51.100.31",
+      "controller": {
+        "credentialsRef": "host-kubeconfig",
+        "endpoint": "kubevirt:bootwright-guests/kubevirt-01-ba334887",
+        "tlsVerify": true,
+        "virtualMedia": {
+          "removeCertificate": false,
+          "restoreVerification": false,
+          "trust": ""
+        }
+      },
+      "controllerKind": "api",
+      "machine": "kubevirt-01",
+      "name": "master-0",
+      "physical": false,
+      "portPinned": true,
+      "stateReadSeconds": 120,
+      "substrate": "kubevirt"
+    },
+    {
+      "address": "198.51.100.32",
+      "controller": {
+        "credentialsRef": "host-kubeconfig",
+        "endpoint": "kubevirt:bootwright-guests/kubevirt-02-6fcb7dda",
+        "tlsVerify": true,
+        "virtualMedia": {
+          "removeCertificate": false,
+          "restoreVerification": false,
+          "trust": ""
+        }
+      },
+      "controllerKind": "api",
+      "machine": "kubevirt-02",
+      "name": "master-1",
+      "physical": false,
+      "portPinned": true,
+      "stateReadSeconds": 120,
+      "substrate": "kubevirt"
+    },
+    {
+      "address": "198.51.100.33",
+      "controller": {
+        "credentialsRef": "host-kubeconfig",
+        "endpoint": "kubevirt:bootwright-guests/kubevirt-03-de2dd99d",
+        "tlsVerify": true,
+        "virtualMedia": {
+          "removeCertificate": false,
+          "restoreVerification": false,
+          "trust": ""
+        }
+      },
+      "controllerKind": "api",
+      "machine": "kubevirt-03",
+      "name": "master-2",
+      "physical": false,
+      "portPinned": true,
+      "stateReadSeconds": 120,
+      "substrate": "kubevirt"
+    }
+  ],
+  "placement": {
+    "connection": "local",
+    "machine": "controller"
+  },
+  "portTools": [
+    {
+      "compatibility": "kubevirt",
+      "kind": "virtctl",
+      "version": "latest"
+    }
+  ],
+  "publicationRoot": {
+    "path": "",
+    "url": ""
+  },
+  "release": {
+    "distribution": "openshift",
+    "version": "4.21.15"
+  },
+  "rendezvous": "198.51.100.31",
+  "tlsCertificateRef": "",
+  "tool": {
+    "compatibility": "openshift",
+    "kind": "openshift-install",
+    "version": "4.21.15"
+  },
+  "version": "cluster-install-agent-v11",
+  "vips": [],
+  "workRoot": "/var/lib/bootwright-clusters/lab/kubevirt"
+}

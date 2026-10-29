@@ -16,7 +16,9 @@
     index_var: containercluster_install_agent_index
   vars:
     containercluster_install_agent_user: "{{ bootwright_cluster_install_material['controllerUserNode' ~ containercluster_install_agent_index] }}"
-    containercluster_install_agent_password: "{{ bootwright_cluster_install_material['controllerPasswordNode' ~ containercluster_install_agent_index] }}"
+    containercluster_install_agent_password: >-
+      {{ '' if containercluster_install_agent_node.portPinned | default(false)
+         else bootwright_cluster_install_material['controllerPasswordNode' ~ containercluster_install_agent_index] }}
     containercluster_install_agent_ca: "{{ bootwright_cluster_install_material['controllerCANode' ~ containercluster_install_agent_index] | default('') }}"
 
 # ansible-core keeps nothing of a failure under no_log but that it failed, so
@@ -51,9 +53,13 @@
       media: >-
         {{ containercluster_install_agent_presenting | map(attribute='item.machine') | list }}
       ownMedia: >-
-        {{ containercluster_install_agent_media_identity.results | default([])
-           | selectattr('own', 'defined') | selectattr('own', 'equalto', true)
-           | map(attribute='item.item.machine') | list }}
+        {{ (containercluster_install_agent_controllers.results | default([])
+            | selectattr('media_state', 'defined') | selectattr('media_state', 'equalto', 'own')
+            | map(attribute='item.machine') | list)
+           if (bootwright_cluster_install_request.deliveryKind | default('fetch')) == 'push' else
+           (containercluster_install_agent_media_identity.results | default([])
+            | selectattr('own', 'defined') | selectattr('own', 'equalto', true)
+            | map(attribute='item.item.machine') | list) }}
       powered: >-
         {{ containercluster_install_agent_controllers.results | default([])
            | selectattr('power', 'defined') | selectattr('power', 'equalto', 'On')

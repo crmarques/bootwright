@@ -65,15 +65,28 @@ def index(items, task):
     return next(position for position, candidate in enumerate(items) if candidate is task)
 
 
+def link_block():
+    """The block that publishes and proves a fetching node's own link, and the
+    sequence it sits in before that node's insert."""
+    outer = next(items for items in sequences(tasks('boot.yml'))
+                 if any(task.get('block') is not None and task['block'] == boot_sequence() for task in items))
+    return only(outer, lambda t: t.get('block') == boot_sequence()), outer
+
+
 def test_boot_publishes_then_proves_the_listener_then_inserts():
     steps = boot_sequence()
     publish = only(steps, lambda t: t.get(MODULE, {}).get('operation') == 'publish')
     probe = only(steps, lambda t: 'ansible.builtin.uri' in t)
     gate = only(steps, lambda t: 'ansible.builtin.assert' in t and 'token_probe' in str(t['ansible.builtin.assert']['that']))
-    insert = only(steps, lambda t: t.get('vars', {}).get('containercluster_install_agent_port_operation') == 'media_insert')
+    linked, outer = link_block()
+    insert = only(outer, lambda t: t.get('vars', {}).get('containercluster_install_agent_port_operation') == 'media_insert')
     assert publish['register'] == 'containercluster_install_agent_token'
     assert publish[MODULE]['source'] == '{{ containercluster_install_agent_url }}'
-    assert index(steps, publish) < index(steps, probe) < index(steps, gate) < index(steps, insert)
+    assert index(steps, publish) < index(steps, probe) < index(steps, gate)
+    assert index(outer, linked) < index(outer, insert)
+    # A pushed node is handed the file, so it publishes, proves and retires no link.
+    for kind, links in [('fetch', True), ('push', False)]:
+        assert holds(linked['when'], {'bootwright_cluster_install_request': {'deliveryKind': kind}}) is links
     probing = probe['ansible.builtin.uri']
     assert probing['url'] == TOKEN_URL
     assert probing['ca_path'] == '{{ bootwright_cluster_install_material.artifactCertificate }}'
@@ -110,8 +123,13 @@ def test_the_insert_serves_the_per_insert_token_never_the_cluster_wide_publicati
     assert material['ansible.builtin.copy']['mode'] == '0600'
     assert render(material['ansible.builtin.copy']['content'], scope) == scope['containercluster_install_agent_token']['url']
     port = only(tasks('port.yml'), lambda t: 'ansible.builtin.include_role' in t)
-    arguments = port['vars']['containercluster_install_agent_port_arguments']['media_insert']
+    arguments = port['vars']['containercluster_install_agent_fetched_insert']
     assert arguments['image_url_file'] == material['ansible.builtin.copy']['dest']
+    chosen = port['vars']['containercluster_install_agent_port_arguments']['media_insert']
+    for kind, used in [('fetch', 'fetched'), ('push', 'pushed')]:
+        selection = {'bootwright_cluster_install_request': {'deliveryKind': kind},
+                     'containercluster_install_agent_fetched_insert': 'fetched', 'containercluster_install_agent_pushed_insert': 'pushed'}
+        assert render(chosen, selection) == used
     removals = [t for t in steps if t.get(MODULE, {}).get('operation') == 'remove']
     assert len(removals) == 2
     for removal in removals:

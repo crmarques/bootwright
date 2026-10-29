@@ -34,6 +34,15 @@
       when: containercluster_install_agent_before.observation.url | default('') | length > 0
       no_log: true
 
+    # A pushed image is recognized by the port itself: the media volume the
+    # machine presents is this Machine's and carries the frozen media identity.
+    - name: Prove the presented pushed image identity
+      ansible.builtin.set_fact:
+        containercluster_install_agent_node_identity:
+          own: "{{ containercluster_install_agent_node_read.media_state | default('') == 'own' }}"
+      when: (bootwright_cluster_install_request.deliveryKind | default('fetch')) == 'push'
+      no_log: true
+
     - name: Mark this node phase complete only after its final step
       ansible.builtin.set_fact:
         containercluster_install_agent_phase_failed: false

@@ -8,10 +8,10 @@ installer platform. It is not the baremetal-VIP lab-kubevirt profile Q19 ranks
 first, and it claims no accepted run. The existing host is reached
 through a context-bound kubeconfig; Bootwright does not create the host cluster.
 
-The API validates this profile, and [B87](../../specs/milestones/m1.md#b87)
-realizes the provider proof and the guests in-tree; the installation refuses a
-node whose image is pushed until [B88](../../specs/milestones/m3.md#b88) boots
-it, so the profile does not run yet. Do not bypass the refusal.
+The API validates this profile, [B87](../../specs/milestones/m1.md#b87)
+realizes the provider proof and the guests, and
+[B88](../../specs/milestones/m3.md#b88) pushes, boots, releases and removes
+the cluster in-tree; its live run on an external host is B731's operator gate.
 The provider derives each interface's MAC from the context, Machine and
 interface name, so no Machine authors a MAC or an `interfaceBinding`
 ([B87](../../specs/milestones/m1.md#b87)).
@@ -64,8 +64,7 @@ make build
 ./bin/bootwright validate -f "$m3_input"
 ```
 
-After B87 and B88 qualify runtime execution, customize and import this private
-copy into an unused `lab-kubevirt-external` context. Follow the
+Customize and import this private copy into an unused `lab-kubevirt-external` context. Follow the
 [compact staging sequence](lab-compact.md#stage-and-install), adapting
 its context, input directory and Secret names. Bind `host-kubeconfig` with
 `secret set --value-file`, bind `openshift-pull-secret`, and generate

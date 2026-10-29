@@ -41,3 +41,21 @@ func TestInstalledToolLookupPreservesStoreFailures(t *testing.T) {
 		})
 	}
 }
+
+// A latest intent names the one release the proved closure resolved it to,
+// and nothing when the closure holds no such client or several of it.
+func TestALatestIntentLocatesTheOneReleaseItsClosureResolved(t *testing.T) {
+	virtctl := func(version string) ToolDefinition {
+		return ToolDefinition{Kind: "virtctl", Compatibility: "kubevirt", Version: version,
+			Files: []ToolFile{{Member: "virtctl", Path: "tools/virtctl/kubevirt/" + version + "/virtctl"}}}
+	}
+	latest := controller.InstalledTool{Kind: "virtctl", Compatibility: "kubevirt", Version: "latest", Executable: "virtctl"}
+	if member, found := publishedMember([]ToolDefinition{virtctl("v1.6.2")}, latest); !found || member != "tools/virtctl/kubevirt/v1.6.2/virtctl" {
+		t.Fatalf("one release: %q %t", member, found)
+	}
+	for name, tools := range map[string][]ToolDefinition{"none": {}, "several": {virtctl("v1.6.2"), virtctl("v1.7.0")}} {
+		if member, found := publishedMember(tools, latest); found {
+			t.Fatalf("%s: located %q", name, member)
+		}
+	}
+}

@@ -33,7 +33,6 @@ Slices with an item `in progress`.
 | X61 | M2c | D159 | in progress |
 | X118 | M3c | D172 | in progress |
 | X123 | M3d | D174, D181 | in progress |
-| X130 | M3e | D181 | in progress |
 | X143 | M4c | D180 | in progress |
 | X189 | M1 | D190 | in progress |
 | X194 | M1 | D192 | in progress |

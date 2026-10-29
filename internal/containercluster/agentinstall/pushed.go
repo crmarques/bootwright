@@ -2,8 +2,10 @@ package agentinstall
 
 import (
 	"slices"
+	"strings"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
+	controllerscope "github.com/crmarques/bootwright/internal/controller"
 	"github.com/crmarques/bootwright/internal/infrastructureservices/artifactserver"
 	"github.com/crmarques/bootwright/internal/machine"
 	"github.com/crmarques/bootwright/internal/reconciliation"
@@ -46,3 +48,25 @@ func bindPushedMedia(media MediaRequest, needs Requirements, install *InstallReq
 	install.PublicationRoot = Publication{}
 	return err
 }
+
+// portTools are the clients the nodes' arms run, as the controller stage installs them.
+func portTools(catalog api.Catalog, nodes []nodeProjection) ([]Tool, error) {
+	var kinds []string
+	for _, node := range nodes {
+		if provider, found := catalog.Find(api.InfraProvider, node.target.Provider); found && node.target.Delivery == substrate.DeliveryPush {
+			kinds = append(kinds, substrate.ProviderTools(provider)...)
+		}
+	}
+	slices.Sort(kinds)
+	var tools []Tool
+	for _, kind := range slices.Compact(kinds) {
+		request, err := controllerscope.ProviderTool(catalog, kind)
+		if err != nil {
+			return nil, err
+		}
+		tools = append(tools, Tool{Compatibility: request.Compatibility, Kind: request.Kind, Version: request.Version})
+	}
+	return tools, nil
+}
+
+func portToolValue(tool Tool) string { return strings.ReplaceAll(tool.Kind, "-", "") }

@@ -95,9 +95,18 @@ func LocateInstalledTool(ctx context.Context, view StorageView, tools []ToolDefi
 }
 
 // publishedMember is the file one retained closure publishes for exactly this
-// client kind, compatibility and version. A closure publishes more than one
-// executable, so the member is named rather than inferred from the kind.
+// client kind, compatibility and version, a latest intent its one release. A
+// closure publishes several executables, so the member is named.
 func publishedMember(tools []ToolDefinition, tool controller.InstalledTool) (string, bool) {
+	if tool.Version == "latest" {
+		matches := slices.DeleteFunc(slices.Clone(tools), func(definition ToolDefinition) bool {
+			return definition.Kind != tool.Kind || definition.Compatibility != tool.Compatibility
+		})
+		if len(matches) != 1 {
+			return "", false
+		}
+		tool.Version = matches[0].Version
+	}
 	for _, definition := range tools {
 		if definition.Kind != tool.Kind || definition.Compatibility != tool.Compatibility || definition.Version != tool.Version {
 			continue

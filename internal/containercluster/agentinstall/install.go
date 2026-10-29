@@ -405,31 +405,46 @@ func (c InstallCapability) runWithOutputs(ctx context.Context, execution lifecyc
 		}
 		values[strings.ReplaceAll(executable, "-", "")] = path
 	}
-	refusals := runtimeRefusals(execution.Context, execution.Continuation, request)
-	if operation == "apply" {
-		pins, err := c.pinValues(execution, request)
+	for _, tool := range request.PortTools {
+		if operation != "apply" {
+			break
+		}
+		path, err := ToolPath(ctx, execution, tool, tool.Kind)
 		if err != nil {
 			return lifecycle.RunResult{}, err
 		}
-		maps.Copy(values, pins)
+		values[portToolValue(tool)] = path
+	}
+	refusals := runtimeRefusals(execution.Context, execution.Continuation, request)
+	pins, err := c.pinValues(execution, operation, request)
+	if err != nil {
+		return lifecycle.RunResult{}, err
+	}
+	maps.Copy(values, pins)
+	if operation == "apply" {
 		maps.Copy(refusals, preBootRefusals(execution.Context, execution.Continuation, request))
 	}
 	// The attempt adds the placement's identity and host key. The serving
 	// certificate and each node's own credentials are lent here.
-	materials := []lifecycle.MaterialFile{{
-		Name: "artifact-certificate", Part: secrets.CertificatePart,
-		Secret: request.TLSCertificateRef, Variable: "artifactCertificate",
-	}}
+	var materials []lifecycle.MaterialFile
+	if request.TLSCertificateRef != "" {
+		materials = append(materials, lifecycle.MaterialFile{
+			Name: "artifact-certificate", Part: secrets.CertificatePart,
+			Secret: request.TLSCertificateRef, Variable: "artifactCertificate",
+		})
+	}
 	for index, node := range request.Nodes {
-		materials = append(materials,
-			lifecycle.MaterialFile{
-				Name: "bmc-user-" + node.Machine, Part: secrets.UsernamePart,
-				Secret: node.Controller.CredentialsRef, Variable: "controllerUser" + nodeVariable(index),
-			},
-			lifecycle.MaterialFile{
-				Name: "bmc-password-" + node.Machine, Part: secrets.PasswordPart,
+		user, password := substrate.ControllerCredential(node.Substrate)
+		materials = append(materials, lifecycle.MaterialFile{
+			Name: "bmc-user-" + node.Machine, Part: user,
+			Secret: node.Controller.CredentialsRef, Variable: "controllerUser" + nodeVariable(index),
+		})
+		if password != "" {
+			materials = append(materials, lifecycle.MaterialFile{
+				Name: "bmc-password-" + node.Machine, Part: password,
 				Secret: node.Controller.CredentialsRef, Variable: "controllerPassword" + nodeVariable(index),
 			})
+		}
 		if node.Controller.TrustBundleRef != "" {
 			materials = append(materials, lifecycle.MaterialFile{
 				Name: "bmc-ca-" + node.Machine, Part: secrets.CertificatePart,
@@ -464,25 +479,31 @@ func preBootRefusals(contextName, continuation string, request InstallRequest) m
 // nodeRefusal is the reason a node's boot names one pre-boot refusal by.
 func nodeRefusal(reason string, index int) string { return reason + "-node-" + strconv.Itoa(index) }
 
-// pinValues carries the identity each physical node's own Machine block proved
-// earlier in this operation, under that node's position, so its pre-boot proof
-// refuses a machine that answers as another system. A node its substrate
-// created, and a Machine with no pin, carry nothing.
-func (c InstallCapability) pinValues(execution lifecycle.Execution, request InstallRequest) (map[string]string, error) {
+// pinValues carries, under each node's position, the identity its Machine
+// block proved: a physical node's on apply, a pinned port's on every operation.
+func (c InstallCapability) pinValues(execution lifecycle.Execution, operation string, request InstallRequest) (map[string]string, error) {
 	values := map[string]string{}
 	for index, node := range request.Nodes {
-		if !node.Physical {
+		pinnedPort := node.PortPinned
+		if !pinnedPort && (!node.Physical || operation != "apply") {
 			continue
 		}
 		if c.identities == nil {
 			return nil, refusal("lifecycle.state", "the reader of Machine/"+node.Machine+"'s pinned identity is not configured", "")
 		}
-		pin, pinned, err := c.identities.PinnedIdentity(node.Machine, execution.Proved)
+		proved := execution.Proved
+		if pinnedPort && len(execution.ApplyProved) != 0 {
+			proved = execution.ApplyProved
+		}
+		pin, pinned, err := c.identities.PinnedIdentity(node.Machine, proved)
 		if err != nil {
 			return nil, err
 		}
 		if pinned {
 			maps.Copy(values, pin.PinValues(nodeVariable(index)))
+		} else if pinnedPort && operation == "apply" {
+			return nil, refusal("lifecycle.state", "Machine/"+node.Machine+"'s machine block recorded no identity its port is pinned to in this operation, so no entry point of that port can prove it",
+				"run bootwright apply --context "+execution.Context+" so the Machine's block records them")
 		}
 	}
 	return values, nil

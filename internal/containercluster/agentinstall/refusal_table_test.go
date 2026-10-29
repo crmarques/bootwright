@@ -49,7 +49,6 @@ func TestOpenShiftClusterRefusalTableMatchesUnsupported(t *testing.T) {
 	unrealized = unrealized.WithSpec(unrealized.Spec().WithPath(api.StringValue("vc"), "substrate", "providerRef"))
 	nestedKubevirt := api.NewObject(api.InfraProvider, "vc", api.Value{}, api.MapValue(field("kubevirt", api.MapValue(text("hostClusterRef", "host")))))
 	vsphere := api.NewObject(api.InfraProvider, "vc", api.Value{}, api.MapValue(field("vsphere", api.MapValue())))
-	pushing := api.NewObject(api.InfraProvider, "vc", api.Value{}, api.MapValue(field("kubevirt", api.MapValue(text("kubeconfigRef", "host"), text("namespace", "guests")))))
 	multiNode := api.NewCatalog(append(base(),
 		guest("ocp-01", "198.51.100.31/24"), guest("ocp-02", "198.51.100.32/24"), guest("ocp-03", "198.51.100.33/24"),
 		cluster("ocp",
@@ -119,10 +118,9 @@ func TestOpenShiftClusterRefusalTableMatchesUnsupported(t *testing.T) {
 		"Several nodes on another platform": {multiNode, "OpenShiftCluster/ocp", map[string]string{"<cluster>": "OpenShiftCluster/ocp"}},
 		"More nodes than the run ceiling fits": {largeCatalog(29), "OpenShiftCluster/ocp",
 			map[string]string{"<cluster>": "OpenShiftCluster/ocp", "<nodes>": "29", "<deadline>": "6h18m0s"}},
-		"A node with an install profile":              {onSNO(installed), "OpenShiftCluster/sno", onNode},
-		"A node on an unrealized substrate":           {onSNO(unrealized, vsphere), "OpenShiftCluster/sno", onSNOCluster},
-		"A KubeVirt node on a nested host":            {onSNO(unrealized, nestedKubevirt), "OpenShiftCluster/sno", map[string]string{"<provider>": "InfraProvider/vc"}},
-		"A node on a substrate that pushes its image": {onSNO(unrealized, pushing), "OpenShiftCluster/sno", onSNOCluster},
+		"A node with an install profile":    {onSNO(installed), "OpenShiftCluster/sno", onNode},
+		"A node on an unrealized substrate": {onSNO(unrealized, vsphere), "OpenShiftCluster/sno", onSNOCluster},
+		"A KubeVirt node on a nested host":  {onSNO(unrealized, nestedKubevirt), "OpenShiftCluster/sno", map[string]string{"<provider>": "InfraProvider/vc"}},
 		"A node whose emulated BMC port does not allocate": {
 			singleNodeOnProvider(portPastTheSpace, guest("sno-00", "198.51.100.20/24")), "OpenShiftCluster/sno", map[string]string{"<provider>": "InfraProvider/lab-libvirt", "<node>": "master-0", "<machine>": "Machine/sno-01"},
 		},
