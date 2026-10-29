@@ -29,7 +29,26 @@ The most consequential remaining work is:
 
 Two concrete spec contradictions remain: [specs/architecture.md:1159](../../../specs/architecture.md) still names removed `CephCluster.spec.type` as a selector (F06-01); and [specs/state-reconciliation.md:2106](../../../specs/state-reconciliation.md) promises GitOps bootstrap after every block reaching the cluster, while [specs/add-ons.md:74](../../../specs/add-ons.md) and [internal/reconciliation/lifecycle/stage_tails.go:31](../../../internal/reconciliation/lifecycle/stage_tails.go) limit the dependency to the same stage (F12-04).
 
-## Verification and limits
+## Quality of the addressed work
+
+**Overall judgment: the sampled remediation is technically strong, but operational confidence is uneven.** The work includes substantive implementation and useful failure-path tests. The strongest evidence is in lifecycle refusals and replay, API consistency, shared capability contracts and automated documentation checks. The weakest evidence is user-task validation and live qualification. This is an assessment of the delivered scope, not a production-readiness certification.
+
+The [quality assessment](quality-assessment.md) adds evidence and qualifications for the **185 addressed findings and 29 explicit decisions**, reviewed against `4510d73b6` on 2026-10-29. All 214 entries received a catalog-level review; selected implementation and test paths received deeper inspection. It does not assign an unsubstantiated score to every finding. The original 232-finding dispositions and 18 incomplete findings remain unchanged.
+
+| Area | Quality judgment | Main qualification |
+| --- | --- | --- |
+| Lifecycle and destructive-operation guards | Strong in-tree evidence: meaningful negative tests check refusal, replay and effect ordering. | Shared-host discovery, incarnation ownership, restore protection and some Ceph recovery remain deferred. |
+| API and CLI changes | Strong contract consistency and regression coverage; explicit choices are traceable. | The eight operator authoring tasks remain unrun under B857, so improved usability is not demonstrated. |
+| Architecture and extensibility | Stronger ownership and shared contracts, with useful synthetic second-implementation tests. | Synthetic examples and structural guards do not prove another production implementation works. |
+| Verification tooling | Useful enforcement with tests of the checks themselves. | Author assertions, advisory hooks and file classification still need judgment; passing checks are not semantic proof. |
+| Documentation and delivery records | Good navigation, explicit limitations and enforceable drift controls. | Existing exceptions and remaining contradictory prose show that editorial cleanup is incomplete. A merged lane is not evidence of complete runtime delivery. |
+| Decisions and interim documentation fixes | Adequate where they satisfy the accepted correction and expose the tradeoff. | Recording a decision or warning earns no implementation or live-acceptance credit. |
+
+The most important caution applies to F10-03, CX-R4 and CX-API04: their closure documents a safety or recovery limitation; it does not remove that limitation. R2-06-01 adds a real shared-claim guard but still lacks foreign-domain discovery. R2-04-08 implements and tests an identity rule whose live invariant remains unverified. The detailed assessment explains the evidence and what would increase confidence in each case.
+
+## Verification and limits of the original disposition review
+
+The later quality enhancement also passed the full integration gate; its separate [verification record](quality-assessment.md#verification-of-this-enhancement) preserves the commands, skips and limits. The following describes the earlier disposition review only.
 
 The review compared the original catalog with current owning specs, decision and delivery records, relevant code and test guards. It checked counterevidence, including explicit decisions that rejected or narrowed recommendations, and kept those separate from unfinished work. The same IDs are counted only once even when a remaining concern overlaps another finding.
 
