@@ -3328,8 +3328,8 @@ holding such a clause, the clauses pending and the work they enable.
   read back and refused (X199).
 - [D201](#d201): clauses (1) to (11), OpenShift on KubeVirt Machines over an
   external host (X130).
-- [D203](#d203): clauses (1) to (7), stretch service placement and front
-  doors (X200).
+- [D203](#d203): clauses (1) to (14), stretch service placement and front
+  doors (X200) and the removal of a provided tiebreaker (X203).
 
 ### D1
 
@@ -5769,3 +5769,41 @@ name (D142). Exit evidence: admission tests per rule and their neighbours,
 gateway-worker fakes for `.rgw.root` placement, per-site ingress readiness
 and site coverage, and a consumer export planned over a stretch cluster; the
 operator gate is B488's emulated rehearsal of the reference profile.
+Taken by the session, pending the owner's review, for B892
+([provided tiebreaker removal](../ceph.md#a-provided-tiebreakers-removal)):
+(8) A stretch cluster whose tiebreaker is a provided Machine retires with its
+installed hosts: that Machine leaves only the surviving-host binding, and
+the cluster block's destroy removes the tiebreaker's footprint after every
+read-only refusal of the retirement and before its retirement record, so a
+failure stops the destroy before any data-site Machine is deleted; every
+other surviving host keeps the refusal. (9) The removal reaches the
+tiebreaker over the fleet connection the cluster already uses for that host,
+with its pinned host key, and needs neither the bootstrap host nor MON
+quorum. (10) Before any effect it proves, read-only, the owner marker under
+`/var/lib/bootwright/ceph/<fsid>` equal to the cluster's marker identity,
+`cephadm ls` listing only `cephadm:v1` daemons, none of another FSID and of
+this FSID a subset of the host's `mon` and `crash`, and no other FSID's
+directory under `/var/lib/ceph`; anything else refuses `tiebreaker-foreign`.
+(11) Under one attempt record it removes the recorded cluster-key line from
+the cluster SSH user's `authorized_keys`, the registry credential
+`/etc/ceph/podman-auth.json` under its recorded metadata, and runs the
+package cephadm's `rm-cluster --fsid <fsid> --force`, never `--zap-osds`,
+whose footprint (the FSID's units, directories and files, with no cluster
+left cephadm's shared target, logrotate file and logs, and `/etc/ceph`'s
+conf, public key and admin keyring when the conf names the FSID) is
+unverified until B488 reads it; packages, images, firewall openings, users,
+disks, the OS and Bootwright's records stay. (12) Absence is proved by no
+daemon, unit or target of the FSID, none of its data, log or logrotate
+paths, no FSID in `/etc/ceph/ceph.conf`, and neither the key line nor the
+credential, read without following links; only then is completion recorded
+and the retirement evidence names the tiebreaker as cleaned. (13) A lost
+reply leaves the effect unknown: the next attempt observes first, completes
+without a command when absence is proved, and otherwise repeats each removal
+under its attempt record; an unreachable tiebreaker reads as unknown, never
+absent, refusing `tiebreaker-unreachable` before the retirement record; a
+decommissioned or reinstalled tiebreaker has no exit yet ([B938](m2.md#b938)).
+(14) The cluster's retirement evidence gains the cleaned tiebreaker and its
+version moves; older records refuse by name (D142). Exit evidence: destroy
+tests over the fake transport for a lost reply, an unreachable host, a
+foreign daemon on the tiebreaker and the complete journey refusing nothing;
+the operator gate is the removal in B488's emulated rehearsal.

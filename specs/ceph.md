@@ -532,9 +532,10 @@ unverified in the [stretch native facts](../.agents/knowledge/ceph-stretch-nativ
 until B488's rehearsal reads them from the selected build.
 Not yet met: an interrupted stretch stage has no forward exit short of
 retiring the whole cluster; tracked as [B920](milestones/m2.md#b920).
-Not yet met: destroy never retires a cluster with a provided tiebreaker,
-because no block removes that Machine, so it refuses by the surviving-host
-rule; tracked as [B892](milestones/m2.md#b892).
+Not yet met: destroy does not yet
+[remove a provided tiebreaker's footprint](#a-provided-tiebreakers-removal),
+so a cluster with one refuses by the surviving-host rule; tracked as
+[B892](milestones/m2.md#b892).
 
 ### Stretch services and front doors
 
@@ -1783,6 +1784,55 @@ candidate Ceph capabilities refuse removal until their native proofs and
 inverses are qualified. Native principal or pool absence alone cannot prove
 withdrawal of retained confidential material or sessions. B70 owns offline
 physical erase; removing services or releasing claims proves no erasure.
+
+### A provided tiebreaker's removal
+
+A stretch cluster whose [tiebreaker](#stretch-topology) is a provided
+Machine retires with its installed hosts, as above: the provided Machine
+leaves only the surviving-host binding, and still counts for the retirement
+record and consumer hosts. Its cluster block removes the tiebreaker's
+footprint itself, after every read-only refusal of the retirement and before
+it records the retirement, so a failure stops the destroy before any
+data-site Machine is deleted (D203). The removal reaches that host over the
+fleet connection the cluster already uses for it, with its pinned host key,
+and needs neither the bootstrap host nor MON quorum.
+
+- **Proof before effect.** Read-only: the owner marker under
+  `/var/lib/bootwright/ceph/<fsid>` on the host equals this cluster's marker
+  identity, for the FSID Bootwright recorded; `cephadm ls` lists only
+  `cephadm:v1` daemons, none of another FSID and, of this FSID, a subset of
+  the host's `mon` and `crash`; `/var/lib/ceph` holds no other FSID's
+  directory. Anything else refuses `tiebreaker-foreign` with no effect.
+- **Effect.** An attempt record in that marker directory, then:
+  the cluster-key line the `authorize` phase added to the cluster SSH user's
+  `authorized_keys`, exactly as recorded, removed and proved absent; the
+  registry credential `/etc/ceph/podman-auth.json`, removed under its
+  recorded descriptor metadata; and the package cephadm binary's `rm-cluster
+  --fsid <fsid> --force`, never `--zap-osds`, never the copy under
+  `/var/lib/ceph/<fsid>`. That command removes the FSID's units, data, log,
+  run and temporary directories, logrotate and sysctl files; with no Ceph
+  cluster left, cephadm's `ceph.target`, its logrotate file and its
+  `cephadm.log` files; and, when `/etc/ceph/ceph.conf` names the FSID, that
+  file, `ceph.pub` and the admin keyring. Its exact footprint on the selected
+  build is unverified until [B488](milestones/m2.md#b488) reads it.
+  Packages, images, firewall openings, users, disks, the OS and Bootwright's
+  own records under `/var/lib/bootwright/ceph*/<fsid>` stay.
+- **Absence.** `cephadm ls` lists no daemon of the FSID, no
+  `ceph-<fsid>` unit or target remains, neither `/var/lib/ceph/<fsid>`,
+  `/var/log/ceph/<fsid>` nor the FSID's logrotate file exists,
+  `/etc/ceph/ceph.conf` does not name the FSID, and neither the recorded
+  `authorized_keys` line nor the credential remains, read without following
+  links; only then is the completion recorded and the cluster's retirement
+  evidence names the tiebreaker as cleaned.
+- **Recovery.** A lost reply leaves the effect unknown: the next attempt
+  observes first, completes without a command when absence is proved, and
+  otherwise repeats each removal under its attempt record. An unreachable
+  tiebreaker is unknown, never absent, and refuses `tiebreaker-unreachable`
+  before the retirement record.
+
+Not yet met: a tiebreaker the operator has decommissioned or reinstalled
+refuses this removal with no exit; tracked as
+[B938](milestones/m2.md#b938).
 
 The context lease admits one mutator. Within its DAG, blocks declare exclusive
 resources for cluster-wide orchestrator/configuration changes, host preparation,
