@@ -9582,3 +9582,18 @@ All 232 finding dispositions, all 18 work packages and the original assessment
 baselines are preserved. This is an editorial consolidation, not a new product
 assessment. The delivering commit records preservation and link checks,
 independent review and integration gate results.
+
+### X212 — Claude follow-up assessment of the specification audit
+
+**Item:** B956 (opened and delivered on 2026-10-29 for the owner's request to
+check whether every audit finding was really addressed and to evaluate the
+quality of that work). **Kind:** enabling. **Owners:** Architecture and Agent
+guidance.
+
+The [Claude follow-up](../../audits/specs/001/follow-up/001/report-claude.md)
+reassesses all 232 findings at `896e8d8f2`, independently of the Codex
+follow-up: 174 closed, 19 closed by an owner decision, 35 partial, 2 carried by
+open items and 2 missing, with 24 confirmed defects in the remediation itself.
+It judges the quality of the remediation commits X160 to X193 and proposes
+eight work packages. The assessment ran no live operation and changes no
+product behavior, contract or milestone item state.

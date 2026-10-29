@@ -16,3 +16,4 @@ when checking historical evidence.
 ## Follow-up
 
 - [Follow-up 001 by Codex: assessment, implementation plan, findings and evidence](follow-up/001/report-codex.md)
+- [Follow-up 001 by Claude: fresh assessment at `896e8d8f2`, remediation quality, plan, findings and evidence](follow-up/001/report-claude.md)
