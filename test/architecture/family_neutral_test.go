@@ -136,7 +136,8 @@ func familyKindNames(source sourceFile, kinds map[string]bool) []string {
 }
 
 // kindProseExempt is the CLI, whose help and rendered output state which
-// cluster kinds each command applies to; the help goldens pin that text.
+// cluster kinds each command applies to; the help goldens pin that text
+// until B968 derives it from the family registry.
 func kindProseExempt(owner string) bool {
 	return owner == "internal/cli" || strings.HasPrefix(owner, "internal/cli/")
 }

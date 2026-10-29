@@ -279,6 +279,8 @@ Alias cell.
 | [B965](#b965) | new, 2026-10-29 (X220) | enabling | Specification maintenance | The ten section-budget exceptions and the leaf-budget exceptions of the spec pages are split into leaves within budget | The split is large documentation work with no consumer; the docs gate holds each ceiling falling in the meantime |
 | [B966](#b966) | new, 2026-10-29 (X220) | enabling | Ansible collection | The role and plugin naming misfits are renamed to the pattern | The rename moves the automation digest, so it rides a build and setup; the allowance in `test_collection_names.py` only shrinks in the meantime |
 | [B967](#b967) | new, 2026-10-29 (X220) | enabling | Verification tooling | The selection logic of `scripts/quick-test` and `scripts/check-commits` moves behind `scripts/tools` launchers | Both scripts are named shell exceptions that work; no gate fails until the move |
+| [B968](#b968) | new, 2026-10-29 (X216) | enabling | CLI | CLI help and output name cluster and storage kinds from the family registry, and the family-neutral check covers `internal/cli` | About 24 help and output strings name kinds directly and the help goldens pin them; the check exempts `internal/cli` meanwhile |
+| [B969](#b969) | new, 2026-10-29 (X216) | enabling | Storage | The six storage requirements no example plans become reference-edge rows | `CephClient`, `CephNFSExport` and `CephSMBResource` `filesystemRef` and the three `CephObjectGateway` `spec.pools` references order blocks in code, but the catalog test needs a planned example per row, so they carry a reason meanwhile |
 
 ### B82
 
@@ -801,23 +803,16 @@ doubles are not held to the contextfs behaviour; the media shelf double keeps an
 unused `Digest` method beside the held-image method; and the Kickstart renderer
 treats a Proxy reference that does not resolve, or a managed Proxy, as no proxy
 because admission refuses both first, so an admission that ever lets one
-through would fetch repositories directly instead of refusing; and the controller
-prerequisites argument spec types `nativeStaging` as raw because the role-spec
-test does not know `int`, so the integer check lives only in the Python frozen
-request and the role's tasks (found in X43). Three more argument specifications
-leave what their entry points read undeclared or untyped:
-`managedos_install_anaconda` reads `bootwright_os_install_digest` without
-declaring it, `storage_ceph_core`'s nested request mappings carry no options
-for the members its tasks read, and `physical_erase` neither mirrors the erase
-method and target bounds Go freezes as choices nor names them as checked only
-by asserts. Since 2026-10-26 (X162) `test_entry_point_reads.py` refuses an
-entry point reading an undeclared `bootwright_*` variable and names 29
-existing reads in an exact shrinking allowance under this item: the digest
-variables the runner passes and `bootwright_run_scratch`, in nearly every
-role; declaring them empties it. **Exit evidence:** each covered or removed by a test that fails
-when its guard is removed, `nativeStaging` typed `int` with the role-spec test
-taught the type, and those three specifications declaring what their entry
-points read.
+through would fetch repositories directly instead of refusing (found in X43).
+**Partly delivered** by
+[X221](delivered.md#x221--declared-adapter-arguments): the digest and scratch
+variables, `storage_ceph_core`'s nested request members and the
+`physical_erase` targets; `nativeStaging` was already typed `int`. **Remains:** the bare nested mappings of
+`managedos_install_anaconda` (`identity`, `placement`, `target`), the
+`physical_erase` `install` mapping and the other Ceph roles' nested mappings.
+**Exit evidence:** each defect covered or removed by a test that fails when its
+guard is removed, and the remaining mappings declared and held to their Go
+requests by a struct walk like `storage_ceph_core`'s.
 
 ### B432
 
@@ -2332,8 +2327,9 @@ not.
 ### B676
 
 `spec.dependencyVersions.libvirt` admits a NEVRA pin
-(`api/v1alpha1/environment.go`), while the controller stage refuses any pin
-(`internal/controller/clients/capability.go`). Found by the D163 sweep
+(`api/v1alpha1/environment.go`), while plan and the controller stage refuse
+any pin (`internal/controller/selection.go`,
+`internal/controller/clients/capability.go`). Found by the D163 sweep
 (`D163-B13`). **Outcome:** the field either honours a NEVRA pin through host
 `dnf` or leaves the grammar. **Why parked:** it is implementation scope, not a
 compatibility rule. **Requires:** none. **Definition:** `Needs definition`.
@@ -3098,6 +3094,26 @@ until their logic moves behind a tested launcher; `scripts/runtime-lock`'s host
 launcher under `scripts/tools/` with its tests beside it, and the exceptions
 leave the reference. **Exit evidence:** the launchers' `*_test.py` suites,
 `TestCheckCommitsRequiresAContractLineWhereAContractCanMove` and `make quick`.
+
+### B968
+
+**Owner:** CLI. **Kind:** enabling. **Requires:** none. **Definition:**
+Specified. `kindProseExempt` in `test/architecture/family_neutral_test.go`
+exempts `internal/cli`, whose help and output strings name kinds directly.
+**Outcome:** those strings come from the family registry, so a second family
+changes no CLI literal, and the exemption is gone. **Exit evidence:** the
+family-neutral check over `internal/cli` and regenerated help goldens, plus a
+test that adds a synthetic second storage family kind and sees it named.
+
+### B969
+
+**Owner:** Storage. **Kind:** enabling. **Requires:** none. **Definition:**
+Specified. `TestEveryReferenceFieldHasAnEdgeRowOrAReason` gives six storage
+references that emit requirements a reason instead of a
+[reference edges](../state-reconciliation.md#reference-edges) row because no
+example plans them. **Outcome:** examples or fixtures plan each edge, the rows
+exist and the reasons are gone. **Exit evidence:** the edge-catalog test with
+the six rows.
 
 ## Audit remediation (2026-10-26)
 

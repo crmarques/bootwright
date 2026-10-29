@@ -241,10 +241,11 @@ func referenceFields(kind api.Kind, shape *api.Shape, prefix string, depth int) 
 // unorderedReferences names each reference field that may name an object
 // some block realizes, that no edge catalog row names and that the example
 // corpus does not show its family ordering, by "<Kind> <path>", with why it
-// orders nothing (specs/state-reconciliation.md, Reference edges).
+// orders nothing or, for B969's storage requirements, why no row names it yet
+// (specs/state-reconciliation.md, Reference edges).
 func unorderedReferences() map[string]string {
 	placement := "a managed service's placement Machine is OS-ready (os.provided: true), so no block of the plan readies it (specs/infrastructure-services.md, Selection and refusal)"
-	unplanned := "the storage capability requires it, but no example plans it and a catalog row needs one that does"
+	unplanned := "the storage capability requires it, but no example plans it and a catalog row needs one that does, so no row names it yet (B969)"
 	return map[string]string{
 		"ArtifactServer spec.machineRef":                                                     placement,
 		"DNSServer spec.machineRef":                                                          placement,

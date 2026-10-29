@@ -873,9 +873,9 @@ capability family, such as the substrate family that claims a Machine.
 Reconciliation resolves every requirement to the blocks that realize that
 object, or only that family's blocks, before it freezes the plan, and refuses
 before registration when no block realizes it, so a capability never learns
-another's block-identity grammar. A reference orders a block only through a
-row of the [reference edges](#reference-edges) catalog, which domain pages
-link rather than restate.
+another's block-identity grammar. A requirement is a row of the
+[reference edges](#reference-edges) catalog, which domain pages link rather
+than restate.
 
 An apply attempt receives what each block it depends on durably proved in this
 operation: that block's kind, object, implementation, verb and state, and the
@@ -903,8 +903,9 @@ requirement resolves only when some block of the plan realizes its target, so
 an external service never orders anything. A reference no row names is
 resolved and validated but orders nothing; each such field that can name a
 realized object needs its family's own ordering or a stated reason, which
-`TestEveryReferenceFieldHasAnEdgeRowOrAReason` holds. Destroy inverts every
-edge. Rows within one family that the family orders by its own block
+`TestEveryReferenceFieldHasAnEdgeRowOrAReason` holds. Not yet met: six
+storage references emit requirements no row names; tracked as
+[B969](milestones/backlog.md#b969). Destroy inverts every edge. Rows within one family that the family orders by its own block
 dependencies, such as a storage child after its cluster, are not requirements
 and are not listed. `TestEveryRequirementMatchesTheEdgeCatalog` plans every
 example and fails when a capability emits a requirement no row names, or omits

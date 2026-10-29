@@ -9865,3 +9865,112 @@ carried safety and qualification debt (B567, B568, B659, B662, B491, B103,
 B857, B867) and plans packages D and P1 to P8. Package D records owner
 questions [Q119 to Q134](backlog.md#audit-remediation-decisions); none is
 answered here. No product behavior, contract or item state changes.
+
+### X214 — Signed media URLs off the argument vector
+
+**Item:** B958 (opened and delivered on 2026-10-29 by package P1 of the
+[consolidated follow-up](../../audits/specs/001/follow-up/001/report-final.md),
+finding F11-08). **Kind:** safety. **Owners:** CLI and Managed OS.
+
+`media add --from-url` refuses a URL carrying any query, a bare `?` included,
+as a usage failure before any I/O, and names `--from-url-file` in the remedy;
+a signed URL reaches Bootwright only through that file or standard input
+([media acquisition](../cli/commands.md#flag-relationships-and-safeguards)).
+`TestMediaURLBoundaries` covers the refusal and the unchanged file path.
+
+### X215 — Root lock wait inside a lifecycle operation
+
+**Item:** B959 (package P2, finding F13-02). **Kind:** safety. **Owner:**
+Workspace.
+
+A root transaction a running apply or destroy takes for its leases or bundle
+reads waits for a held root lock up to `rootLockWait`, ends on cancellation,
+and still refuses `lifecycle.lease` past the bound; top-level commands keep
+their immediate busy refusal
+([locking](../contexts.md#storage-locking-and-publication)). The waiter holds
+no root lock, and no root holder waits for any lock, so the wait cannot
+deadlock. Not covered: engine-level tests of the block outcome a refusal past
+the bound records.
+
+### X216 — Architecture seams and guards
+
+**Item:** B960 (package P3, findings F07-03, F07-07, R2-01-01 and F06-01).
+**Kind:** enabling. **Owner:** Architecture.
+
+The arm-identity guard exempts an exact list of admission files, each with a
+reason, and refuses arm-prefixed literals; KubeVirt endpoint and provider
+fields are read through substrate accessors. Shared preflight contracts live
+in `internal/substrate/capacity`, so neither preflight imports the other.
+General-flow diagnostics derive kind names from the family registry, and the
+family-neutral check refuses a literal naming a family kind outside
+`internal/cli` ([B968](backlog.md#b968)). One rule orders a block through the
+[reference edges](../state-reconciliation.md#reference-edges) catalog, and
+`TestEveryReferenceFieldHasAnEdgeRowOrAReason` holds every reference field to
+a row or a stated reason; six storage requirements no example plans are
+carried by [B969](backlog.md#b969).
+
+### X217 — Trust anchors, custody wording and remedies
+
+**Item:** B961 (package P4, finding R2-04-04 and follow-up defects).
+**Kind:** safety. **Owners:** Secrets, State reconciliation and CLI.
+
+A [trust anchor](../secrets.md) is a third Secret class, verified against and
+never presented or rebound; API pages label every trust bundle and known-hosts
+reference with it. The `access.unproved` wording names the removal-kept
+custody mark. A resolution a fresh removal records carries the optional
+`removal` member, so `status` explains it by the destroy reading first.
+Default remedies naming a context-backed command carry the invoking
+`--context` when it is a valid name.
+
+### X218 — Admission and API corrections
+
+**Item:** B962 (package P5, findings R2-05-01, F02-01, F02-06 and F03-03).
+**Kind:** product. **Owners:** Desired state, Controller and Add-ons.
+
+The [unrealized table](../api.md) lists `connectToInsights: true` and the
+libvirt pin, which plan now refuses before the controller stage does. BMC
+prose names the BMC and a narrow docs check holds the three phrasings. The
+authored add-on refusal names an authored add-on, and the glossary defines
+add-on, package and authored add-on. A generated ArtifactServer certificate
+derives the serving Machine's FQDN, and the examples drop the SAN lists that
+restated the derivation.
+An existing context's stored ArtifactServer certificate whose descriptor
+authors no names, served by a Machine with an `fqdn` address that no HTTPS
+endpoint already names, turns stale after the upgrade: bind refuses with
+`secret.source` until `bootwright secret generate --context <context> --name
+<secret>` re-mints it before the next apply (from code, not run live).
+
+### X219 — Spec and guidance corrections
+
+**Item:** B963 (package P6). **Kind:** enabling. **Owners:** Architecture and
+Agent guidance.
+
+The spec and guidance remedies of the consolidated follow-up's package P6
+land on their owning pages, among them the change classes of the
+[verification reference](../../.agents/skills/code-implementation/references/verification.md),
+the routing rule replacing per-page milestone cards, Block and Step in the
+glossary, the setup-subtree and Ceph host-preparation owners, release
+observations in knowledge, and actionable format refusals. Not done: B477's
+narrative (no delivered record receives it) and B93's (no owning spec).
+
+### X220 — Gate coverage and ratchet owners
+
+**Item:** B964 (package P7). **Kind:** enabling. **Owner:** Verification
+tooling.
+
+`TestStopCheckHookBranches` covers every branch of the Stop hook; a leaf
+section budget ratchets with dated exceptions; the language-row test covers
+tracked `e2e/` and `examples/` scripts. The parked
+[B965](backlog.md#b965), [B966](backlog.md#b966) and
+[B967](backlog.md#b967) own the remaining exceptions.
+
+### X221 — Declared adapter arguments
+
+**Item:** [B431](backlog.md#b431), partly (package P8, finding V2-15).
+**Kind:** enabling. **Owner:** Ansible collection.
+
+Eleven roles declare their digest and scratch variables, emptying the
+undeclared-read allowance; `storage_ceph_core` declares every nested request
+member, held to the Go request by a struct walk; `physical_erase` declares its
+targets and names its assert-only bounds. No contract golden moved; the
+automation digest did, so a host takes a build and setup.
