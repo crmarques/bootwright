@@ -48,7 +48,7 @@ release numbers or contact publishers.
 
 | Field | Dependency | Exact override |
 | --- | --- | --- |
-| `libvirt` | Native libvirt client, including `virsh` | `latest`; the grammar admits a distribution package version or `[EPOCH:]VERSION-RELEASE`, which the controller stage refuses. |
+| `libvirt` | Native libvirt client, including `virsh` | `latest`; the grammar admits a distribution package version or `[EPOCH:]VERSION-RELEASE`, which a plan refuses ([refusal table](#refusal-table)). |
 | `helm` | Helm | `latest` or an exact publisher release tag, optionally prefixed by `v`. |
 | `govc` | vSphere client | `latest` or an exact publisher release tag, optionally prefixed by `v`. |
 | `virtctl` | Upstream KubeVirt client | `latest` or an exact publisher release tag, optionally prefixed by `v`. |
@@ -62,9 +62,11 @@ like any other unknown key.
 `latest` selects the publisher's latest stable release for
 the generic target clients. For the libvirt client the controller stage
 installs whatever the host's own repositories provide, through the host's dnf,
-so a selected libvirt closure with any other `libvirt` value refuses at that
-stage, naming the Environment and the remedy of removing the field
-([the controller stage](../controller.md#the-controller-stage)). Version
+so a selected libvirt closure with any other `libvirt` value refuses at plan,
+naming the Environment and the remedy of removing the field, and the stage
+refuses a frozen request that carries one
+([the controller stage](../controller.md#the-controller-stage)); the pin is
+tracked as [B676](../milestones/backlog.md#b676). Version
 ranges, wildcards, nulls and empty strings are invalid. A client release tag,
 after its optional `v`, is at most 95 ASCII characters, starts with a digit,
 and otherwise contains only alphanumerics or `._+-`; any tag the publisher
@@ -446,9 +448,9 @@ for every consumer: a Proxy's endpoints by
 [its own admission](infrastructure-services.md#proxy-dns-ntp-and-registry-deployment),
 and each bypass entry by the [proxy choice](infrastructure-services.md#proxy-choice)
 that declares it, each naming its field and never the value. This Environment
-therefore adds no refusal of its own. Admission never refuses a
-shape only this executable cannot realize: those are the controller's, and
-refuse before registration as the table below states.
+therefore adds no refusal of its own. A shape only this executable cannot
+realize is refused where the [compiler boundary](../api.md#compiler-boundary)
+states, and the table below lists the controller's.
 
 ### Refusal table
 
@@ -459,7 +461,8 @@ registration with `lifecycle.unsupported` naming this Environment, and
 controller selection refuses the first one it meets with
 `controller.unsupported` on the declaring object and field. Its reason and
 remedy are the diagnostic's message and remediation, in which `<machine>` is
-the controller Machine and `<proxy>` the Proxy it selects.
+the controller Machine, `<proxy>` the Proxy it selects and `<environment>` this
+Environment.
 
 | Refusal | Path | Reason | Remedy |
 | --- | --- | --- | --- |
@@ -468,6 +471,7 @@ the controller Machine and `<proxy>` the Proxy it selects.
 | Proxy authentication | `spec.connection.auth.proxyAuthRef` on the selected external `Proxy` | `this executable's controller stage acquires through no authenticated proxy, and <proxy> sets spec.connection.auth.proxyAuthRef` | `select direct: {} or an external Proxy that needs no authentication in spec.proxy on <machine>` |
 | Private trust | `spec.connection.trustBundleRef` on the selected external `Proxy` | `this executable's controller stage trusts only the host's system trust store, and <proxy> sets spec.connection.trustBundleRef` | `select direct: {} or an external Proxy without spec.connection.trustBundleRef that the host's system trust store verifies in spec.proxy on <machine>` |
 | HTTP proxy alone | `spec.connection.httpProxy` without `spec.connection.httpsProxy` on the selected external `Proxy` | `every dependency source is HTTPS, so the spec.connection.httpProxy of <proxy> alone selects no controller acquisition route` | `set connection.httpsProxy on <proxy> to the proxy endpoint; every dependency source is HTTPS` |
+| Libvirt release pin | `spec.dependencyVersions.libvirt` other than `latest`, with the libvirt client selected | `this executable's controller stage installs the libvirt release the host's repositories provide, and <environment> pins spec.dependencyVersions.libvirt` | `remove spec.dependencyVersions.libvirt from <environment>` |
 
 ## Lifecycle rescue declaration
 

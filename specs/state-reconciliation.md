@@ -2076,7 +2076,7 @@ projection claiming any other field is refused as above.
 
 | Implementation | Object | Observed fields | Notes |
 | --- | --- | --- | --- |
-| `machine-libvirt-v1` | `Machine` | `spec.substrate.providerRef` | domain state; controller power |
+| `machine-libvirt-v1` | `Machine` | `spec.substrate.providerRef` | domain state; emulated BMC power |
 | `machine-libvirt-v1` | `InfraProvider` | `spec.libvirt.machineProfiles[].name`, `[].diskGiB`, `[].dataDisks[].name`, `[].dataDisks[].sizeGiB`, `[].dataDisks[].media` | missing disks |
 | `cluster-install-agent-v1` | `OpenShiftCluster` | `spec.nodes[].name`, `[].labels`, `[].taints` | declared labels and taints a node lacks |
 

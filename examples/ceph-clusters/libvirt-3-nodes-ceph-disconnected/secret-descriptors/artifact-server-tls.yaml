@@ -10,10 +10,4 @@ spec:
     generated:
       commonName: controller.lab.example.test
 
-      dnsNames:
-        - controller.lab.example.test
-
-      ipAddresses:
-        - 198.51.100.1
-
       validityDays: 3650

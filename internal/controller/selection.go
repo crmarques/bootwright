@@ -300,6 +300,13 @@ func Unsupported(catalog api.Catalog) []UnsupportedShape {
 
 func unsupported(machine api.Object, catalog api.Catalog) []UnsupportedShape {
 	shapes := []UnsupportedShape{}
+	if environments := catalog.OfKind(api.Environment); len(environments) == 1 && requiresLibvirtClient(catalog, machine) {
+		if versions, err := selectDependencyVersions(environments[0]); err == nil && versions.Libvirt != DefaultDependencyVersions().Libvirt {
+			shapes = append(shapes, UnsupportedShape{Object: environments[0], Field: "$.spec.dependencyVersions.libvirt",
+				Reason:      "this executable's controller stage installs the libvirt release the host's repositories provide, and " + environments[0].Identity() + " pins spec.dependencyVersions.libvirt",
+				Remediation: "remove spec.dependencyVersions.libvirt from " + environments[0].Identity()})
+		}
+	}
 	if bypass := machine.Spec().Get("proxy", "noProxy"); bypass.Type() == api.Sequence && bypass.Len() > maxProxyBypassEntries {
 		shapes = append(shapes, UnsupportedShape{Object: machine, Field: "$.spec.proxy.noProxy",
 			Reason:      "this executable's controller route carries at most " + strconv.Itoa(maxProxyBypassEntries) + " bypass entries, and " + machine.Identity() + " declares more in spec.proxy.noProxy",

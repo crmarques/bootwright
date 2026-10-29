@@ -178,10 +178,15 @@ func CertificateNames(c api.Catalog, secret string) []string {
 		if !placed || value.Get("tls", "secretRef").Text() != secret {
 			continue
 		}
+		serving := false
 		for _, endpoint := range value.Get("endpoints").Items() {
 			if listenerProtocol(value, endpoint.Get("listenerRef").Text()) == "https" {
 				names = append(names, machineAddress(machine, endpoint.Get("addressRef").Text()))
+				serving = true
 			}
+		}
+		if serving {
+			names = append(names, machineAddress(machine, "fqdn"))
 		}
 	}
 	return names

@@ -150,7 +150,7 @@ A managed ArtifactServer accepts these fields after `management`:
 | `bindAddress` | string | no | IP literal; derived as the [deployment defaults](#proxy-dns-ntp-and-registry-deployment) state. |
 | `retention` | string | no | `persistent`, the default and only value: published content is kept until destroy. `installOnly` is [retired](../api.md#retired-values). |
 | `tls` | object | conditional | Required when any effective listener uses HTTPS; forbidden for HTTP-only listeners. |
-| `tls.secretRef` | string | with TLS | `tlsCertificate` Secret supplying certificate and key. A [generated](secrets.md#generated-source) Secret derives its `ipAddresses` and `dnsNames` from these HTTPS endpoints; an authored list names the address of every HTTPS endpoint, or that endpoint refuses at `$.spec.endpoints[i]` naming the Secret and the address. Effect material: the server serves it. |
+| `tls.secretRef` | string | with TLS | `tlsCertificate` Secret supplying certificate and key. A [generated](secrets.md#generated-source) Secret derives its `ipAddresses` and `dnsNames` from these HTTPS endpoints and the `machineRef` Machine's `fqdn`; an authored list names the address of every HTTPS endpoint, or that endpoint refuses at `$.spec.endpoints[i]` naming the Secret and the address. Effect material: the server serves it. |
 | `tls.minVersion` | string | no | `TLSv1.2` by default, or `TLSv1.3`. |
 | `listeners` | array | no | Non-empty; defaults to `[{name: https, protocol: https, port: 8443}]`. |
 | `listeners[].name` | string | yes | Unique listener name. |

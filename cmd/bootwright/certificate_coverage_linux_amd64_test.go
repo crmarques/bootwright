@@ -15,7 +15,7 @@ func TestAGeneratedServingCertificateMissingAnHTTPSAddressRefusesBeforePlan(t *t
 			compileAcceptance(t, exampleDirectory(t, example))
 		})
 	}
-	edit := exampleEdit{"secret-descriptors/artifact-server-tls.yaml", "ipAddresses:\n        - 192.0.2.1\n", "ipAddresses:\n        - 192.0.2.99\n"}
+	edit := exampleEdit{"secret-descriptors/artifact-server-tls.yaml", "validityDays: 3650\n", "ipAddresses:\n        - 192.0.2.99\n\n      validityDays: 3650\n"}
 	refusal := requireRefusal(t, editedExample(t, "lab-baremetal", edit), "api.invariant", "ArtifactServer/lab-artifacts", "$.spec.endpoints[0]")
 	if refusal.Message != "endpoint ip-https serves HTTPS at 192.0.2.1, which the generated certificate of Secret/artifact-server-tls does not name" ||
 		refusal.Remediation != "add 192.0.2.1 to spec.source.generated.ipAddresses of Secret/artifact-server-tls, import the change with bootwright context update --name <context> --input-dir <dir>, "+

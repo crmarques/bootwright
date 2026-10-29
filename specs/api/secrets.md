@@ -127,11 +127,14 @@ A type the [type table](../secrets.md#acquisition-and-commands) does not mark ge
 consumed by the selected type is rejected. A generated `tlsCertificate` that
 authors neither `dnsNames` nor `ipAddresses` derives both from what its
 consumers serve it at: every address of an HTTPS endpoint of an
-`ArtifactServer` whose `tls.secretRef` names it, and the `bindAddress` of
-each libvirt provider's emulated BMC whose `certificateRef` names it, each list
-sorted and without repeats; an IP goes to `ipAddresses` and a name to
-`dnsNames`. Authoring either list overrides the derivation, and its consumers
-still refuse an address it does not name. Normalization materializes the
+`ArtifactServer` whose `tls.secretRef` names it, plus the `fqdn` address of
+that server's `machineRef` Machine, and the `bindAddress` of each libvirt
+provider's emulated BMC whose `certificateRef` names it (never the host's
+`fqdn`, since the BMC is dialed at its bind address), each list sorted and
+without repeats; an IP goes to `ipAddresses` and a name to `dnsNames`. Authoring
+either list overrides the derivation as a whole, so a descriptor that needs a
+name beyond the derived ones restates the derived values it keeps, and its
+consumers still refuse an address it does not name. Normalization materializes the
 `username`, `validityDays`, and `keyType` defaults on their applicable arms.
 The token-byte default is a generation-time semantic default and may remain
 omitted in effective state. Normalization never fabricates secret bytes.

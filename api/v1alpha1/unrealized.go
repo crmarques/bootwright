@@ -7,23 +7,26 @@ import (
 )
 
 type Unrealized struct {
-	Kind  Kind
-	Path  string
-	Value string
-	Item  string
+	Kind   Kind
+	Path   string
+	Value  string
+	Item   string
+	Except string
 }
 
 var unrealized = []Unrealized{
-	{InfraProvider, "$.spec.vsphere", "", "B99"},
-	{MachineInstallProfile, "$.spec.installer.templateClone", "", "B99"},
-	{Registry, "$.spec.management", "managed", "B68"},
-	{LoadBalancer, "$.spec.management", "managed", "B100"},
-	{OpenShiftCluster, "$.spec.distribution.type", "okd", "B748"},
-	{OpenShiftCluster, "$.spec.install.mode", "disconnected", "B69"},
-	{OpenShiftCluster, "$.spec.install.servingCertificates", "", "B723"},
-	{ClusterAddonBinding, "$.spec.addonRefs", "", "B90"},
-	{ClusterAddonBinding, "$.spec.profileRefs", "", "B90"},
-	{CustomPlaybook, "$.spec.enabled", "true", "B102"},
+	{Kind: InfraProvider, Path: "$.spec.vsphere", Item: "B99"},
+	{Kind: MachineInstallProfile, Path: "$.spec.installer.templateClone", Item: "B99"},
+	{Kind: Registry, Path: "$.spec.management", Value: "managed", Item: "B68"},
+	{Kind: LoadBalancer, Path: "$.spec.management", Value: "managed", Item: "B100"},
+	{Kind: OpenShiftCluster, Path: "$.spec.distribution.type", Value: "okd", Item: "B748"},
+	{Kind: OpenShiftCluster, Path: "$.spec.install.mode", Value: "disconnected", Item: "B69"},
+	{Kind: OpenShiftCluster, Path: "$.spec.install.servingCertificates", Item: "B723"},
+	{Kind: ClusterAddonBinding, Path: "$.spec.addonRefs", Item: "B90"},
+	{Kind: ClusterAddonBinding, Path: "$.spec.profileRefs", Item: "B90"},
+	{Kind: CustomPlaybook, Path: "$.spec.enabled", Value: "true", Item: "B102"},
+	{Kind: Entitlement, Path: "$.spec.rhsm.connectToInsights", Value: "true"},
+	{Kind: Environment, Path: "$.spec.dependencyVersions.libvirt", Except: "latest", Item: "B676"},
 }
 
 func UnrealizedDeclarations() []Unrealized { return slices.Clone(unrealized) }
@@ -38,6 +41,8 @@ func (u Unrealized) DeclaredBy(object Object) bool {
 		return false
 	case value.Type() == Boolean:
 		return strconv.FormatBool(value.Bool()) == u.Value
+	case u.Except != "":
+		return value.Text() != u.Except
 	case u.Value != "":
 		return value.Text() == u.Value
 	case value.Type() == Sequence:
@@ -50,6 +55,9 @@ func (u Unrealized) Declaration() string {
 	path := strings.TrimPrefix(u.Path, "$.")
 	if u.Value != "" {
 		return path + ": " + u.Value
+	}
+	if u.Except != "" {
+		return path + " other than " + u.Except
 	}
 	return path
 }

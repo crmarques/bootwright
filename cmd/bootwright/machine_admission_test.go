@@ -128,29 +128,30 @@ func TestAProviderlessMachineIsPoweredThroughTheControllerItAuthors(t *testing.T
 // A value with exactly one valid derivation is derived (D183, Q82 b): a
 // managed service binds the one address its endpoints name, and the wildcard
 // when they name several; a generated certificate names what its consumers
-// serve it at; an authored value overrides either.
+// serve it at, and an artifact server's also names its Machine's fqdn; an
+// authored value overrides either.
 func TestSingleDerivationValuesAreDerived(t *testing.T) {
 	const proxy, tls, bmc = "infra/components/proxy.yaml", "secret-descriptors/artifact-server-tls.yaml", "secret-descriptors/lab-bmc-tls.yaml"
-	sans := "      dnsNames:\n        - controller.lab.example.test\n\n      ipAddresses:\n        - 192.0.2.1\n\n"
-	state, _ := compileAcceptance(t, editedExample(t, "lab-rhel", exampleEdit{tls, sans, ""},
+	state, _ := compileAcceptance(t, editedExample(t, "lab-rhel",
 		exampleEdit{bmc, "      dnsNames:\n        - localhost\n\n      ipAddresses:\n        - 127.0.0.1\n\n", ""}))
 	effective := state.Effective()
 	if bind := requireObject(t, effective, api.DNSServer, "lab-dns").Spec().Get("bindAddress").Text(); bind != "192.0.2.1" {
 		t.Fatalf("derived DNS bind = %q, want 192.0.2.1", bind)
 	}
-	for name, want := range map[string]string{"artifact-server-tls": "192.0.2.1", "lab-bmc-tls": "127.0.0.1"} {
+	for name, want := range map[string][2]string{"artifact-server-tls": {"192.0.2.1", "controller.lab.example.test"}, "lab-bmc-tls": {"127.0.0.1", ""}} {
 		generated := requireObject(t, effective, api.Secret, name).Spec().Get("source", "generated")
-		if got := generated.Get("ipAddresses").Strings(); len(got) != 1 || got[0] != want || generated.Has("dnsNames") {
-			t.Fatalf("%s derived names = %v, want ipAddresses [%s]", name, generated, want)
+		if ips, dns := generated.Get("ipAddresses").Strings(), generated.Get("dnsNames").Strings(); len(ips) != 1 || ips[0] != want[0] || strings.Join(dns, ",") != want[1] {
+			t.Fatalf("%s derived names = %v, want ipAddresses [%s] and dnsNames [%s]", name, generated, want[0], want[1])
 		}
 	}
-	state, _ = compileAcceptance(t, editedExample(t, "lab-rhel", exampleEdit{proxy, "    - name: ip\n      addressRef: ip\n",
-		"    - name: ip\n      addressRef: ip\n\n    - name: name\n      addressRef: fqdn\n"}))
+	state, _ = compileAcceptance(t, editedExample(t, "lab-rhel",
+		exampleEdit{proxy, "    - name: ip\n      addressRef: ip\n", "    - name: ip\n      addressRef: ip\n\n    - name: name\n      addressRef: fqdn\n"},
+		exampleEdit{tls, "      validityDays: 3650\n", "      dnsNames:\n        - controller.lab.example.test\n        - extra.lab.example.test\n\n      ipAddresses:\n        - 192.0.2.1\n\n      validityDays: 3650\n"}))
 	if bind := requireObject(t, state.Effective(), api.Proxy, "lab-proxy").Spec().Get("bindAddress").Text(); bind != "0.0.0.0" {
 		t.Fatalf("a proxy whose endpoints name an address and a name binds %q, want the wildcard", bind)
 	}
-	authored := requireObject(t, state.Effective(), api.Secret, "artifact-server-tls").Spec().Get("source", "generated", "dnsNames").Strings()
-	if len(authored) != 1 || authored[0] != "controller.lab.example.test" {
+	authored := requireObject(t, state.Effective(), api.Secret, "artifact-server-tls").Spec().Get("source", "generated")
+	if names := authored.Get("dnsNames").Strings(); len(names) != 2 || names[1] != "extra.lab.example.test" {
 		t.Fatalf("authored names were not kept as the override: %v", authored)
 	}
 }

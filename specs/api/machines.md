@@ -317,7 +317,7 @@ power reaches the Machine through the `bmc` it authors from the controller host
 `api.invariant` at the same path, naming the provider and its arm. The arm is
 omitted only where it would be empty: an OS-ready Machine of a virtual provider
 that names no profile, or an installer-provisioned or OS-ready bare-metal
-Machine that declares no controller, MAC or physical hint. The retired
+Machine that declares no BMC, MAC or physical hint. The retired
 `substrate.profileRef`, `hardware.management`, `hardware.nics[].macAddress`,
 `os.install.rootDeviceHints` and `network.interfaceAttachments` refuse with
 `api.field`, naming their replacements ([retired

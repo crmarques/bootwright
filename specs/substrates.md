@@ -795,7 +795,7 @@ the declared one only in both type and value, so `true` never matches `1`.
    where the SettingsObject advertises it; a task the BMC answers with is
    polled; and the pending read-back must show the declared values.
 6. A fresh system read must still report the one-time override and power
-   `Off`, and both resets must resolve to a type the controller accepts, at a
+   `Off`, and both resets must resolve to a type the BMC accepts, at a
    target on the BMC's own endpoint, or it refuses without any power request.
    It also refuses, with the machine still `Off`, once the share of the
    [bound](#identity-and-power-operations) before the power-on, measured on a

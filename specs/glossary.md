@@ -54,6 +54,17 @@ its modifier wherever two of its senses can meet; elsewhere context decides. A n
   profile ([`ClusterAddonProfile`](api/addons.md#clusteraddonprofile)) or
   acceptance profile (a row of a coverage page, such as the
   [Ceph profile catalog](ceph-coverage.md#profile-catalog)).
+- **Add-on**: what a `ClusterAddonBinding` attaches to a cluster: a built-in
+  **package** or an **authored add-on**, never both senses at once
+  ([add-ons](add-ons.md)).
+- **Package**: always a built-in add-on package, a registry entry compiled into
+  the executable ([add-ons](add-ons.md#built-in-packages-and-selection)). An
+  operating-system package and an OLM package are written with that
+  qualifier.
+- **Authored add-on**: a `ClusterAddon` the operator declares, admitted as data
+  ([add-ons](add-ons.md#trust-boundary),
+  [`ClusterAddon`](api/addons.md#clusteraddon)). It is never an "add-on
+  package".
 - **Capability**: always an add-on
   capability token (what an [add-on](api/addons.md#clusteraddon) provides or
   requires for ordering), a lifecycle capability (a module of one bounded

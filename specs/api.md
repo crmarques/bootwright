@@ -59,8 +59,13 @@ proves each row warned and refused at `plan`.
 | ClusterAddonBinding | `spec.addonRefs` | [B90](milestones/m4.md#b90) |
 | ClusterAddonBinding | `spec.profileRefs` | [B90](milestones/m4.md#b90) |
 | CustomPlaybook | `spec.enabled: true` | [B102](milestones/backlog.md#b102) |
+| Entitlement | `spec.rhsm.connectToInsights: true` | none tracked |
+| Environment | `spec.dependencyVersions.libvirt other than latest` | [B676](milestones/backlog.md#b676) |
 
-An install-profile row is refused on each Machine that selects the profile.
+An install-profile row is refused on each Machine that selects the profile, and
+an Entitlement row on each Machine whose install profile subscribes to it. The
+`dependencyVersions.libvirt` row is refused when the controller selects the
+libvirt client.
 Other plan-time refusals, such as bounds, placements and trust shapes, stay in
 their capabilities' refusal tables and raise no warning here. `api.deferred`
 stays the warning for a declaration that plans but changes nothing: an

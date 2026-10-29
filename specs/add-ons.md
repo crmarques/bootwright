@@ -481,7 +481,7 @@ the refused ClusterAddon, `<binding>` the binding, `<package>` the package,
 
 | Refusal | Path | Reason | Remedy |
 | --- | --- | --- | --- |
-| An authored add-on | a `ClusterAddon` a binding selects, directly or through a profile | `<addon> is an authored add-on package, which needs the custom-package lifecycle this executable does not offer` | `select a built-in package under spec.packages of <binding>, or remove <addon> from its selection` |
+| An authored add-on | a `ClusterAddon` a binding selects, directly or through a profile | `<addon> is an authored add-on, which needs the custom-package lifecycle this executable does not offer` | `select a built-in package under spec.packages of <binding>, or remove <addon> from its selection` |
 | An oversized instance | a package whose rendered program for `<cluster>` passes a bound | `the program of package <package> for <cluster> passes its <bound>` | `reduce the configuration of package <package> in <binding>` |
 
 ## Design

@@ -422,8 +422,9 @@ Before any effect the attempt records its intent, the
 the requirements it is about to ask dnf for and the exact tool source
 identities it is about to add, which are first retained in the shared
 controller record. A declared `spec.dependencyVersions.libvirt` other than
-`latest` refuses before anything is read, naming the Environment and the
-remedy of removing it: the host's repositories decide the libvirt release.
+`latest` refuses at plan, and in a frozen request before anything is read,
+naming the Environment and the remedy of removing it: the host's repositories
+decide the libvirt release.
 
 Missing host packages are installed as root under `setup/lock`, so setup and
 another context's stage never run dnf beside it; a busy lock refuses rather

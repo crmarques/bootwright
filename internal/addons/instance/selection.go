@@ -19,7 +19,7 @@ func (c Capability) Unsupported(state *compilation.State) []lifecycle.Refusal {
 	for _, binding := range catalog.OfKind(api.ClusterAddonBinding) {
 		selected, _ := addons.ExpandBinding(binding, catalog)
 		for _, addon := range selected {
-			result = append(result, lifecycle.RefusalOf(binding, addon.Identity()+" is an authored add-on package, which needs the custom-package lifecycle this executable does not offer", "select a built-in package under spec.packages of "+binding.Identity()+", or remove "+addon.Identity()+" from its selection"))
+			result = append(result, lifecycle.RefusalOf(binding, addon.Identity()+" is an authored add-on, which needs the custom-package lifecycle this executable does not offer", "select a built-in package under spec.packages of "+binding.Identity()+", or remove "+addon.Identity()+" from its selection"))
 		}
 	}
 	if c.facts == nil {

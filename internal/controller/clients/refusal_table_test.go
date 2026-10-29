@@ -47,7 +47,7 @@ func externalProxy(connection ...api.FieldValue) api.Object {
 // either side fails here.
 func TestControllerRefusalTableMatchesUnsupported(t *testing.T) {
 	endpoint := text("httpsProxy", "http://proxy.example.test:3128")
-	names := map[string]string{"<machine>": "Machine/controller", "<proxy>": "Proxy/egress"}
+	names := map[string]string{"<machine>": "Machine/controller", "<proxy>": "Proxy/egress", "<environment>": "Environment/lab"}
 	bypass := make([]string, 129)
 	for index := range bypass {
 		bypass[index] = "host-" + strconv.Itoa(index) + ".example.test"
@@ -58,8 +58,9 @@ func TestControllerRefusalTableMatchesUnsupported(t *testing.T) {
 			names},
 		"Proxy authentication": {[]api.Object{proxied(), externalProxy(endpoint, field("auth", api.MapValue(text("proxyAuthRef", "proxy-credentials"))))},
 			names},
-		"Private trust":    {[]api.Object{proxied(), externalProxy(endpoint, text("trustBundleRef", "corporate-ca"))}, names},
-		"HTTP proxy alone": {[]api.Object{proxied(), externalProxy(text("httpProxy", "http://proxy.example.test:3128"))}, names},
+		"Private trust":       {[]api.Object{proxied(), externalProxy(endpoint, text("trustBundleRef", "corporate-ca"))}, names},
+		"HTTP proxy alone":    {[]api.Object{proxied(), externalProxy(text("httpProxy", "http://proxy.example.test:3128"))}, names},
+		"Libvirt release pin": {append([]api.Object{environment(field("dependencyVersions", api.MapValue(text("libvirt", "10.0.0"))))}, libvirtGraph()[1:]...), names},
 	}
 	for _, row := range refusalTable(t) {
 		test, found := cases[row.name]
@@ -70,7 +71,7 @@ func TestControllerRefusalTableMatchesUnsupported(t *testing.T) {
 		delete(cases, row.name)
 		t.Run(row.name, func(t *testing.T) {
 			want := []lifecycle.Refusal{{Kind: "Environment", Name: "lab", Reason: expand(row.reason, test.values), Remediation: expand(row.remedy, test.values)}}
-			if got := (Capability{}).Unsupported(stateOf(append([]api.Object{environment()}, test.objects...)...)); !reflect.DeepEqual(got, want) {
+			if got := (Capability{}).Unsupported(stateOf(withEnvironment(test.objects)...)); !reflect.DeepEqual(got, want) {
 				t.Fatalf("the capability refuses %+v, the table %+v", got, want)
 			}
 		})
@@ -81,6 +82,14 @@ func TestControllerRefusalTableMatchesUnsupported(t *testing.T) {
 	if got := (Capability{}).Unsupported(stateOf(environment(), proxied(".example.test"), externalProxy(endpoint))); len(got) != 0 {
 		t.Fatalf("a supported controller was refused: %+v", got)
 	}
+}
+
+// withEnvironment adds the plain Environment unless the graph declares its own.
+func withEnvironment(objects []api.Object) []api.Object {
+	if slices.ContainsFunc(objects, func(object api.Object) bool { return object.Kind() == api.Environment }) {
+		return objects
+	}
+	return append([]api.Object{environment()}, objects...)
 }
 
 // refusalRow is one row of a refusal table: its name, and its reason and remedy

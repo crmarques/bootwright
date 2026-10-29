@@ -14,7 +14,10 @@ import (
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
 )
 
-const unrealizedSpec = "../../specs/api.md"
+const (
+	unrealizedSpec = "../../specs/api.md"
+	hostVariants   = "libvirt-3-nodes-ceph-host-variants"
+)
 
 // patchedSources rewrites the one source file whose path ends with suffix,
 // replacing old, which it must hold exactly once, and adds files under the
@@ -46,20 +49,34 @@ func unrealizedFixtures(t *testing.T) map[string]desiredstate.Sources {
 		"a disconnected cluster": patchedSources(t, patchedSources(t, exampleDirectory(t, "lab-features"), "clusters/features/cluster.yaml",
 			"    mode: connected\n", "    mode: disconnected\n", nil), "clusters/features/cluster.yaml", "          endpointRef: ip-https\n\n    # pullSecretRef",
 			"          endpointRef: ip-https\n\n      bootArtifacts:\n        artifactServerEndpoint:\n          serverRef: lab-artifacts\n          endpointRef: ip-https\n\n    # pullSecretRef", nil),
+		"a pinned libvirt release": patchedSources(t, exampleDirectory(t, hostVariants), "environment.yaml",
+			"  controller:\n    machineRef: controller\n", "  controller:\n    machineRef: controller\n\n  dependencyVersions:\n    libvirt: 10.0.0\n", nil),
+		"Insights enrollment": patchedSources(t, exampleDirectory(t, hostVariants), "storage/rhel-entitlement.yaml",
+			"connectToInsights: false", "connectToInsights: true", nil),
 		"serving certificates": patchedSources(t, exampleDirectory(t, "lab-sno"), cluster, "    mode: connected\n",
 			"    mode: connected\n\n    servingCertificates:\n      ingress:\n        defaultCertificateRef: artifact-server-tls\n", nil),
 	}
 }
 
 // refusesDeclaration says whether a plan refusal names the declaring object,
-// or the Machine an unrealized install profile would install.
+// or the Machine whose install profile is, or subscribes to, the object.
 func refusesDeclaration(refusal lifecycle.Refusal, object api.Object, catalog api.Catalog) bool {
 	if refusal.Kind == string(object.Kind()) && refusal.Name == object.Name() {
 		return true
 	}
 	machine, found := catalog.Find(api.Machine, refusal.Name)
-	return refusal.Kind == string(api.Machine) && found && object.Kind() == api.MachineInstallProfile &&
-		machine.Spec().Get("os", "installProfileRef").Text() == object.Name()
+	if refusal.Kind != string(api.Machine) || !found {
+		return false
+	}
+	profileName := machine.Spec().Get("os", "installProfileRef").Text()
+	switch object.Kind() {
+	case api.MachineInstallProfile:
+		return profileName == object.Name()
+	case api.Entitlement:
+		profile, found := catalog.Find(api.MachineInstallProfile, profileName)
+		return found && profile.Spec().Get("subscription", "entitlementRef").Text() == object.Name()
+	}
+	return false
 }
 
 // TestUnrealizedTableMatchesUnsupported holds the Admitted but unrealized

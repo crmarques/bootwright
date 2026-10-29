@@ -709,12 +709,19 @@ func reflectEqual(x, y prerequisites.SetupEgress) bool {
 }
 
 // A declared libvirt release is an intent the host's repositories decide, so
-// the stage refuses it rather than install another release silently.
+// planning refuses it, and the stage refuses a frozen request that carries one
+// rather than install another release silently.
 func TestADeclaredLibvirtReleaseRefuses(t *testing.T) {
 	declared := environment(field("dependencyVersions", api.MapValue(text("libvirt", "10.0.0"))))
+	objects := append([]api.Object{declared}, libvirtGraph()[1:]...)
+	capability := stage(&fakeTools{complete: true}, newDnf(), &fakeSetup{}, &fakeInstaller{})
+	if _, err := capability.Plan(context.Background(), planInput(stateOf(objects...), reconciliation.Apply)); firstCode(err) != "controller.unsupported" {
+		t.Fatalf("plan = %v", err)
+	}
 	dnf := newDnf()
-	capability := stage(&fakeTools{complete: true}, dnf, &fakeSetup{}, &fakeInstaller{})
-	block := planBlock(t, capability, stateOf(append([]api.Object{declared}, libvirtGraph()[1:]...)...), reconciliation.Apply)
+	capability = stage(&fakeTools{complete: true}, dnf, &fakeSetup{}, &fakeInstaller{})
+	block := planBlock(t, capability, stateOf(libvirtGraph()...), reconciliation.Apply)
+	block.Request = json.RawMessage(bytes.Replace(block.Request, []byte(`"libvirt":"latest"`), []byte(`"libvirt":"10.0.0"`), 1))
 	result, err := capability.Apply(context.Background(), newRecorder(&fakeArea{}).execution(t, block, hostState()))
 	reported := diagnostics.Of(err)
 	if result.Outcome != reconciliation.OutcomeFailed || len(reported) != 1 || reported[0].Code != "controller.unsupported" || reported[0].Remediation != "remove spec.dependencyVersions.libvirt from lab" || len(dnf.calls) != 0 {

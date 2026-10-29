@@ -11,10 +11,4 @@ spec:
       commonName: controller.metal.example.test
       issuerRef: artifact-server-ca
 
-      dnsNames:
-        - controller.metal.example.test
-
-      ipAddresses:
-        - 192.0.2.1
-
       validityDays: 365

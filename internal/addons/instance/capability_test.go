@@ -351,3 +351,23 @@ func TestPartialEvidenceRetainsReceiptsAndInvalidEvidenceDoesNotPersist(t *testi
 		})
 	}
 }
+
+func TestAnAuthoredAddOnIsRefusedAsAnAuthoredAddOn(t *testing.T) {
+	registry, err := addons.NewRegistry([]addons.Package{fixturePackage()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	binding := api.NewObject(api.ClusterAddonBinding, "binding", api.Value{}, api.MapValue(
+		api.FieldValue{Name: "clusterRef", Value: api.StringValue("cluster")},
+		api.FieldValue{Name: "addonRefs", Value: api.StringList("custom")}))
+	catalog := api.NewCatalog([]api.Object{binding, api.NewObject(api.ClusterAddon, "custom", api.Value{}, api.MapValue())})
+	got := New(nil, registry, nil).Unsupported(compilation.NewState(catalog, catalog, nil))
+	want := []lifecycle.Refusal{{
+		Kind: "ClusterAddonBinding", Name: "binding",
+		Reason:      "ClusterAddon/custom is an authored add-on, which needs the custom-package lifecycle this executable does not offer",
+		Remediation: "select a built-in package under spec.packages of ClusterAddonBinding/binding, or remove ClusterAddon/custom from its selection",
+	}}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("refusals = %+v, want %+v", got, want)
+	}
+}
