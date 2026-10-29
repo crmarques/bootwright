@@ -43,6 +43,26 @@ func installedMachines(r Request) []string {
 	return hostMachines(r, false)
 }
 
+func providedMachines(r Request) []string {
+	machines := []string{}
+	for _, host := range r.Hosts {
+		if host.Machine != "" && host.Provided {
+			machines = append(machines, host.Machine)
+		}
+	}
+	slices.Sort(machines)
+	return slices.Compact(machines)
+}
+
+func boundMachines(machines, provided []string) []string {
+	return slices.DeleteFunc(slices.Clone(machines), func(machine string) bool { return slices.Contains(provided, machine) })
+}
+
+func validProvided(machines, provided []string) bool {
+	return (len(provided) == 0 || strictlySorted(provided)) && len(boundMachines(machines, provided)) != 0 &&
+		!slices.ContainsFunc(provided, func(machine string) bool { return !slices.Contains(machines, machine) })
+}
+
 func hostMachines(r Request, provided bool) []string {
 	machines := []string{}
 	for _, host := range r.Hosts {

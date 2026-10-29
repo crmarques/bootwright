@@ -18,7 +18,7 @@ import (
 )
 
 const ConsumerImplementation = "ceph-export-v1"
-const ConsumerVersion = "ceph-export-request-v2"
+const ConsumerVersion = "ceph-export-request-v3"
 const ConsumerEvidenceVersion = "ceph-export-evidence-v1"
 const ConsumerOutput = "external-details"
 
@@ -55,6 +55,7 @@ type ConsumerRequest struct {
 	PhysicalHosts   bool                         `json:"physicalHosts"`
 	Pool            string                       `json:"pool"`
 	Principals      map[string]map[string]string `json:"principals"`
+	Provided        []string                     `json:"providedMachines"`
 	Scope           json.RawMessage              `json:"scope,omitempty"`
 	Version         string                       `json:"version"`
 }
@@ -74,7 +75,7 @@ func DecodeConsumerRequest(data []byte) (ConsumerRequest, error) {
 	if err != nil {
 		return r, err
 	}
-	if r.Cluster == "" || r.Controller == "" || !reconciliation.ValidSegment(r.Name) || r.Filesystem == "" || r.Pool == "" || r.DefaultDataPool == "" || !strictlySorted(r.Machines) || len(r.Scope) != 0 || (r.KeyType != "aes" && r.KeyType != "aes256k") {
+	if r.Cluster == "" || r.Controller == "" || !reconciliation.ValidSegment(r.Name) || r.Filesystem == "" || r.Pool == "" || r.DefaultDataPool == "" || !strictlySorted(r.Machines) || !validProvided(r.Machines, r.Provided) || len(r.Scope) != 0 || (r.KeyType != "aes" && r.KeyType != "aes256k") {
 		return r, failure("lifecycle.state", "the frozen Ceph consumer request is inconsistent", "")
 	}
 	if len(r.Monitors) == 0 || len(r.Monitors) > 64 || !strictlySorted(r.MonitoringHosts) || r.MonitoringPort != 9283 {
@@ -168,7 +169,7 @@ func (c ConsumerCapability) Plan(ctx context.Context, input lifecycle.PlanInput)
 		if len(data) == 0 {
 			return plan, failure("lifecycle.state", "Ceph consumer has no filesystem default data pool", "")
 		}
-		r := ConsumerRequest{Cluster: cluster.Name(), Controller: input.Controller, DefaultDataPool: nativePoolRef(catalog, data[0]), Filesystem: fs.Name(), KeyType: refs.Get("cephxKeyType").Text(), Machines: requestMachines(base), Name: obj.Name(), PhysicalHosts: physicalHosts(base.Hosts), Pool: nativePoolRef(catalog, refs.Get("rbdPoolRef").Text()), Version: ConsumerVersion}
+		r := ConsumerRequest{Cluster: cluster.Name(), Controller: input.Controller, DefaultDataPool: nativePoolRef(catalog, data[0]), Filesystem: fs.Name(), KeyType: refs.Get("cephxKeyType").Text(), Machines: requestMachines(base), Name: obj.Name(), PhysicalHosts: physicalHosts(base.Hosts), Provided: providedMachines(base), Pool: nativePoolRef(catalog, refs.Get("rbdPoolRef").Text()), Version: ConsumerVersion}
 		if err := exportMonitoring(catalog, cluster, &r); err != nil {
 			return plan, err
 		}
@@ -248,7 +249,7 @@ func (c ConsumerCapability) runExport(ctx context.Context, e lifecycle.Execution
 	if err != nil {
 		return lifecycle.RunResult{}, r, err
 	}
-	if !slices.Equal(r.Machines, scope.Machines) {
+	if !slices.Equal(r.Machines, scope.Machines) || !slices.Equal(r.Provided, scope.Provided) {
 		return lifecycle.RunResult{}, r, failure("lifecycle.state", "Ceph consumer host set differs from its proved cluster", "")
 	}
 	if err = bindPhysicalHosts(scope.Scope.Hosts, e, c.proofs); err != nil {

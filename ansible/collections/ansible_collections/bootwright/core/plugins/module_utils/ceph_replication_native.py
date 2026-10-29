@@ -11,7 +11,7 @@ import os
 from ansible_collections.bootwright.core.plugins.module_utils import ceph_native, ceph_native_resources
 from ansible_collections.bootwright.core.plugins.module_utils.ceph_native import canonical, named, require, unique_object
 
-VERSION = "ceph-replication-v1"
+VERSION = "ceph-replication-v2"
 PHASES = frozenset(("replication_prepare", "replication_token", "replication_import", "replication_image",
                     "replication_pool_observe", "replication_image_observe", "replication_commit"))
 # Mirror.cc logs decoded bootstrap tokens at debug_rbd=20. Override the inherited logging configuration for every call.
@@ -29,10 +29,11 @@ def validate(value):
     require(isinstance(value["images"], list) and 1 <= len(value["images"]) <= 3)
     for side in ("primary", "secondary"):
         endpoint = value[side]
-        require(isinstance(endpoint, dict) and set(endpoint) == {"cluster", "machines", "pool", "poolObject", "scope"})
+        require(isinstance(endpoint, dict) and set(endpoint) == {"cluster", "machines", "pool", "poolObject", "providedMachines", "scope"})
         scope = ceph_native.validate_scope(endpoint["scope"])
         require(endpoint["cluster"] == scope["cluster"] and named(endpoint["poolObject"]))
         require(endpoint["machines"] == sorted({host["machine"] for host in scope["hosts"]}))
+        require(endpoint["providedMachines"] == sorted({host["machine"] for host in scope["hosts"] if host.get("provided")}))
         pool = endpoint["pool"]
         ceph_native_resources.validate_pool(pool, len(scope["hosts"]))
         require(pool["type"] == "replicated" and pool["role"] == "rbd" and pool.get("object", pool["name"]) == endpoint["poolObject"])

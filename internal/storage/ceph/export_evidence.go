@@ -192,7 +192,7 @@ func (c ConsumerCapability) Observe(ctx context.Context, e lifecycle.Execution) 
 func (ConsumerCapability) RequiresOnlineRemoval(reconciliation.Block) bool { return true }
 func (ConsumerCapability) HostMachines(block reconciliation.Block) ([]string, error) {
 	r, err := DecodeConsumerRequest(block.Request)
-	return slices.Clone(r.Machines), err
+	return boundMachines(r.Machines, r.Provided), err
 }
 func (c ConsumerCapability) Removal(ctx context.Context, block reconciliation.Block) (lifecycle.Removal, error) {
 	if err := ctx.Err(); err != nil {

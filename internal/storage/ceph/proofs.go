@@ -40,6 +40,7 @@ type ProvedClusterScope struct {
 	Authored  []AuxiliaryReference
 	Bootstrap Host
 	Machines  []string
+	Provided  []string
 	Scope     ClusterScope
 }
 
@@ -90,5 +91,5 @@ func ProvedCluster(proofs []lifecycle.BlockEvidence, cluster, owner string) (Pro
 	if r.Auxiliary, err = ProvedAuxiliaryImages(proofs, cluster, r.Auxiliary); err != nil {
 		return ProvedClusterScope{}, err
 	}
-	return ProvedClusterScope{Authored: authored, Bootstrap: r.Hosts[at], Machines: requestMachines(r), Scope: scopeOf(r)}, nil
+	return ProvedClusterScope{Authored: authored, Bootstrap: r.Hosts[at], Machines: requestMachines(r), Provided: providedMachines(r), Scope: scopeOf(r)}, nil
 }

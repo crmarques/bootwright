@@ -1,6 +1,6 @@
 implementation: ceph-export-v1
-content-digest: 129376e1f6ef22439566ae05385e20e439938ffa8e56910330aad3bf7893e250
-request-version: ceph-export-request-v2
+content-digest: a087e9035d78569b64e9f62cef7d1a04820c484922e3abe373dc9b2c03dad0ea
+request-version: ceph-export-request-v3
 automation-formats: -custody-v1
 mark-formats: bootwright-managed-export, bootwright-owner
 proof-ids: marker:-attempt.json, marker:-complete.json, marker:-facts.json, marker:-id.json, marker:-rgw.json, marker:.json, marker:artifact.json, marker:attempt-call_home_initialize.json, marker:bootstrap-attempt.json, marker:bootstrap-enrollment.json, marker:bootstrap-original-ready.json, marker:bootstrap-original-reserved.json, marker:bootstrap-output-source.json, marker:bootstrap-prepared.json, marker:bootstrap-protocol.json, marker:bootstrap-scope.json, marker:cache-ready.json, marker:call-home-accepted.json, marker:client-, marker:client-applied-, marker:client-attempt-, marker:client-generator.json, marker:complete-call_home_initialize.json, marker:complete.json, marker:dashboard-port-, marker:dashboard-port-repair.json, marker:dashboard-redeploy.json, marker:dashboard-redeployed.json, marker:decision.json, marker:device-identities.json, marker:filesystem-, marker:filesystem-attempt., marker:filesystem-id., marker:gateway-, marker:group-attempt., marker:group., marker:initial-mgr-original-ready.json, marker:manifest.json, marker:native-teardown.json, marker:osd-device-, marker:osd-device-intent.json, marker:owner.json, marker:podman-auth.json, marker:policy-, marker:policy-attempt-, marker:policy-id-, marker:pool-, marker:pool-attempt-, marker:pool-id-, marker:pool-rbd-attempt-, marker:pool-rbd-complete-, marker:pool-setting-, marker:rbd-, marker:rbd-attempt., marker:rbd-id., marker:registry-file.json, marker:registry-intent.json, marker:registry-pending.json, marker:registry-removal.json, marker:registry-removed.json, marker:service-, marker:service-inputs.json, marker:ssh-authorization.json, marker:sshd-policy.json, marker:subvolume-, marker:subvolume-attempt., marker:subvolume-path., marker:transport-directory.json, marker:transport-ready.json, marker:transport.json, marker:tunnel-config-attempt-, marker:tunnel-config-attempt-call_home.json, marker:tunnel-config-complete-, marker:tunnel-config-complete-call_home.json, marker:tunnel-config-intent.json, marker:tunnel-configured.json, marker:tunnel-manager-files.json, marker:tunnel-mgr-source.json, marker:tunnel-mounted.json, marker:tunnel-redeploy.json, marker:tunnel-stage.json
@@ -37,6 +37,7 @@ request-schema:
   physicalHosts bool
   pool string
   principals map[string]map[string]string
+  providedMachines []string
   scope opaque omitempty
   version string
 evidence-schema:

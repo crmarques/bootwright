@@ -15,7 +15,7 @@ def request():
     cluster = scope()
     value = {"version": export.VERSION, "cluster": "example", "controller": "controller", "name": "consumer", "filesystem": "files",
              "pool": "block", "defaultDataPool": "fs-data", "keyType": "aes", "machines": [host["machine"] for host in cluster["hosts"]],
-             "scope": cluster, "physicalHosts": False, "monitors": {"node-1": "192.0.2.1"},
+             "providedMachines": [], "scope": cluster, "physicalHosts": False, "monitors": {"node-1": "192.0.2.1"},
              "monitoringHosts": ["192.0.2.1", "192.0.2.2"], "monitoringPort": 9283}
     value["principals"] = export.caps_for(value)
     return value
@@ -167,6 +167,23 @@ def test_widened_native_caps_are_refused():
     value["principals"]["rbd-node"]["mon"] = "allow *"
     with pytest.raises(ceph_native.Refusal):
         export.validate(value)
+
+
+def with_provided_tiebreaker(value):
+    value["scope"]["hosts"].append({"name": "tie", "machine": "tie", "address": "198.51.100.10", "user": "operator", "port": 22, "devices": [],
+                                    "labels": ["mon"], "location": {}, "sshKeyRef": "fleet-key", "knownHostsRef": "tie-known-hosts", "provided": True})
+    value["machines"] = sorted(value["machines"] + ["tie"])
+    return value
+
+
+def test_the_provided_machines_are_exactly_the_scope_s_provided_hosts():
+    value = with_provided_tiebreaker(request())
+    for provided in ([], ["machine-1"], ["machine-1", "tie"]):
+        with pytest.raises(ceph_native.Refusal):
+            export.validate(dict(value, providedMachines=provided))
+    export.validate(dict(value, providedMachines=["tie"]))
+    with pytest.raises(ceph_native.Refusal):
+        export.validate(dict(request(), providedMachines=["machine-1"]))
 
 
 def prerequisite_worker(monkeypatch):

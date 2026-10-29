@@ -57,7 +57,8 @@
       "size": 2,
       "type": "replicated"
     },
-    "poolObject": "primary-volumes"
+    "poolObject": "primary-volumes",
+    "providedMachines": []
   },
   "secondary": {
     "cluster": "secondary",
@@ -98,7 +99,8 @@
       "size": 2,
       "type": "replicated"
     },
-    "poolObject": "secondary-volumes"
+    "poolObject": "secondary-volumes",
+    "providedMachines": []
   },
-  "version": "ceph-replication-v1"
+  "version": "ceph-replication-v2"
 }

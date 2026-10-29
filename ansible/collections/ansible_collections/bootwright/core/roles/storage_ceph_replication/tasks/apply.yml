@@ -2,7 +2,7 @@
 - name: Validate the frozen Ceph replication request
   ansible.builtin.assert:
     that:
-      - bootwright_ceph_replication_request.version == 'ceph-replication-v1'
+      - bootwright_ceph_replication_request.version == 'ceph-replication-v2'
       - bootwright_ceph_replication_digest is match('^[0-9a-f]{64}$')
       - ansible_connection == 'local'
     quiet: true

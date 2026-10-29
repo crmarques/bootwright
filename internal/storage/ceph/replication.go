@@ -18,7 +18,7 @@ import (
 	"github.com/crmarques/bootwright/internal/storage/cephcluster"
 )
 
-const ReplicationVersion = "ceph-replication-v1"
+const ReplicationVersion = "ceph-replication-v2"
 const ReplicationImplementation = "storage-ceph-replication-v2"
 const ReplicationEvidenceVersion = "ceph-replication-evidence-v1"
 
@@ -35,6 +35,7 @@ type ReplicationEndpoint struct {
 	Machines   []string        `json:"machines"`
 	Pool       Pool            `json:"pool"`
 	PoolObject string          `json:"poolObject"`
+	Provided   []string        `json:"providedMachines"`
 	Scope      json.RawMessage `json:"scope,omitempty"`
 }
 type ReplicationRequest struct {
@@ -59,7 +60,7 @@ func DecodeReplicationRequest(data []byte) (ReplicationRequest, error) {
 		return r, failure("lifecycle.state", "the frozen Ceph replication request is inconsistent", "")
 	}
 	for _, end := range []ReplicationEndpoint{r.Primary, r.Secondary} {
-		if len(end.Scope) != 0 || !strictlySorted(end.Machines) || end.Pool.Name != r.Primary.Pool.Name || end.Pool.Type != "replicated" || end.Pool.Role != "rbd" || end.PoolObject == "" || end.Pool.Object != "" && end.Pool.Object != end.PoolObject || end.Pool.Object == "" && end.Pool.Name != end.PoolObject {
+		if len(end.Scope) != 0 || !strictlySorted(end.Machines) || !validProvided(end.Machines, end.Provided) || end.Pool.Name != r.Primary.Pool.Name || end.Pool.Type != "replicated" || end.Pool.Role != "rbd" || end.PoolObject == "" || end.Pool.Object != "" && end.Pool.Object != end.PoolObject || end.Pool.Object == "" && end.Pool.Name != end.PoolObject {
 			return r, failure("lifecycle.state", "the frozen replication endpoint is inconsistent", "")
 		}
 	}
@@ -111,7 +112,7 @@ func (c ReplicationCapability) Plan(ctx context.Context, input lifecycle.PlanInp
 			if err != nil {
 				return plan, err
 			}
-			endpoint := ReplicationEndpoint{Cluster: base.Cluster, Machines: requestMachines(base), Pool: *base.Pool, PoolObject: pool.Name()}
+			endpoint := ReplicationEndpoint{Cluster: base.Cluster, Machines: requestMachines(base), Pool: *base.Pool, PoolObject: pool.Name(), Provided: providedMachines(base)}
 			if i == 0 {
 				r.Primary = endpoint
 				r.Mode = pool.Spec().Get("mirroring", "mode").Text()
@@ -197,7 +198,7 @@ func (c ReplicationCapability) prepare(ctx context.Context, e lifecycle.Executio
 		if err != nil {
 			return r, nil, err
 		}
-		if !slices.Equal(proof.Machines, end.Machines) {
+		if !slices.Equal(proof.Machines, end.Machines) || !slices.Equal(proof.Provided, end.Provided) {
 			return r, nil, failure("lifecycle.state", "replication machines do not match original cluster creation evidence", "")
 		}
 		if err := bindPhysicalHosts(proof.Scope.Hosts, e, c.proofs); err != nil {
@@ -301,9 +302,12 @@ func (ReplicationCapability) HostMachines(b reconciliation.Block) ([]string, err
 	if err != nil {
 		return nil, err
 	}
+	return boundMachines(replicationMachines(r), append(slices.Clone(r.Primary.Provided), r.Secondary.Provided...)), nil
+}
+func replicationMachines(r ReplicationRequest) []string {
 	names := append(slices.Clone(r.Primary.Machines), r.Secondary.Machines...)
 	slices.Sort(names)
-	return slices.Compact(names), nil
+	return slices.Compact(names)
 }
 func (c ReplicationCapability) retirement(ctx context.Context, e lifecycle.Execution) (json.RawMessage, error) {
 	r, err := c.identity(ctx, e)
@@ -313,10 +317,7 @@ func (c ReplicationCapability) retirement(ctx context.Context, e lifecycle.Execu
 	if !e.RetiredWithHosts {
 		return nil, failure("lifecycle.unsupported", survivingReason, survivingRemedy)
 	}
-	machines, err := c.HostMachines(e.Block)
-	if err != nil {
-		return nil, err
-	}
+	machines := replicationMachines(r)
 	pending, err := pendingPhysicalClusters(e, []string{r.Primary.Cluster, r.Secondary.Cluster}, machines)
 	if err != nil {
 		return nil, err
@@ -350,11 +351,7 @@ func (c ReplicationCapability) Quiescent(ctx context.Context, p lifecycle.Probe)
 	}
 	if p.RetiredWithHosts {
 		if r, err := DecodeReplicationRequest(p.Block.Request); err == nil {
-			machines, err := c.HostMachines(p.Block)
-			if err != nil {
-				return lifecycle.Quiescence{State: lifecycle.Unproved}, err
-			}
-			pending, err := pendingPhysicalClusters(p.Execution(), []string{r.Primary.Cluster, r.Secondary.Cluster}, machines)
+			pending, err := pendingPhysicalClusters(p.Execution(), []string{r.Primary.Cluster, r.Secondary.Cluster}, replicationMachines(r))
 			if err != nil {
 				return lifecycle.Quiescence{State: lifecycle.Unproved, Reason: survivingReason, Remedy: survivingRemedy}, nil
 			}

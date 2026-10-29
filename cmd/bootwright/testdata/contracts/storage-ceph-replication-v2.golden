@@ -1,6 +1,6 @@
 implementation: storage-ceph-replication-v2
-content-digest: 3824163f16c60d7009f6d9916a6cc42468fcd7f9fa92f4465523e0a71884c1dd
-request-version: ceph-replication-v1
+content-digest: 8d4f356ef4c8de381a3e818c71ee1419aaeb0972d92584866db768b6bbb3c305
+request-version: ceph-replication-v2
 automation-formats: ceph-replication-custody-v1
 mark-formats: bootwright-owner
 proof-ids: marker:-attempt.json, marker:-complete.json, marker:.json, marker:artifact.json, marker:attempt-call_home_initialize.json, marker:bootstrap-attempt.json, marker:bootstrap-enrollment.json, marker:bootstrap-original-ready.json, marker:bootstrap-original-reserved.json, marker:bootstrap-output-source.json, marker:bootstrap-prepared.json, marker:bootstrap-protocol.json, marker:bootstrap-scope.json, marker:cache-ready.json, marker:call-home-accepted.json, marker:client-, marker:client-applied-, marker:client-attempt-, marker:client-generator.json, marker:complete-call_home_initialize.json, marker:complete.json, marker:dashboard-port-, marker:dashboard-port-repair.json, marker:dashboard-redeploy.json, marker:dashboard-redeployed.json, marker:decision.json, marker:device-identities.json, marker:filesystem-, marker:filesystem-attempt., marker:filesystem-id., marker:group-attempt., marker:group., marker:image-, marker:initial-mgr-original-ready.json, marker:manifest.json, marker:native-teardown.json, marker:osd-device-, marker:osd-device-intent.json, marker:owner.json, marker:podman-auth.json, marker:policy-, marker:policy-attempt-, marker:policy-id-, marker:pool-, marker:pool-attempt-, marker:pool-id-, marker:pool-rbd-attempt-, marker:pool-rbd-complete-, marker:pool-setting-, marker:rbd-, marker:rbd-attempt., marker:rbd-id., marker:registry-file.json, marker:registry-intent.json, marker:registry-pending.json, marker:registry-removal.json, marker:registry-removed.json, marker:replication-, marker:service-, marker:service-inputs.json, marker:ssh-authorization.json, marker:sshd-policy.json, marker:subvolume-, marker:subvolume-attempt., marker:subvolume-path., marker:transport-directory.json, marker:transport-ready.json, marker:transport.json, marker:tunnel-config-attempt-, marker:tunnel-config-attempt-call_home.json, marker:tunnel-config-complete-, marker:tunnel-config-complete-call_home.json, marker:tunnel-config-intent.json, marker:tunnel-configured.json, marker:tunnel-manager-files.json, marker:tunnel-mgr-source.json, marker:tunnel-mounted.json, marker:tunnel-redeploy.json, marker:tunnel-stage.json
@@ -69,6 +69,7 @@ request-schema:
   primary.pool.size int
   primary.pool.type string
   primary.poolObject string
+  primary.providedMachines []string
   primary.scope opaque omitempty
   secondary struct ceph.ReplicationEndpoint
   secondary.cluster string
@@ -113,6 +114,7 @@ request-schema:
   secondary.pool.size int
   secondary.pool.type string
   secondary.poolObject string
+  secondary.providedMachines []string
   secondary.scope opaque omitempty
   version string
 evidence-schema:

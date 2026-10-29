@@ -3336,6 +3336,8 @@ holding such a clause, the clauses pending and the work they enable.
   dialed with the fleet key its Machine never names (X204).
 - [D205](#d205): clauses (1) to (9), how a provided tiebreaker's removal is
   realized (X203).
+- [D206](#d206): clauses (1) to (6), the consumer and replication bindings
+  of a stretch cluster with a provided tiebreaker (X205).
 
 ### D1
 
@@ -5989,3 +5991,49 @@ record as unverified. (9) A tiebreaker the apply never claimed has no owner
 marker and refuses `tiebreaker-foreign` even with no footprint;
 [B942](m2.md#b942) records it, as treating such a host as absent needs the
 owner's decision.
+
+### D206
+
+**session-pending** (2026-10-29, the owner; the clauses after the owner's
+words are taken by the session, pending the owner's review). The owner asked
+the session to "Plan and implement what is still missing". It defines and
+authorizes [B941](m2.md#b941) as slice X205 on M2 and waives B941's unmet
+Requires, B892 awaiting operator acceptance, for implementation only. Taken
+by the session, pending the owner's review: (1) A
+[CephConsumer](../ceph-resources.md#cephconsumer)'s frozen request and each
+[CephReplication](../ceph-resources.md#cephreplication) endpoint freeze
+`providedMachines`, the sorted provided Machines of their cluster's frozen
+hosts, beside `machines`, which still names every host Machine. Their
+surviving-host binding is `machines` without `providedMachines`, so the
+provided tiebreaker leaves it exactly as it leaves the core blocks' (D205);
+a request whose `providedMachines` is not a sorted subset of `machines`
+that leaves an installed Machine refuses at decode, and a surviving
+Bootwright-installed host still refuses by the
+[surviving-host rule](../ceph.md#removal-and-concurrency). (2) Their
+retirement records keep their form and still name every host Machine in
+`retiredWith`, the tiebreaker included, as the cluster's own record does;
+no record or evidence version moves. (3) Their runs, in Go and in the
+workers, refuse a cluster proof whose provided Machines differ from the
+frozen ones, as they refuse another host set. (4) Neither block reaches the
+tiebreaker at destroy, so no fleet connection is added for them: an export's
+principals and a replication's peer and bootstrap credential are entries of
+the cluster's monitor store, whose copy on the tiebreaker is FSID data the
+cluster block's `rm-cluster` removes; the export keys' and the replication
+token's custody is on the bootstrap host, never the tiebreaker; and no
+rbd-mirror daemon runs there, since an authored service placed on the
+tiebreaker refuses. Those blocks record their retirement before the cluster
+block's removal runs; a refused removal stops the destroy before any
+data-site Machine is deleted, and the next destroy continues at the cluster
+block, as for every other core block. (5) The consumer request moves to
+`ceph-export-request-v3` and the replication request to
+`ceph-replication-v2`, moving `ceph-export-v1`'s and
+`storage-ceph-replication-v2`'s content digests, because a frozen request of
+the earlier version names a provided tiebreaker as a host it retires with; a
+request of the earlier version refuses by name (D142), so an operation an
+earlier build applied continues or is removed only under that build. (6)
+Exit evidence: the engine destroy journeys of a stretch cluster with a
+provided tiebreaker and a CephConsumer, or a CephReplication, that refuse
+nothing, record each retirement and record the cluster's only once the
+tiebreaker reports its footprint absent, with the binding, decode and
+surviving-host refusal tests; the operator gate is B488's emulated rehearsal
+destroying such a cluster with its consumer export.

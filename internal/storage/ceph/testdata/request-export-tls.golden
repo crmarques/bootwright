@@ -68,5 +68,6 @@
       "osd": "profile rbd pool=block"
     }
   },
-  "version": "ceph-export-request-v2"
+  "providedMachines": [],
+  "version": "ceph-export-request-v3"
 }

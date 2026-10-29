@@ -1794,7 +1794,12 @@ physical erase; removing services or releasing claims proves no erasure.
 A stretch cluster whose [tiebreaker](#stretch-topology) is a provided
 Machine retires with its installed hosts, as above: the provided Machine
 leaves only the surviving-host binding, and still counts for the retirement
-record and consumer hosts. Its cluster block removes the tiebreaker's
+record and consumer hosts. The cluster's core blocks read it from the frozen
+host's `provided` member; a
+[CephConsumer](ceph-resources.md#cephconsumer)'s request and each
+[CephReplication](ceph-resources.md#cephreplication) endpoint freeze it in
+`providedMachines` beside the `machines` they name, and their run refuses a
+cluster proof that names other provided Machines (D206). Its cluster block removes the tiebreaker's
 footprint itself, after every read-only refusal of the retirement and before
 it records the retirement, so a failure stops the destroy before any
 data-site Machine is deleted (D203). The removal reaches that host over the
@@ -1852,12 +1857,14 @@ and needs neither the bootstrap host nor MON quorum.
   Every other core block's record carries the version and no tiebreaker.
 
 Only the cluster block reaches the tiebreaker; every other core block of the
-cluster retires as before, with no native call. Not yet met: the sshd drop-in
+cluster, its consumer export and its replications retire as before, with no
+native call. An export's principals and a replication's peer and bootstrap
+credential live in the cluster's monitor store, whose copy on the tiebreaker
+goes with the FSID's data under `rm-cluster`, and their custody is on the
+bootstrap host, which is never the tiebreaker; no rbd-mirror daemon runs
+there, since the tiebreaker [runs a MON alone](#stretch-topology). Not yet met: the sshd drop-in
 the `authorize` phase writes stays on the tiebreaker after its removal;
-tracked as [B940](milestones/m2.md#b940). Not yet met: a CephConsumer or
-CephReplication of such a cluster names the provided Machine among the hosts
-it retires with, so its destroy refuses by the surviving-host rule; tracked
-as [B941](milestones/m2.md#b941). Not yet met: a tiebreaker the cluster's
+tracked as [B940](milestones/m2.md#b940). Not yet met: a tiebreaker the cluster's
 apply never claimed holds no owner marker, so its removal refuses
 `tiebreaker-foreign` even with no footprint; tracked as
 [B942](milestones/m2.md#b942).
@@ -1924,7 +1931,7 @@ must be finished or destroyed with their original build.
 ## RBD replication
 
 [CephReplication](ceph-resources.md#cephreplication) has its own
-`storage-ceph-replication-v2` implementation, `ceph-replication-v1` frozen
+`storage-ceph-replication-v2` implementation, `ceph-replication-v2` frozen
 request and `ceph-replication-evidence-v1` observation. Its two runtime scopes
 come only from both clusters' original apply proofs. Scoped SSH keys and
 proved host keys reach the controller worker as private files; no ambient SSH
