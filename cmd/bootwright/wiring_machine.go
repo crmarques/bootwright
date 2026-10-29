@@ -153,9 +153,9 @@ func (o machineOwnership) Ownership(ctx context.Context, name string) (map[strin
 }
 
 // machineRealization reads the block that realizes one Machine on its
-// provider. Its emulated controller is that block's effect, so power asks it
-// alone: the installation that follows it on the same Machine, and the
-// bare-metal claim of a physical one, create no controller.
+// provider. Its emulated controller or KubeVirt port is that block's effect,
+// so power asks it alone: the installation that follows it on the same
+// Machine, and the bare-metal claim of a physical one, create no controller.
 type machineRealization struct{ reconciler lifecycle.Service }
 
 func (r machineRealization) Realization(ctx context.Context, contextName, name string) (machine.OwnershipState, bool, error) {
@@ -167,11 +167,11 @@ func (r machineRealization) Realization(ctx context.Context, contextName, name s
 	return state, found, nil
 }
 
-// realizationOf picks the libvirt machine block out of everything the current
-// plan froze for one Machine, and reports the verb and state it reached.
+// realizationOf picks the libvirt or KubeVirt machine block the current plan
+// froze for one Machine, and reports the verb and state it reached.
 func realizationOf(published []lifecycle.BlockEvidence) (machine.OwnershipState, bool) {
 	for _, block := range published {
-		if block.Implementation == libvirt.MachineImplementation {
+		if block.Implementation == libvirt.MachineImplementation || block.Implementation == kubevirt.MachineImplementation {
 			return machine.OwnershipState{Verb: string(block.Verb), State: string(block.State)}, true
 		}
 	}

@@ -15,6 +15,7 @@ import (
 	"github.com/crmarques/bootwright/internal/reconciliation"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
 	"github.com/crmarques/bootwright/internal/substrate/baremetal"
+	"github.com/crmarques/bootwright/internal/substrate/kubevirt"
 	"github.com/crmarques/bootwright/internal/substrate/libvirt"
 	"github.com/crmarques/bootwright/internal/trust/enrollment"
 )
@@ -78,8 +79,8 @@ func TestTheInstallationsReadTheBareMetalPinOfTheirOwnMachine(t *testing.T) {
 	}
 }
 
-// An emulated controller is an effect of the libvirt machine block, so power
-// reads that block of the current plan and never the installation that follows
+// An emulated controller, or a KubeVirt VirtualMachine's port, is an effect
+// of the arm's machine block, so power reads that block of the current plan and never the installation that follows
 // it on the same Machine, whatever order the evidence lists them in, nor a
 // bare-metal claim, which creates no controller.
 func TestPowerAsksTheMachineBlockNotTheInstallation(t *testing.T) {
@@ -109,6 +110,13 @@ func TestPowerAsksTheMachineBlockNotTheInstallation(t *testing.T) {
 		"removal pending": {[]lifecycle.BlockEvidence{
 			block(installation.Implementation, reconciliation.Destroy, reconciliation.BlockDone),
 			block(libvirt.MachineImplementation, reconciliation.Destroy, reconciliation.BlockPending),
+		}, machine.OwnershipState{Verb: "destroy", State: "pending"}, true},
+		"a KubeVirt machine block": {[]lifecycle.BlockEvidence{
+			block(installation.Implementation, reconciliation.Apply, reconciliation.BlockFailed),
+			block(kubevirt.MachineImplementation, reconciliation.Apply, reconciliation.BlockDone),
+		}, machine.OwnershipState{Verb: "apply", State: "done"}, true},
+		"a KubeVirt removal pending": {[]lifecycle.BlockEvidence{
+			block(kubevirt.MachineImplementation, reconciliation.Destroy, reconciliation.BlockPending),
 		}, machine.OwnershipState{Verb: "destroy", State: "pending"}, true},
 		"nothing planned":       {nil, machine.OwnershipState{}, false},
 		"only the installation": {[]lifecycle.BlockEvidence{block(installation.Implementation, reconciliation.Apply, reconciliation.BlockDone)}, machine.OwnershipState{}, false},
