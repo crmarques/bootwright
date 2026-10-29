@@ -763,6 +763,7 @@ New logic goes to the first row whose placement question it answers yes.
 | Ansible YAML | One capability's binding: entry-point validation, host targeting, privilege scope, fixed module calls, progress groups, and bounded remote effects and observation under a frozen request. | Chooses a workflow, provider or variant from authored data or gathered facts, orders work across domains, or runs a command through a shell. | Does it bind one fixed capability to hosts, privilege and modules? |
 | Python in the collection | Action plugins, modules and module utilities: protocol publication, native transport, bounded native-API clients, result normalization, evidence fields, shipped fixed workers, and the fixed, spec-owned procedure of one frozen request. | Chooses product workflow, dispatches on authored data, orders work across blocks, authorizes, writes operation state or judges a postcondition; starts a process outside its site's one bounded runner or encodes canonical JSON outside its site's one module; sends a remote command string outside the [process boundary](security.md#process-boundary). | Is it how one already-selected effect is reached and proved on its target? |
 | Shell | Pinned tool wrappers, completion shims and the installer-native sections Go emits. | Holds selection logic, parses repository content, or performs a product effect outside an emitted installer section. | Does it only fix an environment and run a pinned tool, or prove on the installer what its owning domain specifies? |
+| Case renderer | The bash script directly under `e2e/` that renders an [end-to-end case](../e2e/README.md) into an input directory outside the repository for an owner-run acceptance. | Ships in the executable, runs a Bootwright command, reaches a host, or decides what a case declares. | Does it only turn a case's templates and values into an input directory for an owner's run? |
 | Rendered documents | Role templates and Go-emitted native documents: a deterministic projection of the frozen request. | Reads files, the network or secrets at render time, or branches to select a variant. | Is it the same bytes for the same request? |
 
 A Python site is where its code runs: the controller runtime for action
@@ -785,7 +786,8 @@ reason in that test, and the lists only shrink. Repository tools under
 `scripts/tools/` are Python outside the collection; the
 [Python reference](../.agents/skills/code-implementation/references/python.md#repository-tools)
 owns them. `TestEveryCollectionAndScriptSourceMapsToALanguageRow` fails on a
-tracked source under the collection's plugins or `scripts/` that no row holds.
+tracked source under the collection's plugins, `scripts/`, `e2e/` or
+`examples/` that no row holds.
 
 ## Ansible collection structure
 
@@ -823,7 +825,9 @@ operations. `TestEveryBoundPlaybookIsNamedForItsCapabilityAndOperation` holds
 every binding to that pattern, and `test_collection_names.py` holds role and
 action-plugin names to the [role pattern](#ansible-collection-structure); the
 roles and plugins that predate the patterns are an exact allowance in that
-test that only shrinks.
+test that only shrinks. Not yet met: 5 roles and 14 plugins still carry
+names outside the patterns; tracked as
+[B966](milestones/backlog.md#b966).
 
 A playbook imports its role's entry point by the key the role's argument
 specification declares, never by its task file's name, which ansible-core runs

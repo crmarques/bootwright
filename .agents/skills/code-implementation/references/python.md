@@ -78,7 +78,8 @@ failed checks under the shared workflow.
 A shell script under `scripts/` only resolves a pinned tool and executes it;
 selection and parsing logic belongs in a launcher under `scripts/tools/`.
 `scripts/quick-test` and `scripts/check-commits` are named exceptions until
-their logic moves behind a tested launcher, and the runtime hook
+their logic moves behind a tested launcher
+([B967](../../../../specs/milestones/backlog.md#b967)), and the runtime hook
 `scripts/hooks/stop-check` stays a short POSIX `sh` guard. A launcher uses only
 the standard library, runs on the host's CPython 3.12 or newer, and runs every
 check it dispatches through a pinned wrapper or the Ansible check environment.

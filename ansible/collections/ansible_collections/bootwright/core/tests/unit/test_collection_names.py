@@ -5,7 +5,8 @@ a playbook directory and the implementation, when there is one, directly after
 it. An action plugin is named for the domain and implementation of the role
 that invokes it, because it speaks that implementation's vocabulary. The names
 that predate the patterns are exact allowances that only shrink: one that now
-fits, or whose role or plugin is gone, fails until it is removed.
+fits, or whose role or plugin is gone, fails until it is removed. B966 in
+specs/milestones/backlog.md owns the renames that empty both lists.
 """
 
 from __future__ import annotations

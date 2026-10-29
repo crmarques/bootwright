@@ -276,6 +276,9 @@ Alias cell.
 | [B909](#b909) | new, 2026-10-28 (D197) | product | Substrate | KubeVirt interfaces on a namespaced UserDefinedNetwork | The arm realizes Localnet ClusterUserDefinedNetwork and bridge NetworkAttachmentDefinition attachments; no profile needs a UDN |
 | [B925](#b925) | new, 2026-10-28 (D201) | safety | Substrate and Container cluster | A released KubeVirt node's image claim is ejected live where the host enables declarative hotplug | The eject leaves the claim until the node next stops, which security records; live removal is an optional specialization no profile needs yet |
 | [B927](#b927) | new, 2026-10-28 (D201) | product | Container cluster and Substrate | An installer VIP on a KubeVirt attachment is proved free before a fresh boot | The pre-boot ARP probe reaches only a managed libvirt bridge on the controller; a KubeVirt attachment is reported unprobed and the operator proves its VIPs free |
+| [B965](#b965) | new, 2026-10-29 (X220) | enabling | Specification maintenance | The ten section-budget exceptions and the leaf-budget exceptions of the spec pages are split into leaves within budget | The split is large documentation work with no consumer; the docs gate holds each ceiling falling in the meantime |
+| [B966](#b966) | new, 2026-10-29 (X220) | enabling | Ansible collection | The role and plugin naming misfits are renamed to the pattern | The rename moves the automation digest, so it rides a build and setup; the allowance in `test_collection_names.py` only shrinks in the meantime |
+| [B967](#b967) | new, 2026-10-29 (X220) | enabling | Verification tooling | The selection logic of `scripts/quick-test` and `scripts/check-commits` moves behind `scripts/tools` launchers | Both scripts are named shell exceptions that work; no gate fails until the move |
 
 ### B82
 
@@ -3056,6 +3059,45 @@ refuses when it cannot. Today the VIP evidence names those addresses as not
 probed ([container clusters](../openshift-clusters.md#installation)).
 **Outcome:** a VIP another host answers refuses before boot. **Exit evidence:**
 probe tests and a live run.
+
+### B965
+
+**Owner:** Specification maintenance. **Kind:** enabling. **Requires:** none.
+**Definition:** Specified. `docsSectionExceptions` in
+`test/architecture/docs_gates_test.go` grants ten level-2 sections a ceiling
+above the section budget, up to 88812 bytes, and `docsLeafExceptions` grants
+the leaves above the leaf budget; the first split targets are
+[Installation](../managed-os.md#installation) and
+[Plan and execution](../state-reconciliation.md#plan-and-execution).
+**Outcome:** each excepted section and leaf is split into named leaves within
+its budget, the index routes to them, and both exception maps are empty.
+**Exit evidence:** `make docs-check` with both maps empty, and a link check
+that no anchor or citation of a split section broke.
+
+### B966
+
+**Owner:** Ansible collection. **Kind:** enabling. **Requires:** none.
+**Definition:** Specified. `ROLE_MISFITS` (5 roles) and `PLUGIN_MISFITS` (14
+plugins) in `test_collection_names.py` are the exact allowance that
+[playbooks](../architecture.md#playbooks) states only shrinks. **Outcome:**
+the 5 roles and 14 plugins are renamed to the role and plugin patterns,
+including playbook imports, role FQCNs, Go bindings and plugin references, and
+both lists are empty. The rename moves the automation digest only, so it is
+delivered by a build and setup, with no destroy. **Exit evidence:** the
+collection unit tests with both lists empty, the architecture suite and the
+contract goldens.
+
+### B967
+
+**Owner:** Verification tooling. **Kind:** enabling. **Requires:** none.
+**Definition:** Specified. The
+[Python reference](../../.agents/skills/code-implementation/references/python.md#repository-tools)
+names `scripts/quick-test` and `scripts/check-commits` as shell exceptions
+until their logic moves behind a tested launcher; `scripts/runtime-lock`'s host
+`python3` stays as documented. **Outcome:** both scripts only pin and execute a
+launcher under `scripts/tools/` with its tests beside it, and the exceptions
+leave the reference. **Exit evidence:** the launchers' `*_test.py` suites,
+`TestCheckCommitsRequiresAContractLineWhereAContractCanMove` and `make quick`.
 
 ## Audit remediation (2026-10-26)
 

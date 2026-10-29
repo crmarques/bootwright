@@ -152,7 +152,8 @@ type docsSectionException struct {
 // docsSectionExceptions names, by "page ## heading", the sections granted a
 // ceiling above specSectionBudget on 2026-10-27, when the budget began, each
 // ceiling its section's size that day. Each is split into named leaves the
-// index routes to; none may grow.
+// index routes to; none may grow. B965 in
+// specs/milestones/backlog.md owns the split.
 var docsSectionExceptions = map[string]docsSectionException{
 	"specs/managed-os.md ## Installation":                       {ceiling: 88812, since: "2026-10-27"},
 	"specs/state-reconciliation.md ## Plan and execution":       {ceiling: 75242, since: "2026-10-27"},
@@ -164,6 +165,39 @@ var docsSectionExceptions = map[string]docsSectionException{
 	"specs/openshift-clusters.md ## Installation":               {ceiling: 30134, since: "2026-10-27"},
 	"specs/architecture.md ## Go package structure":             {ceiling: 28975, since: "2026-10-27"},
 	"specs/cli/commands.md ## Command and flag catalog":         {ceiling: 28622, since: "2026-10-27"},
+}
+
+// specLeafBudget bounds a leaf of a spec page, a heading from level 3 down
+// with the text up to the next heading, the unit an agent reads when a link
+// names an anchor. A leaf above it is named in docsLeafExceptions with the
+// date it was granted; the exceptions only fall, as docsSectionException says.
+const specLeafBudget = 8192
+
+// docsLeafExceptions names, by "page heading line", the leaves granted a
+// ceiling above specLeafBudget on 2026-10-29, when the leaf budget began, each
+// ceiling its leaf's size that day. B965 in specs/milestones/backlog.md owns
+// splitting them and the section exceptions above; none may grow.
+var docsLeafExceptions = map[string]docsSectionException{
+	"specs/api/machines.md ### Network configuration":                           {ceiling: 8731, since: "2026-10-29"},
+	"specs/architecture.md #### The adapter result protocol":                    {ceiling: 13900, since: "2026-10-29"},
+	"specs/ceph-coverage.md ### Profile catalog":                                {ceiling: 13962, since: "2026-10-29"},
+	"specs/ceph-native-api.md ### Observability and management gateway records": {ceiling: 8545, since: "2026-10-29"},
+	"specs/ceph-native-api.md ### RGW, ingress and NFS records":                 {ceiling: 8993, since: "2026-10-29"},
+	"specs/ceph-native-api.md ### Service identity and references":              {ceiling: 9552, since: "2026-10-29"},
+	"specs/ceph-native-api.md ### Verified native orchestration transport":      {ceiling: 11154, since: "2026-10-29"},
+	"specs/ceph-resources.md ### Consumer refusals":                             {ceiling: 8954, since: "2026-10-29"},
+	"specs/ceph.md ### Cluster execution budget":                                {ceiling: 11210, since: "2026-10-29"},
+	"specs/cli.md ### Lifecycle receipt":                                        {ceiling: 10899, since: "2026-10-29"},
+	"specs/cli.md ### Local privilege and user identity":                        {ceiling: 10666, since: "2026-10-29"},
+	"specs/cli.md ### Machine SSH sessions":                                     {ceiling: 9273, since: "2026-10-29"},
+	"specs/managed-os.md ### Derived installation":                              {ceiling: 11761, since: "2026-10-29"},
+	"specs/managed-os.md ### Network convergence":                               {ceiling: 16647, since: "2026-10-29"},
+	"specs/managed-os.md ### Registration":                                      {ceiling: 12269, since: "2026-10-29"},
+	"specs/managed-os.md ### Root-disk encryption":                              {ceiling: 8256, since: "2026-10-29"},
+	"specs/openshift-clusters.md ### Refusal table":                             {ceiling: 8901, since: "2026-10-29"},
+	"specs/state-reconciliation.md ### Continuation and removal":                {ceiling: 20636, since: "2026-10-29"},
+	"specs/state-reconciliation.md ### Converging an effect":                    {ceiling: 10414, since: "2026-10-29"},
+	"specs/state-reconciliation.md #### Stopping after an add-on instance":      {ceiling: 13029, since: "2026-10-29"},
 }
 
 var exceptionDate = regexp.MustCompile(`^[0-9]{4}-[0-9]{2}-[0-9]{2}$`)
@@ -192,6 +226,32 @@ func specSections(file markdownFile) []specSection {
 		}
 	}
 	return sections
+}
+
+// specLeaves splits a page at every heading outside fenced code and keeps the
+// leaves, the headings from level 3 down: each runs from its heading line to
+// the next heading of any level or the end of the page.
+func specLeaves(file markdownFile) []specSection {
+	var leaves []specSection
+	fenced, open := false, false
+	for _, line := range file.lines {
+		if strings.HasPrefix(strings.TrimSpace(line), "```") {
+			fenced = !fenced
+		}
+		if !fenced && strings.HasPrefix(line, "#") {
+			depth := len(line) - len(strings.TrimLeft(line, "#"))
+			if strings.HasPrefix(line[depth:], " ") && depth <= 6 {
+				open = depth >= 3
+				if open {
+					leaves = append(leaves, specSection{heading: line})
+				}
+			}
+		}
+		if open {
+			leaves[len(leaves)-1].bytes += len(line) + 1
+		}
+	}
+	return leaves
 }
 
 // isNormativeSpec says whether a page is a spec the gates hold to the budgets
@@ -257,26 +317,90 @@ func TestDocsSectionBudgetViolations(t *testing.T) {
 	}
 }
 
+func TestDocsSpecLeavesStayWithinBudgets(t *testing.T) {
+	for _, violation := range leafBudgetViolations(guidanceFiles(t), specLeafBudget, docsLeafExceptions) {
+		t.Error(violation)
+	}
+}
+
+func TestDocsLeafBudgetViolations(t *testing.T) {
+	page := func(name string, lines ...string) markdownFile {
+		return markdownFile{path: name, lines: lines}
+	}
+	filler := func(size int) string { return strings.Repeat("x", size) }
+	const budget = 100
+	cases := []struct {
+		name       string
+		files      []markdownFile
+		exceptions map[string]docsSectionException
+		want       []string
+	}{
+		{"a leaf within the budget", []markdownFile{page("specs/a.md", "## S", "### Leaf", filler(90))}, nil, nil},
+		{"a level-2 section is no leaf", []markdownFile{page("specs/a.md", "## S", filler(500))}, nil, nil},
+		{"a leaf over the budget", []markdownFile{page("specs/a.md", "## S", "### Leaf", filler(100))}, nil,
+			[]string{"specs/a.md ### Leaf is 110 bytes, above the 100-byte leaf budget; split it into named leaves or name an exception"}},
+		{"a deeper leaf ends at the next heading of any level", []markdownFile{page("specs/a.md", "## S", "### Parent", filler(60), "#### Child", filler(60))}, nil, nil},
+		{"a level-2 heading ends the leaf", []markdownFile{page("specs/a.md", "### Leaf", filler(50), "## Next", filler(500))}, nil, nil},
+		{"a heading inside a fence is no leaf", []markdownFile{page("specs/a.md", "### Leaf", "```", "### Fake", filler(150), "```")}, nil,
+			[]string{"specs/a.md ### Leaf is 177 bytes, above the 100-byte leaf budget; split it into named leaves or name an exception"}},
+		{"milestone pages are not specs", []markdownFile{page("specs/milestones/m1.md", "### Leaf", filler(500))}, nil, nil},
+		{"an exception holds a leaf above the budget", []markdownFile{page("specs/a.md", "### Leaf", filler(150))},
+			map[string]docsSectionException{"specs/a.md ### Leaf": {ceiling: 160, since: "2026-10-29"}}, nil},
+		{"a leaf outgrowing its exception", []markdownFile{page("specs/a.md", "### Leaf", filler(161))},
+			map[string]docsSectionException{"specs/a.md ### Leaf": {ceiling: 160, since: "2026-10-29"}},
+			[]string{"specs/a.md ### Leaf is 171 bytes, above its 160-byte exception; split it, never widen it"}},
+		{"a stale exception a tenth above its leaf", []markdownFile{page("specs/a.md", "### Leaf", filler(110))},
+			map[string]docsSectionException{"specs/a.md ### Leaf": {ceiling: 160, since: "2026-10-29"}},
+			[]string{"specs/a.md ### Leaf is 120 bytes, more than a tenth below its 160-byte exception; lower it to 120"}},
+		{"an exception for a leaf within the budget", []markdownFile{page("specs/a.md", "### Leaf", filler(50))},
+			map[string]docsSectionException{"specs/a.md ### Leaf": {ceiling: 99, since: "2026-10-29"}},
+			[]string{"specs/a.md ### Leaf is 60 bytes, within the leaf budget; remove its exception"}},
+		{"an exception for a missing leaf", []markdownFile{page("specs/a.md", "### Leaf", filler(50))},
+			map[string]docsSectionException{"specs/a.md ### Gone": {ceiling: 150, since: "2026-10-29"}},
+			[]string{"leaf exception specs/a.md ### Gone names no leaf heading of a tracked spec page"}},
+		{"an undated exception", []markdownFile{page("specs/a.md", "### Leaf", filler(150))},
+			map[string]docsSectionException{"specs/a.md ### Leaf": {ceiling: 160}},
+			[]string{"leaf exception specs/a.md ### Leaf has no YYYY-MM-DD date"}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := leafBudgetViolations(tc.files, budget, tc.exceptions); !slices.Equal(got, tc.want) {
+				t.Fatalf("violations = %q, want %q", got, tc.want)
+			}
+		})
+	}
+}
+
 // sectionBudgetViolations reports each level-2 section of a spec page above the
 // budget that no exception covers, each section above its exception's ceiling,
 // each ceiling more than a tenth above its section, each exception whose
 // section fits the budget or does not exist, and each exception without a date.
 func sectionBudgetViolations(files []markdownFile, budget int, exceptions map[string]docsSectionException) []string {
+	return budgetViolations(files, budget, exceptions, specSections, "section", "level-2 section")
+}
+
+// leafBudgetViolations holds the leaves of a spec page, the headings from
+// level 3 down, to the same rules.
+func leafBudgetViolations(files []markdownFile, budget int, exceptions map[string]docsSectionException) []string {
+	return budgetViolations(files, budget, exceptions, specLeaves, "leaf", "leaf heading")
+}
+
+func budgetViolations(files []markdownFile, budget int, exceptions map[string]docsSectionException, split func(markdownFile) []specSection, unit, kind string) []string {
 	var violations []string
 	used := map[string]bool{}
 	for _, file := range files {
 		if !isNormativeSpec(file.path) {
 			continue
 		}
-		for _, section := range specSections(file) {
+		for _, section := range split(file) {
 			key := file.path + " " + section.heading
 			exception, excepted := exceptions[key]
 			used[key] = true
 			switch {
 			case !excepted && section.bytes > budget:
-				violations = append(violations, fmt.Sprintf("%s is %d bytes, above the %d-byte section budget; split it into named leaves or name an exception", key, section.bytes, budget))
+				violations = append(violations, fmt.Sprintf("%s is %d bytes, above the %d-byte %s budget; split it into named leaves or name an exception", key, section.bytes, budget, unit))
 			case excepted && section.bytes <= budget:
-				violations = append(violations, fmt.Sprintf("%s is %d bytes, within the section budget; remove its exception", key, section.bytes))
+				violations = append(violations, fmt.Sprintf("%s is %d bytes, within the %s budget; remove its exception", key, section.bytes, unit))
 			case excepted && section.bytes > exception.ceiling:
 				violations = append(violations, fmt.Sprintf("%s is %d bytes, above its %d-byte exception; split it, never widen it", key, section.bytes, exception.ceiling))
 			case excepted && exception.ceiling-section.bytes > exception.ceiling/10:
@@ -287,9 +411,9 @@ func sectionBudgetViolations(files []markdownFile, budget int, exceptions map[st
 	for _, key := range slices.Sorted(maps.Keys(exceptions)) {
 		switch {
 		case !used[key]:
-			violations = append(violations, fmt.Sprintf("section exception %s names no level-2 section of a tracked spec page", key))
+			violations = append(violations, fmt.Sprintf("%s exception %s names no %s of a tracked spec page", unit, key, kind))
 		case !exceptionDate.MatchString(exceptions[key].since):
-			violations = append(violations, fmt.Sprintf("section exception %s has no YYYY-MM-DD date", key))
+			violations = append(violations, fmt.Sprintf("%s exception %s has no YYYY-MM-DD date", unit, key))
 		}
 	}
 	return violations
