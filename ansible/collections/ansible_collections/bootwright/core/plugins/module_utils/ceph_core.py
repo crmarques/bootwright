@@ -46,6 +46,9 @@ BOOTSTRAP_CEILING = 1920
 BOOTSTRAP_BUDGET = 1800
 BOOTSTRAP_CALL = BOOTSTRAP_BUDGET + 60
 NATIVE_FAILURES = ("native-unknown", "native-refusal", "native-timeout")
+# A provided tiebreaker's removal evidence (ceph_native_stretch.TiebreakerRemoval); its Go caller decodes the same closed members.
+TIEBREAKER_EVIDENCE = "ceph-tiebreaker-evidence-v1"
+TIEBREAKER_MEMBERS = frozenset(("version", "request", "owner", "fsid", "host", "removed", "attempted"))
 # The produced-material output each action writes on apply and observe: its Go caller reads exactly that one.
 OUTPUTS = {"client": "client", "cluster": "dashboard", "object-user": "object-user"}
 UNIT_DAEMON = re.compile(r"[a-z][a-z0-9-]*\.[A-Za-z0-9][A-Za-z0-9_.-]{0,250}\Z")
@@ -76,7 +79,7 @@ CLUSTER_REASONS = (
     "nvmeof-native", "nvmeof-identity", "nvmeof-foreign", "nvmeof-budget",
     "ingress-firewall", "service-credential-foreign", "ssh-policy-host-excluded", "ssh-policy-unavailable", "tunnel-host-key-excluded",
     "sso-unverified", "stretch-intent", "stretch-interrupted", "stretch-location", "stretch-rule", "stretch-foreign", "stretch-pools",
-    "stretch-drift",
+    "stretch-drift", "tiebreaker-foreign", "tiebreaker-unreachable",
 )
 SMB_REASONS = (
     "request", "artifact", "ownership", "evidence", "material", "transport", "remote-refusal", "adapter-exception", "native-command",
@@ -923,13 +926,61 @@ def tunnel_before(request, request_digest, bootstrap, state, preparations):
     return stage, before
 
 
-def execute(request, operation, request_digest, transport, outputs=None, *, now=time.monotonic, pause=time.sleep, connect=tls_certificate):
+def tiebreaker_host(request):
+    """The one provided host of a stretch cluster, which is its tiebreaker."""
+    stretch = request.get("stretch")
+    hosts = [host for host in request["hosts"] if host.get("provided") is True]
+    ceph_native.require(request["action"] == "cluster" and isinstance(stretch, dict) and len(hosts) == 1 and hosts[0]["name"] == stretch["tiebreaker"],
+                        "request")
+    return hosts[0]
+
+
+def tiebreaker_evidence(value, request_digest, request=None):
+    """The closed evidence of a provided tiebreaker's removal or its observation; never a host's native output."""
+    ceph_native.require(isinstance(value, dict) and set(value) == TIEBREAKER_MEMBERS and value["version"] == TIEBREAKER_EVIDENCE, "evidence")
+    ceph_native.require(ceph_native.digest(request_digest) and value["request"] == request_digest, "evidence")
+    ceph_native.require(all(ceph_native.named(value[key]) for key in ("owner", "host")) and isinstance(value["fsid"], str), "evidence")
+    ceph_native.require(type(value["removed"]) is bool and type(value["attempted"]) is bool, "evidence")
+    if request is not None:
+        ceph_native.require(value["owner"] == request["owner"] and value["fsid"] == request["fsid"] and value["host"] == tiebreaker_host(request)["name"],
+                            "evidence")
+    return value
+
+
+def execute_tiebreaker(request, operation, request_digest, transport, outputs):
+    """A provided tiebreaker's removal, or its read-only observation, over the fleet connection to that host alone (D203).
+
+    Neither the bootstrap host nor MON quorum is needed. A host that does not answer leaves the removal unknown, never absent.
+    """
+    ceph_native.require(operation in ("observe", "destroy") and not outputs, "request")
+    host = tiebreaker_host(request)
+    try:
+        result = transport.call(host, "tiebreaker_remove" if operation == "destroy" else "tiebreaker_observe")
+    except ceph_native.RemoteRefusal:
+        raise
+    except ceph_native.Refusal as error:
+        if str(error) == "transport":
+            raise ceph_native.Refusal("tiebreaker-unreachable") from None
+        raise
+    members = {"changed", "removed", "attempted"} if operation == "destroy" else {"removed", "attempted"}
+    ceph_native.require(isinstance(result, dict) and set(result) == members and all(type(result[key]) is bool for key in members), "evidence")
+    ceph_native.require(operation == "observe" or result["removed"] and result["attempted"], "not-removed")
+    value = {"version": TIEBREAKER_EVIDENCE, "request": request_digest, "owner": request["owner"], "fsid": request["fsid"], "host": host["name"],
+             "removed": result["removed"], "attempted": result["attempted"]}
+    return {"changed": result.get("changed", False), "evidence": tiebreaker_evidence(value, request_digest, request)}
+
+
+def execute(request, operation, request_digest, transport, outputs=None, *, now=time.monotonic, pause=time.sleep, connect=tls_certificate,
+            retirement=None):
     """Keep read-only observation distinct from any preparation or mutation."""
     ceph_native.validate(request)
     ceph_native.require(operation in ("apply", "observe", "destroy"))
     ceph_native.require(ceph_native.digest(request_digest))
     if operation != "observe":
         ceph_native.require(ceph_native.supported_transport(request), "unsupported-release")
+    ceph_native.require(retirement in (None, "tiebreaker"), "request")
+    if retirement is not None:
+        return execute_tiebreaker(request, operation, request_digest, transport, outputs)
     bootstrap = next(h for h in request["hosts"] if h["name"] == request["bootstrap"])
     outputs = outputs or {}
     ceph_native.require(set(outputs) <= set(OUTPUTS.values()))

@@ -202,3 +202,15 @@ def test_protocol_documentation_lists_every_refusal():
     choices = yaml.safe_load(ceph_cluster_protocol.DOCUMENTATION)["options"]["reason"]["choices"]
     assert len(set(choices)) == len(choices)
     assert set(choices) == set(protocol.REFUSALS)
+
+
+def test_the_protocol_publishes_a_tiebreaker_removal_only_when_it_proves_absence():
+    digest = "d" * 64
+    evidence = {"version": ceph_core.TIEBREAKER_EVIDENCE, "request": digest, "owner": "apply-123", "fsid": "4c0a4300-aa43-458c-86d7-ac2256d1fc00",
+                "host": "node-5", "removed": True, "attempted": True}
+    assert protocol.completion({"evidence": evidence, "digest": digest, "observed": False, "removed": True}) == (evidence, None)
+    partial = dict(evidence, removed=False)
+    assert protocol.completion({"evidence": partial, "digest": digest, "observed": True, "removed": False}) == (partial, None)
+    assert protocol.completion({"evidence": partial, "digest": digest, "observed": False, "removed": True})[1] is not None
+    with pytest.raises(ceph_native.Refusal, match="^evidence$"):
+        protocol.completion({"evidence": dict(evidence, extra=1), "digest": digest, "observed": True, "removed": False})

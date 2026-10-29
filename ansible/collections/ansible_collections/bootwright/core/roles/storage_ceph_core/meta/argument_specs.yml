@@ -131,6 +131,9 @@ argument_specs:
       bootwright_ceph_material:
         type: dict
         required: true
+        description:
+          - Runner-owned private material file paths.
+          - C(retirement) C(tiebreaker) selects a provided stretch tiebreaker's removal or its read-only observation.
       bootwright_ceph_output:
         type: dict
         required: false

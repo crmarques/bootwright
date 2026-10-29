@@ -64,7 +64,7 @@ func cephMarkerNames() []string {
 		"registry-removal.json", "registry-removed.json", "replication-", "rgw-root.json", "route.json",
 		"runtime-profile.json", "scope.json", "service-", "service-inputs.json", "smb-applied.", "smb-attempt.",
 		"ssh-authorization.json", "sshd-policy.json", "stretch-", "subvolume-", "subvolume-attempt.", "subvolume-path.",
-		"synthetic.json", "transport-directory.json", "transport-file-ready-", "transport-file-relabeled-",
+		"synthetic.json", "tiebreaker-removal-attempt.json", "tiebreaker-removal-complete.json", "transport-directory.json", "transport-file-ready-", "transport-file-relabeled-",
 		"transport-file-reserved-", "transport-ready.json", "transport-relabel.json", "transport.json",
 		"tunnel-config-attempt-", "tunnel-config-attempt-call_home.json", "tunnel-config-complete-",
 		"tunnel-config-complete-call_home.json", "tunnel-config-intent.json", "tunnel-configured.json",

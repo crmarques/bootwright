@@ -137,7 +137,7 @@ func contractRecipes() map[string]digestRecipe {
 			partPin("registry.access.redhat.com/ubi9/nginx-124@sha256:bff0f204cfef8af0b21a2e683a9d1231da98a429d856ee29ebd0e2691d919b56"),
 			partPin("/var/lib/bootwright-services"), partPin("bootwright")),
 		ceph.Implementation: digestOf(partImplementation(ceph.Implementation), partRequest(ceph.Version), partVersion(ceph.EvidenceVersion), partVersion(ceph.PackageVersion),
-			partPin("selected-tunnel-image-v3")),
+			partVersion(ceph.RetirementVersion), partVersion(ceph.TiebreakerEvidenceVersion), partPin("selected-tunnel-image-v3")),
 		ceph.ImageImplementation: digestOf(partImplementation(ceph.ImageImplementation), partRequest(ceph.ImageVersion), partPin("selected-artifact-manifest-v2")),
 		ceph.HostImplementation: digestOf(partImplementation(ceph.HostImplementation), partRequest(ceph.HostVersion), partVersion(ceph.HostEvidenceVersion),
 			partPin("selected-packages-pull-profile-route-devices-v3")),

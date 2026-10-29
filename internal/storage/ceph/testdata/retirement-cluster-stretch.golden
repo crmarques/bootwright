@@ -1,0 +1,18 @@
+{
+  "action": "cluster",
+  "cluster": "example",
+  "fsid": "5effe704-a878-5cae-8b43-c81f7112832a",
+  "retiredWith": [
+    "node-1",
+    "node-2",
+    "node-3",
+    "node-4",
+    "tie"
+  ],
+  "tiebreaker": {
+    "host": "tie",
+    "machine": "tie",
+    "removed": true
+  },
+  "version": "ceph-core-retirement-v2"
+}

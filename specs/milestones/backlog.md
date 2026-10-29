@@ -3334,6 +3334,8 @@ holding such a clause, the clauses pending and the work they enable.
   doors (X200) and the removal of a provided tiebreaker (X203).
 - [D204](#d204): clauses (1) to (7), how a provided stretch tiebreaker is
   dialed with the fleet key its Machine never names (X204).
+- [D205](#d205): clauses (1) to (9), how a provided tiebreaker's removal is
+  realized (X203).
 
 ### D1
 
@@ -5934,3 +5936,56 @@ plan over a full catalog with a provided tiebreaker, the refusals of (5),
 the named `transport` refusal and the multidc-platform reference's
 tiebreaker Machine in this shape; the operator gate is B488's emulated
 rehearsal reaching a provided tiebreaker authorized only with the fleet key.
+
+### D205
+
+**session-pending** (2026-10-29, the owner; the clauses after the owner's
+words are taken by the session, pending the owner's review). The owner asked
+the session to "Plan and implement what is still missing". It fixes how X203
+realizes [B892](m2.md#b892) under [D203](#d203) (8) to (14), as
+[a provided tiebreaker's removal](../ceph.md#a-provided-tiebreakers-removal)
+states. Taken by the session, pending the owner's review: (1) The daemon
+inventory D203 (10) and (12) call `cephadm ls` is the bounded read of
+cephadm's own layout every Ceph phase uses, because `cephadm ls` starts
+cephadm's logging, which writes host files
+([cleanup facts](../../.agents/knowledge/ibm-ceph-cleanup.md)); with
+`/var/lib/ceph` holding nothing but the FSID's directory it proves only
+`cephadm:v1` daemons and none of another FSID. A MON's or crash collector's
+ID is the tiebreaker's short or full name. (2) The proof before effect also
+reads the cluster-key line (no line names the recorded key but the recorded
+one), each registry credential name (absent, or carrying its record's
+descriptor metadata; a name without a record is foreign) and the fixed
+layout (a link or non-directory where it keeps a directory); each refuses
+`tiebreaker-foreign`. (3) Each removal runs only while its part remains, and
+`rm-cluster` only while a native part does, the package cephadm's proof and
+its parser's declaration of every option passed both read before the attempt
+record; the key line is removed by
+a staged rewrite that keeps every other byte, the file's owner and mode, and
+refuses a file changed since it was read. (4) Unit absence reads the unit
+files in `/etc/systemd/system` and its `ceph.target.wants`, not systemd's
+loaded state. The removal observation reports a partial effect once an
+attempt record exists and no effect before one; a failed fleet connection to
+that host refuses `tiebreaker-unreachable`. A `retirement: tiebreaker` value
+selects the run within the cluster block's ordinary destroy and observe, so
+the observation stays the runner's read-only operation; the run takes no
+produced output and lends only the fleet key and the pinned host keys. (5)
+The sshd drop-in the `authorize` phase writes stays, since D203 names no
+such removal and the removal touches nothing it does not name;
+[B940](m2.md#b940) records it. (6) A CephConsumer's and a CephReplication's
+frozen requests name the provided Machine among the hosts they retire with,
+so their destroy still refuses by the surviving-host rule;
+[B941](m2.md#b941) records it rather than moving their versions here. (7)
+Every core block's retirement record carries `ceph-core-retirement-v2` (the
+unversioned record being the first), and the cluster block's adds its
+`tiebreaker` member; that version and the tiebreaker evidence's
+`ceph-tiebreaker-evidence-v1` enter `storage-ceph-core-v3`'s content digest,
+the request version staying, since no request member changes; the SMB,
+consumer and host-release records are unchanged. (8) Exit evidence: the
+fake-transport destroy and observation tests and the worker tests over a
+temporary root that B892 names; the operator gate is the removal in B488's
+emulated rehearsal, which reads the `rm-cluster` footprint the
+[stretch native facts](../../.agents/knowledge/ceph-stretch-native-facts.md)
+record as unverified. (9) A tiebreaker the apply never claimed has no owner
+marker and refuses `tiebreaker-foreign` even with no footprint;
+[B942](m2.md#b942) records it, as treating such a host as absent needs the
+owner's decision.

@@ -6,6 +6,12 @@ attempt record exists without a completion record is observed and never
 repeated. The JSON shapes of `ceph mon dump`, `ceph osd dump`, `ceph osd crush
 tree` and `ceph osd crush rule dump` that no cited page fixes are recorded as
 unverified in .agents/knowledge/ceph-stretch-native-facts.md.
+
+A provided tiebreaker's removal runs on that host alone: a read-only proof that
+it holds only this cluster's MON and crash collector, then, under one attempt
+record, the recorded cluster-key line, the registry credential and the package
+cephadm's rm-cluster, and absence read back without following links. Its
+footprint on the selected build is unverified until B488 reads it.
 """
 
 from __future__ import annotations
@@ -14,10 +20,18 @@ from __future__ import annotations
 # pylint: disable=unidiomatic-typecheck
 
 import base64
+import contextlib
 import copy
+import os
+import pwd
 import re
+import stat
+import uuid
 
-from ansible_collections.bootwright.core.plugins.module_utils.ceph_native import Refusal, daemon_identity_host, named, require
+from ansible_collections.bootwright.core.plugins.module_utils.ceph_native import (
+    REGISTRY_NAME, Refusal, daemon_identity_host, marker_identity, named, registry_directory, registry_exists, registry_read, require,
+    tunnel_helpers,
+)
 
 STAGES = ("located", "rule-present", "election-connectivity", "stretch-enabled", "verified")
 ROOT = "default"
@@ -407,3 +421,307 @@ def evidence(value, request=None):
     require(expected and value["action"] == "cluster" and isinstance(member, dict) and set(member) == {"stage", "enabled"}, "evidence")
     require(member["stage"] in ("",) + STAGES and type(member["enabled"]) is bool, "evidence")
     require(not value["ready"] or member["stage"] == "verified" and member["enabled"], "evidence")
+
+
+REMOVAL_VERSION = "ceph-tiebreaker-removal-v1"
+REMOVAL_ATTEMPT = "tiebreaker-removal-attempt.json"
+REMOVAL_COMPLETE = "tiebreaker-removal-complete.json"
+# The only daemon types of this FSID a provided tiebreaker runs: its MON and the derived crash collector.
+REMOVAL_TYPES = ("mon", "crash")
+RM_CLUSTER_TIMEOUT = 300
+DATA_ROOT, LOG_ROOT, UNIT_ROOT, LOGROTATE_ROOT, CONF_ROOT = "/var/lib/ceph", "/var/log/ceph", "/etc/systemd/system", "/etc/logrotate.d", "/etc/ceph"
+UNIT_WANTS = "ceph.target.wants"
+MAX_LISTING = 4096
+MAX_KEYS = 1024 * 1024
+MAX_CONF = 1024 * 1024
+NATIVE = ("daemons", "data", "log", "logrotate", "units", "conf")
+
+
+@contextlib.contextmanager
+def walked(path):
+    """The directory at a fixed absolute path, each component opened without following a link; None when one is absent."""
+    current = os.open("/", os.O_RDONLY | os.O_DIRECTORY | os.O_CLOEXEC)
+    try:
+        for part in path.strip("/").split("/"):
+            try:
+                following = os.open(part, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | os.O_CLOEXEC, dir_fd=current)
+            except FileNotFoundError:
+                following = None
+            except OSError:
+                # A link or a non-directory where the fixed layout keeps a directory is no layout this cluster made.
+                raise Refusal("tiebreaker-foreign") from None
+            os.close(current)
+            current = following
+            if current is None:
+                break
+        yield current
+    finally:
+        if current is not None:
+            os.close(current)
+
+
+def present(path):
+    """Whether a fixed path names anything, read without following a link."""
+    parent, name = path.rsplit("/", 1)
+    with walked(parent) as directory:
+        if directory is None:
+            return False
+        try:
+            os.stat(name, dir_fd=directory, follow_symlinks=False)
+        except FileNotFoundError:
+            return False
+        return True
+
+
+def listing(path):
+    with walked(path) as directory:
+        if directory is None:
+            return []
+        names = os.listdir(directory)
+        require(len(names) <= MAX_LISTING, "tiebreaker-foreign")
+        return sorted(names)
+
+
+def removal_target(request, host):
+    """The provided stretch tiebreaker this removal runs on: the one provided host, named by the stretch block."""
+    stretch = request.get("stretch")
+    require(request["action"] == "cluster" and isinstance(stretch, dict) and host["name"] == stretch["tiebreaker"]
+            and host.get("provided") is True and host["name"] != request["bootstrap"], "request")
+
+
+class TiebreakerRemoval:
+    """One cluster's footprint on its provided tiebreaker: proved its own before any effect, removed, and read back absent."""
+
+    def __init__(self, worker):
+        removal_target(worker.request, worker.host)
+        self.worker = worker
+        self.request = worker.request
+        self.host = worker.host
+        self.markers = worker.markers
+        self.fsid = worker.request["fsid"]
+        self.record = {"version": REMOVAL_VERSION, "owner": self.request["owner"], "fsid": self.fsid, "host": self.host["name"]}
+
+    def journal(self):
+        attempt, complete = self.markers.read(REMOVAL_ATTEMPT), self.markers.read(REMOVAL_COMPLETE)
+        require(attempt in (None, self.record) and complete in (None, self.record) and (complete is None or attempt is not None), "ownership")
+        return attempt, complete
+
+    def owned(self):
+        """The owner marker this cluster's claim wrote, naming exactly this cluster; anything else is another's host."""
+        try:
+            record = self.markers.read()
+        except Refusal:
+            raise Refusal("tiebreaker-foreign") from None
+        require(record is not None and record == marker_identity(self.request), "tiebreaker-foreign")
+
+    def daemons(self):
+        """This FSID's daemons, each a cephadm:v1 MON or crash collector of this host; no other FSID or layout under the data root."""
+        require(all(name == self.fsid for name in listing(DATA_ROOT)), "tiebreaker-foreign")
+        try:
+            daemons = self.worker.daemons()
+        except Refusal as error:
+            if str(error) == "foreign-cluster":
+                raise Refusal("tiebreaker-foreign") from None
+            raise
+        names = (self.host["name"], self.host["name"].split(".", 1)[0])
+        for daemon in daemons:
+            kind, separator, identifier = str(daemon.get("name", "")).partition(".")
+            require(daemon.get("style") == "cephadm:v1" and daemon.get("fsid") == self.fsid and separator
+                    and kind in REMOVAL_TYPES and identifier in names, "tiebreaker-foreign")
+        return sorted(daemon["name"] for daemon in daemons)
+
+    def authorization(self):
+        """The cluster-key line this host's authorize phase recorded, proved against its account; None when none was recorded."""
+        value = self.markers.read("ssh-authorization.json")
+        if value is None:
+            return None
+        helper, unused = tunnel_helpers()
+        require(isinstance(value, dict) and set(value) == {"uid", "home", "line"} and type(value["uid"]) is int
+                and isinstance(value["home"], str) and os.path.isabs(value["home"]), "tiebreaker-foreign")
+        try:
+            account = pwd.getpwnam(self.request["clusterSSHUser"])
+        except KeyError:
+            raise Refusal("tiebreaker-foreign") from None
+        require(value["uid"] == account.pw_uid > 0 and value["home"] == account.pw_dir, "tiebreaker-foreign")
+        require(isinstance(value["line"], str) and len(value["line"].split()) == 4, "tiebreaker-foreign")
+        public = " ".join(value["line"].split()[1:3])
+        require(value["line"] == helper.authorization_line(public, self.request["owner"]), "tiebreaker-foreign")
+        return value
+
+    @contextlib.contextmanager
+    def keys(self, value):
+        """The account's .ssh directory, and authorized_keys' descriptor and bytes, or None when either is absent."""
+        home = os.open(value["home"], os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | os.O_CLOEXEC)
+        directory = None
+        try:
+            info = os.fstat(home)
+            require(info.st_uid == value["uid"] and info.st_mode & 0o022 == 0, "tiebreaker-foreign")
+            try:
+                directory = os.open(".ssh", os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | os.O_CLOEXEC, dir_fd=home)
+            except FileNotFoundError:
+                yield None, None, None
+                return
+            info = os.fstat(directory)
+            require(info.st_uid == value["uid"] and info.st_mode & 0o077 == 0, "tiebreaker-foreign")
+            try:
+                fd = os.open("authorized_keys", os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK | os.O_CLOEXEC, dir_fd=directory)
+            except FileNotFoundError:
+                yield directory, None, None
+                return
+            with os.fdopen(fd, "rb") as handle:
+                info = os.fstat(handle.fileno())
+                require(stat.S_ISREG(info.st_mode) and info.st_nlink == 1 and info.st_uid in (0, value["uid"]) and info.st_mode & 0o022 == 0
+                        and info.st_size <= MAX_KEYS, "tiebreaker-foreign")
+                content = handle.read(MAX_KEYS + 1)
+                require(len(content) == info.st_size, "tiebreaker-foreign")
+                yield directory, info, content
+        finally:
+            if directory is not None:
+                os.close(directory)
+            os.close(home)
+
+    @staticmethod
+    def matching(value, content):
+        """The lines naming the recorded public key: none, or exactly the recorded line."""
+        blob = value["line"].split()[2]
+        try:
+            lines = content.decode("utf-8").splitlines()
+        except UnicodeError:
+            raise Refusal("tiebreaker-foreign") from None
+        found = [line for line in lines if blob in line.split()]
+        require(found in ([], [value["line"]]), "tiebreaker-foreign")
+        return bool(found)
+
+    def key_present(self, value):
+        if value is None:
+            return False
+        with self.keys(value) as (unused, info, content):
+            return info is not None and self.matching(value, content)
+
+    def remove_key(self, value):
+        """Rewrite authorized_keys without exactly the recorded line, keeping its owner, mode and every other byte."""
+        with self.keys(value) as (directory, info, content):
+            if info is None or not self.matching(value, content):
+                return
+            kept = b"".join(line for line in content.splitlines(keepends=True) if line.rstrip(b"\r\n") != value["line"].encode())
+            stage = ".bootwright-" + uuid.uuid4().hex
+            fd = os.open(stage, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW | os.O_CLOEXEC, 0o600, dir_fd=directory)
+            try:
+                with os.fdopen(fd, "wb") as handle:
+                    os.fchown(handle.fileno(), info.st_uid, info.st_gid)
+                    os.fchmod(handle.fileno(), stat.S_IMODE(info.st_mode))
+                    handle.write(kept)
+                    handle.flush()
+                    os.fsync(handle.fileno())
+                # The file read is still the one named: an edit since then is never overwritten.
+                now = os.stat("authorized_keys", dir_fd=directory, follow_symlinks=False)
+                require((now.st_dev, now.st_ino, now.st_size, now.st_mtime_ns) == (info.st_dev, info.st_ino, info.st_size, info.st_mtime_ns),
+                        "tiebreaker-foreign")
+                os.rename(stage, "authorized_keys", src_dir_fd=directory, dst_dir_fd=directory)
+                os.fsync(directory)
+            finally:
+                with contextlib.suppress(FileNotFoundError):
+                    os.unlink(stage, dir_fd=directory)
+
+    def credentials(self):
+        """The registry credential names this host's records bind, each with the metadata it must carry; any other refuses."""
+        intent = self.worker.registry_intent()
+        ready, pending = self.markers.read("registry-file.json"), self.markers.read("registry-pending.json")
+        for record in (ready, pending):
+            require(record is None or isinstance(record, dict) and set(record) == {"intent", "metadata"} and record["intent"] == intent,
+                    "tiebreaker-foreign")
+        if ready is not None:
+            return intent, ((REGISTRY_NAME, ready["metadata"], False, (1,)), (intent["anchor"], None, False, ()))
+        if pending is not None:
+            return intent, ((REGISTRY_NAME, pending["metadata"], True, (1, 2)), (intent["anchor"], pending["metadata"], True, (1, 2)))
+        return intent, ((REGISTRY_NAME, None, False, ()), (intent["anchor"], None, False, ()))
+
+    def credential_present(self, remove=False):
+        """Whether a recorded credential name remains; with remove, unlink each one proved by its recorded descriptor metadata."""
+        unused, names = self.credentials()
+        remaining = False
+        try:
+            with registry_directory() as directory:
+                for name, metadata, pending, links in names:
+                    if not registry_exists(directory, name):
+                        continue
+                    require(metadata is not None, "tiebreaker-foreign")
+                    require(registry_read(directory, name, metadata, pending=pending, links=links) is not None, "tiebreaker-foreign")
+                    if not remove:
+                        remaining = True
+                        continue
+                    os.unlink(name, dir_fd=directory)
+                    os.fsync(directory)
+        except Refusal as error:
+            if str(error) == "registry-ownership":
+                raise Refusal("tiebreaker-foreign") from None
+            raise
+        return remaining
+
+    def units(self):
+        prefix = "ceph-" + self.fsid
+        found = [name for name in listing(UNIT_ROOT) if name.startswith(prefix)]
+        return found + [UNIT_WANTS + "/" + name for name in listing(UNIT_ROOT + "/" + UNIT_WANTS) if name.startswith(prefix)]
+
+    def conf_names(self):
+        """Whether /etc/ceph/ceph.conf names this FSID, which is when rm-cluster removes it with ceph.pub and the admin keyring."""
+        with walked(CONF_ROOT) as directory:
+            if directory is None:
+                return False
+            try:
+                fd = os.open("ceph.conf", os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK | os.O_CLOEXEC, dir_fd=directory)
+            except FileNotFoundError:
+                return False
+            except OSError:
+                raise Refusal("tiebreaker-foreign") from None
+            with os.fdopen(fd, "rb") as handle:
+                info = os.fstat(handle.fileno())
+                require(stat.S_ISREG(info.st_mode) and info.st_size <= MAX_CONF, "tiebreaker-foreign")
+                return self.fsid.encode("ascii") in handle.read(MAX_CONF + 1)
+
+    def footprint(self, authorization):
+        return {"daemons": self.daemons(), "data": present(DATA_ROOT + "/" + self.fsid), "log": present(LOG_ROOT + "/" + self.fsid),
+                "logrotate": present(LOGROTATE_ROOT + "/ceph-" + self.fsid), "units": self.units(), "conf": self.conf_names(),
+                "key": self.key_present(authorization), "credential": self.credential_present()}
+
+    def prove(self):
+        """Read only: this cluster's owner marker, its records, and a footprint that is only its own."""
+        self.owned()
+        attempt, complete = self.journal()
+        authorization = self.authorization()
+        return attempt, complete, authorization, self.footprint(authorization)
+
+    def observe(self):
+        attempt, unused, unused_authorization, footprint = self.prove()
+        return {"removed": not any(footprint.values()), "attempted": attempt is not None}
+
+    def rm_cluster(self):
+        """The package cephadm's rm-cluster for this FSID alone, proved before any effect; never --zap-osds, never the copy under the data root."""
+        tool = self.worker.tool
+        require(os.path.isabs(tool) and not tool.startswith(DATA_ROOT + "/"), "request")
+        self.worker.verify_tool()
+        argv = [tool, "rm-cluster", "--fsid", self.fsid, "--force"]
+        self.worker.require_declared_options(argv)
+        return argv
+
+    def remove(self):
+        """Every proof before the attempt record; each removal only while its part remains; completion only once all is absent."""
+        attempt, complete, authorization, footprint = self.prove()
+        if not any(footprint.values()):
+            if complete is None:
+                self.markers.write(REMOVAL_ATTEMPT, self.record)
+                self.markers.write(REMOVAL_COMPLETE, self.record)
+            return {"changed": False, "removed": True, "attempted": True}
+        require(complete is None, "tiebreaker-foreign")
+        del attempt
+        argv = self.rm_cluster() if any(footprint[name] for name in NATIVE) else None
+        self.markers.write(REMOVAL_ATTEMPT, self.record)
+        if footprint["key"]:
+            self.remove_key(authorization)
+        if footprint["credential"]:
+            self.credential_present(remove=True)
+        if argv is not None:
+            self.worker.command(argv, timeout=RM_CLUSTER_TIMEOUT, json_result=False)
+        require(not any(self.footprint(authorization).values()), "not-removed")
+        self.markers.write(REMOVAL_COMPLETE, self.record)
+        return {"changed": True, "removed": True, "attempted": True}

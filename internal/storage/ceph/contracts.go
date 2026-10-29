@@ -81,6 +81,6 @@ func unsupportedFailure() error {
 }
 
 func ContentDigest() string {
-	d := sha256.Sum256([]byte(Implementation + "\x00" + Version + "\x00" + EvidenceVersion + "\x00" + PackageVersion + "\x00selected-tunnel-image-v3"))
+	d := sha256.Sum256([]byte(Implementation + "\x00" + Version + "\x00" + EvidenceVersion + "\x00" + PackageVersion + "\x00" + RetirementVersion + "\x00" + TiebreakerEvidenceVersion + "\x00selected-tunnel-image-v3"))
 	return hex.EncodeToString(d[:])
 }

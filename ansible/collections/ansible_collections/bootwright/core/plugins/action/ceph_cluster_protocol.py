@@ -15,7 +15,13 @@ def completion(arguments):
     removed = arguments.get("removed", False)
     if type(observed) is not bool or type(removed) is not bool:
         raise ValueError("operation")
-    result = ceph_core.evidence(arguments.get("evidence"), arguments.get("digest"))
+    value = arguments.get("evidence")
+    if isinstance(value, dict) and value.get("version") == ceph_core.TIEBREAKER_EVIDENCE:
+        result = ceph_core.tiebreaker_evidence(value, arguments.get("digest"))
+        if observed or removed and result["removed"]:
+            return result, None
+        return result, "the Ceph operation has not proved its postcondition"
+    result = ceph_core.evidence(value, arguments.get("digest"))
     if observed or result["removed" if removed else "ready"]:
         return result, None
     return result, "the Ceph operation has not proved its postcondition"

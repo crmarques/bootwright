@@ -76,8 +76,9 @@ SUBVOLUME_PATH = re.compile(r"/volumes/(?:_nogroup|[A-Za-z0-9][A-Za-z0-9_.-]{0,1
                             r"([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\Z")
 CORE_PHASES = frozenset(("prerequisites", "claim", "devices", "osd_prepare", "tunnel_preflight", "authorize", "bootstrap", "tunnel_configure", "tunnel_mount",
                          "cache", "enroll", "license", "services", "stretch_locate", "stretch_enable", "dashboard", "dashboard_read", "observe",
-                         "bootstrap_state", "host_state", "destroy"))
-CORE_READ_ONLY_PHASES = frozenset(("prerequisites", "devices", "tunnel_preflight", "observe", "bootstrap_state", "host_state", "dashboard_read"))
+                         "bootstrap_state", "host_state", "destroy", "tiebreaker_observe", "tiebreaker_remove"))
+CORE_READ_ONLY_PHASES = frozenset(("prerequisites", "devices", "tunnel_preflight", "observe", "bootstrap_state", "host_state", "dashboard_read",
+                                   "tiebreaker_observe"))
 EVIDENCE_VERSION = "ceph-core-evidence-v13"
 # The specialization ids the last dispatched phase's worker applied; the remote wrapper reads it once per process.
 APPLIED = []
@@ -3341,6 +3342,14 @@ class Worker:
     def stretch_enable(self):
         from ansible_collections.bootwright.core.plugins.module_utils import ceph_native_stretch
         return ceph_native_stretch.Activation(self).enable()
+
+    def tiebreaker_observe(self):
+        from ansible_collections.bootwright.core.plugins.module_utils import ceph_native_stretch
+        return ceph_native_stretch.TiebreakerRemoval(self).observe()
+
+    def tiebreaker_remove(self):
+        from ansible_collections.bootwright.core.plugins.module_utils import ceph_native_stretch
+        return ceph_native_stretch.TiebreakerRemoval(self).remove()
 
     def dashboard_scope(self):
         """Bind the dashboard credential to the owned cluster incarnation and its bootstrap host."""

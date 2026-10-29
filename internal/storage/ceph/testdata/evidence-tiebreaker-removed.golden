@@ -1,0 +1,9 @@
+{
+  "attempted": true,
+  "fsid": "5effe704-a878-5cae-8b43-c81f7112832a",
+  "host": "tie",
+  "owner": "apply-original",
+  "removed": true,
+  "request": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+  "version": "ceph-tiebreaker-evidence-v1"
+}

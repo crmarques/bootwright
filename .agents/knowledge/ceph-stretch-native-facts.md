@@ -131,3 +131,37 @@ a cross-kind rule like this one by compiling a whole example, as
 `cmd/bootwright/ceph_provided_tiebreaker_linux_amd64_test.go` does, never
 only the capability's own catalog. The owning rule is the
 [stretch topology](../../specs/ceph.md#stretch-topology).
+
+## Removing a provided tiebreaker (X203): unverified footprint
+
+X203 removes a provided tiebreaker's footprint in the cluster block's
+destroy (`TiebreakerRemoval` in `plugins/module_utils/ceph_native_stretch.py`,
+tested in `test_ceph_tiebreaker_removal.py`; the owning rule is
+[a provided tiebreaker's removal](../../specs/ceph.md#a-provided-tiebreakers-removal)).
+Its effect is the package cephadm's `rm-cluster --fsid <fsid> --force`,
+never `--zap-osds`. The [cleanup source review](ibm-ceph-cleanup.md) read
+`_rm_cluster` but no run has; the fake answers as written here, and B488's
+emulated rehearsal must read each from the selected build:
+- UNVERIFIED: that `rm-cluster` removes `/var/lib/ceph/<fsid>`,
+  `/var/log/ceph/<fsid>`, `/etc/logrotate.d/ceph-<fsid>`, the
+  `ceph-<fsid>@.service` and `ceph-<fsid>.target` unit files and the
+  `ceph.target.wants` link, and `/etc/ceph/ceph.conf`, `ceph.pub` and the
+  admin keyring when the conf names the FSID; the absence proof refuses
+  `not-removed` when one remains.
+- UNVERIFIED: whether it stops and disables the units before removing them
+  and reloads systemd; absence reads unit files only, not systemd's loaded
+  state.
+- UNVERIFIED: whether its logging start, like `cephadm ls`'s, writes
+  `/var/log/ceph/cephadm.log` and `/etc/logrotate.d/cephadm` again after
+  removing them with the last cluster; absence does not read those.
+- UNVERIFIED: whether it removes `/etc/ceph/podman-auth.json` itself;
+  Bootwright removes its own credential first, under its recorded metadata.
+- UNVERIFIED: the crash collector's daemon ID on a host whose native
+  hostname is a full name; the proof admits `crash.` and `mon.` with either
+  the short or the full name of the tiebreaker.
+- UNVERIFIED: whether an `rm-cluster` killed partway leaves a daemon
+  directory the bounded inventory refuses as `native-observation-unproved`;
+  the removal then stays unknown, never absent.
+- The selected cephadm's parser must declare `--fsid` and `--force`
+  (`require_declared_options`); a build lacking either refuses before the
+  command.

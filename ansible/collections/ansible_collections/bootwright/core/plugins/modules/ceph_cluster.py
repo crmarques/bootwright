@@ -26,7 +26,9 @@ options:
     type: str
     required: true
   material:
-    description: Runner-owned private material file paths.
+    description:
+      - Runner-owned private material file paths.
+      - C(retirement) set to C(tiebreaker) selects a provided stretch tiebreaker's removal on destroy, or its read-only observation on observe.
     type: dict
     required: true
   outputs:
@@ -86,8 +88,11 @@ def main():
     )
     params = module.params
     try:
-        transport = ceph_core.Transport(params["request"], params["material"])
-        result = ceph_core.execute(params["request"], params["operation"], params["digest"], transport, params["outputs"])
+        # The retirement selector is a value beside the material paths, never a path the transport reads.
+        material = dict(params["material"])
+        retirement = material.pop("retirement", None)
+        transport = ceph_core.Transport(params["request"], material)
+        result = ceph_core.execute(params["request"], params["operation"], params["digest"], transport, params["outputs"], retirement=retirement)
     except Exception as error:
         reason, detail = ceph_core.refusal(error, ceph_core.CLUSTER_REASONS)
         failure = {"reason": reason}

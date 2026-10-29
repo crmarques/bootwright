@@ -540,10 +540,6 @@ unverified in the [stretch native facts](../.agents/knowledge/ceph-stretch-nativ
 until B488's rehearsal reads them from the selected build.
 Not yet met: an interrupted stretch stage has no forward exit short of
 retiring the whole cluster; tracked as [B920](milestones/m2.md#b920).
-Not yet met: destroy does not yet
-[remove a provided tiebreaker's footprint](#a-provided-tiebreakers-removal),
-so a cluster with one refuses by the surviving-host rule; tracked as
-[B892](milestones/m2.md#b892).
 
 ### Stretch services and front doors
 
@@ -1807,17 +1803,27 @@ and needs neither the bootstrap host nor MON quorum.
 
 - **Proof before effect.** Read-only: the owner marker under
   `/var/lib/bootwright/ceph/<fsid>` on the host equals this cluster's marker
-  identity, for the FSID Bootwright recorded; `cephadm ls` lists only
-  `cephadm:v1` daemons, none of another FSID and, of this FSID, a subset of
-  the host's `mon` and `crash`; `/var/lib/ceph` holds no other FSID's
-  directory. Anything else refuses `tiebreaker-foreign` with no effect.
-- **Effect.** An attempt record in that marker directory, then:
-  the cluster-key line the `authorize` phase added to the cluster SSH user's
-  `authorized_keys`, exactly as recorded, removed and proved absent; the
-  registry credential `/etc/ceph/podman-auth.json`, removed under its
-  recorded descriptor metadata; and the package cephadm binary's `rm-cluster
-  --fsid <fsid> --force`, never `--zap-osds`, never the copy under
-  `/var/lib/ceph/<fsid>`. That command removes the FSID's units, data, log,
+  identity, for the FSID Bootwright recorded; the daemon inventory lists
+  only `cephadm:v1` daemons, none of another FSID and, of this FSID, a
+  subset of the host's `mon` and `crash`; `/var/lib/ceph` holds nothing but
+  this FSID's directory; the cluster SSH user's `authorized_keys` names the
+  recorded key in no line but the recorded one; and each registry
+  credential name is absent or carries the descriptor metadata its record
+  holds. Anything else refuses `tiebreaker-foreign` with no effect. The
+  inventory is the bounded read of cephadm's own layout every Ceph phase
+  uses in place of `cephadm ls`, whose logging start writes host files
+  ([cleanup facts](../.agents/knowledge/ibm-ceph-cleanup.md)).
+- **Effect.** An attempt record in that marker directory, then, each only
+  while its part remains: the cluster-key line the `authorize` phase added
+  to the cluster SSH user's `authorized_keys`, exactly as recorded, removed
+  by a staged rewrite that keeps every other byte, the file's owner and
+  mode, and refuses a file changed since it was read; the registry
+  credential `/etc/ceph/podman-auth.json`, removed under its recorded
+  descriptor metadata; and, while any native part remains, the package
+  cephadm binary's `rm-cluster --fsid <fsid> --force`, never `--zap-osds`,
+  never the copy under `/var/lib/ceph/<fsid>`, the binary's package proof
+  and its parser's declaration of every option passed both read before the
+  attempt record. That command removes the FSID's units, data, log,
   run and temporary directories, logrotate and sysctl files; with no Ceph
   cluster left, cephadm's `ceph.target`, its logrotate file and its
   `cephadm.log` files; and, when `/etc/ceph/ceph.conf` names the FSID, that
@@ -1825,18 +1831,36 @@ and needs neither the bootstrap host nor MON quorum.
   build is unverified until [B488](milestones/m2.md#b488) reads it.
   Packages, images, firewall openings, users, disks, the OS and Bootwright's
   own records under `/var/lib/bootwright/ceph*/<fsid>` stay.
-- **Absence.** `cephadm ls` lists no daemon of the FSID, no
-  `ceph-<fsid>` unit or target remains, neither `/var/lib/ceph/<fsid>`,
+- **Absence.** The inventory lists no daemon of the FSID, no unit file
+  named `ceph-<fsid>` remains in `/etc/systemd/system` or its
+  `ceph.target.wants`, neither `/var/lib/ceph/<fsid>`,
   `/var/log/ceph/<fsid>` nor the FSID's logrotate file exists,
   `/etc/ceph/ceph.conf` does not name the FSID, and neither the recorded
   `authorized_keys` line nor the credential remains, read without following
-  links; only then is the completion recorded and the cluster's retirement
-  evidence names the tiebreaker as cleaned.
+  links; only then is the completion recorded beside the attempt and the
+  cluster's retirement evidence names the tiebreaker as cleaned.
 - **Recovery.** A lost reply leaves the effect unknown: the next attempt
   observes first, completes without a command when absence is proved, and
-  otherwise repeats each removal under its attempt record. An unreachable
+  otherwise repeats each removal under its attempt record. The removal
+  observation reports a partial effect once an attempt record exists and
+  no effect before one, so either retries the destroy. An unreachable
   tiebreaker is unknown, never absent, and refuses `tiebreaker-unreachable`
   before the retirement record.
+- **Evidence.** The cluster block's retirement record carries version
+  `ceph-core-retirement-v2`, and its `tiebreaker` member names the host and
+  Machine it cleaned; a record of another version refuses by name (D142).
+  Every other core block's record carries the version and no tiebreaker.
+
+Only the cluster block reaches the tiebreaker; every other core block of the
+cluster retires as before, with no native call. Not yet met: the sshd drop-in
+the `authorize` phase writes stays on the tiebreaker after its removal;
+tracked as [B940](milestones/m2.md#b940). Not yet met: a CephConsumer or
+CephReplication of such a cluster names the provided Machine among the hosts
+it retires with, so its destroy refuses by the surviving-host rule; tracked
+as [B941](milestones/m2.md#b941). Not yet met: a tiebreaker the cluster's
+apply never claimed holds no owner marker, so its removal refuses
+`tiebreaker-foreign` even with no footprint; tracked as
+[B942](milestones/m2.md#b942).
 
 Not yet met: a tiebreaker the operator has decommissioned or reinstalled
 refuses this removal with no exit; tracked as

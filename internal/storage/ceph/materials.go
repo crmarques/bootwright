@@ -165,6 +165,10 @@ func gatewayMaterial(e lifecycle.Execution, r Request, operation string) ([]life
 }
 
 func (c Capability) run(ctx context.Context, e lifecycle.Execution, operation string, r Request) (lifecycle.RunResult, error) {
+	return c.invoke(ctx, e, operation, r, nil, nil)
+}
+
+func (c Capability) invoke(ctx context.Context, e lifecycle.Execution, operation string, r Request, values map[string]string, named map[string]error) (lifecycle.RunResult, error) {
 	if c.runner == nil {
 		return lifecycle.RunResult{}, failure("lifecycle.state", "the Ceph adapter is not configured", "")
 	}
@@ -185,20 +189,22 @@ func (c Capability) run(ctx context.Context, e lifecycle.Execution, operation st
 	}
 	defer cleanup()
 	outputs := []lifecycle.OutputFile{}
-	if (operation == "apply" || operation == "observe") && r.Action == "client" {
+	produces := (operation == "apply" || operation == "observe") && values == nil
+	if produces && r.Action == "client" {
 		outputs = append(outputs, lifecycle.OutputFile{Name: "client", Variable: "client"})
 	}
-	if (operation == "apply" || operation == "observe") && r.Action == "object-user" {
+	if produces && r.Action == "object-user" {
 		outputs = append(outputs, lifecycle.OutputFile{Name: ObjectUserOutput, Variable: ObjectUserOutput})
 	}
-	if (operation == "apply" || operation == "observe") && r.Action == "cluster" {
+	if produces && r.Action == "cluster" {
 		outputs = append(outputs, lifecycle.OutputFile{Name: DashboardOutput, Variable: DashboardOutput})
 	}
 	refusals := adapterRefusals()
 	if r.Client != nil {
 		refusals["foreign-client"] = foreignClientRefusal(r.Client.Name)
 	}
-	return c.runner.Run(ctx, lifecycle.RunFor(execution, lifecycle.Invocation{Implementation: Implementation, Operation: operation, Variable: "bootwright_ceph", Canonical: canonical, Placement: machine.Placement{Connection: machine.ConnectionLocal, Machine: r.Controller}, Materials: files, Outputs: outputs, Refusals: refusals, NativeErrors: true, Deadline: deadline}))
+	maps.Copy(refusals, named)
+	return c.runner.Run(ctx, lifecycle.RunFor(execution, lifecycle.Invocation{Implementation: Implementation, Operation: operation, Variable: "bootwright_ceph", Canonical: canonical, Placement: machine.Placement{Connection: machine.ConnectionLocal, Machine: r.Controller}, Materials: files, Values: values, Outputs: outputs, Refusals: refusals, NativeErrors: true, Deadline: deadline}))
 }
 
 const (
