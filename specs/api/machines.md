@@ -18,8 +18,8 @@ inside one service, and attachment refs inside one provider. Loading order
 never chooses among duplicates.
 
 A field that references a Secret names its
-[class](../secrets.md#immutable-binding-and-contexts), effect material or
-access credential.
+[class](../secrets.md#immutable-binding-and-contexts), effect material,
+access credential or trust anchor.
 
 ## Kinds
 
@@ -58,7 +58,7 @@ its 63-byte identity.
 | --- | --- | --- | --- | --- |
 | `spec.baremetal.defaults.bmc.credentialsRef` | string | no | — | Default `usernamePassword` `Secret` reference for a Machine that omits its own BMC credentials. Access credential. |
 | `spec.baremetal.defaults.bmc.tls.verify` | boolean | no | `true` | Default for a machine BMC whose own `tls.verify` is absent. |
-| `spec.baremetal.defaults.bmc.tls.trustBundleRef` | string | no | — | Default `caBundle` `Secret` reference for a machine BMC that keeps verification; refused beside `tls.verify: false`. Access credential. |
+| `spec.baremetal.defaults.bmc.tls.trustBundleRef` | string | no | — | Default `caBundle` `Secret` reference for a machine BMC that keeps verification; refused beside `tls.verify: false`. Trust anchor. |
 | `spec.baremetal.defaults.bmc.virtualMedia.tls.trust` | string | no | `importCertificate` | `importCertificate` or `established`. `disableVerification` is refused here: it is a per-Machine exception and never a provider default. |
 | `spec.baremetal.defaults.bmc.virtualMedia.tls.restoreVerificationAfterBoot` | boolean | no | — | Refused: it is valid only with `disableVerification`, which a provider never defaults. |
 | `spec.baremetal.defaults.bmc.virtualMedia.tls.removeCertificateAfterBoot` | boolean | no | `false` | Valid only with `importCertificate`. |
@@ -76,8 +76,8 @@ machine-local bundle always wins. An Environment kind-default bundle likewise
 never reaches an object that authors `tls.verify: false`. A bundle beside
 verification turned off, whether either half was authored or inherited, fails
 admission at `tls.trustBundleRef`. A bundle replaces the system trust store
-rather than adding to it: it is the one anchor of the controller-to-BMC leg, an access
-credential. A placement host reached over SSH verifies with its own interpreter, which may
+rather than adding to it: it is the one anchor of the controller-to-BMC leg, a trust
+anchor. A placement host reached over SSH verifies with its own interpreter, which may
 not accept a partial chain, so the bundle holds the issuing root rather than
 only an intermediate. A `caBundle` Secret holds CA certificates only
 ([secrets](../secrets.md)), so a BMC presenting a self-signed
@@ -521,7 +521,7 @@ installer-provisioned machine, omission means no Bootwright login.
 | `auth.privateKeyRef` | string | union | — | `sshKeyPair` `Secret`. Access credential. |
 | `auth.passwordRef` | string | union | — | `usernamePassword` `Secret`; requires authored `user`. Access credential. |
 | `sudoPasswordRef` | string | no | — | `usernamePassword` `Secret`; refused on a [lifecycle placement host](#addresses-and-access), and no consumer escalates with it. Access credential. |
-| `knownHostsRef` | string | no | [context-managed trust](../contexts.md#storage-locking-and-publication) | `opaque` `Secret` containing one exact OpenSSH `known_hosts` entry. Access credential. |
+| `knownHostsRef` | string | no | [context-managed trust](../contexts.md#storage-locking-and-publication) | `opaque` `Secret` containing one exact OpenSSH `known_hosts` entry. Trust anchor. |
 
 Exactly one SSH `auth` arm is present. `access.rootLogin` is `keep` by default
 or `revoke`. `revoke` requires authored SSH access and a non-root replacement
@@ -543,7 +543,7 @@ here; its placement refuses before planning under the
 Machines that are only cluster nodes, storage nodes or session targets keep
 any account.
 
-The `knownHostsRef` Secret, an access credential, is ASCII split at spaces
+The `knownHostsRef` Secret, a trust anchor, is ASCII split at spaces
 and tabs only. Blank and `#` lines are ignored; exactly one data line remains,
 `<host> <type> <key>` optionally followed by a comment. Its host token is the effective SSH address for port `22`, or
 `[<address>]:<port>` otherwise. Markers, patterns, hashed hosts and
@@ -585,7 +585,7 @@ The nested blocks of the bare-metal [substrate arm](#substrate-arm).
 | `protocol` | string | no | `redfish` | `redfish`. |
 | `credentialsRef` | string | resolved with the BMC block | configured provider default | `usernamePassword` `Secret`; machine-local values take precedence. Access credential. |
 | `tls.verify` | boolean | no | `true` | Whether the controller-to-BMC TLS leg is verified: against `tls.trustBundleRef` alone when it is set, and against the system trust store otherwise. |
-| `tls.trustBundleRef` | string | no | configured provider default | `caBundle` `Secret`; the one anchor of the controller-to-BMC leg. Refused beside `tls.verify: false`. Access credential. |
+| `tls.trustBundleRef` | string | no | configured provider default | `caBundle` `Secret`; the one anchor of the controller-to-BMC leg. Refused beside `tls.verify: false`. Trust anchor. |
 | `virtualMedia.tls.trust` | string | no | `importCertificate` | How the BMC is made to trust the artifact server it fetches media from. `importCertificate` uses the device certificate collection or the qualified discovered SecurityService [media trust contract](../substrates.md#identity-and-power-operations); `established` changes nothing, because the BMC already trusts the server; `disableVerification` turns the device's verification off before the insert and is the per-Machine exception below. |
 | `virtualMedia.tls.restoreVerificationAfterBoot` | boolean | no | `true` | Only with `disableVerification`; the eject turns verification back on. |
 | `virtualMedia.tls.removeCertificateAfterBoot` | boolean | no | `false` | Only with `importCertificate`; the eject deletes the imported certificate. |

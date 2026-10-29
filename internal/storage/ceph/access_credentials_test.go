@@ -18,3 +18,28 @@ func TestAHostReadsOnlyTheRegistryLoginAsAnAccessCredential(t *testing.T) {
 		t.Fatalf("the cluster key %q was read as an access credential", r.Cluster.ClusterKeyRef)
 	}
 }
+
+func TestAHostRebindsNoTrustAnchor(t *testing.T) {
+	e, r, _ := hostExecution(t, "node-2")
+	r.Cluster.RegistryTrustBundleRef = "registry-ca"
+	r.Cluster.Packages.PackageRepositoryTrustBundleRef = "repository-ca"
+	r.Cluster.Hosts[0].KnownHostsRef = "node-known-hosts"
+	canonical, err := r.canonical()
+	if err != nil {
+		t.Fatal(err)
+	}
+	e.Block.Request = canonical
+	access, err := NewHost(nil).AccessCredentials(e.Block)
+	if err != nil {
+		t.Fatal(err)
+	}
+	references := r.SecretReferences()
+	for _, anchor := range []string{"registry-ca", "repository-ca", "node-known-hosts"} {
+		if !slices.Contains(references, anchor) {
+			t.Fatalf("the host does not reference trust anchor %q: %v", anchor, references)
+		}
+		if slices.Contains(access, anchor) {
+			t.Fatalf("trust anchor %q was read as an access credential: %v", anchor, access)
+		}
+	}
+}

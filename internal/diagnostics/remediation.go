@@ -1,6 +1,11 @@
 package diagnostics
 
-const usageCode = "cli.usage"
+import "strings"
+
+const (
+	usageCode          = "cli.usage"
+	ContextPlaceholder = "<context>"
+)
 
 var defaultRemediations = map[string]string{
 	"input.not-found":     "correct the input path and repeat the command",
@@ -40,12 +45,12 @@ var defaultRemediations = map[string]string{
 	"context.unsafe-delete": "resolve the evidence the message names and repeat the deletion",
 	"context.orphaned":      "review the abandoned objects the message names",
 
-	"secret.store":                 "run bootwright secret check to see which Secrets are usable",
+	"secret.store":                 "run bootwright secret check --context <context> to see which Secrets are usable",
 	"secret.declaration":           "correct the Secret name or declaration in the desired state",
 	"secret.source":                "correct the Secret's declared source or parameters",
 	"secret.part":                  "supply the Secret part the message names, or correct its value",
 	"secret.input":                 "supply valid Secret input or material and repeat the command",
-	"secret.store.uninitialized":   "initialize the Secret store with bootwright secret encryption init",
+	"secret.store.uninitialized":   "initialize the Secret store with bootwright secret encryption init --context <context>",
 	"secret.store.implementation":  "configure the Secret store implementation the message names",
 	"secret.store.key-unavailable": "make the Secret store key or unlock session available and repeat the command",
 	"secret.store.conflict":        "repeat the command once the concurrent change has finished",
@@ -65,16 +70,16 @@ var defaultRemediations = map[string]string{
 	"controller.setup":       "resolve the failed action the message names and repeat setup",
 	"controller.unknown":     "repeat bootwright setup to resolve the unknown action",
 
-	"lifecycle.state":           "run bootwright status to see the records and the next step",
+	"lifecycle.state":           "run bootwright status --context <context> to see the records and the next step",
 	"lifecycle.unsupported":     "remove the object this executable cannot realize, or use a build that supports it",
 	"lifecycle.stage":           "select a stage that has a startable block",
 	"lifecycle.authorization":   "repeat the command with the authorization the frozen plan requires",
 	"lifecycle.lease":           "repeat the command once the other operation on the context has finished",
-	"lifecycle.unknown":         "resolve the unknown effect with the command bootwright status names",
+	"lifecycle.unknown":         "resolve the unknown effect with the command bootwright status --context <context> names",
 	"lifecycle.live":            "stop what still uses the state and repeat the removal",
 	"lifecycle.adapter-running": "wait for the adapter the message names to end and repeat the command",
 
-	"trust.identity":     "review the SSH identity the message names and enroll it with bootwright machine trust",
+	"trust.identity":     "review the SSH identity the message names and enroll it with bootwright machine trust --context <context>",
 	"access.unavailable": "provide the access metadata or credential the message names and repeat the command",
 	"access.target":      "name exactly one authorized target and repeat the command",
 	"access.handoff":     "correct the access descriptor the message names and repeat the command",
@@ -86,9 +91,19 @@ var defaultRemediations = map[string]string{
 
 func DefaultRemediation(code string) string { return defaultRemediations[code] }
 
-func WithRemediation(d Diagnostic) Diagnostic {
+func DefaultRemediationFor(code, contextName string) string {
+	remediation := defaultRemediations[code]
+	if contextName == "" {
+		return remediation
+	}
+	return strings.ReplaceAll(remediation, ContextPlaceholder, contextName)
+}
+
+func WithRemediation(d Diagnostic) Diagnostic { return WithRemediationFor(d, "") }
+
+func WithRemediationFor(d Diagnostic, contextName string) Diagnostic {
 	if d.Severity == "error" && d.Code != usageCode && d.Remediation == "" {
-		d.Remediation = DefaultRemediation(d.Code)
+		d.Remediation = DefaultRemediationFor(d.Code, contextName)
 	}
 	return d
 }

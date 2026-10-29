@@ -1035,8 +1035,8 @@ func (s *Store) CompleteAttempt(ctx context.Context, id, block string, number in
 
 // StartResolution allocates and durably records the resolution identity, naming
 // build, and its log before any observation begins, so an observation can never
-// happen under an identity that was never reserved.
-func (s *Store) StartResolution(ctx context.Context, id, block string, attempt int, build Build) (int, error) {
+// happen under an identity that was never reserved; removal marks a removal's.
+func (s *Store) StartResolution(ctx context.Context, id, block string, attempt int, build Build, removal bool) (int, error) {
 	if err := validateBuild(build); err != nil {
 		return 0, err
 	}
@@ -1070,7 +1070,7 @@ func (s *Store) StartResolution(ctx context.Context, id, block string, attempt i
 	if err != nil {
 		return 0, err
 	}
-	record := Attempt{Version: 1, Block: block, Number: attempt, Resolution: next, Phase: "running", Build: &build, Started: started, Updated: started}
+	record := Attempt{Version: 1, Block: block, Number: attempt, Resolution: next, Removal: removal, Phase: "running", Build: &build, Started: started, Updated: started}
 	encoded, err := encode(record, MaxAttemptBytes)
 	if err != nil {
 		return 0, err

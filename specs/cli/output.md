@@ -434,7 +434,12 @@ its code's default written, which `internal/diagnostics` holds for every
 registered code that can be an error
 (`TestEveryErrorCodeHasADefaultRemediation`,
 `TestEveryErrorDiagnosticIsWrittenWithARemediation`); a `cli.usage` error and a
-warning get none.
+warning get none. A default that names a context-backed command carries
+`--context`, the invoking invocation's context when it named a valid context
+name and `<context>` otherwise
+(`TestEveryDefaultNamingAContextBackedCommandCarriesTheContext`,
+`TestADefaultRemediationNamesTheInvokingContext`,
+`TestADefaultRemediationKeepsThePlaceholderForAnInvalidContext`).
 
 Safe display text preserves printable UTF-8 and escapes backslash, control
 characters, ESC, newline, and invalid UTF-8 bytes with deterministic `\\`,

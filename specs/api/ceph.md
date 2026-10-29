@@ -196,7 +196,7 @@ source default, not a release catalog. Independent publisher signatures remain
 required for its selected RPMs.
 
 `packageRepositoryTrustBundleRef` optionally names a `caBundle` Secret,
-an access credential, that is the only TLS trust anchor for the authored `packageRepository`:
+a trust anchor, that is the only TLS trust anchor for the authored `packageRepository`:
 host package acquisition verifies that repository's metadata and package
 downloads against the bundle alone (no host trust store, default path or
 environment override), and against the host trust store when the field is

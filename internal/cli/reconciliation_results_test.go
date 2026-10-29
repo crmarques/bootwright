@@ -12,6 +12,7 @@ import (
 
 	"github.com/crmarques/bootwright/internal/diagnostics"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
+	"github.com/spf13/cobra"
 )
 
 func previewResult() *lifecycle.PlanResult {
@@ -441,6 +442,39 @@ func TestPausedOperationReportsSuccessAndItsContinuation(t *testing.T) {
 	}
 }
 
+func TestADefaultRemediationNamesTheInvokingContext(t *testing.T) {
+	failure := &diagnostics.Failure{Diagnostics: []diagnostics.Diagnostic{{Severity: "error", Code: "lifecycle.state", Message: "the operation did not complete"}}}
+	record := &dispatchRecord{result: commandResult{lifecycleOperation: &lifecycle.OperationResult{Context: lifecycle.ContextIdentity{Name: "lab"}, Verb: "apply"}}, err: failure}
+	var out, errOut bytes.Buffer
+	if code := New(Config{Out: &out, ErrOut: &errOut, Services: dispatchSpies(record)}).Run(context.Background(), []string{"apply", "--context", "lab", "--yes"}); code != 1 {
+		t.Fatalf("code = %d", code)
+	}
+	if !strings.Contains(errOut.String(), "Next: run bootwright status --context lab to see the records and the next step\n") {
+		t.Fatalf("stderr = %q", errOut.String())
+	}
+}
+
+// A --context value that is not a context name never reaches a remedy: the
+// default keeps its placeholder.
+func TestADefaultRemediationKeepsThePlaceholderForAnInvalidContext(t *testing.T) {
+	failure := diagnostics.Diagnostic{Severity: "error", Code: "lifecycle.state", Message: "the operation did not complete"}
+	for name, want := range map[string]string{
+		"lab":           "run bootwright status --context lab to see the records and the next step",
+		"lab; rm -rf ~": "run bootwright status --context <context> to see the records and the next step",
+		"$(id)":         "run bootwright status --context <context> to see the records and the next step",
+		"Lab":           "run bootwright status --context <context> to see the records and the next step",
+	} {
+		command := &cobra.Command{Use: "apply"}
+		command.Flags().String("context", "", "")
+		if err := command.Flags().Set("context", name); err != nil {
+			t.Fatal(err)
+		}
+		if got := remediatedFor(command, []diagnostic{failure}); got[0].Remediation != want {
+			t.Fatalf("--context %q remedies %q, want %q", name, got[0].Remediation, want)
+		}
+	}
+}
+
 func TestFailedOperationKeepsItsResultLogAndReceipt(t *testing.T) {
 	for _, path := range []string{"apply", "destroy"} {
 		t.Run(path, func(t *testing.T) {
@@ -471,7 +505,7 @@ func TestFailedOperationKeepsItsResultLogAndReceipt(t *testing.T) {
 			if !strings.HasSuffix(rendered, "next: continue-"+path+"\n") {
 				t.Fatalf("result does not end with its receipt: %q", rendered)
 			}
-			if errOut.String() != "  error  lifecycle.state\n    the operation did not complete\n    Next: run bootwright status to see the records and the next step\n" {
+			if errOut.String() != "  error  lifecycle.state\n    the operation did not complete\n    Next: run bootwright status --context <context> to see the records and the next step\n" {
 				t.Fatalf("stderr = %q", errOut.String())
 			}
 		})

@@ -159,7 +159,7 @@ func (s Service) startResolution(ctx context.Context, tx Transaction, store Oper
 	if err != nil {
 		return 0, "", nil, err
 	}
-	number, err := store.StartResolution(ctx, operation.ID, block.ID, attempt, s.ranUnder(block))
+	number, err := store.StartResolution(ctx, operation.ID, block.ID, attempt, s.ranUnder(block), removal)
 	if err != nil {
 		release()
 		return 0, "", nil, err

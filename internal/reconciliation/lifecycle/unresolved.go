@@ -122,10 +122,15 @@ func (s Service) unresolvedOf(ctx context.Context, store OperationStore, operati
 		}
 		return Unresolved{Reason: "its observation could not run: " + failed.Message, Remedy: remedy}, nil
 	}
+	// A removal's record is read for the removal first, as its refusal read
+	// it; a record without the member as earlier builds read it.
+	if resolution.Removal {
+		if explained := s.explain(reconciliation.Destroy, block, resolution.Evidence); explained != unexplained {
+			return explained, nil
+		}
+	}
 	explained := s.explain(operation.Verb, block, resolution.Evidence)
-	// A fresh removal resolves an apply's block by its own check, so what it
-	// recorded may be read only by the removal's reading of the same evidence.
-	if explained == unexplained && operation.Verb == reconciliation.Apply {
+	if explained == unexplained && !resolution.Removal && operation.Verb == reconciliation.Apply {
 		explained = s.explain(reconciliation.Destroy, block, resolution.Evidence)
 	}
 	return explained, nil

@@ -460,7 +460,7 @@ type OperationStore interface {
 	RecordPreparation(context.Context, string, string, int, json.RawMessage) error
 	CompleteAttempt(context.Context, string, string, int, reconciliation.Outcome, reconciliation.EffectState, reconciliation.BlockState, json.RawMessage, ...operationstore.Warning) error
 	LastAttempt(context.Context, string, string) (int, error)
-	StartResolution(context.Context, string, string, int, operationstore.Build) (int, error)
+	StartResolution(context.Context, string, string, int, operationstore.Build, bool) (int, error)
 	LastResolution(context.Context, string, string, int) (operationstore.Attempt, bool, error)
 	CompleteResolution(context.Context, string, string, int, int, reconciliation.Outcome, reconciliation.EffectState, reconciliation.BlockState, json.RawMessage, *operationstore.ObservationFailure) error
 	OpenLog(context.Context, string) (*operationstore.Log, error)

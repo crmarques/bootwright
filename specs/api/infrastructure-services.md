@@ -124,7 +124,7 @@ External forms have these exact connection fields:
 
 | Kind | Fields | Rule |
 | --- | --- | --- |
-| `Proxy` | `connection.httpProxy`, `connection.httpsProxy`, `connection.auth.proxyAuthRef`, `connection.trustBundleRef` | `connection` sets at least one bare HTTP(S) proxy endpoint: at most 4096 ASCII bytes with a host and no userinfo, path, query or fragment, under the [context-free route's grammar](../controller.md#the-context-free-acquisition-route); validate refuses another at that field, naming the field and never the value. Authentication names a `usernamePassword` Secret; trust names a `caBundle` Secret. `proxyAuthRef` and `trustBundleRef` name access credentials. |
+| `Proxy` | `connection.httpProxy`, `connection.httpsProxy`, `connection.auth.proxyAuthRef`, `connection.trustBundleRef` | `connection` sets at least one bare HTTP(S) proxy endpoint: at most 4096 ASCII bytes with a host and no userinfo, path, query or fragment, under the [context-free route's grammar](../controller.md#the-context-free-acquisition-route); validate refuses another at that field, naming the field and never the value. Authentication names a `usernamePassword` Secret; trust names a `caBundle` Secret. `proxyAuthRef` names an access credential and `trustBundleRef` a trust anchor. |
 | `DNSServer` | `address`, optional `additionalIngressHosts[]` | Required resolver IP, canonicalized in effective state. |
 | `NTPServer` | `address` | Required IP or DNS hostname. |
 | `Registry` | `url` | Required registry location without embedded credentials. |
@@ -136,8 +136,8 @@ upstream sources. DNS names and list order remain unchanged.
 Proxy bypass policy belongs to the consumer's proxy choice, never to
 `Proxy.spec.connection`. Registry additionally accepts `credentialsRef` to a
 `usernamePassword` or `dockerConfigJson` Secret and `trustBundleRef` to a
-`caBundle` Secret in either management mode, both access credentials of the
-consumers that reach the registry. Those fields are service facts; consumers do
+`caBundle` Secret in either management mode, an access credential and a trust
+anchor of the consumers that reach the registry. Those fields are service facts; consumers do
 not duplicate them.
 
 ## ArtifactServer

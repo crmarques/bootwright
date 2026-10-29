@@ -14,13 +14,13 @@ import (
 var (
 	secretReferenceField = regexp.MustCompile("`[A-Za-z0-9_.\\[\\]]*Refs?`")
 	secretWord           = regexp.MustCompile(`\bSecrets?\b`)
-	secretClass          = regexp.MustCompile(`(?i)access credentials?|effect material`)
+	secretClass          = regexp.MustCompile(`(?i)access credentials?|effect material|trust anchors?`)
 )
 
 // unclassifiedSecretReferences returns, for one API page, every table row
 // whose field is a reference to a Secret and every prose paragraph or list
-// item that names one, which states neither class of bound Secret: effect
-// material or access credential (specs/secrets.md#immutable-binding-and-contexts).
+// item that names one, which states no class of bound Secret: effect
+// material, access credential or trust anchor (specs/secrets.md#immutable-binding-and-contexts).
 func unclassifiedSecretReferences(name, text string) []string {
 	var found []string
 	var paragraph []string
@@ -61,7 +61,8 @@ func unclassifiedSecretReferences(name, text string) []string {
 
 // Every API field that references a Secret names the class of bound Secret it
 // is, in its table row or in the paragraph that defines it, so the rebind exit
-// and every reader can tell an access credential from effect material.
+// and every reader can tell an access credential from effect material and from
+// a trust anchor.
 func TestDocsSecretReferencesNameTheirClass(t *testing.T) {
 	root := filepath.Join("..", "..")
 	names, err := trackedFiles(root)
@@ -79,7 +80,7 @@ func TestDocsSecretReferencesNameTheirClass(t *testing.T) {
 		}
 		pages++
 		for _, unclassified := range unclassifiedSecretReferences(name, string(data)) {
-			t.Errorf("a Secret reference names no class (effect material or access credential): %s", unclassified)
+			t.Errorf("a Secret reference names no class (effect material, access credential or trust anchor): %s", unclassified)
 		}
 	}
 	if pages == 0 {
@@ -92,6 +93,7 @@ func TestDocsSecretReferenceClassCheckFindsAnUnclassifiedField(t *testing.T) {
 		"| Field | Type | Rule |",
 		"| `credentialsRef` | string | `usernamePassword` `Secret`. |",
 		"| `classifiedRef` | string | `token` Secret. Access credential. |",
+		"| `anchorRef` | string | `caBundle` Secret. Trust anchor. |",
 		"| `machineRef` | string | Global Machine. |",
 		"",
 		"`keyRef` names an `sshKeyPair`",

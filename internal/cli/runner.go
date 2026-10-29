@@ -297,6 +297,7 @@ func (r *Runner) execute(ctx context.Context, command *cobra.Command, path strin
 }
 
 func (r *Runner) writeServiceDiagnostics(command *cobra.Command, path string, result commandResult, reported []diagnostic, usage bool, logs []string) int {
+	reported = remediatedFor(command, reported)
 	if handled, presentErr := r.writeNegativeReadinessResults(command, path, result, reported); handled {
 		if presentErr != nil {
 			return 1
@@ -330,6 +331,18 @@ func (r *Runner) writeServiceDiagnostics(command *cobra.Command, path string, re
 		}
 	}
 	return exitCode
+}
+
+func remediatedFor(command *cobra.Command, reported []diagnostic) []diagnostic {
+	var contextName string
+	if flag := command.Flags().Lookup("context"); flag != nil && dnsLabel(flag.Value.String()) {
+		contextName = flag.Value.String()
+	}
+	remediated := make([]diagnostic, len(reported))
+	for i, d := range reported {
+		remediated[i] = diagnostics.WithRemediationFor(d, contextName)
+	}
+	return remediated
 }
 
 // refusalStatus is the status of a refusal of path. An SSH session's status is

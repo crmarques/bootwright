@@ -719,7 +719,7 @@ func TestAnAttemptAndItsResolutionNameTheBuildTheyRanUnder(t *testing.T) {
 		t.Fatal(err)
 	}
 	named("observed,", testBuild)
-	if _, err := store.StartResolution(ctx, operation.ID, "alpha", 1, other); err != nil {
+	if _, err := store.StartResolution(ctx, operation.ID, "alpha", 1, other, false); err != nil {
 		t.Fatal(err)
 	}
 	if err := store.CompleteResolution(ctx, operation.ID, "alpha", 1, 1, reconciliation.OutcomeChanged, reconciliation.EffectCompleted, reconciliation.BlockDone, json.RawMessage(`{}`), nil); err != nil {
@@ -819,7 +819,7 @@ func TestAStartRefusesAnInvalidBuild(t *testing.T) {
 			if _, err := store.StartAttempt(ctx, operation.ID, "alpha", build); !refusedAsRecord(err) {
 				t.Fatalf("a start under an invalid build = %v", err)
 			}
-			if _, err := store.StartResolution(ctx, operation.ID, "alpha", 1, build); !refusedAsRecord(err) {
+			if _, err := store.StartResolution(ctx, operation.ID, "alpha", 1, build, false); !refusedAsRecord(err) {
 				t.Fatalf("a resolution under an invalid build = %v", err)
 			}
 			if !maps.EqualFunc(area.files, snapshot, bytes.Equal) {
@@ -956,7 +956,7 @@ func TestResolutionNumbersNeverReuseAPath(t *testing.T) {
 		t.Fatal(err)
 	}
 	for want := 1; want <= 3; want++ {
-		got, err := store.StartResolution(ctx, operation.ID, "alpha", 1, testBuild)
+		got, err := store.StartResolution(ctx, operation.ID, "alpha", 1, testBuild, false)
 		if err != nil || got != want {
 			t.Fatalf("resolution = %d (%v), want %d", got, err, want)
 		}
@@ -995,7 +995,7 @@ func TestAResolutionRecordCarriesABoundedObservationFailureOnly(t *testing.T) {
 	if err := store.CompleteAttempt(ctx, operation.ID, "alpha", 1, reconciliation.OutcomeUnknown, reconciliation.EffectUnknown, reconciliation.BlockUnknown, nil); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := store.StartResolution(ctx, operation.ID, "alpha", 1, testBuild); err != nil {
+	if _, err := store.StartResolution(ctx, operation.ID, "alpha", 1, testBuild, false); err != nil {
 		t.Fatal(err)
 	}
 	valid := ObservationFailure{Code: "lifecycle.state", Message: "the adapter could not reach the host", Remediation: "restore it"}
@@ -1028,7 +1028,7 @@ func TestAResolutionRecordCarriesABoundedObservationFailureOnly(t *testing.T) {
 	if err != nil || !found || settled.Failure == nil || *settled.Failure != valid {
 		t.Fatalf("the resolution read back as %+v, %t (%v)", settled, found, err)
 	}
-	if _, err := store.StartResolution(ctx, operation.ID, "alpha", 1, testBuild); err != nil {
+	if _, err := store.StartResolution(ctx, operation.ID, "alpha", 1, testBuild, false); err != nil {
 		t.Fatal(err)
 	}
 	if err := store.CompleteResolution(ctx, operation.ID, "alpha", 1, 2, reconciliation.OutcomeUnknown, reconciliation.EffectUnknown, reconciliation.BlockUnknown, nil, nil); err != nil {
@@ -1069,7 +1069,7 @@ func TestLastResolutionReadsTheRecordThatSettledTheBlock(t *testing.T) {
 		{reconciliation.OutcomeUnknown, reconciliation.EffectUnknown, reconciliation.BlockUnknown, `{"seen":1}`},
 		{reconciliation.OutcomeUnchanged, reconciliation.EffectCompleted, reconciliation.BlockDone, `{"seen":2}`},
 	} {
-		number, err := store.StartResolution(ctx, operation.ID, "alpha", 1, testBuild)
+		number, err := store.StartResolution(ctx, operation.ID, "alpha", 1, testBuild, false)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -1085,7 +1085,7 @@ func TestLastResolutionReadsTheRecordThatSettledTheBlock(t *testing.T) {
 	if _, found, err := store.LastResolution(ctx, operation.ID, "alpha", 2); err != nil || found {
 		t.Fatalf("a resolution of attempt 1 read back for attempt 2 (%t, %v)", found, err)
 	}
-	if _, err := store.StartResolution(ctx, operation.ID, "alpha", 1, testBuild); err != nil {
+	if _, err := store.StartResolution(ctx, operation.ID, "alpha", 1, testBuild, false); err != nil {
 		t.Fatal(err)
 	}
 	running, found, err := store.LastResolution(ctx, operation.ID, "alpha", 1)
@@ -1890,5 +1890,46 @@ func TestAdmitAttemptKeepsTheRemovalReserve(t *testing.T) {
 	_, err = store.AdmitAttempt(ctx, removing, removal, "alpha", false)
 	if refused := diagnostics.Of(err); !IntoTheReserve(err) || len(refused) != 1 || !strings.Contains(refused[0].Message, "cannot hold another attempt of this removal") {
 		t.Fatalf("a removal's attempt one entry short reported %+v (%v)", refused, err)
+	}
+}
+
+// A resolution a removal records reads back as one, through its observation,
+// and a resolution that is not a removal's encodes no such member at all.
+func TestAResolutionRecordRemembersARemovalRecordedIt(t *testing.T) {
+	ctx := context.Background()
+	store, area := newStore(t)
+	plan := testPlan(t, "alpha")
+	operation := testOperation(t, plan)
+	if _, err := store.Index(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.Register(ctx, operation, plan); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.StartAttempt(ctx, operation.ID, "alpha", testBuild); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.CompleteAttempt(ctx, operation.ID, "alpha", 1, reconciliation.OutcomeUnknown, reconciliation.EffectUnknown, reconciliation.BlockUnknown, nil); err != nil {
+		t.Fatal(err)
+	}
+	for number, removal := range []bool{true, false} {
+		resolution, err := store.StartResolution(ctx, operation.ID, "alpha", 1, testBuild, removal)
+		if err != nil || resolution != number+1 {
+			t.Fatalf("resolution %d started as %d (%v)", number+1, resolution, err)
+		}
+		if err := store.CompleteResolution(ctx, operation.ID, "alpha", 1, resolution, reconciliation.OutcomeUnknown, reconciliation.EffectUnknown, reconciliation.BlockUnknown, nil, nil); err != nil {
+			t.Fatal(err)
+		}
+		settled, found, err := store.LastResolution(ctx, operation.ID, "alpha", 1)
+		if err != nil || !found || settled.Removal != removal {
+			t.Fatalf("resolution %d read back as %+v, %t (%v), want removal %t", resolution, settled, found, err, removal)
+		}
+		record := area.files[operation.ID+"/blocks/alpha/attempt-000001-resolution-00000"+string(rune('0'+resolution))+".json"]
+		if bytes.Contains(record, []byte(`"removal"`)) != removal {
+			t.Fatalf("resolution %d encodes %s", resolution, record)
+		}
+	}
+	if err := validateAttempt(Attempt{Version: 1, Block: "alpha", Number: 1, Phase: "running", Removal: true}); err == nil {
+		t.Fatal("an attempt record claimed to be a removal's resolution")
 	}
 }

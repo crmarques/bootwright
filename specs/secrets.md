@@ -319,18 +319,21 @@ current declarations or replaced by other material; the lifecycle consumer
 [refuses](state-reconciliation.md#continuation-and-removal) the operation that
 names it.
 
-A bound Secret is of one of two classes. Effect material is placed in or
+A bound Secret is of one of three classes. Effect material is placed in or
 derived into an effect, as a disk recovery passphrase, a delivered host key or
 a generated certificate is, so only its bound version proves the effect it
 created. An access credential is only presented to authenticate to an endpoint
 the operator owns, as a management controller's password or a provider's
-kubeconfig is, and no ownership proof rests on it. Each field that references
-a Secret names its class. Both classes follow the binding rule above: a
-continuation or removal presents the version its operation bound. An access
-credential rotated at its endpoint is presented at its current version only
-through the recorded
+kubeconfig is, and no ownership proof rests on it. A trust anchor is only
+verified against, as a `caBundle` that anchors a TLS leg or the `known_hosts`
+entry that pins an SSH host key is: it is never presented to an endpoint and
+never rebound. Each field that references a Secret names its class. All three
+classes follow the binding rule above: a continuation or removal presents the
+version its operation bound. An access credential rotated at its endpoint is
+presented at its current version only through the recorded
 [access-credential rebind](state-reconciliation.md#access-credential-rebind),
-which issues a new binding version; effect material refuses it.
+which issues a new binding version; effect material and a trust anchor refuse
+it (`TestAHostRebindsNoTrustAnchor`).
 
 "A Secret declaration's fingerprint drops its provenance and covers type,
 source and parameters only, and a stored version whose fingerprint equals the
@@ -379,15 +382,14 @@ of the same name. Four outputs are revealed, each by its one command only:
 | --- | --- | --- | --- |
 | `kubeconfig` (an installation) | `cluster kubeconfig` under the [explicit sensitive-output boundary](cli.md#administrator-access-export) | the custodied bytes | revealed with one `access.unproved` warning |
 | `client` (a CephClient) | `cluster keyring` under the [client keyring export](cli.md#client-keyring-export) | the native keyring form | revealed with one `access.unproved` warning |
-| `dashboard` (a managed CephCluster) | `cluster info --secrets` under the [storage dashboard access](cli.md#storage-dashboard-access) boundary | `passwordValue` of `dashboard` | carries no mark; see the note below |
+| `dashboard` (a managed CephCluster) | `cluster info --secrets` under the [storage dashboard access](cli.md#storage-dashboard-access) boundary | `passwordValue` of `dashboard` | revealed with one `access.unproved` warning |
 | `object-user` (a CephObjectUser) | `cluster info --object-user <name>`, same boundary | `accessKey` and `secretKey` of the one entry of `objectUsers` | refused `access.unavailable`, with no partial output |
 
 No other output is revealed: a Ceph consumer's `external-details` reach only
 the consuming cluster's [placed Secret](#material-placed-in-a-cluster). The
 `object-user` reveal is authorized (D183, Q100). A dashboard whose evidence
-does not prove it reachable is revealed with `dashboard.status` `unproved` and
-its reason, and no warning, because its password carries no mark (D183,
-Q101).
+does not prove it reachable and whose password carries no mark is revealed with
+`dashboard.status` `unproved` and its reason, and no warning (D183, Q101).
 
 Produced material's parts count in `materialParts`,
 rotation re-encrypts it with every other version, and it is removed with the

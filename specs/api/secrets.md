@@ -199,7 +199,7 @@ are rejected there.
 Capsule, and is a bare host with no scheme, path, whitespace, or surrounding
 whitespace. `trustBundleRef` names a `caBundle` Secret holding the CA that
 signs that server's certificate, such as the Satellite's
-`katello-server-ca.crt`, an access credential; on a `redhatRhel` Entitlement
+`katello-server-ca.crt`, a trust anchor; on a `redhatRhel` Entitlement
 it is required whenever `satellite` is present. `contentBaseURL` is the content
 root rhsm appends every repository path to (`rhsm.baseurl`); omission derives
 `https://<hostname>/pulp/content` during normalization, and on a `redhatRhel`
@@ -224,7 +224,7 @@ installation's [refusal table](../managed-os.md#refusal-table).
 | --- | --- | --- | --- | --- |
 | `url` | string | no | `registry.redhat.io` for `redhatCeph`; `cp.icr.io/cp` for `ibmStorageCeph` | Scheme-less `host[:port][/namespace]`. |
 | `credentialsRef` | string | conditional | — | Required for `redhatCeph` and `ibmStorageCeph`; `usernamePassword` registry credential Secret. Access credential: the registry login, which cephadm also retains [native-side](../secrets.md#native-side-retention). |
-| `trustBundleRef` | string | no | — | `caBundle` Secret. When set, it is the only TLS anchor that Ceph image resolution and the guest pull broker use for this registry, for the Ceph image and every auxiliary image; without it they verify against the host trust store ([storage](../ceph.md#bootstrap-identity-and-continuation)). Access credential. |
+| `trustBundleRef` | string | no | — | `caBundle` Secret. When set, it is the only TLS anchor that Ceph image resolution and the guest pull broker use for this registry, for the Ceph image and every auxiliary image; without it they verify against the host trust store ([storage](../ceph.md#bootstrap-identity-and-continuation)). Trust anchor. |
 
 A registry address contains no scheme, inline credentials, query, fragment,
 whitespace, leading or trailing slash, empty path segment, `.` segment, or

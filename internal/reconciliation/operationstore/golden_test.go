@@ -263,7 +263,7 @@ func TestOperationRecordsMatchTheirGoldens(t *testing.T) {
 		t.Fatal(err)
 	}
 	installed.Modified = true
-	resolution, err := store.StartResolution(ctx, applied.ID, "install-node-01", 1, installed)
+	resolution, err := store.StartResolution(ctx, applied.ID, "install-node-01", 1, installed, false)
 	if err != nil || resolution != 1 {
 		t.Fatalf("starting the resolution: %d (%v)", resolution, err)
 	}

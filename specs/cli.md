@@ -1301,9 +1301,9 @@ run in this order, each before the next:
 
 The target and its applicability are settled from the compiled graph before
 any custody read, so a refusal of the first three kinds reads no credential
-bytes. A copy custody marks unproved, kept from an apply that never proved the
-dashboard reachable, is revealed with exactly one `access.unproved` warning
-naming the cluster, and its `dashboard.status` is `unproved`. A dashboard whose
+bytes. A copy custody marks unproved, kept by a removal that never proved its
+effect, is revealed with exactly one `access.unproved` warning naming the
+cluster, and its `dashboard.status` is `unproved`. A dashboard whose
 evidence alone does not prove it reachable, its copy unmarked, is revealed with
 `dashboard.status` `unproved` and its reason and no warning (D183, Q101). The value occurs only in
 the `passwordValue` field, and is never copied to a diagnostic, log, evidence

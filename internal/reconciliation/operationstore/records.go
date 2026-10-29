@@ -217,6 +217,7 @@ type Attempt struct {
 	Block       string                     `json:"block"`
 	Number      int                        `json:"number"`
 	Resolution  int                        `json:"resolution"`
+	Removal     bool                       `json:"removal,omitempty"`
 	Phase       string                     `json:"phase"`
 	Outcome     reconciliation.Outcome     `json:"outcome"`
 	Effect      reconciliation.EffectState `json:"effect"`
@@ -429,6 +430,9 @@ func validateAttempt(record Attempt) error {
 		if len(record.Evidence) > MaxAttemptBytes {
 			return recordError("lifecycle attempt evidence exceeds its bound")
 		}
+	}
+	if record.Removal && record.Resolution == 0 {
+		return recordError("only a lifecycle resolution record can be a removal's")
 	}
 	if record.Failure != nil && !validFailure(record) {
 		return recordError("lifecycle attempt failure is invalid")

@@ -423,7 +423,9 @@ resolution records carry their block, attempt and resolution numbers, phase,
 outcome, effect, bounded evidence and timestamps, and a resolution whose
 observation could not run also carries `failure`, the first diagnostic that
 observation reported, its code, message and remediation, each bounded, an
-optional member no other record carries. Every attempt and
+optional member no other record carries. A resolution a fresh removal records
+against an apply's block carries `removal`, so `status` explains it for the
+removal's reading first. Every attempt and
 resolution also names the build it ran under, `build`: the automation digest
 the executable embeds, which the run's staged extraction holds, the block's content
 digest, the executable's version and commit, and `modified` when its own stamp
@@ -452,7 +454,7 @@ neither moves the attempt's outcome or its block's state.
 [The output contract](cli/output.md#private-operation-logs) owns the `logs/`
 tree.
 
-`replaces`, `failure`, `warnings` and `build` are optional members: each was added without
+`replaces`, `failure`, `warnings`, `build` and `removal` are optional members: each was added without
 moving its record's version, because a record that omits one means what a
 record written before it meant. A member whose omission would mean anything
 else moves its record's version. An optional member is compatible one way only:

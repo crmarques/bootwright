@@ -434,6 +434,35 @@ func (k *recordingKeeper) Keep(_ context.Context, execution Execution) ([]Produc
 	return nil, nil
 }
 
+type dashboardKeeper struct {
+	*testCapability
+}
+
+func (c dashboardKeeper) Keeps(block reconciliation.Block) (KeptEntry, bool, error) {
+	return KeptEntry{Block: block.ID, Name: "dashboard"}, true, nil
+}
+
+func (c dashboardKeeper) Keep(context.Context, Execution) ([]Produced, error) {
+	return []Produced{{Name: "dashboard", Material: secrets.NewMaterial(map[secrets.Part][]byte{secrets.ValuePart: []byte("dashboard-password")})}}, nil
+}
+
+// A removal marks unproved whatever output its keeper hands over, a
+// dashboard password as much as a kubeconfig, so a reveal of it warns.
+func TestARemovalKeepsAnyOutputUnproved(t *testing.T) {
+	h := newHarness(t, "install")
+	h.service.capabilities = testResolver{capability: dashboardKeeper{h.capability}}
+	if _, err := apply(h); err != nil {
+		t.Fatal(err)
+	}
+	h.capability.outcomes = []Result{{Outcome: reconciliation.OutcomeFailed}}
+	if _, err := destroy(h); err == nil {
+		t.Fatal("a failed removal completed")
+	}
+	if got := kept(h); !slices.Equal(got, []string{"install/dashboard (unproved)=dashboard-password"}) {
+		t.Fatalf("custody after the removal = %v, want the dashboard password kept unproved", got)
+	}
+}
+
 // A keep runs inside a destroy attempt but only observes, so it hands its
 // keeper the attempt's execution marked read-only.
 func TestAKeepRunsReadOnly(t *testing.T) {
