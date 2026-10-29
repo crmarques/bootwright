@@ -59,8 +59,9 @@ umask 077; D=$(mktemp -d)                        # private scratch for this run
 ./bin/bootwright context init --name "$C" --input-dir "$IN"
 ./bin/bootwright secret generate --context "$C"
 if [ "$REGISTER" = true ]; then
-  ./bin/bootwright secret set --context "$C" --name rhsm-org --value-stdin
-  ./bin/bootwright secret set --context "$C" --name rhsm-key --value-stdin
+  { IFS= read -rsp 'RHSM organization ID: ' v; echo >&2; printf '%s' "$v"; } |
+    ./bin/bootwright secret set --context "$C" --name rhsm-org --value-stdin --yes
+  ./bin/bootwright secret set --context "$C" --name rhsm-key --value-stdin --yes
 fi
 ./bin/bootwright secret check --context "$C"
 ./bin/bootwright plan --context "$C"

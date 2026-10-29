@@ -75,6 +75,7 @@ func TestTerminalStdinPromptsForTokensAndPasswordsAndRefusesOpaque(t *testing.T)
 			_, err := New(input, Options{Terminal: terminal}).Acquire(context.Background(), secrets.Declaration{Name: "fixture", Type: kind, Source: "contextStore"}, secrets.Input{ContextName: "lab", ValueStdin: true})
 			found := diagnostics.Of(err)
 			if !diagnostics.IsUsage(err) || len(found) != 1 || found[0].Code != "secret.input" || found[0].Object == nil || found[0].Object.Name != "fixture" ||
+				found[0].Message != "Secret fixture has type "+kind+"; its value is read from a pipe or a file, never typed at a terminal" ||
 				found[0].Remediation != "pipe the value into bootwright secret set --context lab --name fixture --value-stdin, or use --value-file <path>" ||
 				len(terminal.prompts) != 0 || input.reads != 0 {
 				t.Fatalf("a %s value at a terminal: %+v after %d prompts and %d reads", kind, found, len(terminal.prompts), input.reads)

@@ -76,9 +76,10 @@ ev=~/bootwright-e2e/evidence-$C; install -d -m 0700 "$ev"
 ./bin/bootwright context init --name "$C" --input-dir "$IN"
 ./bin/bootwright secret generate --context "$C"
 ./bin/bootwright secret set --context "$C" --name ibm-registry --username cp --password-stdin --yes
-./bin/bootwright secret set --context "$C" --name rhsm-org --value-stdin
-./bin/bootwright secret set --context "$C" --name rhsm-key --value-stdin
-./bin/bootwright secret set --context "$C" --name luks-recovery --value-stdin
+{ IFS= read -rsp 'RHSM organization ID: ' v; echo >&2; printf '%s' "$v"; } |
+  ./bin/bootwright secret set --context "$C" --name rhsm-org --value-stdin --yes
+./bin/bootwright secret set --context "$C" --name rhsm-key --value-stdin --yes
+./bin/bootwright secret set --context "$C" --name luks-recovery --value-stdin --yes
 ./bin/bootwright secret check --context "$C"
 ./bin/bootwright plan --context "$C"
 ```

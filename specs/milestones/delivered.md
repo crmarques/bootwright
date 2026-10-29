@@ -9974,3 +9974,19 @@ undeclared-read allowance; `storage_ceph_core` declares every nested request
 member, held to the Go request by a struct walk; `physical_erase` declares its
 targets and names its assert-only bounds. No contract golden moved; the
 automation digest did, so a host takes a build and setup.
+
+### X222 — Opaque Secret input in the runbooks
+
+**Item:** B970 (opened and delivered on 2026-10-29 for the owner's report of
+`secret set --name rhsm-org --value-stdin` refusing at a terminal).
+**Kind:** defect. **Owners:** Secrets and e2e cases.
+
+The lab-rhel and lab-3-nodes-ceph-host-variants runbooks typed the `opaque`
+`rhsm-org` value at a terminal, which the
+[input rules](../secrets.md#acquisition-and-commands) refuse because a typed
+line cannot carry exact bytes. They now pipe it from a hidden `read` in the
+same pipeline, and every standard-input `secret set` passes `--yes` so a rerun
+replaces the value; the [e2e conventions](../../e2e/README.md#conventions)
+state both. The refusal says the Secret "has type" its type instead of
+building an article, and `TestTerminalStdinPromptsForTokensAndPasswordsAndRefusesOpaque`
+holds its message.

@@ -230,7 +230,7 @@ func (s *Service) terminalPrompt(declaration secrets.Declaration, input secrets.
 	case "usernamePassword":
 		return "Password for Secret " + declaration.Name + in + ": ", nil
 	}
-	return "", secrets.UsageRefusal("input", "Secret "+declaration.Name+" is a "+declaration.Type+" Secret; its value is read from a pipe or a file, never typed at a terminal", input.ContextName, declaration.Name,
+	return "", secrets.UsageRefusal("input", "Secret "+declaration.Name+" has type "+declaration.Type+"; its value is read from a pipe or a file, never typed at a terminal", input.ContextName, declaration.Name,
 		"pipe the value into "+secrets.Command(input.ContextName, "set")+" --name "+declaration.Name+" --value-stdin, or use --value-file <path>")
 }
 

@@ -115,8 +115,13 @@ Run shell blocks in Bash from the repository root, in the runbook's order.
 Edit only the variable assignments marked for your run or observed values;
 an empty required variable refuses at the command that needs it. Keep the
 same shell so later blocks retain those variables, and run only the sections
-for the toggles you enabled. Credentials requested by `secret set` are entered
-at its hidden prompt, never in a shell variable or command line.
+for the toggles you enabled. Credentials never enter a runbook shell variable
+or a command line. A token or password is typed at the hidden prompt of
+`secret set`; an `opaque` value, which a terminal cannot carry
+[byte for byte](../specs/secrets.md#acquisition-and-commands), is piped from
+a hidden `read` in the same pipeline, which adds no line feed. Each
+standard-input `secret set` passes `--yes`, so rerunning the block replaces
+the value instead of refusing.
 
 Runbooks use `./bin/bootwright` and set `C` to
 the context name, `IN` to the rendered directory and `A` to the host address.
