@@ -5440,8 +5440,9 @@ record and with its own, and a mismatch refuses. Each VirtualMachine claims
 remainder).
 (13) New items: [B905](#b905), [B906](#b906), [B907](#b907),
 [B908](m3.md#b908) (peer VM placement), [B909](#b909) (UserDefinedNetwork
-attachments, refused by the arm until then) and [B910](m1.md#b910), the port's
-cluster and UID pin the slice's review found missing.
+attachments, refused by the arm until then) and [B910](m1.md#b910), the live power read's
+pin; the port's own cluster and UID pin, which the slice's review found
+missing, is delivered with it.
 
 ### D198
 

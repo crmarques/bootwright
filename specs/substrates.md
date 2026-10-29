@@ -986,13 +986,19 @@ endpoint `kubevirt:<namespace>/<vm>` and the provider's `kubeconfigRef` as its
 credential. A consumer lends a controller credential by the parts the
 substrate's `ControllerCredential` fact names: an account's username and
 password for a Redfish arm, and for this one the kubeconfig's value alone, as
-the port's `user` file; `password` and `ca` stay empty. Every entry point
-refuses a VirtualMachine whose labels do not derive its name.
+the port's `user` file; `password` and `ca` stay empty. The port is pinned
+(the substrate's `PortPinned` fact): a consumer passes the identity the
+Machine's completed block recorded, the host's `kube-system` UID as
+`pinned_uuid_base64` and the VirtualMachine's UID as `pinned_serial_base64`.
+Before any request that writes, every entry point re-reads both and refuses
+`identity-mismatch`, changing nothing, when either differs, when the
+VirtualMachine's labels do not derive its name, or when no record exists yet;
+only the machine block creates and records. The upload DataVolume carries an
+owner reference to the pinned VirtualMachine and is this Machine's only
+through it.
 
-Not yet met: a port entry point proves the VirtualMachine by its labels alone,
-not by the cluster identity and UID its machine block recorded, so a
-kubeconfig moved to another cluster holding a same-named VirtualMachine of a
-same-named context is not refused there; tracked as
+Not yet met: the live power read (`machine_power_read`) carries no pin, so it
+reads a KubeVirt Machine's power as unknown; tracked as
 [B910](milestones/m1.md#b910). The machine must be off, by a positive `NotFound` of its
 VirtualMachineInstance, before any media write. `media_insert` takes the
 image file as `image_path` and the controller's `virtctl` as `virtctl`; it

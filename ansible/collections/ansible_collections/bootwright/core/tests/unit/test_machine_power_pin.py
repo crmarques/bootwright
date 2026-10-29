@@ -83,9 +83,12 @@ def encoded(value):
     return base64.b64encode(value.encode()).decode()
 
 
-def scope(tmp_path, observation=None, pin_uuid=None, pin_serial=None, **raw):
-    """The run's variables as the runner writes and ansible-core loads them, then one inspection."""
+def scope(tmp_path, observation=None, pin_uuid=None, pin_serial=None, physical=True, **raw):
+    """The run's variables as the runner writes and ansible-core loads them, then one inspection.
+    A physical run carries the controller host's identity, as the power service hands every one."""
     material = {"controllerUser": str(tmp_path / "bmc-user"), "controllerPassword": str(tmp_path / "bmc-password")}
+    if physical:
+        material["controllerHostUUIDBase64"] = encoded("00000000-0000-4000-8000-00000000c0de")
     if pin_uuid is not None:
         material["pinnedUUIDBase64"] = encoded(pin_uuid)
     if pin_serial is not None:
@@ -335,3 +338,11 @@ def test_a_pinned_machine_skips_the_unpinned_proof(tmp_path):
     variables = scope(tmp_path, dict(reported(), addresses=["52:54:00:9a:1b:09"]), UUID, SERIAL,
                       controllerHostMACsBase64=encoded(HOST_MACS))
     assert holds(variables, check("hardware-mismatch")[1]) is None
+
+
+def test_a_port_pinned_machine_leaves_the_comparison_to_its_port(tmp_path):
+    """A KubeVirt pin is the cluster and VirtualMachine UIDs its port re-proves;
+    the controller identity comparison is a physical machine's alone."""
+    variables = scope(tmp_path, None, UUID, SERIAL, physical=False)
+    assert gated(variables) is False and names_the_refusal(variables) is False
+    assert Templar(loader=LOADER, variables=variables).template(variables["machine_power_access"])["pinned_serial_base64"] == encoded(SERIAL)

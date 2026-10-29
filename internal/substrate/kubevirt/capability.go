@@ -407,8 +407,7 @@ func (c MachineCapability) mutate(ctx context.Context, execution lifecycle.Execu
 	return lifecycle.Result{Outcome: outcome, Evidence: result.Evidence}, nil
 }
 
-// samePin holds a mutation's evidence to the cluster identity its provider's
-// proof recorded, beside the adapter's own comparison.
+// samePin holds a mutation's evidence to the cluster its provider's proof recorded.
 func samePin(data []byte, digest string, records []lifecycle.BlockEvidence, provider string) error {
 	evidence, err := decodeMachineEvidence(data, digest)
 	if err != nil {

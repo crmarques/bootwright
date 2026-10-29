@@ -97,9 +97,10 @@ def owned_by(live, owner_uids):
 class Host:
     """One request's view of the host: its paths, a deadline and the cluster pin."""
 
-    def __init__(self, client, namespace, deadline, clock=time.time, sleep=time.sleep):
+    def __init__(self, client, namespace, deadline, clock=time.time, sleep=time.sleep, pin=None):
         self.client, self.namespace, self.deadline = client, namespace, deadline
         self.clock, self.sleep = clock, sleep
+        self.pin = pin or {}
 
     def vm(self, vm=""):
         return path("kubevirt.io", "v1", "virtualmachines", self.namespace, vm)
@@ -394,8 +395,7 @@ def read_machine(host, request, context, receipts):
             evidence["instance"] = str((instance.get("status") or {}).get("phase") or "Pending")[:32]
         for volume in (request["rootVolume"], request["mediaVolume"]):
             held = host.client.get(host.dv(volume))
-            mine = held is not None and (owned_by(held, owners) or ownership("DataVolume", held, receipts, context) == "own"
-                                         or (volume == request["mediaVolume"] and derives(held, vm)))
+            mine = held is not None and (owned_by(held, owners) or ownership("DataVolume", held, receipts, context) == "own")
             if held is not None and not mine:
                 evidence["foreign"] = True
             if mine:
@@ -495,7 +495,7 @@ def destroy(host, request, context):
     if read_machine(host, request, dict(context, pinned=dict(context["pinned"], receipts=receipts)), receipts)["foreign"]:
         raise Refused("an object of VirtualMachine %s/%s's names is not this context's, so nothing was deleted" % (request["namespace"], vm))
     media = host.client.get(host.dv(request["mediaVolume"]))
-    if media is not None and derives(media, vm):
+    if media is not None and state == "own" and owned_by(media, {uid(live)}):
         changed = delete(host, host.dv(request["mediaVolume"]), uid(media)) or changed
     if state == "own":
         keep(receipts, "VirtualMachine", vm, live, "mark-recovered")
@@ -538,12 +538,30 @@ def endpoint(value):
 
 
 def port_vm(host, vm):
+    """The pinned VirtualMachine, re-proved before any effect: the host must be
+    the cluster and the object the VirtualMachine its machine block recorded."""
+    cluster, recorded = host.pin.get("cluster", ""), host.pin.get("vm", "")
+    if not cluster or not recorded:
+        raise PortRefused("identity-mismatch", "VirtualMachine %s/%s has no cluster and UID its machine block recorded, so nothing was done; "
+                          "apply the Machine so its block records them" % (host.namespace, vm))
+    if host.cluster_uid() != cluster:
+        raise PortRefused("identity-mismatch", "the host cluster the kubeconfig reaches is not the one VirtualMachine %s/%s was realized on "
+                          "(kube-system UID differs), so nothing was done" % (host.namespace, vm))
     live = host.client.get(host.vm(vm))
     if live is None:
         raise Refused("VirtualMachine %s/%s does not exist; apply the Machine first" % (host.namespace, vm))
-    if not derives(live, vm):
-        raise Refused("VirtualMachine %s/%s is not one this context realized" % (host.namespace, vm))
+    if not derives(live, vm) or uid(live) != recorded:
+        raise PortRefused("identity-mismatch", "VirtualMachine %s/%s is not the one this context's machine block recorded, so nothing was done"
+                          % (host.namespace, vm))
     return live
+
+
+def media_of(host, live, volume):
+    """The upload DataVolume, own only when an owner reference names the pinned VirtualMachine."""
+    held = host.client.get(host.dv(volume))
+    if held is not None and not (derives(held, live["metadata"]["name"]) and owned_by(held, {uid(live)})):
+        raise Refused("DataVolume %s/%s is not this context's, so it was not touched" % (host.namespace, volume))
+    return held
 
 
 def instance_phase(host, vm):
@@ -575,7 +593,8 @@ def state_read(host, vm, media_identity="", media=True):
         return result
     held = host.client.get(host.dv(volume))
     identity = ((held or {}).get("metadata") or {}).get("annotations", {}).get(MEDIA, "")
-    result["media_state"] = "own" if held is not None and derives(held, vm) and media_identity and identity == media_identity else "foreign"
+    mine = held is not None and derives(held, vm) and owned_by(held, {uid(live)})
+    result["media_state"] = "own" if mine and media_identity and identity == media_identity else "foreign"
     return result
 
 
@@ -630,23 +649,21 @@ def patch_vm(host, live, operations):
 def eject(host, vm):
     """Remove the media volume from the stopped VirtualMachine and delete the upload DataVolume by its UID."""
     live = port_vm(host, vm)
+    volume = vm + "-media"
+    held = media_of(host, live, volume)
     template = ((live.get("spec") or {}).get("template") or {}).get("spec") or {}
     operations = []
     for index, disk in enumerate(((template.get("domain") or {}).get("devices") or {}).get("disks") or []):
         if disk.get("name") == MEDIA_VOLUME:
             operations += [{"op": "test", "path": "/spec/template/spec/domain/devices/disks/%d/name" % index, "value": MEDIA_VOLUME},
                            {"op": "remove", "path": "/spec/template/spec/domain/devices/disks/%d" % index}]
-    for index, volume in enumerate(template.get("volumes") or []):
-        if volume.get("name") == MEDIA_VOLUME:
+    for index, entry in enumerate(template.get("volumes") or []):
+        if entry.get("name") == MEDIA_VOLUME:
             operations += [{"op": "test", "path": "/spec/template/spec/volumes/%d/name" % index, "value": MEDIA_VOLUME},
                            {"op": "remove", "path": "/spec/template/spec/volumes/%d" % index}]
     if operations:
         patch_vm(host, live, operations)
-    volume = vm + "-media"
-    held = host.client.get(host.dv(volume))
     if held is not None:
-        if not derives(held, vm):
-            raise Refused("DataVolume %s/%s is not this context's, so it was not deleted" % (host.namespace, volume))
         delete(host, host.dv(volume), uid(held))
         if host.wait(lambda: host.client.get(host.dv(volume)), lambda value: value is None, VOLUME_SECONDS) is not None:
             raise Refused("DataVolume %s/%s was not deleted within %d seconds" % (host.namespace, volume, VOLUME_SECONDS))
@@ -659,11 +676,9 @@ def upload_volume(host, vm, media_identity, size_bytes):
     if instance_phase(host, vm):
         raise PortRefused("machine-running", "this machine is running; media is written only to a stopped machine")
     volume = vm + "-media"
-    held = host.client.get(host.dv(volume))
+    held = media_of(host, live, volume)
     if held is not None:
         identity = ((held.get("metadata") or {}).get("annotations") or {}).get(MEDIA, "")
-        if not derives(held, vm):
-            raise Refused("DataVolume %s/%s exists and is not this context's" % (host.namespace, volume))
         if identity == media_identity and (held.get("status") or {}).get("phase") == "Succeeded":
             return True, live
         eject(host, vm)
@@ -672,7 +687,8 @@ def upload_volume(host, vm, media_identity, size_bytes):
     body = {"apiVersion": "cdi.kubevirt.io/v1beta1", "kind": "DataVolume",
             "metadata": {"name": volume, "namespace": host.namespace,
                          "labels": labels(metadata[CONTEXT], metadata[MACHINE]),
-                         "annotations": {MEDIA: media_identity, BIND: "true"}},
+                         "annotations": {MEDIA: media_identity, BIND: "true"},
+                         "ownerReferences": [{"apiVersion": "kubevirt.io/v1", "kind": "VirtualMachine", "name": vm, "uid": uid(live)}]},
             "spec": {"source": {"upload": {}},
                      "storage": {"resources": {"requests": {"storage": "%dGi" % (-(-size_bytes // GIB) + 1)}}}}}
     status, answer = host.client.request("POST", host.dv(), body)
@@ -700,7 +716,7 @@ def attach(host, vm):
     """Present the uploaded volume to the stopped VirtualMachine as a SATA cdrom second in its boot order."""
     live = port_vm(host, vm)
     volume = vm + "-media"
-    held = host.client.get(host.dv(volume))
+    held = media_of(host, live, volume)
     if held is None or (held.get("status") or {}).get("phase") != "Succeeded":
         raise Refused("DataVolume %s/%s did not complete its upload" % (host.namespace, volume))
     if presented(live) == volume:

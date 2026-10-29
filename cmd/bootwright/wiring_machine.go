@@ -20,6 +20,7 @@ import (
 	"github.com/crmarques/bootwright/internal/reconciliation/ansiblerunner"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
 	"github.com/crmarques/bootwright/internal/substrate/baremetal"
+	"github.com/crmarques/bootwright/internal/substrate/kubevirt"
 	"github.com/crmarques/bootwright/internal/substrate/libvirt"
 	"github.com/crmarques/bootwright/internal/trust"
 	"github.com/crmarques/bootwright/internal/trust/enrollment"
@@ -228,7 +229,14 @@ func (i machineIdentities) ProvedIdentity(ctx context.Context, contextName, name
 	if err != nil {
 		return machine.HardwareIdentity{}, false, err
 	}
-	return baremetal.PinnedIdentity(name, published)
+	return pinnedIdentity(name, published)
+}
+
+func pinnedIdentity(name string, published []lifecycle.BlockEvidence) (machine.HardwareIdentity, bool, error) {
+	if pin, found, err := baremetal.PinnedIdentity(name, published); err != nil || found {
+		return pin, found, err
+	}
+	return kubevirt.PinnedIdentity(name, published)
 }
 
 // provedIdentities reads the identity a physical Machine's own block proved
@@ -245,5 +253,5 @@ func (provedIdentities) PinnedIdentity(name string, proved []lifecycle.BlockEvid
 			own = append(own, block)
 		}
 	}
-	return baremetal.PinnedIdentity(name, own)
+	return pinnedIdentity(name, own)
 }

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import base64
+
 import pytest
 
 from ansible_collections.bootwright.core.plugins.action import substrate_kubevirt_api as action
@@ -26,7 +28,9 @@ def test_media_insert_uploads_once_through_the_verified_proxy_then_presents_the_
         uploads.append((namespace, volume, path, proxy, authority.startswith("-----BEGIN CERTIFICATE-----")))
         api.objects["/apis/cdi.kubevirt.io/v1beta1/namespaces/guests/datavolumes/" + volume]["status"]["phase"] = "Succeeded"
 
-    arguments = {"endpoint": "kubevirt:guests/" + VM, "image_path": str(image), "virtctl": "/usr/bin/virtctl", "media_identity": "digest-1", "seconds": 1800}
+    recorded = base64.b64encode(api.objects["/apis/kubevirt.io/v1/namespaces/guests/virtualmachines/" + VM]["metadata"]["uid"].encode()).decode()
+    arguments = {"endpoint": "kubevirt:guests/" + VM, "image_path": str(image), "virtctl": "/usr/bin/virtctl",
+                 "pinned_uuid_base64": base64.b64encode(b"cluster-1").decode(), "pinned_serial_base64": recorded, "media_identity": "digest-1", "seconds": 1800}
     assert action.port("media_insert", client(api), arguments, upload) == {}
     assert uploads == [("guests", VM + "-media", str(image), "https://cdi-uploadproxy.apps.host.example.test", True)]
     assert action.port("media_insert", client(api), arguments, upload) == {} and len(uploads) == 1
@@ -70,3 +74,12 @@ def test_the_upload_never_disables_verification_and_trusts_only_the_ingress_auth
     for bad in ({"proxy": "http://cdi.example.test"}, {"volume": "Bad_Name"}, {"image": "relative.iso"}):
         with pytest.raises(ValueError):
             kubevirt_upload.argv(dict(params, **bad))
+
+
+def test_a_port_without_the_pin_refuses_before_any_request():
+    api = proved_host()
+    arm.apply(arm.Host(client(api), "guests", 1e12), request(), context())
+    api.requests.clear()
+    with pytest.raises(arm.PortRefused):
+        action.port("power", client(api), {"endpoint": "kubevirt:guests/" + VM, "power": "on"}, None)
+    assert api.requests == []

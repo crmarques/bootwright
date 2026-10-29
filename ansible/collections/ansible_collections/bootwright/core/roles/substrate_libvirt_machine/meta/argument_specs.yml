@@ -271,6 +271,10 @@ argument_specs:
           expected_power:
             type: str
             choices: ['On', 'Off']
+          pinned_uuid_base64:
+            type: str
+          pinned_serial_base64:
+            type: str
 
   media_insert:
     short_description: Execute the bounded machine media insert port.
@@ -373,3 +377,7 @@ argument_specs:
             type: bool
           attempts:
             type: int
+          pinned_uuid_base64:
+            type: str
+          pinned_serial_base64:
+            type: str

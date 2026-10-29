@@ -157,9 +157,14 @@ def context(receipts=(), uid="cluster-1", operation="op-1"):
             "pinned": {"kubeSystemUID": uid, "server": "https://api.host.example.test:6443", "storageClass": "guest-block", "receipts": list(receipts)}}
 
 
-def host(api, seconds=60):
+def host(api, seconds=60, pin=None):
     clock = {"now": 0.0}
-    return arm.Host(client(api), "guests", seconds, clock=lambda: clock["now"], sleep=lambda s: clock.update(now=clock["now"] + s))
+    return arm.Host(client(api), "guests", seconds, clock=lambda: clock["now"], sleep=lambda s: clock.update(now=clock["now"] + s), pin=pin)
+
+
+def pinned(api):
+    """A port host pinned to the cluster and VirtualMachine the block recorded."""
+    return host(api, pin={"cluster": "cluster-1", "vm": api.objects[VM_PATH]["metadata"]["uid"]})
 
 
 VM_PATH = "/apis/kubevirt.io/v1/namespaces/guests/virtualmachines/" + VM
@@ -255,8 +260,10 @@ def test_an_unreachable_host_is_unknown_never_absent():
 def test_removal_proves_every_owned_object_and_claim_absent():
     api = FakeAPI()
     ignored_changed, applied = arm.apply(host(api), request(), context())
-    api.create("/apis/cdi.kubevirt.io/v1beta1/namespaces/guests/datavolumes", {
-        "apiVersion": "cdi.kubevirt.io/v1beta1", "kind": "DataVolume", "metadata": {"name": VM + "-media", "labels": arm.labels("lab", "master-0")}})
+    media = {"name": VM + "-media", "labels": arm.labels("lab", "master-0"),
+             "ownerReferences": [{"uid": api.objects[VM_PATH]["metadata"]["uid"]}]}
+    api.create("/apis/cdi.kubevirt.io/v1beta1/namespaces/guests/datavolumes",
+               {"apiVersion": "cdi.kubevirt.io/v1beta1", "kind": "DataVolume", "metadata": media})
     api.put("/api/v1/namespaces/guests/persistentvolumeclaims/persistent-state-for-" + VM + "-x1",
             {"metadata": {"name": "persistent-state-for-" + VM + "-x1", "uid": "s1", "ownerReferences": [{"uid": api.objects[VM_PATH]["metadata"]["uid"]}]}})
     changed, evidence = arm.destroy(host(api), request(), context(applied["receipts"]))
@@ -282,7 +289,7 @@ def test_removal_refuses_a_running_machine():
 def test_the_port_reads_powers_and_ejects_only_a_machine_its_labels_derive():
     api = FakeAPI()
     arm.apply(host(api), request(), context())
-    machine = host(api)
+    machine = pinned(api)
     assert arm.state_read(machine, VM)["power_state"] == "off" and arm.state_read(machine, VM)["media_state"] == "none"
     assert arm.pre_boot(machine, VM, expected=["52:54:00:25:10:E0"])["power"] == "Off"
     with pytest.raises(kapi.Refused, match="interfaces"):
@@ -298,14 +305,14 @@ def test_the_port_reads_powers_and_ejects_only_a_machine_its_labels_derive():
     stop = [p for m, p in api.requests if m == "PUT" and p.endswith("/stop")]
     assert stop
     api.objects[VM_PATH]["metadata"]["labels"][arm.MACHINE] = "other"
-    with pytest.raises(kapi.Refused, match="not one this context realized"):
+    with pytest.raises(arm.PortRefused, match="not the one this context's machine block recorded"):
         arm.state_read(machine, VM)
 
 
 def test_media_is_uploaded_into_a_stopped_machine_and_ejected_by_uid():
     api = FakeAPI()
     arm.apply(host(api), request(), context())
-    machine = host(api)
+    machine = pinned(api)
     reuse, ignored_value = arm.upload_volume(machine, VM, "digest-1", 3 * arm.GIB + 1)
     volume = api.objects["/apis/cdi.kubevirt.io/v1beta1/namespaces/guests/datavolumes/" + VM + "-media"]
     assert not reuse and volume["spec"]["storage"]["resources"]["requests"]["storage"] == "5Gi"
@@ -412,9 +419,66 @@ def test_one_kubeconfig_form_is_accepted_and_every_other_refused():
 def test_a_claim_outliving_its_deleted_data_volume_keeps_the_removal_unproved():
     api = FakeAPI()
     ignored_changed, applied = arm.apply(host(api), request(), context())
-    arm.upload_volume(host(api), VM, "digest-1", 1)
+    arm.upload_volume(pinned(api), VM, "digest-1", 1)
     media_uid = api.objects["/apis/cdi.kubevirt.io/v1beta1/namespaces/guests/datavolumes/" + VM + "-media"]["metadata"]["uid"]
     collect = api.collect
     api.collect = lambda uid: None if uid == media_uid else collect(uid)
     ignored_changed, evidence = arm.destroy(host(api), request(), context(applied["receipts"]))
     assert not evidence["absent"] and {"kind": "PersistentVolumeClaim", "name": VM + "-media", "present": True} in evidence["volumes"]
+
+
+PORTS = [
+    ("pre_boot", lambda machine: arm.pre_boot(machine, VM)),
+    ("state_read", lambda machine: arm.state_read(machine, VM, "digest-1")),
+    ("power on", lambda machine: arm.change_power(machine, VM, "on")),
+    ("power off", lambda machine: arm.change_power(machine, VM, "off", force=True)),
+    ("eject", lambda machine: arm.eject(machine, VM)),
+    ("insert", lambda machine: arm.upload_volume(machine, VM, "digest-2", 1)),
+    ("attach", lambda machine: arm.attach(machine, VM)),
+]
+
+
+def presented_machine():
+    api = FakeAPI()
+    arm.apply(host(api), request(), context())
+    arm.upload_volume(pinned(api), VM, "digest-1", 1)
+    api.objects["/apis/cdi.kubevirt.io/v1beta1/namespaces/guests/datavolumes/" + VM + "-media"]["status"]["phase"] = "Succeeded"
+    arm.attach(pinned(api), VM)
+    return api
+
+
+@pytest.mark.parametrize("entry", [name for name, ignored_act in PORTS])
+def test_every_port_entry_point_refuses_another_cluster_a_foreign_vm_or_no_record_and_changes_nothing(entry):
+    act = dict(PORTS)[entry]
+    for pin, refusal in [({"cluster": "cluster-0", "vm": None}, "kube-system UID differs"),
+                         ({"cluster": "cluster-1", "vm": "another-uid"}, "is not the one this context's machine block recorded"),
+                         ({"cluster": "", "vm": ""}, "has no cluster and UID")]:
+        api = presented_machine()
+        if pin["vm"] is None:
+            pin = dict(pin, vm=api.objects[VM_PATH]["metadata"]["uid"])
+        before = copy.deepcopy(api.objects)
+        api.requests.clear()
+        with pytest.raises(arm.PortRefused, match=refusal) as refused:
+            act(host(api, pin=pin))
+        assert refused.value.code == "identity-mismatch"
+        assert api.objects == before and not [m for m, ignored_path in api.requests if m != "GET"]
+
+
+def test_the_media_volume_is_owned_only_through_the_pinned_virtual_machine():
+    api = presented_machine()
+    volume = api.objects["/apis/cdi.kubevirt.io/v1beta1/namespaces/guests/datavolumes/" + VM + "-media"]
+    assert volume["metadata"]["ownerReferences"][0]["uid"] == api.objects[VM_PATH]["metadata"]["uid"]
+    volume["metadata"]["ownerReferences"] = [{"uid": "someone-else"}]
+    with pytest.raises(kapi.Refused, match="not this context's"):
+        arm.eject(pinned(api), VM)
+    assert arm.state_read(pinned(api), VM, "digest-1")["media_state"] == "foreign"
+
+
+def test_the_pinned_path_still_boots_and_ejects():
+    api = presented_machine()
+    machine = pinned(api)
+    assert arm.state_read(machine, VM, "digest-1")["media_state"] == "own"
+    assert arm.change_power(machine, VM, "on")["power"] == "On"
+    assert arm.change_power(machine, VM, "off")["power"] == "Off"
+    arm.eject(machine, VM)
+    assert arm.state_read(machine, VM)["media_state"] == "none"

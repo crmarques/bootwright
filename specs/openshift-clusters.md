@@ -198,8 +198,9 @@ pushes its image; a nested host is refused by lifecycle selection. Admission
 checks the homogeneous arm, attachment kinds and endpoint sources, installer
 input projections have offline goldens, and [B87](milestones/m1.md#b87)
 delivers the target, the port and its bounds; the installation's pushed boot
-through that port, which lends the kubeconfig by the arm's credential parts,
-is tracked as [B88](milestones/m3.md#b88).
+through that port, which lends the kubeconfig by the arm's credential parts
+and passes each node's pin to every entry point it calls, is tracked as
+[B88](milestones/m3.md#b88).
 
 Not yet met: a node on a vSphere provider refuses as a node on an unrealized
 substrate, and a multi-node `vsphere` cluster refuses as several nodes on

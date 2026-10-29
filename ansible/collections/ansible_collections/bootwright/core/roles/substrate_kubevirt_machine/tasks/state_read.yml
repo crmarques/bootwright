@@ -23,6 +23,8 @@
     kubeconfig: '{{ bootwright_machine_port.user }}'
     scratch: '{{ bootwright_run_scratch }}'
     endpoint: '{{ bootwright_machine_port.endpoint }}'
+    pinned_uuid_base64: "{{ bootwright_machine_port.pinned_uuid_base64 | default('') }}"
+    pinned_serial_base64: "{{ bootwright_machine_port.pinned_serial_base64 | default('') }}"
     media_identity: '{{ bootwright_machine_port.media_identity | default("") }}'
     media: '{{ bootwright_machine_port.media | default(true) }}'
   retries: '{{ bootwright_machine_port.retries | default(1) }}'

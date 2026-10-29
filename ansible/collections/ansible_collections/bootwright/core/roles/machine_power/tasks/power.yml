@@ -150,7 +150,8 @@
     phase: refused
     reason: identity-mismatch
   when: >-
-    ((bootwright_machine_power_material.pinnedUUIDBase64 | default('') | length > 0)
+    (machine_power_physical | bool)
+    and ((bootwright_machine_power_material.pinnedUUIDBase64 | default('') | length > 0)
     or (bootwright_machine_power_material.pinnedSerialBase64 | default('') | length > 0))
     and not (machine_power_answers_as_pinned | bool)
   no_log: true
@@ -180,8 +181,9 @@
       power request was sent. Correct spec.substrate.baremetal.bmc.address, or destroy and apply
       this context so the machine is proved again.
   when: >-
-    (bootwright_machine_power_material.pinnedUUIDBase64 | default('') | length > 0)
-    or (bootwright_machine_power_material.pinnedSerialBase64 | default('') | length > 0)
+    (machine_power_physical | bool)
+    and ((bootwright_machine_power_material.pinnedUUIDBase64 | default('') | length > 0)
+    or (bootwright_machine_power_material.pinnedSerialBase64 | default('') | length > 0))
 
 - name: Stop the machine and poll it to off
   ansible.builtin.include_tasks: stop.yml

@@ -66,6 +66,9 @@ func PreBootRefusals(arm, contextName, continuation, machine, endpoint string) m
 			RefusalMachineRunning: running,
 			RefusalTPMAbsent: refused(identity+" presents no persistent vTPM, so no encrypted installer was booted",
 				destroy+", declare tpm without persistent: false on the profile "+identity+" selects"+update+", then run "+apply),
+			RefusalIdentityMismatch: refused("the host cluster or VirtualMachine answering for "+identity+" is not the one its machine block recorded, so no media was inserted into it and it was not booted",
+				"restore the Secret the provider's spec.kubevirt.kubeconfigRef names so it reaches the cluster "+identity+" was realized on, then run "+next+
+					" with --authorize rebind=<that Secret>; to realize it again instead, "+destroy+", then run "+apply),
 		}
 	case ArmBaremetal:
 		return map[string]error{

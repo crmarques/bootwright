@@ -348,3 +348,24 @@ func TestEveryCapabilityDeadlineCoversItsFrozenBudgets(t *testing.T) {
 		t.Fatalf("host runs = %+v", run.requests)
 	}
 }
+
+func TestThePinIsTheClusterAndVirtualMachineTheBlockRecorded(t *testing.T) {
+	block := machineBlock(t)
+	record := lifecycle.BlockEvidence{Block: block, Kind: MachineKind, Object: "master-0", Implementation: MachineImplementation,
+		Verb: reconciliation.Apply, State: reconciliation.BlockDone, Evidence: machineFixture(t, block.RequestDigest, nil)}
+	pin, found, err := PinnedIdentity("master-0", []lifecycle.BlockEvidence{record})
+	if err != nil || !found || pin.UUID != "cluster-1" || pin.Serial != "vm-1" {
+		t.Fatalf("pin = %+v, %v, %v", pin, found, err)
+	}
+	if !substrate.PortPinned(substrate.ArmKubeVirt) || substrate.PortPinned(substrate.ArmLibvirt) {
+		t.Fatal("only the KubeVirt port is pinned")
+	}
+	unproved := record
+	unproved.Evidence = machineFixture(t, block.RequestDigest, func(e *MachineEvidence) { e.Receipts = nil })
+	if _, found, err := PinnedIdentity("master-0", []lifecycle.BlockEvidence{unproved}); found || err != nil {
+		t.Fatal("a block with no VirtualMachine receipt pins it")
+	}
+	if _, found, _ := PinnedIdentity("other", []lifecycle.BlockEvidence{record}); found {
+		t.Fatal("another Machine's record pins this one")
+	}
+}

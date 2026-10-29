@@ -23,6 +23,8 @@
     kubeconfig: '{{ bootwright_machine_port.user }}'
     scratch: '{{ bootwright_run_scratch }}'
     endpoint: '{{ bootwright_machine_port.endpoint }}'
+    pinned_uuid_base64: "{{ bootwright_machine_port.pinned_uuid_base64 | default('') }}"
+    pinned_serial_base64: "{{ bootwright_machine_port.pinned_serial_base64 | default('') }}"
     power_on: '{{ bootwright_machine_port.power_on }}'
   register: substrate_kubevirt_machine_port_result
   failed_when: false

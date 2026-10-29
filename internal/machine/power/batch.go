@@ -81,7 +81,7 @@ func (s Service) resolveOne(ctx context.Context, catalog api.Catalog, contextNam
 	}
 	object, _ := catalog.Find(api.Machine, name)
 	resolved := target{frozen: frozen, physical: physical}
-	if physical {
+	if physical || substrate.PortPinned(frozen.Arm) {
 		proved, found, err := s.identities.ProvedIdentity(ctx, contextName, frozen.Identity.Object)
 		if err != nil {
 			return target{}, err
@@ -89,6 +89,8 @@ func (s Service) resolveOne(ctx context.Context, catalog api.Catalog, contextNam
 		if found {
 			resolved.pin = proved
 		}
+	}
+	if physical {
 		if resolved.host, err = s.controllerHost(ctx, name); err != nil {
 			return target{}, err
 		}

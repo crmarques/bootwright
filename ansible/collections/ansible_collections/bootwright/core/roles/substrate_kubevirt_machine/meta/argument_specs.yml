@@ -99,13 +99,13 @@ argument_specs:
           verify:
             type: bool
             required: true
-          expected:
-            type: list
-            elements: str
           pinned_uuid_base64:
             type: str
           pinned_serial_base64:
             type: str
+          expected:
+            type: list
+            elements: str
           require_tpm:
             type: bool
           firmware:
@@ -133,6 +133,10 @@ argument_specs:
           verify:
             type: bool
             required: true
+          pinned_uuid_base64:
+            type: str
+          pinned_serial_base64:
+            type: str
           installer_powers_off:
             type: bool
             required: true
@@ -159,6 +163,10 @@ argument_specs:
           verify:
             type: bool
             required: true
+          pinned_uuid_base64:
+            type: str
+          pinned_serial_base64:
+            type: str
           power_on:
             type: bool
             required: true
@@ -191,6 +199,10 @@ argument_specs:
           verify:
             type: bool
             required: true
+          pinned_uuid_base64:
+            type: str
+          pinned_serial_base64:
+            type: str
           media_identity:
             type: str
           media:
@@ -229,6 +241,10 @@ argument_specs:
           verify:
             type: bool
             required: true
+          pinned_uuid_base64:
+            type: str
+          pinned_serial_base64:
+            type: str
           media_identity:
             type: str
           image_url_file:
@@ -266,6 +282,10 @@ argument_specs:
           verify:
             type: bool
             required: true
+          pinned_uuid_base64:
+            type: str
+          pinned_serial_base64:
+            type: str
           media_identity:
             type: str
           restore_verification:
@@ -297,6 +317,10 @@ argument_specs:
           verify:
             type: bool
             required: true
+          pinned_uuid_base64:
+            type: str
+          pinned_serial_base64:
+            type: str
           media_identity:
             type: str
           power:

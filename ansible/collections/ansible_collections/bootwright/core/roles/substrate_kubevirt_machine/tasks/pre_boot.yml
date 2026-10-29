@@ -25,6 +25,8 @@
     kubeconfig: '{{ bootwright_machine_port.user }}'
     scratch: '{{ bootwright_run_scratch }}'
     endpoint: '{{ bootwright_machine_port.endpoint }}'
+    pinned_uuid_base64: "{{ bootwright_machine_port.pinned_uuid_base64 | default('') }}"
+    pinned_serial_base64: "{{ bootwright_machine_port.pinned_serial_base64 | default('') }}"
     require_tpm: '{{ bootwright_machine_port.require_tpm | default(false) }}'
     expected: '{{ bootwright_machine_port.expected | default([]) }}'
     firmware: '{{ bootwright_machine_port.firmware | default({}) }}'
@@ -36,6 +38,11 @@
   ansible.builtin.set_fact:
     substrate_kubevirt_machine_refusal: tpm-absent
   when: substrate_kubevirt_machine_port_result.refusal | default('') == 'tpm-absent'
+
+- name: Name another cluster or VirtualMachine than the recorded one as the refusal
+  ansible.builtin.set_fact:
+    substrate_kubevirt_machine_refusal: identity-mismatch
+  when: substrate_kubevirt_machine_port_result.refusal | default('') == 'identity-mismatch'
 
 - name: Name a running machine as the refusal
   ansible.builtin.set_fact:

@@ -10,6 +10,7 @@ result is censored.
 
 from __future__ import annotations
 
+import base64
 import os
 import tempfile
 import time
@@ -46,7 +47,7 @@ def block(operation, client, arguments, clock=time.time, sleep=time.sleep):
 def port(operation, client, arguments, upload, clock=time.time, sleep=time.sleep):
     """One machine port entry point over the VirtualMachine the endpoint names."""
     namespace, vm = arm.endpoint(arguments["endpoint"])
-    host = arm.Host(client, namespace, clock() + int(arguments.get("seconds", 900)), clock, sleep)
+    host = arm.Host(client, namespace, clock() + int(arguments.get("seconds", 900)), clock, sleep, pin=pinned(arguments))
     if operation == "pre_boot":
         return arm.pre_boot(host, vm, bool(arguments.get("require_tpm")), arguments.get("expected") or (), arguments.get("firmware"))
     if operation == "state_read":
@@ -71,6 +72,17 @@ def port(operation, client, arguments, upload, clock=time.time, sleep=time.sleep
         if done is None or (done.get("status") or {}).get("phase") != "Succeeded":
             raise Refused("the upload to DataVolume %s/%s-media did not succeed" % (namespace, vm))
     return arm.attach(host, vm)
+
+
+def pinned(arguments):
+    """The cluster and VirtualMachine UIDs the consumer's pin carries, decoded only to compare."""
+    decoded = {}
+    for key, name in (("pinned_uuid_base64", "cluster"), ("pinned_serial_base64", "vm")):
+        try:
+            decoded[name] = base64.b64decode(str(arguments.get(key) or ""), validate=True).decode("ascii").strip()
+        except (ValueError, UnicodeError):
+            decoded[name] = ""
+    return decoded
 
 
 def failed(error):
