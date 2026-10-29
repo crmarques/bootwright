@@ -20,11 +20,13 @@ type specOption struct {
 	Elements string `yaml:"elements"`
 }
 
+type specNode struct {
+	specOption `yaml:",inline"`
+	Options    map[string]specNode `yaml:"options"`
+}
+
 type specEntry struct {
-	Options map[string]struct {
-		specOption `yaml:",inline"`
-		Options    map[string]specOption `yaml:"options"`
-	} `yaml:"options"`
+	Options map[string]specNode `yaml:"options"`
 }
 
 func ansibleType(t reflect.Type) (string, string) {
@@ -70,19 +72,19 @@ func TestEveryCephRoleEntryPointDeclaresExactlyTheRequestItReceives(t *testing.T
 		{"storage_ceph_image", "bootwright_ceph_image_request", []string{"resolve", "observe", "destroy"}, reflect.TypeFor[ImageRequest]()},
 		{"storage_ceph_host", "bootwright_ceph_host_request", []string{"prepare", "observe", "destroy"}, reflect.TypeFor[HostRequest]()},
 	} {
-		requireRoleRequest(t, role.name, role.variable, role.entries, role.request)
+		requireRoleRequest(t, role.name, role.variable, role.entries, role.request, role.name == "storage_ceph_core")
 	}
 }
 
 func TestReplicationRoleEntryPointDeclaresExactlyTheRequestItReceives(t *testing.T) {
-	requireRoleRequest(t, "storage_ceph_replication", "bootwright_ceph_replication_request", []string{"apply", "observe", "destroy"}, reflect.TypeFor[ReplicationRequest]())
+	requireRoleRequest(t, "storage_ceph_replication", "bootwright_ceph_replication_request", []string{"apply", "observe", "destroy"}, reflect.TypeFor[ReplicationRequest](), false)
 }
 
 func TestSMBRoleEntryPointDeclaresExactlyTheRequestItReceives(t *testing.T) {
-	requireRoleRequest(t, "storage_ceph_smb", "bootwright_ceph_smb_request", []string{"apply", "observe", "destroy"}, reflect.TypeFor[SMBRequest]())
+	requireRoleRequest(t, "storage_ceph_smb", "bootwright_ceph_smb_request", []string{"apply", "observe", "destroy"}, reflect.TypeFor[SMBRequest](), false)
 }
 
-func requireRoleRequest(t *testing.T, role, variable string, entries []string, request reflect.Type) {
+func requireRoleRequest(t *testing.T, role, variable string, entries []string, request reflect.Type, nested bool) {
 	t.Helper()
 	path := "collections/ansible_collections/bootwright/core/roles/" + role + "/meta/argument_specs.yml"
 	var document struct {
@@ -109,11 +111,56 @@ func requireRoleRequest(t *testing.T, role, variable string, entries []string, r
 					t.Errorf("%s refuses %s.%s, which the request is encoded with", entry, variable, name)
 					continue
 				}
-				if got != want[name] {
-					t.Errorf("%s.%s is declared %s, the request encodes %s", variable, name, describe(got), describe(want[name]))
+				if got.specOption != want[name] {
+					t.Errorf("%s.%s is declared %s, the request encodes %s", variable, name, describe(got.specOption), describe(want[name]))
 				}
 			}
+			if nested {
+				requireNestedOptions(t, variable, declared.Options, request)
+			}
 		})
+	}
+}
+
+func structOf(t reflect.Type) (reflect.Type, bool) {
+	for t.Kind() == reflect.Pointer || t.Kind() == reflect.Slice && t != reflect.TypeFor[json.RawMessage]() {
+		t = t.Elem()
+	}
+	return t, t.Kind() == reflect.Struct
+}
+
+func nullable(t reflect.Type) bool {
+	return slices.Contains([]reflect.Kind{reflect.Pointer, reflect.Slice, reflect.Map}, t.Kind())
+}
+
+func requireNestedOptions(t *testing.T, path string, declared map[string]specNode, request reflect.Type) {
+	t.Helper()
+	for field := range request.Fields() {
+		name, _, _ := strings.Cut(field.Tag.Get("json"), ",")
+		member, ok := structOf(field.Type)
+		if !ok {
+			continue
+		}
+		got := declared[name]
+		sent := map[string]bool{}
+		for child := range member.Fields() {
+			option, flags, _ := strings.Cut(child.Tag.Get("json"), ",")
+			sent[option] = true
+			kind, elements := ansibleType(child.Type)
+			want := specOption{Type: kind, Elements: elements, Required: !strings.Contains(flags, "omitempty") && !nullable(child.Type)}
+			node, ok := got.Options[option]
+			if !ok {
+				t.Errorf("%s.%s declares no option %s, which the request is encoded with", path, name, option)
+			} else if node.specOption != want {
+				t.Errorf("%s.%s.%s is declared %s, the request encodes %s", path, name, option, describe(node.specOption), describe(want))
+			}
+		}
+		for _, option := range slices.Sorted(maps.Keys(got.Options)) {
+			if !sent[option] {
+				t.Errorf("%s.%s.%s is declared, and the request is never encoded with it", path, name, option)
+			}
+		}
+		requireNestedOptions(t, path+"."+name, got.Options, member)
 	}
 }
 

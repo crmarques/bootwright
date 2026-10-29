@@ -36,7 +36,7 @@ CORE = {
     "nfsGaneshaPackageVersion": "synthetic-nfs",
     "packageRepository": "https://packages.example.test/selected", "packageRepositoryKey": "https://packages.example.test/keys/ibm.asc",
     "cephadm": {"packageVersion": "20.2.1-405.el9cp", "path": "/usr/sbin/cephadm"},
-    "client": {"access": "rw", "dataPools": [], "name": "app", "pool": "data"},
+    "client": {"access": "rw", "dataPools": [], "filesystem": "", "group": "", "name": "app", "pool": "data", "subvolume": ""},
     "cluster": "example",
     "clusterKeyRef": "cluster-key",
     "clusterNetworks": ["198.51.100.0/24"],

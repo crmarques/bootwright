@@ -24,6 +24,13 @@ argument_specs:
           auxiliary:
             type: list
             elements: dict
+            options:
+              image:
+                type: str
+                required: true
+              name:
+                type: str
+                required: true
           nfsGaneshaPackageVersion:
             type: str
           packageRepository:
@@ -35,8 +42,39 @@ argument_specs:
           cephadm:
             type: dict
             required: true
+            options:
+              packageVersion:
+                type: str
+                required: true
+              path:
+                type: str
+                required: true
           client:
             type: dict
+            options:
+              access:
+                type: str
+                required: true
+              dataPools:
+                type: list
+                elements: str
+              filesystem:
+                type: str
+                required: true
+              group:
+                type: str
+                required: true
+              name:
+                type: str
+                required: true
+              pool:
+                type: str
+                required: true
+              subvolume:
+                type: str
+                required: true
+              subvolumePath:
+                type: str
           cluster:
             type: str
             required: true
@@ -61,16 +99,174 @@ argument_specs:
           delegated:
             type: list
             elements: dict
+            options:
+              hosts:
+                type: list
+                elements: str
+              name:
+                type: str
+                required: true
           filesystem:
             type: dict
+            options:
+              activeCount:
+                type: int
+                required: true
+              dataPools:
+                type: list
+                elements: str
+              defaultDataPool:
+                type: str
+                required: true
+              groups:
+                type: list
+                elements: dict
+                options:
+                  gid:
+                    type: int
+                    required: true
+                  mode:
+                    type: str
+                    required: true
+                  name:
+                    type: str
+                    required: true
+                  pool:
+                    type: str
+                    required: true
+                  sizeBytes:
+                    type: int
+                    required: true
+                  uid:
+                    type: int
+                    required: true
+              mdsService:
+                type: str
+                required: true
+              metadataPool:
+                type: str
+                required: true
+              name:
+                type: str
+                required: true
+              standbyCountWanted:
+                type: int
+                required: true
+              standbyReplay:
+                type: bool
+                required: true
           fsid:
             type: str
           gateway:
             type: dict
+            options:
+              bindings:
+                type: list
+                elements: dict
+                options:
+                  path:
+                    type: str
+                    required: true
+                  secretRef:
+                    type: str
+                    required: true
+                  serviceRef:
+                    type: str
+                    required: true
+              dataExtraPool:
+                type: str
+                required: true
+              dataPool:
+                type: str
+                required: true
+              documents:
+                type: list
+                elements: dict
+              endpoint:
+                type: str
+                required: true
+              indexPool:
+                type: str
+                required: true
+              name:
+                type: str
+                required: true
+              realm:
+                type: str
+                required: true
+              zone:
+                type: str
+                required: true
+              zoneGroup:
+                type: str
+                required: true
+              zonePools:
+                type: list
+                elements: str
           hosts:
             type: list
             elements: dict
             required: true
+            options:
+              address:
+                type: str
+                required: true
+              devices:
+                type: list
+                elements: dict
+                options:
+                  path:
+                    type: str
+                    required: true
+                  rotational:
+                    type: bool
+                  serial:
+                    type: str
+                    required: true
+                  sizeBytes:
+                    type: int
+                    required: true
+                  wwn:
+                    type: str
+              hardware:
+                type: dict
+                options:
+                  macs:
+                    type: list
+                    elements: str
+                  uuid:
+                    type: str
+                    required: true
+              hostKeyRef:
+                type: str
+              knownHosts:
+                type: str
+              knownHostsRef:
+                type: str
+              labels:
+                type: list
+                elements: str
+              location:
+                type: dict
+              machine:
+                type: str
+                required: true
+              name:
+                type: str
+                required: true
+              physical:
+                type: bool
+              port:
+                type: int
+                required: true
+              provided:
+                type: bool
+              sshKeyRef:
+                type: str
+                required: true
+              user:
+                type: str
+                required: true
           image:
             type: str
             required: true
@@ -79,26 +275,428 @@ argument_specs:
             required: true
           nvmeof:
             type: dict
+            options:
+              gateways:
+                type: list
+                elements: dict
+                options:
+                  address:
+                    type: str
+                    required: true
+                  host:
+                    type: str
+                    required: true
+                  port:
+                    type: int
+                    required: true
+              group:
+                type: str
+                required: true
+              hosts:
+                type: list
+                elements: str
+              listeners:
+                type: list
+                elements: dict
+                options:
+                  address:
+                    type: str
+                    required: true
+                  host:
+                    type: str
+                    required: true
+                  port:
+                    type: int
+                    required: true
+              mtls:
+                type: str
+                required: true
+              name:
+                type: str
+                required: true
+              namespaces:
+                type: list
+                elements: dict
+                options:
+                  id:
+                    type: int
+                    required: true
+                  image:
+                    type: dict
+                    required: true
+                    options:
+                      dataPool:
+                        type: str
+                        required: true
+                      features:
+                        type: list
+                        elements: str
+                      name:
+                        type: str
+                        required: true
+                      pool:
+                        type: str
+                        required: true
+                      sizeBytes:
+                        type: int
+                        required: true
+              nqn:
+                type: str
+                required: true
+              pool:
+                type: str
+                required: true
+              service:
+                type: str
+                required: true
           nfsExport:
             type: dict
+            options:
+              filesystem:
+                type: str
+                required: true
+              group:
+                type: str
+                required: true
+              name:
+                type: str
+                required: true
+              native:
+                type: dict
+                required: true
+                options:
+                  access_type:
+                    type: str
+                    required: true
+                  clients:
+                    type: list
+                    elements: dict
+                    options:
+                      access_type:
+                        type: str
+                        required: true
+                      addresses:
+                        type: list
+                        elements: str
+                      squash:
+                        type: str
+                        required: true
+                  fsal:
+                    type: dict
+                    required: true
+                    options:
+                      cmount_path:
+                        type: str
+                      fs_name:
+                        type: str
+                      name:
+                        type: str
+                        required: true
+                      user_id:
+                        type: str
+                  path:
+                    type: str
+                  protocols:
+                    type: list
+                    elements: int
+                  pseudo:
+                    type: str
+                    required: true
+                  sectype:
+                    type: list
+                    elements: str
+                  security_label:
+                    type: bool
+                    required: true
+                  squash:
+                    type: str
+                    required: true
+                  transports:
+                    type: list
+                    elements: str
+              objectUser:
+                type: dict
+                options:
+                  gateway:
+                    type: str
+                    required: true
+                  name:
+                    type: str
+                    required: true
+                  realm:
+                    type: str
+                    required: true
+                  zone:
+                    type: str
+                    required: true
+                  zoneGroup:
+                    type: str
+                    required: true
+              service:
+                type: str
+                required: true
+              subvolume:
+                type: str
+                required: true
+              subvolumePath:
+                type: str
           objectBucket:
             type: dict
+            options:
+              backend:
+                type: str
+                required: true
+              certificateRef:
+                type: str
+                required: true
+              endpoint:
+                type: str
+                required: true
+              gateway:
+                type: str
+                required: true
+              name:
+                type: str
+                required: true
+              owner:
+                type: str
+                required: true
+              policy:
+                type: str
+                required: true
+              port:
+                type: int
+                required: true
+              realm:
+                type: str
+                required: true
+              zone:
+                type: str
+                required: true
+              zoneGroup:
+                type: str
+                required: true
           objectUser:
             type: dict
+            options:
+              displayName:
+                type: str
+                required: true
+              gateway:
+                type: str
+                required: true
+              name:
+                type: str
+                required: true
+              realm:
+                type: str
+                required: true
+              zone:
+                type: str
+                required: true
+              zoneGroup:
+                type: str
+                required: true
           owner:
             type: str
           packages:
             type: dict
+            options:
+              licenseAccepted:
+                type: bool
+                required: true
+              packageRepositoryTrustBundleRef:
+                type: str
+              sources:
+                type: list
+                elements: dict
+                options:
+                  certificateRef:
+                    type: str
+                    required: true
+                  host:
+                    type: str
+                    required: true
+                  media:
+                    type: str
+                    required: true
+                  mediaSHA256:
+                    type: str
+                  mediaSize:
+                    type: int
+                  profile:
+                    type: str
+                    required: true
+                  publicationPath:
+                    type: str
+                    required: true
+                  url:
+                    type: str
+                    required: true
+              version:
+                type: str
+                required: true
           policy:
             type: dict
+            options:
+              deviceClass:
+                type: str
+                required: true
+              failureDomain:
+                type: str
+                required: true
+              name:
+                type: str
+                required: true
+              root:
+                type: str
+                required: true
+              rule:
+                type: str
+                required: true
+              size:
+                type: int
+                required: true
           pool:
             type: dict
+            options:
+              application:
+                type: str
+                required: true
+              autoscale:
+                type: dict
+                required: true
+                options:
+                  bulk:
+                    type: bool
+                    required: true
+                  maxPGs:
+                    type: int
+                    required: true
+                  minPGs:
+                    type: int
+                    required: true
+                  mode:
+                    type: str
+                    required: true
+                  targetBytes:
+                    type: int
+                    required: true
+                  targetRatio:
+                    type: str
+                    required: true
+              compression:
+                type: dict
+                required: true
+                options:
+                  algorithm:
+                    type: str
+                    required: true
+                  maxBlob:
+                    type: int
+                    required: true
+                  minBlob:
+                    type: int
+                    required: true
+                  mode:
+                    type: str
+                    required: true
+                  requiredRatio:
+                    type: str
+                    required: true
+              crushRule:
+                type: str
+                required: true
+              erasure:
+                type: dict
+                options:
+                  codingChunks:
+                    type: int
+                    required: true
+                  dataChunks:
+                    type: int
+                    required: true
+                  deviceClass:
+                    type: str
+                    required: true
+                  failureDomain:
+                    type: str
+                    required: true
+                  plugin:
+                    type: str
+                    required: true
+                  profile:
+                    type: str
+                    required: true
+                  profileDefaults:
+                    type: dict
+                  root:
+                    type: str
+                    required: true
+                  stripeUnit:
+                    type: int
+                    required: true
+                  technique:
+                    type: str
+                    required: true
+              filesystem:
+                type: str
+                required: true
+              minSize:
+                type: int
+                required: true
+              name:
+                type: str
+                required: true
+              object:
+                type: str
+              overwrites:
+                type: bool
+                required: true
+              pgNum:
+                type: int
+                required: true
+              quota:
+                type: dict
+                required: true
+                options:
+                  maxBytes:
+                    type: int
+                    required: true
+                  maxObjects:
+                    type: int
+                    required: true
+              role:
+                type: str
+                required: true
+              size:
+                type: int
+                required: true
+              type:
+                type: str
+                required: true
           publicNetworks:
             type: list
             elements: str
             required: true
           rbd:
             type: dict
+            options:
+              dataPool:
+                type: str
+                required: true
+              features:
+                type: list
+                elements: str
+              name:
+                type: str
+                required: true
+              pool:
+                type: str
+                required: true
+              sizeBytes:
+                type: int
+                required: true
           registry:
             type: str
             required: true
@@ -113,14 +711,91 @@ argument_specs:
             required: true
           service:
             type: dict
+            options:
+              bindings:
+                type: list
+                elements: dict
+                options:
+                  path:
+                    type: str
+                    required: true
+                  secretRef:
+                    type: str
+                    required: true
+                  serviceRef:
+                    type: str
+                    required: true
+              config:
+                type: dict
+              documents:
+                type: list
+                elements: dict
+              id:
+                type: str
+                required: true
+              type:
+                type: str
+                required: true
           security:
             type: dict
+            options:
+              cephxKeyType:
+                type: str
+                required: true
+              fips:
+                type: bool
+                required: true
           settings:
             type: dict
+            options:
+              modules:
+                type: list
+                elements: str
           stretch:
             type: dict
+            options:
+              dataSites:
+                type: list
+                elements: str
+              failureDomain:
+                type: str
+                required: true
+              rule:
+                type: str
+                required: true
+              tiebreaker:
+                type: str
+                required: true
+              tiebreakerSite:
+                type: str
+                required: true
           subvolume:
             type: dict
+            options:
+              filesystem:
+                type: str
+                required: true
+              gid:
+                type: int
+                required: true
+              group:
+                type: str
+                required: true
+              mode:
+                type: str
+                required: true
+              name:
+                type: str
+                required: true
+              pool:
+                type: str
+                required: true
+              sizeBytes:
+                type: int
+                required: true
+              uid:
+                type: int
+                required: true
           version:
             type: str
             required: true

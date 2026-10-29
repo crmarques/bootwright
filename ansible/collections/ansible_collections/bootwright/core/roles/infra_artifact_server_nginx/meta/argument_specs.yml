@@ -42,6 +42,9 @@ argument_specs:
             type: str
             required: true
             choices: [artifact-server-nginx-v2]
+      bootwright_artifact_server_digest:
+        type: str
+        required: true
       bootwright_artifact_server_material:
         type: dict
         required: true

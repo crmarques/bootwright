@@ -5,8 +5,7 @@ its first task (specs/architecture.md, Playbooks), so a variable the entry
 point reads without declaring it reaches the effects unvalidated. These cases
 walk each entry point's task file and every task file it includes by a literal
 name, and refuse a bootwright_* variable read there that the specification, the
-role's defaults or the task files themselves do not define. The reads that
-predate the rule are an exact allowance that only shrinks.
+role's defaults or the task files themselves do not define.
 """
 
 from __future__ import annotations
@@ -21,40 +20,6 @@ ROLES = pathlib.Path(__file__).resolve().parents[2] / "roles"
 VARIABLE = re.compile(r"\bbootwright_[a-z][a-z0-9_]*\b")
 INCLUDES = ("ansible.builtin.include_tasks", "ansible.builtin.import_tasks")
 LITERAL = re.compile(r"(?:\{\{ role_path \}\}/tasks/)?(\w+)\.yml")
-
-# The reads that predate the rule, by role and entry point (B431 declares them):
-# the runner passes each digest and the run scratch beside the request.
-UNDECLARED_READS = {
-    ("containercluster_install_agent", "apply"): {"bootwright_cluster_install_digest"},
-    ("containercluster_install_agent", "observe"): {"bootwright_cluster_install_digest", "bootwright_run_scratch"},
-    ("containercluster_install_agent", "destroy"): {"bootwright_cluster_install_digest", "bootwright_run_scratch"},
-    ("containercluster_media_agent", "apply"): {"bootwright_cluster_media_digest"},
-    ("containercluster_media_agent", "observe"): {"bootwright_cluster_media_digest"},
-    ("containercluster_media_agent", "destroy"): {"bootwright_cluster_media_digest"},
-    ("infra_artifact_server_nginx", "apply"): {"bootwright_artifact_server_digest"},
-    ("infra_artifact_server_nginx", "observe"): {"bootwright_artifact_server_digest"},
-    ("infra_artifact_server_nginx", "destroy"): {"bootwright_artifact_server_digest"},
-    ("infra_managed_service", "apply"): {"bootwright_managed_service_digest"},
-    ("infra_managed_service", "observe"): {"bootwright_managed_service_digest"},
-    ("infra_managed_service", "destroy"): {"bootwright_managed_service_digest"},
-    ("machine_power_read", "read"): {"bootwright_machine_power_read_digest"},
-    ("machine_power", "power"): {"bootwright_machine_power_digest"},
-    ("managedos_install_anaconda", "apply"): {"bootwright_os_install_digest", "bootwright_run_scratch"},
-    ("managedos_install_anaconda", "observe"): {"bootwright_os_install_digest", "bootwright_run_scratch"},
-    ("managedos_install_anaconda", "destroy"): {"bootwright_os_install_digest", "bootwright_run_scratch"},
-    ("managedos_package_tree", "apply"): {"bootwright_os_tree_digest"},
-    ("managedos_package_tree", "observe"): {"bootwright_os_tree_digest"},
-    ("managedos_package_tree", "destroy"): {"bootwright_os_tree_digest"},
-    ("substrate_baremetal_machine", "apply"): {"bootwright_substrate_physical_digest"},
-    ("substrate_baremetal_machine", "observe"): {"bootwright_substrate_physical_digest"},
-    ("substrate_baremetal_machine", "destroy"): {"bootwright_substrate_physical_digest"},
-    ("substrate_libvirt_host", "apply"): {"bootwright_run_scratch", "bootwright_substrate_host_digest"},
-    ("substrate_libvirt_host", "observe"): {"bootwright_substrate_host_digest"},
-    ("substrate_libvirt_host", "destroy"): {"bootwright_substrate_host_digest"},
-    ("substrate_libvirt_machine", "apply"): {"bootwright_run_scratch", "bootwright_substrate_machine_digest"},
-    ("substrate_libvirt_machine", "observe"): {"bootwright_substrate_machine_digest"},
-    ("substrate_libvirt_machine", "destroy"): {"bootwright_substrate_machine_digest"},
-}
 
 
 def tasks_of(text):
@@ -129,15 +94,7 @@ def entry_points():
 def test_an_entry_point_reads_only_what_its_specification_declares(role, entry):
     reads, dynamic = entry_point_reads(role, entry)
     assert dynamic == [], "%s/%s includes a task file by a name no walk resolves: %s" % (role, entry, dynamic)
-    allowed = UNDECLARED_READS.get((role, entry), set())
-    assert reads - allowed == set(), "%s/%s reads %s, which its argument specification does not declare" % (
-        role, entry, sorted(reads - allowed))
-    assert allowed - reads == set(), "%s/%s no longer reads %s; remove them from UNDECLARED_READS" % (
-        role, entry, sorted(allowed - reads))
-
-
-def test_the_allowance_names_only_entry_points_that_exist():
-    assert set(UNDECLARED_READS) <= set(entry_points())
+    assert reads == set(), "%s/%s reads %s, which its argument specification does not declare" % (role, entry, sorted(reads))
 
 
 def test_a_seeded_undeclared_read_is_refused_and_a_defined_one_is_not(tmp_path):

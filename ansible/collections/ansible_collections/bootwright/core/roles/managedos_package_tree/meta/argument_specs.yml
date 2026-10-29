@@ -22,6 +22,9 @@ argument_specs:
             type: str
             required: true
             choices: [os-package-tree-v1]
+      bootwright_os_tree_digest:
+        type: str
+        required: true
       bootwright_os_tree_material:
         type: dict
         required: true

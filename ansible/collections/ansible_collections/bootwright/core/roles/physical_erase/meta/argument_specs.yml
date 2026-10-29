@@ -23,10 +23,29 @@ argument_specs:
           network:
             type: str
             required: true
+          # Go freezes only the logicalOverwrite method, so the request carries
+          # no method to choose from. Go also bounds the targets: one to
+          # sixteen, unique nonempty identities of at most 256, and a
+          # sizeBytes of 4096 to 64 TiB in multiples of 4096. An argument
+          # specification states no such bound; the worker's request
+          # validation in physical_erase_worker.py alone checks them.
           targets:
             type: list
             elements: dict
             required: true
+            options:
+              deviceName:
+                type: str
+                required: true
+              serialNumber:
+                type: str
+                required: true
+              sizeBytes:
+                type: int
+                required: true
+              wwn:
+                type: str
+                required: true
       bootwright_physical_erase_digest:
         type: str
         required: true

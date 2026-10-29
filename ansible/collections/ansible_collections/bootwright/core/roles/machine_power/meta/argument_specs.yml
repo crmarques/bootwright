@@ -46,6 +46,9 @@ argument_specs:
             type: str
             required: true
             choices: [machine-power-v4]
+      bootwright_machine_power_digest:
+        type: str
+        required: true
       bootwright_machine_power_material:
         type: dict
         required: true

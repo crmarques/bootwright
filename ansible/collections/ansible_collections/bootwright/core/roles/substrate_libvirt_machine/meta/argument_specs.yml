@@ -57,6 +57,12 @@ argument_specs:
             type: str
             required: true
             choices: [machine-libvirt-v8]
+      bootwright_substrate_machine_digest:
+        type: str
+        required: true
+      bootwright_run_scratch:
+        type: path
+        required: true
       bootwright_substrate_machine_material:
         type: dict
         required: true

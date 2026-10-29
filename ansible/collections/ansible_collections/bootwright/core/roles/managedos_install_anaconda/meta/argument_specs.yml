@@ -157,6 +157,12 @@ argument_specs:
             type: str
             required: true
             choices: [os-install-anaconda-v21]
+      bootwright_os_install_digest:
+        type: str
+        required: true
+      bootwright_run_scratch:
+        type: path
+        required: true
       bootwright_os_install_material:
         type: dict
         required: true

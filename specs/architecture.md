@@ -853,9 +853,7 @@ holds every later play to a declared entry point or the eight task files its
 allowance names. `test_entry_point_reads.py` refuses an entry point whose task
 files read a `bootwright_*` variable that its specification, the role's defaults
 and the task files do not define. Not yet met: some roles declare nested
-members as bare mappings, and the digests and run scratch that entry points read
-beside their request are an exact allowance in that test that only shrinks;
-tracked as [B431](milestones/backlog.md#b431).
+members as bare mappings; tracked as [B431](milestones/backlog.md#b431).
 
 Every `observe` entrypoint runs only the modules the read-only allowlist
 names, each for a stated reason; `TestEveryObservePlaybookRunsOnlyAllowedTasks`

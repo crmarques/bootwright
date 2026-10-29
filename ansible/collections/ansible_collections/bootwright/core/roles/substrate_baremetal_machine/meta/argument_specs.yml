@@ -39,6 +39,9 @@ argument_specs:
             type: str
             required: true
             choices: [machine-baremetal-v2]
+      bootwright_substrate_physical_digest:
+        type: str
+        required: true
       bootwright_substrate_physical_material:
         type: dict
         required: true

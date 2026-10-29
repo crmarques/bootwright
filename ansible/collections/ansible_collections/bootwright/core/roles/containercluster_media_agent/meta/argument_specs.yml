@@ -74,6 +74,9 @@ argument_specs:
           workRoot:
             type: str
             required: true
+      bootwright_cluster_media_digest:
+        type: str
+        required: true
       bootwright_cluster_media_material:
         type: dict
         required: true
