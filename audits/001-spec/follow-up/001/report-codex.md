@@ -21,7 +21,7 @@ dates and commits identify their evidence.
 
 ## Executive summary
 
-**Not all audit work is complete.** The [remediation ledger](../../../../../specs/milestones/backlog.md) marks all 31 lanes merged, but closure of a lane sometimes meant moving unfinished work to another item. All 232 catalog findings have a disposition below: no missing or duplicate IDs.
+**Not all audit work is complete.** The [remediation ledger](../../../../specs/milestones/backlog.md) marks all 31 lanes merged, but closure of a lane sometimes meant moving unfinished work to another item. All 232 catalog findings have a disposition below: no missing or duplicate IDs.
 
 | Disposition | Findings |
 | --- | ---: |
@@ -37,16 +37,16 @@ The most consequential remaining work is:
 
 | Work | Current evidence and consequence |
 | --- | --- |
-| Shared-host teardown — B567 | [specs/substrates.md:297](../../../../../specs/substrates.md) still states that removal does not enumerate host domains. [internal/substrate/libvirt/capability.go:575](../../../../../internal/substrate/libvirt/capability.go) still derives quiescence from this context's Machines. Shared bridge reservations were added, but live foreign-domain checks remain unfinished. |
-| Context incarnation ownership — B568 | [specs/state-reconciliation.md:2150](../../../../../specs/state-reconciliation.md) retains name-derived ownership for libvirt, emulated BMCs, services and artifact paths. The interim warning is implemented; persistent incarnation identity is not. |
-| Ceph recovery and online removal — B659, B662, B491 | [specs/milestones/m2.md:504](../../../../../specs/milestones/m2.md) and [specs/milestones/m2.md:514](../../../../../specs/milestones/m2.md) mark these Needs definition / not started. Partial enrollment and partial DB/WAL refuse; removal while hosts survive remains unsupported. Physical retirement with a covering erase policy already exists, so the original blanket claim of no backward exit was too broad. |
-| Restore seal-counter safety — B103 | [specs/contexts.md:862](../../../../../specs/contexts.md) explicitly says rolled-back seal counters are not detected and a fresh encryption key is not established. The restore-boundary documentation is corrected; the protection is not implemented. |
-| Operator authoring-task validation — B857 | [specs/milestones/backlog.md:2934](../../../../../specs/milestones/backlog.md) explicitly records that the eight section-5.7 tasks were not run before the API reshape landed. This is a roadmap exit requirement beyond the 232-ID catalog count. |
-| Acceptance templates — F17-07 / B61, B755 | [specs/milestones/m3.md:589](../../../../../specs/milestones/m3.md) and [specs/milestones/m4.md:837](../../../../../specs/milestones/m4.md) defer the missing cluster and add-on ledger templates until their first acceptance runs. |
-| Adapter schema cleanup — V2-15 / B431 | [specs/architecture.md:849](../../../../../specs/architecture.md) and [specs/milestones/backlog.md:792](../../../../../specs/milestones/backlog.md) retain bare nested mappings and an allowance for 29 undeclared entry-point reads. Rules and tests landed; the legacy cleanup did not. |
-| Ceph recapture identity live proof — B867 | [specs/milestones/backlog.md:2951](../../../../../specs/milestones/backlog.md) requires a live run to validate the chosen monitor-map creation-time invariant. This is follow-up debt discovered during remediation, not another original catalog finding. |
+| Shared-host teardown — B567 | [specs/substrates.md:297](../../../../specs/substrates.md) still states that removal does not enumerate host domains. [internal/substrate/libvirt/capability.go:575](../../../../internal/substrate/libvirt/capability.go) still derives quiescence from this context's Machines. Shared bridge reservations were added, but live foreign-domain checks remain unfinished. |
+| Context incarnation ownership — B568 | [specs/state-reconciliation.md:2150](../../../../specs/state-reconciliation.md) retains name-derived ownership for libvirt, emulated BMCs, services and artifact paths. The interim warning is implemented; persistent incarnation identity is not. |
+| Ceph recovery and online removal — B659, B662, B491 | [specs/milestones/m2.md:504](../../../../specs/milestones/m2.md) and [specs/milestones/m2.md:514](../../../../specs/milestones/m2.md) mark these Needs definition / not started. Partial enrollment and partial DB/WAL refuse; removal while hosts survive remains unsupported. Physical retirement with a covering erase policy already exists, so the original blanket claim of no backward exit was too broad. |
+| Restore seal-counter safety — B103 | [specs/contexts.md:862](../../../../specs/contexts.md) explicitly says rolled-back seal counters are not detected and a fresh encryption key is not established. The restore-boundary documentation is corrected; the protection is not implemented. |
+| Operator authoring-task validation — B857 | [specs/milestones/backlog.md:2934](../../../../specs/milestones/backlog.md) explicitly records that the eight section-5.7 tasks were not run before the API reshape landed. This is a roadmap exit requirement beyond the 232-ID catalog count. |
+| Acceptance templates — F17-07 / B61, B755 | [specs/milestones/m3.md:589](../../../../specs/milestones/m3.md) and [specs/milestones/m4.md:837](../../../../specs/milestones/m4.md) defer the missing cluster and add-on ledger templates until their first acceptance runs. |
+| Adapter schema cleanup — V2-15 / B431 | [specs/architecture.md:849](../../../../specs/architecture.md) and [specs/milestones/backlog.md:792](../../../../specs/milestones/backlog.md) retain bare nested mappings and an allowance for 29 undeclared entry-point reads. Rules and tests landed; the legacy cleanup did not. |
+| Ceph recapture identity live proof — B867 | [specs/milestones/backlog.md:2951](../../../../specs/milestones/backlog.md) requires a live run to validate the chosen monitor-map creation-time invariant. This is follow-up debt discovered during remediation, not another original catalog finding. |
 
-Two concrete spec contradictions remain: [specs/architecture.md:1159](../../../../../specs/architecture.md) still names removed `CephCluster.spec.type` as a selector (F06-01); and [specs/state-reconciliation.md:2106](../../../../../specs/state-reconciliation.md) promises GitOps bootstrap after every block reaching the cluster, while [specs/add-ons.md:74](../../../../../specs/add-ons.md) and [internal/reconciliation/lifecycle/stage_tails.go:31](../../../../../internal/reconciliation/lifecycle/stage_tails.go) limit the dependency to the same stage (F12-04).
+Two concrete spec contradictions remain: [specs/architecture.md:1159](../../../../specs/architecture.md) still names removed `CephCluster.spec.type` as a selector (F06-01); and [specs/state-reconciliation.md:2106](../../../../specs/state-reconciliation.md) promises GitOps bootstrap after every block reaching the cluster, while [specs/add-ons.md:74](../../../../specs/add-ons.md) and [internal/reconciliation/lifecycle/stage_tails.go:31](../../../../internal/reconciliation/lifecycle/stage_tails.go) limit the dependency to the same stage (F12-04).
 
 ### Quality at a glance
 
@@ -130,15 +130,15 @@ received a fresh independent code audit or a quality grade.
 
 | Findings sampled | Quality assessment and evidence | What the evidence does not establish |
 | --- | --- | --- |
-| F02-04, F03-01, F02-09, F03-07 | **Strong in-tree evidence.** [Catalog tests](../../../../../api/v1alpha1/catalog_docs_test.go) compare registered kinds with documentation and output order. `TestEveryUnionFollowsTheOneRule` in [union tests](../../../../../test/architecture/unions_test.go) rejects synthetic rule violations. [Enum](../../../../../test/architecture/enum_casing_test.go), [reference](../../../../../test/architecture/reference_suffix_test.go) and [scope](../../../../../api/v1alpha1/scope_test.go) guards reduce independent inventories and detect stale exceptions. | Structural consistency does not establish that the chosen model is easy to author. |
-| R2-05-01, F05-04, F05-09, R2-02-06, F16-01 | **Strong implementation of an honest availability boundary.** [Unrealized declaration tests](../../../../../cmd/bootwright/unrealized_linux_amd64_test.go) compare the table, warning identity/severity and actual plan refusal, with coverage of every listed declaration. [Unavailable-command tests](../../../../../cmd/bootwright/unavailable_commands_test.go) check stub wiring, failure status and diagnostics. | Clear warnings and refusals do not implement vSphere, reserved add-ons or custom playbooks. |
-| F03-02, F03-03, F04-01, R2-05-05, V2-02 | **Strong in-tree evidence.** [Compiler tests](../../../../../internal/desiredstate/compilation/compiler_test.go) check skipped-secret warnings and remedies. [Machine admission tests](../../../../../cmd/bootwright/machine_admission_test.go) check arm conflicts, derived defaults and authored overrides. [Entitlement-default tests](../../../../../internal/desiredstate/compilation/entitlement_defaults_test.go) verify that defaults do not introduce arms forbidden by the selected type. [Ceph normalization](../../../../../internal/storage/cephcluster/normalization.go) and [topology admission](../../../../../internal/storage/cephcluster/topology.go) implement the safe access default and native-mode refusal. | Synthetic declarations and catalogs do not qualify native providers. |
-| V2-19, F04-11 | **Strong in-tree evidence.** [Block identity tests](../../../../../internal/reconciliation/block_identity_test.go) exercise deterministic bounded identities and collision refusal naming both objects. One shared rule is more maintainable than service-specific name limits. | These tests do not prove every external service accepts every otherwise valid authored name. |
-| F05-06 | **Strong behavioral correction.** [Placement tests](../../../../../internal/containercluster/agentinstall/placement_test.go) freeze labels/taints, reject missing or changed completion evidence, preserve unrelated manager taints and ensure read-only diff reports a missing label without restoring it. [Evidence validation](../../../../../internal/containercluster/agentinstall/evidence.go) enforces the postcondition. | Synthetic evidence/runners do not establish native installation or live cluster acceptance. |
-| F03-05 | **Sound alternative, with qualified usability evidence.** [Origin tests](../../../../../cmd/bootwright/render_origins_linux_amd64_test.go) check text and JSON provenance; [schema-export tests](../../../../../cmd/bootwright/json_schema_linux_amd64_test.go) check examples, malformed input classes, defaults and bounded export size/depth. | The schema is deliberately advisory; it omits semantic constraints and uses an in-repository subset checker in its tests. General editor interoperability and operator task success are not demonstrated. |
-| F01-01, F03-01, F04-01, F05-03, F18-02 and the other explicit decisions | **Sound at accepted scope.** The [decision record](../../../../../specs/milestones/backlog.md#d183) makes retained service implementation fields, narrow substrate arms, family-specific kinds and other choices traceable. Existing guards enforce several of those choices. | Choosing a defensible alternative does not prove it is easier to use. B857 remains the relevant empirical exit, and retained/deferred functionality gains no implementation credit. |
+| F02-04, F03-01, F02-09, F03-07 | **Strong in-tree evidence.** [Catalog tests](../../../../api/v1alpha1/catalog_docs_test.go) compare registered kinds with documentation and output order. `TestEveryUnionFollowsTheOneRule` in [union tests](../../../../test/architecture/unions_test.go) rejects synthetic rule violations. [Enum](../../../../test/architecture/enum_casing_test.go), [reference](../../../../test/architecture/reference_suffix_test.go) and [scope](../../../../api/v1alpha1/scope_test.go) guards reduce independent inventories and detect stale exceptions. | Structural consistency does not establish that the chosen model is easy to author. |
+| R2-05-01, F05-04, F05-09, R2-02-06, F16-01 | **Strong implementation of an honest availability boundary.** [Unrealized declaration tests](../../../../cmd/bootwright/unrealized_linux_amd64_test.go) compare the table, warning identity/severity and actual plan refusal, with coverage of every listed declaration. [Unavailable-command tests](../../../../cmd/bootwright/unavailable_commands_test.go) check stub wiring, failure status and diagnostics. | Clear warnings and refusals do not implement vSphere, reserved add-ons or custom playbooks. |
+| F03-02, F03-03, F04-01, R2-05-05, V2-02 | **Strong in-tree evidence.** [Compiler tests](../../../../internal/desiredstate/compilation/compiler_test.go) check skipped-secret warnings and remedies. [Machine admission tests](../../../../cmd/bootwright/machine_admission_test.go) check arm conflicts, derived defaults and authored overrides. [Entitlement-default tests](../../../../internal/desiredstate/compilation/entitlement_defaults_test.go) verify that defaults do not introduce arms forbidden by the selected type. [Ceph normalization](../../../../internal/storage/cephcluster/normalization.go) and [topology admission](../../../../internal/storage/cephcluster/topology.go) implement the safe access default and native-mode refusal. | Synthetic declarations and catalogs do not qualify native providers. |
+| V2-19, F04-11 | **Strong in-tree evidence.** [Block identity tests](../../../../internal/reconciliation/block_identity_test.go) exercise deterministic bounded identities and collision refusal naming both objects. One shared rule is more maintainable than service-specific name limits. | These tests do not prove every external service accepts every otherwise valid authored name. |
+| F05-06 | **Strong behavioral correction.** [Placement tests](../../../../internal/containercluster/agentinstall/placement_test.go) freeze labels/taints, reject missing or changed completion evidence, preserve unrelated manager taints and ensure read-only diff reports a missing label without restoring it. [Evidence validation](../../../../internal/containercluster/agentinstall/evidence.go) enforces the postcondition. | Synthetic evidence/runners do not establish native installation or live cluster acceptance. |
+| F03-05 | **Sound alternative, with qualified usability evidence.** [Origin tests](../../../../cmd/bootwright/render_origins_linux_amd64_test.go) check text and JSON provenance; [schema-export tests](../../../../cmd/bootwright/json_schema_linux_amd64_test.go) check examples, malformed input classes, defaults and bounded export size/depth. | The schema is deliberately advisory; it omits semantic constraints and uses an in-repository subset checker in its tests. General editor interoperability and operator task success are not demonstrated. |
+| F01-01, F03-01, F04-01, F05-03, F18-02 and the other explicit decisions | **Sound at accepted scope.** The [decision record](../../../../specs/milestones/backlog.md#d183) makes retained service implementation fields, narrow substrate arms, family-specific kinds and other choices traceable. Existing guards enforce several of those choices. | Choosing a defensible alternative does not prove it is easier to use. B857 remains the relevant empirical exit, and retained/deferred functionality gains no implementation credit. |
 
-The main weakness is evidence of the user benefit: [B857](../../../../../specs/milestones/backlog.md#b857)
+The main weakness is evidence of the user benefit: [B857](../../../../specs/milestones/backlog.md#b857)
 explicitly records that the eight human/agent authoring tasks were not run
 before the API reshape landed. Contract consistency is demonstrated more
 strongly than usability. A quality-focused follow-up should execute those
@@ -149,24 +149,24 @@ claiming the API is simpler in practice.
 
 | Findings sampled | Quality assessment and evidence | Remaining limit |
 | --- | --- | --- |
-| F10-01, F10-02, F10-05 | **Strong in-tree evidence.** [Installer target-proof tests](../../../../../internal/managedos/installation/target_proof_test.go) execute the rendered Bash against synthetic sysfs and mocked device reads: wrong/missing disks, partitions, MAC mismatches and unreadable identity must stop before storage changes. [Power tests](../../../../../internal/machine/power/service_test.go) check refusal before runtime entry for unreadable proof, missing identity and the declared controller Machine, plus propagation of the adapter's controller-host refusal. | Executing the rendered proof is stronger than a text snapshot, but still uses synthetic hardware. The Anaconda proof does not establish the same inside-installer protection for OpenShift Agent; its [disk-safety limitation](../../../../../.agents/knowledge/openshift-agent-disk-safety.md) remains relevant. |
-| CX-R5, CX-X1, F09-02 | **Strong failure-oriented corrections.** [Inconclusive-removal tests](../../../../../internal/reconciliation/lifecycle/inconclusive_removal_test.go) retain unknown observations, prevent replacement registration and constrain reread/replay. [Disk-boot intent tests](../../../../../internal/managedos/installation/disk_boot_intent_test.go) model recovery before and after installation proof, material withdrawal, power-off and disk boot. [Registration tests](../../../../../internal/reconciliation/lifecycle/registration_test.go) exhaust apply budgets while preserving a working removal reserve. | [Adapter ordering tests](../../../../../ansible/collections/ansible_collections/bootwright/core/tests/unit/test_managedos_disk_boot_intent.py) inspect task structure; they do not execute an installer. In-tree recovery evidence is not a live failure drill. |
-| R2-02-01, F10-04, R2-06-01, R2-06-04, R2-06-06 | **Strong guards within their coordination boundary.** [Consumer-survival tests](../../../../../internal/reconciliation/lifecycle/consumer_survival_test.go) refuse before registration, probing or destruction. [Shared-claim tests](../../../../../internal/substrate/libvirt/shared_claims_test.go) and [system-claim tests](../../../../../internal/workspace/contextfs/system_claim_linux_amd64_test.go) cover bridge/BMC claims, interrupted removal and host aliases sharing a pinned key. | Claims coordinate the same store. [Libvirt host quiescence](../../../../../internal/substrate/libvirt/capability.go) still relies on this context's Machines; B567's foreign-domain discovery remains absent. This is a real guard, not complete shared-host safety. |
-| F13-07, F13-02, F13-06 | **Strong observable-state tests.** [Root filesystem tests](../../../../../internal/workspace/contextfs/root_filesystem_linux_amd64_test.go) refuse volatile filesystems before publication. [Context service tests](../../../../../internal/workspace/contexts/service_test.go) change evidence during confirmation and assert no write. [Controller-rebind tests](../../../../../internal/workspace/contextfs/controller_rebind_linux_amd64_test.go) check preserved bindings, copied-directory refusal and interruptions around durable rename. | Filesystem types are injected; reboot durability is not tested. Supported rebind is not general restore or arbitrary filesystem-identity recovery. |
-| F11-03, F11-08, F10-06 | **Precise trust and confidential-input boundaries.** [Enrollment tests](../../../../../internal/trust/enrollment/service_test.go) ensure missing unattended fingerprints and mismatched supplied fingerprints cannot be recorded. [Private URL tests](../../../../../internal/managedos/medialocal/url_file_test.go) bound input and prevent disclosure in errors. [Elevation tests](../../../../../internal/controller/privilege/elevation_test.go) refuse stdin-logging policy. [Authorization tests](../../../../../internal/reconciliation/lifecycle/authorization_test.go) prevent prompts, mutations and effects for stale/unbound data-loss tokens. | Deployed sudo/PAM policies are not exhaustively qualified. The documented distinction between keyring custody and material retained on a native host does not erase that material on abandonment. |
-| R2-04-08 | **Good implementation safeguards; native identity assumption not yet demonstrated.** [Produced-identity tests](../../../../../internal/secrets/localkeyring/produced_identity_linux_amd64_test.go) check retention, invalid/unproved identity refusal and unchanged storage. [Ceph module tests](../../../../../ansible/collections/ansible_collections/bootwright/core/tests/unit/plugins/module_utils/test_ceph_core.py) validate timestamps, FSID matching and evidence shape. | The tests fabricate monitor-map timestamps. They do not prove stability through membership changes/upgrades or a change on same-FSID rebootstrap. B867 explicitly owns that live experiment. |
+| F10-01, F10-02, F10-05 | **Strong in-tree evidence.** [Installer target-proof tests](../../../../internal/managedos/installation/target_proof_test.go) execute the rendered Bash against synthetic sysfs and mocked device reads: wrong/missing disks, partitions, MAC mismatches and unreadable identity must stop before storage changes. [Power tests](../../../../internal/machine/power/service_test.go) check refusal before runtime entry for unreadable proof, missing identity and the declared controller Machine, plus propagation of the adapter's controller-host refusal. | Executing the rendered proof is stronger than a text snapshot, but still uses synthetic hardware. The Anaconda proof does not establish the same inside-installer protection for OpenShift Agent; its [disk-safety limitation](../../../../.agents/knowledge/openshift-agent-disk-safety.md) remains relevant. |
+| CX-R5, CX-X1, F09-02 | **Strong failure-oriented corrections.** [Inconclusive-removal tests](../../../../internal/reconciliation/lifecycle/inconclusive_removal_test.go) retain unknown observations, prevent replacement registration and constrain reread/replay. [Disk-boot intent tests](../../../../internal/managedos/installation/disk_boot_intent_test.go) model recovery before and after installation proof, material withdrawal, power-off and disk boot. [Registration tests](../../../../internal/reconciliation/lifecycle/registration_test.go) exhaust apply budgets while preserving a working removal reserve. | [Adapter ordering tests](../../../../ansible/collections/ansible_collections/bootwright/core/tests/unit/test_managedos_disk_boot_intent.py) inspect task structure; they do not execute an installer. In-tree recovery evidence is not a live failure drill. |
+| R2-02-01, F10-04, R2-06-01, R2-06-04, R2-06-06 | **Strong guards within their coordination boundary.** [Consumer-survival tests](../../../../internal/reconciliation/lifecycle/consumer_survival_test.go) refuse before registration, probing or destruction. [Shared-claim tests](../../../../internal/substrate/libvirt/shared_claims_test.go) and [system-claim tests](../../../../internal/workspace/contextfs/system_claim_linux_amd64_test.go) cover bridge/BMC claims, interrupted removal and host aliases sharing a pinned key. | Claims coordinate the same store. [Libvirt host quiescence](../../../../internal/substrate/libvirt/capability.go) still relies on this context's Machines; B567's foreign-domain discovery remains absent. This is a real guard, not complete shared-host safety. |
+| F13-07, F13-02, F13-06 | **Strong observable-state tests.** [Root filesystem tests](../../../../internal/workspace/contextfs/root_filesystem_linux_amd64_test.go) refuse volatile filesystems before publication. [Context service tests](../../../../internal/workspace/contexts/service_test.go) change evidence during confirmation and assert no write. [Controller-rebind tests](../../../../internal/workspace/contextfs/controller_rebind_linux_amd64_test.go) check preserved bindings, copied-directory refusal and interruptions around durable rename. | Filesystem types are injected; reboot durability is not tested. Supported rebind is not general restore or arbitrary filesystem-identity recovery. |
+| F11-03, F11-08, F10-06 | **Precise trust and confidential-input boundaries.** [Enrollment tests](../../../../internal/trust/enrollment/service_test.go) ensure missing unattended fingerprints and mismatched supplied fingerprints cannot be recorded. [Private URL tests](../../../../internal/managedos/medialocal/url_file_test.go) bound input and prevent disclosure in errors. [Elevation tests](../../../../internal/controller/privilege/elevation_test.go) refuse stdin-logging policy. [Authorization tests](../../../../internal/reconciliation/lifecycle/authorization_test.go) prevent prompts, mutations and effects for stale/unbound data-loss tokens. | Deployed sudo/PAM policies are not exhaustively qualified. The documented distinction between keyring custody and material retained on a native host does not erase that material on abandonment. |
+| R2-04-08 | **Good implementation safeguards; native identity assumption not yet demonstrated.** [Produced-identity tests](../../../../internal/secrets/localkeyring/produced_identity_linux_amd64_test.go) check retention, invalid/unproved identity refusal and unchanged storage. [Ceph module tests](../../../../ansible/collections/ansible_collections/bootwright/core/tests/unit/plugins/module_utils/test_ceph_core.py) validate timestamps, FSID matching and evidence shape. | The tests fabricate monitor-map timestamps. They do not prove stability through membership changes/upgrades or a change on same-FSID rebootstrap. B867 explicitly owns that live experiment. |
 
 Three addressed findings especially need a different quality judgment from
 the implemented guards above:
 
 | Finding | Quality of the delivered work | Protection still absent and consequence |
 | --- | --- | --- |
-| F10-03 | **Sound interim documentation.** [Ownership wording](../../../../../specs/state-reconciliation.md) states the name-derived identity boundary and carries B568. | Persistent incarnation identity is absent; recreating a context with the same name does not gain the stronger ownership separation the original safety concern sought. |
-| CX-R4 | **Sound restore-boundary clarification.** [Context restore documentation](../../../../../specs/contexts.md) identifies the matching-whole-store boundary, no supported restore command, and B103. | Rolled-back seal counters are not detected and a fresh encryption key is not established. Honest disclosure does not supply rollback protection. |
-| CX-API04 | **Sound correction of an overbroad claim and explicit recovery limits.** [Ceph lifecycle](../../../../../specs/ceph.md) distinguishes erase-backed physical retirement from the unsupported paths. | B659/B662 still own partial enrollment and DB/WAL recovery; B491 owns removal while hosts survive. These are material recovery limitations, despite closure of the documentation finding. |
+| F10-03 | **Sound interim documentation.** [Ownership wording](../../../../specs/state-reconciliation.md) states the name-derived identity boundary and carries B568. | Persistent incarnation identity is absent; recreating a context with the same name does not gain the stronger ownership separation the original safety concern sought. |
+| CX-R4 | **Sound restore-boundary clarification.** [Context restore documentation](../../../../specs/contexts.md) identifies the matching-whole-store boundary, no supported restore command, and B103. | Rolled-back seal counters are not detected and a fresh encryption key is not established. Honest disclosure does not supply rollback protection. |
+| CX-API04 | **Sound correction of an overbroad claim and explicit recovery limits.** [Ceph lifecycle](../../../../specs/ceph.md) distinguishes erase-backed physical retirement from the unsupported paths. | B659/B662 still own partial enrollment and DB/WAL recovery; B491 owns removal while hosts survive. These are material recovery limitations, despite closure of the documentation finding. |
 
 The five explicit safety decisions (F09-01, F13-05, R2-03-01, R2-06-02 and
-V2-05) are traceable in the [owner decision](../../../../../specs/milestones/backlog.md#d183).
+V2-05) are traceable in the [owner decision](../../../../specs/milestones/backlog.md#d183).
 Their quality is decision clarity: whole-removal refusal, bounded retained
 runtime recovery, no removal content-digest comparison and claim release on
 acknowledged abandonment remain deliberate limits. They are not additional
@@ -176,22 +176,22 @@ implemented protections or proof of indefinite offline recovery.
 
 | Findings sampled | Quality assessment and evidence | Remaining limit |
 | --- | --- | --- |
-| F06-03, F06-07, F18-04 | **Strong reduction of coupling.** [Retirement contracts](../../../../../internal/managedos/installation/contracts.go) and [composition](../../../../../cmd/bootwright/wiring_reconciliation.go) support multiple policies; [erase tests](../../../../../internal/managedos/installation/erase_test.go) require both installation and erase to wait for two injected policies. [Identity-owner checks](../../../../../test/architecture/implementation_identity_test.go) discover constants, reject forbidden comparisons and stale allowances; the migration allowlist is empty. | The AST check recognizes particular references and exempts legitimate owners/composition. It cannot prove all business policy resides in the right component. |
-| F06-06 | **Strong shared-contract evidence.** [Capability tests](../../../../../cmd/bootwright/capability_contract_test.go) cover every offered binding plus a synthetic double, reject missing suite coverage, and check deterministic effect-free planning, frozen removal requests, malformed/foreign evidence, failure outcomes and replay. The known-deviation map is empty. [Second-storage tests](../../../../../internal/environment/second_storage_implementation_test.go) demonstrate membership-based admission with a different layout. | The second storage implementation is synthetic. Scripted-runner replay checks identical requests, not native idempotence; cancellation uses an already-cancelled context rather than every interruption timing. |
-| R2-01-01 through R2-01-06 | **Strong targeted graph corrections.** [Edge-catalog tests](../../../../../cmd/bootwright/edge_catalog_linux_amd64_test.go) compare requirements in both directions. [Selection tests](../../../../../internal/environment/selection_closure_test.go) cover both replication ends, exclusion of unrelated scope, omitted roots and nested hosts. [KubeVirt nested tests](../../../../../internal/substrate/kubevirt/nested_test.go) check hosted prerequisites and their absence for external hosts. | The catalog test plans examples and skips individual capabilities whose plan errors. Fixtures do not enumerate every admissible graph or demonstrate a live nested deployment. |
-| F08-01, F08-06, F08-07, V2-14 | **Good responsibility boundaries with explicit exceptions.** [Python-site tests](../../../../../ansible/collections/ansible_collections/bootwright/core/tests/unit/test_python_sites.py) detect copied process/serialization owners, aliases and stale exceptions. [Entry-point tests](../../../../../ansible/collections/ansible_collections/bootwright/core/tests/unit/test_playbook_entry_points.py) use Ansible's loader to check validation is first and reject undeclared imports. | Standalone-worker exceptions and eight later-play task allowances remain. [Language-row tests](../../../../../test/architecture/language_rows_test.go) classify files/extensions/shebangs; they do not determine whether business logic belongs in that language. V2-15's adapter schema debt remains partial in the original review. |
-| F14-01, F14-02, F14-12, V2-11 | **Strong tests of enforcement failure behavior.** [Focus-tool tests](../../../../../scripts/tools/focus_test.py) preserve flaky outcomes, distinguish other exit-75 failures and exercise termination, interruption and deadlines. [Guidance tests](../../../../../test/architecture/docs_test.go) reject missing/orphan skill wrappers and compare effectful-command ask rules with the catalog. | Repository rules cannot guarantee agent compliance. The stop hook is intentionally advisory and runtime-specific. |
-| R2-03-03 | **Useful, bounded change discipline.** [Commit checks](../../../../../scripts/check-commits) require a contract decision and corresponding changed goldens when a content digest moves. | The tool cannot determine whether an author's `Contract: unchanged` judgment is semantically true. Independent review remains necessary. |
-| F06-04, F06-05, F06-09, F06-10, F06-11 | **Sound design guidance.** [Architecture](../../../../../specs/architecture.md) distinguishes typed variants, implementations and specializations and names the extension touch set. [Specialization tests](../../../../../test/architecture/version_specializations_test.go) discover unlisted registries and test discovery failures. | Choosing the correct mechanism still requires design judgment; a catalog guard does not establish the suitability of every specialization. |
+| F06-03, F06-07, F18-04 | **Strong reduction of coupling.** [Retirement contracts](../../../../internal/managedos/installation/contracts.go) and [composition](../../../../cmd/bootwright/wiring_reconciliation.go) support multiple policies; [erase tests](../../../../internal/managedos/installation/erase_test.go) require both installation and erase to wait for two injected policies. [Identity-owner checks](../../../../test/architecture/implementation_identity_test.go) discover constants, reject forbidden comparisons and stale allowances; the migration allowlist is empty. | The AST check recognizes particular references and exempts legitimate owners/composition. It cannot prove all business policy resides in the right component. |
+| F06-06 | **Strong shared-contract evidence.** [Capability tests](../../../../cmd/bootwright/capability_contract_test.go) cover every offered binding plus a synthetic double, reject missing suite coverage, and check deterministic effect-free planning, frozen removal requests, malformed/foreign evidence, failure outcomes and replay. The known-deviation map is empty. [Second-storage tests](../../../../internal/environment/second_storage_implementation_test.go) demonstrate membership-based admission with a different layout. | The second storage implementation is synthetic. Scripted-runner replay checks identical requests, not native idempotence; cancellation uses an already-cancelled context rather than every interruption timing. |
+| R2-01-01 through R2-01-06 | **Strong targeted graph corrections.** [Edge-catalog tests](../../../../cmd/bootwright/edge_catalog_linux_amd64_test.go) compare requirements in both directions. [Selection tests](../../../../internal/environment/selection_closure_test.go) cover both replication ends, exclusion of unrelated scope, omitted roots and nested hosts. [KubeVirt nested tests](../../../../internal/substrate/kubevirt/nested_test.go) check hosted prerequisites and their absence for external hosts. | The catalog test plans examples and skips individual capabilities whose plan errors. Fixtures do not enumerate every admissible graph or demonstrate a live nested deployment. |
+| F08-01, F08-06, F08-07, V2-14 | **Good responsibility boundaries with explicit exceptions.** [Python-site tests](../../../../ansible/collections/ansible_collections/bootwright/core/tests/unit/test_python_sites.py) detect copied process/serialization owners, aliases and stale exceptions. [Entry-point tests](../../../../ansible/collections/ansible_collections/bootwright/core/tests/unit/test_playbook_entry_points.py) use Ansible's loader to check validation is first and reject undeclared imports. | Standalone-worker exceptions and eight later-play task allowances remain. [Language-row tests](../../../../test/architecture/language_rows_test.go) classify files/extensions/shebangs; they do not determine whether business logic belongs in that language. V2-15's adapter schema debt remains partial in the original review. |
+| F14-01, F14-02, F14-12, V2-11 | **Strong tests of enforcement failure behavior.** [Focus-tool tests](../../../../scripts/tools/focus_test.py) preserve flaky outcomes, distinguish other exit-75 failures and exercise termination, interruption and deadlines. [Guidance tests](../../../../test/architecture/docs_test.go) reject missing/orphan skill wrappers and compare effectful-command ask rules with the catalog. | Repository rules cannot guarantee agent compliance. The stop hook is intentionally advisory and runtime-specific. |
+| R2-03-03 | **Useful, bounded change discipline.** [Commit checks](../../../../scripts/check-commits) require a contract decision and corresponding changed goldens when a content digest moves. | The tool cannot determine whether an author's `Contract: unchanged` judgment is semantically true. Independent review remains necessary. |
+| F06-04, F06-05, F06-09, F06-10, F06-11 | **Sound design guidance.** [Architecture](../../../../specs/architecture.md) distinguishes typed variants, implementations and specializations and names the extension touch set. [Specialization tests](../../../../test/architecture/version_specializations_test.go) discover unlisted registries and test discovery failures. | Choosing the correct mechanism still requires design judgment; a catalog guard does not establish the suitability of every specialization. |
 
 ### Documentation, ownership and delivery records
 
 | Findings sampled | Quality assessment and evidence | Remaining limit |
 | --- | --- | --- |
-| F15-01, F15-07, F15-08 | **Strong enforcement of bounded navigation.** [Documentation gates](../../../../../test/architecture/docs_gates_test.go) exercise too-large sections, overly generous exceptions, missing pages, unreachable specs and added delivery-history references using seeded violations. [Entry budgets](../../../../../test/architecture/docs_test.go) bound the pages and openings read routinely. | Existing large sections and history references remain under explicit ratchets. The quality review did not reproduce the historical task-token experiment; these gates do not measure comprehension. |
-| F17-03, F15-06, V2-12, F15-10 | **Sound and testable organization.** [Milestone checks](../../../../../test/architecture/milestones_test.go) reject inconsistent active slices, missing authorizing decisions and WIP violations. [Decision checks](../../../../../test/architecture/milestones_decisions_test.go) detect missing status tokens and inconsistent pending-clause lists; decision-link tests require the individual anchor. | Structural consistency cannot verify that a delivery claim reflects real acceptance. Keeping the decision log in the backlog is an explicit choice, not a failure to perform the rejected split. |
-| F05-08, F15-03, F15-09, F16-03, V2-08, V2-16 | **Sound at accepted scope.** The [Ceph API](../../../../../specs/api/ceph.md) routes fields to their owner; the [historical review](../../../../../specs/storage-api-review.md) is labeled; [CLI help](../../../../../specs/cli/commands.md#help-content) has a normative owner; [substrate contracts](../../../../../specs/substrates.md) refer to code-owned version symbols instead of stale literals. | These corrections reduce drift but do not prove complete deduplication. The original remaining findings still identify stale selector wording, GitOps ordering contradictions and incomplete page conventions. |
-| R2-02-05, F01-02, F01-04 | **Sound clarification of qualification and ownership.** [Substrate qualification](../../../../../specs/substrates.md#qualification) distinguishes accepted evidence from unrun gates. [Project scope](../../../../../specs/project.md) clarifies retained ownership and future lifecycle work. | A qualification row is not a new acceptance run; clear retained-ownership wording is not an implemented ownership-transfer mechanism. |
+| F15-01, F15-07, F15-08 | **Strong enforcement of bounded navigation.** [Documentation gates](../../../../test/architecture/docs_gates_test.go) exercise too-large sections, overly generous exceptions, missing pages, unreachable specs and added delivery-history references using seeded violations. [Entry budgets](../../../../test/architecture/docs_test.go) bound the pages and openings read routinely. | Existing large sections and history references remain under explicit ratchets. The quality review did not reproduce the historical task-token experiment; these gates do not measure comprehension. |
+| F17-03, F15-06, V2-12, F15-10 | **Sound and testable organization.** [Milestone checks](../../../../test/architecture/milestones_test.go) reject inconsistent active slices, missing authorizing decisions and WIP violations. [Decision checks](../../../../test/architecture/milestones_decisions_test.go) detect missing status tokens and inconsistent pending-clause lists; decision-link tests require the individual anchor. | Structural consistency cannot verify that a delivery claim reflects real acceptance. Keeping the decision log in the backlog is an explicit choice, not a failure to perform the rejected split. |
+| F05-08, F15-03, F15-09, F16-03, V2-08, V2-16 | **Sound at accepted scope.** The [Ceph API](../../../../specs/api/ceph.md) routes fields to their owner; the [historical review](../../../../specs/storage-api-review.md) is labeled; [CLI help](../../../../specs/cli/commands.md#help-content) has a normative owner; [substrate contracts](../../../../specs/substrates.md) refer to code-owned version symbols instead of stale literals. | These corrections reduce drift but do not prove complete deduplication. The original remaining findings still identify stale selector wording, GitOps ordering contradictions and incomplete page conventions. |
+| R2-02-05, F01-02, F01-04 | **Sound clarification of qualification and ownership.** [Substrate qualification](../../../../specs/substrates.md#qualification) distinguishes accepted evidence from unrun gates. [Project scope](../../../../specs/project.md) clarifies retained ownership and future lifecycle work. | A qualification row is not a new acceptance run; clear retained-ownership wording is not an implemented ownership-transfer mechanism. |
 
 The original audit's interpretation of an earlier scope decision was also
 corrected in X160. Checking such counterevidence is good review practice:
@@ -229,7 +229,7 @@ and the deferred safety and validation work named in the executive summary.
 This plan is part of the consolidated follow-up report. The work
 packages below are proposed implementation units, not active slices or
 permission to run effects. Their W and A labels are local to this plan.
-[Milestones](../../../../../specs/milestones.md#scope-rules) remain the authority
+[Milestones](../../../../specs/milestones.md#scope-rules) remain the authority
 for delivery state and authorization. The 29 explicit owner dispositions in
 the review remain settled unless the owner changes them.
 
@@ -286,7 +286,7 @@ choice should name the relevant B/X items and amend the owning spec.
 
 #### W01 — Prove shared-host network quiescence
 
-**Carrier:** [B567](../../../../../specs/milestones/backlog.md#b567).
+**Carrier:** [B567](../../../../specs/milestones/backlog.md#b567).
 **Owner:** Substrate, with State reconciliation. **Class:** safety.
 **Ready after:** A1 and a named safety slice.
 
@@ -300,7 +300,7 @@ cannot lock an operator's independent libvirt client.
 
 Primary touch points: `internal/substrate/libvirt/capability.go`, the
 `substrate_libvirt_host` role and shared substrate modules, the owning
-[removal contract](../../../../../specs/substrates.md#provider-host-realization).
+[removal contract](../../../../specs/substrates.md#provider-host-realization).
 **Exit:** tests prove an unreadable inventory, running foreign guest, stopped
 foreign guest under A1, and continuation all refuse without a destructive
 call; an unused owned network removes successfully. A deliberate guard
@@ -309,7 +309,7 @@ on an explicitly authorized emulated host before recording live acceptance.
 
 #### W02 — Give owned resources a persistent context incarnation
 
-**Carrier:** [B568](../../../../../specs/milestones/backlog.md#b568).
+**Carrier:** [B568](../../../../specs/milestones/backlog.md#b568).
 **Owners:** Workspace, Substrate, Infrastructure services and Managed OS.
 **Class:** safety. **Ready after:** W01 and A2; co-design with W06.
 
@@ -333,7 +333,7 @@ changed effect. Keep the existing orphan warning until the full path qualifies.
 
 #### W03 — Continue partially enrolled Ceph clusters
 
-**Carrier:** [B659](../../../../../specs/milestones/m2.md#b659).
+**Carrier:** [B659](../../../../specs/milestones/m2.md#b659).
 **Owner:** Storage. **Class:** safety because recovery changes effect proofs.
 **Ready after:** A3 and the applicable identity contract from W02.
 
@@ -352,7 +352,7 @@ artifacts; the item stays awaiting acceptance until that evidence is accepted.
 
 #### W04 — Provide a supported partial-OSD recovery exit
 
-**Carrier:** [B662](../../../../../specs/milestones/m2.md#b662).
+**Carrier:** [B662](../../../../specs/milestones/m2.md#b662).
 **Owners:** Storage and device ownership. **Class:** safety.
 **Ready after:** A4 and the agreed receipt/device identity contracts.
 
@@ -372,7 +372,7 @@ supported recovery claim closes.
 
 #### W05 — Remove owned storage while hosts survive
 
-**Carrier:** [B491](../../../../../specs/milestones/m2.md#b491).
+**Carrier:** [B491](../../../../specs/milestones/m2.md#b491).
 **Owners:** Storage and State reconciliation. **Class:** safety.
 **Ready after:** A5 and applicable W02/W04 proofs; use existing online ordering.
 
@@ -392,7 +392,7 @@ consumer-retirement rehearsals; each family records its own acceptance scope.
 
 #### W06 — Restore complete stores without reusing rolled-back seal state
 
-**Carrier:** [B103](../../../../../specs/milestones/backlog.md#b103).
+**Carrier:** [B103](../../../../specs/milestones/backlog.md#b103).
 **Owners:** Workspace and Secrets. **Class:** safety.
 **Ready after:** A2/A6 and a named restore definition; W02 defines logical identity.
 
@@ -417,7 +417,7 @@ contract and its operator gate; improving a warning alone cannot close B103.
 **Findings:** F02-01, F02-06, F06-01, F06-12, F12-04.
 **Owners:** Architecture, Machine, Add-ons and State reconciliation.
 **Carrier:** new bounded documentation item; coordinate the adjacent
-[B884](../../../../../specs/milestones/m4.md#b884) corrections without marking it done
+[B884](../../../../specs/milestones/m4.md#b884) corrections without marking it done
 unless both of its stated defects are fixed.
 
 Replace the obsolete Ceph selector, finish the BMC wording, define add-on,
@@ -434,7 +434,7 @@ such as a selector schema path; do not add string-matching tests for prose edits
 #### W08 — Complete the adapter schemas covered by the audit
 
 **Finding:** V2-15. **Carrier:** the argument-schema portion of
-[B431](../../../../../specs/milestones/backlog.md#b431).
+[B431](../../../../specs/milestones/backlog.md#b431).
 **Owners:** each affected adapter. **Class:** enabling unless behavior changes.
 
 Declare the request members and auxiliary digest/scratch variables entry points
@@ -558,8 +558,8 @@ gates and a focused before/after review, not new tests that mirror sentences.
 #### W15 — Supply acceptance templates and truthful example status
 
 **Findings:** F17-07 and R2-05-08.
-**Carriers:** template clauses of [B61](../../../../../specs/milestones/m3.md#b61)
-and [B755](../../../../../specs/milestones/m4.md#b755); a new example-index item if needed.
+**Carriers:** template clauses of [B61](../../../../specs/milestones/m3.md#b61)
+and [B755](../../../../specs/milestones/m4.md#b755); a new example-index item if needed.
 **Owners:** Verification documentation, Container cluster and Add-ons.
 
 Add the two blank row templates from the existing gate requirements now, and
@@ -576,7 +576,7 @@ projection's consistency check. B61/B755 remain awaiting their operator gates.
 
 #### W16 — Run the eight authoring tasks and act on the results
 
-**Carrier:** [B857](../../../../../specs/milestones/backlog.md#b857).
+**Carrier:** [B857](../../../../specs/milestones/backlog.md#b857).
 **Owner:** Desired state and operator experience.
 **Ready after:** baseline preparation; repeat after approved W10–W13 changes.
 
@@ -597,7 +597,7 @@ decide A7, and rerun affected tasks against the final implemented shape.
 #### W17 — Complete access-credential semantics with the vSphere arm
 
 **Finding:** R2-04-01 remainder.
-**Carrier:** [B99](../../../../../specs/milestones/m1.md#b99).
+**Carrier:** [B99](../../../../specs/milestones/m1.md#b99).
 **Owners:** Substrate and Secrets. **Class:** safety for binding/rebind behavior.
 
 Specify `credentialsRef` as access material in the deferred arm now; preserve
@@ -615,7 +615,7 @@ The audit finding remains partial until those runtime conditions are delivered.
 
 #### W18 — Qualify Ceph recapture identity on native artifacts
 
-**Carrier:** [B867](../../../../../specs/milestones/backlog.md#b867).
+**Carrier:** [B867](../../../../specs/milestones/backlog.md#b867).
 **Owner:** Storage. **Ready after:** an explicitly authorized disposable live
 cluster and an agreed evidence procedure.
 
@@ -662,7 +662,7 @@ These do not change the review's 232-finding count.
 
 For each promoted package, record the outcome and any owner decisions in its
 owning milestone before implementation. Use a task worktree and coherent
-commits under [code implementation](../../../../../.agents/skills/code-implementation/SKILL.md).
+commits under [code implementation](../../../../.agents/skills/code-implementation/SKILL.md).
 Read the owning spec and symptom-indexed knowledge; verify current paths and
 line references against the implementation baseline rather than copying this
 snapshot's line numbers blindly.
@@ -754,7 +754,7 @@ gate separately from the earlier evidence above.
 | F02-03 | Low | Partial | Undefined JSON members are now explained, but a plan node is still called a step in presentation and a block in lifecycle; the recommended single block terminology was not adopted. B824 narrowed its implementation work to the groups member. | specs/cli/output.md:241-242,281-288 |
 | F02-05 | Low | Addressed | Infrastructure service and substrate meanings are explicit; stage is infrastructure-services, with retired-token refusal. | specs/glossary.md:20-26; internal/cli/catalog_test.go:21; specs/milestones/delivered.md:8785 |
 | F02-06 | Low | Partial | Authored-add-on refusal wording changed, but add-on is still defined narrowly as ClusterAddon in one owner page and includes built-in packages in the API page. No shared Add-on/Package/Instance glossary definitions as recommended. | specs/add-ons.md:3-5; specs/api/addons.md:4-7; specs/glossary.md:7-78 |
-| F02-07 | Low | Addressed | Overloaded qualified forms now have owner links in a standalone glossary. Audit narrative permits keeping the full ~40-term table in the audit; not all forty terms need copying. | specs/glossary.md:35-78; audits/specs/001/report-final.md:409 |
+| F02-07 | Low | Addressed | Overloaded qualified forms now have owner links in a standalone glossary. Audit narrative permits keeping the full ~40-term table in the audit; not all forty terms need copying. | specs/glossary.md:35-78; audits/001-spec/report-final.md:409 |
 | F02-09 | Low | Explicit decision | Naming/Ref rules exist and tests passed; D183 Q105 chose lowerCamel instead of recommended kebab-case. | specs/api.md:354-371; test/architecture/enum_casing_test.go:71; test/architecture/reference_suffix_test.go:66 |
 | F02-12 | Low | Explicit decision | Roles removed; lifecycle and add-on capability senses qualified. D183 Q105 chose lowerCamel tokens. | specs/glossary.md:51-57; specs/api/machines.md:326-332; specs/api.md:360-363 |
 | F05-05 | Low | Explicit decision | D183 Q107 renamed export to CephConsumer, retaining storage principal / package consumer decomposition. | specs/api/ceph.md:82-83; specs/milestones/delivered.md:8730-8734 |
@@ -1978,7 +1978,7 @@ Its data agrees with the human checklist above.
       "title": "The glossary defines seven terms but not the most overloaded core terms",
       "section": "S4",
       "status": "resolved",
-      "evidence": "specs/glossary.md:35-78; audits/specs/001/report-final.md:409",
+      "evidence": "specs/glossary.md:35-78; audits/001-spec/report-final.md:409",
       "remaining": "Overloaded qualified forms now have owner links in a standalone glossary. Audit narrative permits keeping the full ~40-term table in the audit; not all forty terms need copying."
     },
     {

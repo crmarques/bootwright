@@ -8520,7 +8520,7 @@ matrix acceptance and M2d/M2e's physical/stretch gates remain open.
 **Item:** B592 (opened on 2026-10-14 by the X91 audit). **Kind:** enabling.
 **Owners:** Architecture and Agent guidance. Delivered on 2026-10-26 at the
 owner's request to apply the
-[2026-10-26 spec audit](../../audits/specs/001/report-final.md) to the specs and
+[2026-10-26 spec audit](../../audits/001-spec/report-final.md) to the specs and
 skills and to park the rest of its roadmap.
 
 The specs, glossary and skills now state what the code does where they had
@@ -9764,9 +9764,9 @@ lab-kubevirt input and runbook are prepared and validated, with no live claim.
 prepare an implementation plan and preserve the review).
 **Kind:** enabling. **Owners:** Architecture and Agent guidance.
 
-The [dated review](../../audits/specs/001/follow-up/001/report-codex.md), its
+The [dated review](../../audits/001-spec/follow-up/001/report-codex.md), its
 232-finding ledger and the
-[implementation plan](../../audits/specs/001/follow-up/001/report-codex.md)
+[implementation plan](../../audits/001-spec/follow-up/001/report-codex.md)
 are preserved together. The plan maps all 18 incomplete catalog findings and
 the eight carried safety or validation items to proposed work packages,
 dependencies, required decisions and exit evidence. Existing milestone items
@@ -9784,9 +9784,9 @@ No product behavior or contract changes.
 evaluate the quality of the addressed audit work).
 **Kind:** enabling. **Owners:** Architecture and Agent guidance.
 
-The [follow-up report](../../audits/specs/001/follow-up/001/report-codex.md) now
+The [follow-up report](../../audits/001-spec/follow-up/001/report-codex.md) now
 summarizes remediation quality and links a
-[detailed assessment](../../audits/specs/001/follow-up/001/report-codex.md).
+[detailed assessment](../../audits/001-spec/follow-up/001/report-codex.md).
 It distinguishes implementation and failure-path regression evidence from
 accepted decisions, interim documentation and unrun operational qualification.
 All 214 addressed or decision entries received catalog-level consideration;
@@ -9805,7 +9805,7 @@ adopt the reorganized audit directory and improve the follow-up format).
 
 The [audit convention](../../audits/README.md) adopts one numbered directory
 per topic and one undated follow-up directory. The
-[specification audit archive](../../audits/specs/001/README.md) retains its
+[specification audit archive](../../audits/001-spec/README.md) retains its
 source reports and now has one human report for disposition, quality,
 remaining work and verification; the plan, structured ledger and evidence
 remain separate. Local audit guidance makes the convention discoverable.
@@ -9823,7 +9823,7 @@ No product behavior, contract or milestone implementation state changes.
 unify all follow-up content in one named report).
 **Kind:** enabling. **Owners:** Architecture and Agent guidance.
 
-The [Codex follow-up](../../audits/specs/001/follow-up/001/report-codex.md)
+The [Codex follow-up](../../audits/001-spec/follow-up/001/report-codex.md)
 contains the assessment, implementation plan, complete findings, embedded
 structured ledger and verbatim retained check output. The specification audit
 uses the requested `specs` topic directory; navigation and the
@@ -9842,7 +9842,7 @@ check whether every audit finding was really addressed and to evaluate the
 quality of that work). **Kind:** enabling. **Owners:** Architecture and Agent
 guidance.
 
-The [Claude follow-up](../../audits/specs/001/follow-up/001/report-claude.md)
+The [Claude follow-up](../../audits/001-spec/follow-up/001/report-claude.md)
 reassesses all 232 findings at `896e8d8f2`, independently of the Codex
 follow-up: 174 closed, 19 closed by an owner decision, 35 partial, 2 carried by
 open items and 2 missing, with 24 confirmed defects in the remediation itself.
@@ -9857,7 +9857,7 @@ compare the Claude and Codex follow-ups, consolidate them and plan the
 remaining work). **Kind:** enabling. **Owners:** Architecture and Agent
 guidance.
 
-The [consolidated follow-up](../../audits/specs/001/follow-up/001/report-final.md)
+The [consolidated follow-up](../../audits/001-spec/follow-up/001/report-final.md)
 gives each of the 232 findings one final disposition, reconciling the two
 reviewers by fresh checks at `896e8d8f2`: 171 closed, 19 closed by an owner
 decision, 38 partial, 2 carried by open items and 2 missing. It names the
@@ -9869,7 +9869,7 @@ answered here. No product behavior, contract or item state changes.
 ### X214 — Signed media URLs off the argument vector
 
 **Item:** B958 (opened and delivered on 2026-10-29 by package P1 of the
-[consolidated follow-up](../../audits/specs/001/follow-up/001/report-final.md),
+[consolidated follow-up](../../audits/001-spec/follow-up/001/report-final.md),
 finding F11-08). **Kind:** safety. **Owners:** CLI and Managed OS.
 
 `media add --from-url` refuses a URL carrying any query, a bare `?` included,

@@ -2935,7 +2935,7 @@ adding a retry that conceals a live owner.
 **Owner:** Desired state. **Kind:** enabling. **Requires:** none.
 **Definition:** Specified. B814's Work 5 named the operator-task check of
 section 5.7 of the
-[2026-10-26 spec audit](../../audits/specs/001/report-final.md); X171 landed the
+[2026-10-26 spec audit](../../audits/001-spec/report-final.md); X171 landed the
 reshaped API without it. **Outcome:** the eight tasks of that section (declare
 an environment from an empty directory, fix a wrong-class reference, predict an
 omitted field's effective value, select an unsupported implementation, narrow
@@ -3117,7 +3117,7 @@ the six rows.
 
 ## Audit remediation (2026-10-26)
 
-The [2026-10-26 spec audit](../../audits/specs/001/report-final.md) ordered its
+The [2026-10-26 spec audit](../../audits/001-spec/report-final.md) ordered its
 recommendations into a roadmap (its section 14). Slice X160 corrected the
 specs and skills where no owner decision or code was needed; every remaining
 recommendation is parked above as [B800](delivered.md#x161--audit-lane-a-harness-and-guards) to [B836](delivered.md#x164--audit-lane-e-store-durability-and-controller-records), one item per
@@ -3207,7 +3207,7 @@ to `merged (X<n>)`, and fast-forward main. Pushing waits for the owner.
 Questions for the owner, numbered after M4a's Q61. The owner answered Q62 to
 Q118 on 2026-10-26 ([D183](#d183)); each answer is applied by the item it
 blocks. Q119 to Q134 come from the
-[consolidated follow-up 001](../../audits/specs/001/follow-up/001/report-final.md)
+[consolidated follow-up 001](../../audits/001-spec/follow-up/001/report-final.md)
 and are open; an answer that adopts new work opens its item.
 
 | ID | Question | Options | Recommendation | Blocks | Status |

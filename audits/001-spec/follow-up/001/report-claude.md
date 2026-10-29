@@ -50,7 +50,7 @@ Consequential remaining work, in order of consequence:
 
 1. **F17-03 (High, partial).** The Active slices table and its two-way
    checker make authorization decidable, but D168's own text says M2c is
-   paused ([backlog.md D168](../../../../../specs/milestones/backlog.md#d168),
+   paused ([backlog.md D168](../../../../specs/milestones/backlog.md#d168),
    last paragraph) while `specs/milestones/m2.md:231` and the X160 record say
    D168 "pauses no lane", and `specs/milestones.md:33` lists X61 in progress.
    The checker cannot represent a paused slice. The owner must say which
@@ -256,7 +256,7 @@ in-tree contract holds; it does not mean live acceptance.
 ## 4. Implementation plan
 
 The plan authorizes nothing by itself. Each package lands as its own commit
-under [code-implementation](../../../../../.agents/skills/code-implementation/SKILL.md),
+under [code-implementation](../../../../.agents/skills/code-implementation/SKILL.md),
 recorded as a milestone item that its Refs line names. Owner-decision packages
 produce a question with options and a recommendation, never an edit that
 presumes the answer.
@@ -545,7 +545,7 @@ Generated from the verifier and reviewer results for assessed commit `896e8d8f2`
 <details><summary>Ledger JSON: 232 findings and 26 new-defect claims (24 confirmed)</summary>
 
 ```json
-{"audit": "audits/specs/001/report-final.md", "follow_up": "001", "reviewer": "claude", "assessed_commit": "896e8d8f2", "audited_baseline": "17acb63d9", "date": "2026-10-29",
+{"audit": "audits/001-spec/report-final.md", "follow_up": "001", "reviewer": "claude", "assessed_commit": "896e8d8f2", "audited_baseline": "17acb63d9", "date": "2026-10-29",
 "findings":[
 {"id": "F01-01", "severity": "Medium", "section": "S3 Objectives, scope and domain", "title": "Portfolio and family scope are one list; milestone completion needs family arms", "roadmap_step": "P1-H", "carrier": "B815", "disposition": "closed-by-decision", "quality": "good", "delivered_by": ["X173 70486c470"], "open_carrier": null, "evidence": ["specs/project.md:20-47 'committed portfolio' (each entry links a milestone) and 'extension envelope'; 'Only the owner promotes an envelope entry into the portfolio; no session clause does'", "specs/milestones/backlog.md:3182 Q89 answered by D183: (a) two labelled lists, 'no milestone page changes'; (b) moving M1f/M3f out is 'a separate owner option'", "specs/milestones/delivered.md:8893-8905 (X173) records the split"], "remaining": "The audit acceptance clause 'M3 exit tier and M1 item table no longer require vSphere' is deliberately not met: vSphere is placed in the committed list (project.md:26-27), so M1f/M3f still gate M1/M3 (specs/milestones/m3.md:39-41). Only an owner decision superseding D158 (Q89 b/c) changes that.", "note": "Confirmed independently; no milestone page holds an OKD/oss/redhat item that gates completion. The two-list split is faithful to the owner's Q89(a) and the envelope entries (OKD, non-RHEL OS, managed LB, cross-arm clusters) point at parked B-items. The audit's deeper concern (family arms gating portfolio completion) is consciously left to a later owner choice and is recorded as such.", "reviewed_by": ["verifier", "closure-review"]},
 {"id": "F01-02", "severity": "Medium", "section": "S3 Objectives, scope and domain", "title": "GitOps handoff leaves Bootwright-owned resources with no day-2 owner or exit", "roadmap_step": "P1-H", "carrier": "B815", "disposition": "closed", "quality": "adequate", "delivered_by": ["X173 70486c470"], "open_carrier": "B106", "evidence": ["specs/project.md:~76-84 defines 'Downstream day-2 resources are those that no owned-object evidence lists', states an owned object 'stays as applied and a change to it is a destroy followed by a fresh apply', links B106", "specs/add-ons.md:420-427 repeats the frozen stance, cites D153/B106 and links project.md#lifecycle-and-handoff", "specs/state-reconciliation.md:2095-2101 links the project handoff rule"], "remaining": "", "note": "Substance holds; one literal acceptance link is missing, so adequate rather than good. Picks option (c) with a definition, links it from both consuming pages and parks options (a)/(b) in an existing parked item that now names the audit finding. Matches the arbiter acceptance (defines term, states frozen stance, links D153 and B106).", "reviewed_by": ["verifier", "closure-review"]},
@@ -814,12 +814,12 @@ Generated from the verifier and reviewer results for assessed commit `896e8d8f2`
 
 ### 7.2 Full gate output
 
-Command: `GOTMPDIR=$HOME/.cache/gotmp TMPDIR=$HOME/.cache/gotmp make -C <clean worktree at 896e8d8f2> check`, run 2026-10-29; exit status appended by the wrapper as the last line. Verbatim except that trailing spaces are removed from lines, as the repository whitespace check requires.
+Command: `GOTMPDIR=$HOME/.cache/gotmp TMPDIR=$HOME/.cache/gotmp make -C <clean worktree at 896e8d8f2> check`, run 2026-10-29; exit status appended by the wrapper as the last line. Verbatim except that trailing spaces are removed from lines, as the repository whitespace check requires, and local checkout/cache prefixes were replaced with `<audit-checkout>` and `<local-cache>` during the 2026-10-29 archive relocation.
 
 <details><summary>make check output (exit 0)</summary>
 
 ```text
-make: Entering directory '/home/crmarques/projects/gitops-workspace/bootwright-worktrees/fu-001-gate'
+make: Entering directory '<audit-checkout>'
 ./scripts/go mod verify
 all modules verified
 ./scripts/go -C scripts/tools mod verify
@@ -942,205 +942,205 @@ Use '-show verbose' for more details.
 ./scripts/ansible-check
 [WARNING]: Could not match supplied host pattern, ignoring: bootwright_target
 
-playbook: /home/crmarques/projects/gitops-workspace/bootwright-worktrees/fu-001-gate/ansible/collections/ansible_collections/bootwright/core/playbooks/addons/instance_apply.yml
+playbook: <audit-checkout>/ansible/collections/ansible_collections/bootwright/core/playbooks/addons/instance_apply.yml
 [WARNING]: Could not match supplied host pattern, ignoring: bootwright_target
 
-playbook: /home/crmarques/projects/gitops-workspace/bootwright-worktrees/fu-001-gate/ansible/collections/ansible_collections/bootwright/core/playbooks/addons/instance_observe.yml
+playbook: <audit-checkout>/ansible/collections/ansible_collections/bootwright/core/playbooks/addons/instance_observe.yml
 [WARNING]: Could not match supplied host pattern, ignoring: bootwright_target
 [WARNING]: Could not match supplied host pattern, ignoring: bootwright_nodes
 
-playbook: /home/crmarques/projects/gitops-workspace/bootwright-worktrees/fu-001-gate/ansible/collections/ansible_collections/bootwright/core/playbooks/containercluster/install_apply.yml
+playbook: <audit-checkout>/ansible/collections/ansible_collections/bootwright/core/playbooks/containercluster/install_apply.yml
 [WARNING]: Could not match supplied host pattern, ignoring: bootwright_target
 
-playbook: /home/crmarques/projects/gitops-workspace/bootwright-worktrees/fu-001-gate/ansible/collections/ansible_collections/bootwright/core/playbooks/containercluster/install_destroy.yml
+playbook: <audit-checkout>/ansible/collections/ansible_collections/bootwright/core/playbooks/containercluster/install_destroy.yml
 [WARNING]: Could not match supplied host pattern, ignoring: bootwright_target
 
-playbook: /home/crmarques/projects/gitops-workspace/bootwright-worktrees/fu-001-gate/ansible/collections/ansible_collections/bootwright/core/playbooks/containercluster/install_observe.yml
+playbook: <audit-checkout>/ansible/collections/ansible_collections/bootwright/core/playbooks/containercluster/install_observe.yml
 [WARNING]: Could not match supplied host pattern, ignoring: bootwright_target
 
-playbook: /home/crmarques/projects/gitops-workspace/bootwright-worktrees/fu-001-gate/ansible/collections/ansible_collections/bootwright/core/playbooks/containercluster/media_apply.yml
+playbook: <audit-checkout>/ansible/collections/ansible_collections/bootwright/core/playbooks/containercluster/media_apply.yml
 [WARNING]: Could not match supplied host pattern, ignoring: bootwright_target
 
-playbook: /home/crmarques/projects/gitops-workspace/bootwright-worktrees/fu-001-gate/ansible/collections/ansible_collections/bootwright/core/playbooks/containercluster/media_destroy.yml
+playbook: <audit-checkout>/ansible/collections/ansible_collections/bootwright/core/playbooks/containercluster/media_destroy.yml
 [WARNING]: Could not match supplied host pattern, ignoring: bootwright_target
 
-playbook: /home/crmarques/projects/gitops-workspace/bootwright-worktrees/fu-001-gate/ansible/collections/ansible_collections/bootwright/core/playbooks/containercluster/media_observe.yml
+playbook: <audit-checkout>/ansible/collections/ansible_collections/bootwright/core/playbooks/containercluster/media_observe.yml
 [WARNING]: Could not match supplied host pattern, ignoring: bootwright_target
 
-playbook: /home/crmarques/projects/gitops-workspace/bootwright-worktrees/fu-001-gate/ansible/collections/ansible_collections/bootwright/core/playbooks/containercluster/network_apply.yml
+playbook: <audit-checkout>/ansible/collections/ansible_collections/bootwright/core/playbooks/containercluster/network_apply.yml
 [WARNING]: Could not match supplied host pattern, ignoring: bootwright_target
 
-playbook: /home/crmarques/projects/gitops-workspace/bootwright-worktrees/fu-001-gate/ansible/collections/ansible_collections/bootwright/core/playbooks/containercluster/network_observe.yml
+playbook: <audit-checkout>/ansible/collections/ansible_collections/bootwright/core/playbooks/containercluster/network_observe.yml
 
-playbook: /home/crmarques/projects/gitops-workspace/bootwright-worktrees/fu-001-gate/ansible/collections/ansible_collections/bootwright/core/playbooks/controller/setup.yml
+playbook: <audit-checkout>/ansible/collections/ansible_collections/bootwright/core/playbooks/controller/setup.yml
 [WARNING]: Could not match supplied host pattern, ignoring: bootwright_target
 
-playbook: /home/crmarques/projects/gitops-workspace/bootwright-worktrees/fu-001-gate/ansible/collections/ansible_collections/bootwright/core/playbooks/infrastructureservices/artifact_server_apply.yml
+playbook: <audit-checkout>/ansible/collections/ansible_collections/bootwright/core/playbooks/infrastructureservices/artifact_server_apply.yml
 [WARNING]: Could not match supplied host pattern, ignoring: bootwright_target
 
-playbook: /home/crmarques/projects/gitops-workspace/bootwright-worktrees/fu-001-gate/ansible/collections/ansible_collections/bootwright/core/playbooks/infrastructureservices/artifact_server_destroy.yml
+playbook: <audit-checkout>/ansible/collections/ansible_collections/bootwright/core/playbooks/infrastructureservices/artifact_server_destroy.yml
 [WARNING]: Could not match supplied host pattern, ignoring: bootwright_target
 
-playbook: /home/crmarques/projects/gitops-workspace/bootwright-worktrees/fu-001-gate/ansible/collections/ansible_collections/bootwright/core/playbooks/infrastructureservices/artifact_server_observe.yml
+playbook: <audit-checkout>/ansible/collections/ansible_collections/bootwright/core/playbooks/infrastructureservices/artifact_server_observe.yml
 [WARNING]: Could not match supplied host pattern, ignoring: bootwright_target
 
-playbook: /home/crmarques/projects/gitops-workspace/bootwright-worktrees/fu-001-gate/ansible/collections/ansible_collections/bootwright/core/playbooks/infrastructureservices/dns_server_apply.yml
+playbook: <audit-checkout>/ansible/collections/ansible_collections/bootwright/core/playbooks/infrastructureservices/dns_server_apply.yml
 [WARNING]: Could not match supplied host pattern, ignoring: bootwright_target
 
-playbook: /home/crmarques/projects/gitops-workspace/bootwright-worktrees/fu-001-gate/ansible/collections/ansible_collections/bootwright/core/playbooks/infrastructureservices/dns_server_destroy.yml
+playbook: <audit-checkout>/ansible/collections/ansible_collections/bootwright/core/playbooks/infrastructureservices/dns_server_destroy.yml
 [WARNING]: Could not match supplied host pattern, ignoring: bootwright_target
 
-playbook: /home/crmarques/projects/gitops-workspace/bootwright-worktrees/fu-001-gate/ansible/collections/ansible_collections/bootwright/core/playbooks/infrastructureservices/dns_server_observe.yml
+playbook: <audit-checkout>/ansible/collections/ansible_collections/bootwright/core/playbooks/infrastructureservices/dns_server_observe.yml
 [WARNING]: Could not match supplied host pattern, ignoring: bootwright_target
 
-playbook: /home/crmarques/projects/gitops-workspace/bootwright-worktrees/fu-001-gate/ansible/collections/ansible_collections/bootwright/core/playbooks/infrastructureservices/ntp_server_apply.yml
+playbook: <audit-checkout>/ansible/collections/ansible_collections/bootwright/core/playbooks/infrastructureservices/ntp_server_apply.yml
 [WARNING]: Could not match supplied host pattern, ignoring: bootwright_target
 
-playbook: /home/crmarques/projects/gitops-workspace/bootwright-worktrees/fu-001-gate/ansible/collections/ansible_collections/bootwright/core/playbooks/infrastructureservices/ntp_server_destroy.yml
+playbook: <audit-checkout>/ansible/collections/ansible_collections/bootwright/core/playbooks/infrastructureservices/ntp_server_destroy.yml
 [WARNING]: Could not match supplied host pattern, ignoring: bootwright_target
 
-playbook: /home/crmarques/projects/gitops-workspace/bootwright-worktrees/fu-001-gate/ansible/collections/ansible_collections/bootwright/core/playbooks/infrastructureservices/ntp_server_observe.yml
+playbook: <audit-checkout>/ansible/collections/ansible_collections/bootwright/core/playbooks/infrastructureservices/ntp_server_observe.yml
 [WARNING]: Could not match supplied host pattern, ignoring: bootwright_target
 
-playbook: /home/crmarques/projects/gitops-workspace/bootwright-worktrees/fu-001-gate/ansible/collections/ansible_collections/bootwright/core/playbooks/infrastructureservices/proxy_apply.yml
+playbook: <audit-checkout>/ansible/collections/ansible_collections/bootwright/core/playbooks/infrastructureservices/proxy_apply.yml
 [WARNING]: Could not match supplied host pattern, ignoring: bootwright_target
 
-playbook: /home/crmarques/projects/gitops-workspace/bootwright-worktrees/fu-001-gate/ansible/collections/ansible_collections/bootwright/core/playbooks/infrastructureservices/proxy_destroy.yml
+playbook: <audit-checkout>/ansible/collections/ansible_collections/bootwright/core/playbooks/infrastructureservices/proxy_destroy.yml
 [WARNING]: Could not match supplied host pattern, ignoring: bootwright_target
 
-playbook: /home/crmarques/projects/gitops-workspace/bootwright-worktrees/fu-001-gate/ansible/collections/ansible_collections/bootwright/core/playbooks/infrastructureservices/proxy_observe.yml
+playbook: <audit-checkout>/ansible/collections/ansible_collections/bootwright/core/playbooks/infrastructureservices/proxy_observe.yml
 [WARNING]: Could not match supplied host pattern, ignoring: bootwright_target
 
-playbook: /home/crmarques/projects/gitops-workspace/bootwright-worktrees/fu-001-gate/ansible/collections/ansible_collections/bootwright/core/playbooks/machine/power.yml
+playbook: <audit-checkout>/ansible/collections/ansible_collections/bootwright/core/playbooks/machine/power.yml
 [WARNING]: Could not match supplied host pattern, ignoring: bootwright_target
 
-playbook: /home/crmarques/projects/gitops-workspace/bootwright-worktrees/fu-001-gate/ansible/collections/ansible_collections/bootwright/core/playbooks/machine/power_read.yml
+playbook: <audit-checkout>/ansible/collections/ansible_collections/bootwright/core/playbooks/machine/power_read.yml
 [WARNING]: Could not match supplied host pattern, ignoring: bootwright_target
 
-playbook: /home/crmarques/projects/gitops-workspace/bootwright-worktrees/fu-001-gate/ansible/collections/ansible_collections/bootwright/core/playbooks/managedos/erase_destroy.yml
+playbook: <audit-checkout>/ansible/collections/ansible_collections/bootwright/core/playbooks/managedos/erase_destroy.yml
 [WARNING]: Could not match supplied host pattern, ignoring: bootwright_target
 
-playbook: /home/crmarques/projects/gitops-workspace/bootwright-worktrees/fu-001-gate/ansible/collections/ansible_collections/bootwright/core/playbooks/managedos/erase_observe.yml
+playbook: <audit-checkout>/ansible/collections/ansible_collections/bootwright/core/playbooks/managedos/erase_observe.yml
 [WARNING]: Could not match supplied host pattern, ignoring: bootwright_target
 
-playbook: /home/crmarques/projects/gitops-workspace/bootwright-worktrees/fu-001-gate/ansible/collections/ansible_collections/bootwright/core/playbooks/managedos/install_apply.yml
+playbook: <audit-checkout>/ansible/collections/ansible_collections/bootwright/core/playbooks/managedos/install_apply.yml
 [WARNING]: Could not match supplied host pattern, ignoring: bootwright_target
 
-playbook: /home/crmarques/projects/gitops-workspace/bootwright-worktrees/fu-001-gate/ansible/collections/ansible_collections/bootwright/core/playbooks/managedos/install_destroy.yml
+playbook: <audit-checkout>/ansible/collections/ansible_collections/bootwright/core/playbooks/managedos/install_destroy.yml
 [WARNING]: Could not match supplied host pattern, ignoring: bootwright_target
 
-playbook: /home/crmarques/projects/gitops-workspace/bootwright-worktrees/fu-001-gate/ansible/collections/ansible_collections/bootwright/core/playbooks/managedos/install_observe.yml
+playbook: <audit-checkout>/ansible/collections/ansible_collections/bootwright/core/playbooks/managedos/install_observe.yml
 [WARNING]: Could not match supplied host pattern, ignoring: bootwright_target
 
-playbook: /home/crmarques/projects/gitops-workspace/bootwright-worktrees/fu-001-gate/ansible/collections/ansible_collections/bootwright/core/playbooks/managedos/tree_apply.yml
+playbook: <audit-checkout>/ansible/collections/ansible_collections/bootwright/core/playbooks/managedos/tree_apply.yml
 [WARNING]: Could not match supplied host pattern, ignoring: bootwright_target
 
-playbook: /home/crmarques/projects/gitops-workspace/bootwright-worktrees/fu-001-gate/ansible/collections/ansible_collections/bootwright/core/playbooks/managedos/tree_destroy.yml
+playbook: <audit-checkout>/ansible/collections/ansible_collections/bootwright/core/playbooks/managedos/tree_destroy.yml
 [WARNING]: Could not match supplied host pattern, ignoring: bootwright_target
 
-playbook: /home/crmarques/projects/gitops-workspace/bootwright-worktrees/fu-001-gate/ansible/collections/ansible_collections/bootwright/core/playbooks/managedos/tree_observe.yml
+playbook: <audit-checkout>/ansible/collections/ansible_collections/bootwright/core/playbooks/managedos/tree_observe.yml
 [WARNING]: Could not match supplied host pattern, ignoring: bootwright_target
 
-playbook: /home/crmarques/projects/gitops-workspace/bootwright-worktrees/fu-001-gate/ansible/collections/ansible_collections/bootwright/core/playbooks/storage/core_apply.yml
+playbook: <audit-checkout>/ansible/collections/ansible_collections/bootwright/core/playbooks/storage/core_apply.yml
 [WARNING]: Could not match supplied host pattern, ignoring: bootwright_target
 
-playbook: /home/crmarques/projects/gitops-workspace/bootwright-worktrees/fu-001-gate/ansible/collections/ansible_collections/bootwright/core/playbooks/storage/core_destroy.yml
+playbook: <audit-checkout>/ansible/collections/ansible_collections/bootwright/core/playbooks/storage/core_destroy.yml
 [WARNING]: Could not match supplied host pattern, ignoring: bootwright_target
 
-playbook: /home/crmarques/projects/gitops-workspace/bootwright-worktrees/fu-001-gate/ansible/collections/ansible_collections/bootwright/core/playbooks/storage/core_observe.yml
+playbook: <audit-checkout>/ansible/collections/ansible_collections/bootwright/core/playbooks/storage/core_observe.yml
 [WARNING]: Could not match supplied host pattern, ignoring: bootwright_target
 
-playbook: /home/crmarques/projects/gitops-workspace/bootwright-worktrees/fu-001-gate/ansible/collections/ansible_collections/bootwright/core/playbooks/storage/export_apply.yml
+playbook: <audit-checkout>/ansible/collections/ansible_collections/bootwright/core/playbooks/storage/export_apply.yml
 [WARNING]: Could not match supplied host pattern, ignoring: bootwright_target
 
-playbook: /home/crmarques/projects/gitops-workspace/bootwright-worktrees/fu-001-gate/ansible/collections/ansible_collections/bootwright/core/playbooks/storage/export_observe.yml
+playbook: <audit-checkout>/ansible/collections/ansible_collections/bootwright/core/playbooks/storage/export_observe.yml
 [WARNING]: Could not match supplied host pattern, ignoring: bootwright_target
 
-playbook: /home/crmarques/projects/gitops-workspace/bootwright-worktrees/fu-001-gate/ansible/collections/ansible_collections/bootwright/core/playbooks/storage/host_apply.yml
+playbook: <audit-checkout>/ansible/collections/ansible_collections/bootwright/core/playbooks/storage/host_apply.yml
 [WARNING]: Could not match supplied host pattern, ignoring: bootwright_target
 
-playbook: /home/crmarques/projects/gitops-workspace/bootwright-worktrees/fu-001-gate/ansible/collections/ansible_collections/bootwright/core/playbooks/storage/host_destroy.yml
+playbook: <audit-checkout>/ansible/collections/ansible_collections/bootwright/core/playbooks/storage/host_destroy.yml
 [WARNING]: Could not match supplied host pattern, ignoring: bootwright_target
 
-playbook: /home/crmarques/projects/gitops-workspace/bootwright-worktrees/fu-001-gate/ansible/collections/ansible_collections/bootwright/core/playbooks/storage/host_observe.yml
+playbook: <audit-checkout>/ansible/collections/ansible_collections/bootwright/core/playbooks/storage/host_observe.yml
 [WARNING]: Could not match supplied host pattern, ignoring: bootwright_target
 
-playbook: /home/crmarques/projects/gitops-workspace/bootwright-worktrees/fu-001-gate/ansible/collections/ansible_collections/bootwright/core/playbooks/storage/image_apply.yml
+playbook: <audit-checkout>/ansible/collections/ansible_collections/bootwright/core/playbooks/storage/image_apply.yml
 [WARNING]: Could not match supplied host pattern, ignoring: bootwright_target
 
-playbook: /home/crmarques/projects/gitops-workspace/bootwright-worktrees/fu-001-gate/ansible/collections/ansible_collections/bootwright/core/playbooks/storage/image_destroy.yml
+playbook: <audit-checkout>/ansible/collections/ansible_collections/bootwright/core/playbooks/storage/image_destroy.yml
 [WARNING]: Could not match supplied host pattern, ignoring: bootwright_target
 
-playbook: /home/crmarques/projects/gitops-workspace/bootwright-worktrees/fu-001-gate/ansible/collections/ansible_collections/bootwright/core/playbooks/storage/image_observe.yml
+playbook: <audit-checkout>/ansible/collections/ansible_collections/bootwright/core/playbooks/storage/image_observe.yml
 [WARNING]: Could not match supplied host pattern, ignoring: bootwright_target
 
-playbook: /home/crmarques/projects/gitops-workspace/bootwright-worktrees/fu-001-gate/ansible/collections/ansible_collections/bootwright/core/playbooks/storage/replication_apply.yml
+playbook: <audit-checkout>/ansible/collections/ansible_collections/bootwright/core/playbooks/storage/replication_apply.yml
 [WARNING]: Could not match supplied host pattern, ignoring: bootwright_target
 
-playbook: /home/crmarques/projects/gitops-workspace/bootwright-worktrees/fu-001-gate/ansible/collections/ansible_collections/bootwright/core/playbooks/storage/replication_destroy.yml
+playbook: <audit-checkout>/ansible/collections/ansible_collections/bootwright/core/playbooks/storage/replication_destroy.yml
 [WARNING]: Could not match supplied host pattern, ignoring: bootwright_target
 
-playbook: /home/crmarques/projects/gitops-workspace/bootwright-worktrees/fu-001-gate/ansible/collections/ansible_collections/bootwright/core/playbooks/storage/replication_observe.yml
+playbook: <audit-checkout>/ansible/collections/ansible_collections/bootwright/core/playbooks/storage/replication_observe.yml
 [WARNING]: Could not match supplied host pattern, ignoring: bootwright_target
 
-playbook: /home/crmarques/projects/gitops-workspace/bootwright-worktrees/fu-001-gate/ansible/collections/ansible_collections/bootwright/core/playbooks/storage/smb_apply.yml
+playbook: <audit-checkout>/ansible/collections/ansible_collections/bootwright/core/playbooks/storage/smb_apply.yml
 [WARNING]: Could not match supplied host pattern, ignoring: bootwright_target
 
-playbook: /home/crmarques/projects/gitops-workspace/bootwright-worktrees/fu-001-gate/ansible/collections/ansible_collections/bootwright/core/playbooks/storage/smb_destroy.yml
+playbook: <audit-checkout>/ansible/collections/ansible_collections/bootwright/core/playbooks/storage/smb_destroy.yml
 [WARNING]: Could not match supplied host pattern, ignoring: bootwright_target
 
-playbook: /home/crmarques/projects/gitops-workspace/bootwright-worktrees/fu-001-gate/ansible/collections/ansible_collections/bootwright/core/playbooks/storage/smb_observe.yml
+playbook: <audit-checkout>/ansible/collections/ansible_collections/bootwright/core/playbooks/storage/smb_observe.yml
 [WARNING]: Could not match supplied host pattern, ignoring: bootwright_target
 
-playbook: /home/crmarques/projects/gitops-workspace/bootwright-worktrees/fu-001-gate/ansible/collections/ansible_collections/bootwright/core/playbooks/substrate/baremetal_machine_apply.yml
+playbook: <audit-checkout>/ansible/collections/ansible_collections/bootwright/core/playbooks/substrate/baremetal_machine_apply.yml
 [WARNING]: Could not match supplied host pattern, ignoring: bootwright_target
 
-playbook: /home/crmarques/projects/gitops-workspace/bootwright-worktrees/fu-001-gate/ansible/collections/ansible_collections/bootwright/core/playbooks/substrate/baremetal_machine_destroy.yml
+playbook: <audit-checkout>/ansible/collections/ansible_collections/bootwright/core/playbooks/substrate/baremetal_machine_destroy.yml
 [WARNING]: Could not match supplied host pattern, ignoring: bootwright_target
 
-playbook: /home/crmarques/projects/gitops-workspace/bootwright-worktrees/fu-001-gate/ansible/collections/ansible_collections/bootwright/core/playbooks/substrate/baremetal_machine_observe.yml
+playbook: <audit-checkout>/ansible/collections/ansible_collections/bootwright/core/playbooks/substrate/baremetal_machine_observe.yml
 [WARNING]: Could not match supplied host pattern, ignoring: bootwright_target
 
-playbook: /home/crmarques/projects/gitops-workspace/bootwright-worktrees/fu-001-gate/ansible/collections/ansible_collections/bootwright/core/playbooks/substrate/kubevirt_host_apply.yml
+playbook: <audit-checkout>/ansible/collections/ansible_collections/bootwright/core/playbooks/substrate/kubevirt_host_apply.yml
 [WARNING]: Could not match supplied host pattern, ignoring: bootwright_target
 
-playbook: /home/crmarques/projects/gitops-workspace/bootwright-worktrees/fu-001-gate/ansible/collections/ansible_collections/bootwright/core/playbooks/substrate/kubevirt_host_destroy.yml
+playbook: <audit-checkout>/ansible/collections/ansible_collections/bootwright/core/playbooks/substrate/kubevirt_host_destroy.yml
 [WARNING]: Could not match supplied host pattern, ignoring: bootwright_target
 
-playbook: /home/crmarques/projects/gitops-workspace/bootwright-worktrees/fu-001-gate/ansible/collections/ansible_collections/bootwright/core/playbooks/substrate/kubevirt_host_lend.yml
+playbook: <audit-checkout>/ansible/collections/ansible_collections/bootwright/core/playbooks/substrate/kubevirt_host_lend.yml
 [WARNING]: Could not match supplied host pattern, ignoring: bootwright_target
 
-playbook: /home/crmarques/projects/gitops-workspace/bootwright-worktrees/fu-001-gate/ansible/collections/ansible_collections/bootwright/core/playbooks/substrate/kubevirt_host_observe.yml
+playbook: <audit-checkout>/ansible/collections/ansible_collections/bootwright/core/playbooks/substrate/kubevirt_host_observe.yml
 [WARNING]: Could not match supplied host pattern, ignoring: bootwright_target
 
-playbook: /home/crmarques/projects/gitops-workspace/bootwright-worktrees/fu-001-gate/ansible/collections/ansible_collections/bootwright/core/playbooks/substrate/kubevirt_machine_apply.yml
+playbook: <audit-checkout>/ansible/collections/ansible_collections/bootwright/core/playbooks/substrate/kubevirt_machine_apply.yml
 [WARNING]: Could not match supplied host pattern, ignoring: bootwright_target
 
-playbook: /home/crmarques/projects/gitops-workspace/bootwright-worktrees/fu-001-gate/ansible/collections/ansible_collections/bootwright/core/playbooks/substrate/kubevirt_machine_destroy.yml
+playbook: <audit-checkout>/ansible/collections/ansible_collections/bootwright/core/playbooks/substrate/kubevirt_machine_destroy.yml
 [WARNING]: Could not match supplied host pattern, ignoring: bootwright_target
 
-playbook: /home/crmarques/projects/gitops-workspace/bootwright-worktrees/fu-001-gate/ansible/collections/ansible_collections/bootwright/core/playbooks/substrate/kubevirt_machine_observe.yml
+playbook: <audit-checkout>/ansible/collections/ansible_collections/bootwright/core/playbooks/substrate/kubevirt_machine_observe.yml
 [WARNING]: Could not match supplied host pattern, ignoring: bootwright_target
 
-playbook: /home/crmarques/projects/gitops-workspace/bootwright-worktrees/fu-001-gate/ansible/collections/ansible_collections/bootwright/core/playbooks/substrate/libvirt_host_apply.yml
+playbook: <audit-checkout>/ansible/collections/ansible_collections/bootwright/core/playbooks/substrate/libvirt_host_apply.yml
 [WARNING]: Could not match supplied host pattern, ignoring: bootwright_target
 
-playbook: /home/crmarques/projects/gitops-workspace/bootwright-worktrees/fu-001-gate/ansible/collections/ansible_collections/bootwright/core/playbooks/substrate/libvirt_host_destroy.yml
+playbook: <audit-checkout>/ansible/collections/ansible_collections/bootwright/core/playbooks/substrate/libvirt_host_destroy.yml
 [WARNING]: Could not match supplied host pattern, ignoring: bootwright_target
 
-playbook: /home/crmarques/projects/gitops-workspace/bootwright-worktrees/fu-001-gate/ansible/collections/ansible_collections/bootwright/core/playbooks/substrate/libvirt_host_observe.yml
+playbook: <audit-checkout>/ansible/collections/ansible_collections/bootwright/core/playbooks/substrate/libvirt_host_observe.yml
 [WARNING]: Could not match supplied host pattern, ignoring: bootwright_target
 
-playbook: /home/crmarques/projects/gitops-workspace/bootwright-worktrees/fu-001-gate/ansible/collections/ansible_collections/bootwright/core/playbooks/substrate/libvirt_machine_apply.yml
+playbook: <audit-checkout>/ansible/collections/ansible_collections/bootwright/core/playbooks/substrate/libvirt_machine_apply.yml
 [WARNING]: Could not match supplied host pattern, ignoring: bootwright_target
 
-playbook: /home/crmarques/projects/gitops-workspace/bootwright-worktrees/fu-001-gate/ansible/collections/ansible_collections/bootwright/core/playbooks/substrate/libvirt_machine_destroy.yml
+playbook: <audit-checkout>/ansible/collections/ansible_collections/bootwright/core/playbooks/substrate/libvirt_machine_destroy.yml
 [WARNING]: Could not match supplied host pattern, ignoring: bootwright_target
 
-playbook: /home/crmarques/projects/gitops-workspace/bootwright-worktrees/fu-001-gate/ansible/collections/ansible_collections/bootwright/core/playbooks/substrate/libvirt_machine_observe.yml
+playbook: <audit-checkout>/ansible/collections/ansible_collections/bootwright/core/playbooks/substrate/libvirt_machine_observe.yml
 WARNING  Directory expansion discovered 701 file(s). If this is more than expected, use 'exclude_paths' in your ansible-lint configuration to narrow the scope. See: https://docs.ansible.com/projects/lint/configuring/
-WARNING  /home/crmarques/projects/gitops-workspace/bootwright/.cache/ansible-check/venv/lib/python3.13/site-packages/ansible/parsing/plugin_docs.py:75 AnsibleWarning Building documentation, failed to assign id for <ast.Tuple object at 0x7f3bbd2b90d0> on /home/crmarques/projects/gitops-workspace/bootwright-worktrees/fu-001-gate/ansible/collections/ansible_collections/bootwright/core/tests/unit/plugins/modules/test_redfish_firmware.py, skipping
-WARNING  /home/crmarques/projects/gitops-workspace/bootwright/.cache/ansible-check/venv/lib/python3.13/site-packages/ansible/parsing/plugin_docs.py:75 AnsibleWarning Building documentation, failed to assign id for <ast.Tuple object at 0x7f3bbd2b8a90> on /home/crmarques/projects/gitops-workspace/bootwright-worktrees/fu-001-gate/ansible/collections/ansible_collections/bootwright/core/tests/unit/plugins/modules/test_redfish_firmware.py, skipping
+WARNING  <local-cache>/ansible-check/venv/lib/python3.13/site-packages/ansible/parsing/plugin_docs.py:75 AnsibleWarning Building documentation, failed to assign id for <ast.Tuple object at 0x7f3bbd2b90d0> on <audit-checkout>/ansible/collections/ansible_collections/bootwright/core/tests/unit/plugins/modules/test_redfish_firmware.py, skipping
+WARNING  <local-cache>/ansible-check/venv/lib/python3.13/site-packages/ansible/parsing/plugin_docs.py:75 AnsibleWarning Building documentation, failed to assign id for <ast.Tuple object at 0x7f3bbd2b8a90> on <audit-checkout>/ansible/collections/ansible_collections/bootwright/core/tests/unit/plugins/modules/test_redfish_firmware.py, skipping
 WARNING  Listing 1 violation(s) that are fatal
 Read documentation for instructions on how to ignore specific rule violations.
 
@@ -1161,16 +1161,16 @@ Running sanity test "action-plugin-docs"
 Installing requirements for Python 3.13 [venv]
 Running sanity test "ansible-doc"
 Installing requirements for Python 3.13 [venv]
-Using cached pip 25.2 bootstrap script: /home/crmarques/.cache/gotmp/bootwright-ansible-check_v164pye8/.ansible/test/cache/get_pip_25_2.py
-Looking in links: /home/crmarques/.cache/gotmp/bootwright-ansible-check_v164pye8/wheels
-Processing /home/crmarques/.cache/gotmp/bootwright-ansible-check_v164pye8/wheels/pip-25.2-py3-none-any.whl
+Using cached pip 25.2 bootstrap script: <local-cache>/gotmp/bootwright-ansible-check_v164pye8/.ansible/test/cache/get_pip_25_2.py
+Looking in links: <local-cache>/gotmp/bootwright-ansible-check_v164pye8/wheels
+Processing <local-cache>/gotmp/bootwright-ansible-check_v164pye8/wheels/pip-25.2-py3-none-any.whl
 Installing collected packages: pip
 Successfully installed pip-25.2
-Looking in links: /home/crmarques/.cache/gotmp/bootwright-ansible-check_v164pye8/wheels
-Processing /home/crmarques/.cache/gotmp/bootwright-ansible-check_v164pye8/wheels/jinja2-3.1.6-py3-none-any.whl (from -r requirements/sanity.ansible-doc.txt (line 2))
-Processing /home/crmarques/.cache/gotmp/bootwright-ansible-check_v164pye8/wheels/markupsafe-3.0.3-cp313-cp313-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl (from -r requirements/sanity.ansible-doc.txt (line 3))
-Processing /home/crmarques/.cache/gotmp/bootwright-ansible-check_v164pye8/wheels/packaging-26.0-py3-none-any.whl (from -r requirements/sanity.ansible-doc.txt (line 4))
-Processing /home/crmarques/.cache/gotmp/bootwright-ansible-check_v164pye8/wheels/pyyaml-6.0.3-cp313-cp313-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl (from -r requirements/sanity.ansible-doc.txt (line 5))
+Looking in links: <local-cache>/gotmp/bootwright-ansible-check_v164pye8/wheels
+Processing <local-cache>/gotmp/bootwright-ansible-check_v164pye8/wheels/jinja2-3.1.6-py3-none-any.whl (from -r requirements/sanity.ansible-doc.txt (line 2))
+Processing <local-cache>/gotmp/bootwright-ansible-check_v164pye8/wheels/markupsafe-3.0.3-cp313-cp313-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl (from -r requirements/sanity.ansible-doc.txt (line 3))
+Processing <local-cache>/gotmp/bootwright-ansible-check_v164pye8/wheels/packaging-26.0-py3-none-any.whl (from -r requirements/sanity.ansible-doc.txt (line 4))
+Processing <local-cache>/gotmp/bootwright-ansible-check_v164pye8/wheels/pyyaml-6.0.3-cp313-cp313-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl (from -r requirements/sanity.ansible-doc.txt (line 5))
 Installing collected packages: PyYAML, packaging, MarkupSafe, Jinja2
 
 Successfully installed Jinja2-3.1.6 MarkupSafe-3.0.3 PyYAML-6.0.3 packaging-26.0
@@ -1180,25 +1180,25 @@ Running sanity test "empty-init"
 Running sanity test "ignores"
 Running sanity test "import" on Python 3.13
 Installing requirements for Python 3.13 [venv]
-Using cached pip 25.2 bootstrap script: /home/crmarques/.cache/gotmp/bootwright-ansible-check_v164pye8/.ansible/test/cache/get_pip_25_2.py
-Looking in links: /home/crmarques/.cache/gotmp/bootwright-ansible-check_v164pye8/wheels
-Processing /home/crmarques/.cache/gotmp/bootwright-ansible-check_v164pye8/wheels/pip-25.2-py3-none-any.whl
+Using cached pip 25.2 bootstrap script: <local-cache>/gotmp/bootwright-ansible-check_v164pye8/.ansible/test/cache/get_pip_25_2.py
+Looking in links: <local-cache>/gotmp/bootwright-ansible-check_v164pye8/wheels
+Processing <local-cache>/gotmp/bootwright-ansible-check_v164pye8/wheels/pip-25.2-py3-none-any.whl
 Installing collected packages: pip
 Successfully installed pip-25.2
-Looking in links: /home/crmarques/.cache/gotmp/bootwright-ansible-check_v164pye8/wheels
-Processing /home/crmarques/.cache/gotmp/bootwright-ansible-check_v164pye8/wheels/pyyaml-6.0.3-cp313-cp313-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl (from -r requirements/sanity.import.txt (line 2))
+Looking in links: <local-cache>/gotmp/bootwright-ansible-check_v164pye8/wheels
+Processing <local-cache>/gotmp/bootwright-ansible-check_v164pye8/wheels/pyyaml-6.0.3-cp313-cp313-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl (from -r requirements/sanity.import.txt (line 2))
 Installing collected packages: PyYAML
 Successfully installed PyYAML-6.0.3
 Installing requirements for Python 3.13 [venv]
-Using cached pip 25.2 bootstrap script: /home/crmarques/.cache/gotmp/bootwright-ansible-check_v164pye8/.ansible/test/cache/get_pip_25_2.py
-Looking in links: /home/crmarques/.cache/gotmp/bootwright-ansible-check_v164pye8/wheels
-Processing /home/crmarques/.cache/gotmp/bootwright-ansible-check_v164pye8/wheels/pip-25.2-py3-none-any.whl
+Using cached pip 25.2 bootstrap script: <local-cache>/gotmp/bootwright-ansible-check_v164pye8/.ansible/test/cache/get_pip_25_2.py
+Looking in links: <local-cache>/gotmp/bootwright-ansible-check_v164pye8/wheels
+Processing <local-cache>/gotmp/bootwright-ansible-check_v164pye8/wheels/pip-25.2-py3-none-any.whl
 Installing collected packages: pip
 Successfully installed pip-25.2
-Looking in links: /home/crmarques/.cache/gotmp/bootwright-ansible-check_v164pye8/wheels
-Processing /home/crmarques/.cache/gotmp/bootwright-ansible-check_v164pye8/wheels/jinja2-3.1.6-py3-none-any.whl (from -r requirements/sanity.import.plugin.txt (line 2))
-Processing /home/crmarques/.cache/gotmp/bootwright-ansible-check_v164pye8/wheels/markupsafe-3.0.3-cp313-cp313-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl (from -r requirements/sanity.import.plugin.txt (line 3))
-Processing /home/crmarques/.cache/gotmp/bootwright-ansible-check_v164pye8/wheels/pyyaml-6.0.3-cp313-cp313-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl (from -r requirements/sanity.import.plugin.txt (line 4))
+Looking in links: <local-cache>/gotmp/bootwright-ansible-check_v164pye8/wheels
+Processing <local-cache>/gotmp/bootwright-ansible-check_v164pye8/wheels/jinja2-3.1.6-py3-none-any.whl (from -r requirements/sanity.import.plugin.txt (line 2))
+Processing <local-cache>/gotmp/bootwright-ansible-check_v164pye8/wheels/markupsafe-3.0.3-cp313-cp313-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl (from -r requirements/sanity.import.plugin.txt (line 3))
+Processing <local-cache>/gotmp/bootwright-ansible-check_v164pye8/wheels/pyyaml-6.0.3-cp313-cp313-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl (from -r requirements/sanity.import.plugin.txt (line 4))
 Installing collected packages: PyYAML, MarkupSafe, Jinja2
 
 Successfully installed Jinja2-3.1.6 MarkupSafe-3.0.3 PyYAML-6.0.3
@@ -1209,46 +1209,46 @@ Running sanity test "no-illegal-filenames"
 Running sanity test "no-smart-quotes"
 Running sanity test "pep8"
 Installing requirements for Python 3.13 [venv]
-Using cached pip 25.2 bootstrap script: /home/crmarques/.cache/gotmp/bootwright-ansible-check_v164pye8/.ansible/test/cache/get_pip_25_2.py
-Looking in links: /home/crmarques/.cache/gotmp/bootwright-ansible-check_v164pye8/wheels
-Processing /home/crmarques/.cache/gotmp/bootwright-ansible-check_v164pye8/wheels/pip-25.2-py3-none-any.whl
+Using cached pip 25.2 bootstrap script: <local-cache>/gotmp/bootwright-ansible-check_v164pye8/.ansible/test/cache/get_pip_25_2.py
+Looking in links: <local-cache>/gotmp/bootwright-ansible-check_v164pye8/wheels
+Processing <local-cache>/gotmp/bootwright-ansible-check_v164pye8/wheels/pip-25.2-py3-none-any.whl
 Installing collected packages: pip
 Successfully installed pip-25.2
-Looking in links: /home/crmarques/.cache/gotmp/bootwright-ansible-check_v164pye8/wheels
-Processing /home/crmarques/.cache/gotmp/bootwright-ansible-check_v164pye8/wheels/pycodestyle-2.14.0-py2.py3-none-any.whl (from -r requirements/sanity.pep8.txt (line 2))
+Looking in links: <local-cache>/gotmp/bootwright-ansible-check_v164pye8/wheels
+Processing <local-cache>/gotmp/bootwright-ansible-check_v164pye8/wheels/pycodestyle-2.14.0-py2.py3-none-any.whl (from -r requirements/sanity.pep8.txt (line 2))
 Installing collected packages: pycodestyle
 Successfully installed pycodestyle-2.14.0
 Running sanity test "pslint"
 Running sanity test "pylint"
 Installing requirements for Python 3.13 [venv]
-Using cached pip 25.2 bootstrap script: /home/crmarques/.cache/gotmp/bootwright-ansible-check_v164pye8/.ansible/test/cache/get_pip_25_2.py
-Looking in links: /home/crmarques/.cache/gotmp/bootwright-ansible-check_v164pye8/wheels
-Processing /home/crmarques/.cache/gotmp/bootwright-ansible-check_v164pye8/wheels/pip-25.2-py3-none-any.whl
+Using cached pip 25.2 bootstrap script: <local-cache>/gotmp/bootwright-ansible-check_v164pye8/.ansible/test/cache/get_pip_25_2.py
+Looking in links: <local-cache>/gotmp/bootwright-ansible-check_v164pye8/wheels
+Processing <local-cache>/gotmp/bootwright-ansible-check_v164pye8/wheels/pip-25.2-py3-none-any.whl
 Installing collected packages: pip
 Successfully installed pip-25.2
-Looking in links: /home/crmarques/.cache/gotmp/bootwright-ansible-check_v164pye8/wheels
-Processing /home/crmarques/.cache/gotmp/bootwright-ansible-check_v164pye8/wheels/astroid-4.0.4-py3-none-any.whl (from -r requirements/sanity.pylint.txt (line 2))
-Processing /home/crmarques/.cache/gotmp/bootwright-ansible-check_v164pye8/wheels/dill-0.4.1-py3-none-any.whl (from -r requirements/sanity.pylint.txt (line 3))
-Processing /home/crmarques/.cache/gotmp/bootwright-ansible-check_v164pye8/wheels/isort-8.0.1-py3-none-any.whl (from -r requirements/sanity.pylint.txt (line 4))
-Processing /home/crmarques/.cache/gotmp/bootwright-ansible-check_v164pye8/wheels/mccabe-0.7.0-py2.py3-none-any.whl (from -r requirements/sanity.pylint.txt (line 5))
-Processing /home/crmarques/.cache/gotmp/bootwright-ansible-check_v164pye8/wheels/platformdirs-4.9.4-py3-none-any.whl (from -r requirements/sanity.pylint.txt (line 6))
-Processing /home/crmarques/.cache/gotmp/bootwright-ansible-check_v164pye8/wheels/pylint-4.0.5-py3-none-any.whl (from -r requirements/sanity.pylint.txt (line 7))
-Processing /home/crmarques/.cache/gotmp/bootwright-ansible-check_v164pye8/wheels/pyyaml-6.0.3-cp313-cp313-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl (from -r requirements/sanity.pylint.txt (line 8))
-Processing /home/crmarques/.cache/gotmp/bootwright-ansible-check_v164pye8/wheels/tomlkit-0.14.0-py3-none-any.whl (from -r requirements/sanity.pylint.txt (line 9))
+Looking in links: <local-cache>/gotmp/bootwright-ansible-check_v164pye8/wheels
+Processing <local-cache>/gotmp/bootwright-ansible-check_v164pye8/wheels/astroid-4.0.4-py3-none-any.whl (from -r requirements/sanity.pylint.txt (line 2))
+Processing <local-cache>/gotmp/bootwright-ansible-check_v164pye8/wheels/dill-0.4.1-py3-none-any.whl (from -r requirements/sanity.pylint.txt (line 3))
+Processing <local-cache>/gotmp/bootwright-ansible-check_v164pye8/wheels/isort-8.0.1-py3-none-any.whl (from -r requirements/sanity.pylint.txt (line 4))
+Processing <local-cache>/gotmp/bootwright-ansible-check_v164pye8/wheels/mccabe-0.7.0-py2.py3-none-any.whl (from -r requirements/sanity.pylint.txt (line 5))
+Processing <local-cache>/gotmp/bootwright-ansible-check_v164pye8/wheels/platformdirs-4.9.4-py3-none-any.whl (from -r requirements/sanity.pylint.txt (line 6))
+Processing <local-cache>/gotmp/bootwright-ansible-check_v164pye8/wheels/pylint-4.0.5-py3-none-any.whl (from -r requirements/sanity.pylint.txt (line 7))
+Processing <local-cache>/gotmp/bootwright-ansible-check_v164pye8/wheels/pyyaml-6.0.3-cp313-cp313-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl (from -r requirements/sanity.pylint.txt (line 8))
+Processing <local-cache>/gotmp/bootwright-ansible-check_v164pye8/wheels/tomlkit-0.14.0-py3-none-any.whl (from -r requirements/sanity.pylint.txt (line 9))
 Installing collected packages: tomlkit, PyYAML, platformdirs, mccabe, isort, dill, astroid, pylint
 
 Successfully installed PyYAML-6.0.3 astroid-4.0.4 dill-0.4.1 isort-8.0.1 mccabe-0.7.0 platformdirs-4.9.4 pylint-4.0.5 tomlkit-0.14.0
 Running sanity test "replace-urlopen"
 Running sanity test "runtime-metadata"
 Installing requirements for Python 3.13 [venv]
-Using cached pip 25.2 bootstrap script: /home/crmarques/.cache/gotmp/bootwright-ansible-check_v164pye8/.ansible/test/cache/get_pip_25_2.py
-Looking in links: /home/crmarques/.cache/gotmp/bootwright-ansible-check_v164pye8/wheels
-Processing /home/crmarques/.cache/gotmp/bootwright-ansible-check_v164pye8/wheels/pip-25.2-py3-none-any.whl
+Using cached pip 25.2 bootstrap script: <local-cache>/gotmp/bootwright-ansible-check_v164pye8/.ansible/test/cache/get_pip_25_2.py
+Looking in links: <local-cache>/gotmp/bootwright-ansible-check_v164pye8/wheels
+Processing <local-cache>/gotmp/bootwright-ansible-check_v164pye8/wheels/pip-25.2-py3-none-any.whl
 Installing collected packages: pip
 Successfully installed pip-25.2
-Looking in links: /home/crmarques/.cache/gotmp/bootwright-ansible-check_v164pye8/wheels
-Processing /home/crmarques/.cache/gotmp/bootwright-ansible-check_v164pye8/wheels/pyyaml-6.0.3-cp313-cp313-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl (from -r requirements/sanity.runtime-metadata.txt (line 2))
-Processing /home/crmarques/.cache/gotmp/bootwright-ansible-check_v164pye8/wheels/voluptuous-0.16.0-py3-none-any.whl (from -r requirements/sanity.runtime-metadata.txt (line 3))
+Looking in links: <local-cache>/gotmp/bootwright-ansible-check_v164pye8/wheels
+Processing <local-cache>/gotmp/bootwright-ansible-check_v164pye8/wheels/pyyaml-6.0.3-cp313-cp313-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl (from -r requirements/sanity.runtime-metadata.txt (line 2))
+Processing <local-cache>/gotmp/bootwright-ansible-check_v164pye8/wheels/voluptuous-0.16.0-py3-none-any.whl (from -r requirements/sanity.runtime-metadata.txt (line 3))
 Installing collected packages: voluptuous, PyYAML
 
 Successfully installed PyYAML-6.0.3 voluptuous-0.16.0
@@ -1259,38 +1259,38 @@ Running sanity test "use-argspec-type-path"
 Running sanity test "use-compat-six"
 Running sanity test "validate-modules"
 Installing requirements for Python 3.13 [venv]
-Using cached pip 25.2 bootstrap script: /home/crmarques/.cache/gotmp/bootwright-ansible-check_v164pye8/.ansible/test/cache/get_pip_25_2.py
-Looking in links: /home/crmarques/.cache/gotmp/bootwright-ansible-check_v164pye8/wheels
-Processing /home/crmarques/.cache/gotmp/bootwright-ansible-check_v164pye8/wheels/pip-25.2-py3-none-any.whl
+Using cached pip 25.2 bootstrap script: <local-cache>/gotmp/bootwright-ansible-check_v164pye8/.ansible/test/cache/get_pip_25_2.py
+Looking in links: <local-cache>/gotmp/bootwright-ansible-check_v164pye8/wheels
+Processing <local-cache>/gotmp/bootwright-ansible-check_v164pye8/wheels/pip-25.2-py3-none-any.whl
 Installing collected packages: pip
 Successfully installed pip-25.2
-Looking in links: /home/crmarques/.cache/gotmp/bootwright-ansible-check_v164pye8/wheels
-Processing /home/crmarques/.cache/gotmp/bootwright-ansible-check_v164pye8/wheels/antsibull_docs_parser-1.0.0-py3-none-any.whl (from -r requirements/sanity.validate-modules.txt (line 2))
-Processing /home/crmarques/.cache/gotmp/bootwright-ansible-check_v164pye8/wheels/jinja2-3.1.6-py3-none-any.whl (from -r requirements/sanity.validate-modules.txt (line 3))
-Processing /home/crmarques/.cache/gotmp/bootwright-ansible-check_v164pye8/wheels/markupsafe-3.0.3-cp313-cp313-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl (from -r requirements/sanity.validate-modules.txt (line 4))
-Processing /home/crmarques/.cache/gotmp/bootwright-ansible-check_v164pye8/wheels/pyyaml-6.0.3-cp313-cp313-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl (from -r requirements/sanity.validate-modules.txt (line 5))
-Processing /home/crmarques/.cache/gotmp/bootwright-ansible-check_v164pye8/wheels/voluptuous-0.16.0-py3-none-any.whl (from -r requirements/sanity.validate-modules.txt (line 6))
+Looking in links: <local-cache>/gotmp/bootwright-ansible-check_v164pye8/wheels
+Processing <local-cache>/gotmp/bootwright-ansible-check_v164pye8/wheels/antsibull_docs_parser-1.0.0-py3-none-any.whl (from -r requirements/sanity.validate-modules.txt (line 2))
+Processing <local-cache>/gotmp/bootwright-ansible-check_v164pye8/wheels/jinja2-3.1.6-py3-none-any.whl (from -r requirements/sanity.validate-modules.txt (line 3))
+Processing <local-cache>/gotmp/bootwright-ansible-check_v164pye8/wheels/markupsafe-3.0.3-cp313-cp313-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl (from -r requirements/sanity.validate-modules.txt (line 4))
+Processing <local-cache>/gotmp/bootwright-ansible-check_v164pye8/wheels/pyyaml-6.0.3-cp313-cp313-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl (from -r requirements/sanity.validate-modules.txt (line 5))
+Processing <local-cache>/gotmp/bootwright-ansible-check_v164pye8/wheels/voluptuous-0.16.0-py3-none-any.whl (from -r requirements/sanity.validate-modules.txt (line 6))
 Installing collected packages: voluptuous, PyYAML, MarkupSafe, antsibull-docs-parser, Jinja2
 
 Successfully installed Jinja2-3.1.6 MarkupSafe-3.0.3 PyYAML-6.0.3 antsibull-docs-parser-1.0.0 voluptuous-0.16.0
 Running sanity test "yamllint"
 Installing requirements for Python 3.13 [venv]
-Using cached pip 25.2 bootstrap script: /home/crmarques/.cache/gotmp/bootwright-ansible-check_v164pye8/.ansible/test/cache/get_pip_25_2.py
-Looking in links: /home/crmarques/.cache/gotmp/bootwright-ansible-check_v164pye8/wheels
-Processing /home/crmarques/.cache/gotmp/bootwright-ansible-check_v164pye8/wheels/pip-25.2-py3-none-any.whl
+Using cached pip 25.2 bootstrap script: <local-cache>/gotmp/bootwright-ansible-check_v164pye8/.ansible/test/cache/get_pip_25_2.py
+Looking in links: <local-cache>/gotmp/bootwright-ansible-check_v164pye8/wheels
+Processing <local-cache>/gotmp/bootwright-ansible-check_v164pye8/wheels/pip-25.2-py3-none-any.whl
 Installing collected packages: pip
 Successfully installed pip-25.2
-Looking in links: /home/crmarques/.cache/gotmp/bootwright-ansible-check_v164pye8/wheels
-Processing /home/crmarques/.cache/gotmp/bootwright-ansible-check_v164pye8/wheels/pathspec-1.0.4-py3-none-any.whl (from -r requirements/sanity.yamllint.txt (line 2))
-Processing /home/crmarques/.cache/gotmp/bootwright-ansible-check_v164pye8/wheels/pyyaml-6.0.3-cp313-cp313-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl (from -r requirements/sanity.yamllint.txt (line 3))
-Processing /home/crmarques/.cache/gotmp/bootwright-ansible-check_v164pye8/wheels/yamllint-1.38.0-py3-none-any.whl (from -r requirements/sanity.yamllint.txt (line 4))
+Looking in links: <local-cache>/gotmp/bootwright-ansible-check_v164pye8/wheels
+Processing <local-cache>/gotmp/bootwright-ansible-check_v164pye8/wheels/pathspec-1.0.4-py3-none-any.whl (from -r requirements/sanity.yamllint.txt (line 2))
+Processing <local-cache>/gotmp/bootwright-ansible-check_v164pye8/wheels/pyyaml-6.0.3-cp313-cp313-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl (from -r requirements/sanity.yamllint.txt (line 3))
+Processing <local-cache>/gotmp/bootwright-ansible-check_v164pye8/wheels/yamllint-1.38.0-py3-none-any.whl (from -r requirements/sanity.yamllint.txt (line 4))
 Installing collected packages: PyYAML, pathspec, yamllint
 
 Successfully installed PyYAML-6.0.3 pathspec-1.0.4 yamllint-1.38.0
 Unit test modules with Python 3.13
 ============================= test session starts ==============================
 platform linux -- Python 3.13.16, pytest-9.1.1, pluggy-1.6.0
-rootdir: /home/crmarques/.cache/gotmp/bootwright-ansible-check_v164pye8/collections/ansible_collections/bootwright/core
+rootdir: <local-cache>/gotmp/bootwright-ansible-check_v164pye8/collections/ansible_collections/bootwright/core
 configfile: ../../../../../../../projects/gitops-workspace/bootwright/.cache/ansible-check/venv/lib/python3.13/site-packages/ansible_test/_data/pytest/config/default.ini
 plugins: platformdirs-4.12.2, xdist-3.8.0, mock-3.16.0
 created: 16/16 workers
@@ -1304,12 +1304,12 @@ created: 16/16 workers
 ........................................................................ [ 75%]
 ........................................................................ [ 88%]
 ...................................................................      [100%]
-- generated xml file: /home/crmarques/.cache/gotmp/bootwright-ansible-check_v164pye8/collections/ansible_collections/bootwright/core/tests/output/junit/python3.13-modules-units.xml -
+- generated xml file: <local-cache>/gotmp/bootwright-ansible-check_v164pye8/collections/ansible_collections/bootwright/core/tests/output/junit/python3.13-modules-units.xml -
 ============================= 571 passed in 7.42s ==============================
 Unit test module_utils with Python 3.13
 ============================= test session starts ==============================
 platform linux -- Python 3.13.16, pytest-9.1.1, pluggy-1.6.0
-rootdir: /home/crmarques/.cache/gotmp/bootwright-ansible-check_v164pye8/collections/ansible_collections/bootwright/core
+rootdir: <local-cache>/gotmp/bootwright-ansible-check_v164pye8/collections/ansible_collections/bootwright/core
 configfile: ../../../../../../../projects/gitops-workspace/bootwright/.cache/ansible-check/venv/lib/python3.13/site-packages/ansible_test/_data/pytest/config/default.ini
 plugins: platformdirs-4.12.2, xdist-3.8.0, mock-3.16.0
 created: 16/16 workers
@@ -1381,14 +1381,14 @@ created: 16/16 workers
 ........................................................................ [ 97%]
 ........................................................................ [ 98%]
 ........................................................                 [100%]
-- generated xml file: /home/crmarques/.cache/gotmp/bootwright-ansible-check_v164pye8/collections/ansible_collections/bootwright/core/tests/output/junit/python3.13-module_utils-units.xml -
+- generated xml file: <local-cache>/gotmp/bootwright-ansible-check_v164pye8/collections/ansible_collections/bootwright/core/tests/output/junit/python3.13-module_utils-units.xml -
 =========================== short test summary info ============================
 SKIPPED [1] tests/unit/plugins/module_utils/test_controller_files.py:289: the temporary root lists a held directory as it is
 ======================= 4735 passed, 1 skipped in 28.10s =======================
 Unit test controller with Python 3.13
 ============================= test session starts ==============================
 platform linux -- Python 3.13.16, pytest-9.1.1, pluggy-1.6.0
-rootdir: /home/crmarques/.cache/gotmp/bootwright-ansible-check_v164pye8/collections/ansible_collections/bootwright/core
+rootdir: <local-cache>/gotmp/bootwright-ansible-check_v164pye8/collections/ansible_collections/bootwright/core
 configfile: ../../../../../../../projects/gitops-workspace/bootwright/.cache/ansible-check/venv/lib/python3.13/site-packages/ansible_test/_data/pytest/config/default.ini
 plugins: platformdirs-4.12.2, xdist-3.8.0, mock-3.16.0
 created: 16/16 workers
@@ -1427,7 +1427,7 @@ created: 16/16 workers
 ........................................................................ [ 96%]
 ........................................................................ [ 99%]
 .......                                                                  [100%]
-- generated xml file: /home/crmarques/.cache/gotmp/bootwright-ansible-check_v164pye8/collections/ansible_collections/bootwright/core/tests/output/junit/python3.13-controller-units.xml -
+- generated xml file: <local-cache>/gotmp/bootwright-ansible-check_v164pye8/collections/ansible_collections/bootwright/core/tests/output/junit/python3.13-controller-units.xml -
 ======================= 2311 passed in 118.09s (0:01:58) =======================
 Running controller_tool integration test role
 
@@ -1473,7 +1473,7 @@ WARNING: Reviewing previous 1 warning(s):
 WARNING: Unable to determine context for the following test targets, they will be run on the target host: controller_supervisor
 ============================= test session starts ==============================
 platform linux -- Python 3.13.16, pytest-9.1.1, pluggy-1.6.0
-rootdir: /home/crmarques/.cache/gotmp/bootwright-ansible-check_v164pye8/collections
+rootdir: <local-cache>/gotmp/bootwright-ansible-check_v164pye8/collections
 plugins: platformdirs-4.12.2, xdist-3.8.0, mock-3.16.0
 collected 7618 items
 
@@ -1936,37 +1936,37 @@ ansible_collections/bootwright/core/tests/unit/test_transfer_carries_no_material
 
 ======================= 7618 passed in 178.01s (0:02:58) =======================
 Installing requirements for Python 3.9 [venv]
-Using cached pip 25.2 bootstrap script: /home/crmarques/.cache/gotmp/bootwright-ansible-check_v164pye8/.ansible/test/cache/get_pip_25_2.py
-Looking in links: /home/crmarques/.cache/gotmp/bootwright-ansible-check_v164pye8/wheels
-Processing /home/crmarques/.cache/gotmp/bootwright-ansible-check_v164pye8/wheels/pip-25.2-py3-none-any.whl
+Using cached pip 25.2 bootstrap script: <local-cache>/gotmp/bootwright-ansible-check_v164pye8/.ansible/test/cache/get_pip_25_2.py
+Looking in links: <local-cache>/gotmp/bootwright-ansible-check_v164pye8/wheels
+Processing <local-cache>/gotmp/bootwright-ansible-check_v164pye8/wheels/pip-25.2-py3-none-any.whl
 Installing collected packages: pip
 Successfully installed pip-25.2
 Installing requirements for Python 3.9 [venv]
-Looking in links: /home/crmarques/.cache/gotmp/bootwright-ansible-check_v164pye8/wheels
-Processing /home/crmarques/.cache/gotmp/bootwright-ansible-check_v164pye8/wheels/mock-5.2.0-py3-none-any.whl (from -r requirements/units.txt (line 1))
-Processing /home/crmarques/.cache/gotmp/bootwright-ansible-check_v164pye8/wheels/pytest-9.1.1-py3-none-any.whl (from -r requirements/units.txt (line 2))
-Processing /home/crmarques/.cache/gotmp/bootwright-ansible-check_v164pye8/wheels/pytest_mock-3.15.1-py3-none-any.whl (from -r requirements/units.txt (line 3))
-Processing /home/crmarques/.cache/gotmp/bootwright-ansible-check_v164pye8/wheels/pytest_xdist-3.8.0-py3-none-any.whl (from -r requirements/units.txt (line 4))
-Processing /home/crmarques/.cache/gotmp/bootwright-ansible-check_v164pye8/wheels/pyyaml-6.0.3-cp39-cp39-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl (from -r requirements/units.txt (line 5))
-Processing /home/crmarques/.cache/gotmp/bootwright-ansible-check_v164pye8/wheels/typing_extensions-4.15.0-py3-none-any.whl (from -r requirements/units.txt (line 6))
+Looking in links: <local-cache>/gotmp/bootwright-ansible-check_v164pye8/wheels
+Processing <local-cache>/gotmp/bootwright-ansible-check_v164pye8/wheels/mock-5.2.0-py3-none-any.whl (from -r requirements/units.txt (line 1))
+Processing <local-cache>/gotmp/bootwright-ansible-check_v164pye8/wheels/pytest-9.1.1-py3-none-any.whl (from -r requirements/units.txt (line 2))
+Processing <local-cache>/gotmp/bootwright-ansible-check_v164pye8/wheels/pytest_mock-3.15.1-py3-none-any.whl (from -r requirements/units.txt (line 3))
+Processing <local-cache>/gotmp/bootwright-ansible-check_v164pye8/wheels/pytest_xdist-3.8.0-py3-none-any.whl (from -r requirements/units.txt (line 4))
+Processing <local-cache>/gotmp/bootwright-ansible-check_v164pye8/wheels/pyyaml-6.0.3-cp39-cp39-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl (from -r requirements/units.txt (line 5))
+Processing <local-cache>/gotmp/bootwright-ansible-check_v164pye8/wheels/typing_extensions-4.15.0-py3-none-any.whl (from -r requirements/units.txt (line 6))
 INFO: pip is looking at multiple versions of pytest to determine which version is compatible with other requirements. This could take a while.
-Processing /home/crmarques/.cache/gotmp/bootwright-ansible-check_v164pye8/wheels/pytest-8.4.2-py3-none-any.whl (from -r requirements/units.txt (line 2))
-Processing /home/crmarques/.cache/gotmp/bootwright-ansible-check_v164pye8/wheels/exceptiongroup-1.3.1-py3-none-any.whl (from pytest->-r requirements/units.txt (line 2))
-Processing /home/crmarques/.cache/gotmp/bootwright-ansible-check_v164pye8/wheels/iniconfig-2.3.0-py3-none-any.whl (from pytest->-r requirements/units.txt (line 2))
-Processing /home/crmarques/.cache/gotmp/bootwright-ansible-check_v164pye8/wheels/packaging-26.3-py3-none-any.whl (from pytest->-r requirements/units.txt (line 2))
-Processing /home/crmarques/.cache/gotmp/bootwright-ansible-check_v164pye8/wheels/pluggy-1.6.0-py3-none-any.whl (from pytest->-r requirements/units.txt (line 2))
-Processing /home/crmarques/.cache/gotmp/bootwright-ansible-check_v164pye8/wheels/pygments-2.21.0-py3-none-any.whl (from pytest->-r requirements/units.txt (line 2))
-Processing /home/crmarques/.cache/gotmp/bootwright-ansible-check_v164pye8/wheels/tomli-2.4.1-py3-none-any.whl (from pytest->-r requirements/units.txt (line 2))
-Processing /home/crmarques/.cache/gotmp/bootwright-ansible-check_v164pye8/wheels/execnet-2.1.2-py3-none-any.whl (from pytest-xdist->-r requirements/units.txt (line 4))
+Processing <local-cache>/gotmp/bootwright-ansible-check_v164pye8/wheels/pytest-8.4.2-py3-none-any.whl (from -r requirements/units.txt (line 2))
+Processing <local-cache>/gotmp/bootwright-ansible-check_v164pye8/wheels/exceptiongroup-1.3.1-py3-none-any.whl (from pytest->-r requirements/units.txt (line 2))
+Processing <local-cache>/gotmp/bootwright-ansible-check_v164pye8/wheels/iniconfig-2.3.0-py3-none-any.whl (from pytest->-r requirements/units.txt (line 2))
+Processing <local-cache>/gotmp/bootwright-ansible-check_v164pye8/wheels/packaging-26.3-py3-none-any.whl (from pytest->-r requirements/units.txt (line 2))
+Processing <local-cache>/gotmp/bootwright-ansible-check_v164pye8/wheels/pluggy-1.6.0-py3-none-any.whl (from pytest->-r requirements/units.txt (line 2))
+Processing <local-cache>/gotmp/bootwright-ansible-check_v164pye8/wheels/pygments-2.21.0-py3-none-any.whl (from pytest->-r requirements/units.txt (line 2))
+Processing <local-cache>/gotmp/bootwright-ansible-check_v164pye8/wheels/tomli-2.4.1-py3-none-any.whl (from pytest->-r requirements/units.txt (line 2))
+Processing <local-cache>/gotmp/bootwright-ansible-check_v164pye8/wheels/execnet-2.1.2-py3-none-any.whl (from pytest-xdist->-r requirements/units.txt (line 4))
 INFO: pip is looking at multiple versions of iniconfig to determine which version is compatible with other requirements. This could take a while.
-Processing /home/crmarques/.cache/gotmp/bootwright-ansible-check_v164pye8/wheels/iniconfig-2.1.0-py3-none-any.whl (from pytest->-r requirements/units.txt (line 2))
+Processing <local-cache>/gotmp/bootwright-ansible-check_v164pye8/wheels/iniconfig-2.1.0-py3-none-any.whl (from pytest->-r requirements/units.txt (line 2))
 Installing collected packages: typing_extensions, tomli, pyyaml, pygments, pluggy, packaging, mock, iniconfig, execnet, exceptiongroup, pytest, pytest-xdist, pytest-mock
 
 Successfully installed exceptiongroup-1.3.1 execnet-2.1.2 iniconfig-2.1.0 mock-5.2.0 packaging-26.3 pluggy-1.6.0 pygments-2.21.0 pytest-8.4.2 pytest-mock-3.15.1 pytest-xdist-3.8.0 pyyaml-6.0.3 tomli-2.4.1 typing_extensions-4.15.0
 Unit test modules with Python 3.9
 ============================= test session starts ==============================
 platform linux -- Python 3.9.25, pytest-8.4.2, pluggy-1.6.0
-rootdir: /home/crmarques/.cache/gotmp/bootwright-ansible-check_v164pye8/collections/ansible_collections/bootwright/core
+rootdir: <local-cache>/gotmp/bootwright-ansible-check_v164pye8/collections/ansible_collections/bootwright/core
 configfile: ../../../../../../../projects/gitops-workspace/bootwright/.cache/ansible-check/venv/lib/python3.13/site-packages/ansible_test/_data/pytest/config/default.ini
 plugins: xdist-3.8.0, mock-3.15.1
 created: 16/16 workers
@@ -1980,12 +1980,12 @@ created: 16/16 workers
 ........................................................................ [ 75%]
 ........................................................................ [ 88%]
 ...................................................................      [100%]
-- generated xml file: /home/crmarques/.cache/gotmp/bootwright-ansible-check_v164pye8/collections/ansible_collections/bootwright/core/tests/output/junit/python3.9-modules-units.xml -
+- generated xml file: <local-cache>/gotmp/bootwright-ansible-check_v164pye8/collections/ansible_collections/bootwright/core/tests/output/junit/python3.9-modules-units.xml -
 ============================= 571 passed in 6.87s ==============================
 Unit test module_utils with Python 3.9
 ============================= test session starts ==============================
 platform linux -- Python 3.9.25, pytest-8.4.2, pluggy-1.6.0
-rootdir: /home/crmarques/.cache/gotmp/bootwright-ansible-check_v164pye8/collections/ansible_collections/bootwright/core
+rootdir: <local-cache>/gotmp/bootwright-ansible-check_v164pye8/collections/ansible_collections/bootwright/core
 configfile: ../../../../../../../projects/gitops-workspace/bootwright/.cache/ansible-check/venv/lib/python3.13/site-packages/ansible_test/_data/pytest/config/default.ini
 plugins: xdist-3.8.0, mock-3.15.1
 created: 16/16 workers
@@ -2057,14 +2057,14 @@ created: 16/16 workers
 ........................................................................ [ 97%]
 ........................................................................ [ 98%]
 ........................................................                 [100%]
-- generated xml file: /home/crmarques/.cache/gotmp/bootwright-ansible-check_v164pye8/collections/ansible_collections/bootwright/core/tests/output/junit/python3.9-module_utils-units.xml -
+- generated xml file: <local-cache>/gotmp/bootwright-ansible-check_v164pye8/collections/ansible_collections/bootwright/core/tests/output/junit/python3.9-module_utils-units.xml -
 =========================== short test summary info ============================
 SKIPPED [1] tests/unit/plugins/module_utils/test_controller_files.py:289: the temporary root lists a held directory as it is
 ======================= 4735 passed, 1 skipped in 26.31s =======================
 Running sanity test "import" on Python 3.9
 Installing requirements for Python 3.9 [venv]
 git diff --check
-make: Leaving directory '/home/crmarques/projects/gitops-workspace/bootwright-worktrees/fu-001-gate'
+make: Leaving directory '<audit-checkout>'
 exit=0
 ```
 

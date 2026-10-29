@@ -1,13 +1,13 @@
 # Audits
 
-Keep each audit and its follow-ups under `audits/<topic>/<NNN>/`. Specification
-audits use the topic `specs`. Number audits independently within each topic,
-starting at `001`; the next specification audit is `specs/002`.
+Keep each audit and its follow-ups under `audits/<NNN>-<topic>/`. Number
+audits across topics, starting at `001`; use a short topic name. The
+specification audit is `001-spec`, and the add-ons audit is `002-addons`.
 
 ## Directory format
 
 ```text
-audits/<topic>/<NNN>/
+audits/<NNN>-<topic>/
   README.md
   report-final.md
   report-<reviewer>.md
@@ -19,7 +19,7 @@ audits/<topic>/<NNN>/
 Use numbered follow-up rounds beneath one undated `follow-up/` directory.
 Number rounds independently within each audit, starting at `001`; a subsequent
 reassessment uses the next number. A reviewer's follow-up is one self-contained
-Markdown file, such as `audits/specs/001/follow-up/001/report-codex.md`. Its
+Markdown file, such as `audits/001-spec/follow-up/001/report-codex.md`. Its
 assessment, plan, finding ledger and retained evidence belong in that file,
 with no companion plan, JSON or log files.
 
@@ -67,4 +67,5 @@ or effects.
 
 ## Audit index
 
-- [Specification audit 001](specs/001/README.md)
+- [Specification audit 001](001-spec/README.md)
+- [Add-ons audit 002](002-addons/README.md)

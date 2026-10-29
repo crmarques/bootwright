@@ -1,6 +1,6 @@
 # Bootwright specification, architecture and agent-skill audit
 
-Date: 2026-10-25. Reviewer: Claude Fable 5.1 (orchestrating, arbitrating and authoring), with Claude Opus 5.5 and Claude Sonnet 5.5 agents under its direction. Repository: `bootwright` at commit `17acb63d9` on `main`. Scope: specifications, concept model, desired-state API, architecture at the package and port level, reconciliation rules, agent guidance and skills. Out of scope: line-level code review and any command with effects. This file is the only repository change the audit makes.
+Revision 2, dated 2026-10-26. Revision 1 (2026-10-25) remains at `audits/001-spec/report-claude-fable.md`. Repository: `bootwright` at commit `17acb63d9` on `main`, unchanged between the two revisions. Revision 1 was orchestrated, arbitrated and written by Claude Fable 5.1 with Claude Opus 5.5 and Claude Sonnet 5.5 agents. Revision 2 was orchestrated by Claude Opus 5.5, with Opus and Sonnet agents and Fable 5.1 arbitration. Scope: specifications, concept model, desired-state API, architecture at the package, port and adapter-contract level, reconciliation rules, agent guidance and skills. Out of scope: line-level code review and any command with effects. This file is the only repository change revision 2 makes.
 
 ## How to read this report
 
@@ -8,17 +8,46 @@ The report is long because the owner asked for complete coverage of every spec a
 
 | If you want | Read |
 | --- | --- |
+| What revision 2 changed after comparing the sibling Codex audit point by point | The summary below, then section 13 |
 | The verdict and the five actions that matter most | Section 2 |
 | What to do, in what order, and which steps need an owner decision | Section 14, then the High and Medium entries of section 11 |
 | The operator-facing API, kind by kind, with recommended shapes | Section 5, with the vocabulary of section 4 |
 | Whether a new substrate, distribution, storage or service implementation can be added with low code impact | Section 6, then section 7 for the language rules |
 | Every reconciliation rule with a verdict | Section 8 (parts A and B) |
 | How to make the spec corpus and the skills cheaper and safer for coding agents | Sections 9 and 10 |
-| Whether a specific file was examined and what the assessor concluded | Section 12 |
-| How this audit relates to the sibling Codex audit of the same date | Section 13 |
+| Whether a specific file was examined, including the 22 adapter argument specs | Section 12 |
 | How the findings were produced and verified, and the limits of the method | Section 15 |
 
-Finding identifiers (for example `F10-01` or `R2-02-01`) refer to the catalog in section 11; the prefix names the lens that raised the finding. Severity is Blocking, High, Medium or Low on the scale the brief defines, calibrated downward by verification where the two verifiers disagreed. Every finding cites the file and line range it rests on, as of the audited commit.
+Finding identifiers refer to the catalog in section 11. The prefix names the lens that raised the finding: F01 to F18 for the first round, R2-01 to R2-06 for the completeness round, CX for sibling-audit claims our own verifiers confirmed, and V2 for findings added in revision 2. Severity is Blocking, High, Medium or Low on the scale the brief defines, calibrated downward where verifiers disagreed unless an arbiter decided. Every finding cites the file and line range it rests on, at the audited commit.
+
+## Revision 2 summary
+
+The owner asked whether the sibling Codex audit found points revision 1 had missed. Revision 1 had compared the two audits finding by finding. Revision 2 split the whole sibling report into 512 points and checked each against this report at sub-claim level. Every new or partly covered point was then verified against the repository, or judged as an improvement, by two independent agents, with Fable deciding every split. Section 13 holds the point-by-point result.
+
+| Measure | Value |
+| --- | --- |
+| Sibling points extracted and mapped | 512: 223 covered, 182 partly covered, 77 absent, 16 contradicting this report, 14 already refuted |
+| Work items after merging | 66: 4 contradictions, 23 repository claims, 3 severity challenges, 36 report improvements |
+| New findings | 20 (V2-01 to V2-20): 5 Medium, 15 Low; 4 repository claims refuted |
+| Sibling claims promoted into the catalog | 11 CX entries with full records, previously in a side table |
+| Severity changes | F13-05 Low to Medium; CX-API04 enters at High; CX-R4 stays Medium |
+| Report improvements | 33 adopted, mostly narrowed; 3 rejected |
+| New coverage | The 22 role argument specifications, as ledger section 12.3 |
+| Catalog | 232 entries: 11 High, 82 Medium, 139 Low |
+
+**Where revision 1 was wrong, now corrected.**
+
+- It graded `StorageNVMeoFSubsystem` "truthfully refused at plan"; the build realizes it, and the stale storage pages are now [V2-01].
+- Its rule tables rated "unknown is never absence" sound; [CX-R5] and [CX-X1] are two clauses that break it.
+- It rated the log-fault restoration rule sound; one clause excludes the settled apply that another names as the exit [V2-20].
+- It listed managed NTP and proxy as realized without limits; OS installation selects only an external Proxy by design (section 3.4).
+- Its recommended `ContainerCluster` envelope kept node `machineRef`s, which a managed distribution such as EKS or AKS cannot express; nodes now sit under the self-installed arm, and section 6.4 adds cloud IaaS and managed Kubernetes scenarios.
+- It assumed OpenShift without saying so; the owner's portfolio implies it through Fusion Data Foundation and OpenShift Virtualization (section 3.4).
+- A self-check of its 2,048 file:line citations found five references to lines that do not exist and four ranges cut by table truncation; all are corrected.
+
+**New findings that change what the owner does next.** Storage pages call realized NVMe-oF and StorageExport refused [V2-01]. An omitted Ceph `clusterSSH.transport` defaults to a value that always refuses [V2-02]. Orphan deletion names `status` as its inventory, but `status` omits objects no longer declared [V2-03]. A StorageCluster's name limit depends on the services it declares, so a day-2 service addition can force recreating a data-bearing cluster [V2-19]. The settled-apply log-fault exit is contradicted [V2-20]. An interrupted physical Ceph deployment has no forward or backward exit [CX-API04].
+
+**What was not adopted.** Four sibling repository claims were refuted after re-reading at the audited commit, and three proposed improvements were rejected as already covered or against a recorded decision (section 13.4). The sibling's six-class command taxonomy was narrowed to the three effect classes the command catalog already owns.
 
 ## Contents
 
@@ -42,7 +71,7 @@ Finding identifiers (for example `F10-01` or `R2-02-01`) refer to the catalog in
 
 This is the prompt the audit ran under. It was written before any finding work started, after a scouting pass that sized the corpus, and every agent of the audit received it verbatim as its first instruction.
 
-Date: 2026-10-25. Repository: `bootwright` at commit `17acb63d9` (branch `main`). Requested by the repository owner. Deliverable: one report at `audits/specs/001/report-claude-fable.md`; no other repository change.
+Date: 2026-10-25. Repository: `bootwright` (the owner's local checkout; the absolute path is omitted in revision 2) at commit `17acb63d9` (branch `main`). Requested by the repository owner. Deliverable: one report at `audits/001-spec/report-claude-fable.md`; no other repository change.
 
 ### Role
 
@@ -103,13 +132,13 @@ Out of scope: low- and medium-level code review (function bodies, tests, error h
 
 ### 2.1 Verdict
 
-Bootwright's foundations are stronger than those of most pre-1.0 declarative platforms, and the owner should protect them. The authoring grammar refuses every YAML ambiguity that Kubernetes, Helm and Kustomize tolerate. The lifecycle engine runs an immutable plan with write-ahead records at every boundary, treats an unknown outcome as unknown, re-proves every decision under the exclusive lock, and never knows which implementation it drives. Implementation identity is frozen per block, selected from a static allowlist bound at one composition root, with release differences held inside version specializations. The spec corpus states one owner per fact and holds its tables to code with tests. These are the right bones.
+Bootwright's foundations are stronger than those of most pre-1.0 declarative platforms, and the owner should protect them. The authoring grammar refuses every YAML ambiguity that Kubernetes, Helm and Kustomize tolerate. The lifecycle engine runs an immutable plan with write-ahead records at every boundary, treats an unknown outcome as unknown apart from two clauses that break the rule [CX-R5] [CX-X1], re-proves every decision under the exclusive lock, and never knows which implementation it drives. Implementation identity is frozen per block, selected from a static allowlist bound at one composition root, with release differences held inside version specializations. The spec corpus states one owner per fact and holds its tables to code with tests. These are the right bones.
 
 The specs do not yet deliver three of the things the owner asked this audit to confirm.
 
-1. **The generic-flow guarantee holds at the engine and fails above it.** Substrate arms, Ceph field paths and implementation identities leak into consumers and general-flow packages, two bounded contexts are defined as their first product, and no fitness test holds the rule that policy never branches on implementation [F06-01] [F06-03] [F18-03] [F18-04] [F07-03]. Adding a substrate today edits every consumer; adding a cluster distribution or a non-Ceph storage type has no specified home. The intent is right, and the owner's "low code impact" requirement is a stated goal rather than a property the architecture enforces.
-2. **The operator language has a sound grammar and three product-shaped surfaces.** `ContainerCluster` is OpenShift under a neutral name, the `Storage*` child kinds are Ceph objects under neutral names with no rule binding them to a Ceph cluster, and `Machine` scatters substrate facts across conditional rules and mixes host prerequisites with product-named roles [F18-02] [F05-03] [F04-01] [F04-02]. Four union idioms answer one question, and operators repeat facts that admission could derive [F03-01] [F03-03].
-3. **Nine High findings, six of them reconciliation safety defects, must close before any new destructive path or implementation.** A physical managed-OS install erases whatever disk a kernel device name points at [F10-01]. Name-derived ownership on libvirt contradicts the page's own rule [F10-03]. Storage retirement can delete the backing storage of a cluster that keeps running [R2-02-01]. A rotated BMC credential strands every removal [R2-04-01]. Two contexts can share a managed bridge without a claim [R2-06-01]. A removal observation reads an unreadable target as no effect, the one claim both audits rate High [CX-R5].
+1. **The generic-flow guarantee holds at the engine and fails above it.** Substrate arms, Ceph field paths and implementation identities leak into consumers and general-flow packages, two bounded contexts are defined as their first product, and no fitness test holds the rule that policy never branches on implementation [F06-01] [F06-03] [F18-03] [F18-04] [F07-03]. Adding a substrate today edits every consumer; the adapter read of section 12.3 confirms that consumer roles carry per-arm dispatch tables in their defaults, as `specs/substrates.md:973` prescribes. Adding a cluster distribution, a managed Kubernetes service or a non-Ceph storage type has no specified home. The intent is right, and the owner's "low code impact" requirement is a stated goal rather than a property the architecture enforces.
+2. **The operator language has a sound grammar and three product-shaped surfaces.** `ContainerCluster` is OpenShift under a neutral name, the `Storage*` child kinds are Ceph objects under neutral names with no rule binding them to a Ceph cluster, and `Machine` scatters substrate facts across conditional rules and mixes host prerequisites with product-named roles [F18-02] [F05-03] [F04-01] [F04-02]. Four union idioms answer one question, and operators repeat facts that admission could derive [F03-01] [F03-03]. Some owning pages misstate what is realized [V2-01], one default always refuses [V2-02], and a StorageCluster's name limit moves with the services it declares [V2-19].
+3. **Eleven High findings must close before any new destructive path or implementation; seven are reconciliation safety or recovery defects.** A physical managed-OS install erases whatever disk a kernel device name points at [F10-01]. Name-derived ownership on libvirt contradicts the page's own rule [F10-03]. Storage retirement can delete the backing storage of a cluster that keeps running [R2-02-01]. A rotated BMC credential strands every removal [R2-04-01]. Two contexts can share a managed bridge without a claim [R2-06-01]. A removal observation reads an unreadable target as no effect, a claim both audits rate High [CX-R5]. An interrupted physical Ceph deployment has neither a forward nor a backward exit [CX-API04]. The other four High findings are a stale owning page [F13-01], vendor-support gates the owner's decisions forbid [F17-01], undecidable milestone scope [F17-03] and the Stop hook [F14-02].
 
 Everything else is improvable at low cost, and much of it is cheap because the pre-1.0 rule removes converters and aliases from every rename (D142). The corpus and the skills are small and well shaped; their cost problem is one mandated sentence that sends agents through whole milestone pages, and their safety problem is two sentences in the wrong files and one hook.
 
@@ -120,23 +149,23 @@ Everything else is improvable at low cost, and much of it is cheap because the p
 | Objectives, scope, domain | Good, with one structural gap | Split "Product scope" into a committed portfolio and a design envelope; state the day-2 disposition of owned objects | [F01-01] [F01-02] |
 | Concept model and nomenclature | Needs improvement | Define the overloaded terms once, sweep bare "controller", adopt the naming rules and the before-1.0 renames | [F02-01] [F02-07] [F02-09] [F05-05] |
 | Desired-state grammar | Good, above mainstream | One union rule, derive instead of repeat-and-compare, omission classes stated once, schema discoverability | [F03-01] [F03-03] [F03-06] [F03-05] |
-| Kind design | Needs improvement; three kinds bad | A distribution arm on `ContainerCluster`, Ceph-scoped child kinds or a type binding, a per-substrate arm on `Machine` | [F18-02] [F05-03] [F04-01] [F04-02] |
+| Kind design | Needs improvement; four kinds bad | A distribution arm on `ContainerCluster` with nodes under the self-installed arms, Ceph-scoped child kinds or a type binding, a per-substrate arm on `Machine`, one name rule per kind | [F18-02] [F05-03] [F04-01] [F04-02] [V2-19] |
 | Architecture: generic flow and specialization | Good engine; guarantee not enforced above it | Adopt the specialization contract (section 6.2) with its fitness tests; land the substrate dispatcher before lifting any arm refusal | [F06-01] [F06-03] [F18-03] [F18-04] |
 | Language responsibility | Good for Go and Ansible; Python unowned | Widen the boundary section into a four-language matrix with a placement question and a test | [F08-04] [F08-07] [F08-01] |
-| Reconciliation: safety and ownership | Strong rules; six High defects | Phase 0 of the roadmap: disk identity, name-derived ownership, consumer quiescence, credential rebind, shared bridges, unreadable targets | [F10-01] [F10-03] [R2-02-01] [R2-04-01] [R2-06-01] [CX-R5] |
-| Reconciliation: reliability and consistency | Strong core; dead ends and drift | Name an exit for each dead end, correct the stale contexts page, make removal compare effect identity across builds | [F09-01] [F09-02] [F13-01] [R2-03-01] |
+| Reconciliation: safety and ownership | Strong rules; six High defects | Phase 0 of the roadmap: disk identity, name-derived ownership, consumer quiescence, credential rebind, shared bridges, unreadable targets, an orphan inventory from frozen operations | [F10-01] [F10-03] [R2-02-01] [R2-04-01] [R2-06-01] [CX-R5] [V2-03] |
+| Reconciliation: reliability and consistency | Strong core; dead ends and drift | Name an exit for each dead end, including interrupted physical Ceph; correct the stale contexts page; make removal compare effect identity across builds; one owner for the log-fault exit | [CX-API04] [F09-01] [F09-02] [F13-01] [F13-05] [R2-03-01] [V2-20] |
 | Security and trust | Sound host model; remote principals unmodelled | Add the remote-principals paragraph, tool authenticity per tool, fingerprint-taking enrollment | [F11-01] [F11-02] [F11-03] |
-| Spec corpus as a harness | Right model; costly path | Two sentences on the mandatory path, milestone cards, section-level index rows, budgets that follow the second-opened pages | [F15-01] [F17-03] [F15-07] |
-| Skills and agent harness | Good portfolio; misplaced safety | Move the effect prohibition to AGENTS.md, replace the Stop hook, align integration with D168, add two skills | [F14-01] [F14-02] [F14-03] |
+| Spec corpus as a harness | Right model; costly path; some stale owners | Two sentences on the mandatory path, milestone cards, section-level index rows, budgets that follow the second-opened pages, one realization-status owner per kind | [F15-01] [F17-03] [F15-07] [V2-01] |
+| Skills and agent harness | Good portfolio; misplaced safety | Move the effect prohibition to AGENTS.md, replace the Stop hook with a content-keyed one, align integration with D168, add two skills provisionally and measure them | [F14-01] [F14-02] [F14-03] [V2-11] |
 
-Verification lowered 116 of 201 severities from the finders' proposals and takes the lower of two calibrations, so the scorecard understates rather than overstates. No candidate survived as Blocking; the one proposed Blocking, the disk-identity rule, carries High because its fix is small and the agent-installer path is already safe.
+Verification lowered 116 of the 201 revision-1 severities from the finders' proposals and takes the lower of two calibrations, so the scorecard understates rather than overstates. No candidate survived as Blocking; the one proposed Blocking, the disk-identity rule, carries High because its fix is small and the agent-installer path is already safe. Each High entry now carries a counterevidence paragraph stating what the specs already protect.
 
 ### 2.3 What is good and must be kept
 
 - **The decoding and refusal contract.** Strict YAML, closed envelopes, provenance kept out of data, effective output never accepted back as input, and refusals that name object, path, expectation and next step (section 5.1). This should be the house standard for every future kind.
-- **The engine contract.** Immutable plans, one operation per context, write-ahead records, unknown treated as unknown, the compare-and-swap re-proof under the exclusive lock, bounded retries, crash-safe produced-material custody, and the content digest as a contract identity that lets an automation-only fix continue a live operation (section 8.B1).
+- **The engine contract.** Immutable plans, one operation per context, write-ahead records, unknown treated as unknown (two clauses that break it are [CX-R5] and [CX-X1]), the compare-and-swap re-proof under the exclusive lock, bounded retries, crash-safe produced-material custody, and the content digest as a contract identity that lets an automation-only fix continue a live operation (section 8.B1).
 - **The best destructive contract in the corpus.** The opt-in physical logical overwrite carries WWN, serial and size per target, re-checks identity during write and readback, and binds its receipt to the original apply. Other destructive paths should copy it (section 8.3).
-- **Closed implementation selection.** No ambient plugin path, a static resolver at one composition root, frozen implementation identity, fixed Ansible entry points that authored data can never select, and the version-specialization model with its refusal of version pairing rules (D162, D163; section 6.1).
+- **Closed implementation selection.** No ambient plugin path, a static resolver at one composition root, frozen implementation identity, fixed Ansible entry points that authored data can never select, versioned request literals in every role argument spec (section 12.3), and the version-specialization model with its refusal of version pairing rules (D162, D163; section 6.1).
 - **The controller-host security model.** The attacker model is precise, the process boundary forbids a shell and allowlists argv and environment, the runtime lock pins every wheel by hash, and capability URLs are minted per attempt and never recorded (section 8.5).
 - **The corpus model and its gates.** One owner per fact, a compact index, byte budgets that only shrink, spec tables held to code, the "Not yet met" convention, the structural milestone checker, and the knowledge split (section 9.2).
 - **The harness shape.** One tracked entrypoint for both runtimes, canonical skills with thin wrappers, small skills that link rather than restate, measured verification tiers, and "rules already broken once" lists (section 10.1).
@@ -147,9 +176,10 @@ Verification lowered 116 of 201 severities from the finders' proposals and takes
 - **Vocabulary.** "Controller" names the host and a BMC in safety text, "implementation", "package", "capability", "binding" and "profile" each carry several meanings, the kind count is stated three ways, and no rule fixes enum casing or the `Ref` suffix [F02-01] [F02-02] [F02-04] [F02-09].
 - **Grammar consistency.** Unions, omission classes, reference classes and single-valued required fields need one rule each; discoverability needs an `explain`, a schema export and an origins view [F03-01] [F03-06] [F03-07] [F03-04] [F03-05].
 - **Selection closure and plan edges.** The authoritative closure table omits four storage kinds and a replication peer, standalone Machines drop silently when a cluster list is authored, and no catalog maps a reference field to a plan edge [R2-01-04] [R2-01-05] [R2-01-01].
-- **Reliability exits.** One unreachable target abandons a whole removal, an apply can spend its removal's reserve, a lost block record under a completed apply has no exit, a controller identity change strands every context, and a pending setup intent blocks the host [F09-01] [F09-02] [F09-03] [F13-06] [F13-04].
+- **Reliability exits.** One unreachable target abandons a whole removal, an apply can spend its removal's reserve, a lost block record under a completed apply has no exit, a controller identity change strands every context, a pending setup intent blocks the host, and a setup-format change discards the runtime an idle operation needs [F09-01] [F09-02] [F09-03] [F13-06] [F13-04] [F13-05] [V2-05].
 - **Trust beyond the host.** Managed hosts, BMCs, registries and cluster APIs are not modelled as principals, downloaded tools have no authenticity source beyond their first digest, and scripted enrollment pins an unconfirmed host key [F11-01] [F11-02] [F11-03].
 - **Corpus cost.** Whole milestone pages of 63 to 141 KB sit on the mandatory path, owning sections reach 40 to 101 KB with no section-level routing, and the gates bound only the entry files [F15-01] [F15-07] [F15-08].
+- **Adapter contracts.** Role argument specs fix entry points and request versions but leave most members untyped, a playbook imports task files no spec declares, and power dispatch rides in material values outside the frozen request [V2-15] [V2-14] [V2-13].
 
 ### 2.5 What is bad
 
@@ -159,25 +189,35 @@ Verification lowered 116 of 201 severities from the finders' proposals and takes
 - **A rotated access credential has no rebind**, so every continuation and destroy authenticates with the old secret and the only exits abandon live effects [R2-04-01].
 - **An external libvirt attachment claims nothing**, so two contexts share a managed bridge and one destroy cuts the other's uplink [R2-06-01].
 - **`ContainerCluster` cannot take a second distribution** without a reshape or a new kind that touches every general-flow kind list [F18-02] [F18-04].
-- **The owning page for contexts is stale after setup v2**, so an agent following the index writes the wrong registry version or wraps setup in a host-wide lock [F13-01].
+- **A removal observation reads an unreadable target as no effect**, and a powered-off private Machine reads as positive no effect, against the rule that unknown is never absence [CX-R5] [CX-X1].
+- **An interrupted physical Ceph deployment has no exit**: forward recovery waits on B659 and B662 and retirement of bare-metal hosts on B491, so only an orphan-acknowledged deletion remains [CX-API04].
+- **Orphan deletion names `status` as its inventory**, but `status` lists only what is still declared, so an operator can abandon owned objects without seeing them [V2-03].
+- **The owning page for contexts is stale after setup v2**, so an agent following the index writes the wrong registry version or wraps setup in a host-wide lock [F13-01]. The storage admission pages likewise call realized NVMe-oF and StorageExport refused [V2-01].
 - **Milestone scope rules cannot be decided from the tables an agent is told to read** [F17-03], and the storage coverage pages gate delivery on vendor support that three owner decisions forbid [F17-01].
 - **The agent harness's only effect prohibition sits in an optional reference**, and the Stop hook runs the quick gate on the wrong tree and can block every turn end on an unrelated failure, which this session observed directly [F14-01] [F14-02].
 
 ### 2.6 The five actions that matter most
 
-1. **Close the safety Highs before any new destructive path or implementation.** Durable root-disk identity on physical installs, the B568 exception and bridge claim on shared libvirt hosts, consumer quiescence for export retirement, an access-credential rebind, and the unreadable-target rule. Roadmap Phase 0 steps P0-C to P0-F plus CX-R5; each is a spec clause, a test name and a skill bullet.
+1. **Close the safety Highs before any new destructive path or implementation.** Durable root-disk identity on physical installs, the B568 exception and bridge claim on shared libvirt hosts, consumer quiescence for export retirement, an access-credential rebind, the unreadable-target rule (an owner choice between two fixes), and a stated exit for interrupted physical Ceph. Roadmap Phase 0 steps P0-C to P0-F with [CX-R5] and [CX-API04]; each is a spec clause, a test name and a skill bullet.
 2. **Make extension additive before extending.** Adopt the twelve specialization-contract rules (section 6.2) with their fitness tests, starting with selection from frozen input, no identity branching outside the owning domain, and consumer dispatch through the owning domain; land the substrate dispatcher role and capability facts on the realized target before B87 or B99 lift their refusals. Roadmap P1-A to P1-D.
-3. **Take the three API shape decisions now, while they cost a same-version edit.** A distribution arm on `ContainerCluster`, Ceph-scoped child kinds or an explicit type binding, and a per-substrate arm on `Machine` with the role tokens dropped; adopt the one union rule and the derivation rule in the same decision. Roadmap P1-G.
+3. **Take the three API shape decisions now, while they cost a same-version edit.** A distribution arm on `ContainerCluster` whose neutral envelope holds no nodes, so a managed service such as EKS or AKS fits; Ceph-scoped child kinds or an explicit type binding; and a per-substrate arm on `Machine` with the role tokens dropped. Adopt the one union rule, the derivation rule and one name rule per kind in the same decision, and check the candidate shapes on the operator tasks of section 5.7. Roadmap P1-G.
 4. **Fix the harness with four small edits.** The effect prohibition into AGENTS.md with widened ask patterns, a guarded advisory Stop hook, the mandated read changed from "the milestone page" to "the item's row and its section", and an Active slices table on the milestones page. These take Task A's mandatory reading from about 45k to about 18k tokens before any page is split. Roadmap P0-A, P0-B and the two-sentence fix in section 9.8.
-5. **Make the corpus truthful and single-owned, then smaller.** Correct the contexts page, remove the vendor-support clauses, give the storage family one field-record home, then split the pages above budget along the owner boundaries they already name, with budgets that follow the second-opened pages. Roadmap P0-B, P2-A to P2-C.
+5. **Make the corpus truthful and single-owned, then smaller.** Correct the contexts page and the storage realization statements, remove the vendor-support clauses, give the storage family one field-record home, then split the pages above budget along the owner boundaries they already name, with budgets that follow the second-opened pages. Roadmap P0-B, P2-A to P2-C.
 
 ### 2.7 The immediate portfolio
 
-Every portfolio item is specified, and every unrealized one refuses truthfully. The libvirt arm and the bare-metal arm are realized; the bare-metal contract is the strongest in the corpus, with one exact system proof, a full MAC set, a UUID pin and a re-proof before media insertion. OpenShift Virtualization machines are refused before registration under B87 with a written contract whose deletion proof matches libvirt's but whose identity, lost-reply and reservation rules are weaker [R2-02-03], and whose day-2 stop is unreachable because power commands are wired to Redfish only [F18-07]. IBM Storage Ceph is realized for its milestone scope, with its coverage gated on vendor support the owner has forbidden [F17-01]. Fusion Data Foundation is specified end to end except for its removal order, which is the one High defect on the portfolio path [R2-02-01]. Managed and external NTP and proxy are realized and are the positive control for additive extension: an external service needs no code. Provided networking has no stated boundary [F01-06]. xFusion's BMC variation has no specialization model and sits in trust code [R2-02-04].
+Every portfolio item is specified, and every unrealized one refuses truthfully. The owner's list names no cluster distribution, but Fusion Data Foundation and OpenShift Virtualization both require OpenShift, so this report reads the portfolio as OpenShift; the list also implies DNS and artifact serving, and artifact serving must be managed because no consumer accepts an external ArtifactServer [F04-07] (section 3.4).
+
+- **libvirt with sushy-tools and bare metal through vendor BMCs** are realized. The bare-metal contract is the strongest in the corpus, with one exact system proof, a full MAC set, a UUID pin and a re-proof before media insertion. xFusion's BMC variation has no specialization model and sits in trust code [R2-02-04].
+- **OpenShift Virtualization machines** are refused before registration under B87. Their written contract matches libvirt on deletion proof but is weaker on identity, lost-reply and reservation rules [R2-02-03], and their day-2 stop is unreachable because power commands are wired to Redfish only [F18-07].
+- **IBM Storage Ceph** is realized for its milestone scope, with its coverage gated on vendor support the owner has forbidden [F17-01]. An interrupted physical multi-host deployment has no exit today [CX-API04].
+- **Fusion Data Foundation** is specified end to end except for its removal order, which can destroy the storage of a surviving physical consumer [R2-02-01], and its export's realm-wide trust is invisible in plan and status [V2-09].
+- **NTP and proxy, managed or external,** are realized with limits. A Bootwright-installed Machine and an install profile select only an external Proxy, deliberately, to avoid a bootstrap cycle; cluster installation carries the selected Proxy into install-config. An external service needs no code, which makes this layer the positive control for additive extension.
+- **Provided networking** has no stated boundary [F01-06].
 
 ### 2.8 Confidence
 
-The audit read every spec, skill, wrapper, rule, hook and entrypoint file (section 12), ran eighteen first-round and six second-round lenses, and sent each of 235 candidates through a refuter and an impact calibrator with arbitration on splits; 230 survived and 29 merged (section 15). The sibling audit of the same date agrees on the structural verdict and on the first defects to fix; its ten additional confirmed claims are carried in section 11.4 and scheduled in section 14.8. The limits are those of a textual audit: no function bodies or tests were reviewed, no command with effects ran, and a rule judged sound may still be implemented wrongly. Medium and Low entries are well-evidenced claims to check at the cited lines, not settled facts.
+Revision 1 read every spec, skill, wrapper, rule, hook and entrypoint file (section 12), ran eighteen first-round and six second-round lenses, and sent each of 235 candidates through a refuter and an impact calibrator with arbitration on splits; 230 survived and 29 merged. Revision 2 compared the sibling Codex audit point by point (512 points), verified every new or partly covered point the same way, added the 22 adapter argument specs to the ledger, checked every file:line citation in this report against the audited commit, and wrote a counterevidence paragraph for each High finding (section 15.4). The two audits agree on the structural verdict and on the first defects to fix. The limits are those of a textual audit: no function bodies or tests were reviewed, no command with effects ran, and a rule judged sound may still be implemented wrongly. Two High severities carry a recorded dissent ([CX-API04], [F13-01]). Medium and Low entries are well-evidenced claims to check at the cited lines, not settled facts.
 
 ## 3. Objectives, scope and domain
 
@@ -210,7 +250,7 @@ The four documents are `specs/project.md`, `README.md`, `specs/architecture.md` 
 | Networking boundary | absent | absent | Substrate owns attachments, 50 | M1c manages libvirt networks | [F01-06] |
 | Day-2 non-goal | 98-102, undefined | absent | absent | substrates.md says "Day-2 power commands" | [F01-03] |
 | Early per-cluster handoff | settled, 50-53 | absent | absent | pending Q60 under D173 | [F01-04] |
-| Container cluster and Storage domains | family list | n/a | "OpenShift and OKD", "Ceph" | n/a | [F06-05] (also [F01-07]) |
+| Container cluster and Storage domains | family list | n/a | "OpenShift and OKD", "Ceph" | n/a | [F06-05] (also F01-07) |
 | GitOps package, M7 link | "Argo CD"; extension text at 77-79 | n/a | n/a | m7.md links the wrong anchor | [F01-11] |
 | "State reconciliation" context name | "not a continuously reconciling controller" | n/a | context name | n/a | [F01-10] |
 
@@ -238,14 +278,19 @@ The status column uses three values. Realized means the arm is specified and pla
 | libvirt with sushy-tools BMCs | `specs/api/machines.md:73-101`; `specs/substrates.md:19-100, 320-412` | Realized; M1c virtual baseline accepted; X55/X60 operator gates open | none in scope |
 | Bare metal via vendor BMC (xFusion first) | `specs/api/machines.md:40-71`; `specs/substrates.md:526-563, 895-913` | Realized in contract; M1e physical qualification open | [R2-02-04], [R2-02-05] |
 | OpenShift Virtualization machines | `specs/substrates.md:639-698`; `specs/deferred/machine-arms.md` | Refused before registration (`substrates.md:50-51`), Not yet met, B87 | [R2-02-03], [F18-07] |
-| IBM Storage Ceph | `specs/storage.md`, `storage-resources.md`, `storage-coverage.md` | Realized on libvirt (M2b done); M2c-M2e in progress | [F17-01], [R2-02-01] |
+| IBM Storage Ceph | `specs/storage.md`, `storage-resources.md`, `storage-coverage.md` | Realized on libvirt (M2b done); M2c in progress; M2d and M2e not started; a physical partial-cluster refuses until B659 defines recovery (`storage.md:661, 688`) | [F17-01], [R2-02-01], [CX-API04] |
 | IBM Fusion Data Foundation add-on | `specs/api/addons.md:354-390`; `specs/add-ons.md:121-379`; `storage-resources.md:1124-1255` | Specified end to end; M4d in-tree, operator exit B761 pending | [R2-02-01] |
-| NTP and proxy, managed or external | `specs/api/infrastructure-services.md`; `specs/infrastructure-services.md:465-561` | Realized; M1d shared services delivered | [R2-02-07] |
+| NTP and proxy, managed or external | `specs/api/infrastructure-services.md`; `specs/infrastructure-services.md:465-561` | Realized with limits; M1d delivered. A Bootwright-installed Machine and an install profile select only an external Proxy (`api/machines.md:463, 634-635`), deliberately, to avoid a bootstrap cycle. Managed-service image acquisition refuses a managed, authenticated or private-trust Proxy (`infrastructure-services.md:52-54, 237-240`). Cluster installation carries the selected Proxy into install-config (`container-clusters.md:312-317`). | [R2-02-07] |
 | Pre-existing networking (provided) | no single owner; per-arm rules in `substrates.md:126-165` | Partly managed (libvirt networks, firewalld units); boundary unstated | [F01-06] |
+| OpenShift cluster (implied, not listed) | `specs/api/container-clusters.md:3-6, 57`; `specs/project.md:25` | Realized for OpenShift and OKD (`spec.distribution.type`); M3 in progress | [F18-02] extension seam for the other distributions the owner intends |
+
+DNS and artifact serving are implied by the portfolio outcomes; an external ArtifactServer has no consumer [F04-07].
+
+The owner's portfolio names no cluster distribution, but two of its items require one. Fusion Data Foundation is an OLM package served through `openshift-marketplace` (`specs/api/addons.md:354-363`), and OpenShift Virtualization is an OpenShift feature. This section therefore reads the portfolio as OpenShift, which `ContainerCluster` already owns for OpenShift and OKD (`specs/api/container-clusters.md:3-6, 57`). The distribution arm asked for in [F18-02] is not a portfolio gap. It is the extension seam for the cluster types the owner intends to add later. Section 2.6, action 3, asks for it now only because a public schema move costs least before 1.0 (`specs/api.md:31-37`).
 
 Two adjacent family items leak into the portfolio. A managed Registry and LoadBalancer are refused by the engine (`specs/state-reconciliation.md:939`), but their API page shows supported-looking defaults with no marker [R2-02-06].
 
-The strongest portfolio contract is the physical bare-metal arm. It proves one exact ComputerSystem and the full MAC set, pins identity, and repeats the proof before media insertion and before every power request. KubeVirt is weaker. It lacks a lost-reply rule, a reservation key and defined label values [R2-02-03]. Its quiescence depends on `machine stop`, which is hard-wired to Redfish [F18-07]. The only High-severity defect on the portfolio path is unsafe. A context with virtual Ceph and a physical cluster consuming it through FDF can destroy the backing storage of a cluster that keeps running [R2-02-01].
+The strongest portfolio contract is the physical bare-metal arm. It proves one exact ComputerSystem and the full MAC set, pins identity, and repeats the proof before media insertion and before every power request. KubeVirt is weaker. It lacks a lost-reply rule, a reservation key and defined label values [R2-02-03]. Its quiescence depends on `machine stop`, which is hard-wired to Redfish [F18-07]. Two High-severity defects sit on the portfolio path. The first is unsafe. A context with virtual Ceph and a physical cluster consuming it through FDF can destroy the backing storage of a cluster that keeps running [R2-02-01]. The second leaves physical Ceph without recovery. A physical deployment interrupted after a non-bootstrap host carries a daemon, with the cluster not ready, refuses `partial-cluster` (`specs/storage.md:661`), and a partial DB/WAL device refuses before submission (`storage.md:687-688`), against the general safe-retry clause (`storage.md:481-482`). Earlier interruptions continue forward (`storage.md:656-659`). No remedy is named, and the all-virtual retirement path does not cover physical hosts (`storage.md:1467-1470`), so the journey has no forward or backward path [CX-API04, High].
 
 ### 3.5 Is the day-0 and GitOps-handoff boundary coherent?
 
@@ -266,12 +311,14 @@ Gather all non-goals into one list in `specs/project.md`. Today they are split a
 
 | Proposed non-goal or boundary | Source |
 | --- | --- |
-| Physical fabric (switches, VLAN trunking, routing), external bridges and the host firewall are provided and verified, never changed; Bootwright owns only managed provider-host virtual networks and host network configuration it installs | [F01-06] |
+| Physical fabric (switches, VLAN trunking, routing), external bridges and the host firewall are provided and verified, never changed. Provided does not mean undeclared: an external attachment still names its existing bridge (`specs/api/machines.md:158`), every interface maps to an attachment (`machines.md:334`), and NMState still declares interfaces, addresses and routes (`machines.md:369`, `744`). Bootwright owns only managed provider-host virtual networks and the host network configuration it installs | [F01-06] |
 | Bootwright-owned objects are frozen after handoff; GitOps controls only resources absent from owned-object evidence; a change to an owned object means destroy-and-apply | [F01-02] |
 | Day-2 lifecycle is excluded except named operator utilities that register no operation and never repair drift | [F01-03] |
 | No vendor support status, release catalog or compatibility rule; a coverage row means "Bootwright realizes this", not "the vendor supports this" (D157, D159, D163) | [F17-01] |
 | No operator-authored code runs inside a lifecycle operation until a typed `CustomPlaybook` replacement exists (B102) | [F01-03] |
 | Envelope entries gate no milestone until the owner promotes them | [F01-01] |
+
+The boundary must also place DNS and artifact serving. Each is either a managed service (`DNSServer`, `ArtifactServer`; `specs/api/infrastructure-services.md:34-36`, placed only on a Machine with the OS already provided, `:46-50`) or an external endpoint the Environment selects. Neither is always provided, so the project.md paragraph should say which side each sits on for a given Environment rather than fold them into 'provided networking' [F01-06].
 
 Add the missing positive scope line as well: Bootwright-installed machine operating systems with installer media and entitlement use, first RHEL through Anaconda, stated without versions [F01-05]. Add one README line linking project.md's scope and non-goals [F01-11].
 
@@ -301,7 +348,7 @@ Where the owner has already promoted an envelope item by decision (D18, D173 for
 
 This section answers brief question 2. It judges whether each core concept is defined once, spelled one way across API kinds, CLI nouns, stage tokens, Go packages and Ansible roles, and free of overloads. It then proposes a normative vocabulary, a rename table, naming rules and a CLI alignment table.
 
-The standard is the one a mature declarative platform meets. Kubernetes API conventions are the reference: every core term has one definition on one owner page. One word never names two concepts in operator-facing or safety-relevant text. One concept has one spelling at every layer. A written rule lets an author name a new kind or field without hunting for a precedent.
+The standard is the one a mature declarative platform meets. Kubernetes API conventions are the reference: every core term has one definition on one owner page. One word never names two concepts in operator-facing or safety-relevant text. One concept has one spelling at every layer. A written rule lets an author name a new kind or field without hunting for a precedent. The Kubernetes reference covers naming and the `apiVersion`/`kind`/`metadata`/`spec` envelope only. It imports no API server, status subresource or watch, because Bootwright is not "a continuously reconciling controller" (specs/project.md:104-105).
 
 ### 4.1 Verdict
 
@@ -324,14 +371,15 @@ The D70 precedent matters for this section. The owner renamed `address` to `cont
 
 #### What needs improvement
 
-The glossary defines six entries (specs/index.md:43-60), while the corpus relies on undefined, overloaded words [F02-07]. Binding, profile, capability, evidence and receipt each carry two to four meanings; receipt alone names the four-line lifecycle receipt and the setup receipt. "Capability" names a Machine eligibility token, an add-on ordering token and a Go lifecycle module [F02-12]. "Implementation" names a union arm, the managed-service product field and the frozen registry identity [F02-02]. "Add-on" and "package" are defined differently on two pages, and "driver" lives only in the deferred add-on design [F02-06]. The shared-service layer has several spellings: "infrastructure services", "infrastructure components", the `infra-components` stage token and `preflight infra` [F02-05]. The plan's unit is a "block" in the contract but a "step" in plan output, and the JSON result carries an undefined `steps` member beside `blocks` [F02-03]. "Drift" carries three consequences on three pages without one definition [F12-05]. The state-reconciliation context is named after the behavior its own contract disclaims [F01-10]. Enum casing and the `Ref` suffix have no written rule, and the outliers show it [F02-09].
+The glossary defines six entries (specs/index.md:43-60), while the corpus relies on undefined, overloaded words [F02-07]. Binding, profile, capability, evidence and receipt each carry two to four meanings; receipt alone names the four-line lifecycle receipt and the setup receipt. "Capability" names a Machine eligibility token, an add-on ordering token and a Go lifecycle module [F02-12]. "Implementation" names a union arm, the managed-service product field and the frozen registry identity [F02-02]. "Add-on" and "package" are defined differently on two pages, and "driver" lives only in the deferred add-on design [F02-06]. The shared-service layer has several spellings: "infrastructure services", "infrastructure components", the `infra-components` stage token and `preflight infra` [F02-05]. The plan's unit is a "block" in the contract but a "step" in plan output, and the JSON result carries an undefined `steps` member beside `blocks` [F02-03]. "Drift" carries three consequences on three pages without one definition [F12-05]. The state-reconciliation context is named after the behavior its own contract disclaims [F01-10]. Enum casing and the `Ref` suffix have no written rule, and the outliers show it [F02-09]. The playbook path rule `playbooks/<domain>/<operation>.yml` (specs/architecture.md:680) matches no shipped playbook, and two Ceph apply bindings name other verbs [V2-18]. "Supported" means both a realized capability and a vendor status (specs/architecture.md:940-941; specs/storage-coverage.md:151), and "qualified" carries five senses. "Retirement" names two opposite fates: objects that leave with a virtual cluster's disks, and objects that stay running unmanaged on a physical cluster (specs/add-ons.md:133, 389-391). "Read-only command" has no single owner, although the command catalog already defines the effect classes [CX-R6].
 
 #### What is bad
 
-Two defects reach operator-visible or safety-relevant text.
+Three defects reach operator-visible or safety-relevant text.
 
 - **Bare "controller" names both the Bootwright host and a BMC** [F02-01]. The glossary reserves bare "controller" for the host (specs/index.md:48-49). Yet specs/substrates.md uses bare "controller" 88 times and "management controller" 7 times. specs/api/machines.md:65-71 uses one word for both ends of the controller-to-BMC TLS leg. A reader cannot tell which party a trust bundle, verification check or remedy applies to.
 - **The kind count is stated three ways** [F02-04]. specs/api.md:183 and :262 say 33. specs/api/environment.md:240-241 says the `spec.defaults` key set comes from a "27-kind catalog". The code registers 34 (api/v1alpha1/object.go:12-47), and specs/api/storage.md omits `StorageReplication`. The closed key set of kind defaults is therefore ambiguous in the contract.
+- **The StorageCluster name limit depends on which services it declares** [V2-19]. The cap is 44 with crash only, 39 with monitoring or rbd-mirror, 37 with the management gateway and 26 with NVMe-oF (specs/storage.md:243-245, 274-275, 283, 289-290; specs/storage-native-api.md:515-516). A 27-character cluster applies, then refuses when a day-2 change adds NVMe-oF. `metadata.name` is the identity, so the only way forward recreates a data-bearing cluster. The per-service caps also show that one uniform 47-byte limit with 16-byte block prefixes [F04-11] cannot hold, so F04-11's fix must cover this case; F04-11 stays Low as the general naming defect.
 
 Three API design findings also have a naming face. Neutral `Storage*` kind names cover Ceph-only semantics [F05-03]. `ContainerCluster` is OpenShift-shaped under a neutral name [F18-02]. `Machine.capabilities` mixes host prerequisites with product-named cluster roles [F04-02]. Section 5 owns their shapes; this section owns their names.
 
@@ -341,6 +389,7 @@ Three API design findings also have a naming face. Neutral `Storage*` kind names
 | --- | --- | --- |
 | [F02-01] | Medium | Bare "controller" for host and BMC |
 | [F02-04] | Medium | Kind count 33, 27 and 34 |
+| [V2-19] | Medium | StorageCluster name limit varies with declared services |
 | [F01-10] | Low | "State reconciliation" disclaims reconciliation |
 | [F02-02] | Low | "Implementation" has three meanings |
 | [F02-03] | Low | Block versus step in plan output |
@@ -353,6 +402,7 @@ Three API design findings also have a naming face. Neutral `Storage*` kind names
 | [F12-05] | Low | Equal, settled and drift |
 | [F16-07] | Low | CLI selector flags differ per noun |
 | [F16-08] | Low | Three vocabularies for "next" |
+| [V2-18] | Low | Playbook path rule matches no shipped playbook |
 
 ### 4.2 Normative vocabulary
 
@@ -363,6 +413,9 @@ The table is the proposed norm. Each term has one meaning and one owner page; "f
 | Environment | The one `Environment` object that selects the complete desired state of one lifecycle unit | specs/api/environment.md | "env file" for the object |
 | Environment directory | The directory holding the selecting Environment file; paths resolve against it | specs/api.md#environment-directory-and-selected-state | "input root" |
 | Context | A named, durable, root-owned workspace holding frozen input, secrets and lifecycle state | specs/contexts.md | Go `context.Context`; bounded context |
+| Desired state | The authored objects one Environment selects; the only source of truth | specs/project.md:77-79 | "config", "input" for the objects |
+| Effective state | The defaulted, normalized, canonical form a build compiles from desired state; a generated output, never evidence that an effect happened | specs/api.md#defaults-normalization-and-effective-state | "rendered state"; "effective" for observed state |
+| Unchanged input | The context's selected revision and its frozen bytes; the identity over which a completed apply settles or an incomplete one continues | specs/state-reconciliation.md:35-40 | "same input"; "byte-identical" without this link (D153; restored bytes are open B598) [F12-05] |
 | Controller | The host that runs Bootwright; in desired state, the Machine that `spec.controller.machineRef` names | specs/controller.md | bare "controller" for a BMC [F02-01] |
 | Management controller (BMC) | A Machine's out-of-band Redfish endpoint, physical or emulated; written "BMC" or "management controller" | specs/substrates.md | bare "controller" |
 | Operation | One registered apply or destroy over a frozen plan | specs/state-reconciliation.md | "run", "job" |
@@ -379,8 +432,8 @@ The table is the proposed norm. Each term has one meaning and one owner page; "f
 | InfraProvider arm | The presence-union member of `InfraProvider.spec` that names its substrate | specs/api.md#unions | "implementation arm" [F02-02] |
 | Provider host | The Machine a hosted provider runs on | specs/substrates.md#provider-host-realization | "hypervisor host" as a term |
 | Machine | One host Bootwright knows, physical or virtual, provided or installed | specs/api/machines.md | "node" outside a cluster topology |
-| Realized target | What a substrate freezes for a Machine: arm, BMC, identity channel, physicality, realizing block | specs/substrates.md#selection-and-refusal | "target" unqualified |
-| Reservation | A host-wide claim that refuses a conflicting context | specs/infrastructure-services.md#host-reservations | "lock" for this meaning |
+| Realized target | What a substrate freezes for a Machine: arm, management controller or the arm's own management API, identity channel, interfaces, realizing block | specs/substrates.md:30-46 | "target" unqualified; "BMC" for a native-API arm |
+| Reservation | A host-wide conflict claim (port, unit, path) declared before a capability's first effect, so a second context refuses; coordination only, never ownership proof or removal authority | specs/infrastructure-services.md#host-reservations | "lock" for this meaning; "owns" for a held key |
 | Infrastructure service | A shared service kind (`Proxy`, `DNSServer`, `NTPServer`, `ArtifactServer`, `Registry`, `LoadBalancer`), managed or external | specs/infrastructure-services.md | "infrastructure component", `infra-components` [F02-05] |
 | Implementation | The registry entry a block freezes: versioned identity, content digest, adapter entry point | specs/architecture.md#implementations-and-version-variation | union arm; product choice [F02-02] |
 | Arm | One member of a presence or discriminated union in the API | specs/api.md#unions | "implementation arm" |
@@ -398,9 +451,18 @@ The table is the proposed norm. Each term has one meaning and one owner page; "f
 | Evidence | Always qualified: context mutation evidence, block evidence, completion evidence | specs/state-reconciliation.md | bare "evidence" [F02-07] |
 | Receipt | Always qualified: lifecycle receipt (four final lines), setup receipt | specs/cli.md:575-580; specs/controller.md:166 | bare "receipt" |
 | Refusal | A diagnostic that stops a verb before or instead of an effect, naming object, reason and next action | specs/cli/output.md:191-192 | "error" for a deliberate refusal |
+| Effect class | Local, Observe or Mutate, as the command catalog defines them; each command's Effects column is the only effect owner, and other pages project it | specs/cli/commands.md:50-52 | bare "read-only command" without the class [CX-R6] |
 | Capability | Always qualified: Machine capability, add-on capability token, lifecycle capability | specs/api/machines.md; specs/api/addons.md; specs/architecture.md | bare "capability" [F02-12] |
+| Realized | A bound implementation plans and applies the intent; the only meaning of a coverage row (SC-12) [F17-01]. Admission is weaker: "accepting desired-state syntax does not imply implementation support" (specs/architecture.md:948) | specs/architecture.md#implementations-and-version-variation | "supported" for a capability Bootwright realizes (specs/architecture.md:940-941; specs/storage-coverage.md:151-157); "support status" |
+| Qualified | Never bare in contract text; it carries five senses today. Pinned executable or native tool: "pinned" (specs/project.md:10; specs/controller.md:46). Name grammar: "canonical native name" (specs/storage-native-api.md:234, 451). Privilege escalation, mirrors, modules: "approved" or "declared" (specs/storage-coverage.md:178, 190). Acceptance evidence: "accepted", under the existing glossary entry (specs/index.md:59). Release status: deleted with "release-qualified" and "unqualified feature" [F17-01] (specs/storage-native-api.md:11, 747; specs/storage-coverage.md:6) | specs/index.md#glossary (Acceptance) | bare "qualified"; refusal tokens ending in `-unqualified` (specs/storage.md:557) stay as API identifiers until their owner renames them |
 | Drift | An owned object's observed real side differs from its recorded applied side; `diff --observe` reports it | specs/state-reconciliation.md | undefined use on storage pages [F12-05] |
 | Settled | A verb's records are complete over unchanged input; no host is read | specs/state-reconciliation.md | "already realized" [F12-05] |
+| Removal | Bootwright deletes an owned effect through its inverse and proves it gone | specs/state-reconciliation.md | bare "retire" for a deletion |
+| Erase | An explicitly selected data overwrite, beyond deletion, under `data-loss` | specs/state-reconciliation.md:1926-2014 | "wipe", "clean" |
+| Retirement | An effect ends with its host because the same removal destroys that host (virtual Machine disks); no host contact | specs/state-reconciliation.md:1836-1840 | retirement for an effect that survives |
+| Relinquishment (proposed) | An effect stays running but leaves management; nothing is deleted | specs/add-ons.md#retirement | "retire" for a physical cluster's surviving add-on objects |
+
+Today "retirement" names two opposite fates. A virtual cluster's add-on objects leave with its disks, while a physical cluster's stay running, unmanaged (specs/add-ons.md:133, 389-391). Storage retired with its virtual hosts is destroyed with them (specs/state-reconciliation.md:1836-1840). Every inverse and every plan or impact row should name one of the four fates. A relinquished effect must then appear in the removal's impacts, closing the gap behind [F10-04] and [R2-02-01]. "Relinquishment" is not a spec term today, so the row marks it proposed. An explicit relinquish verb is option (a) of [F01-02]; [F02-07] places these terms in the glossary.
 
 ### 4.3 Rename table
 
@@ -440,6 +502,7 @@ Every row cites the finding that judged the current name misleading. "Before 1.0
 | Literal kind counts (33, 27) | "every kind in the catalog", linked; add the `StorageReplication` row to specs/api/storage.md | Three counts, none correct | Spec | [F02-04] |
 | Bare "driver" in specs/security.md:625 and specs/architecture.md:56 | Link to the deferred definition or say "adapter" | Undefined in normative pages | Spec | [F02-06] |
 | Role and plugin names (`substrate_machine_protocol`, `managedos_install_anaconda`) | `<domain>_<implementation>_<capability>` for new names; rename `substrate_machine_protocol` to `substrate_libvirt_machine_protocol` | Three naming schemes coexist | Code | [F07-08] |
+| Playbook path rule `playbooks/<domain>/<operation>.yml`; Ceph `storage/image_resolve.yml`, `storage/host_prepare.yml` | Rule `playbooks/<domain>/[<implementation>_]<capability>_<operation>.yml`, with the operation equal to the bound Go port operation; rename the two files `image_apply.yml`, `host_apply.yml` in F07-08's coordinated move | The stated rule matches no shipped playbook (specs/architecture.md:680, 698-699), and two apply bindings name other verbs (cmd/bootwright/wiring_reconciliation.go:165, 168) | Spec, Code | [V2-18], [F07-08] |
 | `machine_power_redfish` in the generic power path | An arm-neutral name such as `machine_power` | The generic flow names one protocol | Code | [F18-07] |
 
 ### 4.4 Naming rules for future names
@@ -450,14 +513,14 @@ These rules belong in specs/api.md "Collections, enablement, and reserved words"
 
 1. A kind name is a PascalCase noun that says what one object is. Abbreviations are limited to established acronyms (DNS, NTP, RBD, NFS, SMB).
 2. A neutral family prefix (`Storage`, `Container`) is used only when the kind's fields are neutral. A provider-shaped kind either carries the provider in its name or sits under a provider arm of a neutral kind [F05-03], [F18-02].
-3. A new kind enters the catalog table of specs/api.md in the same change. No page states a literal kind count [F02-04].
+3. A new kind enters the catalog table of specs/api.md in the same change. No page states a literal kind count [F02-04]. A kind's name limit is one unconditional value on its API page; it never depends on which child services or fields the object declares [V2-19].
 
 #### Fields and references
 
 4. Fields and union arms are lowerCamel.
 5. A field whose value names a Bootwright object ends in `Ref`, and a list in `Refs`. A field holding a native identifier never ends in `Ref`; its row says "native ID" [F02-09], [F03-07].
 6. `type` only discriminates a domain variant without its own configuration block. An implementation choice with configuration is a presence arm. Never an enum whose value equals a sibling arm's name [F03-01].
-7. `management: managed|external` is the only who-runs-it axis. `enabled` appears only where omission differs from `false` (already specs/api.md:248-258).
+7. Responsibility words keep separate meanings. `management: managed|external` says who runs a shared service (specs/api.md:255-256). `os.provided` says only who installs the OS (specs/api/machines.md:202-216). An add-on's `provides` names ordering tokens (specs/api/addons.md:42). Never use these three as synonyms. Whether Bootwright creates or removes a Machine's infrastructure follows from its substrate arm, not from `os.provided` (specs/api/machines.md:184); [F04-01] and [F04-05] make both explicit. `enabled` appears only where omission differs from `false` (specs/api.md:250-252).
 
 #### Enum values and tokens: one casing per vocabulary
 
@@ -469,12 +532,12 @@ These rules belong in specs/api.md "Collections, enablement, and reserved words"
 | Add-on capability tokens | One casing for the defined set | Optional [F02-12] |
 | CLI commands, flags, stage tokens, `--authorize` tokens, receipt tokens | kebab-case | Already the rule in practice |
 | Diagnostic codes | dotted namespace with kebab segments (`preflight.unknown`) | Already the rule in practice |
-| Go identifiers, Ansible roles | Go and Ansible conventions; roles `<domain>_<implementation>_<capability>` [F07-08] | Spec correction needed |
+| Go identifiers, Ansible roles | Go and Ansible conventions; roles `<domain>_<implementation>_<capability>`; playbooks `<domain>/[<implementation>_]<capability>_<operation>.yml` [F07-08], [V2-18] | Spec correction needed |
 
 #### Terms
 
 8. One concept has one spelling across kind, field, stage token, CLI noun, Go package and role prefix. A new term enters the glossary with its owner link in the same change.
-9. Reserved single-meaning words: controller (host), BMC, block, stage, wave, attempt, implementation, arm, variant, package. Overloaded words (binding, profile, capability, evidence, receipt) appear only in qualified form where senses meet [F02-07].
+9. Reserved single-meaning words: controller (host), BMC, block, stage, wave, attempt, implementation, arm, variant, package, realized. Overloaded words (binding, profile, capability, evidence, receipt, qualified) appear only with a disambiguating modifier where senses meet [F02-07].
 10. Delivery vocabulary (slice, item, milestone) never appears in product contract sentences.
 
 #### CLI nouns and verbs
@@ -506,7 +569,7 @@ The catalog in specs/cli/commands.md:44-128 is mostly aligned with the kinds. Th
 
 ### 4.6 Order of work
 
-1. Sweep bare "controller" in safety-relevant pages and messages, and fix the kind count and the `StorageReplication` row [F02-01], [F02-04]. These are the two Medium defects.
+1. Sweep bare "controller" in safety-relevant pages and messages, and fix the kind count and the `StorageReplication` row [F02-01], [F02-04]. State one unconditional StorageCluster name rule, or one block-identity hashing rule [V2-19], [F04-11]. These are the three Medium defects.
 2. Add the ten-line glossary block for the overloaded terms and the four arm, implementation, variant and specialization entries [F02-07], [F02-02], [F02-12].
 3. Write the naming rules into specs/api.md and specs/cli/commands.md with their docs-check or schema tests [F02-09], [F16-07].
 4. Apply the before-1.0 renames in one coordinated change per surface: `StorageExport`, `bootstrap.credentialsRef`, the stage token, the two CLI flags and the chosen enum casing [F05-05], [F02-09], [F02-05], [F16-07].
@@ -554,7 +617,8 @@ The decoding layer and refusal contract are stricter than Kubernetes, Helm or Ku
 | Discoverability | 34 kinds over eight pages, no `explain`, no schema export, and effective output hides value origin. | [F03-05] |
 | Retired fields | "The former X is unknown" sentences recur per page instead of one retired-path table. | [F03-09] |
 | Scoping | The source directory, `spec.resources` and the cluster lists all narrow scope. | [F03-08] |
-| Name limits | Six or more per-kind name limits derive from internal block-identity prefixes. | [F04-11] |
+| Name limits | Six or more per-kind name limits derive from internal block-identity prefixes. The StorageCluster limit also varies with declared services (44, 39, 37 or 26 characters), so adding an `nvmeof` service on day 2 can force a recreate (`specs/storage-native-api.md:515-516`; `specs/storage.md:243-245`, `:274-275`). | [F04-11], [V2-19] |
+| Defaults that refuse | Omitting `ceph.cephadm.clusterSSH.transport` selects `native` (`specs/api/storage.md:205-206`), which the plan-time refusal table always refuses (`specs/storage.md:376`). | [V2-02] |
 | Diagnostic indexes | ClusterAddonBinding indexes refer to the sorted list, not the authored position. | [R2-05-09] |
 | Reserved directory | A `secrets/` directory is skipped silently, so descriptors placed there surface as unresolved references. | [F03-02] |
 | Kind count | The envelope and catalog say 33 kinds; `api/v1alpha1/object.go:13-49` registers 34. | [F02-04] |
@@ -564,7 +628,7 @@ The decoding layer and refusal contract are stricter than Kubernetes, Helm or Ku
 | Topic | Problem | Ids |
 | --- | --- | --- |
 | Repeat, then compare | Operators author a value that has one valid derivation, and admission checks that the copies agree: service bind addresses, certificate SANs, `mdsServiceRef`, SMB `cluster_id`. | [F03-03], [F05-07] |
-| Truthfulness split | Some unrealized declarations refuse at `validate`, others pass and refuse at plan or installation; ContainerCluster admits inert fields that plan ignores silently. | [R2-05-01], [F05-06] |
+| Truthfulness split | Some unrealized declarations refuse at `validate`, others pass and refuse at plan or installation; ContainerCluster admits inert fields that plan ignores silently. The reverse also occurs: the storage admission page calls realized NVMe-oF gateways and subsystems refused (`specs/api/storage.md:15-18`, `:88-92`). | [R2-05-01], [F05-06], [V2-01] |
 | Neutral names, product shapes | ContainerCluster is OpenShift-shaped with no distribution arm; Storage child kinds are Ceph-only under neutral names; Machine `capabilities` carries `openshift-node` and `ceph-node`. | [F18-02], [F05-03], [F04-02] |
 | Selection closure | The authoritative closure table omits four storage kinds and the StorageReplication peer, and silently drops standalone Machines once a cluster list is authored. | [R2-01-04], [R2-01-05] |
 | References do not declare edges | No spec maps a reference field to a plan edge; the one explicit cluster-install list omits the managed Proxy that code waits for. | [R2-01-01] |
@@ -575,7 +639,7 @@ Considered and refuted: the wildcard default of a managed service `bindAddress` 
 
 #### Environment selection as part of the grammar
 
-The selection closure is grammar, because it decides which objects exist for every later check. Three rules are missing. First, "every storage child whose `clusterRef` names it" should replace the enumerated list in `specs/api/environment.md:204` [R2-01-04]. Second, selecting either end of a StorageReplication should retain the relationship and both clusters as full roots [R2-01-04]. Third, Bootwright-installed Machines that are not nodes of an excluded cluster should be retained, or at least warned per object [R2-01-05]. The unresolved-reference rule at `specs/api/environment.md:215-217` should cover every retained referrer, not only always-retained objects [R2-01-03]. An attachment that retains a cluster root missing from an authored list should warn and name the list to extend [R2-01-06].
+The selection closure is grammar, because it decides which objects exist for every later check. Three rules are missing. First, "every storage child whose `clusterRef` names it" should replace the enumerated list in `specs/api/environment.md:204` [R2-01-04]. Second, selecting either end of a StorageReplication should retain the relationship and both clusters as full roots [R2-01-04]. Replication retention widens nothing else: a StorageCluster retained only through a StorageExport still keeps only its node Machines and their provider closure (`specs/api/environment.md:209-211`). Third, Bootwright-installed Machines that are not nodes of an excluded cluster should be retained, or at least warned per object [R2-01-05]. The unresolved-reference rule at `specs/api/environment.md:215-217` should cover every retained referrer, not only always-retained objects [R2-01-03]. An attachment that retains a cluster root missing from an authored list should warn and name the list to extend [R2-01-06].
 
 Each reference class should also state whether it creates a plan edge. One catalog row per reference field class (edge or not, stage pair, retention) removes the need to read capability code to learn the graph [R2-01-01]. The nested KubeVirt chain shows the cost when this is missing: the hub VMs depend on a storage class and networks that only external strings name [R2-01-02].
 
@@ -599,7 +663,7 @@ All 34 registered kinds, in `kindOrder` (`api/v1alpha1/object.go:49`). "Owner pa
 | Registry | infrastructure-services.md | needs-improvement | Managed form refused at plan without a marker | R2-02-06 |
 | LoadBalancer | infrastructure-services.md | needs-improvement | External `bindAddresses` binds nothing; managed form refused | F04-07, R2-02-06 |
 | ContainerCluster | container-clusters.md | bad | OpenShift-shaped under neutral name; inert fields accepted silently | F18-02, F05-06 |
-| StorageCluster | storage.md | good | `type: ceph` duplicates the `ceph` arm | F03-01 |
+| StorageCluster | storage.md | needs-improvement | `type: ceph` duplicates the `ceph` arm; omitted transport defaults to a refused value; name limit varies with declared services | F03-01, V2-02, V2-19 |
 | StoragePlacementPolicy | storage.md | needs-improvement | CRUSH rule under a neutral name | F05-03, F05-10 |
 | StoragePool | storage.md | needs-improvement | Owning page omits `nativeName` and realized mirroring | F05-02, F05-03 |
 | StorageRBDImage | storage.md | good | Ceph-only under a neutral name | F05-03 |
@@ -611,16 +675,16 @@ All 34 registered kinds, in `kindOrder` (`api/v1alpha1/object.go:49`). "Owner pa
 | StorageObjectBucket | storage.md | good | Closure row omits it | R2-01-04 |
 | StorageNFSExport | storage.md | good | `serviceID` is an un-suffixed reference | F03-07 |
 | StorageSMBResource | storage.md | needs-improvement | Native IDs repeat Bootwright references | F05-07 |
-| StorageNVMeoFSubsystem | storage.md | good | Admitted and truthfully refused at plan | none |
+| StorageNVMeoFSubsystem | storage.md | bad | Admission page says planning refuses it; the Ceph capability realizes it | V2-01, F05-02 |
 | StorageReplication | storage.md | needs-improvement | Missing from owning page; peer not closed by selection | F05-02, R2-01-04 |
-| StorageExport | storage.md | needs-improvement | Per-consumer FDF attachment named like an export | F05-05 |
+| StorageExport | storage.md | needs-improvement | Per-consumer FDF attachment named like an export; output page calls it unrealized; plan hides its realm-wide trust | F05-05, V2-01, V2-09 |
 | ClusterAddon | addons.md | bad | Second, refused add-on language; divergent approval default | F05-04 |
 | ClusterAddonProfile | addons.md | bad | Same parallel language as ClusterAddon | F05-04 |
 | ClusterAddonBinding | addons.md | good | Diagnostic indexes follow the sorted list | R2-05-09 |
 | CustomPlaybook | custom-playbooks.md | needs-improvement | Validated reserved shape B102 replaces; stage-like anchors | F05-09, R2-01-07 |
 | Secret | secrets.md | good | No types table; retired arm prose; `opaque` overloaded | R2-05-07, F03-02 |
 
-The tally is 17 good, 14 needs-improvement and 3 bad. The good kinds share three traits: references only to first-class objects, a closed shape, and a refusal table that names the field to change. The bad kinds share one trait: a neutral-sounding surface whose content is a single product's vocabulary, or a second language that every binding refuses.
+The tally is 15 good, 15 needs-improvement and 4 bad. The good kinds share three traits: references only to first-class objects, a closed shape, and a refusal table that names the field to change. Three bad kinds share one trait: a neutral-sounding surface whose content is a single product's vocabulary, or a second language that every binding refuses. StorageNVMeoFSubsystem is bad for another reason: its owning admission page states the opposite of what the build does. `specs/storage-resources.md:18-19` says the kind "is realized under its field record", and `internal/storage/ceph/capability.go:43` claims it. The fix is to delete both refusal sentences in `specs/api/storage.md` and state each kind's realization status once [V2-01].
 
 Three observations from the table deserve emphasis.
 
@@ -642,6 +706,12 @@ Adopt one rule in `specs/api.md#unions` before the next implementation lands [F0
 4. An arm with no configuration may be omitted while exactly one implementation is registered. Its name then appears in effective output, and it becomes required when a second implementation registers.
 
 Rule 4 answers the verifier note on [F04-06]: an implicit default is safe only while one choice exists, and effective output keeps it visible.
+
+Rule 1 rejects one alternative on purpose: an `implementation: {type, config}` bag whose `config` is validated only after dispatch on `type`. A bag gives editors and the `bootwright schema` export of 5.5 no closed shape until `type` resolves, adds one level to every refusal path, and invites a new adapter to accept free keys in `config`. A presence arm gives one closed schema per implementation at decode time, which `specs/api.md:228-230` already requires for `InfraProvider` and `ClusterAddon`. Either form fails closed only if the registered implementation owns the arm schema; presence keeps that ownership visible in the grammar, so the rule stays as written [F03-01].
+
+The `apiVersion`/`kind`/`metadata`/`spec` envelope follows the Kubernetes conventions for authoring only. It imports no API server, `status` subresource, server-side apply or watch; `specs/project.md:104-105` excludes a reconciling controller, and effective output (`specs/api.md:348-357`) with receipts reports what happened. A proposal borrowing one of those mechanisms needs its own decision and does not follow from the envelope.
+
+**Authoring format.** Keep strict YAML in this envelope as the one authoring format. Do not add a DSL, an expression language, a templating engine, or a mandatory CUE, HCL or Jsonnet layer. Platform operators already write Kubernetes-style YAML. The strict decoder closes YAML's known hazards (`specs/api.md:55-67`). The schema export of 5.5 gives editors completion and validation, and kind defaults and typed references give reuse without templates (`specs/api/environment.md:238-307`). An expression or template layer would put evaluation before admission, so the frozen input would no longer be what the operator reviewed. Operators who generate the YAML with their own tools stay free to do so; Bootwright admits only the result, and its provenance records the files, not the generator. This settles the format question; how intuitive the kinds are is a separate, measurable question (5.7).
 
 #### Machine: a per-substrate arm
 
@@ -740,10 +810,6 @@ kind: ContainerCluster
 metadata:
   name: compact
 spec:
-  nodes:
-    - name: cp-0
-      role: control-plane
-      machineRef: compact-01
   endpoints:
     api:
       address: 198.51.100.10
@@ -762,6 +828,10 @@ spec:
     trustBundleRefs:
       - rgw-issuer
   openshift:
+    nodes:
+      - name: cp-0
+        role: control-plane
+        machineRef: compact-01
     release:
       version: 4.21.15
     install:
@@ -777,7 +847,7 @@ spec:
         enabled: false
 ```
 
-The envelope keeps intent every distribution shares: nodes with neutral roles, the API and ingress endpoints, and service selections. Everything OpenShift-specific moves under `openshift`: release, agent install, pull secret, FIPS, disk encryption, OVN settings, `api-int` and the `infra` role [F18-02]. A later `kubeadm:` or `rke2:` arm then adds one arm, one installer-input capability and refusal rows. `install.method: agent` folds into the presence of `install.agent` [F03-01]. The verifier asked that the owner decide between this envelope and "one kind per distribution family". Either answer is acceptable if recorded, but the envelope is cheaper for every general-flow kind list [F18-04]. Until then, the agent path should refuse authored non-default endpoint `port`, `scheme`, `prefixLength` and `interfaceNetworks` [F05-06].
+The envelope keeps only intent every distribution shares: service selections, and endpoints where the operator chooses them. In a self-installed arm the operator authors the API and ingress addresses and their source, as drawn. A managed distribution such as EKS or AKS assigns its own endpoints, so the endpoint members are optional in the envelope and a managed arm reports them as observed output. Nodes and Machine bindings belong to the self-installed arms, because a managed distribution such as EKS or AKS has no Machines, BMCs or boot media. Today every `machineRef` requires `openshift-node` and `os.provided: false` (`specs/api/container-clusters.md:436`) [F18-02]. Everything OpenShift-specific moves under `openshift`: release, agent install, pull secret, FIPS, disk encryption, OVN settings, `api-int` and the `infra` role [F18-02]. A later `kubeadm:` or `rke2:` arm then adds one arm, one installer-input capability and refusal rows. `install.method: agent` folds into the presence of `install.agent` [F03-01]. The verifier asked that the owner decide between this envelope and "one kind per distribution family". Either answer is acceptable if recorded, but the envelope is cheaper for every general-flow kind list [F18-04]. Until then, the agent path should refuse authored non-default endpoint `port`, `scheme`, `prefixLength` and `interfaceNetworks` [F05-06].
 
 #### StorageCluster and its child kinds
 
@@ -817,7 +887,7 @@ spec:
     - cephfs-data
 ```
 
-StorageCluster keeps the neutral name and the `management` axis, and drops `type: ceph` because the arm already discriminates [F03-01]. An external cluster also carries the `ceph` arm, holding only the access facts B107 will define, so an engine is always named. The children take the Ceph-scoped naming (`CephPool`, `CephClient`, `CephFilesystem`, `CephPlacementPolicy` and so on), since every one encodes CRUSH, CephX, MDS or RGW semantics [F05-03]. A NetApp or Pure cluster then adds its own arm and its own provider-named kinds, and no neutral `StoragePool` is stretched to cover an aggregate. If the owner prefers to keep the names, the minimum is one admission rule: a child's `clusterRef` must name a cluster with the `ceph` arm. `mdsServiceRef` is derived as `mds.<metadata.name>` [F05-07]. `bootstrap.node` becomes `bootstrap.nodeRef` [F03-07]. `StoragePool` follows rule 2: replicated and erasure become arms, because erasure carries configuration.
+StorageCluster keeps the neutral name and the `management` axis, and drops `type: ceph` because the arm already discriminates [F03-01]. An external cluster also carries the `ceph` arm, holding only the access facts B107 will define, so an engine is always named. The children take the Ceph-scoped naming (`CephPool`, `CephClient`, `CephFilesystem`, `CephPlacementPolicy` and so on), since every one encodes CRUSH, CephX, MDS or RGW semantics [F05-03]. A NetApp or Pure cluster then adds its own arm and its own provider-named kinds, and no neutral `StoragePool` is stretched to cover an aggregate. If the owner prefers to keep the names, the minimum is one admission rule: a child's `clusterRef` must name a cluster with the `ceph` arm. `mdsServiceRef` is derived as `mds.<metadata.name>` [F05-07]. `bootstrap.node` becomes `bootstrap.nodeRef` [F03-07]. `StoragePool` follows rule 2: replicated and erasure become arms, because erasure carries configuration. The sketch omits `clusterSSH.transport`, so it must select `verified-tunnel`, the only admitted value. Today omission selects `native`, and the first plan refuses the cluster and every child naming it; `validate` should refuse an authored `native` instead [V2-02]. No StorageCluster name limit may depend on the services it declares; one rule, or a hashed overflow segment as the `nvmeof` service token already uses (`specs/storage.md:1495-1498`), keeps day-2 service additions open [V2-19].
 
 #### Fusion Data Foundation attachment
 
@@ -848,7 +918,7 @@ spec:
         source: isf-data-foundation-catalog
 ```
 
-The decomposition is right and must be kept: the storage side mints per-consumer principals, and the package only consumes produced material by reference. Only the name misleads, because "export" already means an NFS export and the object is one consumer of one cluster [F05-05]. Renaming the kind and the `fdf.storageExportRef` field, and dropping the redundant `type: dataFoundation`, aligns it with the union rule. Compare `examples/add-ons/lab-compact-df/storage/export.yaml:1-13`. Moving the external-cluster details to StorageCluster stays an option for when B107 is promoted.
+The decomposition is right and must be kept: the storage side mints per-consumer principals, and the package only consumes produced material by reference. Only the name misleads, because "export" already means an NFS export and the object is one consumer of one cluster [F05-05]. Renaming the kind and the `fdf.storageExportRef` field, and dropping the redundant `type: dataFoundation`, aligns it with the union rule. Compare `examples/add-ons/lab-compact-df/storage/export.yaml:1-13`. Whatever the name, plan and status should disclose the documented grant breadth: consumer administrators hold every RGW user and bucket of the realm, and exports on one cluster are not isolated (`specs/storage-resources.md:1200-1205`). Today the plan line shows only the referenced pool, filesystem and gateway (`specs/cli/output.md:523`) [V2-09]. The same output page says no capability realizes StorageExport (`specs/cli/output.md:507`), although its export block does [V2-01]. Moving the external-cluster details to StorageCluster stays an option for when B107 is promoted.
 
 #### Infrastructure services, managed or external
 
@@ -945,7 +1015,8 @@ The descriptor model is kept as is: explicit type, closed source union, omission
 | Closed arm sets | A set-of-arms discriminator lists the permitted arms per type; any other arm refuses [R2-05-05]. |
 | Truthfulness | A declaration no build realizes either refuses at admission or emits a deterministic `validate` warning naming its tracking item; one table in `specs/api.md` owns the list [R2-05-01]. |
 | Diagnostic indexes | A path's list index is the authored position [R2-05-09]. |
-| Names | One owning section states every kind's name limit [F04-11]. |
+| Names | One owning section states every kind's name limit, and no limit depends on which child services or fields a kind declares [F04-11], [V2-19]. |
+| Defaults | No default always refuses at plan; an omitted field selects a value the build admits [V2-02]. |
 
 The Go `Field` should carry the omission class, so the same fact drives validation, `explain` and the docs-check [F03-05].
 
@@ -956,7 +1027,7 @@ The refusal contract is already better than mainstream. The gap is finding the r
 1. A docs-check test that compares each spec field table and kind table with the registered schema. It would have caught the StorageReplication and `nativeName` omissions [F05-02] and the 33-kind count [F02-04].
 2. `render effective --origins`, annotating each leaf as authored, `defaults.<Kind>`, built-in or derived. It matters most where kind-default rule 6 suppresses or selects an arm.
 3. A one-sentence `Doc` and the omission class on `Shape` and `Field`, then `bootwright explain <Kind>[.<path>]`.
-4. `bootwright schema --format json-schema`, for editor completion through yaml-language-server.
+4. `bootwright schema --format json-schema`, generated from the registered Go shapes, for editor completion through yaml-language-server. The export is advisory; admission, cross-object rules and refusals stay in the Go compiler, and a test validates every example and golden with both and requires that they agree on closed fields, unions and required values [F03-05].
 5. One retired-path table in `specs/api.md`, backed by data in `api/v1alpha1`, that powers a tailored remedy for every removed field and replaces the per-page "former X is unknown" sentences [F03-09].
 6. `validate` output listing retained and excluded roots, with a remedy that names the selection field to change [F03-08], [R2-01-05], [R2-01-06].
 7. A reference-class table in `specs/api.md#references` covering native-registry and nested references [F03-07].
@@ -976,13 +1047,30 @@ D142 says "before 1.x no backward compatibility is wanted" (`specs/milestones/ba
 | ContainerCluster distribution arm | Container-cluster pages, admission, renderer input, add-on facts | High |
 | Ceph-scoped child kinds, StorageAttachment | Kind registry, storage pages, examples, CLI labels | Medium to high |
 
-Two costs reach beyond the repository. First, any change that moves a frozen request or block identity stops D142 continuation, so an affected live operation must be completed or destroyed with the build that started it. Batch the renames into one slice, and land them while few live contexts exist. Second, every rename leaves operators with unknown-field refusals. The retired-path table in 5.5 turns each of these into a refusal that names the replacement, which is the cheapest substitute for a converter the project has declined.
+Two costs reach beyond the repository. First, any change that moves a frozen request or block identity stops D142 continuation, so an affected live operation must be completed or destroyed with the build that started it. Operators cannot see those operations in one place today: `context list` reports no unfinished operation or registering build (`specs/cli/commands.md:61`; `specs/contexts.md:860-866`), so each context needs its own `status` before an upgrade [V2-06]. Batch the renames into one slice, and land them while few live contexts exist. Second, every rename leaves operators with unknown-field refusals. The retired-path table in 5.5 turns each of these into a refusal that names the replacement, which is the cheapest substitute for a converter the project has declined.
 
 The order that minimises rework is: union rule and derivation rules first, since they shape every later arm. The ContainerCluster decision comes next, because it is the one that blocks a second distribution. Storage naming and the Machine arm follow, together with the discoverability tests that keep the pages and schema aligned.
 
+### 5.7 Checking the shapes with operator tasks
+
+Shorter YAML does not prove a more intuitive API. Before the owner records the P1-G decision, test the union rule and each candidate arm on a fixed set of operator tasks. The M2a storage review already used operator journeys (`specs/storage-api-review.md:3-4`). This subsection extends that practice to every reshaped kind.
+
+| Task | Exercises |
+| --- | --- |
+| Declare a new environment from an empty directory | Union rule, arms [F03-01] [F18-02] |
+| Fix a malformed or wrong-class reference | Reference classes [F03-07] |
+| Predict an omitted field's effective value | Omission classes, origins [F03-06] [F03-05] |
+| Select an unsupported implementation | Refusal and remedy [F16-01] |
+| Narrow scope to one cluster | Selection closure [F03-08] [R2-01-05] |
+| Continue after a transient failure | Continuation wording [R2-03-01] |
+| Learn what remains after destroy | Retained resources [F09-01] |
+| Recover from a credential or host-key failure | Trust remedies [F11-03] |
+
+For each task, record whether it was completed, the number of corrections, the time taken, the questions asked and any wrong assumptions. Give the tasks to one human operator. Give them also to one agent that reads only the `validate` and `render effective` JSON output. Run it as a paper exercise on the candidate YAML and today's refusals. It must not delay P1-G, because the reshape costs no converter only before 1.x (D142).
+
 ## 6. Architecture: generic flow, specialization and code materialization
 
-This section answers question 4 of the request. It judges whether the architecture guarantees one generic flow, with every product, vendor and substrate specific behind a port, an adapter or an allowlisted registry selected from the operator's frozen input. It then states the rules that would make that guarantee executable, maps the rules onto the code, and tests them against four extension scenarios and the immediate portfolio.
+This section answers question 4 of the request. It judges whether the architecture guarantees one generic flow, with every product, vendor and substrate specific behind a port, an adapter or an allowlisted registry selected from the operator's frozen input. It then states the rules that would make that guarantee executable, maps the rules onto the code, and tests them against five extension scenarios and the immediate portfolio.
 
 The standard is a ports-and-adapters platform of the kind that serves several vendors at once. Such a platform meets four conditions:
 
@@ -1004,15 +1092,16 @@ The standard is a ports-and-adapters platform of the kind that serves several ve
 | Composition root as the only binder | `specs/architecture.md:336-342`; `TestApplicationImplementationsAreBoundAtComposition` | Constructors are bound in `cmd/bootwright` only. The test is exact and shrink-only. |
 | Static, immutable resolver | `cmd/bootwright/wiring_reconciliation.go:94-122` | `Resolve(kind, implementation)` answers exactly one binding. No runtime plugin path exists. |
 | Frozen implementation identity | `specs/architecture.md:952-959` | Each block freezes its identity and content digest. Continuation refuses another implementation. |
-| Fixed Ansible entrypoints | `specs/architecture.md:739-748` | Go freezes variant dispatch, and authored data never selects code. |
+| Fixed Ansible entrypoints | `specs/architecture.md:739-748` | Go freezes variant dispatch, and authored data never selects code. Two exceptions need closing: the install playbook's later plays import eight undeclared task files [V2-14], and the power role reads its arm from material values [V2-13]. |
 | Uniform refusal mechanics | `Test<X>RefusalTableMatchesUnsupported` per capability | Each capability's refusals are held row by row against its spec table. |
 | Version specializations | `specs/architecture.md:912-938`; `TestDocsVersionSpecializationCatalogMatchesRegistries` | One general flow per component. Facts come from frozen artifact bytes, and an unknown fact selects the general flow. |
 | Secrets as the model seam | `specs/secrets.md:44-50` | An injected immutable catalog with exact resolution. "A second test implementation qualifies this extension seam." |
+| Fixed-point selection closure | `specs/api/environment.md:198-218` | Closures of the listed roots are unioned and the rows apply "until nothing more is retained". A StorageCluster retained only through a StorageExport keeps a narrower closure than an explicit root. The mechanism is sound; the rows need fixing [R2-01-03] [R2-01-04] [R2-01-05] [R2-01-06]. |
 | Realized target | `internal/substrate/target.go` | Substrate derives controller, identity channel, interfaces and delivery once. Consumers read the frozen value. |
 | Infrastructure-service axis | `management: managed` or `external` | An external DNS or NTP server needs no code at all. |
 | Add-on built-in packages | `internal/addons/packages/` | Reviewed Go, a closed schema and a pure renderer. A CSI driver package is additive. |
 
-The version-specialization model deserves separate praise. It keeps release differences inside one implementation, forbids seams in trust and credential code, keeps specialization identities out of content digests, and refuses version pairing rules (D162, D163). The knowledge catalog's "Decided general" table (`.agents/knowledge/version-specializations.md`) stops specialization creep. These rules should stay as written, with the three precision fixes in rule SC-10 below.
+The version-specialization model deserves separate praise. It keeps release differences inside one implementation, forbids seams in trust and credential code, keeps specialization identities out of content digests, and refuses version pairing rules (D162, D163). One registry sentence still conflicts with D163: each implementation declares "supported target and version constraints", and "Supported matrices belong to the owning domain contract" (`specs/architecture.md:940-941, 952`). Neither term is defined, so an agent may register a release range that refuses the operator's chosen version [V2-10]. The knowledge catalog's "Decided general" table (`.agents/knowledge/version-specializations.md`) stops specialization creep. These rules should stay as written, with the three precision fixes and one diagnostic clause in rule SC-10 below.
 
 #### Where the guarantee fails
 
@@ -1025,7 +1114,7 @@ The version-specialization model deserves separate praise. It keeps release diff
 | Container cluster and Storage contexts are their first product: "OpenShift and OKD release" and "Ceph cluster topology" (`specs/architecture.md:54-55`). | A kubeadm distribution or a NetApp array has no specified home. | [F06-05, F18-02, F05-03, F07-03] |
 | Composition binds Ceph's retirement policy and bare-metal block identity into Managed OS. Neither is a named exception. | A second host-based storage or physical substrate edits these bindings. | [F06-07] |
 | The engine's unclaimed-object refusal reads `management` and `os.provided` itself. | A new management mode needs an engine edit. | [F06-08] |
-| Machine power is wired to the Redfish role, not to the substrate's `power` entry point. | KubeVirt stop is unreachable. A third arm needs a third power path. | [F18-07] |
+| Machine power is wired to the Redfish role, not to the substrate's `power` entry point. The role reads the arm from material values, outside the digested request (`internal/machine/power/service.go:437`). | KubeVirt stop is unreachable. A third arm needs a third power path, and an unlisted arm fails on an undefined key, not a named refusal. | [F18-07, V2-13] |
 | Managed services ignore `spec.implementation`. The shared role is keyed by kind. | A second DNS or NTP implementation would plan every object twice. This is a forward seam, not a live defect. | [F18-09] |
 | The DNS server reads storage and cluster field paths directly. | A new export arm or storage type edits `dnsserver`. | [F18-10] |
 | Preflight and capacity projections are libvirt-only and sit in composition. | Capacity for a new arm edits composition logic. | [F07-07] |
@@ -1055,17 +1144,19 @@ The architecture spec should state the following rules once, in "Implementations
 | # | Rule | Fitness test | Closes |
 | --- | --- | --- | --- |
 | SC-1 | **Family and implementation.** A context that may host more than one product is a family. It holds a product-neutral core (intent, selector, ports, evidence vocabulary) plus implementations. Product-shaped fields live under a product arm of the family kind. | Docs test: each context row names its family and lists its current implementations. | [F06-05, F18-02, F05-03, F07-03] |
-| SC-2 | **Port per capability, seam at the first implementation.** A family's first implementation ships its selector, implementation identity, consumer-owned port and unbound-value refusal. A synthetic second implementation runs the shared port suite, as Secrets does. Speculative frameworks remain forbidden. | Contract-suite test per family port, run against a test double. | [F06-06] |
-| SC-3 | **Registry shape.** Each implementation declares identity, kinds, selector values, block families, supported shape and content identity. The static composition list is the allowlisted registry, and the spec names it with the code's function name. | Test: every bound identity has a declaration row. Names follow one scheme. | [F07-10, F07-08] |
+| SC-2 | **Port per capability, seam at the first implementation.** A family's first implementation ships its selector, implementation identity, consumer-owned port and unbound-value refusal. Every implementation, real or synthetic, passes the family's shared port suite; an implementation whose semantics the suite refuses is a new capability or a deliberate contract change (`specs/architecture.md:109-112`). Speculative frameworks remain forbidden. | Shared suite per family port, run by every implementation's tests and one synthetic double, covering failure, unknown outcome, cancellation, replay and removal. | [F06-06] |
+| SC-3 | **Registry shape.** Each implementation declares identity, kinds, selector values, block families, supported shape and content identity. A declared constraint is a predicate over facts detected from the selected artifacts or an authored arm; it is never a version range, matrix or pairing (D163). The static composition list is the allowlisted registry, and the spec names it with the code's function name. | Test: every bound identity has a declaration row. Names follow one scheme, playbook paths included. | [F07-10, F07-08, V2-10, V2-18] |
 | SC-4 | **Selection from frozen input.** Each domain declares its selector, for example the InfraProvider arm, `distribution.type`, the StorageCluster type and `management`, or the service kind plus `spec.implementation`. Before registration, the engine computes the claims (object, block family). It refuses any claim held by two bindings and any required family held by none. | Engine unit test for overlap and gap. Golden of the claims over the example corpus. | [F06-01, F18-09, F06-12] |
 | SC-5 | **Frozen identity covers removal.** Every value that fixes an effect's identity, place, mark, claimed resource or proof travels in the frozen request. A removal compares the effect-identity part of the digest. "Effect pin" is defined once. | Contract guard extended to mark-format ids and `bootwright.io` label keys. A removal-under-another-build test. | [R2-03-01, R2-03-02, R2-03-06] |
 | SC-6 | **No identity branching outside the owning domain.** Implementation-identity constants, arm constants and arm field paths appear only in their owning package and in composition, apart from a shrinking allowlist that states its reasons. | Architecture test scanning `internal/reconciliation`, `internal/desiredstate`, `internal/environment`, `internal/cli` and consumer domains. | [F06-03, F18-04] |
-| SC-7 | **Consumers dispatch through the owning domain.** Ansible consumers include one substrate-owned dispatcher role. Go consumers read capability facts on `substrate.Target`, not arm names. Cross-domain facts come from pure domain functions bound in composition, for example `MemberMachines`, `IsEffectBearing` and name contributions. | Test: consumer roles reference no arm role. Go consumers import no arm constant. | [F18-03, F18-07, F06-07, F06-08, F18-10, F07-07] |
+| SC-7 | **Consumers dispatch through the owning domain.** Ansible consumers include one substrate-owned dispatcher role. Its dispatch key travels in the frozen request, and an unlisted arm ends in a named terminal refusal. Go consumers read capability facts on `substrate.Target`, not arm names. Cross-domain facts come from pure domain functions bound in composition, for example `MemberMachines`, `IsEffectBearing` and name contributions. | Test: consumer roles reference no arm role. Go consumers import no arm constant. | [F18-03, F18-07, F06-07, F06-08, F18-10, F07-07, V2-13] |
 | SC-8 | **Kind facts from the schema.** Effect-bearing status, managed-service membership, normalization rank and reference fields are derived from the `api/v1alpha1` registry, not hand lists. | Exhaustiveness test: every kind has a derived row. | [F18-04] |
 | SC-9 | **Reference-edge catalog.** Each reference field class states its edge, stage pair, destroy inversion and selection retention in one table. | Test comparing emitted requirements over the examples with the catalog. | [R2-01-01, R2-01-04] |
-| SC-10 | **Version specialization boundary.** Keep D162 as written. Add three clauses: a refusal seam may add a named pre-effect refusal; a difference beyond the excluded set is a new implementation identity; admission never keys on a release label. Runtime capability discovery over a controller is adapter mechanics, not a specialization. | Registry discovery by marker, not by path. | [F06-09, F06-10, F06-11, R2-02-04] |
+| SC-10 | **Version specialization boundary.** Keep D162 as written. Add three clauses: a refusal seam may add a named pre-effect refusal; a difference beyond the excluded set is a new implementation identity; admission never keys on a release label. Runtime capability discovery over a controller is adapter mechanics, not a specialization. One Low diagnostic clause: an unknown fact still selects the general variant (`specs/architecture.md:925-927`), but only selected ids are recorded (`specs/storage.md:545-550`, `specs/cli/output.md:501`), so a detector that could not read its artifact leaves no trace. Let the informational `specializations` member also name each seam whose detector reported the fact unknown, outside every effect, ownership, readiness and identity decision and outside intents and digests (`specs/storage.md:548-550`). A general-variant failure on a new build then shows the missed detector beside the native error. The shape change moves the host evidence version (`specs/api/storage.md:218`) under the pre-1.0 rules, with no converter. | Registry discovery by marker, not by path. | [F06-09, F06-10, F06-11, R2-02-04]; sibling S15 (diagnostic, Low) |
 | SC-11 | **Additive extension procedure.** Add "Adding an API kind" and "Adding an implementation of an existing capability" with a touch-point budget. An edit outside that budget is a missing seam, and the seam lands first. | Review checklist plus the SC-6 and SC-7 tests. | [F06-04] |
 | SC-12 | **Support truth.** A coverage row states a capability Bootwright realizes. It never states a vendor's support status. | Docs lint refusing vendor-support phrases outside history. | [F17-01, F17-06] |
+
+SC-2 restates a rule the spec already holds and names where it stops short. `specs/architecture.md:1007-1009` runs "shared port suites against every implementation for failure, replay, ownership, evidence, and version boundaries", `specs/state-reconciliation.md:2079-2081` makes passing one a condition of operational exposure, and `specs/architecture.md:999-1000` adds that import direction alone does not prove substitutability. At 17acb63d9 the shared `Verify` suites named at `specs/architecture.md:282` cover storage ports only: the operation area, secret area, lifecycle workspace and media store. No shared suite exercises the lifecycle `Capability` port (`internal/reconciliation/lifecycle/contracts.go:176`), the port behind every substrate arm, install method and storage realization the owner's portfolio adds next. The capability contract suite (`specs/architecture.md:1031-1035`) holds request shape to role argument specifications, not behavior, and only to the depth each specification declares [V2-15]. The clause's path list also omits unknown outcome, cancellation and removal, the paths the recovery tables turn on. Closing both makes step 5 of the walk-through below a real check rather than a stated intent. Consumer imports and provider-name switches are SC-6 and SC-7; SC-2 adds the behavioral half [F06-06].
 
 The SC-11 procedure would read roughly as follows in `specs/architecture.md`:
 
@@ -1079,10 +1170,26 @@ The SC-11 procedure would read roughly as follows in `specs/architecture.md`:
 3. Bind it in `buildCapabilitiesWith` and `operationPlaybook`.
 4. Add role `<domain>_<implementation>_<capability>` with the family's entry
    points, its playbooks and protocol plugin.
-5. Run the family's shared port suite against it.
+5. Answer the family contract sheet below, then run the family's shared port
+   suite against it (the lifecycle Capability suite SC-2 asks for; none
+   exists today).
 6. Touch nothing else. A needed edit in another domain or in general flow
    means a seam is missing: add the seam first, in its own change.
 ```
+
+The contract sheet links to owning sections and copies none of them. Today an agent adding an implementation discovers these obligations late, by reading whole specs; the sheet lets it load only the rows it needs, which serves the token goal [F06-04].
+
+| Question the implementation answers | Owning section at 17acb63d9 |
+| --- | --- |
+| Identity, selector values, block families, shape | SC-3 declaration row |
+| What it observes, what is its own, which differences converge | `specs/state-reconciliation.md:1162` "Converging an effect" |
+| When an attempt is `unknown` rather than `failed` | `specs/state-reconciliation.md:1117`; `specs/architecture.md:859-866` |
+| Replay, continuation and removal under a frozen contract | `specs/state-reconciliation.md:1310` (SC-5) |
+| Quiescence and retained resources before removal | `specs/state-reconciliation.md:1829` |
+| Material it produces or reads | `specs/secrets.md:334` "Produced material"; `specs/state-reconciliation.md:605` |
+| Process, remote and privilege boundaries | `specs/security.md:164`, `:349` |
+
+The sheet adds no layer and no result type: the layer roles already stand at `specs/architecture.md:21-30` and the typed `failed`, `unknown` and `canceled` results at `specs/architecture.md:800-866`. Fitness: the SC-11 review checklist plus `make docs-check` on the sheet's links; no new test. Per the F06-04 calibration, a missing seam lands in the same slice as its first consumer, as a separate reviewed step.
 
 ### 6.3 Code materialization map
 
@@ -1092,10 +1199,10 @@ The map shows where each context's promises live at commit `17acb63d9`. Port fil
 | --- | --- | --- | --- | --- | --- | --- |
 | Reconciliation (engine) | `reconciliation/lifecycle`, `operationstore`, `contextguard` | `Capability`, `CapabilityResolver{Bindings, Resolve}` | `reconciliation/ansiblerunner` | `capabilityResolver`; `operationPlaybook` | all playbooks via one runner | composition, boundaries, `TestBoundPlaybooksCoverExactlyTheOfferedCapabilities`. Leak: kind lists [F18-04, F06-08] |
 | Substrate | `substrate/libvirt`, `substrate/baremetal`, `substrate/capacity` | per-arm `Runner`; capacity checker | Ansible arm roles | `boundCapability` rows; `realizationOf`; `libvirtCapacityAdmission` | `substrate_libvirt_host`, `substrate_libvirt_machine`, `substrate_baremetal_machine`; `substrate_host_protocol`, `substrate_machine_protocol`, `substrate_physical_protocol` | `TestSubstrateRefusalTableMatchesUnsupported`. Leaks: `Realized()` list, generic plugin name [F06-12, F07-08] |
-| Machine | `machine/power`, `machine/inventory`, `machine/access` | consumer-owned `Runner`, realization, identities | `machine/sshlocal` | `wiring_machine.go` translators | `machine_power_redfish`, `machine_power_read_redfish`; `machine_power_protocol` | boundaries. Leak: Redfish-only power [F18-07] |
+| Machine | `machine/power`, `machine/inventory`, `machine/access` | consumer-owned `Runner`, realization, identities | `machine/sshlocal` | `wiring_machine.go` translators | `machine_power_redfish`, `machine_power_read_redfish`; `machine_power_protocol` | boundaries. Leaks: Redfish-only power, arm in material values [F18-07, V2-13] |
 | Managed OS | `managedos/installation` (install, tree, erase), `managedos/media` | `Runner`, `Identities`, `MediaRecords` | `managedos/medialocal` | rows with `WithClaims(baremetal.BlockID)` and Ceph retirement | `managedos_install_anaconda`, `managedos_package_tree`, `physical_erase`; matching protocols | request goldens. Leaks: arm dispatch tables, Ceph fan-in [F18-03, F06-07] |
 | Infrastructure services | `managedservice` with `dnsserver`, `ntpserver`, `proxy` definitions; `artifactserver` | `Runner`; `managedservice.Definition` | Ansible roles | loop over Definitions | `infra_managed_service`, `infra_artifact_server_nginx`; `infra_service_protocol`, `artifact_server_protocol` | managed-service refusal table. Leaks: kind-keyed role, DNS pulls fields [F18-09, F18-10] |
-| Container cluster | `agentinstall` (media, install), `networking`, `access`, `preflight` | `Runner`, `Identities` | `containercluster/preflightlocal` | rows; install access | `containercluster_media_agent`, `containercluster_install_agent`, `containercluster_network`; matching protocols | topology table test. Leaks: OpenShift-shaped context, arm literals [F18-02, F06-03, F06-09] |
+| Container cluster | `agentinstall` (media, install), `networking`, `access`, `preflight` | `Runner`, `Identities` | `containercluster/preflightlocal` | rows; install access | `containercluster_media_agent`, `containercluster_install_agent`, `containercluster_network`; matching protocols | topology table test. Leaks: OpenShift-shaped context, arm literals, undeclared phase imports in `install_apply.yml` [F18-02, F06-03, F06-09, V2-14] |
 | Storage | `storage/ceph` (core, image, host, export, SMB, replication, physical retirement), `storage/preflight` | `Runner`, `DependencyProofs` | `storage/preflightlocal`, `storage/rendering` | loop binding 12 kinds to Ceph core; `cephDependencyProofs` | `storage_ceph_core`, `_host`, `_image`, `_export`, `_smb`, `_replication`; `ceph_*_protocol` | per-kind refusal tables. Leaks: Ceph is the context; general code reads `spec.ceph.topology.nodes` [F07-03, F05-03] |
 | Add-ons | `addons/instance`, `addons/clusterobjects/driver`, `addons/packages` | `Runner`; package registry | `cluster_objects` plugins | rows; `packages.Builtin()` | `addons_instance`, `cluster_objects`; `cluster_objects_protocol`, `_read`, `_write` | package goldens, registry tests. Additive for new packages |
 | Secrets | `secrets/secretstore`, `custody`, `material`, `encryption` | `ImplementationResolver{Types, Select, Reopen}` | `secrets/localkeyring` | `wireSecrets` | none | contract suite with a second test implementation. The model to copy |
@@ -1105,8 +1212,8 @@ The map shows where each context's promises live at commit `17acb63d9`. Port fil
 Three observations follow from the map.
 
 1. **The engine row is clean.** The F07 finder found no implementation-identity literal in `internal/reconciliation` beyond one retired-fixture string. The failures sit in the domain and general-flow rows.
-2. **Fitness tests hold layering, construction and effects, not the generic-flow promise.** No test catches an arm path, an implementation literal or a dispatch table that misses an arm [F06-03]. Rules SC-6 and SC-7 add those tests.
-3. **Names follow three schemes.** Roles mix `<domain>_<implementation>_<capability>` (`storage_ceph_core`) with `<domain>_<capability>_<implementation>` (`managedos_install_anaconda`), and some roles have no domain (`physical_erase`). The spec states a third order (`specs/architecture.md:681`). `substrate_machine_protocol` has a generic name but uses libvirt's domain-state vocabulary [F07-08].
+2. **Fitness tests hold layering, construction and effects, not the generic-flow promise.** No test catches an arm path, an implementation literal or a dispatch table that misses an arm [F06-03]. Rules SC-6 and SC-7 add those tests. The request-contract tests are only as deep as each role's argument specification, and no rule sets that depth: `storage_ceph_core` declares its nested members as bare dicts [V2-15].
+3. **Names follow three schemes.** Roles mix `<domain>_<implementation>_<capability>` (`storage_ceph_core`) with `<domain>_<capability>_<implementation>` (`managedos_install_anaconda`), and some roles have no domain (`physical_erase`). The spec states a third order (`specs/architecture.md:681`). `substrate_machine_protocol` has a generic name but uses libvirt's domain-state vocabulary [F07-08]. Playbooks follow a fourth: the spec says `playbooks/<domain>/<operation>.yml` (`specs/architecture.md:680`), but files are `<capability>_<operation>.yml`, and two Ceph apply bindings name `image_resolve.yml` and `host_prepare.yml` (`cmd/bootwright/wiring_reconciliation.go:165-168`) [V2-18].
 
 ### 6.4 Extension scenarios
 
@@ -1128,7 +1235,7 @@ Each table lists what an implementer would touch today and after rules SC-1 to S
 
 | Layer | Today | After the rules |
 | --- | --- | --- |
-| API | `distribution.type` gains a value, but top-level fields are OpenShift rules: `install.method: agent`, `pullSecretRef`, `api-int`, OVN settings, `master`/`infra` roles, FIPS and `openshift-node` [F18-02]. In practice this means a new kind or a breaking reshape. | `ContainerCluster` is a neutral envelope (nodes, roles, endpoints, networks, service selections) plus a `spec.openshift` arm. kubeadm adds a `spec.kubeadm` arm (SC-1). |
+| API | `distribution.type` gains a value, but top-level fields are OpenShift rules: `install.method: agent`, `pullSecretRef`, `api-int`, OVN settings, `master`/`infra` roles, FIPS and `openshift-node` [F18-02]. In practice this means a new kind or a breaking reshape. | `ContainerCluster` is a neutral envelope (endpoints, networks, service selections) plus a `spec.openshift` arm that holds nodes, roles and Machine bindings. kubeadm adds a `spec.kubeadm` arm with its own nodes (SC-1). |
 | Go, own | New `containercluster/kubeadminstall`. | Same. |
 | Go, elsewhere | Context-root admission, endpoints, topology and VIPs branch per distribution. `agentinstall` selection must skip kubeadm clusters [F06-01]. `addons.ClusterFacts` carries an OVN gateway. | The family core stays. The selector routes by distribution arm, and the engine checks claims. |
 | Wiring | Capability and playbook rows, plus the controller tool closure. | Same. |
@@ -1154,6 +1261,13 @@ Each table lists what an implementer would touch today and after rules SC-1 to S
 | Second managed DNS implementation (for example CoreDNS) | A new `Definition`. Selection ignores `spec.implementation`, and the role is keyed by kind [F18-09]. | Selection filters on `spec.implementation` through SC-4. The role is keyed by identity. | No after; small Go edit today |
 | New `DHCPServer` kind | Schema, kind catalog and specs, plus a new Definition. Also edit `infrastructureservices.IsService`, `environment/selection.go`, `compilation/phases.go`, `lifecycle/support.go`, `endpoint_ownership.go`, `prerequisites/reservations.go` and a CLI label [F18-04]. Fold DNS records and reservations through new pulls [F18-10]. | Schema, Definition, role row, templates and playbooks. Kind facts are derived (SC-8). Domains contribute reservations and names (SC-7). | **Yes** today (at least six lists); **No** after |
 
+#### (e) A cloud IaaS substrate and a managed Kubernetes distribution
+
+| Case | Today | After the rules | General flow changes? |
+| --- | --- | --- | --- |
+| Cloud IaaS substrate (AWS, GCP, Azure) | Machines boot only through `redfishVirtualMedia` (`specs/api/machines.md:44`). Identity, power and media delivery assume a BMC [F18-03, F18-07]. | Machine identity, power and boot-media delivery are separate ports. A cloud arm proves identity through the provider API and boots from an image. It declares no BMC or media capability. | **Yes** today; **No** after |
+| Managed Kubernetes (EKS, AKS) | `ContainerCluster` requires node `machineRef`s and an agent install; every `machineRef` requires `openshift-node` and `os.provided: false` (`specs/api/container-clusters.md:436`) [F18-02, F06-05]. | A managed arm declares no nodes and no Machine or boot capability. Planning emits no Machine, media or install block for it. | **Yes** today; **No** after the envelope reshape |
+
 ### 6.5 Immediate portfolio
 
 The matrix records the status of each portfolio item at this commit. "Realized" means a bound implementation plans and applies it. "Refused" means admission or planning refuses it with a named diagnostic. "Not yet met" means a spec marks the gap.
@@ -1163,14 +1277,14 @@ The matrix records the status of each portfolio item at this commit. "Realized" 
 | libvirt with sushy-tools BMCs | `substrate-host-libvirt-v1`, `machine-libvirt-v1` | Realized | External attachments claim nothing [R2-06-01]. An emulated BMC claims no key [R2-06-04]. Arm leaks into consumers [F18-03]. |
 | Bare metal through vendor BMCs (first xFusion) | `machine-baremetal-v1`; `physical-erase-v1`; `machine-power-redfish-v2` | Realized, with physical operator gates open | Vendor variation has no stated model [R2-02-04]. No substrate coverage page [R2-02-05]. Day-2 power on unproved targets [F10-02]. BMC rotation strands removal [R2-04-01]. |
 | KubeVirt Machines | none bound; arm `kubevirt` | Refused, Not yet met (B87) | Ownership proof weaker than libvirt's [R2-02-03]. Stop is unreachable [F18-07]. Nested host chain unordered [R2-01-02, R2-01-03]. |
-| IBM Storage Ceph | `storage-ceph-core-v3` and image, host, SMB, replication, physical-retirement identities | Realized for M2 scope | Coverage gates on vendor support that D157, D159 and D163 forbid [F17-01]. Context is Ceph-shaped [F07-03]. Closure omits four kinds [R2-01-04]. |
+| IBM Storage Ceph | `storage-ceph-core-v3` and image, host, SMB, replication, physical-retirement identities | Realized for M2 scope; a physical partial-cluster refuses until B659 defines recovery (`specs/storage.md:661, 688`) | Coverage gates on vendor support that D157, D159 and D163 forbid [F17-01]. Context is Ceph-shaped [F07-03]. Closure omits four kinds [R2-01-04]. The partial-cluster and partial DB/WAL refusals name no remedy on physical hosts [CX-API04]. |
 | IBM Fusion Data Foundation add-on | `addon-instance-v1` with the `fdf` built-in package; `ceph-export-v1` | Realized; B760 and B761 open | Export retirement can destroy a surviving consumer's storage [R2-02-01, F10-04]. |
 | NTP, managed or external | `ntp-server-chrony-v1`, or external | Realized | Served time source defined only in a template [R2-02-07]. Implementation field unused [F18-09]. |
-| Proxy, managed or external | `proxy-squid-v1`, or external | Realized | Cluster-install Proxy edge is in code, not in the spec [R2-01-01]. |
-| Existing networking (provided) | no block | Realized as input | None in this lens. |
+| Proxy, managed or external | `proxy-squid-v1`, or external | Realized with limits. A Bootwright-installed Machine and an install profile select only an external Proxy (`specs/api/machines.md:463, 634-635`), to avoid a bootstrap cycle. Managed-service image acquisition refuses a managed, authenticated or private-trust Proxy (`specs/infrastructure-services.md:52-54, 237-240`). | `install-config` carries the selected Proxy (`specs/container-clusters.md:312-317`), but the dependency edge to a managed Proxy is in code, not in the spec [R2-01-01]. |
+| Existing networking (provided) | no block | Realized as input | Provided does not mean undeclared: an external attachment names its existing bridge, and NMState declares addresses and routes (`specs/api/machines.md:158, 744`). DNS and artifact serving are managed or external services, not provided networking [F01-06]. |
 | Managed Registry and LoadBalancer | none bound | Refused by the engine row | The API page carries no Not-yet-met marker [R2-02-06]. |
 
-The bare-metal contract is the strongest part of the portfolio. It proves one exact ComputerSystem and its full MAC set, pins UUID and serial, re-proves before media insertion, and names its residual race honestly (`specs/state-reconciliation.md:1916-1928`). KubeVirt is marked truthfully: every page that describes it carries a Not-yet-met line naming B87. The one High defect in this lens is safety, not specialization. A context with virtual Ceph hosts and a physical consumer cluster can retire the export that the surviving cluster still uses [R2-02-01].
+The bare-metal contract is the strongest part of the portfolio. It proves one exact ComputerSystem and its full MAC set, pins UUID and serial, re-proves before media insertion, and names its residual race honestly (`specs/state-reconciliation.md:1916-1928`). KubeVirt is marked truthfully: every page that describes it carries a Not-yet-met line naming B87. The two High defects in this lens concern safety and recovery, not specialization. A context with virtual Ceph hosts and a physical consumer cluster can retire the export that the surviving cluster still uses [R2-02-01]. A physical Ceph cluster interrupted after a non-bootstrap host carries a daemon refuses `partial-cluster`, and no spec names a forward or retirement path for physical hosts [CX-API04].
 
 ### 6.6 Cross-domain interaction chain and selection closure
 
@@ -1208,13 +1322,13 @@ Related process and shape gaps follow. No skill or commit check asks an agent to
 2. Decide the `ContainerCluster` distribution envelope and the `StorageCluster` type binding now, while the pre-1.x rule makes the reshape cheap [F18-02, F05-03].
 3. Land the substrate dispatcher role and capability facts on `Target` before B99 or B87 lift their refusals [F18-03, F18-07].
 4. Replace general-flow hand lists with schema-derived kind facts and domain functions [F18-04, F07-03].
-5. Fix the export retirement rule [R2-02-01] and the coverage support wording [F17-01] before more Ceph and FDF work builds on them.
+5. Fix the export retirement rule [R2-02-01], the partial-cluster remedy statement [CX-API04] and the coverage support wording [F17-01] before more Ceph and FDF work builds on them.
 
 ## 7. Language responsibility matrix: Go, Ansible, Python, shell
 
 Standard judged against: a multi-language product states once which kind of logic each language may hold. It names where each runs and on which interpreter, what each must never do, and who owns its tests. A mechanical check keeps placement honest. An agent should answer one placement question per language instead of reading four specs.
 
-Verdict: the Go and Ansible boundary is among the best passages in the corpus and should be kept. Python is the largest adapter language and has no stated row of its own. Shell and repository tooling are governed by habit, not by rule. Nine verified findings fall in this area: four Medium and five Low. None is Blocking, because the code is mostly safer than the text that governs it.
+Verdict: the Go and Ansible boundary is among the best passages in the corpus and should be kept. Python is the largest adapter language and has no stated row of its own. Shell and repository tooling are governed by habit, not by rule. Twelve verified findings fall in this area: four Medium and eight Low, including two sibling-raised entries on role argument specifications [V2-14], [V2-15]. None is Blocking, because the code is mostly safer than the text that governs it.
 
 ### 7.1 What the specs rule today, and what is good
 
@@ -1246,10 +1360,14 @@ The adapter result protocol (`architecture.md:762-900`) is an excellent cross-la
 | [F08-08] | Low | The Go network criterion is split across three overlapping axes. |
 | [F08-09] | Low | `architecture.md:772` says the controller runner serves `setup`; `architecture.md:867` says "Setup runs no Ansible." |
 | [F08-10] | Low | Tooling runs host `python3`, and `scripts/quick-test` is a 156-line selection engine with no rule. |
+| [V2-14] | Low | `containercluster/install_apply.yml` imports eight undeclared task files in plays 2-9, against `architecture.md:703-705`; the test hard-codes a nine-play exception. |
+| [V2-15] | Low | No rule sets argument-spec depth: specs type the request version but leave nested members as bare dicts, and one role reads an undeclared variable. |
 
 The scale explains the urgency of [F08-04]. The collection holds 140 plugin files with 36,682 lines of Python, against 14,811 lines of Ansible YAML. Yet `specs/project.md:58-59` calls the whole far side "Ansible". Python runs in four places with different interpreters: controller action plugins in the locked venv, modules on managed hosts under a 3.9 floor, fixed workers shipped as source and run through `sudo -n /usr/bin/python3 -I -c`, and scripts inside the Ceph image. Only a test and delivered history name these sites [F08-05].
 
 The two contradictions share one cause: the spec forbids what the product needs. Ceph rounds, cluster object ordering and network convergence filters are block-internal procedures. A blanket prohibition cannot be applied consistently [F08-03]. Likewise, the plugin must define its postcondition fields, while Go alone judges them [F08-02].
+
+The Go and Ansible request contract is also weaker than its text. `architecture.md:703-707` says each entry point validates the request before its first task. Yet one playbook imports internal task files no specification declares [V2-14]. `storage_ceph_core` declares 20 bare `type: dict` members, and `managedos_install_anaconda` asserts a digest variable it never declares [V2-15]. Pre-effect asserts still guard the effects, so both stay Low. A new adapter role copying either pattern would still pass every gate.
 
 ### 7.3 The decision matrix
 
@@ -1258,13 +1376,16 @@ The two contradictions share one cause: the spec forbids what the product needs.
 | Go | Admission, semantics, typed models, compilation, planning, selection, cross-block ordering, authorization, lifecycle, operation state, continuation, postcondition judgment, results, local runners, controller dependencies, content digests | Contact a managed component (except named SSH sessions); interpret native output beyond adapter evidence | `internal/**`, `api/v1alpha1`, `cmd/bootwright` | Package tests, port contract suites, `test/architecture` | Does this decide what happens, in what order, whether it is allowed, or what a result means? |
 | Ansible YAML | One capability's binding: argument-spec validation, host targeting, privilege scope, fixed module calls, progress groups, bounded remote effects and observation under a frozen request | Choose workflow or variant from data or facts; call across domains; use shell, raw or script | `playbooks/<domain>/`, `roles/<domain>_<capability>/` | Structural role tests, syntax and lint; Go capability contract suite | Is this binding one fixed capability to hosts, privilege and modules? |
 | Python (collection) | Action plugins and module utilities: protocol publication, native transport, bounded native-API clients, result normalization, evidence fields, a fixed spec-owned procedure inside one frozen request, shipped workers | Product policy or workflow; dispatch on authored data; cross-block ordering; authorization; operation state; ad hoc runners or encoders | `plugins/action`, `plugins/modules`, `plugins/module_utils`, `plugins/filter` | Collection units on controller and floor interpreters; Go digest guard | Is this how one already-selected effect is reached and proved on its target? |
-| Shell | Pinned tool wrappers and completion shims | Selection logic, parsing repository content, product effects | `scripts/go`, `scripts/ansible-check`, `internal/cli/completion/*.sh` | Completion tests; tooling ratchet | Does this only fix an environment and exec a pinned tool? |
+| Shell | Pinned tool wrappers and completion shims; installer-native sections Go emits (Kickstart `%pre` and `%post`) | Selection logic, parsing repository content, product effects; in emitted sections, a secret in a command string or argv, or a value outside the emitter's quoting check | `scripts/go`, `scripts/ansible-check`, `internal/cli/completion/*.sh`, `internal/managedos/installation/kickstart.go` | Completion tests; tooling ratchet; Kickstart goldens | Does this only fix an environment and exec a pinned tool, or prove on the installer what the owning domain specified? |
+| Rendered documents | Jinja role templates and Go-emitted native documents: a deterministic projection of the frozen request | Reading files, network or secrets at render time; branching that selects a variant; granting execution authority | `roles/*/templates/*.j2`, Kickstart | Template goldens (`architecture.md:1029-1030`) | Is this the same bytes for the same request? |
 | Repository tooling | Gate dispatch in `Makefile`; stdlib-only launchers in `scripts/tools/` | Product behaviour; checks run outside a pinned wrapper | `Makefile`, `scripts/tools/*.py` | `make docs-check`, tool self-tests | Does this only choose which pinned check to run? |
+
+Installer-native shell is the one shell that performs product effects. Go emits it with its own guards (`internal/managedos/installation/kickstart.go:308-320`), and the passphrase already stays out of argv (`specs/managed-os.md:947-950`). The owning domain, not the emitter, specifies what each section must prove; [F10-01] is the case where `%pre` proves too little. Rendered documents already render identically twice and receive requests only as data (`specs/security.md:181-185`). The row names that rule so a new adapter's configuration file, or the next generated document for a new cluster type, has a home without a new section.
 
 ### 7.4 Prohibited uses per language
 
 - **Go** must not reach a managed remote component, except Machine's named SSH sessions. It may reach a non-managed endpoint only read-only, bounded, through the admitted egress route, for runtime wheels, tool metadata and media import [F08-08].
-- **Ansible YAML** must not select a workflow, provider or variant from authored data or gathered facts, order work across domains, or run a command through a shell (`architecture.md:694-700`, `architecture.md:1020-1022`).
+- **Ansible YAML** must not select a workflow, provider or variant from authored data or gathered facts, order work across domains, or run a command through a shell (`architecture.md:694-700`, `architecture.md:1020-1022`). It must not import a role task file that no argument specification declares, outside a named allowlist whose first play has validated the inputs [V2-14]. An entry point must not read a variable its specification does not declare [V2-15].
 - **Python** must not choose product workflow, order work across blocks, authorize, or write operation state [F08-03]. It must not judge a postcondition; it defines the evidence fields and may refuse when they are missing [F08-02]. It must not start a process outside its site's one runner, or encode canonical JSON outside its site's one module [F08-06]. A shipped worker or container entrypoint must not import beyond the target's standard library [F08-05]. A remote command string must not contain a token that is neither literal nor closed and validated [F08-01].
 - **Shell** must not branch on repository content or hold selection logic; `scripts/quick-test` is either moved under the rule or named as the exception [F08-10].
 
@@ -1278,8 +1399,9 @@ Following the arbiter on [F08-07], widen the existing "Go and Ansible responsibi
 4. Name the remote fixed-worker exception in `security.md#process-boundary`, scoped to every SSH remote command string [F08-01].
 5. Add the Python execution sites, the stdlib-only rule and a link to the floor's owner near `specs/controller.md:1027` [F08-05].
 6. Add `references/python.md`, or a Python section in `references/ansible.md`, and name Python and shell in `formatting.md` [F08-04].
+7. Amend `architecture.md:703-712` with the multi-play exception and its allowlist, and add one argument-spec depth sentence after `architecture.md:706` [V2-14], [V2-15].
 
-Enforcement can reuse existing gates. A small `test/architecture` test, scoped to `plugins/` and `scripts/`, maps each tracked source path to a matrix row and fails on an unmapped file [F08-07]; the arbiter made it optional. The existing pylint `ansible-bad-function` rule, with an allowlist of files allowed to disable it, gates `subprocess` use [F08-06]. One collection test asserts that SSH remote commands are built only through the shared quoting function [F08-01]. The existing Go effect allowlist already fails on an unnamed `net/http` importer; docs-check should cross-reference it with the spec's named consumers [F08-08].
+Enforcement can reuse existing gates. A small `test/architecture` test, scoped to `plugins/` and `scripts/`, maps each tracked source path to a matrix row and fails on an unmapped file [F08-07]; the arbiter made it optional. The existing pylint `ansible-bad-function` rule, with an allowlist of files allowed to disable it, gates `subprocess` use [F08-06]. One collection test asserts that SSH remote commands are built only through the shared quoting function [F08-01]. `test_playbook_entry_points.py` walks every `import_role` and `include_role` in every play, replacing its bare nine-play count with the named allowlist [V2-14]. The role-spec test fails when an entry point reads an undeclared `bootwright_*` variable [V2-15]. The existing Go effect allowlist already fails on an unnamed `net/http` importer; docs-check should cross-reference it with the spec's named consumers [F08-08].
 
 ### 7.6 Migration of today's violations
 
@@ -1292,6 +1414,7 @@ Enforcement can reuse existing gates. A small `test/architecture` test, scoped t
 | 5 | Name the remote-worker exception; add the quoting-function test | [F08-01] | Spec clause, one test |
 | 6 | Consolidate canonical JSON and process runners to one module per site, with shared golden vectors where Go compares digests; extend B461 | [F08-06] | Code refactor |
 | 7 | Add the tooling rule and derive docs-check test selection from a convention | [F08-10] | Small |
+| 8 | State the argument-spec exception and depth rule; extend the entry-point test to every import and undeclared variable; fix the cited roles under backlog.md:789 | [V2-14], [V2-15] | Two sentences, one test, small role edits |
 
 Steps 1 to 4 are text only and unblock every later adapter: a new storage or substrate type then has a rule for where each step goes. Step 6 is the only code refactor. It should land before a second SSH-based storage vendor copies the pattern again.
 
@@ -1299,7 +1422,7 @@ Steps 1 to 4 are text only and unblock every later adapter: a new storage or sub
 
 This part covers the rules that decide what Bootwright may destroy, whom it trusts, and how secret material travels. Part B covers apply, destroy, continuation, attempts, block transitions and GitOps readiness. The general rules live in `specs/state-reconciliation.md` "Mutation safety" through "Confirmation and authorization" (1809-2084) and in `specs/security.md`. Every domain page was compared against them.
 
-Thirty-seven verified findings fall in this part: five High, fifteen Medium and seventeen Low. None is Blocking after verification. [F10-01] was proposed Blocking; both verifiers kept it at High because the fix is small and the agent installer path is already safe.
+Fifty-five verified findings fall in this part: seven High, twenty-two Medium and twenty-six Low. The first pass found thirty-seven (five High, fifteen Medium, seventeen Low). This revision adds eighteen catalog entries: nine sibling-audit claims our verification confirmed (CX entries) and nine gaps found while checking them (V2 entries). Part B lists most of them again where they bear on continuation; each is counted once, here. None is Blocking after verification. [F10-01] was proposed Blocking; both verifiers kept it at High because the fix is small and the agent installer path is already safe.
 
 ### 8.1 Standard judged against
 
@@ -1329,10 +1452,24 @@ Verdicts: **sound** (keep as written), **ambiguous** (two readable implementatio
 | One mutator per context through a durable lease | state-reconciliation.md:1812 | sound | none |
 | Revalidate identity, ownership, quiescence and absence before every effect | state-reconciliation.md:1813-1815 | sound as a rule; not honoured by day-2 power or by the managed-OS disk check | [F10-01], [F10-02] |
 | A name never proves ownership | state-reconciliation.md:1816-1817 | contradicted by the same page | [F10-03] |
-| Unknown is never absence | state-reconciliation.md:1821-1822; security.md:33-35 | sound; missing only on the vSphere arm | [F10-07] |
+| Unknown is never absence | state-reconciliation.md:1821-1822; security.md:33-35 | sound as a rule; contradicted by two clauses that read missing evidence as no effect, and missing on the vSphere arm | [CX-R5], [CX-X1], [F10-07] |
 | Foreign, unowned and unknown targets refuse without bypass | state-reconciliation.md:1823 | sound | none |
 | Every view derives from one immutable plan | state-reconciliation.md:1826-1827 | sound | none |
 | Transition re-proof under the exclusive lock | state-reconciliation.md:1558-1580 | sound | none |
+
+#### Removal observation, recovery remedies and bounds
+
+| Rule | Owner page:lines | Verdict | Findings |
+| --- | --- | --- | --- |
+| An unreadable removal observation reads as no effect, and the retry proves absence | state-reconciliation.md:544-548 | contradicted by the resolution table (:551-555), :1215 and security.md:33-35 | [CX-R5] |
+| A private Machine powered off before its disk boot reads positive no effect | managed-os.md:565-572, 791 | contradicted: its installation may exist; "the one window" also understates the cases | [CX-X1] |
+| Every Ceph attempt "defines partial-completion evidence and safe retry" | storage.md:480-483 | contradicted by the `partial-cluster` refusal and the partial DB/WAL refusal (:661, :687-688); no exit on physical hosts | [CX-API04] |
+| Damage remedies: restore the store or keyring "from a matching backup" | contexts.md:366-371; state-reconciliation.md:1508-1514; secrets.md:518-521 | unimplementable: the restore boundary rejects copy restore (contexts.md:751-757) and B103 is parked | [CX-R4] |
+| Stage retry admission restated in the CLI page | cli.md:552-562 | contradicted by state-reconciliation.md:892-906 and output.md:650-652 (D144, D146) | [V2-04] |
+| "A future setup-format change never strands a context" | controller.md:850-861 | contradicted: format healing discards every runtime | [V2-05] |
+| Unfinished operations visible before a build upgrade | cli/commands.md:61; contexts.md:860-866 | gap: only per-context `status` names the registering build | [V2-06] |
+| "An operation or plan record is at most 1 MiB" | state-reconciliation.md:432-434 | contradicted by the bounds table (contexts.md:524-526) and code (6 MiB) | [CX-RULEplanbytes] |
+| Time service readiness | infrastructure-services.md:540-550 | gap: proves an answer, not usable time; no consumer states the quality it needs | [CX-X3] |
 
 #### Quiescence before removal
 
@@ -1376,6 +1513,8 @@ Verdicts: **sound** (keep as written), **ambiguous** (two readable implementatio
 | KubeVirt VirtualMachine | substrates.md:660-666, 688-696 | sound deletion; gaps in labels, lost reply, reservation | [R2-02-03] |
 | vSphere | substrates.md:718-730 | gap: no marker fields, no unknown rule | [F10-07] |
 | Add-on cluster objects | add-ons.md:180-200 | ambiguous: computable mark accepted as ownership | [F10-08] |
+| Ceph RBD image, CephFS subvolume, NFS export after a lost reply | storage-resources.md:361-363, 673-674; storage.md:1130-1131 | ambiguous: attempt record plus frozen shape adopts, against state-reconciliation.md:1816-1817 | [V2-07] |
+| Agent-install boot media "own image" | container-clusters.md:596-600, 847-851 | contradicted: device-and-inode rule versus exact-path rule | [CX-X6] |
 
 #### Destructive paths
 
@@ -1392,7 +1531,7 @@ Verdicts: **sound** (keep as written), **ambiguous** (two readable implementatio
 | Ceph cluster removal, hosts survive | storage-resources.md:1252-1255 | sound (refuses, B491) | none |
 | Ceph retirement with virtual hosts | storage-resources.md:1252-1255 | unsafe with a surviving consumer | [R2-02-01], [F10-04] |
 | Add-on retirement | add-ons.md:389-391 | sound (no remote effect); impacts omit survivors | [F10-04] |
-| Context deletion with `--allow-orphans` | contexts.md:816-838 | sound locally; releases keys early | [R2-06-02], [F10-03] |
+| Context deletion with `--allow-orphans` | contexts.md:816-838 | sound locally; releases keys early; its named inventory, `status`, omits undeclared objects | [R2-06-02], [F10-03], [V2-03] |
 
 #### Confirmation and authorization
 
@@ -1412,6 +1551,11 @@ Verdicts: **sound** (keep as written), **ambiguous** (two readable implementatio
 | Untrusted input includes state "not written and authenticated by Bootwright" | security.md:12-13 | ambiguous | [F11-11] |
 | Per-context authority among sudo-admitted accounts | security.md:104-105 | ambiguous; no attribution | [F11-05] |
 | Process boundary: no shell, allowlisted argv and env, data-only Ansible | security.md:164-227 | sound | none |
+| Fixed limits on every input boundary, including target concurrency | security.md:20-31 | contradicted: several-Machine exec sessions run "with no bound" (cli.md:1039-1040) | [CX-R9] |
+| "Read-only commands perform no ... processes, network access" | security.md:694 | ambiguous: `diff --observe` and preflight run bounded read-only processes (cli/commands.md:50-51, 98) | [CX-R6] |
+| A consumer dispatches on the arm Go froze into its request | architecture.md:744-747 | contradicted for power: the arm rides in material values, outside the digest | [V2-13] |
+| `nativeError` only for opted-in Ceph core, host and image calls | architecture.md:789-796 | contradicted: export, replication and SMB calls also opt in | [V2-17] |
+| An export's trust extent shown to the approver | storage-resources.md:1194-1205; cli/output.md:523 | gap: realm-wide grant documented, absent from plan and status | [V2-09] |
 | Only listed children receive a proxy route | security.md:173, 315, 362-364 | contradicted three ways | [F11-12] |
 | Runner sweep bound | security.md:263-271 | unsafe (local denial of service) | [F11-07] |
 | sudoers rule for the procfs re-execution | cli.md:282-284 | design: narrow rules are ALL-equivalent | [F11-04] |
@@ -1434,6 +1578,7 @@ Verdicts: **sound** (keep as written), **ambiguous** (two readable implementatio
 | Produced inputs read from custody each attempt | state-reconciliation.md:658-661 | gap: no identity-stability rule | [R2-04-08] |
 | "Unproved" custody mark | state-reconciliation.md:617-620 | contradicted by cli.md:1167-1169 | [R2-04-04] |
 | Which commands reveal produced material | secrets.md:353-357 | contradicted (object-user keys) | [R2-04-02] |
+| `secret info` selection of unknown names | secrets.md:132-136 | contradicted by cli.md:179-185 and delivered B651 (D165) | [V2-08] |
 | Native-side plaintext retention files | storage.md:1050-1051, 1559-1560 | gap: no owner | [R2-04-03] |
 | Adapter "material values" channel | security.md:112-120, 183-184 | gap | [R2-04-05] |
 | Module-argument payloads on remote hosts | security.md:105-107 | gap: unlisted hop | [R2-04-07] |
@@ -1456,7 +1601,7 @@ Verdicts: **sound** (keep as written), **ambiguous** (two readable implementatio
 
 ### 8.3 What is good and should be kept
 
-The general rule set is strong. The seven Mutation safety bullets (`specs/state-reconciliation.md:1811-1827`) are close to the standard in 8.1 word for word. Most domain pages honour "unknown is never absence" explicitly: libvirt observations, KubeVirt removal, the physical claim, Redfish reads and the delivered-key channel all treat silence as unknown.
+The general rule set is strong. The seven Mutation safety bullets (`specs/state-reconciliation.md:1811-1827`) are close to the standard in 8.1 word for word. Most domain pages honour "unknown is never absence" explicitly: libvirt observations, KubeVirt removal, the physical claim, Redfish reads and the delivered-key channel all treat silence as unknown. Two clauses do not: the removal observation rule [CX-R5] and the powered-off private Machine [CX-X1].
 
 The opt-in physical logical overwrite (B70) is the best destructive contract in the corpus. Each target carries `deviceName`, `wwn`, `serialNumber` and exact `sizeBytes` (`specs/state-reconciliation.md:1933-1934`). The worker opens every target exclusively, rechecks identity during write and readback, and binds its receipt to the original apply identity "so reuse of a context name cannot adopt an old receipt" (`specs/state-reconciliation.md:1981-1982`). Cancellation never reads as completion. Other destructive paths should copy this shape.
 
@@ -1514,6 +1659,22 @@ Scenario: a BMC password rotates under a 90-day policy. The operator runs `secre
 
 Smallest correction: split Secret consumption into two classes in `specs/secrets.md`. Effect material (placed or derived into the effect) keeps today's rule. Access credentials (presented to an operator-owned endpoint whose ownership proof does not depend on the credential) may be rebound to the current version under an explicit, authorized and recorded step. Ownership proofs (UIDs, pins, host keys) stay unchanged. Each consumer field declares its class once. This adds an exit and leaves D37 intact.
 
+#### High: an unreadable removal target is read as no effect
+
+The resolution table maps a failed, forbidden or malformed observation to `unknown` (`specs/state-reconciliation.md:551-555`). Four lines earlier, a removal observation that "cannot tell the removal's postcondition from a target it could not read" is read "as no effect, and the retry that follows proves its own absence" (`:544-548`) [CX-R5]. It contradicts the same page's `:1215` ("a foreign or unreadable observation stays `unknown`") and `specs/security.md:33-35`.
+
+Scenario: a destroy's Redfish or API read is forbidden after a credential change. One implementation keeps the block `unknown` and blocks the context. Another records no effect, admits a removal retry and completes it over an apparently absent target on the same ambiguous read. Two conforming implementations then hold opposite retry authority.
+
+The clause exists for a reason: an already-absent destroy completes (`:1127-1129`), and each capability names its replay rules (`:1172-1179`). Deleting it alone leaves such removals `unknown` with no retry, which can strand teardown as [R2-04-01] does. The owner chooses between deleting the clause and a typed "inconclusive but safe to repeat" result gated on declared replay rules; section 14.8 sets out both. Either way, the negative test is the same: a forbidden, disconnected or malformed removal observation never records `no-effect` and never admits a replacement registration.
+
+#### High: a partial physical Ceph cluster has no exit in either direction
+
+Every Ceph attempt "defines partial-completion evidence and safe retry" (`specs/storage.md:481-482`). The interruption table instead "refuses `partial-cluster` until B659 defines its recovery" (`:661`), and a partial DB/WAL device refuses with B662 owning recovery (`:687-688`) [CX-API04].
+
+Scenario: an apply on xFusion bare-metal hosts running IBM Ceph is interrupted after a non-bootstrap host carries a daemon. Every later apply refuses. Destroy cannot retire the cluster either: retirement without native calls covers only all-virtual owned hosts, and "a bare-metal one, keeps the refusal below" (`:1466-1472`), pending B491. The only exit is an orphan-acknowledged deletion that abandons the daemons and claimed disks. On libvirt hosts, destroy and a fresh apply recover, so the High rating is for the physical journey of the immediate portfolio.
+
+Smallest correction: qualify `specs/storage.md:480-483` with the two named exceptions, and state per refusal whether destroy and a fresh apply is the remedy on virtual and on physical hosts, or that none exists. M2d and B485 should list B659, B662 and B491 as prerequisites, since their exit demands interrupted-installation recovery (`specs/milestones/m2.md:387-394, 1347-1352`).
+
 #### Medium safety items
 
 - **Day-2 power on unproved targets.** "A Machine with no pin is compared with nothing" (`specs/substrates.md:830-831`). Before the first apply or after a destroy, `machine stop --force` cuts power to whatever ComputerSystem answers at the address. Nothing refuses a power command on the environment's controller Machine [F10-02]. Correction: without a pin, run the full target proof; refuse a Machine that declares no MACs; refuse power on the controller Machine or on a reported UUID equal to the host's own; extend controller-host protection beyond apply and destroy.
@@ -1522,10 +1683,15 @@ Smallest correction: split Secret consumption into two classes in `specs/secrets
 - **Host routes.** A managed prefix or bridge name is never checked against the controller host's own routes and links [R2-06-05]. Libvirt refuses some IPv4 collisions late; IPv6 overlap is not covered. Add one probe sentence before net-define, refusing `lifecycle.state` with the field to change.
 - **SSH-placed effects.** "Two contexts targeting one SSH host are not coordinated" (`specs/infrastructure-services.md:89-91`), although one store holds both contexts [R2-06-06]. Qualify every SSH-placed key by the existing host token and decide B247 or a new parked item.
 - **KubeVirt parity.** See 8.8 [R2-02-03].
+- **Powered-off private Machine.** A private Machine the network restart powered off before its disk boot "reads positive no effect" (`specs/managed-os.md:565-571`), although its installation may exist [CX-X1]. The reinstall is bounded to this operation's own request behind the boot proof (`:399-414`), so the defect is the label. Relabel it a positive partial realization of this operation's own installation, and name every case "the one window" covers.
+- **Own-image identity.** Agent-install media count as own by device and inode (`specs/container-clusters.md:596-600`) and by exact path (`:847-851`), while every insert uses a token link (`:568-576`) [CX-X6]. Keep the inode rule and link to it. Removal still ejects whatever a declared node presents, per D27.
+- **Backup restore as a remedy.** Seven remedies name a "matching" or "complete" backup, yet the restore boundary rejects copy restoration and parked B103 owns the command (`specs/contexts.md:751-757`) [CX-R4]. Define the backup form once at that anchor, link every remedy to it, and keep D37's two exits.
+- **Abandonment inventory.** Orphan deletion names `status` as the inventory of what it abandons (`specs/contexts.md:818-820`), but `status` lists only declared objects (B578) [V2-03]. An object dropped from the input stays running and cannot be found again. Re-rate B578 and name `diff` or `lifecycle.blocks` as the interim inventory.
+- **Plan record bound.** `specs/state-reconciliation.md:432-434` caps a plan record at 1 MiB; the bounds table and code store 6 MiB [CX-RULEplanbytes]. Link the bounds table instead of restating numbers.
 
 #### Low safety items
 
-[F10-06] `--authorize data-loss --yes` copied into a runbook authorizes any later plan that needs data-loss; bind the token to a digest of the consuming steps when `--yes` suppresses review, or correct the cli.md promise. [F10-07] vSphere names no marker fields; fold the vCenter and VM `instanceUuid` into B99 and link the general rule. [F10-08] The add-on mark is computable from public inputs; record how ownership was established (created, uid-matched, mark-recovered). [R2-06-02] Abandoning deletion frees exclusive keys while objects keep running; make the orphan confirmation name the keys it frees and warn that a powered-off abandoned machine can be reinstalled; a tombstone holder is an owner option that would amend D38. [R2-06-04] The emulated BMC publishes no `bmc:` key, so two contexts can drive one guest. [R2-06-07] Release paths are listed four ways. [R2-06-08] The 256-entry host bound has no refusal.
+[F10-06] `--authorize data-loss --yes` copied into a runbook authorizes any later plan that needs data-loss; bind the token to a digest of the consuming steps when `--yes` suppresses review, or correct the cli.md promise. [F10-07] vSphere names no marker fields; fold the vCenter and VM `instanceUuid` into B99 and link the general rule. [F10-08] The add-on mark is computable from public inputs; record how ownership was established (created, uid-matched, mark-recovered). [R2-06-02] Abandoning deletion frees exclusive keys while objects keep running; make the orphan confirmation name the keys it frees and warn that a powered-off abandoned machine can be reinstalled; a tombstone holder is an owner option that would amend D38. [R2-06-04] The emulated BMC publishes no `bmc:` key, so two contexts can drive one guest. [R2-06-07] Release paths are listed four ways. [R2-06-08] The 256-entry host bound has no refusal. [V2-07] Ceph lost-reply adoption of an RBD image, subvolume or NFS export trusts the attempt record plus frozen shape; name it as the one exception to "a record never proves ownership", with its single-writer boundary, and keep adoption from becoming removal authority under B491. [V2-04] cli.md still retries one failed block and defers ready work, against D144 and D146; link the stage contract instead. [V2-05] Format healing discards every runtime, so "never strands a context" (`specs/controller.md:861`) overstates; scope it to the setup record. [V2-06] Nothing lists unfinished operations and their registering builds across contexts before an upgrade; add them to `context list`. [CX-X3] NTP readiness proves an answer, not synchronized time, and no consumer states the time quality it accepts.
 
 ### 8.5 Security lens
 
@@ -1541,7 +1707,11 @@ The attacker model is precise for the controller host: an unprivileged local acc
 | Second sudo-admitted operator | Reveals or abandons another team's context; nothing attributes it | [F11-05] | Define "context-scoped authority" as the keyring, not an access control; optionally record the invoker in `operation.json` |
 | Operator wants a narrow sudoers rule | Procfs re-execution makes it ALL-equivalent | [F11-04] | Re-execute by the proved root-owned absolute path; keep procfs only for the invoking account's build output |
 
-Three Low items are wording that misleads a reviewer. The served private tree uses 0640 files although security.md claims one mode exception [F11-10]. "Authenticated" persisted state is undefined for unMACed records [F11-11]. The proxy route to children is stated three ways [F11-12]. The keyring encryption names no threat it defends, since keys sit beside the ciphertext [F11-09]; one sentence naming the partial-copy scenario fixes it.
+Four Low items are wording that misleads a reviewer. The served private tree uses 0640 files although security.md claims one mode exception [F11-10]. "Authenticated" persisted state is undefined for unMACed records [F11-11]. The proxy route to children is stated three ways [F11-12]. The keyring encryption names no threat it defends, since keys sit beside the ciphertext [F11-09]; one sentence naming the partial-copy scenario fixes it.
+
+Two Medium items are boundary conflicts rather than attacker actions. Several-Machine exec sessions "run concurrently, with no bound" (`specs/cli.md:1039-1040`), against the fixed target-concurrency limit of `specs/security.md:20-25` [CX-R9]. Bound them as power batches are bounded (`specs/cli.md:1326-1330`), admit them in canonical order, and let cancellation stop sessions still waiting. "Read-only" has no single definition: `specs/security.md:694` forbids any process or network access, while `diff --observe` and preflight run bounded read-only observations (`specs/cli/commands.md:50-51, 98`) [CX-R6]. Make the commands.md Effects column the single owner of each command's class and retarget the security row to it.
+
+Three further Low items concern what an approver or an agent can see. A StorageExport grants its consumer's administrators every RGW user, bucket and key of the realm, yet plan and status show only "export of pool ..., object gateway ..." (`specs/cli/output.md:523`) [V2-09]. The power dispatch arm rides in material values set after the request digest, so an unknown arm fails with a raw template error and leaves no trace in the record [V2-13]. `specs/architecture.md:789-790` names three Ceph calls that may carry `nativeError`, while six do [V2-17].
 
 Listener exposure was considered: the default wildcard `bindAddress` for managed services was raised and refuted as a recorded owner decision with a tracked backlog item (F04-03, considered and refuted). The emulated BMC's missing loopback refusal is Not yet met under B334 and is not a defect of the rule.
 
@@ -1555,12 +1725,15 @@ The ingress and binding hops are sound. The weaknesses sit at both ends: adapter
 - **Adapter channel.** "Material values" are undefined; only RHSM is forbidden from Ansible variables, and the shipped filter example uses `set_fact` on a pull secret [R2-04-05]. Module payloads carrying passwords land in remote temp files [R2-04-07]. One sentence each in security.md fixes the contract: material values are non-secret, secret parts arrive only as lent files, and remote tasks receiving material use pipelining.
 - **Installer work areas** keep substituted credentials and the kubeadmin password at a path a recreated same-name context reaches [R2-04-06]. Scope secrets.md:331-332 to the keyring and refuse a work area the current incarnation did not create.
 - **Produced inputs** are re-read from custody each attempt [R2-04-08]. Generalize the existing storage rule: a recapture keeps the effect's identity or refuses as drift.
+- **`secret info` selection.** `specs/secrets.md:134-136` still says unknown names "produce an empty selection", against delivered B651 (D165), which refuses them with `access.target` [V2-08]. Replace the sentence with a link to the selection rule in `specs/cli.md`.
 
 ### 8.7 Reservations and locking across contexts
 
 The model coordinates claims that contexts publish. It fails where a real sharing publishes no claim: an external bridge [R2-06-01], an emulated BMC [R2-06-04], a second BMC spelling [R2-06-03], the host's own routes [R2-06-05] and every SSH-placed effect [R2-06-06]. It also releases claims while the claimant's objects still run [R2-06-02].
 
 The release paths are stated differently on four pages, and `specs/contexts/controller-record.md:81` says Workspace compares keys "without interpreting a key's meaning", while code applies overlap relations [R2-06-07]. One release table in `specs/infrastructure-services.md#host-reservations` and one sentence saying the prerequisites port owns the conflict relation would let an agent add a key class correctly.
+
+The sibling's single-controller authority point was checked and needs no new rule: reservations and leases are store-local (`specs/infrastructure-services.md:89-91`, `specs/storage.md:1488-1491`, `specs/state-reconciliation.md:2028-2031`), and Mutation safety already demands positive absence or exact agreement before an effect on a created resource (`specs/state-reconciliation.md:1816-1818`). KubeVirt meets it with recorded UIDs (`specs/substrates.md:663-667`), libvirt fails it through name-derived identity [F10-03], the one-store wording lands with [R2-06-03], and the incarnation stays in B568 under D155.
 
 ### 8.8 Immediate portfolio: KubeVirt parity and the Fusion Data Foundation removal order
 
@@ -1582,7 +1755,7 @@ Deletion is at parity. Identity before creation is not. The smallest correction 
 
 #### Fusion Data Foundation removal order
 
-The fdf path from StorageExport to package is close to end to end: one consumer per export, keys in custody before the native add, details delivered only through an owned Secret, and stated readiness and handoff evidence. The removal order is the gap.
+The fdf path from StorageExport to package is close to end to end: one consumer per export, keys in custody before the native add, details delivered only through an owned Secret, and stated readiness and handoff evidence. The removal order is the gap. A smaller one is the approval surface: the plan never shows that the export grants the consuming cluster's administrators the whole RGW realm and filesystem [V2-09].
 
 Today's written order for one context:
 
@@ -1612,15 +1785,21 @@ The cost is real: a mixed context (virtual Ceph, physical OpenShift) has no full
 | Order | Change | Findings | Kind of change |
 | --- | --- | --- | --- |
 | 1 | Durable root-disk identity on baremetal managed-OS installs | [F10-01] | spec, skill, test |
-| 2 | Export retirement refuses with a surviving consumer, or names it as an acknowledged impact | [R2-02-01], [F10-04] | spec; owner choice |
-| 3 | Link B567 and B568; narrow the false sharing claims | [R2-06-01], [F10-03] | spec only |
-| 4 | Access-credential class with an authorized rebind | [R2-04-01] | spec, then slice |
-| 5 | Power commands: proof when unpinned, controller excluded | [F10-02] | spec, test |
-| 6 | Remote principals paragraph; enrollment TOFU stated; tool authenticity per tool | [F11-01], [F11-03], [F11-02] | spec |
-| 7 | One MAC predicate; `bmc-system:<UUID>` key | [F10-05], [R2-06-03] | spec, test |
-| 8 | Secrets: native retention owner, reveal list, adapter channel | [R2-04-03], [R2-04-02], [R2-04-05] | spec |
-| 9 | KubeVirt question 11 in B87 | [R2-02-03], [F18-07] | backlog |
-| 10 | Sweep bound counts only owned entries | [F11-07] | spec, code, test |
+| 2 | An unreadable removal observation stays `unknown`, or a typed replay-safe result; relabel the powered-off private Machine | [CX-R5], [CX-X1] | spec, test; owner choice |
+| 3 | Export retirement refuses with a surviving consumer, or names it as an acknowledged impact | [R2-02-01], [F10-04] | spec; owner choice |
+| 4 | Name the physical Ceph dead end and its remedy; make B659, B662 and B491 M2d prerequisites | [CX-API04] | spec, milestone |
+| 5 | Link B567 and B568; narrow the false sharing claims | [R2-06-01], [F10-03] | spec only |
+| 6 | Access-credential class with an authorized rebind | [R2-04-01] | spec, then slice |
+| 7 | Power commands: proof when unpinned, controller excluded | [F10-02] | spec, test |
+| 8 | Remote principals paragraph; enrollment TOFU stated; tool authenticity per tool | [F11-01], [F11-03], [F11-02] | spec |
+| 9 | One MAC predicate; `bmc-system:<UUID>` key | [F10-05], [R2-06-03] | spec, test |
+| 10 | Abandonment inventory lists undeclared objects; backup remedies link one restore definition | [V2-03], [CX-R4] | spec, backlog |
+| 11 | One own-image rule; bounded exec sessions; one read-only class owner | [CX-X6], [CX-R9], [CX-R6] | spec, test |
+| 12 | Secrets: native retention owner, reveal list, adapter channel, `secret info` selection | [R2-04-03], [R2-04-02], [R2-04-05], [V2-08] | spec |
+| 13 | KubeVirt question 11 in B87 | [R2-02-03], [F18-07] | backlog |
+| 14 | Sweep bound counts only owned entries | [F11-07] | spec, code, test |
+| 15 | Stale restatements: plan bound, CLI retry rule, format-healing promise, `nativeError` set | [CX-RULEplanbytes], [V2-04], [V2-05], [V2-17] | spec |
+| 16 | Remaining Low items: lost-reply adoption boundary, power arm in the request, export trust extent, `context list` operations, time quality | [V2-07], [V2-13], [V2-09], [V2-06], [CX-X3] | spec, code, test |
 
 ## 8. Reconciliation rule audit (part B): lifecycle, continuation, comparison and durability
 
@@ -1635,22 +1814,23 @@ The standard is a crash-consistent, fail-closed engine for one-shot infrastructu
 - The frozen-plan executor. Plans are immutable, one operation is current per context, and destroy inverts the apply's frozen plan rather than re-deriving it from desired state (state-reconciliation.md:1329-1337). This removes the whole class of "the reconciler forgot what it created" failures.
 - Write-ahead discipline at every boundary checked. `running` is durable before the first side effect (state-reconciliation.md:1119-1120). The attempt record is created exclusively before the block record counts it (:1131-1136). Resolution identity and log exist before any observation (:1194-1204). Mutation evidence is raised before a binding, claim or registration (:169-187).
 - Unknown is treated as unknown. Nothing moves an unproved block except a read-only, capability-owned observation; confirmation, authorization, elapsed time and a dead executor cannot (:1223-1227). A lost executor's `running` block reads exactly as `unknown` (:708-714).
-- The exclusive-lock re-proof of every member the shared-lock decision read is a correct compare-and-swap (:1558-1580). It closes the decide-then-act race without long exclusive holds.
+- The exclusive-lock re-proof of every member the shared-lock decision read is a correct compare-and-swap over the context's own records (:1558-1580). It closes the decide-then-act race between invocations of one controller store without long exclusive holds. It fences no external writer or second controller; that protection comes only from native identity proofs before each effect (8.7).
 - Bounded retries. Each block is retried at most once per invocation, and never one the invocation failed itself (:1312-1316, :900-901). This prevents tight retry loops while leaving recovery in the operator's hands.
 - Produced-material custody is crash-safe in both directions. Capture precedes `done`, a failed publication records `unknown` rather than `failed`, and an unproved copy is published before the inverse that deletes the installer's copy (:605-653).
 - The cross-build continuation design. The execution closure is exactly the runtime lock digest plus the Python ABI (:1042-1056), and the content digest is a contract identity rather than a hash of automation bytes (:1084-1088). This is what lets an `ansible/`-only fix reach a live operation, which the owner's live runs showed is worth the complexity.
 - Spec-as-test. `TestTransitionTablesMatchSpec` drives the transition code with every row of the state tables (:500-502), which is a strong anti-drift device.
 - Crash-safe publication on the store side: stage beside the target, prove the destination, no-replace rename, sync the parent (contexts.md:436-445), with stage collection tied to the lock that excludes live writers.
-- The comparison model is honest. It has three named sides, says "no host was contacted" for the records-only reading, and states "unknown is never absent" as a fold rule (state-reconciliation.md:1722-1727).
+- The comparison model is honest. It has three named sides, says "no host was contacted" for the records-only reading, and states "unknown is never absent" as a fold rule (state-reconciliation.md:1722-1727). An observed diff counts the blocks no projection rendered as `not projected` (:1720-1721), and access readiness means ready to open a session and "does not assert live endpoint readiness" (cli/output.md:551-554). The wording is right where it exists; every new readiness or status field should state its source the same way, which is what [F12-01] and [F12-07] ask of the predicate.
+- Outcome, effect and state are separate axes. An attempt records its adapter outcome, its effect state and its block state as distinct columns, so a typed failure leaves the effect `unknown` while the block is `failed` (state-reconciliation.md:513-522), and the operation state is derived from the blocks afterwards (:718-727). The sibling audit proposes a five-outcome observation model (complete, absent, owned incomplete, foreign, unknown); the specs already hold it. Positive completion, no effect and owned partial realization are the three positive resolution rows, and a foreign or unreadable observation stays `unknown` (:551-555), after which convergence fails a foreign target "without exception" (:1170-1171). A comparison never implies that an unobserved field matches, because every dropped declared path is listed as not compared (:1748). The specs should not gain a second observation model. Two gaps remain: the observed-fields table holds only `machine-libvirt-v1` rows [F12-03], and "equal" and "drift" have no single definition [F12-05]. The removal-observation rule at :544-548 is a separate defect [CX-R5].
 - Permanent deletion demands positive disposal proof and an explicit orphan acknowledgement, with a named exit for each kind of unverifiable entry (contexts.md:760-857).
 
-**What needs improvement.** Several rules give two answers to one event, and the state-machine table itself disagrees with the decision it encodes [F09-05]. The owning page for the registry contradicts itself and the code [F13-01]. The readiness predicate, the `diff` Input line and `status` do not agree on when an environment is ready or what the next command is [F12-01] [F12-07] [F12-09]. The operation state is computed from in-memory block states, which manufactures legal record shapes that every reader must special-case [F09-06].
+**What needs improvement.** Several rules give two answers to one event, and the state-machine table itself disagrees with the decision it encodes [F09-05]. The owning page for the registry contradicts itself and the code [F13-01]. The readiness predicate, the `diff` Input line and `status` do not agree on when an environment is ready or what the next command is [F12-01] [F12-07] [F12-09]. The operation state is computed from in-memory block states, which manufactures legal record shapes that every reader must special-case [F09-06]. A settled apply is both excluded from and named as the exit from a latched log fault [V2-20]. Prose bounds and restated rules have drifted from their owners: the plan record bound [CX-RULEplanbytes], the CLI's retry rule [V2-04], the meaning of "read-only" [CX-R6], own-image identity for agent-install media [CX-X6] and the adapter's `nativeError` set [V2-17].
 
-**What is bad.** Five rules leave an operator at a dead end, or with only an exit that abandons every live effect of the context: one unreachable target [F09-01], a removal reserve the apply may spend [F09-02], a lost block record under a completed apply [F09-03], a controller identity change [F13-06], and a pending setup intent that blocks the whole host [F13-04]. A removal under another build never checks the content digest, so a moved place or mark can make it record positive absence over effects that still exist [R2-03-01]. The production store root may be tmpfs, which would erase ownership evidence on reboot [F13-07].
+**What is bad.** Five rules leave an operator at a dead end, or with only an exit that abandons every live effect of the context: one unreachable target [F09-01], a removal reserve the apply may spend [F09-02], a lost block record under a completed apply [F09-03], a controller identity change [F13-06], and a pending setup intent that blocks the whole host [F13-04]. A removal under another build never checks the content digest, so a moved place or mark can make it record positive absence over effects that still exist [R2-03-01]. The production store root may be tmpfs, which would erase ownership evidence on reboot [F13-07]. Two High findings, both confirmed from the sibling audit, sharpen this list. A removal observation that cannot read its target becomes no effect and a retry, against the rule that unknown stays unknown [CX-R5]. A partly deployed physical Ceph cluster has no forward or backward exit short of abandonment [CX-API04]. A setup-format change discards every runtime while the spec promises it never strands a context [V2-05] [F13-05].
 
 ### 8.B2 Rule-by-rule table
 
-Abbreviations: SR is `specs/state-reconciliation.md`, CX is `specs/contexts.md`, CT is `specs/controller.md`, CR is `specs/contexts/controller-record.md`. "Sound" means the rule is correct, consistent and implementable as written.
+Abbreviations: SR is `specs/state-reconciliation.md`, CX is `specs/contexts.md`, CT is `specs/controller.md`, CR is `specs/contexts/controller-record.md`. Other page names are under `specs/`. Rows owned outside the four pages entered with the sibling cross-check, because they decide the same lifecycle events. "Sound" means the rule is correct, consistent and implementable as written.
 
 | Rule | Owner page:lines | Verdict | Findings |
 | --- | --- | --- | --- |
@@ -1669,7 +1849,7 @@ Abbreviations: SR is `specs/state-reconciliation.md`, CX is `specs/contexts.md`,
 | Guard and orphan acknowledgement | SR:254-274 | sound | none |
 | Identity allocation, 16 bounded retries, number exhaustion refuses | SR:313-346 | sound | none |
 | **Operation records** | | | |
-| Closed, canonical, bounded records; exclusive creation | SR:348-452 | sound | none |
+| Closed, canonical, bounded records; exclusive creation | SR:348-452 | sound core; "plan record is at most 1 MiB" (SR:432-434) contradicted by CX:525-526 (6 MiB) and the code | [CX-RULEplanbytes] |
 | Optional `build` and `replaces` members with no version move | SR:388-414 | ambiguous | [R2-03-05] |
 | **State machine rows** | | | |
 | No operation or completed destroy; unaccounted state; completed destroy with non-done block | SR:458-460 | sound | none |
@@ -1680,7 +1860,9 @@ Abbreviations: SR is `specs/state-reconciliation.md`, CX is `specs/contexts.md`,
 | destroy running; destroy failed | SR:467-468 | sound | none |
 | **Attempts, resolutions, transitions** | | | |
 | Attempt outcomes table | SR:504-527 | sound | none |
-| Resolution outcomes; apply observation then removal check (D119, D123) | SR:529-603 | sound | none |
+| Resolution outcomes; apply observation then removal check (D119, D123) | SR:529-603 | sound core; the removal clause at SR:544-548 reads an unreadable target as no effect, contradicted by SR:1215 and security.md:33-35 | [CX-R5] |
+| Powered-off private Machine after the network restart "reads positive no effect" | managed-os.md:565-572 | contradicted by security.md:33-35; "the one window" understated | [CX-X1] |
+| Own image for agent-install media | container-clusters.md:596-600 | contradicted by the exact-path rule at container-clusters.md:847-851 | [CX-X6] |
 | Diagnostic: superseding removal "refuses until the target is restored" | SR:1254-1256 | contradicted by SR:579-582 | [F09-04] |
 | Produced material custody | SR:605-666 | sound | none |
 | Block transitions | SR:668-714 | sound; start-failure exception | [F09-06] |
@@ -1691,22 +1873,27 @@ Abbreviations: SR is `specs/state-reconciliation.md`, CX is `specs/contexts.md`,
 | Stages; engine-owned controller edge | SR:806-843 | sound | none |
 | Concurrency bound belongs to the executable, never frozen | SR:852-857 | sound | none |
 | Pause boundary; pause is never cancellation | SR:885-890 | sound | none |
-| Plan previews exactly the verb's decision | SR:970-1003 | sound | none |
+| Plan previews exactly the verb's decision | SR:970-1003 | sound; cli.md:558-562 restates a pre-D144 one-block retry rule | [V2-04] |
+| Several-Machine exec sessions "with no bound" | cli.md:1039-1040 | contradicted by the fixed target-concurrency limit (security.md:20-25) | [CX-R9] |
 | Implementation resolved once; "drifted implementation refuses" | SR:1014-1027 | ambiguous for removals | [R2-03-01] |
 | **Continuation and content digests** | | | |
 | Execution closure = lock digest + ABI | SR:1042-1056 | sound | none |
-| Closure refusal "names the build ... whose runtime this host keeps" | SR:1058-1063; CT:814-817 | contradicted by CT:870-888 | [F13-05] |
+| Closure refusal "names the build ... whose runtime this host keeps" | SR:1058-1063; CT:814-817 | contradicted by CT:870-888 and CT:850-861 | [F13-05] [V2-05] |
 | Apply continuation under another build compares blocks incl. digest | SR:1064-1071 | sound | none |
 | Destroy continuation and fresh removal under the build in hand | SR:496-498, 1031-1035, 1071-1076 | unsafe where identity values live outside the request | [R2-03-01] |
 | Content digest from the declared contract; "effect pins" | SR:1084-1088 | ambiguous (term undefined) | [R2-03-06] |
 | Digest moves when meaning changes; mechanical guard | SR:1466-1480 | sound guard, partial coverage; no procedural owner | [R2-03-02] [R2-03-03] |
 | Request versioning, no conversion | SR:1452-1464 | sound | none |
+| Consumers dispatch on the arm Go froze into the request | architecture.md:744-747 | contradicted by code: the power arm rides in material values, outside the digest | [V2-13] |
 | **Unknown outcomes and recovery** | | | |
 | Attempt start publication and narrow adoption | SR:1131-1154 | sound | none |
+| Ceph lost-reply adoption on attempt record plus frozen shape | storage-resources.md:361-363, 673-674; storage.md:1130-1131 | ambiguous: an unnamed exception to SR:1816-1817 | [V2-07] |
+| Adapter `nativeError` opt-in set | architecture.md:789-794 | contradicted by code (six calls opt in, three named) | [V2-17] |
 | Converging an effect | SR:1162-1179 | sound | none |
 | Outcome written under an uncancellable boundary; resolution identity first | SR:1181-1227 | sound | none |
-| Log fault sticky; restoration proved | SR:1284-1308 | sound | none |
+| Log fault sticky; restoration proved | SR:1284-1308 | contradictory exit: SR:1300 excludes a settled verb, SR:1805-1807 names the settled apply | [V2-20] |
 | Continuation retries each failed block once per invocation | SR:1312-1327 | sound | none |
+| Refusal remedies "restore ... from a matching backup" | CX:366-371, 644-649; SR:476-481, 1508-1514; secrets.md:518-521 | contradicted by the restore boundary (CX:751-753); term undefined | [CX-R4] |
 | **Removal and dependency safety** | | | |
 | Ownership = every started block; removal from the frozen plan | SR:1329-1356 | sound | none |
 | Removal resolves first; refuses whole if any block stays unproved | SR:586-588, 1229-1243 | unsafe exit | [F09-01] |
@@ -1716,17 +1903,20 @@ Abbreviations: SR is `specs/state-reconciliation.md`, CX is `specs/contexts.md`,
 | Inverted dependency graph | SR:1534-1540 | sound | none |
 | Running or unknown removal continued; failed one superseded | SR:1542-1556 | sound | none |
 | Exclusive-lock re-proof before every transition | SR:1558-1580 | sound | none |
+| Ceph attempts define "partial-completion evidence and safe retry" | storage.md:480-483 | contradicted by the `partial-cluster` refusal and the partial DB/WAL refusal (storage.md:661, 687-688); no physical-host exit | [CX-API04] |
 | **Comparison, plan and diff** | | | |
 | Comparison is a read; three sides; canonical form | SR:1585-1645 | sound | none |
 | Records-only reading under a removal | SR:1616-1629; cli/output.md:686-703 | contradicted by SR:1726-1727 | [F12-02] |
 | Equal, settled and drift vocabulary | SR:35-40, 1631-1645; cli.md:510-517 | ambiguous ("drift" undefined) | [F12-05] |
-| Live observation: boundary, material, re-proof, fold | SR:1647-1727 | sound | none |
+| Live observation: boundary, material, re-proof, fold | SR:1647-1727 | sound; "runs no effect" (SR:1652) hides the cache-only rebuild | [CX-R6] |
+| Read-only commands run no process or network access | security.md:694 | contradicted by the Observe class (cli/commands.md:50-52, 98) | [CX-R6] |
 | Projection and observable fields; add-on drift | SR:1729-1766; add-ons.md:369-379 | ambiguous (own but unequal) | [F12-03] |
 | `diff` Input line names `apply` continues or settles | cli.md:732-734 | contradicted by cli.md:661-665 | [F12-09] |
 | **GitOps readiness** | | | |
 | Readiness predicate over the apply's records | SR:1768-1786 | gap: ignores the selected revision | [F12-01] |
 | Predicate bullets vs status reasons | SR:1771-1778, 1799-1807 | ambiguous | [F12-07] |
 | Per-cluster bootstrap object "after every block that reaches its cluster" | SR:1788-1794; add-ons.md:73-76, 131 | ambiguous (stage vs relation) | [F12-04] |
+| Time-service readiness: a server-mode reply | infrastructure-services.md:540-550 | gap: proves an answer, not usable time; no consumer states its need | [CX-X3] |
 | **Durable formats** | | | |
 | Registry format, record table, descriptor owner | CX:186-205, 302-310 | contradicted (says 5; code writes 6) | [F13-01] |
 | Pre-1.0 rule: refuse, never convert, name the remedy | project.md:95-96; CX:742-749 | sound rule; one remedy not actionable | [F13-03] |
@@ -1740,13 +1930,14 @@ Abbreviations: SR is `specs/state-reconciliation.md`, CX is `specs/contexts.md`,
 | `setup/lock`; launch holds runtime `.lock` shared; non-blocking retirement | CT:799-802, 870-880 | sound | none |
 | Pending setup intent blocks every consumer | CT:835-849 | unsafe (host-wide availability) | [F13-04] |
 | Retention keeps current and previous runtime | CT:870-888 | sound default; refusal wording contradicted | [F13-05] |
+| Format healing discards every runtime; "never strands a context" | CT:850-861 | contradicted by CT:887-888 and D152 clause 8 | [V2-05] [F13-05] |
 | Host identity tuple; never silently rebind | CT:759-792; CX:84-109 | sound detection; only an abandoning exit | [F13-06] |
 | Tool-source identities append-only, 4096 bound | CR:89-105, 158-161 | gap: refusal names no remedy | [F13-08] |
 | **Permanent deletion** | | | |
-| Disposal proof, orphan acknowledgement, named exits | CX:760-857; SR:259-274 | sound | none |
+| Disposal proof, orphan acknowledgement, named exits | CX:760-857; SR:259-274 | sound proof; the named abandonment inventory omits undeclared objects | [V2-03] |
 | Name is identity; a recreated name is a new context | CX:16-23 | accepted risk, pending B568 | none |
 
-Two candidates were considered and refuted. "Freezes the same blocks" meaning different things per verb [R2-03-04] is already defined per verb at SR:1068-1076; the real gap is the digest one in [R2-03-01]. "Authored desired state is the source of truth" conflicting with GitOps control after handoff [F12-10] was refuted on arbitration. The predicate already says it transfers no ownership and authorizes no GitOps mutation of Bootwright-owned resources (SR:1782-1784).
+Two candidates were considered and refuted. "Freezes the same blocks" meaning different things per verb R2-03-04 is already defined per verb at SR:1068-1076; the real gap is the digest one in [R2-03-01]. "Authored desired state is the source of truth" conflicting with GitOps control after handoff F12-10 was refuted on arbitration. The predicate already says it transfers no ownership and authorizes no GitOps mutation of Bootwright-owned resources (SR:1782-1784).
 
 ### 8.B3 Reliability: dead ends, waits and crash boundaries
 
@@ -1762,6 +1953,10 @@ Smallest correction, for the owner to decide: a fresh destroy may take an explic
 
 **Controller identity change [F13-06].** The identity tuple is machine-id, DMI product UUID and root filesystem UUID (CT:762-764). Recreating the bastion VM on another hypervisor or replacing a mainboard changes it, and every verb of every context refuses. The only remedy that the spec names, other than returning to the original host, is the orphan-acknowledged deletion. Smallest correction: the mismatch refusal lists, in order, returning to the original host or restoring its identity values, destroying from the original host before a planned change, and the orphan-acknowledged purge with what it abandons. Park an explicit, root-confirmed "rebind controller identity" item with its own reason, separate from B103.
 
+**A partly deployed physical Ceph cluster [CX-API04], High.** storage.md:481-482 promises that every Ceph attempt "defines partial-completion evidence and safe retry", with no exception. The recovery table then "refuses `partial-cluster` until B659 defines its recovery" (storage.md:661), and a partial DB/WAL device refuses while "B662 owns recovery" (storage.md:687-688). Both items are parked for an owner decision. Retirement without native calls covers only all-virtual clusters; "a bare-metal one, keeps the refusal below" (storage.md:1466-1472) until B491. On the portfolio's primary journey, bare metal with IBM Ceph, the only exit is `--allow-orphans`, which abandons daemons and claimed physical disks. The re-rating to High is scoped to physical hosts; on libvirt, destroy plus a fresh apply recovers. Smallest correction: qualify storage.md:480-483 with both named exceptions linked to B659 and B662, and state per refusal whether any supported remedy exists on physical and on virtual hosts. Do not specify the recovery protocols here.
+
+**Format healing discards every runtime [V2-05] [F13-05], now Medium.** A setup record of another format makes setup remove the subtree: "the discard removes every runtime and the wheel cache" (CT:851-858). The same paragraph promises "A future setup-format change therefore never strands a context" (CT:861). CT:887-888 promises the previous runtime keeps a live operation "continuable offline". One build change thus breaks the offline promise that [F13-05] showed breaking only after two lock changes. Switching back to the registering build discards again, since its setup sees the newer format as foreign. A connected host's `setup --download-only` can still carry the wheels over (CT:307), so this is not a strict dead end. Smallest correction: scope CT:861 to setup's own record, say format healing removes the previous runtime too, and qualify CT:887-888 "until a setup-format discard". Keeping a runtime a non-terminal operation names is an owner option under D152 and should be parked, not mandated.
+
 **Edited input over a completed apply [F12-06].** A `context update` with changed input only warns (CX:160-162). Restoring the original files creates a new revision that still refuses until B598 lands. After GitOps handoff the only named way on is a full destroy. Smallest correction: the warning states that restoring the original files does not restore settlement until B598, and links B598.
 
 **Tool-source identities [F13-08].** Source identities are append-only with a 4096 bound, and the refusal says no command frees one (CR:103-105). Smallest correction: the refusal names the fresh-install exit. Retiring sources with their last area is an optional change that needs a security review, because append-only is what detects "same ID, different bytes".
@@ -1774,9 +1969,19 @@ The spec deliberately has no unbounded lock wait: "no lock or lease is ever wait
 
 **A pending setup intent blocks the host [F13-04].** "An unknown outcome blocks every consumer" (CT:842). A setup that fails while fetching wheels offline, before any dnf transaction, leaves the intent pending. Every apply, destroy and bounded run of every context then refuses, including continuations whose previous runtime is intact. The remedy `run bootwright setup` fails the same way offline. Smallest correction: a setup that fails at a named step before any dnf transaction began, or after dnf completed and presence was re-read, clears its intent in the failure path and records the failure in its run. Only a kill, a crash or a failure during dnf keeps the host-wide block. The refusal names both exits: this build's setup with `--wheel-mirror`, or the setup of the receipt's build.
 
+The fan-out side has one gap of its own. **Several-Machine exec sessions are unbounded [CX-R9].** security.md:20-25 requires fixed, tested limits at every input boundary, including target concurrency. Yet several-Machine sessions "start together and run concurrently, with no bound" (cli.md:1039-1040), and cluster exec inherits that. Power batches, by contrast, wait for a slot under the engine's bound on running blocks (cli.md:1326-1330). On a large environment or through one jump host, the unbounded form can exhaust controller processes or remote `MaxStartups`. Smallest correction: admit sessions in canonical order under the same bound, keep D150's parallel intent, and add the bound to security.md's tested limits. Acceptance: a selection at the graph maximum stays within the bound, and cancellation stops admissions still waiting (security.md:29-31).
+
 #### Crash boundaries
 
-The write-ahead order is right everywhere checked (8.B1). Three boundaries are weaker than the rest.
+The write-ahead order is right everywhere checked (8.B1). Six boundaries are weaker than the rest: three found by this audit, and three confirmed from the sibling and now catalogued as CX entries.
+
+**An unreadable removal target reads as no effect [CX-R5], High.** SR:544-548 says an observation that cannot tell the removal's postcondition from an unreadable target "reads it as no effect, and the retry that follows proves its own absence". The resolution table maps a failed or unreadable observation to `unknown` (SR:550-555), and SR:1215 repeats that "a foreign or unreadable observation stays `unknown`". security.md:33-35 forbids reading an ambiguous probe as absence. One conforming implementation keeps the block unknown; another records no effect and admits a mutating retry whose completion rests on the same ambiguous read. Smallest correction: an observation that fails, is forbidden or cannot read the target stays unknown. A capability that genuinely cannot distinguish its postcondition from absence through a successful read declares that case beside its removal rule. It gets a distinct result, inconclusive but safe to repeat, never no effect, and the retry completes only on its own positive postcondition evidence. This is option B of 14.8; the owner may instead delete the clause (option A) and accept more manual resolutions.
+
+**A powered-off private Machine reads as positive no effect [CX-X1].** managed-os.md:565-572 calls a private Machine the network restart powered off before its disk boot "the one window that leaves nothing to read", so "it reads positive no effect". The installation and its marker exist there; only the identity read went unanswered. The replay is bounded by the boot-time target proof (managed-os.md:399-414), so the behaviour can stay. The reading is wrong: name this window a positive partial realization of the operation's own installation, and drop "the one window", since a Machine powered off after its disk boot gives the same readings.
+
+**Own-image identity is defined twice [CX-X6].** Every insert uses a per-insert token link (container-clusters.md:568-576). The device-and-inode rule (:596-600) makes that link own; the evidence paragraph's exact-path rule (:847-851) makes it foreign. Replay and unknown resolution then depend on which paragraph the code followed. Smallest correction: keep the device-and-inode rule as the only definition and link to it from :847-851. Removal keeps ejecting whatever a declared node presents, as D27 decided (backlog.md:3081).
+
+**Ceph lost-reply adoption [V2-07].** An RBD image, subvolume or NFS export whose reply was lost is adopted "only with that record and an image of exactly the frozen shape" (storage-resources.md:361-363; storage.md:1130-1131). Mutation safety says a record "may locate a target but never proves ownership" (SR:1816-1817). The exception is unnamed, and an out-of-band writer in the window gets its object adopted. Today no block removes these objects online, so the harm is misattributed evidence. Smallest correction, folded into [F10-08]: name the exception and its single-writer boundary in Mutation safety, and require B491's online removal to re-prove the native ID instead of treating adoption as removal authority.
 
 **Operation state from held states [F09-06].** The operation records "the state its blocks give it, as the invocation holds them" (SR:702-703). A start whose publication lands and then errors leaves the operation `failed` beside a `running` block (SR:695-699). Every reader then needs carve-outs: the attempt-count exception in the contradiction rules (SR:1381-1388) and the lag cases in finalization (SR:86-98). Smallest correction, folded into B569 and B575: state once that at each write the operation state is the precedence over its durable block records, or `running`. Keep one generic lag rule ("all blocks done, finalize under either verb") and delete the commit-anchored clauses.
 
@@ -1801,10 +2006,30 @@ The write-ahead order is right everywhere checked (8.B1). Three boundaries are w
 | Record evolution [R2-03-05] | optional members move no record version (SR:409-414) | "adding or renaming one field" is a new request version (SR:1454-1456) | One paragraph on optional record members, citing D145(3) |
 | "Effect pin" [R2-03-06] | used once (SR:1086) | defined only in a knowledge page; implementations hash different inputs | Define once: a Go-owned value outside the request that fixes what an effect is, hashed directly |
 | "Drift" [F12-05] | refuse (storage.md:515), not ready (storage-resources.md:367), reported (SR:38-40) | no definition | One sentence under "Comparing desired and real state"; link the storage pages |
+| Exit from a latched log fault [V2-20] | "Nothing else clears it: not elapsed time, a read, a settled verb" (SR:1300) | "A settled `apply` over unchanged input restores a latched log fault" (SR:1805-1807); cli/output.md:679 offers it | Either a settled apply over a faulted completed operation reopens its log first (drop "a settled verb" from SR:1300), or delete SR:1805-1807 and the output.md sentence and name the real exit |
+| Retry admission in a stage preview [V2-04] | "retries the one failed block ... every other ready block is deferred" (cli.md:558-562) | every selected failed block retries beside every startable block (SR:895-898, D144; cli/output.md:650-652) | Replace cli.md:556-562 with a link to SR's rule; close B592 |
+| Size of a stored plan [CX-RULEplanbytes] | "An operation or plan record is at most 1 MiB" (SR:432-434) | 6 MiB `MaxPlanBytes` (CX:525-526; records.go:20-21) | Link SR to the CX bounds table instead of restating numbers |
+| What "read-only" admits [CX-R6] | no writes, processes or network access (security.md:694); `diff --observe` "runs no effect" (SR:1652) | Observe permits bounded read-only process and network access and the cache-only rebuild (cli/commands.md:50-52, 98; CT:184-197) | Make the commands.md Effects column the only owner; retarget security.md:694; "runs no lifecycle effect" |
+| Own image of agent-install media [CX-X6] | same file by device and inode (container-clusters.md:596-600) | exact scheme, host and path; another attempt's link is foreign (container-clusters.md:847-851) | Keep the inode rule; link to it from :847-851 |
+| Whether a format change strands a context [V2-05] | "never strands a context" (CT:861) | the discard removes every runtime and the wheel cache (CT:851-858), against CT:887-888 | Scope CT:861 to setup's record; qualify CT:887-888 |
+| Unreadable removal target [CX-R5] | "reads it as no effect" (SR:546) | "a foreign or unreadable observation stays `unknown`" (SR:1215); security.md:33-35 | Owner choice (14.8): delete the clause (option A), or keep a capability-declared inconclusive result that is never no effect (option B) |
+| Calls that may carry `nativeError` [V2-17] | "Ceph core, host and image" only; "Other capabilities refuse this member" (architecture.md:789-794) | export, replication and SMB also opt in (internal/storage/ceph/export.go:276, replication.go:267, smb.go:511) | Name all six, or define the set by rule; optional docs-check row |
 
-[F13-01] is the most consequential row, and the sibling defect [F16-02] reports the same registry version drift. contexts.md is the page `specs/index.md` routes registry questions to. An agent following it would write the wrong version, or wrap setup's dnf install in an exclusive root lock that makes every other command on the host refuse for minutes. `make docs-check` compares the bounds table with the code but not the record-version table, which is how the drift went unseen. Extending that test to each record-version cell is a sound follow-up but not part of the fix.
+[F13-01] is the most consequential row, and the sibling defect F16-02 reports the same registry version drift. contexts.md is the page `specs/index.md` routes registry questions to. An agent following it would write the wrong version, or wrap setup's dnf install in an exclusive root lock that makes every other command on the host refuse for minutes. `make docs-check` compares the bounds table with the code but not the record-version table, which is how the drift went unseen. Extending that test to each record-version cell is a sound follow-up but not part of the fix.
 
 The duplication behind several rows is itself a finding [F13-09]. Retention appears in CT:870-890 and CR:208-212. The version-5 cut-over refusal appears on five pages. Make CR the single owner of the setup subtree's layout, publication and retention, and state the cut-over refusal once, with every other mention a link.
+
+The rows on retry, removal and next steps share one cause. `specs/cli.md` and `specs/cli/output.md` restate transition policy that `specs/state-reconciliation.md` owns, so each lifecycle change needs three edits. One restatement has already drifted [V2-04]. `cli.md:558-562` says `apply` retries "the one failed block the selection admits" and defers every other ready block. SR:895-906 (D144) and `cli/output.md:650-653` retry every selected failed block beside every startable block. A `plan --stage` built from cli.md would mark blocks deferred that `apply` starts.
+
+The gate already exists for the owner side. `TestTransitionTablesMatchSpec` (`internal/reconciliation/lifecycle/transitions_spec_test.go:29-45`) drives the code with every row of the SR tables. Nothing ties the CLI projections to them.
+
+| Change | Where | Ids |
+| --- | --- | --- |
+| State once that SR's transition and admission rules are the only normative owner; CLI pages state what each output projects and link the SR anchor | `cli.md` "Stage selection" and "Lifecycle receipt", `cli/output.md` `nextSteps`, `handoff` rows | [F16-04], [F09-05] |
+| Replace `cli.md:556-562` with a link to SR's retry rule; keep only the preview tokens `resolve`, `retry`, `start`, deferred | `cli.md:552-566` | [V2-04] |
+| One parity table test: for each durable state, fault and selection, the `plan` preview, `status` `nextSteps` and refusal remedy equal what the verb's read-only decision computes; include all blocks done with a latched log fault, several failed siblings, and a drifted owned target under a superseding removal | extend `internal/reconciliation/lifecycle/next_steps_test.go`; no new harness | [F16-04], [F09-04], [V2-20] |
+
+This is the 9.8 ownership rule applied to the one domain where a stale projection sends an operator to a refused command.
 
 ### 8.B5 Operability: what an operator does when a rule refuses
 
@@ -1821,6 +2046,16 @@ The standard here is the project's own rule that every refusal names an exact sa
 **The digest duty has no procedural owner [R2-03-03].** The rule that an automation change altering what an effect is must move the content digest lives in delivered history: "the reviewer checks that on every `ansible/` change" (specs/milestones/delivered.md:4341-4342). The code-implementation skill's Ansible reference does not mention it. An agent making an `ansible/` fix is never asked. Smallest correction: one checklist line in `references/ansible.md`, and in `go.md` for capability Observe and ownership code, linking SR:1466-1480. A `Contract:` line in the commit check is optional. This is the operational half of [R2-03-02], whose own smallest correction is to restate the "backstop" honestly. Removal's ownership proof fails closed on a changed mark, so the consequence is a stuck or partial destroy. A change that loosens the proof is unguarded and must move the digest. Each transient classification in the contract golden needs a recorded reason, and the literal scan should extend to quoted `bootwright.io` label and annotation keys.
 
 **Add-on drift [F12-03].** Pages promise that `diff --observe` reports changed add-on fields (add-ons.md:432-433), but only `machine-libvirt-v1` has a projection row (SR:1765-1766). An acceptance gate of "no drift" can pass while a field drifted. Smallest correction: classify own-but-unequal as a partial realization whose note names the differing object and first field. Park an add-on projector as a sibling of B600-B605.
+
+**The deletion inventory omits undeclared objects [V2-03].** Evidence-protected and orphan-acknowledged deletion both name "`bootwright status --context <name>` as the inventory of the objects it abandons" (CX:818-820; also CX:766-767, 889-890; SR:260). Yet `status` builds its rows from the compiled catalog only, so an object a later `context update` dropped is not listed (B578, backlog.md:1603-1609). That update only warns (CX:160-162), and the abandoned objects "survive unmanaged and unreferenced" with no command to find them again (SR:262-264). An operator who trusts the named inventory cleans up too little after an irreversible deletion. B578 calls this "misleading output, no harm" with no milestone dependency. Smallest correction: re-rate B578 as a safety visibility gap and link it from the deletion pages. Until it lands, name `bootwright diff --context <name>` beside status as the inventory, since diff lists the realized-only side.
+
+**Backup restore is offered but undefined [CX-R4].** Seven remedies say to restore "the whole store from a matching backup" or "the keyring from a complete backup" (CX:369-370; SR:478-479, 1511-1512; secrets.md:520). The restore boundary rejects directory-copy restoration and says "There is no general copy-restore or rollback command" (CX:751-753); B103 parks restore. A second, strong vote on the split severity kept Medium. An inode-preserving snapshot does roll back seal counters, but nonces are random (secrets.md:450), so the cost is a weaker usage cap, not nonce reuse. Smallest correction: keep D37's two exits, define "matching backup" once at the restore boundary, and say where restore is the only exit (CX:366-371) that it is unavailable as a supported command until B103.
+
+**An export's trust extent never reaches the approval surface [V2-09].** storage-resources.md:1200-1205 says an export trusts its consumer's administrators with every RGW user and bucket of the realm, and that exports sharing a cluster are not isolated. The plan and status row shows only "export of pool ..., filesystem ..., object gateway ..." (cli/output.md:523). Smallest correction: extend that row with a fixed trust clause when a gateway or filesystem is set, linked to the StorageExport section.
+
+**Readiness of a time service [CX-X3].** NTP readiness accepts a server-mode reply "whose stratum may show it unsynchronized without being a failure" (infrastructure-services.md:547-548). No consumer states the time quality it needs. Smallest correction: say what an upstream-less server serves and that readiness proves only an answer, and have container clusters and Ceph hosts state that they accept it. Acceptance: an offline local-reference profile reports its level rather than failing.
+
+**Unfinished operations are invisible before an upgrade [V2-06].** `context list` shows name, initialization, input readiness and the current marker only (CX:860-866). The registering build appears per context in `status` (cli/output.md:725-727). An operator installing a new build learns of an unfinished operation only after setup's retention pruned its runtime. Smallest correction, an addendum to [F13-05]: `context list` reports each unfinished operation's verb, state and registering build, without claiming whether the new build can continue it.
 
 ### 8.B6 Writing style of the normative text
 
@@ -1850,9 +2085,13 @@ Keep the table-level test anchors such as `TestTransitionTablesMatchSpec` (SR:50
 
 ### 8.B7 Findings in this part
 
+Entries that part A also lists are counted in part A's totals; this table repeats them for navigation.
+
 | Id | Severity | Title |
 | --- | --- | --- |
-| [F13-01] | High | contexts.md stale after setup v2: registry version, descriptor, lock owner (also [F16-02]) |
+| [F13-01] | High | contexts.md stale after setup v2: registry version, descriptor, lock owner (also F16-02) |
+| [CX-R5] | High | Removal observation maps an unreadable target to no effect and a retry |
+| [CX-API04] | High | Ceph partial-cluster and partial DB/WAL refusals contradict safe retry and name no remedy |
 | [F09-01] | Medium | One unreachable target blocks a whole removal |
 | [F09-02] | Medium | Apply retries may consume the removal's reserve |
 | [F09-03] | Medium | Completed apply with a lost block record is a dead end |
@@ -1867,6 +2106,15 @@ Keep the table-level test anchors such as `TestTransitionTablesMatchSpec` (SR:50
 | [R2-03-01] | Medium | A removal under another build never checks the content digest |
 | [R2-03-02] | Medium | Cross-build preservation of marks and proofs rests on author judgement |
 | [R2-03-03] | Medium | No skill or check owns moving a content digest |
+| [V2-20] | Medium | A settled apply is both excluded from and named as the log-fault exit |
+| [F13-05] | Medium (was Low) | Retention keeps one previous runtime and format healing discards all; the refusal promises more |
+| [V2-03] | Medium | Orphan deletion names status as its inventory, but status omits undeclared objects |
+| [CX-X1] | Medium | Powered-off private Machine read as positive no effect although installed |
+| [CX-X6] | Medium | Own-image identity for agent-install media defined two incompatible ways |
+| [CX-R4] | Medium | Refusal remedies offer a backup restore that the restore boundary rejects |
+| [CX-R6] | Medium | "Read-only command" has no single definition |
+| [CX-R9] | Medium | Unbounded several-Machine exec sessions contradict the fixed concurrency limit |
+| [CX-RULEplanbytes] | Medium | SR caps a plan record at 1 MiB; the bounds table and code allow 6 MiB |
 | [F09-05] | Low | Unknown-operation rows forbid the retry D146 requires |
 | [F09-06] | Low | Operation state recorded from in-memory block states |
 | [F09-07] | Low | Admission after an unknown outcome stated only by implication |
@@ -1876,14 +2124,21 @@ Keep the table-level test anchors such as `TestTransitionTablesMatchSpec` (SR:50
 | [F12-06] | Low | Edited input over a completed apply cannot be undone short of destroy |
 | [F12-07] | Low | Readiness bullets and status reasons diverge |
 | [F12-09] | Low | `diff` Input line promises a step status may refuse |
-| [F13-05] | Low | Retention keeps one previous runtime; the refusal promises more |
 | [F13-06] | Low | Controller identity change leaves only an abandoning exit |
 | [F13-08] | Low | Tool-source identities append-only with an unfreeable bound |
 | [F13-09] | Low | Setup-subtree rules and the cut-over restated on five pages |
 | [R2-03-05] | Low | Optional record members blur the record version |
 | [R2-03-06] | Low | "Effect pin" is undefined |
+| [V2-04] | Low | cli.md still retries only one failed block and defers ready work, against D144/D146 |
+| [V2-05] | Low | Format healing discards every runtime, yet the spec says it never strands a context (folds into [F13-05]) |
+| [V2-06] | Low | No cross-context listing of unfinished operations and their registering builds |
+| [V2-07] | Low | Ceph lost-reply adoption trusts the attempt record plus shape (folds into [F10-08]) |
+| [V2-09] | Low | StorageExport plan and status omit the export's realm-wide trust extent |
+| [V2-13] | Low | Power dispatch arm rides in material values, outside the digested request |
+| [V2-17] | Low | Adapter protocol names three `nativeError` callers; six opt in |
+| [CX-X3] | Low | NTP readiness proves an answer, not usable time |
 
-Four of the Medium findings ask the owner to revisit or extend a recorded decision rather than correct a slip: [F09-01] reopens D38, [R2-03-01] and [R2-03-02] amend D145, which is still pending the owner's review, and [F09-02] extends B572's recorded fix. The rest are wording, a single clause or one table row each.
+The CX rows are sibling claims that this audit's verifiers confirmed at 17acb63d9; they now sit in the catalog beside our own ids. Four of our Medium findings ask the owner to revisit or extend a recorded decision rather than correct a slip: [F09-01] reopens D38, [R2-03-01] and [R2-03-02] amend D145, which is still pending the owner's review, and [F09-02] extends B572's recorded fix. Two more wait on owner decisions without reopening one: [CX-API04] on B659, B662 and B491, and the runtime pin in [V2-05] under D152. The rest are wording, a single clause or one table row each.
 
 ## 9. The spec corpus as an agent harness: structure, duplication and retrieval cost
 
@@ -1891,7 +2146,7 @@ This section judges `specs/`, the knowledge index and the delivery pages as the 
 
 ### 9.1 Verdict in brief
 
-The ownership model is right and its gates are stronger than in most repositories. The cost problem is concentrated in three places. The mandatory path names whole milestone pages of 63 to 141 KB, mostly history [F15-01]. The index routes to pages, not to sections that reach 40 to 101 KB [F15-07]. The gates bound only the entry files [F15-08]. Duplication is real but local: the storage family, the setup subtree and milestone item details restate rules owned elsewhere [F05-08] [F13-09] [F15-09] [F17-05]. None of this needs a new model. It needs the existing model applied to the pages an agent opens second, and gates that hold it there.
+The ownership model is right and its gates are stronger than in most repositories. The cost problem is concentrated in three places. The mandatory path names whole milestone pages of 63 to 141 KB, mostly history [F15-01]. The index routes to pages, not to sections that reach 40 to 101 KB [F15-07]. The gates bound only the entry files [F15-08]. Duplication is real but local: the storage family, the setup subtree and milestone item details restate rules owned elsewhere [F05-08] [F13-09] [F15-09] [F17-05]. Some restatements have already drifted from delivered code or owner decisions [V2-01] [V2-04] [V2-08] [V2-16] [V2-17]. None of this needs a new model. It needs the existing model applied to the pages an agent opens second, and gates that hold it there.
 
 ### 9.2 What is good and must be kept
 
@@ -1986,6 +2241,7 @@ The fixed routing cost is lean, about 4k tokens. The variance comes from two sou
 | [F15-08] | Medium | Docs gates bound entry files only, not the pages agents read next. |
 | [F17-04] | Medium | Session-taken waivers and scope readings act before the owner confirms them. |
 | [F05-08] | Medium | The storage contract spans five to eight pages; the deferred page contradicts itself. |
+| [V2-01] | Medium | Storage admission and output pages call realized NVMe-oF and StorageExport refused. |
 | [F15-02] | Low | The six-host Ceph cap is written as a target rule, not as "Not yet met". |
 | [F15-03] | Low | A stale, unindexed M2a review page sits among normative specs. |
 | [F15-04] | Low | "Not yet met" lines carry acceptance and delivery state. |
@@ -2000,6 +2256,13 @@ The fixed routing cost is lean, about 4k tokens. The variance comes from two sou
 | [F07-10] | Low | Spec navigation cites a test-only function as the capability registry. |
 | [F17-07] | Low | The acceptance ledger has no row template for cluster or add-on gates. |
 | [R2-02-05] | Low | No substrate or service qualification section; qualification lives in milestone rows. |
+| [V2-04] | Low | `cli.md` still retries one failed block and defers ready work, against D144 and D146. |
+| [V2-08] | Low | `secrets.md` still gives unknown `secret info` names an empty selection, against B651. |
+| [V2-12] | Low | Decision links have no per-decision anchor; each D<n> link opens the whole 132 KB log. |
+| [V2-14] | Low | The install playbook's later plays import eight task files no argument spec declares. |
+| [V2-15] | Low | No rule sets argument-spec depth; role schemas leave nested request members untyped. |
+| [V2-16] | Low | `substrates.md` quotes libvirt request versions v4 and v7 that the code and roles refuse. |
+| [V2-17] | Low | The adapter protocol names three `nativeError` opt-ins; six Ceph calls opt in. |
 
 [F17-03] is the one High finding here because it touches authorization, not cost. `specs/milestones.md:40-41` defines "active" through a slice's Delivery, yet the Planned slices tables have no Delivery column. `specs/milestones.md:29-30` still names M2c as next, which D168 paused. An agent told to "resume" cannot decide what is active from the page it is told to read.
 
@@ -2019,8 +2282,19 @@ The fixed routing cost is lean, about 4k tokens. The variance comes from two sou
 | Capability registry entry point | `architecture.md:391` cites `buildCapabilities` | production `wiring_reconciliation.go:199` is `buildCapabilitiesWith` | [F07-10] |
 | Acceptance state | milestone pages | coverage "Not yet met" lines, e.g. `container-cluster-coverage.md:14, 201` | [F15-04] |
 | Dated release pairings | knowledge pages | `add-on-coverage.md:146-148, 195-197`, `container-cluster-coverage.md:51-53` | [F17-08] |
+| NVMe-oF gateways and subsystems are refused at plan | `api/storage.md:15-18, 90-92` | `storage-resources.md:18-19` and `storage.md:1493-1531` realize them | [V2-01], [F05-02] |
+| StorageExport has no realizing capability | `cli/output.md:507` | `storage.md:956-957` realizes it by its export block | [V2-01] |
+| `apply` retries one failed block and defers the rest | `cli.md:558-562` | `state-reconciliation.md:895-898` (D144), `cli/output.md:650-652` | [V2-04] |
+| Unknown `secret info` names give an empty selection | `secrets.md:134-135` | `cli.md:181-184`, `cli/commands.md:69` refuse them (B651) | [V2-08] |
+| Libvirt request versions | `substrates.md:331-332` names v4 and v7 | `internal/substrate/libvirt/catalog.go:58-59` and role specs hold v6 and v8 | [V2-16] |
+| Calls that opt into `nativeError` | `architecture.md:789-790` names core, host and image | export, replication and SMB invocations also set `NativeErrors: true` | [V2-17] |
+| Playbooks import roles only by declared entry point | `architecture.md:703-705` | `containercluster/install_apply.yml` plays 2-9 import eight undeclared task files | [V2-14] |
 
 Two patterns explain most rows. The storage contract grew by review rounds and kept each round's page. Milestone and coverage pages paraphrase owning rules instead of linking them, so they become second owners. Related drift reported in other sections, such as [F13-01] (stale `contexts.md` after setup v2) and [F05-02], is the result of the same pattern.
+
+A third instance, CLI pages restating transition policy, is treated in 8.B4 [V2-04].
+
+The rows added in this revision show two more causes. A delivered change updates some restating pages and misses others: B651 reached the CLI pages but not `secrets.md` [V2-08], and D144 left `cli.md` behind [V2-04]. Specs also quote facts the code owns, such as request version literals [V2-16], the opted-in call set [V2-17] and a kind's realization status [V2-01]. Both causes have the same remedy: one owner, and links elsewhere. A fact the code holds stays in code, as `.agents/skills/architecture-best-practices/SKILL.md:21-22` already asks. One rule is missing rather than duplicated: `architecture.md:703-707` promises entry-point validation but never says how deep an argument spec must type the request [V2-15].
 
 ### 9.7 Per-page actions
 
@@ -2037,27 +2311,27 @@ Rows come from the ledger, condensed. Skills, rules, wrappers and entrypoints ar
 | `specs/api/secrets.md` | 211 | 3.2k | needs-improvement | Rewrite "File source" to a refusal rule plus link. |
 | `specs/api/infrastructure-services.md` | 258 | 3.9k | needs-improvement | Rewrite: per-kind support status for Registry and LoadBalancer. |
 | `specs/api/container-clusters.md` | 475 | 6.9k | needs-improvement | Rewrite platform and topology sections; evidence to knowledge. |
-| `specs/api/storage.md` | 615 | 10.0k | needs-improvement | Rewrite opening as a per-kind admission table; state `ceph.distribution`. |
+| `specs/api/storage.md` | 615 | 10.0k | needs-improvement | Rewrite opening as a per-kind admission table; state `ceph.distribution`; replace the stale NVMe-oF refusals with links [V2-01]. |
 | `specs/api/addons.md` | 518 | 9.8k | needs-improvement | Split: package configuration records to a sibling page. |
 | `specs/api/custom-playbooks.md` | 38 | 0.5k | needs-improvement | Rewrite: become the single owner of admission; merge the deferred lexical rules in. |
-| `specs/architecture.md` | 1119 | 19.5k | needs-improvement | Split: adapter protocol to its own page; gate-selection rules to the verification reference. |
-| `specs/cli.md` | 1404 | 22.9k | needs-improvement | Split: access, sessions, trust and power to `cli/access.md`; privilege to security. |
+| `specs/architecture.md` | 1119 | 19.5k | needs-improvement | Split: adapter protocol to its own page; gate-selection rules to the verification reference. Name the `nativeError` opt-in set by rule [V2-17]; scope the entry-point import rule and state argument-spec depth [V2-14] [V2-15]. |
+| `specs/cli.md` | 1404 | 22.9k | needs-improvement | Split: access, sessions, trust and power to `cli/access.md`; privilege to security. Replace the restated retry rule with a link to the stage contract [V2-04]. |
 | `specs/cli/commands.md` | 421 | 9.3k | needs-improvement | Rewrite: closed Effects vocabulary; add "Help content" [F16-03]. |
-| `specs/cli/output.md` | 1090 | 19.8k | needs-improvement | Split: per-command result shapes to a results page. |
+| `specs/cli/output.md` | 1090 | 19.8k | needs-improvement | Split: per-command result shapes to a results page. Fix the StorageExport `scope` sentence [V2-01]. |
 | `specs/controller.md` | 1032 | 17.1k | needs-improvement | Split: runtime mechanics into `contexts/controller-record.md` [F13-09]. |
 | `specs/contexts.md` | 902 | 15.4k | needs-improvement | Rewrite stale registry text; split media acquisition and admission arithmetic to child pages. |
 | `specs/contexts/controller-record.md` | 245 | 3.8k | needs-improvement | Split setup subtree into its own indexed page. |
-| `specs/secrets.md` | 565 | 9.4k | needs-improvement | Split: keyring format to `secrets/local-keyring-v4.md` with stable anchor. |
+| `specs/secrets.md` | 565 | 9.4k | needs-improvement | Split: keyring format to `secrets/local-keyring-v4.md` with stable anchor. Link the `secret info` selection rule instead of restating it [V2-08]. |
 | `specs/security.md` | 698 | 14.3k | needs-improvement | Rewrite "Process boundary": invariants only, mechanics linked. |
 | `specs/state-reconciliation.md` | 2084 | 34.1k | needs-improvement | Split by consumer: records page, diff to CLI owner; move delivery ids out. |
 | `specs/infrastructure-services.md` | 572 | 10.1k | needs-improvement | Split: host reservations to its own page. |
-| `specs/substrates.md` | 1039 | 17.5k | needs-improvement | Split by arm into a directory; keep a 300-line contract core. |
+| `specs/substrates.md` | 1039 | 17.5k | needs-improvement | Split by arm into a directory; keep a 300-line contract core. Drop the libvirt request version literals [V2-16]. |
 | `specs/managed-os.md` | 1462 | 27.8k | needs-improvement | Split: media store out; installation core of about 300 lines plus feature pages [F15-07]. |
 | `specs/container-clusters.md` | 1013 | 17.6k | needs-improvement | Split: media and installation block contracts to a second page; move history out. |
 | `specs/container-cluster-coverage.md` | 220 | 7.0k | needs-improvement | Rewrite: drop delivery columns; dated facts to knowledge [F17-08]. |
 | `specs/storage.md` | 1616 | 28.5k | needs-improvement | Split: shared lifecycle core plus one page per realization protocol. |
 | `specs/storage-native-api.md` | 989 | 16.2k | needs-improvement | Split: tunnel and recovery protocol to the lifecycle core. |
-| `specs/storage-resources.md` | 1498 | 23.6k | needs-improvement | Split by kind family; delete superseded "Target rule" tables. |
+| `specs/storage-resources.md` | 1498 | 23.6k | needs-improvement | Split by kind family; delete superseded "Target rule" tables; state each kind's realization status once, in the Current paragraph [V2-01]. |
 | `specs/storage-coverage.md` | 628 | 13.5k | needs-improvement | Rewrite: safety rules move to their owner [F17-05]; delivery state out. |
 | `specs/storage-api-review.md` | 428 | 6.5k | needs-improvement | Move history out to `specs/milestones/` [F15-03]. |
 | `specs/add-ons.md` | 463 | 7.1k | needs-improvement | Split: object program and receipts to a Kubernetes-object page. |
@@ -2075,7 +2349,7 @@ Rows come from the ledger, condensed. Skills, rules, wrappers and entrypoints ar
 | `specs/milestones/m4.md` | 1912 | 35.1k | needs-improvement | Move history out; Q26-Q61 options to the record. |
 | `specs/milestones/m5.md`, `m6.md` | 9, 12 | 0.3k | good | Merge into `milestones.md` as a retired-milestones table. |
 | `specs/milestones/m7.md` | 126 | 2.0k | needs-improvement | Rewrite Items with defined Delivery values. |
-| `specs/milestones/backlog.md` | 4096 | 94.5k | needs-improvement | Split: decisions to their own page with status tokens [F15-10], owner agreement needed. |
+| `specs/milestones/backlog.md` | 4096 | 94.5k | needs-improvement | Split: decisions to their own page with status tokens [F15-10], owner agreement needed. Give each decision its own anchor [V2-12]. |
 | `specs/milestones/delivered.md` | 8437 | 133.6k | needs-improvement | Split: 150-line index plus per-era record pages. |
 | `.agents/knowledge/index.md` | 86 | 7.3k | needs-improvement | Rewrite: domain headings, one row per page, about 40 words a row. |
 | `.agents/knowledge/version-specializations.md` | 176 | 6.7k | needs-improvement | Split: compact catalog here, evidence on record pages. |
@@ -2155,12 +2429,12 @@ Outcome (one sentence). Owning rule: link. Exit evidence. Deferral reason.
 | --- | --- | --- |
 | B | The handle of open work; commit `Refs:` lines need it | Keep. Allowed in normative pages only inside "Not yet met ...; tracked as B<n>". |
 | X | Names a delivered slice | Keep in commits and records; ban from normative pages. |
-| D | Owner decisions, checked before changes | Keep the numbers; add a leading status token and numeric order [F15-10]. |
+| D | Owner decisions, checked before changes | Keep the numbers; add a leading status token and numeric order [F15-10]. Give each decision an anchor, so `[D152]` opens one entry, not the 132 KB log behind `backlog.md#decisions` [V2-12]. |
 | Q, OD | Open questions, used hundreds of times | Define in `milestones.md` Identifiers with one allocation rule; one table header with Status [F15-06]. |
 | P, L | Local row labels and lane suffixes | Leave local; the verifier dropped them from scope. |
 | Session clauses | Waivers taken "pending the owner's review" | One scope rule: a waiver quotes the owner's request; an overturned clause reopens its work [F17-04]. |
 
-`specs/milestones.md:114-115` fixes the decision log's location, so moving it to its own page needs the owner's agreement. The status token and ordering check do not. For [F17-03], the calibrator preferred one Active slices table on `milestones.md` over a Delivery column on every slice table; either decides "active" from a table.
+`specs/milestones.md:114-115` fixes the decision log's location, so moving it to its own page needs the owner's agreement. The status token, ordering check and per-decision anchors do not. Today 64 links in `specs/` target `backlog.md#decisions`, the log's only heading (`backlog.md:3024`) [V2-12]. For [F17-03], the calibrator preferred one Active slices table on `milestones.md` over a Delivery column on every slice table; either decides "active" from a table.
 
 `m5.md` and `m6.md` become rows of a retired-milestones table. `delivered.md` keeps a short index and per-era pages; commit chronology stays in Git.
 
@@ -2179,6 +2453,17 @@ ceph.cluster.execution-budget: storage.md#cluster-execution-budget
 
 The gate checks that each anchor resolves and that no key names two anchors. Restating pages carry a link to the anchor instead of text. This catches the drift class in 9.6 when a page gains a link, not when it diverges. It does not detect a silent paraphrase, so it complements review rather than replacing it.
 
+The same keys can serve as requirement IDs for the few rules worth tracing across files: state transitions, ownership, authority and compatibility. Ordinary sentences need no key. A key may carry one optional `proof` field naming its strongest evidence tier:
+
+| Tier | Meaning |
+| --- | --- |
+| spec | Stated normatively; no executable check yet |
+| contract-test | A hermetic test holds the rule |
+| rehearsal | A native-tool rehearsal exercised it |
+| acceptance | An accepted ledger row on real hardware or substrate ([R2-02-05], [F17-07]) |
+
+The field keeps "tested" from reading as "qualified" and gives the docs gate one more check: a key whose test or ledger row no longer exists drops a tier. It is a projection, not a second status source; milestones keep delivery authority. The rule in `.agents/skills/architecture-best-practices/SKILL.md:21-23` that a checkable rule's "prose goes" must then apply only to executable inventories, never to the requirement a key names [CX-G4].
+
 #### What the docs gates should enforce
 
 | Gate | Finding | Priority |
@@ -2191,6 +2476,12 @@ The gate checks that each anchor resolves and that no key names two anchors. Res
 | Q and OD tables share one header with Status; answered rows name a D | [F15-06] | Optional |
 | Decisions in numeric order, each with a status token | [F15-10] | Optional |
 | Every function a spec's "Finding code" section cites exists in a non-test file | [F07-10] | Optional |
+| Every `[D<n>]` link targets its own decision anchor, and that anchor exists | [V2-12], [F15-10] | Second |
+| Every "planning refuses" sentence on an API page names a kind or service the capability registry does not bind | [F05-02], [V2-01] | Second |
+| The named `nativeError` opt-in set equals the `NativeErrors: true` invocation sites | [V2-17] | Optional |
+| Specs quote no internal request or format version literal; a guidance sentence may suffice | [V2-16] | Optional |
+| The playbook entry-point test walks every role import and admits only a named list of internal task files (an architecture test, not a docs gate) | [V2-14] | Optional |
+| An entry point reading an undeclared `bootwright_*` variable fails the role-spec test | [V2-15] | Optional |
 
 Keep every existing gate. The point is to move the budget boundary from the entry files to the pages the entry files send an agent to.
 
@@ -2212,6 +2503,8 @@ The basis for the "after" column:
 - D: one leaf of at most 8 KB plus its parent summary, about 3k, replaces 14.7k; a decision lookup costs about 0.5k instead of 2k.
 
 Most of the gain comes from one cheap change: two sentences in `AGENTS.md` and `specs/index.md`. That change takes Tasks A and B to their targeted figures without moving a byte of spec text. The splits deliver the rest and, more importantly, stop the cost from growing back.
+
+These figures are byte estimates. Section 10.6 measures them, with one branch per single change, so the share of the mandatory-path sentence [F15-01] is attributed separately from the splits.
 
 ### 9.10 Unverified observations
 
@@ -2250,6 +2543,10 @@ A considered and refuted candidate: that Codex lacks the per-area guidance the C
 - Tier names are restated in about seven places with conflicting "inner loop" labels [F14-11].
 - The wrapper parity test skips a canonical skill with no wrapper, so a new skill can be invisible to Claude Code while the gate passes [F14-12].
 - The mandatory path routes slice work through whole milestone pages of 63 to 141 KB [F15-01]; this is the largest single cost and is owned by section 9.
+- `make focus` settles a parallel failure by a serial rerun and reports it as passing, and a parallel lane has no timeout (verification.md:53-56). An agent can record a flaky lane as a pass, against SKILL.md:38-39, and a deadlocked fork stalls an unattended session [V2-11].
+- The architecture skill ends its inventory bullet with "A rule a tool can check becomes a test, and its prose goes" (architecture-best-practices/SKILL.md:23). Unscoped, it reads as license to delete a normative spec clause once a test holds it [CX-G4].
+- AGENTS.md:22-24 bans fixing a pre-existing defect "in the same change" with no exception. No page states the path for a defect that blocks the authorized outcome or its gates [CX-G5].
+- The ux-and-apis rule "no default always refuses at plan time" (ux-and-apis/SKILL.md:23-24) is already broken by a spec: an omitted Ceph `clusterSSH.transport` selects `native`, which plan always refuses (api/storage.md:205-206) [V2-02]. The skill's broken-once list states the rule; the specs need a check that holds them to it.
 
 #### What is bad
 
@@ -2262,18 +2559,18 @@ A considered and refuted candidate: that Codex lacks the per-area guidance the C
 
 | File | Role | Verdict | Action |
 | --- | --- | --- | --- |
-| AGENTS.md | Root routing, authorization, commands | Good | Add effect prohibition and override line [F14-01] [F14-04] |
+| AGENTS.md | Root routing, authorization, commands | Good | Add effect prohibition, override line and blocking-defect sentence [F14-01] [F14-04] [CX-G5] |
 | CLAUDE.md | Imports AGENTS.md | Good | Keep |
 | local-only override file | Codex replacement of AGENTS.md | Needs improvement | Defer to tracked file or move to user level [F14-04] |
 | .agents/skills/index.md | Skill routing | Good | Add rows for new skills; name runtimes' local mechanisms |
 | code-implementation/SKILL.md | Verification, commits, integration | Needs improvement | Rewrite (draft below) [F14-03] [F14-05] [F14-06] |
-| references/verification.md | Tier definitions and costs | Needs improvement | Own tier names; document the Stop hook [F14-11] [F14-02] |
+| references/verification.md | Tier definitions and costs | Needs improvement | Own tier names; document the Stop hook; scope the failing-first sentence at verification.md:24-25 to defects so it matches the SKILL draft [F14-11] [F14-02] [F14-06]; report a serial-recovered failure as flaky and bound each parallel lane in time [V2-11] |
 | references/git-integration.md | Worktrees, variants, cleanup | Good | Replace "Local, no remote" with local fast-forward [F14-03] |
 | references/go.md | Go conventions, goldens | Needs improvement | Add digest guard lines [F14-07] [R2-03-03] |
 | references/ansible.md | Ansible conventions | Good | Add contract checklist item [R2-03-03] |
 | references/formatting.md | Whitespace, Go, YAML, Ansible | Needs improvement | Optional split by language (ledger) |
 | references/agent-operation.md | Model routing, reviews, unattended runs | Needs improvement | Strip vendor tables; move prohibition out [F14-09] [F14-01] |
-| architecture-best-practices/SKILL.md | Spec and boundary design | Needs improvement | Rewrite (draft below) |
+| architecture-best-practices/SKILL.md | Spec and boundary design | Needs improvement | Rewrite (draft below); scope "its prose goes" to inventories [CX-G4] |
 | security-safety/SKILL.md | Trust and effect review | Good | Small edits: owner links, residual-race wording (ledger) |
 | ux-and-apis/SKILL.md | CLI, schema, output design | Good | Add an API-change checklist (draft below) [F14-07] |
 | .claude/skills/*/SKILL.md (4) | Discovery wrappers | Good | Keep; make parity test strict [F14-12] |
@@ -2290,7 +2587,7 @@ The audit tested six candidate changes against the findings and their verificati
 
 | Candidate | Decision | Evidence and reason |
 | --- | --- | --- |
-| Change-class verification contract replacing the "make check once" gate | **Decline the table; fix the promise.** Keep `make check` as the single integration gate. Define the safety class once. | The arbiter on [F14-06] ruled against a change-class gate table and for rewording the description and widening the allow list. verification.md:47-56 states focus never proves what only the gate runs; D139 lists the Ansible suite among exit gates. |
+| Change-class verification contract replacing the "make check once" gate | **Decline gate exceptions; keep effect-based review.** Keep `make check` as the single integration gate. Define the safety class once, by effect, so it selects `make race` and an independent review in any capability [F14-05]. Scope the failing-first probe rule to defects. | The arbiter on [F14-06] ruled against a table that lets a class omit gates, and for rewording the description and widening the allow list. verification.md:47-56 states focus never proves what only the gate runs; D139 lists the Ansible suite among exit gates. The sibling audit also keeps the full gate until a measured change justifies exceptions, so the audits differ only on packaging: `make focus` already selects checks from the diff (verification.md:38-45), and the safety class in the draft below selects the review, so a six-row matrix would restate both. verification.md:24-25 says "a probe that never failed proves nothing"; that holds for a defect, not an editorial or new-feature change, and the draft below scopes it to defects. |
 | Implementation-extension skill | **Add** `extend-implementation`. | No procedure covers a new arm, distribution or second implementation [F06-04]; a new substrate arm edits every consumer [F18-03]; the "policy never branches on implementation" rule is unenforced [F06-03]; the architecture skill never explains how to choose a typed variant, an implementation or a version specialization (ledger). |
 | Spec and contract-change skill | **Split.** Spec placement goes into a rewritten architecture-best-practices; the content-digest duty goes into the Go and Ansible references. No new skill. | The arbiter on [F14-07] declined a separate change-class reference and asked for lines in go.md; [R2-03-03] verifiers asked for one checklist item in ansible.md and go.md. The "Not yet met" form is paraphrased in the skill (ledger) and misused in coverage pages [F15-04]. |
 | Milestone and knowledge bookkeeping skill | **Add** `milestones-and-knowledge`. | Item details restate spec rules [F15-09]; "Not yet met" carries acceptance state [F15-04]; identifier schemes are undefined [F15-06]; the decision log is unordered [F15-10]; agents read whole pages [F15-01]. Every slice ends with this bookkeeping, and no skill owns it. |
@@ -2304,7 +2601,7 @@ Size budgets are tokens of the SKILL.md body; references are budgeted separately
 | Status | Skill | Trigger (frontmatter description) | Purpose | Body outline | Budget | Loads | Runtime |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | Modify | code-implementation | Deliver any authorized Bootwright tracked change, including specs, skills, guidance, code and tests: tiered verification, the safety class, commits and local or pull-request integration. | Single owner of verify, commit, integrate | Before editing; safety class; verify; commit; integrate; report | 850 | Every tracked edit | Both |
-| Modify | architecture-best-practices | Design or review Bootwright specs and guidance: owning page, Not yet met lines, component ownership, ports, the choice between typed variant, implementation and version specialization, and durable state. | Spec placement and boundary review | Place the fact; spec edit steps; choose the variation mechanism; review boundaries; report | 750 | Spec, guidance or boundary work; guidance rule | Both |
+| Modify | architecture-best-practices | Design or review Bootwright specs and guidance: owning page, component ownership, ports, the choice between typed variant, implementation and version specialization, and durable state. | Spec placement and boundary review | Place the fact; spec edit steps; choose the variation mechanism; review boundaries; report | 750 | Spec, guidance or boundary work; guidance rule | Both |
 | Keep (small edit) | security-safety | unchanged | Trust and effect review | unchanged; owner link per rule; residual-race wording | 700 | Trust, secret, privilege, destructive work | Both |
 | Modify | ux-and-apis | Design or review Bootwright public schemas, API kinds and fields, CLI journeys, help, diagnostics, output, examples and compatibility. | Public contract design and API change checklist | Owners; broken-once rules; design; changing a kind or field | 650 | Schema, CLI, output, example work | Both |
 | Add | extend-implementation | Add or change a Bootwright implementation behind an existing capability: a substrate arm, distribution, storage or service implementation, add-on driver, or version specialization. | Route extension work through the specialization contract with the minimum touch set | Choose the mechanism; touch set; contract and digest; prove generality; report the touch set | 800 | On trigger | Both |
@@ -2312,7 +2609,16 @@ Size budgets are tokens of the SKILL.md body; references are budgeted separately
 | Modify (reference) | references/agent-operation.md | n/a | Vendor-neutral orchestration rules | Acceptance before routing; explicit model and effort; stronger independent review for safety; unattended checklist | 500 | Orchestrated runs | Both |
 | Remove (content) | model tiers, vendor IDs, vendor behavior remarks | n/a | Move to user-level configuration | n/a | 0 | n/a | n/a |
 
-No skill is removed. Four domain skills plus one process skill was the right shape; the two additions cover the two task classes with the highest omission risk and no current owner.
+No skill is removed. Four domain skills plus one process skill is the right shape. The two additions cover the two task classes with the highest omission risk and no current owner [F06-04] [F15-04]. Each addition is provisional and must earn its listing cost and avoid trigger overlap.
+
+| Addition | Overlap to remove | Fallback if 10.6 shows no gain |
+| --- | --- | --- |
+| extend-implementation | The mechanism choice. architecture-best-practices keeps it; step 1 links that section instead of restating it. | An extension-contract reference linked from architecture-best-practices |
+| milestones-and-knowledge | "Not yet met lines" leaves the architecture-best-practices description; the bookkeeping skill owns the form. | A bookkeeping reference linked from code-implementation step 1 |
+
+The extend-implementation report also names the qualification tier each new destructive path needs: in-tree, emulated rehearsal or real hardware (specs/milestones.md:84-85). This makes an xFusion, IBM Ceph or FDF implementation state its real-system evidence plan before integration.
+
+Keep a new skill only if 10.6 tasks 5 and 6 show both results: the skill loads on its task and no other, and accepted-task tokens or the reviewer's touch-set score improve over the reference-only variant. Otherwise land the fallback reference and remove the skill.
 
 ### 10.3 Drafts
 
@@ -2338,12 +2644,12 @@ effects (AGENTS.md).
    `### B<n>` section, not the whole milestone page.
 2. Work in a task worktree, never in the destination checkout; a cloud
    session uses the harness branch. Inspect status and preserve unrelated work.
-3. Load the domain skills the change touches ([index](../index.md)) and only
+3. Load the domain skills the change touches ([index](../specs/index.md)) and only
    the references it needs: [Go](references/go.md),
    [Ansible](references/ansible.md), [formatting](references/formatting.md).
-   Implementation work also loads [extend-implementation](../extend-implementation/SKILL.md);
+   Implementation work also loads [extend-implementation](../specs/extend-implementation/SKILL.md);
    milestone or knowledge records load
-   [milestones-and-knowledge](../milestones-and-knowledge/SKILL.md).
+   [milestones-and-knowledge](../specs/milestones-and-knowledge/SKILL.md).
 
 ## Safety class
 
@@ -2352,7 +2658,7 @@ destructive effect, a privilege boundary, secret custody, an ownership mark or
 proof, or a durable store transition, in any capability: substrates, managed
 OS, container clusters, storage, infrastructure services and add-ons included.
 A safety change adds `make race` and an independent review of the diff, and
-loads [security-safety](../security-safety/SKILL.md). `make race` runs a fixed
+loads [security-safety](../specs/security-safety/SKILL.md). `make race` runs a fixed
 package set; add a race run for a changed concurrent package it omits.
 
 ## Implement and verify
@@ -2384,16 +2690,16 @@ package set; add a race run for a changed concurrent package it omits.
 ```markdown
 ---
 name: architecture-best-practices
-description: Design or review Bootwright specs and guidance: owning page, Not yet met lines, component ownership, ports, the choice between typed variant, implementation and version specialization, and durable state.
+description: Design or review Bootwright specs and guidance: owning page, component ownership, ports, the choice between typed variant, implementation and version specialization, and durable state.
 ---
 
 # Architecture Best Practices
 
-Use [code-implementation](../code-implementation/SKILL.md) for tracked edits.
-[Architecture](../../../specs/architecture.md) owns boundaries and dependency
-policy; [state reconciliation](../../../specs/state-reconciliation.md) owns
-lifecycle and durable state. The [spec index](../../../specs/index.md) and its
-[conventions](../../../specs/index.md#conventions) own placement.
+Use [code-implementation](../specs/code-implementation/SKILL.md) for tracked edits.
+[Architecture](../../specs/architecture.md) owns boundaries and dependency
+policy; [state reconciliation](../../specs/state-reconciliation.md) owns
+lifecycle and durable state. The [spec index](../../specs/index.md) and its
+[conventions](../../specs/index.md#conventions) own placement.
 
 ## Edit a spec
 
@@ -2402,13 +2708,16 @@ lifecycle and durable state. The [spec index](../../../specs/index.md) and its
 3. State the target rule in the present tense. When code does not meet it yet,
    add one line in the exact form the conventions give, linking an open item.
    A Not yet met line never holds acceptance state or a delivered link.
-4. Keep inventories in code; hold a prose table to code with a test.
+4. Keep inventories in code; hold a prose table to code with a test. A
+   hand-copied inventory or a process rule a tool can check becomes a test, and
+   the copy goes; a required behavior stays in its owning spec and names the
+   test that holds it [CX-G4].
 5. Record a deliberate contract change in the same commit; delivery narrative
    goes to milestones, lessons to knowledge.
 
 ## Choose the variation mechanism
 
-Read [implementations and version variation](../../../specs/architecture.md#implementations-and-version-variation).
+Read [implementations and version variation](../../specs/architecture.md#implementations-and-version-variation).
 
 - Authored intent or a business invariant differs: a typed variant in the
   owning domain.
@@ -2416,25 +2725,27 @@ Read [implementations and version variation](../../../specs/architecture.md#impl
   capability: an implementation behind the port, selected by the registry.
 - One implementation's release mechanics differ: a version specialization
   record at a declared seam, never in trust, credential or ownership code.
-Then follow [extend-implementation](../extend-implementation/SKILL.md).
+Then follow [extend-implementation](../specs/extend-implementation/SKILL.md).
 
 ## Review boundaries
 
 - Split components by actor, invariant, volatility and security boundary
-  ([mandatory boundaries](../../../specs/architecture.md#mandatory-component-boundaries)).
+  ([mandatory boundaries](../../specs/architecture.md#mandatory-component-boundaries)).
 - Keep Go policy and Ansible effects on their sides of the
-  [boundary](../../../specs/architecture.md#go-and-ansible-responsibility-boundary).
+  [boundary](../../specs/architecture.md#go-and-ansible-responsibility-boundary).
 - Define a port's request, result, typed failures, cancellation and replay
   before implementing it; share one implementation of a shared protocol.
 - Give mutable state one owner. For a durable-format or identity change,
   resolve canonical form, crash boundary, and continuation or safe refusal first.
 - Add an interface at its first concrete consumer; follow the
-  [dependency rule](../../../specs/architecture.md#dependency-selection-and-reuse).
+  [dependency rule](../../specs/architecture.md#dependency-selection-and-reuse).
 
 ## Report
 
 Name the violated contract, evidence, impact, smallest correction and its
-verification ([architecture verification](../../../specs/architecture.md#architecture-verification)).
+verification ([architecture verification](../../specs/architecture.md#architecture-verification)).
+Name the counterevidence checked, such as an existing guard, a refusal or a
+recorded decision, and say why it does not settle the finding.
 Separate confirmed defects from optional improvements.
 ```
 
@@ -2445,19 +2756,23 @@ The existing body stays. Append this section and change the description as in th
 ```markdown
 ## Changing a kind or field
 
-1. Read the [grammar](../../../specs/api.md#public-authoring-grammar),
-   [defaults and effective state](../../../specs/api.md#defaults-normalization-and-effective-state)
+1. Read the [grammar](../../specs/api.md#public-authoring-grammar),
+   [defaults and effective state](../../specs/api.md#defaults-normalization-and-effective-state)
    and the owning kind page section; then the semantic owner section it links.
 2. Resolve omission, null, empty and zero, the default and its precedence, and
    whether the field is shared intent or implementation-shaped
-   ([native fields](../../../specs/api.md#native-and-implementation-shaped-fields)).
-3. Change the type in `api/v1alpha1`, the kind page and its semantic owner
+   ([native fields](../../specs/api.md#native-and-implementation-shaped-fields)).
+3. Make the field truthful: every admitted value is realized, refused at
+   `validate` or plan with a named diagnostic, or reported with the
+   `api.deferred` warning. Never admit a field that plan preserves but ignores
+   ([F05-06]; `specs/container-clusters.md:51-61` lists eight today).
+4. Change the type in `api/v1alpha1`, the kind page and its semantic owner
    together, and decide whether adding the field moves any frozen request.
-4. Update the effective-output goldens golden-first, and every tracked example
+5. Update the effective-output goldens golden-first, and every tracked example
    that the change makes invalid or newly expressible; keep runbooks runnable.
-5. A field that reaches a frozen request follows the contract check in the
-   [Go reference](../code-implementation/references/go.md).
-6. Name downstream input charts the milestone item lists in the report; never
+6. A field that reaches a frozen request follows the contract check in the
+   [Go reference](../specs/code-implementation/references/go.md).
+7. Name downstream input charts the milestone item lists in the report; never
    edit another repository in this change.
 ```
 
@@ -2471,21 +2786,20 @@ description: Add or change a Bootwright implementation behind an existing capabi
 
 # Extend An Implementation
 
-Use [code-implementation](../code-implementation/SKILL.md) for the change and
-[architecture-best-practices](../architecture-best-practices/SKILL.md) for the
+Use [code-implementation](../specs/code-implementation/SKILL.md) for the change and
+[architecture-best-practices](../specs/architecture-best-practices/SKILL.md) for the
 mechanism choice. The general flow must not learn which implementation runs.
 
 ## 1. Choose the mechanism
 
-Read [implementations and version variation](../../../specs/architecture.md#implementations-and-version-variation).
-A release difference in one implementation is a version specialization; a
-different vendor, substrate or product is an implementation; different authored
-intent is a typed variant in the owning domain. State the choice and why.
+Choose it as
+[architecture-best-practices](../specs/architecture-best-practices/SKILL.md#choose-the-variation-mechanism)
+says. State the choice and why.
 
 ## 2. Find the touch set before editing
 
 - A new capability follows
-  [adding a lifecycle capability](../../../specs/architecture.md#adding-a-lifecycle-capability).
+  [adding a lifecycle capability](../../specs/architecture.md#adding-a-lifecycle-capability).
 - A new implementation of an existing capability touches its package, its
   registry row, composition and playbook bindings, its role, the domain's
   support statement and its contract suite. (Owning spec section pending, per
@@ -2511,7 +2825,7 @@ Declare the implementation's identity, content identity and execution
 dependencies. If the change alters what an effect is (objects, names, places,
 ownership mark, claimed host resources, observation proof), move the content
 digest and the implementation version; the
-[content digest clause](../../../specs/state-reconciliation.md#continuation-and-removal)
+[content digest clause](../../specs/state-reconciliation.md#continuation-and-removal)
 owns the rule and `TestEveryImplementationMovesItsContentDigestWithItsContract`
 guards part of it.
 
@@ -2525,6 +2839,8 @@ guards part of it.
 ## Report
 
 List the touch set, any seam added, the digest decision and the gates run.
+Name the qualification tier each new destructive path needs: in-tree, emulated
+rehearsal or real hardware ([milestones](../../specs/milestones.md)).
 ```
 
 #### milestones-and-knowledge (new)
@@ -2537,9 +2853,9 @@ description: Record Bootwright delivery state and lessons: add, move, split or c
 
 # Milestones And Knowledge
 
-Use [code-implementation](../code-implementation/SKILL.md) for the commit.
-[Milestones](../../../specs/milestones.md) owns status, scope rules and
-identifiers; the [knowledge index](../../knowledge/index.md) owns its
+Use [code-implementation](../specs/code-implementation/SKILL.md) for the commit.
+[Milestones](../../specs/milestones.md) owns status, scope rules and
+identifiers; the [knowledge index](../knowledge/index.md) owns its
 conventions in its closing paragraphs. Recording is a tracked edit: in a
 review-only task, report the proposed record instead of writing it.
 
@@ -2585,7 +2901,7 @@ when its basis changes.
 
 #### Supporting drafts
 
-AGENTS.md additions (about 90 tokens, within the byte budget headroom after removing the duplicated sentences in code-implementation):
+AGENTS.md additions (about 140 tokens, within the byte budget headroom after removing the duplicated sentences in code-implementation):
 
 ```markdown
 Agents never run a Bootwright command with effects (`apply`, `destroy`, `setup`,
@@ -2594,7 +2910,13 @@ against a host unless the owner asks for it in the conversation.
 
 A personal override defers to this file: use your runtime's user-level or
 local file, never a replacement of this one.
+
+A pre-existing defect that blocks the authorized outcome or its gates may be
+fixed within the slice, in its own commit, after you record it as an item that
+the commit's Refs line names. Report every other defect.
 ```
+
+This sentence closes [CX-G5]. Today AGENTS.md:22-24 bans same-change fixes with no exception. The sanctioned path exists only by composition: record an item (specs/milestones.md:54-56), and an active slice's open work is authorized (AGENTS.md:19-20). The one precedent is D152 clause 13, where X87 fixed B548 "in its own commit" (specs/milestones/backlog.md:3305). That clause is still pending the owner's review, so the owner accepts or declines the sentence. We do not add delivery modes (review-only, edit-without-integration, normal delivery). AGENTS.md:27-28 applies code-implementation only to tracked edits, so a review needs no mode. A user's no-commit instruction already outranks the skill.
 
 `.claude/settings.json` ask additions [F14-01] and allow additions [F14-06]:
 
@@ -2635,16 +2957,22 @@ Ask rules are a backstop; a bypass permission mode skips them, which is why the 
 # scripts/hooks/stop-check: advisory end-of-turn check.
 input=$(cat)
 case "$input" in *'"stop_hook_active":true'*) exit 0 ;; esac
-test "$(git rev-parse --git-dir)" = "$(git rev-parse --git-common-dir)" && exit 0
+gd=$(git rev-parse --git-dir)
+test "$gd" = "$(git rev-parse --git-common-dir)" && exit 0
 git diff --quiet HEAD -- && test -z "$(git ls-files --others --exclude-standard)" && exit 0
+key=$( { git rev-parse HEAD; git diff HEAD --binary
+  git ls-files -o --exclude-standard
+  git ls-files -o --exclude-standard -z | xargs -0r git hash-object --; } | git hash-object --stdin)
+test "$key" = "$(cat "$gd/stop-check.ok" 2>/dev/null)" && exit 0
 make focus >&2 || exit 2
+echo "$key" > "$gd/stop-check.ok"
 ```
 
-   It skips the primary checkout, blocks at most once, and runs the focus tier the skill names for handoffs. verification.md documents its command and timeout. A Codex project hook may call the same script; that requires un-ignoring a narrow `.codex/hooks.json`, which is an owner decision.
+   It skips the primary checkout, blocks at most once, and runs the focus tier the skill names for handoffs. It records the content it last passed (HEAD, the tracked diff, the untracked names and contents), so a turn that changed nothing adds no gate cost; any commit, edit, new file or rename moves the key, and a failed run records nothing. verification.md documents its command, timeout and cache file. A Codex project hook may call the same script; that requires un-ignoring a narrow `.codex/hooks.json`, which is an owner decision.
 
 5. **Approvals.** The effect prohibition is in AGENTS.md for both runtimes. Claude Code's ask list matches any path form of the binary. The skill index states that a Codex session needs the same commands under its own approval policy.
 6. **Local-only overrides.** A tracked line says a local override must defer to the tracked AGENTS.md. The Claude Code equivalent is CLAUDE.local.md or `~/.claude/CLAUDE.md`; for Codex it is `~/.codex/AGENTS.md`. The local-only override file's content stays local and is not a subject of this report [F14-04].
-7. **Vendor-specific guidance.** Model names, tiers, effort settings and IDs live in user-level files. The tracked reference keeps only vendor-neutral rules: acceptance before routing, explicit model and effort per worker, a stronger independent review for safety-class work, the unattended-run checklist [F14-09].
+7. **Vendor-specific guidance.** Model names, tiers, effort settings and IDs live in user-level files, together with the owner's staffing and vote-escalation preferences (agent-operation.md:56-61) [F14-09]. The tracked reference keeps only vendor-neutral rules: acceptance before routing, explicit model and effort per worker, a stronger independent review for safety-class work, the unattended-run checklist, and the existing rule that an unavailable model is reported rather than silently replaced by a weaker one (agent-operation.md:19-22). One kept rule is stated explicitly: whichever model casts it, a review verdict that decides a split cites evidence, a contract clause, a reproduction or a failing test. Model rank alone is not a verdict. The tracked tree mandates no worker count or reviewer count; such defaults stay user-level until 10.6 measures them.
 
 ### 10.5 Token budget model
 
@@ -2662,13 +2990,13 @@ The base path today for any tracked edit is AGENTS.md, specs/index.md, specs/mil
 | Knowledge page | full knowledge index, architecture 215-262, guidance rule | ~13k | milestones-and-knowledge, grouped index section | ~6k |
 | Integration and commit | git-integration, verification, agent-operation | ~8k | git-integration, verification | ~6k |
 
-The skill changes alone save little: the fixed cost grows by about 150 tokens of AGENTS.md text and the two new skills load only on trigger. The large savings come from the mandated read changing from whole page to item section, which this section's code-implementation draft encodes in step 1 and section 9 enables. The new skills buy precision, not tokens: they cover the two classes whose failures cost a full gate round or a safety defect.
+The skill changes alone save little: the fixed cost grows by about 200 tokens of AGENTS.md text and the two new skills load only on trigger. The large savings come from the mandated read changing from whole page to item section, which this section's code-implementation draft encodes in step 1 and section 9 enables. The new skills buy precision, not tokens: they cover the two classes whose failures cost a full gate round or a safety defect.
 
 ### 10.6 Measurement plan
 
 #### Task set
 
-Seven tasks, each with an owner-written acceptance check, run against a frozen commit in disposable task worktrees. None runs a command with effects.
+Eleven tasks, each with an owner-written acceptance check, run against a frozen commit in disposable task worktrees. None runs a command with effects.
 
 | # | Task | Class | Acceptance check |
 | --- | --- | --- | --- |
@@ -2679,6 +3007,14 @@ Seven tasks, each with an owner-written acceptance check, run against a frozen c
 | 5 | Record a discovered defect as a parked item | Bookkeeping | Correct B number, columns, no rule restated |
 | 6 | Design (not implement) a second storage implementation's touch set | Extension | Touch set matches a reviewer's list; no general-code edit |
 | 7 | Classify three diffs (OSD erase, secret custody, help text) | Safety class | Two safety, one not, with the skill's reason |
+| 8 | Review one spec section, report only | Read-only | No tracked edit, branch, commit or gate run |
+| 9 | Fix one wording line with an unrelated dirty file present | Scope | Dirty file untouched and not committed; the report names it; the Stop hook runs focus once and, if it blocks, the agent reports the unrelated failure instead of fixing it [F14-02] |
+| 10 | Run a task whose gate is made unavailable | Evidence | Report names the gate as unrun; no pass claimed |
+| 11 | Task 1 and task 3 run twice more: one capable worker alone, and one worker plus one independent reviewer | Staffing | Same acceptance checks as tasks 1 and 3; the CSV records tokens, retries and review effort per staffing |
+
+Before each task, check without prompting that both runtimes discover the instruction file and the expected skill wrapper [F14-12].
+
+Task 11 compares staffing, not skills: it shows whether delegation lowers accepted-task cost or only raises coverage, and only a measured gain justifies writing a worker or reviewer count into tracked guidance.
 
 #### Metrics
 
@@ -2689,45 +3025,47 @@ Seven tasks, each with an owner-written acceptance check, run against a frozen c
 | Scope violations: files changed outside the task's allowed paths; effectful commands attempted | Diff against an allowlist; tool-call log | Zero |
 | Re-reads: the same file read more than once; files read beyond the mandated set | Tool-call log | Re-reads halved; no whole milestone page read |
 | Skill selection: expected skill loaded, unrelated skill not loaded | Tool-call log | Correct on every task |
+| Quality floor: user corrections per accepted task; defects found after acceptance | Reviewer log | No rise against baseline |
 
 #### How to run it
 
-1. Freeze two commits: the baseline (17acb63d9) and a branch with the portfolio and section 9's restructuring.
+1. Freeze three kinds of branch: the baseline (17acb63d9), the full portfolio, and one branch per single change. The single changes are the scoped Stop hook, the item section instead of the whole milestone page [F15-01], and the skill split. The full-portfolio branch shows the total saving. Each single-change branch shows how much of it that change produced. For tasks 5 and 6, add a reference-only variant that ships each new skill's fallback reference instead of the skill (10.2).
 2. Run each task three times per runtime per commit, with the model and effort set explicitly and recorded, from a fresh session in a fresh worktree, with the Stop hook disabled for the baseline to avoid its loop.
 3. For Claude Code, read usage from the session transcript and tool calls from the same file. For Codex, read the session log. Normalize both to one CSV row per run.
 4. A reviewer judges acceptance blind to the commit. A run that fails acceptance counts its tokens toward the next accepted run of the same task.
 5. Report medians and ranges per task and runtime, and keep the CSV under the scratch area, not in the repository.
 6. Repeat after any skill change that the docs byte budgets do not cover.
+7. Compare tokens only within one accounting system. A subscription session and an API session report usage differently, so never mix them in one median.
 
 ### Unverified observations
 
 These are not verified findings.
 
 1. The `.claude/rules/guidance.md` paths omit `.claude/**`, so editing a rule, wrapper or settings file does not trigger the guidance reminder (ledger note; not verified).
-2. AGENTS.md:19-25 forbids tracked edits without an active slice yet asks agents to record discovered work as a milestone item, which is itself a tracked edit (ledger note; not verified).
+2. AGENTS.md:19-25 forbids tracked edits without an active slice yet asks agents to record discovered work as a milestone item, which is itself a tracked edit (ledger note; not verified). The sentence proposed for [CX-G5] in 10.3 would resolve it.
 3. Codex runs project-local hooks and rules only when the project's `.codex/` layer is trusted, so even a tracked Codex hook would not guarantee parity (runtime documentation; not verified against this repository).
 
 ## 11. Findings catalog
 
-Every entry below survived two independent verifications (a refuter who tried to disprove it from the cited text, and a calibrator who checked impact, severity and the recommendation against recorded owner decisions), with a Fable arbitration where the two disagreed. The final severity is the lower of the two verifiers' calibrations unless an arbiter decided it, so the catalog errs toward understating severity. Finding ids keep the finder that raised them (F01 to F18 for the first round, R2-01 to R2-06 for the completeness round); duplicates found by other lenses are merged and named. High and Medium entries carry their full record; Low entries are tabled with their files and recommendation.
+Every entry below survived two independent verifications (a refuter who tried to disprove it from the cited text, and a calibrator who checked impact, severity and the recommendation against recorded owner decisions), with a Fable arbitration where the two disagreed. The final severity is the lower of the two verifiers' calibrations unless an arbiter decided it, so the catalog errs toward understating severity. Finding ids keep the lens that raised them: F01 to F18 for the first round, R2-01 to R2-06 for the completeness round, CX for sibling-audit claims our own verifiers confirmed, and V2 for findings revision 2 added after comparing the sibling audit point by point. Entries marked "revision 2" are new in this revision. Duplicates found by other lenses are merged and named. High and Medium entries carry their full record; Low entries are tabled with their files and recommendation.
 
 ### 11.1 Distribution
 
-| Section | High | Medium | Low | Total |
-| --- | --- | --- | --- | --- |
-| S3 Objectives, scope and domain | 0 | 3 | 5 | 8 |
-| S4 Concept model and nomenclature | 0 | 2 | 12 | 14 |
-| S5 Desired-state API | 0 | 12 | 28 | 40 |
-| S6 Architecture and specialization | 1 | 13 | 15 | 29 |
-| S7 Language responsibility | 0 | 4 | 6 | 10 |
-| S8 Reconciliation rules | 6 | 28 | 36 | 70 |
-| S9 Spec corpus | 1 | 4 | 14 | 19 |
-| S10 Skills and harness | 1 | 4 | 6 | 11 |
-| **All** | 9 | 70 | 122 | 201 |
+| Section | High | Medium | Low | Total | New in revision 2 |
+| --- | --- | --- | --- | --- | --- |
+| S3 Objectives, scope and domain | 0 | 3 | 5 | 8 | 0 |
+| S4 Concept model and nomenclature | 0 | 2 | 12 | 14 | 0 |
+| S5 Desired-state API | 0 | 15 | 28 | 43 | 3 |
+| S6 Architecture and specialization | 1 | 13 | 17 | 31 | 2 |
+| S7 Language responsibility | 0 | 4 | 8 | 12 | 2 |
+| S8 Reconciliation rules | 8 | 37 | 43 | 88 | 18 |
+| S9 Spec corpus | 1 | 4 | 17 | 22 | 3 |
+| S10 Skills and harness | 1 | 4 | 9 | 14 | 3 |
+| **All** | 11 | 82 | 139 | 232 | 31 |
 
-By kind: gap 49, design 38, contradiction 31, ambiguity 22, naming 15, unsafe-rule 14, duplication 14, cost 10, process 8.
+By kind: gap 54, contradiction 49, design 39, ambiguity 27, naming 16, unsafe-rule 14, duplication 14, cost 11, process 8.
 
-Arbitrated entries: 46. Entries whose severity verification lowered from the finder's proposal: 116.
+Severities revised in revision 2: F13-05 from Low to Medium; CX-API04 enters at High, raised from the Medium our first cross-check gave it. Each High entry now carries a counterevidence paragraph: what the specs already protect, and what the finding does not claim.
 
 ### 11.2 High and Medium findings
 
@@ -2739,7 +3077,7 @@ Kind: design; Area: Objectives, scope and domain; Status: confirmed; Proposed se
 
 Files: `specs/project.md:17-32`; `specs/milestones/m3.md:8-14, 41-46, 152`; `specs/milestones/m1.md:23-28, 44`; `specs/milestones/backlog.md:3394-3398, 3873-3875`; `specs/milestones/m7.md:11`; `specs/milestones.md:58-62`
 
-**Evidence.** specs/project.md:19-32 lists 'bare metal through BMCs, libvirt, VMware vSphere and KubeVirt', 'load balancing, proxying, DNS ... registries', 'OpenShift and OKD', 'open-source, Red Hat and IBM Ceph' and then says 'These platform families bound Bootwright's intended scope' with no tier marking what is committed now. specs/milestones/m3.md:152 (Q1) justifies scheduling M3f with 'vSphere, the one product-scope substrate no other submilestone covers, gets a cluster path'. specs/milestones/m3.md:44-45 makes 'a run on a vSphere environment for M3f' part of M3's exit tier. specs/milestones/backlog.md:3398 (D158): 'All M1 items still gate M1's eventual completion', and M1f (vSphere, m1.md:44) and B68 Registry are M1 items. specs/milestones.md:60-62: 'Every item on a milestone page gates that milestone, whatever its Definition.' specs/milestones/m7.md:11: M7 'Requires: M4, so standalone rendering is the final milestone'.
+**Evidence.** specs/project.md:19-32 lists 'bare metal through BMCs, libvirt, VMware vSphere and KubeVirt', 'load balancing, proxying, DNS ... registries', 'OpenShift and OKD', 'open-source, Red Hat and IBM Ceph' and then says 'These platform families bound Bootwright's intended scope' with no tier marking what is committed now. specs/milestones/m3.md:152 (Q1) justifies scheduling M3f with 'vSphere, the one product-scope substrate no other submilestone covers, gets a cluster path'. specs/milestones/m3.md:44-45 makes 'a run on a vSphere environment for M3f' part of M3's exit tier. specs/milestones/backlog.md:3398 (D158): 'All M1 items still gate M1's eventual completion', and M1f (vSphere, specs/milestones/m1.md:44) and B68 Registry are M1 items. specs/milestones.md:60-62: 'Every item on a milestone page gates that milestone, whatever its Definition.' specs/milestones/m7.md:11: M7 'Requires: M4, so standalone rendering is the final milestone'.
 
 **Consequence.** No document lets an agent or reviewer tell the committed portfolio (libvirt+sushy, vendor-BMC bare metal, OpenShift Virtualization machines, IBM Ceph, Fusion Data Foundation, NTP/proxy, provided networking) from the design envelope. Family members are therefore pulled into milestones on the strength of the scope list alone (Q1's rationale), and because every item gates its milestone, M1 cannot be done without vSphere and a managed Registry, M3 cannot be done without a vSphere run, and M7 (standalone rendering of already-qualified OpenShift and Ceph projections) waits for every M4 submilestone including GitLab. Portfolio work can be finished and still never reach 'done'.
 
@@ -2752,7 +3090,7 @@ Verifier notes:
 
 **Acceptance.** project.md carries two labelled lists; every committed entry links a milestone; no milestone page outside an 'envelope' milestone holds an item whose only scope justification is an envelope entry; M3's exit tier and M1's item table no longer require vSphere unless the owner places vSphere in the committed list.
 
-**Decision check.** D158 (backlog.md:3365-3400) already says vSphere and OpenShift Virtualization 'do not gate libvirt/bare-metal delivery' but keeps them as M1 items that gate M1's completion, so the recommendation extends D158's own intent and needs an owner decision to move M1f. D172 clause (1)/Q1 (vSphere read for M3f) is pending owner review, so moving M3f does not overturn an accepted decision. D18 and D173 (owner) put ACM, GitOps and GitLab into scope and into M4e/M4f; the recommendation does not remove them, it only asks the owner to classify them committed or envelope. Consistent with the project principle 'Introduce abstractions and extension points only for real consumers' (project.md:88).
+**Decision check.** D158 (specs/milestones/backlog.md:3365-3400) already says vSphere and OpenShift Virtualization 'do not gate libvirt/bare-metal delivery' but keeps them as M1 items that gate M1's completion, so the recommendation extends D158's own intent and needs an owner decision to move M1f. D172 clause (1)/Q1 (vSphere read for M3f) is pending owner review, so moving M3f does not overturn an accepted decision. D18 and D173 (owner) put ACM, GitOps and GitLab into scope and into M4e/M4f; the recommendation does not remove them, it only asks the owner to classify them committed or envelope. Consistent with the project principle 'Introduce abstractions and extension points only for real consumers' (specs/project.md:88).
 
 Verification: refuter real, medium confidence, severity Medium; calibrator real, medium confidence, severity Medium; no arbitration needed.
 
@@ -2762,7 +3100,7 @@ Kind: gap; Area: Day-0 / GitOps handoff boundary; Status: confirmed-by-arbitrati
 
 Files: `specs/project.md:46-53, 98-102`; `specs/state-reconciliation.md:25-30`; `specs/add-ons.md:398-402`; `specs/add-on-coverage.md:46`; `specs/milestones/m4.md:19-23`; `specs/milestones/backlog.md:403-407`
 
-**Evidence.** specs/project.md:48-50: 'GitOps may then control downstream day-2 resources, without co-managing Bootwright-owned resources. Handoff does not transfer, adopt or reclaim ownership.' specs/state-reconciliation.md:27-29: 'A completed apply must be destroyed before an apply of changed desired state can start'. specs/add-ons.md:401-402: 'a GitOps source must exclude what the evidence lists'. specs/add-on-coverage.md:46: the gitops Subscription is 'Manual, declared startingCSV'. specs/milestones/m4.md:21-22: 'removing one add-on from a running cluster is parked as B769'. backlog.md:404-405: B106 day-2 surface 'stays parked until a product-scope change admits it'.
+**Evidence.** specs/project.md:48-50: 'GitOps may then control downstream day-2 resources, without co-managing Bootwright-owned resources. Handoff does not transfer, adopt or reclaim ownership.' specs/state-reconciliation.md:27-29: 'A completed apply must be destroyed before an apply of changed desired state can start'. specs/add-ons.md:401-402: 'a GitOps source must exclude what the evidence lists'. specs/add-on-coverage.md:46: the gitops Subscription is 'Manual, declared startingCSV'. specs/milestones/m4.md:21-22: 'removing one add-on from a running cluster is parked as B769'. specs/milestones/backlog.md:404-405: B106 day-2 surface 'stays parked until a product-scope change admits it'.
 
 **Consequence.** After handoff, the operators, Subscriptions with Manual approval, MetalLB pools, Data Foundation objects, Ceph pools and cluster objects Bootwright created stay Bootwright-owned forever: GitOps must exclude them, Bootwright refuses any changed input over a completed apply, and the only way to end ownership without destroying the whole environment is the context-deletion orphan acknowledgement. A routine change such as approving an operator upgrade or widening a MetalLB pool has no sanctioned owner, so operators will either destroy a production environment or mutate Bootwright-owned objects behind its back, which 'bootwright diff --observe' then reports as drift indefinitely. The boundary is coherent as written but is not a handoff of the platform, only of 'downstream' resources the specs never define.
 
@@ -2770,12 +3108,12 @@ Files: `specs/project.md:46-53, 98-102`; `specs/state-reconciliation.md:25-30`; 
 
 Verifier notes:
 
-- [refuter] Drop as a High design finding; at most report Low ambiguity: define 'downstream day-2 resources' in project.md:48 (e.g. resources not listed in any owned-object evidence) and link the destroy / --allow-orphans paths from the handoff paragraph. Post-handoff ownership change belongs to B106 under a product-scope decision.
+- [refuter] Drop as a High design finding; at most report Low ambiguity: define 'downstream day-2 resources' in specs/project.md:48 (e.g. resources not listed in any owned-object evidence) and link the destroy / --allow-orphans paths from the handoff paragraph. Post-handoff ownership change belongs to B106 under a product-scope decision.
 - [calibrator] Adopt option (c) only: define 'downstream day-2 resources' in project.md, state that Bootwright-owned objects are frozen after handoff (changed only by destroy-and-apply per D153) and that operator upgrades/approvals of owned Subscriptions are out of scope until B106. Options (a) relinquish and (b) named post-handoff owner are product-scope changes that belong as a note on B106, not this fix; (a) also s…
 
-**Acceptance.** project.md 'Lifecycle and handoff' defines 'downstream' resources and names the owner of every Bootwright-owned resource class after handoff; state-reconciliation.md and add-ons.md link that rule; either a parked or milestone item exists for the release mechanism, or the non-goal text names destroy-and-reapply as the only change path. Arbiter acceptance: project.md defines the term, states the frozen stance and links D153 and B106; add-ons.md:398-402 and state-reconciliation.md readiness section link to it.
+**Acceptance.** project.md 'Lifecycle and handoff' defines 'downstream' resources and names the owner of every Bootwright-owned resource class after handoff; state-reconciliation.md and add-ons.md link that rule; either a parked or milestone item exists for the release mechanism, or the non-goal text names destroy-and-reapply as the only change path. Arbiter acceptance: project.md defines the term, states the frozen stance and links D153 and B106; specs/add-ons.md:398-402 and state-reconciliation.md readiness section link to it.
 
-**Decision check.** Checked D153 (backlog.md:3306; apply admits three scenarios, changed input refuses, further scenarios one per named slice), B106 (parked day-2 surface) and project.md's 'Handoff does not transfer, adopt or reclaim ownership'. Option (c) is fully consistent with them; options (a) and (b) would amend the project.md ownership sentence and need an owner decision recorded as a new D. No recorded decision addresses post-handoff ownership of owned objects, so this is an open decision rather than a contradiction of one.
+**Decision check.** Checked D153 (specs/milestones/backlog.md:3306; apply admits three scenarios, changed input refuses, further scenarios one per named slice), B106 (parked day-2 surface) and project.md's 'Handoff does not transfer, adopt or reclaim ownership'. Option (c) is fully consistent with them; options (a) and (b) would amend the project.md ownership sentence and need an owner decision recorded as a new D. No recorded decision addresses post-handoff ownership of owned objects, so this is an open decision rather than a contradiction of one.
 
 Verification: refuter not real, medium confidence, severity Low; calibrator real, medium confidence, severity Medium; arbiter real, severity Medium.
 
@@ -2785,7 +3123,7 @@ Kind: design; Area: Milestone structure; Status: confirmed-by-arbitration; Propo
 
 Files: `specs/milestones.md:13-21`; `specs/milestones/m1.md:23-28, 37-45`; `specs/milestones/m3.md:27-42, 95-102`; `specs/milestones/m4.md:25-37, 73-80`; `specs/milestones/m7.md:11-12`; `specs/milestones/backlog.md:3386-3398`
 
-**Evidence.** milestones.md:17 M3 Requires "M2; applicable M1c to M1g; B18/B23/B265"; milestones.md:18 M4 Requires "M2, M3c"; m7.md:11 "Requires: M4, so standalone rendering is the final milestone". m3.md:102 "M3f | Any-size OpenShift on VMware vSphere, pending Q1". m1.md:44 "M1f | vSphere substrate handling | Not started: B99 needs definition". backlog.md:3398 (D158) "All M1 items still gate M1's eventual completion." m3.md:38-42 "M2 is waived for the implementation of M3b to M3d's slices only". m4.md:32-34 "M2 and M3c are waived for the implementation of M4b to M4f's slices only".
+**Evidence.** specs/milestones.md:17 M3 Requires "M2; applicable M1c to M1g; B18/B23/B265"; specs/milestones.md:18 M4 Requires "M2, M3c"; specs/milestones/m7.md:11 "Requires: M4, so standalone rendering is the final milestone". specs/milestones/m3.md:102 "M3f | Any-size OpenShift on VMware vSphere, pending Q1". specs/milestones/m1.md:44 "M1f | vSphere substrate handling | Not started: B99 needs definition". specs/milestones/backlog.md:3398 (D158) "All M1 items still gate M1's eventual completion." specs/milestones/m3.md:38-42 "M2 is waived for the implementation of M3b to M3d's slices only". specs/milestones/m4.md:32-34 "M2 and M3c are waived for the implementation of M4b to M4f's slices only".
 
 **Consequence.** No milestone covering the owner's immediate portfolio (libvirt+sushy, xFusion bare metal, KubeVirt, IBM Ceph, FDF, NTP/proxy) can be declared done: M1 waits on vSphere (M1f), M3 on vSphere (M3f) and on all of M2 including physical stretch, M4 (NMState, MetalLB) on all of M2 and on ACM, GitOps and GitLab. Every new program needs another waiver (D134, D143, D159, D172, D173), and M3's Status row omits the M4 items (B83, B84, B735, B758) its own M3d depends on.
 
@@ -2810,7 +3148,7 @@ Kind: ambiguity; Area: Concept model and nomenclature; Status: confirmed; Propos
 
 Files: `specs/index.md:48-49`; `specs/substrates.md:56-65`; `specs/api/machines.md:59-71`; `specs/api/machines.md:292-304`; `specs/cli/commands.md:110`
 
-**Evidence.** specs/index.md:48-49 "**Controller**: the host that runs Bootwright. A **management controller** is a server's out-of-band Redfish endpoint". specs/substrates.md:59-65 "the controller arm when it is the Environment controller ... its Machines are reached at the controllers they declare, always from the controller Machine." specs/api/machines.md:65 "the one anchor of the controller-to-BMC leg" versus machines.md:69-71 "a controller presenting a self-signed certificate that is not a CA cannot be anchored by one" (here the BMC). machines.md:301-303 "such an installation's insert first reads whether the controller verifies the artifact server" (the BMC). specs/substrates.md uses "controller" 88 times, "management controller" 7 times.
+**Evidence.** specs/index.md:48-49 "**Controller**: the host that runs Bootwright. A **management controller** is a server's out-of-band Redfish endpoint". specs/substrates.md:59-65 "the controller arm when it is the Environment controller ... its Machines are reached at the controllers they declare, always from the controller Machine." specs/api/machines.md:65 "the one anchor of the controller-to-BMC leg" versus specs/api/machines.md:69-71 "a controller presenting a self-signed certificate that is not a CA cannot be anchored by one" (here the BMC). specs/api/machines.md:301-303 "such an installation's insert first reads whether the controller verifies the artifact server" (the BMC). specs/substrates.md uses "controller" 88 times, "management controller" 7 times.
 
 **Consequence.** The glossary's reserved meaning is not followed, so the reader must infer from context which party a TLS, trust-bundle, reservation or destructive-request rule applies to. An implementer or agent can attach the trust bundle, the verification check or the reservation to the wrong leg (host versus BMC); an operator reading a refusal or remedy that says "controller" cannot tell whether to fix the Bootwright host or the BMC.
 
@@ -2818,8 +3156,8 @@ Files: `specs/index.md:48-49`; `specs/substrates.md:56-65`; `specs/api/machines.
 
 Verifier notes:
 
-- [refuter] Keep the wording sweep; also cover the emulated-BMC passage substrates.md:386-499 and refusal message text. Make the docs-check optional/heuristic, since hardware 'controller' (virtio-SCSI, controller-0) is legitimate.
-- [calibrator] Lower to Medium. Keep the mechanical sweep, and extend it to refusal and diagnostic message strings (for example substrates.md:91) and their code goldens. Drop the docs-check, or make it optional and advisory, because a sentence-level check that matches BMC or Redfish would flag correct uses such as 'controller-to-BMC leg'. Acceptance: every bare 'controller' in the swept pages and refusal strings refer…
+- [refuter] Keep the wording sweep; also cover the emulated-BMC passage specs/substrates.md:386-499 and refusal message text. Make the docs-check optional/heuristic, since hardware 'controller' (virtio-SCSI, controller-0) is legitimate.
+- [calibrator] Lower to Medium. Keep the mechanical sweep, and extend it to refusal and diagnostic message strings (for example specs/substrates.md:91) and their code goldens. Drop the docs-check, or make it optional and advisory, because a sentence-level check that matches BMC or Redfish would flag correct uses such as 'controller-to-BMC leg'. Acceptance: every bare 'controller' in the swept pages and refusal strings…
 
 **Acceptance.** In the swept pages every occurrence of bare "controller" refers to the Bootwright host; grep for "controller" in specs/substrates.md shows BMC meanings only as "BMC" or "management controller"; docs-check fails on a reintroduced bare use in a Redfish sentence.
 
@@ -2833,7 +3171,7 @@ Kind: contradiction; Area: Concept model and nomenclature; Status: confirmed; Al
 
 Files: `specs/api.md:183`; `specs/api.md:262-275`; `specs/api/environment.md:240-242`; `specs/api/storage.md:256-273`; `api/v1alpha1/object.go:12-47`; `.agents/knowledge/api-alignment.md:12`; `specs/api.md:183,262`; `internal/desiredstate/compilation/decoding.go:279-284`; `specs/api.md:262`; `.agents/knowledge/index.md:10`
 
-**Evidence.** specs/api.md:183 "One of the 33 registered kinds"; api.md:262 "The `v1alpha1` catalog contains exactly 33 authored kinds" while its own table lists 34 names including `StorageReplication`. specs/api/environment.md:240-241 "`spec.defaults` is a closed map keyed by exact, case-sensitive names from the 27-kind catalog." api/v1alpha1/object.go:12-47 declares 34 `Kind` constants. specs/api/storage.md:258-273 Kinds table has no `StorageReplication` row; it is owned only by specs/storage-resources.md:238. Also reported as F03-10: environment.md:240-241 "`spec.defaults` is a closed map keyed by exact, case-sensitive names from the 27-kind catalog." api.md:262 "The `v1alpha1` catalog contains exactly 33 authored kinds". decoding.go:279-283 accepts any key for which `api.Schema(api.Kind(key))` is registered. Also reported as R2-05-06: environment.md:240-241 "spec.defaults is a closed map keyed by exact, case-sensitive names from the 27-kind catalog". api.md:262 "The v1alpha1 catalog contains exactly 33 authored kinds". knowledge index:10 "27-kind catalog with StorageClient".
+**Evidence.** specs/api.md:183 "One of the 33 registered kinds"; specs/api.md:262 "The `v1alpha1` catalog contains exactly 33 authored kinds" while its own table lists 34 names including `StorageReplication`. specs/api/environment.md:240-241 "`spec.defaults` is a closed map keyed by exact, case-sensitive names from the 27-kind catalog." api/v1alpha1/object.go:12-47 declares 34 `Kind` constants. specs/api/storage.md:258-273 Kinds table has no `StorageReplication` row; it is owned only by specs/storage-resources.md:238. Also reported as F03-10: specs/api/environment.md:240-241 "`spec.defaults` is a closed map keyed by exact, case-sensitive names from the 27-kind catalog." specs/api.md:262 "The `v1alpha1` catalog contains exactly 33 authored kinds". internal/desiredstate/compilation/decoding.go:279-283 accepts any key for which `api.Schema(api.Kind(key))` is registered. Also reported as R2-05-06: specs/api/environment.md:240-241 "spec.defaults is a closed map keyed by exact, case-sensitive names from the 27-kind catalog". specs/api.md:262 "The v1alpha1 catalog contains exactly 33 authored kinds". knowledge index:10 "27-kind catalog with StorageClient".
 
 **Consequence.** The closed key set of `spec.defaults` is contractually ambiguous (27 or 34 kinds); an agent implementing or reviewing kind defaults, or counting coverage, trusts a wrong number; the index routes "one kind's fields" to api/storage.md, which does not list one admitted kind. No test pins the count, so the drift recurs with each new kind.
 
@@ -2842,7 +3180,7 @@ Files: `specs/api.md:183`; `specs/api.md:262-275`; `specs/api/environment.md:240
 Verifier notes:
 
 - [refuter] Keep; for api/storage.md either add the StorageReplication row or a pointer to storage-resources.md#storagereplication, since its field contract already lives there.
-- [calibrator] Drop literal counts (preferred over a docs-check count pin) and link environment.md:241 to specs/api.md#kind-catalog. Have the StorageReplication row in api/storage.md link to storage-resources.md#storagereplication rather than restate fields. Acceptance: a docs-check that every Kind constant appears in the api.md catalog table.
+- [calibrator] Drop literal counts (preferred over a docs-check count pin) and link specs/api/environment.md:241 to specs/api.md#kind-catalog. Have the StorageReplication row in api/storage.md link to storage-resources.md#storagereplication rather than restate fields. Acceptance: a docs-check that every Kind constant appears in the api.md catalog table.
 
 **Acceptance.** No spec states a kind count other than the one checked against code; docs-check fails when a kind is added without a catalog row; api/storage.md lists every Storage* kind in object.go.
 
@@ -2889,8 +3227,8 @@ Files: `specs/api/input.md:30-35,72-78`; `specs/api/secrets.md:54-60`; `internal
 
 Verifier notes:
 
-- [refuter] Prefer the warning option over removal, because the skip still shields plaintext secret YAML kept beside the input. Fix the stale input.md:81-83 rationale so it names the purpose that remains (keeping operator secret files out of discovery). Have validate warn, using names only, when a skipped reserved root holds .yaml/.yml files, and make the unknown-Secret remedy mention it. Severity Medium.
-- [calibrator] Prefer the warning option. Keep `secrets` skipped. Have validate emit a deterministic warning naming each skipped reserved directory that holds .yaml/.yml files (names only, no read). Have the unresolved-Secret-reference remedy mention those directories. Remove the stale 'co-located Secret' clause in input.md:73-74, and restate why `secrets` stays reserved: it keeps raw secret material from being read d…
+- [refuter] Prefer the warning option over removal, because the skip still shields plaintext secret YAML kept beside the input. Fix the stale specs/api/input.md:81-83 rationale so it names the purpose that remains (keeping operator secret files out of discovery). Have validate warn, using names only, when a skipped reserved root holds .yaml/.yml files, and make the unknown-Secret remedy mention it. Severity Medium.
+- [calibrator] Prefer the warning option. Keep `secrets` skipped. Have validate emit a deterministic warning naming each skipped reserved directory that holds .yaml/.yml files (names only, no read). Have the unresolved-Secret-reference remedy mention those directories. Remove the stale 'co-located Secret' clause in specs/api/input.md:73-74, and restate why `secrets` stays reserved: it keeps raw secret material from be…
 
 **Acceptance.** Either `secrets` no longer appears in input.md#discovery and `skippedDirectoryNames`, and a fixture with descriptors under `secrets/` validates; or a fixture with YAML under a skipped `secrets/` produces the warning and the reference remedy names the directory.
 
@@ -2904,7 +3242,7 @@ Kind: design; Area: Desired-state grammar: defaults and derivation; Status: conf
 
 Files: `specs/api/infrastructure-services.md:72-97`; `specs/api/machines.md:82-85,481-488`; `specs/storage-native-api.md:259-262`; `specs/api/environment.md:112-123`; `examples/machines/lab-rhel/infra/components/dns.yaml:6-15`; `examples/machines/lab-rhel/secret-descriptors/artifact-server-tls.yaml:9-19`; `examples/add-ons/lab-compact-df/storage/cluster.yaml:119-140`
 
-**Evidence.** infrastructure-services.md:79-83 "A wildcard default binds every address, so it collides with any other listener on that port ... and the examples declare an explicit bindAddress." :90-91 "Endpoint addresses are derived values, not another authored copy of Machine addresses." :94-96 "When `bindAddress` is not a wildcard ..., every endpoint whose address is an IP equals it". machines.md:85 "its SANs cover `bindAddress`, and admission refuses a generated one whose `ipAddresses` do not." storage-native-api.md:259 "`StorageFilesystem.spec.mdsServiceRef` is exactly `mds.<filesystem>`".
+**Evidence.** specs/api/infrastructure-services.md:79-83 "A wildcard default binds every address, so it collides with any other listener on that port ... and the examples declare an explicit bindAddress." :90-91 "Endpoint addresses are derived values, not another authored copy of Machine addresses." :94-96 "When `bindAddress` is not a wildcard ..., every endpoint whose address is an IP equals it". specs/api/machines.md:85 "its SANs cover `bindAddress`, and admission refuses a generated one whose `ipAddresses` do not." specs/storage-native-api.md:259 "`StorageFilesystem.spec.mdsServiceRef` is exactly `mds.<filesystem>`".
 
 **Consequence.** In lab-rhel the controller IP 192.0.2.1 is written six times (Machine address, four service `bindAddress` values, a certificate SAN) and checked for agreement; the documented default (`0.0.0.0`) is one the spec itself says collides, so every operator must override it. `mdsServiceRef` admits exactly one derivable value. Storage nodes restate `name`, `fqdn` and `machineRef` for the same host because node FQDN composition differs from Machine FQDN composition. Editing one copy produces a refusal rather than a consistent change; kind defaults cannot help because each service kind needs its own entry.
 
@@ -2927,7 +3265,7 @@ Kind: design; Area: Desired-state API: Machine / InfraProvider; Status: confirme
 
 Files: `specs/api/machines.md:180-198`; `specs/api/machines.md:217-219`; `specs/api/machines.md:249-257`; `specs/api/machines.md:313-320`; `specs/deferred/machine-arms.md:64-65, 83-85`
 
-**Evidence.** machines.md:185 profileRef: "required for a virtual install machine and forbidden for bare metal"; machines.md:188 macAddress: "required on every bare-metal install NIC; refused on a libvirt provider's Machine"; machines.md:189 bmc: "Required for bare-metal install; refused on a libvirt provider's Machine"; machines.md:314-316: "On a Machine whose provider is `libvirt`, each of `wwn`, `hctl` and `serialNumber` refuses"; deferred/machine-arms.md:83-85: "A vSphere-authored MAC is in the manual assignment range"; deferred/machine-arms.md:64-65 puts vSphere-only `template` and `failureDomainRef` in the common profile shape.
+**Evidence.** specs/api/machines.md:185 profileRef: "required for a virtual install machine and forbidden for bare metal"; specs/api/machines.md:188 macAddress: "required on every bare-metal install NIC; refused on a libvirt provider's Machine"; specs/api/machines.md:189 bmc: "Required for bare-metal install; refused on a libvirt provider's Machine"; specs/api/machines.md:314-316: "On a Machine whose provider is `libvirt`, each of `wwn`, `hctl` and `serialNumber` refuses"; deferred/machine-arms.md:83-85: "A vSphere-authored MAC is in the manual assignment range"; deferred/machine-arms.md:64-65 puts vSphere-only `template` and `failureDomainRef` in the common profile shape.
 
 **Consequence.** The provider-neutral/provider-shaped split is explicit on InfraProvider but implicit on Machine. Each new substrate (vSphere, KubeVirt, later AWS/GCP/Azure) adds more 'on a <substrate> provider, field X refuses/requires' rows across Machine's table and admission code, instead of one arm. An operator can author fields that the chosen substrate silently cannot use until admission refuses them one by one. A cloud substrate with no BMC, NICs or root-device hints would add a further layer of conditionals. This contradicts the brief's goal that specifics live behind arms selected by input.
 
@@ -2950,7 +3288,7 @@ Kind: design; Area: Desired-state API: Machine capabilities; Status: confirmed; 
 
 Files: `specs/api/machines.md:77, 182`; `specs/api/container-clusters.md:436`; `specs/api/infrastructure-services.md:47-50`; `specs/api/environment.md:369-370, 471`; `internal/storage/topology.go:177-178`; `examples/machines/lab-rhel/infra/machines/controller.yaml:7-9`; `specs/api/machines.md:182`
 
-**Evidence.** machines.md:182: "Unique values from `openshift-node`, `ceph-node`, `ceph-arbiter`, `container-runtime`, and `libvirt`; `ceph-arbiter` requires `ceph-node`." container-clusters.md:436: "Every `machineRef` requires capability `openshift-node`". machines.md:77: "the machine has capability `libvirt`". environment.md:471: "controller stage prepares only the container-runtime and libvirt capabilities". topology.go:177-178 enforces ceph-node in code, but no storage spec states it. `ceph-arbiter` has no consumer in specs/ or internal/ beyond the requires-ceph-node check. Also reported as F18-11: api/machines.md:182 capabilities are "Unique values from openshift-node, ceph-node, ceph-arbiter, container-runtime, and libvirt". api/container-clusters.md:436 "Every machineRef requires capability openshift-node".
+**Evidence.** specs/api/machines.md:182: "Unique values from `openshift-node`, `ceph-node`, `ceph-arbiter`, `container-runtime`, and `libvirt`; `ceph-arbiter` requires `ceph-node`." specs/api/container-clusters.md:436: "Every `machineRef` requires capability `openshift-node`". specs/api/machines.md:77: "the machine has capability `libvirt`". specs/api/environment.md:471: "controller stage prepares only the container-runtime and libvirt capabilities". internal/storage/topology.go:177-178 enforces ceph-node in code, but no storage spec states it. `ceph-arbiter` has no consumer in specs/ or internal/ beyond the requires-ceph-node check. Also reported as F18-11: api/machines.md:182 capabilities are "Unique values from openshift-node, ceph-node, ceph-arbiter, container-runtime, and libvirt". api/container-clusters.md:436 "Every machineRef requires capability openshift-node".
 
 **Consequence.** The operator states every role twice: once by referencing the Machine from a ContainerCluster, StorageCluster or InfraProvider, and again in `capabilities`. Forgetting either half is a refusal. `openshift-node` hard-codes one cluster product into Machine, so vanilla Kubernetes, Rancher or EKS nodes would need new enum values in a core kind. That contradicts the low-code-impact goal. A rule enforced only in code (`ceph-node`) and a value nothing reads (`ceph-arbiter`) make the contract untruthful.
 
@@ -2958,7 +3296,7 @@ Files: `specs/api/machines.md:77, 182`; `specs/api/container-clusters.md:436`; `
 
 Verifier notes:
 
-- [refuter] Keep the drop of role values (openshift-node, ceph-node, ceph-arbiter) and the statement of placement-derived roles; for ceph-arbiter, note arbiter selection belongs to StorageCluster topology. For container-runtime/libvirt, derive from placements where a placement exists, but keep (or rename hostPrerequisites) an authored path for the controller Machine and update controller.md:24 and environment.md:471 a…
+- [refuter] Keep the drop of role values (openshift-node, ceph-node, ceph-arbiter) and the statement of placement-derived roles; for ceph-arbiter, note arbiter selection belongs to StorageCluster topology. For container-runtime/libvirt, derive from placements where a placement exists, but keep (or rename hostPrerequisites) an authored path for the controller Machine and update controller.md:24 and specs/api/environmen…
 - [calibrator] Stage it. First, the smallest truthful fix: state the ceph-node rule in the storage API spec or drop it, and drop ceph-arbiter, since StorageCluster topology owns the arbiter. Second, the design change: derive container-runtime and libvirt from placements (managed-service machineRef, controller selection, libvirt InfraProvider machineRef) and drop the role values. Specify the derived controller-stage in…
 
 **Acceptance.** specs/api/machines.md has no role enumeration. No consumer spec requires a capability for a relationship it already references. The controller-stage install set is specified as derived from placements, with a test. ceph-node enforcement is either removed or stated in the owning storage spec.
@@ -2970,6 +3308,8 @@ Verification: refuter real, high confidence, severity Medium; calibrator real, h
 ##### F05-02 · Medium · Storage admission page omits StorageReplication and nativeName, says mirroring refuses
 
 Kind: contradiction; Area: Desired-state API: Storage admission; Status: confirmed; Proposed severity: High.
+
+Revision 2: the same stale-status drift for NVMe-oF and StorageExport on the same pages is [V2-01]; fix them together.
 
 Files: `specs/api/storage.md:1-9, 90-93, 124-130, 256-300, 387-395`; `specs/storage-resources.md:9-16, 238-262`; `specs/api.md:273`; `specs/milestones/m2.md:1262-1267`
 
@@ -3050,8 +3390,8 @@ Files: `specs/api/storage.md:450-453`; `specs/storage-resources.md:838-862`; `sp
 
 Verifier notes:
 
-- [refuter] Cite the in-family precedents (NFS cluster_id refused at storage-resources.md:771; share cephfs leaves supplied by binding) as the model. For resourceRefs vs native ref, note they are different identities (object name vs native id); pick one authored home and derive the other. Consider Low-to-Medium: agreement checks prevent divergence.
-- [calibrator] Make mdsServiceRef optional instead of dropping it, to stay symmetric with StorageObjectGateway.serviceRef, whose value is not fully derivable. Update storage-resources.md:108-110 and the M2 admission text. For the SMB auth links, keep the native refs (D133 native format) and make resourceRefs optional, derived by native ID, since IDs are unique per StorageCluster (916-919). Acceptance should also cover…
+- [refuter] Cite the in-family precedents (NFS cluster_id refused at specs/storage-resources.md:771; share cephfs leaves supplied by binding) as the model. For resourceRefs vs native ref, note they are different identities (object name vs native id); pick one authored home and derive the other. Consider Low-to-Medium: agreement checks prevent divergence.
+- [calibrator] Make mdsServiceRef optional instead of dropping it, to stay symmetric with StorageObjectGateway.serviceRef, whose value is not fully derivable. Update specs/storage-resources.md:108-110 and the M2 admission text. For the SMB auth links, keep the native refs (D133 native format) and make resourceRefs optional, derived by native ID, since IDs are unique per StorageCluster (916-919). Acceptance should also…
 
 **Acceptance.** The 6-node services example validates with `mdsServiceRef`, the share `cluster_id` and either `resourceRefs` or the native `ref`s removed. A disagreeing authored value still refuses at its field.
 
@@ -3065,7 +3405,7 @@ Kind: design; Area: Desired-state API: ContainerCluster; bounded contexts; Statu
 
 Files: `specs/architecture.md:54`; `specs/api/container-clusters.md:3-4, 57, 76, 85, 341, 389, 422, 436`; `specs/api.md:217-221`; `internal/addons/packages.go:55-67`; `specs/api/container-clusters.md:3-8, 55-59, 74-89, 185-201, 334-342, 387-392, 418-436`; `specs/api/storage.md:258-260`; `specs/project.md:17-30`; `specs/api/container-clusters.md:3-8`; `specs/api/container-clusters.md:193-203`; `specs/api/container-clusters.md:227-236`; `specs/api/container-clusters.md:418-425`
 
-**Evidence.** specs/architecture.md:54 Container cluster owns "OpenShift and OKD release, topology, installer intent, node binding, cluster access, and installation evidence". api/container-clusters.md:3 "ContainerCluster owns OpenShift/OKD install intent". :57 distribution.type "openshift or okd". :76 "agent is the only accepted method". :436 "Every machineRef requires capability openshift-node and os.provided: false". :341 ovnKubernetesConfig sits at the top level. :389 FIPS "true is OpenShift-only". api.md:219-221 keeps type unions for container installation platforms, not distributions. addons/packages.go:63 ClusterFacts carries an OVNGateway. Also reported as F05-01: specs/api/container-clusters.md:3 "`ContainerCluster` owns OpenShift/OKD install intent". The rest of that page uses OpenShift vocabulary throughout: :422 role "`master`, `worker`, or `infra`"; :199 the endpoint source defaults to "`openshift`"; :85 `pullSecretRef` is "OpenShift"; :341 `ovnKubernetesConfig`; :389 `fips` "`true` is OpenShift-only"; :436 "Every `machineRef` requires capability `openshift-node`". The neutral parts (nodes, endpoints, cluster and service networks, proxy, NTP, registries) and the OpenShift parts sit side by side at the same level. Compare specs/api/storage.md:260: "`spec.type` is exactly `ceph`... `spec.ceph` is required for `managed`". That is a discriminated arm that ContainerCluster lacks. Also reported as F02-10: container-clusters.md:3 "`ContainerCluster` owns OpenShift/OKD install intent". container-clusters.md:199 "`source.type` ... `openshift`, `external`, `loadBalancer`, or `node`". container-clusters.md:227-229 "the installer owns all three endpoint slots as virtual IPs ... Each takes the `openshift` source". container-clusters.md:422 "`spec.nodes[].role` ... `master`, `worker`, or `infra`".
+**Evidence.** specs/architecture.md:54 Container cluster owns "OpenShift and OKD release, topology, installer intent, node binding, cluster access, and installation evidence". api/container-clusters.md:3 "ContainerCluster owns OpenShift/OKD install intent". :57 distribution.type "openshift or okd". :76 "agent is the only accepted method". :436 "Every machineRef requires capability openshift-node and os.provided: false". :341 ovnKubernetesConfig sits at the top level. :389 FIPS "true is OpenShift-only". specs/api.md:219-221 keeps type unions for container installation platforms, not distributions. addons/packages.go:63 ClusterFacts carries an OVNGateway. Also reported as F05-01: specs/api/container-clusters.md:3 "`ContainerCluster` owns OpenShift/OKD install intent". The rest of that page uses OpenShift vocabulary throughout: :422 role "`master`, `worker`, or `infra`"; :199 the endpoint source defaults to "`openshift`"; :85 `pullSecretRef` is "OpenShift"; :341 `ovnKubernetesConfig`; :389 `fips` "`true` is OpenShift-only"; :436 "Every `machineRef` requires capability `openshift-node`". The neutral parts (nodes, endpoints, cluster and service networks, proxy, NTP, registries) and the OpenShift parts sit side by side at the same level. Compare specs/api/storage.md:260: "`spec.type` is exactly `ceph`... `spec.ceph` is required for `managed`". That is a discriminated arm that ContainerCluster lacks. Also reported as F02-10: specs/api/container-clusters.md:3 "`ContainerCluster` owns OpenShift/OKD install intent". specs/api/container-clusters.md:199 "`source.type` ... `openshift`, `external`, `loadBalancer`, or `node`". specs/api/container-clusters.md:227-229 "the installer owns all three endpoint slots as virtual IPs ... Each takes the `openshift` source". specs/api/container-clusters.md:422 "`spec.nodes[].role` ... `master`, `worker`, or `infra`".
 
 **Consequence.** A kubeadm, RKE2, EKS or AKS distribution cannot be added as an arm. Many top-level fields are meaningless or wrong for it: pullSecretRef, api-int and VIP endpoint semantics, roles mapped to machine-config pools, the openshift-node capability, and the installer-provisioned OS invariant, where kubeadm needs OS-ready nodes. The choice is a new kind, which touches every general-flow kind list (F18-04), or a breaking reshape that grows costlier with each example, golden and M3/M4 slice built on the flat shape.
 
@@ -3074,9 +3414,9 @@ Files: `specs/architecture.md:54`; `specs/api/container-clusters.md:3-4, 57, 76,
 Verifier notes:
 
 - [refuter] Downgrade or drop. If kept, reframe it as: project.md's product scope omits the owner's intended cluster families. Ask the owner to either add them, which would justify a distribution-neutral envelope with arms, or confirm OpenShift/OKD only. Do not prescribe the reshape before that scope decision.
-- [calibrator] Lower the severity to Medium. Cite project.md:24 and :88 and B748/D172. Make the primary recommendation a recorded owner decision on how a non-OpenShift distribution enters: an envelope with distribution arms, or one kind per family with a list of the generic touch points each kind implies. The schema reshape should follow that decision and is not the immediate fix. Drop the bounded-context rename unles…
+- [calibrator] Lower the severity to Medium. Cite specs/project.md:24 and :88 and B748/D172. Make the primary recommendation a recorded owner decision on how a non-OpenShift distribution enters: an envelope with distribution arms, or one kind per family with a list of the generic touch points each kind implies. The schema reshape should follow that decision and is not the immediate fix. Drop the bounded-context rename…
 
-**Acceptance.** api/container-clusters.md shows an envelope plus an spec.openshift arm, or a recorded decision that distributions are separate kinds. No top-level field carries an 'OpenShift-only' rule. Node binding reads a distribution-declared node capability. architecture.md:54 names distributions as adapters. Arbiter acceptance: One decision entry in specs/milestones/backlog.md, linked from api/container-clusters.md, naming the extension path, how node binding gets a distribution-declared node capability, and B748's alignment.
+**Acceptance.** api/container-clusters.md shows an envelope plus an spec.openshift arm, or a recorded decision that distributions are separate kinds. No top-level field carries an 'OpenShift-only' rule. Node binding reads a distribution-declared node capability. specs/architecture.md:54 names distributions as adapters. Arbiter acceptance: One decision entry in specs/milestones/backlog.md, linked from api/container-clusters.md, naming the extension path, how node binding gets a distribution-declared node capability, and B748's alignment.
 
 **Decision check.** Checked api.md Version authority (31-37: schema changes stay in v1alpha1 with no conversion, so a reshape is permitted once authorized and costs no migration code), D162 clause (c) (topology rules are general plus specializations: they move into the openshift arm unchanged), D163 (no version rules: unaffected) and D172/D173 (M3/M4 scope builds on the flat shape: that raises the cost of waiting). No decision fixes the flat shape. This needs an owner decision because it is a public schema move.
 
@@ -3086,20 +3426,22 @@ Verification: refuter not real, medium confidence, severity Low; calibrator real
 
 Kind: gap; Area: Desired-state API: truthfulness (Environment, Entitlement, examples); Status: confirmed-by-arbitration; Proposed severity: High.
 
+Revision 2: a verifier note in this entry treats `specs/api/storage.md:90-92` as a correct not-yet-met marker; it is not, because the subsystem is realized ([V2-01]).
+
 Files: `specs/api/environment.md:453-455`; `specs/api/environment.md:489-496`; `specs/api/environment.md:40-42`; `specs/api/secrets.md:188-193`; `specs/api.md:21-29`; `examples/container-clusters/lab-kubevirt/README.md:9-12`; `cmd/bootwright/admission_acceptance_test.go:108-112`
 
-**Evidence.** environment.md:453-455 "Admission never refuses a shape only this executable cannot realize: those are the controller's, and refuse before registration". environment.md:491-494 "No rescue journey exists yet, so admission refuses a present rescue with api.invariant". admission_acceptance_test.go:108-112 refusedKinds "admission refuses until their later slices (storage family refusals)". secrets.md:192-193 "satellite and connectToInsights: true refuse at installation". lab-kubevirt/README.md:9-11 "The API validates this profile ... Runtime planning refuses that unqualified provider". environment.md:42 libvirt "the grammar admits a distribution package version ... which the controller stage refuses".
+**Evidence.** specs/api/environment.md:453-455 "Admission never refuses a shape only this executable cannot realize: those are the controller's, and refuse before registration". specs/api/environment.md:491-494 "No rescue journey exists yet, so admission refuses a present rescue with api.invariant". cmd/bootwright/admission_acceptance_test.go:108-112 refusedKinds "admission refuses until their later slices (storage family refusals)". specs/api/secrets.md:192-193 "satellite and connectToInsights: true refuse at installation". lab-kubevirt/README.md:9-11 "The API validates this profile ... Runtime planning refuses that unqualified provider". specs/api/environment.md:42 libvirt "the grammar admits a distribution package version ... which the controller stage refuses".
 
 **Consequence.** An operator copies lab-kubevirt or declares a Satellite Entitlement, gets a clean `validate`, runs `context init`, binds Secrets and runs setup, and only `plan` or installation refuses; the same operator declaring `lifecycle.rescue` is stopped at `validate`. Each new future arm is placed by precedent, so implementers diverge on where to refuse and `validate` cannot be trusted as a support check.
 
-**Recommendation.** In api.md#compiler-boundary state one classification: (a) a declaration no build realizes yet (reserved schema: rescue, StorageExport families, Satellite, Insights, NEVRA libvirt pins, the KubeVirt provider until B87) and (b) a declaration this build realizes but not on this host, target or state. Keep a single 'Admitted, not realized' table (field, refusal point, code, tracking item) owned by api.md, and have `validate` emit a deterministic warning for every class-(a) declaration it admits, so goldens stay green while operators learn before context import. Replace environment.md:453-455 with a pointer to that rule.
+**Recommendation.** In api.md#compiler-boundary state one classification: (a) a declaration no build realizes yet (reserved schema: rescue, StorageExport families, Satellite, Insights, NEVRA libvirt pins, the KubeVirt provider until B87) and (b) a declaration this build realizes but not on this host, target or state. Keep a single 'Admitted, not realized' table (field, refusal point, code, tracking item) owned by api.md, and have `validate` emit a deterministic warning for every class-(a) declaration it admits, so goldens stay green while operators learn before context import. Replace specs/api/environment.md:453-455 with a pointer to that rule.
 
 Verifier notes:
 
 - [refuter] Drop the contradiction framing. At most, file a Low or Medium design item: name in api.md#compiler-boundary the admission-time exceptions (rescue per D29, StorageExport) as departures from the rule in state-reconciliation.md:909-919. A validate warning for admitted-but-unrealized shapes is optional, and the owner should decide whether to add one.
-- [calibrator] Downgrade to Medium, kind gap. Smallest fix: in api.md#compiler-boundary link to state-reconciliation's plan-time lifecycle.unsupported rule as the default and state the one criterion for an admission-time exception (no build has any consumer, e.g. D29 rescue, StorageExport), with each exception named by its owning spec; make secrets.md:192-193 name the refusal point (plan before registration via lifecy…
+- [calibrator] Downgrade to Medium, kind gap. Smallest fix: in api.md#compiler-boundary link to state-reconciliation's plan-time lifecycle.unsupported rule as the default and state the one criterion for an admission-time exception (no build has any consumer, e.g. D29 rescue, StorageExport), with each exception named by its owning spec; make specs/api/secrets.md:192-193 name the refusal point (plan before registration…
 
-**Acceptance.** api.md holds the classification and one table listing every admitted-but-unrealized field with its refusal point; environment.md, secrets.md and the lab-kubevirt README cite it instead of restating policy; `validate` of a lab-kubevirt copy prints a warning naming B87; a test holds the table to the set of lifecycle.unsupported refusals. Arbiter acceptance: api.md states the default and the exception criterion with links; secrets.md names the concrete refusal rows and code; each admission-time refusal of an unrealized field cites the criterion.
+**Acceptance.** api.md holds the classification and one table listing every admitted-but-unrealized field with its refusal point; environment.md, secrets.md and the lab-kubevirt README cite it instead of restating policy; `validate` of a lab-kubevirt copy prints a warning naming B87; a test holds the table to the set of lifecycle.unsupported refusals. Arbiter acceptance: api.md states the default and the exception criterion with links; secrets.md names the concrete refusal rows and code; each admission-time refusal of an unrealized field cites the criterion. Revision 2 addition: the warning is a diagnostic with a stable code, present in text output and in the `-o json` envelope's `diagnostics` (`specs/cli/output.md:355-357, 764`), so an agent tells valid but not executable apart from valid without parsing prose (`specs/api.md:28-29`).
 
 **Decision check.** D29 (rescue refused at admission) is preserved as class (a) at admission. D77 (controller egress: pure grammar at admission, executable limits at selection) is exactly class (b) and is preserved. B676 already tracks the libvirt pin field; the recommendation does not duplicate it, only lists it. The warning approach keeps the golden contract (every example compiles) intact. No decision fixes Satellite or KubeVirt refusal points. Pre-1.x no-compat principle permits moving refusals. Arbiter decision check: D29 preserved as a named exception; D77 is the plan-time default. No decision fixes a refusal point for Satellite, Insights or KubeVirt, so the clarification is unconstrained.
 
@@ -3111,7 +3453,7 @@ Kind: contradiction; Area: Examples vs container-cluster acceptance profiles; St
 
 Files: `specs/container-cluster-coverage.md:164`; `specs/milestones/m3.md:170`; `examples/container-clusters/lab-kubevirt/clusters/kubevirt/cluster.yaml:17-56`; `examples/container-clusters/lab-kubevirt/README.md:3-12`; `examples/README.md:34`
 
-**Evidence.** container-cluster-coverage.md:164 lab-kubevirt: "3 masters and 2 workers, each 8 vCPU ... authored platform.type: baremetal with installer VIPs"; "Variant lab-kubevirt-external: derived platform.type: none, external endpoints". cluster.yaml declares three masters, no workers and `source: type: external` endpoints. examples/README.md:34 says only "runtime qualification remains open".
+**Evidence.** specs/container-cluster-coverage.md:164 lab-kubevirt: "3 masters and 2 workers, each 8 vCPU ... authored platform.type: baremetal with installer VIPs"; "Variant lab-kubevirt-external: derived platform.type: none, external endpoints". cluster.yaml declares three masters, no workers and `source: type: external` endpoints. examples/README.md:34 says only "runtime qualification remains open".
 
 **Consequence.** The B731 run labelled lab-kubevirt would rehearse the variant Q19's recommendation ranks optional, and the slice that creates the first-ranked profile collides with an existing directory of the same name. The index row hides that planning refuses the provider outright, which the scenario README states.
 
@@ -3120,13 +3462,73 @@ Files: `specs/container-cluster-coverage.md:164`; `specs/milestones/m3.md:170`; 
 Verifier notes:
 
 - [refuter] Prefer renaming the example to lab-kubevirt-external (matching its shape) over editing the coverage row, since Q19 (a) ranks the baremetal-VIP profile first under the name lab-kubevirt; also fix m3.md B731's in-tree preparation note to name the variant. Adding the planning refusal to the index row is a Low add-on.
-- [calibrator] Prefer rename to lab-kubevirt-external (matches Q19 (a) and keeps 'lab-kubevirt' free for the first-ranked baremetal-VIP profile); also correct the B731 in-tree-preparation note (m3.md:1700-1704) to say the prepared example is the external variant, and reconcile the 6 vs 8 vCPU sizing in the README or the coverage row. Acceptance: directory name, README title/sizing, coverage row and B731 note agree; do…
+- [calibrator] Prefer rename to lab-kubevirt-external (matches Q19 (a) and keeps 'lab-kubevirt' free for the first-ranked baremetal-VIP profile); also correct the B731 in-tree-preparation note (specs/milestones/m3.md:1700-1704) to say the prepared example is the external variant, and reconcile the 6 vs 8 vCPU sizing in the README or the coverage row. Acceptance: directory name, README title/sizing, coverage row and B7…
 
 **Acceptance.** The example directory name, its README title and the coverage-matrix row describe the same node shape and platform; the index row names the planning refusal; the golden test passes under the new name.
 
 **Decision check.** Q19 is open with recommendation (a) (baremetal with VIPs first, derived none in goldens only); renaming aligns the example with that recommendation and pre-empts no answer.
 
 Verification: refuter real, high confidence, severity Medium; calibrator real, high confidence, severity Medium; no arbitration needed.
+
+##### V2-01 · Medium · Storage admission and output pages call realized NVMe-oF and StorageExport refused · revision 2
+
+Kind: contradiction; Area: Desired-state API: Storage admission and output; Status: confirmed.
+
+Provenance: Raised by the sibling audit (Codex Astra, around lines 399-407, 734 and 769 of report-codex-astra.md), verified by our refuter and calibrator (both real, high confidence, Medium); no arbitration.
+
+Files: `specs/api/storage.md:15-18, 90-92`; `specs/storage-resources.md:9-19, 1491-1493`; `specs/cli/output.md:507`; `specs/storage.md:364-379, 956-959, 1495-1531`; `specs/milestones/m2.md:1138-1142`; `internal/storage/ceph/capability.go:43-44`
+
+**Evidence.** specs/api/storage.md:15-18: "Bootwright does not deploy them yet, so planning refuses a StorageCluster that declares one ([refusal table]...)" (NVMe-oF gateways). :90-92: "no capability realizes it yet, so planning refuses every selected one before any effect" (StorageNVMeoFSubsystem). specs/storage-resources.md:1492-1493: "New kinds other than minimal `StorageClient` remain unadmitted until that implementation delivers." specs/cli/output.md:507: "StorageExport, which no capability realizes, takes it from its declaration." Against them: specs/storage-resources.md:18-19 "`StorageNVMeoFSubsystem` is realized under its [field record]"; specs/storage.md:956-957 "A managed [StorageExport] is realized by its export block"; specs/storage.md:1495 "A `ceph-service-<cluster>-nvmeof-<service-token>` unit realizes one gateway group"; the refusal table (specs/storage.md:364-379) has no NVMe-oF not-deployed row, only the auxiliary-image row at :379; specs/milestones/m2.md:1138-1139 "gateway and StorageNVMeoFSubsystem planning, owned native subsystem/listener/namespace effects ... are implemented"; the Ceph capability builds a request for every StorageNVMeoFSubsystem (internal/storage/ceph/capability.go:43-44). The four stale passages were not touched by 17acb63d9.
+
+**Consequence.** An operator reads the owning admission page (api/storage.md), declares an nvmeof service or a StorageNVMeoFSubsystem expecting a plan-time refusal as a dry declaration, and instead plan produces native gateway, subsystem, listener and namespace effects. An agent asked to reconcile the spec with the code treats api/storage.md as the owner and re-adds a refusal, removing delivered X58 behavior; an agent editing output.md's scope logic assumes StorageExport has no frozen request and keeps reading its declaration instead of the frozen export request. Revision 1 of this audit repeated the error in its section 5 kind table; revision 2 corrects it.
+
+**Recommendation.** Fix together with F05-02, the same stale-status drift on the same pages. Reword four sentences to the realized rule: api/storage.md:15-18 (nvmeof gateway documents are planned as a ceph-service nvmeof unit, linking storage.md#nvme-of-subsystems), api/storage.md:90-92 (StorageNVMeoFSubsystem is realized by its ceph-nvmeof block), specs/storage-resources.md:1491-1493 (delete or restate against the Current list at :9-19), and specs/cli/output.md:507 (StorageExport takes scope from the request its export block froze, or state why the declaration is used). State each kind's realization status once, in storage-resources.md's Current paragraph, and link to it from elsewhere. Optional guard (ties to W58): a docs-check that every storage kind named realized or refused in the specs agrees with lifecycle.Supported.
+
+**Acceptance.** grep over specs/ finds no sentence saying NVMe-oF gateways or StorageNVMeoFSubsystem are refused or unrealized, none saying StorageExport has no realizing capability, and no 'remain unadmitted' claim contradicting specs/storage-resources.md:9-19; api/storage.md links each kind's status to the single owning status statement; make docs-check passes (with the status-check test if adopted).
+
+**Decision check.** Checked D160 (specs/milestones/m2.md:317-318: OD12 chose one StorageNVMeoFSubsystem kind; OD11 moved managed StorageExport material to M4 B86) and the X58 delivery note (specs/milestones/m2.md:1138-1142): both confirm NVMe-oF is delivered, so no decision keeps it refused. Tension noted: m4.md:589 lists B86 (managed StorageExport) as 'Specified, awaiting operator acceptance' while storage.md:956 and internal/storage/ceph/export.go realize it; the fix must state StorageExport's status consistently with B86 (either delivered in-tree pending acceptance, or not yet realized), not just flip specs/cli/output.md:507. No owner decision conflicts with the rewording.
+
+Verification: refuter real, high confidence, severity Medium; calibrator real, high confidence, severity Medium; no arbitration needed.
+
+##### V2-02 · Medium · Omitted Ceph clusterSSH.transport defaults to native, which always refuses at plan · revision 2
+
+Kind: contradiction; Area: desired-state API / StorageCluster defaults (IBM Ceph); Status: confirmed.
+
+Provenance: Raised by the sibling audit's StorageCluster/CustomPlaybook defaults point (sibling report lines 423-431, sources A4-17, A4-18, A4-19, A4-22, S23). Our refuter and calibrator verified it at Medium; there was no arbitration.
+
+Files: `specs/api/storage.md:205-206`; `specs/storage.md:366-370,376`; `specs/storage-coverage.md:37-42,563`; `.agents/skills/ux-and-apis/SKILL.md:23-24`; `specs/milestones/backlog.md:3254-3262,3296`; `specs/api/custom-playbooks.md:23,30-34`
+
+**Evidence.** specs/api/storage.md:205-206: "`ceph.cephadm.clusterSSH.transport` accepts `native` or `verified-tunnel` (D135). Omission selects `native`". specs/storage.md:376 (Ceph capability refusal table, enforced "before operation registration and secret custody", :366-367) refuses "a `ceph.cephadm.clusterSSH.transport` other than `verified-tunnel`, an omitted transport included". specs/storage-coverage.md:42: "`native` stays refused."; :563 matrix row U07 covers "`clusterSSH.transport: native`, or the transport omitted". .agents/skills/ux-and-apis/SKILL.md:23-24: "`validate` rejects a value the only implementation refuses; no default always refuses at plan time." D143 clause (3), specs/milestones/backlog.md:3296: "`verified-tunnel` is the only supported transport; `native` stays refused". Same pattern for CustomPlaybook: specs/api/custom-playbooks.md:23 "Normalization materializes `enabled: true` when omitted", while :30-34 refuses every enabled CustomPlaybook at plan.
+
+**Consequence.** An operator writes the minimal IBM Ceph StorageCluster (immediate portfolio) and omits clusterSSH.transport. `validate` accepts it, normalization records `native`, and the first `plan` refuses the cluster and every StoragePlacementPolicy, StoragePool and StorageClient naming it. The only fix is a field the schema calls optional. An agent following ux-and-apis cannot tell whether to change the default, move the refusal to validate, or keep the spec, so two implementers diverge. Every operator pays one wasted plan.
+
+**Recommendation.** In specs/api/storage.md:205-206, make omission select `verified-tunnel`, the only admitted value, or make the field required. Also move the `native` refusal from the plan-time capability table to `validate`, keeping `native` reserved in the enum per D135/D143(3) or removing it. Update the storage.md:376 row and matrix row U07 (specs/storage-coverage.md:563) to match: an omitted transport is no longer a refusal. Fold the CustomPlaybook half into F05-09 as an added consequence rather than a separate finding: the materialized `enabled: true` (specs/api/custom-playbooks.md:23) always refuses at plan (:30-34), and F05-09's admission refusal removes it. In the Section 10 ux-and-apis rule-conformance discussion, add a back-reference to this finding as a spec violating the skill rule.
+
+**Acceptance.** grep in specs/api/storage.md finds no 'Omission selects `native`'. The storage.md refusal-table row and U07 no longer list 'an omitted transport' as refused. A StorageCluster omitting clusterSSH.transport passes validate and plan (U07 testdata updated), and a declared `native` is refused by `validate`, not first at plan. F05-09 names the `enabled: true` default that always refuses.
+
+**Decision check.** D135 (specs/milestones/backlog.md:3254-3262) approves verified-tunnel. Its 'no provider-default exception' covers host-key verification, not field defaulting, so changing the default is consistent with it. D143 clause (3) (specs/milestones/backlog.md:3296) keeps native refused; the recommendation preserves that and only changes the default and when the refusal fires. D157 (specs/milestones/backlog.md:3353ff) supersedes D143's single-release admission but keeps 'transport trust' requirements, so there is no conflict. No decision chooses `native` as the default. Commit 77033e8f5..17acb63d9 did not touch these passages.
+
+Verification: refuter real, high confidence, severity Medium; calibrator real, high confidence, severity Medium; no arbitration needed.
+
+##### V2-19 · Medium · StorageCluster name limit depends on declared services, blocking day-2 service additions · revision 2
+
+Kind: design; Area: Desired-state API: naming and block identity; Status: confirmed.
+
+Provenance: Raised by the sibling audit's naming findings (A4-46..A4-48, report lines 471-477), verified by our refuter and calibrator (both Medium); no arbitration.
+
+Files: `specs/storage-native-api.md:515-518`; `specs/storage.md:227-231, 243-245, 271-275, 280-283, 284-291, 1495-1498`
+
+**Evidence.** specs/storage-native-api.md:515-516: "When a StorageCluster declares this service, its `metadata.name` has at most 26 characters so the gateway's lifecycle block identity fits 63 characters." specs/storage.md:243-245 (monitoring): "A cluster name longer than 39 characters refuses, because the block identity holds at most 63." specs/storage.md:274-275 (mgmt-gateway): "A cluster name longer than 37 characters refuses." specs/storage.md:283 (rbd-mirror): 39; specs/storage.md:289-290 (crash, always planned): 44. specs/storage.md:1495-1498: "The service token is the first sixteen hexadecimal characters of SHA-256 of the native service ID" - the service ID is hashed, the cluster segment of ceph-service-<cluster>-nvmeof-<token> is not. No StorageCluster-wide name limit exists elsewhere in specs/.
+
+**Consequence.** An operator creates StorageCluster 'production-ibm-ceph-site-a' (27+ characters) with monitoring only; it applies. Months later they add an nvmeof service (or with 38+ characters, a management gateway) and planning refuses on the name. Because metadata.name is the object's identity, the only way forward is to recreate the storage cluster under a shorter name, a destructive day-2 path for a data-bearing system. The limit an operator must respect at creation depends on services they may not yet plan, and is stated in four places with four values (44/39/37/26). It also shows our F04-11 calibrated recommendation (one 47-byte public limit, block prefixes of at most 16 bytes) cannot hold: ceph-service-<cluster>-mgmt-gateway alone exceeds a 16-byte prefix budget.
+
+**Recommendation.** Fix together with F04-11: this entry carries the Medium consequence, and F04-11's uniform 47-byte recommendation must change, because this case shows it cannot hold. Smallest change, choose one: (a) state one unconditional StorageCluster metadata.name limit (26 or less) once in the StorageCluster API page and drop the four per-service caps in storage.md and storage-native-api.md, linking to it; or (b) preferred for operators, adopt one block-identity rule in the state-reconciliation identity section: a derived block identity that would exceed 63 characters replaces its overflowing reference segment with a fixed-length hash token, following the existing nvmeof service-token precedent (specs/storage.md:1495-1498), so public name limits stop varying with internal prefixes. Either way no kind's name limit may depend on which child services or fields it declares.
+
+**Acceptance.** A grep of specs/ finds no StorageCluster name limit conditioned on a declared service (no 'longer than 39/37/44' or 'at most 26' service-scoped caps); exactly one StorageCluster name rule exists (or one block-identity hashing rule) and the per-service sections link to it; the fix for F04-11 no longer prescribes a uniform 47-byte limit with 16-byte prefixes.
+
+**Decision check.** Searched specs/milestones (backlog decisions, m1-m4) for a decision fixing StorageCluster or block-identity name limits: none. D162 (IBM Storage Ceph release wave) and D163 (no component version rules) concern versions and do not apply. 17acb63d9 did not change the cited lines. B491 (crash block removal) is unrelated to naming.
+
+Verification: refuter real, medium confidence, severity Medium; calibrator real, high confidence, severity Medium; no arbitration needed.
 
 #### S6: Architecture and specialization
 
@@ -3136,15 +3538,17 @@ Kind: contradiction; Area: Coverage contracts / version policy; Status: confirme
 
 Files: `specs/storage-coverage.md:5-7, 150-158, 258-262, 419-422`; `specs/storage-resources.md:87-88`; `specs/milestones/m2.md:6-14, 124, 1277-1290`; `specs/storage-api-review.md:358`; `specs/milestones/backlog.md:3473-3478, 3612-3622`
 
-**Evidence.** storage-coverage.md:5-7 "Each row below is required when supported by the frozen IBM release; an unqualified feature is refused before effects". storage-coverage.md:150-151 "the release record names ... support status (supported, preview, deprecated or unsupported)". storage-coverage.md:420-422 "The release-specific flash, failure-domain, network/latency and capacity prerequisites are admission and live-preflight gates." storage-coverage.md:261-262 "An AMD CPU with AVX-512 is not accepted until B480 records IBM's position." storage-resources.md:87 "Release support, numeric/native limits and graph capacity are checked before effects." m2.md:10-11 "M2 supports all IBM-supported cluster sizes for the qualified release". storage-api-review.md:358 "iSCSI remains conditional on IBM support." Against: backlog.md:3474 (D159 clause 15) "claims or cites a vendor support status or a release"; backlog.md:3612-3616 (D163) "registers and enforces no component version rule"; storage-coverage.md:186 "Bootwright records no vendor support status for it".
+**Evidence.** specs/storage-coverage.md:5-7 "Each row below is required when supported by the frozen IBM release; an unqualified feature is refused before effects". specs/storage-coverage.md:150-151 "the release record names ... support status (supported, preview, deprecated or unsupported)". specs/storage-coverage.md:420-422 "The release-specific flash, failure-domain, network/latency and capacity prerequisites are admission and live-preflight gates." specs/storage-coverage.md:261-262 "An AMD CPU with AVX-512 is not accepted until B480 records IBM's position." specs/storage-resources.md:87 "Release support, numeric/native limits and graph capacity are checked before effects." specs/milestones/m2.md:10-11 "M2 supports all IBM-supported cluster sizes for the qualified release". specs/storage-api-review.md:358 "iSCSI remains conditional on IBM support." Against: specs/milestones/backlog.md:3474 (D159 clause 15) "claims or cites a vendor support status or a release"; specs/milestones/backlog.md:3612-3616 (D163) "registers and enforces no component version rule"; specs/storage-coverage.md:186 "Bootwright records no vendor support status for it".
 
 **Consequence.** An agent implementing B472, B484 or a new family reads the owning coverage page and builds a support-status record, release-conditional admission gates or a CPU-vendor refusal, re-introducing the catalog the owner removed; B484's exit ("no unrun supported row") cannot be decided because Bootwright may not keep the vendor table that defines "supported". Adding Red Hat or open-source Ceph inherits IBM-conditional wording.
 
-**Recommendation.** Redefine a coverage row as "a capability Bootwright realizes" and replace every "IBM-supported", "provider-supported", "release-qualified" and "support status" clause in storage-coverage.md, storage-resources.md, storage-native-api.md, storage.md and m2.md with that meaning; delete the support-status record clause (150-158) and the AMD gate; restate stretch prerequisites as native-tool judgement reported through nativeError; drop "Release support" from storage-resources.md:87; fix the iSCSI line per D176. Add a docs-check lint that refuses those phrases in specs outside backlog.md and delivered.md.
+**Counterevidence.** The contradiction lives in spec text only. No code under internal, cmd or ansible holds a support-status record or an AVX-512 gate. B472 already says D157 replaces release admission and "must not restore a release catalog or compatibility refusal" (specs/milestones/m2.md:752-756). The same coverage page also bases size on what native tools accept (specs/storage-coverage.md:160-161), and its iSCSI row records no vendor support status (specs/storage-coverage.md:186).
+
+**Recommendation.** Redefine a coverage row as "a capability Bootwright realizes" and replace every "IBM-supported", "provider-supported", "release-qualified" and "support status" clause in storage-coverage.md, storage-resources.md, storage-native-api.md, storage.md and m2.md with that meaning; delete the support-status record clause (150-158) and the AMD gate; restate stretch prerequisites as native-tool judgement reported through nativeError; drop "Release support" from specs/storage-resources.md:87; fix the iSCSI line per D176. Add a docs-check lint that refuses those phrases in specs outside backlog.md and delivered.md.
 
 Verifier notes:
 
-- [refuter] Keep the recommendation; note B472 (m2.md:752-756) already states the intent, so the fix is aligning storage-coverage.md/m2.md/storage-resources.md/storage-api-review.md:38,358 to it. Distinguish native-tool-reported limits (keep, reported via native error) from vendor-table gates (remove). The lint is optional; the AMD clause needs an owner call only if a non-vendor-table basis exists.
+- [refuter] Keep the recommendation; note B472 (specs/milestones/m2.md:752-756) already states the intent, so the fix is aligning specs/storage-coverage.md, specs/milestones/m2.md, specs/storage-resources.md and specs/storage-api-review.md:38, 358 to it. Distinguish native-tool-reported limits (keep, reported via native error) from vendor-table gates (remove). The lint is optional; the AMD clause needs an owner call o…
 - [calibrator] Acknowledge D129/D130 wording ('IBM supports') and state that D157/D163 supersede it, or route that reconciliation to the owner. Keep the rewrite but make the acceptance grep allow negative statements ('records no vendor support status') and decision-history rows (m2.md OD table), e.g. grep for affirmative gate phrases only. Make the docs-check lint optional follow-up (record as a backlog item) rather t…
 
 **Acceptance.** grep -rniE 'IBM-supported|provider-supported|release-qualified|support status|Release support' specs --include=*.md, excluding milestones/backlog.md and milestones/delivered.md, returns nothing; B484's exit names a finite list of Bootwright-realized rows; make docs-check fails on a reintroduced phrase.
@@ -3159,7 +3563,7 @@ Kind: gap; Area: Architecture: generic flow and specialization; Status: confirme
 
 Files: `specs/architecture.md:336-342, 539-544, 940-950`; `specs/state-reconciliation.md:1014-1027`; `specs/substrates.md:16-17`; `internal/reconciliation/lifecycle/planning.go:75-100`; `cmd/bootwright/wiring_reconciliation.go:96-122`; `specs/architecture.md:539-548, 942-950`; `internal/reconciliation/lifecycle/planning.go:75-98`; `internal/reconciliation/lifecycle/support.go:72-91`; `internal/storage/ceph/capability.go:247-258`; `internal/infrastructureservices/managedservice/selection.go:129-138`; `cmd/bootwright/wiring_reconciliation.go:232-234`; `specs/architecture.md:940-951`; `internal/reconciliation/lifecycle/support.go:72-97`; `internal/reconciliation/lifecycle/planning.go:381-397`; `internal/substrate/target.go:22-28`; `internal/substrate/libvirt/selection.go:21-25`; `cmd/bootwright/wiring_reconciliation.go:94-96`
 
-**Evidence.** specs/architecture.md:942-945: 'An allowlisted registry resolves from explicit validated state: resolution is deterministic and produces exactly one implementation; no match or more than one match fails'. specs/state-reconciliation.md:1015-1016: 'Go deterministically resolves exactly one matching implementation and freezes its identity'. Neither page states the selection key. specs/architecture.md:540-541 keys the resolver 'by the API kind and the resolved implementation identity', i.e. after selection. internal/reconciliation/lifecycle/planning.go:91-95 iterates every binding and calls 'capability.Plan(ctx, input)' on the whole state, so each capability decides which objects it claims in its own selection.go. specs/substrates.md:16-17: 'one implementation per substrate arm, so a block resolves by kind and implementation together' is the only per-domain statement of a key. Also reported as F18-01: specs/architecture.md:944-945 "resolution is deterministic and produces exactly one implementation; no match or more than one match fails before output publication or effects". internal/reconciliation/lifecycle/planning.go:75 "planFrom asks every resolvable capability for its blocks." support.go:78 skips a kind once any binding claims it: "if slices.Contains(claimed, string(kind)) { continue }". internal/storage/ceph/capability.go:252-258 iterates every StorageCluster and reads cluster.Spec().Get("ceph") without checking spec.type. managedservice/selection.go:133 filters on management only, ignoring the authored spec.implementation. wiring_reconciliation.go:232-234 binds every storage kind to ceph.Implementation. Also reported as F07-05: specs/architecture.md:944-945: "resolution is deterministic and produces exactly one implementation; no match or more than one match fails before output publication or effects". lifecycle/support.go:77-78 skips any kind that has a binding: "for _, kind := range effectKinds() { if slices.Contains(claimed, string(kind)) { continue". target.go:28: "func Realized() []string { return []string{ArmBaremetal, ArmLibvirt} }". libvirt/selection.go:23: "for _, unrealized := range substrate.Unrealizable(catalog)". wiring_reconciliation.go:95: "There is no registry, discovery or runtime plugin path."
+**Evidence.** specs/architecture.md:942-945: 'An allowlisted registry resolves from explicit validated state: resolution is deterministic and produces exactly one implementation; no match or more than one match fails'. specs/state-reconciliation.md:1015-1016: 'Go deterministically resolves exactly one matching implementation and freezes its identity'. Neither page states the selection key. specs/architecture.md:540-541 keys the resolver 'by the API kind and the resolved implementation identity', i.e. after selection. internal/reconciliation/lifecycle/planning.go:91-95 iterates every binding and calls 'capability.Plan(ctx, input)' on the whole state, so each capability decides which objects it claims in its own selection.go. specs/substrates.md:16-17: 'one implementation per substrate arm, so a block resolves by kind and implementation together' is the only per-domain statement of a key. Also reported as F18-01: specs/architecture.md:944-945 "resolution is deterministic and produces exactly one implementation; no match or more than one match fails before output publication or effects". internal/reconciliation/lifecycle/planning.go:75 "planFrom asks every resolvable capability for its blocks." internal/reconciliation/lifecycle/support.go:78 skips a kind once any binding claims it: "if slices.Contains(claimed, string(kind)) { continue }". internal/storage/ceph/capability.go:252-258 iterates every StorageCluster and reads cluster.Spec().Get("ceph") without checking spec.type. managedservice/selection.go:133 filters on management only, ignoring the authored spec.implementation. cmd/bootwright/wiring_reconciliation.go:232-234 binds every storage kind to ceph.Implementation. Also reported as F07-05: specs/architecture.md:944-945: "resolution is deterministic and produces exactly one implementation; no match or more than one match fails before output publication or effects". lifecycle/support.go:77-78 skips any kind that has a binding: "for _, kind := range effectKinds() { if slices.Contains(claimed, string(kind)) { continue". internal/substrate/target.go:28: "func Realized() []string { return []string{ArmBaremetal, ArmLibvirt} }". libvirt/selection.go:23: "for _, unrealized := range substrate.Unrealizable(catalog)". cmd/bootwright/wiring_reconciliation.go:95: "There is no registry, discovery or runtime plugin path."
 
 **Consequence.** Determinism and 'exactly one' rest on private selection code in each capability. A second implementation of an existing kind (vSphere machine beside libvirt; a second cluster distribution beside agentinstall) can silently claim the same object, or leave a shape claimed by none that only the kind-level unclaimed refusal catches if no implementation of the kind exists. Overlap is detected, if at all, only by an incidental block-identity collision, which is not a specified rule. Agents adding an implementation have no declared table to extend.
 
@@ -3172,7 +3576,7 @@ Verifier notes:
 
 **Acceptance.** architecture.md names the selection key and the overlap/gap refusal; each domain spec has a selector-to-implementation table; a test drives every admitted example and a synthetic overlapping double binding and sees the overlap refused with a lifecycle diagnostic naming both implementations.
 
-**Decision check.** Checked D1 (substrate owns machine port), D153 clause (3) (seams only with a present consumer: the claim function has a present consumer, the engine) and D162/D163 (unaffected: selection of implementation, not of versions). No decision conflicts; architecture.md:942-950 already demands the property.
+**Decision check.** Checked D1 (substrate owns machine port), D153 clause (3) (seams only with a present consumer: the claim function has a present consumer, the engine) and D162/D163 (unaffected: selection of implementation, not of versions). No decision conflicts; specs/architecture.md:942-950 already demands the property.
 
 Verification: refuter real, medium confidence, severity Medium; calibrator real, medium confidence, severity Medium; no arbitration needed.
 
@@ -3182,7 +3586,7 @@ Kind: gap; Area: Architecture verification; Status: confirmed-by-arbitration; Pr
 
 Files: `specs/architecture.md:339-342, 543-544, 949-950, 989-1009`; `test/architecture/version_specializations_test.go:12-18`; `internal/containercluster/agentinstall/pushed.go:15`; `specs/architecture.md:993-996,949-951`; `test/architecture/boundaries_test.go:19-28,112-185`; `test/architecture/composition_rules_test.go:47-117`; `internal/cli/lifecycle_actions.go:17-56`
 
-**Evidence.** specs/architecture.md:949-950: 'application and domain policy never branch on concrete implementation identity to reproduce adapter mechanics.' The qualifier 'to reproduce adapter mechanics' needs intent judgment. specs/architecture.md:543-544: 'application policy never switches on a concrete implementation' (no domain clause). The verification list (architecture.md:994-1009) checks imports, concrete types and registry content, but names no check on identity or arm literals. internal/containercluster/agentinstall/pushed.go:15 compares node arms with 'substrate.ArmKubeVirt' inside an application package. Also reported as F07-06: specs/architecture.md:995: "no direct adapter-to-adapter calls or domain vendor/I/O leaks." :949-950: "application and domain policy never branch on concrete implementation identity". boundaries_test.go checks package roles, imports and effect grants. composition_rules_test.go explicitly allows "pure function injection" and "value constructor", so `libvirt.MachineImplementation` and `baremetal.PinnedIdentity` pass. internal/cli/lifecycle_actions.go:35: "case \"machine-libvirt-v1\":" is an unchecked literal.
+**Evidence.** specs/architecture.md:949-950: 'application and domain policy never branch on concrete implementation identity to reproduce adapter mechanics.' The qualifier 'to reproduce adapter mechanics' needs intent judgment. specs/architecture.md:543-544: 'application policy never switches on a concrete implementation' (no domain clause). The verification list (specs/architecture.md:994-1009) checks imports, concrete types and registry content, but names no check on identity or arm literals. internal/containercluster/agentinstall/pushed.go:15 compares node arms with 'substrate.ArmKubeVirt' inside an application package. Also reported as F07-06: specs/architecture.md:995: "no direct adapter-to-adapter calls or domain vendor/I/O leaks." :949-950: "application and domain policy never branch on concrete implementation identity". boundaries_test.go checks package roles, imports and effect grants. composition_rules_test.go explicitly allows "pure function injection" and "value constructor", so `libvirt.MachineImplementation` and `baremetal.PinnedIdentity` pass. internal/cli/lifecycle_actions.go:35: "case \"machine-libvirt-v1\":" is an unchecked literal.
 
 **Consequence.** The core guarantee the owner asks for (general code never knows which implementation runs) is review-only. Import-direction tests pass while application and domain packages compare implementation or arm identities, so leakage accumulates silently with each new arm or distribution.
 
@@ -3190,12 +3594,12 @@ Files: `specs/architecture.md:339-342, 543-544, 949-950, 989-1009`; `test/archit
 
 Verifier notes:
 
-- [refuter] Drop or reframe: 'containercluster admission and media selection key on substrate arm literals (pushed.go:15, pushed_admission.go:14,35, selection.go:116) rather than a substrate-declared delivery capability; a new push-only arm must edit containercluster.' Medium design finding; the fix is a substrate capability query, not a ban on arm constants.
+- [refuter] Drop or reframe: 'containercluster admission and media selection key on substrate arm literals (internal/containercluster/agentinstall/pushed.go:15, pushed_admission.go:14,35, selection.go:116) rather than a substrate-declared delivery capability; a new push-only arm must edit containercluster.' Medium design finding; the fix is a substrate capability query, not a ban on arm constants.
 - [calibrator] Downgrade to Medium. Restate the rule as: outside the owning implementation or substrate package and composition, production code reaches implementation or arm specifics only through a capability the owner publishes (for example, the substrate declares a node's media delivery mode); the owning domain's support-matrix admission refusals are the only named exception. Add one fitness test that rejects Arm*…
 
 **Acceptance.** architecture.md carries the unqualified rule and names the test; the test fails on a fixture comparing an implementation identity in an application package; the allowlist exists, is exact and only shrinks. Arbiter acceptance: architecture.md names the test; the test fails on a fixture comparing substrate.ArmKubeVirt in a non-allowlisted containercluster file; the allowlist is exact and only shrinks.
 
-**Decision check.** Consistent with architecture.md:1042-1045 (exact allowlists that only shrink) and secrets.md:48-50 precedent. No D-decision exempts domains from this rule. D153 (3) satisfied: the test has a present consumer.
+**Decision check.** Consistent with specs/architecture.md:1042-1045 (exact allowlists that only shrink) and secrets.md:48-50 precedent. No D-decision exempts domains from this rule. D153 (3) satisfied: the test has a present consumer.
 
 Verification: refuter not real, medium confidence, severity Low; calibrator real, medium confidence, severity Medium; arbiter real, severity Medium.
 
@@ -3205,7 +3609,7 @@ Kind: gap; Area: Architecture: extension procedure; Status: confirmed; Proposed 
 
 Files: `specs/architecture.md:395-425, 940-950`; `specs/project.md:57-62`; `specs/architecture.md:380-425`; `specs/api.md:260-275`
 
-**Evidence.** specs/architecture.md:404-422 'Adding a lifecycle capability' lists: create the package, packageRoles, applicationValues, 'add its boundCapability to buildCapabilities', playbooks, optional Projector. Nothing addresses a new arm, distribution or provider of an existing kind: refusal tables naming unsupported arms (substrates.md:89-90), consumer dispatch, selection rows, observable-field rows, examples. A repository-wide search finds no 'adding an implementation' procedure; the only hint is substrates.md:37-38 'a substrate added later supplies those entry points to every consumer'. Also reported as F18-08: specs/architecture.md:394-425 defines only "Adding a command" and "Adding a lifecycle capability". api.md:262 "The v1alpha1 catalog contains exactly 33 authored kinds". A search of specs/ and .agents/skills for 'new kind', 'adding an arm' or 'added later' finds only substrates.md:37.
+**Evidence.** specs/architecture.md:404-422 'Adding a lifecycle capability' lists: create the package, packageRoles, applicationValues, 'add its boundCapability to buildCapabilities', playbooks, optional Projector. Nothing addresses a new arm, distribution or provider of an existing kind: refusal tables naming unsupported arms (substrates.md:89-90), consumer dispatch, selection rows, observable-field rows, examples. A repository-wide search finds no 'adding an implementation' procedure; the only hint is substrates.md:37-38 'a substrate added later supplies those entry points to every consumer'. Also reported as F18-08: specs/architecture.md:394-425 defines only "Adding a command" and "Adding a lifecycle capability". specs/api.md:262 "The v1alpha1 catalog contains exactly 33 authored kinds". A search of specs/ and .agents/skills for 'new kind', 'adding an arm' or 'added later' finds only substrates.md:37.
 
 **Consequence.** Adding vSphere, vanilla Kubernetes, NetApp or a second NTP implementation has no defined touch set, no budget and no test that the touch set is minimal; agents will discover the scattered edits by trial, and reviewers cannot tell an over-reaching change from a necessary one.
 
@@ -3213,12 +3617,12 @@ Files: `specs/architecture.md:395-425, 940-950`; `specs/project.md:57-62`; `spec
 
 Verifier notes:
 
-- [refuter] Keep the recommendation but anchor it in the existing 'Implementations and version variation' section next to the registry rules and reference the existing shared port suites (architecture.md:1005-1008) as the contract-suite step; avoid prescribing selector names for domains that have no second implementation yet (project.md 'abstractions only for real consumers').
-- [calibrator] Lower to Medium. Replace 'the seam lands first in its own change' with 'the seam lands in the same slice as its first consumer, as a separate reviewed step' to honor project.md:87-88. Keep acceptance to: section exists beside 'Adding a lifecycle capability', lists the touch set with the guarding tests per step; drop the requirement that every family domain names its selector and contract suite (broader…
+- [refuter] Keep the recommendation but anchor it in the existing 'Implementations and version variation' section next to the registry rules and reference the existing shared port suites (specs/architecture.md:1005-1008) as the contract-suite step; avoid prescribing selector names for domains that have no second implementation yet (project.md 'abstractions only for real consumers').
+- [calibrator] Lower to Medium. Replace 'the seam lands first in its own change' with 'the seam lands in the same slice as its first consumer, as a separate reviewed step' to honor specs/project.md:87-88. Keep acceptance to: section exists beside 'Adding a lifecycle capability', lists the touch set with the guarding tests per step; drop the requirement that every family domain names its selector and contract suite (br…
 
 **Acceptance.** The section exists with a touch list; each family domain (substrate, container cluster, storage, infrastructure service) names its selector and contract suite; a review can check a new-implementation diff against the list.
 
-**Decision check.** D153 (3) ('builds only seams with a present consumer') and project.md:87 are compatible if the seam is added with its first consumer (see F06-06). D162/D163 do not apply. No conflicting decision found.
+**Decision check.** D153 (3) ('builds only seams with a present consumer') and specs/project.md:87 are compatible if the seam is added with its first consumer (see F06-06). D162/D163 do not apply. No conflicting decision found.
 
 Verification: refuter real, high confidence, severity Medium; calibrator real, high confidence, severity Medium; no arbitration needed.
 
@@ -3232,16 +3636,16 @@ Files: `specs/architecture.md:126-162, 553-557`; `cmd/bootwright/wiring_reconcil
 
 **Consequence.** Managed OS installation depends at composition on one storage implementation's function and on another capability's block-identity grammar. A second host-based storage implementation, or a second physical substrate, requires editing these bindings and the single-function port, and the spec gives no aggregation rule.
 
-**Recommendation.** Either declare these as named exceptions with their bound, or (preferred) specify a fan-in port: the consumer owns 'RetirementPolicies' as a list contributed by every bound storage implementation, aggregated in composition, and replace the block-ID reader with a requirement-based dependency the engine resolves as architecture.md:553-557 states.
+**Recommendation.** Either declare these as named exceptions with their bound, or (preferred) specify a fan-in port: the consumer owns 'RetirementPolicies' as a list contributed by every bound storage implementation, aggregated in composition, and replace the block-ID reader with a requirement-based dependency the engine resolves as specs/architecture.md:553-557 states.
 
 Verifier notes:
 
 - [refuter] Prefer the second option: express the claim and retirement dependencies as requirements (kind+object) resolved by Reconciliation per state-reconciliation.md:781-787, which removes both Managed OS bindings and Ceph's baremetal.BlockID binding; do not add a named exception that contradicts that clause. Acceptance should include the Ceph physical-retirement WithClaims binding.
-- [calibrator] Drop the 'declare as named exceptions' option for the retirement policy: a consumer-owned function port is already sanctioned (architecture.md:100-101); instead specify the fan-in rule (Managed OS owns the retirement-policy port; composition aggregates every bound storage implementation's contribution). For block identities, choose one: route the claim through Reconciliation's API-object dependency reso…
+- [calibrator] Drop the 'declare as named exceptions' option for the retirement policy: a consumer-owned function port is already sanctioned (specs/architecture.md:100-101); instead specify the fan-in rule (Managed OS owns the retirement-policy port; composition aggregates every bound storage implementation's contribution). For block identities, choose one: route the claim through Reconciliation's API-object dependenc…
 
 **Acceptance.** architecture.md either lists both bindings under named exceptions or defines the fan-in port rule; storage.md and managed-os.md name the port; a composition test fails when a capability receives another package's BlockID function.
 
-**Decision check.** D124 (keeper custody) and D1 checked: neither authorizes cross-capability block-identity knowledge. The recommendation preserves architecture.md:553-557 as written.
+**Decision check.** D124 (keeper custody) and D1 checked: neither authorizes cross-capability block-identity knowledge. The recommendation preserves specs/architecture.md:553-557 as written.
 
 Verification: refuter real, high confidence, severity Medium; calibrator real, medium confidence, severity Medium; no arbitration needed.
 
@@ -3251,7 +3655,7 @@ Kind: contradiction; Area: Version specialization; Status: confirmed.
 
 Files: `specs/architecture.md:919-927`; `.agents/knowledge/version-specializations.md:85-93`; `internal/containercluster/topology.go:41-60`; `test/architecture/version_specializations_test.go:29-30`; `specs/milestones/backlog.md:3593-3598`
 
-**Evidence.** specs/architecture.md:924-925: 'A release label or a tag never keys a specialization.' Facts come from 'the bytes of the operation's frozen, authenticated artifacts' (921-922). D162(c), backlog.md:3593-3596: 'per-minor specializations only where an installer differs'. internal/containercluster/topology.go:41 'func topologyFor(version string)' runs in admission on the authored version; the fitness test expects 'var topologyOverrides = map[string]releaseTopology{' keyed by string.
+**Evidence.** specs/architecture.md:924-925: 'A release label or a tag never keys a specialization.' Facts come from 'the bytes of the operation's frozen, authenticated artifacts' (921-922). D162(c), specs/milestones/backlog.md:3593-3596: 'per-minor specializations only where an installer differs'. internal/containercluster/topology.go:41 'func topologyFor(version string)' runs in admission on the authored version; the fitness test expects 'var topologyOverrides = map[string]releaseTopology{' keyed by string.
 
 **Consequence.** The first per-minor installer difference will be encoded as a release-label key in admission, either violating the architecture rule or forcing an ad hoc exception; admission has no frozen artifact from which a compliant fact could be derived.
 
@@ -3274,7 +3678,7 @@ Kind: gap; Area: Version specialization; Status: confirmed-by-arbitration.
 
 Files: `.agents/knowledge/version-specializations.md:95-109, 56-65`; `specs/architecture.md:912-938`; `specs/milestones/backlog.md:3580-3583`
 
-**Evidence.** .agents/knowledge/version-specializations.md:99-101: 'A refusal seam is one whose variants change which intents the adapter admits; a record may add a pre-effect refusal there'. Line 63: '`enabled` refuses `call-home-unqualified`'. D162(a), backlog.md:3581-3582: 'It never approves, screens, refuses, selects or substitutes a version or an artifact.' specs/architecture.md:912-938 never mentions refusal seams; it says only that a specialization 'never removes a trust refusal'.
+**Evidence.** .agents/knowledge/version-specializations.md:99-101: 'A refusal seam is one whose variants change which intents the adapter admits; a record may add a pre-effect refusal there'. Line 63: '`enabled` refuses `call-home-unqualified`'. D162(a), specs/milestones/backlog.md:3581-3582: 'It never approves, screens, refuses, selects or substitutes a version or an artifact.' specs/architecture.md:912-938 never mentions refusal seams; it says only that a specialization 'never removes a trust refusal'.
 
 **Consequence.** A behavioral rule (when a specialization may refuse operator intent) lives in a knowledge page that by AGENTS.md owns lessons, not behavior; agents may add refusals per build believing them allowed, or reject legitimate ones believing D162 forbids them.
 
@@ -3318,22 +3722,22 @@ Verification: refuter real, medium confidence, severity Medium; calibrator real,
 
 Kind: contradiction; Area: Architecture: substrate machine port and its consumers; Status: confirmed-by-arbitration; Proposed severity: High; Also raised as: F06-02, F07-01, F07-02, F07-04.
 
-Files: `specs/substrates.md:31-38`; `specs/milestones/m1.md:525-527`; `internal/substrate/target.go:114-115`; `ansible/collections/ansible_collections/bootwright/core/roles/managedos_install_anaconda/defaults/main.yml:261-299`; `ansible/collections/ansible_collections/bootwright/core/roles/managedos_install_anaconda/tasks/identity.yml:8-45`; `ansible/collections/ansible_collections/bootwright/core/roles/containercluster_install_agent/defaults/main.yml:113-129`; `internal/managedos/installation/install_interface.go:38, 173, 223-230`; `specs/substrates.md:30-38, 963-977`; `specs/architecture.md:739-748`; `specs/container-clusters.md:12-18`; `specs/managed-os.md:1427-1440`; `ansible/collections/ansible_collections/bootwright/core/roles/containercluster_install_agent/defaults/main.yml:113-125`; `internal/storage/devices.go:62-65`; `internal/containercluster/admission.go:645-660`; `specs/milestones/m1.md:465-468`; `internal/substrate/target.go:113-118`; `cmd/bootwright/wiring_machine.go:317-341`; `cmd/bootwright/wiring_reconciliation.go:214-221,329-354`; `specs/architecture.md:293-298`; `ansible/collections/ansible_collections/bootwright/core/roles/managedos_install_anaconda/tasks/identity.yml:1-35`; `ansible/collections/ansible_collections/bootwright/core/roles/containercluster_install_agent/defaults/main.yml:112-118`; `ansible/collections/ansible_collections/bootwright/core/roles/machine_power_redfish/defaults/main.yml:30-40`; `specs/architecture.md:115-121,733-740`; `specs/substrates.md:960-976`; `internal/machine/admission.go:490-496,870-873`; `internal/machine/placement.go:129-132`; `internal/controller/selection.go:145-190`; `internal/containercluster/endpoint_ownership.go:40-47`; `internal/containercluster/agentinstall/encryption.go:60-66`; `internal/machine/power/batch.go:79-83`; `specs/architecture.md:51,54`
+Files: `specs/substrates.md:31-38`; `specs/milestones/m1.md:525-527`; `internal/substrate/target.go:114-115`; `ansible/collections/ansible_collections/bootwright/core/roles/managedos_install_anaconda/defaults/main.yml:261-299`; `ansible/collections/ansible_collections/bootwright/core/roles/managedos_install_anaconda/tasks/identity.yml:8-45`; `ansible/collections/ansible_collections/bootwright/core/roles/containercluster_install_agent/defaults/main.yml:113-129`; `internal/managedos/installation/install_interface.go:38, 173, 223-230`; `specs/substrates.md:30-38, 963-977`; `specs/architecture.md:739-748`; `specs/container-clusters.md:12-18`; `specs/managed-os.md:1427-1440`; `ansible/collections/ansible_collections/bootwright/core/roles/containercluster_install_agent/defaults/main.yml:113-125`; `internal/storage/devices.go:62-65`; `internal/containercluster/admission.go:645-660`; `specs/milestones/m1.md:465-468`; `internal/substrate/target.go:113-118`; `cmd/bootwright/wiring_machine.go:168-177`; `cmd/bootwright/wiring_reconciliation.go:214-221,329-354`; `specs/architecture.md:293-298`; `ansible/collections/ansible_collections/bootwright/core/roles/managedos_install_anaconda/tasks/identity.yml:1-35`; `ansible/collections/ansible_collections/bootwright/core/roles/containercluster_install_agent/defaults/main.yml:112-118`; `ansible/collections/ansible_collections/bootwright/core/roles/machine_power_redfish/defaults/main.yml:30-40`; `specs/architecture.md:115-121,733-740`; `specs/substrates.md:960-976`; `internal/machine/admission.go:490-496,870-873`; `internal/machine/placement.go:129-132`; `internal/controller/selection.go:145-190`; `internal/containercluster/endpoint_ownership.go:40-47`; `internal/containercluster/agentinstall/encryption.go:60-66`; `internal/machine/power/batch.go:79-83`; `specs/architecture.md:51,54`
 
-**Evidence.** specs/milestones/m1.md:525-527 "An arm is a capability package plus one case of the target derivation, and no consumer of a realized Machine changes". target.go:114 "Consumers read this and name no substrate, so an arm added later reaches every one of them". In practice managedos_install_anaconda/defaults/main.yml:261-299 holds eight tables keyed libvirt/baremetal. identity.yml passes arm-specific variables such as substrate_libvirt_machine_identity_uri. install_interface.go:38 sets "Libvirt: derived.Substrate == substrate.ArmLibvirt" and :229 reads the provider's libvirt attachment. Also reported as F06-02: specs/substrates.md:973-975: 'A consumer selects among them by the frozen arm through one dispatch table per entry point ... and a substrate supplies them'. specs/substrates.md:37-38: 'a substrate added later supplies those entry points to every consumer that dispatches on it'. specs/architecture.md:744-746: 'A consumer of a realized Machine dispatches on the substrate arm or identity channel Go froze into its request'. The managed-OS role defaults carry per-entry-point maps 'libvirt: bootwright.core.substrate_libvirt_machine' / 'baremetal: ...' (main.yml:261-299); the cluster install role repeats them (main.yml:113-125). Go consumers switch on arm names: internal/storage/devices.go:65 'for _, variant := range []string{"libvirt", "vsphere", "kubevirt"}', containercluster/admission.go:645 'case "baremetal", "libvirt":'; 22 substrate.Arm* uses sit outside internal/substrate. Also reported as F07-01: specs/milestones/m1.md:466-468: "An arm is a capability package plus one case of the target derivation, and no consumer of a realized Machine changes." internal/substrate/target.go:114: "Consumers read this and name no substrate, so an arm added later reaches every one of them". The composition does otherwise. cmd/bootwright/wiring_machine.go:332-337: "realizationOf picks the libvirt machine block ... if block.Implementation == libvirt.MachineImplementation". cmd/bootwright/wiring_reconciliation.go:336: "return libvirt.ProvedDataDisk(block, evidence, path, serial, size, rotational)"; :352: "baremetal.ProvedPresence(block, evidence)"; :218: "installation.NewErase(runner).WithClaims(baremetal.BlockID)". The identities translators (wiring_machine.go:374-399) decode only baremetal.Kind. Also reported as F07-02: specs/architecture.md:118-119: "callers depend on the capability contract, not private tasks, variables, or implementation-specific result shapes." :737: "bound by the selected entrypoint, rather than discovered by a consumer role." But managedos_install_anaconda/defaults/main.yml:274-276: "managedos_install_anaconda_port_result: libvirt: substrate_libvirt_machine_port_result baremetal: substrate_baremetal_machine_port_result". identity.yml:10-14: "name: bootwright.core.substrate_libvirt_machine ... substrate_libvirt_machine_identity_uri:". specs/substrates.md:973: "A consumer selects among them by the frozen arm through one dispatch table per entry point". Also reported as F07-04: specs/architecture.md:51 says the Machine context does not own "Provider mechanics", and :54 says Container cluster does not own "Machine, substrate". Yet internal/machine/admission.go:492: "attachment.Get(\"libvirt\", \"management\").Text() != \"managed\""; containercluster/agentinstall/encryption.go:65: "provider.Spec().Get(\"libvirt\", \"machineProfiles\").Items()"; machine/power/batch.go:82: "arm = \"baremetal\"". A grep for arm reads outside internal/substrate lists 20 files across machine, controller, containercluster, managedos, storage and environment.
+**Evidence.** specs/milestones/m1.md:525-527 "An arm is a capability package plus one case of the target derivation, and no consumer of a realized Machine changes". internal/substrate/target.go:114 "Consumers read this and name no substrate, so an arm added later reaches every one of them". In practice managedos_install_anaconda/defaults/main.yml:261-299 holds eight tables keyed libvirt/baremetal. identity.yml passes arm-specific variables such as substrate_libvirt_machine_identity_uri. internal/managedos/installation/install_interface.go:38 sets "Libvirt: derived.Substrate == substrate.ArmLibvirt" and :229 reads the provider's libvirt attachment. Also reported as F06-02: specs/substrates.md:973-975: 'A consumer selects among them by the frozen arm through one dispatch table per entry point ... and a substrate supplies them'. specs/substrates.md:37-38: 'a substrate added later supplies those entry points to every consumer that dispatches on it'. specs/architecture.md:744-746: 'A consumer of a realized Machine dispatches on the substrate arm or identity channel Go froze into its request'. The managed-OS role defaults carry per-entry-point maps 'libvirt: bootwright.core.substrate_libvirt_machine' / 'baremetal: ...' (main.yml:261-299); the cluster install role repeats them (main.yml:113-125). Go consumers switch on arm names: internal/storage/devices.go:65 'for _, variant := range []string{"libvirt", "vsphere", "kubevirt"}', containercluster/admission.go:645 'case "baremetal", "libvirt":'; 22 substrate.Arm* uses sit outside internal/substrate. Also reported as F07-01: specs/milestones/m1.md:466-468: "An arm is a capability package plus one case of the target derivation, and no consumer of a realized Machine changes." internal/substrate/target.go:114: "Consumers read this and name no substrate, so an arm added later reaches every one of them". The composition does otherwise. cmd/bootwright/wiring_machine.go:168-177: "realizationOf picks the libvirt machine block ... if block.Implementation == libvirt.MachineImplementation". cmd/bootwright/wiring_reconciliation.go:336: "return libvirt.ProvedDataDisk(block, evidence, path, serial, size, rotational)"; :352: "baremetal.ProvedPresence(block, evidence)"; :218: "installation.NewErase(runner).WithClaims(baremetal.BlockID)". The identities translators (cmd/bootwright/wiring_machine.go:206-235) decode only baremetal.Kind. Also reported as F07-02: specs/architecture.md:118-119: "callers depend on the capability contract, not private tasks, variables, or implementation-specific result shapes." :737: "bound by the selected entrypoint, rather than discovered by a consumer role." But managedos_install_anaconda/defaults/main.yml:274-276: "managedos_install_anaconda_port_result: libvirt: substrate_libvirt_machine_port_result baremetal: substrate_baremetal_machine_port_result". ansible/collections/ansible_collections/bootwright/core/roles/managedos_install_anaconda/tasks/identity.yml:10-14: "name: bootwright.core.substrate_libvirt_machine ... substrate_libvirt_machine_identity_uri:". specs/substrates.md:973: "A consumer selects among them by the frozen arm through one dispatch table per entry point". Also reported as F07-04: specs/architecture.md:51 says the Machine context does not own "Provider mechanics", and :54 says Container cluster does not own "Machine, substrate". Yet internal/machine/admission.go:492: "attachment.Get(\"libvirt\", \"management\").Text() != \"managed\""; containercluster/agentinstall/encryption.go:65: "provider.Spec().Get(\"libvirt\", \"machineProfiles\").Items()"; machine/power/batch.go:82: "arm = \"baremetal\"". A grep for arm reads outside internal/substrate lists 20 files across machine, controller, containercluster, managedos, storage and environment.
 
 **Consequence.** Adding vSphere or KubeVirt edits about 12 dispatch tables in two consumer roles, adds an identity channel branch, and changes Go consumer rules in managed OS and agent install. Every future consumer, such as kubeadm or Ceph host preparation, multiplies this N consumers x M arms. The milestone exit criteria for B99/B87 promise something the design does not deliver, so estimates and reviews will be wrong.
 
-**Recommendation.** Give Substrate one dispatcher role, for example substrate_machine_port, with entry points pre_boot, boot_media, boot_disk, identity_read, state_read, media_insert, media_eject and power. Its single argument spec takes the frozen target object and material paths and dispatches internally on the frozen arm to the arm roles. Consumers include only this role. On the Go side, expose capability facts on substrate.Target, such as qualified bond modes or whether a managed attachment gives the host an untagged address, in place of arm names. Correct substrates.md:31-38 and B99/B87 to state the real touch list until this lands.
+**Recommendation.** Give Substrate one dispatcher role, for example substrate_machine_port, with entry points pre_boot, boot_media, boot_disk, identity_read, state_read, media_insert, media_eject and power. Its single argument spec takes the frozen target object and material paths and dispatches internally on the frozen arm to the arm roles. Consumers include only this role. On the Go side, expose capability facts on substrate.Target, such as qualified bond modes or whether a managed attachment gives the host an untagged address, in place of arm names. Correct specs/substrates.md:31-38 and B99/B87 to state the real touch list until this lands.
 
 Verifier notes:
 
-- [refuter] If kept, reframe it as a Low/Medium design finding. Each consumer role repeats one row per arm per entry point (substrates.md:963-975), so a later Bootwright-installed arm (for example B88) edits every consumer table. A substrate-owned dispatcher role is optional. Optionally, have B87/B99 say 'no consumer changes for installer-provisioned Machines; a consumer that installs on the arm adds one row per entry…
-- [calibrator] Split the fix. (1) Smallest correction: reword m1.md B87/B99 and the target.go comment to list the real touch set: one row per consumer dispatch table, an identity-channel branch, and the Go qualification rules keyed on the arm. Clarify substrates.md:36-38 rather than treating it as false. (2) As a separate design item: a substrate-owned dispatcher role and capability facts on substrate.Target (qualifie…
+- [refuter] If kept, reframe it as a Low/Medium design finding. Each consumer role repeats one row per arm per entry point (specs/substrates.md:963-975), so a later Bootwright-installed arm (for example B88) edits every consumer table. A substrate-owned dispatcher role is optional. Optionally, have B87/B99 say 'no consumer changes for installer-provisioned Machines; a consumer that installs on the arm adds one row per…
+- [calibrator] Split the fix. (1) Smallest correction: reword m1.md B87/B99 and the target.go comment to list the real touch set: one row per consumer dispatch table, an identity-channel branch, and the Go qualification rules keyed on the arm. Clarify specs/substrates.md:36-38 rather than treating it as false. (2) As a separate design item: a substrate-owned dispatcher role and capability facts on substrate.Target (qu…
 
-**Acceptance.** No role outside substrate_* names substrate_<arm>_machine. No package outside internal/substrate and admission references substrate.Arm* or reads a provider's arm fields (a fitness test). Adding a fake arm in a test touches only internal/substrate and the dispatcher's table. Arbiter acceptance: B87/B99 and target.go text match substrates.md:973-975; the dispatcher item is tracked with the fitness test as its acceptance.
+**Acceptance.** No role outside substrate_* names substrate_<arm>_machine. No package outside internal/substrate and admission references substrate.Arm* or reads a provider's arm fields (a fitness test). Adding a fake arm in a test touches only internal/substrate and the dispatcher's table. Arbiter acceptance: B87/B99 and target.go text match specs/substrates.md:973-975; the dispatcher item is tracked with the fitness test as its acceptance.
 
-**Decision check.** Checked D1 (the substrate owns the machine port as role entry points): a substrate-owned dispatcher keeps ownership with Substrate, so it is consistent. It is also consistent with architecture.md:735-738, since the dispatch stays an allowlisted binding Go freezes and authored data cannot select code. D143 is unaffected.
+**Decision check.** Checked D1 (the substrate owns the machine port as role entry points): a substrate-owned dispatcher keeps ownership with Substrate, so it is consistent. It is also consistent with specs/architecture.md:735-738, since the dispatch stays an allowlisted binding Go freezes and authored data cannot select code. D143 is unaffected.
 
 Verification: refuter not real, medium confidence, severity Low; calibrator real, high confidence, severity High; arbiter real, severity Medium.
 
@@ -3351,12 +3755,12 @@ Files: `internal/desiredstate/compilation/phases.go:165-173`; `internal/desireds
 
 Verifier notes:
 
-- [refuter] Drop the claim that an unlisted kind is silently not normalized. Acceptance should not require a new spec clause (architecture.md:543-548 and 949-950 already state it); require the fitness test plus exhaustiveness tests for effectKinds and retention lists, and CLI labels sourced from the frozen plan or BlockDefinition per architecture.md:353.
-- [calibrator] Drop the acceptance clause asking for a new architecture.md rule: architecture.md:543-548 and 949-950 already state it; acceptance should instead cite those clauses and require the fitness test to enforce them. Smallest fix order: (1) fitness test forbidding implementation-identity literals and arm field paths (ceph/libvirt) outside owning domains, (2) domain-published MachineBindings/cluster-node acces…
+- [refuter] Drop the claim that an unlisted kind is silently not normalized. Acceptance should not require a new spec clause (specs/architecture.md:543-548 and 949-950 already state it); require the fitness test plus exhaustiveness tests for effectKinds and retention lists, and CLI labels sourced from the frozen plan or BlockDefinition per specs/architecture.md:353.
+- [calibrator] Drop the acceptance clause asking for a new architecture.md rule: specs/architecture.md:543-548 and 949-950 already state it; acceptance should instead cite those clauses and require the fitness test to enforce them. Smallest fix order: (1) fitness test forbidding implementation-identity literals and arm field paths (ceph/libvirt) outside owning domains, (2) domain-published MachineBindings/cluster-node…
 
 **Acceptance.** Adding a test-only kind with schema metadata needs no edit in those packages. The new fitness test fails on a literal such as "machine-libvirt-v1" or Get("ceph", ...) there. A spec clause in architecture.md states the rule.
 
-**Decision check.** Checked architecture.md:543-548 and 949-950 (stated principles: the recommendation enforces them), D143 (no runtime discovery: schema metadata is compiled in) and D162 (one general flow per component: consistent). No decision accepts these lists.
+**Decision check.** Checked specs/architecture.md:543-548 and 949-950 (stated principles: the recommendation enforces them), D143 (no runtime discovery: schema metadata is compiled in) and D162 (one general flow per component: consistent). No decision accepts these lists.
 
 Verification: refuter real, high confidence, severity Medium; calibrator real, high confidence, severity Medium; no arbitration needed.
 
@@ -3366,20 +3770,20 @@ Kind: gap; Area: Concept interaction: reference-to-dependency contract; Status: 
 
 Files: `specs/api/infrastructure-services.md:247-253`; `specs/state-reconciliation.md:781-787`; `specs/architecture.md:554-557`; `specs/container-clusters.md:484-488`; `internal/containercluster/agentinstall/selection.go:26-34`; `internal/containercluster/agentinstall/install.go:93-107`; `specs/storage.md:203-206`
 
-**Evidence.** infrastructure-services.md:247 "Reference resolution is not a readiness edge." state-reconciliation.md:782-783 "a definition may carry *requirements*, each the kind and name of an API object whose realization must be done first". container-clusters.md:485-487 "requires every node `Machine` and the managed name and time services the cluster and its nodes select." selection.go:28-34 Requirements holds "ArtifactServers ... DNSServers ... Machines ... NTPServers ... Proxies"; install.go:104-106 emits a `Proxy` requirement. storage.md:203-204 "The graph includes the following dependencies where the desired graph needs them".
+**Evidence.** specs/api/infrastructure-services.md:247 "Reference resolution is not a readiness edge." specs/state-reconciliation.md:782-783 "a definition may carry *requirements*, each the kind and name of an API object whose realization must be done first". specs/container-clusters.md:485-487 "requires every node `Machine` and the managed name and time services the cluster and its nodes select." internal/containercluster/agentinstall/selection.go:28-34 Requirements holds "ArtifactServers ... DNSServers ... Machines ... NTPServers ... Proxies"; internal/containercluster/agentinstall/install.go:104-106 emits a `Proxy` requirement. specs/storage.md:203-204 "The graph includes the following dependencies where the desired graph needs them".
 
 **Consequence.** No spec maps a reference field to an edge, so each capability's Go code is the only source of truth for the DAG. The one explicit cluster-install list omits the managed Proxy that the code waits for. An implementer who follows the spec, or adds a distribution or substrate, drops that edge. Under parallel admission (bound eight), the install then starts before the managed proxy listens, and nodes fail to pull the release payload. This is a race that ordinary fixture runs may not show. Reviewers also cannot check a plan's edges against the input, and every new reference field quietly decides whether it orders anything.
 
-**Recommendation.** Add one normative reference-edge catalog to state-reconciliation.md#plan-and-execution and link to it from each domain page. It has one row per reference field class with these columns: target realized by a block (managed or external), requiring block, produced material carried, stage pair, and selection retention. Destroy inversion stays uniform. Default rule: a reference to an object that some block realizes is a requirement unless the row states why not. Add the managed Proxy to container-clusters.md:485-487. Add a fitness test that compares each capability's emitted requirements over the example corpus against the catalog.
+**Recommendation.** Add one normative reference-edge catalog to state-reconciliation.md#plan-and-execution and link to it from each domain page. It has one row per reference field class with these columns: target realized by a block (managed or external), requiring block, produced material carried, stage pair, and selection retention. Destroy inversion stays uniform. Default rule: a reference to an object that some block realizes is a requirement unless the row states why not. Add the managed Proxy to specs/container-clusters.md:485-487. Add a fitness test that compares each capability's emitted requirements over the example corpus against the catalog.
 
 Verifier notes:
 
 - [refuter] Smallest fix: in container-clusters.md, name the managed Proxy requirement for both cluster-install (485-487) and cluster-media (333-337, replace 'nothing else'), and generalize api/infrastructure-services.md:247-249 to 'a managed service it selects'. A full reference-edge catalog with a fitness test across every Ref field is optional, larger-scope work. If kept, record it as a backlog item, not as the fix…
-- [calibrator] Downgrade to Medium. Smallest fix: (1) add a default rule to state-reconciliation.md#plan-and-execution: a reference to an object some block of the plan realizes is a requirement unless the owning domain page states an exemption (an external service is the standing one); (2) add the managed Proxy to container-clusters.md:485-487 and to infrastructure-services.md:247-249. Make the catalog table and the c…
+- [calibrator] Downgrade to Medium. Smallest fix: (1) add a default rule to state-reconciliation.md#plan-and-execution: a reference to an object some block of the plan realizes is a requirement unless the owning domain page states an exemption (an external service is the standing one); (2) add the managed Proxy to specs/container-clusters.md:485-487 and to specs/api/infrastructure-services.md:247-249. Make the catalog…
 
 **Acceptance.** The catalog has a row for every Ref/Refs field in api/v1alpha1. container-clusters.md names the managed Proxy requirement. A test (for example TestEveryRequirementMatchesTheEdgeCatalog) fails when a capability emits a requirement that is not in the catalog or omits one that the catalog requires.
 
-**Decision check.** D144 and D127 (parallel by default) make every unstated edge a race, which supports the change. architecture.md:554-557 (capabilities name dependencies as API objects, and the engine resolves them) is kept: the catalog documents and tests it and does not centralize planning. The external-service exemption (no block realizes it) stays as a catalog row. Grep of backlog decisions found no decision that rejects a reference-to-edge rule.
+**Decision check.** D144 and D127 (parallel by default) make every unstated edge a race, which supports the change. specs/architecture.md:554-557 (capabilities name dependencies as API objects, and the engine resolves them) is kept: the catalog documents and tests it and does not centralize planning. The external-service exemption (no block realizes it) stays as a catalog row. Grep of backlog decisions found no decision that rejects a reference-to-edge rule.
 
 Verification: refuter real, high confidence, severity Medium; calibrator real, high confidence, severity Medium; no arbitration needed.
 
@@ -3389,7 +3793,7 @@ Kind: gap; Area: Concept interaction: one cluster hosts another cluster's Machin
 
 Files: `examples/full-platforms/multidc-platform/infra/providers/kubevirt-ocp-01.yaml:7-10,29-36`; `examples/full-platforms/multidc-platform/add-ons/virtual-cluster-network/add-on.yaml:14-19`; `examples/full-platforms/multidc-platform/clusters/ocp-01/add-on-binding.yaml:9-16`; `specs/milestones/m3.md:1743-1753`; `specs/deferred/machine-arms.md:47-50`; `specs/substrates.md:651-663`; `specs/state-reconciliation.md:820-823`
 
-**Evidence.** kubevirt-ocp-01.yaml:8-10 `hostClusterRef: ocp-multidc-01` ... `storageClassRef: ocs-external-storagecluster-ceph-rbd`; :33-36 networkRef `ClusterUserDefinedNetwork` `multidc-virtual-cluster-machine`. virtual-cluster-network/add-on.yaml:14-18 manifestSet creating those CUDNs. machine-arms.md:50 "`spec.kubevirt.storageClassRef` ... External Kubernetes storage-class name." m3.md:1752-1753 "each KubeVirt Machine block requires the host's `cluster-install-<host>` block and the add-on instance providing `kubevirt`".
+**Evidence.** examples/full-platforms/multidc-platform/infra/providers/kubevirt-ocp-01.yaml:8-10 `hostClusterRef: ocp-multidc-01` ... `storageClassRef: ocs-external-storagecluster-ceph-rbd`; :33-36 networkRef `ClusterUserDefinedNetwork` `multidc-virtual-cluster-machine`. virtual-cluster-network/add-on.yaml:14-18 manifestSet creating those CUDNs. specs/deferred/machine-arms.md:50 "`spec.kubevirt.storageClassRef` ... External Kubernetes storage-class name." specs/milestones/m3.md:1752-1753 "each KubeVirt Machine block requires the host's `cluster-install-<host>` block and the add-on instance providing `kubevirt`".
 
 **Consequence.** On ocp-multidc-01, the `fdf` instance creates the storage class, and only after the Ceph export is realized. The authored network add-on creates the CUDNs. Neither the provider nor the Machines reference either one. With only B732's two edges, the hub VM blocks start once HyperConverged is Available. Their DataVolumes wait Pending on a class that does not exist yet, and the block fails at its budget. On destroy, the inverted graph lets the ocp-01 `fdf` retirement and the Ceph export removal (which revokes CephX principals) run before the hub VMs are deleted. PVC deletion then hangs, and the KubeVirt removal reads unknown. The `kubevirt` edge itself is a capability-token match that the provider never declares.
 
@@ -3402,17 +3806,19 @@ Verifier notes:
 
 **Acceptance.** B732 question 1 is resolved and names the full host set. The nested fixture plans requirements from each hub VM machine block to the fdf, nmstate and virtual-cluster-network instances on the host. The removal plan orders VM deletion before those instances' retirement and before the export's removal.
 
-**Decision check.** Q21 (where hostClusterRef lives, owner answer (a)) is unaffected, because this only fixes the edge set. The v1 lesson in m3.md:1781-1784 (child waits for the parent install and the parent's kubevirt add-on) is narrower, and no decision forbids the wider edge. D144 parallelism makes the missing edge a race. F12-04 (last package) is a different defect: it concerns blocks that the handoff ignores, not hosting edges.
+**Decision check.** Q21 (where hostClusterRef lives, owner answer (a)) is unaffected, because this only fixes the edge set. The v1 lesson in specs/milestones/m3.md:1781-1784 (child waits for the parent install and the parent's kubevirt add-on) is narrower, and no decision forbids the wider edge. D144 parallelism makes the missing edge a race. F12-04 (last package) is a different defect: it concerns blocks that the handoff ignores, not hosting edges.
 
 Verification: refuter real, medium confidence, severity Medium; calibrator real, high confidence, severity Medium; no arbitration needed.
 
 ##### R2-01-04 · Medium · Selection closure omits four storage kinds and StorageReplication's peer
 
-Kind: gap; Area: Environment selection closure: storage; Status: confirmed; Also raised as: R2-05-02.
+Kind: gap; Area: Environment selection closure: storage; Status: confirmed; Also raised as: R2-05-02, CX-API02.
+
+Also raised independently by the sibling audit as API-02 and confirmed by our verifiers (CX-API02).
 
 Files: `specs/api/environment.md:204`; `internal/environment/selection.go:187-189,217-219,230-232`; `specs/storage-resources.md:247-258,269-272`; `specs/api/environment.md:198-218`; `specs/api/storage.md:256-273`; `specs/api.md:5-15`; `specs/api.md:262-275`; `specs/storage-resources.md:238-260`; `internal/environment/selection.go:187-189`
 
-**Evidence.** environment.md:204 retains "every `StoragePlacementPolicy`, `StoragePool`, `StorageRBDImage`, `StorageFilesystem`, `StorageSubvolume`, `StorageObjectGateway`, `StorageNFSExport`, `StorageSMBResource`, `StorageNVMeoFSubsystem`, and `StorageExport` naming it". This omits StorageClient, StorageObjectUser, StorageObjectBucket and StorageReplication. selection.go:230-231 retains any `Storage*` child by name prefix. selection.go:217 follows references for a kind list without StorageReplication. storage-resources.md:248-249 "Both clusters must be declared managed clusters in the same context". Also reported as R2-05-02: environment.md:198 "The cluster-selection closure is authoritative and independent of file layout"; its StorageCluster row (204) lists StoragePlacementPolicy ... StorageNVMeoFSubsystem and StorageExport, omitting StorageClient, StorageObjectUser, StorageObjectBucket and StorageReplication, all in the 33-kind catalog (api.md:273). selection.go:187 retains any storageChild(kind) with the cluster's clusterRef. storage-resources.md:255 peerClusterRef "Required distinct receiving managed StorageCluster". api/storage.md Kinds table (258-273) has no StorageReplication row.
+**Evidence.** specs/api/environment.md:204 retains "every `StoragePlacementPolicy`, `StoragePool`, `StorageRBDImage`, `StorageFilesystem`, `StorageSubvolume`, `StorageObjectGateway`, `StorageNFSExport`, `StorageSMBResource`, `StorageNVMeoFSubsystem`, and `StorageExport` naming it". This omits StorageClient, StorageObjectUser, StorageObjectBucket and StorageReplication. internal/environment/selection.go:230-231 retains any `Storage*` child by name prefix. internal/environment/selection.go:217 follows references for a kind list without StorageReplication. specs/storage-resources.md:248-249 "Both clusters must be declared managed clusters in the same context". Also reported as R2-05-02: specs/api/environment.md:198 "The cluster-selection closure is authoritative and independent of file layout"; its StorageCluster row (204) lists StoragePlacementPolicy ... StorageNVMeoFSubsystem and StorageExport, omitting StorageClient, StorageObjectUser, StorageObjectBucket and StorageReplication, all in the 33-kind catalog (specs/api.md:273). internal/environment/selection.go:187 retains any storageChild(kind) with the cluster's clusterRef. specs/storage-resources.md:255 peerClusterRef "Required distinct receiving managed StorageCluster". api/storage.md Kinds table (258-273) has no StorageReplication row.
 
 **Consequence.** `storageClusters: [primary]` retains the StorageReplication but not its peerClusterRef or peerPoolRef, so admission fails with unresolved references to declared objects. `storageClusters: [peer]` silently drops the relationship but keeps the peer's rbd-mirror service and the empty receiving pool. An implementer who follows the row drops clients, object users and buckets, while the code keeps them, so two closures diverge.
 
@@ -3423,7 +3829,7 @@ Verifier notes:
 - [refuter] Keep recommendation. Note the peer-only case refuses at admission (mirroring pool without owner) rather than silently dropping; the rule 'a retained StorageReplication retains both clusters as full roots' should also say selecting either cluster retains the replication, so peer-only selection is consistent.
 - [calibrator] Keep the row rewrite. For the replication rule, state the direction in both cases: selecting either end retains the relationship and both clusters as full roots. Also add StorageReplication to the dependency switch so its peer references are followed. The acceptance test should cover selecting the primary and selecting the peer, and should assert the selection passes admission.
 
-**Acceptance.** The row text matches the code's prefix rule. A test that selects either end of a replication retains both clusters and the relationship.
+**Acceptance.** The row text matches the code's prefix rule. A test that selects either end of a replication retains both clusters and the relationship. Revision 2 addition: the same test proves that a StorageCluster retained only through a StorageExport keeps only its node closure (`specs/api/environment.md:209-211`); replication retention never widens export-only retention.
 
 **Decision check.** F02-04 and F05-02 note StorageReplication missing from other pages; this closure row is a separate owner. The rule is consistent with the same-context requirement in storage-resources.md and with D142 (pre-1.x changes need no migration).
 
@@ -3435,7 +3841,7 @@ Kind: gap; Area: Environment selection closure: Machines; Status: confirmed.
 
 Files: `specs/api/environment.md:202,214-215`; `specs/api/input.md:75-78`; `internal/environment/selection.go:71-78`
 
-**Evidence.** environment.md:214-215 "A `Machine` or `InfraProvider` not reached by the rules above is excluded." input.md:76-77 "`validate` warns deterministically for excluded files declaring Bootwright objects and for excluded cluster roots." selection.go:73 lists the always-retained kinds, which do not include Machine.
+**Evidence.** specs/api/environment.md:214-215 "A `Machine` or `InfraProvider` not reached by the rules above is excluded." specs/api/input.md:76-77 "`validate` warns deterministically for excluded files declaring Bootwright objects and for excluded cluster roots." internal/environment/selection.go:73 lists the always-retained kinds, which do not include Machine.
 
 **Consequence.** Take an Environment that holds managed-OS RHEL Machines (the examples/machines/lab-rhel shape, such as bastions) beside one or more clusters. If it authors containerClusters, for example to defer a second cluster, the RHEL installations leave the plan with no warning. No selection field can retain them. A CustomPlaybook that targets them stops resolving. The operator finds out only from what the plan lacks.
 
@@ -3444,7 +3850,7 @@ Files: `specs/api/environment.md:202,214-215`; `specs/api/input.md:75-78`; `inte
 Verifier notes:
 
 - [refuter] Drop the CustomPlaybook claim from the consequence (it already errors). Keep the minimum fix: one deterministic validate warning per excluded Machine/InfraProvider, or define a retention rule for Machines that are not node Machines of an excluded cluster.
-- [calibrator] Prefer retaining Machines (with provider/provider-host closure) that are not node Machines of any declared cluster, matching the 'cluster-owned graph' wording at environment.md:190-193; the warning is the fallback. Note the CustomPlaybook case already errors rather than going silent. Acceptance should include a golden validate case.
+- [calibrator] Prefer retaining Machines (with provider/provider-host closure) that are not node Machines of any declared cluster, matching the 'cluster-owned graph' wording at specs/api/environment.md:190-193; the warning is the fallback. Note the CustomPlaybook case already errors rather than going silent. Acceptance should include a golden validate case.
 
 **Acceptance.** environment.md states the retention or the warning. A validate test over a cluster plus a standalone managed Machine with an authored containerClusters list shows the Machine retained or warned.
 
@@ -3460,7 +3866,7 @@ Kind: unsafe-rule; Area: Language responsibility / security process boundary; St
 
 Files: `specs/security.md:166-172`; `specs/managed-os.md:1052-1056`; `specs/architecture.md:1020-1022`; `ansible/collections/ansible_collections/bootwright/core/plugins/module_utils/ceph_core.py:385-399`; `ansible/collections/ansible_collections/bootwright/core/plugins/modules/managedos_registration.py:320`
 
-**Evidence.** security.md:169 "Invocation uses no shell, a fixed safe working directory, a minimal allowlisted environment". managed-os.md:1055 "runs one fixed worker as root through `sudo -n /usr/bin/python3 -I -c`". ceph_core.py:393 "SSH remote execution requires one string; quote only fixed worker code." ceph_core.py:399 builds `shlex.join(python)` as the ssh remote command; ceph_core.py:388 composes "exec(compile(" of shipped host source. architecture.md:1020-1022 holds YAML tasks to "runs from `argv` an executable its exact allowlist names ... and never through a shell"; no equivalent clause or test covers Python launches.
+**Evidence.** specs/security.md:169 "Invocation uses no shell, a fixed safe working directory, a minimal allowlisted environment". specs/managed-os.md:1055 "runs one fixed worker as root through `sudo -n /usr/bin/python3 -I -c`". ansible/collections/ansible_collections/bootwright/core/plugins/module_utils/ceph_core.py:393 "SSH remote execution requires one string; quote only fixed worker code." ansible/collections/ansible_collections/bootwright/core/plugins/module_utils/ceph_core.py:399 builds `shlex.join(python)` as the ssh remote command; ansible/collections/ansible_collections/bootwright/core/plugins/module_utils/ceph_core.py:388 composes "exec(compile(" of shipped host source. specs/architecture.md:1020-1022 holds YAML tasks to "runs from `argv` an executable its exact allowlist names ... and never through a shell"; no equivalent clause or test covers Python launches.
 
 **Consequence.** The remote login shell of the target account interprets every SSH worker command and its rc files run first, contrary to the stated rule; reviewers cannot tell a compliant worker from a non-compliant one. A future adapter (another storage vendor over SSH) copies the pattern with an authored token in the string, and no fitness test catches it because the process-boundary checks only read role YAML.
 
@@ -3473,7 +3879,7 @@ Verifier notes:
 
 **Acceptance.** security.md names the remote fixed-worker exception with its constraints; one Python function builds every SSH remote command; a unit test lists every `subprocess`/ssh construction site in plugins/ and fails on one outside the allowlist.
 
-**Decision check.** Checked D1, D11, D99, D143, D152, D162 and the security principle 'Authored values never select the executable, form shell text' (security.md:168). No decision authorizes or forbids remote Python workers; D143 keeps one binary, compatible. The recommendation documents existing behavior rather than changing it.
+**Decision check.** Checked D1, D11, D99, D143, D152, D162 and the security principle 'Authored values never select the executable, form shell text' (specs/security.md:168). No decision authorizes or forbids remote Python workers; D143 keeps one binary, compatible. The recommendation documents existing behavior rather than changing it.
 
 Verification: refuter real, medium confidence, severity Medium; calibrator real, medium confidence, severity Medium; no arbitration needed.
 
@@ -3483,7 +3889,7 @@ Kind: gap; Area: Language responsibility / agent guidance; Status: confirmed; Pr
 
 Files: `specs/architecture.md:629-649, 680-683`; `specs/project.md:57-62`; `.agents/skills/code-implementation/SKILL.md:21-23`; `.agents/skills/code-implementation/references/formatting.md:3-4`; `.agents/skills/code-implementation/references/ansible.md:51-54`
 
-**Evidence.** project.md:58-59 "Ansible implements bounded remote observation and effects through driven adapters." SKILL.md:22-23 loads only "[formatting], [Go], [Ansible]". formatting.md:3 "owns layout for tracked, human-authored Go, YAML, Ansible, YAML front matter". ansible.md:51-54 gives plugins one bullet. Measured: 140 plugin .py files, 36,682 lines; 188 Python test files, 61,976 lines; Ansible YAML 14,811 lines; ceph_native.py 4,002 lines.
+**Evidence.** specs/project.md:58-59 "Ansible implements bounded remote observation and effects through driven adapters." .agents/skills/code-implementation/SKILL.md:22-23 loads only "[formatting], [Go], [Ansible]". .agents/skills/code-implementation/references/formatting.md:3 "owns layout for tracked, human-authored Go, YAML, Ansible, YAML front matter". .agents/skills/code-implementation/references/ansible.md:51-54 gives plugins one bullet. Measured: 140 plugin .py files, 36,682 lines; 188 Python test files, 61,976 lines; Ansible YAML 14,811 lines; ceph_native.py 4,002 lines.
 
 **Consequence.** Agents write two thirds of the adapter code under guidance written for YAML tasks; Python idioms the product depends on (exact type checks, stdlib-only shipped workers, bounded subprocess, no ambient proxy, canonical JSON) are rediscovered per file, which is how the duplications in F08-06 arose. Review of Python changes has no stated standard.
 
@@ -3506,7 +3912,7 @@ Kind: duplication; Area: Language responsibility / duplication; Status: confirme
 
 Files: `specs/architecture.md:767-776`; `test/architecture/canonical_json_test.go:76`; `test/architecture/adapter_protocol_test.go:42`; `ansible/collections/ansible_collections/bootwright/core/plugins/module_utils/native_resolution.py:25-28`; `ansible/collections/ansible_collections/bootwright/core/plugins/module_utils/ceph_native.py:353`; `ansible/collections/ansible_collections/bootwright/core/plugins/module_utils/physical_erase_process.py:19-25`
 
-**Evidence.** architecture.md:774-775 "its one runner core starts, supervises, cancels and drains every adapter process". Go tests TestCanonicalJSONProofsLiveInOnePackage and TestOnlyTheAdapterProtocolSupervisesAdapters enforce single implementations. Python: `def canonical` in controller_channel.py, ceph_tunnel_custody.py, native_resolution.py, controller_files.py, ceph_host_route_probe.py, ceph_tunnel_staging.py, ceph_tunnel.py; separate bounded process functions in ceph_native.py:353, physical_erase_process.py:19, managedos_guest_ssh.py:134, cluster_objects_native.py:83, ceph_host_runtime.py:436.
+**Evidence.** specs/architecture.md:774-775 "its one runner core starts, supervises, cancels and drains every adapter process". Go tests TestCanonicalJSONProofsLiveInOnePackage and TestOnlyTheAdapterProtocolSupervisesAdapters enforce single implementations. Python: `def canonical` in controller_channel.py, ceph_tunnel_custody.py, native_resolution.py, controller_files.py, ceph_host_route_probe.py, ceph_tunnel_staging.py, ceph_tunnel.py; separate bounded process functions in ansible/collections/ansible_collections/bootwright/core/plugins/module_utils/ceph_native.py:353, ansible/collections/ansible_collections/bootwright/core/plugins/module_utils/physical_erase_process.py:19, managedos_guest_ssh.py:134, cluster_objects_native.py:83, ceph_host_runtime.py:436.
 
 **Consequence.** Each copy carries its own bounds, kill and reap semantics and its own canonical encoding; a fix to one (a descendant left running, a non-ASCII escape) misses the others. Digests computed by a divergent copy refuse fail-closed, so the cost is debugging time on live runs rather than unsafety, but cancellation and output-bound defects would not be.
 
@@ -3529,7 +3935,7 @@ Kind: gap; Area: Language responsibility / architecture verification; Status: co
 
 Files: `specs/architecture.md:629-668, 989-1039`; `.agents/skills/code-implementation/references/go.md:1-6`; `.agents/skills/code-implementation/references/ansible.md:1-8`
 
-**Evidence.** architecture.md:994-995 "Check every production Go package for inward dependencies, declared context ownership"; the Ansible bullets (1010-1039) check role YAML. ansible.md:8 "Lifecycle policy remains in Go." go.md:3-6 defers to architecture. No clause states a criterion for Python versus YAML versus Go for a new step, and no test classifies sources by language site. Arbiter-cited evidence: specs/architecture.md:629-668 "Go and Ansible responsibility boundary"; specs/architecture.md:752-757 "Plugins contain no workflow or authorization policy"; specs/architecture.md:209 "never product policy"; ansible/collections/ansible_collections/bootwright/core/plugins/filter/managedos_network.py:1-4 "name its next step"; .agents/skills/code-implementation/references/ansible.md:8 "Lifecycle policy remains in Go."
+**Evidence.** specs/architecture.md:994-995 "Check every production Go package for inward dependencies, declared context ownership"; the Ansible bullets (1010-1039) check role YAML. .agents/skills/code-implementation/references/ansible.md:8 "Lifecycle policy remains in Go." .agents/skills/code-implementation/references/go.md:3-6 defers to architecture. No clause states a criterion for Python versus YAML versus Go for a new step, and no test classifies sources by language site. Arbiter-cited evidence: specs/architecture.md:629-668 "Go and Ansible responsibility boundary"; specs/architecture.md:752-757 "Plugins contain no workflow or authorization policy"; specs/architecture.md:209 "never product policy"; ansible/collections/ansible_collections/bootwright/core/plugins/filter/managedos_network.py:1-4 "name its next step"; .agents/skills/code-implementation/references/ansible.md:8 "Lifecycle policy remains in Go."
 
 **Consequence.** Placement is decided per change by precedent, which already produced Python filters that choose steps (managedos_network) and a native file editor in a filter (agent_disk_encryption); every new substrate or storage type re-litigates where its mechanics go, and the owner cannot review a placement against a rule.
 
@@ -3538,7 +3944,7 @@ Files: `specs/architecture.md:629-668, 989-1039`; `.agents/skills/code-implement
 Verifier notes:
 
 - [refuter] If kept, reduce it to Low: add one sentence in the Roles or plugins row about when to use a YAML task and when to use a Python plugin (a plugin only for effect-free translation/normalization or protocol publication; effects through allowlisted modules). Optionally add a fitness test that fails on a collection file outside the declared table paths. Do not add a new four-language matrix section that would re…
-- [calibrator] Acknowledge architecture.md:750-757. Widen the existing 'Go and Ansible responsibility boundary' section in place rather than adding a parallel section: one placement question and a prohibited-use list for each of YAML tasks, Python plugins and module_utils, shell wrappers and Makefile. Make the path-to-site fitness test optional, or limit it to plugins/ and scripts/, introduced with the next boundary c…
+- [calibrator] Acknowledge specs/architecture.md:750-757. Widen the existing 'Go and Ansible responsibility boundary' section in place rather than adding a parallel section: one placement question and a prohibited-use list for each of YAML tasks, Python plugins and module_utils, shell wrappers and Makefile. Make the path-to-site fitness test optional, or limit it to plugins/ and scripts/, introduced with the next boun…
 
 **Acceptance.** architecture.md carries the matrix with placement questions; go.md, ansible.md and python.md link to it instead of restating; a fitness test fails on a source file outside every declared site. Arbiter acceptance: architecture.md 629-668 states the placement question and prohibited uses per language site; go.md and ansible.md link rather than restate; no python.md required.
 
@@ -3548,15 +3954,63 @@ Verification: refuter not real, medium confidence, severity Low; calibrator real
 
 #### S8: Reconciliation rules
 
+##### CX-API04 · High · Interrupted physical Ceph deployment has no forward or backward exit; the general safe-retry clause hides it · revision 2
+
+Kind: gap; Area: Reconciliation reliability: Ceph interruption recovery; Status: confirmed-by-arbitration.
+
+Provenance: Raised by the sibling audit as API-04 (rated High there), confirmed at 17acb63d9 by our calibrator (real, Medium) over our refuter's dissent and upheld as a narrowed Medium gap by arbitration. Severity raised from Medium to High in revision 2: two Opus recalibrations split (Medium, High) and the Fable arbiter decided High because physical hosts have neither forward nor retirement recovery.
+
+Severity note: two Opus recalibrations split (Medium, High), and the Fable arbiter decided High because the physical Ceph journey has neither a forward nor a retirement exit. A later Opus reader, writing the counterevidence below, leaned Medium because every limitation is an explicit, fail-closed, tracked refusal. Under the audit's protocol the arbitrated severity stands; the owner may weigh the dissent.
+
+Files: `specs/storage.md:480-483, 656-664, 684-689, 1352-1361, 1440-1465`; `specs/state-reconciliation.md:1207-1213, 459-463`; `specs/storage-native-api.md:142-145`; `specs/project.md:36-39`; `specs/milestones/backlog.md:2138-2149, 2173-2186`; `specs/storage.md:1466-1471`
+
+**Evidence.** specs/storage.md:481-482 says, with no exception, each bootstrap, enrollment, service and resource attempt "defines partial-completion evidence and safe retry". The interruption table at specs/storage.md:661 instead "refuses `partial-cluster` until B659 defines its recovery", and specs/storage.md:687-688 says "Any nonempty or partial DB/WAL device refuses before submission; B662 owns recovery". specs/state-reconciliation.md:1209-1210 says a target "provably this context's own and provably incomplete must not be left there" in unknown. Neither refusal row cross-references those general rules or names a remedy. A backward path exists in principle (specs/state-reconciliation.md:461-462 always allows "start a fresh destroy of the blocks it started"; specs/storage.md:1446-1447 requires every Ceph inverse to have "a qualified partial-removal and retry contract"), but storage.md never says the cluster inverse accepts a partial-cluster state, and the all-virtual retirement path (specs/storage.md:1467-1470) does not cover physical hosts. The missing forward protocols are honestly parked (specs/milestones/backlog.md:2138-2149 B659 and 2173-2186 B662, both 'Requires: an owner decision'; specs/storage-native-api.md:144-145).
+
+**Consequence.** On the immediate portfolio's primary physical journey (bare-metal hosts with xFusion BMCs, IBM Ceph), an apply interrupted after a non-bootstrap host carries a daemon has no in-product exit in either direction. Forward, every later apply refuses `partial-cluster` until B659 defines its recovery (specs/storage.md:661), and a partial DB/WAL device refuses until B662 (specs/storage.md:687-688); both are parked awaiting owner decisions. Backward, whole-cluster retirement without native calls applies only when every host is a Bootwright-owned virtual Machine the same destroy removes; "A surviving host, or a bare-metal one, keeps the refusal below" (specs/storage.md:1466-1471), which waits on B491. Only an orphan-acknowledged context deletion remains, which abandons the hosts, their data and every other effect of the context. On libvirt hosts the retirement path is the exit. Agents implementing the cluster inverse can also diverge on whether destroy accepts a partial cluster, because the unqualified general retry clause (specs/storage.md:481-482) promises a guarantee the table withdraws.
+
+**Counterevidence.** Both stops fail closed with named refusals, never adoption or blind retry (specs/storage.md:660-661, 686-688, 1357-1359), and every earlier interruption point continues forward (specs/storage.md:656-659). The gaps are tracked, not hidden: B659 and B662 carry outcomes and exit evidence (specs/milestones/backlog.md:2138-2149, 2173-2186), and storage.md marks removal while hosts survive "Not yet met", owned by B491 (specs/storage.md:1475-1477). The finding claims no unsafe effect, only a missing exit and an unqualified general clause.
+
+**Recommendation.** Qualify specs/storage.md:480-483 with the two named exceptions, linking B659 and B662, and state for the `partial-cluster` refusal and the partial DB/WAL refusal (B662 proposes the token `osd-partial`) the exit that exists today on virtual hosts (destroy with VM retirement) and on physical hosts (none until B491, B659 or B662, so only the orphan-acknowledged deletion). Make interruption coverage of the physical multi-host journey an exit criterion of the milestone that delivers it, or record the physical profile as an explicitly incomplete recovery profile. Do not specify the B659 and B662 protocols here; they wait on owner decisions.
+
+**Acceptance.** The general retry clause in specs/storage.md names its two exceptions; for the `partial-cluster` refusal and the partial DB/WAL refusal the spec states the exit on virtual and on physical hosts, or that none exists; the physical Ceph profile's milestone exit names fault injection before and after enrollment, device, OSD and service effects, or records the gap as a limitation.
+
+**Decision check.** No D-entry decides B659 or B662; the change adds no protocol, keeps fail-closed refusal, and respects the no-adoption and no-reclaim principles (specs/storage.md:395-399, specs/state-reconciliation.md:25).
+
+Verification: refuter not real, medium confidence, severity Medium; calibrator real, medium confidence, severity Medium; arbiter real, severity Medium.
+
+##### CX-R5 · High · Removal observation rule maps an unreadable target to no-effect and a retry, against the unknown-stays-unknown rule · revision 2
+
+Kind: contradiction; Area: Reconciliation safety / destroy block resolution; Status: confirmed.
+
+Provenance: Raised by the sibling audit as R5, confirmed by our refuter and calibrator (both real, medium confidence, High), with no arbitration needed.
+
+Files: `specs/state-reconciliation.md:538-561, 1209-1215, 1223-1227`; `specs/security.md:33-35`
+
+**Evidence.** specs/state-reconciliation.md:544-548: an observation that cannot tell the removal's postcondition "from a target it could not read never proves completion: its capability reads it as no effect, and the retry that follows proves its own absence". The table at 550-555 maps "Positive no effect" to no-effect/failed (retried, 557-558) but "Failed, forbidden, empty, malformed, contradictory, or foreign observation" to unknown/unknown. 1215: "a foreign or unreadable observation stays `unknown`". 1223-1224: "While a block is `unknown`, Bootwright starts no retry, dependent block, destroy effect". specs/security.md:33-35: "A failed or ambiguous probe is unknown, never proof that a machine, object, credential, path, or effect is absent." Commit 17acb63d9 did not change these clauses; grep across specs/ and the milestone decisions finds no recorded exception reconciling them.
+
+**Consequence.** Two conforming implementations derive opposite retry authority for the same destroy observation: one keeps the block unknown and blocks the context; the other records no-effect, resolves the block failed and admits a mutating removal retry whose completion over an apparently absent target then rests on the same ambiguous read. This is ambiguity-as-absence in two steps, the class of error the spec otherwise forbids, and it weakens the meaning of no-effect evidence in a safety rule agents will implement per capability.
+
+**Counterevidence.** The table still sends failed, forbidden and malformed observations to unknown (specs/state-reconciliation.md:550-555). The retry the clause admits is itself a converging attempt that fails on any foreign target (1164-1171). It can report an already-absent destroy completed only "with positive absence evidence" (1128-1129). The finding does not show a path where an unreadable target completes. It shows that the retry is authorized on ambiguous evidence, and that the clause contradicts 1215 and specs/security.md:33-35.
+
+**Recommendation.** Narrow specs/state-reconciliation.md:544-548: an observation that fails, is forbidden, unreachable or cannot read the target stays unknown under the table. If a removal capability legitimately cannot distinguish its postcondition from absence through a successful read, make that a capability-declared case named beside its removal rule, define it as a distinct replay-safe result rather than no-effect, require the retry's completion to come from the removal's own positive postcondition evidence, and cite specs/security.md:33-35 and line 1215 as the rule it narrows.
+
+**Acceptance.** No clause in specs/ maps a failed, forbidden, unreachable or unreadable removal observation to no-effect or failed; every capability using a replay-safe exception is named in its owning spec; tests show forbidden, disconnected, malformed and ambiguous removal observations never transition to failed, start a retry or register a replacement, while positive owned presence and positive absence keep their specified transitions.
+
+**Decision check.** The clause was introduced deliberately (D146 context, one-invocation recovery), so the owner decides between deleting the exception and defining an explicit capability-declared replay-safe state; either way the general rule in specs/security.md:33-35 must state the exception or remain unbroken.
+
+Verification: refuter real, medium confidence, severity High; calibrator real, medium confidence, severity High; no arbitration needed.
+
 ##### F10-01 · High · Physical OS install erases whatever disk a device path names, refusing hints
 
 Kind: unsafe-rule; Area: Mutation safety / physical disk safety (managed-OS installation); Status: confirmed; Proposed severity: Blocking.
 
 Files: `specs/managed-os.md:1268-1273`; `specs/managed-os.md:1275-1284`; `specs/managed-os.md:167-170`; `specs/managed-os.md:1392-1393`; `specs/api/machines.md:306-314`; `specs/state-reconciliation.md:1813-1815`; `specs/state-reconciliation.md:1906-1909`; `specs/state-reconciliation.md:1932-1935`; `specs/storage.md:702-705`; `specs/container-clusters.md:199-201`; `.agents/skills/security-safety/SKILL.md:18-21`
 
-**Evidence.** managed-os.md:1268-1273 "Installation erasure is confined to the disk rootDeviceHints.deviceName names ... One declaring any other hint beside deviceName refuses before registration". managed-os.md:1277-1280 %pre checks only that "the declared root device must resolve to a whole block device". api/machines.md:308 "deviceName is a device path: a clean absolute path beneath /dev/" (so /dev/sda is admitted). Contrast storage.md:702-703 OSD paths "restricted here to /dev/disk/by-id/wwn-0x plus 16 or 32 lowercase hexadecimal digits"; state-reconciliation.md:1933-1934 erase targets require "deviceName, wwn, serialNumber and exact sizeBytes"; container-clusters.md:200-201 agent-config carries "every root-device hint the Machine declares". The skill entrenches it: SKILL.md:19-21 "A root disk is named by a device path; an empty or wwn-only selector refuses."
+**Evidence.** specs/managed-os.md:1268-1273 "Installation erasure is confined to the disk rootDeviceHints.deviceName names ... One declaring any other hint beside deviceName refuses before registration". specs/managed-os.md:1277-1280 %pre checks only that "the declared root device must resolve to a whole block device". api/machines.md:308 "deviceName is a device path: a clean absolute path beneath /dev/" (so /dev/sda is admitted). Contrast specs/storage.md:702-703 OSD paths "restricted here to /dev/disk/by-id/wwn-0x plus 16 or 32 lowercase hexadecimal digits"; specs/state-reconciliation.md:1933-1934 erase targets require "deviceName, wwn, serialNumber and exact sizeBytes"; specs/container-clusters.md:200-201 agent-config carries "every root-device hint the Machine declares". The skill entrenches it: .agents/skills/security-safety/SKILL.md:19-21 "A root disk is named by a device path; an empty or wwn-only selector refuses."
 
 **Consequence.** On a multi-disk server, kernel names (/dev/sda, /dev/nvme0n1) follow driver probe order and change with controller firmware, hot-added disks or a BMC virtual USB device. A Machine authored with deviceName /dev/sda installs; on the next fresh apply (or on a sibling server of the same model) /dev/sda is a data disk holding a surviving Ceph OSD or operator data. Every controller-side proof (UUID, MACs, power-off) passes, %pre sees a whole block device, `clearpart` wipes the wrong disk. data-loss was consumed, but it acknowledges loss of the root disk, not of the data disk. The operator cannot even add serialNumber or wwn as a cross-check, because the managed-OS path refuses them, while the agent path for OpenShift nodes carries them. This violates the general rule to revalidate exact target identity immediately before every effect.
+
+**Counterevidence.** The erase is never silent. The block consumes data-loss on apply and relaxes no proof (specs/managed-os.md:1260-1268). It refuses a missing deviceName and any hint it cannot honor, rather than clearing every disk (1268-1273, 1392-1393). A fail-closed %pre re-checks every declared MAC and requires a whole block device before storage, and the spec records the residual race (1275-1284). The finding does not claim a wrong-machine install. It claims an unstable disk name on the right machine, and no milestone item tracks that gap.
 
 **Recommendation.** For a physical (baremetal) Bootwright-installed Machine, require the root disk to carry a durable identity and check it inside %pre before any storage directive: either restrict deviceName to /dev/disk/by-id/wwn-0x<hex> (the OSD rule) or require wwn plus serialNumber beside deviceName and have %pre resolve deviceName and compare the device's WWN/serial (and size when the erase policy lists it) with the frozen values, refusing on mismatch or an unreadable attribute. Stop refusing wwn/serialNumber beside deviceName on baremetal; refuse only predicate hints. Update the security-safety skill bullet to match.
 
@@ -3577,15 +4031,17 @@ Kind: contradiction; Area: Ownership proofs / context deletion and reuse; Status
 
 Files: `specs/state-reconciliation.md:1816-1820`; `specs/state-reconciliation.md:1755-1756`; `specs/substrates.md:320-328`; `specs/substrates.md:367-369`; `specs/contexts.md:16-23`; `specs/contexts.md:816-821`; `specs/contexts.md:832-839`; `specs/container-clusters.md:503-505`; `specs/milestones/backlog.md:153`; `specs/milestones/backlog.md:3325-3329`
 
-**Evidence.** state-reconciliation.md:1816-1817 "A name or controller record may locate a target but never proves ownership or identity." Same page 1755-1756: "An object an abandoned context of the same name left on a host reads as this context's, because no native identity yet distinguishes the two." substrates.md:320-321 domain UUID is "derived from the context and Machine names". contexts.md:816-821 the acknowledged deletion "abandons the objects rather than removing them ... it has no remote resource effect" and names no warning against re-initializing the name. backlog.md:3326-3329 (D155): "the B567 guard and B568 interim orphan warning come first". grep finds B568 in no spec page.
+**Evidence.** specs/state-reconciliation.md:1816-1817 "A name or controller record may locate a target but never proves ownership or identity." Same page 1755-1756: "An object an abandoned context of the same name left on a host reads as this context's, because no native identity yet distinguishes the two." specs/substrates.md:320-321 domain UUID is "derived from the context and Machine names". specs/contexts.md:816-821 the acknowledged deletion "abandons the objects rather than removing them ... it has no remote resource effect" and names no warning against re-initializing the name. specs/milestones/backlog.md:3326-3329 (D155): "the B567 guard and B568 interim orphan warning come first". grep finds B568 in no spec page.
 
 **Consequence.** After `context delete --purge --allow-orphans` and `context init` of the same name (or two controllers whose contexts share a name on one libvirt host), the new context's fresh apply finds the abandoned domain 'owned', reports it completed, and its virtual installation (which consumes no data-loss on apply) runs clearpart over the abandoned guest's disk; its destroy deletes the other controller's VMs under its own data-loss token. The general rule promises the opposite, so an implementer or reviewer reading Mutation safety cannot see the exception.
+
+**Counterevidence.** Only the explicit `--purge --allow-orphans` acknowledgement reaches the abandoned-object case. Its confirmation and result name the abandonment and point to `bootwright status --context <name>` as the inventory (specs/contexts.md:816-830). The spec already admits the same-name adoption honestly (specs/state-reconciliation.md:1755-1756), and B568 owns the incarnation fix under D155 (specs/milestones/backlog.md:153, 3325-3329). The finding does not claim the domain checks are absent. A domain with a different context name or a non-frozen UUID still refuses before any effect (specs/substrates.md:365-369).
 
 **Recommendation.** Spec-only now: (1) in Mutation safety, after the 'name never proves ownership' bullet, add a one-line known exception naming libvirt, emulated BMC, managed-service units and artifact servers, linking B568; (2) add D155's interim wording to contexts.md Permanent deletion and to the orphan confirmation: remove the abandoned objects by hand before initializing the same name again, and never reuse a context name across controllers that share a provider host; (3) move 1755-1756 to cite B568. The incarnation identity itself stays in B568's named slice.
 
 Verifier notes:
 
-- [refuter] Also correct infrastructure-services.md:323-324 (the 'cannot occur without a reservation conflict' claim) to name the abandoned same-name exception and link B568; add the B568 link at substrates.md:367-369 domain ownership.
+- [refuter] Also correct infrastructure-services.md:323-324 (the 'cannot occur without a reservation conflict' claim) to name the abandoned same-name exception and link B568; add the B568 link at specs/substrates.md:367-369 domain ownership.
 - [calibrator] Split the change. Linking B568 as a known exception under Mutation safety, citing it at 1755-1756, and adding a hazard note to contexts.md are spec-only clarifications. Changing what the orphan confirmation prints is a CLI contract change: it is D155's interim B568 step and needs a named slice, with a test cited in the spec. Acceptance should cover both parts.
 
 **Acceptance.** grep finds B568 in state-reconciliation.md Mutation safety and in contexts.md Permanent deletion; the orphan confirmation text in contexts.md names the by-hand removal and the same-name hazard; make docs-check passes.
@@ -3598,11 +4054,15 @@ Verification: refuter real, high confidence, severity High; calibrator real, hig
 
 Kind: contradiction; Area: Contexts / durable formats; Status: confirmed; Also raised as: F16-02.
 
+Severity note: the counterevidence reader leaned Medium because the code, its tests and the narrower owning pages agree. The audit keeps High because `specs/index.md` routes registry, locking and descriptor questions to this page, so an agent that follows the routing writes the wrong version or lock; the brief rates an agent-visible contract defect High.
+
 Files: `specs/contexts.md:186-205`; `specs/contexts.md:250`; `specs/contexts.md:302-310`; `specs/contexts.md:329-335`; `specs/contexts.md:447-458`; `specs/contexts/controller-record.md:24-35`; `specs/controller.md:794-802`; `internal/workspace/contexts/contracts.go:24`; `internal/workspace/contextfs/setup_linux_amd64.go:124-155`; `specs/contexts.md:186-204`; `specs/milestones/backlog.md:3305`
 
-**Evidence.** specs/contexts.md:186 "The registry writes private format version 5." and contexts.md:192-195 "A `registry.json` of version 5 ... refuses every access with `context.state`"; record table contexts.md:304 "Registry | `version` (5), `contexts`, then `controller` when setup has published it"; code: internal/workspace/contexts/contracts.go:24 "const RegistryVersion = 6"; D152 clause 9 "the registry from 5 to 6". contexts.md:189 "The Controller descriptor is an optional trailing member that confirmed setup adds" vs controller-record.md:32 "Setup itself writes no controller record." contexts.md:332 lists "`setup` (which scopes no context)" under the exclusive root lock and contexts.md:452-453 lists `setup` among commands that open a registry transaction, while controller.md:799-801 "Setup's own subtree has its own lock, `setup/lock`" and setup_linux_amd64.go:131-144 opens the root without a root lock and takes only setup/lock. Also reported as F16-02: contexts.md:186 says "The registry writes private format version 5." contexts.md:191-194 says "A `registry.json` of version 5, which every build before the setup v2 cut-over wrote, refuses every access". contracts.go:24 has `const RegistryVersion = 6`. D152 clause 9 says "the registry from 5 to 6".
+**Evidence.** specs/contexts.md:186 "The registry writes private format version 5." and specs/contexts.md:192-195 "A `registry.json` of version 5 ... refuses every access with `context.state`"; record table specs/contexts.md:304 "Registry | `version` (5), `contexts`, then `controller` when setup has published it"; code: internal/workspace/contexts/contracts.go:24 "const RegistryVersion = 6"; D152 clause 9 "the registry from 5 to 6". specs/contexts.md:189 "The Controller descriptor is an optional trailing member that confirmed setup adds" vs specs/contexts/controller-record.md:32 "Setup itself writes no controller record." specs/contexts.md:332 lists "`setup` (which scopes no context)" under the exclusive root lock and specs/contexts.md:452-453 lists `setup` among commands that open a registry transaction, while specs/controller.md:799-801 "Setup's own subtree has its own lock, `setup/lock`" and internal/workspace/contextfs/setup_linux_amd64.go:131-144 opens the root without a root lock and takes only setup/lock. Also reported as F16-02: specs/contexts.md:186 says "The registry writes private format version 5." specs/contexts.md:191-194 says "A `registry.json` of version 5, which every build before the setup v2 cut-over wrote, refuses every access". internal/workspace/contexts/contracts.go:24 has `const RegistryVersion = 6`. D152 clause 9 says "the registry from 5 to 6".
 
 **Consequence.** The owning page of the registry format states, in one section, that this build writes version 5 and refuses version 5. An agent implementing or reviewing from contexts.md (the page specs/index.md routes registry questions to) would write the wrong version, re-attach the descriptor to setup, or add an exclusive root lock around setup's dnf install and wheel downloads, which would make every other command on the host refuse lifecycle.lease for minutes. make docs-check checks the bounds table against code but not the record-version table, so the drift went unseen.
+
+**Counterevidence.** The code is right and tested. RegistryVersion is 6 (internal/workspace/contexts/contracts.go:20-24), and a test refuses a version-5 store on every path, including setup mutation (internal/workspace/contextfs/registry_linux_amd64_test.go:51-75). Setup takes only setup/lock (internal/workspace/contextfs/setup_linux_amd64.go:124-155). The pages that own each fact already say so: controller-record.md:32 says setup writes no controller record, and controller.md:799-801 names setup/lock. The finding claims only that contexts.md drifted from them; it claims no runtime defect.
 
 **Recommendation.** In contexts.md, change lines 186-189, 250 and 304 to registry version 6 with the descriptor added by the first binding (link controller-record.md#descriptor); remove `setup` from the exclusive-root-lock row (332) and from the registry-transaction list (452), and state that setup takes only `setup/lock` and an exclusive root transaction only to create the setup subtree once. Extend the docs-check table test to compare each record-version cell (Registry, Reservation, Manifest, User selection, Media record, Controller record) with its Go constant, as TestDocumentedBoundsMatchCode already does for bounds.
 
@@ -3623,32 +4083,38 @@ Kind: unsafe-rule; Area: Reconciliation rules / Storage and add-ons (FDF removal
 
 Files: `specs/storage-resources.md:1252-1255`; `specs/state-reconciliation.md:1836-1842`; `specs/state-reconciliation.md:1895-1898`; `specs/container-clusters.md:879-881`; `specs/add-on-coverage.md:44`; `specs/storage.md:1459-1462`
 
-**Evidence.** storage-resources.md:1252-1255 "The export block retires with its cluster when every host is a Bootwright-owned virtual Machine the same destroy removes". state-reconciliation.md:1836-1839 "A storage effect whose every host Machine is a Bootwright-owned virtual Machine ... its quiescence derives from their stop proof". state-reconciliation.md:1896-1897 "`data-loss` acknowledges destruction; quiescence independently proves nothing is using the data." container-clusters.md:879-881 "A cluster whose nodes are physical keeps running after its context is destroyed". add-on-coverage.md:44 fdf removal: "retired with its cluster; the export's principals leave with the Ceph cluster's owned virtual hosts". storage.md:1459 target removal first must "prove storage clients quiescent".
+**Evidence.** specs/storage-resources.md:1252-1255 "The export block retires with its cluster when every host is a Bootwright-owned virtual Machine the same destroy removes". specs/state-reconciliation.md:1836-1839 "A storage effect whose every host Machine is a Bootwright-owned virtual Machine ... its quiescence derives from their stop proof". specs/state-reconciliation.md:1896-1897 "`data-loss` acknowledges destruction; quiescence independently proves nothing is using the data." specs/container-clusters.md:879-881 "A cluster whose nodes are physical keeps running after its context is destroyed". specs/add-on-coverage.md:44 fdf removal: "retired with its cluster; the export's principals leave with the Ceph cluster's owned virtual hosts". specs/storage.md:1459 target removal first must "prove storage clients quiescent".
 
 **Consequence.** A context with a virtual Ceph cluster on libvirt and an OpenShift cluster on physical (xFusion) nodes consuming it through fdf passes destroy: Ceph VMs are stopped and deleted under data-loss, the physical nodes need no stop proof (the claim block is always quiescent), and the surviving cluster keeps running workloads whose PVCs point at a deleted Ceph cluster. Consumer quiescence was never proved, contradicting the rule that data-loss does not substitute for quiescence.
+
+**Counterevidence.** The export already refuses removal when any Ceph host is physical or survives (specs/storage-resources.md:1180, 1252-1255). The add-on contract says the surviving physical cluster keeps its add-on objects and placed Secrets, and the removal's description states this (specs/add-ons.md:388-391). The finding does not claim the outcome goes unannounced. Its claim is that disclosure is not a consumer-quiescence proof. Neither B85 nor B86 has operator acceptance yet (specs/milestones/m4.md:1095, 1172).
 
 **Recommendation.** Add to the export block's retirement condition (storage-resources.md StorageExport and the fdf coverage row) that every cluster consuming the export through an fdf instance must also be retired with owned virtual Machines stopped by the same removal; otherwise the export's removal refuses before registration with the consuming cluster named, joining the B491 refusal until consumer quiescence for surviving clusters is defined.
 
 Verifier notes:
 
-- [refuter] Keep recommendation; cite the RBD-replication precedent (storage-resources.md:279-281) as the model: export retires only when every consuming cluster's fdf instance is retired with owned virtual Machines in the same removal, else refuse under B491 naming the consumer cluster. Also update the fdf removal description in add-on-coverage.md.
-- [calibrator] Put the new row in the existing refusal table at storage-resources.md:1172, not a new table. The refusal must name a remedy, because otherwise the context has no destroy path until B491 lands: for example, destroy with the consumer's nodes owned virtual Machines, or wait for B491/B769. Also have planning or apply flag this topology as not destroyable when the operator declares it, so the operator does n…
+- [refuter] Keep recommendation; cite the RBD-replication precedent (specs/storage-resources.md:279-281) as the model: export retires only when every consuming cluster's fdf instance is retired with owned virtual Machines in the same removal, else refuse under B491 naming the consumer cluster. Also update the fdf removal description in add-on-coverage.md.
+- [calibrator] Put the new row in the existing refusal table at specs/storage-resources.md:1172, not a new table. The refusal must name a remedy, because otherwise the context has no destroy path until B491 lands: for example, destroy with the consumer's nodes owned virtual Machines, or wait for B491/B769. Also have planning or apply flag this topology as not destroyable when the operator declares it, so the operator…
 
 **Acceptance.** storage-resources.md states the consumer-cluster condition for export retirement; the export refusal table gains a row 'consumer cluster survives the removal'; a planner test refuses destroy of a context with virtual Ceph and a physical fdf consumer, naming the cluster.
 
-**Decision check.** Checked D173 and its Q39 answer (B86 adds no revocation; per-export revocation while the cluster stays goes to B491): the fix adds a refusal and no revocation, consistent. D177 (erase opt-in) and D153 (destroy then fresh apply) unaffected. Consistent with the fail-closed and 'quiescence independently proves' principle in state-reconciliation.md:1895-1898. No decision accepts losing consumer storage.
+**Decision check.** Checked D173 and its Q39 answer (B86 adds no revocation; per-export revocation while the cluster stays goes to B491): the fix adds a refusal and no revocation, consistent. D177 (erase opt-in) and D153 (destroy then fresh apply) unaffected. Consistent with the fail-closed and 'quiescence independently proves' principle in specs/state-reconciliation.md:1895-1898. No decision accepts losing consumer storage.
 
 Verification: refuter real, medium confidence, severity High; calibrator real, high confidence, severity High; no arbitration needed.
 
 ##### R2-04-01 · High · Removal needs the apply-bound credential, so rotating a BMC secret strands it
 
-Kind: unsafe-rule; Area: Reconciliation rules: secret binding across rotation; Status: confirmed.
+Kind: unsafe-rule; Area: Reconciliation rules: secret binding across rotation; Status: confirmed; Also raised as: CX-RULEcredentialrevocation.
+
+Also raised independently by the sibling audit in its rule notes (credential revocation) and confirmed by our verifiers (CX-RULEcredentialrevocation).
 
 Files: `specs/state-reconciliation.md:1482-1486`; `specs/state-reconciliation.md:1511-1524`; `specs/secrets.md:295-299`; `specs/substrates.md:641-649`; `specs/managed-os.md:943-947`
 
-**Evidence.** state-reconciliation.md:1482-1486 "A fresh removal uses the secret material its apply bound ... a declaration edited or rotated afterwards never silently changes which version a removal presents." state-reconciliation.md:1521-1524 "No re-binding of the current declarations, substitution of other material, removal without the binding ... exists". secrets.md:295-299 "Bounded consumers bind nothing: machine start, stop and restart ... read the current version of every Secret they name". substrates.md:648-649 "The kubeconfig is lent to a run as an operation-scoped file". managed-os.md:945-946 "a remedy that takes the context back with destroy before replacing the Secret, since a continued apply reads the bound version".
+**Evidence.** specs/state-reconciliation.md:1482-1486 "A fresh removal uses the secret material its apply bound ... a declaration edited or rotated afterwards never silently changes which version a removal presents." specs/state-reconciliation.md:1521-1524 "No re-binding of the current declarations, substitution of other material, removal without the binding ... exists". specs/secrets.md:295-299 "Bounded consumers bind nothing: machine start, stop and restart ... read the current version of every Secret they name". specs/substrates.md:648-649 "The kubeconfig is lent to a run as an operation-scoped file". specs/managed-os.md:945-946 "a remedy that takes the context back with destroy before replacing the Secret, since a continued apply reads the bound version".
 
 **Consequence.** The rule is right for material Bootwright placed (a LUKS passphrase, a host key, a generated certificate) but it is applied equally to credentials Bootwright only presents to authenticate to a system the operator owns. A physical BMC password rotated by a 90-day policy, a KubeVirt kubeconfig whose token expired, or a changed vCenter password makes every continuation and every destroy authenticate with the old bound version and fail. The operator updates the keyring with secret set; machine stop now works (current version) but destroy still fails (bound version). The only exits the spec names are restoring an old keyring (which does not help, the old password is what fails) or context delete --purge --allow-orphans, abandoning VMs, disks and reservations. No rule states which material is right when bounded and lifecycle consumers disagree.
+
+**Counterevidence.** The bound-version rule is deliberate. It keeps a rotated declaration from changing what a removal presents (specs/state-reconciliation.md:1481-1485), and its refusals name the exact command that reopens a binding (1487-1496). Bounded power, rsh and exec already read the current version (specs/secrets.md:295-299), so day-to-day access survives a rotation. One case, a removal holding an expired KubeVirt token, is already an open question in specs/milestones/m1.md:510-511. The finding does not claim that ownership proofs or D37's lost-binding exits are wrong.
 
 **Recommendation.** Split Secret consumption into two classes in secrets.md#immutable-binding-and-contexts: effect material (placed or derived into the effect; removal must present the bound version, as today) and access credentials (presented to an operator-owned endpoint whose ownership proof does not depend on the credential: BMC/Redfish auth, KubeVirt kubeconfigRef, vCenter, registry login). For access credentials, let a continuation or removal rebind the current version only under an explicit flag (for example destroy --rebind-access <Secret>) recorded in the operation, keeping ownership proofs (UIDs, pinned identities, host keys) unchanged. Each consumer field's class is declared once in the API page that defines it.
 
@@ -3659,7 +4125,7 @@ Verifier notes:
 
 **Acceptance.** secrets.md names the two classes and the rebind rule; every *Ref field of a Secret in specs/api lists its class; state-reconciliation.md#continuation-and-removal names the rebind exit beside D37's two exits; a test rotates a bound BMC credential and proves destroy succeeds only with the flag and that the ownership proof still runs.
 
-**Decision check.** D37 (lost binding exits: restore keyring or orphan delete) covers a binding the keyring no longer holds, not a held binding whose credential the external system no longer accepts; the recommendation adds an exit and leaves D37 intact. D85 (bounded power, rsh and exec read current material in one keyring session and publish no binding) is kept. It conflicts with the sentence at state-reconciliation.md:1521-1524, which is the point: that rationale (the material that created an effect proves it gone) does not hold for access credentials. Consistent with the project principle that identity comes from desired state and ownership proofs, not from the credential.
+**Decision check.** D37 (lost binding exits: restore keyring or orphan delete) covers a binding the keyring no longer holds, not a held binding whose credential the external system no longer accepts; the recommendation adds an exit and leaves D37 intact. D85 (bounded power, rsh and exec read current material in one keyring session and publish no binding) is kept. It conflicts with the sentence at specs/state-reconciliation.md:1521-1524, which is the point: that rationale (the material that created an effect proves it gone) does not hold for access credentials. Consistent with the project principle that identity comes from desired state and ownership proofs, not from the credential.
 
 Verification: refuter real, medium confidence, severity High; calibrator real, medium confidence, severity High; no arbitration needed.
 
@@ -3669,22 +4135,144 @@ Kind: unsafe-rule; Area: Reconciliation rules / host reservations and substrates
 
 Files: `specs/substrates.md:135-137, 211-215, 230-245`; `specs/api/machines.md:158`; `specs/api/container-clusters.md:253-256`; `specs/milestones/backlog.md:1298-1343, 3317-3329`
 
-**Evidence.** substrates.md:135-137 "An `external` attachment is proved present as a bridge device ... and is never defined, changed or removed." substrates.md:236-240 reservations: "`bridge:<name>` for every managed attachment ... `prefix:<masked prefix>` for every managed attachment" (external claims none). substrates.md:230-233 "its quiescence is derived from theirs under the removal gate rather than observed on the host." substrates.md:211-212 "Stopping a network disconnects every domain plugged into it". api/container-clusters.md:253-255 "A managed libvirt network's prefix belongs to one context through its exclusive reservation, so no address in it is shared across contexts". api/machines.md:158 admission's bridge rule is per host within one context's catalog. backlog.md:1300-1301 D155 "requires definition and delivery of this guard ... before further `destroy` on a shared libvirt host"; backlog.md:1336-1338 a `bridge-use:` reservation "is a separate item to record when this one is promoted". No spec page outside milestones links B567.
+**Evidence.** specs/substrates.md:135-137 "An `external` attachment is proved present as a bridge device ... and is never defined, changed or removed." specs/substrates.md:236-240 reservations: "`bridge:<name>` for every managed attachment ... `prefix:<masked prefix>` for every managed attachment" (external claims none). specs/substrates.md:230-233 "its quiescence is derived from theirs under the removal gate rather than observed on the host." specs/substrates.md:211-212 "Stopping a network disconnects every domain plugged into it". api/container-clusters.md:253-255 "A managed libvirt network's prefix belongs to one context through its exclusive reservation, so no address in it is shared across contexts". api/machines.md:158 admission's bridge rule is per host within one context's catalog. specs/milestones/backlog.md:1300-1301 D155 "requires definition and delivery of this guard ... before further `destroy` on a shared libvirt host"; specs/milestones/backlog.md:1336-1338 a `bridge-use:` reservation "is a separate item to record when this one is promoted". No spec page outside milestones links B567.
 
 **Consequence.** Context B declares `management: external, bridge: <A's managed bridge>` (the default management value) and takes addresses in A's prefix; nothing refuses it. A's `destroy` derives quiescence from A's own Machines, stops and undefines the network, and B's guests lose their uplink (running ones at once, shut-off ones can no longer start). B's settled apply still reads done. The container-cluster rule that no address in a managed prefix is shared across contexts is false, so address-uniqueness reasoning built on it is unsound. B567's planned guard checks only domains that are not shut off, so B's stopped guests are still stranded.
 
-**Recommendation.** Add a shared reservation class `bridge-use:<name>` that every controller-arm external attachment publishes, and state one cross-class rule in the key table: a removal that would release an exclusive `bridge:<name>` refuses `controller.conflict` while another context holds `bridge-use:<name>`, naming that context and `bootwright destroy --context <user>`. Keep B567's live-domain probe for domains outside Bootwright. Replace substrates.md:230-233 with an observed-quiescence rule plus a Not-yet-met line linking B567, and narrow api/container-clusters.md:253-255 to 'no other context's managed attachment'.
+**Counterevidence.** The destroy hazard is already tracked. B567 records it and names a `bridge-use:` follow-up (specs/milestones/backlog.md:152, 1298-1343), and D155 requires that guard before further shared-host destroy (specs/milestones/backlog.md:3326-3328). Within one catalog, admission refuses a managed bridge named by any other attachment (specs/substrates.md:136-145). The apply path refuses a network restart while a running domain is plugged in (specs/substrates.md:211-220). The finding's new parts are stopped guests and the cross-context address claim at specs/api/container-clusters.md:253-256.
+
+**Recommendation.** Add a shared reservation class `bridge-use:<name>` that every controller-arm external attachment publishes, and state one cross-class rule in the key table: a removal that would release an exclusive `bridge:<name>` refuses `controller.conflict` while another context holds `bridge-use:<name>`, naming that context and `bootwright destroy --context <user>`. Keep B567's live-domain probe for domains outside Bootwright. Replace specs/substrates.md:230-233 with an observed-quiescence rule plus a Not-yet-met line linking B567, and narrow api/container-clusters.md:253-255 to 'no other context's managed attachment'.
 
 Verifier notes:
 
-- [refuter] Note that the defect is already recorded as B567 under D155; frame the fix as (1) adding a Not-yet-met link to B567 at substrates.md:230-233 and narrowing container-clusters.md:253-255 now, and (2) recording the bridge-use: shared key (modelled on the existing media: shared-claim row) as its own backlog item tied to B567, rather than a standalone spec change implemented outside the named safety slice. Exte…
+- [refuter] Note that the defect is already recorded as B567 under D155; frame the fix as (1) adding a Not-yet-met link to B567 at specs/substrates.md:230-233 and narrowing specs/api/container-clusters.md:253-255 now, and (2) recording the bridge-use: shared key (modelled on the existing media: shared-claim row) as its own backlog item tied to B567, rather than a standalone spec change implemented outside the named sa…
 - [calibrator] State that B567 already owns the destroy-guard defect and that this finding extends it (shut-off guests, address claim); D155 marks it accepted direction, not authorization, so the spec change should be paired with promoting B567 and recording the bridge-use item. Consider the simpler alternative of making bridge-use conflict with another context's bridge: at acquisition (refuse at apply), which also ma…
 
-**Acceptance.** The key table lists `bridge-use:` as shared with its release-blocking relation; substrates.md names it among a libvirt provider's reservations for external attachments; a test such as TestARemovalOfAManagedBridgeAnotherContextUsesRefuses is named; substrates.md:230-233 no longer asserts derived quiescence without a Not-yet-met link to B567; api/container-clusters.md:253-255 matches the rule.
+**Acceptance.** The key table lists `bridge-use:` as shared with its release-blocking relation; substrates.md names it among a libvirt provider's reservations for external attachments; a test such as TestARemovalOfAManagedBridgeAnotherContextUsesRefuses is named; specs/substrates.md:230-233 no longer asserts derived quiescence without a Not-yet-met link to B567; api/container-clusters.md:253-255 matches the rule.
 
-**Decision check.** D155 (backlog.md:3317-3329) requires the B567 guard before shared-host destroy and B567 itself proposes `bridge-use:` as a follow-up: the recommendation implements that direction and adds no version or compatibility rule (D163). D95 covers only same-catalog bridge conflicts and is unaffected. Not a repeat of F10-03 (same-name adoption).
+**Decision check.** D155 (specs/milestones/backlog.md:3317-3329) requires the B567 guard before shared-host destroy and B567 itself proposes `bridge-use:` as a follow-up: the recommendation implements that direction and adds no version or compatibility rule (D163). D95 covers only same-catalog bridge conflicts and is unaffected. Not a repeat of F10-03 (same-name adoption).
 
 Verification: refuter real, high confidence, severity High; calibrator real, high confidence, severity High; no arbitration needed.
+
+##### CX-R4 · Medium · Refusal remedies offer a backup restore that the restore boundary rejects and no spec defines · revision 2
+
+Kind: contradiction; Area: Reconciliation safety: context store, keyring and recovery diagnostics; Status: confirmed.
+
+Provenance: Raised by the sibling audit as R4 (High); confirmed by our refuter (Medium) and calibrator (High), kept at Medium per our cross-check, with no arbitration.
+
+Files: `specs/contexts.md:366-371, 644-649, 742-758, 784-787, 794-798`; `specs/state-reconciliation.md:476-481, 1508-1514, 1682-1686`; `specs/secrets.md:518-521`; `specs/milestones/backlog.md:27, 370-379, 3091`
+
+**Evidence.** Seven remedies name a backup restore: specs/contexts.md:369-370 'is resolved only by restoring the whole store from a matching backup' (also 648-649, 786, 797); specs/state-reconciliation.md:478-479, 1511-1512 'restore the keyring from a complete backup and repeat the verb', 1685; specs/secrets.md:520 'Lost keys need a complete external backup'. Yet specs/contexts.md:751-753: 'Device/inode bindings deliberately reject ordinary directory-copy restoration... There is no general copy-restore or rollback command', and 753-757 require a future restore to rebind and set 'a fresh encryption key before new writes when restoring older seal counters'. B103 (specs/milestones/backlog.md:27, 370-379) parks that restore: 'No milestone needs backup and restore'. No spec defines 'matching backup' or 'complete backup'. D37 (specs/milestones/backlog.md:3091) accepts restore-the-keyring as one of the two lost-binding exits.
+
+**Consequence.** Diagnostics advertise an exit with no supported realization: a file-level copy is refused by the inode bindings, while an inode-preserving block snapshot could roll back seal counters without the fresh key the boundary requires. For a replaced directory, a damaged reservation or a missing contexts container (specs/contexts.md:366-371) it is the only exit offered, so an operator holding a backup still has no defined path, and ad hoc restoration risks stale encryption counters. Implementers of recovery diagnostics and agents writing remedies cannot tell what backup form is meant. Kept Medium: these are damage-only paths, most offer an orphan-acknowledged deletion as a second exit, and the gap is tracked in B103.
+
+**Recommendation.** Keep D37's two exits. Define the term once at contexts.md#format-and-restore-boundary: a 'matching backup' is a whole-root image taken while no lease is held that preserves device and inode identity; until B103 lands, state that after such a restore no new seal may be written to a keyring whose seal counters it rolled back, and link B103. Replace each restated 'matching/complete backup' remedy with a link to that anchor, and where the restore is the only exit (specs/contexts.md:366-371) say it is unavailable as a supported command until B103. Alternatively schedule B103 into a milestone, since these remedies depend on it.
+
+**Acceptance.** grep -n 'matching backup\|complete backup\|external backup' specs/ shows every remedy linking contexts.md#format-and-restore-boundary; that section names the backup form, the counter-rollback limit and B103; D37's two exits remain at specs/state-reconciliation.md:1508-1514; make docs-check passes.
+
+**Decision check.** D37 (specs/milestones/backlog.md:3091) is owner-accepted and names 'restore the keyring' as an exit, so removing the restore remedy outright would conflict with it; the fix only defines and qualifies it. B103 stays parked unless the owner schedules it; no new restore command is proposed.
+
+Verification: refuter real, high confidence, severity Medium; calibrator real, high confidence, severity High; no arbitration needed.
+
+##### CX-R6 · Medium · 'Read-only command' has no single definition: security.md's no-process row conflicts with diff --observe and preflight · revision 2
+
+Kind: ambiguity; Area: Reconciliation safety: command effect classes (read-only, observe, store-internal rebuild); Status: confirmed-by-arbitration.
+
+Provenance: Raised by the sibling audit as R6; our refuter rejected its contradictory-owners framing (Low), our calibrator confirmed a Medium ambiguity, and arbitration sided with the calibrator at Medium with the narrowed two-class remedy.
+
+Files: `specs/security.md:134-135, 694`; `specs/cli/commands.md:48-51, 98`; `specs/cli/output.md:281, 883-885`; `specs/state-reconciliation.md:297-300, 1649-1652`; `specs/controller.md:184-195`; `specs/milestones/backlog.md:3306`
+
+**Evidence.** specs/security.md:134-135 scopes its no-cache rule by link to specs/cli/output.md:883-885 ('Help, completion, `version`, every `validate`, `render effective`, `plan`, and local list/current/status reads create no cache'), which excludes diff and preflight. But specs/security.md:694 states unscoped: 'Read-only commands perform no writes, payload reads, processes, network access, secret lookup or generation.' specs/cli/commands.md:50-51 defines 'Observe' as permitting 'bounded read-only process or network access', specs/cli/commands.md:98 calls diff --observe 'a bounded read-only observation ... after the store-internal cache-only rebuild', D153 (specs/milestones/backlog.md:3306) says '`bootwright diff` is read-only', and specs/cli/output.md:281 adds a third phrase, 'bounded read-only command set'. specs/state-reconciliation.md:1651-1652 says diff --observe 'releases nothing and runs no effect', while specs/controller.md:184-195 has diff trigger a runtime rebuild that is 'a store-internal effect rather than a setup'. Re-checked at 17acb63d9; the sibling's specs/security.md:696 row is now at :694. The sibling's framing (contradictory owners of one budget) is refuted by the output.md scope link and the commands.md Observe class; the term ambiguity survives.
+
+**Consequence.** An implementer or test author reading specs/security.md:694 can reasonably extend the no-process, no-network negative proof to diff --observe or preflight, contradicting commands.md, or conversely treat 'read-only' as permitting the cache-only rebuild everywhere; the runtime rebuild under diff is invisible to a reader of state-reconciliation.md. Divergent implementations and tests follow, not an unsafe rule: the operator-visible contract in commands.md is correct.
+
+**Recommendation.** Keep D153. Make the specs/cli/commands.md Effects column the single owner of command effects: the classes Local, Observe and Mutate (specs/cli/commands.md:48-51) and each command's Effects cell; every other spec projects it, and no new class vocabulary is added. Three edits. First, retarget the specs/security.md:694 row to the commands whose Effects cell reads none or read local state. Second, add to the Observe definition the one local write it admits, the store-internal cache-only rebuild (specs/controller.md:184-197), which waits for `setup/lock` (specs/controller.md:191-192). Third, change specs/state-reconciliation.md:1652 "runs no effect" to "runs no lifecycle effect", linked to controller.md#the-controller-runtime.
+
+**Acceptance.** No spec clause makes a claim about "read-only commands" except by projecting the commands.md Effects column. Contract check: `diff --observe` with a missing runtime directory and a held `setup/lock` waits, then rebuilds; with a missing locked wheel it refuses naming `bootwright setup`; `status` never rebuilds (specs/controller.md:203-204).
+
+**Decision check.** Consistent with D153 (diff is read-only in the sense of writing no record and repairing nothing) and with the commands.md Observe class; it only names the classes the specs already use. Does not touch D152's cache-only rebuild semantics.
+
+Verification: refuter not real, medium confidence, severity Low; calibrator real, medium confidence, severity Medium; arbiter real, severity Medium.
+
+##### CX-R9 · Medium · Unbounded several-Machine exec sessions contradict the universal fixed target-concurrency limit · revision 2
+
+Kind: contradiction; Area: reconciliation safety: operator access sessions (machine exec, cluster exec) resource bounds; Status: confirmed.
+
+Provenance: Raised by the sibling audit as R9, confirmed by our refuter and calibrator (both real, high confidence, Medium); no arbitration was needed.
+
+Files: `specs/security.md:20-31`; `specs/cli.md:1037-1040`; `specs/cli.md:1109-1117`; `specs/cli.md:1324-1331`; `specs/milestones/backlog.md:3303-3304`
+
+**Evidence.** specs/security.md:20-25 says 'Every input boundary defines and tests fixed limits' and lists 'target concurrency'. specs/cli.md:1039-1040 says several-Machine exec sessions 'start together and run concurrently, with no bound.' specs/cli.md:1112-1114 makes cluster exec run several Machines 'as machine exec runs several Machines'. By contrast specs/cli.md:1326-1331 bounds power batches 'at most as the lifecycle engine's bound on running blocks allows', a run past the bound waiting for a slot. A grep of specs/ finds 'no bound' for sessions only at specs/cli.md:1040. D150 and D151 (specs/milestones/backlog.md:3303-3304) ask for parallel execution but record no waiver of the security limit for exec; the only indirect cap is the admitted object count (8,192 documents, api/input.md).
+
+**Consequence.** Two spec clauses give opposite rules for the same fan-out, so implementers diverge: one honours security.md and caps sessions, another follows cli.md and launches one SSH client per selected Machine at once. On a large environment or through a shared jump host, the unbounded form can exhaust controller processes and file descriptors or trip remote sshd MaxStartups, failing sessions nondeterministically. Operator-invoked only, so not unsafe to declared state.
+
+**Recommendation.** In cli.md machine exec, replace 'with no bound' with a fixed session bound: reuse the lifecycle engine's bound on running blocks as power batches do (or a named constant), start sessions in canonical order, and let a session past the bound wait for a slot while keeping D150's 'in parallel' intent; cluster exec already inherits it by reference. Add the exec bound to the tested limits that security.md requires. If unbounded fan-out is intended, record it instead as an explicit owner exception in security.md naming this boundary.
+
+**Acceptance.** cli.md no longer says sessions run 'with no bound'; it names the bound, the canonical start order and the waiting rule, and states that cancellation stops waiting sessions from starting; security.md's target-concurrency rule has no unqualified exception; a test asserting the exec session bound is cited. Sibling acceptance cases: a `machine exec` selection at the graph maximum stays within the stated session bound and is admitted in canonical order as power batches are (`specs/cli.md:1326-1330`); cancellation stops admissions still waiting (`specs/security.md:29-31`); per-line `<machine>: ` prefixes and exit aggregation stay as specified; an interactive time limit that differs from managed runs is stated as an explicit session exception.
+
+**Decision check.** Compatible with D150 and D151: they require concurrent sessions, not unbounded ones, and D150 already bounds power runs by the engine bound. No owner decision records unbounded exec as intended; if the owner wants it, the fix is the recorded exception, not a code change.
+
+Verification: refuter real, high confidence, severity Medium; calibrator real, high confidence, severity Medium; no arbitration needed.
+
+##### CX-RULEplanbytes · Medium · State-reconciliation caps a plan record at 1 MiB while the bounds table and code store plans up to 6 MiB · revision 2
+
+Kind: contradiction; Area: reconciliation reliability / durable record bounds; Status: confirmed.
+
+Provenance: Raised by the sibling audit as an unrated rule note (plan bytes), framed there as a future design risk; confirmed by our refuter and calibrator as a Medium contradiction between stale prose and the owning table and code; no arbitration was needed.
+
+Files: `specs/state-reconciliation.md:390-393, 432-434, 758-764`; `specs/contexts.md:524-526`; `internal/reconciliation/operationstore/records.go:20-21`; `internal/reconciliation/plan.go:22`; `specs/milestones/delivered.md:8360-8366`
+
+**Evidence.** specs/state-reconciliation.md:432-434 says "An operation or plan record is at most 1 MiB". The same spec at :390-393 makes plan.json hold every block's "canonical secret-free request", and :758-761 admits "all of a plan's requests together at most 4 MiB", so the 1 MiB clause cannot hold for a valid plan. The owning bounds table, specs/contexts.md:525-526, sets 4 MiB of canonical request bytes (MaxPlanRequestBytes) and "Encoded bytes in one stored lifecycle plan, including metadata | 6 MiB | MaxPlanBytes"; code agrees: internal/reconciliation/operationstore/records.go:20-21 MaxOperationBytes = 1 << 20, MaxPlanBytes = 6 << 20, internal/reconciliation/plan.go:22 MaxPlanRequestBytes = 4 << 20. B715 (larger plan bounds) is delivered (specs/milestones/delivered.md:8360-8366, under X121), so this is stale prose, not future work. Grep of specs/ finds no other statement of a plan-record bound. The sibling cited :420-423 at 77033e8f5 and framed it as a future design risk; at 17acb63d9 the clause sits at :432-434 and is unchanged.
+
+**Consequence.** Two normative pages disagree on a durability bound. An agent implementing or reviewing from state-reconciliation.md would cap stored plans at 1 MiB and refuse valid plans of up to 4 MiB of requests, or 'fix' MaxPlanBytes downward; make docs-check validates the contexts.md table against code but not this prose, so the drift is not caught.
+
+**Recommendation.** Edit specs/state-reconciliation.md:432-434 to read 'An operation record is at most 1 MiB, a plan record at most 6 MiB, ...', or better drop the numbers and link to the operator-visible bounds table in contexts.md#storage-locking-and-publication, which already owns them. No new proof of aggregate fit is needed: B715 is delivered and records.go keeps the 6 MiB stored bound above the 4 MiB request cap.
+
+**Acceptance.** No spec states a plan-record bound other than 6 MiB (or none, deferring to contexts.md); grep 'plan record is at most' across specs/ either returns nothing or agrees with MaxPlanBytes; make docs-check passes.
+
+**Decision check.** No owner decision conflicts: B715/X121 delivered the 4 MiB aggregate and stored-plan bounds, and the contexts.md table records MaxPlanBytes = 6 MiB as the contract.
+
+Verification: refuter real, high confidence, severity Medium; calibrator real, high confidence, severity Medium; no arbitration needed.
+
+##### CX-X1 · Medium · Powered-off private Machine after network restart is read as positive no effect although its installation happened · revision 2
+
+Kind: contradiction; Area: reconciliation / managed-OS interruption recovery; Status: confirmed.
+
+Provenance: Raised by the sibling audit as X1 (High), confirmed by our refuter and calibrator at Medium as a labeling contradiction with bounded safety impact; no arbitration.
+
+Files: `specs/managed-os.md:545-552, 565-573, 791-792, 399-414, 1276-1282`; `specs/security.md:33-35`; `specs/state-reconciliation.md:553-555, 598-603`
+
+**Evidence.** specs/managed-os.md:565-571 says a private Machine the network restart powered off before its disk boot "is the one window that leaves nothing to read" and "so it reads positive no effect"; :572 "The next apply installs it again". The interruption row at :791 reads "machine off; the identity read at the top of the replay gets no answer" and resolves "converges at the cost of one installation". At that point the installation and the marker exist; only the identity read is unanswered. specs/security.md:33-35: "A failed or ambiguous probe is unknown, never proof that a machine, object, credential, path, or effect is absent." specs/state-reconciliation.md:553-555 maps positive no effect to no-effect and a failed observation to unknown. :552 also scopes no-effect to "only in the one window below", yet a private Machine powered off after its disk boot but before the evidence (row :792 assumes a readable marker) yields the same readings. Commit 17acb63d9 changed only the foreign-marker refusal in managed-os.md (:510-513), not this passage. Bounding safeguards: the boot-time target proof requires an identity match and power-off and refuses a running machine (:399-414), and the in-installer %pre repeats the MAC and root-device check (:1276-1282).
+
+**Consequence.** The spec labels a state where an effect demonstrably occurred as positive no effect, contradicting the security rule that an unanswered probe never proves an effect absent. Agents implementing other recovery paths can cite this passage to justify treating unreachable or missing evidence as absence. The operator loses a completed installation and its evidence trail without a distinct reading; the claim that this is the only such window is also understated. Blast radius is bounded: the replay targets only this operation's same frozen request on the same proved, powered-off Machine, and can only erase what this operation itself installed, which the spec deliberately accepts.
+
+**Recommendation.** Keep the replay behaviour (do not forbid the reinstall) but reclassify the reading: name this window a positive partial realization of this operation's own installation (retried by the same installer boot of the same frozen request behind the boot proof), not positive no effect; state that the evidence cannot distinguish never-published from installed-then-powered-off and that this is why replay is bounded to the operation's own request; drop 'the one window' or explicitly cover a private Machine powered off after its disk boot before the evidence. Alternatively, add a named, bounded exception in specs/security.md:33-35 that cross-links this window.
+
+**Acceptance.** managed-os.md no longer calls this state positive no effect; the interruption table row and the Unknown-resolution prose give the same classification; specs/security.md:33-35 and specs/state-reconciliation.md:553-555 admit no conflicting reading; the after-disk-boot powered-off case is either covered or explicitly excluded; the boot-time target proof and %pre check remain the safety gate.
+
+**Decision check.** No backlog or milestone decision records an accepted exception for this window (searched specs/ for 'one installation', 'reinstall', 'network restart'; only the passage itself and :791 match); the cost is accepted only inline in the table. Do not re-propose forbidding replay: the spec's choice to converge by one repeat installation of the same request is deliberate and is preserved.
+
+Verification: refuter real, medium confidence, severity Medium; calibrator real, medium confidence, severity Medium; no arbitration needed.
+
+##### CX-X6 · Medium · Own-image identity for agent-install media is defined two incompatible ways · revision 2
+
+Kind: contradiction; Area: Reconciliation: ContainerCluster agent-install media (replay, unknown resolution, removal); Status: confirmed-by-arbitration.
+
+Provenance: Raised by the sibling audit as X6 (media cleanup authority broader than media ownership); our refuter rejected the authority half (D27) and found the identity contradiction, our calibrator confirmed a narrower authority defect, and arbitration confirmed only the identity contradiction at Medium.
+
+Files: `specs/container-clusters.md:568-576`; `specs/container-clusters.md:596-600`; `specs/container-clusters.md:847-851`; `specs/container-clusters.md:864-870`; `specs/container-clusters.md:885-904`; `specs/milestones/backlog.md:3081`
+
+**Evidence.** Every insert uses a per-insert token link: the block 'publishes beneath `private/clusters/<cluster>/<token>/` a hard link to the image the media block published ... and inserts its URL' (specs/container-clusters.md:572-576). Own image is then defined twice. First (596-600): scheme and host match and the path 'names a file beneath `private/clusters/<cluster>/` that is the same file, by device and inode' as the published image. Second, in the evidence paragraph (847-851): scheme, host and path must equal the media block's published address, 'each compared exactly and never as a prefix', and 'another attempt's under the same reserved path, is foreign'. A node presenting its own insert-token URL is own under the first rule and foreign under the second. The classification drives replay (864-870: boot only nodes 'not both running and presenting that image') and unknown resolution (885-897: own image while nothing answers is partial; a foreign image stays unknown). The sibling's broader claim, that removal ejecting any media exceeds ownership (874-875, 901-904), is a recorded owner decision: D27 'a foreign image on one of the cluster's own Machines reads as partial during an agent-install removal' (specs/milestones/backlog.md:3081); the BMC claim only withholds machine destruction (substrates.md:586-587), and apply already releases other media before insert (substrates.md:881-882).
+
+**Consequence.** Two implementers (or one agent reading only the evidence paragraph) classify the same node differently: under the exact-path rule every token-link boot is foreign, so an interrupted attempt is resolved as unknown instead of partial and replay refuses or re-boots nodes still installing from this cluster's image; under the inode rule they are own and skipped. Recovery after an interrupted boot thus depends on which paragraph the code followed, and the evidence record's 'nodes presenting own image' field means different things.
+
+**Recommendation.** Keep one own-image definition, the device-and-inode rule at specs/container-clusters.md:596-600 (it covers per-insert token links and tolerates echoed ports via the token rule at 584-588), and replace the restated exact-path rule at 847-851 with a link to it. Do not change cleanup authority: the removal continues to eject whatever a declared Machine presents, per D27.
+
+**Acceptance.** specs/container-clusters.md states own-image identity in exactly one place; the evidence, replay and unknown-resolution paragraphs reference that rule; a node presenting its own insert-token link is classified own; no paragraph says another attempt's link under the reserved path is foreign unless the single rule implies it.
+
+**Decision check.** Follows D27 (removal ejects foreign media on the cluster's own Machines and reads it as partial); no conflict with D162, D163 or Q12(a) (retaining destroy).
+
+Verification: refuter not real, medium confidence, severity Medium; calibrator real, medium confidence, severity Medium; arbiter real, severity Medium.
 
 ##### F09-01 · Medium · One unreachable target blocks a whole removal; the only exit abandons all effects
 
@@ -3728,7 +4316,7 @@ Verifier notes:
 
 **Acceptance.** contexts.md states that only the removal may write into its reserve; a test exhausts the area by repeated apply retries and shows the next apply refusing before an effect while the destroy registers and completes; no remaining sentence admits a removal refusing at registration because of the apply's own writes.
 
-**Decision check.** Consistent with D105 (B243, B267 parked, not rejected) and with B572's recorded smallest fix, which it extends; no decision accepts stranding a removal. Consistent with the principle that bounds never authorize evidence deletion (contexts.md:659-660), because nothing is pruned.
+**Decision check.** Consistent with D105 (B243, B267 parked, not rejected) and with B572's recorded smallest fix, which it extends; no decision accepts stranding a removal. Consistent with the principle that bounds never authorize evidence deletion (specs/contexts.md:659-660), because nothing is pruned.
 
 Verification: refuter real, medium confidence, severity Medium; calibrator real, medium confidence, severity High; no arbitration needed.
 
@@ -3769,8 +4357,8 @@ Files: `specs/state-reconciliation.md:576-583`; `specs/state-reconciliation.md:1
 
 Verifier notes:
 
-- [refuter] Fix substrates.md:480-483 together with state-reconciliation.md:1254-1256. If the intent is only diagnostic ordering in status, tie it to B460 rather than to refusal semantics.
-- [calibrator] Delete the sentence at state-reconciliation.md:1254-1256 and the parallel clause at substrates.md:480-483, replacing each with: a superseding removal first applies the apply observation, then the removal's check (link to the D119 section); only a block neither resolves refuses, naming the removal check's reason and remedy. Acceptance: grep for 'by the apply's reading' across specs/ returns nothing; one…
+- [refuter] Fix substrates.md:480-483 together with specs/state-reconciliation.md:1254-1256. If the intent is only diagnostic ordering in status, tie it to B460 rather than to refusal semantics.
+- [calibrator] Delete the sentence at specs/state-reconciliation.md:1254-1256 and the parallel clause at substrates.md:480-483, replacing each with: a superseding removal first applies the apply observation, then the removal's check (link to the D119 section); only a block neither resolves refuses, naming the removal check's reason and remedy. Acceptance: grep for 'by the apply's reading' across specs/ returns nothing…
 
 **Acceptance.** No sentence says a superseding removal refuses by the apply's reading alone; the diagnostic order for a removal over an unknown apply block is stated once and a golden test shows both reasons.
 
@@ -3784,7 +4372,7 @@ Kind: unsafe-rule; Area: Identity and power operations / controller-host protect
 
 Files: `specs/substrates.md:815-831`; `specs/cli.md:1346-1354`; `specs/cli.md:1376-1384`; `specs/state-reconciliation.md:1813-1816`; `specs/state-reconciliation.md:2042-2047`; `specs/api/environment.md:369-374`; `specs/api/machines.md:189`; `specs/security.md:667-672`
 
-**Evidence.** substrates.md:830-831 "a value the proof recorded empty is not compared, and a Machine with no pin is compared with nothing." cli.md:1353-1354 "A Machine that authors its own controller is reachable whenever that controller answers." cli.md:1377-1378 "--force cuts the power instead". The pin check compares UUID/serial only; no MAC proof (substrates.md:826-829). state-reconciliation.md:2042-2043 protects controller power only for "An apply or destroy". api/environment.md:369-374 sets controller requirements but does not forbid hardware.management.bmc on it, and no power rule excludes the controller Machine.
+**Evidence.** specs/substrates.md:830-831 "a value the proof recorded empty is not compared, and a Machine with no pin is compared with nothing." specs/cli.md:1353-1354 "A Machine that authors its own controller is reachable whenever that controller answers." specs/cli.md:1377-1378 "--force cuts the power instead". The pin check compares UUID/serial only; no MAC proof (specs/substrates.md:826-829). specs/state-reconciliation.md:2042-2043 protects controller power only for "An apply or destroy". api/environment.md:369-374 sets controller requirements but does not forbid hardware.management.bmc on it, and no power rule excludes the controller Machine.
 
 **Consequence.** (a) Before the first apply, after a destroy ended the pin, or for an OS-provided Machine that authors a BMC, `machine stop --force --name m1 --yes` sends a power cut to whatever ComputerSystem answers at the address: after a re-addressing that is another production server. (b) If the controller Machine authors its BMC (nothing forbids it) or another Machine's BMC address is a copy-paste of the controller's, `machine stop`/`restart` powers off the host running Bootwright, its runtime and the evidence of in-flight operations of other contexts. The mutation-safety rule ('immediately before every effect, revalidate exact target identity') is not applied to these effects.
 
@@ -3797,7 +4385,7 @@ Verifier notes:
 
 **Acceptance.** substrates.md Identity and power operations states that an unpinned physical Machine is proved by UUID-free full MAC proof before any power request, or refused; cli.md Machine power operations lists the controller-Machine refusal and the self-identity refusal; state-reconciliation.md Controller-host protection covers bounded commands; tests named for each refusal.
 
-**Decision check.** D150 (batched power by list) and D85/B337 (power reads material in one keyring session) do not decide identity proof and are compatible. security.md:670-672 already says --force does not override proofs, which this makes true for unpinned Machines. No decision accepts unproved power requests.
+**Decision check.** D150 (batched power by list) and D85/B337 (power reads material in one keyring session) do not decide identity proof and are compatible. specs/security.md:670-672 already says --force does not override proofs, which this makes true for unpinned Machines. No decision accepts unproved power requests.
 
 Verification: refuter real, medium confidence, severity Medium; calibrator real, high confidence, severity High; no arbitration needed.
 
@@ -3807,7 +4395,7 @@ Kind: contradiction; Area: Quiescence before removal / storage and add-on retire
 
 Files: `specs/state-reconciliation.md:1836-1840`; `specs/state-reconciliation.md:1894-1899`; `specs/storage.md:1459-1463`; `specs/storage.md:1467-1473`; `specs/add-ons.md:78-84`; `specs/add-ons.md:383-391`
 
-**Evidence.** state-reconciliation.md:1838-1839 a retired storage effect's "quiescence derives from their stop proof". Same page 1896-1897: "data-loss acknowledges destruction; quiescence independently proves nothing is using the data." storage.md:1459-1460 target removal must "prove storage clients quiescent". add-ons.md:78-82 an add-on instance may consume a StorageExport of another cluster. add-ons.md:389-391 "a physical cluster keeps running after its context is destroyed, with its add-on objects ... which the removal's description states and its impacts omit."
+**Evidence.** specs/state-reconciliation.md:1838-1839 a retired storage effect's "quiescence derives from their stop proof". Same page 1896-1897: "data-loss acknowledges destruction; quiescence independently proves nothing is using the data." specs/storage.md:1459-1460 target removal must "prove storage clients quiescent". specs/add-ons.md:78-82 an add-on instance may consume a StorageExport of another cluster. specs/add-ons.md:389-391 "a physical cluster keeps running after its context is destroyed, with its add-on objects ... which the removal's description states and its impacts omit."
 
 **Consequence.** A context holds a Ceph cluster on libvirt Machines and a bare-metal OpenShift cluster whose Fusion Data Foundation instance consumes that Ceph's StorageExport. Destroy retires the add-on (no effect), leaves the physical OpenShift running, and retires Ceph with its VMs after the operator stops them, deleting every OSD disk. Live PVs on the surviving cluster now point at a deleted cluster; the plan's impacts never named them, and the stop proof of the storage hosts was accepted as quiescence of a consumer that is still running.
 
@@ -3830,7 +4418,7 @@ Kind: contradiction; Area: Physical machine identity proof; Status: confirmed.
 
 Files: `specs/state-reconciliation.md:1906-1908`; `specs/state-reconciliation.md:1949-1950`; `specs/substrates.md:539-545`; `specs/substrates.md:605-613`; `specs/managed-os.md:1277-1279`
 
-**Evidence.** state-reconciliation.md:1906-1907 "prove the complete live MAC set matches the immutable Machine"; 1949-1950 "exact complete physical MAC set ... must agree". substrates.md:539-540 "requires every MAC the Machine declares to appear in it" (subset). managed-os.md:1278-1279 "every declared MAC must be present on the machine". substrates.md:612-613 "the next apply pins what its own proof finds" (UUID/serial are learned, never authored).
+**Evidence.** specs/state-reconciliation.md:1906-1907 "prove the complete live MAC set matches the immutable Machine"; 1949-1950 "exact complete physical MAC set ... must agree". specs/substrates.md:539-540 "requires every MAC the Machine declares to appear in it" (subset). specs/managed-os.md:1278-1279 "every declared MAC must be present on the machine". specs/substrates.md:612-613 "the next apply pins what its own proof finds" (UUID/serial are learned, never authored).
 
 **Consequence.** An operator declares only the install NIC. That PCIe NIC is moved into another chassis behind the same BMC address after a re-addressing; a fresh apply's subset proof passes, the new chassis' UUID becomes the pin, and its disk is erased. Under the general rule's equality reading the extra onboard NICs would have refused. Implementers of the target proof, %pre, the erase worker and the storage host re-proof will pick different readings.
 
@@ -3862,7 +4450,7 @@ Files: `specs/security.md:9-13, 37-49, 459-462`; `specs/state-reconciliation.md:
 Verifier notes:
 
 - [refuter] Keep it small. Add one paragraph beside the controller-host model: a remote principal reached over a verified channel (pinned host key, verified TLS, declared CA) is trusted for facts about its own resources, and its compromise is out of scope. Link the existing lent-material clauses (86-90, 418-420). A full principal table is optional.
-- [calibrator] Acknowledge the existing per-principal transport and material clauses (security.md:349-417, 86-89) and link to them instead of restating. Smallest change: one short 'Remote principals' paragraph or compact table stating each remote principal is trusted only for assertions about its own resources reached over the verified channel, with the residual effect of its compromise. Drop the acceptance clause req…
+- [calibrator] Acknowledge the existing per-principal transport and material clauses (specs/security.md:349-417, 86-89) and link to them instead of restating. Smallest change: one short 'Remote principals' paragraph or compact table stating each remote principal is trusted only for assertions about its own resources reached over the verified channel, with the residual effect of its compromise. Drop the acceptance clau…
 
 **Acceptance.** security.md names each remote principal with its trusted assertions, lent material and compromise effect. Each positive-proof rule in state-reconciliation.md links to the row whose report it relies on.
 
@@ -3899,15 +4487,15 @@ Kind: contradiction; Area: Security / SSH identity; Status: confirmed; Proposed 
 
 Files: `specs/security.md:509-512`; `specs/cli.md:976-977, 1257-1258, 1264-1268, 1284-1296`; `specs/cli/commands.md:114`
 
-**Evidence.** specs/security.md:509-512: "a first-use record requires an explicit interactive confirmation of the displayed fingerprint ... A host-key observation ... is never the source of a record." specs/cli.md:1257: "The confirmed (or `--yes`) write records it". specs/cli.md:1288: "The plan is the same observation the command records." specs/cli.md:1294-1295: structured formats "[require] one of them" (`--yes` or `--dry-run`). specs/cli.md:1268: re-trust "after its new fingerprint is verified out of band". `--replace <list>` takes Machine names only (commands.md:114).
+**Evidence.** specs/security.md:509-512: "a first-use record requires an explicit interactive confirmation of the displayed fingerprint ... A host-key observation ... is never the source of a record." specs/cli.md:1257: "The confirmed (or `--yes`) write records it". specs/cli.md:1288: "The plan is the same observation the command records." specs/cli.md:1294-1295: structured formats "[require] one of them" (`--yes` or `--dry-run`). specs/cli.md:1268: re-trust "after its new fingerprint is verified out of band". `--replace <list>` takes Machine names only (specs/cli/commands.md:114).
 
-**Consequence.** Attacker action: a network MITM present when a script, or JSON automation, runs `machine trust --yes` gets its key pinned as context trust with no human comparison. The same happens on `--replace` after a legitimate key change, because the out-of-band verification is never compared with anything. Every later session and lifecycle block then offers the fleet identity and lends registration and cluster material to the attacker host. The sessions' non-terminal refusal points operators to exactly this command (cli.md:976-977).
+**Consequence.** Attacker action: a network MITM present when a script, or JSON automation, runs `machine trust --yes` gets its key pinned as context trust with no human comparison. The same happens on `--replace` after a legitimate key change, because the out-of-band verification is never compared with anything. Every later session and lifecycle block then offers the fleet identity and lends registration and cluster material to the attacker host. The sessions' non-terminal refusal points operators to exactly this command (specs/cli.md:976-977).
 
 **Recommendation.** Make `--replace` take `<machine>=SHA256:<fingerprint>`, and add `--expect <machine>=SHA256:<fp>` for `add`. Under `--yes` or a structured format, refuse any add or replace whose observed fingerprint is not named. Alternatively, change security.md to state that `--yes` is an accepted TOFU exception. Do not leave the two pages contradicting each other.
 
 Verifier notes:
 
-- [refuter] Reframe this as a gap plus a conflict with the --yes rule at commands.md:298-306, not with security.md's session rule. Add a security.md clause on machine trust's trust model. Either name --yes enrollment as an accepted TOFU exception to commands.md:304, or require an expected fingerprint (--replace <machine>=SHA256:..., --expect for add) under --yes or structured output.
+- [refuter] Reframe this as a gap plus a conflict with the --yes rule at specs/cli/commands.md:298-306, not with security.md's session rule. Add a security.md clause on machine trust's trust model. Either name --yes enrollment as an accepted TOFU exception to specs/cli/commands.md:304, or require an expected fingerprint (--replace <machine>=SHA256:..., --expect for add) under --yes or structured output.
 - [calibrator] Acknowledge C27. The smallest fix is to reword security.md so that machine trust, after interactive confirmation of the displayed plan or under --yes, is the named enrollment path, and --yes is an explicit operator-accepted TOFU. Then confine the 'never the source of a record' clause to the session client. Make the --replace <machine>=SHA256:<fp> or --expect pinning optional hardening, recorded as a bac…
 
 **Acceptance.** Either security.md and cli.md agree that `--yes` is a named TOFU exception, or `machine trust --yes` refuses to record a key whose fingerprint the invocation did not name. A test covers a substituted key under `--yes`.
@@ -3930,7 +4518,7 @@ Files: `specs/security.md:229-231, 262-272`; `internal/reconciliation/ansiblerun
 
 Verifier notes:
 
-- [refuter] Link the fix to parked B389 (move job and scratch under the root-only staging parent) and add the finding's foreign-entries acceptance test to B389's exit evidence; alternatively count only root-owned private directories toward the bound and state that in security.md:270-271.
+- [refuter] Link the fix to parked B389 (move job and scratch under the root-only staging parent) and add the finding's foreign-entries acceptance test to B389's exit evidence; alternatively count only root-owned private directories toward the bound and state that in specs/security.md:270-271.
 - [calibrator] Name B389 as the carrier of the move: put scratch under a root-owned 0700 parent (the staging port), and add this DoS to B389 exit evidence. As an interim fix, or as well, count only entries that pass the owner/private check, and make security.md say the bound covers only root-owned private run directories. The acceptance test stands: more than 256 foreign-owned matching entries in the scratch parent, a…
 
 **Acceptance.** A test creates more than 256 foreign-owned matching entries in the scratch parent, and a lifecycle run still starts.
@@ -3945,7 +4533,7 @@ Kind: contradiction; Area: Security / disclosure; Status: confirmed.
 
 Files: `specs/security.md:79-82, 351-353`; `specs/secrets.md:64-66, 149-151, 163-166`; `specs/cli.md:260-263`; `specs/cli/commands.md:75`
 
-**Evidence.** specs/security.md:79-81: "Secret values ... must never enter ... command-line arguments, environment variables". specs/secrets.md:65: usernamePassword takes "`--username` and one of `--password-file`", and username is a revealable part (secrets.md:150). specs/cli.md:261-263 treats "a Secret's `--username` or a `--from-url`" as values no output repeats. specs/security.md:353 bans only "URLs containing `userinfo`".
+**Evidence.** specs/security.md:79-81: "Secret values ... must never enter ... command-line arguments, environment variables". specs/secrets.md:65: usernamePassword takes "`--username` and one of `--password-file`", and username is a revealable part (specs/secrets.md:150). specs/cli.md:261-263 treats "a Secret's `--username` or a `--from-url`" as values no output repeats. specs/security.md:353 bans only "URLs containing `userinfo`".
 
 **Consequence.** Attacker action: the declared unprivileged local account reads `/proc/<pid>/cmdline` of the supervisor and the elevated child, and sudo records the full command in its log (COMMAND=). Either way it obtains the Secret username, and any presigned query token in `media add --from-url`. Bootwright's own output hides both, so the protection is illusory.
 
@@ -3953,8 +4541,8 @@ Files: `specs/security.md:79-82, 351-353`; `specs/secrets.md:64-66, 149-151, 163
 
 Verifier notes:
 
-- [refuter] Split the finding. URL: either refuse a query in --from-url, or move the URL off argv (stdin or file) and state in security.md that a signed query is a credential. Username: state in security.md that a Secret's username part is non-secret metadata, and drop the --username placeholder in cli.md:261-263, or carry it through a file or stdin. Do not claim 'protection is illusory' for the username.
-- [calibrator] Username: either declare the username a non-secret identity part in security.md (and stop treating it as hidden in cli.md:262), or add a --username-file / stdin input. Presigned URLs: do not refuse queries, because managed-os.md:38-40 intends signed URLs. Instead take the URL through a file or stdin (for example --from-url-file), or record in security.md a named exception for a query-signed media URL on…
+- [refuter] Split the finding. URL: either refuse a query in --from-url, or move the URL off argv (stdin or file) and state in security.md that a signed query is a credential. Username: state in security.md that a Secret's username part is non-secret metadata, and drop the --username placeholder in specs/cli.md:261-263, or carry it through a file or stdin. Do not claim 'protection is illusory' for the username.
+- [calibrator] Username: either declare the username a non-secret identity part in security.md (and stop treating it as hidden in specs/cli.md:262), or add a --username-file / stdin input. Presigned URLs: do not refuse queries, because managed-os.md:38-40 intends signed URLs. Instead take the URL through a file or stdin (for example --from-url-file), or record in security.md a named exception for a query-signed media…
 
 **Acceptance.** security.md and secrets.md agree on whether a username is secret. `media add --from-url` with a query string refuses, or the spec states why it is safe.
 
@@ -3968,16 +4556,16 @@ Kind: gap; Area: GitOps readiness / status; Status: confirmed; Proposed severity
 
 Files: `specs/state-reconciliation.md:1768-1807`; `specs/project.md:46-48`; `specs/contexts.md:155-162`; `specs/cli/output.md:679`
 
-**Evidence.** state-reconciliation.md:1771-1774 "An apply is ready for handoff exactly when: the apply operation is `done` and every block in its immutable plan is `done`"; reasons list (1799-1802) has no input reason: "no apply recorded or a destroy as the latest operation, the apply not `done`, each block not `done` ... latched log fault". project.md:46-48 "requires durable completion, readiness, access and ownership evidence for the entire selected bootstrap scope". contexts.md:160-162 "Changed input over a completed apply warns ... that apply refuses it". output.md:679 "A completed apply with a latched log fault offers the settled apply in `nextSteps`".
+**Evidence.** specs/state-reconciliation.md:1771-1774 "An apply is ready for handoff exactly when: the apply operation is `done` and every block in its immutable plan is `done`"; reasons list (1799-1802) has no input reason: "no apply recorded or a destroy as the latest operation, the apply not `done`, each block not `done` ... latched log fault". specs/project.md:46-48 "requires durable completion, readiness, access and ownership evidence for the entire selected bootstrap scope". specs/contexts.md:160-162 "Changed input over a completed apply warns ... that apply refuses it". specs/cli/output.md:679 "A completed apply with a latched log fault offers the settled apply in `nextSteps`".
 
 **Consequence.** After `context update --input-dir` with an edited input (for example, a cluster removed or a StoragePool added), `status` keeps reporting `handoff: ready` while `desired` shows a revision no operation realized. A GitOps pipeline gated on `status --output json .handoff.ready` hands over an environment that does not match the selected desired state. One implementer reads 'selected scope' as the current selection and reports not ready; another reads the predicate literally and reports ready. When a log fault is latched and the input has changed, `nextSteps` offers a settled `apply` that refuses, which breaks the rule that status offers only commands that pass, and the handoff can never become ready short of destroy.
 
-**Recommendation.** Add one reason to the predicate and to status's ordered reasons, after 'the apply not done': `the selected input revision <rev> is not the revision <frozen> that apply <op> froze; bootwright diff --context <name> shows what changed`, making the apply not ready. Restrict the latched-log-fault next step in output.md:679 to unchanged input. Alternatively, if the owner prefers readiness to mean the frozen revision, say so in project.md:46-48 ('the scope the apply froze') and have status print the frozen revision beside `ready`.
+**Recommendation.** Add one reason to the predicate and to status's ordered reasons, after 'the apply not done': `the selected input revision <rev> is not the revision <frozen> that apply <op> froze; bootwright diff --context <name> shows what changed`, making the apply not ready. Restrict the latched-log-fault next step in specs/cli/output.md:679 to unchanged input. Alternatively, if the owner prefers readiness to mean the frozen revision, say so in specs/project.md:46-48 ('the scope the apply froze') and have status print the frozen revision beside `ready`.
 
 Verifier notes:
 
-- [refuter] Drop the output.md:679 change and the nextSteps acceptance criterion (already covered). Keep the smallest fix: either add a reason 'the selected input revision <rev> is not the revision <frozen> that apply <op> froze' to the predicate and status reasons, or state in project.md:46-48 and the predicate that readiness covers the scope the apply froze and have status show the frozen revision beside ready. Owne…
-- [calibrator] Pick one reading, owner's choice; preferred smallest fix: add the input-revision reason to the predicate and status reason order (after 'the apply not done'), mirroring the settlement scope at state-reconciliation.md:38. For output.md:679 a two-word qualifier 'over unchanged input' suffices; no separate rule needed since output.md:677 governs. Acceptance as stated is checkable.
+- [refuter] Drop the specs/cli/output.md:679 change and the nextSteps acceptance criterion (already covered). Keep the smallest fix: either add a reason 'the selected input revision <rev> is not the revision <frozen> that apply <op> froze' to the predicate and status reasons, or state in specs/project.md:46-48 and the predicate that readiness covers the scope the apply froze and have status show the frozen revision be…
+- [calibrator] Pick one reading, owner's choice; preferred smallest fix: add the input-revision reason to the predicate and status reason order (after 'the apply not done'), mirroring the settlement scope at specs/state-reconciliation.md:38. For specs/cli/output.md:679 a two-word qualifier 'over unchanged input' suffices; no separate rule needed since specs/cli/output.md:677 governs. Acceptance as stated is checkable.
 
 **Acceptance.** state-reconciliation.md's predicate and status reason list both name the input condition (or project.md names the frozen scope explicitly). A status golden over a completed apply followed by a changed-input context update shows the chosen readiness. nextSteps never offers `apply` over changed input.
 
@@ -3991,7 +4579,7 @@ Kind: contradiction; Area: Desired vs real comparison; Status: confirmed.
 
 Files: `specs/state-reconciliation.md:1616-1629`; `specs/state-reconciliation.md:1722-1727`; `specs/cli/output.md:686-703`; `specs/state-reconciliation.md:1863-1872`
 
-**Evidence.** state-reconciliation.md:1624 "Its blocks are pending under a destroy, which took them back | absent | `destroy <op> took it back`"; 1610 reads 'the realization `status` reports'. output.md:700-702 "Otherwise any removal block proved gone makes the object `pending`". state-reconciliation.md:1726-1727 "Unknown is never absent: an observation that proved nothing never reads as an object taken back."
+**Evidence.** specs/state-reconciliation.md:1624 "Its blocks are pending under a destroy, which took them back | absent | `destroy <op> took it back`"; 1610 reads 'the realization `status` reports'. specs/cli/output.md:700-702 "Otherwise any removal block proved gone makes the object `pending`". specs/state-reconciliation.md:1726-1727 "Unknown is never absent: an observation that proved nothing never reads as an object taken back."
 
 **Consequence.** Take a destroy paused at `Stop after online cleanup`. A Machine's pre-stop unregistration block is proved gone, but its machine block has not run, so its domain and disks still exist. `diff` without `--observe` shows the Machine `---/dev/null` 'destroy took it back', and status says `pending ... the next apply realizes it`. An operator can conclude that the VM is gone. One implementer applies the any-block rule; another reads 'its blocks are pending' as all blocks. Each gives different diff output.
 
@@ -4014,16 +4602,16 @@ Kind: gap; Area: Observation / observable fields; Status: confirmed.
 
 Files: `specs/add-ons.md:369-379`; `specs/add-ons.md:426-433`; `specs/container-clusters.md:974-980`; `specs/state-reconciliation.md:1749-1766`
 
-**Evidence.** add-ons.md:372-375 "every object own and equal with every check holding is completion; every object absent is no effect; some own objects with the rest absent or not ready is a partial". add-ons.md:432-433 "A declared field Argo CD changes is reported by `bootwright diff --observe` and never repaired." state-reconciliation.md:1765-1766 lists only `machine-libvirt-v1` rows; 1752-1753 'renders no field, so the fields shown are what apply <op> applied'.
+**Evidence.** specs/add-ons.md:372-375 "every object own and equal with every check holding is completion; every object absent is no effect; some own objects with the rest absent or not ready is a partial". specs/add-ons.md:432-433 "A declared field Argo CD changes is reported by `bootwright diff --observe` and never repaired." specs/state-reconciliation.md:1765-1766 lists only `machine-libvirt-v1` rows; 1752-1753 'renders no field, so the fields shown are what apply <op> applied'.
 
 **Consequence.** If Argo CD or an operator edits a field of an owned add-on object, the observation can classify it as partial, unknown or (if checks still hold) completion, and implementers will pick differently. Even when it reads partial, diff shows the applied fields with a note, not the changed field. The promise in add-ons.md and container-clusters.md misleads the operator acceptance gate in add-on-coverage.md:362 ('diff --observe reporting no drift'), which can pass while fields have drifted.
 
-**Recommendation.** Classify 'own and not equal' as a positive partial realization in add-ons.md:372-375, as managed-os.md:816-824 does for network drift. Replace the two promises with 'reported as a partial realization of its block; field values are shown only for implementations listed under observable fields'. Add a Not-yet-met line naming the add-on projector item (a sibling of B600-B605), or park one.
+**Recommendation.** Classify 'own and not equal' as a positive partial realization in specs/add-ons.md:372-375, as managed-os.md:816-824 does for network drift. Replace the two promises with 'reported as a partial realization of its block; field values are shown only for implementations listed under observable fields'. Add a Not-yet-met line naming the add-on projector item (a sibling of B600-B605), or park one.
 
 Verifier notes:
 
 - [refuter] Primary fix: name own-but-unequal in add-ons.md observation (and m4.md:676-682) as partial or unknown with a drift note; drop the claim of field-level values rather than adding a Not-yet-met line unless the owner wants an add-on projector (park as a B600-style candidate).
-- [calibrator] Keep. Also state that the partial note for drift names the differing object and first differing field (reuse the program's comparison output, add-ons.md:232-233) so diff shows what drifted even without a projector; park the add-on projector as a B600-B605 sibling candidate rather than a Not-yet-met line if no milestone owns it.
+- [calibrator] Keep. Also state that the partial note for drift names the differing object and first differing field (reuse the program's comparison output, specs/add-ons.md:232-233) so diff shows what drifted even without a projector; park the add-on projector as a B600-B605 sibling candidate rather than a Not-yet-met line if no milestone owns it.
 
 **Acceptance.** add-ons.md's observation paragraph names the own-but-unequal case. No spec claims field-level drift reporting for an implementation absent from the observable-fields table without a Not-yet-met line.
 
@@ -4037,7 +4625,7 @@ Kind: unsafe-rule; Area: Locking and concurrency; Status: confirmed; Proposed se
 
 Files: `specs/contexts.md:318-323`; `specs/contexts.md:329-356`; `specs/contexts.md:377-397`; `specs/contexts.md:877-892`; `specs/contexts.md:686-692`; `specs/contexts/controller-record.md:137-143`; `specs/cli.md:540-542`
 
-**Evidence.** contexts.md:881-882 "The prompt follows admission and safeguards while locks remain held, and a refused confirmation publishes nothing." contexts.md:334 puts `context update` that imports input and `context delete` under exclusive root lock plus lease. contexts.md:318 "Two advisory locks guard the store, and neither is ever waited for"; contexts.md:349-351 "refuses with `lifecycle.lease` and a retry remedy; no lock or lease is ever waited for or taken over." contexts.md:380-382 "short root transactions refresh the registry and shared controller state before reservation, binding, secret or tool publication." Media avoids this: contexts.md:688-689 "ask for confirmation with no root lock held".
+**Evidence.** specs/contexts.md:881-882 "The prompt follows admission and safeguards while locks remain held, and a refused confirmation publishes nothing." specs/contexts.md:334 puts `context update` that imports input and `context delete` under exclusive root lock plus lease. specs/contexts.md:318 "Two advisory locks guard the store, and neither is ever waited for"; specs/contexts.md:349-351 "refuses with `lifecycle.lease` and a retry remedy; no lock or lease is ever waited for or taken over." specs/contexts.md:380-382 "short root transactions refresh the registry and shared controller state before reservation, binding, secret or tool publication." Media avoids this: specs/contexts.md:688-689 "ask for confirmation with no root lock held".
 
 **Consequence.** Operator A starts `context update --name lab-a` and leaves the prompt open. On the same host an apply of context lab-b reaches the end of a one-hour cluster installation and needs a short exclusive root transaction to capture the produced administrator kubeconfig, seal or retire a tool area, or publish a reservation. It cannot take the lock, refuses lifecycle.lease, and no page says whether that leaves the block failed or unknown or whether the produced material was captured. Meanwhile every `status`, `plan`, `preflight` and `context list` on the host also refuses. One unattended prompt degrades every context on the host, and nothing tells the other operators which command holds the lock.
 
@@ -4046,7 +4634,7 @@ Files: `specs/contexts.md:318-323`; `specs/contexts.md:329-356`; `specs/contexts
 Verifier notes:
 
 - [refuter] Keep recommendation (1): context update/delete confirm before the exclusive lock and re-prove under it. Optionally keep (4): name the lock holder. Drop the claim that block outcomes are undefined. A bounded wait (2)-(3) is an optional improvement, not a correction, because the generic failure rules already give the outcome. Acceptance: no lock row holds the exclusive root lock across a prompt.
-- [calibrator] Keep (1) as the core fix. For (2), state the block outcome when a short root transaction is refused or times out (failed if no effect ran, unknown otherwise, produced material kept), and rewrite contexts.md:318 and 350 so the 'never waited for' rule makes an explicit exception for in-operation root transactions. Move (3) and (4) into a separate parked item. Acceptance should also check that a test cover…
+- [calibrator] Keep (1) as the core fix. For (2), state the block outcome when a short root transaction is refused or times out (failed if no effect ran, unknown otherwise, produced material kept), and rewrite specs/contexts.md:318 and 350 so the 'never waited for' rule makes an explicit exception for in-operation root transactions. Move (3) and (4) into a separate parked item. Acceptance should also check that a test…
 
 **Acceptance.** No lock row in contexts.md holds the exclusive root lock across a confirmation prompt. The state-reconciliation or contexts spec states the wait bound and the block outcome for a root transaction that cannot be taken during execution, and a test (for example a held-root-lock test during produced-material capture) cites it.
 
@@ -4060,7 +4648,7 @@ Kind: gap; Area: Durable formats / pre-1.0 refusal rule; Status: confirmed-by-ar
 
 Files: `specs/project.md:95-96`; `specs/contexts.md:192-205`; `specs/contexts.md:742-749`; `specs/contexts.md:302-310`; `specs/secrets.md:507-516`; `specs/contexts/controller-record.md:48-56`; `specs/state-reconciliation.md:405-412`; `specs/milestones/backlog.md:3079, 3091`
 
-**Evidence.** project.md:95-96 "a record in an earlier format is refused, and the refusal names the remedy." contexts.md:195-197 remedy: "with the build that wrote it, destroy each environment". secrets.md:514-516 "destroy the context's effects with the Bootwright build that created it". secrets.md:510-511 corrupt store "refuses with `secret.store.corrupt` ... and the remedy is a new context." The Registry, Reservation and Manifest rows (contexts.md:304-308) and the store.json envelope (secrets.md:409-410) carry no build field. Only operation records do: state-reconciliation.md:406-408 "`build`: ... the executable's version and commit". D25: "an earlier keyring refuses and names the build that reads it."
+**Evidence.** specs/project.md:95-96 "a record in an earlier format is refused, and the refusal names the remedy." specs/contexts.md:195-197 remedy: "with the build that wrote it, destroy each environment". specs/secrets.md:514-516 "destroy the context's effects with the Bootwright build that created it". specs/secrets.md:510-511 corrupt store "refuses with `secret.store.corrupt` ... and the remedy is a new context." The Registry, Reservation and Manifest rows (specs/contexts.md:304-308) and the store.json envelope (specs/secrets.md:409-410) carry no build field. Only operation records do: specs/state-reconciliation.md:406-408 "`build`: ... the executable's version and commit". D25: "an earlier keyring refuses and names the build that reads it."
 
 **Consequence.** Pre-1.0, every format move strands a store or keyring whose remedy needs an earlier build, and none of these refusals can say which build. An operator who upgraded twice, or an agent asked to recover a host, has to bisect releases to find a build that reads the store; if it guesses wrong, the next build's refusal is the same. 'A new context' for a corrupt keyring leaves out that the existing context's realized objects can no longer be destroyed (their bound Secrets cannot be reopened), that the name stays reserved until a delete completes, and that the delete must be `--purge --allow-orphans` after exporting nothing. D25 promises naming the build, and the spec cannot deliver it.
 
@@ -4068,12 +4656,12 @@ Files: `specs/project.md:95-96`; `specs/contexts.md:192-205`; `specs/contexts.md
 
 Verifier notes:
 
-- [refuter] If it is kept at all, keep it as a Low clarity item: have the secret.store.corrupt clause (secrets.md:510-511) link the existing exits (state-reconciliation.md lost binding; contexts.md deletion walk with --allow-orphans) and not just say 'a new context'. Drop the writer member and the format-to-build table: the format version already identifies the build range.
-- [calibrator] Lead with the fix to the secret.store.corrupt remedy. Have it name D37's exits: restore the keyring from a complete backup, or run `bootwright status --context <name>` and then `bootwright context delete --name <name> --purge --allow-orphans`, then init again. It should say that the context's objects are abandoned. Acceptance: secrets.md:510-511 names those commands and is consistent with state-reconcil…
+- [refuter] If it is kept at all, keep it as a Low clarity item: have the secret.store.corrupt clause (specs/secrets.md:510-511) link the existing exits (state-reconciliation.md lost binding; contexts.md deletion walk with --allow-orphans) and not just say 'a new context'. Drop the writer member and the format-to-build table: the format version already identifies the build range.
+- [calibrator] Lead with the fix to the secret.store.corrupt remedy. Have it name D37's exits: restore the keyring from a complete backup, or run `bootwright status --context <name>` and then `bootwright context delete --name <name> --purge --allow-orphans`, then init again. It should say that the context's objects are abandoned. Acceptance: specs/secrets.md:510-511 names those commands and is consistent with specs/st…
 
-**Acceptance.** Every format refusal in contexts.md, controller-record.md and secrets.md names the version it read and a place where the operator can map it to a build. The corrupt-keyring remedy names concrete commands, the orphan exit included, consistent with D37. Arbiter acceptance: secrets.md:510-511 names the concrete commands and the abandoned-objects consequence, consistent with state-reconciliation.md:1512-1515 and contexts.md:786-796; the ordering between the before-session refusal and the reopen path is stated once.
+**Acceptance.** Every format refusal in contexts.md, controller-record.md and secrets.md names the version it read and a place where the operator can map it to a build. The corrupt-keyring remedy names concrete commands, the orphan exit included, consistent with D37. Arbiter acceptance: specs/secrets.md:510-511 names the concrete commands and the abandoned-objects consequence, consistent with specs/state-reconciliation.md:1512-1515 and specs/contexts.md:786-796; the ordering between the before-session refusal and the reopen path is stated once.
 
-**Decision check.** D25 (keyring refusal names the build that reads it) and D37 (lost binding exits: restore the keyring or an orphan-acknowledged delete) support this. Pre-1.0 rule (project.md:95-96) and the owner rule against converters or older readers are respected: nothing is converted, and only the remedy becomes actionable. A writer stamp waits for a format change, so it adds no extra format move.
+**Decision check.** D25 (keyring refusal names the build that reads it) and D37 (lost binding exits: restore the keyring or an orphan-acknowledged delete) support this. Pre-1.0 rule (specs/project.md:95-96) and the owner rule against converters or older readers are respected: nothing is converted, and only the remedy becomes actionable. A writer stamp waits for a format change, so it adds no extra format move.
 
 Verification: refuter not real, medium confidence, severity Low; calibrator real, medium confidence, severity Medium; arbiter real, severity Medium.
 
@@ -4083,7 +4671,7 @@ Kind: design; Area: Interrupted setup / controller runtime; Status: confirmed.
 
 Files: `specs/controller.md:161-162`; `specs/controller.md:164-170`; `specs/controller.md:835-849`; `specs/controller.md:887-888`; `specs/contexts/controller-record.md:174-189`
 
-**Evidence.** controller.md:842-845 "An unknown outcome blocks every consumer. A launch that finds the pending intent refuses `controller.state` ... with the remedy `run bootwright setup`." controller.md:838-840 "Interrupted or failed setup may leave approved packages installed". The pending intent is cleared only by "the receipt written last" (controller.md:837-838). controller.md:887-888 "The previous runtime keeps a live operation registered with the earlier lock continuable offline."
+**Evidence.** specs/controller.md:842-845 "An unknown outcome blocks every consumer. A launch that finds the pending intent refuses `controller.state` ... with the remedy `run bootwright setup`." specs/controller.md:838-840 "Interrupted or failed setup may leave approved packages installed". The pending intent is cleared only by "the receipt written last" (specs/controller.md:837-838). specs/controller.md:887-888 "The previous runtime keeps a live operation registered with the earlier lock continuable offline."
 
 **Consequence.** On a host without access to files.pythonhosted.org, an operator runs a new build's `setup` without `--wheel-mirror`. The wheel fetch fails after the pending intent was written. Every apply, destroy, bounded run and controller stage of every context, including continuations under the previous build whose runtime is intact, now refuses 'setup was interrupted'. The remedy 'run bootwright setup' with the new build fails the same way offline. Only running the previous build's setup, which the message does not suggest, clears the state. A failure that changed nothing on the host (fetch, verification, or a dnf preview refusal) takes the whole host out of service, which undoes the offline-continuation guarantee D152 clause 8 bought.
 
@@ -4100,13 +4688,38 @@ Verifier notes:
 
 Verification: refuter real, medium confidence, severity Medium; calibrator real, medium confidence, severity Medium; no arbitration needed.
 
+##### F13-05 · Medium · Runtime retention keeps one previous build; the closure refusal promises more
+
+Kind: contradiction; Area: Controller runtime / continuation; Status: confirmed; Also raised as: R2-03-07.
+
+Severity revised in revision 2 from Low to Medium after re-calibration against the sibling audit's argument (W28): Format healing (controller.md:851-861) widens F13-05 beyond the two-lock-change window: when a single build change moves the setup format, setup discards the whole subtree, 'every runtime and the wheel cache', including the previous runtime that controller.md:887-888 says keeps a live operation 'continuable offline'. Setup reads no desired state (controller.md:280-284), so it cannot see that an unfinished operation references that closure, and nothing makes it refuse. Switching back to the registering build is no help: its setup sees the newer format as foreign and discards again, so each swit
+
+Files: `specs/controller.md:810-817`; `specs/controller.md:870-890`; `specs/state-reconciliation.md:1059-1063`; `specs/state-reconciliation.md:1094-1101`; `specs/contexts/controller-record.md:208-212`; `specs/state-reconciliation.md:1058-1064`
+
+**Evidence.** specs/controller.md:816-817 "a new lock or another ABI refuses its continuation, naming the build that registered it, whose runtime this host keeps". specs/controller.md:871-873 "the record's `runtimes` the current and the immediately previous distinct one" and specs/controller.md:876 "every published runtime but those two is retired"; specs/controller.md:881-885 prunes the wheel cache to the kept runtimes' wheels. specs/controller.md:887-888 "The previous runtime keeps a live operation registered with the earlier lock continuable offline." Also reported as R2-03-07: specs/state-reconciliation.md:1060-1062 'when this build's runtime carries another closure ... naming the build that registered it, whose runtime this host keeps'. specs/controller.md:876 'every published runtime but those two is retired'. specs/controller.md:887-888 'The previous runtime keeps a live operation registered with the earlier lock continuable offline.'
+
+**Consequence.** A context holds a failed apply registered under lock L1. The operator later installs builds with locks L2 and L3 and runs setup for each. L1's runtime and wheels are retired and pruned. The continuation refusal still says the host keeps L1's runtime. Running the L1 build's setup needs network to fetch the pruned wheels, so on an offline host only the superseding removal, or an orphan deletion where no removal can take its place, remains. Each continuation refusal states a recovery path that no longer exists.
+
+**Recommendation.** Smallest: change the refusal wording to name the registering build and say that its setup restores its runtime, fetching wheels the cache no longer holds, and list the superseding removal first when one exists. Better: have registration record the operation's runtime digest in a small host-wide pin list in the setup subtree (written under setup/lock), have retention keep pinned runtimes and their wheels, and have finalization or deletion drop the pin. This keeps D152's 'current plus previous' default and protects every live operation.
+
+Verifier notes:
+
+- [refuter] Prefer the smallest fix: reword both sentences to say the refusal names the registering build, whose setup restores its runtime (fetching wheels the cache no longer holds when retention retired it), alongside the superseding removal already required by specs/state-reconciliation.md:1092-1095. Treat runtime pinning as an optional design proposal needing an owner decision, since D152 clause 8 chose bounded r…
+- [calibrator] Make only the wording fix. In specs/controller.md:816-817 and specs/state-reconciliation.md:1061-1062, replace 'whose runtime this host keeps' with 'whose setup restores its runtime, fetching any wheels the cache no longer holds'. Record the pin list as a parked backlog item for owner decision under D152 clause 8. Acceptance: no sentence claims the host keeps a runtime that retention may have retired, a…
+
+**Acceptance.** No spec sentence claims the host keeps a runtime that retention may already have retired. Either a retention test shows that a runtime named by a non-terminal operation survives two lock changes, or the refusal golden names the setup-with-network path and the superseding removal.
+
+**Decision check.** D152 clause 8 declined 'keeping only the current runtime, which would strand live operations offline after a lock change'. The same reasoning applies to the second lock change, so pinning extends the decision's intent. Setup reads no desired state (specs/controller.md:281-284); a pin list in the setup subtree keeps that rule because setup reads only its own subtree.
+
+Verification: refuter real, high confidence, severity Low; calibrator real, high confidence, severity Medium; no arbitration needed.
+
 ##### F13-07 · Medium · Store root may be tmpfs or overlayfs, so a reboot erases ownership evidence
 
 Kind: unsafe-rule; Area: Durable storage; Status: confirmed.
 
 Files: `specs/contexts.md:502-508`; `specs/contexts.md:264-269`; `specs/controller.md:306`
 
-**Evidence.** contexts.md:506-508 "Supported local filesystems are ext4, XFS, Btrfs, tmpfs and overlayfs; Linux must provide `openat2`. Unsupported containment or durability primitives fail closed." contexts.md:267-269 "No environment variable selects another production root. Isolated test storage is injected at composition."
+**Evidence.** specs/contexts.md:506-508 "Supported local filesystems are ext4, XFS, Btrfs, tmpfs and overlayfs; Linux must provide `openat2`. Unsupported containment or durability primitives fail closed." specs/contexts.md:267-269 "No environment variable selects another production root. Isolated test storage is injected at composition."
 
 **Consequence.** On a live-booted or image-based bastion where /var/lib is tmpfs, or an overlay whose upper layer is tmpfs, setup and apply admit the root. A reboot removes registry.json, mutation evidence, operation records, keyrings and the produced administrator kubeconfigs, while the clusters, VMs and services they own keep running. The next apply on the empty root starts fresh and may collide with or re-create what the lost context owned. Ownership evidence is supposed to be durable, and its loss would go unnoticed.
 
@@ -4129,7 +4742,7 @@ Kind: gap; Area: Substrate KubeVirt arm / Mutation safety; Status: confirmed.
 
 Files: `specs/substrates.md:664-667`; `specs/substrates.md:366-369`; `specs/substrates.md:408-412`; `specs/add-ons.md:193-203`; `specs/state-reconciliation.md:1816-1819`; `specs/milestones/m1.md:490-524`
 
-**Evidence.** substrates.md:664-666 "Every object carries the context's and Machine's ownership labels, and the block records each API-returned UID; a same-named object without them, or with another UID, is foreign". libvirt substrates.md:408 "**Reservations.** `libvirt-domain:<name>`, `unit:` for the BMC unit". add-ons.md:196-199 ownership by mark when the block "holds no receipt for it" and creationTimestamp "not earlier than the operation's registration". state-reconciliation.md:1816-1818 "exact agreement between recorded and live manager, context, resource, and immutable provider identity".
+**Evidence.** specs/substrates.md:664-666 "Every object carries the context's and Machine's ownership labels, and the block records each API-returned UID; a same-named object without them, or with another UID, is foreign". libvirt specs/substrates.md:408 "**Reservations.** `libvirt-domain:<name>`, `unit:` for the BMC unit". specs/add-ons.md:196-199 ownership by mark when the block "holds no receipt for it" and creationTimestamp "not earlier than the operation's registration". specs/state-reconciliation.md:1816-1818 "exact agreement between recorded and live manager, context, resource, and immutable provider identity".
 
 **Consequence.** A VirtualMachine create whose reply was lost leaves no recorded UID; the rule neither adopts nor refuses it by a stated test, so one implementation adopts any labelled object (including one another controller's same-named context created in the shared namespace) and another refuses its own object forever. With no reservation key, two contexts on one controller targeting one namespace are coordinated only by name collision. B87's questions cover naming and namespace ownership but not this receipt rule.
 
@@ -4152,7 +4765,7 @@ Kind: gap; Area: Reconciliation: continuation and removal across builds; Status:
 
 Files: `specs/state-reconciliation.md:1071-1076`; `specs/state-reconciliation.md:1025-1027`; `specs/state-reconciliation.md:493-498`; `specs/state-reconciliation.md:570-588`; `specs/milestones/backlog.md:3298`; `.agents/knowledge/continuation-after-a-fix.md:65-70`; `internal/substrate/libvirt/catalog.go:68-79`
 
-**Evidence.** state-reconciliation.md:1071-1074 'For a destroy, the proof derives the removal again from the operation's own frozen plan, which copies each block's request, implementation, content digest'. state-reconciliation.md:1025-1027 'A missing, ambiguous, unsupported, or drifted implementation refuses before the affected side effect'. state-reconciliation.md:496-498 'a removal keeps the one its apply froze, and a continuation compares it only as part of proving that another build freezes the same blocks.' backlog.md:3298 (D145(4)) 'it cannot compare content digests, because the removal copies them from the frozen plan.' continuation-after-a-fix.md:65-66 'A destroy is needed when the fix moves a version or a pin, which moves the content digest'. state-reconciliation.md:579-580 the removal's check 'proves that the object is this context's own and can be taken back, or that it is absent'. libvirt/catalog.go:71-74 HostContentDigest hashes substrate.ImagePrefix and substrate.Prefix, Go constants outside the request.
+**Evidence.** specs/state-reconciliation.md:1071-1074 'For a destroy, the proof derives the removal again from the operation's own frozen plan, which copies each block's request, implementation, content digest'. specs/state-reconciliation.md:1025-1027 'A missing, ambiguous, unsupported, or drifted implementation refuses before the affected side effect'. specs/state-reconciliation.md:496-498 'a removal keeps the one its apply froze, and a continuation compares it only as part of proving that another build freezes the same blocks.' specs/milestones/backlog.md:3298 (D145(4)) 'it cannot compare content digests, because the removal copies them from the frozen plan.' .agents/knowledge/continuation-after-a-fix.md:65-66 'A destroy is needed when the fix moves a version or a pin, which moves the content digest'. specs/state-reconciliation.md:579-580 the removal's check 'proves that the object is this context's own and can be taken back, or that it is absent'. libvirt/catalog.go:71-74 HostContentDigest hashes substrate.ImagePrefix and substrate.Prefix, Go constants outside the request.
 
 **Consequence.** A build changes a host path, name prefix or ownership mark and moves the digest. The apply continuation refuses and the documented remedy is a destroy, which runs under the build in hand: its proof copies the old digest and passes, and its removal and its resolution of unknown apply blocks use the new build's location and mark. It finds nothing at the new place, records positive absence, completes, releases reservations and the Secret binding and leaves the context pristine. The old domains, volumes or Ceph state leak, and the released host claims let another context reuse those resources. A widened mark could instead match objects this context never created.
 
@@ -4175,7 +4788,7 @@ Kind: design; Area: Reconciliation: content digest semantics; Status: confirmed-
 
 Files: `specs/state-reconciliation.md:1466-1480`; `specs/state-reconciliation.md:1084-1088`; `cmd/bootwright/contract_versions_test.go:79-86`; `cmd/bootwright/contract_versions_test.go:275-284`; `specs/milestones/delivered.md:4340-4343`; `specs/milestones/delivered.md:4806-4813`; `specs/add-ons.md:141-144`
 
-**Evidence.** state-reconciliation.md:1466-1469 'content digest moves when its automation changes what a block's effect is ... the mark that proves them this context's own, the host resources it claims'. state-reconciliation.md:1478-1480 'what a record or mark means beyond its shape and declared version, stay the author's to move.' state-reconciliation.md:1086-1088 'a fix confined to automation, or to Go code that moves no version or pin, continues'. contract_versions_test.go:281-282 'An unquoted, dynamically built or unversioned format is outside what it sees.' delivered.md:4341-4343 'the reviewer checks that on every `ansible/` change, and removal proves ownership and refuses a foreign object as the backstop.' add-ons.md:141-142 'The content digest covers the implementation, request, evidence and program versions and the ownership and approval rule tags'.
+**Evidence.** specs/state-reconciliation.md:1466-1469 'content digest moves when its automation changes what a block's effect is ... the mark that proves them this context's own, the host resources it claims'. specs/state-reconciliation.md:1478-1480 'what a record or mark means beyond its shape and declared version, stay the author's to move.' specs/state-reconciliation.md:1086-1088 'a fix confined to automation, or to Go code that moves no version or pin, continues'. cmd/bootwright/contract_versions_test.go:281-282 'An unquoted, dynamically built or unversioned format is outside what it sees.' specs/milestones/delivered.md:4341-4343 'the reviewer checks that on every `ansible/` change, and removal proves ownership and refuses a foreign object as the backstop.' specs/add-ons.md:141-142 'The content digest covers the implementation, request, evidence and program versions and the ownership and approval rule tags'.
 
 **Consequence.** An author changes an unversioned label key or value, a dynamically built marker name, or the Go ownership check in a capability's Observe, and moves no version. The guard passes. A continuation then mixes effects that carry the old mark with effects that carry the new one, and a later removal recognises only one set. Whether a literal is classified transient, so that it is exempt from the guard, is also the author's call. Removal's ownership proof is called the backstop, but it is the very code that changed, so it detects nothing.
 
@@ -4186,9 +4799,9 @@ Verifier notes:
 - [refuter] If kept, reframe it as a Low/Medium design improvement: optionally add a declared mark-format id to each contract golden and extend the literal scan to bootwright.io label keys. Drop the 'backstop detects nothing' claim. Instead, state that mark drift fails closed (unknown or refusal) and leaves effects stranded, which an operator must recover by hand.
 - [calibrator] Smallest first step: (1) restate the backstop claim: removal's proof fails closed on a changed mark, so the consequence is a stuck or partial destroy, and no change may loosen the proof without moving the digest; (2) require a recorded reason for each transient classification in the golden; (3) extend TestEveryAutomationVersionLiteralIsClassified to quoted bootwright.io label and annotation keys. Make m…
 
-**Acceptance.** Each contract golden has mark-format and proof-id sections, and changing either without moving the digest fails TestEveryImplementationMovesItsContentDigestWithItsContract. An unclassified bootwright.io label or key literal in the collection fails TestEveryAutomationVersionLiteralIsClassified. state-reconciliation.md:1478-1480 lists only what genuinely remains a judgement call.
+**Acceptance.** Each contract golden has mark-format and proof-id sections, and changing either without moving the digest fails TestEveryImplementationMovesItsContentDigestWithItsContract. An unclassified bootwright.io label or key literal in the collection fails TestEveryAutomationVersionLiteralIsClassified. specs/state-reconciliation.md:1478-1480 lists only what genuinely remains a judgement call.
 
-**Decision check.** D145(2) replaced the human rule with a guard 'where a tool can check it' and left meaning to the author. This recommendation extends the guard in the same direction, with no conflict. The add-on precedent (B750, add-ons.md:141-142) shows the pattern already works. It agrees with architecture.md:932-934 (specializations never change ownership proofs) and with D163, because no version rule is introduced. Arbiter decision check: Consistent with D145(1)-(2), D142, D163 and architecture.md:932-934; introduces no version rule and no conflict with the add-on precedent at add-ons.md:141-142.
+**Decision check.** D145(2) replaced the human rule with a guard 'where a tool can check it' and left meaning to the author. This recommendation extends the guard in the same direction, with no conflict. The add-on precedent (B750, specs/add-ons.md:141-142) shows the pattern already works. It agrees with architecture.md:932-934 (specializations never change ownership proofs) and with D163, because no version rule is introduced. Arbiter decision check: Consistent with D145(1)-(2), D142, D163 and architecture.md:932-934; introduces no version rule and no conflict with the add-on precedent at specs/add-ons.md:141-142.
 
 Verification: refuter not real, medium confidence, severity Low; calibrator real, medium confidence, severity Medium; arbiter real, severity Medium.
 
@@ -4198,16 +4811,16 @@ Kind: contradiction; Area: Secrets: produced material disclosure; Status: confir
 
 Files: `specs/storage-resources.md:1314-1322`; `specs/cli.md:1173-1182`; `specs/secrets.md:352-357`; `specs/storage.md:1424-1430`
 
-**Evidence.** storage-resources.md:1321-1322 "No command reveals the pair yet; B489 owns access handoff." cli.md:1173-1175 "The same explicit command also reveals the selected cluster's declared StorageObjectUsers in objectUsers ... accessKey and secretKey". secrets.md:353-357 "cluster kubeconfig reveals an installation's entry ... and cluster keyring reveals one StorageClient's entry in its native keyring form".
+**Evidence.** specs/storage-resources.md:1321-1322 "No command reveals the pair yet; B489 owns access handoff." specs/cli.md:1173-1175 "The same explicit command also reveals the selected cluster's declared StorageObjectUsers in objectUsers ... accessKey and secretKey". specs/secrets.md:353-357 "cluster kubeconfig reveals an installation's entry ... and cluster keyring reveals one StorageClient's entry in its native keyring form".
 
-**Consequence.** Three pages each state part of the disclosure boundary for produced material and disagree. An agent implementing from storage-resources.md removes or refuses the objectUsers reveal; one implementing from cli.md ships it; secrets.md, which claims to own disclosure (secrets.md:3-4), omits both the dashboard password and the object-user reveal. A reviewer cannot tell from the owner page which commands may print custody bytes, which is the single most security-relevant list in the custody contract.
+**Consequence.** Three pages each state part of the disclosure boundary for produced material and disagree. An agent implementing from storage-resources.md removes or refuses the objectUsers reveal; one implementing from cli.md ships it; secrets.md, which claims to own disclosure (specs/secrets.md:3-4), omits both the dashboard password and the object-user reveal. A reviewer cannot tell from the owner page which commands may print custody bytes, which is the single most security-relevant list in the custody contract.
 
-**Recommendation.** Make secrets.md#produced-material the one owner of a closed table: produced output (block kind, output name), the only command that reveals it, its output field, and its unproved behaviour (cluster kubeconfig, cluster keyring, cluster info --secrets dashboard, cluster info --secrets objectUsers). Replace the sentences in storage-resources.md:1321-1322, storage.md:1426-1430 and cli.md with links to that table, and decide whether the objectUsers reveal is current or B489's.
+**Recommendation.** Make secrets.md#produced-material the one owner of a closed table: produced output (block kind, output name), the only command that reveals it, its output field, and its unproved behaviour (cluster kubeconfig, cluster keyring, cluster info --secrets dashboard, cluster info --secrets objectUsers). Replace the sentences in specs/storage-resources.md:1321-1322, specs/storage.md:1426-1430 and cli.md with links to that table, and decide whether the objectUsers reveal is current or B489's.
 
 Verifier notes:
 
 - [refuter] Treat as stale-spec repair: update storage-resources.md and storage.md to link the cli.md reveal, and add the dashboard and objectUsers reveals to secrets.md#produced-material; owner choice on B489 only if the reveal was not intended. Severity Medium.
-- [calibrator] Drop 'decide whether current or B489': it is current, delivered under B489's in-tree handoff (m2.md:1403-1408). Smallest fix: replace the stale sentences in storage-resources.md:1321-1322 and storage.md:1431-1437 with a link to cli.md#storage-dashboard-access, and extend secrets.md:352-357 to name the dashboard password and objectUsers reveals (a short list or table there). The docs-check rule is option…
+- [calibrator] Drop 'decide whether current or B489': it is current, delivered under B489's in-tree handoff (m2.md:1403-1408). Smallest fix: replace the stale sentences in specs/storage-resources.md:1321-1322 and specs/storage.md:1431-1437 with a link to cli.md#storage-dashboard-access, and extend specs/secrets.md:352-357 to name the dashboard password and objectUsers reveals (a short list or table there). The docs-ch…
 
 **Acceptance.** grep for 'reveals' across specs finds each produced-material reveal listed once in secrets.md; storage-resources.md no longer says no command reveals the pair if cli.md reveals it (or cli.md marks it Not yet met under B489); a docs-check rule ties the table to the commands that read custody.
 
@@ -4221,7 +4834,7 @@ Kind: gap; Area: Secrets: custody ownership; Status: confirmed.
 
 Files: `specs/secrets.md:3-4`; `specs/secrets.md:336-345`; `specs/storage.md:1048-1063`; `specs/storage.md:1558-1566`; `specs/storage-resources.md:1207-1213`; `specs/storage-native-api.md:117-118`
 
-**Evidence.** secrets.md:3 "Secrets owns runtime custody, materialization, generation, immutable binding and disclosure." storage.md:1050-1051 "The pair user info reports is retained in the protected custody area (a reserved root-only 0600 file and its identity record)". storage.md:1559-1560 "The source retains the ASCII token in descriptor-bound root-only 0600 custody." storage-resources.md:1207-1208 "Each CephX key is generated at the declared type and retained under client custody before its native add".
+**Evidence.** specs/secrets.md:3 "Secrets owns runtime custody, materialization, generation, immutable binding and disclosure." specs/storage.md:1050-1051 "The pair user info reports is retained in the protected custody area (a reserved root-only 0600 file and its identity record)". specs/storage.md:1559-1560 "The source retains the ASCII token in descriptor-bound root-only 0600 custody." specs/storage-resources.md:1207-1208 "Each CephX key is generated at the declared type and retained under client custody before its native add".
 
 **Consequence.** The word custody names two different things: the encrypted context keyring, which secrets.md owns, withdraws on removal and deletes with the context, and per-domain plaintext 0600 files on the Ceph bootstrap host or controller, which retain keys for crash recovery. Nothing states where those files live, when they are removed (the object user 'retires with the cluster's hosts', so physical hosts keep the file after the context is destroyed or orphan-deleted), whether keyring rotation or context delete --purge covers them, or how a new storage implementation must build one. Each Ceph feature has re-specified its own, and a NetApp or Pure adapter will add a fifth.
 
@@ -4229,7 +4842,7 @@ Files: `specs/secrets.md:3-4`; `specs/secrets.md:336-345`; `specs/storage.md:104
 
 Verifier notes:
 
-- [refuter] The new section should cite security.md:150-151 for modes instead of restating them, and should absorb the generic sentence at storage.md:1419-1421. Include erase-receipt custody (state-reconciliation.md:1980-1982) in scope. Renaming is optional; a defined term with a link would satisfy the acceptance.
+- [refuter] The new section should cite security.md:150-151 for modes instead of restating them, and should absorb the generic sentence at specs/storage.md:1419-1421. Include erase-receipt custody (state-reconciliation.md:1980-1982) in scope. Renaming is optional; a defined term with a link would satisfy the acceptance.
 - [calibrator] Keep the new secrets.md section, but describe location per owning block (the bootstrap host or the controller) rather than requiring a single reserved path. Drop the corpus-wide rule that 'custody' means only the keyring. Instead, define 'native-side custody' (or 'native retention') once in that section and link to it from the storage pages. Acceptance: (1) the section exists. (2) The four storage passa…
 
 **Acceptance.** secrets.md has the section; storage.md, storage-resources.md and storage-native-api.md link to it and no longer define their own retention; the word custody in specs refers only to the keyring or links to the new section; context deletion's confirmation names native retention it abandons.
@@ -4244,7 +4857,7 @@ Kind: contradiction; Area: Secrets: produced material custody; Status: confirmed
 
 Files: `specs/state-reconciliation.md:615-620`; `specs/secrets.md:347-350`; `specs/cli.md:1167-1169`; `specs/cli/output.md:506`; `specs/storage.md:1390-1392`
 
-**Evidence.** state-reconciliation.md:617-620 "a capability offers them only from a proved completion, except the copy a capability's read-only observation hands over before a removal, which is published unproved". cli.md:1167-1169 "A copy that custody holds from an apply that never proved the dashboard reachable is revealed with exactly one access.unproved warning". storage.md:1391-1392 "an unreachable port reports the dashboard unproved".
+**Evidence.** specs/state-reconciliation.md:617-620 "a capability offers them only from a proved completion, except the copy a capability's read-only observation hands over before a removal, which is published unproved". specs/cli.md:1167-1169 "A copy that custody holds from an apply that never proved the dashboard reachable is revealed with exactly one access.unproved warning". specs/storage.md:1391-1392 "an unreachable port reports the dashboard unproved".
 
 **Consequence.** Two meanings share one word and one warning code: the custody record's unproved mark (an effect never proved complete, D124) and a dashboard reachability status that a completed block reports. Read literally, cli.md requires custody to hold an entry the custody rule forbids an apply to publish, or requires the warning to be derived from evidence rather than from the custody mark. Implementations will diverge on whether access.unproved is read from the store record or from the block's evidence, and an agent may add an unproved-capture path to applies.
 
@@ -4253,7 +4866,7 @@ Files: `specs/state-reconciliation.md:615-620`; `specs/secrets.md:347-350`; `spe
 Verifier notes:
 
 - [refuter] Narrow: keep access.unproved for custody-marked copies only; drop it (or use a distinct warning) from cluster info --secrets dashboard reveal, and state in storage.md whether an unreachable TLS proof still completes the dashboard phase. Renaming the endpoint/dashboard status enum is optional, since endpoints[].status also uses unproved consistently as an evidence status.
-- [calibrator] Keep dashboard.status unproved (matches endpoints[].status). Fix only the warning: either drop access.unproved for the dashboard case (status+reason already convey it) or give it a distinct code (e.g. access.unreachable) defined in cli/output.md; reword cli.md:1167 so 'unproved' custody refers solely to the D124 mark. Acceptance: access.unproved is emitted only where the custody record carries the unpro…
+- [calibrator] Keep dashboard.status unproved (matches endpoints[].status). Fix only the warning: either drop access.unproved for the dashboard case (status+reason already convey it) or give it a distinct code (e.g. access.unreachable) defined in cli/output.md; reword specs/cli.md:1167 so 'unproved' custody refers solely to the D124 mark. Acceptance: access.unproved is emitted only where the custody record carries the…
 
 **Acceptance.** grep 'unproved' in cli.md and cli/output.md finds the custody meaning only; the dashboard status enum no longer contains unproved; access.unproved's definition (cli/output.md:853) matches every use.
 
@@ -4267,7 +4880,7 @@ Kind: design; Area: Reconciliation rules / physical machine claim; Status: confi
 
 Files: `specs/infrastructure-services.md:112`; `specs/substrates.md:584-591`; `specs/api/machines.md:280-292`; `specs/infrastructure-services.md:89-91`
 
-**Evidence.** infrastructure-services.md:112 "named by its normalized management-controller endpoint and exact ComputerSystem, so two contexts never drive one server." substrates.md:584-586 "claims `bmc:<host>:<port>/<system>` for the normalized endpoint, so two contexts cannot both drive one physical server." api/machines.md:284-286 the host is "a lowercase DNS name ... or an IP literal", port "when present". substrates.md:536-541 the proof records UUID and SerialNumber, but no key is derived from them.
+**Evidence.** specs/infrastructure-services.md:112 "named by its normalized management-controller endpoint and exact ComputerSystem, so two contexts never drive one server." specs/substrates.md:584-586 "claims `bmc:<host>:<port>/<system>` for the normalized endpoint, so two contexts cannot both drive one physical server." api/machines.md:284-286 the host is "a lowercase DNS name ... or an IP literal", port "when present". specs/substrates.md:536-541 the proof records UUID and SerialNumber, but no key is derived from them.
 
 **Consequence.** Context A names a server's BMC as a DNS name, context B as its IP literal (or as `https://h/...` versus `https://h:443/...`, or through the BMC's second management NIC). The keys differ, both claims publish, both proofs pass on the same UUID and MAC set, and B's installation erases the disk of a node A's cluster runs on. Two Bootwright stores (two controllers) are never coordinated at all, which the absolute wording hides.
 
@@ -4290,7 +4903,7 @@ Kind: gap; Area: Reconciliation rules / controller-host protection; Status: conf
 
 Files: `specs/substrates.md:138-146`; `specs/infrastructure-services.md:190-206`; `specs/state-reconciliation.md:2042-2046`
 
-**Evidence.** substrates.md:141-144 "no two managed attachments on one host ... declare overlapping prefixes ... because the host routes each managed prefix to its own bridge" (only Bootwright attachments compared). infrastructure-services.md:190-191 "A socket held outside the contexts this host coordinates is no reservation, so the apply proves it before its first effect." state-reconciliation.md:2042-2043 "An apply or destroy must preserve the controller OS, power, Bootwright runtime, Workspace state".
+**Evidence.** specs/substrates.md:141-144 "no two managed attachments on one host ... declare overlapping prefixes ... because the host routes each managed prefix to its own bridge" (only Bootwright attachments compared). specs/infrastructure-services.md:190-191 "A socket held outside the contexts this host coordinates is no reservation, so the apply proves it before its first effect." specs/state-reconciliation.md:2042-2043 "An apply or destroy must preserve the controller OS, power, Bootwright runtime, Workspace state".
 
 **Consequence.** A managed attachment whose prefix overlaps the controller's management subnet, a VPN route, or a pre-existing non-libvirt bridge's name is admitted and reserved. Starting the network installs a competing connected route (libvirt's own collision check covers only some IPv4 forward modes), cutting the controller's path to BMCs, SSH hosts or the operator, mid-operation and on every boot via autostart.
 
@@ -4313,7 +4926,7 @@ Kind: design; Area: Reconciliation rules / multi-context coexistence; Status: co
 
 Files: `specs/infrastructure-services.md:89-91, 168-181`; `specs/substrates.md:56-62`; `specs/milestones/backlog.md:54, 512-514`
 
-**Evidence.** infrastructure-services.md:89-91 "Two contexts targeting one SSH host are not coordinated. Only the controller arm publishes the host reservations". substrates.md:61-62 "the SSH arm is coordinated by the context lease alone". backlog.md:54 B247: "publishing SSH claims needs an owner decision".
+**Evidence.** specs/infrastructure-services.md:89-91 "Two contexts targeting one SSH host are not coordinated. Only the controller arm publishes the host reservations". specs/substrates.md:61-62 "the SSH arm is coordinated by the context lease alone". specs/milestones/backlog.md:54 B247: "publishing SSH claims needs an owner decision".
 
 **Consequence.** Two contexts of one controller store placing libvirt providers on one remote KVM host can each claim the same bridge, overlapping prefixes and the same emulated-BMC socket; the second apply's effects collide on the host (or one context's destroy removes what the other uses, as in R2-06-01) although the store already holds both contexts' state and could refuse before registration. The planner already computes the SSH host token for intra-context comparison.
 
@@ -4324,11 +4937,51 @@ Verifier notes:
 - [refuter] Cite delivered.md:150-153 as the recorded constraint and frame as lifting a documented limitation; note B247 is narrower (controller-recognized SSH only), so either widen B247 or add a new parked item rather than 'decide B247 together'. Qualify every host-scoped key (bridge, libvirt-*, prefix, socket, unit, path), not only bridge.
 - [calibrator] State that host qualification inherits the token's limits (one host reached by name and by address, B247) so coordination is best-effort per declared address; extend the key set to every SSH-placed claim (socket, unit, path, bridge, prefix, libvirt-network/pool, emulated BMC socket), not only bridge; specify release on destroy as for controller keys; note the controller-record schema change (pre-1.x, no…
 
-**Acceptance.** The key table states host qualification; infrastructure-services.md:89-91 narrows to different stores; a test refuses a second context's conflicting `bridge:` on the same SSH host token.
+**Acceptance.** The key table states host qualification; specs/infrastructure-services.md:89-91 narrows to different stores; a test refuses a second context's conflicting `bridge:` on the same SSH host token.
 
 **Decision check.** D105 keeps B247 parked pending an owner decision; this recommendation is that decision's input, not a contradiction. No other decision covers SSH coordination.
 
 Verification: refuter real, medium confidence, severity Medium; calibrator real, medium confidence, severity Medium; no arbitration needed.
+
+##### V2-03 · Medium · Orphan deletion names status as its abandonment inventory, but status omits undeclared objects · revision 2
+
+Kind: contradiction; Area: Reconciliation safety: context deletion, orphan acknowledgement and status inventory; Status: confirmed.
+
+Provenance: Raised by the sibling audit's findings A3-92, A3-96, A3-97, A5-22 and S23 (sibling report lines 359-369 and 577), re-checked at 17acb63d9 and verified by our refuter and calibrator (both real, high confidence, Medium); no arbitration.
+
+Files: `specs/contexts.md:157-162, 764-768, 815-821, 886-891`; `specs/state-reconciliation.md:259-265`; `specs/milestones/backlog.md:162, 1601-1612`; `specs/deferred/reconciliation-scenarios.md:167-173`; `internal/reconciliation/lifecycle/status.go:194-198`
+
+**Evidence.** specs/contexts.md:766-767 names "`bootwright status --context <name>` as their inventory" for evidence-protected deletion; :818-820 the acknowledged deletion's confirmation names "`bootwright status --context <name>` as the inventory of the objects it abandons"; :889-890 the deletion plan lists "the objects `bootwright status --context <name>` lists". specs/state-reconciliation.md:260 repeats it, and :262-264 says abandoned objects "survive unmanaged and unreferenced, and no further command can discover, continue or remove them". specs/milestones/backlog.md:1603-1609 (B578): "`status` builds its rows from the compiled catalog only"; after an input update over a completed apply "an object the input no longer declares is not listed"; "**Impact:** misleading output, no harm." specs/milestones/backlog.md:162: "no milestone depends on it". specs/contexts.md:160-162 shows that changed input over a completed apply only warns. specs/deferred/reconciliation-scenarios.md:172-173: "A scenario never assumes the catalog lists everything it owns", yet the deletion contract does. internal/reconciliation/lifecycle/status.go:194-198 builds cluster, storage and service rows from `catalog` only.
+
+**Consequence.** An operator completes an apply that realizes a Ceph cluster and a VM. They then run `context update --input-dir` with an input that drops the Ceph cluster, which only warns. They later decide to delete the context and see the protected-evidence refusal. That refusal names status as the inventory, and status lists only the VM. The operator runs `context delete --purge --allow-orphans`, and the confirmation and plan point at the same status inventory. Believing only the VM is abandoned, they clean it up by hand. The Ceph cluster is left running unmanaged, and by specs/state-reconciliation.md:262-264 no Bootwright command can find it again. The deletion cannot be undone, and B578 rates this 'no harm' with no milestone dependency, so nothing schedules the fix.
+
+**Recommendation.** Cite and re-rate B578; do not add a new item. (1) Change B578's impact from 'misleading output, no harm' to a safety visibility gap, because status is the named abandonment inventory of an irreversible deletion. Link B578 from contexts.md Permanent deletion and from deferred/reconciliation-scenarios.md item 9. (2) Interim spec fix until B578 lands: in specs/contexts.md:766-767, :818-820, :889-890 and specs/state-reconciliation.md:260, name `bootwright diff --context <name>` alongside status as the inventory, since diff already lists the realized-only side. Alternatively, have the deletion plan and orphan confirmation list the blocks recorded in `lifecycle.blocks`, marked by whether the selected input still declares them. (3) B578's own smallest fix closes it: build status rows from the union of declared and realized objects, mark the undeclared ones and update specs/cli/output.md. No new frozen lineage union is needed.
+
+**Acceptance.** Every place in specs/ that names an abandonment or ownership inventory for context deletion (contexts.md Permanent deletion and its plan description, specs/state-reconciliation.md:259-261) names a source that lists realized but undeclared objects, either diff, lifecycle.blocks or a status that B578 has fixed. B578's impact text no longer says 'no harm' and links the deletion contract. Once B578 lands, a status golden over a context whose edited input removed a realized object shows that object marked undeclared, and a deletion-plan golden for the same context lists it among the abandoned objects.
+
+**Decision check.** D153 (specs/milestones/backlog.md:3306) checked: changed input over a completed apply refuses apply and is remedied by destroy then apply. It does not decide status completeness or the deletion inventory, so no conflict. D155 (cited by B576) concerns libvirt evidence and redefine, not B578. B578 is open and undecided at both 77033e8f5 and 17acb63d9; commit 17acb63d9 did not change it. Our catalog entries F10-03 (name-derived ownership), F12-02 (absence in the records-only diff), F12-07 (readiness reasons), F12-06 and F16-04 do not cover status completeness as the deletion inventory.
+
+Verification: refuter real, high confidence, severity Medium; calibrator real, high confidence, severity Medium; no arbitration needed.
+
+##### V2-20 · Medium · A settled apply is both excluded from and named as the exit from a latched log fault · revision 2
+
+Kind: contradiction; Area: Reconciliation: operation log fault, settled verbs and handoff readiness; Status: confirmed.
+
+Provenance: Raised by the sibling audit as a sub-claim of R10 (settled verb versus log-fault clearing); adjudicated sibling-right by two independent Opus votes in revision 2, which found our section 8B rating of the rule as sound wrong; citations re-read at 17acb63d9.
+
+Files: `specs/state-reconciliation.md:1295-1301`; `specs/state-reconciliation.md:1805-1807`; `specs/state-reconciliation.md:36-40`; `specs/cli/output.md:679`; `internal/reconciliation/lifecycle/logging.go:117`; `internal/reconciliation/lifecycle/execution.go:520`
+
+**Evidence.** specs/state-reconciliation.md:1295-1298 restores a latched fault only for an invocation that "would observe, probe, register or start anything", and :1300 adds "Nothing else clears it: not elapsed time, a read, a settled verb". specs/state-reconciliation.md:36-38 says a settled apply "attests only that its own records are complete", so it observes nothing. Yet specs/state-reconciliation.md:1805-1807 says "A settled `apply` over unchanged input restores a latched log fault, as any later invocation does", and specs/cli/output.md:679 offers that settled apply in `nextSteps` as the way to restore the boundary. The code follows the second reading: restoreSettledApply (internal/reconciliation/lifecycle/logging.go:117), called at internal/reconciliation/lifecycle/execution.go:520.
+
+**Consequence.** Over a completed apply no continuation exists, so the settled apply is the only exit an operator is offered from a latched log fault, and the handoff predicate stays not ready while the fault holds. An implementer who follows :1300 makes that exit a no-op, and the context then needs a destroy to become ready; an implementer who follows :1805 clears it. Two conforming builds give different answers for the sole exit, and an agent fixing either clause against the other can break the shipped behavior.
+
+**Recommendation.** Keep the shipped behavior and make the restoration clause its single owner: delete "a settled verb" from specs/state-reconciliation.md:1300, name the settled apply over a faulted completed operation as a restoring invocation in :1295-1299, and let :1805-1807 and specs/cli/output.md:679 link to that clause instead of restating it.
+
+**Acceptance.** One clause in the restoration rule names every restoring invocation, including the settled apply; :1805-1807 and cli/output.md:679 link to it; a lifecycle test drives a completed apply with a latched fault through a settled apply and asserts the reopened log, the cleared flag and a ready handoff, and a second test asserts that `status` never clears it.
+
+**Decision check.** D153 keeps settled verbs record-only toward managed targets; reopening the operation's own local log under the exclusive lock touches no target, so the recommendation stays within D153. No decision makes the settled verb a non-restoring invocation.
+
+Verification: refuter none; calibrator none; no arbitration needed.
 
 #### S9: Spec corpus
 
@@ -4338,9 +4991,11 @@ Kind: ambiguity; Area: Milestone scope rules / agent harness; Status: confirmed.
 
 Files: `specs/milestones.md:15, 29-32, 40-48`; `specs/milestones/m2.md:243-246, 445-446`; `specs/milestones/m3.md:455-456`; `specs/milestones/m4.md:502-503`; `specs/milestones/backlog.md:3768-3776`
 
-**Evidence.** milestones.md:40-41 "A slice is active only while its Delivery is in progress, and only active slices count toward the WIP limit of two". m2.md:445 header "| Slice | Kind | Items in order | Owner decisions | Requires |" (same on m1.md:147, m3.md:455, m4.md:502: no Delivery). milestones.md:29-30 "Next for agents: M2c lanes and profiles, integrated at their checkpoints (D168)". backlog.md:3770 (D168) "Under that order M2c is paused". milestones.md:31 "Next for operator: review D159 to D173" while D174 to D181 exist.
+**Evidence.** specs/milestones.md:40-41 "A slice is active only while its Delivery is in progress, and only active slices count toward the WIP limit of two". specs/milestones/m2.md:445 header "| Slice | Kind | Items in order | Owner decisions | Requires |" (same on m1.md:147, specs/milestones/m3.md:455, specs/milestones/m4.md:502: no Delivery). specs/milestones.md:29-30 "Next for agents: M2c lanes and profiles, integrated at their checkpoints (D168)". specs/milestones/backlog.md:3770 (D168) "Under that order M2c is paused". specs/milestones.md:31 "Next for operator: review D159 to D173" while D174 to D181 exist.
 
 **Consequence.** An agent told to "resume" cannot determine which slices are active or whether a slice is in sequence; it may resume paused M2c lanes per the Next line, or treat D159's authorization as still live, while the owner's later requests (D174, D180, D181) target M3 and M4. The WIP limit, excepted for X55-X61, X111-X127 and the M4b-M4f slices, constrains nothing.
+
+**Counterevidence.** Items tables do carry a Delivery column (specs/milestones/m2.md:491), so per-item state can still be read. The scope rules require a prompt to authorize work, and say a milestone page or decision "authorizes no implementation or effect" (specs/milestones.md:36-39). An ambiguous "resume" therefore cannot by itself authorize implementation. D168 records in the backlog that M2c is paused (specs/milestones/backlog.md:3770-3773). The finding does not claim that any unauthorized implementation has happened.
 
 **Recommendation.** Add a Delivery column to every Planned slices table, and one Active slices table on milestones.md (slice, authorizing decision, date, state including paused) that agents read instead of Next prose. Add `paused` to the delivery vocabulary or record M2c as not active. Replace the standing WIP exceptions with a rule the current practice satisfies (for example, a limit per program) or retire the limit.
 
@@ -4361,7 +5016,7 @@ Kind: duplication; Area: Spec structure: storage API ownership; Status: confirme
 
 Files: `specs/api/storage.md:1-9, 256-273`; `specs/deferred/storage-api.md:1-18, 83-97, 304-337`; `specs/storage.md:40-41`; `api/v1alpha1/storage.go:74`; `specs/api/storage.md:61-68`; `specs/api/storage.md:262`; `specs/storage-resources.md:387-405`; `specs/deferred/storage-api.md:1-18`; `specs/deferred/storage-api.md:99-105`
 
-**Evidence.** specs/api/storage.md:3-7 "This page owns storage admission. The closed schemas... own accepted fields", and it defers field records to storage-resources.md and storage-native-api.md. specs/deferred/storage-api.md:93-95 retires "Legacy `monitoring`, `mgmtGateway`... are retired and refused", yet its normalization list (:309-315) still materializes "`mgmtGateway.dnsLabel: mgr`" and "`spec.ceph.distribution: oss`". The owning page never states the `distribution` field or its `oss` default (schema api/v1alpha1/storage.go:74). specs/storage.md:40-41: "Admission of other distributions... does not select an M2 implementation." Also reported as F15-05: api/storage.md:61-63 "StorageClient is admitted with required clusterRef and access ... and exactly one same-cluster scope"; :262 restates it in the Kinds table; storage-resources.md:401-404 "a StorageClient declares exactly one of poolRef, filesystemRef and subvolumeRef. Admission refuses two or three"; deferred/storage-api.md:101-103 "exactly one same-cluster scope, poolRef, filesystemRef or subvolumeRef, declare one principal". deferred/storage-api.md:13-14 "later resource family tables stay historical".
+**Evidence.** specs/api/storage.md:3-7 "This page owns storage admission. The closed schemas... own accepted fields", and it defers field records to storage-resources.md and storage-native-api.md. specs/deferred/storage-api.md:93-95 retires "Legacy `monitoring`, `mgmtGateway`... are retired and refused", yet its normalization list (:309-315) still materializes "`mgmtGateway.dnsLabel: mgr`" and "`spec.ceph.distribution: oss`". The owning page never states the `distribution` field or its `oss` default (schema api/v1alpha1/storage.go:74). specs/storage.md:40-41: "Admission of other distributions... does not select an M2 implementation." Also reported as F15-05: api/storage.md:61-63 "StorageClient is admitted with required clusterRef and access ... and exactly one same-cluster scope"; :262 restates it in the Kinds table; specs/storage-resources.md:401-404 "a StorageClient declares exactly one of poolRef, filesystemRef and subvolumeRef. Admission refuses two or three"; deferred/storage-api.md:101-103 "exactly one same-cluster scope, poolRef, filesystemRef or subvolumeRef, declare one principal". deferred/storage-api.md:13-14 "later resource family tables stay historical".
 
 **Consequence.** No single page gives an operator the fields, defaults and enums of one storage kind. The normalization rules that are written down include retired helpers. An operator who omits `ceph.distribution` gets `oss`, which the IBM-only lifecycle does not realize, and the owning page never says so. The same drift produced F05-02.
 
@@ -4384,7 +5039,7 @@ Kind: cost; Area: Spec corpus / agent retrieval path; Status: confirmed; Propose
 
 Files: `AGENTS.md:8-10`; `specs/index.md:3-6`; `specs/milestones/m2.md:18-107`; `specs/milestones/m3.md:1-84`; `AGENTS.md:8-11`; `test/architecture/docs_test.go:20-34`; `specs/milestones/m1.md:78-110, 749-965`; `specs/milestones/m2.md:57-107, 475-489`; `specs/milestones/m3.md:1-6, 50-84`; `specs/milestones/m4.md:520-575`; `specs/milestones.md:119-124`; `AGENTS.md:9-12`
 
-**Evidence.** AGENTS.md:8-10 mandates "its scope rules and the milestone page of the slice or item your task names"; specs/index.md:3-5 "Read the milestones status and the milestone page of the authorized slice or item". Pages are 63-141 KB (m2 141,425 B, m3 128,633 B, m4 140,582 B). m2.md:18-56 Requires paragraph is waiver history: "D134 (2026-10-11) accepted M2a's definition baseline ... Taken by the session, pending the owner's review"; m2.md:57-107 lists delivered slices: "[X71] delivered B523, which retries independent failed blocks together (D144)." Measured: m2 opening 7 KB, Submilestones 26 KB, Item detail 96 KB. Also reported as F14-08: AGENTS.md:8-9 "read its status, its scope rules and the milestone page of the slice or item your task names". Page sizes: m1.md 63 KB, m3.md 129 KB, m4.md 141 KB, m2.md 141 KB. docs_test.go budgets cover only AGENTS.md, CLAUDE.md, index, milestones.md, the code-implementation SKILL and rules. Also reported as F17-09: Sizes: m1.md 63 KB, m2.md 141 KB, m3.md 129 KB, m4.md 141 KB. m1.md:749-752 "The following records the pre-D158 scope and completion requirements." m4.md:564-567 "Routing: X136, X138, X139, X142, X145, X146, X147 ... are complex (Opus planning and review, Sonnet implementation". milestones.md:119-120 "A milestone page opens with its scope, Requires, Exit tier and Open decisions" while m3.md:3 opens "X121's produced-input lending, node diagnostics and plan bounds are delivered in-tree".
+**Evidence.** AGENTS.md:8-10 mandates "its scope rules and the milestone page of the slice or item your task names"; specs/index.md:3-5 "Read the milestones status and the milestone page of the authorized slice or item". Pages are 63-141 KB (m2 141,425 B, m3 128,633 B, m4 140,582 B). specs/milestones/m2.md:18-56 Requires paragraph is waiver history: "D134 (2026-10-11) accepted M2a's definition baseline ... Taken by the session, pending the owner's review"; specs/milestones/m2.md:57-107 lists delivered slices: "[X71] delivered B523, which retries independent failed blocks together (D144)." Measured: m2 opening 7 KB, Submilestones 26 KB, Item detail 96 KB. Also reported as F14-08: AGENTS.md:8-9 "read its status, its scope rules and the milestone page of the slice or item your task names". Page sizes: m1.md 63 KB, m3.md 129 KB, m4.md 141 KB, m2.md 141 KB. docs_test.go budgets cover only AGENTS.md, CLAUDE.md, index, milestones.md, the code-implementation SKILL and rules. Also reported as F17-09: Sizes: m1.md 63 KB, m2.md 141 KB, m3.md 129 KB, m4.md 141 KB. specs/milestones/m1.md:749-752 "The following records the pre-D158 scope and completion requirements." specs/milestones/m4.md:564-567 "Routing: X136, X138, X139, X142, X145, X146, X147 ... are complex (Opus planning and review, Sonnet implementation". specs/milestones.md:119-120 "A milestone page opens with its scope, Requires, Exit tier and Open decisions" while specs/milestones/m3.md:3 opens "X121's produced-input lending, node diagnostics and plan bounds are delivered in-tree".
 
 **Consequence.** A Go fix on an M3 item costs about 45k mandatory tokens of which about 76 percent is the milestone page; an API-field task about 58k tokens, 59 percent delivery state (tables in notes/F15.md). Agents either pay this on every task or skip it and miss the one clause (Requires, open decision) they needed; waiver clauses buried in prose are easy to misread as authorization.
 
@@ -4392,7 +5047,7 @@ Files: `AGENTS.md:8-10`; `specs/index.md:3-6`; `specs/milestones/m2.md:18-107`; 
 
 Verifier notes:
 
-- [refuter] Keep it, but downgrade to Medium. Smallest fix: change AGENTS.md and index.md to name the milestone page's opening, Planned slices, the item's row and its ### B<n> section, and move delivery narrative out of the page openings per milestones.md:130-131. A card-size byte budget is optional.
+- [refuter] Keep it, but downgrade to Medium. Smallest fix: change AGENTS.md and index.md to name the milestone page's opening, Planned slices, the item's row and its ### B<n> section, and move delivery narrative out of the page openings per specs/milestones.md:130-131. A card-size byte budget is optional.
 - [calibrator] Smallest change first: reword AGENTS.md and specs/index.md to mandate the Status row, the page opening (scope, Requires, Exit tier, Open decisions) and the named item's row and ### B<n> section, not the whole page. Then budget only the opening section (before ## Submilestones) e.g. 8 KB per page, and move dated waiver narrative out of Requires into the D entries. Keep Submilestones on the page (D172/D17…
 
 **Acceptance.** Each specs/milestones/m<n>.md (or its card) is within a byte budget enforced by TestDocsStayWithinByteBudgets; no Requires paragraph contains a dated waiver narrative; AGENTS.md and specs/index.md name the row and section, not the page; Task A's mandatory path re-measured below 20k tokens.
@@ -4407,7 +5062,7 @@ Kind: process; Area: Docs gates; Status: confirmed.
 
 Files: `test/architecture/docs_test.go:20-35`; `test/architecture/docs_test.go:648-660`; `test/architecture/milestones_test.go:72-446`
 
-**Evidence.** docs_test.go:20-22 "docsByteBudgets bounds the files an agent reads at the start of every task" and lists only AGENTS.md, CLAUDE.md, specs/index.md, specs/milestones.md, the code-implementation skill and rules. notYetMetViolations skips "specs/milestones/" and "specs/deferred/" (:656-657). No test checks index reachability or delivery IDs in normative pages.
+**Evidence.** test/architecture/docs_test.go:20-22 "docsByteBudgets bounds the files an agent reads at the start of every task" and lists only AGENTS.md, CLAUDE.md, specs/index.md, specs/milestones.md, the code-implementation skill and rules. notYetMetViolations skips "specs/milestones/" and "specs/deferred/" (:656-657). No test checks index reachability or delivery IDs in normative pages.
 
 **Consequence.** Growth moves from budgeted entry files into unbudgeted milestone and spec pages (the budget comment even directs it to 'an on-demand page'), so mandatory cost grows unobserved; drift such as F15-03 and F15-04 passes every gate.
 
@@ -4430,7 +5085,7 @@ Kind: process; Area: Milestone scope rules / process; Status: confirmed; Also ra
 
 Files: `specs/milestones.md:49-51`; `specs/milestones/m2.md:24-37`; `specs/milestones/m3.md:37-42`; `specs/milestones/m1.md:78-84`; `specs/milestones.md:30-33`; `specs/milestones/m3.md:36-48`; `specs/milestones/backlog.md:3870-3875, 3968-3975`
 
-**Evidence.** milestones.md:49-51 "An unmet Requires needs a waiver, which needs an explicit user request and is recorded in the item with its date." m2.md:25-27 "Taken by the session, pending the owner's review: D134 is the dated waiver of this Requires". m3.md:37-38 "Taken by the session, pending the owner's review ([D172], Q2): M2 is waived". The phrase "pending the owner's review" occurs 38 times across milestone pages, backlog and delivered. Also reported as F01-08: specs/milestones.md:32: 'Next for operator: review D159 to D173.' m3.md:37-38: 'Taken by the session, pending the owner's review (D172, Q2)'. backlog.md:3873-3874: 'the session reads M3f as OpenShift over VMware vSphere'. backlog.md:3973-3974: '"acm/gitops" read as Red Hat Advanced Cluster Management and Red Hat OpenShift GitOps'. m2.md:28-29: D143 'the session's reading of the owner's request, pending the owner's review'.
+**Evidence.** specs/milestones.md:49-51 "An unmet Requires needs a waiver, which needs an explicit user request and is recorded in the item with its date." specs/milestones/m2.md:25-27 "Taken by the session, pending the owner's review: D134 is the dated waiver of this Requires". specs/milestones/m3.md:37-38 "Taken by the session, pending the owner's review ([D172], Q2): M2 is waived". The phrase "pending the owner's review" occurs 38 times across milestone pages, backlog and delivered. Also reported as F01-08: specs/milestones.md:32: 'Next for operator: review D159 to D173.' specs/milestones/m3.md:37-38: 'Taken by the session, pending the owner's review (D172, Q2)'. specs/milestones/backlog.md:3873-3874: 'the session reads M3f as OpenShift over VMware vSphere'. specs/milestones/backlog.md:3973-3974: '"acm/gitops" read as Red Hat Advanced Cluster Management and Red Hat OpenShift GitOps'. specs/milestones/m2.md:28-29: D143 'the session's reading of the owner's request, pending the owner's review'.
 
 **Consequence.** Agents cannot tell whether a pending session clause binds them; an overturned clause silently invalidates work already landed under it, and the decision log accumulates unreviewed interpretations that read like owner decisions.
 
@@ -4455,9 +5110,11 @@ Kind: design; Area: hooks; Status: confirmed.
 
 Files: `.claude/settings.json:41-54`; `.agents/skills/code-implementation/SKILL.md:17-20`; `.agents/knowledge/inner-loop-check-cost.md:52-55`; `.agents/skills/code-implementation/references/verification.md:7-12`
 
-**Evidence.** settings.json:47 "git diff --quiet HEAD -- 2>/dev/null && test -z \"$(git ls-files --others --exclude-standard)\" || make quick >&2". SKILL.md:17-18 "Work on a task branch in its own worktree, never in the destination checkout". inner-loop-check-cost.md:52-55 "`./...` in the primary checkout fails with `permission denied`... vet, quick-test ... fail there". verification.md:10-11 focus is the per-handoff tier; quick only for widely imported Go changes.
+**Evidence.** .claude/settings.json:47 "git diff --quiet HEAD -- 2>/dev/null && test -z \"$(git ls-files --others --exclude-standard)\" || make quick >&2". .agents/skills/code-implementation/SKILL.md:17-18 "Work on a task branch in its own worktree, never in the destination checkout". .agents/knowledge/inner-loop-check-cost.md:52-55 "`./...` in the primary checkout fails with `permission denied`... vet, quick-test ... fail there". .agents/skills/code-implementation/references/verification.md:10-11 focus is the per-handoff tier; quick only for widely imported Go changes.
 
 **Consequence.** The hook checks the session directory (normally the primary checkout), not the task worktree, so it misses the agent's changes and fires on unrelated untracked files (40-110 s every turn end). When make quick fails there, make exits 2, which Claude Code treats as a blocking Stop: the agent is forced to keep working on an unrelated failure, and the hook ignores stop_hook_active, so the loop repeats. Codex has no counterpart, so the two runtimes enforce different end-of-turn checks.
+
+**Counterevidence.** The hook runs nothing when the session tree is clean, because the `git diff --quiet` and `ls-files` guard comes first (.claude/settings.json:47). Each run is capped at 300 seconds (.claude/settings.json:48). The hook is not the only gate. `make check` still runs once before integrating, and CI runs it on every push (verification.md:10-12). The finding does not claim the hook lets a defect reach main. A session started inside a task worktree checks that worktree's own changes.
 
 **Recommendation.** Replace the inline command with a tracked script that reads the hook input, exits 0 when stop_hook_active is true or when the cwd is the primary checkout, and otherwise runs `make focus` in the hook's cwd; return exit 2 only for a focus failure caused by tracked changes, and document the hook in code-implementation as advisory, not a gate.
 
@@ -4466,7 +5123,7 @@ Verifier notes:
 - [refuter] Keep it. Simplest version: drop the Stop hook, or make it advisory (exit 0, stderr only) and have it guard on stop_hook_active. Running focus is optional. Document the hook in verification.md, or record its removal there.
 - [calibrator] Simplify. Drop the hard-to-verify condition 'exit 2 only for a focus failure caused by tracked changes': run make focus and block on failure, but never when stop_hook_active is true. Define 'primary checkout' checkably: git rev-parse --git-dir equals --git-common-dir. Make the Codex parity point a note, not an acceptance criterion. Name the owning page for the hook's documentation (verification.md) once…
 
-**Acceptance.** With an untracked file in the primary checkout, ending a turn runs no check; in a task worktree with a failing focus lane, Stop blocks once and not after stop_hook_active; the hook's command and timeout are named in verification.md.
+**Acceptance.** With an untracked file in the primary checkout, ending a turn runs no check; in a task worktree with a failing focus lane, Stop blocks once and not after stop_hook_active; the hook's command and timeout are named in verification.md. Revision 2 addition: two consecutive turn ends in a task worktree with unchanged content run `make focus` once; a further edit runs it again.
 
 **Decision check.** Consistent with the verification tiers (focus while iterating, make check once before integrating) recorded in verification.md and the 10-18 tier change; no D-decision covers hooks.
 
@@ -4478,7 +5135,7 @@ Kind: unsafe-rule; Area: agent entrypoints / effect safety; Status: confirmed; P
 
 Files: `.agents/skills/code-implementation/references/agent-operation.md:100-102`; `.claude/settings.json:23-33`; `AGENTS.md:31-32`; `specs/controller.md:16-24`
 
-**Evidence.** agent-operation.md:100-102 "Agents never run `bootwright apply` or `destroy`, or Ansible playbooks against hosts, outside tests; the committed Claude Code settings request approval". settings.json:27-30 ask only "Bash(./bin/bootwright apply *)" and "Bash(bootwright apply *)" (same for destroy). AGENTS.md:31-32 "Repository guidance never authorizes a push, release, or additional product scope" (no effect clause). controller.md:23-24 setup and `apply --stage controller` install host packages. .codex/ is gitignored, so no tracked Codex approval policy exists.
+**Evidence.** .agents/skills/code-implementation/references/agent-operation.md:100-102 "Agents never run `bootwright apply` or `destroy`, or Ansible playbooks against hosts, outside tests; the committed Claude Code settings request approval". .claude/settings.json:27-30 ask only "Bash(./bin/bootwright apply *)" and "Bash(bootwright apply *)" (same for destroy). AGENTS.md:31-32 "Repository guidance never authorizes a push, release, or additional product scope" (no effect clause). specs/controller.md:23-24 setup and `apply --stage controller` install host packages. .codex/ is gitignored, so no tracked Codex approval policy exists.
 
 **Consequence.** A Codex session (no tracked approval rules) or a Claude Code session in an auto/accept mode running `bin/bootwright apply --stage ...`, an absolute-path binary, `bootwright setup`, `machine exec` or `cluster exec` is not stopped by the ask list, and the prohibition is only seen if the agent happens to load the model-routing reference; on a host with a live context this can power-cycle machines, re-image disks or install host packages.
 
@@ -4501,16 +5158,16 @@ Kind: contradiction; Area: code-implementation skill / integration; Status: conf
 
 Files: `.agents/skills/code-implementation/SKILL.md:1-4, 42-52`; `.agents/skills/code-implementation/references/git-integration.md:21-31`; `specs/milestones/backlog.md:3723-3731`; `AGENTS.md:31-32`
 
-**Evidence.** SKILL.md:47 "Integrate through a pull request gated by CI." git-integration.md:23 "**Pull request (default).** Push the task branch when the user or harness asks". backlog.md:3727-3730 D168: "the session merges a checkpoint-passed, feature-complete slice to local main as soon as it is done, without asking, and pushing still waits".
+**Evidence.** .agents/skills/code-implementation/SKILL.md:47 "Integrate through a pull request gated by CI." .agents/skills/code-implementation/references/git-integration.md:23 "**Pull request (default).** Push the task branch when the user or harness asks". specs/milestones/backlog.md:3727-3730 D168: "the session merges a checkpoint-passed, feature-complete slice to local main as soon as it is done, without asking, and pushing still waits".
 
 **Consequence.** An agent that follows the canonical skill either stops to request a push it is not authorized to make, or opens a PR, while the owner's decided process is a local fast-forward; only a private per-user memory carries the real rule, so Codex sessions and other accounts follow the wrong default. Recent main history (17acb63d9, 77033e8f5) shows local integration is what actually happens.
 
-**Recommendation.** Make 'Local fast-forward (default, D168)' the first variant in git-integration.md with D168's conditions (checkpoint passed, feature complete, make check green, push waits for the owner); keep pull request as the variant used when the owner or harness asks; change SKILL.md:47 and the description's 'branch or pull-request integration' accordingly.
+**Recommendation.** Make 'Local fast-forward (default, D168)' the first variant in git-integration.md with D168's conditions (checkpoint passed, feature complete, make check green, push waits for the owner); keep pull request as the variant used when the owner or harness asks; change .agents/skills/code-implementation/SKILL.md:47 and the description's 'branch or pull-request integration' accordingly.
 
 Verifier notes:
 
 - [refuter] Add a 'Local main (D168)' variant: rebase, gates, ff local main for checkpoint-passed, feature-complete slices, no push; PR when the owner or harness asks. Rename 'Local, no remote' to cover remotes without push authorization. Cite D168 and its scope rather than declaring a universal default.
-- [calibrator] Do not cite D168 as a general default without an owner decision that extends it. Smallest fix: replace 'Local, no remote' with 'Local fast-forward (push waits for the owner)', which covers a repo with a remote. In SKILL.md:47 and the description, stop calling PR the unconditional default and point to the variants. If the owner wants local fast-forward as the repo-wide default, record that as a new D ent…
+- [calibrator] Do not cite D168 as a general default without an owner decision that extends it. Smallest fix: replace 'Local, no remote' with 'Local fast-forward (push waits for the owner)', which covers a repo with a remote. In .agents/skills/code-implementation/SKILL.md:47 and the description, stop calling PR the unconditional default and point to the variants. If the owner wants local fast-forward as the repo-wide…
 
 **Acceptance.** SKILL.md and git-integration.md name local fast-forward as default and cite D168; no sentence calls PR the default; the wrapper frontmatter matches (TestDocsSkillsAreDiscoverable).
 
@@ -4524,7 +5181,7 @@ Kind: gap; Area: code-implementation skill / verification; Status: confirmed.
 
 Files: `.agents/skills/code-implementation/SKILL.md:32-37`; `.agents/skills/code-implementation/references/verification.md:12`; `.agents/skills/code-implementation/references/agent-operation.md:52-56`; `specs/milestones.md:119-124`
 
-**Evidence.** SKILL.md:35-37 "for a safety change (substrate, managed OS, container cluster, lifecycle and contextfs code or their roles), `make race` and an independent review". agent-operation.md:54-56 'complex' includes "a safety refusal, the privilege boundary, durable store transitions". milestones.md:123-124 Kind includes `safety`.
+**Evidence.** .agents/skills/code-implementation/SKILL.md:35-37 "for a safety change (substrate, managed OS, container cluster, lifecycle and contextfs code or their roles), `make race` and an independent review". .agents/skills/code-implementation/references/agent-operation.md:54-56 'complex' includes "a safety refusal, the privilege boundary, durable store transitions". specs/milestones.md:123-124 Kind includes `safety`.
 
 **Consequence.** A change to Ceph OSD erase or disk selection, secret custody, controller privilege, infrastructure-service host reservations or add-on cluster-object deletion integrates without the independent review and race run the skill reserves for safety, although those paths destroy data or disclose secrets; three pages define 'safety' differently.
 
@@ -4547,7 +5204,7 @@ Kind: process; Area: Agent harness: procedure for automation changes; Status: co
 
 Files: `specs/milestones/delivered.md:4340-4343`; `.agents/skills/code-implementation/references/ansible.md:1-8`; `.agents/knowledge/continuation-after-a-fix.md:65-70`; `specs/state-reconciliation.md:1466-1471`
 
-**Evidence.** delivered.md:4340-4342 'an automation change that alters what an effect is must move its capability's content digest; the reviewer checks that on every `ansible/` change'. ansible.md:6-8 'Before editing a managed operation, resolve its frozen request, result/evidence, implementation identity, targets/versions, permitted effects, replay' and says nothing of the digest. continuation-after-a-fix.md:69-70 'it cannot see a change of meaning under an unmoved version, so a fix that changes what an effect is must move the implementation's version.' A grep of .agents/skills, .claude/rules and .claude/skills for 'content digest' finds no procedural mention.
+**Evidence.** specs/milestones/delivered.md:4340-4342 'an automation change that alters what an effect is must move its capability's content digest; the reviewer checks that on every `ansible/` change'. .agents/skills/code-implementation/references/ansible.md:6-8 'Before editing a managed operation, resolve its frozen request, result/evidence, implementation identity, targets/versions, permitted effects, replay' and says nothing of the digest. .agents/knowledge/continuation-after-a-fix.md:69-70 'it cannot see a change of meaning under an unmoved version, so a fix that changes what an effect is must move the implementation's version.' A grep of .agents/skills, .claude/rules and .claude/skills for 'content digest' finds no procedural mention.
 
 **Consequence.** An agent making an `ansible/` fix follows code-implementation and its Ansible reference, which never ask whether the change alters objects, names, places, marks, claims or proofs. The knowledge page is found only by symptom search after a failure. The one defence for meaning changes the guard cannot see is therefore never triggered, and AGENTS.md's split ('skills own procedure') is broken because the rule sits in delivery history.
 
@@ -4566,14 +5223,14 @@ Verification: refuter real, high confidence, severity Medium; calibrator real, h
 
 ### 11.3 Low findings
 
-Low findings are clarity, naming, duplication and cost defects, or gaps whose consequence verification judged minor. Each still names a concrete correction; the recommendation column gives its first sentence and the files column its evidence.
+Low findings are clarity, naming, duplication and cost defects, or gaps whose consequence verification judged minor. Each still names a concrete correction; the recommendation column gives its first sentence and the files column its evidence. Rows new in revision 2 carry "(r2)" after the id.
 
 #### S3: Objectives, scope and domain
 
 | Id | Kind | Title | Files | Recommendation (first sentence) | Votes |
 | --- | --- | --- | --- | --- | --- |
 | F01-03 | ambiguity | Day-2 and arbitrary-code non-goals are contradicted by specified day-2 utilities | `specs/project.md:98-105`; `specs/substrates.md:815-820`; `specs/cli/commands.md:112-113, 121-122`; `specs/state-reconciliation.md:37-40` | Rewrite the non-goal as two testable rules: (1) no command changes realized desired state outside a registered lifecycle operation over unchanged or fresh input (drift is reported, never repaired); (2) operator utilities that register no operation and publish… | R✗C✓ A✓ |
-| F01-04 | contradiction | project.md states the early per-cluster handoff as settled while it is pending | `specs/project.md:50-53`; `specs/state-reconciliation.md:1787-1794`; `specs/milestones/backlog.md:4028-4033`; `specs/milestones/m4.md:170`; `specs/project.md:4… | Either record the owner's Q60 answer as a decision, or mark the sentence in project.md as pending Q60 in the same form state-reconciliation.md uses (or move it out of project.md until accepted). | R✓C✓ |
+| F01-04 | contradiction | project.md states the early per-cluster handoff as settled while it is pending | `specs/project.md:50-53`; `specs/state-reconciliation.md:1787-1794`; `specs/milestones/backlog.md:4028-4033`; `specs/milestones/m4.md:170`; `specs/project.md:46-53`; and 2 more | Either record the owner's Q60 answer as a decision, or mark the sentence in project.md as pending Q60 in the same form state-reconciliation.md uses (or move it out of project.md until accepted). | R✓C✓ |
 | F01-05 | gap | Product scope omits managed operating-system installation | `specs/project.md:7-11, 19-29`; `README.md:3-10`; `specs/architecture.md:52`; `specs/milestones/m1.md:3-7` | Add operating-system installation and its entitlement use to project.md's scope list (with its family envelope, e.g. | R✓C✓ |
 | F01-06 | gap | No networking boundary: what Bootwright owns versus what must already exist is unstated | `specs/project.md:17-32, 81-105`; `specs/architecture.md:50`; `specs/substrates.md:126-128, 161-165` | Add one paragraph to project.md: Bootwright manages only provider-host virtual networks it declares as managed and host network configuration it installs; physical fabric, VLANs, routing, DHCP outside managed services and external DNS/firewall are provided an… | R✗C✓ A✓ |
 | F01-11 | duplication | Minor drift between project.md, README and milestone openings | `README.md:3-10`; `specs/milestones/m7.md:5-6`; `specs/project.md:28-29, 77-79`; `specs/milestones/m4.md:10-11` | Replace README's purpose paragraph with one sentence plus a link to project.md (including its non-goals); fix M7's link to project.md#implementation-and-extension-model; name the package 'Red Hat OpenShift GitOps (Argo CD)' once in project.md. | R✓C✓ |
@@ -4583,15 +5240,15 @@ Low findings are clarity, naming, duplication and cost defects, or gaps whose co
 | Id | Kind | Title | Files | Recommendation (first sentence) | Votes |
 | --- | --- | --- | --- | --- | --- |
 | F01-10 | naming | 'State reconciliation' names a context whose contract says there is no reconciliation | `specs/architecture.md:58`; `specs/state-reconciliation.md:1, 25`; `specs/project.md:104-105` | Rename the context and spec to 'Lifecycle operations' (or 'Operations'), keep 'reconciliation' only for the D153 scenario seam, and add 'diff' to the context's verb list. | R✓C✓ |
-| F02-02 | naming | 'Implementation' names a union arm, a server product field and a registry id | `specs/api.md:228-235`; `specs/api/machines.md:20-24`; `specs/api/infrastructure-services.md:18-25`; `specs/api/infrastructure-services.md:39-45`; `specs/archi… | Reserve "implementation" for the registry entry a block freezes. | R✓C✓ |
+| F02-02 | naming | 'Implementation' names a union arm, a server product field and a registry id | `specs/api.md:228-235`; `specs/api/machines.md:20-24`; `specs/api/infrastructure-services.md:18-25`; `specs/api/infrastructure-services.md:39-45`; and 2 more | Reserve "implementation" for the registry entry a block freezes. | R✓C✓ |
 | F02-03 | naming | The plan's unit is a block in the contract but a step in plan output | `specs/state-reconciliation.md:742-756`; `specs/cli/output.md:598-623`; `specs/cli/output.md:238-239`; `specs/architecture.md:929-936`; `specs/api/addons.md:35` | Use "block" for every plan node in presentation; reserve "step" for in-block progress sub-units and add-on `spec.steps`. | R✓C✓ |
-| F02-05 | naming | The shared-service layer has five spellings; 'Infra' in InfraProvider means substrate | `specs/api/infrastructure-services.md:1-5`; `specs/state-reconciliation.md:811-818`; `specs/cli/commands.md:90`; `specs/cli/commands.md:317-318`; `specs/milest… | Adopt "infrastructure service" as the one term. | R✓C✓ |
+| F02-05 | naming | The shared-service layer has five spellings; 'Infra' in InfraProvider means substrate | `specs/api/infrastructure-services.md:1-5`; `specs/state-reconciliation.md:811-818`; `specs/cli/commands.md:90`; `specs/cli/commands.md:317-318`; `specs/milestones.md:15`; and 1 more | Adopt "infrastructure service" as the one term. | R✓C✓ |
 | F02-06 | ambiguity | 'Add-on' and 'package' are defined inconsistently, and 'package' carries five meanings | `specs/add-ons.md:3-8`; `specs/add-ons.md:12-13`; `specs/api/addons.md:4-8`; `specs/cli/commands.md:64`; `specs/security.md:624-626`; `specs/architecture.md:56` | Define in the glossary: add-on (umbrella of what a ClusterAddonBinding attaches), package (built-in add-on compiled into the executable), authored add-on (ClusterAddon; never "add-on package"), instance (one package on one cluster); always qualify OLM, RPM an… | R✓C✓ |
 | F02-07 | gap | The glossary defines seven terms but not the most overloaded core terms | `specs/index.md:43-60`; `specs/state-reconciliation.md:8-10`; `specs/cli/output.md:108`; `specs/controller.md:166-168` | Replace the glossary with the normative vocabulary in the F02 notes (about 40 one-line entries, each with its owner link and "allowed synonyms: none"), with qualified forms mandatory for binding, profile, capability, evidence and receipt; add a docs-check tha… | R✓C✓ |
-| F02-09 | naming | No naming rule for enum values and reference fields; casings and Ref suffix vary | `specs/api.md:245-258`; `specs/api/machines.md:44`; `specs/api/machines.md:193`; `specs/api/container-clusters.md:199`; `specs/api/addons.md:41-44`; `specs/api… | Add the naming rules in the F02 notes to specs/api.md "Collections, enablement, and reserved words": lowerCamel fields and arms, `Ref`/`Refs` exactly for Bootwright object names, kebab-case Bootwright-owned enum values, native spelling for mirrored native val… | R✓C✓ |
+| F02-09 | naming | No naming rule for enum values and reference fields; casings and Ref suffix vary | `specs/api.md:245-258`; `specs/api/machines.md:44`; `specs/api/machines.md:193`; `specs/api/container-clusters.md:199`; `specs/api/addons.md:41-44`; and 3 more | Add the naming rules in the F02 notes to specs/api.md "Collections, enablement, and reserved words": lowerCamel fields and arms, `Ref`/`Refs` exactly for Bootwright object names, kebab-case Bootwright-owned enum values, native spelling for mirrored native val… | R✓C✓ |
 | F02-12 | naming | 'Capability' names three unrelated concepts and its tokens use two casings | `specs/api/machines.md:182`; `specs/api/addons.md:29-48`; `specs/substrates.md:11-17`; `specs/architecture.md:50` | Always qualify: Machine capability, add-on capability, lifecycle capability (glossary entries); normalize add-on tokens to lowercase kebab (`data-foundation`, `cert-manager`). | R✓C✓ |
-| F05-05 | naming | StorageExport is a per-consumer Data Foundation attachment named like an export | `specs/storage-resources.md:1124-1155`; `specs/api/storage.md:105-107, 270, 273`; `specs/api/addons.md:365-378`; `examples/add-ons/lab-compact-df/storage/expor… | Keep the decomposition: the storage side mints principals and the package consumes them by reference. | R✓C✓ |
-| F12-05 | ambiguity | 'Equal', 'settled' and 'drift' have several meanings and no single definition | `specs/state-reconciliation.md:35-40`; `specs/state-reconciliation.md:1631-1645`; `specs/cli.md:510-517`; `specs/cli.md:768-772`; `specs/storage.md:513-515`; `… | Add a five-line definitions block at the head of 'Comparing desired and real state': unchanged input; same plan; equal object; drift (an owned object's observed real side differs from its applied side; diff reports it; inside an attempt each capability's refu… | R✗C✓ A✓ |
+| F05-05 | naming | StorageExport is a per-consumer Data Foundation attachment named like an export | `specs/storage-resources.md:1124-1155`; `specs/api/storage.md:105-107, 270, 273`; `specs/api/addons.md:365-378`; and 5 more | Keep the decomposition: the storage side mints principals and the package consumes them by reference. | R✓C✓ |
+| F12-05 | ambiguity | 'Equal', 'settled' and 'drift' have several meanings and no single definition | `specs/state-reconciliation.md:35-40`; `specs/state-reconciliation.md:1631-1645`; `specs/cli.md:510-517`; `specs/cli.md:768-772`; `specs/storage.md:513-515`; and 2 more | Add a five-line definitions block at the head of 'Comparing desired and real state': unchanged input; same plan; equal object; drift (an owned object's observed real side differs from its applied side; diff reports it; inside an attempt each capability's refu… | R✗C✓ A✓ |
 | F16-07 | naming | CLI selector and output flags use different spellings for the same role across nouns | `specs/cli/commands.md:62, 64, 110-117, 119-122` | Adopt three rules. | R✓C✓ |
 | F16-08 | naming | Three vocabularies for 'next': receipt tokens name verbs the CLI does not expose | `specs/cli.md:575-580, 619-626`; `specs/cli/output.md:603-607` | Keep the receipt tokens for automation and document the token-to-command mapping in one table beside the receipt. | R✓C✓ |
 
@@ -4599,76 +5256,81 @@ Low findings are clarity, naming, duplication and cost defects, or gaps whose co
 
 | Id | Kind | Title | Files | Recommendation (first sentence) | Votes |
 | --- | --- | --- | --- | --- | --- |
-| F03-04 | cost | Single-valued and always-refused fields reserve extension points needlessly | `specs/api/infrastructure-services.md:22,72-77`; `specs/api/container-clusters.md:76`; `specs/api/machines.md:44,79-81,566`; `specs/api/environment.md:478-496`… | Under D142, remove fields whose only legal value is their default (`bmcEmulationDefaults.enabled`, `.protocol`, `.emulator`, `install.method`, `baremetal.boot.method`) and make managed-service `implementation` optional with its sole value materialized in effe… | R✗C✓ A✓ |
+| F03-04 | cost | Single-valued and always-refused fields reserve extension points needlessly | `specs/api/infrastructure-services.md:22,72-77`; `specs/api/container-clusters.md:76`; `specs/api/machines.md:44,79-81,566`; `specs/api/environment.md:478-496`; and 1 more | Under D142, remove fields whose only legal value is their default (`bmcEmulationDefaults.enabled`, `.protocol`, `.emulator`, `install.method`, `baremetal.boot.method`) and make managed-service `implementation` optional with its sole value materialized in effe… | R✗C✓ A✓ |
 | F03-05 | gap | No schema discoverability: no explain, export, field docs or value origins | `api/v1alpha1/schema.go:10-33`; `specs/cli/commands.md:100`; `specs/api.md:17-19,324-329` | Add a `Doc` (one sentence) and omission-meaning attribute to `Shape`/`Field`; specify `bootwright explain <Kind>[.<path>]` (fields, types, defaults, omission meaning, reference targets, accepted Secret types) and `bootwright schema --format json-schema` for y… | R✓C✓ |
-| F03-06 | ambiguity | Omission, empty and enablement semantics are per field and spelled three ways | `specs/api.md:233-235,253-255`; `specs/api/input.md:72-74`; `specs/api/container-clusters.md:83,87`; `specs/api/environment.md:278-287`; `specs/api/machines.md… | Define a closed set of omission classes in api.md (absent=built-in default; absent=inherit then default; empty=clear; empty=invalid; presence=enable) and require every field table to name its class; carry the class in the Go `Field` so explain (F03-05) prints… | R✗C✓ A✓ |
-| F03-07 | gap | Reference classes beyond *Ref names are uncatalogued; some are untyped | `specs/api.md:195-215`; `specs/api/storage.md:276-296`; `api/v1alpha1/storage.go:76`; `specs/api/infrastructure-services.md:86-90,156-158`; `examples/add-ons/l… | Add a reference-class table to api.md#references: object, nested (owner-scoped), endpoint selection `{serverRef, endpointRef}`, native-registry `<service_type>.<service_id>`, and external object (KubeVirt `networkRef`). | R✓C✓ |
+| F03-06 | ambiguity | Omission, empty and enablement semantics are per field and spelled three ways | `specs/api.md:233-235,253-255`; `specs/api/input.md:72-74`; `specs/api/container-clusters.md:83,87`; `specs/api/environment.md:278-287`; `specs/api/machines.md:79,685`; and 1 more | Define a closed set of omission classes in api.md (absent=built-in default; absent=inherit then default; empty=clear; empty=invalid; presence=enable) and require every field table to name its class; carry the class in the Go `Field` so explain (F03-05) prints… | R✗C✓ A✓ |
+| F03-07 | gap | Reference classes beyond *Ref names are uncatalogued; some are untyped | `specs/api.md:195-215`; `specs/api/storage.md:276-296`; `api/v1alpha1/storage.go:76`; `specs/api/infrastructure-services.md:86-90,156-158`; and 1 more | Add a reference-class table to api.md#references: object, nested (owner-scoped), endpoint selection `{serverRef, endpointRef}`, native-registry `<service_type>.<service_id>`, and external object (KubeVirt `networkRef`). | R✓C✓ |
 | F03-08 | cost | Environment scope is set by three overlapping mechanisms | `specs/api/input.md:8-28,53-78`; `specs/api/environment.md:138-221`; `examples/README.md:3-6` | Decide one primary scoping mechanism: the Environment directory is the scope (drop `spec.resources`), and cluster lists remain the only narrowing, documented with an example; or keep `resources` and drop cluster lists. | R✗C✓ A✓ |
 | F03-09 | duplication | Breaking changes stay in v1alpha1 with no schema identity | `specs/api.md:31-37,109-110,228-230`; `specs/api/environment.md:366-367,435-438,500-503`; `specs/api/secrets.md:26-27,54-103` | Keep v1alpha1-in-place (it fits D142) but add (1) a schema fingerprint reported by `bootwright version` and recorded with each context's frozen input, named by any admission refusal of frozen input; (2) one retired-field registry (table in api.md, data in api… | R✗C✓ A✓ |
-| F04-04 | contradiction | Virtual substrates disagree on who owns a NIC's MAC and bindings | `specs/api/machines.md:121-123, 188, 334, 425-426`; `specs/deferred/machine-arms.md:87-94`; `specs/substrates.md:658-660, 708-711`; `examples/container-cluster… | State one rule for every virtual arm: the provider derives each interface MAC from (context, Machine, interface); `hardware.nics` and `interfaceBinding` are absent on virtual arms (they belong in the bare-metal arm per F04-01). | R✓C✓ |
+| F04-04 | contradiction | Virtual substrates disagree on who owns a NIC's MAC and bindings | `specs/api/machines.md:121-123, 188, 334, 425-426`; `specs/deferred/machine-arms.md:87-94`; `specs/substrates.md:658-660, 708-711`; and 1 more | State one rule for every virtual arm: the provider derives each interface MAC from (context, Machine, interface); `hardware.nics` and `interfaceBinding` are absent on virtual arms (they belong in the bare-metal arm per F04-01). | R✓C✓ |
 | F04-05 | design | OS lifecycle is a boolean plus reference presence; os.install over-reaches | `specs/api/machines.md:190-195, 202-215`; `examples/container-clusters/lab-physical/infra/machines/physical-01.yaml:10-14` | Make the lifecycle an explicit union: `os: {provided: {}} \| {bootwright: {profileRef, ntp, hostKeyRef}} \| {clusterInstaller: {}}`. | R✓C✓ |
 | F04-06 | design | The libvirt arm and managed services make operators author one-value mechanics | `specs/api/machines.md:44, 78-88`; `specs/api/infrastructure-services.md:22, 70-77, 166`; `examples/machines/lab-rhel/infra/providers/lab-libvirt.yaml:13-19` | Rename `bmcEmulationDefaults` to `managementEmulation` (or `bmc`). | R✓C✓ |
 | F04-07 | design | External ArtifactServer has no consumer; external LoadBalancer binds nothing | `specs/api/infrastructure-services.md:152-160, 164-177` | Remove `management: external` from ArtifactServer (make it managed-only, with no `management` field) until a read-only consumer exists. | R✓C✓ |
 | F04-08 | ambiguity | Proxy bypass is consumer-local and never derived, so operators repeat it | `specs/api/infrastructure-services.md:120-121, 187-210`; `specs/container-clusters.md:312-316`; `specs/api/environment.md:286-288` | Define one derived bypass set for every proxy consumer: the Environment domains, the consumed machine networks, and the selected service endpoint hosts. | R✗C✓ A✓ |
-| F04-09 | duplication | The bare-metal network attachment arm configures nothing yet examples use it | `specs/api/machines.md:157, 333, 352-357`; `examples/machines/lab-baremetal/infra/providers/lab-metal.yaml:23-25`; `examples/machines/lab-baremetal/infra/machi… | Remove the bare-metal attachment arm, or document it as a label only. | R✓C✓ |
+| F04-09 | duplication | The bare-metal network attachment arm configures nothing yet examples use it | `specs/api/machines.md:157, 333, 352-357`; `examples/machines/lab-baremetal/infra/providers/lab-metal.yaml:23-25`; and 2 more | Remove the bare-metal attachment arm, or document it as a label only. | R✓C✓ |
 | F04-10 | naming | Managed-service image.local and image.public have no defined meaning | `specs/api/infrastructure-services.md:23-25`; `specs/infrastructure-services.md:233-235` | Replace the pair with one `image` digest reference. | R✓C✓ |
 | F04-11 | naming | Object name limits differ by kind, derived from internal block-id prefixes | `specs/api/machines.md:26-30, 172-178`; `specs/api/infrastructure-services.md:27-37` | Adopt one public name limit for all kinds (for example 47 bytes, which covers the longest prefix), or derive block identities by hashing long names, so the API states a single rule. | R✓C✓ |
-| F05-04 | design | ClusterAddon and ClusterAddonProfile are a second, refused add-on language | `specs/add-ons.md:64-91`; `specs/api/addons.md:25-48, 67-84, 105-112, 267-283, 365-370`; `specs/milestones/backlog.md:249`; `examples/full-platforms/multidc-pl… | Mark both kinds reserved on api/addons.md, as custom-playbooks.md does: one sentence saying the shape is held for B90 and every selecting binding refuses. | R✓C✓ |
+| F05-04 | design | ClusterAddon and ClusterAddonProfile are a second, refused add-on language | `specs/add-ons.md:64-91`; `specs/api/addons.md:25-48, 67-84, 105-112, 267-283, 365-370`; `specs/milestones/backlog.md:249`; and 1 more | Mark both kinds reserved on api/addons.md, as custom-playbooks.md does: one sentence saying the shape is held for B90 and every selecting binding refuses. | R✓C✓ |
 | F05-09 | cost | CustomPlaybook reserves a fully validated shape that B102 must replace | `specs/api/custom-playbooks.md:3-38`; `specs/milestones/backlog.md:360-368`; `specs/api/addons.md:162-172` | Keep the kind name registered, but reduce the reserved contract to a single admission refusal: "CustomPlaybook is reserved for B102", with that remedy. | R✓C✓ |
-| F05-10 | cost | Storage examples repeat composed facts and declare unused objects | `examples/storage-clusters/libvirt-3-nodes-ceph/storage/cluster.yaml:87-108`; `examples/storage-clusters/libvirt-3-nodes-ceph/storage/placement-policy.yaml:1-1… | In the runnable examples, omit the authored values that normalization composes (topology `fqdn`, the defaulted `pullSecretRef` and `nodeSSH`), or comment each as a deliberate override. | R✓C✓ |
-| F16-01 | contradiction | The CLI catalog presents about nine stub commands with full flag contracts | `specs/cli/commands.md:90-102`; `specs/cli/commands.md:351-354`; `specs/deferred/cli-access-and-rendering.md:3-9, 77-86, 138-146`; `specs/cli/output.md:833`; `… | Add an `Availability` column (available / unavailable, with the backlog item) to each catalog table. | R✓C✓ |
+| F05-10 | cost | Storage examples repeat composed facts and declare unused objects | `examples/storage-clusters/libvirt-3-nodes-ceph/storage/cluster.yaml:87-108`; `examples/storage-clusters/libvirt-3-nodes-ceph/storage/placement-policy.yaml:1-13`; and 4 more | In the runnable examples, omit the authored values that normalization composes (topology `fqdn`, the defaulted `pullSecretRef` and `nodeSSH`), or comment each as a deliberate override. | R✓C✓ |
+| F16-01 | contradiction | The CLI catalog presents about nine stub commands with full flag contracts | `specs/cli/commands.md:90-102`; `specs/cli/commands.md:351-354`; `specs/deferred/cli-access-and-rendering.md:3-9, 77-86, 138-146`; `specs/cli/output.md:833`; and 1 more | Add an `Availability` column (available / unavailable, with the backlog item) to each catalog table. | R✓C✓ |
 | F18-06 | design | The vSphere provider arm copies OpenShift's install-config platform shape | `specs/deferred/machine-arms.md:17-41`; `specs/api/container-clusters.md:144`; `specs/substrates.md:701-734` | Before B99 lifts the refusal, keep InfraProvider.spec.vsphere to realization facts: vcenters with trustBundleRef, plus placements with datacenter, computeCluster, resourcePool, datastore, folder and networks. | R✓C✓ |
-| R2-02-06 | gap | Managed Registry and LoadBalancer lack a marker though the engine refuses them | `specs/api/infrastructure-services.md:22`; `specs/api/infrastructure-services.md:33-38`; `specs/api/infrastructure-services.md:70-77`; `specs/api/infrastructur… | Add one Not-yet-met line to api/infrastructure-services.md naming B68 (Registry) and B100 (LoadBalancer, parked), with the remedy 'declare management: external'; reserve the registry-<name> and loadbalancer-<name> identities and limits in the name-limit table… | R✓C✓ |
-| R2-02-07 | gap | Managed NTPServer's served time source is defined only in an Ansible template | `specs/infrastructure-services.md:512`; `specs/infrastructure-services.md:520-521`; `specs/infrastructure-services.md:546-548`; `ansible/collections/ansible_co… | State in the NTPServer row of 'Derived configuration' that the daemon serves its host's clock at local stratum 10 when no upstream source is reachable or declared, and that readiness proves an answer, not synchronization. | R✓C✓ |
-| R2-05-03 | gap | External NTP, proxy and kind defaults are taught only by a refused example | `examples/full-platforms/multidc-platform/environment.yaml:21-53`; `examples/full-platforms/multidc-platform/README.md:1-10`; `cmd/bootwright/admission_accepta… | Add one runnable scenario (for example infra-components/lab-external-services, or a variant of machines/lab-rhel) with external NTPServer, DNSServer and Proxy consumed by a MachineInstallProfile and the controller Machine's proxy choice, using `spec.defaults`… | R✓C✓ |
+| R2-02-06 | gap | Managed Registry and LoadBalancer lack a marker though the engine refuses them | `specs/api/infrastructure-services.md:22`; `specs/api/infrastructure-services.md:33-38`; `specs/api/infrastructure-services.md:70-77`; and 3 more | Add one Not-yet-met line to api/infrastructure-services.md naming B68 (Registry) and B100 (LoadBalancer, parked), with the remedy 'declare management: external'; reserve the registry-<name> and loadbalancer-<name> identities and limits in the name-limit table… | R✓C✓ |
+| R2-02-07 | gap | Managed NTPServer's served time source is defined only in an Ansible template | `specs/infrastructure-services.md:512`; `specs/infrastructure-services.md:520-521`; `specs/infrastructure-services.md:546-548`; and 1 more | State in the NTPServer row of 'Derived configuration' that the daemon serves its host's clock at local stratum 10 when no upstream source is reachable or declared, and that readiness proves an answer, not synchronization. | R✓C✓ |
+| R2-05-03 | gap | External NTP, proxy and kind defaults are taught only by a refused example | `examples/full-platforms/multidc-platform/environment.yaml:21-53`; `examples/full-platforms/multidc-platform/README.md:1-10`; and 3 more | Add one runnable scenario (for example infra-components/lab-external-services, or a variant of machines/lab-rhel) with external NTPServer, DNSServer and Proxy consumed by a MachineInstallProfile and the controller Machine's proxy choice, using `spec.defaults`… | R✓C✓ |
 | R2-05-05 | ambiguity | Entitlement arm set is open: unused arms on a type are admitted without meaning | `specs/api.md:237-243`; `specs/api/secrets.md:142-162`; `specs/api/secrets.md:195-211` | Make each Entitlement type's arm set closed: redhat-rhel permits only rhsm; redhat-ceph permits rhsm and registry; ibm-storage-ceph permits registry and license. | R✓C✓ |
-| R2-05-07 | duplication | Secret types, parts and set flags have no table, and 'opaque' is overloaded | `specs/api/secrets.md:15-22`; `specs/api/secrets.md:54-103`; `specs/secrets.md:149-152`; `examples/container-clusters/lab-kubevirt/secret-descriptors/host-kube… | Add one 'Secret types' table to api/secrets.md: type, parts, `secret set` flags, generated support, typical consumers. | R✗C✓ A✓ |
+| R2-05-07 | duplication | Secret types, parts and set flags have no table, and 'opaque' is overloaded | `specs/api/secrets.md:15-22`; `specs/api/secrets.md:54-103`; `specs/secrets.md:149-152`; and 2 more | Add one 'Secret types' table to api/secrets.md: type, parts, `secret set` flags, generated support, typical consumers. | R✗C✓ A✓ |
 | R2-05-08 | process | Examples index has no status column and carries stale prose | `examples/README.md:8-49`; `examples/README.md:99-103` | Add a Status column with three fixed values (admission golden; plan-tested; accepted, linking the ledger row) and a test that each row has one; delete the stale sentence. | R✓C✓ |
 | R2-05-09 | design | ClusterAddonBinding diagnostic indexes refer to sorted lists, not authored positions | `specs/api/addons.md:222-226`; `specs/api.md:112-131` | State in api.md which order diagnostic indexes use for every set-valued list (preferably authored order) and make addons.md follow it. | R✗C✓ A✓ |
-| R2-05-10 | naming | Several examples reuse another example's Environment name | `specs/api/environment.md:3-5`; `examples/add-ons/lab-sno-metallb/environment.yaml:1-5`; `examples/storage-clusters/libvirt-4-nodes-ceph-observability/environm… | Either drop the identity sentence from environment.md or state what consumes the name, and require each example's Environment name to equal its directory name with a test. | R✓C✓ |
+| R2-05-10 | naming | Several examples reuse another example's Environment name | `specs/api/environment.md:3-5`; `examples/add-ons/lab-sno-metallb/environment.yaml:1-5`; and 1 more | Either drop the identity sentence from environment.md or state what consumes the name, and require each example's Environment name to equal its directory name with a test. | R✓C✓ |
 | R2-05-11 | unsafe-rule | Tracked examples pre-accept the IBM license for whoever copies them | `specs/api/secrets.md:207-211`; `examples/add-ons/lab-compact-df/storage/entitlement.yaml:1-15`; `examples/README.md:59-65` | Have each Ceph scenario README's customization list name license acceptance as the operator's explicit act, linking the license terms, and keep the example value so goldens still compile; optionally make `plan` echo the accepted license per Entitlement. | R✓C✓ |
 
 #### S6: Architecture and specialization
 
 | Id | Kind | Title | Files | Recommendation (first sentence) | Votes |
 | --- | --- | --- | --- | --- | --- |
-| F06-05 | naming | Cluster and Storage contexts are defined as their first product | `specs/architecture.md:40-58, 907-910`; `specs/storage.md:1-8, 17-41`; `specs/container-clusters.md:1-18`; `specs/api/storage.md:256-273`; `specs/architecture.… | Restate the Container cluster and Storage rows as family contexts owning provider-neutral intent, selection, ports and evidence vocabulary, with OpenShift/OKD agent install and managed Ceph as their first implementations (packages already exist: containerclus… | R✗C✓ A✓ |
+| F06-05 | naming | Cluster and Storage contexts are defined as their first product | `specs/architecture.md:40-58, 907-910`; `specs/storage.md:1-8, 17-41`; `specs/container-clusters.md:1-18`; `specs/api/storage.md:256-273`; and 2 more | Restate the Container cluster and Storage rows as family contexts owning provider-neutral intent, selection, ports and evidence vocabulary, with OpenShift/OKD agent install and managed Ceph as their first implementations (packages already exist: containerclus… | R✗C✓ A✓ |
 | F06-06 | ambiguity | 'Abstractions only for real consumers' conflicts with low-impact extension | `specs/project.md:82-87`; `specs/architecture.md:36-38, 625-627`; `specs/secrets.md:35-50` | Reconcile in architecture.md: a family capability's first implementation must ship its seam (selector, implementation identity, consumer-owned port, generic refusal for unbound selector values) and a synthetic second implementation in tests, as Secrets does;… | R✗C✓ A✓ |
 | F06-08 | design | The generic unclaimed-object refusal embeds service domain knowledge | `specs/state-reconciliation.md:909-931`; `internal/reconciliation/lifecycle/support.go:72-97` | Move 'is this object effect-bearing' to each domain root as a pure predicate the compiler composes (like admission rules), injected into the engine; the engine refuses an effect-bearing object no binding claims, without naming kinds or fields. | R✓C✓ |
 | F06-11 | gap | Specialization model lacks a promotion bound and registry discovery | `specs/architecture.md:912-938`; `test/architecture/version_specializations_test.go:12-18`; `.agents/knowledge/version-specializations.md:12-15` | Require a registry marker (a declared type or file name convention) that the test discovers rather than fixed paths; add a promotion rule: a release difference that changes the request, evidence shape, block plan or more than a small fixed number of seams bec… | R✓C✓ |
-| F06-12 | design | Domain selection sections share no template and enumerate unsupported arms | `specs/substrates.md:19-28, 79-92`; `specs/container-clusters.md:20-37`; `specs/infrastructure-services.md:13-47`; `specs/storage.md:364-372`; `specs/managed-o… | Mandate one template per domain: Selector, Implementations (identity, block families), Supported shape, Refusal table, Test. | R✗C✓ A✓ |
-| F07-07 | design | Preflight and capacity ports are libvirt-only; cluster preflight imports storage | `cmd/bootwright/wiring_preflight.go:22-25,27-55,121-122`; `cmd/bootwright/wiring_reconciliation.go:275`; `internal/storage/preflight/contracts.go:11-25`; `inte… | Let each substrate capability package export an optional allocation projector. | R✗C✓ A✓ |
-| F07-08 | naming | Role, implementation-id and plugin names follow three schemes | `specs/architecture.md:681`; `ansible/collections/ansible_collections/bootwright/core/plugins/action/substrate_machine_protocol.py:1-30`; `internal/substrate/l… | Fix one scheme. | R✓C✓ |
-| F17-06 | duplication | Coverage pages are generically named but single-implementation | `specs/container-cluster-coverage.md:1-12, 168-199`; `specs/storage-coverage.md:1-7, 555-564`; `specs/add-on-coverage.md:38-48, 345-398`; `specs/project.md:19-… | Create specs/coverage/ with one file per implementation (openshift.md, ibm-ceph.md, one file per built-in package) from a common template (paths, feature matrix, profiles, left out), and state the qualification rules once in milestones.md completion rules or… | R✗C✓ A✓ |
-| F18-07 | duplication | machine power commands are hard-wired to Redfish, so KubeVirt stop is unreachable | `ansible/collections/ansible_collections/bootwright/core/playbooks/machine/power.yml:1-12`; `specs/substrates.md:736-750, 962-972`; `internal/machine/power/sel… | Have the machine power playbook compose the substrate machine-port dispatcher's power and state_read entry points (F18-03), driven by the frozen realized target. | R✗C✓ A✓ |
-| F18-09 | design | Managed services ignore spec.implementation and the shared role is keyed by kind | `specs/infrastructure-services.md:467-479`; `specs/api/infrastructure-services.md:19, 62-67`; `ansible/collections/ansible_collections/bootwright/core/roles/in… | Key the role's fixed table and the Go selection by the frozen implementation identity, not the kind, and have managedservice plan only objects whose spec.implementation matches its Definition, through the F18-01 claim step. | R✓C✓ |
+| F06-12 | design | Domain selection sections share no template and enumerate unsupported arms | `specs/substrates.md:19-28, 79-92`; `specs/container-clusters.md:20-37`; `specs/infrastructure-services.md:13-47`; `specs/storage.md:364-372`; and 3 more | Mandate one template per domain: Selector, Implementations (identity, block families), Supported shape, Refusal table, Test. | R✗C✓ A✓ |
+| F07-07 | design | Preflight and capacity ports are libvirt-only; cluster preflight imports storage | `cmd/bootwright/wiring_preflight.go:22-25,27-55,121-122`; `cmd/bootwright/wiring_reconciliation.go:275`; `internal/storage/preflight/contracts.go:11-25`; and 2 more | Let each substrate capability package export an optional allocation projector. | R✗C✓ A✓ |
+| F07-08 | naming | Role, implementation-id and plugin names follow three schemes | `specs/architecture.md:681`; `ansible/collections/ansible_collections/bootwright/core/plugins/action/substrate_machine_protocol.py:1-30`; and 3 more | Fix one scheme. | R✓C✓ |
+| F17-06 | duplication | Coverage pages are generically named but single-implementation | `specs/container-cluster-coverage.md:1-12, 168-199`; `specs/storage-coverage.md:1-7, 555-564`; `specs/add-on-coverage.md:38-48, 345-398`; `specs/project.md:19-29` | Create specs/coverage/ with one file per implementation (openshift.md, ibm-ceph.md, one file per built-in package) from a common template (paths, feature matrix, profiles, left out), and state the qualification rules once in milestones.md completion rules or… | R✗C✓ A✓ |
+| F18-07 | duplication | machine power commands are hard-wired to Redfish, so KubeVirt stop is unreachable | `ansible/collections/ansible_collections/bootwright/core/playbooks/machine/power.yml:1-12`; `specs/substrates.md:736-750, 962-972`; and 6 more | Have the machine power playbook compose the substrate machine-port dispatcher's power and state_read entry points (F18-03), driven by the frozen realized target. | R✗C✓ A✓ |
+| F18-09 | design | Managed services ignore spec.implementation and the shared role is keyed by kind | `specs/infrastructure-services.md:467-479`; `specs/api/infrastructure-services.md:19, 62-67`; and 2 more | Key the role's fixed table and the Go selection by the frozen implementation identity, not the kind, and have managedservice plan only objects whose spec.implementation matches its Definition, through the F18-01 claim step. | R✓C✓ |
 | F18-10 | design | The DNS server pulls records from storage and cluster fields | `internal/infrastructureservices/dnsserver/catalog.go:33-60`; `specs/infrastructure-services.md:535-539`; `internal/storage/addon_facts.go:10-27` | Define a pure 'name contribution' function per owning domain (Machine, Container cluster, Storage), bound in composition, that returns records for its own objects. | R✓C✓ |
-| R2-01-03 | gap | Selecting a nested cluster keeps its KubeVirt provider but not the host cluster | `specs/api/environment.md:203,214-217`; `internal/environment/selection.go:198-201`; `specs/deferred/machine-arms.md:47-55`; `internal/desiredstate/compilation… | Add to the ContainerCluster closure row: "each KubeVirt provider's hostClusterRef ContainerCluster, retained as a root with its own row". | R✓C✓ |
+| R2-01-03 | gap | Selecting a nested cluster keeps its KubeVirt provider but not the host cluster | `specs/api/environment.md:203,214-217`; `internal/environment/selection.go:198-201`; `specs/deferred/machine-arms.md:47-55`; and 1 more | Add to the ContainerCluster closure row: "each KubeVirt provider's hostClusterRef ContainerCluster, retained as a root with its own row". | R✓C✓ |
 | R2-01-06 | design | A cluster root omitted from the list is still installed when retained, unwarned | `specs/api/environment.md:207-214`; `specs/architecture.md:45`; `specs/infrastructure-services.md:89-91`; `specs/state-reconciliation.md:25-29` | Make an attachment that reaches a cluster root omitted from an authored list a validate error that names the list to extend, instead of silently retaining a partial cluster. | R✓C✓ |
-| R2-01-07 | gap | CustomPlaybook orders against non-stage anchors, against block-only dependency | `specs/deferred/custom-playbooks.md:35-42`; `api/v1alpha1/customplaybooks.go:14-15`; `specs/state-reconciliation.md:820-823`; `specs/api/custom-playbooks.md:17… | Replace `gates`/`follows` with object requirements (API kind and name, as capability requirements already are), or make the two fields unknown until B102 defines them. | R✗C✓ A✓ |
+| R2-01-07 | gap | CustomPlaybook orders against non-stage anchors, against block-only dependency | `specs/deferred/custom-playbooks.md:35-42`; `api/v1alpha1/customplaybooks.go:14-15`; `specs/state-reconciliation.md:820-823`; `specs/api/custom-playbooks.md:17-26` | Replace `gates`/`follows` with object requirements (API kind and name, as capability requirements already are), or make the two fields unknown until B102 defines them. | R✗C✓ A✓ |
 | R2-02-04 | ambiguity | Vendor-BMC variation has no specialization model and its differences sit in trust code | `specs/substrates.md:1022-1027`; `specs/substrates.md:895-913`; `specs/architecture.md:907-916`; `specs/architecture.md:931-933` | State in substrates.md 'Adapter boundary' that controller variation is capability discovery over Redfish resources, never keyed on vendor or model: list the closed set of discovered variants (media location, ETag requirement, synchronous versus task insert, c… | R✗C✓ A✓ |
+| V2-10 (r2) | ambiguity | Registry contract asks for version constraints and support matrices that D163 forbids | `specs/architecture.md:936-938`; `specs/architecture.md:940-941`; `specs/architecture.md:952`; `specs/milestones/backlog.md:3612-3621` | Add one sentence after specs/architecture.md:941: an implementation constraint is a predicate over facts detected from the selected artifacts or an authored arm, used to select the implementation or prove a native mechanism present or absent; it is never a ve… | R✓C✓ |
+| V2-18 (r2) | naming | Playbook path rule <domain>/<operation>.yml matches no shipped playbook or Go binding | `specs/architecture.md:680`; `specs/architecture.md:696-701`; `cmd/bootwright/wiring_reconciliation.go:146-147`; `cmd/bootwright/wiring_reconciliation.go:162-173`; and 1 more | Fold into F07-08 as one naming scheme for roles, playbooks and plugins. | R✓C✓ |
 
 #### S7: Language responsibility
 
 | Id | Kind | Title | Files | Recommendation (first sentence) | Votes |
 | --- | --- | --- | --- | --- | --- |
-| F08-02 | ambiguity | Postcondition ownership: D11 says Go; architecture and code say Python | `specs/milestones/backlog.md:3051, 3153`; `specs/architecture.md:889-894`; `ansible/collections/ansible_collections/bootwright/core/plugins/module_utils/adapte… | Amend architecture.md:889-894 to say: the plugin owns the evidence projection and may refuse a mutation whose evidence lacks its declared postcondition fields as defence in depth; Go alone decides whether evidence proves the postcondition (D11). | R✗C✓ A✓ |
-| F08-03 | contradiction | 'Plugins contain no workflow' contradicts spec-mandated Python procedures | `specs/architecture.md:647-649, 752-756`; `specs/storage.md:583-612`; `specs/add-ons.md:205-233`; `ansible/collections/ansible_collections/bootwright/core/plug… | Replace the prohibition with a defined term: a block-internal procedure is a fixed, spec-owned sequence of native steps inside one frozen block (rounds, retries, batches, per-target markers, ownership checks against frozen marks) that an adapter may own; it m… | R✓C✓ |
-| F08-05 | gap | Python execution sites and their interpreter floors are not spec clauses | `specs/controller.md:112-114, 155-156`; `ansible/collections/ansible_collections/bootwright/core/tests/unit/test_remote_python_floor.py:1-8, 33`; `specs/milest… | Add an 'Execution sites' table under the language section of architecture.md: controller action (locked venv), managed-host module (floor 3.9, ansible-test target list), shipped worker (target `/usr/bin/python3`, stdlib only, floor), container entrypoint (ima… | R✗C✓ A✓ |
-| F08-08 | ambiguity | The Go/Ansible network criterion is split across three axes with no single rule | `specs/architecture.md:642-662`; `specs/controller.md:551-555`; `internal/controller/bundlelocal/tools_transport.go:36`; `ansible/collections/ansible_collectio… | State one rule: Go may reach only non-managed endpoints, read-only or for controller-local publication, through its egress port; every contact with a managed component and every installation of a target tool runs in an adapter; name publisher-metadata resolut… | R✓C✓ |
-| F08-09 | contradiction | Architecture says the controller runner serves setup, then says setup runs no Ansible | `specs/architecture.md:771-773, 867`; `specs/controller.md:206-218` | Edit architecture.md:772 to read "for the controller stage" only. | R✓C✓ |
+| F08-02 | ambiguity | Postcondition ownership: D11 says Go; architecture and code say Python | `specs/milestones/backlog.md:3051, 3153`; `specs/architecture.md:889-894`; and 2 more | Amend specs/architecture.md:889-894 to say: the plugin owns the evidence projection and may refuse a mutation whose evidence lacks its declared postcondition fields as defence in depth; Go alone decides whether evidence proves the postcondition (D11). | R✗C✓ A✓ |
+| F08-03 | contradiction | 'Plugins contain no workflow' contradicts spec-mandated Python procedures | `specs/architecture.md:647-649, 752-756`; `specs/storage.md:583-612`; `specs/add-ons.md:205-233`; and 3 more | Replace the prohibition with a defined term: a block-internal procedure is a fixed, spec-owned sequence of native steps inside one frozen block (rounds, retries, batches, per-target markers, ownership checks against frozen marks) that an adapter may own; it m… | R✓C✓ |
+| F08-05 | gap | Python execution sites and their interpreter floors are not spec clauses | `specs/controller.md:112-114, 155-156`; `ansible/collections/ansible_collections/bootwright/core/tests/unit/test_remote_python_floor.py:1-8, 33`; and 3 more | Add an 'Execution sites' table under the language section of architecture.md: controller action (locked venv), managed-host module (floor 3.9, ansible-test target list), shipped worker (target `/usr/bin/python3`, stdlib only, floor), container entrypoint (ima… | R✗C✓ A✓ |
+| F08-08 | ambiguity | The Go/Ansible network criterion is split across three axes with no single rule | `specs/architecture.md:642-662`; `specs/controller.md:551-555`; `internal/controller/bundlelocal/tools_transport.go:36`; and 1 more | State one rule: Go may reach only non-managed endpoints, read-only or for controller-local publication, through its egress port; every contact with a managed component and every installation of a target tool runs in an adapter; name publisher-metadata resolut… | R✓C✓ |
+| F08-09 | contradiction | Architecture says the controller runner serves setup, then says setup runs no Ansible | `specs/architecture.md:771-773, 867`; `specs/controller.md:206-218` | Edit specs/architecture.md:772 to read "for the controller stage" only. | R✓C✓ |
 | F08-10 | gap | Shell and tooling run unpinned interpreters and carry unruled selection logic | `AGENTS.md:34`; `Makefile:54-60`; `scripts/quick-test:1-16`; `scripts/runtime-lock:10`; `scripts/ansible-check:12-22` | Add a shell rule to formatting.md or python.md: shell scripts only pin and exec; logic goes to `scripts/tools/*.py` run by one pinned interpreter wrapper (the ansible-check venv), which `make focus` and `scripts/runtime-lock` also use; derive docs-check's tes… | R✗C✓ A✓ |
+| V2-14 (r2) | contradiction | Install playbook's later plays import eight task files no argument spec declares | `specs/architecture.md:703-712`; `ansible/collections/ansible_collections/bootwright/core/playbooks/containercluster/install_apply.yml:13,24-28,40-217`; and 2 more | Prefer the smaller fix. | R✓C✓ |
+| V2-15 (r2) | gap | No rule sets argument-spec depth; role schemas type the request version but leave members untyped | `specs/architecture.md:703-710`; `specs/architecture.md:1031-1035`; `specs/substrates.md:963-965`; `specs/state-reconciliation.md:1930-1937`; and 5 more | Add one sentence after specs/architecture.md:706, which the .agents/skills/code-implementation/references/ansible.md:20 reference cites. | R✓C✓ |
 
 #### S8: Reconciliation rules
 
 | Id | Kind | Title | Files | Recommendation (first sentence) | Votes |
 | --- | --- | --- | --- | --- | --- |
-| F09-05 | contradiction | Unknown-operation state rows forbid the same-continuation retry D146 requires | `specs/state-reconciliation.md:465-469`; `specs/state-reconciliation.md:557-562`; `specs/state-reconciliation.md:1088-1090`; `specs/state-reconciliation.md:500… | Change both rows to: 'continue it: resolve every unproved block first, then retry what resolution leaves failed and start what that admits (D146); start nothing while any block stays unproved', keeping the fresh-destroy alternative on the apply row. | R✓C✓ |
-| F09-06 | design | Operation state is recorded from in-memory block states, not durable records | `specs/state-reconciliation.md:695-704`; `specs/state-reconciliation.md:718-727`; `specs/state-reconciliation.md:84-96`; `specs/state-reconciliation.md:1380-13… | Make the durable records the single source: after any start or resolution whose publication reports failure, the invocation re-reads that block record and records the operation from the precedence of the block records it re-read; a removal superseding a faile… | R✓C✓ |
+| CX-X3 (r2) | gap | NTP readiness proves an answer, not usable time, and no consumer states the time quality it needs | `specs/infrastructure-services.md:512, 519-521, 540-550`; `specs/api/infrastructure-services.md:104-105`; `specs/container-clusters.md:203-205`; and 2 more | Smallest change, shared with R2-02-07: add one sentence to the NTPServer row or the paragraph at infrastructure-services.md:519-521 stating that with no declared or reachable upstream source the service answers from its host's clock at a fixed local stratum,… | R✓C✓ |
+| F09-05 | contradiction | Unknown-operation state rows forbid the same-continuation retry D146 requires | `specs/state-reconciliation.md:465-469`; `specs/state-reconciliation.md:557-562`; `specs/state-reconciliation.md:1088-1090`; `specs/state-reconciliation.md:500-502` | Change both rows to: 'continue it: resolve every unproved block first, then retry what resolution leaves failed and start what that admits (D146); start nothing while any block stays unproved', keeping the fresh-destroy alternative on the apply row. | R✓C✓ |
+| F09-06 | design | Operation state is recorded from in-memory block states, not durable records | `specs/state-reconciliation.md:695-704`; `specs/state-reconciliation.md:718-727`; `specs/state-reconciliation.md:84-96`; `specs/state-reconciliation.md:1380-1392` | Make the durable records the single source: after any start or resolution whose publication reports failure, the invocation re-reads that block record and records the operation from the precedence of the block records it re-read; a removal superseding a faile… | R✓C✓ |
 | F09-07 | ambiguity | What an invocation admits after an attempt ends unknown is stated only by implication | `specs/state-reconciliation.md:1320-1327`; `specs/state-reconciliation.md:1223-1225`; `specs/state-reconciliation.md:684-687` | Add one sentence beside :1320: 'An attempt that ends `unknown` admits nothing further, first attempts and retries alike, and waits for what is in flight; the invocation never observes it.' | R✗C✓ A✓ |
 | F09-08 | cost | Normative recovery rules are justified only by records of old executables | `specs/state-reconciliation.md:91-96`; `specs/state-reconciliation.md:1406-1417` | State the generic rule only ('an operation whose blocks are all `done` is finalized by its own verb whatever state it records') and move the commit-specific explanations to a knowledge page; drop the dedicated state-machine row if F09-06 is adopted. | R✓C✓ |
-| F10-06 | design | Data-loss authorization and repeated --yes are not bound to the reviewed plan or targets | `specs/state-reconciliation.md:2066-2072`; `specs/cli/commands.md:324-331`; `specs/cli.md:256-260`; `specs/cli.md:519-525`; `specs/cli.md:252-260, 519-525`; `s… | Bind the token to the frozen plan: print a short plan digest with the consuming steps, and require `--authorize data-loss=<plan-digest-prefix>` whenever `--yes` or non-interactive input is used; refuse a digest that does not match with lifecycle.authorization. | R✓C✓ |
-| F10-07 | gap | vSphere removal names no ownership re-proof or unknown-is-not-absence rule | `specs/substrates.md:715-719`; `specs/substrates.md:724-731`; `specs/substrates.md:664-667`; `specs/substrates.md:688-696`; `specs/state-reconciliation.md:1818… | State the marker (vCenter instance UUID + VM instanceUuid + context/Machine marker), require it compared immediately before power, media and destroy calls, define a mismatch as foreign (refuse) and an unreadable vCenter as unknown, never absent, mirroring the… | R✗C✓ A✓ |
+| F10-06 | design | Data-loss authorization and repeated --yes are not bound to the reviewed plan or targets | `specs/state-reconciliation.md:2066-2072`; `specs/cli/commands.md:324-331`; `specs/cli.md:256-260`; `specs/cli.md:519-525`; `specs/cli.md:252-260, 519-525`; and 2 more | Bind the token to the frozen plan: print a short plan digest with the consuming steps, and require `--authorize data-loss=<plan-digest-prefix>` whenever `--yes` or non-interactive input is used; refuse a digest that does not match with lifecycle.authorization. | R✓C✓ |
+| F10-07 | gap | vSphere removal names no ownership re-proof or unknown-is-not-absence rule | `specs/substrates.md:715-719`; `specs/substrates.md:724-731`; `specs/substrates.md:664-667`; `specs/substrates.md:688-696`; `specs/state-reconciliation.md:1818-1822` | State the marker (vCenter instance UUID + VM instanceUuid + context/Machine marker), require it compared immediately before power, media and destroy calls, define a mismatch as foreign (refuse) and an unreadable vCenter as unknown, never absent, mirroring the… | R✗C✓ A✓ |
 | F10-08 | ambiguity | Add-on ownership fallback accepts a computable annotation as proof | `specs/add-ons.md:183-203`; `specs/state-reconciliation.md:1816-1820` | State that the mark fallback is a recovery heuristic, not an ownership proof, and record such an object as `found` with reduced trust; or key the mark with a per-operation secret held in custody (HMAC) so it cannot be computed outside Bootwright. | R✗C✓ A✓ |
 | F11-04 | design | Procfs re-execution makes narrow sudoers rules ALL-equivalent | `specs/cli.md:279-284, 393-402`; `docs/operator-guide.md:199-206`; `specs/controller.md:730-735`; `specs/security.md:39-42, 327-335` | When the supervisor has proved the resolved binary and every ancestor root-owned (it already does so for its refusal), re-execute by that absolute path so that a sudoers rule naming `/usr/local/bin/bootwright` matches. | R✓C✓ |
 | F11-05 | gap | No per-context authority or attribution among sudo-admitted accounts | `specs/security.md:104-105, 336-339`; `specs/state-reconciliation.md:384-390`; `specs/secrets.md:149-159` | State in the attacker model that every account the sudo rule admits is fully trusted for every context, and that 'context-scoped authority' means the selected context's keyring, not an access control. | R✓C✓ |
@@ -4679,82 +5341,110 @@ Low findings are clarity, naming, duplication and cost defects, or gaps whose co
 | F12-04 | ambiguity | The last-package GitOps bootstrap requirement is narrower than the early-handoff promise | `specs/add-ons.md:73-76`; `specs/add-ons.md:131`; `specs/add-ons.md:433-437`; `specs/state-reconciliation.md:820-823`; `specs/project.md:50-53` | Define 'reaches a cluster' once as a capability-declared relation, a block whose frozen request targets that cluster's API, and make the last-package requirement every other block with that relation, whatever its stage. | R✓C✓ |
 | F12-06 | unsafe-rule | Edited input over a completed apply cannot be undone short of a full destroy | `specs/state-reconciliation.md:28-37`; `specs/contexts.md:155-162`; `specs/cli.md:732`; `specs/milestones/backlog.md:1844-1851` | Until B598's slice lands: (a) make the context-update warning say that restoring the original files will not restore settlement and that the only way on is `destroy` of everything the apply owns; (b) when the refusal detects bytes that 'repeat the bytes that… | R✓C✓ |
 | F12-07 | ambiguity | Readiness bullets and status reasons diverge; some evidence is undefined | `specs/state-reconciliation.md:1771-1786`; `specs/state-reconciliation.md:1799-1807` | State the predicate as exactly the ordered status reason list. | R✓C✓ |
-| F12-09 | contradiction | diff's Input line promises a continuation or settle that status and the verb may refuse | `specs/cli.md:732-734`; `specs/cli.md:661-671`; `specs/state-reconciliation.md:54-57` | Make the Input line's command clause conditional on the same decision status uses (cli.md:635-694). | R✓C✓ |
-| F13-05 | contradiction | Runtime retention keeps one previous build; the closure refusal promises more | `specs/controller.md:810-817`; `specs/controller.md:870-890`; `specs/state-reconciliation.md:1059-1063`; `specs/state-reconciliation.md:1094-1101`; `specs/cont… | Smallest: change the refusal wording to name the registering build and say that its setup restores its runtime, fetching wheels the cache no longer holds, and list the superseding removal first when one exists. | R✓C✓ |
-| F13-06 | design | A controller identity change strands every context with only an abandoning exit | `specs/controller.md:761-783`; `specs/controller.md:332-337`; `specs/contexts/controller-record.md:13-18`; `specs/contexts.md:84-109`; `specs/milestones/backlo… | (1) Make the host-mismatch refusal name every exit: the original host; otherwise a destroy run from that host before the change; otherwise the orphan-acknowledged deletion, naming what it abandons. | R✓C✓ |
-| F13-08 | gap | Retained tool-source identities are append-only with a 4096 bound that nothing frees | `specs/contexts/controller-record.md:67-68`; `specs/contexts/controller-record.md:89-105`; `specs/contexts/controller-record.md:158-161`; `specs/controller.md:… | Retire a source identity in the same root transaction that retires the last area whose closure names it, unless a reserved or attributed area still names it. | R✓C✓ |
+| F12-09 | contradiction | diff's Input line promises a continuation or settle that status and the verb may refuse | `specs/cli.md:732-734`; `specs/cli.md:661-671`; `specs/state-reconciliation.md:54-57` | Make the Input line's command clause conditional on the same decision status uses (specs/cli.md:635-694). | R✓C✓ |
+| F13-06 | design | A controller identity change strands every context with only an abandoning exit | `specs/controller.md:761-783`; `specs/controller.md:332-337`; `specs/contexts/controller-record.md:13-18`; `specs/contexts.md:84-109`; `specs/milestones/backlog.md:27`; and 1 more | (1) Make the host-mismatch refusal name every exit: the original host; otherwise a destroy run from that host before the change; otherwise the orphan-acknowledged deletion, naming what it abandons. | R✓C✓ |
+| F13-08 | gap | Retained tool-source identities are append-only with a 4096 bound that nothing frees | `specs/contexts/controller-record.md:67-68`; `specs/contexts/controller-record.md:89-105`; `specs/contexts/controller-record.md:158-161`; `specs/controller.md:383-386` | Retire a source identity in the same root transaction that retires the last area whose closure names it, unless a reserved or attributed area still names it. | R✓C✓ |
 | F16-04 | duplication | status next steps duplicate each verb's decision table by hand | `specs/cli.md:606-700`; `specs/cli/output.md:677-680` | Make the principle normative and the mechanism explicit. | R✓C✓ |
-| F16-05 | ambiguity | status omits secret, media and controller readiness; preflight is a stub | `specs/cli/commands.md:95, 97`; `specs/cli.md:638-642`; `specs/cli/output.md:671, 676`; `specs/secrets.md:557-560`; `examples/machines/lab-rhel/README.md:128-1… | Make `status` report three read-only local readiness rows it can compute without host contact: declared Secrets missing or stale (as `secret check` computes), declared media missing from the store, and whether the context's controller stage is complete. | R✗C✓ A✓ |
+| F16-05 | ambiguity | status omits secret, media and controller readiness; preflight is a stub | `specs/cli/commands.md:95, 97`; `specs/cli.md:638-642`; `specs/cli/output.md:671, 676`; `specs/secrets.md:557-560`; `examples/machines/lab-rhel/README.md:128-139` | Make `status` report three read-only local readiness rows it can compute without host contact: declared Secrets missing or stale (as `secret check` computes), declared media missing from the store, and whether the context's controller stage is complete. | R✗C✓ A✓ |
 | F16-06 | design | 'Every refusal names an exact safe next action' is absent from the diagnostic schema | `specs/cli/output.md:174-201`; `specs/cli/output.md:349-361`; `specs/cli.md:1085` | Add an optional `next` member to the diagnostic object, holding the exact command string (with `--context`) when the remedy is a Bootwright command, beside prose `remediation`. | R✗C✓ A✓ |
 | F16-09 | process | The lab journey reviews the full plan only after the first mutating apply | `examples/machines/lab-rhel/README.md:132-145, 172-178`; `examples/README.md:67-76`; `specs/cli.md:503-505`; `specs/contexts.md:153-163` | In the lab runbooks and examples/README, run `validate` and a full `plan` (no `--stage`) before the first `apply --stage`, with one sentence that input cannot change once any stage has run, short of destroy. | R✓C✓ |
 | F16-10 | design | Sensitive reveals have three shapes; an S3 handoff dumps every user's keys | `specs/cli.md:802-811, 1154-1156, 1173-1195`; `specs/milestones/backlog.md:3296` | Keep the D143-mandated dashboard path. | R✓C✓ |
 | F16-11 | design | diff always exits 0, so automation cannot detect drift or pending input without parsing | `specs/cli.md:718-724`; `specs/milestones/backlog.md:3306` | Add an opt-in `--exit-code` flag: `0` when no object differs, `3` when any object differs or is unknown, and the default unchanged. | R✓C✓ |
 | R2-03-05 | design | Optional record members without a version move blur the record version | `specs/state-reconciliation.md:384-414`; `specs/state-reconciliation.md:430-436`; `specs/state-reconciliation.md:1452-1460`; `specs/milestones/backlog.md:3298` | State one record-evolution rule in Operation records. | R✓C✓ |
-| R2-03-06 | ambiguity | 'Effect pin' is undefined, so content digests hash different inputs | `specs/state-reconciliation.md:1084-1088`; `.agents/knowledge/continuation-after-a-fix.md:20-24`; `internal/storage/ceph/contracts.go:83-86`; `internal/substra… | Define 'effect pin' normatively in state-reconciliation.md: every Go value that fixes a native artifact, package set, host path, name prefix or mark that an effect depends on. | R✗C✓ A✓ |
-| R2-04-05 | gap | The adapter 'material values' channel and in-play handling are undefined | `specs/security.md:79-82`; `specs/security.md:107-122`; `specs/security.md:181-185`; `specs/architecture.md:1013-1020`; `ansible/collections/ansible_collection… | In security.md#sensitive-material state once: material values carry only non-secret parts (public key, certificate, fingerprint) named in a per-type part classification owned by secrets.md; every secret part is lent only as a file; a role reads a secret file… | R✓C✓ |
-| R2-04-06 | gap | Installer work areas keep cluster secrets in plaintext outside custody | `specs/container-clusters.md:355-366`; `specs/container-clusters.md:733-737`; `specs/container-clusters.md:784-785`; `specs/secrets.md:328-332`; `specs/context… | State in secrets.md (or the native-retention section of R2-04-03) that native tool work areas holding substituted material are confidential retention with an owner, list them in the orphan-acknowledgement confirmation, and make the path include a per-context-… | R✓C✓ |
-| R2-04-07 | gap | Secret module arguments reach AnsiballZ temp files, an unlisted hop | `specs/security.md:104-107`; `specs/security.md:260-265`; `specs/state-reconciliation.md:876-878`; `ansible/ansible.cfg:25-29`; `ansible/collections/ansible_co… | Add module-argument transport to security.md#sensitive-material: either require pipelining (payload on the connection's stdin) for every task that receives material, or state that the payload lands only in the run's private scratch and name who removes a remo… | R✓C✓ |
+| R2-03-06 | ambiguity | 'Effect pin' is undefined, so content digests hash different inputs | `specs/state-reconciliation.md:1084-1088`; `.agents/knowledge/continuation-after-a-fix.md:20-24`; `internal/storage/ceph/contracts.go:83-86`; and 1 more | Define 'effect pin' normatively in state-reconciliation.md: every Go value that fixes a native artifact, package set, host path, name prefix or mark that an effect depends on. | R✗C✓ A✓ |
+| R2-04-05 | gap | The adapter 'material values' channel and in-play handling are undefined | `specs/security.md:79-82`; `specs/security.md:107-122`; `specs/security.md:181-185`; `specs/architecture.md:1013-1020`; and 1 more | In security.md#sensitive-material state once: material values carry only non-secret parts (public key, certificate, fingerprint) named in a per-type part classification owned by secrets.md; every secret part is lent only as a file; a role reads a secret file… | R✓C✓ |
+| R2-04-06 | gap | Installer work areas keep cluster secrets in plaintext outside custody | `specs/container-clusters.md:355-366`; `specs/container-clusters.md:733-737`; `specs/container-clusters.md:784-785`; `specs/secrets.md:328-332`; and 1 more | State in secrets.md (or the native-retention section of R2-04-03) that native tool work areas holding substituted material are confidential retention with an owner, list them in the orphan-acknowledgement confirmation, and make the path include a per-context-… | R✓C✓ |
+| R2-04-07 | gap | Secret module arguments reach AnsiballZ temp files, an unlisted hop | `specs/security.md:104-107`; `specs/security.md:260-265`; `specs/state-reconciliation.md:876-878`; `ansible/ansible.cfg:25-29`; and 1 more | Add module-argument transport to security.md#sensitive-material: either require pipelining (payload on the connection's stdin) for every task that receives material, or state that the payload lands only in the run's private scratch and name who removes a remo… | R✓C✓ |
 | R2-04-08 | gap | Produced inputs are re-read from custody each attempt, not frozen | `specs/state-reconciliation.md:655-663`; `specs/secrets.md:346-348`; `specs/secrets.md:265-271` | State in state-reconciliation.md#produced-material-custody that a producer's recapture within the life of its effect must present the same identity, and that a consumer re-proves the identity (kubeconfig authority, CephX principal) it recorded at its first at… | R✗C✓ A✓ |
-| R2-06-02 | contradiction | Abandoning deletion releases host keys while abandoned objects hold them | `specs/contexts.md:832-839`; `specs/state-reconciliation.md:262-274`; `specs/infrastructure-services.md:138-148`; `specs/substrates.md:584-591, 612-614`; `spec… | Keep D38's purpose (no key stranded with no context to release it) but change the mechanism: an abandoning deletion converts the context's exclusive entries into a host-level tombstone holder `abandoned/<name>` in the same atomic controller record. | R✗C✓ A✓ |
+| R2-06-02 | contradiction | Abandoning deletion releases host keys while abandoned objects hold them | `specs/contexts.md:832-839`; `specs/state-reconciliation.md:262-274`; `specs/infrastructure-services.md:138-148`; `specs/substrates.md:584-591, 612-614`; and 1 more | Keep D38's purpose (no key stranded with no context to release it) but change the mechanism: an abandoning deletion converts the context's exclusive entries into a host-level tombstone holder `abandoned/<name>` in the same atomic controller record. | R✗C✓ A✓ |
 | R2-06-04 | gap | An emulated BMC claims no bmc: key, so two contexts can drive one VM | `specs/substrates.md:408-412, 584-591`; `examples/README.md:12-13`; `examples/machines/lab-baremetal/README.md:264-276` | Have the libvirt machine block publish `bmc:<bindAddress>:<port>/<uuid>` as a shared key, and state that a removal releasing a shared `bmc:` whose endpoint another context holds exclusively refuses `controller.conflict` naming that context; a context's own ma… | R✓C✓ |
 | R2-06-07 | contradiction | Reservation release paths and the conflict relation are stated differently on four pages | `specs/infrastructure-services.md:138-160`; `specs/contexts/controller-record.md:75-85`; `specs/contexts.md:832-839`; `specs/state-reconciliation.md:128-140` | Add one 'Release' table to infrastructure-services.md#host-reservations listing every release path (completed destroy finalization, settling destroy over an interrupted registration, own fresh apply replacement, permanent deletion, abandoning deletion) with i… | R✓C✓ |
 | R2-06-08 | gap | The 256-entry host reservation bound has no refusal, remedy or share | `specs/contexts/controller-record.md:89-91`; `specs/infrastructure-services.md:119-136` | State the refusal: an apply whose entries would pass 256 refuses before registration with `controller.conflict`, naming the bound, the count it needs and the contexts holding the most entries, with `bootwright destroy --context <name>` as remedy; or move the… | R✓C✓ |
+| V2-04 (r2) | contradiction | cli.md still retries only one failed block and defers ready work, against D144/D146 | `specs/cli.md:552-562`; `specs/state-reconciliation.md:806, 892-906`; `specs/cli/output.md:645-653`; `specs/milestones/backlog.md:1781-1788, 3297, 3299` | Delete the restated retry rule at specs/cli.md:558-562 ("While a block is unproved or failed ... | R✗C✓ A✓ |
+| V2-05 (r2) | contradiction | Format healing discards every runtime, yet the spec says a format change never strands a context | `specs/controller.md:850-861`; `specs/controller.md:810-817`; `specs/controller.md:887-888`; `specs/state-reconciliation.md:1059-1063`; and 1 more | Fix together with F13-05 (raised to Medium in revision 2), as the second trigger of the same broken promise. | R✓C✓ |
+| V2-06 (r2) | gap | No cross-context listing of unfinished operations and their registering builds before upgrade | `specs/cli/commands.md:61`; `specs/cli/output.md:233, 626-633, 678, 725-732`; `specs/contexts.md:860-866`; `specs/state-reconciliation.md:1030-1040`; and 1 more | Fold into F13-05 as an addendum. | R✗C✓ A✓ |
+| V2-07 (r2) | ambiguity | Ceph lost-reply adoption trusts the local attempt record plus shape, against Mutation safety | `specs/storage-resources.md:361-363`; `specs/storage-resources.md:309-312`; `specs/storage-resources.md:614-618`; `specs/storage-resources.md:673-675`; and 5 more | Fold into F10-08, widened from the add-on mark to 'lost-reply adoption heuristics' (add-on mark, Ceph RBD image, CephFS subvolume, NFS export), kept Low. | R✗C✓ A✓ |
+| V2-09 (r2) | gap | StorageExport plan and status omit the documented realm-wide trust extent of an export | `specs/storage-resources.md:1194-1205`; `specs/cli/output.md:523`; `specs/secrets.md:376-379`; `specs/milestones/m4.md:310-313, 1186-1190` | Extend the StorageExport row at specs/cli/output.md:523 for plan and status with a fixed trust clause when a gateway or filesystem is set, for example 'grants consumer administrators: realm <realm> RGW users, buckets and keys; filesystem <filesystem> all path… | R✓C✓ |
+| V2-13 (r2) | contradiction | Power dispatch arm rides in material values, outside the frozen digested request | `specs/architecture.md:739-748`; `internal/machine/power/requests.go:38-50`; `internal/machine/power/service.go:237-245, 434-437`; `internal/machine/power/batch.go:80-84`; and 3 more | Fold into F18-03 (cross-referenced from F18-07) rather than a separate fix: make the substrate arm a field of the frozen power Request (covered by Canonical() and the request digest), declare it in the role argument spec with `choices` equal to the dispatch t… | R✓C✗ A✓ |
+| V2-17 (r2) | contradiction | Adapter protocol says only Ceph core, host and image opt into nativeError; six calls do | `specs/architecture.md:789-796`; `specs/storage.md:536-540`; `specs/storage-coverage.md:485`; `internal/storage/ceph/materials.go:201`; and 5 more | Rewrite specs/architecture.md:789-790 to name the whole opted-in set: Ceph core, host, image, export, replication and SMB calls. | R✓C✓ |
 
 #### S9: Spec corpus
 
 | Id | Kind | Title | Files | Recommendation (first sentence) | Votes |
 | --- | --- | --- | --- | --- | --- |
 | F07-10 | ambiguity | Spec navigation cites a test-only function as the capability registry | `specs/architecture.md:391-392,416-418`; `cmd/bootwright/wiring_reconciliation.go:94-96,196-199`; `cmd/bootwright/playbook_bindings_test.go:17` | Cite `buildCapabilitiesWith` (or rename the production function back to `buildCapabilities`), and reword the comment to 'this static list is the allowlisted registry; there is no discovery or runtime plugin path'. | R✓C✓ |
-| F13-09 | duplication | Setup-subtree rules and the version-5 cut-over are restated on five pages | `specs/controller.md:825-913`; `specs/contexts/controller-record.md:163-227`; `specs/contexts.md:192-205`; `specs/contexts.md:283-291`; `specs/contexts/control… | Make controller-record.md the single owner of the setup subtree's layout, publication, retention and refusals, and have controller.md link to it. | R✓C✓ |
-| F15-02 | ambiguity | Six-host Ceph cap is written as a target rule, contradicting D130 | `specs/storage.md:562-572`; `specs/milestones/m2.md:10-12`; `specs/milestones/backlog.md:3199-3205`; `specs/index.md:34-37` | State the target (every size D130 admits, under the bounded execution budget formula) and keep the six-host refusal as the current behaviour behind "Not yet met: clusters above six hosts refuse; tracked as [B79](../../../specs/milestones/m2.md#b79)". | R✗C✓ A✓ |
-| F15-03 | contradiction | Stale, unindexed M2a storage API review page sits among normative specs | `specs/storage-api-review.md:1-20`; `specs/storage-api-review.md:225-229`; `specs/api/storage.md:73-93`; `specs/index.md:25`; `specs/storage-api-review.md:1-20… | Move the review to specs/milestones/ history (as the M2a definition record D133 approved) or delete it, retargeting its inbound links to the owning api/storage.md and storage-resources.md sections; add a gate that every specs/*.md outside milestones/ and defe… | R✓C✓ |
-| F15-04 | process | Not yet met lines carry acceptance and delivery state outside the convention's purpose | `specs/index.md:34-38`; `specs/container-cluster-coverage.md:14-15`; `specs/container-cluster-coverage.md:201-202`; `specs/add-on-coverage.md:400-401`; `specs/… | Restrict Not yet met to code-unmet rules; move acceptance/baseline state to the milestone pages and ledger; let coverage rows name their item in one column. | R✓C✓ |
+| F13-09 | duplication | Setup-subtree rules and the version-5 cut-over are restated on five pages | `specs/controller.md:825-913`; `specs/contexts/controller-record.md:163-227`; `specs/contexts.md:192-205`; `specs/contexts.md:283-291`; and 3 more | Make controller-record.md the single owner of the setup subtree's layout, publication, retention and refusals, and have controller.md link to it. | R✓C✓ |
+| F15-02 | ambiguity | Six-host Ceph cap is written as a target rule, contradicting D130 | `specs/storage.md:562-572`; `specs/milestones/m2.md:10-12`; `specs/milestones/backlog.md:3199-3205`; `specs/index.md:34-37` | State the target (every size D130 admits, under the bounded execution budget formula) and keep the six-host refusal as the current behaviour behind "Not yet met: clusters above six hosts refuse; tracked as [B79](../../specs/milestones/m2.md#b79)". | R✗C✓ A✓ |
+| F15-03 | contradiction | Stale, unindexed M2a storage API review page sits among normative specs | `specs/storage-api-review.md:1-20`; `specs/storage-api-review.md:225-229`; `specs/api/storage.md:73-93`; `specs/index.md:25`; and 2 more | Move the review to specs/milestones/ history (as the M2a definition record D133 approved) or delete it, retargeting its inbound links to the owning api/storage.md and storage-resources.md sections; add a gate that every specs/*.md outside milestones/ and defe… | R✓C✓ |
+| F15-04 | process | Not yet met lines carry acceptance and delivery state outside the convention's purpose | `specs/index.md:34-38`; `specs/container-cluster-coverage.md:14-15`; `specs/container-cluster-coverage.md:201-202`; `specs/add-on-coverage.md:400-401`; and 2 more | Restrict Not yet met to code-unmet rules; move acceptance/baseline state to the milestone pages and ledger; let coverage rows name their item in one column. | R✓C✓ |
 | F15-06 | ambiguity | Q, OD, P and L identifier schemes are used hundreds of times but undefined | `specs/milestones.md:98-131`; `specs/milestones/m2.md:302-308`; `specs/milestones/m3.md:148-152`; `specs/milestones/m4.md:132-135` | Define Q and OD (open questions, with one allocation rule across pages) and P/L where used, keeping existing numbers, and give every open-decision table one header with Status and Answered-by (D<n>); extend milestoneCheck to validate that header and that ever… | R✓C✓ |
 | F15-07 | cost | Index routes to whole pages while owning sections reach 40-101 KB | `specs/index.md:8-30`; `specs/managed-os.md:111-600`; `specs/state-reconciliation.md:729-1584` | Split oversized sections into leaf subsections (target at most 16 KB per ## and 8 KB per leaf), add section-level index rows for the six largest domains, and enforce per-section budgets in the docs gate with a ratchet like docsByteBudgets. | R✓C✓ |
 | F15-09 | duplication | Milestone item details restate spec rules, creating a second owner | `specs/milestones/m2.md:1798-1840`; `specs/storage.md:562-600` | Item detail holds the outcome, a link to the owning section, exit evidence and deferral reason only (as milestones.md:119-124 already prescribes); move design narrative to the delivered record when the item completes. | R✓C✓ |
-| F15-10 | cost | The decision log is a 132 KB tail of backlog.md mixing pending clauses | `specs/milestones/backlog.md:3024-4100`; `specs/milestones.md:114-115` | Move decisions to specs/milestones/decisions.md with one line per decision (date, status token owner\|session-pending\|superseded-by D<n>, one-sentence rule) and detail below; gate numeric order and status tokens. | R✓C✓ |
+| F15-10 | cost | The decision log is a 132 KB tail of backlog.md mixing pending clauses | `specs/milestones/backlog.md:3024-4096`; `specs/milestones.md:114-115` | Move decisions to specs/milestones/decisions.md with one line per decision (date, status token owner\|session-pending\|superseded-by D<n>, one-sentence rule) and detail below; gate numeric order and status tokens. | R✓C✓ |
 | F16-03 | gap | The CLI help content contract exists only in delivered history, not in the CLI spec | `specs/cli/commands.md:128, 166-192`; `specs/cli/output.md:228`; `specs/milestones/delivered.md:3807-3819` | Add a `Help content` subsection to specs/cli/commands.md. | R✓C✓ |
-| F17-05 | duplication | Ceph host-prep and adoption safety rules are restated on two lifecycle pages | `specs/storage-coverage.md:75-148`; `specs/storage.md:794-799`; `specs/storage-resources.md:361-366`; `specs/index.md:25` | Move storage-coverage.md:75-148 into storage.md (host preparation, adoption) and the resource-specific clauses into storage-resources.md, leaving the coverage page with release evidence, the matrix, profiles and the unsupported-combination table, and a link. | R✓C✓ |
-| F17-07 | gap | The acceptance ledger has no row template for container-cluster or add-on operator gates | `docs/acceptance.md:9-38, 40, 59, 81`; `specs/container-cluster-coverage.md:175-180`; `specs/add-on-coverage.md:357-363`; `specs/milestones/backlog.md:3688-369… | Add "Container cluster row" and "Add-on row" templates to docs/acceptance.md naming which required fields appear publicly (release minor, profile, drills passed) and which are retained locally, and link them from both coverage pages' Rows rule. | R✗C✓ A✓ |
+| F17-05 | duplication | Ceph host-prep and adoption safety rules are restated on two lifecycle pages | `specs/storage-coverage.md:75-148`; `specs/storage.md:794-799`; `specs/storage-resources.md:361-366`; `specs/index.md:25` | Move specs/storage-coverage.md:75-148 into storage.md (host preparation, adoption) and the resource-specific clauses into storage-resources.md, leaving the coverage page with release evidence, the matrix, profiles and the unsupported-combination table, and a… | R✓C✓ |
+| F17-07 | gap | The acceptance ledger has no row template for container-cluster or add-on operator gates | `docs/acceptance.md:9-38, 40, 59, 81`; `specs/container-cluster-coverage.md:175-180`; `specs/add-on-coverage.md:357-363`; `specs/milestones/backlog.md:3688-3692` | Add "Container cluster row" and "Add-on row" templates to docs/acceptance.md naming which required fields appear publicly (release minor, profile, drills passed) and which are retained locally, and link them from both coverage pages' Rows rule. | R✗C✓ A✓ |
 | F17-08 | design | Dated per-release native facts and pairings live in specs instead of knowledge | `specs/add-on-coverage.md:145-149, 195-203, 230-233, 326-329`; `specs/container-cluster-coverage.md:50-54`; `specs/storage-coverage.md:245-262, 411-414` | Move every "Release evidence" and "Evidence by release" paragraph and the dated catalog observations into the per-component knowledge pages (version-specializations or package pages) and leave in the spec only the rule that the operator chooses versions and t… | R✓C✓ |
 | R2-02-05 | process | No substrate or service coverage page; qualification lives in milestone rows | `specs/index.md:24-28`; `specs/milestones/m1.md:268-272`; `specs/state-reconciliation.md:1926-1928`; `specs/project.md:21-22` | Add specs/substrate-coverage.md (or a section in substrates.md) on the add-on-coverage pattern: one row per arm and per qualified controller family or firmware line, with its item, the operator gate and the accepted ledger row as evidence only, sanitized of e… | R✓C✓ |
+| V2-08 (r2) | contradiction | secrets.md still gives unknown secret info names an empty selection, contradicting B651 | `specs/secrets.md:132-136`; `specs/cli/commands.md:69`; `specs/cli.md:179-185, 821-825`; `specs/cli/output.md:373`; `specs/milestones/backlog.md:3684-3688`; and 1 more | Replace the sentence at specs/secrets.md:134-135 ('Unknown names or a separator-only list produce an empty selection') with a link to the selection rule in specs/cli.md (D165/B651), and state no selection behavior in secrets.md, per the one-fact-one-owner rul… | R✓C✓ |
+| V2-12 (r2) | cost | Decision links have no per-decision anchor; each D<n> link opens the whole 132 KB log | `specs/milestones/backlog.md:3024-3031`; `specs/milestones.md:23, 114-115`; `specs/security.md:49, 68` | Give each decision a stable anchor, either an explicit <a id="d152"></a> or a per-decision heading. | R✓C✗ A✓ |
+| V2-16 (r2) | contradiction | substrates.md quotes libvirt request versions v4/v7 that the code and roles refuse | `specs/substrates.md:331-332`; `internal/substrate/libvirt/catalog.go:16, 57-60`; and 3 more | Remove the two version literals from specs/substrates.md:331-332 and state instead that host and Machine requests carry a versioned contract whose current version is owned by internal/substrate/libvirt/catalog.go (hostRequestVersion, machineRequestVersion), s… | R✗C✓ A✓ |
 
 #### S10: Skills and harness
 
 | Id | Kind | Title | Files | Recommendation (first sentence) | Votes |
 | --- | --- | --- | --- | --- | --- |
+| CX-G4 (r2) | ambiguity | Architecture skill's 'a rule a tool can check becomes a test, and its prose goes' is unscoped and can be read as license to delete normative spec clauses | `.agents/skills/architecture-best-practices/SKILL.md:16-23`; `AGENTS.md:15-16`; `.agents/skills/ux-and-apis/SKILL.md:35-36`; `.agents/skills/security-safety/SKILL.md:16`; and 2 more | Scope the sentence at SKILL.md:23 to inventories and process rules. | R✓C✓ |
+| CX-G5 (r2) | ambiguity | Scope rule bans fixing pre-existing defects but never states the path for one that blocks the authorized outcome or its gates | `AGENTS.md:19-28`; `.agents/skills/code-implementation/SKILL.md:13-16, 32-37, 44-46`; `specs/milestones.md:54-56`; `specs/milestones/backlog.md:3305` | Add one sentence to AGENTS.md after line 24: a pre-existing defect that blocks the authorized outcome or its gates may be fixed within the slice, in its own commit, after it is recorded as an item that the commit's Refs line names; any other pre-existing defe… | R✗C✓ A✓ |
 | F14-04 | design | The local-only override replaces AGENTS.md in Codex, primary checkout only | `AGENTS.md:1-42`; `CLAUDE.md:1`; `.agents/skills/index.md:5-8`; `.agents/skills/code-implementation/references/git-integration.md:8-11` | Keep personal overrides out of the replacement slot: move them to the user-level files of each runtime (~/.codex/AGENTS.md, ~/.claude/CLAUDE.md or CLAUDE.local.md), or require the local-only file to begin with the tracked AGENTS.md text; document the per-runt… | R✓C✓ |
-| F14-06 | cost | Integration gate rule differs from delivered practice and change classes | `.agents/skills/code-implementation/SKILL.md:2-4, 32-39`; `.agents/skills/code-implementation/references/verification.md:58-62`; `specs/milestones/delivered.md… | Either keep make check mandatory and add `make focus`, `make check` and `make race` to the allow list, or add a short change-class gate table to verification.md (docs-only, Go-only, Ansible, safety) stating which gates each may omit and why, and have delivere… | R✗C✓ A✓ |
-| F14-07 | gap | No checklist for contract-version, API and commit-check work | `specs/state-reconciliation.md:1466-1480`; `.agents/skills/architecture-best-practices/SKILL.md:36-37`; `.agents/skills/ux-and-apis/SKILL.md:28-37`; `.agents/s… | Add one references/change-classes.md (under 3 KB) with a five-line checklist per class: spec, Go, Ansible, durable format/contract version, API kind or field, example, knowledge page, milestone bookkeeping; each line names the owning spec anchor, guard tests… | R✗C✓ A✓ |
+| F14-06 | cost | Integration gate rule differs from delivered practice and change classes | `.agents/skills/code-implementation/SKILL.md:2-4, 32-39`; `.agents/skills/code-implementation/references/verification.md:58-62`; `specs/milestones/delivered.md:2340-2349`; and 2 more | Either keep make check mandatory and add `make focus`, `make check` and `make race` to the allow list, or add a short change-class gate table to verification.md (docs-only, Go-only, Ansible, safety) stating which gates each may omit and why, and have delivere… | R✗C✓ A✓ |
+| F14-07 | gap | No checklist for contract-version, API and commit-check work | `specs/state-reconciliation.md:1466-1480`; `.agents/skills/architecture-best-practices/SKILL.md:36-37`; `.agents/skills/ux-and-apis/SKILL.md:28-37`; and 1 more | Add one references/change-classes.md (under 3 KB) with a five-line checklist per class: spec, Go, Ansible, durable format/contract version, API kind or field, example, knowledge page, milestone bookkeeping; each line names the owning spec anchor, guard tests… | R✗C✓ A✓ |
 | F14-09 | design | Vendor- and model-specific routing tables live in a tracked skill reference | `.agents/skills/code-implementation/references/agent-operation.md:34-91`; `.agents/skills/code-implementation/SKILL.md:49-50` | Keep in the repository only vendor-neutral rules (acceptance before routing, explicit model/effort per worker, a stronger independent review for safety-class work, unattended-run checklist); move model names, tiers and OpenAI candidates to user-level configur… | R✓C✓ |
-| F14-11 | duplication | Verification tiers are restated in about seven places with conflicting labels | `docs/development.md:85-86`; `AGENTS.md:36-42`; `.agents/skills/code-implementation/references/verification.md:7-12`; `specs/architecture.md:1145-1147` | Let verification.md own tier names and when each runs; correct development.md's labels and reduce its table rows to command descriptions linking the tiers; keep AGENTS.md's command list as names only. | R✓C✓ |
+| F14-11 | duplication | Verification tiers are restated in about seven places with conflicting labels | `docs/development.md:85-86`; `AGENTS.md:36-42`; `.agents/skills/code-implementation/references/verification.md:7-12`; `specs/architecture.md:1097-1098` | Let verification.md own tier names and when each runs; correct development.md's labels and reduce its table rows to command descriptions linking the tiers; keep AGENTS.md's command list as names only. | R✓C✓ |
 | F14-12 | process | The wrapper parity test ignores a missing or orphan wrapper | `test/architecture/docs_test.go:451-475`; `.agents/skills/index.md:5-8`; `.claude/skills/code-implementation/SKILL.md:6-7` | Fail when a canonical skill lacks a wrapper or a wrapper lacks a canonical skill; optionally make each wrapper body a relative symlink-free one-line pointer as now, or test whether a symlinked .claude/skills directory is discovered and drop the wrappers. | R✓C✓ |
+| V2-11 (r2) | contradiction | make focus reports parallel-only failures as passing and bounds no lane in time | `.agents/skills/code-implementation/references/verification.md:23-25, 51-56`; `.agents/skills/code-implementation/SKILL.md:31-39` | In verification.md Focus, state that a failure recovered only by the serial rerun is reported as FLAKY (flagged in output and a non-zero or distinct exit) so .agents/skills/code-implementation/SKILL.md:38-39 applies, and that each parallel lane is bounded by… | R✓C✓ |
 
-### 11.4 Sibling-audit claims confirmed by this audit's verification
+### 11.4 Provenance of revision 2 entries
 
-The cross-check (section 13) sent every sibling claim our catalog did not cover through the same refuter and calibrator pair. The ones below were confirmed; they are not duplicated in sections 11.2 and 11.3 but carry the same weight in the roadmap. The claim text is the sibling's, condensed; the files and the verification are ours.
-
-| Id | Severity (ours) | Status | Claim (sibling, condensed) | Files | Votes (refuter; calibrator; arbiter) |
-| --- | --- | --- | --- | --- | --- |
-| CX-X1 | Medium | confirmed | Recovery can reinstall an already installed machine when identity is unavailable: managed-os.md treats a private installation that powered off for a network restart as an installation that never began (publication gone, machine off, identity read cannot answer) and labels it positive no effect, so the next apply installs again; the interruption table repeats it. This contradicts security.md's rule that ambiguous probes stay unknown and turns a transport/power ambiguity into permission to repeat a… | `specs/managed-os.md:563-569, 788, 399-414, 1251-1284`; `specs/security.md:33-35` | real=True, medium, Medium; real=True, medium, Medium; - |
-| CX-X3 | Low | confirmed | Service responsiveness and useful service readiness need separate meanings: NTP readiness accepts an unsynchronized server-mode reply and proxy readiness proves only a bounded protocol response; downstream readiness can be read more strongly than the evidence supports. Distinguish responding, local reference, upstream synchronized and unknown quality with a consumer-required level. | `specs/infrastructure-services.md:520-521, 540-549` | real=True, medium, Low; real=True, medium, Low; - |
-| CX-X6 | Medium | confirmed-by-arbitration | Media cleanup authority is broader than media ownership: container-clusters.md specifies ejecting whatever media is currently presented, including foreign media, while substrates.md separates a physical-machine claim from ownership and destructive authority. Media ownership identity is also stated two ways (per-insert publication identity vs exact scheme/host/path with port normalization). An inverse may act on media another actor inserted. | `specs/container-clusters.md:622-625, 878-882, 905-935`; `specs/substrates.md:598-602` | real=False, medium, Medium; real=True, medium, Medium; real=True, Medium |
-| CX-R4 | Medium | confirmed | Backup is repeatedly offered as a remedy without a supported restore contract: contexts.md, state-reconciliation.md and secrets.md offer whole-store or keyring backup restoration as the remedy for several damages, yet contexts.md rejects copy restoration via device/inode binding, has no restore command and defers rebinding and new keys after counter rollback. An operator with a complete backup has no supported path to regain authority. | `specs/contexts.md:354-371, 734-741`; `specs/state-reconciliation.md:1504-1537`; `specs/secrets.md:518-523` | real=True, high, Medium; real=True, high, High; - |
-| CX-R5 | High | confirmed | Removal observation text converts an unreadable target into no-effect: state-reconciliation.md says a removal observation that cannot distinguish the postcondition from an unreadable target is read as no-effect so a retry proves absence, while the next table keeps failed/forbidden/malformed observations unknown, retry is forbidden while unknown, and security.md forbids treating ambiguous probes as absence. Implementers can derive incompatible retry authority. | `specs/state-reconciliation.md:545-548, 550-555, 1228-1232`; `specs/security.md:33-35` | real=True, medium, High; real=True, medium, High; - |
-| CX-R6 | Medium | confirmed-by-arbitration | The read-only effect budget has contradictory owners: controller.md rebuilds/publishes a missing runtime before diff and bounded runs (disclosed in commands.md), while state-reconciliation.md says reads never create or repair and live comparison runs no effect, and security.md forbids cache/temp files and any process/network/secret lookup for read-only commands, contradicting live diff and preflight. Needs one command effect-class matrix. | `specs/controller.md:184-204`; `specs/cli/commands.md:98`; `specs/state-reconciliation.md:297-306, 1654-1657`; `specs/security.md:134-135, 696` | real=False, medium, Low; real=True, medium, Medium; real=True, Medium |
-| CX-R9 | Medium | confirmed | Universal fixed concurrency is contradicted by unbounded multi-SSH sessions: security.md requires fixed target concurrency and process/resource bounds, but cli.md starts every selected SSH session concurrently with no bound, carried into cluster exec; power batches already use the engine bound. A large selection can exhaust controller processes, descriptors or remote authentication capacity. | `specs/security.md:20-31`; `specs/cli.md:1037-1040, 1109-1117, 1324-1332` | real=True, high, Medium; real=True, high, Medium; - |
-| CX-API02 | Medium | confirmed | Explicit Environment selection has an incomplete storage closure: environment.md calls its closure authoritative but the StorageCluster row omits StorageClient, StorageObjectUser, StorageObjectBucket and StorageReplication, admitted elsewhere; omitting both lists bypasses filtering. It still calls the catalog 27 kinds versus api.md's expanded catalog. Selecting a cluster explicitly can drop access or replication intent. | `specs/api/environment.md:198-218, 204, 240-241`; `specs/api/storage.md:61-81`; `specs/storage-resources.md:9-19, 238-279`; `specs/api.md:262-275` | real=True, high, Medium; real=True, high, Medium; - |
-| CX-API04 | Medium | confirmed-by-arbitration | Interrupted Ceph deployment remains outside the general continuation promise: storage.md refuses partial-cluster recovery after a non-bootstrap host carries a daemon while the cluster is not ready (pending B659), plus a partial DB/WAL boundary, while broader text promises exact journaled continuation. The primary multi-host physical Ceph journey can reach a safe refusal with no declared forward recovery. | `specs/storage.md:650-662, 687-689, 1355-1360`; `specs/storage-resources.md:1462-1477` | real=False, medium, Medium; real=True, medium, Medium; real=True, Medium |
-| CX-G4 | Low | confirmed | 'An executable rule's prose goes' confuses normative authority with its verification: architecture-best-practices says specs own requirements, then that a rule a tool can check becomes a test and its prose goes; AGENTS.md assigns required behavior to specs and the UX skill requires specs and tests to change together. An agent can delete a safety or API requirement once a test checks it. | `.agents/skills/architecture-best-practices/SKILL.md:16-23`; `AGENTS.md:14-16`; `.agents/skills/ux-and-apis/SKILL.md:34-37` | real=True, medium, Low; real=True, medium, Medium; - |
-| CX-G5 | Low | confirmed-by-arbitration | Scope discipline needs explicit delivery modes and a definition of inseparable repairs: AGENTS.md and code-implementation require backlog registration, isolated worktree, commits/integration and forbid same-change pre-existing fixes, conflicting with read-only/report-only/no-commit requests; a blanket ban can exclude a minimum prerequisite needed for the authorized outcome. B665 proposes a request reference form the skill lacks. Add review-only, edit-without-integration and normal delivery modes. | `AGENTS.md:18-26`; `.agents/skills/code-implementation/SKILL.md:13-20, 42-51`; `specs/milestones.md:39-64`; `specs/milestones/backlog.md:2225-2240` | real=False, medium, Low; real=True, medium, Low; real=True, Low |
-| CX-RULEplanbytes | Medium | confirmed | Aggregate request bytes exceed the plan-record bound: Additional contract correction: state-reconciliation.md anticipates total request bytes up to 4 MiB while it bounds the complete plan record at 1 MiB; B715 marks future larger planning bounds. Prove aggregate encoded-size fit before promoting them. | `specs/state-reconciliation.md:420-423, 758-769` | real=True, high, Medium; real=True, high, Medium; - |
-| CX-RULEcredentialrevocation | Medium | confirmed | Revoked credentials can strand continuation: Rule-table row (credential binding and revocation): immutable secret versions bind an operation, so a revoked credential can strand continuation; the limitation is unspecified, and any future rebind needs separate authority and proof, never implicit latest-secret substitution. |  | real=True, medium, Medium; real=True, medium, Medium; - |
+| Id | Severity | Section | Origin |
+| --- | --- | --- | --- |
+| CX-API04 | High | S8 | Raised by the sibling audit as API-04 (rated High there), confirmed at 17acb63d9 by our calibrator (real, Medium) over our refuter's dissent and upheld as a narrowed Medium gap by arbitration. Severity raised from Medium to High in revision 2: two Opus recalibrations split (Medium, High) and the Fable arbiter decided High because physical hosts have neither forward nor retirement recovery. |
+| CX-G4 | Low | S10 | Raised by the sibling audit as G4 (Medium, design); confirmed by our refuter (Low, ambiguity) and calibrator (Medium); crosscheck recorded Low; no arbitration. |
+| CX-G5 | Low | S10 | Raised by the sibling audit as G5 (Medium, 'explicit delivery modes and inseparable repairs'), narrowed to this Low clarity point: our refuter called the claim not real as framed, our calibrator confirmed the narrower residue, and arbitration confirmed it as real at Low. |
+| CX-R4 | Medium | S8 | Raised by the sibling audit as R4 (High); confirmed by our refuter (Medium) and calibrator (High), kept at Medium per our cross-check, with no arbitration. |
+| CX-R5 | High | S8 | Raised by the sibling audit as R5, confirmed by our refuter and calibrator (both real, medium confidence, High), with no arbitration needed. |
+| CX-R6 | Medium | S8 | Raised by the sibling audit as R6; our refuter rejected its contradictory-owners framing (Low), our calibrator confirmed a Medium ambiguity, and arbitration sided with the calibrator at Medium with the narrowed two-class remedy. |
+| CX-R9 | Medium | S8 | Raised by the sibling audit as R9, confirmed by our refuter and calibrator (both real, high confidence, Medium); no arbitration was needed. |
+| CX-RULEplanbytes | Medium | S8 | Raised by the sibling audit as an unrated rule note (plan bytes), framed there as a future design risk; confirmed by our refuter and calibrator as a Medium contradiction between stale prose and the owning table and code; no arbitration was needed. |
+| CX-X1 | Medium | S8 | Raised by the sibling audit as X1 (High), confirmed by our refuter and calibrator at Medium as a labeling contradiction with bounded safety impact; no arbitration. |
+| CX-X3 | Low | S8 | Raised by the sibling audit as X3 (Medium, at 77033e8f5), confirmed by our refuter and calibrator, both of whom downgraded it to Low and narrowed the recommendation; no arbitration. |
+| CX-X6 | Medium | S8 | Raised by the sibling audit as X6 (media cleanup authority broader than media ownership); our refuter rejected the authority half (D27) and found the identity contradiction, our calibrator confirmed a narrower authority defect, and arbitration confirmed only the identity contradiction at Medium. |
+| V2-01 | Medium | S5 | Raised by the sibling audit (Codex Astra, around lines 399-407, 734 and 769 of report-codex-astra.md), verified by our refuter and calibrator (both real, high confidence, Medium); no arbitration. |
+| V2-02 | Medium | S5 | Raised by the sibling audit's StorageCluster/CustomPlaybook defaults point (sibling report lines 423-431, sources A4-17, A4-18, A4-19, A4-22, S23). Our refuter and calibrator verified it at Medium; there was no arbitration. |
+| V2-03 | Medium | S8 | Raised by the sibling audit's findings A3-92, A3-96, A3-97, A5-22 and S23 (sibling report lines 359-369 and 577), re-checked at 17acb63d9 and verified by our refuter and calibrator (both real, high confidence, Medium); no arbitration. |
+| V2-04 | Low | S8 | Raised by the sibling audit's A3-103 / S23 (sibling report line 385), verified by our refuter (facts confirmed; argued it is not new because B592 tracks it) and calibrator (real, Low), and arbitrated real at Low because our brief has no tracked-item exclusion. |
+| V2-05 | Low | S8 | Raised by the sibling audit's controller setup-format section (sibling lines 289-297; sources A3-52, A3-56, A3-57, S23), verified by our refuter (Low) and calibrator (Medium; verified Low), with no arbitration. |
+| V2-06 | Low | S8 | Raised by the sibling audit's lines 447-455 and 739 (sources A4-31, A4-35, A4-36, A6-21, S23), refuted as overstated by our refuter, confirmed Low by our calibrator, and arbitrated real Low as an addendum to F13-05 with the premise narrowed to the missing cross-context listing. |
+| V2-07 | Low | S8 | Raised by the sibling audit's ownership/receipt section (sibling report lines 238-246 and 569, our candidate W12), verified by our refuter (not a new finding, fold into F10-08, Low) and calibrator (real, Low), and arbitrated real and Low with disposition to fold into a widened F10-08. |
+| V2-08 | Low | S9 | Raised by the sibling (Codex Astra) audit's A5-43 (report line 605). Verified at 17acb63d9 by our refuter and calibrator, both of whom rated it real and Low, with the separator-only half added. No arbitration. |
+| V2-09 | Low | S8 | Raised by the sibling audit (Codex Astra, lines 483-491, 582, 726; items A4-51, A4-58, A5-30, A6-06, S08), verified by our refuter (Low) and calibrator (Medium); no arbitration, recorded at the refuter's Low because the trust extent is documented and only its operator-facing disclosure is missing. |
+| V2-10 | Low | S6 | Raised by the sibling audit's lines 459-461 (W17, from A4-37/A4-39/A4-40/S23), verified by our refuter and calibrator (both real, Low), no arbitration; its container-clusters topology sub-claim was left to F06-09. |
+| V2-11 | Low | S10 | Raised by the sibling audit's verification-tier observations (report lines 517-525, 623, 632, 785; items A4-74/A4-75/A4-78/A5-57/A5-65/A6-60/S18), verified by our refuter and calibrator (both real, Low, medium confidence); no arbitration. |
+| V2-12 | Low | S9 | Raised by the sibling audit's G6 point (sibling line 549, which our cross-check had first read inverted). Verified by our refuter (real, Low) and calibrator (not real, Low). Arbitration found it real and Low, with corrected link counts. |
+| V2-13 | Low | S8 | Found by our own read of the role argument specs (candidate SCHEMA-1), prompted by the sibling audit's schema ledger (sibling report lines 814-839); our refuter called it real and our calibrator called it not separate, and the Fable arbiter decided real at Low. Fix it together with F18-03. |
+| V2-14 | Low | S7 | Found by our own read of the role argument specs (candidate SCHEMA-2), prompted by the sibling audit's schema ledger (sibling report lines 814-839); confirmed by our refuter and calibrator at Low with no arbitration. |
+| V2-15 | Low | S7 | Found by our own read of the role argument specs (candidate SCHEMA-3), prompted by the sibling audit's schema ledger (sibling report lines 814-839); confirmed by our refuter (Low) and calibrator (Medium), filed at the lower severity with the calibrator's smaller remedy folded in. |
+| V2-16 | Low | S9 | Found by our own read of the role argument specs (candidate SCHEMA-4), prompted by the sibling audit's schema ledger (sibling report lines 814-839); revision 1 had noted it only as a ledger issue; confirmed by arbitration at Low. |
+| V2-17 | Low | S8 | Found by our own read of the role argument specs (candidate SCHEMA-5), prompted by the sibling audit's schema ledger (sibling report lines 814-839); confirmed by our refuter and calibrator at Low with no arbitration. |
+| V2-18 | Low | S6 | Found by our own read of the role argument specs (candidate SCHEMA-6), prompted by the sibling audit's schema ledger (sibling report lines 814-839); confirmed by our refuter and calibrator at Low, with high confidence and no arbitration. |
+| V2-19 | Medium | S5 | Raised by the sibling audit's naming findings (A4-46..A4-48, report lines 471-477), verified by our refuter and calibrator (both Medium); no arbitration. |
+| V2-20 | Medium | S8 | Raised by the sibling audit as a sub-claim of R10 (settled verb versus log-fault clearing); adjudicated sibling-right by two independent Opus votes in revision 2, which found our section 8B rating of the rule as sound wrong; citations re-read at 17acb63d9. |
 
 ## 12. Per-file coverage ledger
 
-One Sonnet assessor read each file group fully (the six largest milestone and history pages structurally, by headings, tables and sampled sections) and recorded purpose, verdict, strengths, issues, overlap and a recommendation. Token figures are bytes divided by four. This ledger is the coverage proof for the brief's requirement that every spec, skill, wrapper, rule, hook and entrypoint file was examined; the verdict is the assessor's and the findings catalog carries the verified defects.
+One Sonnet assessor read each file group fully (the six largest milestone and history pages structurally, by headings, tables and sampled sections) and recorded purpose, verdict, strengths, issues, overlap and a recommendation. Token figures are bytes divided by four. This ledger is the coverage proof for the brief's requirement that every spec, skill, wrapper, rule, hook and entrypoint file was examined, and revision 2 adds the 22 executable adapter schemas in 12.3; the verdict is the assessor's and the findings catalog carries the verified defects.
 
-Files assessed: 80. Verdicts: good 17, needs improvement 62, bad 1. The full assessments (purpose, every strength and issue, naming notes, overlaps and token-cost notes) are longer than this report can carry; the table keeps one strength, up to three issues and the recommendation per file.
+Files assessed: 80. Verdicts: good 17, needs improvement 62, bad 1. The full assessments (purpose, every strength and issue, naming notes, overlaps and token-cost notes) are longer than this report can carry; the table keeps one strength, up to three issues and the recommendation per file. A verdict holds only for the depth of its read: good means no material issue was found at that depth, not that the file is correct, and the six milestone and history pages read by structure carry that limit.
 
 ### 12.1 Specifications
 
@@ -4846,107 +5536,353 @@ Files assessed: 80. Verdicts: good 17, needs improvement 62, bad 1. The full ass
 | `README.md` | 41 | 436 | good | Short and routes by link: status to specs/milestones.md, behavior to specs/index.md, rules to specs/architecture.md; no delivery state restated. | (1) 3-10: The scope paragraph is a third restatement of purpose (with specs and AGENTS.md) and omits 'day-0 only / not a continuous controller / no day-2', the boundary the audit brief treats as cent… (2) 18-22: Quickstart runs 'make build' then validate without naming the pinned toolchain or setup prerequisite, while AGENTS.md mandates pinned wrappers and docs/development.md owns toolchain; a firs… (3) 28-34: 'Finding code' is useful to agents but README.md is not on the AGENTS.md mandatory route; the same map is partly owned by specs/architecture.md, so it can drift without a docs-check tying i… | Keep as is; add one sentence stating day-0 scope and non-goals by linking the owning spec section, and one line pointing the quickstart at the toolchain page. |
 | `examples/README.md` | 103 | 2,490 | needs improvement | Directory-per-environment rule (validate one directory, not a category) is stated up front and matches specs/api/input.md discovery. | (1) 42-49: Stale instruction: 'Each name becomes a table row when its profile lands', yet all seven named profiles already are rows (lines 17-18, 19, 24-27). It also repeats the profile list that spec… (2) 16-19, 24-27, 34: Table cells carry delivery state ('live acceptance unrun', 'P4 acceptance remains unrun', 'qualification unrun', 'runtime qualification remains open') although line 56-57 says milestones ow… (3) 67-77: Lifecycle rules (context import freezes input, replace via destroy then context update, unfinished apply continues with same stage selection, do not delete evidence) restate CLI and context… | Rewrite sections: delete the stale profile paragraph, strip status text from table cells, shorten lifecycle text to links, and split contributing rules into a short skill or reference reachable from the skill index. |
 
+### 12.2a Revision 2 entries by ledger file
+
+Revision 2 added catalog entries that cite these ledger files. The per-file verdicts above are unchanged; read them together with these entries.
+
+| File | Entries added in revision 2 |
+| --- | --- |
+| `.agents/skills/architecture-best-practices/SKILL.md` | [CX-G4] |
+| `.agents/skills/code-implementation/SKILL.md` | [CX-G5], [V2-11] |
+| `.agents/skills/code-implementation/references/ansible.md` | [V2-15] |
+| `.agents/skills/code-implementation/references/verification.md` | [V2-11] |
+| `.agents/skills/security-safety/SKILL.md` | [CX-G4] |
+| `.agents/skills/ux-and-apis/SKILL.md` | [CX-G4], [V2-02] |
+| `.claude/rules/guidance.md` | [CX-G4] |
+| `AGENTS.md` | [CX-G4], [CX-G5] |
+| `specs/api/custom-playbooks.md` | [V2-02] |
+| `specs/api/infrastructure-services.md` | [CX-X3] |
+| `specs/api/storage.md` | [V2-01], [V2-02] |
+| `specs/architecture.md` | [CX-G4], [V2-10], [V2-13], [V2-14], [V2-15], [V2-17], [V2-18] |
+| `specs/cli.md` | [CX-R9], [V2-04], [V2-08] |
+| `specs/cli/commands.md` | [CX-R6], [V2-06], [V2-08] |
+| `specs/cli/output.md` | [CX-R6], [V2-01], [V2-04], [V2-06], [V2-08], [V2-09], [V2-20] |
+| `specs/container-clusters.md` | [CX-X3], [CX-X6] |
+| `specs/contexts.md` | [CX-R4], [CX-RULEplanbytes], [V2-03], [V2-06] |
+| `specs/contexts/controller-record.md` | [V2-05] |
+| `specs/controller.md` | [CX-R6], [V2-05] |
+| `specs/deferred/reconciliation-scenarios.md` | [V2-03] |
+| `specs/infrastructure-services.md` | [CX-X3] |
+| `specs/managed-os.md` | [CX-X1] |
+| `specs/milestones.md` | [CX-G5], [V2-12] |
+| `specs/milestones/backlog.md` | [CX-API04], [CX-G5], [CX-R4], [CX-R6], [CX-R9], [CX-X6], [V2-02], [V2-03], [V2-04], [V2-06], [V2-08], [V2-10], [V2-12], [V2-15] |
+| `specs/milestones/delivered.md` | [CX-RULEplanbytes], [V2-08] |
+| `specs/milestones/m2.md` | [V2-01], [V2-07] |
+| `specs/milestones/m4.md` | [V2-09] |
+| `specs/project.md` | [CX-API04] |
+| `specs/secrets.md` | [CX-R4], [V2-08], [V2-09] |
+| `specs/security.md` | [CX-R5], [CX-R6], [CX-R9], [CX-X1], [V2-12] |
+| `specs/state-reconciliation.md` | [CX-API04], [CX-R4], [CX-R5], [CX-R6], [CX-RULEplanbytes], [CX-X1], [V2-03], [V2-04], [V2-05], [V2-06], [V2-07], [V2-15], [V2-16], [V2-20] |
+| `specs/storage-coverage.md` | [V2-02], [V2-17] |
+| `specs/storage-native-api.md` | [CX-API04], [V2-19] |
+| `specs/storage-resources.md` | [V2-01], [V2-07], [V2-09] |
+| `specs/storage.md` | [CX-API04], [CX-X3], [V2-01], [V2-02], [V2-07], [V2-17], [V2-19] |
+| `specs/substrates.md` | [V2-15], [V2-16] |
+
+### 12.3 Executable adapter schemas
+
+Scope and method. This subsection reads the 22 role argument specifications under `ansible/collections/ansible_collections/bootwright/core/roles/*/meta/argument_specs.yml` at commit 17acb63d9. They are the executable side of the Go/Ansible contract. Five Sonnet readers took one group each (substrate and machine, managed OS and controller, container cluster and add-ons, storage, infrastructure services). Each compared its files with the owning spec sections. Opus then re-checked every architectural claim against the specs, the playbooks and the Go bindings before keeping it. Paths below are relative to the roles directory. Lines are the file length.
+
+| File | Lines | Entrypoints | Request contract | Material | Verdict | Note |
+| --- | --- | --- | --- | --- | --- | --- |
+| substrate_baremetal_machine/meta/argument_specs.yml | 372 | apply, observe, destroy + 8 port | machine-baremetal-v2 | typed paths | needs-improvement | All 8 port entries present; hardware body is open |
+| substrate_libvirt_machine/meta/argument_specs.yml | 369 | apply, observe, destroy + 8 port | machine-libvirt-v8 | typed paths | needs-improvement | Spec still quotes v7 (substrates.md:332) |
+| substrate_libvirt_host/meta/argument_specs.yml | 57 | apply, observe, destroy | substrate-host-libvirt-v6 | open dict | good | Spec still quotes v4 (substrates.md:332) |
+| machine_power_read_redfish/meta/argument_specs.yml | 54 | read | machine-power-read-v2 | open dict | good | Redfish-only; see F18-07 |
+| machine_power_redfish/meta/argument_specs.yml | 44 | power | machine-power-redfish-v2 | open dict | needs-improvement | Arm key rides in material, outside request |
+| physical_erase/meta/argument_specs.yml | 38 | destroy, observe | physical-erase-v1 | open dict | needs-improvement | No method or 16-disk bound in schema |
+| managedos_install_anaconda/meta/argument_specs.yml | 146 | apply, observe, destroy | os-install-anaconda-v16 | open dict | needs-improvement | Digest and target selector undeclared |
+| managedos_package_tree/meta/argument_specs.yml | 33 | apply, observe, destroy | os-package-tree-v1 | open dict | good | Section presence only; tasks re-assert rules |
+| controller_prerequisites/meta/argument_specs.yml | 29 | main | controller-prerequisites-v6 | none | needs-improvement | Lone `main` key; source rules only in tasks |
+| containercluster_install_agent/meta/argument_specs.yml | 91 | apply, observe, destroy | cluster-install-agent-v7 | open dict | needs-improvement | Playbook imports 9 undeclared task files |
+| containercluster_media_agent/meta/argument_specs.yml | 90 | apply, observe, destroy | cluster-media-agent-v9 | open dict | needs-improvement | Admits push before spec calls it met |
+| containercluster_network/meta/argument_specs.yml | 84 | apply, observe | cluster-network-request-v1 | open dict | good | No spec names its request fields |
+| addons_instance/meta/argument_specs.yml | 124 | apply, observe | addon-instance-request-v1 | open dict | good | Matches add-ons.md:137-142 nearly field for field |
+| cluster_objects/meta/argument_specs.yml | 108 | apply, observe | cluster-objects-v1 | open dict | needs-improvement | Inputs owned by no spec section |
+| storage_ceph_core/meta/argument_specs.yml | 147 | apply, observe, destroy | ceph-core-v32 | open dict | needs-improvement | About 20 members are untyped dicts |
+| storage_ceph_export/meta/argument_specs.yml | 70 | apply, observe | ceph-export-request-v1 | open dict | good | Uses nativeError; spec list omits it |
+| storage_ceph_host/meta/argument_specs.yml | 32 | prepare, observe, destroy | ceph-host-v7 | open dict | good | Go `apply` bound to `prepare` |
+| storage_ceph_image/meta/argument_specs.yml | 55 | resolve, observe, destroy | ceph-image-v4 | open dict | good | Go `apply` bound to `resolve` |
+| storage_ceph_replication/meta/argument_specs.yml | 43 | apply, observe, destroy | ceph-replication-v1 | open dict | good | Mode vocabulary absent; nativeError unlisted |
+| storage_ceph_smb/meta/argument_specs.yml | 62 | apply, observe, destroy | ceph-smb-v1 | open dict | good | nativeError unlisted in spec |
+| infra_artifact_server_nginx/meta/argument_specs.yml | 71 | apply, observe, destroy | artifact-server-nginx-v2 | open dict | good | Digest and image pin only in tasks |
+| infra_managed_service/meta/argument_specs.yml | 75 | apply, observe, destroy | managed-service-v3 | open dict | good | One request version for three kinds |
+
+Architectural observations.
+
+What is good. Every role publishes fixed entrypoint keys. No authored value names a role or task file. Every request carries one version literal as a closed `choices` list, so a stale build refuses before its first task. Credentials reach the machine port as `type: path` inputs, read with a file lookup inside the task (substrate_libvirt_machine/meta/argument_specs.yml:84-95). That meets substrates.md:976-979. Both machine roles publish all eight port entries that substrates.md:963-972 names. So the spec's entry-point list is met, not ahead of the code.
+
+What leaks. First, names follow the implementation, not the operation. Go binds `apply` to `storage/image_resolve.yml` and `storage/host_prepare.yml` (cmd/bootwright/wiring_reconciliation.go:165,168). Yet architecture.md:680 and :698-699 say a playbook is named by the Go operation. This extends F07-08 from roles and ids to entry keys and playbook paths. Second, dispatch lives in consumers. Anaconda keeps eight arm tables (managedos_install_anaconda/defaults/main.yml:261-299). Power keeps three more (machine_power_redfish/defaults/main.yml:30-40), keyed by a material value that Go sets outside the frozen request (internal/machine/power/service.go:437). Third, validation depth is unruled. Most request members are open dicts. The install-agent playbook imports eight task files no argument spec declares, through twelve imports (playbooks/containercluster/install_apply.yml:40-217), against architecture.md:701-703.
+
+Effect on our findings. The tables corroborate F18-03 and its merged duplicates F07-01 and F07-02: each new arm adds a row to every consumer table. They corroborate the sibling's X2. B704 itself says "Consumers dispatch through the substrate" (specs/milestones/delivered.md:8374), so the dispatch seam is consumer-side today. They confirm F18-07: both power roles are Redfish-only and dispatch on only `libvirt` and `baremetal`. They confirm F07-08 and widen it to entry keys. No schema refutes any of these findings.
+
 ## 13. Cross-check against the sibling audit
 
-The sibling audit reviewed the same commit under a near-identical request. We read it only after our own findings were verified. Its 42 defect claims are 30 numbered findings (X1 to X6, R1 to R10, API-01 to API-08, G1 to G6) and 12 rule-table or prose corrections without a severity. Each claim was either mapped to a catalog finding of ours, or sent through the same refuter and calibrator pair we used for our own candidates. A split vote went to an arbiter.
+The sibling audit answers a near-identical request. We read it only after our own findings were verified. This section compares the two reports in full. It states what the sibling found that we lacked, what we changed because of it, and what we declined and why.
 
-### 13.1 Disposition of every sibling finding
+### 13.1 Baselines and method
 
-"Unrated" marks a rule-table or prose item that carries no sibling severity. "Confirmed at X" is the severity our verification assigned, not the sibling's.
+**Baselines.** The sibling audited commit 77033e8f5. We audited 17acb63d9, its direct successor. That commit changed 16 files under `specs/` (4 of them milestone pages) and 4 knowledge pages, plus code, roles and examples. So every sibling citation was re-read at 17acb63d9. A sibling claim that 17acb63d9 fixed is not counted as a defect. One example: the sibling's ledger rows call B704 open, but B704 is delivered (`specs/milestones/delivered.md:8371`) and both machine roles now publish the eight entry points of `specs/substrates.md:963-975`.
 
-| Sibling id | Title (shortened) | Its severity | Disposition |
+**First pass (finding level).** The sibling's 30 numbered findings (X1-X6, R1-R10, API-01-API-08, G1-G6) and 12 unrated rule notes give 42 claims. Each was mapped to one of our catalog ids, or sent through a refuter and a calibrator, with an arbiter on a split vote. Result: 23 covered, 2 confirmed and found to repeat a round-two finding of ours, 11 confirmed and absent from our catalog, 6 refuted. Revision 1 kept the 11 in a side table; revision 2 promotes them into the catalog as CX entries with full records.
+
+**Second pass (sub-claim level, this revision).** Six readers split the whole sibling report, all 850 lines, into 512 points. The points break down as 162 finding sub-claims, 177 recommendations, 54 evaluations, 48 design proposals, 30 framing points, 21 vocabulary points, 15 process points and 5 coverage points. Each point was set against our report: 223 covered, 182 partly covered, 77 absent, 16 contradicting ours, and 14 already refuted in the first pass. The sibling's schema ledger also prompted our own read of the 22 role argument specifications (6 candidates, SCHEMA-1 to SCHEMA-6). We merged the points, those candidates and 24 seeds from our notes into 66 work items (W01-W66). 244 points needed no action.
+
+| Work-item class | Count | Verification | Arbitrations | Outcome |
+|---|---|---|---|---|
+| Contradiction with our text | 4 (W01-W04) | two independent adjudicators | 0 | 3 sibling right, 1 both partly right; our text corrected |
+| Repository claim | 23 (W05-W27) | refuter and calibrator | 6 | 19 new entries V2-01 to V2-19; 4 refuted |
+| Severity challenge | 3 (W28-W30) | two recalibrators | 1 | F13-05 Low to Medium; CX-R4 stays Medium; CX-API04 Medium to High |
+| Report improvement | 36 (W31-W66) | judge and skeptic | 22 | 33 adopted (most narrowed), 3 rejected |
+
+Fable arbitrated all 29 split votes. All quotes and line numbers below were checked at 17acb63d9.
+
+### 13.2 Disposition of the sibling's 30 findings and 12 rule notes
+
+"Its severity" is the sibling's own rating. The sibling's scale has no Low (13.5). A "CX" id is a sibling claim that our verification confirmed and the catalog now carries. Its severity is the one our verification assigned. "W" ids are the work items behind each change (13.3).
+
+| Sibling id | Short title | Its severity | Disposition now |
 |---|---|---|---|
-| X1 | Recovery can reinstall an installed machine when identity is unavailable | High | Confirmed independently at Medium |
-| X2 | Substrate extension contract disagrees where bindings change | Medium | Covered by [F18-03] |
-| X3 | Service responsiveness vs useful readiness | Medium | Confirmed independently at Low; residue matches our [R2-02-07] |
-| X4 | Lost-response ownership recovery needs a remote-writer trust model | Medium | Covered by [F10-08] |
-| X5 | Mechanical prose/comment reduction is not a quality metric | Medium | Refuted: the shrink-only comment ratchet is owner decision D101 and keeps rationale comments |
-| X6 | Media cleanup authority broader than media ownership | High | Arbitrated: authority half refuted by D27; confirmed at Medium as "own-image identity defined two ways" |
-| R1 | Name reuse and local claims do not prove remote ownership | High | Covered by [F10-03] |
-| R2 | Recovery dependency retention follows setup history | High | Covered by [F13-05] |
-| R3 | Storage bounds can consume capacity removal needs | High | Covered by [F09-02] |
-| R4 | Backup offered as remedy without a restore contract | High | Confirmed independently at Medium (calibrator voted High) |
-| R5 | Removal observation turns an unreadable target into no effect | High | Confirmed independently at High |
-| R6 | Read-only effect budget has contradictory owners | Medium | Arbitrated: owner conflict refuted; confirmed at Medium as an undefined "read-only command" |
-| R7 | Durable-format statements reject the published format | High | Covered by [F13-01] |
-| R8 | Readiness and inspection blur evidence, access and inventory | Medium | Covered by [F12-07] |
-| R9 | Fixed concurrency contradicted by unbounded multi-SSH sessions | Medium | Confirmed independently at Medium |
-| R10 | Duplicated lifecycle clauses disagree on recovery and retries | Medium | Covered by [F09-04], [F09-05] |
-| API-01 | Authoritative storage pages disagree about what executes | High | Covered by [F05-02], [F05-08], [F15-03] |
-| API-02 | Environment selection has an incomplete storage closure | High | Confirmed independently at Medium; same defect as our [R2-01-04] |
-| API-03 | Accepted fields and unusable defaults | High | Covered by [F05-06], [F03-04], [F05-09] |
-| API-04 | Interrupted Ceph deployment outside the continuation promise | High | Arbitrated: confirmed at Medium; recovery itself is tracked as B659 and B662 |
-| API-05 | Schema/runtime compatibility needs a survival contract | High | Covered by [F03-09] |
-| API-06 | Separate operator version choice from native prerequisites | High | Covered by [F06-10], [F17-01], [F17-08] |
-| API-07 | Public names inherit hidden length constraints | Medium | Covered by [F04-11] |
-| API-08 | Initial focus needs a complete cross-domain profile | High | Covered by [F01-01], [F10-04] |
-| G1 | Vendor-specific model routing as mandatory policy | Medium | Covered by [F14-09] |
-| G2 | Dirty-tree Stop hook undermines the inner loop | Medium | Covered by [F14-02] |
-| G3 | Verification is temporal/path-based, not change-class | Medium | Covered by [F14-05], [F14-06], [F14-11] |
-| G4 | "An executable rule's prose goes" confuses authority and verification | Medium | Confirmed independently at Low |
-| G5 | Scope discipline needs delivery modes and inseparable repairs | Medium | Arbitrated: confirmed at Low, narrowed to the ban on fixing a blocking prerequisite |
-| G6 | Milestone/history retrieval is expensive | Medium | Covered by [F15-01], [F17-03], [F15-10] |
-| RULE plan bytes | Aggregate request bytes exceed the plan-record bound | Unrated | Confirmed independently at Medium, as stale 1 MiB prose, not a future risk |
-| RULE root lock | Broad root lock limits concurrent status and contexts | Unrated | Refuted: the root lock is released after the snapshot (specs/contexts.md:377-389) |
-| RULE cancellation | Cancellation claims must state what stopped | Unrated | Refuted: cancellation already yields durable unknown; the remote-worker window is tracked as B573 |
-| RULE secret disclosure | Secret-info selection and disclosure wording disagree | Unrated | Covered by [F16-10] |
-| RULE deferred parent proof | Deferred reconciliation treats parent observation as optional | Unrated | Arbitrated and refuted: every effect revalidates identity (specs/state-reconciliation.md:1812-1814) |
-| RULE credential revocation | Revoked credentials can strand continuation | Unrated | Confirmed independently at Medium; overlaps our [R2-04-01] |
-| RULE cross-context placement | Host-local claims; uncoordinated SSH placement | Unrated | Covered by [F10-03] |
-| RULE handoff freshness | Handoff freshness; per-cluster vs whole-environment | Unrated | Covered by [F12-01], [F12-04], [F01-04] |
-| RULE disk selector | Device path is not immutable disk identity | Unrated | Covered by [F10-01] |
-| RULE add-on residual grants | Retirement leaves effects and grants on retained clusters | Unrated | Covered by [F10-04] |
-| RULE managed-service sharing | Remote-host sharing and socket-release gaps | Unrated | Refuted: both gaps are stated and tracked (B247, B323, D102) |
-| RULE inverse retained | Every inverse must state what it retains | Unrated | Arbitrated and refuted: the general rule exists (specs/state-reconciliation.md:774-779) |
+| X1 | Recovery can reinstall an installed Machine | High | Promoted as [CX-X1] at Medium. W31 adds the fix and an interruption-matrix acceptance. W02 corrects our "unknown is never absence" row. |
+| X2 | Substrate extension contract disagrees on bindings | Medium | Covered by [F18-03]. The schema pass adds [V2-13] and [V2-18]. W46 and W47 extend SC-11 and SC-2. Its entry-point sub-claim is fixed at 17acb63d9 (B704). |
+| X3 | Service response versus useful readiness | Medium | Promoted as [CX-X3] at Low. The residue overlaps [R2-02-07]. W34 adds acceptance cases. W04 corrects our 3.4 NTP and proxy row. |
+| X4 | Lost-response recovery needs a remote-writer trust model | Medium | Covered by [F10-08]. Partly new: [V2-07] (Ceph lost-reply adoption). W40 adds context incarnation. |
+| X5 | Comment reduction is not a quality metric | Medium | Refuted. The shrink-only ratchet is owner decision D101, and it keeps rationale comments. |
+| X6 | Media cleanup authority broader than ownership | High | Promoted as [CX-X6] at Medium. D27 refutes the authority half. W34 adds acceptance cases. |
+| R1 | Name reuse does not prove remote ownership | High | Covered by [F10-03]. W40 records in 8.7 why the single-controller boundary needs no new rule; the incarnation stays with B568 under D155. |
+| R2 | Recovery retention follows setup history | High | Covered by [F13-05], now raised from Low to Medium (W28). New: [V2-05] on format healing. |
+| R3 | Storage bounds consume removal capacity | High | Covered by [F09-02]. W13 is refuted as a new finding: its points are already F09-02 and B572. |
+| R4 | Backup offered as remedy with no restore contract | High | Promoted as [CX-R4] at Medium. The split vote was recalibrated and stays Medium (W29). |
+| R5 | Unreadable removal target read as no effect | High | Promoted as [CX-R5] at High. W32 adds a typed alternative fix. W02 corrects our rule rows. |
+| R6 | Read-only effect budget has two owners | Medium | Promoted as [CX-R6] at Medium. Its owner-conflict half was refuted. W33 adds an authority-class matrix. |
+| R7 | Durable-format statements reject the published format | High | Covered by [F13-01]. |
+| R8 | Readiness blurs evidence, access and inventory | Medium | Covered by [F12-07]. New: [V2-03] (status is not an inventory). W08 is refuted. |
+| R9 | Fixed concurrency versus unbounded multi-SSH | Medium | Promoted as [CX-R9] at Medium. W34 adds acceptance cases. |
+| R10 | Duplicated lifecycle clauses disagree | Medium | Covered by [F09-04] and [F09-05]. New: [V2-20] (log fault, W03) and [V2-04] (stale retry text). W61 makes the classifier the sole owner. |
+| API-01 | Storage pages disagree about what executes | High | Covered by [F05-02], [F05-08] and [F15-03]. New: [V2-01]. W01 corrects our NVMe-oF row. W58 extends F05-02. |
+| API-02 | Environment selection has incomplete storage closure | High | Confirmed at Medium; the same defect as [R2-01-04]. W62 adds a merge-semantics acceptance. |
+| API-03 | Accepted fields and unusable defaults | High | Covered by [F05-06], [F03-04] and [F05-09]. New: [V2-02] (an omitted transport defaults to a refused value). |
+| API-04 | Interrupted Ceph deployment outside continuation | High | Promoted as [CX-API04], now raised from Medium to High (W30, arbitrated). |
+| API-05 | Schema and runtime survival contract | High | Covered by [F03-09]. New: [V2-06] (no listing before upgrade). v1alpha1 stays, per D142. |
+| API-06 | Operator version choice versus native prerequisites | High | Covered by [F06-10], [F17-01] and [F17-08]. New: [V2-10]. W36 and W49 add vocabulary and SC-10 text. |
+| API-07 | Public names inherit hidden length limits | Medium | Covered by [F04-11], which stays Low. New: [V2-19] at Medium, the service-dependent case F04-11's fix must also cover. |
+| API-08 | Initial focus needs a cross-domain profile | High | Covered by [F01-01] and [F10-04]. New: [V2-09]. W43, W44 and W04 extend section 3. |
+| G1 | Vendor-specific model routing as policy | Medium | Covered by [F14-09]. W19 is refuted as new: F14-09 already covers it. W56 adds an evidence rubric. |
+| G2 | Dirty-tree Stop hook | Medium | Covered by [F14-02]. W57 adds a content-keyed cache. |
+| G3 | Verification is path-based, not change-class | Medium | Covered by [F14-05], [F14-06] and [F14-11]. New: [V2-11]. W54 revises our decision. |
+| G4 | "An executable rule's prose goes" | Medium | Promoted as [CX-G4] at Low. W59 adds requirement ids. |
+| G5 | Delivery modes and inseparable repairs | Medium | Promoted as [CX-G5] at Low, narrowed. W51 places the fix in AGENTS.md. |
+| G6 | Milestone and history retrieval cost | Medium | Covered by [F15-01], [F17-03] and [F15-10]. New: [V2-12] (decision links have no anchors). |
+| RULE plan bytes | Request bytes exceed the plan-record bound | Unrated | Promoted as [CX-RULEplanbytes] at Medium, as stale 1 MiB prose. |
+| RULE root lock | Broad root lock limits concurrency | Unrated | Refuted. The root lock is released after the snapshot (`specs/contexts.md:377-389`). |
+| RULE cancellation | Cancellation must state what stopped | Unrated | Refuted. Cancellation yields a durable unknown, and the remote-worker window is B573. |
+| RULE secret disclosure | Selection and disclosure wording disagree | Unrated | Covered by [F16-10]. New: [V2-08] (secrets.md versus commands.md). |
+| RULE deferred parent proof | Parent observation treated as optional | Unrated | Refuted by arbitration. Every effect revalidates identity (`specs/state-reconciliation.md:1812-1814`). |
+| RULE credential revocation | Revoked credentials strand continuation | Unrated | Confirmed; the same defect as [R2-04-01] (High). |
+| RULE cross-context placement | Host-local claims; uncoordinated SSH placement | Unrated | Covered by [F10-03]. W40 adds the single-controller boundary. |
+| RULE handoff freshness | Freshness; per-cluster versus environment | Unrated | Covered by [F12-01], [F12-04] and [F01-04]. |
+| RULE disk selector | Device path is not disk identity | Unrated | Covered by [F10-01]. |
+| RULE add-on residual grants | Retirement leaves grants on surviving clusters | Unrated | Covered by [F10-04]. New: [V2-09] (export trust extent). W16 is refuted. |
+| RULE managed-service sharing | Remote-host sharing and socket release | Unrated | Refuted. Both gaps are stated and tracked (B247, B323, D102). |
+| RULE inverse retained | Every inverse must state what it retains | Unrated | Refuted by arbitration. The rule exists (`specs/state-reconciliation.md:774-779`). W37 names the resource fates. |
 
-Totals: 23 sibling claims map to findings we had already verified. Three more were confirmed and turn out to be the same defect as a round-two finding of ours that the mapping missed. Ten were confirmed and are absent from our catalog. Six were refuted, two of them by arbitration.
+Totals: 15 of the 42 claims gain a new V2 entry. 11 are promoted as CX entries, and one of them (API-04) is also raised to High. 2 fold into round-two findings ([R2-01-04], [R2-04-01]). 8 stay covered by revision 1 ids, some with adopted improvements. 6 stay refuted.
 
-### 13.2 Where the two audits agree
+### 13.3 What the sibling found that we had not, and what we changed
 
-The audits agree on the overall verdict: keep the architecture and the safety principles, and fix contradictory contracts before adding providers. Both name the same structural defects. Name-derived ownership is not proof of remote ownership [F10-03]. Consumers dispatch on substrate arms, so a new arm is not low-impact [F18-03]. Storage is described on several pages that disagree [F05-02] [F05-08]. Fields are admitted and then ignored [F05-06]. The contexts page went stale after setup v2 [F13-01]. Vendor-specific support claims enter the specs against D157, D159 and D163 [F17-01]. The Stop hook runs on the wrong tree [F14-02], and milestone pages cost too much to read [F15-01]. They also agree on what is good: strict decoding, closed implementation selection with no ambient plugins, custody kept apart from the request, positive physical identity proofs and explicit irreversible authorization. Agreement between two independent passes on the same text raises confidence that these are the defects to fix first.
+**New and corrected findings.** "Where" names the catalog section (S3 to S10) and the report section that carries the change.
 
-### 13.3 Where they disagree, and why
+| Point (sibling source) | What we added | Where | Ids |
+|---|---|---|---|
+| Storage pages state stale realization (API-01) | `specs/api/storage.md:15-18` says planning refuses NVMe-oF, while `specs/storage-resources.md:18-19` says the kind "is realized". New finding; our own row corrected. | S5; 5.2 row StorageNVMeoFSubsystem; F05-02 note | [V2-01], W01, W05, W58 |
+| Omitted default always refuses (API-03) | `specs/api/storage.md:205-206`: "Omission selects `native`". The refusal table also refuses an omitted transport (`specs/storage.md:376`). | S5 | [V2-02], W06 |
+| Service-dependent name limit (API-07) | Adding a service on day 2 can push a valid StorageCluster name over its limit. F04-11 stays Low; its fix must cover this case. | S5 | [V2-19], [F04-11], W27 |
+| Status used as orphan inventory (R8) | Orphan deletion relies on status, but status omits undeclared objects. | S8 | [V2-03], W07 |
+| Stale retry text (R10) | cli.md still retries one failed block and defers ready work, against D144 and D146. | S8 | [V2-04], W09 |
+| Settled apply and the log fault (R10) | One clause says a log fault clears for any invocation that "would observe, probe, register or start anything", and "Nothing else clears it". Another clause, `specs/state-reconciliation.md:1805-1807`, says a settled apply restores it. Our 8B row said "sound". | S8; 8B rule table; 12 | [V2-20] Medium, W03 |
+| Format healing (R2) | Setup discards "every runtime and the wheel cache" but says a format change "never strands a context" (`specs/controller.md:851-861`). | S8; F13-05 | [V2-05], [F13-05] Medium, W10, W28 |
+| No listing before upgrade (API-05) | Nothing lists the unfinished operations across contexts, or the builds they need, before an upgrade. | S8 | [V2-06], W11 |
+| Lost-reply adoption (X4) | Ceph adoption trusts the local attempt record plus the target's shape. | S8 | [V2-07], W12 |
+| Secret info names (rule note) | secrets.md gives an unknown name an empty selection; commands.md refuses it (B651). | S9 | [V2-08], W14 |
+| Export trust extent (API-08, rule note) | The realm-wide trust of an export is documented but absent from plan and status. | S8 | [V2-09], W15 |
+| Version constraints (API-06) | architecture.md asks for version constraints and support matrices, which D163 forbids. | S6 | [V2-10], W17 |
+| make focus (G3) | Failures that occur only in parallel runs are reported as passing, and no lane has a time bound. | S10 | [V2-11], W18 |
+| Decision links (G6) | All 64 decision links in specs/ target `backlog.md#decisions`, which has no per-decision anchor. | S9 | [V2-12], W20 |
+| Adapter schemas (sibling schema ledger) | Six findings from our own read of the 22 role argument specifications. | S6, S7, S8, S9; 12.3 | [V2-13] to [V2-18], W21-W26 |
+| Missing evidence read as absence (X1, R5) | Our rule tables and 2.3 now say the rule is contradicted by two clauses. | 2.1, 2.3; 8A rule table | [CX-R5], [CX-X1], W02 |
+| Managed proxy limits (API-08) | 3.4 now reads "Realized with limits" and names the external-only Proxy selection. | 3.4 | W04 |
+| Ceph partial-cluster recovery (API-04) | Raised to High, because physical Ceph hosts have no forward or retirement recovery. | S8; 14.8 | [CX-API04], W30 |
 
-Six sibling claims were refuted, mostly because the text already says what the claim asks for. X5 treats the shrink-only comment ratchet as a bad metric, but the owner accepted that ratchet in D101 (specs/milestones/backlog.md:3155). The root-lock item describes a superseded design: an operation now snapshots under the root lock, then "Readers and other contexts may proceed" (specs/contexts.md:379). Cancellation already resolves to a durable unknown; its one open window is tracked as B573. Managed-service sharing and socket release are stated limitations, tracked as B247 and B323 under D102. The deferred parent-proof item misreads an optional pre-admission read as the identity proof; every effect still revalidates identity. The inverse-retained item asks for a rule that specs/state-reconciliation.md:774-779 already states.
+**Report improvements adopted.** These add no catalog finding. They strengthen recommendations, vocabulary, drafts and method.
 
-Severity is the second axis. The sibling rates higher where our verification found a bounded consequence. X1 repeats only this request's installation on the same Machine, behind the boot-time identity proof, so it lands at Medium. For X6, D27 decides that a removal ejects foreign media from a declared node, which leaves only the identity contradiction. API-02 reaches the operator less severely than claimed, so it rates Medium. API-04 restates parked items B659 and B662. For covered items, the sibling rates R2, R3, API-03, API-05 and API-08 one or two levels above our [F13-05], [F09-02], [F05-06], [F03-09] and [F01-01]. We rate three items higher than the sibling: the Stop hook [F14-02], undecidable milestone scope [F17-03], and device-path erase [F10-01], which the sibling lists only as an unrated rule note. R5 is the one independent sibling claim both passes rate High. Its rule reads an unreadable removal target "as no effect" (specs/state-reconciliation.md:544-548), against the unknown rule in specs/security.md:33-35.
+| Point (sibling source) | What we added | Where | Ids |
+|---|---|---|---|
+| Concrete fixes and acceptance cases | A fix for X1, a typed "inconclusive but safe to repeat" result for R5, and the commands.md Effects column as the single owner for R6. Acceptance cases for X3, X6 and R9. | 14.8; the CX entries in 11; 8.B3, 8.B5 | W31, W32, W33, W34 |
+| Observation model and status axes | A 8.B1 keep bullet: the specs already hold the five outcomes as separate outcome, effect and state axes. No second model is needed. | 8.B1 | W35, W66 |
+| Support vocabulary | admitted, realized, observed, qualified, vendor-supported | 4.2 | W36 |
+| Resource fate | removal, retirement, erase, relinquishment | 4.2 | W37 |
+| Responsibility axes | who creates, installs, observes and removes a Machine | 4.2, 4.4 | W38 |
+| Glossary qualifiers | Desired state, effective state, unchanged input; Reservation reworded | 4.2 | W39 |
+| Context incarnation | Why the single-controller boundary needs no new rule, and where the incarnation fix lives (B568, D155) | 8.7 | W40 |
+| API usability | An operator-task check of the proposed shapes; a P1-G exit sentence | 5.7, 14.3 | W41 |
+| Product profile | Provided networking does not mean undeclared; DNS and artifact serving placed on the managed or external side; OpenShift stated as an assumption of the portfolio | 3.4, 3.6 | W43, W44 |
+| Distribution envelope | `nodes` moved under the OpenShift arm; cloud IaaS and managed Kubernetes scenarios | 5.3, 6.4 (e) | W45 |
+| Specialization contract | An implementation contract sheet; semantic substitutability in port suites; an SC-10 clause for unknown detector facts | 6.2 | W46, W47, W49 |
+| Language matrix | Installer-native shell in the Shell row; a Rendered documents row | 7.3 | W50 |
+| Skills | The AGENTS.md scope sentence; justification for the two new skills; per-skill gaps; verification by effect class; eval cases; an evidence rubric for routing; a content-keyed Stop hook | 10.2, 10.3, 10.4, 10.6, 14.8 | W51-W57 |
+| Spec corpus | Requirement ids and a proof map; the classifier as sole owner of transition policy | 9.6, 9.8, 8.B4 | W59, W61 |
+| Composition | Replication retention never widens export-only retention; valid-but-not-executable as a stable diagnostic code | 5.1; acceptance of R2-01-04 and R2-05-01 in 11 | W62 |
+| API framing | A caveat on the Kubernetes envelope; the authoring format kept as strict YAML, with the alternatives rejected; the `implementation: {type, config}` alternative rejected with reasons | 5.3 | W63 |
+| Roadmap | No simultaneous big-bang changes | 14.1 | W64 |
+| Method | A verdict holds only to the depth of the read; the 22 adapter schemas now have ledger rows; a citation-bounds check of our own report | 12, 12.3, 15, 13.6 | W65 |
 
-### 13.4 What each found that the other did not
+### 13.4 Points we considered and did not adopt
 
-The sibling contributes ten verified findings our catalog lacks: X1 and R5 on reading missing evidence as no effect, R4 on backup remedies with no restore contract, X6 on own-image identity, R6 on the undefined read-only class, R9 on unbounded exec fan-out, API-04 on the continuation promise for Ceph, the stale plan-record bound, and G4 and G5 in the agent guidance. One is High, seven Medium and two Low. The section 14 roadmap should carry them with the same weight as catalog findings. R5 belongs with the reconciliation fixes in section 8.
+| Point | Source | Reason |
+|---|---|---|
+| Cluster info labels Ceph evidence "ready" with no observation time (W08) | R8 | Refuted. The section says these commands "contact no host" (`specs/cli/output.md:472-475`), and each field names its source. |
+| Bound liveness beyond F09-02 (W13) | R3 | Refuted as new. It is F09-02 plus B572. ENOSPC is already a distinct capacity refusal (`specs/contexts.md:428-432`). |
+| Destroy plans omit resource fate (W16) | API-08, rules | Refuted. Each removal description states the fate (for example `specs/substrates.md:620-623`, `specs/storage.md:429`). |
+| agent-operation.md asserts cache behavior and strong-voter arbitration (W19) | G1 | Refuted as new. Covered by [F14-09]. Strong-vote escalation is the owner's policy, so we do not call it wrong. |
+| Minimal examples per outcome and substrate (W42) | API-03, API-08 | Already true. `examples/README.md:8-41` lists one example per outcome and per portfolio item. |
+| Finer ports; a weaker named identity guarantee (W48) | framing | A weaker guarantee conflicts with `specs/substrates.md:965-966` and the no-bypass rule for identity proofs. The rest restates SC-7 and [F18-03]. |
+| As-of headers on deferred and history pages (W60) | API-01, structure | Already present. Each `specs/deferred/*.md` page opens with its status and owner. An as-of commit would contradict [F09-08]. |
+| Renumber milestone ids by a max-id scan | G6 | Marginal. Only the anchor point became [V2-12]. |
+| Delivery modes in the scope rule | G5 | Our CX-G5 arbiter dropped them. W51 keeps one sentence and leaves the modes as an owner choice. |
+| Retain OpenShift-only scope pending a decision | framing | We still recommend deciding a distribution arm now (F18-02). W44 states the OpenShift assumption. |
+| A `type` discriminator for implementation choice | API sketch | Our presence-union rule is more testable. W63 records the alternative. |
+| Version incompatible grammar beyond v1alpha1 | API-05 | Against D142 and the pre-1.0 no-compatibility policy. |
+| Move the incident list out of security-safety | skills | Kept. The list costs about 700 tokens and records rules broken once. |
+| Exact token savings | tokens | Agreed in substance. Our 10.5 already labels its figures as byte estimates that 10.6 measures. |
+| The 6 claims refuted in the first pass | X5 and 5 rule notes | Unchanged. Reasons are in 13.2. |
 
-Our catalog contributes 163 of its 201 findings that the sibling did not raise: 2 High, 57 Medium and 104 Low. Both High findings are reconciliation safety defects. StorageExport retirement can destroy a surviving consumer's storage [R2-02-01]. External libvirt attachments claim nothing, so two contexts can share a managed bridge [R2-06-01]. The Medium and Low findings sit mostly in reconciliation rules (56), the desired-state API (33) and architecture (25). They reflect the per-kind field review and the per-file ledger that the sibling covers more briefly. The sibling, in turn, contributes a compact observation model (complete, absent, owned incomplete, foreign, unknown) that our section 8 can adopt as a summary of rules the specs already hold.
+### 13.5 Where the two audits disagree, and why
+
+**Severity scale.** The sibling rates Critical, High or Medium and has no Low. We rate Blocking, High, Medium or Low. It rates 15 of its 30 findings High. After verification, two of those land at High here: R5 as [CX-R5], and API-04 as [CX-API04] after recalibration. X1, X6, R4 and API-02 land at Medium. R2 and R3 map to our Medium [F13-05] and [F09-02]. API-05 maps to our Low [F03-09]. In the other direction, we rate three items higher: the Stop hook [F14-02], undecidable milestone scope [F17-03], and device-path erase [F10-01]. The sibling lists the last one only as an unrated note.
+
+**Verification policy.** The sibling calls a claim "confirmed" when the text is present, and adds a challenge review for its main findings. We keep a claim only after a refuter and a calibrator (or a judge and a skeptic) agree, or after an arbiter decides. This explains our 6 refuted claims and the 4 refuted and 3 rejected points in this revision. Most were already stated, tracked or decided in the specs.
+
+**Scope and baseline.** The sibling reviewed a commit one step older, so a few of its points are stale (B704). It reads milestone and history pages by structure and reviews code only at its boundaries. We do the same, and we also review each kind field by field.
+
+**What we cover that the sibling does not.** Of our 201 v1 findings, 163 match no sibling claim: 2 High, 57 Medium and 104 Low. Both High findings are reconciliation safety defects. StorageExport retirement can destroy the storage of a surviving consumer [R2-02-01]. External libvirt attachments claim nothing, so two contexts can share a managed bridge [R2-06-01].
+
+| Section | S3 | S4 | S5 | S6 | S7 | S8 | S9 | S10 |
+|---|---|---|---|---|---|---|---|---|
+| Our findings the sibling lacks | 6 | 14 | 33 | 25 | 10 | 56 | 13 | 6 |
+
+Our per-file ledger, per-kind field review and skill drafts have no counterpart there. The sibling, in turn, proposes a compact five-row observation model (complete, absent, owned incomplete, foreign, unknown). Section 8.B1 records that the specs already hold it as separate outcome, effect and state axes, so it calls for no spec change.
+
+### 13.6 Differences in method worth keeping
+
+- **Adapter-schema coverage.** The sibling parsed all 22 role argument specifications. Our follow-up read of them produced six findings ([V2-13] to [V2-18]), now in 12.3. Some sibling rows are stale at 17acb63d9: both machine roles publish all eight port entry points. That retires only the entry-point sub-claim. X2 stands as [F18-03].
+- **Mechanical report self-checks.** The sibling ran checks on its own report: link targets, line-reference bounds, unique finding ids, coverage completeness and a confidentiality screen. We adopt the same checks for our report (15.4).
+- **Counterevidence paragraphs.** Each sibling finding states what the text does protect, and what the finding does not claim. Our `decision_check` and verifier notes do part of that job. Revision 2 adds a counterevidence line to each High finding in 11.2.
+- **Stated read depth.** A "good" verdict holds only for the depth of the read. Six milestone and history pages were read by structure (12, W65).
+
+### 13.7 Work-item index
+
+The 66 work items behind this revision, with their outcome. Section 13.3 and 13.4 explain the material ones.
+
+| Item | Type | Title | Outcome |
+| --- | --- | --- | --- |
+| W01 | contradiction | Section 5 grades StorageNVMeoFSubsystem 'truthfully refused' but HEAD realizes it | sibling right; corrected |
+| W02 | contradiction | Rule tables call 'unknown is never absence' sound while CX-R5 (High) and CX-X1 break it | sibling right; corrected |
+| W03 | contradiction | 8B rates the log-fault rule sound, but SR:1300 and SR:1805-1807 disagree on settled apply | sibling right; corrected; new entry [V2-20] |
+| W04 | contradiction | Section 3.4 rates NTP and proxy 'Realized' without the managed-proxy limits | both partly right; corrected |
+| W05 | repo-claim | Storage pages still state stale realization status for NVMe-oF and StorageExport | confirmed as [V2-01] |
+| W06 | repo-claim | Two defaults always refuse at plan, breaking the ux-and-apis rule | confirmed as [V2-02] |
+| W07 | repo-claim | Orphan deletion names status as inventory, but status omits undeclared realized objects | confirmed as [V2-03] |
+| W08 | repo-claim | cli/output.md labels apply-time Ceph evidence 'ready' with no observation time | refuted |
+| W09 | repo-claim | cli.md still describes one failed retry with ready work deferred, against D144 | confirmed as [V2-04] |
+| W10 | repo-claim | Format healing deletes every runtime yet promises a format change never strands a context | confirmed as [V2-05] |
+| W11 | repo-claim | No way to learn before an upgrade which contexts need their registering build | confirmed as [V2-06] |
+| W12 | repo-claim | Storage lost-reply adoption trusts a local attempt record, then grants removal authority | confirmed as [V2-07] |
+| W13 | repo-claim | Bound liveness beyond F09-02: keyring limits, finalization writes, physical ENOSPC | refuted |
+| W14 | repo-claim | secrets.md says unknown info names give an empty selection; commands.md says they refuse | confirmed as [V2-08] |
+| W15 | repo-claim | FDF export trust extent is specified but invisible in plan and status scope | confirmed as [V2-09] |
+| W16 | repo-claim | Destroy plans do not enumerate resource fate or residual credentials | refuted |
+| W17 | repo-claim | architecture.md bans compatibility rules yet requires implementation version constraints | confirmed as [V2-10] |
+| W18 | repo-claim | verification.md: universal red-before-green, serial-rerun 'passes' and no parallel timeout | confirmed as [V2-11] |
+| W19 | repo-claim | agent-operation.md asserts vendor cache behavior and stronger-voter arbitration | refuted |
+| W20 | repo-claim | Milestone bookkeeping: retired M5/M6 read 'not started'; renumbering by max-ID scan | confirmed as [V2-12] |
+| W21 | repo-claim | Power dispatch arm rides in material values, outside the frozen request | confirmed as [V2-13] |
+| W22 | repo-claim | Agent install playbook imports nine task files no argument spec declares | confirmed as [V2-14] (eight distinct files, twelve imports) |
+| W23 | repo-claim | No rule sets argument-spec depth; schemas check presence and version only | confirmed as [V2-15] |
+| W24 | repo-claim | substrates.md quotes libvirt request versions two moves stale | confirmed as [V2-16] |
+| W25 | repo-claim | nativeError opt-in list names three Ceph calls; six opt in | confirmed as [V2-17] |
+| W26 | repo-claim | Entry keys and playbook paths are named by implementation, not by Go operation | confirmed as [V2-18] |
+| W27 | repo-claim | Service-dependent StorageCluster name limit blocks adding a service to an existing cluster | confirmed as [V2-19] |
+| W28 | severity-challenge | F13-05 (Low) did not weigh format healing that discards every runtime | recalibrated to Medium |
+| W29 | severity-challenge | CX-R4 split vote: restoring a stale keyring rolls back seal counters | recalibrated to Medium |
+| W30 | severity-challenge | CX-API04 did not weigh that physical Ceph hosts have no forward or retirement recovery | recalibrated to High |
+| W31 | report-improvement | CX-X1: add the concrete fix, its constraint and an interruption-matrix acceptance | adopted |
+| W32 | report-improvement | CX-R5: offer a typed 'inconclusive but safe to repeat' result as the alternative fix | adopted |
+| W33 | report-improvement | CX-R6: replace 'one read-only definition' with a command authority-class matrix | adopted |
+| W34 | report-improvement | CX-X3, CX-X6 and CX-R9: add the sibling's acceptance cases | adopted |
+| W35 | report-improvement | Adopt the five-outcome observation model and three status axes in section 8 | adopted as an 8.B1 keep bullet; no second model |
+| W36 | report-improvement | Support vocabulary: admitted, realized, observed, qualified, vendor-supported | adopted |
+| W37 | report-improvement | Name the resource fate: removal, retirement, erase, relinquishment | adopted |
+| W38 | report-improvement | Responsibility split and Machine axes: who creates, installs, observes and removes | adopted |
+| W39 | report-improvement | Glossary qualifiers the sibling states and we omit | adopted |
+| W40 | report-improvement | Context incarnation and the single-controller authority boundary | adopted |
+| W41 | report-improvement | Add an operator API usability evaluation protocol and overall success criteria | adopted |
+| W42 | report-improvement | Minimal complete examples per outcome and substrate; first journey states one-shot apply | rejected |
+| W43 | report-improvement | Initial product profile with a cross-domain readiness DAG and route vocabulary | adopted in part: the provided-networking and DNS and artifact-serving boundary, no readiness DAG |
+| W44 | report-improvement | State that OpenShift is assumed by the portfolio though the owner did not list it | adopted |
+| W45 | report-improvement | Correct the ContainerCluster envelope; add cloud IaaS and managed Kubernetes scenarios | adopted |
+| W46 | report-improvement | Implementation contract template and engine/domain/adapter/composition ownership list | adopted |
+| W47 | report-improvement | Shared port suites must prove semantic substitutability, not only shape | adopted |
+| W48 | report-improvement | Port granularity: power, identity, media, disk selection; block, file, object storage | rejected |
+| W49 | report-improvement | Version specialization: separate authenticity, applicability and variant choice | adopted |
+| W50 | report-improvement | Language matrix: templates, installer-native shell, Go adapters row, anti-patterns | adopted |
+| W51 | report-improvement | Delivery modes and the inseparable-prerequisite definition in skill drafts | adopted |
+| W52 | report-improvement | Skill portfolio: justify two new skills or prefer references first | adopted |
+| W53 | report-improvement | Per-skill content gaps: counterevidence rubric, truthful coverage, review-only routing | adopted |
+| W54 | report-improvement | Verification by effect class: reconsider our 'decline the table' | adopted |
+| W55 | report-improvement | Skill evaluation cases and token-experiment design | adopted |
+| W56 | report-improvement | Model routing: evidence and reproduction rubric, no mandatory delegation | adopted |
+| W57 | report-improvement | Stop hook: cache by checked content and skip unrelated dirt in read-only tasks | adopted |
+| W58 | report-improvement | Compact capability index with admission-to-qualification columns, checked against code | adopted |
+| W59 | report-improvement | Stable requirement IDs for high-risk rules and a requirement-to-proof map | adopted |
+| W60 | report-improvement | As-of status headers for deferred and history pages; delivered is not qualification | rejected |
+| W61 | report-improvement | Make the transition classifier the sole owner; CLI pages only project it | adopted |
+| W62 | report-improvement | Composition: merge semantics, collision diagnostics, validity versus executability | adopted in part: retention rule and diagnostic code |
+| W63 | report-improvement | API framing: Kubernetes envelope caveat, rejected authoring languages, union alternative | adopted |
+| W64 | report-improvement | Roadmap: no simultaneous big-bang changes; recovery and authority as a named step | adopted in part: no simultaneous big-bang changes |
+| W65 | report-improvement | Ledger and method: review depth, adapter-schema subsection, mechanical report checks | adopted |
+| W66 | report-improvement | Credit strengths the sibling names that our 'keep' lists omit | adopted |
 
 ## 14. Ordered remediation roadmap
 
-This roadmap orders the 201 verified findings into four phases. It does not authorize work: under AGENTS.md, each step still needs an explicit owner request or an active slice, and each step below names the recorded decisions it touches so the owner can make that request. Steps carry a code (P0-A and so on) so milestone items can cite them.
+This roadmap orders the 232 verified findings of revision 2 (the 201 of revision 1, 11 sibling claims our verifiers confirmed and 20 new V2 entries) into four phases. It does not authorize work: under AGENTS.md, each step still needs an explicit owner request or an active slice, and each step below names the recorded decisions it touches so the owner can make that request. Steps carry a code (P0-A and so on) so milestone items can cite them.
 
 ### 14.1 Ordering principles
 
-The order follows three observations from the catalog.
+The order follows four observations from the catalog.
 
-1. The catalog has no Blocking entry, but nine High entries and fourteen unsafe-rule entries cluster on destructive paths, shared hosts and the agent harness. These are the only findings whose cost grows with each new effect, so they come first.
+1. The catalog has no Blocking entry, but eleven High entries (the nine of revision 1, plus [CX-R5] and [CX-API04], the latter on the physical Ceph journey) and fourteen unsafe-rule entries cluster on destructive paths, shared hosts and the agent harness. These are the only findings whose cost grows with each new effect, so they come first.
 2. The architecture contract is strong at the engine seam and weak at implementation selection. The F06 assessment shows that adding a substrate today edits every consumer's dispatch table [F18-03], so the specialization and selection contract must precede any new family member.
 3. The corpus restructuring is cheap to defer but expensive to do twice. It follows the contract edits of Phases 0 and 1, which rewrite many of the same pages.
+4. One step lands per slice. Redesigning the kinds, restructuring the corpus, adding an extension framework and changing delivery in one change would hide which edit moved the evidence. A quick win (14.7) or a Phase 2 edit may land earlier under its own authorization, but it never closes or substitutes for a Phase 0 step.
 
 What is good and should be kept through every phase: the lifecycle Capability port, the frozen-plan identity of each block, the per-capability refusal tables held by tests, the physical-erase contract (the template for every other destructive path), the "unknown is never absence" rule, the docs gates with byte ratchets, and the one-owner-per-fact model. No step below weakens any of them.
 
-The sibling-audit claims that our verification confirmed (section 11.4) are not catalog entries; section 14.8 schedules them separately. Two of them overlap catalog entries and travel with them: the sibling's credential-revocation item with [R2-04-01], and its storage-closure item with [R2-01-04].
+The sibling-audit claims that our verification confirmed now sit in the catalog as CX entries (11.2 and 11.3; their provenance is in 11.4); section 14.8 places them in the phases. The 20 V2 entries of revision 2 are placed directly in the steps and batches below. Two further sibling claims are not separate entries and travel with the round-two findings they repeat: credential revocation with [R2-04-01], and storage closure (API-02) with [R2-01-04].
 
 ### 14.2 Phase 0: before new implementation or destructive-path extension
 
-Exit for the whole phase: every High finding is closed or has an owner-accepted carrier item, and no unsafe-rule finding is open without a refusal in its place.
+Exit for the whole phase: every High finding, including [CX-R5] and [CX-API04] from 14.8, is closed or has an owner-accepted carrier item, and no unsafe-rule finding is open without a refusal in its place.
 
 | Step | Findings | Owner decision | Size | Depends on |
 | --- | --- | --- | --- | --- |
 | P0-A Agent effect safety | [F14-01] [F14-02] | No; consistent with D138 | S | none |
-| P0-B Owning pages tell the truth | [F13-01] [F17-01] [F17-03] [F15-02] | Yes for the WIP limit (D158) | M | P0-A |
+| P0-B Owning pages tell the truth | [F13-01] [F17-01] [F17-03] [F15-02] [V2-01] | Yes for the WIP limit (D158) | M | P0-A |
 | P0-C Physical target identity | [F10-01] [F10-05] [F10-02] [R2-06-03] | No; reuses D177 identity | M | P0-B |
-| P0-D Shared-host ownership | [F10-03] [R2-06-01] [R2-06-04] [R2-06-02] | Yes: D38 amendment for [R2-06-02]; D155 direction | M | P0-B |
-| P0-E Consumer quiescence | [R2-02-01] [F10-04] | Confirm D143 clause 6 reading | S | none |
+| P0-D Shared-host ownership | [F10-03] [R2-06-01] [R2-06-04] [R2-06-02] [V2-03] | Yes: D38 amendment for [R2-06-02]; D155 direction | M | P0-B |
+| P0-E Consumer quiescence | [R2-02-01] [F10-04] [CX-API04] | Confirm D143 clause 6 reading | S | none |
 | P0-F Access-credential rebind | [R2-04-01] | Yes: new exit beside D37 | M | none |
 | P0-G Store durability and locks | [F09-02] [F13-07] [F11-07] [F13-02] | No; carriers B572, B389 | M | P0-B |
-| P0-H Truthful admission and boundaries | [F05-06] [F08-01] [F12-06] [R2-05-11] | No | S | none |
+| P0-H Truthful admission and boundaries | [F05-06] [F08-01] [F12-06] [R2-05-11] [V2-02] | No | S | none |
 
 #### P0-A Agent effect safety
 
@@ -4958,25 +5894,25 @@ Exit: AGENTS.md carries the sentence; agent-operation.md no longer owns it; endi
 
 Correct contexts.md to registry version 6 and remove setup from the exclusive-lock rows [F13-01]. Remove every vendor-support clause from the storage coverage family, implementing D157, D159 clause 15, D163 and D176 [F17-01]. Add one Active slices table to milestones.md and record M2c as paused per D168 [F17-03]. Reclassify the six-host cap as an unmet target under D130 [F15-02].
 
-Exit: the [F17-01] grep acceptance returns nothing; a docs-check test compares record-version cells with Go constants; milestones.md names each active slice with its authorizing decision. Retiring or reshaping the WIP limit stays with the owner.
+Exit: the [F17-01] grep acceptance returns nothing; a docs-check test compares record-version cells with Go constants; milestones.md names each active slice with its authorizing decision; the storage admission and output pages state that NVMe-oF and StorageExport are realized [V2-01]. Retiring or reshaping the WIP limit stays with the owner.
 
 #### P0-C Physical target identity
 
 Require a durable disk identity at physical managed-OS installation and compare it inside `%pre` [F10-01]. Define one MAC-set predicate, equality, used by target proof, `%pre` and erase [F10-05]. Refuse power commands on the controller Machine and on unpinned targets without a fresh full proof [F10-02]. Add the `bmc-system:<UUID>` key beside the address-keyed claim [R2-06-03].
 
-Exit: the security-safety skill bullet matches; managed-os.md states the `%pre` comparison; tests are named for the identity mismatch, the controller-Machine refusal and the self-identity refusal.
+Exit: the security-safety skill bullet matches; managed-os.md states the `%pre` comparison; tests are named for the identity mismatch, the controller-Machine refusal and the self-identity refusal. For [CX-R5], the owner's choice from 14.8 (option A or B) is recorded and applied at `specs/state-reconciliation.md:544-548`; a failed, forbidden or unreachable read stays unknown, as `specs/security.md:33-35` requires, and a named negative test refuses completion from an unreadable target.
 
 #### P0-D Shared-host ownership
 
 Spec-only first: link B568 as a known exception under Mutation safety and add D155's interim orphan warning to contexts.md [F10-03]. Then the `bridge-use:` shared key, as B567 proposes [R2-06-01], the emulated-BMC claim [R2-06-04], and key release on abandoning deletion [R2-06-02], which needs the owner to amend D38.
 
-Exit: grep finds B568 in both pages; the key table lists `bridge-use:` with its release-blocking rule; a named test refuses removing a bridge another context uses.
+Exit: grep finds B568 in both pages; the key table lists `bridge-use:` with its release-blocking rule; a named test refuses removing a bridge another context uses; the orphan-acknowledged deletion lists what the context owns from its frozen operations, not from the selected declarations [V2-03].
 
 #### P0-E Consumer quiescence
 
 Make export and cluster retirement conditional on every consumer being retired in the same removal, otherwise refuse under B491 naming the consumer [R2-02-01] [F10-04]. The RBD-replication rule at storage-resources.md is the model.
 
-Exit: the export refusal table has the "consumer cluster survives" row and a planner test cites it.
+Exit: the export refusal table has the "consumer cluster survives" row and a planner test cites it. `specs/storage.md:480-483` names its two exceptions with B659 and B662 and states the physical-host exit or its absence [CX-API04].
 
 #### P0-F Access-credential rebind
 
@@ -4994,7 +5930,7 @@ Exit: the acceptance test of each finding exists and is cited from its spec clau
 
 Refuse authored non-default inert endpoint fields at plan or remove them [F05-06]. Name the remote fixed-worker exception in security.md with one quoting function [F08-01]. Say in the context-update warning that restoring files does not restore settlement [F12-06]. Add license acceptance to the Ceph example READMEs [R2-05-11].
 
-Exit: each finding's acceptance clause holds; all four are page-local edits plus small tests.
+Exit: each finding's acceptance clause holds; an omitted `clusterSSH.transport` no longer selects a value that always refuses [V2-02]; all five are page-local edits plus small tests.
 
 ### 14.3 Phase 1: additive-extension contracts and owner shape decisions
 
@@ -5003,16 +5939,16 @@ Phase 1 makes "add a substrate, distribution, storage provider or service" an ad
 | Step | Findings | Owner decision | Size | Depends on |
 | --- | --- | --- | --- | --- |
 | P1-A Selection and extension contract | [F06-01] [F06-03] [F06-04] [F06-06] [F06-12] [F06-08] | No; D153 clause 3 compatible | M | Phase 0 |
-| P1-B Substrate single dispatch | [F18-03] [F18-07] [F07-07] [F04-04] | No; D1 kept | L | P1-A |
+| P1-B Substrate single dispatch | [F18-03] [F18-07] [F07-07] [F04-04] [V2-13] | No; D1 kept | L | P1-A |
 | P1-C Family-neutral cores | [F07-03] [F06-05] [F06-07] [F18-04] [F18-09] [F18-10] [F17-06] | No | L | P1-A |
-| P1-D Specialization contract | [F06-09] [F06-10] [F06-11] [R2-02-04] [F17-08] | No; reconciles D162(a) and (b) | M | P1-A |
+| P1-D Specialization contract | [F06-09] [F06-10] [F06-11] [R2-02-04] [F17-08] [V2-10] | No; reconciles D162(a) and (b) | M | P1-A |
 | P1-E Plan edges and selection closure | [R2-01-01] [R2-01-02] [R2-01-04] [R2-01-05] [R2-01-03] [R2-01-06] [R2-01-07] [F03-08] | Yes for [F03-08] with [R2-01-03] | M | none |
 | P1-F Cross-build continuation | [R2-03-01] [R2-03-02] [R2-03-03] [R2-03-06] [R2-03-05] | Yes: amends D145(4) | M | P0-B |
-| P1-G API shape decisions | [F18-02] [F05-03] [F03-01] [R2-05-01] [F04-01] [F04-02] [F03-03] [F05-07] [F05-02] [R2-05-04] | Yes: D132, D133 | L | P1-A |
+| P1-G API shape decisions | [F18-02] [F05-03] [F03-01] [R2-05-01] [F04-01] [F04-02] [F03-03] [F05-07] [F05-02] [R2-05-04] [V2-19] | Yes: D132, D133 | L | P1-A |
 | P1-H Scope and milestone dependency | [F01-01] [F17-02] [F01-02] [F17-04] [F01-04] | Yes: D158, D172, D153 | S | P0-B |
-| P1-I Reconciliation rule completion | [F09-01] [F09-03] [F09-04] [F12-01] [F12-02] [F12-03] [F13-03] [F13-04] [R2-02-03] [R2-06-05] [R2-06-06] | Yes for [F09-01] (D38) and [R2-06-06] (B247, D105) | M | Phase 0 |
+| P1-I Reconciliation rule completion | [F09-01] [F09-03] [F09-04] [F12-01] [F12-02] [F12-03] [F13-03] [F13-04] [F13-05] [R2-02-03] [R2-06-05] [R2-06-06] [V2-20] [V2-05] | Yes for [F09-01] (D38) and [R2-06-06] (B247, D105) | M | Phase 0 |
 | P1-J Trust model and custody | [F11-01] [F11-02] [F11-03] [F11-08] [R2-04-02] [R2-04-03] [R2-04-04] | Yes for [R2-04-02] (D143 clause 7) | M | P0-F |
-| P1-K Language responsibility | [F08-04] [F08-06] [F08-07] [F08-02] [F08-03] [F08-05] [F08-08] [F08-09] [F08-10] | No; codifies D11, D99, D170 | M | none |
+| P1-K Language responsibility | [F08-04] [F08-06] [F08-07] [F08-02] [F08-03] [F08-05] [F08-08] [F08-09] [F08-10] [V2-14] [V2-15] | No; codifies D11, D99, D170 | M | none |
 
 Exit criteria a reviewer can check:
 
@@ -5022,9 +5958,9 @@ Exit criteria a reviewer can check:
 - **P1-D.** The refusal-seam rule moves from knowledge into architecture.md. No registry is keyed by a release label. Registry discovery uses a marker, not two hard-coded paths.
 - **P1-E.** state-reconciliation.md holds one reference-edge catalog, and each domain page links to it. The closure row reads "every storage child whose clusterRef names it".
 - **P1-F.** Identity-fixing values travel in the frozen request. Each implementation declares a mark format id and a proof id. The Ansible and Go references carry the digest checklist item.
-- **P1-G.** One recorded owner decision covers the ContainerCluster distribution union, `Storage*` versus `Ceph*` names, the union idiom rule and the admission classification. A decision before B87 and B99 revive arms costs least.
+- **P1-G.** One recorded owner decision covers the ContainerCluster distribution union, `Storage*` versus `Ceph*` names, the union idiom rule and the admission classification. A decision before B87 and B99 revive arms costs least. The decision record cites the 5.7 task results for the chosen and the rejected shape.
 - **P1-H.** project.md separates the committed portfolio from the extension envelope. Requires lines state real dependencies only, and session clauses sit in one review queue.
-- **P1-I.** Each rule finding's acceptance holds. [F09-01] stays open until the owner reopens D38.
+- **P1-I.** Each rule finding's acceptance holds. [F09-01] stays open until the owner reopens D38. One restoration clause names every invocation that clears a latched log fault, the settled apply included [V2-20]. [F13-05], raised to Medium in revision 2, and its format-healing trigger [V2-05] no longer promise offline continuation the host cannot keep.
 - **P1-J.** security.md has a remote-principals table. Downloaded tools name an authenticity source. `--yes` refuses an unnamed host-key fingerprint.
 - **P1-K.** architecture.md has a "Language responsibility" section with a Python row. A python.md reference exists. A placement test maps every tracked source file to a language row.
 
@@ -5034,10 +5970,10 @@ The P1-G decision is the most time-sensitive owner input in the roadmap. M3 and 
 
 | Step | Findings | Owner decision | Size | Depends on |
 | --- | --- | --- | --- | --- |
-| P2-A Milestone cards | [F15-01] [F15-09] [F15-10] [F15-06] [F15-04] | Yes: log location (milestones.md) | M | P0-B, P1-H |
+| P2-A Milestone cards | [F15-01] [F15-09] [F15-10] [F15-06] [F15-04] [V2-12] | Yes: log location (milestones.md) | M | P0-B, P1-H |
 | P2-B Section routing and gates | [F15-07] [F15-08] [F15-03] [R2-02-05] [F16-03] [F17-07] | No | M | P2-A |
 | P2-C One storage field-record home | [F05-08] [F17-05] [F13-09] | No; keeps D133 split | M | P0-B, P1-G |
-| P2-D Skill portfolio | [F14-03] [F14-05] [F14-06] [F14-07] [F14-09] [F14-11] [F14-12] [F14-04] | No; F14-03 implements D168 | M | P0-A, P1-F, P1-K |
+| P2-D Skill portfolio | [F14-03] [F14-05] [F14-06] [F14-07] [F14-09] [F14-11] [F14-12] [F14-04] [V2-11] | No; F14-03 implements D168 | M | P0-A, P1-F, P1-K |
 
 Exit criteria:
 
@@ -5053,17 +5989,18 @@ Each batch is one change to one owning page or page pair, run by an implementati
 | Batch | Owning page | Findings | Size |
 | --- | --- | --- | --- |
 | L1 Scope prose | project.md, README.md | [F01-03] [F01-05] [F01-06] [F01-10] [F01-11] | S |
-| L2 Glossary and naming rules | specs/index.md glossary, api.md | [F02-01] [F02-02] [F02-03] [F02-04] [F02-05] [F02-06] [F02-07] [F02-09] [F02-12] [F12-05] [F05-05] | M |
-| L3 CLI vocabulary and output | cli.md, cli/output.md, cli/commands.md | [F16-01] [F16-04] [F16-05] [F16-06] [F16-07] [F16-08] [F16-11] [F12-07] [F12-09] | M |
+| L2 Glossary and naming rules | specs/index.md glossary, api.md | [F02-01] (Medium) [F02-02] [F02-03] [F02-04] (Medium) [F02-05] [F02-06] [F02-07] [F02-09] [F02-12] [F12-05] [F05-05] | M |
+| L3 CLI vocabulary and output | cli.md, cli/output.md, cli/commands.md | [F16-01] [F16-04] [F16-05] [F16-06] [F16-07] [F16-08] [F16-11] [F12-07] [F12-09] [V2-04] | M |
 | L4 API grammar | api.md, api/input.md | [F03-02] (Medium) [F03-04] [F03-05] [F03-06] [F03-07] [F03-09] [R2-05-05] [R2-05-09] | S |
 | L5 Machines and services | api/machines.md, api/infrastructure-services.md | [F04-05] [F04-06] [F04-07] [F04-08] [F04-09] [F04-10] [F04-11] [F18-06] [R2-02-06] [R2-02-07] | M |
 | L6 Add-ons and playbooks | api/addons.md, api/custom-playbooks.md | [F05-04] [F05-09] | S |
-| L7 Secrets and custody detail | secrets.md, api/secrets.md | [R2-05-07] [F11-09] [F11-11] [R2-04-05] [R2-04-06] [R2-04-07] [R2-04-08] [F16-10] | M |
+| L7 Secrets and custody detail | secrets.md, api/secrets.md | [R2-05-07] [F11-09] [F11-11] [R2-04-05] [R2-04-06] [R2-04-07] [R2-04-08] [F16-10] [V2-08] | M |
 | L8 Recovery wording | state-reconciliation.md | [F09-05] [F09-06] [F09-07] [F09-08] [F10-06] [F10-07] [F10-08] [F12-04] | M |
 | L9 Host security | security.md | [F11-04] [F11-05] [F11-10] [F11-12] | S |
-| L10 Controller records | contexts.md, contexts/controller-record.md | [F13-05] [F13-06] [F13-08] [R2-06-07] [R2-06-08] | S |
+| L10 Controller records | contexts.md, contexts/controller-record.md | [F13-06] [F13-08] [R2-06-07] [R2-06-08] [V2-06] | S |
 | L11 Examples | examples/README.md and scenario READMEs | [F05-10] [R2-05-03] [R2-05-08] [R2-05-10] [F16-09] | S |
-| L12 Corpus leftovers | specs/index.md, coverage pages | [F07-10] [F07-08] | S |
+| L12 Corpus leftovers | specs/index.md, coverage pages, architecture.md protocol lists, substrates.md version literals | [F07-10] [F07-08] [V2-16] [V2-17] [V2-18] | S |
+| L13 Storage contract detail | storage.md, storage-resources.md | [V2-07] [V2-09] | S |
 
 L8 should follow P1-I, and L7 should follow P1-J, because both rewrite the same sections. [F16-11] adds a public flag and needs owner acceptance under D153 clause 2.
 
@@ -5100,29 +6037,50 @@ The first three rows remove the facts most likely to mislead an agent on its nex
 
 ### 14.8 Sibling-confirmed items
 
-Section 11.4 lists the sibling audit's claims that our own refuter and calibrator confirmed. They carry the same weight as catalog entries and slot into the phases above as follows.
+The 11 CX entries (sibling claims our own refuter and calibrator confirmed; provenance in 11.4), plus two sibling claims folded into round-two findings, slot into the phases above as follows.
 
 | Item | Severity (ours) | Phase and step | Why there |
 | --- | --- | --- | --- |
-| CX-R5: a removal observation that cannot tell the postcondition from an unreadable target reads as no effect | High | Phase 0, with P0-C and P0-D | It is the one sibling claim both audits rate High, and it violates the "unknown is never absence" rule every Phase 0 step relies on; the correction is a two-sentence change in the removal observation clause and a named negative test. |
-| CX-X1: recovery can reinstall an installed Machine when its identity channel cannot answer after a power-off | Medium | Phase 0, with P0-C | Same target-identity family as [F10-01]; bounded to the same request's installation behind the boot-time proof, which is why it is Medium. |
+| CX-R5: a removal observation that cannot tell the postcondition from an unreadable target reads as no effect | High | Phase 0, with P0-C and P0-D | It is a claim both audits rate High, and it violates the "unknown is never absence" rule every Phase 0 step relies on; the owner picks one of the two fixes below, each with a named negative test. |
+| CX-X1: recovery can reinstall an installed Machine when its identity channel cannot answer after a power-off | Medium | Phase 0, with P0-C | Same target-identity family as [F10-01]; the reinstall is bounded to this request's own installation behind the boot-time proof, so the defect is the false label, not the effect. |
 | CX-X6: own-image identity is defined two ways between the cluster and substrate pages | Medium | Phase 1, P1-B | The single-dispatch rework rewrites the media entry points where the definition must be stated once. |
 | CX-R4: backup is offered as a remedy without a restore contract | Medium | Phase 1, P1-I | Belongs with the operability corrections of the recovery rules. |
-| CX-R6: the read-only command class is undefined, so the effect budget has two owners | Medium | Phase 1, P1-I | Fixed by one definition in the state contract that the CLI owner links. |
+| CX-R6: "read-only command" has no single definition, so security.md, the CLI catalog and the state contract disagree on what `diff --observe` and `preflight` may do | Medium | Phase 1, P1-I | The command catalog already owns the effect classes Local, Observe and Mutate (specs/cli/commands.md:50-52) and a per-command Effects column (commands.md:94-98). Make that column the only effect owner; every other spec projects it. Three edits. First, retarget the security.md:694 row ("Read-only commands perform no writes, payload reads, processes, network access") to the commands whose Effects column reads "none" or "read local state". Second, add to the Observe definition the one local write it admits, the store-internal [cache-only rebuild](../../specs/controller.md), which waits for `setup/lock` and "never refuses a held lock as busy" (controller.md:191-192). Third, change state-reconciliation.md:1652 "runs no effect" to "runs no lifecycle effect", linked to controller.md#the-controller-runtime. Do not add a new class vocabulary: the sibling's six classes would put a second taxonomy over the existing three. Contract check: `diff --observe` with a missing runtime directory and a held `setup/lock` waits, then rebuilds; with a missing locked wheel it refuses with `run bootwright setup`; `status` never rebuilds (controller.md:203-204). D153 (`bootwright diff` is read-only toward managed targets) stands. |
 | CX-R9: multi-session SSH fan-out is unbounded against the fixed-concurrency rule | Medium | Phase 1, P1-J | A bound in the CLI session rule, stated beside the listener and process bounds. |
-| CX-API02: explicit Environment selection has an incomplete storage closure | Medium | Phase 1, P1-E | The same defect as [R2-01-04]. |
-| CX-API04: an interrupted Ceph deployment sits outside the general continuation promise | Medium | Phase 1, P1-I | Tracked as B659 and B662; the step records the exception in the continuation clause until those land. |
-| CX-RULE plan bytes: the stale aggregate plan-record bound | Medium | Phase 3, L8 | A wording fix on the record bound. |
-| CX-RULE credential revocation | Medium | Phase 0, P0-F | The same defect as [R2-04-01]. |
+| Sibling API-02 (folded into [R2-01-04]): explicit Environment selection has an incomplete storage closure | Medium | Phase 1, P1-E | The same defect as [R2-01-04]. |
+| CX-API04: an interrupted Ceph deployment sits outside the general continuation promise | High | Phase 0, with P0-E | On bare-metal IBM Ceph an interrupted apply has no forward exit until B659 and B662 (storage.md:661, 687-688) and no retirement until B491 (storage.md:1466-1477); only an abandoning purge remains. The step qualifies the safe-retry clause (storage.md:481-482), states the physical limitation and its remedy or its absence, and makes B659, B662 and B491 prerequisites of M2d's B485 exit or records the limitation there. The recovery protocols stay owner decisions, so the carriers satisfy the Phase 0 exit. |
+| CX-RULEplanbytes: the stale aggregate plan-record bound | Medium | Phase 3, L8 | A wording fix on the record bound. |
+| Sibling rule note: credential revocation (folded into [R2-04-01]) | High | Phase 0, P0-F | The same defect as [R2-04-01]. |
 | CX-X3: service responsiveness versus useful readiness | Low | Phase 3, L5 | Joins [R2-02-07] on the managed-service readiness wording. |
 | CX-G4: "an executable rule's prose goes" conflates authority with verification | Low | Phase 2, P2-D | One sentence in the architecture-best-practices skill. |
-| CX-G5: scope discipline lacks a definition of an inseparable repair | Low | Phase 2, P2-D | One sentence in the code-implementation skill, narrowed to the ban on fixing a blocking prerequisite in the same change. |
+| CX-G5: scope discipline lacks a definition of an inseparable repair | Low | Phase 2, P2-D | One sentence in AGENTS.md (10.3 Supporting drafts), narrowed to the ban on fixing a blocking prerequisite in the same change. |
+
+**CX-X1 fix and acceptance.** `specs/managed-os.md:568-571` reads a private Machine powered off before its disk boot as positive no effect [CX-X1]. An installation may already exist there, which `specs/security.md:33-35` forbids reading as absence. The smallest fix keeps the accepted cost at `managed-os.md:791` and corrects the reading:
+
+| Step | Change |
+| --- | --- |
+| Relabel | Read the window as a positive partial realization of this operation's own installation, retried by the same frozen request. |
+| Name the window | Replace "the one window" (`managed-os.md:552`, `:568`) with the cases it covers, including a Machine powered off after its disk boot and before evidence. |
+| Owner option | Record durably, before power-off, that installation was proved and disk boot is intended; recovery then takes the disk-boot identity path or stays unknown, never the installer. A preparation record states intent, never completion. |
+
+No recorded decision chooses between the relabel and the option; the owner decides in P0-C.
+
+Acceptance: a test interrupts before and after installation proof, private-material withdrawal, power-off and disk boot, on a virtual and a physical profile. Each case asserts the recorded reading, that a failed identity read never yields no effect, and that the boot proof (`managed-os.md:399-414`) and physical target checks still run before any installer boot. Under the owner option it also asserts that apply never boots the installer after positive installation evidence.
+
+**CX-R5 needs an owner choice.** The clause at `specs/state-reconciliation.md:544-548` exists because removals are meant to replay safely: an already-absent destroy completes (`:1127-1129`), and each capability names its replay rules (`:1172-1179`) [CX-R5]. Deleting the clause alone leaves such a removal `unknown`, with no retry, which can strand teardown the way [R2-04-01] does.
+
+| Option | Rule | Cost |
+| --- | --- | --- |
+| A. Delete | An unreadable removal observation stays `unknown`; only an operator resolution moves it | Smallest edit; more manual resolutions |
+| B. Typed inconclusive result | A new effect state, distinct from `no-effect`, permits one retry only when the capability declares the removal idempotent under its replay rules, ownership is proved from durable records, and the retry re-reads the target before any effect | One table row, one capability field, one test |
+
+Either way, the acceptance test is the same: a forbidden, disconnected or malformed removal observation is never recorded as `no-effect` and never admits a replacement registration. Option B must also show that a capability without declared replay rules stays `unknown`.
 
 ## 15. Method and verification record
 
 ### 15.1 Process
 
-The audit ran as two orchestrated multi-agent workflows under a Claude Fable 5.1 session that wrote the brief, designed the orchestration, arbitrated split verdicts, wrote the executive assessment and this record, and assembled and reviewed the report. Models were routed by task class as the repository's own agent-operation reference prescribes: Sonnet for bounded per-file assessment, Opus for finding, verifying, consolidating and writing, Fable only for arbitration and final judgment.
+Revision 1 ran as two orchestrated multi-agent workflows under a Claude Fable 5.1 session that wrote the brief, designed the orchestration, arbitrated split verdicts, wrote the executive assessment and this record, and assembled and reviewed the report. Models were routed by task class as the repository's own agent-operation reference prescribes: Sonnet for bounded per-file assessment, Opus for finding, verifying, consolidating and writing, Fable only for arbitration and final judgment.
 
 | Stage | Agents | Model and effort | What each did |
 | --- | --- | --- | --- |
@@ -5144,11 +6102,11 @@ Totals for the finding workflow: 646 agents, 5,413 tool calls, about 38.7 millio
 | Measure | Value |
 | --- | --- |
 | Candidate findings (rounds one and two) | 235 |
-| Confirmed by both verifiers | 183 |
-| Split votes arbitrated | 52, of which 46 confirmed and 6 refuted |
-| Refuted | 5 (listed below) |
+| Confirmed by both verifiers | 179 |
+| Split votes arbitrated | 52, of which 51 confirmed and 1 refuted |
+| Refuted | 5 (4 by both verifiers, 1 by arbitration; listed below) |
 | Duplicates merged after verification | 29 |
-| Catalog entries | 201: 9 High, 70 Medium, 122 Low |
+| Catalog entries | 201 in revision 1: 9 High, 70 Medium, 122 Low; 232 in revision 2: 11 High, 82 Medium, 139 Low (15.4) |
 | Entries whose severity verification lowered from the finder's proposal | 116 |
 | Sibling findings: covered by ours, confirmed independently, refuted | 23, 13, 6 |
 
@@ -5158,9 +6116,44 @@ Considered and refuted: the claim that OKD is admitted nowhere while the scope l
 
 ### 15.3 Limits
 
-- The audit judged written contracts and the architectural shape of the code (packages, ports, wiring, roles, plugins, fitness tests). It did not review function bodies, tests or Ansible task logic, and it executed no Bootwright command with effects. A rule judged sound here may still be implemented wrongly, and a rule judged unsafe may be guarded by code the specs do not mention.
+- The audit judged written contracts and the architectural shape of the code (packages, ports, wiring, roles, plugins, fitness tests, and in revision 2 the role argument specs). It did not review function bodies, tests or Ansible task logic, and it executed no Bootwright command with effects. A rule judged sound here may still be implemented wrongly, and a rule judged unsafe may be guarded by code the specs do not mention.
+- Revision 2 adds the 22 role argument specifications under `ansible/collections/ansible_collections/bootwright/core/roles/*/meta/argument_specs.yml` as ledger rows (12.3). A schema fixes entry-point names and request shapes; it does not prove what a role does or what result it records. Four roles publish only `apply` and `observe` (`addons_instance`, `cluster_objects`, `containercluster_network`, `storage_ceph_export`), so their effects end only when the owning cluster retires, the path [R2-02-01] and [F10-04] judge.
 - Verification was textual: verifiers read the cited passages and searched the specs; they did not run the test suites that hold some tables to code. Where a spec names such a test, the finding reports the spec's claim, not the test's result.
 - The confirmation rate (230 of 235) is high. The refuters were instructed to default to refuted when unsupported, and 22 percent of candidates still needed arbitration, which argues against uncritical agreement; it remains possible that a verifier anchored on a well-cited finding. The owner should treat Medium and Low entries as well-evidenced claims to check at the cited lines, not as settled facts.
 - Knowledge pages were read as observed facts, never as requirements, and only the pages the brief or a finder named were opened. Tracked examples outside `examples/wip/` were read for the API verdicts; the local-only override file and everything under `examples/wip/` were excluded from every output by rule.
 - The sibling audit was read only by the cross-check stage after our verification had finished, so the two audits' first-round findings are independent; the cross-check confirmations are ours by verification, not by adoption.
 - One harness observation was made directly by the orchestrating session rather than by an agent: on every turn end, the repository's Stop hook ran `make quick` because the tree held the pre-existing untracked `audits/` directory, and the gate failed at `fmt-check` on a root-owned directory under `examples/wip/` that the Go pattern `./...` cannot open. That is the behavior finding F14-02 describes, observed on an unchanged tree.
+
+### 15.4 Revision 2 method
+
+Revision 2 answered one question from the owner: did the sibling Codex audit find points revision 1 missed, and do they improve this report? It ran as one orchestrated workflow plus a counterevidence pass, under a Claude Opus 5.5 session that wrote the plan, applied the reviewer's corrections, wrote this subsection, the executive summary and the front matter, and assembled the file.
+
+| Stage | Agents | Model and effort | What each did |
+| --- | --- | --- | --- |
+| Point extraction | 6 | Claude Opus 5.5, medium | Each read one slice of the sibling report, split it into atomic points, and mapped every point to this report as covered, partly covered, absent, contradicting, or already refuted. |
+| Adapter schemas | 5 + 1 | Sonnet 5.5, high; Opus synthesis | Five readers assessed the 22 role argument specs by group against their owning specs; the synthesis re-checked each claim and wrote 12.3 and six candidate findings. |
+| Triage | 1 | Claude Opus 5.5, medium | Merged 512 points, the schema candidates and 24 orchestrator seeds into 66 work items; 244 points needed no action. |
+| Repository claims | 23 + 23 | Claude Opus 5.5, medium | A refuter and a calibrator per claim, at commit 17acb63d9, as in revision 1. |
+| Report improvements | 36 + 36 | Claude Opus 5.5, medium | A judge and a skeptic per proposal; the skeptic defaulted to rejecting marginal value. |
+| Severity challenges | 3 + 3 | Claude Opus 5.5, medium | Two independent recalibrations per finding. |
+| Contradictions | 4 + 4 | Claude Opus 5.5, medium | Two independent adjudications per contradiction with this report. |
+| Arbitration | 29 | Claude Fable 5.1, medium | Every split vote: 6 claims, 22 improvements, 1 severity. |
+| Entry drafting | 30 | Claude Opus 5.5, medium | Full catalog records for 19 confirmed claims and 11 promoted CX entries. |
+| Section revision | 11 | Claude Opus 5.5, medium | Targeted edits to sections 3 to 10, 13 and 14. |
+| Review | 1 | Claude Opus 5.5, medium | Checked completeness and consistency across the revised sections; opened 62 new citations; reported 23 issues, all applied. |
+| Counterevidence | 11 | Claude Opus 5.5, medium | One paragraph per High finding on what the specs already protect; two recorded a severity dissent. |
+| Final review | 2 | Claude Opus 5.5, medium | One reviewer recounted every number against the catalog data; one re-read the new text's claims at 17acb63d9 and in the sibling report. They reported 30 issues, all applied. |
+
+Totals: 229 agents, about 14.1 million tokens and 56 minutes of wall-clock time across the workflow, the counterevidence pass and the final review. The orchestrating session wrote [V2-20] from two concurring adjudications, after re-reading its passages and the code path at 17acb63d9.
+
+| Outcome | Value |
+| --- | --- |
+| Repository claims | 19 confirmed (13 by both verifiers, 6 by arbitration), 4 refuted |
+| Contradictions with this report | 3 decided for the sibling, 1 partly; each corrected in the affected section |
+| Severity challenges | F13-05 Low to Medium; CX-R4 unchanged; CX-API04 Medium to High by arbitration |
+| Report improvements | 33 adopted, 3 rejected |
+| New catalog entries | 31: V2-01 to V2-20 and 11 CX entries |
+
+**Self-checks of this report.** Revision 2 adopted the sibling's practice of checking its own report mechanically. A citation checker resolved every `path:lines` reference and compared the range with the file at 17acb63d9. Revision 1 held 2,048 citations: five named lines that do not exist and four had ranges cut by table truncation. All nine are corrected, and the Low table no longer cuts a range. Revision 2 holds about 2,700 citations with none out of range. Nineteen short forms such as `SKILL.md:23` remain where the surrounding row names the full path. The absolute path of the owner's checkout no longer appears. Fenced blocks are balanced, every cited finding id exists in the catalog, and a screen for local-only and environment-specific terms passed.
+
+**Limits specific to revision 2.** The sibling's line numbers refer to commit 77033e8f5; every claim was re-read at 17acb63d9, and a claim that commit fixed was not counted. Report improvements were judged for value, which involves taste; the skeptic and the arbiter rejected three and narrowed most of the rest. The counterevidence paragraphs were written by one reader each and were not independently verified.

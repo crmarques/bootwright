@@ -1,6 +1,6 @@
 # Specification audit 001
 
-[Audit directory format](../../README.md)
+[Audit directory format](../README.md)
 
 ## Source reports
 
@@ -11,7 +11,10 @@
 Source observations retain their original baselines. Archive paths and links
 have been adjusted for this directory, and local checkout paths removed. Some
 cited files exist only at the original audited commit; consult that version
-when checking historical evidence.
+when checking historical evidence. During the 2026-10-29 relocation, local
+checkout and cache prefixes in the Claude follow-up's retained gate output
+were replaced with `<audit-checkout>` and `<local-cache>`. That output is
+path-redacted; test results and finding dispositions are unchanged.
 
 ## Follow-up
 

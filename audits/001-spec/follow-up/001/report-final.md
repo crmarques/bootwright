@@ -140,13 +140,13 @@ table wording and missing decision links (P6); the untested Stop hook and
 
 | Item | State | What is absent | Prerequisite |
 | --- | --- | --- | --- |
-| [B567](../../../../../specs/milestones/backlog.md#b567) | open | Live foreign-domain inventory before a shared libvirt network or bridge is removed; quiescence still derives from this context's Machines | Owner question A1 (stopped foreign guests) |
-| [B568](../../../../../specs/milestones/backlog.md#b568) | open | Persistent context incarnation bound into ownership proofs | Owner question A2 (identity format and old stores) |
-| [B659](../../../../../specs/milestones/m2.md#b659), [B662](../../../../../specs/milestones/m2.md#b662) | Needs definition | Continuation of a partially enrolled Ceph cluster; recovery of partial DB/WAL | Owner questions A3, A4; live evidence |
-| [B491](../../../../../specs/milestones/m2.md#b491) | open | Storage removal while hosts survive | Owner question A5; native research and operator evidence |
-| [B103](../../../../../specs/milestones/backlog.md#b103) | open | Restore that refuses rolled-back seal counters and establishes a fresh key | Owner question A6 |
-| [B857](../../../../../specs/milestones/backlog.md#b857) | open | The eight operator authoring tasks, by a human and by an agent | A human operator |
-| [B867](../../../../../specs/milestones/backlog.md#b867) | open | Live proof that the monitor-map creation time is the Ceph recapture identity | An authorized disposable live cluster |
+| [B567](../../../../specs/milestones/backlog.md#b567) | open | Live foreign-domain inventory before a shared libvirt network or bridge is removed; quiescence still derives from this context's Machines | Owner question A1 (stopped foreign guests) |
+| [B568](../../../../specs/milestones/backlog.md#b568) | open | Persistent context incarnation bound into ownership proofs | Owner question A2 (identity format and old stores) |
+| [B659](../../../../specs/milestones/m2.md#b659), [B662](../../../../specs/milestones/m2.md#b662) | Needs definition | Continuation of a partially enrolled Ceph cluster; recovery of partial DB/WAL | Owner questions A3, A4; live evidence |
+| [B491](../../../../specs/milestones/m2.md#b491) | open | Storage removal while hosts survive | Owner question A5; native research and operator evidence |
+| [B103](../../../../specs/milestones/backlog.md#b103) | open | Restore that refuses rolled-back seal counters and establishes a fresh key | Owner question A6 |
+| [B857](../../../../specs/milestones/backlog.md#b857) | open | The eight operator authoring tasks, by a human and by an agent | A human operator |
+| [B867](../../../../specs/milestones/backlog.md#b867) | open | Live proof that the monitor-map creation time is the Ceph recapture identity | An authorized disposable live cluster |
 
 ## 3. Quality assessment
 
@@ -194,14 +194,14 @@ production readiness.
 The owner's request of 2026-10-29 asks for a plan from this report and its
 implementation. That request authorizes the packages below marked **this
 round**: each is a bounded item opened and delivered by its own commit under
-[code-implementation](../../../../../.agents/skills/code-implementation/SKILL.md).
+[code-implementation](../../../../.agents/skills/code-implementation/SKILL.md).
 Packages that need an owner decision, a human operator or a live run are
 planned but not executed; package D records their questions so the owner can
 answer them.
 
 | Package | Item, slice | Findings and defects | Class | Round | Exit evidence |
 | --- | --- | --- | --- | --- | --- |
-| D Owner questions | B957, X213 | F17-03, F04-05, F04-08, F13-08, F03-06, F03-09, R2-05-08, F02-03 naming, omitted Ceph `distribution`, `ceph.md:550` vendor reason; A1 to A6 for B567, B568, B659, B662, B491, B103 | owner | this round (questions only) | Q119 onward in the [audit remediation decisions](../../../../../specs/milestones/backlog.md#audit-remediation-decisions), each with options, a recommendation and the item it blocks; nothing presumes an answer |
+| D Owner questions | B957, X213 | F17-03, F04-05, F04-08, F13-08, F03-06, F03-09, R2-05-08, F02-03 naming, omitted Ceph `distribution`, `ceph.md:550` vendor reason; A1 to A6 for B567, B568, B659, B662, B491, B103 | owner | this round (questions only) | Q119 onward in the [audit remediation decisions](../../../../specs/milestones/backlog.md#audit-remediation-decisions), each with options, a recommendation and the item it blocks; nothing presumes an answer |
 | P1 Signed URL off the argument vector | B958, X214 | F11-08 | code, safety | this round | A query on `--from-url` is a usage failure naming `--from-url-file`; table test; independent review; `make race` |
 | P2 In-operation root lock wait | B959, X215 | F13-02 and its defect twin | code, safety | this round | Bounded, cancellable wait for root transactions inside a running operation, top-level commands unchanged; tests for a delayed then admitted transaction and an expired bound; the bound stated in `contexts.md`; Opus review; `make race` |
 | P3 Architecture seams and guards | B960, X216 | F07-03, F07-07, R2-01-01, F06-01, admission-file exemption, KubeVirt endpoint parsing | code | this round | Exact exempt-file list with a stale-entry check; `substrate.KubeVirtNamespace`; neutral preflight contracts with no cross-domain import; kind-derived diagnostics with a widened literal check; one edge-catalog default and a registry-driven `*Ref` coverage test; each guard with a seeded violation |
@@ -488,7 +488,7 @@ The ledger below is generated from the two reviewers' embedded ledgers and the f
 <details><summary>Consolidated ledger JSON: 232 findings</summary>
 
 ```json
-{"audit": "audits/specs/001/report-final.md", "follow_up": "001", "consolidated": "2026-10-29", "claude_baseline": "896e8d8f2", "codex_baseline": "78d982988 (dispositions), 4510d73b6 (quality)", "counts": {"closed": 171, "closed-by-decision": 19, "partial": 38, "carried": 2, "missing": 2},"findings":[
+{"audit": "audits/001-spec/report-final.md", "follow_up": "001", "consolidated": "2026-10-29", "claude_baseline": "896e8d8f2", "codex_baseline": "78d982988 (dispositions), 4510d73b6 (quality)", "counts": {"closed": 171, "closed-by-decision": 19, "partial": 38, "carried": 2, "missing": 2},"findings":[
 {"id": "F01-01", "severity": "Medium", "title": "Portfolio and family scope are one list; milestone completion needs family arms", "roadmap_step": "P1-H", "carrier": "B815", "final": "closed-by-decision", "claude": "closed-by-decision", "codex": "decision", "reconciliation": "agreed", "claude_quality": "good", "remaining": "", "codex_remaining": "Two scope lists now exist. Owner chose to keep milestone pages/completion unchanged, including vSphere in the committed portfolio.", "open_carrier": null, "remedy_class": null, "size": null, "package": ""},
 {"id": "F01-02", "severity": "Medium", "title": "GitOps handoff leaves Bootwright-owned resources with no day-2 owner or exit", "roadmap_step": "P1-H", "carrier": "B815", "final": "closed", "claude": "closed", "codex": "resolved", "reconciliation": "agreed", "claude_quality": "adequate", "remaining": "", "codex_remaining": "Downstream resources, frozen ownership and destroy/fresh-apply path are explicit. The broader day-2/relinquish feature remains B106, as the audit acceptance allowed.", "open_carrier": "B106", "remedy_class": null, "size": null, "package": ""},
 {"id": "F17-02", "severity": "Medium", "title": "Milestone Requires encode priority and tie portfolio completion to family scope", "roadmap_step": "P1-H", "carrier": "B815", "final": "closed-by-decision", "claude": "closed-by-decision", "codex": "decision", "reconciliation": "agreed", "claude_quality": "good", "remaining": "", "codex_remaining": "Submilestone Requires cells and cross-milestone prerequisites added. Owner retained all-items completion; broad completion restructuring was not selected.", "open_carrier": null, "remedy_class": null, "size": null, "package": ""},
