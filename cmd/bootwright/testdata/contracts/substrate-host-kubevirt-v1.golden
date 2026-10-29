@@ -1,6 +1,6 @@
 implementation: substrate-host-kubevirt-v1
-content-digest: 06f3c7571c80825b325fe162a18cd1a1137e4ad198d6cc5506ed5ac5c9c9a816
-request-version: substrate-host-kubevirt-v1
+content-digest: b46330eaa662ff5cfc31c9403557b8c38cef2dd3147212b18cfcdec34eaebc05
+request-version: substrate-host-kubevirt-v2
 automation-formats: none
 mark-formats: none
 proof-ids: none
@@ -10,23 +10,27 @@ effect-pins:
   root-class-rwx
   kube-system-uid
   ingress-ca
+  substrate-access-kubevirt-v1
+  substrate-access-kubevirt-evidence-v1
 request-identity:
   identity.context
   identity.object
   identity.block
   namespace
   kubeconfigRef
+  hostCluster
 request-schema:
   access []struct kubevirt.Access
   access[].group string omitempty
   access[].resource string
   access[].subresource string omitempty
   access[].verb string
+  hostCluster string omitempty
   identity struct kubevirt.Identity
   identity.block string
   identity.context string
   identity.object string
-  kubeconfigRef string
+  kubeconfigRef string omitempty
   macAddresses []string
   namespace string
   networks []struct kubevirt.Network
@@ -42,6 +46,7 @@ request-schema:
   placement.port int omitempty
   placement.privateKeyRef string omitempty
   placement.user string omitempty
+  serviceAccount string omitempty
   storageClass string omitempty
   version string
 evidence-schema:

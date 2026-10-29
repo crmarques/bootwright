@@ -35,15 +35,17 @@ type Network struct {
 // networks to prove and the MACs to compare with KubeMacPool's range. It
 // names the kubeconfig declaration, never its material.
 type HostRequest struct {
-	Access        []Access             `json:"access"`
-	Identity      Identity             `json:"identity"`
-	KubeconfigRef string               `json:"kubeconfigRef"`
-	MACAddresses  []string             `json:"macAddresses"`
-	Namespace     string               `json:"namespace"`
-	Networks      []Network            `json:"networks"`
-	Placement     machineref.Placement `json:"placement"`
-	StorageClass  string               `json:"storageClass,omitempty"`
-	Version       string               `json:"version"`
+	Access         []Access             `json:"access"`
+	HostCluster    string               `json:"hostCluster,omitempty"`
+	Identity       Identity             `json:"identity"`
+	KubeconfigRef  string               `json:"kubeconfigRef,omitempty"`
+	MACAddresses   []string             `json:"macAddresses"`
+	Namespace      string               `json:"namespace"`
+	Networks       []Network            `json:"networks"`
+	Placement      machineref.Placement `json:"placement"`
+	ServiceAccount string               `json:"serviceAccount,omitempty"`
+	StorageClass   string               `json:"storageClass,omitempty"`
+	Version        string               `json:"version"`
 }
 
 // Interface is one VirtualMachine interface on the bridge binding, with the
@@ -64,21 +66,24 @@ type TPM struct {
 // root DataVolume. The root class is the one the provider proof reads when the
 // provider names none.
 type MachineRequest struct {
-	CPU           int                  `json:"cpu"`
-	DiskGiB       int                  `json:"diskGiB"`
-	Identity      Identity             `json:"identity"`
-	Interfaces    []Interface          `json:"interfaces"`
-	KubeconfigRef string               `json:"kubeconfigRef"`
-	MediaVolume   string               `json:"mediaVolume"`
-	MemoryMiB     int                  `json:"memoryMiB"`
-	Name          string               `json:"name"`
-	Namespace     string               `json:"namespace"`
-	Placement     machineref.Placement `json:"placement"`
-	Provider      string               `json:"provider"`
-	RootVolume    string               `json:"rootVolume"`
-	StorageClass  string               `json:"storageClass,omitempty"`
-	TPM           *TPM                 `json:"tpm,omitempty"`
-	Version       string               `json:"version"`
+	CPU            int                  `json:"cpu"`
+	DiskGiB        int                  `json:"diskGiB"`
+	HostCluster    string               `json:"hostCluster,omitempty"`
+	Identity       Identity             `json:"identity"`
+	Interfaces     []Interface          `json:"interfaces"`
+	KubeconfigRef  string               `json:"kubeconfigRef,omitempty"`
+	MediaVolume    string               `json:"mediaVolume"`
+	MemoryMiB      int                  `json:"memoryMiB"`
+	Name           string               `json:"name"`
+	Namespace      string               `json:"namespace"`
+	Placement      machineref.Placement `json:"placement"`
+	Provider       string               `json:"provider"`
+	RootVolume     string               `json:"rootVolume"`
+	ServiceAccount string               `json:"serviceAccount,omitempty"`
+	Spread         string               `json:"spread,omitempty"`
+	StorageClass   string               `json:"storageClass,omitempty"`
+	TPM            *TPM                 `json:"tpm,omitempty"`
+	Version        string               `json:"version"`
 }
 
 func (r HostRequest) Canonical() ([]byte, error) {
@@ -98,7 +103,6 @@ func DecodeMachineRequest(data []byte) (MachineRequest, error) {
 }
 
 // SecretReferences names every declaration a request's execution needs bound.
-// The kubeconfig is the only one: the controller runs every effect.
 func (r HostRequest) SecretReferences() []string { return references(r.Placement, r.KubeconfigRef) }
 
 func (r MachineRequest) SecretReferences() []string { return references(r.Placement, r.KubeconfigRef) }

@@ -31,8 +31,7 @@ The expected result is failure with explicit diagnostics for:
 - Unqualified global Ceph options, including missing members of the currently
   qualified pool-default pair.
 - Agent-install bridge interfaces on the two physical OpenShiftClusters.
-- Unrealized-declaration warnings for the KubeVirt providers and the authored
-  add-on profile selections.
+- Unrealized-declaration warnings for the authored add-on profile selections.
 
 The exact set is pinned by `TestActualCLIRefusesFutureReferenceFeatures` in
 [admission acceptance tests](../../../cmd/bootwright/admission_acceptance_test.go).

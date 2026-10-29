@@ -1,6 +1,8 @@
 package kubevirt
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"slices"
 	"strings"
 
@@ -23,6 +25,16 @@ const (
 func Refusals(catalog api.Catalog) []lifecycle.Refusal {
 	var found []lifecycle.Refusal
 	for _, provider := range providers(catalog) {
+		if host, hosted := catalog.Find(api.OpenShiftCluster, substrate.HostCluster(provider)); hosted {
+			for _, attachment := range provider.Spec().Get("networkAttachments").Items() {
+				if !substrate.HostNetworkNamed(host, attachment) {
+					name := attachment.Get("name").Text()
+					found = append(found, lifecycle.RefusalOf(provider,
+						"a KubeVirt provider hosted by "+host.Identity()+" attaches only to that cluster's secondary networks, whose selectors label the namespace its kubevirt instance owns, and attachment "+name+" names another network",
+						"name a ClusterUserDefinedNetwork among spec.networking.secondaryNetworks of "+host.Identity()+" in attachment "+name+" of "+provider.Identity()))
+				}
+			}
+		}
 		for _, machine := range substrate.HostedMachines(catalog, provider.Name()) {
 			if machine.Spec().Get("os", "installProfileRef").Text() != "" {
 				found = append(found, lifecycle.RefusalOf(machine,
@@ -45,8 +57,19 @@ func Refusals(catalog api.Catalog) []lifecycle.Refusal {
 	return lifecycle.SortRefusals(found)
 }
 
-// providers lists the KubeVirt providers this arm realizes: those naming a
-// kubeconfig. One naming hostClusterRef is the substrate's own refusal.
+func spreadOf(catalog api.Catalog, contextName, machine string) string {
+	for _, cluster := range catalog.OfKind(api.OpenShiftCluster) {
+		for _, node := range cluster.Spec().Get("nodes").Items() {
+			if node.Get("machineRef").Text() == machine {
+				digest := sha256.Sum256([]byte(strings.Join([]string{"bootwright.substrate.kubevirt.spread-v1", contextName, cluster.Name(), node.Get("role").Text()}, "\x00")))
+				return hex.EncodeToString(digest[:8])
+			}
+		}
+	}
+	return ""
+}
+
+// providers lists the KubeVirt providers this arm realizes.
 func providers(catalog api.Catalog) []api.Object {
 	var found []api.Object
 	for _, provider := range substrate.ProvidersOn(catalog, substrate.ArmKubeVirt) {
@@ -100,6 +123,7 @@ func HostRequests(catalog api.Catalog, controllerMachine, contextName string) ([
 		arm := provider.Spec().Get(substrate.ArmKubeVirt)
 		request := HostRequest{
 			Access:        slices.Clone(verbs),
+			HostCluster:   substrate.HostCluster(provider),
 			Identity:      Identity{Block: HostBlockID(provider.Name()), Context: contextName, Object: provider.Name()},
 			KubeconfigRef: arm.Get("kubeconfigRef").Text(),
 			MACAddresses:  []string{},
@@ -108,6 +132,9 @@ func HostRequests(catalog api.Catalog, controllerMachine, contextName string) ([
 			Placement:     placement,
 			StorageClass:  arm.Get("storageClassRef").Text(),
 			Version:       hostRequestVersion,
+		}
+		if request.HostCluster != "" {
+			request.ServiceAccount = substrate.HostAccount
 		}
 		for _, attachment := range provider.Spec().Get("networkAttachments").Items() {
 			if network, ok := networkOf(provider, attachment); ok {
@@ -175,6 +202,7 @@ func machineRequestFor(catalog api.Catalog, provider, machine api.Object, contro
 	disk, _ := profile.Get("diskGiB").Int64()
 	request := MachineRequest{
 		CPU: int(cpu), DiskGiB: int(disk), MemoryMiB: int(memory),
+		HostCluster:   substrate.HostCluster(provider),
 		Identity:      Identity{Block: MachineBlockID(name), Context: contextName, Object: name},
 		KubeconfigRef: arm.Get("kubeconfigRef").Text(),
 		MediaVolume:   vm + "-media",
@@ -183,8 +211,12 @@ func machineRequestFor(catalog api.Catalog, provider, machine api.Object, contro
 		Placement:     placement,
 		Provider:      provider.Name(),
 		RootVolume:    vm + "-root",
+		Spread:        spreadOf(catalog, contextName, name),
 		StorageClass:  arm.Get("storageClassRef").Text(),
 		Version:       machineRequestVersion,
+	}
+	if request.HostCluster != "" {
+		request.ServiceAccount = substrate.HostAccount
 	}
 	if profile.Has("tpm") {
 		request.TPM = &TPM{Persistent: !profile.Has("tpm", "persistent") || profile.Get("tpm", "persistent").Bool()}

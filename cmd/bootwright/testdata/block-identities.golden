@@ -147,6 +147,27 @@ lab-kubevirt-external:
   machine-kubevirt-03
   ntp-lab-ntp
   substrate-host-lab-kubevirt
+lab-kubevirt-nested:
+  addon-kubevirt-host
+  addon-nmstate-host
+  artifact-server-lab-artifacts
+  cluster-install-child
+  cluster-install-host
+  cluster-media-child
+  cluster-media-host
+  cluster-network-host
+  controller-prerequisites
+  dns-lab-dns
+  machine-child-01
+  machine-child-02
+  machine-child-03
+  machine-host-01
+  machine-host-02
+  machine-host-03
+  ntp-lab-ntp
+  proxy-lab-proxy
+  substrate-host-lab-kubevirt-nested
+  substrate-host-lab-libvirt
 lab-networks:
   addon-metallb-networks
   addon-nmstate-networks

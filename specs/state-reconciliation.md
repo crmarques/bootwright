@@ -736,6 +736,17 @@ recorded with no identity is replaced and records the one presented; a
 recapture that presents none keeps the recorded one. An entry
 custody marks unproved is replaced by a proved capture whatever it presents.
 
+A capability whose runs must not hold a produced entry itself borrows it for
+a *lend*: a run of operation `lend` that is handed the entry alone, mints from
+it a narrower access for one later run of the same execution, and leaves that
+access as its one output, which is lent to that run and cleared when it
+returns, never published into custody. A lend creates no object, so a
+read-only or unrecorded execution may run one and take its output, which the
+runner refuses for every other operation; a quiescence probe borrows produced
+entries as the removal it gates does. The KubeVirt arm on a host this context
+builds is the one such consumer
+([KubeVirt machine realization](substrates.md#kubevirt-machine-realization)).
+
 Not yet met: no live run has confirmed that the monitor map's creation time
 stays the same across a monitor added or removed and a Ceph upgrade, and
 changes on a new bootstrap under the same fsid; tracked as
@@ -824,10 +835,8 @@ effect an attempt or resolution records is `no-effect`, `partial`,
 A plan is written wave by wave. A block's *wave* is one past the deepest block
 it waits for, and a block that waits for nothing is in the first wave. Blocks
 are frozen in wave order and, within one wave, in identity order, so the
-numbered plan an operator confirms is the order the work is started in rather
-than one arbitrary sequential walk of the same graph. A wave is never a
-barrier: a block starts as soon as its own dependencies are done, so a later
-wave overlaps an earlier one. Equal definitions in any input order still
+numbered plan an operator confirms is the order the work is started in. A
+wave is never a barrier: a block starts once its own dependencies are done. Equal definitions in any input order still
 produce an identical plan and an identical digest.
 
 A plan holds at most 256 blocks, a block at most 32 groups of at most 512
@@ -847,21 +856,19 @@ the set its apply froze, because what must not run together to create
 something is what must not run together to remove it.
 
 A block's description and impacts state what the planned verb does, never what
-the opposite verb would do. A destroy block describes the removal it performs
-and lists only the effects it performs: a resource an apply creates, publishes
-or opens is one the destroy removes or closes, and one a removal deliberately
-retains, such as shared host software another context may still need, appears
-in no impact at all. The description of such a block says that it retains.
+the opposite verb would do. A destroy block lists only the effects it
+performs: a resource an apply creates, publishes or opens is one the destroy
+removes or closes, and one a removal deliberately retains, such as shared host
+software, appears in no impact; its description says that it retains.
 
 A capability names what its blocks depend on in domain terms, not by block
 identity: a definition may carry *requirements*, each the kind and name of an
 API object whose realization must be done first, optionally narrowed to one
 capability family, such as the substrate family that claims a Machine.
 Reconciliation resolves every requirement to the blocks that realize that
-object, or only that family's blocks, before it freezes the plan,
-and refuses before registration when no block realizes it, so a capability
-never learns another capability's block-identity grammar and a frozen plan
-carries only resolved dependencies. A reference from a block's object to an
+object, or only that family's blocks, before it freezes the plan, and refuses
+before registration when no block realizes it, so a capability never learns
+another's block-identity grammar. A reference from a block's object to an
 object another block of the plan realizes is a requirement unless the domain
 page that owns the referencing field states why not; a reference to an
 external service, which no block realizes, is the standing exemption. The
@@ -919,6 +926,9 @@ one a row's field path names on its object while a block realizes the target.
 | `managed-service` `DNSServer` | `InfraProvider` | the provider whose libvirt bridge carries the placement Machine's service address |
 | `managed-service` `NTPServer` | `InfraProvider` | the provider whose libvirt bridge carries the placement Machine's service address |
 | `managed-service` `Proxy` | `InfraProvider` | the provider whose libvirt bridge carries the placement Machine's service address |
+| `substrate-host` `InfraProvider` | `OpenShiftCluster` | `spec.kubevirt.hostClusterRef` |
+| `substrate-host` `InfraProvider` | `ClusterAddonBinding` | non-last instances on that host |
+| `substrate-host` `InfraProvider` | `OpenShiftClusterNetwork` | that host's network block |
 | `cluster-media` `OpenShiftCluster` | `ArtifactServer` | `spec.install.agent.redfishVirtualMedia.artifactServerEndpoint.serverRef` |
 | `cluster-media` `OpenShiftCluster` | `Proxy` | `spec.install.proxy.proxyRef` |
 | `cluster-install` `OpenShiftCluster` | `Machine` | `spec.nodes[].machineRef` |

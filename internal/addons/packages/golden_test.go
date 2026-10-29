@@ -155,6 +155,29 @@ func TestPackageRenderGoldens(t *testing.T) {
 	}
 }
 
+func TestKubeVirtHostedRenderGolden(t *testing.T) {
+	rendered, err := renderKubeVirt(addons.Instance{Cluster: "host", Binding: "binding", Config: packageTestConfig("kubevirt"), Facts: hostedFacts()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	program := co.Program{Version: co.Version, Steps: []co.Step{}, Checks: rendered.Checks}
+	for _, phase := range rendered.After {
+		steps, err := co.CompilePhase(phase)
+		if err != nil {
+			t.Fatal(err)
+		}
+		program.Steps = append(program.Steps, steps...)
+	}
+	data, err := co.Freeze(program, co.Options{Namespace: "openshift-cnv"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	matchesGolden(t, "kubevirt-hosted", data, false)
+	if _, err := co.ThawVersion(data, co.Options{Namespace: "openshift-cnv"}); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func maximumPools() []api.Value {
 	pools := []api.Value{}
 	for i := 0; i < 16; i++ {

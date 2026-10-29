@@ -1,0 +1,660 @@
+apiVersion: bootwright.io/v1alpha1
+kind: Environment
+metadata:
+  name: lab-kubevirt-nested
+spec:
+  domains:
+    base: lab.example.test
+    machines: lab.example.test
+    clusters: lab.example.test
+    containerClusters: lab.example.test
+    storageClusters: lab.example.test
+  controller:
+    machineRef: controller
+---
+apiVersion: bootwright.io/v1alpha1
+kind: Machine
+metadata:
+  name: child-01
+spec:
+  substrate:
+    providerRef: lab-kubevirt-nested
+    kubevirt:
+      profileRef: kubevirt
+  hardware:
+    rootDevice:
+      deviceName: /dev/vda
+  os:
+    provided: false
+  network:
+    configRef: nested-guests
+    attachmentRef: nested-guests
+    installAddressRef: ip
+    addresses:
+      - name: fqdn
+        address: child-01.lab.example.test
+      - name: ip
+        address: 203.0.113.21/24
+        interface: eth0
+---
+apiVersion: bootwright.io/v1alpha1
+kind: Machine
+metadata:
+  name: child-02
+spec:
+  substrate:
+    providerRef: lab-kubevirt-nested
+    kubevirt:
+      profileRef: kubevirt
+  hardware:
+    rootDevice:
+      deviceName: /dev/vda
+  os:
+    provided: false
+  network:
+    configRef: nested-guests
+    attachmentRef: nested-guests
+    installAddressRef: ip
+    addresses:
+      - name: fqdn
+        address: child-02.lab.example.test
+      - name: ip
+        address: 203.0.113.22/24
+        interface: eth0
+---
+apiVersion: bootwright.io/v1alpha1
+kind: Machine
+metadata:
+  name: child-03
+spec:
+  substrate:
+    providerRef: lab-kubevirt-nested
+    kubevirt:
+      profileRef: kubevirt
+  hardware:
+    rootDevice:
+      deviceName: /dev/vda
+  os:
+    provided: false
+  network:
+    configRef: nested-guests
+    attachmentRef: nested-guests
+    installAddressRef: ip
+    addresses:
+      - name: fqdn
+        address: child-03.lab.example.test
+      - name: ip
+        address: 203.0.113.23/24
+        interface: eth0
+---
+apiVersion: bootwright.io/v1alpha1
+kind: Machine
+metadata:
+  name: controller
+spec:
+  os:
+    provided: true
+  proxy:
+    direct: {}
+  network:
+    addresses:
+      - name: fqdn
+        address: controller.lab.example.test
+      - name: ip
+        address: 192.0.2.1
+  access:
+    local: true
+    rootLogin: keep
+---
+apiVersion: bootwright.io/v1alpha1
+kind: Machine
+metadata:
+  name: host-01
+spec:
+  substrate:
+    providerRef: lab-libvirt
+    libvirt:
+      profileRef: master
+      interfaceAttachments:
+        - interface: enp1s0
+          attachmentRef: lab-guests
+        - interface: enp2s0
+          attachmentRef: lab-secondary
+        - interface: enp3s0
+          attachmentRef: lab-routed
+  hardware:
+    rootDevice:
+      deviceName: /dev/vda
+  os:
+    provided: false
+  network:
+    configRef: lab-guests
+    installAddressRef: ip
+    addresses:
+      - name: fqdn
+        address: host-01.lab.example.test
+      - name: ip
+        address: 198.51.100.21/24
+        interface: enp1s0
+      - name: routed
+        address: 192.0.2.141/25
+        interface: enp3s0
+---
+apiVersion: bootwright.io/v1alpha1
+kind: Machine
+metadata:
+  name: host-02
+spec:
+  substrate:
+    providerRef: lab-libvirt
+    libvirt:
+      profileRef: master
+      interfaceAttachments:
+        - interface: enp1s0
+          attachmentRef: lab-guests
+        - interface: enp2s0
+          attachmentRef: lab-secondary
+        - interface: enp3s0
+          attachmentRef: lab-routed
+  hardware:
+    rootDevice:
+      deviceName: /dev/vda
+  os:
+    provided: false
+  network:
+    configRef: lab-guests
+    installAddressRef: ip
+    addresses:
+      - name: fqdn
+        address: host-02.lab.example.test
+      - name: ip
+        address: 198.51.100.22/24
+        interface: enp1s0
+      - name: routed
+        address: 192.0.2.142/25
+        interface: enp3s0
+---
+apiVersion: bootwright.io/v1alpha1
+kind: Machine
+metadata:
+  name: host-03
+spec:
+  substrate:
+    providerRef: lab-libvirt
+    libvirt:
+      profileRef: master
+      interfaceAttachments:
+        - interface: enp1s0
+          attachmentRef: lab-guests
+        - interface: enp2s0
+          attachmentRef: lab-secondary
+        - interface: enp3s0
+          attachmentRef: lab-routed
+  hardware:
+    rootDevice:
+      deviceName: /dev/vda
+  os:
+    provided: false
+  network:
+    configRef: lab-guests
+    installAddressRef: ip
+    addresses:
+      - name: fqdn
+        address: host-03.lab.example.test
+      - name: ip
+        address: 198.51.100.23/24
+        interface: enp1s0
+      - name: routed
+        address: 192.0.2.143/25
+        interface: enp3s0
+---
+apiVersion: bootwright.io/v1alpha1
+kind: NetworkConfig
+metadata:
+  name: lab-guests
+spec:
+  machineNetwork:
+    - cidr: 198.51.100.0/24
+  dns:
+    - serverRef: lab-dns
+      endpointRef: ip
+  nmstate:
+    dns-resolver:
+      config:
+        search:
+          - lab.example.test
+    interfaces:
+      - ipv4:
+          dhcp: false
+          enabled: true
+        ipv6:
+          enabled: false
+        mtu: 1500
+        name: enp1s0
+        state: up
+        type: ethernet
+      - ipv4:
+          enabled: false
+        ipv6:
+          enabled: false
+        mtu: 1500
+        name: enp2s0
+        state: up
+        type: ethernet
+      - ipv4:
+          dhcp: false
+          enabled: true
+        ipv6:
+          enabled: false
+        mtu: 1500
+        name: enp3s0
+        state: up
+        type: ethernet
+    routes:
+      config:
+        - destination: 0.0.0.0/0
+          metric: 100
+          next-hop-address: 198.51.100.1
+          next-hop-interface: enp1s0
+          table-id: 254
+---
+apiVersion: bootwright.io/v1alpha1
+kind: NetworkConfig
+metadata:
+  name: nested-guests
+spec:
+  machineNetwork:
+    - cidr: 203.0.113.0/24
+  dns:
+    - serverRef: lab-dns
+      endpointRef: ip
+  nmstate:
+    dns-resolver:
+      config:
+        search:
+          - lab.example.test
+    interfaces:
+      - ipv4:
+          dhcp: false
+          enabled: true
+        ipv6:
+          enabled: false
+        mtu: 1500
+        name: eth0
+        state: up
+        type: ethernet
+    routes:
+      config:
+        - destination: 0.0.0.0/0
+          metric: 100
+          next-hop-address: 203.0.113.1
+          next-hop-interface: eth0
+          table-id: 254
+---
+apiVersion: bootwright.io/v1alpha1
+kind: InfraProvider
+metadata:
+  name: lab-kubevirt-nested
+spec:
+  kubevirt:
+    hostClusterRef: host
+    namespace: bootwright-nested
+    storageClassRef: nested-guest-storage
+    machineProfiles:
+      - name: kubevirt
+        cpu: 4
+        memoryMiB: 16384
+        diskGiB: 120
+  networkAttachments:
+    - name: nested-guests
+      kubevirt:
+        networkRef:
+          apiGroup: k8s.ovn.org
+          kind: ClusterUserDefinedNetwork
+          name: nested-guests
+---
+apiVersion: bootwright.io/v1alpha1
+kind: InfraProvider
+metadata:
+  name: lab-libvirt
+spec:
+  libvirt:
+    machineRef: controller
+    uri: qemu:///system
+    capacityReserve:
+      cpu: 4
+      memoryMiB: 8192
+      diskGiB: 40
+    bmcEmulation:
+      bindAddress: 127.0.0.1
+      certificateRef: lab-bmc-tls
+      port: 8000
+      auth:
+        credentialsRef: lab-bmc-credentials
+    machineProfiles:
+      - name: master
+        cpu: 12
+        memoryMiB: 40960
+        diskGiB: 200
+        tpm: {}
+  networkAttachments:
+    - name: lab-guests
+      libvirt:
+        bridge: virbr-lab
+        management: managed
+        address: 198.51.100.1/24
+        forward: nat
+    - name: lab-secondary
+      libvirt:
+        bridge: virbr-secondary
+        management: managed
+        address: 203.0.113.1/24
+        forward: nat
+    - name: lab-routed
+      libvirt:
+        bridge: virbr-routed
+        management: managed
+        address: 192.0.2.129/25
+        forward: none
+---
+apiVersion: bootwright.io/v1alpha1
+kind: Proxy
+metadata:
+  name: lab-proxy
+spec:
+  management: managed
+  machineRef: controller
+  implementation: squid
+  bindAddress: 192.0.2.1
+  port: 3128
+  endpoints:
+    - name: ip
+      addressRef: ip
+---
+apiVersion: bootwright.io/v1alpha1
+kind: DNSServer
+metadata:
+  name: lab-dns
+spec:
+  management: managed
+  machineRef: controller
+  implementation: dnsmasq
+  bindAddress: 192.0.2.1
+  port: 53
+  endpoints:
+    - name: ip
+      addressRef: ip
+  forwarders:
+    - 192.0.2.53
+---
+apiVersion: bootwright.io/v1alpha1
+kind: NTPServer
+metadata:
+  name: lab-ntp
+spec:
+  management: managed
+  machineRef: controller
+  implementation: chrony
+  bindAddress: 192.0.2.1
+  port: 123
+  endpoints:
+    - name: ip
+      addressRef: ip
+  upstreamSources:
+    - 192.0.2.123
+---
+apiVersion: bootwright.io/v1alpha1
+kind: ArtifactServer
+metadata:
+  name: lab-artifacts
+spec:
+  management: managed
+  machineRef: controller
+  bindAddress: 192.0.2.1
+  retention: persistent
+  tls:
+    secretRef: artifact-server-tls
+    minVersion: TLSv1.2
+  listeners:
+    - name: https
+      protocol: https
+      port: 8443
+    - name: http
+      protocol: http
+      port: 8080
+  endpoints:
+    - name: ip-https
+      listenerRef: https
+      addressRef: ip
+    - name: ip-http
+      listenerRef: http
+      addressRef: ip
+---
+apiVersion: bootwright.io/v1alpha1
+kind: OpenShiftCluster
+metadata:
+  name: child
+spec:
+  distribution:
+    type: openshift
+    release:
+      version: 4.21.15
+      channel: stable-4.21
+  install:
+    mode: connected
+    platform:
+      baremetal:
+        provisioningNetwork: disabled
+    proxy:
+      direct: {}
+    ntp:
+      - serverRef: lab-ntp
+        endpointRef: ip
+    endpoints:
+      api:
+        address: 203.0.113.10
+        interfaceNetworks: []
+        source:
+          type: installer
+      api-int:
+        address: 203.0.113.10
+        interfaceNetworks: []
+        source:
+          type: installer
+      ingress:
+        address: 203.0.113.11
+        interfaceNetworks: []
+        source:
+          type: installer
+    agent: {}
+    pullSecretRef: openshift-pull-secret
+    nodeSSH:
+      keyPairRef: child-cluster-admin-ssh-key
+    additionalTrustBundleRefs: []
+  networking:
+    clusterNetwork:
+      - cidr: 10.128.0.0/14
+        hostPrefix: 23
+    serviceNetwork:
+      - 172.30.0.0/16
+  nodes:
+    - name: master-0
+      fqdn: master-0.child.lab.example.test
+      role: controlPlane
+      machineRef: child-01
+    - name: master-1
+      fqdn: master-1.child.lab.example.test
+      role: controlPlane
+      machineRef: child-02
+    - name: master-2
+      fqdn: master-2.child.lab.example.test
+      role: controlPlane
+      machineRef: child-03
+---
+apiVersion: bootwright.io/v1alpha1
+kind: OpenShiftCluster
+metadata:
+  name: host
+spec:
+  distribution:
+    type: openshift
+    release:
+      version: 4.21.15
+      channel: stable-4.21
+  install:
+    mode: connected
+    platform:
+      baremetal:
+        provisioningNetwork: disabled
+    proxy:
+      direct: {}
+    ntp:
+      - serverRef: lab-ntp
+        endpointRef: ip
+    endpoints:
+      api:
+        address: 198.51.100.10
+        interfaceNetworks: []
+        source:
+          type: installer
+      api-int:
+        address: 198.51.100.10
+        source:
+          type: installer
+      ingress:
+        address: 198.51.100.11
+        interfaceNetworks: []
+        source:
+          type: installer
+    agent:
+      redfishVirtualMedia:
+        artifactServerEndpoint:
+          serverRef: lab-artifacts
+          endpointRef: ip-https
+    pullSecretRef: openshift-pull-secret
+    nodeSSH:
+      keyPairRef: host-cluster-admin-ssh-key
+    additionalTrustBundleRefs: []
+  networking:
+    secondaryNetworks:
+      - name: nested-guests
+        topology: Localnet
+        uplink:
+          bridge: br-nested
+          interface: enp2s0
+        ipam:
+          mode: Disabled
+        namespaceSelector:
+          matchLabels:
+            network.example.test/nested-guests: enabled
+    clusterNetwork:
+      - cidr: 10.128.0.0/14
+        hostPrefix: 23
+    serviceNetwork:
+      - 172.30.0.0/16
+  nodes:
+    - name: master-0
+      fqdn: master-0.host.lab.example.test
+      role: controlPlane
+      machineRef: host-01
+    - name: master-1
+      fqdn: master-1.host.lab.example.test
+      role: controlPlane
+      machineRef: host-02
+    - name: master-2
+      fqdn: master-2.host.lab.example.test
+      role: controlPlane
+      machineRef: host-03
+---
+apiVersion: bootwright.io/v1alpha1
+kind: ClusterAddonBinding
+metadata:
+  name: host-virtualization
+spec:
+  clusterRef: host
+  packages:
+    nmstate:
+      subscription:
+        channel: example-channel
+        startingCSV: kubernetes-nmstate-operator.v0.0.0
+        source: redhat-operators
+        sourceNamespace: openshift-marketplace
+      timeout: 30m
+    kubevirt:
+      subscription:
+        channel: example-channel
+        startingCSV: kubevirt-hyperconverged-operator.v0.0.0
+        source: redhat-operators
+        sourceNamespace: openshift-marketplace
+      timeout: 45m
+---
+apiVersion: bootwright.io/v1alpha1
+kind: Secret
+metadata:
+  name: artifact-server-tls
+spec:
+  type: tlsCertificate
+  source:
+    generated:
+      commonName: controller.lab.example.test
+      dnsNames:
+        - controller.lab.example.test
+      ipAddresses:
+        - 192.0.2.1
+      validityDays: 3650
+---
+apiVersion: bootwright.io/v1alpha1
+kind: Secret
+metadata:
+  name: child-cluster-admin-ssh-key
+spec:
+  type: sshKeyPair
+  source:
+    generated:
+      keyType: ed25519
+      comment: child-cluster-admin
+---
+apiVersion: bootwright.io/v1alpha1
+kind: Secret
+metadata:
+  name: host-cluster-admin-ssh-key
+spec:
+  type: sshKeyPair
+  source:
+    generated:
+      keyType: ed25519
+      comment: host-cluster-admin
+---
+apiVersion: bootwright.io/v1alpha1
+kind: Secret
+metadata:
+  name: lab-bmc-credentials
+spec:
+  type: usernamePassword
+  source:
+    generated:
+      username: admin
+---
+apiVersion: bootwright.io/v1alpha1
+kind: Secret
+metadata:
+  name: lab-bmc-tls
+spec:
+  type: tlsCertificate
+  source:
+    generated:
+      commonName: localhost
+      dnsNames:
+        - localhost
+      ipAddresses:
+        - 127.0.0.1
+      validityDays: 3650
+---
+apiVersion: bootwright.io/v1alpha1
+kind: Secret
+metadata:
+  name: openshift-pull-secret
+spec:
+  type: dockerConfigJson
+  source:
+    contextStore: {}

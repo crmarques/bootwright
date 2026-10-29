@@ -318,11 +318,12 @@ type Probe struct {
 	Launch           prerequisites.PythonLaunch
 	Material         map[string]secrets.Material
 	RetiredWithHosts bool
+	LendProduced     func(context.Context, ProducedInput) (secrets.Material, error)
 }
 
 // Execution presents a read-only adapter call without effect-attempt hooks.
 func (p Probe) Execution() Execution {
-	return Execution{ApplyOperation: p.ApplyOperation, ApplyProved: p.ApplyProved, Context: p.Context, Block: p.Block, Launch: p.Launch, Material: p.Material, RetiredWithHosts: p.RetiredWithHosts}
+	return Execution{ApplyOperation: p.ApplyOperation, ApplyProved: p.ApplyProved, Context: p.Context, Block: p.Block, Launch: p.Launch, Material: p.Material, RetiredWithHosts: p.RetiredWithHosts, LendProduced: p.LendProduced}
 }
 
 // QuiescenceState is what a probe proved about one block's targets.

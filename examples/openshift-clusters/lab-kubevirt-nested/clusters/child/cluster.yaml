@@ -1,0 +1,59 @@
+apiVersion: bootwright.io/v1alpha1
+kind: OpenShiftCluster
+metadata:
+  name: child
+
+spec:
+  distribution:
+    type: openshift
+
+    release:
+      version: 4.21.15
+
+  install:
+    mode: connected
+
+    # The installer's keepalived holds the API and ingress VIPs on the nodes'
+    # shared layer 2 and its haproxy balances them; no load balancer is needed.
+    platform:
+      baremetal:
+        provisioningNetwork: disabled
+
+    endpoints:
+      api:
+        address: 203.0.113.10
+
+        source:
+          type: installer
+
+      api-int:
+        address: 203.0.113.10
+
+        source:
+          type: installer
+
+      ingress:
+        address: 203.0.113.11
+
+        source:
+          type: installer
+
+    # pullSecretRef and nodeSSH take their conventional values, the Secrets
+    # openshift-pull-secret and child-cluster-admin-ssh-key.
+
+    ntp:
+      - serverRef: lab-ntp
+        endpointRef: ip
+
+  nodes:
+    - name: master-0
+      role: controlPlane
+      machineRef: child-01
+
+    - name: master-1
+      role: controlPlane
+      machineRef: child-02
+
+    - name: master-2
+      role: controlPlane
+      machineRef: child-03

@@ -10,6 +10,17 @@
         "status": "True",
         "type": "Available"
       }
+    },
+    {
+      "condition": {
+        "apiVersion": "hco.kubevirt.io/v1beta1",
+        "kind": "HyperConverged",
+        "name": "kubevirt-hyperconverged",
+        "namespace": "openshift-cnv",
+        "namespaced": true,
+        "status": "False",
+        "type": "Degraded"
+      }
     }
   ],
   "steps": [

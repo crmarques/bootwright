@@ -65,6 +65,7 @@ type Controller struct {
 	// Endpoint is the exact ComputerSystem resource, absolute and normalized.
 	Endpoint       string
 	CredentialsRef string
+	HostCluster    string
 	// TLSVerify covers the controller-to-BMC leg. An opt-out is declared per
 	// endpoint and never becomes a default.
 	TLSVerify bool
@@ -275,10 +276,10 @@ func virtualTarget(catalog api.Catalog, provider, machine api.Object, contextNam
 
 func kubevirtTarget(catalog api.Catalog, provider, machine api.Object, contextName, controllerMachine string, target Target) (Target, error) {
 	arm := provider.Spec().Get(ArmKubeVirt)
-	credentials := arm.Get("kubeconfigRef").Text()
-	if credentials == "" {
-		return Target{}, refusal("api.required", "the KubeVirt provider names no kubeconfig",
-			"set spec.kubevirt.kubeconfigRef on "+provider.Identity())
+	credentials, cluster := arm.Get("kubeconfigRef").Text(), HostCluster(provider)
+	if credentials == "" && cluster == "" {
+		return Target{}, refusal("api.required", "the KubeVirt provider names no kubeconfig and no host cluster",
+			"set spec.kubevirt.kubeconfigRef or spec.kubevirt.hostClusterRef on "+provider.Identity())
 	}
 	host, ok := catalog.Find(api.Machine, controllerMachine)
 	if !ok {
@@ -287,7 +288,7 @@ func kubevirtTarget(catalog api.Catalog, provider, machine api.Object, contextNa
 	}
 	target.Controller = Controller{
 		Endpoint:       KubeVirtEndpoint(arm.Get("namespace").Text(), KubeVirtName(contextName, machine.Name())),
-		CredentialsRef: credentials, TLSVerify: true,
+		CredentialsRef: credentials, HostCluster: cluster, TLSVerify: true,
 	}
 	target.Identity = Identity{Channel: ChannelNone}
 	names, err := EthernetInterfaces(catalog, machine)
@@ -497,10 +498,6 @@ func Unrealizable(catalog api.Catalog) []Unrealized {
 		}
 		reason := "this executable realizes no provider on the substrate it declares"
 		remediation := "remove " + provider.Identity() + " and the Machines it hosts from the selected Environment, or declare them on " + realized
-		if NamesHostCluster(provider) {
-			reason = "this executable realizes a KubeVirt provider only on the host cluster its kubeconfigRef names"
-			remediation = "declare spec.kubevirt.kubeconfigRef instead of hostClusterRef on " + provider.Identity() + ", or remove " + provider.Identity() + " and the Machines it hosts from the selected Environment"
-		}
 		found = append(found, Unrealized{Object: provider, Reason: reason, Remediation: remediation})
 		for _, machine := range HostedMachines(catalog, provider.Name()) {
 			found = append(found, Unrealized{Object: machine,

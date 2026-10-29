@@ -51,7 +51,7 @@ func BridgedGuests(arm string) bool { return armFacts[arm].bridgedGuests }
 func ProviderTools(provider api.Object) []string { return armFacts[Variant(provider)].tools }
 
 func IsRealized(provider api.Object) bool {
-	return slices.Contains(Realized(), Variant(provider)) && !NamesHostCluster(provider)
+	return slices.Contains(Realized(), Variant(provider))
 }
 
 func HostMachine(provider api.Object) string {
@@ -60,8 +60,13 @@ func HostMachine(provider api.Object) string {
 
 func NeedsHypervisorClient(provider api.Object) bool { return provider.Spec().Has(ArmLibvirt) }
 
-func NamesHostCluster(provider api.Object) bool {
-	return Variant(provider) == ArmKubeVirt && provider.Spec().Has(ArmKubeVirt, "hostClusterRef")
+func NamesHostCluster(provider api.Object) bool { return HostCluster(provider) != "" }
+
+func HostCluster(provider api.Object) string {
+	if Variant(provider) != ArmKubeVirt {
+		return ""
+	}
+	return provider.Spec().Get(ArmKubeVirt, "hostClusterRef").Text()
 }
 
 type ManagedNetwork struct{ Prefix, Bridge string }

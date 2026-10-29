@@ -27,10 +27,11 @@ func (r Runner) playbookFor(request lifecycle.RunRequest) (string, bool) {
 }
 
 func checkReadOnly(request lifecycle.RunRequest) error {
-	if request.ReadOnly && request.Operation != lifecycle.ObserveOperation {
+	lend := request.Operation == lifecycle.LendOperation
+	if request.ReadOnly && request.Operation != lifecycle.ObserveOperation && !lend {
 		return failure("lifecycle.state", "a read-only invocation may run only its capability's observation", "")
 	}
-	if request.Unrecorded && len(request.Outputs) != 0 {
+	if request.Unrecorded && len(request.Outputs) != 0 && !lend {
 		return failure("lifecycle.state", "an invocation no operation records may take over no material, so this observation cannot run outside an operation", "")
 	}
 	return nil

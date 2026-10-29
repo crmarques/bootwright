@@ -112,7 +112,6 @@ their diagnostic carries the refused field's path.
 | More nodes than the run ceiling fits | more than 28 emulated `spec.nodes`, whose installation [deadline](#installation) passes the 6-hour ceiling | `installing <nodes> nodes needs a run deadline of <deadline>, past the 6h0m0s every adapter run is held to` | `declare at most 28 nodes on <cluster>` |
 | A node with an install profile | `spec.os.installProfileRef` on a node's Machine | `a declared node selects an install profile, so two installations would write its disk` | `remove spec.os.installProfileRef from <machine> or drop it from <cluster>` |
 | A node on an unrealized substrate | a node's Machine whose provider declares a substrate this executable does not realize | `a declared node is on a substrate this executable does not realize` | `correct <cluster>` |
-| A KubeVirt node on a nested host | a node's KubeVirt provider names `hostClusterRef` | `a declared node's KubeVirt provider names hostClusterRef` | `select kubeconfigRef on <provider>` |
 | A node whose emulated BMC port does not allocate | a virtual node whose provider's `spec.libvirt.bmcEmulation.port` plus the node's position among that provider's Machines is past 65535 | `node <node> (<machine>): the Machine's emulated BMC port does not allocate` | `correct spec.libvirt.bmcEmulation.port on <provider>` |
 | A node's provider with no emulated BMC credential | a virtual node whose provider declares no `spec.libvirt.bmcEmulation.auth.credentialsRef` | `node <node> (<machine>): the provider declares no emulated BMC credential` | `set spec.libvirt.bmcEmulation.auth.credentialsRef on <provider>` |
 | A physical node with an HTTP BMC | a physical node's BMC uses HTTP | `a physical node's private boot image requires an HTTPS management controller` | `set spec.substrate.baremetal.bmc.address on <machine> to an HTTPS ComputerSystem endpoint` |
@@ -173,13 +172,12 @@ applied again.
 
 ### Nodes on KubeVirt and vSphere
 
-A cluster whose nodes are all Machines on KubeVirt providers that name their
-host through `kubeconfigRef`, or all Machines on one vSphere provider, is a
-shape the product admits. Its nodes take pushed delivery, so the [boot media](#boot-media)
+A cluster whose nodes are all Machines on KubeVirt providers, whether each
+names its host through `kubeconfigRef` or `hostClusterRef`, or all Machines on
+one vSphere provider, is a shape the product admits. Its nodes take pushed delivery, so the [boot media](#boot-media)
 is built and not published, and the [installation](#installation) boots, reads
 and releases each node through its arm's entry points. A cluster mixing such
-nodes with nodes of another arm refuses, and so does a KubeVirt provider that
-names `hostClusterRef`.
+nodes with nodes of another arm refuses.
 
 Platform. Each arm's derivation, and the attachment rule of a KubeVirt cluster
 that authors `baremetal`, are in the
@@ -195,7 +193,11 @@ does, not a support statement
 The port is lent and pinned per node. The installation lends each node's
 controller credential by the parts its arm's `ControllerCredential` fact names,
 for KubeVirt the provider's kubeconfig as the port's `user` file and no password
-or trust bundle, and a node whose arm's port is pinned (`PortPinned`) carries,
+or trust bundle, and for a node on a host this context builds the kubeconfig
+the [arm's lend](substrates.md#kubevirt-machine-realization) mints once per
+host namespace for the run's whole deadline; the request freezes that host as
+the node's `controller.hostCluster` (`cluster-install-agent-v12`) and names
+the host installation's `kubeconfig` as its produced input, and a node whose arm's port is pinned (`PortPinned`) carries,
 under its position, the cluster and VirtualMachine identity its Machine's
 block recorded in the original apply, to every entry point every operation of
 this block calls: pre-boot, insert, boot, the state reads, eject and disk boot,

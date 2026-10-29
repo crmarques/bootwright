@@ -13,9 +13,12 @@ argument_specs:
           identity:
             type: dict
             required: true
+          hostCluster:
+            type: str
+            required: false
           kubeconfigRef:
             type: str
-            required: true
+            required: false
           macAddresses:
             type: list
             elements: str
@@ -30,13 +33,16 @@ argument_specs:
           placement:
             type: dict
             required: true
+          serviceAccount:
+            type: str
+            required: false
           storageClass:
             type: str
             required: false
           version:
             type: str
             required: true
-            choices: [substrate-host-kubevirt-v1]
+            choices: [substrate-host-kubevirt-v2]
       bootwright_substrate_kubevirt_host_material:
         type: dict
         required: true

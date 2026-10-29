@@ -264,7 +264,7 @@ func TestReferenceReadmeListsExactlyTheReferenceRefusals(t *testing.T) {
 		"Agent-install bridge interfaces on the two physical OpenShiftClusters.": func(d diagnosticTuple) bool {
 			return d.kind == "OpenShiftCluster" && strings.HasPrefix(d.field, "$.spec.nodes[")
 		},
-		"Unrealized-declaration warnings for the KubeVirt providers and the authored add-on profile selections.": func(d diagnosticTuple) bool {
+		"Unrealized-declaration warnings for the authored add-on profile selections.": func(d diagnosticTuple) bool {
 			return d.code == "api.unrealized"
 		},
 	}
@@ -348,8 +348,7 @@ func referenceRefusals() []diagnosticTuple {
 				result = append(result, diagnosticTuple{"api.invariant", "OpenShiftCluster", name, fmt.Sprintf("$.spec.nodes[%d].machineRef", index)})
 			}
 		}
-		result = append(result, diagnosticTuple{"api.unrealized", "ClusterAddonBinding", name + "-addons", "$.spec.profileRefs"},
-			diagnosticTuple{"api.unrealized", "InfraProvider", "kubevirt-" + name, "$.spec.kubevirt.hostClusterRef"})
+		result = append(result, diagnosticTuple{"api.unrealized", "ClusterAddonBinding", name + "-addons", "$.spec.profileRefs"})
 	}
 	return result
 }

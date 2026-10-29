@@ -5,8 +5,10 @@ import (
 	"encoding/base64"
 	"fmt"
 	"reflect"
+	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/containercluster/openshift"
@@ -178,7 +180,11 @@ func TestKubeVirtBudgetsFollowTheArmsBounds(t *testing.T) {
 // apply's evidence, and returns what the adapter was given.
 func kubevirtRun(t *testing.T, operation string, pins map[string]machine.HardwareIdentity, applyProved bool) (lifecycle.RunRequest, error) {
 	t.Helper()
-	catalog := kubevirtCatalog(3, 0, false)
+	return kubevirtRunOn(t, kubevirtCatalog(3, 0, false), operation, pins, applyProved, nil)
+}
+
+func kubevirtRunOn(t *testing.T, catalog api.Catalog, operation string, pins map[string]machine.HardwareIdentity, applyProved bool, access HostAccess) (lifecycle.RunRequest, error) {
+	t.Helper()
 	_, requests, _, err := Requests(catalog, "controller", testContext)
 	if err != nil {
 		t.Fatal(diagnostics.Of(err))
@@ -219,7 +225,7 @@ func kubevirtRun(t *testing.T, operation string, pins map[string]machine.Hardwar
 		execution.ApplyProved = proved
 	}
 	runner := &fakeRunner{}
-	capability := NewInstall(runner).WithIdentities(&pinsByName{pins: pins})
+	capability := NewInstall(runner).WithIdentities(&pinsByName{pins: pins}).WithHostAccess(access)
 	_, err = capability.run(context.Background(), execution, operation, request)
 	if len(runner.requests) != 1 {
 		return lifecycle.RunRequest{}, err
@@ -292,4 +298,77 @@ func TestAKubeVirtApplyWithoutTheMachinesRecordRefusesBeforeTheAdapter(t *testin
 func kubevirtTool() prerequisites.ToolDefinition {
 	return prerequisites.ToolDefinition{Kind: "virtctl", Compatibility: "kubevirt", Version: "v1.6.2",
 		Files: []prerequisites.ToolFile{{Member: "virtctl", Path: "tools/virtctl/kubevirt/v1.6.2/virtctl"}}}
+}
+
+type recordedLends struct{ lends []string }
+
+func (r *recordedLends) LendHostAccess(_ context.Context, _ lifecycle.Execution, cluster, namespace string, _ machine.Placement, deadline time.Duration) (secrets.Material, error) {
+	r.lends = append(r.lends, cluster+"/"+namespace+"/"+deadline.String())
+	return secrets.NewMaterial(map[secrets.Part][]byte{secrets.ValuePart: []byte("minted")}), nil
+}
+
+func hostedCatalog() api.Catalog {
+	var objects []api.Object
+	for _, object := range kubevirtCatalog(3, 0, false).Objects() {
+		if object.Kind() == api.InfraProvider {
+			object = api.NewObject(api.InfraProvider, object.Name(), api.Value{}, object.Spec().With("kubevirt",
+				object.Spec().Get("kubevirt").Without("kubeconfigRef").With("hostClusterRef", api.StringValue("host"))))
+		}
+		objects = append(objects, object)
+	}
+	return api.NewCatalog(objects)
+}
+
+// The nodes of a provider a cluster of this context hosts are reached through
+// one token minted per host namespace for the run's whole deadline, lent as
+// each node's port user file; the request names the host, no Secret, and the
+// host installation's kubeconfig as its one produced input.
+func TestAHostedClustersNodesAreLentOneMintedTokenPerHostNamespace(t *testing.T) {
+	_, requests, _, err := Requests(hostedCatalog(), "controller", testContext)
+	if err != nil {
+		t.Fatal(diagnostics.Of(err))
+	}
+	request := requests[0]
+	for _, node := range request.Nodes {
+		if node.Controller.HostCluster != "host" || node.Controller.CredentialsRef != "" {
+			t.Fatalf("node %s froze %+v", node.Machine, node.Controller)
+		}
+	}
+	if slices.Contains(request.SecretReferences(), "") {
+		t.Fatalf("secret references %v", request.SecretReferences())
+	}
+	canonical, _ := request.Canonical()
+	block := reconciliation.Block{BlockDefinition: reconciliation.BlockDefinition{Request: canonical}}
+	inputs, err := NewInstall(nil).ProducedInputs(block)
+	if err != nil || !slices.Equal(inputs, []lifecycle.ProducedInput{{Kind: "OpenShiftCluster", Object: "host", Output: KubeconfigOutput}}) {
+		t.Fatalf("produced inputs %v, %v", inputs, err)
+	}
+	if access, _ := NewInstall(nil).AccessCredentials(block); len(access) != 0 {
+		t.Fatalf("access credentials %v", access)
+	}
+	for _, operation := range []string{"apply", "destroy", "observe"} {
+		lends := &recordedLends{}
+		run, err := kubevirtRunOn(t, hostedCatalog(), operation, kubevirtPins(), true, lends)
+		if err != nil {
+			t.Fatalf("%s: %v", operation, diagnostics.Of(err))
+		}
+		if len(lends.lends) != 1 || !strings.HasPrefix(lends.lends[0], "host/bootwright-guests/") {
+			t.Fatalf("%s: lends %v", operation, lends.lends)
+		}
+		users := 0
+		for _, material := range run.Materials {
+			if strings.HasPrefix(material.Name, "bmc-user-") {
+				users++
+				if material.Secret != "lent:host-0" || run.Material[material.Secret].Size() == 0 {
+					t.Fatalf("%s: %+v is not the minted token", operation, material)
+				}
+			}
+		}
+		if users != 3 {
+			t.Fatalf("%s: %d nodes lent", operation, users)
+		}
+	}
+	if _, err := kubevirtRunOn(t, hostedCatalog(), "apply", kubevirtPins(), true, nil); err == nil {
+		t.Fatal("a hosted node was reached with no lender")
+	}
 }

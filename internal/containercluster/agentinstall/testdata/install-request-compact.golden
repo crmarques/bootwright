@@ -111,7 +111,7 @@
     "kind": "openshift-install",
     "version": "4.21.15"
   },
-  "version": "cluster-install-agent-v11",
+  "version": "cluster-install-agent-v12",
   "vips": [
     {
       "address": "198.51.100.10",

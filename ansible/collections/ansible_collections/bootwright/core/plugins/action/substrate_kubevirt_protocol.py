@@ -68,7 +68,23 @@ def machine(observation, digest):
     }
 
 
+def lend(observation, digest):
+    seconds = observation.get("expirationSeconds")
+    if not isinstance(seconds, int) or isinstance(seconds, bool) or not 0 <= seconds <= 1 << 31:
+        raise ValueError("bounded lifetime")
+    return {
+        "expirationSeconds": seconds,
+        "postcondition": bool(observation.get("postcondition")),
+        "request": adapter_protocol.request_digest(digest),
+        "server": text(observation.get("server")),
+        "version": "substrate-access-kubevirt-evidence-v1",
+    }
+
+
 def completion(arguments):
+    if arguments.get("subject") == "lend":
+        evidence = lend(arguments.get("observation") or {}, arguments.get("digest"))
+        return evidence, None if evidence["postcondition"] else "the KubeVirt host access was not lent"
     if arguments.get("subject") == "host" and arguments.get("released"):
         return host({"absent": True, "postcondition": True}, arguments.get("digest")), None
     shape = host if arguments.get("subject") == "host" else machine

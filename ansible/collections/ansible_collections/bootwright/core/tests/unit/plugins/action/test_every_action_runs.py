@@ -39,6 +39,7 @@ EFFECTS = {
     "cluster_objects_read": "Engine",
     "cluster_objects_write": "Engine",
     "substrate_kubevirt_api": "connect",
+    "substrate_kubevirt_access": "Client",
 }
 
 

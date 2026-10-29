@@ -22,17 +22,17 @@ per substrate arm, so a block resolves by kind and implementation together.
 This contract realizes the libvirt, bare-metal and KubeVirt arms. The arm an
 `InfraProvider` declares is the selector: `libvirt` selects the implementation
 identities `substrate-host-libvirt-v1` and `machine-libvirt-v1`, `baremetal`
-selects `machine-baremetal-v1`, and `kubevirt` naming `kubeconfigRef` selects
-`substrate-host-kubevirt-v1` and `machine-kubevirt-v1`. A provider host block
+selects `machine-baremetal-v1`, and `kubevirt` selects
+`substrate-host-kubevirt-v1` and `machine-kubevirt-v1`, whether it names its
+host through `kubeconfigRef` or `hostClusterRef`. A provider host block
 is planned for every libvirt and KubeVirt `InfraProvider` in the selected
 graph, and a machine block for every Machine on any realized provider whose
 effective `os.provided` is `false`. A bare-metal `InfraProvider` plans no block
 of its own: `machine-baremetal-v1` claims it, realized only through its
 Machines. A KubeVirt provider's block only proves the host it is given and
 changes nothing on it. Provided Machines are never realized. A vSphere
-provider, a KubeVirt provider naming `hostClusterRef`, and every non-provided
-Machine on one, refuses before operation registration with one diagnostic per
-unsupported object, which names the object, why it is refused (a Machine's
+provider, and every non-provided Machine on one, refuses before operation
+registration with one diagnostic per unsupported object, which names the object, why it is refused (a Machine's
 names its provider) and the remedy, as the [refusal table](#refusal-table)
 states.
 
@@ -61,9 +61,6 @@ realization derived, the delivery kind `push`, and the controller Machine as
 placement. A Bootwright-installed Machine on either arm keeps refusing until
 its arm defines an identity channel ([B905](milestones/backlog.md#b905) for
 KubeVirt).
-
-Not yet met: a KubeVirt provider naming `hostClusterRef`, and its Machines,
-refuse before registration; tracked as [B732](milestones/m3.md#b732).
 
 Not yet met: a vSphere provider and its Machines refuse before registration;
 tracked as [B99](milestones/m1.md#b99).
@@ -97,12 +94,12 @@ Each row is one refusal of the provider host lifecycle capability, and
 `TestSubstrateRefusalTableMatchesUnsupported` holds its `Unsupported` to it.
 Its reason and remedy are the diagnostic's message and remediation, in which
 `<provider>` is the refused provider or the refused Machine's provider and
-`<machine>` the refused Machine. A Machine is refused beside its provider.
+`<machine>` the refused Machine and `<cluster>` the provider's host cluster. A Machine is refused beside its provider.
 
 | Refusal | Path | Reason | Remedy |
 | --- | --- | --- | --- |
 | A provider on an unrealized substrate | an `InfraProvider` whose arm is `vsphere` | `this executable realizes no provider on the substrate it declares` | `remove <provider> and the Machines it hosts from the selected Environment, or declare them on a baremetal, kubevirt or libvirt provider` |
-| A KubeVirt provider on a host this context builds | a KubeVirt provider's `spec.kubevirt.hostClusterRef` | `this executable realizes a KubeVirt provider only on the host cluster its kubeconfigRef names` | `declare spec.kubevirt.kubeconfigRef instead of hostClusterRef on <provider>, or remove <provider> and the Machines it hosts from the selected Environment` |
+| A KubeVirt provider on a host without OpenShift Virtualization | a KubeVirt provider's `spec.kubevirt.hostClusterRef` naming a cluster on which no add-on instance provides `kubevirt` | `a KubeVirt provider hosted by <cluster> needs an add-on instance on that cluster that provides kubevirt, which owns the provider's namespace and access` | `bind the kubevirt package to <cluster>, or name the host through spec.kubevirt.kubeconfigRef on <provider>` |
 | A Machine on an unrealized substrate | a Machine with `os.provided: false` whose `spec.substrate.providerRef` names such a provider | `its provider <provider> is on a substrate this executable does not realize` | `host <machine> on a baremetal, kubevirt or libvirt provider, declare its operating system provided, or remove it from the selected Environment` |
 | A Bootwright-installed Machine on KubeVirt | a Machine on a KubeVirt provider that names `spec.os.installProfileRef` | `a KubeVirt Machine is realized for an installer that supplies its operating system, and this one names an install profile` | `remove spec.os.installProfileRef from <machine>, or host it on a baremetal or libvirt provider` |
 | A KubeVirt profile without a size | a non-provided Machine on a KubeVirt provider whose profile's `cpu`, `memoryMiB` or `diskGiB` is `0` | `a KubeVirt machine is created with the CPU count, memory and root disk its profile declares, and its profile <profile> declares one as zero` | `set cpu, memoryMiB and diskGiB above zero on profile <profile> of <provider>` |
@@ -902,6 +899,46 @@ authenticating by `client-certificate-data` with `client-key-data`, or by
 reference, `insecure-skip-tls-verify`, `proxy-url`, `tls-server-name`, a
 username or password, or a second credential refuses, naming the Secret.
 
+**A host this context builds.** A provider may instead name, through
+`spec.kubevirt.hostClusterRef`, an `OpenShiftCluster` of the same context
+([B732](milestones/m3.md#b732), [D202](milestones/backlog.md#d202)). Its
+namespace, ServiceAccount and access are then the host's
+[`kubevirt` instance's](api/addons.md#package-kubevirt), which owns one
+Namespace per hosted provider namespace, labelled with the union of the
+`namespaceSelector.matchLabels` of the host secondary networks the providers'
+attachments name; admission refuses two such networks that give one key two
+values, naming both, and more than 16 hosted namespaces on one host, and
+planning refuses an attachment that names no `ClusterUserDefinedNetwork` among
+the host's `secondaryNetworks`, and a host on which no add-on instance
+provides `kubevirt` ([refusal table](#refusal-table)). The provider proof
+requires the host's installation, every add-on instance on it but a
+[last package's](add-ons.md#built-in-packages-and-selection) and its
+[cluster network block](openshift-clusters.md#post-installation-network-configuration)
+when it declares secondary networks; each Machine block requires the proof,
+and a removal inverts these edges, so the child's Machines leave before the
+host's blocks; edges that close a cycle, such as a host add-on ordered after
+its own child, refuse planning, naming the cycle's blocks in order. No arm block, port entry point or consumer is lent the host
+installation's administrator kubeconfig: before each run the substrate's
+lend, implementation `substrate-host-kubevirt-v1` operation `lend` with
+request `substrate-access-kubevirt-v1`, borrows that kubeconfig as the
+[produced input](state-reconciliation.md#produced-material-custody) of the
+host's installation block, posts one `TokenRequest` for the ServiceAccount
+`bootwright-kubevirt` of the provider's namespace with an `expirationSeconds`
+of the consuming run's deadline plus 600 seconds (600 at least), and leaves,
+as its one output, a kubeconfig of the same server and authority carrying
+that token alone, which is lent to that one run as its kubeconfig and cleared
+when it returns. A granted `spec.expirationSeconds` shorter than requested
+refuses, so no run outlives its access. The token is never evidence,
+custody, a record or a log, and every continuation, observation, probe and
+removal mints again; the evidence (`substrate-access-kubevirt-evidence-v1`)
+names the server and the granted lifetime. A host the lend cannot reach leaves
+the block unknown, never absent, as every unanswered host does.
+
+Not yet met: `bootwright machine` power commands refuse, and the power reading
+omits, a Machine on a host this context builds, so the operator stops its
+VirtualMachines through the host's API before a destroy; tracked as
+[B930](milestones/m3.md#b930).
+
 **Provider proof.** The block `substrate-host-<provider>`, implementation
 `substrate-host-kubevirt-v1`, proves the host before any Machine of the
 provider is touched; each Machine's block requires it. It changes nothing and
@@ -960,7 +997,15 @@ contexts of one controller store never realize one VirtualMachine.
 count as the cores of one socket and its memory, EFI firmware with
 `secureBoot: false` and no SMM, frozen at creation, `evictionStrategy:
 LiveMigrate`, and a persistent vTPM, `devices.tpm.persistent` as the profile's
-`tpm.persistent` (default `true`), only when the profile declares `tpm`. Its
+`tpm.persistent` (default `true`), only when the profile declares `tpm`. A
+Machine that is a node of an `OpenShiftCluster` carries the template label
+`bootwright.io/spread`, the first 16 hexadecimal digits of the SHA-256 of
+`bootwright.substrate.kubevirt.spread-v1`, NUL, the context, NUL, the cluster,
+NUL and the node's role, and a preferred pod anti-affinity of weight 100
+on `kubernetes.io/hostname` for that label, so the nodes of one role prefer
+distinct host nodes; it is never required, because a required rule on a host
+with fewer nodes than the role would leave a node unscheduled and block a
+host drain ([B908](milestones/m3.md#b908)). Its
 root DataVolume template is requested through `spec.storage` with the root
 class the proof read, naming neither access mode nor volume mode so the
 class's StorageProfile decides them, at the profile's `diskGiB`, blank, and
@@ -976,14 +1021,15 @@ MAC field), on the network its attachment's `networkRef` names: for a
 of the same name in the provider's namespace, and for a
 NetworkAttachmentDefinition of type `bridge` that object, in the namespace
 admission gave it. A reread VirtualMachine whose frozen fields (CPU, memory,
-firmware, TPM, interfaces and their MACs, root size and class) differ from the
+firmware, TPM, interfaces and their MACs, spread, root size and class) differ from the
 request refuses, because the arm never rewrites them. A vTPM's state claim is
 placed on the host's VM state class, which this arm neither sets nor proves
 migratable ([B906](milestones/backlog.md#b906)).
 
 **Port.** The realized target names, as its management controller, the
 endpoint `kubevirt:<namespace>/<vm>` and the provider's `kubeconfigRef` as its
-credential. A consumer lends a controller credential by the parts the
+credential, or, on a host this context builds, that host cluster, whose
+lend mints the credential for each run. A consumer lends a controller credential by the parts the
 substrate's `ControllerCredential` fact names: an account's username and
 password for a Redfish arm, and for this one the kubeconfig's value alone, as
 the port's `user` file; `password` and `ca` stay empty. The port is pinned
@@ -1046,7 +1092,8 @@ deletes the upload DataVolume and then the VirtualMachine, each with
 claim it owned, its persistent TPM state claim included, absent by a positive
 `NotFound` or a listing that answered without them. It consumes `data-loss`,
 because it deletes the disks. The namespace and every network object are the
-operator's and are never written. A host that cannot be read, refuses the
+operator's, or the host's `kubevirt` instance's and its cluster network
+block's, and the arm never writes them. A host that cannot be read, refuses the
 request or answers what is not the expected object is unknown, never absent.
 
 ## vSphere machine realization

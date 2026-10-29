@@ -37,7 +37,7 @@ func (MachineCapability) Unresolved(verb reconciliation.Verb, block reconciliati
 	case !observed.Answered:
 		return lifecycle.Unresolved{
 			Reason: "the host cluster of InfraProvider/" + request.Provider + " did not answer for " + vm,
-			Remedy: "restore the host cluster's API, or rotate spec.kubevirt.kubeconfigRef of InfraProvider/" + request.Provider + " and continue with --authorize rebind=" + request.KubeconfigRef,
+			Remedy: unansweredRemedy(request),
 		}, true
 	}
 	effect, refused := machineEffect(verb, evidence, request, block.RequestDigest)
@@ -62,4 +62,11 @@ func (HostCapability) Unresolved(verb reconciliation.Verb, block reconciliation.
 		return lifecycle.Unresolved{}, false
 	}
 	return lifecycle.Drifted(verb, "the host cluster of InfraProvider/"+block.Object, "namespace "+request.Namespace, refused)
+}
+
+func unansweredRemedy(request MachineRequest) string {
+	if request.HostCluster != "" {
+		return "restore the API of OpenShiftCluster/" + request.HostCluster + ", whose installation lends each run its access, and continue"
+	}
+	return "restore the host cluster's API, or rotate spec.kubevirt.kubeconfigRef of InfraProvider/" + request.Provider + " and continue with --authorize rebind=" + request.KubeconfigRef
 }

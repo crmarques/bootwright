@@ -15,7 +15,6 @@ type Unrealized struct {
 
 var unrealized = []Unrealized{
 	{InfraProvider, "$.spec.vsphere", "", "B99"},
-	{InfraProvider, "$.spec.kubevirt.hostClusterRef", "", "B732"},
 	{MachineInstallProfile, "$.spec.installer.templateClone", "", "B99"},
 	{Registry, "$.spec.management", "managed", "B68"},
 	{LoadBalancer, "$.spec.management", "managed", "B100"},

@@ -110,6 +110,8 @@ type RunRequest struct {
 
 const ObserveOperation = "observe"
 
+const LendOperation = "lend"
+
 // MaxDeadline is the longest any adapter run may take, whatever deadline its
 // request states. A capability that states one derives it from the budgets its
 // request froze, and its own tests hold what it derives to this ceiling; a

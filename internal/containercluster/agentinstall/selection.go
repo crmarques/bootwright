@@ -160,9 +160,6 @@ func unsupportedReason(catalog api.Catalog, cluster api.Object) (reason, remedia
 				return issues[0].Message, issues[0].Remediation
 			}
 		}
-		if provider, ok := machine.Provider(bound, catalog); ok && substrate.NamesHostCluster(provider) {
-			return "a declared node's KubeVirt provider names hostClusterRef", "select kubeconfigRef on " + provider.Identity()
-		}
 		target, err := substrate.TargetFor(catalog, bound, cluster.Name(), controllerMachine)
 		if err != nil {
 			reason, remedy := nodeTargetRefusal(catalog, bound, err)
@@ -536,6 +533,7 @@ func frozenNodes(nodes []nodeProjection) []Node {
 			Controller: Controller{
 				CredentialsRef: node.target.Controller.CredentialsRef,
 				Endpoint:       node.target.Controller.Endpoint,
+				HostCluster:    node.target.Controller.HostCluster,
 				TLSVerify:      node.target.Controller.TLSVerify,
 				TrustBundleRef: node.target.Controller.TrustBundleRef,
 				VirtualMedia: VirtualMedia{

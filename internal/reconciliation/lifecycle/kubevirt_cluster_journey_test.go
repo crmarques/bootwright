@@ -103,6 +103,13 @@ type kubevirtHost struct {
 	failAt     string
 	calls      []string
 	pinRefused []string
+	// nested hosts the provider on a cluster of the context: every run is
+	// then lent a token the lend minted for it.
+	nested      bool
+	unreachable bool
+	minted      int
+	tokens      []string
+	lendRefused []string
 }
 
 func newKubevirtHost() *kubevirtHost {
@@ -122,6 +129,15 @@ func (h *kubevirtHost) Run(_ context.Context, run lifecycle.RunRequest) (lifecyc
 	h.mutex.Lock()
 	defer h.mutex.Unlock()
 	h.calls = append(h.calls, run.Implementation+" "+run.Operation)
+	if run.Operation == "lend" {
+		return h.lend(run)
+	}
+	if h.nested && run.Implementation != agentinstall.MediaImplementation {
+		if err := h.mintedFor(run); err != nil {
+			h.lendRefused = append(h.lendRefused, err.Error())
+			return lifecycle.RunResult{}, err
+		}
+	}
 	switch run.Implementation {
 	case kubevirt.HostImplementation:
 		return h.proof(run)
@@ -348,7 +364,7 @@ func kubevirtClusterJourney(t *testing.T) (*lifecycle.CapabilityJourney, *kubevi
 		Controller: "controller", Context: lifecycle.ContextIdentity{Name: lifecycle.JourneyContext}}
 	host := newKubevirtHost()
 	bound := []lifecycle.BoundCapability{
-		{Binding: lifecycle.CapabilityBinding{Kind: kubevirt.HostKind, Implementation: kubevirt.HostImplementation}, Capability: kubevirt.NewHost(host)},
+		{Binding: lifecycle.CapabilityBinding{Kind: kubevirt.HostKind, Implementation: kubevirt.HostImplementation}, Capability: kubevirt.NewHost(host, nil)},
 		{Binding: lifecycle.CapabilityBinding{Kind: kubevirt.MachineKind, Implementation: kubevirt.MachineImplementation}, Capability: kubevirt.NewMachine(host)},
 		{Binding: lifecycle.CapabilityBinding{Kind: agentinstall.Kind, Implementation: agentinstall.MediaImplementation}, Capability: locatedMedia{agentinstall.NewMedia(host, material.AuthorizedKey)}},
 		{Binding: lifecycle.CapabilityBinding{Kind: agentinstall.Kind, Implementation: agentinstall.InstallImplementation},

@@ -215,9 +215,6 @@ every selected object.
 Not yet met: a package's configuration retains no export; tracked as
 [B760](../milestones/m4.md#b760).
 
-Not yet met: admission refuses a KubeVirt provider, so the `hostClusterRef`
-row takes effect only once [B732](../milestones/m3.md#b732) lifts that refusal.
-
 ## Remote-machine access and install defaults
 
 `spec.remoteMachinesAccessKey.keyRef` is a plain reference to an `sshKeyPair`

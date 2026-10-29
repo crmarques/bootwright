@@ -2,6 +2,7 @@ package agentinstall
 
 import (
 	"context"
+	"time"
 
 	"github.com/crmarques/bootwright/internal/machine"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
@@ -22,6 +23,10 @@ type Runner interface {
 // never an error.
 type Identities interface {
 	PinnedIdentity(name string, proved []lifecycle.BlockEvidence) (machine.HardwareIdentity, bool, error)
+}
+
+type HostAccess interface {
+	LendHostAccess(ctx context.Context, execution lifecycle.Execution, cluster, namespace string, placement machine.Placement, deadline time.Duration) (secrets.Material, error)
 }
 
 type AuthorizedKey func(secrets.Material, string) (string, error)

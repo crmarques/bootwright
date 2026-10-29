@@ -338,7 +338,10 @@ Red Hat OpenShift Virtualization, providing `kubevirt`
 ([coverage](../add-on-coverage.md#kubevirt)). Its configuration is
 `subscription` (`source` defaults to `redhat-operators`) and `timeout`
 (default `45m`); it has no other field, and the `HyperConverged` object it
-creates carries no configuration.
+creates carries no configuration. The namespaces, ServiceAccounts and roles
+it owns for the KubeVirt providers its cluster hosts derive from those
+providers and the cluster's secondary networks, never from this
+configuration ([coverage](../add-on-coverage.md#kubevirt)).
 
 ### Package metallb
 

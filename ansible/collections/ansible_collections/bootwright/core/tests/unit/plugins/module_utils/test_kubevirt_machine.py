@@ -146,7 +146,7 @@ def request(**extra):
         "interfaces": [{"macAddress": "52:54:00:25:10:e0", "name": "enp1s0", "network": "guest-l2"}],
         "kubeconfigRef": "host-kubeconfig", "mediaVolume": VM + "-media", "memoryMiB": 16384, "name": VM, "namespace": "guests",
         "placement": {"connection": "local", "machine": "controller"}, "provider": "lab-kubevirt", "rootVolume": VM + "-root",
-        "version": "machine-kubevirt-v1",
+        "version": "machine-kubevirt-v2",
     }
     value.update(extra)
     return value
@@ -482,3 +482,24 @@ def test_the_pinned_path_still_boots_and_ejects():
     assert arm.change_power(machine, VM, "off")["power"] == "Off"
     arm.eject(machine, VM)
     assert arm.state_read(machine, VM)["media_state"] == "none"
+
+
+def test_a_cluster_node_prefers_host_nodes_its_role_peers_are_not_on():
+    api = FakeAPI()
+    arm.apply(host(api), request(spread="0a1b2c3d4e5f6a7b"), context())
+    template = api.objects[VM_PATH]["spec"]["template"]
+    assert template["metadata"]["labels"][arm.SPREAD] == "0a1b2c3d4e5f6a7b"
+    assert template["spec"]["affinity"] == {"podAntiAffinity": {"preferredDuringSchedulingIgnoredDuringExecution": [{
+        "weight": 100, "podAffinityTerm": {"labelSelector": {"matchLabels": {arm.SPREAD: "0a1b2c3d4e5f6a7b"}},
+                                           "topologyKey": "kubernetes.io/hostname"}}]}}
+    plain = FakeAPI()
+    arm.apply(host(plain), request(), context())
+    assert "affinity" not in plain.objects[VM_PATH]["spec"]["template"]["spec"]
+    assert arm.SPREAD not in plain.objects[VM_PATH]["spec"]["template"]["metadata"]["labels"]
+
+
+def test_a_spread_changed_since_creation_is_a_frozen_difference():
+    api = FakeAPI()
+    changed, evidence = arm.apply(host(api), request(spread="0a1b2c3d4e5f6a7b"), context())
+    assert arm.frozen_difference(request(spread="0a1b2c3d4e5f6a7b"), context(), api.objects[VM_PATH]) == ""
+    assert arm.frozen_difference(request(spread="ffffffffffffffff"), context(), api.objects[VM_PATH]) != ""

@@ -54,8 +54,8 @@ func TestSubstrateRefusalTableMatchesUnsupported(t *testing.T) {
 			"InfraProvider/lab-libvirt", map[string]string{"<provider>": "InfraProvider/lab-libvirt"}},
 		"A provider using more external bridges than its use reservation holds": {catalogOf(controller(), provider(externalAttachments(manyBridges(substrate.MaxExternalBridges+1)...))),
 			"InfraProvider/lab-libvirt", map[string]string{"<provider>": "InfraProvider/lab-libvirt"}},
-		"A KubeVirt provider on a host this context builds": {catalogOf(controller(), kubevirtProvider("hostClusterRef", "")), "InfraProvider/kv",
-			map[string]string{"<provider>": "InfraProvider/kv"}},
+		"A KubeVirt provider on a host without OpenShift Virtualization": {catalogOf(controller(), kubevirtProvider("hostClusterRef", "")), "InfraProvider/kv",
+			map[string]string{"<provider>": "InfraProvider/kv", "<cluster>": "OpenShiftCluster/host"}},
 		"A Bootwright-installed Machine on KubeVirt": {catalogOf(controller(), networkConfig(), kubevirtProvider("kubeconfigRef", ""),
 			kubevirtGuest(text("installProfileRef", "rhel-9-8"))), "Machine/node-01", map[string]string{"<machine>": "Machine/node-01"}},
 		"A KubeVirt profile without a size": {catalogOf(controller(), networkConfig(), kubevirtProvider("kubeconfigRef", "", number("cpu", "0")), kubevirtGuest()),
@@ -74,7 +74,7 @@ func TestSubstrateRefusalTableMatchesUnsupported(t *testing.T) {
 			kind, name, _ := strings.Cut(test.refused, "/")
 			want := []lifecycle.Refusal{{Kind: kind, Name: name, Reason: expand(row.reason, test.values), Remediation: expand(row.remedy, test.values)}}
 			state := compilation.NewState(test.catalog, test.catalog, nil)
-			got := slices.DeleteFunc(append(NewHost(nil).Unsupported(state), kubevirt.NewHost(nil).Unsupported(state)...),
+			got := slices.DeleteFunc(append(NewHost(nil).Unsupported(state), kubevirt.NewHost(nil, nil).Unsupported(state)...),
 				func(refused lifecycle.Refusal) bool { return refused.Kind != kind || refused.Name != name })
 			if !reflect.DeepEqual(got, want) {
 				t.Fatalf("the capability refuses %+v, the table %+v", got, want)

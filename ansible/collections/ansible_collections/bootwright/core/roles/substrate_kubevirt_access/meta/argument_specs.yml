@@ -1,0 +1,36 @@
+argument_specs:
+  lend:
+    short_description: Mint the access one hosted KubeVirt provider's run is lent.
+    options:
+      bootwright_substrate_kubevirt_lend_request:
+        type: dict
+        required: true
+        options:
+          cluster:
+            type: str
+            required: true
+          expirationSeconds:
+            type: int
+            required: true
+          namespace:
+            type: str
+            required: true
+          serviceAccount:
+            type: str
+            required: true
+          version:
+            type: str
+            required: true
+            choices: [substrate-access-kubevirt-v1]
+      bootwright_substrate_kubevirt_lend_material:
+        type: dict
+        required: true
+      bootwright_substrate_kubevirt_lend_digest:
+        type: str
+        required: true
+      bootwright_substrate_kubevirt_lend_output:
+        type: dict
+        required: true
+      bootwright_run_scratch:
+        type: path
+        required: true

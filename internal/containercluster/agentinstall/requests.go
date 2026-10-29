@@ -47,6 +47,7 @@ type Tool struct {
 type Controller struct {
 	CredentialsRef string       `json:"credentialsRef"`
 	Endpoint       string       `json:"endpoint"`
+	HostCluster    string       `json:"hostCluster,omitempty"`
 	TLSVerify      bool         `json:"tlsVerify"`
 	TrustBundleRef string       `json:"trustBundleRef,omitempty"`
 	VirtualMedia   VirtualMedia `json:"virtualMedia"`

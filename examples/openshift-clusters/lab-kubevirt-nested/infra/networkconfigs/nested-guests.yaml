@@ -1,0 +1,39 @@
+apiVersion: bootwright.io/v1alpha1
+kind: NetworkConfig
+metadata:
+  name: nested-guests
+
+spec:
+  machineNetwork:
+    - cidr: 203.0.113.0/24
+
+  dns:
+    - serverRef: lab-dns
+      endpointRef: ip
+
+  nmstate:
+    interfaces:
+      - name: eth0
+        type: ethernet
+        state: up
+        mtu: 1500
+
+        ipv4:
+          enabled: true
+          dhcp: false
+
+        ipv6:
+          enabled: false
+
+    dns-resolver:
+      config:
+        search:
+          - lab.example.test
+
+    routes:
+      config:
+        - destination: 0.0.0.0/0
+          next-hop-address: 203.0.113.1
+          next-hop-interface: eth0
+          table-id: 254
+          metric: 100

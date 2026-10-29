@@ -1,0 +1,18 @@
+apiVersion: bootwright.io/v1alpha1
+kind: ClusterAddonBinding
+metadata:
+  name: host-virtualization
+
+spec:
+  clusterRef: host
+
+  packages:
+    nmstate:
+      subscription:
+        channel: example-channel
+        startingCSV: kubernetes-nmstate-operator.v0.0.0
+
+    kubevirt:
+      subscription:
+        channel: example-channel
+        startingCSV: kubevirt-hyperconverged-operator.v0.0.0

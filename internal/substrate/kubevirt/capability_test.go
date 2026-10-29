@@ -87,7 +87,7 @@ func TestTheTargetNamesTheVirtualMachineAndItsKubeconfig(t *testing.T) {
 }
 
 func TestPlansAProofBlockAndAMachineBlockThatRequiresIt(t *testing.T) {
-	host, err := NewHost(nil).Plan(context.Background(), planInput(labCatalog(), reconciliation.Apply))
+	host, err := NewHost(nil, nil).Plan(context.Background(), planInput(labCatalog(), reconciliation.Apply))
 	if err != nil || len(host.Definitions) != 1 || host.Definitions[0].Stage != reconciliation.StageSubstrates || !slices.Equal(host.Secrets, []string{"host-kubeconfig"}) {
 		t.Fatalf("host plan = %+v, %v", host, err)
 	}
@@ -106,7 +106,7 @@ func TestPlansAProofBlockAndAMachineBlockThatRequiresIt(t *testing.T) {
 
 func TestBothBlocksReadTheKubeconfigAsAnAccessCredential(t *testing.T) {
 	for _, block := range []reconciliation.Block{hostBlock(t), machineBlock(t)} {
-		var capability lifecycle.AccessCredentialReader = NewHost(nil)
+		var capability lifecycle.AccessCredentialReader = NewHost(nil, nil)
 		if block.Implementation == MachineImplementation {
 			capability = NewMachine(nil)
 		}
@@ -307,7 +307,7 @@ func TestTheProofRefusesWhatItCouldNotProve(t *testing.T) {
 		t.Fatal("a proof missing a network passed")
 	}
 	run := &runner{result: lifecycle.RunResult{Outcome: "unchanged", Evidence: encoded(t, HostEvidence{Absent: true, Failures: []string{}, Networks: []NetworkEvidence{}, Postcondition: true, Request: block.RequestDigest})}}
-	if result, err := NewHost(run).Destroy(context.Background(), lifecycle.Execution{Block: block}); err != nil || result.Outcome != reconciliation.OutcomeUnchanged ||
+	if result, err := NewHost(run, nil).Destroy(context.Background(), lifecycle.Execution{Block: block}); err != nil || result.Outcome != reconciliation.OutcomeUnchanged ||
 		len(run.requests[0].Materials) != 1 {
 		t.Fatalf("destroy = %+v, %v", result, err)
 	}
@@ -325,12 +325,12 @@ func TestUnsupportedRefusesWhatTheArmDoesNotRealize(t *testing.T) {
 		"zero size":       labCatalog(provider(number("diskGiB", "0"))),
 		"UDN":             labCatalog(udn),
 	} {
-		refused := NewHost(nil).Unsupported(compilation.NewState(catalog, catalog, nil))
+		refused := NewHost(nil, nil).Unsupported(compilation.NewState(catalog, catalog, nil))
 		if len(refused) != 1 || refused[0].Name != "master-0" {
 			t.Errorf("%s: %+v", name, refused)
 		}
 	}
-	if refused := NewHost(nil).Unsupported(compilation.NewState(labCatalog(), labCatalog(), nil)); len(refused) != 0 {
+	if refused := NewHost(nil, nil).Unsupported(compilation.NewState(labCatalog(), labCatalog(), nil)); len(refused) != 0 {
 		t.Fatalf("the lab is refused: %+v", refused)
 	}
 }
@@ -343,7 +343,7 @@ func TestEveryCapabilityDeadlineCoversItsFrozenBudgets(t *testing.T) {
 		t.Fatalf("the machine deadline %s does not cover the role's 1100 s waits", machineDeadline)
 	}
 	run := &runner{result: lifecycle.RunResult{Outcome: "unchanged"}}
-	_, _ = NewHost(run).Apply(context.Background(), lifecycle.Execution{Block: hostBlock(t)})
+	_, _ = NewHost(run, nil).Apply(context.Background(), lifecycle.Execution{Block: hostBlock(t)})
 	if len(run.requests) != 1 || run.requests[0].Deadline != hostDeadline {
 		t.Fatalf("host runs = %+v", run.requests)
 	}

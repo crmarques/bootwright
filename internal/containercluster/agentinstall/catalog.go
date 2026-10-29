@@ -25,7 +25,7 @@ const (
 
 const (
 	mediaRequestVersion   = "cluster-media-agent-v9"
-	installRequestVersion = "cluster-install-agent-v11"
+	installRequestVersion = "cluster-install-agent-v12"
 )
 
 // mediaMargin is what a media run's deadline allows beyond its build budget:
@@ -104,8 +104,10 @@ func MediaContentDigest() string {
 
 func InstallContentDigest() string {
 	return contentDigest("bootwright.containercluster.install-agent-v1",
-		InstallImplementation, installRequestVersion, consumerPrefix, ImageFile, workRootPrefix, installerTool, clientTool)
+		InstallImplementation, installRequestVersion, consumerPrefix, ImageFile, workRootPrefix, installerTool, clientTool, hostAccessLend)
 }
+
+const hostAccessLend = "substrate-access-kubevirt-v1"
 
 func contentDigest(parts ...string) string {
 	digest := sha256.Sum256([]byte(strings.Join(parts, "\x00")))

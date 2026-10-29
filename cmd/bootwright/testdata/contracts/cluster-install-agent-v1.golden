@@ -1,6 +1,6 @@
 implementation: cluster-install-agent-v1
-content-digest: b903ad706a74058b49446df8d5f3cb5f4eaba86de55049125b6bad91f1306152
-request-version: cluster-install-agent-v11
+content-digest: 8bfe1aa21d7ede247a9d33794a3002a70db6c70ffb79cb4079428478d9ed6ccd
+request-version: cluster-install-agent-v12
 automation-formats: none
 mark-formats: none
 proof-ids: .bootwright-booted, /.bootwright-booted, bootwright/containercluster/identity/v2
@@ -11,6 +11,7 @@ effect-pins:
   /var/lib/bootwright-clusters
   openshift-install
   openshift-clients
+  substrate-access-kubevirt-v1
 request-identity:
   identity.context
   identity.cluster
@@ -45,6 +46,7 @@ request-schema:
   nodes[].controller struct agentinstall.Controller
   nodes[].controller.credentialsRef string
   nodes[].controller.endpoint string
+  nodes[].controller.hostCluster string omitempty
   nodes[].controller.tlsVerify bool
   nodes[].controller.trustBundleRef string omitempty
   nodes[].controller.virtualMedia struct agentinstall.VirtualMedia

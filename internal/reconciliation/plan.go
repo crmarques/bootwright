@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"maps"
 	"slices"
 	"strings"
 	"unicode/utf8"
@@ -338,9 +339,26 @@ func waves(known map[string]BlockDefinition) (map[string]int, error) {
 		}
 	}
 	if measured != len(known) {
-		return nil, planError("lifecycle plan dependencies form a cycle")
+		return nil, diagnostics.NewFailureWithRemediation("lifecycle.state", "lifecycle plan dependencies form a cycle: "+strings.Join(cycleOf(known, remaining), " -> "), "",
+			"remove one of the references that order these blocks after one another")
 	}
 	return depth, nil
+}
+
+func cycleOf(known map[string]BlockDefinition, remaining map[string]int) []string {
+	ids := slices.Sorted(maps.Keys(remaining))
+	id := ids[slices.IndexFunc(ids, func(id string) bool { return remaining[id] > 0 })]
+	var path []string
+	for !slices.Contains(path, id) {
+		path = append(path, id)
+		dependencies := slices.Sorted(slices.Values(known[id].Dependencies))
+		next := slices.IndexFunc(dependencies, func(dependency string) bool { return remaining[dependency] > 0 })
+		if next < 0 {
+			return path
+		}
+		id = dependencies[next]
+	}
+	return append(path[slices.Index(path, id):], id)
 }
 
 // Schedule is what a frozen plan's shape says about running it: the wave each

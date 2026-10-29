@@ -3328,6 +3328,8 @@ holding such a clause, the clauses pending and the work they enable.
   read back and refused (X199).
 - [D201](#d201): clauses (1) to (11), OpenShift on KubeVirt Machines over an
   external host (X130).
+- [D202](#d202): clauses (1) to (11), KubeVirt Machines on a host cluster the
+  context builds and their spread (X131).
 - [D203](#d203): clauses (1) to (14), stretch service placement and front
   doors (X200) and the removal of a provided tiebreaker (X203).
 
@@ -5712,6 +5714,82 @@ those VIPs unprobed and the runbook asks the operator to prove them free;
 (11) The install request moves to `cluster-install-agent-v11`, adding
 `portTools` and `nodes[].portPinned` and admitting the controller kind `api`;
 a v10 record refuses by name (D142), and the media request is unchanged.
+
+### D202
+
+**session-pending** (2026-10-28, the owner; the clauses after the owner's
+words are taken by the session, pending the owner's review). The owner asked
+the session to "Plan and implement what is still missing" and said "the
+solution must be as good as possible in terms of well-designed architecture
+and ux". It answers [Q21](m3.md#m3a-open-decisions) and
+[B732](m3.md#b732)'s questions 1, 2, 3, 5 and 6 (question 4 is
+[D193](#d193)'s), specifies [B908](m3.md#b908), and implements both as the
+planned slice X131; B732's Requires on the operator acceptance of B88, B83
+and B726 is waived for implementation only, each acceptance staying its own
+operator gate. Taken by the session, pending the owner's review:
+(1) Q21 (a): `hostClusterRef` is M3e's, so M3 completes with a host the
+context builds.
+(2) The proof block of a provider naming `hostClusterRef` requires the host's
+`OpenShiftCluster`, every add-on instance on it but a last package's, and its
+cluster network block when it declares secondary networks; each Machine block
+requires the proof, the child installation its Machines, and a removal
+inverts every edge. A plan cycle refuses naming one cycle's blocks in order.
+A host on which no instance provides `kubevirt` refuses before registration.
+(3) No arm run, port entry point or child installation is lent the host
+installation's administrator kubeconfig. Before each run, the arm's `lend`
+(operation `lend` of `substrate-host-kubevirt-v1`, request
+`substrate-access-kubevirt-v1`) borrows it as the host installation's produced
+input and posts one `TokenRequest` for ServiceAccount `bootwright-kubevirt`
+of the provider's namespace, lifetime the consuming run's deadline plus 600 s
+(at least 600 s, at most the run ceiling plus 600 s), and leaves as its one
+output a kubeconfig of the same server and authority with that token alone,
+lent to that run and cleared; a shorter granted lifetime refuses. No token
+Secret exists, so there is no inverse. Every attempt, observation, quiescence
+probe and removal mints again; the child installation mints once per host
+namespace for its whole deadline.
+(4) A lend creates no object, so the runner admits it in a read-only or
+unrecorded execution with its one output, which no other operation may take
+there, and a quiescence probe borrows produced entries as its removal does.
+(5) The `kubevirt` package owns, from admitted facts alone, one Namespace per
+hosted provider namespace labelled with the union of the
+`namespaceSelector.matchLabels` of the host secondary networks the providers'
+attachments name, the ServiceAccount and RoleBinding `bootwright-kubevirt` to
+ClusterRole `bootwright-kubevirt-machines` (the arm's verbs and the
+attachment-definition read), and ClusterRole and ClusterRoleBinding
+`bootwright-kubevirt-proof` for the proof's cluster reads, narrowed by name
+where the proof names its object, with a Role and RoleBinding of that name in
+`openshift-config-managed` and `openshift-cnv` for the one ConfigMap each
+holds. The arm's verbs gain claim `get`, which `virtctl image-upload` uses.
+The token is bound to no object, so it stays valid on the host until it
+expires; the lifetime bound is its only revocation. Two networks giving one key two values
+refuse at admission, naming both; a host holds at most 16 hosted namespaces;
+an attachment of a hosted provider that names no `ClusterUserDefinedNetwork`
+among the host's secondary networks refuses at plan. External hosts keep the
+operator's namespace.
+(6) Readiness is the CSV `Succeeded` and the HyperConverged `Available`
+`True` and `Degraded` `False`; an unready host leaves the child pending
+through the edges, and a host the lend or the proof cannot read is unknown,
+never absent.
+(7) No edge orders a child's image build after the host's installation.
+(8) Question 3b's `vmStateStorageClass` is not added: the owner's target VMs
+need no vTPM, and the state class stays [B906](#b906)'s.
+(9) B908: each KubeVirt Machine that is a cluster node freezes `spread`, the
+first 16 hexadecimal digits of the SHA-256 of
+`bootwright.substrate.kubevirt.spread-v1`, context, cluster and role; its
+VirtualMachine carries the template label `bootwright.io/spread` and a
+preferred pod anti-affinity of weight 100 on `kubernetes.io/hostname`, never
+a required one, which would block a host drain; no host count warns.
+(10) The requests move to `substrate-host-kubevirt-v2`, `machine-kubevirt-v2`
+(adding `hostCluster`, `serviceAccount` and `spread`) and
+`cluster-install-agent-v12` (adding `nodes[].controller.hostCluster`); older
+records refuse by name (D142).
+(11) `bootwright machine` power commands refuse, and the power reading omits,
+a Machine on a hosted provider until [B930](m3.md#b930); the
+lab-kubevirt-nested example and its README name the operator's stop through
+the host's API before a destroy.
+Exit evidence: the nested lifecycle journey, the lend, namespace, edge,
+cycle and power tests, the package and contract goldens and the example; the
+operator gate is the lab-kubevirt-nested run.
 
 ### D203
 

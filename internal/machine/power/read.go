@@ -78,7 +78,7 @@ func readSurveysFor(catalog api.Catalog, contextName string, names []string, rea
 			continue
 		}
 		managed, err := managedTarget(catalog, object, contextName, controllerMachine)
-		if err != nil {
+		if err != nil || managed.Controller.HostCluster != "" {
 			continue
 		}
 		if !managed.Physical {

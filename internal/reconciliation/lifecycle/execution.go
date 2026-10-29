@@ -1618,10 +1618,15 @@ func (s Service) proveQuiescent(ctx context.Context, store OperationStore, conte
 			if err != nil {
 				return err
 			}
+			lend, release, err := s.producedLender(block, planDefinitions(plan), true, s.producedInContext(contextName))
+			if err != nil {
+				return err
+			}
 			state, err := capability.Quiescent(ctx, Probe{
 				ApplyOperation: applyOperation, ApplyProved: applyProved, Context: contextName, Block: block, Launch: launch, Material: material,
-				RetiredWithHosts: boundary.retired[block.ID],
+				RetiredWithHosts: boundary.retired[block.ID], LendProduced: lend,
 			})
+			release()
 			if err != nil {
 				return err
 			}

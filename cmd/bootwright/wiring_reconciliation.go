@@ -3,11 +3,13 @@ package main
 import (
 	"context"
 	"crypto/rand"
+	"slices"
 	"strings"
 	"time"
 
 	"github.com/crmarques/bootwright/ansible"
 	api "github.com/crmarques/bootwright/api/v1alpha1"
+	"github.com/crmarques/bootwright/internal/addons"
 	"github.com/crmarques/bootwright/internal/addons/instance"
 	"github.com/crmarques/bootwright/internal/addons/packages"
 	"github.com/crmarques/bootwright/internal/containercluster/agentinstall"
@@ -151,6 +153,7 @@ func operationPlaybook() map[string]string {
 		kubevirt.HostImplementation + "/apply":          "substrate/kubevirt_host_apply.yml",
 		kubevirt.HostImplementation + "/observe":        "substrate/kubevirt_host_observe.yml",
 		kubevirt.HostImplementation + "/destroy":        "substrate/kubevirt_host_destroy.yml",
+		kubevirt.HostImplementation + "/lend":           "substrate/kubevirt_host_lend.yml",
 		kubevirt.MachineImplementation + "/apply":       "substrate/kubevirt_machine_apply.yml",
 		kubevirt.MachineImplementation + "/observe":     "substrate/kubevirt_machine_observe.yml",
 		kubevirt.MachineImplementation + "/destroy":     "substrate/kubevirt_machine_destroy.yml",
@@ -198,6 +201,27 @@ func operationPlaybook() map[string]string {
 	return bindings
 }
 
+func kubevirtHostRequirements(registry addons.Registry) kubevirt.HostRequirements {
+	return func(catalog api.Catalog, cluster string) ([]reconciliation.ObjectRef, bool) {
+		selected, _ := addons.Instances(catalog, registry)
+		var requires []reconciliation.ObjectRef
+		provided := false
+		for _, member := range selected {
+			if member.Instance.Cluster != cluster {
+				continue
+			}
+			provided = provided || slices.Contains(member.Package.Provides, "kubevirt")
+			if !member.Package.Last {
+				requires = append(requires, reconciliation.ObjectRef{Kind: instance.Kind, Object: cluster + "." + member.Package.Name})
+			}
+		}
+		if host, found := catalog.Find(api.OpenShiftCluster, cluster); found && host.Spec().Get("networking", "secondaryNetworks").Len() != 0 {
+			requires = append(requires, reconciliation.ObjectRef{Kind: networking.Kind, Object: cluster})
+		}
+		return requires, provided
+	}
+}
+
 // capabilityRunner is the port every runner-driven capability declares, so
 // the one runner composition builds reaches each of them unchanged.
 type capabilityRunner interface {
@@ -226,7 +250,7 @@ func buildCapabilitiesWith(clock systemClock, controller controllerDependencies,
 		capability: kubevirt.NewMachine(runner),
 	}, {
 		kind: kubevirt.HostKind, implementation: kubevirt.HostImplementation, family: "substrate-host",
-		capability: kubevirt.NewHost(runner),
+		capability: kubevirt.NewHost(runner, kubevirtHostRequirements(packages.Builtin())),
 	}, {
 		kind: installation.TreeKind, implementation: installation.TreeImplementation, family: "os-package-tree",
 		capability: installation.NewTree(runner).WithMedia(records),
@@ -242,7 +266,7 @@ func buildCapabilitiesWith(clock systemClock, controller controllerDependencies,
 		capability: agentinstall.NewMedia(runner, material.AuthorizedKey),
 	}, {
 		kind: agentinstall.Kind, implementation: agentinstall.InstallImplementation, family: "cluster-install",
-		capability: agentinstall.NewInstall(runner).WithIdentities(provedIdentities{}),
+		capability: agentinstall.NewInstall(runner).WithIdentities(provedIdentities{}).WithHostAccess(kubevirt.NewLender(runner)),
 	}}
 	for _, kind := range []api.Kind{api.CephCluster, api.CephPlacementPolicy, api.CephPool, api.CephRBDImage, api.CephFilesystem, api.CephSubvolume, api.CephClient, api.CephObjectGateway, api.CephObjectUser, api.CephObjectBucket, api.CephNFSExport, api.CephNVMeoFSubsystem} {
 		resolver = append(resolver, boundCapability{kind: string(kind), implementation: ceph.Implementation, family: "storage-core", capability: ceph.New(kind, runner).WithProofs(cephDependencyProofs{})})

@@ -3,6 +3,7 @@ package kubevirt
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"slices"
 	"strings"
 
 	"github.com/crmarques/bootwright/internal/reconciliation"
@@ -25,8 +26,8 @@ const (
 )
 
 const (
-	hostRequestVersion    = "substrate-host-kubevirt-v1"
-	machineRequestVersion = "machine-kubevirt-v1"
+	hostRequestVersion    = "substrate-host-kubevirt-v2"
+	machineRequestVersion = "machine-kubevirt-v2"
 	hostEvidenceVersion   = "substrate-host-kubevirt-evidence-v1"
 	machineEvidence       = "machine-kubevirt-evidence-v1"
 )
@@ -46,8 +47,11 @@ var verbs = []Access{
 	{Group: "cdi.kubevirt.io", Resource: "datavolumes", Verb: "delete"},
 	{Group: "cdi.kubevirt.io", Resource: "datavolumes", Verb: "get"},
 	{Group: "upload.cdi.kubevirt.io", Resource: "uploadtokenrequests", Verb: "create"},
+	{Resource: "persistentvolumeclaims", Verb: "get"},
 	{Resource: "persistentvolumeclaims", Verb: "list"},
 }
+
+func Verbs() []Access { return slices.Clone(verbs) }
 
 // HostBlockID and MachineBlockID name the blocks each capability contributes.
 // A consumer states requirements by API object, never by these identities.
@@ -62,12 +66,13 @@ func MachineBlockID(machine string) string { return reconciliation.BlockIdentity
 // VirtualMachine the arm creates.
 func HostContentDigest() string {
 	return contentDigest("bootwright.substrate.kubevirt.host-v1", HostImplementation, hostRequestVersion, hostEvidenceVersion,
-		"access-reviews", "root-class-rwx", "kube-system-uid", "ingress-ca")
+		"access-reviews", "root-class-rwx", "kube-system-uid", "ingress-ca", lendVersion, lendEvidence)
 }
 
 func MachineContentDigest() string {
 	return contentDigest("bootwright.substrate.kubevirt.machine-v1", MachineImplementation, machineRequestVersion, machineEvidence,
-		"run-strategy-manual", "efi-no-secure-boot", "evict-live-migrate", "bridge-binding", "root-template-blank", "owner-annotation-mark")
+		"run-strategy-manual", "efi-no-secure-boot", "evict-live-migrate", "bridge-binding", "root-template-blank", "owner-annotation-mark",
+		lendVersion, lendEvidence, "spread-preferred-anti-affinity")
 }
 
 func contentDigest(parts ...string) string {

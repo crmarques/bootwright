@@ -1,0 +1,13 @@
+---
+- name: Lend one hosted KubeVirt provider its access
+  hosts: bootwright_target
+  gather_facts: false
+  any_errors_fatal: true
+  serial: 1
+  strategy: ansible.builtin.linear
+
+  tasks:
+    - name: Execute the KubeVirt host access lend
+      ansible.builtin.import_role:
+        name: bootwright.core.substrate_kubevirt_access
+        tasks_from: lend

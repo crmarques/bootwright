@@ -22,6 +22,7 @@ MEDIA = "bootwright.io/media-identity"
 DOMAIN = "bootwright.substrate.kubevirt.owner-v1"
 MANAGED = ("app.kubernetes.io/managed-by", "bootwright")
 CONTEXT, MACHINE = "bootwright.io/context", "bootwright.io/machine"
+SPREAD = "bootwright.io/spread"
 BIND = "cdi.kubevirt.io/storage.bind.immediate.requested"
 DEFAULT_VIRT = "storageclass.kubevirt.io/is-default-virt-class"
 DEFAULT_CLASS = "storageclass.kubernetes.io/is-default-class"
@@ -308,6 +309,15 @@ def vm_body(request, context):
     if request.get("tpm") is not None:
         devices["tpm"] = {"persistent": bool(request["tpm"]["persistent"])}
     memory = "%dMi" % request["memoryMiB"]
+    template = {"labels": held}
+    placement = {}
+    if request.get("spread"):
+        # A soft rule: a required one would leave a peer unschedulable, and a
+        # host drain blocked, on a host with fewer nodes than the role has.
+        template = {"labels": dict(held, **{SPREAD: request["spread"]})}
+        placement = {"affinity": {"podAntiAffinity": {"preferredDuringSchedulingIgnoredDuringExecution": [{
+            "weight": 100, "podAffinityTerm": {"labelSelector": {"matchLabels": {SPREAD: request["spread"]}},
+                                               "topologyKey": "kubernetes.io/hostname"}}]}}}
     return {
         "apiVersion": "kubevirt.io/v1", "kind": "VirtualMachine",
         "metadata": {"name": vm, "namespace": namespace, "labels": held, "annotations": {OWNER: owner("VirtualMachine", vm)}},
@@ -321,8 +331,8 @@ def vm_body(request, context):
                                      "storageClassName": storage_class(request, context)}},
             }],
             "template": {
-                "metadata": {"labels": held},
-                "spec": {
+                "metadata": template,
+                "spec": dict(placement, **{
                     "domain": {"cpu": {"cores": request["cpu"], "sockets": 1, "threads": 1},
                                "memory": {"guest": memory}, "resources": {"requests": {"memory": memory}},
                                "firmware": {"bootloader": {"efi": {"secureBoot": False}}},
@@ -331,7 +341,7 @@ def vm_body(request, context):
                     "networks": [{"name": "nic%d" % index, "multus": {"networkName": iface["network"]}}
                                  for index, iface in enumerate(request["interfaces"])],
                     "volumes": [{"name": "root", "dataVolume": {"name": request["rootVolume"]}}],
-                },
+                }),
             },
         },
     }

@@ -5,6 +5,8 @@ import (
 	"slices"
 	"strings"
 	"testing"
+
+	"github.com/crmarques/bootwright/internal/diagnostics"
 )
 
 func definition(id string, dependencies ...string) BlockDefinition {
@@ -108,6 +110,17 @@ func TestPlanRefusesInvalidGraphs(t *testing.T) {
 				t.Fatal("invalid graph produced a plan")
 			}
 		})
+	}
+}
+
+// A cycle refuses naming its blocks, so a nested provider whose host waits
+// on its own child is told which references close the loop.
+func TestPlanRefusesACycleByNamingItsBlocks(t *testing.T) {
+	_, err := NewPlan(Apply, []BlockDefinition{definition("addon-gitops-host", "machine-child-0"), definition("cluster-install-host"),
+		definition("machine-child-0", "substrate-host-child"), definition("substrate-host-child", "addon-gitops-host", "cluster-install-host")})
+	want := "addon-gitops-host -> machine-child-0 -> substrate-host-child -> addon-gitops-host"
+	if found := diagnostics.Of(err); len(found) != 1 || !strings.Contains(found[0].Message, want) {
+		t.Fatalf("the cycle was refused as %v, want it named %q", found, want)
 	}
 }
 

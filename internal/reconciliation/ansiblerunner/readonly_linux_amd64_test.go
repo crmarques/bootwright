@@ -91,3 +91,22 @@ func TestAnUnrecordedInvocationTakesOverNoMaterial(t *testing.T) {
 		t.Fatalf("an unrecorded observation declaring no output started its adapter %d times (%v)", *started, err)
 	}
 }
+
+// A lend mints access for one later run of the same execution and creates no
+// object, so a read-only or unrecorded execution, a quiescence probe or a
+// comparison among them, may run it with its one output; nothing else gains
+// that exemption.
+func TestALendRunsInsideAReadOnlyOrUnrecordedExecution(t *testing.T) {
+	outputs := []lifecycle.OutputFile{{Name: "kubeconfig", Variable: "kubeconfig"}}
+	lend := lifecycle.RunRequest{Operation: lifecycle.LendOperation, ReadOnly: true, Unrecorded: true, Outputs: outputs}
+	if err := checkReadOnly(lend); err != nil {
+		t.Fatalf("a lend was refused: %v", err)
+	}
+	for _, operation := range []string{"apply", "destroy", lifecycle.ObserveOperation} {
+		other := lend
+		other.Operation = operation
+		if checkReadOnly(other) == nil {
+			t.Fatalf("an unrecorded %s took over an output", operation)
+		}
+	}
+}

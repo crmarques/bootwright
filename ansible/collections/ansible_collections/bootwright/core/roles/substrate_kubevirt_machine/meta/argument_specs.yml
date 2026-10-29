@@ -19,9 +19,12 @@ argument_specs:
             type: list
             elements: dict
             required: true
+          hostCluster:
+            type: str
+            required: false
           kubeconfigRef:
             type: str
-            required: true
+            required: false
           mediaVolume:
             type: str
             required: true
@@ -43,6 +46,12 @@ argument_specs:
           rootVolume:
             type: str
             required: true
+          serviceAccount:
+            type: str
+            required: false
+          spread:
+            type: str
+            required: false
           storageClass:
             type: str
             required: false
@@ -52,7 +61,7 @@ argument_specs:
           version:
             type: str
             required: true
-            choices: [machine-kubevirt-v1]
+            choices: [machine-kubevirt-v2]
       bootwright_substrate_kubevirt_machine_material:
         type: dict
         required: true

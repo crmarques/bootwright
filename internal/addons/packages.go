@@ -64,6 +64,13 @@ type ClusterFacts struct {
 	SecondaryNetworks                                 []SecondaryNetwork
 	Exports                                           []ConsumerFacts
 	Trust                                             TrustFacts
+	HostedNamespaces                                  []HostedNamespace
+}
+
+type HostedNamespace struct {
+	Name     string
+	Labels   map[string]string
+	Conflict string
 }
 
 type ConsumerFacts struct {

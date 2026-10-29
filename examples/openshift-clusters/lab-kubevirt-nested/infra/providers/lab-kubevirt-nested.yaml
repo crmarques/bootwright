@@ -1,0 +1,26 @@
+apiVersion: bootwright.io/v1alpha1
+kind: InfraProvider
+metadata:
+  name: lab-kubevirt-nested
+
+spec:
+  kubevirt:
+    # The host's kubevirt instance owns this namespace, its ServiceAccount and
+    # roles; each run is lent a token minted for that account.
+    hostClusterRef: host
+    namespace: bootwright-nested
+    storageClassRef: nested-guest-storage
+
+    machineProfiles:
+      - name: kubevirt
+        cpu: 4
+        memoryMiB: 16384
+        diskGiB: 120
+
+  networkAttachments:
+    - name: nested-guests
+      kubevirt:
+        networkRef:
+          apiGroup: k8s.ovn.org
+          kind: ClusterUserDefinedNetwork
+          name: nested-guests

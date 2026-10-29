@@ -1,0 +1,580 @@
+{
+  "checks": [
+    {
+      "condition": {
+        "apiVersion": "hco.kubevirt.io/v1beta1",
+        "kind": "HyperConverged",
+        "name": "kubevirt-hyperconverged",
+        "namespace": "openshift-cnv",
+        "namespaced": true,
+        "status": "True",
+        "type": "Available"
+      }
+    },
+    {
+      "condition": {
+        "apiVersion": "hco.kubevirt.io/v1beta1",
+        "kind": "HyperConverged",
+        "name": "kubevirt-hyperconverged",
+        "namespace": "openshift-cnv",
+        "namespaced": true,
+        "status": "False",
+        "type": "Degraded"
+      }
+    }
+  ],
+  "steps": [
+    {
+      "kind": "wait",
+      "wait": [
+        {
+          "condition": {
+            "apiVersion": "apiextensions.k8s.io/v1",
+            "kind": "CustomResourceDefinition",
+            "name": "hyperconvergeds.hco.kubevirt.io",
+            "namespace": "",
+            "namespaced": false,
+            "status": "True",
+            "type": "Established"
+          }
+        }
+      ]
+    },
+    {
+      "create": {
+        "apiVersion": "hco.kubevirt.io/v1beta1",
+        "body": {
+          "apiVersion": "hco.kubevirt.io/v1beta1",
+          "kind": "HyperConverged",
+          "metadata": {
+            "name": "kubevirt-hyperconverged",
+            "namespace": "openshift-cnv"
+          },
+          "spec": {}
+        },
+        "desiredDigest": "464c8c6778ad2c6b43a078eb5b865953a8d129245d06988e700f61752bad69d0",
+        "kind": "HyperConverged",
+        "name": "kubevirt-hyperconverged",
+        "namespace": "openshift-cnv",
+        "namespaced": true
+      },
+      "kind": "create"
+    },
+    {
+      "create": {
+        "apiVersion": "v1",
+        "body": {
+          "apiVersion": "v1",
+          "kind": "Namespace",
+          "metadata": {
+            "labels": {
+              "bootwright.example.com/net": "machine",
+              "tier": "hub"
+            },
+            "name": "guests-a"
+          }
+        },
+        "desiredDigest": "d93bc2c72f66524921275a9ecbc1c4e94f7f22a33ff0ae8c9a3b0c3c3d559219",
+        "kind": "Namespace",
+        "name": "guests-a",
+        "namespace": "",
+        "namespaced": false
+      },
+      "kind": "create"
+    },
+    {
+      "create": {
+        "apiVersion": "v1",
+        "body": {
+          "apiVersion": "v1",
+          "kind": "ServiceAccount",
+          "metadata": {
+            "name": "bootwright-kubevirt",
+            "namespace": "guests-a"
+          }
+        },
+        "desiredDigest": "9ffafdc9437a11bb8da98ec0379cf4e8fd7edccf490989c73a5c34e15bbcd43e",
+        "kind": "ServiceAccount",
+        "name": "bootwright-kubevirt",
+        "namespace": "guests-a",
+        "namespaced": true
+      },
+      "kind": "create"
+    },
+    {
+      "create": {
+        "apiVersion": "rbac.authorization.k8s.io/v1",
+        "body": {
+          "apiVersion": "rbac.authorization.k8s.io/v1",
+          "kind": "RoleBinding",
+          "metadata": {
+            "name": "bootwright-kubevirt",
+            "namespace": "guests-a"
+          },
+          "roleRef": {
+            "apiGroup": "rbac.authorization.k8s.io",
+            "kind": "ClusterRole",
+            "name": "bootwright-kubevirt-machines"
+          },
+          "subjects": [
+            {
+              "kind": "ServiceAccount",
+              "name": "bootwright-kubevirt",
+              "namespace": "guests-a"
+            }
+          ]
+        },
+        "desiredDigest": "f3dad829b0e17b42a64c112d083a3152d3c20fab0ef43ae69fb42ba4ced7ffe7",
+        "kind": "RoleBinding",
+        "name": "bootwright-kubevirt",
+        "namespace": "guests-a",
+        "namespaced": true
+      },
+      "kind": "create"
+    },
+    {
+      "create": {
+        "apiVersion": "v1",
+        "body": {
+          "apiVersion": "v1",
+          "kind": "Namespace",
+          "metadata": {
+            "name": "guests-b"
+          }
+        },
+        "desiredDigest": "250acd7554d394994b8765fe767d5a5d1632dbc1857f046d8b080e8c7df056de",
+        "kind": "Namespace",
+        "name": "guests-b",
+        "namespace": "",
+        "namespaced": false
+      },
+      "kind": "create"
+    },
+    {
+      "create": {
+        "apiVersion": "v1",
+        "body": {
+          "apiVersion": "v1",
+          "kind": "ServiceAccount",
+          "metadata": {
+            "name": "bootwright-kubevirt",
+            "namespace": "guests-b"
+          }
+        },
+        "desiredDigest": "78faec2c3d5920335d4dcbd8a49ab349a58b02a480daecb08d37e9bd54e6bc1f",
+        "kind": "ServiceAccount",
+        "name": "bootwright-kubevirt",
+        "namespace": "guests-b",
+        "namespaced": true
+      },
+      "kind": "create"
+    },
+    {
+      "create": {
+        "apiVersion": "rbac.authorization.k8s.io/v1",
+        "body": {
+          "apiVersion": "rbac.authorization.k8s.io/v1",
+          "kind": "RoleBinding",
+          "metadata": {
+            "name": "bootwright-kubevirt",
+            "namespace": "guests-b"
+          },
+          "roleRef": {
+            "apiGroup": "rbac.authorization.k8s.io",
+            "kind": "ClusterRole",
+            "name": "bootwright-kubevirt-machines"
+          },
+          "subjects": [
+            {
+              "kind": "ServiceAccount",
+              "name": "bootwright-kubevirt",
+              "namespace": "guests-b"
+            }
+          ]
+        },
+        "desiredDigest": "5d5747385570238cd678bdf5bd76bdda9d282475137b2b28e8f9bdcdbc63b4ea",
+        "kind": "RoleBinding",
+        "name": "bootwright-kubevirt",
+        "namespace": "guests-b",
+        "namespaced": true
+      },
+      "kind": "create"
+    },
+    {
+      "create": {
+        "apiVersion": "rbac.authorization.k8s.io/v1",
+        "body": {
+          "apiVersion": "rbac.authorization.k8s.io/v1",
+          "kind": "ClusterRole",
+          "metadata": {
+            "name": "bootwright-kubevirt-machines"
+          },
+          "rules": [
+            {
+              "apiGroups": [
+                "kubevirt.io"
+              ],
+              "resources": [
+                "virtualmachines"
+              ],
+              "verbs": [
+                "create",
+                "delete",
+                "get",
+                "patch"
+              ]
+            },
+            {
+              "apiGroups": [
+                "kubevirt.io"
+              ],
+              "resources": [
+                "virtualmachineinstances"
+              ],
+              "verbs": [
+                "get"
+              ]
+            },
+            {
+              "apiGroups": [
+                "subresources.kubevirt.io"
+              ],
+              "resources": [
+                "virtualmachines/start"
+              ],
+              "verbs": [
+                "update"
+              ]
+            },
+            {
+              "apiGroups": [
+                "subresources.kubevirt.io"
+              ],
+              "resources": [
+                "virtualmachines/stop"
+              ],
+              "verbs": [
+                "update"
+              ]
+            },
+            {
+              "apiGroups": [
+                "cdi.kubevirt.io"
+              ],
+              "resources": [
+                "datavolumes"
+              ],
+              "verbs": [
+                "create",
+                "delete",
+                "get"
+              ]
+            },
+            {
+              "apiGroups": [
+                "upload.cdi.kubevirt.io"
+              ],
+              "resources": [
+                "uploadtokenrequests"
+              ],
+              "verbs": [
+                "create"
+              ]
+            },
+            {
+              "apiGroups": [
+                ""
+              ],
+              "resources": [
+                "persistentvolumeclaims"
+              ],
+              "verbs": [
+                "get",
+                "list"
+              ]
+            },
+            {
+              "apiGroups": [
+                "k8s.cni.cncf.io"
+              ],
+              "resources": [
+                "network-attachment-definitions"
+              ],
+              "verbs": [
+                "get"
+              ]
+            }
+          ]
+        },
+        "desiredDigest": "6f9abccdcba47e9a26e0392dbc70dcc0f0c395b34acec75d879ed462efca2410",
+        "kind": "ClusterRole",
+        "name": "bootwright-kubevirt-machines",
+        "namespace": "",
+        "namespaced": false
+      },
+      "kind": "create"
+    },
+    {
+      "create": {
+        "apiVersion": "rbac.authorization.k8s.io/v1",
+        "body": {
+          "apiVersion": "rbac.authorization.k8s.io/v1",
+          "kind": "ClusterRole",
+          "metadata": {
+            "name": "bootwright-kubevirt-proof"
+          },
+          "rules": [
+            {
+              "apiGroups": [
+                ""
+              ],
+              "resourceNames": [
+                "guests-a",
+                "guests-b",
+                "kube-system"
+              ],
+              "resources": [
+                "namespaces"
+              ],
+              "verbs": [
+                "get"
+              ]
+            },
+            {
+              "apiGroups": [
+                "cdi.kubevirt.io"
+              ],
+              "resourceNames": [
+                "config"
+              ],
+              "resources": [
+                "cdiconfigs"
+              ],
+              "verbs": [
+                "get"
+              ]
+            },
+            {
+              "apiGroups": [
+                "cdi.kubevirt.io"
+              ],
+              "resources": [
+                "storageprofiles"
+              ],
+              "verbs": [
+                "get"
+              ]
+            },
+            {
+              "apiGroups": [
+                "storage.k8s.io"
+              ],
+              "resources": [
+                "storageclasses"
+              ],
+              "verbs": [
+                "get",
+                "list"
+              ]
+            },
+            {
+              "apiGroups": [
+                "k8s.ovn.org"
+              ],
+              "resources": [
+                "clusteruserdefinednetworks"
+              ],
+              "verbs": [
+                "get"
+              ]
+            }
+          ]
+        },
+        "desiredDigest": "a2d10410b29db51927f90380d49862319da1bd638e20e802bd2cf316ac44edb4",
+        "kind": "ClusterRole",
+        "name": "bootwright-kubevirt-proof",
+        "namespace": "",
+        "namespaced": false
+      },
+      "kind": "create"
+    },
+    {
+      "create": {
+        "apiVersion": "rbac.authorization.k8s.io/v1",
+        "body": {
+          "apiVersion": "rbac.authorization.k8s.io/v1",
+          "kind": "ClusterRoleBinding",
+          "metadata": {
+            "name": "bootwright-kubevirt-proof"
+          },
+          "roleRef": {
+            "apiGroup": "rbac.authorization.k8s.io",
+            "kind": "ClusterRole",
+            "name": "bootwright-kubevirt-proof"
+          },
+          "subjects": [
+            {
+              "kind": "ServiceAccount",
+              "name": "bootwright-kubevirt",
+              "namespace": "guests-a"
+            },
+            {
+              "kind": "ServiceAccount",
+              "name": "bootwright-kubevirt",
+              "namespace": "guests-b"
+            }
+          ]
+        },
+        "desiredDigest": "d14f88fb5c0f95897e8e02b195d5120decdc5e8bb39a0e209f77ddd0729a5ab4",
+        "kind": "ClusterRoleBinding",
+        "name": "bootwright-kubevirt-proof",
+        "namespace": "",
+        "namespaced": false
+      },
+      "kind": "create"
+    },
+    {
+      "create": {
+        "apiVersion": "rbac.authorization.k8s.io/v1",
+        "body": {
+          "apiVersion": "rbac.authorization.k8s.io/v1",
+          "kind": "Role",
+          "metadata": {
+            "name": "bootwright-kubevirt-proof",
+            "namespace": "openshift-config-managed"
+          },
+          "rules": [
+            {
+              "apiGroups": [
+                ""
+              ],
+              "resourceNames": [
+                "default-ingress-cert"
+              ],
+              "resources": [
+                "configmaps"
+              ],
+              "verbs": [
+                "get"
+              ]
+            }
+          ]
+        },
+        "desiredDigest": "2ce47f8e9734e415b3202dd696313f63d060a958c990fa2412488b1ba44abdd9",
+        "kind": "Role",
+        "name": "bootwright-kubevirt-proof",
+        "namespace": "openshift-config-managed",
+        "namespaced": true
+      },
+      "kind": "create"
+    },
+    {
+      "create": {
+        "apiVersion": "rbac.authorization.k8s.io/v1",
+        "body": {
+          "apiVersion": "rbac.authorization.k8s.io/v1",
+          "kind": "RoleBinding",
+          "metadata": {
+            "name": "bootwright-kubevirt-proof",
+            "namespace": "openshift-config-managed"
+          },
+          "roleRef": {
+            "apiGroup": "rbac.authorization.k8s.io",
+            "kind": "Role",
+            "name": "bootwright-kubevirt-proof"
+          },
+          "subjects": [
+            {
+              "kind": "ServiceAccount",
+              "name": "bootwright-kubevirt",
+              "namespace": "guests-a"
+            },
+            {
+              "kind": "ServiceAccount",
+              "name": "bootwright-kubevirt",
+              "namespace": "guests-b"
+            }
+          ]
+        },
+        "desiredDigest": "0f074e2fcb0f8de9b257db61942fe57a7aa7a5aec71cc8d7c0b49c51314f4d9e",
+        "kind": "RoleBinding",
+        "name": "bootwright-kubevirt-proof",
+        "namespace": "openshift-config-managed",
+        "namespaced": true
+      },
+      "kind": "create"
+    },
+    {
+      "create": {
+        "apiVersion": "rbac.authorization.k8s.io/v1",
+        "body": {
+          "apiVersion": "rbac.authorization.k8s.io/v1",
+          "kind": "Role",
+          "metadata": {
+            "name": "bootwright-kubevirt-proof",
+            "namespace": "openshift-cnv"
+          },
+          "rules": [
+            {
+              "apiGroups": [
+                ""
+              ],
+              "resourceNames": [
+                "kubemacpool-mac-range-config"
+              ],
+              "resources": [
+                "configmaps"
+              ],
+              "verbs": [
+                "get"
+              ]
+            }
+          ]
+        },
+        "desiredDigest": "c3933de84c4681006d42e7191e29358ead7fc75a191c225f3719c9bfbff6cfdb",
+        "kind": "Role",
+        "name": "bootwright-kubevirt-proof",
+        "namespace": "openshift-cnv",
+        "namespaced": true
+      },
+      "kind": "create"
+    },
+    {
+      "create": {
+        "apiVersion": "rbac.authorization.k8s.io/v1",
+        "body": {
+          "apiVersion": "rbac.authorization.k8s.io/v1",
+          "kind": "RoleBinding",
+          "metadata": {
+            "name": "bootwright-kubevirt-proof",
+            "namespace": "openshift-cnv"
+          },
+          "roleRef": {
+            "apiGroup": "rbac.authorization.k8s.io",
+            "kind": "Role",
+            "name": "bootwright-kubevirt-proof"
+          },
+          "subjects": [
+            {
+              "kind": "ServiceAccount",
+              "name": "bootwright-kubevirt",
+              "namespace": "guests-a"
+            },
+            {
+              "kind": "ServiceAccount",
+              "name": "bootwright-kubevirt",
+              "namespace": "guests-b"
+            }
+          ]
+        },
+        "desiredDigest": "9f0233c7d47ddf8e8cf8638fb0c8b78da8148e6d68a595a107a37bf8eb9784e0",
+        "kind": "RoleBinding",
+        "name": "bootwright-kubevirt-proof",
+        "namespace": "openshift-cnv",
+        "namespaced": true
+      },
+      "kind": "create"
+    }
+  ],
+  "version": "cluster-objects-v2"
+}

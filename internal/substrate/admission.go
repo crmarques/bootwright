@@ -254,6 +254,7 @@ func Validate(o api.Object, c api.Catalog) []api.Issue {
 			}
 		}
 	}
+	issues = add(issues, validateHostedProvider(o, c)...)
 	return issues[:min(len(issues), 999)]
 }
 

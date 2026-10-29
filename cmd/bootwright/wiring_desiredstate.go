@@ -65,6 +65,9 @@ func clusterMembers() func(api.Object) (environment.Membership, bool) {
 
 func addonFacts(c api.Catalog, cluster string) addons.ClusterFacts {
 	facts := openshift.AddonFacts(c, cluster)
+	for _, hosted := range substrate.HostedNamespaces(c, cluster) {
+		facts.HostedNamespaces = append(facts.HostedNamespaces, addons.HostedNamespace{Name: hosted.Name, Labels: hosted.Labels, Conflict: hosted.Conflict})
+	}
 	for _, export := range cephcluster.AddonExportFacts(c) {
 		facts.Exports = append(facts.Exports, addons.ConsumerFacts{Name: export.Name, Cluster: export.Cluster, Gateway: export.Gateway, TLS: export.TLS})
 	}

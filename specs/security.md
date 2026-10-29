@@ -534,7 +534,13 @@ before the adapter's first request, in the provider proof every Machine of
 the provider waits for and again in every block and port entry point
 ([KubeVirt machine realization](substrates.md#kubevirt-machine-realization)),
 because each would let the host connection run or trust something the
-declaration does not name. Its CDI upload proxy is verified against the
+declaration does not name. A host cluster the context builds is reached the
+same way, through a kubeconfig the arm's lend mints for each run, carrying
+only a short-lived token of the ServiceAccount its `kubevirt` instance owns in
+the provider's namespace; the host installation's administrator kubeconfig
+reaches that lend alone
+([KubeVirt machine realization](substrates.md#kubevirt-machine-realization)).
+Its CDI upload proxy is verified against the
 ingress certificate authority read through that verified connection, never with
 `--insecure`. A vCenter is reached at its declared server and port over TLS
 verified against the system trust store; its `disableCertificateVerification`

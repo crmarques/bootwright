@@ -1,10 +1,10 @@
 implementation: machine-kubevirt-v1
-content-digest: b73dcf33cbb5e84625c6f99d10187a801df4c3a730ce886221233df67e2bbed9
-request-version: machine-kubevirt-v1
+content-digest: bbe152305086ad712b6e58445ed2b2f8c5d7c26ae8292ce8793c630b74426199
+request-version: machine-kubevirt-v2
 automation-formats: none
 mark-formats: bootwright.io/context, bootwright.io/machine, bootwright.io/owner, bootwright.substrate.kubevirt.owner-v1
 proof-ids: bootwright.io/media-identity
-fixed-places: bootwright.substrate.kubevirt.name-v1
+fixed-places: bootwright.io/spread, bootwright.substrate.kubevirt.name-v1
 effect-pins:
   run-strategy-manual
   efi-no-secure-boot
@@ -12,6 +12,9 @@ effect-pins:
   bridge-binding
   root-template-blank
   owner-annotation-mark
+  substrate-access-kubevirt-v1
+  substrate-access-kubevirt-evidence-v1
+  spread-preferred-anti-affinity
 request-identity:
   identity.context
   identity.object
@@ -25,6 +28,7 @@ request-identity:
 request-schema:
   cpu int
   diskGiB int
+  hostCluster string omitempty
   identity struct kubevirt.Identity
   identity.block string
   identity.context string
@@ -33,7 +37,7 @@ request-schema:
   interfaces[].macAddress string
   interfaces[].name string
   interfaces[].network string
-  kubeconfigRef string
+  kubeconfigRef string omitempty
   mediaVolume string
   memoryMiB int
   name string
@@ -48,6 +52,8 @@ request-schema:
   placement.user string omitempty
   provider string
   rootVolume string
+  serviceAccount string omitempty
+  spread string omitempty
   storageClass string omitempty
   tpm *struct kubevirt.TPM omitempty
   tpm.persistent bool

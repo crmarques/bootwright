@@ -40,6 +40,7 @@ plugins/modules/redfish_system_inspect.py validate-modules:missing-gplv3-license
 plugins/modules/redfish_system_read.py validate-modules:missing-gplv3-license
 plugins/modules/ssh_key_policy.py validate-modules:missing-gplv3-license
 plugins/modules/substrate_host_protocol.py validate-modules:missing-gplv3-license
+plugins/modules/substrate_kubevirt_access.py validate-modules:missing-gplv3-license
 plugins/modules/substrate_kubevirt_api.py validate-modules:missing-gplv3-license
 plugins/modules/substrate_kubevirt_protocol.py validate-modules:missing-gplv3-license
 plugins/modules/substrate_kubevirt_upload.py validate-modules:missing-gplv3-license

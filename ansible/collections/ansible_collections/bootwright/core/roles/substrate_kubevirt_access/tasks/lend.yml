@@ -1,0 +1,46 @@
+---
+# The administrator kubeconfig of the host installation reaches only this
+# task: it mints one token of the hosted namespace's ServiceAccount and writes
+# a kubeconfig carrying that token alone to the run's one output file, which
+# the runner lends to the consuming run and clears.
+- name: Validate the frozen lend request
+  ansible.builtin.assert:
+    that:
+      - bootwright_substrate_kubevirt_lend_request.version == 'substrate-access-kubevirt-v1'
+      - bootwright_substrate_kubevirt_lend_digest is match('[0-9a-f]{64}')
+    quiet: true
+  no_log: true
+
+- name: Complete the qualified execution handoff
+  bootwright.core.substrate_kubevirt_protocol:
+    phase: loaded
+  no_log: true
+
+- name: Mint the hosted provider's access
+  bootwright.core.substrate_kubevirt_access:
+    kubeconfig: '{{ bootwright_substrate_kubevirt_lend_material.kubeconfig }}'
+    scratch: '{{ bootwright_run_scratch }}'
+    request: '{{ bootwright_substrate_kubevirt_lend_request }}'
+    output: '{{ bootwright_substrate_kubevirt_lend_output.kubeconfig }}'
+  register: substrate_kubevirt_access_lent
+  failed_when: false
+  no_log: true
+
+- name: Stop at a host that lends no access
+  ansible.builtin.assert:
+    that:
+      - substrate_kubevirt_access_lent.msg is not defined
+    fail_msg: >-
+      lending the access of host cluster {{ bootwright_substrate_kubevirt_lend_request.cluster }}
+      failed: {{ (substrate_kubevirt_access_lent.msg | default('') | string | bootwright.core.printable)[:512] }}
+    quiet: true
+
+- name: Publish the bounded lend
+  bootwright.core.substrate_kubevirt_protocol:
+    phase: completed
+    subject: lend
+    observed: false
+    outcome: unchanged
+    digest: '{{ bootwright_substrate_kubevirt_lend_digest }}'
+    observation: '{{ substrate_kubevirt_access_lent.observation }}'
+  no_log: true

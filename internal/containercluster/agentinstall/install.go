@@ -21,6 +21,7 @@ import (
 type InstallCapability struct {
 	runner     Runner
 	identities Identities
+	access     HostAccess
 }
 
 func NewInstall(runner Runner) InstallCapability { return InstallCapability{runner: runner} }
@@ -29,6 +30,11 @@ func NewInstall(runner Runner) InstallCapability { return InstallCapability{runn
 // identities, which composition binds to the pin's own owner.
 func (c InstallCapability) WithIdentities(identities Identities) InstallCapability {
 	c.identities = identities
+	return c
+}
+
+func (c InstallCapability) WithHostAccess(access HostAccess) InstallCapability {
+	c.access = access
 	return c
 }
 
@@ -433,11 +439,20 @@ func (c InstallCapability) runWithOutputs(ctx context.Context, execution lifecyc
 			Secret: request.TLSCertificateRef, Variable: "artifactCertificate",
 		})
 	}
+	hosted, release, err := c.lendHosted(ctx, &execution, request)
+	if err != nil {
+		return lifecycle.RunResult{}, err
+	}
+	defer release()
 	for index, node := range request.Nodes {
 		user, password := substrate.ControllerCredential(node.Substrate)
+		credential := node.Controller.CredentialsRef
+		if node.Controller.HostCluster != "" {
+			credential = hosted[hostedKey(node.Controller)]
+		}
 		materials = append(materials, lifecycle.MaterialFile{
 			Name: "bmc-user-" + node.Machine, Part: user,
-			Secret: node.Controller.CredentialsRef, Variable: "controllerUser" + nodeVariable(index),
+			Secret: credential, Variable: "controllerUser" + nodeVariable(index),
 		})
 		if password != "" {
 			materials = append(materials, lifecycle.MaterialFile{
@@ -460,6 +475,60 @@ func (c InstallCapability) runWithOutputs(ctx context.Context, execution lifecyc
 		Outputs: outputs, Refusals: refusals, Deadline: request.Deadline(),
 		NodeCount: len(request.Nodes), Parallelism: request.Budgets.FanOut,
 	}))
+}
+
+func (c InstallCapability) lendHosted(ctx context.Context, execution *lifecycle.Execution, request InstallRequest) (map[string]string, func(), error) {
+	names := map[string]string{}
+	var lent []secrets.Material
+	release := func() {
+		for _, material := range lent {
+			material.Clear()
+		}
+	}
+	for _, node := range request.Nodes {
+		key := hostedKey(node.Controller)
+		if node.Controller.HostCluster == "" || names[key] != "" {
+			continue
+		}
+		if c.access == nil {
+			release()
+			return nil, func() {}, refusal("lifecycle.state", "the lender of host cluster "+node.Controller.HostCluster+"'s access is not configured", "")
+		}
+		namespace, _, _ := strings.Cut(strings.TrimPrefix(node.Controller.Endpoint, "kubevirt:"), "/")
+		material, err := c.access.LendHostAccess(ctx, *execution, node.Controller.HostCluster, namespace, request.Placement, request.Deadline())
+		if err != nil {
+			release()
+			return nil, func() {}, err
+		}
+		lent = append(lent, material)
+		names[key] = "lent:host-" + strconv.Itoa(len(names))
+		execution.Material = maps.Clone(execution.Material)
+		if execution.Material == nil {
+			execution.Material = map[string]secrets.Material{}
+		}
+		execution.Material[names[key]] = material
+	}
+	return names, release, nil
+}
+
+func hostedKey(controller Controller) string {
+	namespace, _, _ := strings.Cut(strings.TrimPrefix(controller.Endpoint, "kubevirt:"), "/")
+	return controller.HostCluster + "/" + namespace
+}
+
+func (c InstallCapability) ProducedInputs(block reconciliation.Block) ([]lifecycle.ProducedInput, error) {
+	request, err := DecodeInstallRequest(block.Request)
+	if err != nil {
+		return nil, err
+	}
+	var inputs []lifecycle.ProducedInput
+	for _, node := range request.Nodes {
+		input := lifecycle.ProducedInput{Kind: "OpenShiftCluster", Object: node.Controller.HostCluster, Output: KubeconfigOutput}
+		if node.Controller.HostCluster != "" && !slices.Contains(inputs, input) {
+			inputs = append(inputs, input)
+		}
+	}
+	return inputs, nil
 }
 
 // preBootRefusals names what each node's pre-boot proof may refuse under that

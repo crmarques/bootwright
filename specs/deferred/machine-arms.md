@@ -1,10 +1,11 @@
 # Refused machine arms
 
 [B87](../milestones/m1.md#b87) admitted the KubeVirt arm for a host named
-by `kubeconfigRef` ([KubeVirt machine realization](../substrates.md#kubevirt-machine-realization));
-its `hostClusterRef` half waits for [B732](../milestones/m3.md#b732), and
-[B99](../milestones/m1.md#b99) revives the vSphere detail. Until then those
-arms are admitted by the closed schema in `api/v1alpha1/machines.go` and
+by `kubeconfigRef` and [B732](../milestones/m3.md#b732) for one this context
+builds, named by `hostClusterRef`
+([KubeVirt machine realization](../substrates.md#kubevirt-machine-realization)),
+and [B99](../milestones/m1.md#b99) revives the vSphere detail. Until then the
+vSphere arm is admitted by the closed schema in `api/v1alpha1/machines.go` and
 `api/v1alpha1/machines_install.go`, whose admission enforces the rules below
 as written, and refused before registration under the
 [refused-arm note](../api/machines.md#refused-arms). The KubeVirt arm realizes

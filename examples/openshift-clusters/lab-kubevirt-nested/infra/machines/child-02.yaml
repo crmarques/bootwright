@@ -1,0 +1,30 @@
+apiVersion: bootwright.io/v1alpha1
+kind: Machine
+metadata:
+  name: child-02
+
+spec:
+  substrate:
+    providerRef: lab-kubevirt-nested
+    kubevirt:
+      profileRef: kubevirt
+
+  hardware:
+    rootDevice:
+      deviceName: /dev/vda
+
+  os:
+    provided: false
+
+  network:
+    configRef: nested-guests
+    attachmentRef: nested-guests
+    installAddressRef: ip
+
+    addresses:
+      - name: fqdn
+        address: child-02.lab.example.test
+
+      - name: ip
+        address: 203.0.113.22/24
+        interface: eth0
