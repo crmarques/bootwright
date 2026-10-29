@@ -9597,3 +9597,19 @@ open items and 2 missing, with 24 confirmed defects in the remediation itself.
 It judges the quality of the remediation commits X160 to X193 and proposes
 eight work packages. The assessment ran no live operation and changes no
 product behavior, contract or milestone item state.
+
+### X213 — Consolidated follow-up of the specification audit
+
+**Item:** B957 (opened and delivered on 2026-10-29 for the owner's request to
+compare the Claude and Codex follow-ups, consolidate them and plan the
+remaining work). **Kind:** enabling. **Owners:** Architecture and Agent
+guidance.
+
+The [consolidated follow-up](../../audits/specs/001/follow-up/001/report-final.md)
+gives each of the 232 findings one final disposition, reconciling the two
+reviewers by fresh checks at `896e8d8f2`: 171 closed, 19 closed by an owner
+decision, 38 partial, 2 carried by open items and 2 missing. It names the
+carried safety and qualification debt (B567, B568, B659, B662, B491, B103,
+B857, B867) and plans packages D and P1 to P8. Package D records owner
+questions [Q119 to Q134](backlog.md#audit-remediation-decisions); none is
+answered here. No product behavior, contract or item state changes.
