@@ -125,7 +125,7 @@ func selectClusters(catalog api.Catalog, clusters []string) ([]string, bool, err
 		remedy = "select one of " + strings.Join(selectable, ", ") + " with --clusters, or omit --clusters"
 	}
 	return nil, false, failure("access.target",
-		"the selected context declares no OpenShiftCluster or CephCluster named "+strings.Join(unknown, ", "), remedy)
+		"the selected context declares no "+api.KindPhrase(api.ClusterKinds(), false)+" named "+strings.Join(unknown, ", "), remedy)
 }
 
 // normalize applies the list rules a cluster selector follows: an omitted

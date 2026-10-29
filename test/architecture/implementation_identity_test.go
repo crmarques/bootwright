@@ -87,20 +87,30 @@ func implementationIdentityRule(sources []sourceFile) identityRule {
 	return rule
 }
 
+// armSupportFiles names every file outside the substrate packages that may
+// name arms because it refuses or shapes its own kind's per-arm support
+// matrix, with why. It is exact: a new file needs a row, and a row whose file
+// is gone or no longer names an arm fails until it is removed.
+func armSupportFiles() map[string]string {
+	return map[string]string{
+		"internal/containercluster/openshift/admission.go":        "maps an OpenShiftCluster's substrate arm to the installer platform it supports",
+		"internal/containercluster/openshift/pushed_admission.go": "refuses OpenShiftCluster shapes a push-only KubeVirt cluster does not support",
+		"internal/machine/admission.go":                           "validates the Machine kind's own per-arm spec.substrate blocks against its provider's arm",
+		"internal/machine/erase_admission.go":                     "refuses a Machine erase on an arm with no physical disk to erase",
+		"internal/managedos/admission.go":                         "refuses ManagedOS installer and disk-encryption shapes an arm does not support",
+	}
+}
+
 // identityExempt reports whether a file may name arm and implementation
 // specifics: the API schema that declares the arms, the substrate packages,
-// composition, a domain's admission
-// refusals of its own support matrix, and, for one implementation's identity,
-// that implementation's own package.
-func identityExempt(source sourceFile) bool {
+// composition and a file armSupportFiles names.
+func identityExempt(source sourceFile, supported map[string]string) bool {
+	_, listed := supported[source.path]
 	return strings.HasPrefix(source.owner, "api/") || source.owner == "internal/substrate" || strings.HasPrefix(source.owner, "internal/substrate/") ||
-		source.owner == "cmd/bootwright" || strings.Contains(path.Base(source.path), "admission")
+		source.owner == "cmd/bootwright" || listed
 }
 
 func implementationIdentityUses(rule identityRule, source sourceFile) []string {
-	if identityExempt(source) {
-		return nil
-	}
 	aliases := map[string]string{}
 	for _, imported := range source.imports {
 		aliases[imported.alias] = imported.path
@@ -132,6 +142,11 @@ func implementationIdentityUses(rule identityRule, source sourceFile) []string {
 			if arm, found := rule.arms[text]; found {
 				uses = append(uses, strconv.Quote(text)+" ("+arm+")")
 			}
+			if value, _, qualified := strings.Cut(text, ":"); qualified {
+				if arm, found := rule.arms[value]; found {
+					uses = append(uses, strconv.Quote(text)+" ("+arm+" endpoint grammar)")
+				}
+			}
 			if declaring, found := rule.values[text]; found && declaring != owner {
 				uses = append(uses, strconv.Quote(text)+" (an implementation identity)")
 			}
@@ -142,11 +157,19 @@ func implementationIdentityUses(rule identityRule, source sourceFile) []string {
 	return slices.Compact(uses)
 }
 
-func implementationIdentityViolations(rule identityRule, sources []sourceFile, allowed map[string]string) []string {
+func implementationIdentityViolations(rule identityRule, sources []sourceFile, allowed, supported map[string]string) []string {
 	found := map[string]bool{}
+	naming := map[string]bool{}
 	var violations []string
 	for _, source := range sources {
-		for _, use := range implementationIdentityUses(rule, source) {
+		uses := implementationIdentityUses(rule, source)
+		if len(uses) > 0 {
+			naming[source.path] = true
+		}
+		if identityExempt(source, supported) {
+			continue
+		}
+		for _, use := range uses {
 			key := source.path + ": " + use
 			found[key] = true
 			if _, listed := allowed[key]; !listed {
@@ -157,6 +180,11 @@ func implementationIdentityViolations(rule identityRule, sources []sourceFile, a
 	for _, key := range slices.Sorted(maps.Keys(allowed)) {
 		if !found[key] {
 			violations = append(violations, "implementationIdentityAllowlist excuses "+key+", which no longer occurs; remove it")
+		}
+	}
+	for _, file := range slices.Sorted(maps.Keys(supported)) {
+		if !naming[file] {
+			violations = append(violations, "armSupportFiles exempts "+file+", which names no arm or implementation; remove it")
 		}
 	}
 	slices.Sort(violations)
@@ -182,20 +210,23 @@ func TestNoProductionCodeBranchesOnAnArmOrImplementationOutsideItsOwner(t *testi
 		}
 	}
 	maps.Copy(allowed, coincidentArmWords())
-	for _, violation := range implementationIdentityViolations(rule, sources, allowed) {
+	for _, violation := range implementationIdentityViolations(rule, sources, allowed, armSupportFiles()) {
 		t.Error(violation)
 	}
 }
 
-// A containercluster file comparing a node's arm with substrate.ArmKubeVirt is
-// exactly the use the rule rejects; the same comparison in an admission file
-// passes, and an allowlist row naming it excuses it.
+// A containercluster file comparing a node's arm with substrate.ArmKubeVirt or
+// parsing a "kubevirt:" endpoint is exactly the use the rule rejects; an
+// allowlist row naming it excuses it, an armSupportFiles row exempts its file,
+// and a file merely named like admission gains nothing.
 func TestTheImplementationIdentityRuleRejectsAnArmComparison(t *testing.T) {
 	syntax, err := parser.ParseFile(token.NewFileSet(), "pushed.go", `package agentinstall
 
 import "github.com/crmarques/bootwright/internal/substrate"
 
-func pushed(arm string) bool { return arm == substrate.ArmKubeVirt || arm == "machine-libvirt-v1" }
+func pushed(arm, endpoint string) bool {
+	return arm == substrate.ArmKubeVirt || arm == "machine-libvirt-v1" || strings.HasPrefix(endpoint, "kubevirt:")
+}
 `, 0)
 	if err != nil {
 		t.Fatal(err)
@@ -207,23 +238,33 @@ func pushed(arm string) bool { return arm == substrate.ArmKubeVirt || arm == "ma
 	}
 	fixture := sourceFile{path: "internal/containercluster/agentinstall/pushed.go", owner: "internal/containercluster/agentinstall", syntax: syntax,
 		imports: []packageImport{{alias: "substrate", path: substratePackage}}}
-	want := []string{
-		`internal/containercluster/agentinstall/pushed.go: "machine-libvirt-v1" (an implementation identity) names an arm or implementation outside its owner; reach it through a capability the owner publishes`,
-		"internal/containercluster/agentinstall/pushed.go: substrate.ArmKubeVirt names an arm or implementation outside its owner; reach it through a capability the owner publishes",
+	refused := func(path string) []string {
+		return []string{
+			path + `: "kubevirt:" (substrate.ArmKubeVirt endpoint grammar) names an arm or implementation outside its owner; reach it through a capability the owner publishes`,
+			path + `: "machine-libvirt-v1" (an implementation identity) names an arm or implementation outside its owner; reach it through a capability the owner publishes`,
+			path + ": substrate.ArmKubeVirt names an arm or implementation outside its owner; reach it through a capability the owner publishes",
+		}
 	}
-	if got := implementationIdentityViolations(rule, []sourceFile{fixture}, nil); !slices.Equal(got, want) {
+	if got, want := implementationIdentityViolations(rule, []sourceFile{fixture}, nil, nil), refused(fixture.path); !slices.Equal(got, want) {
 		t.Fatalf("violations = %q, want %q", got, want)
 	}
 	allowed := map[string]string{"internal/containercluster/agentinstall/pushed.go: substrate.ArmKubeVirt": "B809",
-		`internal/containercluster/agentinstall/pushed.go: "machine-libvirt-v1" (an implementation identity)`: "B809",
-		"internal/cli/gone.go: substrate.ArmLibvirt":                                                          "B809"}
-	if got := implementationIdentityViolations(rule, []sourceFile{fixture}, allowed); !slices.Equal(got, []string{
+		`internal/containercluster/agentinstall/pushed.go: "machine-libvirt-v1" (an implementation identity)`:    "B809",
+		`internal/containercluster/agentinstall/pushed.go: "kubevirt:" (substrate.ArmKubeVirt endpoint grammar)`: "B809",
+		"internal/cli/gone.go: substrate.ArmLibvirt":                                                             "B809"}
+	if got := implementationIdentityViolations(rule, []sourceFile{fixture}, allowed, nil); !slices.Equal(got, []string{
 		"implementationIdentityAllowlist excuses internal/cli/gone.go: substrate.ArmLibvirt, which no longer occurs; remove it",
 	}) {
 		t.Fatalf("allowlisted violations = %q", got)
 	}
-	fixture.path = "internal/containercluster/openshift/pushed_admission.go"
-	if got := implementationIdentityViolations(rule, []sourceFile{fixture}, nil); len(got) != 0 {
-		t.Fatalf("an admission file is refused: %q", got)
+	fixture.path = "internal/containercluster/openshift/new_admission.go"
+	if got, want := implementationIdentityViolations(rule, []sourceFile{fixture}, nil, nil), refused(fixture.path); !slices.Equal(got, want) {
+		t.Fatalf("an unlisted admission file is exempt: %q", got)
+	}
+	supported := map[string]string{fixture.path: "its kind's support matrix", "internal/machine/gone_admission.go": "a removed matrix"}
+	if got := implementationIdentityViolations(rule, []sourceFile{fixture}, nil, supported); !slices.Equal(got, []string{
+		"armSupportFiles exempts internal/machine/gone_admission.go, which names no arm or implementation; remove it",
+	}) {
+		t.Fatalf("supported-file violations = %q", got)
 	}
 }

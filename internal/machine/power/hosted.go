@@ -3,7 +3,6 @@ package power
 import (
 	"context"
 	"maps"
-	"strings"
 	"time"
 
 	"github.com/crmarques/bootwright/internal/machine"
@@ -33,8 +32,7 @@ func credentialReferences(access Access) []string {
 }
 
 func hostedNamespace(access Access) string {
-	namespace, _, _ := strings.Cut(strings.TrimPrefix(access.Endpoint, "kubevirt:"), "/")
-	return namespace
+	return substrate.KubeVirtNamespace(access.Endpoint)
 }
 
 const runOverhead = 5 * time.Minute

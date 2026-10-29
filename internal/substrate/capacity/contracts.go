@@ -3,6 +3,9 @@ package capacity
 import (
 	"context"
 	"time"
+
+	api "github.com/crmarques/bootwright/api/v1alpha1"
+	"github.com/crmarques/bootwright/internal/machine"
 )
 
 const (
@@ -57,4 +60,19 @@ type Check struct {
 }
 type CapacityChecker interface {
 	Check(context.Context, []Allocation, bool) ([]Check, error)
+}
+
+type Graph interface {
+	Effective(context.Context, string) (api.Catalog, error)
+}
+type Ownership interface {
+	Ownership(context.Context, string) (map[string]machine.OwnershipState, error)
+}
+type Projector func(api.Catalog, string) ([]Allocation, error)
+
+type Summary struct{ Passed, Failed, Unknown, Pending int }
+type Report struct {
+	Context, Target string
+	Checks          []Check
+	Summary         Summary
 }

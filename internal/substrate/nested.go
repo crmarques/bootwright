@@ -61,6 +61,20 @@ func HostedNamespaces(catalog api.Catalog, cluster string) []HostedNamespace {
 	return namespaces
 }
 
+func AttachmentNetworkKind(provider api.Object, attachment string) string {
+	kind := ""
+	for _, declared := range provider.Spec().Get("networkAttachments").Items() {
+		if declared.Get("name").Text() == attachment {
+			kind = declared.Get(ArmKubeVirt, "networkRef", "kind").Text()
+		}
+	}
+	return kind
+}
+
+func PersistentTPM(profile api.Value) bool {
+	return profile.Has("tpm") && (!profile.Has("tpm", "persistent") || profile.Get("tpm", "persistent").Bool())
+}
+
 func HostNetworkNamed(host api.Object, attachment api.Value) bool {
 	_, ok := hostNetwork(host, attachment)
 	return ok

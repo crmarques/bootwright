@@ -494,8 +494,7 @@ func (c InstallCapability) lendHosted(ctx context.Context, execution *lifecycle.
 			release()
 			return nil, func() {}, refusal("lifecycle.state", "the lender of host cluster "+node.Controller.HostCluster+"'s access is not configured", "")
 		}
-		namespace, _, _ := strings.Cut(strings.TrimPrefix(node.Controller.Endpoint, "kubevirt:"), "/")
-		material, err := c.access.LendHostAccess(ctx, *execution, node.Controller.HostCluster, namespace, request.Placement, request.Deadline())
+		material, err := c.access.LendHostAccess(ctx, *execution, node.Controller.HostCluster, substrate.KubeVirtNamespace(node.Controller.Endpoint), request.Placement, request.Deadline())
 		if err != nil {
 			release()
 			return nil, func() {}, err
@@ -512,8 +511,7 @@ func (c InstallCapability) lendHosted(ctx context.Context, execution *lifecycle.
 }
 
 func hostedKey(controller Controller) string {
-	namespace, _, _ := strings.Cut(strings.TrimPrefix(controller.Endpoint, "kubevirt:"), "/")
-	return controller.HostCluster + "/" + namespace
+	return controller.HostCluster + "/" + substrate.KubeVirtNamespace(controller.Endpoint)
 }
 
 func (c InstallCapability) ProducedInputs(block reconciliation.Block) ([]lifecycle.ProducedInput, error) {

@@ -12,15 +12,14 @@ import (
 	"github.com/crmarques/bootwright/internal/diagnostics"
 	"github.com/crmarques/bootwright/internal/environment"
 	"github.com/crmarques/bootwright/internal/machine"
-	storage "github.com/crmarques/bootwright/internal/storage/preflight"
 	"github.com/crmarques/bootwright/internal/substrate/capacity"
 )
 
 type Service struct {
-	Graph     storage.Graph
+	Graph     capacity.Graph
 	Selection func(context.Context) (string, error)
-	Ownership storage.Ownership
-	Project   storage.Projector
+	Ownership capacity.Ownership
+	Project   capacity.Projector
 	Capacity  capacity.CapacityChecker
 	Blocks    func(context.Context, string) (map[string]string, error)
 	DNSBlock  func(server string) string

@@ -80,7 +80,11 @@ func (s Service) resolveOne(ctx context.Context, catalog api.Catalog, contextNam
 		return target{}, err
 	}
 	if frozen.Controller.HostCluster != "" && s.access == nil {
-		return target{}, refusedOn(name, "this executable lends no access to OpenShiftCluster/"+frozen.Controller.HostCluster+", which hosts Machine/"+name+", so no power request was sent", "")
+		kind := api.KindPhrase(api.CategoryKinds(api.ContainerClusterCategory), false)
+		if host, found := catalog.FindInCategory(api.ContainerClusterCategory, frozen.Controller.HostCluster); found {
+			kind = string(host.Kind())
+		}
+		return target{}, refusedOn(name, "this executable lends no access to "+kind+"/"+frozen.Controller.HostCluster+", which hosts Machine/"+name+", so no power request was sent", "")
 	}
 	object, _ := catalog.Find(api.Machine, name)
 	resolved := target{frozen: frozen, physical: physical}

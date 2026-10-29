@@ -37,7 +37,7 @@ func validatePushedNodes(cluster api.Object, catalog api.Catalog) []api.Issue {
 		}
 		path := fmt.Sprintf("$.spec.nodes[%d].machineRef", index)
 		if encryptedNode(cluster, node.Get("role").Text()) {
-			if _, profile, found := substrate.SelectedProfile(catalog, bound); found && (!profile.Has("tpm") || profile.Has("tpm", "persistent") && !profile.Get("tpm", "persistent").Bool()) {
+			if _, profile, found := substrate.SelectedProfile(catalog, bound); found && !substrate.PersistentTPM(profile) {
 				issues = add(issues, invariantRemediation(path, "an encrypted KubeVirt node needs a persistent vTPM, which a host stop would otherwise discard with the key its disk is sealed to",
 					"declare tpm: {} without persistent: false on the profile "+substrate.MachineProfileRef(bound)+" of "+provider.Identity()+", or remove the node's role from spec.security.diskEncryption.roles"))
 			}
@@ -54,13 +54,7 @@ func validatePushedNodes(cluster api.Object, catalog api.Catalog) []api.Issue {
 			}
 		}
 		for _, name := range references {
-			kind := ""
-			for _, attachment := range provider.Spec().Get("networkAttachments").Items() {
-				if attachment.Get("name").Text() == name {
-					kind = attachment.Get("kubevirt", "networkRef", "kind").Text()
-				}
-			}
-			if kind != "ClusterUserDefinedNetwork" && kind != "NetworkAttachmentDefinition" {
+			if kind := substrate.AttachmentNetworkKind(provider, name); kind != "ClusterUserDefinedNetwork" && kind != "NetworkAttachmentDefinition" {
 				issues = add(issues, reference(path, "a KubeVirt baremetal platform requires ClusterUserDefinedNetwork or NetworkAttachmentDefinition attachments", "select a Localnet ClusterUserDefinedNetwork or bridge NetworkAttachmentDefinition for every interface of "+bound.Identity()))
 			}
 		}

@@ -93,22 +93,22 @@ func sessionTargets(catalog api.Catalog, command, contextName string, names []st
 		}
 	}
 	if len(unknown) > 0 {
-		subject, remedy := "no OpenShiftCluster or CephCluster named ", "name a cluster the context selects; "
+		subject, remedy := "no "+api.KindPhrase(api.ClusterKinds(), false)+" named ", "name a cluster the context selects; "
 		if len(unknown) > 1 {
-			subject, remedy = "no OpenShiftClusters or CephClusters named ", "name clusters the context selects; "
+			subject, remedy = "no "+api.KindPhrase(api.ClusterKinds(), true)+" named ", "name clusters the context selects; "
 		}
 		return nil, failure("access.target", "the context "+contextName+" selects "+subject+strings.Join(unknown, ", "), remedy+discovery+" lists them")
 	}
 	for _, storage := range clusters {
 		if management := storage.Spec().Get("management").Text(); management != "" && management != "managed" {
 			return nil, failure("cluster.not-applicable",
-				"bootwright "+command+" does not apply to "+storage.Name()+", an "+management+" CephCluster; it applies to managed CephClusters, whose declared nodes it opens a session on",
+				"bootwright "+command+" does not apply to "+storage.Name()+", an "+management+" "+string(storage.Kind())+"; it applies to managed "+string(storage.Kind())+"s, whose declared nodes it opens a session on",
 				discovery+" lists the clusters this context selects and their kinds")
 		}
 	}
 	if len(containers) > 0 {
 		return nil, diagnostics.NewFailure("access.unavailable",
-			"bootwright "+command+" is not available for "+containers[0].Name()+", an OpenShiftCluster: sessions are not yet implemented for that kind, and the cluster is reached through bootwright cluster kubeconfig", "")
+			"bootwright "+command+" is not available for "+containers[0].Name()+", "+api.Article(containers[0].Kind())+" "+string(containers[0].Kind())+": sessions are not yet implemented for that kind, and the cluster is reached through bootwright cluster kubeconfig", "")
 	}
 	return clusters, nil
 }

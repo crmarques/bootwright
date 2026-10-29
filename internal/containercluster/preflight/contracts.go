@@ -4,10 +4,10 @@ import (
 	"context"
 
 	"github.com/crmarques/bootwright/internal/machine"
-	storage "github.com/crmarques/bootwright/internal/storage/preflight"
+	"github.com/crmarques/bootwright/internal/substrate/capacity"
 )
 
-type Report = storage.Report
+type Report = capacity.Report
 
 type Resolver interface {
 	Read(context.Context, []string) ([]byte, error)

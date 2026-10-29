@@ -531,7 +531,9 @@ A child kind with a `peerClusterRef` to a cluster kind keeps both of its
 clusters whole in selection, and normalization runs the family kinds in
 registry order, each root before its children. Reconciliation, desired state,
 Environment and the CLI iterate the registry and name no family kind or
-family-owned child kind, which `TestGeneralFlowNamesNoImplementation` holds; a
+family-owned child kind, and outside the CLI's help and output text their
+diagnostics build each kind's name from the object or the registry, which
+`TestGeneralFlowNamesNoImplementation` holds; a
 new family therefore adds its registry row, its schemas and its domain without
 editing the general flow.
 

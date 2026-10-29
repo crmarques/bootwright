@@ -16,7 +16,7 @@ func (s Service) revealObjectUser(ctx context.Context, selected string, catalog 
 	gatewayKind, _ := api.RoleKind(api.StorageClusterCategory, api.ObjectGatewayRole)
 	user, declared := catalog.Find(userKind, name)
 	if !declared || user.Spec().Get("clusterRef").Text() != entry.Name {
-		return failure("access.target", "CephCluster "+entry.Name+" of context "+selected+" declares no CephObjectUser named "+name,
+		return failure("access.target", entry.Kind+" "+entry.Name+" of context "+selected+" declares no "+string(userKind)+" named "+name,
 			"bootwright cluster info --context "+selected+" --name "+entry.Name+" lists its object users")
 	}
 	for _, user := range []api.Object{user} {
@@ -30,19 +30,19 @@ func (s Service) revealObjectUser(ctx context.Context, selected string, catalog 
 			return err
 		}
 		if !proved {
-			return failure("access.unavailable", "the original apply does not prove CephObjectUser "+user.Name()+" in this cluster and gateway", "restore the original storage scope before requesting its credentials")
+			return failure("access.unavailable", "the original apply does not prove "+string(user.Kind())+" "+user.Name()+" in this cluster and gateway", "restore the original storage scope before requesting its credentials")
 		}
 		read, found, err := s.custody.ObjectUserCredentials(ctx, selected, user.Name())
 		if err != nil {
 			read.Material.Clear()
 			if errors.Is(err, ErrObjectUserMaterial) {
-				return failure("secret.store.corrupt", "this context holds invalid S3 material for CephObjectUser "+user.Name(), "restore the original context custody before continuing")
+				return failure("secret.store.corrupt", "this context holds invalid S3 material for "+string(user.Kind())+" "+user.Name(), "restore the original context custody before continuing")
 			}
 			return err
 		}
 		if !found || read.Unproved || !validObjectCredentials(read.Material) {
 			read.Material.Clear()
-			return failure("access.unavailable", "this context holds no proved S3 credentials for CephObjectUser "+user.Name(), "bootwright apply --context "+selected+" --stage clusters")
+			return failure("access.unavailable", "this context holds no proved S3 credentials for "+string(user.Kind())+" "+user.Name(), "bootwright apply --context "+selected+" --stage clusters")
 		}
 		entry.Ceph.ObjectUsers = append(entry.Ceph.ObjectUsers, ObjectUserAccess{Name: user.Name(), Gateway: gatewayName, Credentials: read.Material})
 	}

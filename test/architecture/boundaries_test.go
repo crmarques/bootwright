@@ -176,8 +176,9 @@ func applicationDependencies() map[string][]string {
 		"internal/infrastructureservices/dnsserver": {"internal/infrastructureservices/managedservice"},
 		"internal/infrastructureservices/ntpserver": {"internal/infrastructureservices/managedservice"},
 		"internal/infrastructureservices/proxy":     {"internal/infrastructureservices/managedservice"},
-		// Container preflight reuses storage's report and capacity port.
-		"internal/containercluster/preflight": {"internal/storage/preflight", "internal/substrate/capacity"},
+		// Each family's preflight shares the capacity port's report, graph,
+		// ownership and projector types, never the other family's preflight.
+		"internal/containercluster/preflight": {"internal/substrate/capacity"},
 		"internal/storage/preflight":          {"internal/substrate/capacity"},
 		// Cluster preflight is the union of the container and storage checks.
 		"internal/environment/clusterpreflight": {"internal/containercluster/preflight", "internal/storage/preflight", "internal/substrate/capacity"},

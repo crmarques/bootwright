@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net/netip"
 	"slices"
+	"strings"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/infrastructureservices"
@@ -497,7 +498,7 @@ func validateAccess(o api.Object, c api.Catalog) []api.Issue {
 		issues = appendIssues(issues, invariant("$.spec.access.local", "local access must be true and requires an OS-ready Machine", "remove spec.access.local, or set it to true on an OS-ready Machine"))
 	}
 	if s.Get("access", "rootLogin").Text() == "revoke" && (installed(o) || !successorLogin(o, c)) {
-		issues = appendIssues(issues, invariant("$.spec.access.rootLogin", "revoking root login requires a managed storage-cluster non-root successor login", "remove spec.access.rootLogin, or make this Machine a node of a managed CephCluster whose spec.cephadm.clusterSSH names a non-root user and a keyRef"))
+		issues = appendIssues(issues, invariant("$.spec.access.rootLogin", "revoking root login requires a managed storage-cluster non-root successor login", "remove spec.access.rootLogin, or make this Machine a node of "+successorLoginHolders()))
 	}
 	return issues
 }
@@ -831,6 +832,16 @@ func validateServices(o api.Object, c api.Catalog) []api.Issue {
 	issues = appendIssues(issues, infrastructureservices.ValidateProxy(s.Get("proxy"), c, "$.spec.proxy", installed(o))...)
 	issues = appendIssues(issues, infrastructureservices.ValidateServerSelections(s.Get("os", "install", "ntp"), c, api.NTPServer, "$.spec.os.install.ntp")...)
 	return issues
+}
+
+func successorLoginHolders() string {
+	var holders []string
+	for _, kind := range api.ClusterKinds() {
+		if field, ok := api.ClusterSuccessorLoginField(kind); ok {
+			holders = append(holders, "a managed "+string(kind)+" whose "+field+" names a non-root user and a keyRef")
+		}
+	}
+	return strings.Join(holders, " or ")
 }
 
 func successorLogin(o api.Object, c api.Catalog) bool {

@@ -219,7 +219,7 @@ func machineRequestFor(catalog api.Catalog, provider, machine api.Object, contro
 		request.ServiceAccount = substrate.HostAccount
 	}
 	if profile.Has("tpm") {
-		request.TPM = &TPM{Persistent: !profile.Has("tpm", "persistent") || profile.Get("tpm", "persistent").Bool()}
+		request.TPM = &TPM{Persistent: substrate.PersistentTPM(profile)}
 	}
 	for _, iface := range target.Interfaces {
 		reference := attachmentOf(machine, iface.Name)

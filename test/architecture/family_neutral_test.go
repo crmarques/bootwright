@@ -98,7 +98,8 @@ func familyKindAllowlist() map[string]excusedUse {
 const familyKindAllowlistCeiling = 0
 
 // familyKindNames lists each cluster family kind or family-owned child kind a
-// source names, as an API constant or as a string literal equal to its name.
+// source names, as an API constant, as a string literal equal to its name, or,
+// outside the CLI's help and output text, as prose inside a string literal.
 func familyKindNames(source sourceFile, kinds map[string]bool) []string {
 	alias := ""
 	for _, imported := range source.imports {
@@ -114,13 +115,30 @@ func familyKindNames(source sourceFile, kinds map[string]bool) []string {
 				found = append(found, source.path+": "+alias+"."+node.Sel.Name+" names a cluster family kind; iterate the family registry instead")
 			}
 		case *ast.BasicLit:
-			if text, err := strconv.Unquote(node.Value); err == nil && node.Kind == token.STRING && kinds[text] {
+			text, err := strconv.Unquote(node.Value)
+			if err != nil || node.Kind != token.STRING {
+				return true
+			}
+			if kinds[text] {
 				found = append(found, source.path+": "+strconv.Quote(text)+" names a cluster family kind; iterate the family registry instead")
+				return true
+			}
+			for _, kind := range slices.Sorted(maps.Keys(kinds)) {
+				if !kindProseExempt(source.owner) && strings.Contains(text, kind) {
+					found = append(found, source.path+": "+strconv.Quote(text)+" names a cluster family kind in prose; build it from the object's kind instead")
+					break
+				}
 			}
 		}
 		return true
 	})
 	return found
+}
+
+// kindProseExempt is the CLI, whose help and rendered output state which
+// cluster kinds each command applies to; the help goldens pin that text.
+func kindProseExempt(owner string) bool {
+	return owner == "internal/cli" || strings.HasPrefix(owner, "internal/cli/")
 }
 
 func familyKinds() map[string]bool {
@@ -202,8 +220,11 @@ import api "github.com/crmarques/bootwright/api/v1alpha1"
 var roots = []api.Kind{api.OpenShiftCluster, api.Machine, api.CephPool, api.ClusterAddonBinding}
 
 const kind, child = "CephCluster", "CephConsumer"
+
+var message = "the CephCluster " + name + " declares no node"
 `)
-	if got := familyKindNames(source, familyKinds()); len(got) != 4 {
+	got := familyKindNames(source, familyKinds())
+	if len(got) != 5 || got[4] != `internal/environment/fixture.go: "the CephCluster " names a cluster family kind in prose; build it from the object's kind instead` {
 		t.Fatalf("violations = %q", got)
 	}
 }

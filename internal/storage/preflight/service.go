@@ -126,7 +126,7 @@ func (s Service) Check(ctx context.Context, request PreflightRequest) (*Report, 
 	}
 
 	slices.SortFunc(result.Checks, func(a, b Check) int { return strings.Compare(a.Target+"/"+a.ID, b.Target+"/"+b.ID) })
-	result.summarize()
+	summarize(result)
 	if result.Summary.Failed+result.Summary.Unknown+result.Summary.Pending > 0 {
 		code := "preflight.unknown"
 		if result.Summary.Failed > 0 {

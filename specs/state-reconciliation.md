@@ -873,12 +873,9 @@ capability family, such as the substrate family that claims a Machine.
 Reconciliation resolves every requirement to the blocks that realize that
 object, or only that family's blocks, before it freezes the plan, and refuses
 before registration when no block realizes it, so a capability never learns
-another's block-identity grammar. A reference from a block's object to an
-object another block of the plan realizes is a requirement unless the domain
-page that owns the referencing field states why not; a reference to an
-external service, which no block realizes, is the standing exemption. The
-[reference edges](#reference-edges) catalog lists every requirement a
-capability emits, and domain pages link it rather than restating their sets.
+another's block-identity grammar. A reference orders a block only through a
+row of the [reference edges](#reference-edges) catalog, which domain pages
+link rather than restate.
 
 An apply attempt receives what each block it depends on durably proved in this
 operation: that block's kind, object, implementation, verb and state, and the
@@ -903,9 +900,11 @@ Each row is one requirement class a capability family emits: the block (its
 family and block kind), the API object it requires (narrowed to one family
 where stated), and the reference or rule that names that object. A
 requirement resolves only when some block of the plan realizes its target, so
-an external service never orders anything. A reference no row names orders
-nothing for that block; it is still resolved and validated. Destroy inverts
-every edge. Rows within one family that the family orders by its own block
+an external service never orders anything. A reference no row names is
+resolved and validated but orders nothing; each such field that can name a
+realized object needs its family's own ordering or a stated reason, which
+`TestEveryReferenceFieldHasAnEdgeRowOrAReason` holds. Destroy inverts every
+edge. Rows within one family that the family orders by its own block
 dependencies, such as a storage child after its cluster, are not requirements
 and are not listed. `TestEveryRequirementMatchesTheEdgeCatalog` plans every
 example and fails when a capability emits a requirement no row names, or omits
@@ -944,7 +943,7 @@ one a row's field path names on its object while a block realizes the target.
 | `cluster-network` `OpenShiftClusterNetwork` | `ClusterAddonBinding` | the add-on instance on that cluster that provides `nmstate` |
 | `addon-instance` `ClusterAddonBinding` | `OpenShiftCluster` | the binding's `spec.clusterRef` |
 | `addon-instance` `ClusterAddonBinding` | `ClusterAddonBinding` | each instance on the same cluster providing a capability the package requires |
-| `addon-instance` `ClusterAddonBinding` | `CephConsumer` | the package's `cephConsumerRef` |
+| `addon-instance` `ClusterAddonBinding` | `CephConsumer` | the package's `spec.packages.fdf.cephConsumerRef` |
 | `storage-core` `CephCluster` | `Machine` | `spec.topology.nodes[].machineRef` |
 | `storage-core` `CephPool` | `CephPlacementPolicy` | `spec.placementPolicyRef` |
 | `storage-core` `CephRBDImage` | `CephPool` | `spec.poolRef`, `spec.dataPoolRef` |

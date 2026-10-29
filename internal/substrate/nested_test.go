@@ -87,3 +87,35 @@ func TestAHostedTargetNamesItsHostInPlaceOfACredential(t *testing.T) {
 		t.Fatal("an external provider names a host cluster")
 	}
 }
+
+// A consumer reads a hosted provider's facts through these accessors, never
+// the endpoint grammar or the provider's arm block itself.
+func TestHostedAccessorsReadTheProvidersOwnShape(t *testing.T) {
+	endpoint := KubeVirtEndpoint("guests", "vm-1")
+	if got := KubeVirtNamespace(endpoint); got != "guests" {
+		t.Fatalf("namespace of %q = %q", endpoint, got)
+	}
+	if got := KubeVirtNamespace(""); got != "" {
+		t.Fatalf("namespace of an empty endpoint = %q", got)
+	}
+	provider := hostedOn("a", "guests", "machine")
+	if got := AttachmentNetworkKind(provider, "machine"); got != "ClusterUserDefinedNetwork" {
+		t.Fatalf("kind of machine = %q", got)
+	}
+	if got := AttachmentNetworkKind(provider, "missing"); got != "" {
+		t.Fatalf("kind of an undeclared attachment = %q", got)
+	}
+	for _, tc := range []struct {
+		profile api.Value
+		want    bool
+	}{
+		{m("name", "p"), false},
+		{m("name", "p", "tpm", m()), true},
+		{m("name", "p", "tpm", m("persistent", true)), true},
+		{m("name", "p", "tpm", m("persistent", false)), false},
+	} {
+		if got := PersistentTPM(tc.profile); got != tc.want {
+			t.Errorf("PersistentTPM(%v) = %t, want %t", tc.profile, got, tc.want)
+		}
+	}
+}

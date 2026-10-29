@@ -266,7 +266,7 @@ func (r *retention) omittedRoots(env api.Object) []SelectionIssue {
 		category, _ := api.CategoryOf(api.Kind(kind))
 		field := category.SelectionField()
 		problems = append(problems, SelectionIssue{Object: env, Target: identity, Issue: api.Issue{Code: "api.invariant", Field: "$.spec." + field,
-			Message:     identity + " is attached to CephConsumer/" + r.attached[identity] + " of the selection, but spec." + field + " omits it",
+			Message:     identity + " is attached to " + r.attached[identity] + " of the selection, but spec." + field + " omits it",
 			Remediation: "add " + name + " to spec." + field + ", or remove the attachment"}})
 	}
 	return problems
@@ -331,10 +331,10 @@ func (r *retention) expand(catalog api.Catalog, attachments []Attachment) {
 			}
 			storage := r.parentOf(attached.Kind(), attached.Spec())
 			if r.retained[consumer] {
-				r.reach(storage, attachment.ConsumerRef)
+				r.reach(storage, attached.Identity())
 			}
 			if r.full[storage] {
-				r.reach(consumer, attachment.ConsumerRef)
+				r.reach(consumer, attached.Identity())
 				r.keepFull(r.clusterKind(api.ContainerClusterCategory, attachment.ClusterRef), attachment.ClusterRef)
 			}
 		}

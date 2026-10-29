@@ -8,25 +8,17 @@ import (
 	"github.com/crmarques/bootwright/internal/substrate/capacity"
 )
 
-type Graph interface {
-	Effective(context.Context, string) (api.Catalog, error)
-}
-type Ownership interface {
-	Ownership(context.Context, string) (map[string]machine.OwnershipState, error)
-}
-type Projector func(api.Catalog, string) ([]Allocation, error)
+type Graph = capacity.Graph
+type Ownership = capacity.Ownership
+type Projector = capacity.Projector
 
 type GuestObserver interface {
 	CheckGuest(context.Context, string, api.Object, PreflightRequest) ([]Check, error)
 }
-type Summary struct{ Passed, Failed, Unknown, Pending int }
-type Report struct {
-	Context, Target string
-	Checks          []Check
-	Summary         Summary
-}
+type Summary = capacity.Summary
+type Report = capacity.Report
 
-func (r *Report) summarize() {
+func summarize(r *Report) {
 	r.Summary = Summary{}
 	for _, check := range r.Checks {
 		switch check.Status {

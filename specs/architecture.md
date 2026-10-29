@@ -1160,8 +1160,8 @@ and it resolves from explicit validated state:
 
 Each domain names, in its supported-shape section, the selector its
 implementations claim objects by: the InfraProvider arm, an OpenShiftCluster's
-`spec.distribution.type` and present `spec.install` arm, a CephCluster's
-`spec.type` and `spec.management`, or a service kind with its
+`spec.distribution.type` and present `spec.install` arm, the CephCluster kind
+and its `spec.management`, or a service kind with its
 `spec.implementation`. Each binding names the capability family it realizes,
 and bindings of one family are alternatives. Every selected object of a block
 family is claimed by exactly one bound implementation or refused by its
@@ -1179,11 +1179,13 @@ whether or not its kind is bound.
 every planned block of an effect-bearing object to its implementation's
 claim, and every claim to a block or a named no-block rule.
 Outside its owning implementation or substrate package, the API schema that
-declares the arms, composition and its domain's admission refusals,
-production code reaches an arm's or an implementation's specifics only through
+declares the arms, composition and the admission files that refuse or shape
+their own kind's per-arm support matrix, which the test's `armSupportFiles`
+names exactly with a reason each, production code reaches an arm's or an implementation's specifics only through
 a capability the owner publishes, such as a substrate-declared media delivery
 mode. `TestNoProductionCodeBranchesOnAnArmOrImplementationOutsideItsOwner`
-rejects any other arm constant, arm value or arm field path and any other
+rejects any other arm constant, arm value, arm-prefixed endpoint literal or
+arm field path and any other
 package's implementation identity constant or value, except where its exact
 allowlist, which only shrinks, names the item that removes the use.
 

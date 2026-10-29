@@ -118,6 +118,35 @@ func (c Catalog) FindInCategory(category Category, name string) (Object, bool) {
 	return Object{}, false
 }
 
+func KindPhrase(kinds []Kind, plural bool) string {
+	var words []string
+	for _, kind := range kinds {
+		word := string(kind)
+		if plural {
+			word += "s"
+		}
+		if !slices.Contains(words, word) {
+			words = append(words, word)
+		}
+	}
+	return strings.Join(words, " or ")
+}
+
+func KindsOf(objects []Object) []Kind {
+	kinds := make([]Kind, 0, len(objects))
+	for _, object := range objects {
+		kinds = append(kinds, object.Kind())
+	}
+	return kinds
+}
+
+func Article(kind Kind) string {
+	if kind != "" && strings.ContainsRune("AEIOU", rune(strings.ToUpper(string(kind))[0])) {
+		return "an"
+	}
+	return "a"
+}
+
 func (c Catalog) OfCategory(category Category) []Object {
 	var objects []Object
 	for _, kind := range CategoryKinds(category) {
@@ -193,6 +222,14 @@ func ClusterSuccessorLogin(cluster Object) bool {
 	login := cluster.Spec().Get(path...)
 	user := login.Get("user").Text()
 	return user != "" && user != "root" && login.Has("keyRef")
+}
+
+func ClusterSuccessorLoginField(kind Kind) (string, bool) {
+	path := clusterLayouts[kind].successorLogin
+	if path == nil {
+		return "", false
+	}
+	return "spec." + strings.Join(path, "."), true
 }
 
 func ClusterRequiresControllerFIPS(cluster Object) bool {

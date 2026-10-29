@@ -86,3 +86,29 @@ func TestClusterAccessorsReadEachKindsOwnLayout(t *testing.T) {
 		t.Error("only the OpenShift agent installation is an agent installation")
 	}
 }
+
+// A diagnostic names the kinds it concerns from the registry, so a second
+// family kind joins the phrase without an edit to the message.
+func TestKindPhrasesFollowTheRegistry(t *testing.T) {
+	if got := KindPhrase(ClusterKinds(), false); got != "OpenShiftCluster or CephCluster" {
+		t.Fatalf("singular phrase = %q", got)
+	}
+	if got := KindPhrase([]Kind{CephCluster, CephCluster, Kind("ExampleCluster")}, true); got != "CephClusters or ExampleClusters" {
+		t.Fatalf("plural phrase = %q", got)
+	}
+	if got := KindPhrase(KindsOf([]Object{NewObject(CephCluster, "a", Value{}, Value{})}), false); got != "CephCluster" {
+		t.Fatalf("phrase of objects = %q", got)
+	}
+	if Article(OpenShiftCluster) != "an" || Article(CephCluster) != "a" || Article("") != "a" {
+		t.Fatal("articles do not follow the kind's first letter")
+	}
+}
+
+func TestOnlyAKindWithASuccessorLoginNamesItsField(t *testing.T) {
+	if field, ok := ClusterSuccessorLoginField(CephCluster); !ok || field != "spec.cephadm.clusterSSH" {
+		t.Fatalf("CephCluster successor login field = %q, %t", field, ok)
+	}
+	if _, ok := ClusterSuccessorLoginField(OpenShiftCluster); ok {
+		t.Fatal("OpenShiftCluster names a successor login field")
+	}
+}

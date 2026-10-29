@@ -82,7 +82,14 @@ func KubeVirtName(contextName, machine string) string {
 	return head + "-" + hex.EncodeToString(sum[:4])
 }
 
-func KubeVirtEndpoint(namespace, name string) string { return "kubevirt:" + namespace + "/" + name }
+func KubeVirtEndpoint(namespace, name string) string {
+	return ArmKubeVirt + ":" + namespace + "/" + name
+}
+
+func KubeVirtNamespace(endpoint string) string {
+	namespace, _, _ := strings.Cut(strings.TrimPrefix(endpoint, ArmKubeVirt+":"), "/")
+	return namespace
+}
 
 // ControllerEndpoint is the Redfish address a consumer reaches one Machine's
 // management controller at. Its declared serving certificate always protects
