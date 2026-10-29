@@ -22,6 +22,8 @@ spec:
     ssh:
       addressRef: ssh
       port: 22
+      user: cephadm
+      knownHostsRef: ceph-known-hosts
 
       auth:
         operatorIdentity: {}

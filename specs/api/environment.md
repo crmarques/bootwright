@@ -231,6 +231,10 @@ also differ from every Machine-authored private key. Validation checks
 reference identity and type, preventing Ceph key reuse for fleet access. The
 fleet key must also differ from every Machine's `os.install.hostKeyRef`; the
 Machine [refuses the collision](machines.md#os-lifecycle-and-substrate-invariants).
+A provided Ceph stretch tiebreaker is no exception: Ceph dials it with the
+fleet key while its Machine names only its own operator access
+([stretch topology](../ceph.md#stretch-topology)), and the refusal of a
+provided Machine that names the fleet key says so.
 
 ## Kind defaults
 

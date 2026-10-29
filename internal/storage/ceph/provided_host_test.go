@@ -2,8 +2,10 @@ package ceph
 
 import (
 	"bytes"
+	"context"
 	"encoding/base64"
 	"encoding/binary"
+	"slices"
 	"strings"
 	"testing"
 
@@ -18,12 +20,16 @@ import (
 const tieAddress = "198.51.100.10"
 
 // tiebreakerCatalog adds a provided RHEL host at a third site to the
-// four-host package catalog and names it the stretch tiebreaker.
+// four-host package catalog and names it the stretch tiebreaker. Its Machine
+// names only the cluster SSH user, its pinned host key and an operator
+// identity; the Environment's fleet key is the one Ceph dials it with.
 func tiebreakerCatalog(change func(machine, cluster api.Value) (api.Value, api.Value)) (api.Catalog, api.Object) {
 	objects := packageCatalogOf(4).Objects()
 	tie := requestMap("os", requestMap("provided", true),
 		"network", requestMap("addresses", api.ListValue(requestMap("name", "ip", "address", tieAddress))),
-		"access", requestMap("ssh", requestMap("addressRef", "ip", "user", "operator", "knownHostsRef", "tie-known-hosts", "auth", requestMap("privateKeyRef", "fleet-key"))))
+		"access", requestMap("ssh", requestMap("addressRef", "ip", "user", "operator", "knownHostsRef", "tie-known-hosts", "auth", requestMap("operatorIdentity", api.MapValue()))))
+	objects = append(objects, api.NewObject(api.Environment, "environment", api.Value{}, requestMap("remoteMachinesAccessKey", requestMap("keyRef", "fleet-key"))),
+		api.NewObject(api.Secret, "fleet-key", api.Value{}, requestMap("type", "sshKeyPair")))
 	for i, object := range objects {
 		if object.Kind() != api.CephCluster {
 			continue
@@ -117,13 +123,19 @@ func TestAProvidedHostRefusesOutsideTheTiebreakerOrWithoutItsPinnedFleetAccess(t
 			return m, c.WithPath(api.MapValue(), "topology").WithPath(c.Get("topology", "nodes"), "topology", "nodes")
 		},
 		"no pinned host key": func(m, c api.Value) (api.Value, api.Value) {
-			return m.WithPath(api.Value{}, "access", "ssh", "knownHostsRef").WithPath(requestMap("addressRef", "ip", "user", "operator", "auth", requestMap("privateKeyRef", "fleet-key")), "access", "ssh"), c
+			return m.WithPath(requestMap("addressRef", "ip", "user", "operator", "auth", requestMap("operatorIdentity", api.MapValue())), "access", "ssh"), c
 		},
-		"another fleet key": func(m, c api.Value) (api.Value, api.Value) {
-			return m.WithPath(api.StringValue("other-key"), "access", "ssh", "auth", "privateKeyRef"), c
+		"the fleet key as its access key": func(m, c api.Value) (api.Value, api.Value) {
+			return m.WithPath(requestMap("privateKeyRef", "fleet-key"), "access", "ssh", "auth"), c
+		},
+		"the cluster key as its access key": func(m, c api.Value) (api.Value, api.Value) {
+			return m.WithPath(requestMap("privateKeyRef", c.Get("cephadm", "clusterSSH", "keyRef").Text()), "access", "ssh", "auth"), c
 		},
 		"another user": func(m, c api.Value) (api.Value, api.Value) {
 			return m.WithPath(api.StringValue("root"), "access", "ssh", "user"), c
+		},
+		"no SSH access": func(m, c api.Value) (api.Value, api.Value) {
+			return m.WithPath(api.Value{}, "access"), c
 		},
 	} {
 		t.Run(name, func(t *testing.T) {
@@ -132,6 +144,60 @@ func TestAProvidedHostRefusesOutsideTheTiebreakerOrWithoutItsPinnedFleetAccess(t
 				t.Fatalf("admitted: %v", err)
 			}
 		})
+	}
+}
+
+// The tiebreaker's own access arm serves operator sessions only: a key of its
+// own binds as well as an operator identity, and Ceph dials it with the fleet
+// key either way, so without a declared fleet key it refuses.
+func TestAProvidedTiebreakerIsDialedWithTheFleetKeyWhateverItsOwnAccessArm(t *testing.T) {
+	catalog, cluster := tiebreakerCatalog(func(m, c api.Value) (api.Value, api.Value) {
+		return m.WithPath(requestMap("privateKeyRef", "tie-operator-key"), "access", "ssh", "auth"), c
+	})
+	r, err := boundTiebreaker(catalog, cluster)
+	if err != nil {
+		t.Fatal(diagnostics.Of(err))
+	}
+	if tie := tieHost(t, r); tie.SSHKeyRef != "fleet-key" || slices.Contains(scopeOf(r).secretReferences(), "tie-operator-key") {
+		t.Fatalf("the tiebreaker's operator key reached the Ceph request: %+v", tie)
+	}
+	for name, change := range map[string]func(m, c api.Value) (api.Value, api.Value){
+		"a password arm": func(m, c api.Value) (api.Value, api.Value) {
+			return m.WithPath(requestMap("passwordRef", "tie-operator-password"), "access", "ssh", "auth"), c
+		},
+		"the tiebreaker listed first": func(m, c api.Value) (api.Value, api.Value) {
+			nodes := c.Get("topology", "nodes").Items()
+			return m, c.WithPath(api.ListValue(append([]api.Value{nodes[len(nodes)-1]}, nodes[:len(nodes)-1]...)...), "topology", "nodes")
+		},
+	} {
+		catalog, cluster := tiebreakerCatalog(change)
+		r, err := boundTiebreaker(catalog, cluster)
+		if err != nil || tieHost(t, r).SSHKeyRef != "fleet-key" || slices.ContainsFunc(r.Hosts, func(h Host) bool { return h.SSHKeyRef != "fleet-key" }) {
+			t.Fatalf("%s: %+v %v", name, r.Hosts, diagnostics.Of(err))
+		}
+	}
+	objects := slices.DeleteFunc(catalog.Objects(), func(o api.Object) bool { return o.Kind() == api.Environment })
+	_, err = boundTiebreaker(api.NewCatalog(objects), cluster)
+	if d := diagnostics.Of(err); len(d) != 1 || !strings.Contains(d[0].Message, "the Environment declares none") || !strings.Contains(d[0].Remediation, "spec.remoteMachinesAccessKey.keyRef") {
+		t.Fatalf("no fleet key: %v", err)
+	}
+}
+
+// A provided host's first fleet call is where its authorization is proved, so
+// a connection that fails there names the fleet key, the user and the pin.
+func TestAProvidedHostsFailedFleetConnectionNamesTheKeyToAuthorize(t *testing.T) {
+	host := Host{Name: "tie", Machine: "tie", Address: tieAddress, Port: 22, User: "bootwright", SSHKeyRef: "fleet-key", KnownHostsRef: "tie-known-hosts", Provided: true, Devices: []Device{}}
+	r := HostRequest{Version: HostVersion, Host: "tie", Cluster: ClusterScope{Controller: "controller", Hosts: []Host{host}}}
+	runner := &refusingRunner{reason: "transport"}
+	_, err := NewHost(runner).run(context.Background(), lifecycle.Execution{}, "destroy", r)
+	d := diagnostics.Of(err)
+	if len(d) != 1 || !strings.Contains(d[0].Message, "Machine/tie at "+tieAddress) || !strings.Contains(d[0].Remediation, "inspect the retained operation evidence") ||
+		!strings.Contains(d[0].Remediation, "public half of the fleet key Secret fleet-key (bootwright secret show --name fleet-key --part public-key) for user bootwright on Machine/tie") || !strings.Contains(d[0].Remediation, "tie-known-hosts") {
+		t.Fatalf("transport = %+v", d)
+	}
+	r.Cluster.Hosts[0].Provided = false
+	if _, err := NewHost(runner).run(context.Background(), lifecycle.Execution{}, "destroy", r); strings.Contains(diagnostics.Of(err)[0].Message, "provided tiebreaker") {
+		t.Fatal("an installed host's transport failure was read as a provided host's")
 	}
 }
 

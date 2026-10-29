@@ -1623,8 +1623,10 @@ spec:
     ssh:
       addressRef: ssh
       port: 22
+      user: cephadm
       auth:
         operatorIdentity: {}
+      knownHostsRef: ceph-known-hosts
     rootLogin: keep
 ---
 apiVersion: bootwright.io/v1alpha1

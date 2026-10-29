@@ -24,18 +24,23 @@ func (f *HostFIPS) proved() bool {
 	return f != nil && f.Kernel == FIPSKernelEnabled && f.Policy == FIPSPolicy
 }
 
-func bindProvidedHost(r *Request, m api.Object, node api.Value, tiebreaker, bootstrap, addressRef string) error {
+func bindProvidedHost(r *Request, c api.Catalog, m api.Object, node api.Value, tiebreaker, bootstrap, addressRef string) error {
 	name := cephcluster.NativeHostname(node)
 	if tiebreaker == "" || node.Get("name").Text() != tiebreaker || node.Get("name").Text() == bootstrap {
 		return failure("lifecycle.unsupported", "Machine/"+m.Name()+" is provided, and a provided Machine joins a Ceph cluster only as its stretch tiebreaker, which runs a MON alone",
 			"select a Bootwright-installed Machine for Ceph host "+name+", or make it spec.topology.stretch.tiebreaker.node")
 	}
-	ssh, ok := machine.SSH(m)
-	if !ok || ssh.PrivateKeyRef == "" || ssh.PasswordRef != "" || ssh.OperatorIdentity || ssh.User != r.ClusterSSHUser || ssh.PrivateKeyRef == r.ClusterKeyRef || ssh.KnownHostsRef == "" {
-		return failure("lifecycle.unsupported", "the provided tiebreaker Machine/"+m.Name()+" needs the fleet SSH key, the cluster SSH user and a pinned host key",
-			"declare access.ssh on Machine/"+m.Name()+" with user "+r.ClusterSSHUser+", auth.privateKeyRef naming the fleet key other Ceph hosts use and knownHostsRef pinning its host key")
+	fleet, declared := machine.FleetKey(c)
+	if !declared {
+		return failure("lifecycle.unsupported", "the provided tiebreaker Machine/"+m.Name()+" is dialed with the fleet SSH key, and the Environment declares none",
+			"set Environment spec.remoteMachinesAccessKey.keyRef to an sshKeyPair Secret and authorize its public half for user "+r.ClusterSSHUser+" on Machine/"+m.Name())
 	}
-	if len(r.Hosts) > 0 && ssh.PrivateKeyRef != r.Hosts[0].SSHKeyRef {
+	ssh, ok := machine.SSH(m)
+	if !ok || ssh.User != r.ClusterSSHUser || ssh.KnownHostsRef == "" || ssh.PrivateKeyRef == fleet || ssh.PrivateKeyRef == r.ClusterKeyRef {
+		return failure("lifecycle.unsupported", "the provided tiebreaker Machine/"+m.Name()+" needs SSH access as the cluster SSH user with a pinned host key, and Ceph dials it with the fleet key, which the Machine never names",
+			"declare access.ssh on Machine/"+m.Name()+" with user "+r.ClusterSSHUser+" and knownHostsRef pinning its host key, keep its auth for operator sessions only (operatorIdentity or a key of its own), and authorize the public half of Secret "+fleet+" (bootwright secret show --name "+fleet+" --part public-key) for user "+r.ClusterSSHUser+" on that host")
+	}
+	if len(r.Hosts) > 0 && fleet != r.Hosts[0].SSHKeyRef {
 		return failure("lifecycle.unsupported", "core Ceph currently requires one fleet SSH key for its guests", "declare a shared fleet identity distinct from the native cluster identity")
 	}
 	if address, declared := machine.Address(m, "fqdn"); declared && address != name {
@@ -51,8 +56,14 @@ func bindProvidedHost(r *Request, m api.Object, node api.Value, tiebreaker, boot
 		}
 	}
 	r.Hosts = append(r.Hosts, Host{Name: name, Machine: m.Name(), Address: ssh.Address, User: ssh.User, Port: ssh.Port, Devices: []Device{}, Labels: node.Get("labels").Strings(),
-		Location: map[string]string{}, SSHKeyRef: ssh.PrivateKeyRef, KnownHostsRef: ssh.KnownHostsRef, Provided: true})
+		Location: map[string]string{}, SSHKeyRef: fleet, KnownHostsRef: ssh.KnownHostsRef, Provided: true})
 	return nil
+}
+
+func providedTransport(h Host) error {
+	return failure("lifecycle.unknown", "the Ceph host preparation could not prove its transport boundary with the provided tiebreaker Machine/"+h.Machine+" at "+machine.SSHHost(h.Address, h.Port),
+		"inspect the retained operation evidence; when the SSH session itself was refused, authorize the public half of the fleet key Secret "+h.SSHKeyRef+" (bootwright secret show --name "+h.SSHKeyRef+" --part public-key) for user "+h.User+" on Machine/"+h.Machine+
+			", check that it offers the host key Secret "+h.KnownHostsRef+" pins and that the controller reaches it, then repeat the operation")
 }
 
 func pinnedHostKey(h Host, e lifecycle.Execution) (trust.HostKey, error) {

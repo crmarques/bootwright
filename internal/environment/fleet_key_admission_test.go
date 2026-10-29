@@ -50,7 +50,7 @@ func TestReusedFleetKeyNamesTheProvidedMachine(t *testing.T) {
 	issue := issues[0]
 	if issue.Code != "api.invariant" || issue.Field != "$.spec.remoteMachinesAccessKey.keyRef" ||
 		!strings.HasPrefix(issue.Message, "Machine/bastion uses the fleet install key as its access key") ||
-		issue.Remediation != "give Machine/bastion its own sshKeyPair Secret, or choose another fleet key" {
+		!strings.HasPrefix(issue.Remediation, "give Machine/bastion its own sshKeyPair Secret or an operator identity, or choose another fleet key;") {
 		t.Fatalf("reused fleet key refusal = %+v", issue)
 	}
 }

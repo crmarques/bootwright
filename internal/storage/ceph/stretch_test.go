@@ -210,8 +210,13 @@ func withStretchTiebreaker(catalog api.Catalog, fips bool) api.Catalog {
 		objects[i] = object.WithSpec(spec)
 	}
 	tie := requestMap("os", requestMap("provided", true), "network", requestMap("addresses", api.ListValue(requestMap("name", "ip", "address", "203.0.113.10"))),
-		"access", requestMap("ssh", requestMap("addressRef", "ip", "user", "operator", "knownHostsRef", "tie-known-hosts", "auth", requestMap("privateKeyRef", "fleet-key"))))
-	return api.NewCatalog(append(objects, api.NewObject(api.Machine, "tie", api.Value{}, tie)))
+		"access", requestMap("ssh", requestMap("addressRef", "ip", "user", "operator", "knownHostsRef", "tie-known-hosts", "auth", requestMap("operatorIdentity", api.MapValue()))))
+	objects = append(objects, api.NewObject(api.Machine, "tie", api.Value{}, tie))
+	if len(catalog.OfKind(api.Environment)) == 0 {
+		objects = append(objects, api.NewObject(api.Environment, "environment", api.Value{}, requestMap("remoteMachinesAccessKey", requestMap("keyRef", "fleet-key"))),
+			api.NewObject(api.Secret, "fleet-key", api.Value{}, requestMap("type", "sshKeyPair")))
+	}
+	return api.NewCatalog(objects)
 }
 
 func TestTheSMBConsumerAndReplicationBlocksBindAProvidedTiebreakersPinnedHostKey(t *testing.T) {

@@ -469,6 +469,7 @@ func (c HostCapability) run(ctx context.Context, e lifecycle.Execution, operatio
 	refusals := hostRefusals()
 	if host, _ := r.target(); host.Provided {
 		refusals["fips-not-enabled"] = fipsNotEnabled(host.Machine)
+		refusals["transport"] = providedTransport(host)
 	}
 	return c.runner.Run(ctx, lifecycle.RunFor(execution, lifecycle.Invocation{Implementation: HostImplementation, Operation: operation, Variable: "bootwright_ceph_host", Canonical: canonical,
 		Placement: machine.Placement{Connection: machine.ConnectionLocal, Machine: r.Cluster.Controller}, Materials: files, Refusals: refusals, NativeErrors: true, Deadline: hostDeadline(operation)}))

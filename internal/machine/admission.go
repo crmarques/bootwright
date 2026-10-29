@@ -127,7 +127,7 @@ func validateDerivedContact(o api.Object, c api.Catalog) []api.Issue {
 func normalizedAccess(o api.Object, c api.Catalog, s, network api.Value) api.Value {
 	access := s.Get("access")
 	if installed(o) {
-		if key, ok := fleetKey(c); ok {
+		if key, ok := FleetKey(c); ok {
 			access = api.MapValue().WithPath(api.StringValue("bootwright"), "ssh", "user").WithPath(api.StringValue(key), "ssh", "auth", "privateKeyRef")
 		}
 	} else if s.Get("os", "provided").Bool() && !access.Has("local") && !access.Has("ssh") {
@@ -153,11 +153,11 @@ func normalizedAccess(o api.Object, c api.Catalog, s, network api.Value) api.Val
 	return access
 }
 
-// fleetKey is the Environment's fleet key when it names an sshKeyPair Secret,
+// FleetKey is the Environment's fleet key when it names an sshKeyPair Secret,
 // the only key an installed Machine's derived access can use. Any other key is
 // the Environment's own refusal, which a derived reference would only repeat
 // with a remedy admission forbids on an installed Machine.
-func fleetKey(c api.Catalog) (string, bool) {
+func FleetKey(c api.Catalog) (string, bool) {
 	envs := c.OfKind(api.Environment)
 	if len(envs) != 1 {
 		return "", false

@@ -412,7 +412,7 @@ func bindHosts(r *Request, c api.Catalog, cluster api.Object, contextName string
 		m, _ := c.Find(api.Machine, node.Get("machineRef").Text())
 		provided := m.Spec().Get("os", "provided").Bool()
 		if provided {
-			if err := bindProvidedHost(r, m, node, tiebreaker, spec.Get("cephadm", "bootstrap", "nodeRef").Text(), spec.Get("cephadm", "addressRef").Text()); err != nil {
+			if err := bindProvidedHost(r, c, m, node, tiebreaker, spec.Get("cephadm", "bootstrap", "nodeRef").Text(), spec.Get("cephadm", "addressRef").Text()); err != nil {
 				return err
 			}
 			continue

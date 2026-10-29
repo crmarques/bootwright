@@ -116,3 +116,18 @@ tiebreaker's host block reads the same two files (`observe_fips` in
 `plugins/module_utils/ceph_native.py`, tested in `test_ceph_core.py` and
 `test_ceph_host_execution.py`). `FIPS:OSPP` is a subpolicy and proves
 nothing.
+
+## Access to a provided tiebreaker
+
+X198 bound a provided tiebreaker only when its Machine named the fleet key as
+`access.ssh.auth.privateKeyRef`, which Environment admission refuses (`uses
+the fleet install key as its access key`), so no such cluster validated and
+planned; its tests built the Ceph request from a catalog Environment
+admission never saw. The fleet key is effect material and a Machine access
+key an access credential, so the tiebreaker's Machine names only the cluster
+SSH user and its `knownHostsRef`, and Ceph dials it with the Environment's key
+(D204, `bindProvidedHost` in `internal/storage/ceph/provided_host.go`). Test
+a cross-kind rule like this one by compiling a whole example, as
+`cmd/bootwright/ceph_provided_tiebreaker_linux_amd64_test.go` does, never
+only the capability's own catalog. The owning rule is the
+[stretch topology](../../specs/ceph.md#stretch-topology).

@@ -65,8 +65,9 @@ func fleetKeyIssues(fleetKey api.Value, catalog api.Catalog) []api.Issue {
 		}
 		if fleetKey.Present() && !installs && machine.Spec().Get("access", "ssh", "auth", "privateKeyRef").Equal(fleetKey) && len(issues) < 999 {
 			issues = append(issues, api.Issue{Code: "api.invariant", Field: field,
-				Message:     subject + " uses the fleet install key as its access key; the fleet key must differ from authored Machine access keys",
-				Remediation: "give " + subject + " its own sshKeyPair Secret, or choose another fleet key"})
+				Message: subject + " uses the fleet install key as its access key; the fleet key must differ from authored Machine access keys",
+				Remediation: "give " + subject + " its own sshKeyPair Secret or an operator identity, or choose another fleet key; if Bootwright dials it with the fleet key, " +
+					"as a Ceph stretch tiebreaker, it never names that key: authorize the public half of Secret " + fleetKey.Text() + " on that host instead"})
 		}
 	}
 	if installing == 0 {

@@ -3332,6 +3332,8 @@ holding such a clause, the clauses pending and the work they enable.
   context builds and their spread (X131).
 - [D203](#d203): clauses (1) to (14), stretch service placement and front
   doors (X200) and the removal of a provided tiebreaker (X203).
+- [D204](#d204): clauses (1) to (7), how a provided stretch tiebreaker is
+  dialed with the fleet key its Machine never names (X204).
 
 ### D1
 
@@ -5370,7 +5372,8 @@ default CRUSH bucket type above `host`; a host `location` names only that
 key, equal to the node's site, derived when omitted; the tiebreaker has none;
 outside stretch a `location` refuses at validation. (6) A provided Machine
 joins a Ceph cluster only as its stretch tiebreaker: MON-only, never the
-bootstrap node, with the fleet key, the cluster SSH user and a
+bootstrap node, with the fleet key ([D204](#d204): dialed with it, never
+named by the Machine), the cluster SSH user and a
 `knownHostsRef`-pinned host key, no device or erase claim and no Machine
 block requirement; its OS dependency packages come from the bootstrap host's
 hosted DVD; any other authored service placing on it refuses, while the
@@ -5885,3 +5888,49 @@ version moves; older records refuse by name (D142). Exit evidence: destroy
 tests over the fake transport for a lost reply, an unreachable host, a
 foreign daemon on the tiebreaker and the complete journey refusing nothing;
 the operator gate is the removal in B488's emulated rehearsal.
+
+### D204
+
+**session-pending** (2026-10-28, the owner; the clauses after the owner's
+words are taken by the session, pending the owner's review). The owner asked
+the session to "Plan and implement what is still missing" and said "the
+solution must be as good as possible in terms of well-designed architecture
+and ux". It defines and authorizes [B894](m2.md#b894), the defect of X198
+that no stretch cluster with a provided tiebreaker both validates and plans,
+as slice X204 on M2. Taken by the session, pending the owner's review: (1)
+The [fleet key](../api/environment.md#remote-machine-access-and-install-defaults)
+is effect material: an installation places its public half on every
+installed host, so only its bound version proves those hosts' access, and
+it is never rebound. A Machine's `access.ssh.auth.privateKeyRef` is an
+access credential the operator owns and rotates freely, since only operator
+sessions present it and no operation binds it; were it bound, only the
+[access-credential rebind](../state-reconciliation.md#access-credential-rebind)
+could move it, which refuses effect material. One Secret cannot be both:
+rotating what the operator reads as one host's login would strand every
+installed host, and its class would depend on which blocks name it. So the Environment invariant that the
+fleet key differs from every authored Machine access key stays, with no
+exemption for a tiebreaker (option (b) rejected). (2) A provided stretch
+tiebreaker's Machine declares `access.ssh` with the cluster SSH user and a
+`knownHostsRef` host-key pin; its `auth` arm (an operator identity, a key of
+its own or a password) serves operator sessions only, and no Ceph request
+names it. (3) Ceph dials the tiebreaker with the Environment's fleet key, as
+it dials every Ceph host; the frozen host entry's `sshKeyRef` already names
+that key, so no request, evidence or contract version moves. (4) The
+operator authorizes the fleet key's public half for the cluster SSH user on
+the tiebreaker; Bootwright never places it there, having installed nothing.
+The host block's first fleet call proves it, and a `transport` failure on a
+provided host names the Machine, its endpoint, the fleet key Secret and how
+to show its public half, the user and the pinned host key Secret, beside the
+retained evidence to inspect, since that reason also covers a worker's
+malformed output; no separate preflight probe is added. (5) Planning refuses a tiebreaker whose SSH user
+is not the cluster SSH user, that pins no host key, that names the fleet or
+cluster key as its access key, or whose Environment declares no fleet key;
+validation's refusal of a provided Machine naming the fleet key offers an
+operator identity or a key of its own and says that a host Bootwright dials
+with the fleet key, as a stretch tiebreaker, never names it but has its
+public half authorized; the Environment names no storage kind for this. (6) [D196](#d196) (6)'s "with the fleet key" reads as dialed with it;
+D196 is otherwise unchanged. (7) Exit evidence: an end-to-end validation and
+plan over a full catalog with a provided tiebreaker, the refusals of (5),
+the named `transport` refusal and the multidc-platform reference's
+tiebreaker Machine in this shape; the operator gate is B488's emulated
+rehearsal reaching a provided tiebreaker authorized only with the fleet key.

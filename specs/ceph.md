@@ -433,11 +433,19 @@ topology; this section owns what the plan derives and realizes (D196).
   refuses; the derived per-host crash collector still runs there
   ([B686](milestones/m2.md#b686)). It may be a provided Machine
   (`os.provided: true`), the only place a provided Machine joins a Ceph
-  cluster. A provided tiebreaker is reached over the fleet connection: its
-  `access.ssh` names the fleet key the other hosts use and the cluster SSH
-  user, and its `knownHostsRef` pins the one host key every Ceph connection
-  verifies. It holds no device and no erase claim, needs no Machine block,
-  and takes its OS dependency packages from the hosted DVD of the bootstrap
+  cluster. A provided tiebreaker is reached over the fleet connection with
+  the [fleet key](api/environment.md#remote-machine-access-and-install-defaults),
+  which its Machine never names, because that key is effect material and a
+  Machine access key an access credential (D204). Its `access.ssh` names the
+  cluster SSH user and a `knownHostsRef` pinning the one host key every Ceph
+  connection verifies; its `auth` arm serves operator sessions only. The
+  operator authorizes the fleet key's public half (`bootwright secret show
+  --part public-key`) for that user on the host, and the host block's first
+  fleet call proves it: a `transport` failure there names the Machine, the
+  fleet key Secret, the user and the pinned host key beside the retained
+  evidence to inspect. A tiebreaker without that user or pin, or with no fleet
+  key declared, refuses at plan. It holds no device and no erase claim, needs
+  no Machine block, and takes its OS dependency packages from the hosted DVD of the bootstrap
   host's install profile; a host whose release that tree cannot serve fails
   the native package resolution. Its FIPS proof is
   [observed](#frozen-release-and-trust).
