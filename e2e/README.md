@@ -43,7 +43,7 @@ Once per host, from the repository root:
 1. A Fedora or RHEL amd64 host with `/dev/kvm`, sudo, `helm` and network
    egress ([controller requirements](../specs/controller.md#supported-hosts)).
    Bootwright installs everything else it needs.
-2. `make build`, then `./bin/bootwright setup --yes`.
+2. `make build`, then `./bin/bootwright controller install --yes`.
 3. Free host ports: 53/tcp+udp, 123/udp, 3128, 8080 and 8443 on the host
    address, and 8000 on loopback (a two-context case lists its extra ports).
    A host `chronyd` or `dnsmasq` listening on all addresses conflicts:

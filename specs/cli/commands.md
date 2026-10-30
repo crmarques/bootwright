@@ -9,8 +9,8 @@ Every command accepts and parses the presentation flags below so the same flag
 spellings and resolved values can be reused across workflow commands. `--context`
 and the `--ssh-*` flags are accepted only by the commands whose use case reads
 them; any other command refuses them as flags it does not accept. The
-context-free commands, which refuse `--context`, are `setup`, `controller
-rebind`, `context` (every subcommand), `media` (every subcommand), `add-ons
+context-free commands, which refuse `--context`, are `controller install`, `controller
+rebind`, `controller uninstall`, `context` (every subcommand), `media` (every subcommand), `add-ons
 list`, `help`, `completion`, `version` and `schema`; only `apply`, `destroy`,
 `machine rsh`, `machine exec`, `cluster rsh`, `cluster exec` and every
 `preflight` check but `preflight controller` and `preflight infra` accept
@@ -151,8 +151,9 @@ and answer `cli.not-implemented`; their contracts are intent, tracked as
 | `bootwright machine start` | required `--name <list>` | the power state each Machine's management controller proved once the operation settled | bounded power operation through that management controller, one concurrent [batch](../cli.md#machine-power-operations) for several Machines |
 | `bootwright machine stop` | required `--name <list>`; `--force` false; `--yes` false | same, after the operating system is asked to shut down | same |
 | `bootwright machine restart` | required `--name <list>`; `--force` false; `--yes` false | same, after a proved stop and a proved start | same |
-| `bootwright setup` | `--dry-run` false; `--yes` false; `--wheel-mirror <file:///dir or https://base>` default none; `--download-only` false; `--dest-dir <dir>` default none | [context-independent controller prerequisite plan or completed setup](../controller.md#the-setup-flow); with `--dry-run --output json`, the plan and every locked wheel; with `--download-only`, the [files written for an offline host](../controller.md#offline-and-mirrored-wheels) | host packages through the host's own dnf after its verbatim preview, and the controller runtime from locked wheels over the [context-free route](../controller.md#the-context-free-acquisition-route), or from `--wheel-mirror`; a ready host makes no request and no change; dry-run only lists requirement names; `--download-only` requires `--dest-dir`, conflicts with `--dry-run`, never elevates, reads no setup state and writes only the directory |
+| `bootwright controller install` | `--dry-run` false; `--yes` false; `--wheel-mirror <file:///dir or https://base>` default none; `--download-only` false; `--dest-dir <dir>` default none | [context-independent controller prerequisite plan or completed setup](../controller.md#the-setup-flow); with `--dry-run --output json`, the plan and every locked wheel; with `--download-only`, the [files written for an offline host](../controller.md#offline-and-mirrored-wheels) | host packages through the host's own dnf after its verbatim preview, and the controller runtime from locked wheels over the [context-free route](../controller.md#the-context-free-acquisition-route), or from `--wheel-mirror`; a ready host makes no request and no change; dry-run only lists requirement names; `--download-only` requires `--dest-dir`, conflicts with `--dry-run`, never elevates, reads no setup state and writes only the directory |
 | `bootwright controller rebind` | `--yes` false; `--recorded-host-retired` false, required with `--yes`; `--machine-id <id>`, `--product-uuid <uuid>` and `--root-uuid <uuid>` default none, all three this host's and required with `--yes`, and a remedy repeating the command names them by placeholder | the outcome and the counts of the bindings and reservations it kept | [host identity rewrite](../contexts.md#controller-relationship-and-host-binding) of the controller record, once, under the exclusive root lock, after a confirmation naming the recorded and the new identity and affirming that the recorded host no longer runs this store; refuses a store whose directories are not the ones its registry attributed and an unchanged identity, and cannot tell a byte-for-byte clone from the store |
+| `bootwright controller uninstall` | `--keep-packages` false; `--yes` false | what it removed and kept or `Nothing to do.` | host packages and state by the [uninstall flow](../controller.md#the-uninstall-flow) |
 | `bootwright cluster list` | none | container and storage cluster names and kinds in canonical order | read local state |
 | `bootwright cluster info` | `--name <list>` default all unless `--secrets` or `--object-user`, which require exactly one cluster; `--secrets` false; `--object-user <name>` none | cluster kinds, endpoints, access-command applicability and availability, artifact availability, for a managed Ceph cluster its release, FSID, frozen image, monitors, administrator command and dashboard access, and optional explicit sensitive values | read local state and optional confidential material |
 | `bootwright cluster rsh` | required `--name <cluster>` (one cluster); `--node <node>` default first node in canonical name order (at most one) | an interactive SSH session on the resolved node's Machine under the [cluster session contract](../cli.md#cluster-sessions); the client's exit status is the result | same as `machine rsh` |
@@ -262,7 +263,7 @@ error: the `Bootwright` headline, then exactly these six fields in this order.
 
 The composition root supplies every value. It obtains the Go runtime, GOOS, and
 GOARCH from the linked Go runtime, the dependency bundle as the digest of the
-automation the executable embeds, the one `setup` publishes and every
+automation the executable embeds, the one `controller install` publishes and every
 operation records, and combines them with the link-supplied version, commit and
 source-state values (`TestCompositionSuppliesRuntimeBuildInformation`). For a version,
 commit, or source state the build left empty, it uses the module version,

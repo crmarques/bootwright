@@ -12,7 +12,10 @@ import (
 
 type Packages struct{}
 
-var _ prerequisites.HostPackages = (*Packages)(nil)
+var (
+	_ prerequisites.HostPackages       = (*Packages)(nil)
+	_ prerequisites.HostPackageRemoval = (*Packages)(nil)
+)
 
 func New(controller.Route) (*Packages, error) { return &Packages{}, nil }
 
@@ -38,6 +41,20 @@ func (*Packages) Preview(ctx context.Context, _ []string) (prerequisites.HostPac
 
 func (*Packages) Install(ctx context.Context, _ []string, _ prerequisites.RunOutput) ([]prerequisites.HostPackageEvidence, error) {
 	return nil, unsupported(ctx)
+}
+
+func (*Packages) InstalledNames(ctx context.Context, _ []string) ([]string, error) {
+	return nil, unsupported(ctx)
+}
+
+func (*Packages) EraseTest(ctx context.Context, _ []string) error { return unsupported(ctx) }
+
+func (*Packages) RemovalPreview(ctx context.Context, _ []string) (prerequisites.HostPackagePreview, error) {
+	return prerequisites.HostPackagePreview{}, unsupported(ctx)
+}
+
+func (*Packages) Remove(ctx context.Context, _ []string, _ prerequisites.RunOutput) error {
+	return unsupported(ctx)
 }
 
 func unsupported(ctx context.Context) error {

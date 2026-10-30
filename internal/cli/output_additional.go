@@ -170,6 +170,8 @@ func writeAdditionalStructuredResult(out io.Writer, command *cobra.Command, path
 		shown = secretMutationPresentation{Context: displaySecretContext(m.Context), Name: escapeDisplayLine(m.Name), Changed: m.Changed, Unchanged: m.Unchanged, ChangedNames: displayNames(m.ChangedNames), UnchangedNames: displayNames(m.UnchangedNames), Parts: displaySecretPartValues(m.Parts)}
 	case path == "controller rebind" && validRebind(result.rebind):
 		shown = rebindPresentation{Outcome: escapeDisplayLine(result.rebind.Outcome), Bindings: result.rebind.Bindings, Reservations: result.rebind.Reservations}
+	case path == "controller uninstall" && validUninstall(result.uninstall):
+		shown = displayUninstall(result.uninstall)
 	case (path == "media add" || path == "media delete") && validMediaMutation(result.mediaMutation):
 		m := result.mediaMutation
 		shown = mediaMutationPresentation{Name: escapeDisplayLine(m.Name), Outcome: escapeDisplayLine(m.Outcome), Size: m.Size, SHA256: escapeDisplayLine(m.SHA256)}
@@ -182,14 +184,14 @@ func writeAdditionalStructuredResult(out io.Writer, command *cobra.Command, path
 		}, ActiveKey: escapeDisplayLine(m.ActiveKey), Changed: m.Changed, RetiredKeys: displayNames(m.RetiredKeys), ReencryptedVersions: m.ReencryptedVersions, ReencryptedParts: m.ReencryptedParts}
 	case path == "render" && validRender(result.rendered):
 		shown = displayRender(result.rendered)
-	case path == "setup" && validSetupDownload(result.controller):
+	case path == "controller install" && validSetupDownload(result.controller):
 		r := result.controller
 		download := setupDownloadPresentation{Directory: escapeDisplayLine(r.Export.Directory), Outcome: escapeDisplayLine(r.Outcome), Files: []downloadFilePresentation{}, Next: escapeDisplayLine(r.Next)}
 		for _, f := range r.Export.Files {
 			download.Files = append(download.Files, downloadFilePresentation{Filename: escapeDisplayLine(f.Filename), SHA256: escapeDisplayLine(f.SHA256), Size: f.Size, Origin: escapeDisplayLine(f.Origin)})
 		}
 		shown, reported = download, r.Warnings
-	case (path == "preflight controller" || path == "setup" && result.controller != nil && !result.controller.DryRun) && validControllerReport(result.controller):
+	case (path == "preflight controller" || path == "controller install" && result.controller != nil && !result.controller.DryRun) && validControllerReport(result.controller):
 		return true, writeStructuredController(out, path, result.controller, nil, 0)
 	case path == "plan" && result.lifecyclePlan != nil:
 		shown, reported = displayPlan(result.lifecyclePlan), result.lifecyclePlan.Warnings

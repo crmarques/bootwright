@@ -187,7 +187,7 @@ func TestAPythonZStreamUpdateContinues(t *testing.T) {
 // the removal that takes back what it owns; restoring the
 // lock the operation registered under continues it.
 func TestALockChangeRefusesContinuationNamingTheKeptRuntime(t *testing.T) {
-	const kept = "run the setup of bootwright devel (abcdef1), which restores its runtime (Python 3.14, ansible-core 2.21.5), fetching any wheel its cache no longer holds over the network or with --wheel-mirror <mirror>, then continue it with that build"
+	const kept = "run the controller install of bootwright devel (abcdef1), which restores its runtime (Python 3.14, ansible-core 2.21.5), fetching any wheel its cache no longer holds over the network or with --wheel-mirror <mirror>, then continue it with that build"
 	for _, change := range []struct {
 		name    string
 		move    func(*harness)

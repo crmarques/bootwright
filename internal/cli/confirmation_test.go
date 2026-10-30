@@ -196,8 +196,8 @@ func TestEachConfirmationNamesItsObjectAndContextAndKeepsItsConsumersCode(t *tes
 		args                                                 []string
 		identity                                             *diagnostics.ObjectIdentity
 	}{
-		{action: "setup", object: "this host", prompt: "Confirm controller setup on this host? [y/N] ", args: []string{"setup"},
-			code: "controller.setup", label: "setup", remedy: "review the plan, then repeat bootwright setup with --yes"},
+		{action: "controller install", object: "this host", prompt: "Confirm controller install on this host? [y/N] ", args: []string{"controller", "install"},
+			code: "controller.install", label: "install", remedy: "review the plan, then repeat bootwright controller install with --yes"},
 		{action: "media replace", object: "rhel.iso", prompt: "Confirm replace of stored media rhel.iso? [y/N] ",
 			args: []string{"media", "add", "--name", "rhel.iso", "--from-file", "/srv/rhel.iso"},
 			code: "media.store", label: "media", remedy: "review it, then repeat bootwright media add --from-file /srv/rhel.iso --name rhel.iso with --yes"},
@@ -307,9 +307,9 @@ func TestARefusedConfirmationRepeatsTheExactInvocation(t *testing.T) {
 		{name: "a trust selection and replacement", action: "trust", object: "lab",
 			args:   []string{"machine", "trust", "--name", "rhel-01", "--replace", "rhel-01", "--output", "json"},
 			remedy: "review the plan, then repeat bootwright machine trust --context lab --name rhel-01 --output json --replace rhel-01 with --yes"},
-		{name: "a setup", action: "setup", object: "this host",
-			args:   []string{"setup"},
-			remedy: "review the plan, then repeat bootwright setup with --yes"},
+		{name: "a controller install", action: "controller install", object: "this host",
+			args:   []string{"controller", "install"},
+			remedy: "review the plan, then repeat bootwright controller install with --yes"},
 		{name: "a media download keeps its digest and hides its URL", action: "media replace", object: "rhel.iso",
 			args:   []string{"media", "add", "--name", "rhel.iso", "--from-url", "https://mirror.example.test/rhel.iso?token=abc", "--sha256", strings.Repeat("a", 64)},
 			remedy: "review it, then repeat bootwright media add --from-url <from-url> --name rhel.iso --sha256 " + strings.Repeat("a", 64) + " with --yes"},

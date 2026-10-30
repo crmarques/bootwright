@@ -6168,3 +6168,34 @@ is the context's current operation a KubeVirt power command refuses
 `identity-mismatch`; [B951](m1.md#b951) records it. Exit evidence: the
 hosted power, reading, lend and pin tests and goldens; the operator gates are
 the lab-kubevirt and lab-kubevirt-nested runs.
+
+### D209
+
+**delegated** (2026-10-29, the owner). The owner asked to "rename bootwright
+setup to bootwright install" and to "add a new command: bootwright
+uninstall", then told the session to "proceed with recommendations". It
+authorizes B975 and [B976](m1.md#b976) as slice [X226](delivered.md#x226--controller-install-and-uninstall) on M1, out
+of sequence by the owner's request. The recommendations it accepts:
+(1) the command is `bootwright controller install`, beside `controller
+rebind`, because `install` alone reads as installing the platform, which
+`apply` does; there is no alias.
+(2) Its refusal code becomes `controller.install`; the setup subtree, its
+record format, its lock and its run IDs keep their names, so no prepared host
+needs another install.
+(3) `bootwright controller uninstall` refuses while the store holds any
+context, naming `destroy` and `context delete --purge`.
+(4) It removes only the host packages the install receipt records as
+installed by an install run, never one present before Bootwright, refuses when
+another installed package requires one, shows dnf's own removal preview before
+confirmation, and `--keep-packages` leaves every package.
+Decided by the session under the same instruction:
+(5) packages a context's controller stage installed stay, because no record
+names them;
+(6) a media store that holds an image refuses, naming `media delete`, because
+uninstall never deletes data the operator supplied;
+(7) an interrupted install, or an install record this build cannot read,
+refuses package removal unless `--keep-packages`, because what it installed is
+not known;
+(8) packages are removed before the state, and the state is renamed away
+before it is deleted, so running uninstall again finishes an interrupted one.
+The [uninstall flow](../controller.md#the-uninstall-flow) owns the contract.

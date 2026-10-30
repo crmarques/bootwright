@@ -49,7 +49,7 @@ func (r *Runner) writeResult(ctx context.Context, command *cobra.Command, path s
 		if result.storagePreflight != nil {
 			return true, writeStoragePreflight(out, errOut, path, result.storagePreflight, nil, 0, selectedJSON(command))
 		}
-	case "setup", "preflight controller", "controller rebind":
+	case "controller install", "preflight controller", "controller rebind", "controller uninstall":
 		return writeControllerOutcome(out, errOut, path, result, selectedJSON(command))
 	case "plan", "status", "diff":
 		return r.writeLifecycleInspection(ctx, command, path, result)
@@ -276,7 +276,9 @@ func writeControllerOutcome(out, errOut io.Writer, path string, result commandRe
 	switch {
 	case validRebind(result.rebind):
 		return true, writeRebind(out, result.rebind)
-	case path == "setup" && validSetupDownload(result.controller):
+	case path == "controller uninstall" && validUninstall(result.uninstall):
+		return true, writeUninstall(out, result.uninstall)
+	case path == "controller install" && validSetupDownload(result.controller):
 		return true, writeSetupDownload(out, result.controller)
 	case validControllerReport(result.controller) && successfulControllerReport(path, result.controller):
 		return true, writeControllerResult(out, errOut, path, result.controller, jsonMode)

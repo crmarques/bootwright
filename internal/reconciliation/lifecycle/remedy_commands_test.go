@@ -114,14 +114,14 @@ func TestAStageAttemptCarriesItsContinuation(t *testing.T) {
 // before the stage capability runs, so only the lifecycle can name the stage
 // command that settles it, with the context.
 func TestAStageBlockRefusedOnEntryNamesTheStageCommand(t *testing.T) {
-	failure := &prerequisites.ScopedFailure{Code: "controller.state", Message: "the controller runtime for this build (lock 0123456789ab, Python cp312) is not prepared", Correction: "Run bootwright setup", Command: "repeat this command"}
+	failure := &prerequisites.ScopedFailure{Code: "controller.state", Message: "the controller runtime for this build (lock 0123456789ab, Python cp312) is not prepared", Correction: "Run bootwright controller install", Command: "repeat this command"}
 	for _, test := range []struct {
 		name  string
 		stage reconciliation.Stage
 		want  string
 	}{
-		{"controller stage", reconciliation.StageController, "Run bootwright setup, then run bootwright apply --stage controller --context lab."},
-		{"another stage", reconciliation.StageMachines, "Run bootwright setup, then repeat this command."},
+		{"controller stage", reconciliation.StageController, "Run bootwright controller install, then run bootwright apply --stage controller --context lab."},
+		{"another stage", reconciliation.StageMachines, "Run bootwright controller install, then repeat this command."},
 	} {
 		block := destructive("clients")
 		block.Stage = test.stage
@@ -138,7 +138,7 @@ func TestAStageBlockRefusedOnEntryNamesTheStageCommand(t *testing.T) {
 // apply's unknown controller stage block, and that refusal names the stage
 // command too, because the observation it refused is the apply's own.
 func TestAStageResolutionRefusedOnEntryNamesTheStageCommand(t *testing.T) {
-	failure := &prerequisites.ScopedFailure{Code: "controller.state", Message: "the controller runtime for this build (lock 0123456789ab, Python cp312) is not prepared", Correction: "Run bootwright setup", Command: "repeat this command"}
+	failure := &prerequisites.ScopedFailure{Code: "controller.state", Message: "the controller runtime for this build (lock 0123456789ab, Python cp312) is not prepared", Correction: "Run bootwright controller install", Command: "repeat this command"}
 	block := destructive("clients")
 	block.Stage = reconciliation.StageController
 	h := newPlannedHarness(t, []reconciliation.BlockDefinition{block})
@@ -149,7 +149,7 @@ func TestAStageResolutionRefusedOnEntryNamesTheStageCommand(t *testing.T) {
 	h.capability.outcomeFor = nil
 	h.service.guard = refusingGuard{failure}
 	reported := diagnostics.Of(authorizedApply(h))
-	want := "Run bootwright setup, then run bootwright apply --stage controller --context lab."
+	want := "Run bootwright controller install, then run bootwright apply --stage controller --context lab."
 	if len(reported) == 0 || reported[0].Code != "controller.state" || reported[0].Remediation != want {
 		t.Fatalf("the resolution reported %+v, want remediation %q", reported, want)
 	}
@@ -159,7 +159,7 @@ func TestAStageResolutionRefusedOnEntryNamesTheStageCommand(t *testing.T) {
 // entry keeps the failure's own remedy: an incomplete destroy refuses the
 // stage apply, so naming it would name a command that cannot run.
 func TestADestroyRefusedOnAStageBlockEntryKeepsItsOwnRemedy(t *testing.T) {
-	failure := &prerequisites.ScopedFailure{Code: "controller.state", Message: "the controller runtime for this build (lock 0123456789ab, Python cp312) is not prepared", Correction: "Run bootwright setup", Command: "repeat this command"}
+	failure := &prerequisites.ScopedFailure{Code: "controller.state", Message: "the controller runtime for this build (lock 0123456789ab, Python cp312) is not prepared", Correction: "Run bootwright controller install", Command: "repeat this command"}
 	block := destructive("clients")
 	block.Stage = reconciliation.StageController
 	h := newPlannedHarness(t, []reconciliation.BlockDefinition{block})
@@ -170,7 +170,7 @@ func TestADestroyRefusedOnAStageBlockEntryKeepsItsOwnRemedy(t *testing.T) {
 	h.service.guard = guard
 	_, err := h.service.Destroy(context.Background(), DestroyRequest{ContextName: "lab", SkipConfirmation: true})
 	reported := diagnostics.Of(err)
-	want := "Run bootwright setup, then repeat this command."
+	want := "Run bootwright controller install, then repeat this command."
 	if guard.refused == 0 || len(reported) == 0 || reported[0].Code != "controller.state" || reported[0].Remediation != want {
 		t.Fatalf("the destroy reported %+v after %d refusals, want remediation %q", reported, guard.refused, want)
 	}

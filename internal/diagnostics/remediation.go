@@ -63,12 +63,13 @@ var defaultRemediations = map[string]string{
 	"preflight.failed":  "resolve the failed checks and repeat the preflight",
 	"preflight.unknown": "resolve the unknown and pending checks and repeat the preflight",
 
-	"controller.unsupported": "run setup on a qualified host, or choose a supported dependency combination or route",
-	"controller.identity":    "run bootwright setup to record the controller binding and host evidence",
-	"controller.state":       "run bootwright setup to replace the retained setup evidence",
+	"controller.unsupported": "run bootwright controller install on a qualified host, or choose a supported dependency combination or route",
+	"controller.identity":    "run bootwright controller install to record the controller binding and host evidence",
+	"controller.state":       "run bootwright controller install to replace the retained setup evidence",
 	"controller.conflict":    "wait for the other setup or context to finish and repeat the command",
-	"controller.setup":       "resolve the failed action the message names and repeat setup",
-	"controller.unknown":     "repeat bootwright setup to resolve the unknown action",
+	"controller.install":     "resolve the failed action the message names and repeat controller install",
+	"controller.uninstall":   "resolve what the message names and repeat bootwright controller uninstall",
+	"controller.unknown":     "repeat bootwright controller install to resolve the unknown action",
 
 	"lifecycle.state":           "run bootwright status --context <context> to see the records and the next step",
 	"lifecycle.unsupported":     "remove the object this executable cannot realize, or use a build that supports it",

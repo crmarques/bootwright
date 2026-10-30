@@ -12,7 +12,7 @@ import (
 )
 
 // launchRefused runs a fresh apply and a bounded run, each of which must
-// refuse controller.state with message and run bootwright setup as its remedy
+// refuse controller.state with message and run bootwright controller install as its remedy
 // before it registers anything or launches the runtime.
 func launchRefused(t *testing.T, h *harness, message string) {
 	t.Helper()
@@ -34,8 +34,8 @@ func launchRefused(t *testing.T, h *harness, message string) {
 func requireSetupRefusal(t *testing.T, err error, message string) {
 	t.Helper()
 	reported := diagnostics.Of(err)
-	if len(reported) != 1 || reported[0].Code != "controller.state" || reported[0].Message != message || !strings.HasPrefix(reported[0].Remediation, "run bootwright setup") {
-		t.Fatalf("the launch reported %+v (%v), want controller.state %q naming bootwright setup", reported, err, message)
+	if len(reported) != 1 || reported[0].Code != "controller.state" || reported[0].Message != message || !strings.HasPrefix(reported[0].Remediation, "run bootwright controller install") {
+		t.Fatalf("the launch reported %+v (%v), want controller.state %q naming bootwright controller install", reported, err, message)
 	}
 }
 
@@ -49,7 +49,7 @@ func TestAPendingSetupBlocksALaunch(t *testing.T) {
 	h.setup.set(view)
 	launchRefused(t, h, "a controller setup (setup-000042) was interrupted before it finished")
 	_, err := apply(h)
-	want := "run bootwright setup, adding --wheel-mirror <mirror> on a host that cannot reach the wheel origins, or run the setup of the Bootwright build whose lock the receipt names (" + view.State.Receipt.Lock + ") to keep its runtime"
+	want := "run bootwright controller install, adding --wheel-mirror <mirror> on a host that cannot reach the wheel origins, or run the controller install of the Bootwright build whose lock the receipt names (" + view.State.Receipt.Lock + ") to keep its runtime"
 	if reported := diagnostics.Of(err); len(reported) != 1 || reported[0].Remediation != want {
 		t.Fatalf("the launch reported %+v, want the remedy %q", reported, want)
 	}
@@ -177,7 +177,7 @@ func TestAFailedRebuildRefusesWithRunSetup(t *testing.T) {
 	}))
 	_, err := apply(h)
 	reported := diagnostics.Of(err)
-	if len(reported) != 1 || reported[0].Code != "controller.state" || reported[0].Remediation != "run bootwright setup" ||
+	if len(reported) != 1 || reported[0].Code != "controller.state" || reported[0].Remediation != "run bootwright controller install" ||
 		!strings.Contains(reported[0].Message, "could not be rebuilt from the wheel cache: pip could not install") {
 		t.Fatalf("a failed rebuild reported %+v (%v)", reported, err)
 	}

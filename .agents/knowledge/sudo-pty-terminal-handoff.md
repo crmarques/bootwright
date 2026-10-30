@@ -6,7 +6,7 @@ Observed on 2026-09-12 with sudo 1.9.17p2 on Fedora 43, whose sudoers enables
 
 ## Symptom
 
-`setup` printed its plan, asked `Confirm controller setup on this host?
+`controller install` printed its plan, asked `Confirm controller install on this host?
 [y/N]`, echoed the typed `y` and then stayed silent indefinitely. The typed
 `y` and newline were still queued unread on the invoking terminal (`FIONREAD`
 reported two bytes), the elevated child had written nothing further, held no
@@ -50,7 +50,7 @@ group differing from the pseudo-terminal's foreground group.
   decides from the child's own standard output. Sudo's pseudo-terminal mode
   routes only descriptors that are terminals through the pseudo-terminal and
   hands a redirected standard output to the command unchanged, so
-  `controller setup > log` receives the appended-line form. This follows sudo's
+  `controller install > log` receives the appended-line form. This follows sudo's
   `exec_pty` descriptor handling and is operator-verified, not gated in-tree.
 
 Evidence: `TestBackgroundConfirmationRequestsTerminalThroughJobControl`

@@ -278,7 +278,7 @@ func (s Service) rebuild(ctx context.Context, located approved, rebuild bool) er
 	if len(reported) != 0 {
 		cause = reported[0].Message
 	}
-	return failure("controller.state", "the controller runtime for this build ("+runtimeIdentity(lock, abi)+") could not be rebuilt from the wheel cache: "+cause, "run bootwright setup")
+	return failure("controller.state", "the controller runtime for this build ("+runtimeIdentity(lock, abi)+") could not be rebuilt from the wheel cache: "+cause, "run bootwright controller install")
 }
 
 // withPython launches the approved runtime; one retired since it was located
@@ -296,7 +296,7 @@ func (s Service) withPython(ctx context.Context, runtime approved, use func(prer
 }
 
 func runtimeUnprepared(lock RuntimeLock, abi string) error {
-	return failure("controller.state", "the controller runtime for this build ("+runtimeIdentity(lock, abi)+") is not prepared", "run bootwright setup")
+	return failure("controller.state", "the controller runtime for this build ("+runtimeIdentity(lock, abi)+") is not prepared", "run bootwright controller install")
 }
 
 func runtimeIdentity(lock RuntimeLock, abi string) string {

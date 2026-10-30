@@ -136,8 +136,8 @@ func TestStatusOffersSetupWhenNoRuntimeIsLocated(t *testing.T) {
 	} {
 		t.Run(name, func(t *testing.T) {
 			status, err := row.arrange(t).service.Status(context.Background(), StatusRequest{ContextName: testContextName})
-			if err != nil || !slices.Equal(status.NextSteps, []string{"bootwright setup"}) {
-				t.Fatalf("status = %+v (%v), want only bootwright setup", status, err)
+			if err != nil || !slices.Equal(status.NextSteps, []string{"bootwright controller install"}) {
+				t.Fatalf("status = %+v (%v), want only bootwright controller install", status, err)
 			}
 			for _, verb := range row.gated {
 				requireSetupRefuses(t, row.arrange(t), verb)

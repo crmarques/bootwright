@@ -65,7 +65,7 @@ func (a *AutomationStager) Stage(ctx context.Context) (prerequisites.StagedAutom
 	}
 	stage, err := os.OpenRoot(path.Join(parent.path, made.name))
 	if err != nil {
-		return failed("controller.setup", "the controller automation cannot be staged in "+parent.path, "Free space on the filesystem holding "+parent.path)
+		return failed("controller.install", "the controller automation cannot be staged in "+parent.path, "Free space on the filesystem holding "+parent.path)
 	}
 	defer stage.Close()
 	files := a.source
@@ -73,7 +73,7 @@ func (a *AutomationStager) Stage(ctx context.Context) (prerequisites.StagedAutom
 		files = ansible.Automation()
 	}
 	if err := writeTree(stage, files); err != nil {
-		return failed("controller.setup", "the controller automation cannot be staged in "+parent.path, "Free space on the filesystem holding "+parent.path)
+		return failed("controller.install", "the controller automation cannot be staged in "+parent.path, "Free space on the filesystem holding "+parent.path)
 	}
 	if err := verifyTree(stage, ansible.Automation()); err != nil {
 		return failed("controller.identity", "the staged automation does not match the embedded automation digest", "Rerun the command, and reinstall this Bootwright build if it repeats")

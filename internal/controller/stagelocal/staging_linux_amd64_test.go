@@ -182,7 +182,7 @@ func TestTheStagingRootRefusesAnUnsafeParent(t *testing.T) {
 			}
 			_, err := NewStaging(parent).Stage(t.Context(), "resolver")
 			found := diagnostics.Of(err)
-			if len(found) != 1 || found[0].Code != "controller.setup" || !strings.Contains(found[0].Message, parent) || !strings.Contains(found[0].Remediation, parent) {
+			if len(found) != 1 || found[0].Code != "controller.install" || !strings.Contains(found[0].Message, parent) || !strings.Contains(found[0].Remediation, parent) {
 				t.Fatalf("an unsafe staging parent was not refused by name: %+v", found)
 			}
 		})
@@ -219,7 +219,7 @@ func nest(t *testing.T, base string, levels int) {
 func refusedByParent(t *testing.T, err error, parent, holds string) {
 	t.Helper()
 	found := diagnostics.Of(err)
-	if len(found) != 1 || found[0].Code != "controller.setup" || !strings.Contains(found[0].Message, parent) || !strings.Contains(found[0].Message, holds) || !strings.Contains(found[0].Remediation, parent) {
+	if len(found) != 1 || found[0].Code != "controller.install" || !strings.Contains(found[0].Message, parent) || !strings.Contains(found[0].Message, holds) || !strings.Contains(found[0].Remediation, parent) {
 		t.Fatalf("the sweep did not refuse naming %s and %q: %+v", parent, holds, found)
 	}
 }

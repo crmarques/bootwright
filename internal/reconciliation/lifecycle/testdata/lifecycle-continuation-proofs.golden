@@ -9,7 +9,7 @@
     ],
     "contradictions": [],
     "nextSteps": [
-      "bootwright setup"
+      "bootwright controller install"
     ]
   },
   "status over an unknown removal with no setup receipt": {
@@ -22,7 +22,7 @@
     ],
     "contradictions": [],
     "nextSteps": [
-      "bootwright setup"
+      "bootwright controller install"
     ]
   },
   "the apply over an unbound unknown removal": {

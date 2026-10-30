@@ -14,7 +14,7 @@ import (
 // re-derived from the pending scope: a context with no controller stage is
 // sent to its first apply although its pending check is a context's.
 func TestANotReadyPreflightOffersTheCommandItsServiceDecided(t *testing.T) {
-	for _, next := range []string{"bootwright apply --context lab", "bootwright apply --stage controller --context lab", "bootwright setup"} {
+	for _, next := range []string{"bootwright apply --context lab", "bootwright apply --stage controller --context lab", "bootwright controller install"} {
 		report := controllerReport("not-ready", false)
 		report.ContextName, report.Machine, report.Next = "lab", "controller", next
 		report.Checks = append(report.Checks, prerequisites.Check{ID: "controller-binding", Required: "controller", Observed: "missing or unverified", Status: "not-ready", Scope: prerequisites.ContextScope})

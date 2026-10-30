@@ -13,4 +13,4 @@
               bootwright)
 
     Outcome  not-ready
-    Next     bootwright setup
+    Next     bootwright controller install

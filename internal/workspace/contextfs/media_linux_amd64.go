@@ -134,7 +134,7 @@ func (e *mediaBusy) Unwrap() error { return e.held }
 func (e *mediaBusy) Is(target error) bool { return target == media.ErrBusy }
 
 func mediaUnprepared() error {
-	return mediaFailure("this host has no Bootwright store to hold installer media", "run bootwright setup first")
+	return mediaFailure("this host has no Bootwright store to hold installer media", "run bootwright controller install first")
 }
 
 // Names lists every occupied media name, so a publication never collides with

@@ -78,7 +78,7 @@ func TestARegistryVersion5StoreNamesTheFreshInstallRemedy(t *testing.T) {
 	if !strings.HasPrefix(freshInstallMessage, "/var/lib/bootwright holds a store an earlier Bootwright build wrote (registry version 5)") ||
 		!strings.Contains(freshInstallRemediation, "destroy each environment (bootwright destroy --context <name>)") ||
 		!strings.Contains(freshInstallRemediation, "delete each context (bootwright context delete --name <name> --purge)") ||
-		!strings.Contains(freshInstallRemediation, "remove /var/lib/bootwright and /var/lib/bootwright-staging and run bootwright setup with this build") ||
+		!strings.Contains(freshInstallRemediation, "remove /var/lib/bootwright and /var/lib/bootwright-staging and run bootwright controller install with this build") ||
 		!strings.HasSuffix(freshInstallRemediation, "Never remove /var/lib/bootwright while services it manages run.") {
 		t.Errorf("the fresh-install refusal reads %q: %q", freshInstallMessage, freshInstallRemediation)
 	}

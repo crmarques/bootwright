@@ -316,7 +316,7 @@ func idleSteps(view View, unindexed []string) []string {
 		command, _ := deletionCommand(view)
 		return []string{command}
 	case !setupComplete(view.Controller()):
-		return []string{"bootwright setup"}
+		return []string{"bootwright controller install"}
 	}
 	name := view.Identity().Name
 	return []string{contextCommand(name, "plan"), contextCommand(name, string(reconciliation.Apply))}
@@ -377,7 +377,7 @@ func (s Service) offered(ctx context.Context, view View, store OperationStore, o
 
 // setupStep is the step status offers in place of every verb the retained
 // controller setup refuses. Setup is context-free, so it names no context.
-const setupStep = "bootwright setup"
+const setupStep = "bootwright controller install"
 
 // setupGates reports whether the controller setup refuses every transition
 // that runs a block or registers: setup has not completed on this host, or

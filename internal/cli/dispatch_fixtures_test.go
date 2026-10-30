@@ -171,11 +171,15 @@ func (s controllerSpy) Check(ctx context.Context, request prerequisites.CheckReq
 }
 
 func (s controllerSpy) Setup(ctx context.Context, request prerequisites.SetupRequest) (*prerequisites.Report, error) {
-	return s.record.result.controller, s.record.called(ctx, "setup", request)
+	return s.record.result.controller, s.record.called(ctx, "controller install", request)
 }
 
 func (s controllerSpy) Rebind(ctx context.Context, request prerequisites.RebindRequest) (*prerequisites.RebindResult, error) {
 	return s.record.result.rebind, s.record.called(ctx, "controller rebind", request)
+}
+
+func (s controllerSpy) Uninstall(ctx context.Context, request prerequisites.UninstallRequest) (*prerequisites.UninstallResult, error) {
+	return s.record.result.uninstall, s.record.called(ctx, "controller uninstall", request)
 }
 
 type environmentSpy struct{ record *dispatchRecord }

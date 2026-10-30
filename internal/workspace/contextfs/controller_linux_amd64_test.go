@@ -192,7 +192,7 @@ func TestTheFirstBindingRefusesBeforeSetupCompletes(t *testing.T) {
 				return tx.Bind(context.Background(), "controller", syntheticHost(t))
 			})
 			if found := diagnostics.Of(err); len(found) != 1 || found[0].Code != "controller.identity" || found[0].Message != "this host has no completed controller setup" ||
-				found[0].Remediation != "run bootwright setup, then repeat the command" {
+				found[0].Remediation != "run bootwright controller install, then repeat the command" {
 				t.Fatalf("binding before setup = %#v", found)
 			}
 			if _, err := os.Stat(filepath.Join(store.options.Root, "controller")); !errors.Is(err, os.ErrNotExist) {
@@ -698,7 +698,7 @@ func TestAControllerRecordOfAnotherVersionNamesTheFreshInstall(t *testing.T) {
 	for _, part := range []string{
 		"destroy each environment (bootwright destroy --context <name>)",
 		"delete each context (bootwright context delete --name <name> --purge)",
-		"remove /var/lib/bootwright and /var/lib/bootwright-staging and run bootwright setup",
+		"remove /var/lib/bootwright and /var/lib/bootwright-staging and run bootwright controller install",
 		"Never remove /var/lib/bootwright while services it manages run.",
 		"drops this host's contexts with their Secrets and its stored media",
 		"bootwright context init and bootwright media add",

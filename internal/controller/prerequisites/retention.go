@@ -14,7 +14,7 @@ const retentionCode = "controller.runtime-retention"
 func (s Service) retain(ctx context.Context, tx SetupTransaction, current *inspection) {
 	if err := s.retainRuntimes(ctx, tx, current); err != nil && ctx.Err() == nil {
 		current.report.Warnings = append(current.report.Warnings, diagnostics.Diagnostic{Severity: "warning", Code: retentionCode,
-			Message: "older controller runtimes and wheels could not all be removed (" + err.Error() + "); the next bootwright setup retries"})
+			Message: "older controller runtimes and wheels could not all be removed (" + err.Error() + "); the next bootwright controller install retries"})
 	}
 }
 

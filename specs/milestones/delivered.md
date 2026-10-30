@@ -10023,3 +10023,29 @@ counts with `set --` and `$#`; both refuse exactly what they refused before.
 The request goldens now pass the plan guard, which
 `TestTheFrozenRequestsMatchTheirGoldens` and
 `TestPhysicalHostVariantsRequestGolden` hold.
+
+### X226 — Controller install and uninstall
+
+**Item:** B975 ([D209](backlog.md#d209)); the uninstall half awaits operator
+acceptance on [its M1 row](m1.md#b976). **Kind:** safety. **Owners:**
+Controller, with CLI and Workspace.
+
+`bootwright setup` is now `bootwright controller install`, its flags and
+behavior unchanged, and its refusal code is `controller.install`; the setup
+subtree, its lock, record format and run IDs keep their names, so no prepared
+host needs another install. `bootwright controller uninstall`
+([uninstall flow](../controller.md#the-uninstall-flow)) removes the host
+packages an install recorded as its own, then `/var/lib/bootwright` and
+`/var/lib/bootwright-staging`, from a host that holds no context or media. It
+refuses before any effect on a context, an image, a held staging extraction or
+lock, a mounted root or staging directory, an interrupted or unreadable install
+record, a dependent package, or a dnf resolution that would also remove a
+package present before Bootwright; `--keep-packages` leaves every package.
+Each tree is renamed aside before it is deleted, so the next uninstall
+finishes an interrupted one. `TestAnUninstallRemovesThePackagesBeforeTheState`,
+`TestAnUninstallNeverRemovesAPackagePresentBeforeBootwright`,
+`TestAnUninstallRefusesAMountedRootOrStagingBeforeAnyEffect` and
+`TestTheNextUninstallFinishesAnInterruptedOne` hold it. Accepted: a package an
+operator installs with dnf between uninstall's last erase test and its removal,
+which requires one being removed, is removed with it. The operator gate is an
+uninstall followed by a fresh install on a disposable controller host.

@@ -49,7 +49,7 @@ func TestOperationBoundaryOwnsContextAndCleanupForEveryImplementedPath(t *testin
 		[]string{"secret", "show", "--name", "example", "--part", "value"}, []string{"secret", "delete", "--name", "example"},
 		[]string{"secret", "encryption", "init"}, []string{"secret", "encryption", "status"}, []string{"secret", "encryption", "rotate"},
 		[]string{"media", "add", "--name", "example.iso", "--from-file", "image.iso"}, []string{"media", "list"}, []string{"media", "delete", "--name", "example.iso"},
-		[]string{"setup"}, []string{"setup", "--dry-run"}, []string{"preflight", "controller"}, []string{"preflight", "storage-cluster"}, []string{"preflight", "container-cluster"}, []string{"preflight", "clusters"}, []string{"preflight", "infra"}, []string{"preflight", "all"},
+		[]string{"controller", "install"}, []string{"controller", "install", "--dry-run"}, []string{"preflight", "controller"}, []string{"preflight", "storage-cluster"}, []string{"preflight", "container-cluster"}, []string{"preflight", "clusters"}, []string{"preflight", "infra"}, []string{"preflight", "all"},
 		[]string{"plan"}, []string{"status"}, []string{"apply", "--yes"}, []string{"destroy", "--yes"},
 		[]string{"machine", "list"}, []string{"cluster", "list"}, []string{"cluster", "info"}, []string{"machine", "rsh", "--name", "example"},
 		[]string{"machine", "exec", "--name", "example", "uptime"},

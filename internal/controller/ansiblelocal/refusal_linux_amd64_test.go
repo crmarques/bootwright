@@ -86,13 +86,13 @@ func TestARefusedRecordNamesItsClassifiedCause(t *testing.T) {
 		name, script, code, message, outcome string
 		routable                             bool
 	}{
-		{"a tool transfer past its deadline", installing + `printf '` + refused("timeout", "tool-helm") + `' >&3; exit 2`, "controller.setup", "get.example.test did not answer within its bounded acquisition deadline", "unknown", true},
-		{"a tool source unresolved, exit first", installing + afterTheExit(refused("dns", "tool-helm")), "controller.setup", "get.example.test could not be resolved by this host's configured resolver", "unknown", true},
+		{"a tool transfer past its deadline", installing + `printf '` + refused("timeout", "tool-helm") + `' >&3; exit 2`, "controller.install", "get.example.test did not answer within its bounded acquisition deadline", "unknown", true},
+		{"a tool source unresolved, exit first", installing + afterTheExit(refused("dns", "tool-helm")), "controller.install", "get.example.test could not be resolved by this host's configured resolver", "unknown", true},
 		{"a source other than the tool being installed", installing + `printf '` + refused("timeout", "tool-other") + `' >&3; exit 2`, "controller.unknown", "the Ansible capability protocol was invalid", "unknown", false},
 		{"a tool source before its continue", f.handoff + acknowledged(f.toolPrepare) + `printf '` + refused("dns", "tool-helm") + `' >&3; exit 2`, "controller.unknown", "the Ansible capability protocol was invalid", "failed", false},
 		{"an acquisition class without its source", installing + `printf '` + refused("dns", "") + `' >&3; exit 2`, "controller.unknown", "the Ansible capability protocol was invalid", "unknown", false},
 		{"a native class", f.handoff + `printf '` + refused("database", "") + `' >&3; exit 2`, "controller.unknown", "the Ansible capability protocol was invalid", "failed", false},
-		{"an internal refusal", f.handoff + acknowledged(f.toolPrepare) + `printf '` + refused("internal", "") + `' >&3; exit 2`, "controller.setup", "Ansible did not complete the authorized dependency operation", "failed", false},
+		{"an internal refusal", f.handoff + acknowledged(f.toolPrepare) + `printf '` + refused("internal", "") + `' >&3; exit 2`, "controller.install", "Ansible did not complete the authorized dependency operation", "failed", false},
 		{"a record after an internal refusal", f.handoff + `printf '` + refused("internal", "") + refused("dns", "tool-helm") + `' >&3; exit 2`, "controller.unknown", "the Ansible capability protocol was invalid", "failed", false},
 		{"an unknown class", installing + `printf '` + refused("quota", "tool-helm") + `' >&3; exit 2`, "controller.unknown", "the Ansible capability protocol was invalid", "unknown", false},
 	} {
@@ -121,7 +121,7 @@ func TestAStorageRefusalNamesTheFilesystemItsSourceFills(t *testing.T) {
 		f.request(request)
 		request.PublicationBundle = bundleLocation{Path: bundle, Writable: true}
 	})
-	if len(found) != 1 || found[0].Code != "controller.setup" ||
+	if len(found) != 1 || found[0].Code != "controller.install" ||
 		found[0].Message != "the filesystem holding "+bundle+" could not hold the approved download from get.example.test" ||
 		!strings.HasPrefix(found[0].Remediation, "Free space on the filesystem holding "+bundle+", ") {
 		t.Fatalf("the run reported %+v", found)

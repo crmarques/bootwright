@@ -205,7 +205,7 @@ func TestPendingIntentIsDurableBeforeEffects(t *testing.T) {
 		t.Fatal(err)
 	}
 	refusal := onlyDiagnostic(t, prerequisites.SetupLaunchRefusal(view))
-	if refusal.Code != "controller.state" || refusal.Message != "a controller setup (setup-000001) was interrupted before it finished" || refusal.Remediation != "run bootwright setup, adding --wheel-mirror <mirror> on a host that cannot reach the wheel origins" {
+	if refusal.Code != "controller.state" || refusal.Message != "a controller setup (setup-000001) was interrupted before it finished" || refusal.Remediation != "run bootwright controller install, adding --wheel-mirror <mirror> on a host that cannot reach the wheel origins" {
 		t.Fatalf("an interrupted setup refuses a launch with %#v", refusal)
 	}
 }
@@ -289,7 +289,7 @@ func TestAnotherBuildsSetupFormatRefusesALaunch(t *testing.T) {
 				t.Fatalf("launch read %#v %v, want foreign %q", view, err, test.foreign)
 			}
 			refusal := onlyDiagnostic(t, prerequisites.SetupLaunchRefusal(view))
-			if refusal.Code != "controller.state" || refusal.Message != "the controller setup record was written by another Bootwright build" || refusal.Remediation != "run bootwright setup" {
+			if refusal.Code != "controller.state" || refusal.Message != "the controller setup record was written by another Bootwright build" || refusal.Remediation != "run bootwright controller install" {
 				t.Fatalf("a foreign record refuses a launch with %#v", refusal)
 			}
 			mutateSetup(t, store, func(tx prerequisites.SetupTransaction) error {

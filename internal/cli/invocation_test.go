@@ -99,12 +99,12 @@ func TestOnlyContextFreeAcquisitionConsumesTheInvokingEnvironment(t *testing.T) 
 	}{
 		// Setup selects no context: it acquires, and its dry run previews the
 		// route setup would take.
-		{"setup", nil, readsRoute},
-		{"setup", []string{"--dry-run"}, readsRoute},
-		{"setup", []string{"--yes"}, readsRoute},
-		{"setup", []string{"--dry-run", "--output", "json"}, readsRoute},
-		{"setup", []string{"--download-only", "--dest-dir", "wheels"}, readsRoute},
-		{"setup", []string{"--wheel-mirror", "https://mirror.example/wheels"}, readsRoute},
+		{"controller install", nil, readsRoute},
+		{"controller install", []string{"--dry-run"}, readsRoute},
+		{"controller install", []string{"--yes"}, readsRoute},
+		{"controller install", []string{"--dry-run", "--output", "json"}, readsRoute},
+		{"controller install", []string{"--download-only", "--dest-dir", "wheels"}, readsRoute},
+		{"controller install", []string{"--wheel-mirror", "https://mirror.example/wheels"}, readsRoute},
 		// Preflight reports the host's route only when no context is named; an
 		// explicitly empty final --context is omission.
 		{"preflight controller", nil, readsRoute},
@@ -123,6 +123,8 @@ func TestOnlyContextFreeAcquisitionConsumesTheInvokingEnvironment(t *testing.T) 
 		{"media list", []string{"--checksums"}, ignoresRoute},
 		{"media delete", []string{"--name", "image.iso"}, ignoresRoute},
 		{"controller rebind", nil, ignoresRoute},
+		{"controller uninstall", nil, readsRoute},
+		{"controller uninstall", []string{"--keep-packages"}, ignoresRoute},
 		// Every other command acquires nothing before a context exists.
 		{"context init", []string{"--name", "lab"}, ignoresRoute},
 		{"context update", []string{"--name", "lab", "--input-dir", "inputs"}, ignoresRoute},
@@ -183,7 +185,7 @@ func TestOnlyContextFreeAcquisitionConsumesTheInvokingEnvironment(t *testing.T) 
 		{"completion fish", nil, notAdmitted},
 		{"completion powershell", nil, notAdmitted},
 		// An invocation that is not admitted reads no route.
-		{"setup", []string{"--help"}, notAdmitted},
+		{"controller install", []string{"--help"}, notAdmitted},
 		{"preflight controller", []string{"--context", "Lab"}, notAdmitted},
 		{"media add", []string{"--name", "image.iso", "--from-url", source}, notAdmitted},
 		{"media add", []string{"--name", "image.iso", "--from-url", source, "--from-file", "/images/image.iso", "--sha256", digest}, notAdmitted},

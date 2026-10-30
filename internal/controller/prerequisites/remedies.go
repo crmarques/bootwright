@@ -16,7 +16,7 @@ import (
 // scope, it is setup's.
 type ScopedFailure struct {
 	// Code is the diagnostic code the failure keeps in every scope, and
-	// controller.setup when it names none.
+	// controller.install when it names none.
 	Code       string
 	Message    string
 	Correction string
@@ -32,7 +32,7 @@ type ScopedFailure struct {
 func (f *ScopedFailure) Error() string { return "failed with diagnostics" }
 
 func (f *ScopedFailure) Unwrap() error {
-	return f.remedied("set HTTPS_PROXY to a proxy that reaches it and keep it out of NO_PROXY", cmp.Or(f.Command, "rerun bootwright setup"))
+	return f.remedied("set HTTPS_PROXY to a proxy that reaches it and keep it out of NO_PROXY", cmp.Or(f.Command, "rerun bootwright controller install"))
 }
 
 // InStage renders a scoped failure as the named context's controller stage
@@ -58,7 +58,7 @@ func (f *ScopedFailure) remedied(route, command string) error {
 	}
 	code := f.Code
 	if code == "" {
-		code = "controller.setup"
+		code = "controller.install"
 	}
 	return diagnostics.NewFailureWithRemediation(code, f.Message, "", remedy+", then "+command+".")
 }

@@ -92,7 +92,7 @@ func TestAnotherBuildContinuesAnOperationWhoseBlocksItFreezesTheSame(t *testing.
 // effect and no record changed.
 func TestAnotherBuildRefusesToContinueABlockItWouldFreezeDifferently(t *testing.T) {
 	const take = "take back what this operation owns under this executable with bootwright destroy --context lab, or install bootwright devel (abcdef1), which registered it"
-	const install = "install bootwright devel (abcdef1), which registered this operation, and run bootwright setup"
+	const install = "install bootwright devel (abcdef1), which registered this operation, and run bootwright controller install"
 	const differently = "this executable would freeze the block artifact-server-lab differently from the plan this operation froze"
 	const unplannable = "this executable cannot plan this operation again to prove it freezes the same blocks: "
 	for _, test := range []struct {

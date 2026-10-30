@@ -241,7 +241,7 @@ this build does not read or convert", and the fresh-install remedy: "with a
 build that reads it, destroy each environment (bootwright destroy --context
 <name>) and delete each context (bootwright context delete --name <name>
 --purge); then, as root, remove /var/lib/bootwright and
-/var/lib/bootwright-staging and run bootwright setup with this build. Never remove /var/lib/bootwright while
+/var/lib/bootwright-staging and run bootwright controller install with this build. Never remove /var/lib/bootwright while
 services it manages run." ([D152](milestones/backlog.md#d152),
 `TestARegistryVersion5StoreNamesTheFreshInstallRemedy`). Nothing in that store
 is rewritten. A `registry.json` of any other format version, such as the
@@ -374,8 +374,8 @@ retained beside it.
 | Root lock | Lease | Commands |
 | --- | --- | --- |
 | shared | none | Every read: `context list` and `current`, `plan`, `status`, `preflight controller`, `secret check`, `list` and `show`, `secret encryption status`, `media list`, including the opening of each image `--checksums` then reads, the admission a `media add` or `media delete` without `--yes` reviews before its confirmation, the store check a `secret set` from standard input makes before it reads, the plan a `context update` or `context delete` without `--yes` presents before its confirmation, SSH-trust and input reads, and the reads that precede `apply` and `destroy`. |
-| exclusive | none | Every other command that may publish, such as `context use`, a `context update` that imports no input, `media delete`, the admission and publication of `media add`, the SSH trust that `machine trust` or a confirmed first use records, and the one registry transaction in which `setup` creates a missing setup subtree. |
-| none | none | The [acquisition](#media-acquisition) of `media add` between those two holds: its copy or download, or its re-read of a stage it adopts, its digest verification, and the record it retains beside a stage whose publication met another command's lock; the full read of each image by `media list --checksums`, through the descriptor its shared hold opened; the confirmation prompt of `media add`, `media delete`, `context update` and `context delete`; the [read of standard input](secrets.md#acquisition-and-commands) by `secret set --value-stdin` or `--password-stdin`, including its terminal prompt; and every other part of `setup`, which holds only [`setup/lock`](contexts/controller-record.md#the-setup-subtree). |
+| exclusive | none | Every other command that may publish, such as `context use`, a `context update` that imports no input, `media delete`, the admission and publication of `media add`, the SSH trust that `machine trust` or a confirmed first use records, and the registry transaction in which `controller install` creates a missing setup subtree. |
+| none | none | The [acquisition](#media-acquisition) of `media add` between those two holds: its copy or download, or its re-read of a stage it adopts, its digest verification, and the record it retains beside a stage whose publication met another's lock; the full read of each image by `media list --checksums`, through the descriptor its shared hold opened; the confirmation prompt of `media add`, `media delete`, `context update` and `context delete`; the [read of standard input](secrets.md#acquisition-and-commands) by `secret set --value-stdin` or `--password-stdin`, including its terminal prompt; and every other part of `controller install`, which holds only [`setup/lock`](contexts/controller-record.md#the-setup-subtree). |
 | exclusive | held | `context init`; a `context update` that imports input; `context delete` of a ready context; `secret set` (from standard input, only to write what it read), `generate` and `delete`, `secret encryption init` and `rotate`, and the Secret binding `apply` and `destroy` take before they execute; and the short shared-state publications of `apply` and `destroy`. |
 | none during effects | exclusive | The execution of `apply` and `destroy`, between short root transactions. |
 | shared during admission, none during effects | shared | [Bounded runs](cli/output.md#bounded-run-output), including Machine power; their lease excludes lifecycle mutation of the same context. |
@@ -394,12 +394,12 @@ and the lease to write and re-proves its
 that cannot take the lock or lease refuses with `lifecycle.lease` and a retry
 remedy; no lock or lease is ever taken over. A lease is held
 only once its stage collection, layout verification and reservation check
-succeed; a lease that refuses is released at once. `setup`
+succeed; a lease that refuses is released at once. `controller install`
 [selects no context](controller.md#the-setup-flow), so it
 takes no lease and collects no stage in a context's `state/` subtree. Its
-reads take no root lock, and its run holds no exclusive root lock: it opens
+reads take no root lock, and its run holds none exclusively: it opens
 one exclusive registry transaction only to create the root and its setup
-subtree when that subtree is missing, then holds only `setup/lock`
+subtree when missing, then holds only `setup/lock`
 ([controller](controller.md#host-identity-and-shared-prerequisites)).
 Revalidate target, identity and evidence under those locks. Read-only
 operations perform no repair, initialization or publication.
@@ -509,7 +509,7 @@ Collection takes the corresponding lock, so no collected stage has a live
 writer: only a killed process,
 or a failure whose directory no longer verified, leaves one. Every command
 that opens a registry transaction (`context init`, `use`, `update` and
-`delete`, `setup` when it creates its missing subtree, and the execution of
+`delete`, `controller install` creating its missing subtree, and the execution of
 `apply` and `destroy`) therefore first removes the root's registry stages and
 the controller directory's stages and, when it takes the lease of a context whose directory identity the registry
 records, the stages in that context's `state/` directory and in its operation,

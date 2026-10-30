@@ -30,7 +30,7 @@ validation and planning only; no live acceptance is claimed.
   cephadm-ansible `5.0.3-1.el9cp`) are authored, not qualified.
 - Call Home stays `enabled` (the selected 20.2.x build); with public egress
   blocked expect a connectivity warning. Offline reporting is not claimed.
-- Controller side: `setup --download-only --dest-dir` on a connected host and
+- Controller side: `controller install --download-only --dest-dir` on a connected host and
   `--wheel-mirror` on the isolated one prepare automation wheels only. The
   ingress is HTTP; add a qualified TLS binding before sensitive object data.
 - Required inputs: `mirror-ca` and the `ibm-registry` account for the mirror

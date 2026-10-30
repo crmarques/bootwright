@@ -47,7 +47,7 @@ type ToolFile struct {
 // projection found it. The same release and mirror reuse the retained source,
 // so restoring sources cannot help; only another release or mirror can.
 func UnreleasedClient(tool ToolDefinition) error {
-	return failure("controller.setup", "the oc of OpenShift client release "+tool.Version+" does not name its frozen release",
+	return failure("controller.install", "the oc of OpenShift client release "+tool.Version+" does not name its frozen release",
 		"declare a release.version or downloads.openshiftClientsMirror whose oc passes the release-stamp check; the same release and mirror reuse the retained source and refuse again")
 }
 
@@ -57,9 +57,9 @@ func UnreleasedClient(tool ToolDefinition) error {
 // stage selects, so a consumer runs the exact file that stage installed for
 // the release its own graph selected, and never one another closure holds.
 func LocateInstalledTool(ctx context.Context, view StorageView, tools []ToolDefinition, tool controller.InstalledTool) (string, error) {
-	unavailable, missing := "run bootwright setup, then apply --stage controller", "run bootwright apply --stage controller"
+	unavailable, missing := "run bootwright controller install, then apply --stage controller", "run bootwright apply --stage controller"
 	if view.Context.Name != "" {
-		unavailable, missing = "run bootwright setup, then "+stageInvocation(view.Context.Name), stageCommand(view.Context.Name)
+		unavailable, missing = "run bootwright controller install, then "+stageInvocation(view.Context.Name), stageCommand(view.Context.Name)
 	}
 	if view.OpenBundle == nil {
 		return "", failure("controller.state", "the retained controller areas are unavailable", unavailable)

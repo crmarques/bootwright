@@ -32,7 +32,7 @@ func TestRunnerDispatchesEveryApplicationCommand(t *testing.T) {
 		"add-ons list",
 		"secret set --name demo --value-file secret.bin", "secret generate", "secret check", "secret list", "secret show --name demo --part value", "secret delete --name demo", "secret encryption init", "secret encryption status", "secret encryption rotate",
 		"media add --name demo.iso --from-file image.iso", "media list", "media delete --name demo.iso", "validate", "preflight controller", "preflight infra", "preflight clusters", "preflight container-cluster", "preflight storage-cluster", "preflight add-ons", "preflight all", "plan", "status", "render --output-dir artifacts --sensitive", "render effective", "render installer", "render storage", "apply", "destroy",
-		"machine list", "machine rsh --name demo", "machine exec --name demo echo", "machine trust", "setup", "cluster list", "cluster info", "cluster rsh --name demo", "cluster exec --name demo echo", "cluster oc --name demo get", "cluster kubectl --name demo get", "cluster kubeconfig --name demo", "cluster keyring --name demo --client vm-disks",
+		"machine list", "machine rsh --name demo", "machine exec --name demo echo", "machine trust", "controller install", "cluster list", "cluster info", "cluster rsh --name demo", "cluster exec --name demo echo", "cluster oc --name demo get", "cluster kubectl --name demo get", "cluster kubeconfig --name demo", "cluster keyring --name demo --client vm-disks",
 	}
 	for _, invocation := range cases {
 		t.Run(invocation, func(t *testing.T) {

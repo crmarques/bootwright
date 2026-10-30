@@ -424,7 +424,7 @@ spec:
 
 A controller may host a managed service when that service explicitly selects
 its `machineRef`. The controller receives the container runtime even when no
-managed service is selected: `setup` installs an absent qualified Podman and
+managed service is selected: `controller install` installs an absent qualified Podman and
 verifies its dependencies.
 No service placement defaults to the controller.
 

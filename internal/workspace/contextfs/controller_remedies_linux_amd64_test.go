@@ -39,7 +39,7 @@ func TestControllerRefusalsNameTheirOwnRemedies(t *testing.T) {
 			message = "locally hosted services require a completed controller setup on this host"
 		}
 		if len(reported) != 1 || reported[0].Code != "controller.identity" || reported[0].Message != message ||
-			reported[0].Remediation != "run bootwright setup, then repeat the command" || reported[0].Source != nil {
+			reported[0].Remediation != "run bootwright controller install, then repeat the command" || reported[0].Source != nil {
 			t.Errorf("%s: refusal = %+v", name, reported)
 		}
 	}
@@ -72,7 +72,7 @@ func TestAToolAreaSetupMustSettleNamesSetup(t *testing.T) {
 	stored := controllerStored{bundles: []controllerBundleReservation{{ID: clientClosure, Mode: "sealed"}}}
 	_, err := openControllerBundle(context.Background(), nil, nil, contexts.Registry{}, stored, clientClosure, func() bool { return true }, false, nil)
 	reported := diagnostics.Of(err)
-	if len(reported) != 1 || reported[0].Message != "required controller bundle is not attributable" || reported[0].Remediation != "run bootwright setup" {
+	if len(reported) != 1 || reported[0].Message != "required controller bundle is not attributable" || reported[0].Remediation != "run bootwright controller install" {
 		t.Errorf("refusal = %+v", reported)
 	}
 }

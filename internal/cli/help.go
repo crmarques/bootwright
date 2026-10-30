@@ -31,7 +31,7 @@ func writeHelp(w io.Writer, command *cobra.Command) error {
 	text.lines([]string{command.UseLine()})
 	if command == command.Root() {
 		for _, group := range []struct{ title, names string }{
-			{"Start", "context setup validate preflight"},
+			{"Start", "context controller validate preflight"},
 			{"Lifecycle", "plan apply destroy status diff"},
 			{"Resources", "machine cluster media secret add-ons render"},
 			{"Tools", "version completion help"},
@@ -117,9 +117,9 @@ func helpExample(path string) string {
 		"machine info": "--context lab --name node", "secret info": "--context lab --name ssh-key",
 		"context init": "--name lab --input-dir ./input", "context update": "--name lab --input-dir ./input", "context use": "--name lab", "context list": "", "context current": "--short", "context delete": "--name lab --purge",
 		"secret set": "--name token --value-file ./token --yes", "secret generate": "--name ssh-key", "secret check": "--output json", "secret list": "--output json", "secret show": "--name token --part value", "secret delete": "--name token", "secret encryption init": "", "secret encryption status": "", "secret encryption rotate": "",
-		"controller rebind": "", "media add": "--name installer.iso --from-file ./installer.iso", "media list": "--checksums", "media delete": "--name installer.iso",
+		"controller rebind": "", "controller uninstall": "", "media add": "--name installer.iso --from-file ./installer.iso", "media list": "--checksums", "media delete": "--name installer.iso",
 		"validate": "--file ./input --output json", "preflight controller": "--context lab", "preflight storage-cluster": "--context lab --output json", "preflight clusters": "--context lab --output json", "preflight infra": "--context lab --output json", "preflight all": "--context lab --output json", "preflight container-cluster": "--context lab --output json", "plan": "--context lab --stage machines", "status": "--context lab", "diff": "--context lab --observe", "render": "--input-dir ./input --output-dir ./artifacts", "render effective": "--context lab --output json", "apply": "--context lab --stage machines", "destroy": "--context lab",
-		"machine list": "--context lab --power-status", "machine rsh": "--context lab --name node", "machine exec": "--context lab --name node -- uname -a", "machine start": "--context lab --name node", "machine stop": "--context lab --name node", "machine restart": "--context lab --name node", "machine trust": "--context lab --dry-run", "setup": "--dry-run", "cluster kubeconfig": "--context lab --name cluster", "cluster keyring": "--context lab --name storage --client vm-disks",
+		"machine list": "--context lab --power-status", "machine rsh": "--context lab --name node", "machine exec": "--context lab --name node -- uname -a", "machine start": "--context lab --name node", "machine stop": "--context lab --name node", "machine restart": "--context lab --name node", "machine trust": "--context lab --dry-run", "controller install": "--dry-run", "cluster kubeconfig": "--context lab --name cluster", "cluster keyring": "--context lab --name storage --client vm-disks",
 		"cluster list": "--context lab", "cluster info": "--context lab --name storage", "cluster rsh": "--context lab --name storage --node node-1", "cluster exec": "--context lab --name storage -- uname -a",
 		"version": "", "schema": "--format json-schema", "help": "context init", "completion bash": "", "completion zsh": "", "completion fish": "", "completion powershell": "",
 	}

@@ -6,6 +6,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"io"
+	"syscall"
 	"time"
 
 	"github.com/crmarques/bootwright/internal/workspace/contexts"
@@ -29,8 +30,9 @@ const pristineMutation = "{\"version\":1,\"operation\":\"none\",\"ownership\":\"
 type Ownership struct{ UID, GID uint32 }
 
 type Options struct {
-	Root  string
-	Owner *Ownership
+	Root    string
+	Staging string
+	Owner   *Ownership
 }
 
 // Store has no effects until a repository method is called. A Store is safe for
@@ -45,6 +47,7 @@ type Store struct {
 	// root on that filesystem.
 	rootFilesystem func() int64
 	rootWait       time.Duration
+	uninstallEntry func(parent, name string) (syscall.Stat_t, error)
 }
 
 func New(options Options) *Store {

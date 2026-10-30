@@ -179,7 +179,7 @@ func mirrored(inner wheelSource, mirror prerequisites.WheelMirror) wheelSource {
 func mirrorFailure(message string, mirror prerequisites.WheelMirror) error {
 	return &prerequisites.ScopedFailure{
 		Message:    message,
-		Correction: "Place the locked wheels in " + mirror.String() + " (setup --download-only --dest-dir writes them), or drop --wheel-mirror",
+		Correction: "Place the locked wheels in " + mirror.String() + " (controller install --download-only --dest-dir writes them), or drop --wheel-mirror",
 		Command:    "repeat this command",
 	}
 }

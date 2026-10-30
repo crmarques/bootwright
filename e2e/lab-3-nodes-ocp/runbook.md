@@ -95,7 +95,7 @@ C="lab-3-nodes-ocp"
 IN="$HOME/bootwright-e2e/lab-3-nodes-ocp"
 A="$(ip -4 route get 192.0.2.1 | sed -n 's/.* src \([0-9.]*\).*/\1/p')"
 ./bin/bootwright validate -f "$IN"
-./bin/bootwright setup --yes
+./bin/bootwright controller install --yes
 ./bin/bootwright context init --name "$C" --input-dir "$IN"
 ./bin/bootwright secret set --context "$C" --name openshift-pull-secret --value-file "${PULL_SECRET_FILE:?Set PULL_SECRET_FILE to the private pull-secret JSON file}" --yes
 ./bin/bootwright secret generate --context "$C"

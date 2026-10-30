@@ -136,7 +136,7 @@ func remedyInvocation(err error) string {
 func (s Service) setup(ctx context.Context, request SetupRequest) (*Report, error) {
 	mirror, err := ParseWheelMirror(request.WheelMirror)
 	if err != nil {
-		return nil, failure("controller.setup", err.Error(), "pass --wheel-mirror as "+WheelMirrorUsage)
+		return nil, failure("controller.install", err.Error(), "pass --wheel-mirror as "+WheelMirrorUsage)
 	}
 	if request.DownloadOnly {
 		return s.downloadOnly(ctx, request, mirror)
@@ -165,7 +165,7 @@ func (s Service) setup(ctx context.Context, request SetupRequest) (*Report, erro
 	}
 	current.plan()
 	if s.options.Presenter == nil {
-		return &current.report, failure("controller.setup", "setup plan presentation is not configured", "")
+		return &current.report, failure("controller.install", "setup plan presentation is not configured", "")
 	}
 	if err := s.options.Presenter.PresentControllerPlan(ctx, cloneReport(current.report)); err != nil {
 		return nil, err
@@ -174,9 +174,9 @@ func (s Service) setup(ctx context.Context, request SetupRequest) (*Report, erro
 	current.report.PresentedWarnings = len(current.report.Warnings)
 	if !request.SkipConfirmation {
 		if s.options.Confirmer == nil {
-			return &current.report, failure("controller.setup", "setup requires confirmation", "review the plan and repeat with --yes")
+			return &current.report, failure("controller.install", "controller install requires confirmation", "review the plan and repeat with --yes")
 		}
-		if err := s.options.Confirmer.Confirm(ctx, "setup", "this host"); err != nil {
+		if err := s.options.Confirmer.Confirm(ctx, "controller install", "this host"); err != nil {
 			return &current.report, err
 		}
 	}
@@ -208,10 +208,10 @@ func (s Service) downloadOnly(ctx context.Context, request SetupRequest, mirror 
 		return nil, availability.ErrNotImplemented
 	}
 	if request.DryRun {
-		return nil, failure("controller.setup", "--download-only writes the locked files, so it cannot be a dry run", "drop --dry-run, or use setup --dry-run --output json to list the locked files")
+		return nil, failure("controller.install", "--download-only writes the locked files, so it cannot be a dry run", "drop --dry-run, or use controller install --dry-run --output json to list the locked files")
 	}
 	if request.Destination == "" {
-		return nil, failure("controller.setup", "--download-only needs a directory to write", "pass --dest-dir <directory>")
+		return nil, failure("controller.install", "--download-only needs a directory to write", "pass --dest-dir <directory>")
 	}
 	route := inspection{selection: controller.Baseline().WithAmbientRoute(s.options.AmbientRoute)}
 	export, err := s.ports.Python.Export(ctx, request.Destination, route.route(), mirror)
@@ -312,7 +312,7 @@ func readiness(id, required string, ready bool, scope string) Check {
 
 func setupCommand() string { return "run " + setupInvocation }
 
-const setupInvocation = "bootwright setup"
+const setupInvocation = "bootwright controller install"
 
 func stageInvocation(name string) string {
 	return "bootwright apply --stage controller --context " + name

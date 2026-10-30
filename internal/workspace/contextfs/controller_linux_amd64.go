@@ -26,7 +26,7 @@ type controllerStored struct {
 
 // completeSetup settles a command other than setup that needs the completed
 // setup this host lacks.
-const completeSetup = "run bootwright setup, then repeat the command"
+const completeSetup = "run bootwright controller install, then repeat the command"
 
 // applyRetry settles an uncertain controller record publication an apply of
 // the named context met.

@@ -11,4 +11,4 @@
 
     Outcome  downloaded
     Written  4 (1 fetched, 1 from the wheel cache, 1 already there)
-    Next     bootwright setup --wheel-mirror file:///srv/bootwright-wheels
+    Next     bootwright controller install --wheel-mirror file:///srv/bootwright-wheels

@@ -444,9 +444,9 @@ func printable(text string) bool {
 
 func failure(message, correction string) error {
 	if correction == "" {
-		return diagnostics.NewFailure("controller.setup", message, "")
+		return diagnostics.NewFailure("controller.install", message, "")
 	}
-	return &prerequisites.ScopedFailure{Code: "controller.setup", Message: message, Correction: correction}
+	return &prerequisites.ScopedFailure{Code: "controller.install", Message: message, Correction: correction}
 }
 
 func unqualified(tool string) error {

@@ -1,6 +1,6 @@
 {
   "schemaVersion": "v1alpha1",
-  "command": "setup",
+  "command": "controller install",
   "ok": false,
   "exitCode": 1,
   "result": {

@@ -17,7 +17,7 @@ func TestAToolLookupWithoutRetainedAreasNamesTheStageCommandOfItsContext(t *test
 	_, err := ToolPath(context.Background(), lifecycle.Execution{Context: "lab"}, Tool{Kind: "openshift", Version: "4.18.1"}, "openshift-install")
 	got := diagnostics.Of(err)
 	if len(got) != 1 || got[0].Code != "controller.state" ||
-		got[0].Remediation != "run bootwright setup, then bootwright apply --context lab --stage controller" {
+		got[0].Remediation != "run bootwright controller install, then bootwright apply --context lab --stage controller" {
 		t.Fatalf("the lookup refused with %#v", got)
 	}
 }

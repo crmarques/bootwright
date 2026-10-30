@@ -3,7 +3,7 @@
 Observed 2026-10-13 in the owner's M2b Ceph run, where a destroy of the whole
 Ceph fleet followed an automation-only fix that the code did not require.
 Revised for setup v2 (X88): no execution bundle exists any more, so the
-automation never needs `setup` to reach a run.
+automation never needs `controller install` to reach a run.
 
 ## Symptom
 
@@ -12,7 +12,7 @@ the operator destroyed and rebuilt the whole context (35 minutes for the Ceph
 fleet) because the milestone status said a moved automation digest needs
 retirement. Builds before X88 also stopped the continuation at the first step
 with `controller.identity`, "the embedded automation does not match the
-approved execution bundle", unless `bootwright setup` had projected the new
+approved execution bundle", unless `bootwright controller install` had projected the new
 automation first.
 
 ## Cause
@@ -31,7 +31,7 @@ an operation exactly when it freezes the same blocks
 D142). Since X88 each invocation stages the running executable's embedded
 automation itself, and the execution closure (`execution-closure-v2`) is only
 the runtime lock digest and the interpreter ABI, so a rebuild that keeps the
-lock continues with no `setup`.
+lock continues with no `controller install`.
 
 ## Rule
 
@@ -39,9 +39,9 @@ lock continues with no `setup`.
   operation, its done blocks and their evidence stay; each attempt record names
   the build that ran it (`build`), and `plan` and `status` say the operation was
   registered by another build.
-- `bootwright setup` is needed only when the fix moves the runtime lock (another
+- `bootwright controller install` is needed only when the fix moves the runtime lock (another
   `ansible-core`, Python dependency or interpreter ABI). Before that setup the
-  apply refuses with `run bootwright setup`; after it, a live operation whose
+  apply refuses with `run bootwright controller install`; after it, a live operation whose
   closure differs refuses naming the build that registered it, and offers the
   removal when the operation can be superseded.
 - An unknown block is observed first. When the observation leaves it `failed`,

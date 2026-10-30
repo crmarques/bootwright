@@ -20,4 +20,4 @@
     ansible-core 2.21.5: 1 of 2 wheels to download (2.4 MB), 1 cached
 
     Outcome  planned (dry run)
-    Next     bootwright setup
+    Next     bootwright controller install

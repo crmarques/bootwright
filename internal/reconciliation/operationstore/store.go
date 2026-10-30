@@ -666,7 +666,7 @@ func (s *Store) unrecognizedStage(ctx context.Context, id string, stage reconcil
 	}
 	return diagnostics.NewFailureWithRemediation("lifecycle.state",
 		"the frozen plan names the stage"+named+", which this executable does not run, so it cannot continue or remove this operation", "",
-		"install "+registered+", which registered this operation, and run bootwright setup to finish or destroy it")
+		"install "+registered+", which registered this operation, and run bootwright controller install to finish or destroy it")
 }
 
 func definitions(plan reconciliation.Plan) []reconciliation.BlockDefinition {

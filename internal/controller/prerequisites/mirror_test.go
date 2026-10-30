@@ -114,7 +114,7 @@ func TestAnInvalidMirrorRefusesBeforeAnyInspection(t *testing.T) {
 		f := newSetupFixture(t)
 		report, err := f.service.Setup(context.Background(), request)
 		reported := diagnostics.Of(err)
-		if report != nil || len(reported) != 1 || reported[0].Code != "controller.setup" || !strings.Contains(reported[0].Remediation, WheelMirrorUsage) {
+		if report != nil || len(reported) != 1 || reported[0].Code != "controller.install" || !strings.Contains(reported[0].Remediation, WheelMirrorUsage) {
 			t.Fatalf("%+v: %+v, %v", request, report, err)
 		}
 		if len(f.events) != 0 {
@@ -146,7 +146,7 @@ func TestDownloadOnlyRefusesWhatItCannotDo(t *testing.T) {
 		f := newSetupFixture(t)
 		report, err := f.service.Setup(context.Background(), request)
 		reported := diagnostics.Of(err)
-		if report != nil || len(reported) != 1 || reported[0].Code != "controller.setup" || reported[0].Remediation == "" || len(f.events) != 0 {
+		if report != nil || len(reported) != 1 || reported[0].Code != "controller.install" || reported[0].Remediation == "" || len(f.events) != 0 {
 			t.Errorf("%s: %+v, %v, %v", name, report, err, f.events)
 		}
 	}

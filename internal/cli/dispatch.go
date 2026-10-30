@@ -39,6 +39,7 @@ type commandResult struct {
 	rendered         *artifactrendering.Result
 	controller       *prerequisites.Report
 	rebind           *prerequisites.RebindResult
+	uninstall        *prerequisites.UninstallResult
 	storagePreflight *storagepreflight.Report
 
 	lifecyclePlan      *lifecycle.PlanResult
@@ -101,7 +102,7 @@ func (s Services) invoke(ctx context.Context, path string, flags *pflag.FlagSet,
 		return s.invokeMedia(ctx, path, &values, args)
 	case "validate", "render effective":
 		return s.invokeDesiredState(ctx, path, &values, args)
-	case "preflight controller", "setup", "controller rebind":
+	case "preflight controller", "controller install", "controller rebind", "controller uninstall":
 		return s.invokeController(ctx, path, &values, args)
 	case "preflight clusters":
 		return s.invokeClustersPreflight(ctx, path, &values, args)

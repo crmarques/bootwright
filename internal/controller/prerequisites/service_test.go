@@ -159,7 +159,7 @@ func (p *hostPackages) Preview(_ context.Context, missing []string) (HostPackage
 	p.owner.record("preview " + strings.Join(missing, ","))
 	for _, requirement := range missing {
 		if p.refuse[requirement] {
-			return HostPackagePreview{}, failure("controller.setup", "no package in the host's repositories provides "+requirement, "Enable the repository that provides it in the host's dnf configuration, then run setup again.")
+			return HostPackagePreview{}, failure("controller.install", "no package in the host's repositories provides "+requirement, "Enable the repository that provides it in the host's dnf configuration, then run setup again.")
 		}
 	}
 	return HostPackagePreview{Text: p.preview, Notes: []string{"this install also updates core packages (glibc); dnf applies it as for any package install"}}, nil
@@ -481,8 +481,8 @@ func TestAFailureBeforeAnyDnfTransactionClearsThePendingIntent(t *testing.T) {
 			if test.missing != "" {
 				f.packages.present[test.missing] = false
 			}
-			f.python.fetchErr = failure("controller.setup", "the wheel origin did not answer", "pass --wheel-mirror")
-			if _, err := f.service.Setup(context.Background(), SetupRequest{}); codeOf(err) != "controller.setup" {
+			f.python.fetchErr = failure("controller.install", "the wheel origin did not answer", "pass --wheel-mirror")
+			if _, err := f.service.Setup(context.Background(), SetupRequest{}); codeOf(err) != "controller.install" {
 				t.Fatalf("Setup = %v", err)
 			}
 			state := f.store.view.State

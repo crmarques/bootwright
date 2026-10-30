@@ -34,7 +34,7 @@ func TestCommandModesComeFromTheCatalog(t *testing.T) {
 		"secret encryption init": true, "secret encryption status": true,
 		"secret encryption rotate": true, "validate": true, "render effective": true,
 		"media add": true, "media list": true, "media delete": true,
-		"setup": true, "controller rebind": true, "preflight controller": true, "preflight storage-cluster": true, "preflight container-cluster": true, "preflight clusters": true, "preflight infra": true, "render": true, "preflight all": true,
+		"controller install": true, "controller rebind": true, "controller uninstall": true, "preflight controller": true, "preflight storage-cluster": true, "preflight container-cluster": true, "preflight clusters": true, "preflight infra": true, "render": true, "preflight all": true,
 		"plan": true, "status": true, "diff": true, "apply": true, "destroy": true,
 		"machine list": true, "machine info": true, "machine rsh": true, "machine exec": true,
 		"cluster rsh": true, "cluster exec": true, "cluster list": true, "cluster info": true,

@@ -5,11 +5,11 @@
     bootwright [flags]
 
   Start
-  COMMAND     PURPOSE
-  context     Manage context
-  setup       Set up context-independent controller prerequisites
-  validate    Validate a complete desired-state input universe
-  preflight   Manage preflight
+  COMMAND      PURPOSE
+  context      Manage context
+  controller   Manage controller
+  validate     Validate a complete desired-state input universe
+  preflight    Manage preflight
 
   Lifecycle
   COMMAND   PURPOSE

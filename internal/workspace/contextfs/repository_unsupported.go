@@ -29,6 +29,10 @@ func (*Store) RebindController(ctx context.Context, _, _ controller.InstalledHos
 	return prerequisites.RebindResult{}, unsupported(ctx)
 }
 
+func (*Store) Uninstall(ctx context.Context, _ func(prerequisites.UninstallTransaction) error) error {
+	return unsupported(ctx)
+}
+
 func (*Store) CheckInputDirectory(ctx context.Context, _ string) error { return unsupported(ctx) }
 
 func (*Store) View(ctx context.Context) (contexts.Registry, error) {

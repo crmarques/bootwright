@@ -507,8 +507,8 @@ func TestLabRHELExampleContextAndControllerPreparationJourney(t *testing.T) {
 	// Setup plans the same context-independent prerequisites whatever context
 	// is selected, so its dry run names the baseline and neither the example's
 	// target tools nor its host binding.
-	plan, _ := contextRun(t, services, 0, "setup", "--dry-run")
-	for _, expected := range []string{"Scope     baseline", "[UNKNOWN]  Controller runtime", "Outcome  planned", "Next     bootwright setup"} {
+	plan, _ := contextRun(t, services, 0, "controller", "install", "--dry-run")
+	for _, expected := range []string{"Scope     baseline", "[UNKNOWN]  Controller runtime", "Outcome  planned", "Next     bootwright controller install"} {
 		if !strings.Contains(plan, expected) {
 			t.Fatalf("baseline dry-run lacks %q:\n%s", expected, plan)
 		}
@@ -528,7 +528,7 @@ func TestLabRHELExampleContextAndControllerPreparationJourney(t *testing.T) {
 	}
 	// The host itself is unprepared, so the one actionable next command is
 	// setup rather than the context's own controller stage.
-	if !strings.Contains(diagnostics, "preflight.failed") || !strings.Contains(diagnostics, "run bootwright setup") {
+	if !strings.Contains(diagnostics, "preflight.failed") || !strings.Contains(diagnostics, "run bootwright controller install") {
 		t.Fatalf("preflight before setup must fail with setup guidance:\nstdout=%s\nstderr=%s", report, diagnostics)
 	}
 	_, diagnostics = contextRun(t, services, 1, "preflight", "controller", "--context", "missing")

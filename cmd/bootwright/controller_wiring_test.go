@@ -21,7 +21,7 @@ func TestComposedBaselineDryRunReadsNoSetupState(t *testing.T) {
 	ports, stores := &setupPorts{}, &controllerPorts{}
 	services := assembleServices(serviceDependencies{Controller: ports.setupDependencies(stores, stores)})
 	var out, errOut bytes.Buffer
-	code := runServices(context.Background(), []string{"setup", "--dry-run"}, &out, &errOut, services)
+	code := runServices(context.Background(), []string{"controller", "install", "--dry-run"}, &out, &errOut, services)
 	if code != 0 || errOut.Len() != 0 || ports.reads == 0 || ports.effects != 0 || stores.effects != 0 || !strings.Contains(out.String(), "Scope     baseline") ||
 		!strings.Contains(out.String(), "Outcome  planned") || !strings.Contains(out.String(), "  podman\n") {
 		t.Fatal(code, out.String(), errOut.String(), ports, stores)
@@ -30,9 +30,9 @@ func TestComposedBaselineDryRunReadsNoSetupState(t *testing.T) {
 
 func TestComposedDownloadOnlyStaysBelowThePrivilegeBoundaryAndReadsNoState(t *testing.T) {
 	destination := t.TempDir()
-	args := []string{"setup", "--download-only", "--dest-dir", destination, "--wheel-mirror", "file:///srv/wheels"}
-	if class := cli.ClassifyInvocation(args); class.RequiresRoot || class.Command != "setup" {
-		t.Fatalf("setup --download-only classifies as %+v", class)
+	args := []string{"controller", "install", "--download-only", "--dest-dir", destination, "--wheel-mirror", "file:///srv/wheels"}
+	if class := cli.ClassifyInvocation(args); class.RequiresRoot || class.Command != "controller install" {
+		t.Fatalf("controller install --download-only classifies as %+v", class)
 	}
 	ports, stores := &setupPorts{}, &controllerPorts{}
 	services := assembleServices(serviceDependencies{Controller: ports.setupDependencies(stores, stores)})
@@ -55,7 +55,7 @@ func TestTheDryRunJSONListsEveryLockedFileOfTheEmbeddedLock(t *testing.T) {
 	deps := ports.setupDependencies(stores, stores)
 	deps.Lock = runtimeLock(lock)
 	var out, errOut bytes.Buffer
-	if code := runServices(context.Background(), []string{"setup", "--dry-run", "--output", "json"}, &out, &errOut, assembleServices(serviceDependencies{Controller: deps})); code != 0 || errOut.Len() != 0 {
+	if code := runServices(context.Background(), []string{"controller", "install", "--dry-run", "--output", "json"}, &out, &errOut, assembleServices(serviceDependencies{Controller: deps})); code != 0 || errOut.Len() != 0 {
 		t.Fatal(code, out.String(), errOut.String())
 	}
 	var envelope struct {
@@ -144,7 +144,7 @@ func TestComposedControllerSuppliesEveryPort(t *testing.T) {
 
 func TestUnsuppliedControllerPortsRemainUnavailable(t *testing.T) {
 	services := assembleServices(serviceDependencies{})
-	for _, args := range [][]string{{"setup"}, {"setup", "--dry-run"}, {"preflight", "controller"}} {
+	for _, args := range [][]string{{"controller", "install"}, {"controller", "install", "--dry-run"}, {"preflight", "controller"}} {
 		var out, errOut bytes.Buffer
 		code := runServices(context.Background(), args, &out, &errOut, services)
 		if code != 1 || out.Len() != 0 || !strings.HasPrefix(errOut.String(), "  error  cli.not-implemented\n    bootwright ") {

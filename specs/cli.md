@@ -243,13 +243,13 @@ exclusive lock or a remote observation (a removal's resolution of every effect
 it takes back and its quiescence gate, the reopened Secret binding, a power
 command's controller identity) follows the prompt and still refuses before
 registration or any effect. Every prompt names the object it acts on and, for
-an object of a context, the context it acts in; `setup` and `media` act on the
+an object of a context, the context it acts in; `controller install`, `controller uninstall` and `media` act on the
 host and name none. Only `y` or `yes`, case-insensitive with surrounding
 whitespace ignored, accepts. Read one answer of at most 64 bytes including LF
 without read-ahead. Decline, non-interactive input, cancellation or an I/O
 failure refuses, and the command performs none of the effects it asked about.
 A declined, non-interactive or unanswerable confirmation refuses under the
-confirming command's own code (`controller.setup`, `media.store`,
+confirming command's own code (`controller.install`, `controller.uninstall`, `media.store`,
 `machine.power`, `lifecycle.state`, `trust.identity`, `context.state` or
 `secret.store.conflict`), with the reason in its message and the command
 repeated with `--yes` in `next:`; a cancellation names no command. The
@@ -277,11 +277,11 @@ answer the same way. `--yes` suppresses only this prompt, under
 
 Classify and validate arguments before privilege effects. Help, completion,
 version, invalid invocations, unavailable commands, explicit-input validate and
-`setup --dry-run` never elevate. The same classification selects, from the
-parsed flags, the invocations that read the
+`controller install --dry-run` never elevate. The same classification selects, from the
+parsed flags, invocations reading the
 [context-free acquisition route](controller.md#the-context-free-acquisition-route)
 before `sudo` can prompt. Available controller setup and inspection may
-need private shared-host metadata or installation privilege; their exact
+need private shared-host metadata or install privilege; their
 effects follow [Controller](controller.md#the-setup-flow).
 Available commands requiring context state run as root; a
 non-root invocation keeps an unprivileged supervisor and launches one exact
@@ -447,7 +447,7 @@ completion, or context initialization without input. Context-free validation
 can run away from the declared controller; it checks input relationships and
 never verifies the invoking host.
 
-`setup` and `preflight controller` follow the
+`controller install` and `preflight controller` follow the
 [Controller journeys](controller.md#the-setup-flow), including
 preparation before context creation or Environment import and the context each
 consumes. Which invocations read the invoking environment's proxy route is
@@ -721,19 +721,19 @@ apply, since its presented plan names them.
 
 `status` draws its next steps from one candidate list, in this order: the
 operation's own verb (`plan` and `apply` beside no operation), the `destroy`
-that supersedes an incomplete apply, `bootwright setup`, and the context
+that supersedes an incomplete apply, `bootwright controller install`, and the context
 deletion `bootwright context delete --name <name> --purge`. A candidate verb is
 offered only where its decision would pass over the records `status` read, so
 `status` never offers a command those records refuse; where the decision
-refuses, the exit its refusal names (setup, or the deletion) is offered in its
-place when `status` can run it, and otherwise no step. The decisions belong to
+refuses, the exit its refusal names (`controller install` or the deletion) is offered in its
+place when `status` can run it, else no step. The decisions belong to
 [state reconciliation](state-reconciliation.md#continuation-and-removal); the
 cases below apply that rule and restate no decision, and a change of a decision
 changes the case it governs
 (`TestStatusStepsAreExactlyWhatTheVerbsDecisionsDerive` derives each candidate
 by running its verb over the records and holds the steps to exactly them):
 
-- beside no operation, `bootwright setup` alone while the host's controller
+- beside no operation, `controller install` alone while the host's controller
   setup has not completed, because an apply claims the host only after it
   ([host identity](controller.md#host-identity-and-shared-prerequisites)), and
   otherwise `bootwright plan --context <name>` and
@@ -767,20 +767,20 @@ by running its verb over the records and holds the steps to exactly them):
   refusal names is offered where it names one, and otherwise no step. `status`
   probes no host, so a binding recorded for another host is left to the
   continuation's own refusal;
-- over either incomplete operation, `bootwright setup` in place of a
+- over either incomplete operation, `controller install` in place of a
   continuation or resolution that still has a block to run while the host's
   controller setup has not completed or while its retained receipt holds no
   execution definition, because that continuation re-proves the setup and
   refuses either; the removal beside an incomplete apply and the replacement
   of a failed removal, which prove the setup before they resolve or register
-  anything, are then replaced by it too, and a finalization is not held to it
+  anything, are replaced by it too, and a finalization is not held to it
   and stays offered;
 - over a completed operation, nothing, except over a completed destroy holding
   a block that is not `done`, which both verbs refuse: there the deletion of
   the context, as beside unindexed records, which abandons what the operation
   owns; and over a completed apply holding such a block, whose repeated
   `apply` refuses: there `bootwright destroy --context <name>`, which takes
-  back its whole frozen plan, or `bootwright setup` in its place while setup
+  back its frozen plan, or `controller install` in its place while setup
   gates it, then that deletion;
 - over an operation whose continuation or removal reopens a Secret binding the
   context's keyring no longer lists, or whose keyring listing fails reporting
@@ -808,8 +808,8 @@ image, in the order of the rows. These steps are the one place a next step
 carries a placeholder the operator fills, because the material or file is the
 operator's. They are omitted when nothing is missing, over an operation, where
 the frozen plan and its Secret binding decide, and when the only step is
-`bootwright setup` or a deletion. A read that fails adds no row, because
-`secret check` and `media list` report that failure when run.
+`controller install` or a deletion. A read that fails adds no row, because
+`secret check` and `media list` report it when run.
 
 An apply that has not completed owns every block it started, whichever state
 it stopped in, so taking them back is as legitimate a way forward as

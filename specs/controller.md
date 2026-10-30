@@ -1,13 +1,13 @@
 # Controller prerequisites and setup
 
 Controller owns inspection and preparation of the local host on which
-Bootwright runs. This contract defines `setup`, `preflight controller` and the
-controller stage. Setup never provisions an operating system or executes a
+Bootwright runs. This contract defines `controller install`, `controller uninstall`,
+`preflight controller` and the controller stage. Setup never provisions an operating system or executes a
 managed service's lifecycle.
 
 Prerequisites divide by what selects them. **Host prerequisites** are
 context-independent: every context on this host needs exactly the same ones, so
-`setup` owns them and reads no desired state at all. **Context prerequisites**
+`controller install` owns them and reads no desired state at all. **Context prerequisites**
 are selected by one Environment's own graph, so the
 [controller stage](state-reconciliation.md#stages-and-the-pause-boundary) of
 that context's apply owns them. Each prerequisite belongs to exactly one side,
@@ -20,13 +20,13 @@ packages already present ([D178](milestones/backlog.md#d178)).
 
 | Scope | Prerequisites | Owner |
 | --- | --- | --- |
-| Host | A [supported](#supported-hosts) OS family and architecture and verified installed-host identity; the fixed root and its [setup subtree](contexts/controller-record.md#the-setup-subtree); the [controller runtime](#the-controller-runtime), a virtual environment on the host's own CPython holding the [locked](#the-runtime-lock) `ansible-core` closure; the baseline [host packages](#host-packages) `openssh-clients` and `podman`. | `setup` |
+| Host | A [supported](#supported-hosts) OS family and architecture and verified installed-host identity; the fixed root and its [setup subtree](contexts/controller-record.md#the-setup-subtree); the [controller runtime](#the-controller-runtime), a virtual environment on the host's own CPython holding the [locked](#the-runtime-lock) `ansible-core` closure; the baseline [host packages](#host-packages) `openssh-clients` and `podman`. | `controller install` |
 | Context | The target client closure the selected graph needs; the libvirt client closure any Machine a libvirt provider hosts selects, derived from placements with no Machine role declared; the hypervisor closure and the libvirt client a libvirt provider hosted on this Machine selects; the installer-media tooling an Anaconda installation published through an artifact server on this Machine selects; the `nmstate` package an agent-installed OpenShiftCluster node that references a declared Machine selects; the `iputils` package an agent-installed multi-node baremetal OpenShiftCluster selects when one of its OpenShift-sourced IPv4 virtual IPs lies in a managed libvirt network of a provider hosted on this Machine; the binding between this context and this host. | [`apply --stage controller`](#the-controller-stage) |
 
 A host prepared once therefore serves every context later created on it, and a
 context that selects nothing beyond the baseline needs no controller stage.
 The [Environment-selected controller Machine](api/environment.md#controller-machine)
-names the host a context expects to run on; `setup` never reads it.
+names the host a context expects to run on; `controller install` never reads it.
 
 Setup installs only what is missing and never checks for updates: a host
 package is asked of the host's own dnf by name or RPM capability, and the
@@ -158,14 +158,14 @@ interpreter path, NUL-separated. Setup builds it in a stage the
    and `ansible-core` release, and the stage is
    [published](contexts/controller-record.md#the-setup-subtree) whole.
 
-A failure in any step refuses `controller.setup` naming the step, with the
-remedy `run bootwright setup` again, and leaves no runtime under its digest.
+A failure in any step refuses `controller.install` naming the step, with the
+remedy `run bootwright controller install` again, and leaves no runtime under its digest.
 
 **Launch.** Every private Python launch, a lifecycle block's, a bounded run's
 and the controller stage's, locates the runtime of this build's lock on the
 interpreter the setup receipt names. It refuses `controller.state`, "the
 controller runtime for this build (lock `<12 hex>`, Python `<abi>`) is not
-prepared", with the remedy `run bootwright setup`, when there is no receipt,
+prepared", with the remedy `run bootwright controller install`, when there is no receipt,
 a setup is pending, another build's setup record stands or the runtime
 directory is missing. The launch guard holds `flock(LOCK_SH)` on the
 runtime's `.lock` for the whole Ansible block, so retirement never removes a
@@ -194,14 +194,14 @@ checks under it, and builds and publishes the runtime exactly as setup does
 from the cache alone: no network, no confirmation and no change to the setup
 record, so it is a store-internal effect rather than a setup. A runtime another
 launch published while it waited is adopted. It refuses with the message above
-and `run bootwright setup` when a locked wheel is missing, the interpreter no
+and `run bootwright controller install` when a locked wheel is missing, the interpreter no
 longer qualifies or the receipt is incomplete, and a build that fails once
 every wheel is cached refuses `controller.state`, "the controller runtime for
 this build (…) could not be rebuilt from the wheel cache: `<cause>`", with the
 same remedy, `<cause>` being the build's own first message rather than its
 setup remedy. Each refusal keeps that code and remedy whatever the setup store
 reports for the transaction it ran in. `status` changes nothing: it never rebuilds, and offers
-`bootwright setup` while the directory is missing.
+`bootwright controller install` while the directory is missing.
 
 **Automation.** The automation is no part of any setup identity. Each
 invocation that launches Ansible extracts the embedded tree once into
@@ -246,7 +246,7 @@ because rpm reads a whole `name = EVR` string as one provide name.
 confirmation. Its standard output is display text, bounded to 64 KiB and shown
 verbatim in the plan, never parsed for a decision, because dnf4 and dnf5 render
 it differently; its expected exit status 1 is no error. A "no match" for a
-requirement and a dependency-resolution failure each refuse `controller.setup`
+requirement and a dependency-resolution failure each refuse `controller.install`
 naming the requirement and dnf's last error line, with the remedy of fixing
 the host's dnf configuration. A line naming `glibc*`, `libgcc`, `kernel*`,
 `systemd*`, `openssl-libs` or the selected `python3.X` appends one
@@ -257,9 +257,9 @@ applies it as for any package install", and never refuses
 **Install** runs as root,
 `dnf install --assumeyes --setopt=install_weak_deps=False -- <missing>`, its
 output streamed into the run's log. Presence is then read again and must
-report nothing missing, or the install refuses `controller.setup`, "dnf
+report nothing missing, or the install refuses `controller.install`, "dnf
 finished but nothing provides `<requirement>`", with the remedy of checking
-the host's dnf configuration and running setup again. The evidence records
+the host's dnf configuration and running `controller install` again. The evidence records
 each requirement's provider NEVRA and the repository `dnf repoquery
 --installed` reports for it, because rpm reads no `%{FROM_REPO}`. dnf may
 resolve differently between the preview and the install when its metadata
@@ -279,7 +279,7 @@ no dnf call. The Ceph node's own package path is unchanged.
 
 ## The setup flow
 
-`setup` selects no context. It ignores the invoking user's current selection,
+`controller install` selects no context. It ignores the invoking user's current selection,
 resolves no desired state, and refuses an explicit `--context` as a flag it does not accept. This
 allows preparation before context creation or Environment import, and makes one
 prepared host serve every context created on it. No current directory or user
@@ -292,7 +292,7 @@ and nonempty**. An explicitly empty value is omission. Nonempty names follow
 the existing context-name grammar. An explicit context must be ready and have
 an admitted input revision; an empty one returns `context.input` with the
 import command. Every check carries the scope that owns it, so a negative
-report names the one command that settles it: `setup` for a host prerequisite,
+report names the one command that settles it: `controller install` for a host prerequisite,
 and that context's own `apply --stage controller --context <name>` for anything
 its graph selects. A context whose graph selects no target client, libvirt
 client, hypervisor, installer-media tooling, `nmstate` or `iputils` has no controller stage, so its
@@ -304,9 +304,9 @@ SSH flags remain unconsumed.
 
 | Invocation | Required behavior |
 | --- | --- |
-| `bootwright setup --dry-run` | Admit the host as setup does, select the interpreter and list by name the host package requirements setup would install, through unprivileged `rpm` presence queries and without a dnf preview. No setup record is read, so this stays below the privilege boundary. No network, Secret read, privilege escalation or write. Runtime readiness and the setup state are explicitly unverified. With `--output json`, which setup accepts only with `--dry-run`, the result also lists every locked wheel's ABI, file, URL and SHA-256. The `state-root` check reports, from an unprivileged look at the state root, an absent root, which setup creates, or a `root:root` `0700` directory on a local filesystem, whose contents setup verifies. A root of another type, owner or mode, one on an unqualified filesystem, and, when the root's owner runs the dry run, one holding state this build cannot read, such as an earlier build's, are not ready: the dry run reports the check beside the store's own refusal and remedy, and exits 1. The check reaches the root as the store opens it, every ancestor without following a link and on a qualified local filesystem. A root behind a symbolic link in its path is not ready, and the dry run reports the store's own refusal beside the check (`TestTheStateRootInspectionReachesTheRootAsTheStoreOpensIt`). |
-| `bootwright setup --download-only --dest-dir <dir>` | Write the lock's files into `<dir>` as [Offline and mirrored wheels](#offline-and-mirrored-wheels) defines. It never elevates and admits no host: it reads no setup record, runs no `rpm` or `dnf` and changes nothing outside `<dir>`, so any connected host can run it. |
-| `bootwright setup` | Elevate, then inspect read-only: admission, the installed host, FIPS mode, the untested release and loader preload (informational), the setup state, the interpreter and its runtime and the baseline package presence. A ready host prints the receipt table and `Nothing to do.`, with no network request, confirmation or write. Otherwise run the preview and present the plan, confirm, take `setup/lock`, inspect again and refuse a host that moved, record the pending intent, install with dnf, fetch, build, verify and publish the runtime, and write the receipt, which clears the pending intent. Publish no binding and touch no controller record. |
+| `bootwright controller install --dry-run` | Admit the host as setup does, select the interpreter and list by name the host package requirements setup would install, through unprivileged `rpm` presence queries and without a dnf preview. No setup record is read, so this stays below the privilege boundary. No network, Secret read, privilege escalation or write. Runtime readiness and the setup state are explicitly unverified. With `--output json`, which setup accepts only with `--dry-run`, the result also lists every locked wheel's ABI, file, URL and SHA-256. The `state-root` check reports, from an unprivileged look at the state root, an absent root, which setup creates, or a `root:root` `0700` directory on a local filesystem, whose contents setup verifies. A root of another type, owner or mode, one on an unqualified filesystem, and, when the root's owner runs the dry run, one holding state this build cannot read, such as an earlier build's, are not ready: the dry run reports the check beside the store's own refusal and remedy, and exits 1. The check reaches the root as the store opens it, every ancestor without following a link and on a qualified local filesystem. A root behind a symbolic link in its path is not ready, and the dry run reports the store's own refusal beside the check (`TestTheStateRootInspectionReachesTheRootAsTheStoreOpensIt`). |
+| `bootwright controller install --download-only --dest-dir <dir>` | Write the lock's files into `<dir>` as [Offline and mirrored wheels](#offline-and-mirrored-wheels) defines. It never elevates and admits no host: it reads no setup record, runs no `rpm` or `dnf` and changes nothing outside `<dir>`, so any connected host can run it. |
+| `bootwright controller install` | Elevate, then inspect read-only: admission, the installed host, FIPS mode, the untested release and loader preload (informational), the setup state, the interpreter and its runtime and the baseline package presence. A ready host prints the receipt table and `Nothing to do.`, with no network request, confirmation or write. Otherwise run the preview and present the plan, confirm, take `setup/lock`, inspect again and refuse a host that moved, record the pending intent, install with dnf, fetch, build, verify and publish the runtime, and write the receipt, which clears the pending intent. Publish no binding and touch no controller record. |
 | `bootwright preflight controller` | Read and verify the same host checks as setup with bounded local probes and no dnf preview, and report the host's FIPS mode and the missing package names. May use the verified privilege boundary for private metadata. |
 | `bootwright preflight controller --context <name>` | Additionally report that context's own target tools, its libvirt client, hypervisor, installer-media, `nmstate` and `iputils` requirements by `rpm` presence, and its host binding, as context-scoped checks. Contact no publisher and read no repository metadata for them. |
 
@@ -346,6 +346,122 @@ Environment input, and claims no context.
 `--wheel-mirror` and `--download-only --dest-dir` serve a host that cannot
 reach `files.pythonhosted.org`; [Offline and mirrored wheels](#offline-and-mirrored-wheels)
 owns them.
+
+## The uninstall flow
+
+`controller uninstall` is the inverse of `controller install` on a host that
+holds no context ([D209](milestones/backlog.md#d209)). It removes the host
+packages an install recorded as its own and the state Bootwright keeps on this
+host, `/var/lib/bootwright` and `/var/lib/bootwright-staging`, so the host is
+as it was before its first install apart from what the operator or a
+context's controller stage added. It never removes the Bootwright executable,
+a package present before Bootwright, a package a
+[controller stage](#the-controller-stage) installed, which no record names,
+or data the operator supplied. Like install it selects no context, refuses
+`--context`, and elevates as install does.
+
+| Invocation | Required behavior |
+| --- | --- |
+| `bootwright controller uninstall` | Elevate, take the exclusive root lock and [`setup/lock`](contexts/controller-record.md#the-setup-subtree), each refused as busy rather than awaited, and inspect read-only. A host with no state root, no staging directory and no tree an interrupted uninstall renamed prints `Nothing to do.` and changes nothing. A root without a setup subtree has no receipt, so it names no package to remove. Otherwise present the plan, confirm, inspect again under the same locks and refuse a host that moved, remove the packages, then remove the state, and report what it removed and what it kept. |
+| `bootwright controller uninstall --keep-packages` | The same, without the package action: no `rpm` erase test, dnf preview or dnf removal, and no refusal that only package removal needs. |
+
+**Refusals before any effect.** Each refuses `controller.uninstall` with the
+remedy named, unless it names another code:
+
+- a store this build cannot read, such as an earlier build's, refuses with the
+  store's own refusal and remedy, because uninstall cannot prove it holds no
+  context;
+- a registry that names any context, active or reserved, refuses naming each
+  one, with the remedy "destroy each environment
+  (`bootwright destroy --context <name>`) and delete each context
+  (`bootwright context delete --name <name> --purge`), then run
+  bootwright controller uninstall again";
+- a [media store](managed-os.md#media-store) holding any image, record or kept
+  stage refuses naming each image, with the remedy
+  `bootwright media delete --name <image>` for each, because uninstall never
+  deletes media the operator supplied;
+- a staging extraction another process holds refuses `lifecycle.lease` with a
+  retry remedy;
+- without `--keep-packages`, a setup record that carries a pending intent, or
+  that cannot be read or carries another format, refuses, because the
+  packages that install added are not known: "an earlier install (`<id>`) was
+  interrupted before it recorded what it installed" or "the install record was
+  written by another Bootwright build", with the remedy "run
+  bootwright controller install, then run bootwright controller uninstall
+  again; or pass --keep-packages to leave every host package";
+- without `--keep-packages`, a package to remove that another installed
+  package requires refuses naming the dependent packages rpm reports, with the
+  remedy "remove the dependent packages first, or pass --keep-packages".
+
+**Packages.** The packages to remove are the providers the receipt records
+with `installedBy` an install run ID, by package name, that `rpm -q` still
+reports installed; a provider the receipt marks `present before bootwright`
+is never among them, and one the host no longer has drops out. Before the
+plan, as root, `rpm --erase --test -- <names>` must succeed; a failure that
+names a dependent outside the set is the refusal above, and any other failure
+refuses with rpm's own message. The plan then shows, as display text bounded
+to 64 KiB as install's preview is,
+`dnf remove --assumeno -- <names>`, dnf's own resolution, including the
+dependencies it would remove with them. A resolution that names a package the
+receipt marks `present before bootwright` refuses, read conservatively so a
+doubtful match or a truncated preview refuses too, with the remedy of passing
+`--keep-packages` or removing the packages by hand; after the removal `rpm -q`
+must still report each such package it reported before, or the removal
+refuses and removes no state. The removal runs
+`dnf remove --assumeyes -- <names>` with the environment, executable
+qualification and dnf configuration ownership of an
+[install](#host-packages), streams what dnf prints to the terminal, and then
+`rpm -q` must report none of the names, or it refuses `controller.uninstall`,
+"dnf did not remove `<names>`", with the remedy of reviewing the host's dnf
+configuration and running uninstall again. A package removal that fails
+removes no state, so the receipt that names what to remove survives for the
+next run.
+
+**State.** After the packages, uninstall renames `/var/lib/bootwright` to
+`/var/lib/.bootwright-uninstall-<32 hex>` and `/var/lib/bootwright-staging` to
+`/var/lib/.bootwright-staging-uninstall-<32 hex>`, each one atomic rename in
+`/var/lib` reached as the store reaches its root, then removes each renamed
+tree without following a link. Once the root is renamed no command finds a
+store, so every one reports a missing install. An uninstall interrupted after
+the rename is finished by the next one, which removes every
+`/var/lib/.bootwright-uninstall-*` and `/var/lib/.bootwright-staging-uninstall-*`
+directory it finds, owned by `root:root`, and reports them. Install ignores
+them.
+
+The plan names each action in order, then what stays:
+
+- `remove-host-packages`, "Remove the host packages install added: `<names>`",
+  with dnf's verbatim preview; absent with `--keep-packages` or when no package
+  remains to remove;
+- `remove-state`, "Remove Bootwright's state on this host: /var/lib/bootwright
+  (the install record, runtimes, wheel cache, controller record and tools) and
+  /var/lib/bootwright-staging";
+- `finish-removal`, when an interrupted uninstall left renamed trees, naming
+  them;
+- what stays: each package marked `present before bootwright`, and, with
+  `--keep-packages`, each package install added, and always the packages a
+  controller stage installed and the executable itself.
+
+The inspection after confirmation repeats the erase test and the preview
+check before dnf removes anything, so a dependent installed meanwhile still
+refuses; one another dnf installs after that last test is an accepted window.
+A media stage a running `media add` holds refuses `lifecycle.lease`; an
+abandoned stage goes with the state. A state root or staging directory that is
+its own mount, a bind mount included, refuses before any effect, since no
+rename in `/var/lib` can move it, and a staging directory that is a link, or
+that another user owns or may write, refuses as not Bootwright's
+(`TestAnUninstallRefusesAMountedRootOrStagingBeforeAnyEffect`,
+`TestAnUninstallLeavesWhatIsNotItsOwn`). Each renamed tree is locked while a
+run removes it, so a second run refuses busy, and renamed trees go before the
+run's own renames, so a failing rename strands none. A state removal that
+fails after the packages names the packages already removed
+(`TestAnUninstallNeverRemovesAPackagePresentBeforeBootwright`,
+`TestAnUninstallWhoseStateFailsNamesTheRemovedPackages`).
+
+`--yes` suppresses the [ordinary confirmation](cli.md#ordinary-confirmation)
+only; decline, noninteractive input without `--yes`, or cancellation removes
+nothing. What dnf prints is kept in no setup run, because the subtree that
+holds runs is what uninstall removes.
 
 ## The controller stage
 
@@ -571,7 +687,7 @@ A failure this stage meets in an adapter it shares with setup (the tool
 catalog, its publisher metadata, transport, acquisition or trust, the host's
 dnf, or the controller Ansible run) keeps its own diagnostic code and names
 this stage's own `bootwright apply --stage controller --context <name>` as
-what settles it, never `setup`, which installs nothing a context selects.
+what settles it, never `controller install`, which installs nothing a context selects.
 `preflight controller --context <name>` names the same command for the same
 failures it meets while it recovers that context's clients by presence. That
 remedy offers the correction alone, even for a publisher the host could not
@@ -580,7 +696,7 @@ acquires over, and the failed apply holding it can only be
 [continued over its exact input](state-reconciliation.md#state-machine), so
 another route is nothing that command can settle. A refusal of the controller
 record that an apply or this stage meets names its own remedy: a host without
-completed setup names `bootwright setup` and then the refused command, another
+completed setup names `bootwright controller install` and then the refused command, another
 host names the host the state belongs to, and a context bound elsewhere names
 its bound Machine input or a new context. A publication of the controller
 record whose outcome is unknown names, once storage is healthy,
@@ -618,7 +734,7 @@ definition.
 **Trust off the Fedora/RHEL family.** The `tls-ca-bundle.pem` read above is the
 only trust the wheel fetch reads while that file exists, and an unsafe one is
 refused. Where the file is absent, as on a Debian, SUSE or Alpine workstation
-that runs `setup --download-only`, the fetch uses Go's system certificate pool,
+that runs `controller install --download-only`, the fetch uses Go's system certificate pool,
 which reads the host's own bundle locations; a host with no trust at all is
 refused naming the absent bundle and `--wheel-mirror`. A wheel is used only
 when its size and SHA-256 match the lock, so the TLS trust never decides what
@@ -632,7 +748,7 @@ contacted. A cached wheel is never fetched again.
 
 ### Offline and mirrored wheels
 
-**`--wheel-mirror <mirror>`** moves where setup, and `setup --download-only`,
+**`--wheel-mirror <mirror>`** moves where setup, and `controller install --download-only`,
 read each locked wheel from: the lock's URL becomes `<mirror>/<filename>`.
 The mirror is untrusted transport. The lock's size and SHA-256 alone decide
 whether its bytes are used, through the same wheel cache and the same
@@ -660,9 +776,9 @@ fetched again, so a mirror is read only for what the cache lacks. The mirror
 only replaces wheel origins: it changes no dnf configuration, and the plan's
 runtime action names it.
 
-**`setup --download-only --dest-dir <dir>`** is the counterpart of
+**`controller install --download-only --dest-dir <dir>`** is the counterpart of
 `dnf --downloadonly --destdir`. It runs unprivileged on any connected host and
-never elevates: the invocation classification treats it as `setup --dry-run`
+never elevates: the invocation classification treats it as `controller install --dry-run`
 is, and the command reads no setup record, takes no lock, admits no OS family
 and runs no package manager. It writes into `<dir>`, which it creates when
 absent:
@@ -683,11 +799,11 @@ is kept and not fetched again. Files are `0644` and the directory `0755`.
 no `--output json`; a missing or unwritable `<dir>` is a failure naming it,
 and a failed transfer names the file and the host.
 
-**`setup --dry-run --output json`** lists every locked file under `files`: its
+**`controller install --dry-run --output json`** lists every locked file under `files`: its
 Python ABI (absent for the pip wheel), filename, URL and SHA-256, so an
 operator can fetch them by other means. With `--wheel-mirror`, the plan's
 runtime action also names the mirror; the listed URLs stay the lock's.
-The fields are the `setup` row of the [result fields](cli/output.md#json-output).
+The fields are the `controller install` row of the [result fields](cli/output.md#json-output).
 
 **The dnf route.** When the admitted route is a proxy, dnf receives it as
 `https_proxy` and `no_proxy`, and a `proxy=` in the host's dnf configuration
@@ -701,8 +817,9 @@ holds the packages makes no dnf call.
 A command that acquires before any context exists has no Environment to select
 a route from, so it reads one from the environment that invoked it. An admitted
 invocation's parsed flags decide this, never its command path alone, and
-exactly three shapes read it: `setup`, whose `--dry-run` preview reports the
-route setup would take; `preflight controller` while its final `--context` is
+exactly four shapes read it: `controller install`, whose `--dry-run` preview reports the
+route setup would take; `controller uninstall` without `--keep-packages`, whose
+dnf may refresh repository metadata; `preflight controller` while its final `--context` is
 omitted or empty, which reports the host's route; and `media add --from-url`.
 Every context-backed shape, including `apply --stage controller`,
 `preflight controller --context <name>` and every lifecycle block, continues to
@@ -743,7 +860,7 @@ nothing it recorded depends on the route.
 A publisher setup could not reach or resolve is therefore offered a proxy
 through `HTTPS_PROXY`, kept out of `NO_PROXY`, and never an external Proxy on
 the controller Machine, which setup does not read; a failure setup meets names
-`bootwright setup` as what settles it. The same adapter failure met by a
+`bootwright controller install` as what settles it. The same adapter failure met by a
 context's controller stage names [that stage](#the-controller-stage) instead.
 
 Local privilege is where this route is qualified. The unprivileged invocation
@@ -813,7 +930,7 @@ they never silently rebind.
 Workspace serializes shared prerequisite mutation across every context in the
 fixed root using its exclusive root lock, acquired before a context lease.
 Preflight holds a shared root lock when the root exists, for coherent stored
-evidence. An absent root reports missing setup with `setup` guidance
+evidence. An absent root reports missing setup with `controller install` guidance
 and creates nothing. A busy lock refuses; there is no timeout-based takeover.
 Setup's own subtree has its own lock, `setup/lock`, which setup, runtime
 publication and the controller stage's dnf take; a launch takes none and holds
@@ -832,7 +949,7 @@ digest and the ABI, with the ABI and `ansible-core` release a refusal names
 ([dependency safety](state-reconciliation.md#dependency-safety-during-recovery)).
 An OS Python z-stream update, an OS release upgrade that keeps the ABI, and any
 rebuild with the same lock continue a live operation; a new lock or another
-ABI refuses its continuation, naming the build that registered it, whose setup
+ABI refuses its continuation, naming the build that registered it, whose `controller install`
 restores its runtime, fetching any wheel the cache no longer holds over the
 network or with `--wheel-mirror`, because [retention](#publication-and-interrupted-setup)
 keeps only the current and previous runtimes and a setup-format discard keeps
@@ -861,14 +978,14 @@ receipt written last clears it. A setup that fails before any dnf transaction
 began, as a failed wheel fetch does, also clears it, because a runtime
 publishes only whole and nothing else changed, so the runtime a kept receipt
 names still launches. Interrupted or failed setup may leave approved
-packages installed; nothing is rolled back, and shared OS packages are never
-removed.
+packages installed; nothing is rolled back, and install never removes a
+package: only [uninstall](#the-uninstall-flow) removes what a receipt records.
 
 **An unknown outcome blocks every consumer.** A launch that finds the pending
 intent refuses `controller.state`, "a controller setup (`setup-000042`) was
-interrupted before it finished", with the remedy `run bootwright setup`, adding
+interrupted before it finished", with the remedy `run bootwright controller install`, adding
 `--wheel-mirror <mirror>` on a host that cannot reach the wheel origins, or,
-when it keeps a receipt, the setup of the build whose lock that receipt names,
+when it keeps a receipt, the `controller install` of the build whose lock that receipt names,
 which keeps its runtime. Setup itself
 re-inspects: its plan names the interrupted run and the step it stopped in and
 asks for confirmation, then installs only what is still missing and publishes
@@ -889,7 +1006,7 @@ receipt names it. A launch refuses as the
 future setup-format change therefore never leaves setup
 unable to heal its own state, but the discard also removes the previous
 runtime: an operation registered under the discarded closure continues only
-through its registering build's setup, which fetches its wheels again and so
+through its registering build's `controller install`, which fetches its wheels again and so
 needs network or `--wheel-mirror`, and which discards this build's subtree in
 turn, or through the removal that supersedes it.
 
@@ -934,7 +1051,7 @@ read refuses so, before any dnf preview, plan or confirmation.
 An input update may change a context's controller prerequisite intent, which
 its next controller stage installs, but cannot silently change an established
 controller Machine/host binding. A host prerequisite that loses readiness is
-prepared again by `setup`. What deleting a context removes from shared host
+prepared again by `controller install`. What deleting a context removes from shared host
 state follows the
 [host-binding rules](contexts.md#controller-relationship-and-host-binding).
 

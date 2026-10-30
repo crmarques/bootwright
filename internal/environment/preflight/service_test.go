@@ -142,7 +142,7 @@ func targets(checks []capacity.Check) []string {
 
 func TestInfrastructureReportsTheControllerAndCapacityChecksAndNothingItDoesNotObserve(t *testing.T) {
 	service, controller, budget, _ := fixture()
-	controller.report = &prerequisites.Report{Next: "bootwright setup", Checks: []prerequisites.Check{
+	controller.report = &prerequisites.Report{Next: "bootwright controller install", Checks: []prerequisites.Check{
 		ready("host-packages", "podman", "podman 5"),
 		{ID: "controller-binding", Required: "this host", Observed: "another host", Status: "not-ready", Scope: prerequisites.ContextScope},
 		{ID: "fips-mode", Required: "the host's FIPS mode", Observed: "unverified", Status: "unverified", Scope: prerequisites.HostScope},
@@ -173,7 +173,7 @@ func TestInfrastructureReportsTheControllerAndCapacityChecksAndNothingItDoesNotO
 		t.Fatalf("controller %+v, dry-run %t", controller.request, budget.dryRun)
 	}
 	for _, check := range result.Checks {
-		if check.Status != capacity.Passed && check.Next != "run bootwright setup" {
+		if check.Status != capacity.Passed && check.Next != "run bootwright controller install" {
 			t.Fatalf("an unready controller check does not name the command that settles it: %+v", check)
 		}
 	}

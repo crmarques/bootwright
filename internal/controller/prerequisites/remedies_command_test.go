@@ -14,11 +14,11 @@ func TestAnUnscopedFailureNamesItsCommandOrSetup(t *testing.T) {
 		failure *ScopedFailure
 		want    string
 	}{
-		{&ScopedFailure{Message: "m", Correction: "Restore it"}, "Restore it, then rerun bootwright setup."},
+		{&ScopedFailure{Message: "m", Correction: "Restore it"}, "Restore it, then rerun bootwright controller install."},
 		{&ScopedFailure{Message: "m", Correction: "Restore it", Command: "repeat this command"}, "Restore it, then repeat this command."},
 	} {
 		reported := diagnostics.Of(test.failure)
-		if len(reported) != 1 || reported[0].Code != "controller.setup" || reported[0].Remediation != test.want {
+		if len(reported) != 1 || reported[0].Code != "controller.install" || reported[0].Remediation != test.want {
 			t.Fatalf("diagnostics = %+v, want %q", reported, test.want)
 		}
 	}

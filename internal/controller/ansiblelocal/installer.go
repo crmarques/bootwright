@@ -66,7 +66,7 @@ func (installer Installer) Clients(ctx context.Context, installation prerequisit
 		return result, err
 	}
 	if installer.runner == nil || installer.Stager == nil || installation.Target == nil || installation.Publish == nil || len(installation.Tools) == 0 {
-		return result, failure("controller.setup", "the Ansible controller adapter is incomplete")
+		return result, failure("controller.install", "the Ansible controller adapter is incomplete")
 	}
 	request, err := installer.request(ctx, installation.Target, installation.Identity, installation.Tools, installation.Egress)
 	if err != nil {
@@ -124,7 +124,7 @@ func (s swallowingOutput) Write(value []byte) (int, error) {
 // to prove.
 func (installer Installer) request(ctx context.Context, target prerequisites.BundleArea, identity string, tools []prerequisites.ToolDefinition, egress prerequisites.SetupEgress) (capabilityRequest, error) {
 	if target == nil {
-		return capabilityRequest{}, failure("controller.setup", "the Ansible controller adapter is incomplete")
+		return capabilityRequest{}, failure("controller.install", "the Ansible controller adapter is incomplete")
 	}
 	destination, err := target.Location(ctx)
 	if err != nil {

@@ -56,7 +56,7 @@ func AdapterRefusal(reason, host, area string, authorized bool) (error, bool) {
 	if !known || condition.native != (host == "") || area == "" && strings.Contains(condition.condition, "%a") {
 		return nil, false
 	}
-	failure := &ScopedFailure{Code: "controller.setup", Message: fill(condition.condition, host, area), Correction: fill(condition.correction, host, area), Routable: condition.routable}
+	failure := &ScopedFailure{Code: "controller.install", Message: fill(condition.condition, host, area), Correction: fill(condition.correction, host, area), Routable: condition.routable}
 	if authorized {
 		failure.Code, failure.Correction, failure.Routable = "controller.unknown", "Resolve the native transaction", false
 	}

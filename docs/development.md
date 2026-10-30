@@ -73,7 +73,7 @@ git ls-files -z 'examples/**/*.yaml' | xargs -0 "$yaml_python" -I -m yamllint --
 
 The embedded collection is no part of any setup identity: each command that
 runs Ansible unpacks the build's own automation, so a build that changes only
-`ansible/` needs a build and an `apply`, never a `setup`;
+`ansible/` needs a build and an `apply`, never a `controller install`;
 [changing the build between runs](operator-guide.md#changing-the-build-between-runs)
 says what a lock change requires.
 
@@ -154,13 +154,13 @@ running host and are run by hand as the code evolves:
 `scripts/runtime-lock verify` checks the lock against its publisher with
 network, as [below](#lock-refresh-and-tested-hosts). A controller's host
 package installation and runtime build are covered by none of these; they are
-a manual `setup` on a host missing something, as the
+a manual `controller install` on a host missing something, as the
 [operator guide](operator-guide.md#prepare-a-host) describes, recorded as the
 [setup row](acceptance.md#setup-v2-fresh-install-row).
 
 ## Lock refresh and tested hosts
 
-`setup` admits any Fedora or RHEL host on Linux/amd64, a derivative whose
+`controller install` admits any Fedora or RHEL host on Linux/amd64, a derivative whose
 `/etc/os-release` `ID_LIKE` names one included, that has a qualified `rpm` and
 `dnf`, a locked Python ABI installed or offered and a glibc at or above the
 lock's floor ([controller](../specs/controller.md#supported-hosts)). The lock's

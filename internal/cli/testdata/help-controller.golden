@@ -5,8 +5,10 @@
     bootwright controller [flags]
 
   Commands
-  COMMAND   PURPOSE
-  rebind    Rebind the controller record to this host's changed identity
+  COMMAND     PURPOSE
+  install     Install context-independent controller prerequisites
+  rebind      Rebind the controller record to this host's changed identity
+  uninstall   Remove what controller install added to this host
 
   Common flags
       --ascii       Use ASCII status markers

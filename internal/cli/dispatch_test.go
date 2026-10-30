@@ -62,7 +62,7 @@ func TestDispatchEveryApplicationCommand(t *testing.T) {
 		{"validate", compilation.ValidateRequest{ContextName: "", Files: []string{"inputs"}}},
 		{"render effective", compilation.EffectiveRequest{ContextName: "example", Origins: true}},
 		{"preflight controller", prerequisites.CheckRequest{ContextName: "example"}},
-		{"setup", prerequisites.SetupRequest{DryRun: true, SkipConfirmation: true, WheelMirror: "file:///srv/wheels", DownloadOnly: true, Destination: "/srv/wheels-out"}},
+		{"controller install", prerequisites.SetupRequest{DryRun: true, SkipConfirmation: true, WheelMirror: "file:///srv/wheels", DownloadOnly: true, Destination: "/srv/wheels-out"}},
 		{"preflight infra", environmentpreflight.InfrastructurePreflightRequest{ContextName: "example", DryRun: true}},
 		{"preflight clusters", clusterpreflight.PreflightRequest{ContextName: "example", Clusters: []string{"first", "second"}, DryRun: true, TrustOnFirstUse: true, SSH: ssh}},
 		{"preflight all", environmentpreflight.AllPreflightRequest{ContextName: "example", DryRun: true, TrustOnFirstUse: true, SSH: ssh}},

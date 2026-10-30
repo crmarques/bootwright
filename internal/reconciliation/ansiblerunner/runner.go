@@ -181,7 +181,7 @@ func materialBytes(request lifecycle.RunRequest) (map[string][]byte, error) {
 // remediation was wrong for every failure that had nothing to do with Secrets.
 // A failure the adapter's own output explains names what its request says,
 // because only the caller knows where that output is named.
-const setupRemediation = "run bootwright setup"
+const setupRemediation = "run bootwright controller install"
 
 func failure(code, message, remediation string) error {
 	return diagnostics.NewFailureWithRemediation(code, message, "", remediation)

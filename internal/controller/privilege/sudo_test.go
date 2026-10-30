@@ -266,10 +266,10 @@ func TestSupervisorPlacesRouteAssignmentsBeforeTheOptionTerminator(t *testing.T)
 		Executable: "/opt/bootwright", Sudo: "/usr/bin/sudo", Executor: executor, Delay: delay,
 		Assignments: []string{"HTTPS_PROXY=http://proxy.example:3128", "NO_PROXY=.internal.example,10.0.0.0/8"},
 	}
-	if _, err := NewSupervisor(options).Run(context.Background(), []string{"setup"}); err != nil {
+	if _, err := NewSupervisor(options).Run(context.Background(), []string{"controller", "install"}); err != nil {
 		t.Fatal(err)
 	}
-	want := []string{"-u", "#0", "HTTPS_PROXY=http://proxy.example:3128", "NO_PROXY=.internal.example,10.0.0.0/8", "--", "/opt/bootwright", "setup"}
+	want := []string{"-u", "#0", "HTTPS_PROXY=http://proxy.example:3128", "NO_PROXY=.internal.example,10.0.0.0/8", "--", "/opt/bootwright", "controller", "install"}
 	if !reflect.DeepEqual(child.Arguments, want) {
 		t.Fatalf("arguments = %v", child.Arguments)
 	}
@@ -304,7 +304,7 @@ func TestSupervisorRefusesAnAssignmentOutsideTheRouteVocabulary(t *testing.T) {
 			Executable: "/opt/bootwright", Sudo: "/usr/bin/sudo", Executor: executor, Delay: delay,
 			Assignments: []string{assignment},
 		}
-		if _, err := NewSupervisor(options).Run(context.Background(), []string{"setup"}); err == nil {
+		if _, err := NewSupervisor(options).Run(context.Background(), []string{"controller", "install"}); err == nil {
 			t.Fatalf("accepted %q", assignment)
 		}
 	}
@@ -324,10 +324,10 @@ func TestSupervisorLeavesADirectInvocationUnchanged(t *testing.T) {
 		return ctx.Err()
 	})
 	options := SudoOptions{Executable: "/opt/bootwright", Sudo: "/usr/bin/sudo", Executor: executor, Delay: delay}
-	if _, err := NewSupervisor(options).Run(context.Background(), []string{"setup"}); err != nil {
+	if _, err := NewSupervisor(options).Run(context.Background(), []string{"controller", "install"}); err != nil {
 		t.Fatal(err)
 	}
-	if !reflect.DeepEqual(child.Arguments, []string{"-u", "#0", "--", "/opt/bootwright", "setup"}) {
+	if !reflect.DeepEqual(child.Arguments, []string{"-u", "#0", "--", "/opt/bootwright", "controller", "install"}) {
 		t.Fatalf("arguments = %v", child.Arguments)
 	}
 }

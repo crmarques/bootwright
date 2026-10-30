@@ -21,7 +21,7 @@ import (
 
 // publishCompletedSetup records a setup that completed and binds each named
 // context, so host reservations have a controller record to live in, as a
-// host that ran bootwright setup and applied those contexts carries.
+// host that ran bootwright controller install and applied those contexts carries.
 func publishCompletedSetup(t *testing.T, repository *contextfs.Store, names ...string) {
 	t.Helper()
 	ctx := context.Background()

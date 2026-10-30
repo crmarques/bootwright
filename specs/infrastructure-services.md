@@ -72,7 +72,7 @@ The controller arm requires this context's verified
 [host binding](contexts.md#controller-relationship-and-host-binding) and the
 controller runtime of the running build's lock, which a completed setup
 publishes. A missing, contradictory or stale binding refuses before effects
-and names `setup`.
+and names `controller install`.
 
 The SSH arm connects as root and never escalates. It consumes authored
 `access.ssh.auth.privateKeyRef` and required `access.ssh.knownHostsRef`, and

@@ -7,7 +7,7 @@ Observed on 2026-09-15. Required behavior stays in
 
 `apply` printed its plan and then grew one identical `[RUNNING]` line per
 second under `Progress`, each cut at exactly the terminal width, instead of
-rewriting a single row in place. `setup` on the same terminal settled each step
+rewriting a single row in place. `controller install` on the same terminal settled each step
 as one line, because its step labels and details are shorter than the window.
 
 ## Mechanism
@@ -70,7 +70,7 @@ per running step instead of one row in total. What that costs to get right:
 - **Erase downward, then return.** `\x1b[2K` does not move the cursor, so the
   erase walks down with `\n` between lines and then moves back up by the same
   count. For a one-line block this is byte-identical to the old
-  `\r\x1b[2K` prefix, which is what keeps `setup` output unchanged.
+  `\r\x1b[2K` prefix, which is what keeps `controller install` output unchanged.
 - **A heading owns its block.** `closeLine` now also drops the steps, because a
   block that survived a heading change was redrawn under the new heading and
   printed the previous heading's rows a second time. The visible symptom is

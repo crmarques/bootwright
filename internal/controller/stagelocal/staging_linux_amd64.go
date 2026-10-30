@@ -78,7 +78,7 @@ func (s *Staging) Stage(ctx context.Context, kind string) (prerequisites.Stage, 
 }
 
 func stagingRefused() error {
-	return &prerequisites.ScopedFailure{Code: "controller.setup", Message: "staging is unavailable", Correction: "Run bootwright on Linux amd64"}
+	return &prerequisites.ScopedFailure{Code: "controller.install", Message: "staging is unavailable", Correction: "Run bootwright on Linux amd64"}
 }
 
 // open sweeps the parent and then claims one new stage of the kind in it.
@@ -122,7 +122,7 @@ func (s *Staging) openParent() (*stagingParent, error) {
 	owner := uint32(os.Geteuid())
 	refuse := func() (*stagingParent, error) {
 		return nil, &prerequisites.ScopedFailure{
-			Code:       "controller.setup",
+			Code:       "controller.install",
 			Message:    "the resolution staging directory " + s.parent + " is not a directory this user owns and alone may write",
 			Correction: "Remove " + s.parent + " or make it a directory owned by user " + strconv.FormatUint(uint64(owner), 10) + " with mode 0711",
 		}
@@ -132,7 +132,7 @@ func (s *Staging) openParent() (*stagingParent, error) {
 			return refuse()
 		}
 	} else if !errors.Is(err, fs.ErrExist) {
-		return nil, &prerequisites.ScopedFailure{Code: "controller.setup", Message: "the resolution staging directory " + s.parent + " cannot be created", Correction: "Restore the parent directory of " + s.parent}
+		return nil, &prerequisites.ScopedFailure{Code: "controller.install", Message: "the resolution staging directory " + s.parent + " cannot be created", Correction: "Restore the parent directory of " + s.parent}
 	}
 	listed, err := os.Lstat(s.parent)
 	if err != nil || !listed.IsDir() {
@@ -173,7 +173,7 @@ func (p *stagingParent) close() { p.root.Close() }
 
 func (p *stagingParent) unswept() error {
 	return &prerequisites.ScopedFailure{
-		Code:       "controller.setup",
+		Code:       "controller.install",
 		Message:    "a stale resolution stage in " + p.path + " could not be removed safely",
 		Correction: "Remove the stages in " + p.path + " that no process holds",
 	}
@@ -187,7 +187,7 @@ func (p *stagingParent) sweep() error {
 	if err != nil {
 		if errors.Is(err, errParentBound) {
 			return &prerequisites.ScopedFailure{
-				Code:       "controller.setup",
+				Code:       "controller.install",
 				Message:    p.path + " holds more than " + strconv.Itoa(maxParentEntries) + " entries",
 				Correction: "Remove the entries in " + p.path + " that no process holds",
 			}
@@ -236,7 +236,7 @@ func (p *stagingParent) names() ([]string, error) {
 // automation stage, read only by this identity, never grants.
 func (p *stagingParent) create(kind string) (created, error) {
 	unavailable := &prerequisites.ScopedFailure{
-		Code:       "controller.setup",
+		Code:       "controller.install",
 		Message:    "a resolution stage cannot be created in " + p.path,
 		Correction: "Free space on the filesystem holding " + p.path + " and keep it a directory owned by user " + strconv.FormatUint(uint64(p.owner), 10) + " with mode 0711",
 	}

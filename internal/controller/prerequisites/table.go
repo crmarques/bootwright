@@ -58,7 +58,7 @@ func (i inspection) packagesLine() string {
 	case len(i.missing) != 0:
 		return "missing " + strings.Join(i.missing, ", ")
 	case receipt == nil || len(receipt.Packages) == 0:
-		return "present, not yet recorded by setup"
+		return "present, not yet recorded by controller install"
 	}
 	items := make([]string, 0, len(receipt.Packages))
 	for _, item := range receipt.Packages {

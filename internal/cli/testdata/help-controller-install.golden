@@ -1,9 +1,9 @@
-  bootwright / setup
+  bootwright / controller install
       Prepare this host's context-independent controller prerequisites: the baseline host
       packages, installed through the host's own dnf, and the controller runtime, a venv on the
-      OS Python holding exactly the wheels this build locks. Setup selects no context; the
-      prerequisites a context adds are installed by the controller stage of apply. A ready host
-      makes no request and no change. Otherwise the plan shows dnf's own preview before
+      OS Python holding exactly the wheels this build locks. This command selects no context;
+      the prerequisites a context adds are installed by the controller stage of apply. A ready
+      host makes no request and no change. Otherwise the plan shows dnf's own preview before
       confirmation. --dry-run never elevates: it names the host package requirements without a
       preview and makes no changes, and --dry-run --output json or --output yaml also lists
       every locked wheel's file, URL and SHA-256. --wheel-mirror reads each locked wheel as
@@ -15,7 +15,7 @@
       confirmation.
 
   Usage
-    bootwright setup [flags]
+    bootwright controller install [flags]
 
   Command flags
       --dest-dir       Write the locked wheels, the pip wheel and lock.json into this directory
@@ -37,4 +37,4 @@
       --width       Set presentation width (0: automatic) · default 0
 
   Examples
-    bootwright setup --dry-run
+    bootwright controller install --dry-run

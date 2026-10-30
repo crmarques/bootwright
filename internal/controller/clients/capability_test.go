@@ -636,7 +636,7 @@ func TestApplyInstallsHostPackagesBeforeItPublishesTools(t *testing.T) {
 // repeats it. An install that fails once dnf began may have changed the host,
 // so it stays unknown and is resolved from live presence.
 func TestAHostPackageFailureIsFailedBeforeTheInstallAndUnknownAfter(t *testing.T) {
-	refusal := &prerequisites.ScopedFailure{Code: "controller.setup", Message: "no package in the host's repositories provides libvirt-client: No match for argument: libvirt-client", Correction: "Enable the repository that provides it in the host's dnf configuration"}
+	refusal := &prerequisites.ScopedFailure{Code: "controller.install", Message: "no package in the host's repositories provides libvirt-client: No match for argument: libvirt-client", Correction: "Enable the repository that provides it in the host's dnf configuration"}
 	for name, test := range map[string]struct {
 		dnf     *fakeDnf
 		setup   *fakeSetup
@@ -644,10 +644,10 @@ func TestAHostPackageFailureIsFailedBeforeTheInstallAndUnknownAfter(t *testing.T
 		code    string
 		install bool
 	}{
-		"a preview refusal": {dnf: &fakeDnf{installed: map[string]bool{}, previewErr: refusal}, setup: &fakeSetup{}, outcome: reconciliation.OutcomeFailed, code: "controller.setup"},
+		"a preview refusal": {dnf: &fakeDnf{installed: map[string]bool{}, previewErr: refusal}, setup: &fakeSetup{}, outcome: reconciliation.OutcomeFailed, code: "controller.install"},
 		"an interrupted setup": {dnf: newDnf(), setup: &fakeSetup{view: prerequisites.SetupView{Exists: true, State: prerequisites.SetupState{Pending: &prerequisites.PendingSetup{ID: "setup-000042"}}}},
 			outcome: reconciliation.OutcomeFailed, code: "controller.state"},
-		"a failed install": {dnf: &fakeDnf{installed: map[string]bool{}, installErr: refusal}, setup: &fakeSetup{}, outcome: reconciliation.OutcomeUnknown, code: "controller.setup", install: true},
+		"a failed install": {dnf: &fakeDnf{installed: map[string]bool{}, installErr: refusal}, setup: &fakeSetup{}, outcome: reconciliation.OutcomeUnknown, code: "controller.install", install: true},
 	} {
 		t.Run(name, func(t *testing.T) {
 			capability := stage(&fakeTools{complete: true}, test.dnf, test.setup, &fakeInstaller{})
@@ -661,7 +661,7 @@ func TestAHostPackageFailureIsFailedBeforeTheInstallAndUnknownAfter(t *testing.T
 			if installed := slices.ContainsFunc(test.dnf.calls, func(call string) bool { return strings.HasPrefix(call, "install ") }); installed != test.install {
 				t.Fatalf("dnf calls = %q", test.dnf.calls)
 			}
-			if test.code == "controller.setup" && !strings.HasSuffix(diagnostics.Of(err)[0].Remediation, ", then run bootwright apply --stage controller --context lab.") {
+			if test.code == "controller.install" && !strings.HasSuffix(diagnostics.Of(err)[0].Remediation, ", then run bootwright apply --stage controller --context lab.") {
 				t.Fatalf("remedy = %q", diagnostics.Of(err)[0].Remediation)
 			}
 		})
@@ -875,7 +875,7 @@ func TestStageFailuresNameTheStageThatSettlesThem(t *testing.T) {
 			execution.Stage.Setup.Context = prerequisites.SetupContext{Name: "lab", Revision: "rev-" + strings.Repeat("2", 32)}
 			reported := diagnostics.Of(test.call(capability, execution))
 			want := "Restore this host's access to api.github.com, then run bootwright apply --stage controller --context lab."
-			if len(reported) != 1 || reported[0].Code != "controller.setup" || reported[0].Message != message || reported[0].Remediation != want {
+			if len(reported) != 1 || reported[0].Code != "controller.install" || reported[0].Message != message || reported[0].Remediation != want {
 				t.Fatalf("stage failure: %+v", reported)
 			}
 		})

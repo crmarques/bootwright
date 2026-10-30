@@ -1242,7 +1242,7 @@ Every effect of an operation runs inside the controller runtime of the build
 in hand: the venv its embedded runtime lock builds on the interpreter the setup
 receipt names ([controller runtime](controller.md#host-identity-and-shared-prerequisites)).
 An operation locates that runtime once, before it registers, and refuses
-`controller.state` with `run bootwright setup` when the setup record holds no
+`controller.state` with `run bootwright controller install` when the setup record holds no
 receipt, records an interrupted setup or another build's format, or this host
 has published no runtime for the build's lock. A registration freezes the
 runtime's Python and Ansible *execution closure* in the operation record:
@@ -1258,8 +1258,8 @@ Before a continuation of either verb restores its operation's log, raises
 evidence or marks its operation `running`, it refuses `lifecycle.state`, with no
 effect and no record changed, when this build's runtime carries another closure (another
 runtime lock or another interpreter ABI), naming the build that registered it,
-whose `setup` restores its runtime, fetching any wheel the cache no longer
-holds over the network or with `--wheel-mirror`, then continues it, and for an
+whose `controller install` restores its runtime, fetching any uncached wheel over
+the network or with `--wheel-mirror`, then continues it, and for an
 apply the removal that takes back what it owns, or when
 another build registered the operation and this executable does not freeze the
 same blocks. Another build is one whose automation differs from the one the
@@ -1290,7 +1290,7 @@ path, a name prefix or an ownership mark; the digest hashes each one, and a
 value the request carries needs no pin
 ([when a digest moves](#continuation-and-removal)). A fix confined to
 automation, or to Go code that moves no version or pin, therefore continues
-with no `setup` between, because automation is staged per invocation and a
+with no `controller install` between, because automation is staged per invocation and a
 continuation needs only the same runtime lock and Python ABI. Such a
 continuation resolves an
 unknown block first and, when the observation leaves it failed, retries it in
@@ -1329,8 +1329,8 @@ one, only when its re-proof, or that replacement's host proof, admits it;
 otherwise its remedy is the exit that proof's refusal names, and that refusal
 follows it. A host whose setup has not completed, or whose runtime for the
 running build is not prepared, refuses every verb that runs a block or
-registers, naming `run bootwright setup`, and `status` offers
-`bootwright setup` in their place.
+registers, naming `run bootwright controller install`, and `status` offers it
+in their place.
 
 ### Attempts and unknown outcomes
 
@@ -2006,7 +2006,7 @@ moved since the first read. It proves this context is bound to this host as a
 continuation does, refusing `controller.identity` or `controller.state` with
 the remedy `run bootwright diff --context <name> without --observe` for an
 unbound context, and locates this build's controller runtime, refusing
-`controller.state` with `run bootwright setup` when it is not prepared. It observes at most
+`controller.state` with `run bootwright controller install` when it is not prepared. It observes at most
 as many blocks at once as an operation runs, each inside its own execution
 guard, reports one check row, `observation`, and holds the lock until every
 observation returned, so an apply or destroy started meanwhile refuses

@@ -198,7 +198,7 @@ realize says so and may name its backlog item.
 `TestRefusalsNameNoVendorRelease` check the Go sources and the collection's
 plugins.
 A context-backed next action carries `--context <name>` for the context the
-invocation resolved. The context-free commands (`setup`, `media`, `version`, `schema` and the
+invocation resolved. The context-free commands (`controller install`, `media`, `version`, `schema` and the
 others [listed with the global flags](commands.md#global-flags)) take none and
 refuse `--context`. No diagnostic carries confidential material.
 
@@ -252,9 +252,9 @@ Successful result objects have stable top-level fields:
 | `render effective` | `counts`, `effectiveState`, and with `--origins` `origins` |
 | `render installer` | `clusters` |
 | `render storage` | `clusters` |
-| `setup` (with `--download-only`) | `directory`, `outcome`, `files`, `next` |
-| `setup` (mutation), `preflight controller` | optional `context`, optional `machine`, optional `route`, `dryRun`, `outcome`, `platform`, `checks`, `actions`, `requirements`, `files`, optional `preview`, `progress`, optional `receipt`, `next` |
-| `setup` (with `--dry-run`) | `dryRun`, `outcome`, `platform`, `checks`, `actions`, `requirements`, `files` |
+| `controller install` (with `--download-only`) | `directory`, `outcome`, `files`, `next` |
+| `controller install` (mutation), `preflight controller` | optional `context`, optional `machine`, optional `route`, `dryRun`, `outcome`, `platform`, `checks`, `actions`, `requirements`, `files`, optional `preview`, `progress`, optional `receipt`, `next` |
+| `controller install` (with `--dry-run`) | `dryRun`, `outcome`, `platform`, `checks`, `actions`, `requirements`, `files` |
 | `machine list`, `machine info` | `context`, `machines`, `powerRead` |
 | `machine trust` | `context`, `dryRun`, `pending`, `recorded`, `hosts` |
 | `machine start`, `machine stop`, `machine restart` | `context`, `verb`, `machines` |
@@ -350,7 +350,7 @@ observe the controller and take neither, as
 with no CephCluster selected, named or declared, are the `cli.usage` refusal
 `preflight container-cluster` gives.
 
-A `setup --dry-run --output json` that the host or the state root refuses
+A `controller install --dry-run --output json` that the host or the state root refuses
 writes the same fields with `ok` `false` and the refusal in `diagnostics`,
 including the `state-root` check, and nothing else on standard output: the
 human plan is not written beside it.
@@ -824,7 +824,7 @@ probe. Its result orders these fields:
 | `storageClusters` | Ordered `{name, kind, status, resources}` rows for selected CephClusters. `resources` holds one `{kind, name, status}` row for each selected storage child object (a kind whose `clusterRef` names a CephCluster) whose `clusterRef` names this cluster, ordered by API kind order then name, `status` in the realization vocabulary below; it is `[]` for an external CephCluster and for one with no such object. |
 | `shared` | Ordered `{kind, name, machine, status}` rows for selected managed shared services, `status` in the realization vocabulary below. |
 | `secrets` | `declared`, the Secret objects the selected input declares, and `bindings`, the Secret bindings the current operation's record holds: one per operation however many Secrets it covers, and 0 beside no operation and once a completed removal finalized, which its pristine evidence proves without reading the keyring. |
-| `readiness` | Ordered `{kind, name, state, remedy}` rows for what the next `plan` and `apply` read from the selected input and the host does not hold: each declared Secret whose material is `missing` or `stale` as [`secret check`](../secrets.md) reports it (`kind` `secret`, ordered by name), then each installer image a MachineImage's `bootMedia` or a MachineInstallProfile's `hostedTree.fromMedia` names that [`media list`](../managed-os.md) does not show (`kind` `media`, `state` `missing`, ordered by name). `remedy` is the command that supplies it: `bootwright secret set --context <name> --name <secret> ...` or `bootwright secret generate ...` as `secret check` names it, and `bootwright media add --name <image> --from-file <path>`, with `<path>` left for the operator. The rows come from the keyring's metadata and the media store's records alone, never from Secret material or image bytes, under the shared reads those commands take, and run no effect. `[]` beside an operation, where the frozen plan and its Secret binding decide, while a deletion or `bootwright setup` is the only step, when nothing is missing, and when a read fails (`secret check` and `media list` report the failure); a failed read leaves only its own rows out. Human output has a Readiness section listing each row's state and `Kind/name`, omitted when empty. |
+| `readiness` | Ordered `{kind, name, state, remedy}` rows for what the next `plan` and `apply` read from the selected input and the host does not hold: each declared Secret whose material is `missing` or `stale` as [`secret check`](../secrets.md) reports it (`kind` `secret`, ordered by name), then each installer image a MachineImage's `bootMedia` or a MachineInstallProfile's `hostedTree.fromMedia` names that [`media list`](../managed-os.md) does not show (`kind` `media`, `state` `missing`, ordered by name). `remedy` is the command that supplies it: `bootwright secret set --context <name> --name <secret> ...` or `bootwright secret generate ...` as `secret check` names it, and `bootwright media add --name <image> --from-file <path>`, with `<path>` left for the operator. The rows come from the keyring's metadata and the media store's records alone, never from Secret material or image bytes, under the shared reads those commands take, and run no effect. `[]` beside an operation, where the frozen plan and its Secret binding decide, while a deletion or `bootwright controller install` is the only step, when nothing is missing, and when a read fails (`secret check` and `media list` report the failure); a failed read leaves only its own rows out. Human output has a Readiness section listing each row's state and `Kind/name`, omitted when empty. |
 | `nextSteps` | Ordered command strings whose decision would pass over the records `status` read, as the [lifecycle receipt](../cli.md#lifecycle-receipt) states; empty when none would. Each `readiness` remedy, in row order, precedes the `plan` step. |
 | `lifecycle` | `null` when no operation exists, else `operation`, `verb`, `state`, `next` (the receipt's action token, which the human Lifecycle `Next` row prints as the receipt does; the command it maps to is in `nextSteps`), `anotherBuild` (boolean: the build in hand is not the one that registered the operation, by the rule of [another build](../state-reconciliation.md#dependency-safety-during-recovery)), ordered `blocks` of `{id, description, stage, state, attempts}`, and `logs` of safe paths relative to the state root, in the order and form the envelope's [`logs`](#private-operation-logs) list them. A block that is `unknown` or `running` adds `unresolved`, `{reason, remedy}`: why its outcome is unproved and what the operator does, which for a block no resolution observed is the exact command, with `--context` and the frozen plan's `--authorize` tokens, that observes it, as its [resolution](../state-reconciliation.md#attempts-and-unknown-outcomes) names them; every other block omits it. |
 | `handoff` | `{ready, reasons}` derived from the [handoff predicate](../state-reconciliation.md#bootstrap-completion-and-gitops-readiness), with a boolean `ready` and ordered reason strings; `reasons` is `[]` when ready. Human output has a Handoff section with `ready`, or `not ready` followed by each reason. A completed apply with a latched log fault over unchanged input offers the settled apply in `nextSteps` as the invocation that [restores](../state-reconciliation.md#converging-an-effect) that boundary. |
@@ -1001,7 +1001,8 @@ it to a variable.
 | `controller.identity` | Required controller binding or verified host evidence is missing or contradictory. |
 | `controller.state` | Retained setup evidence is incomplete, contradictory or no longer valid. |
 | `controller.conflict` | Another setup or context protects a shared prerequisite or holds its coordination boundary. |
-| `controller.setup` | A local controller prerequisite action definitely failed. |
+| `controller.install` | A local controller prerequisite action definitely failed. |
+| `controller.uninstall` | Controller uninstall refused before an effect, or a removal it ran did not complete. |
 | `controller.untested-release` | Informational: the host's release is outside the releases this build was tested on; setup checks its floors and continues. Never a refusal. |
 | `controller.loader-preload` | Informational: `/etc/ld.so.preload` is not empty, so it loads libraries into every process, root dnf runs included; setup continues. Never a refusal. |
 | `controller.runtime-retention` | Informational: after a setup, a controller runtime a running command holds was kept ("kept: 3 runtimes (1 in use)"), or older runtimes and wheels could not all be removed; the next setup retries. Never a refusal and never changes the setup's outcome. |
@@ -1188,7 +1189,7 @@ nothing, then the directory.
 
 ### Setup run output
 
-Local `setup` registers no lifecycle operation and selects no context, so the
+Local `controller install` registers no lifecycle operation and selects no context, so the
 dnf it runs has neither an attempt log nor a context's run area to sit beside.
 A confirmed setup first creates a run of its own beneath its setup subtree and
 keeps exactly one file there:

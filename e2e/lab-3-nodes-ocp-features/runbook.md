@@ -144,7 +144,7 @@ Continue with the selected render and controller address:
 C="lab-3-nodes-ocp-features"
 IN="$HOME/bootwright-e2e/lab-3-nodes-ocp-features"
 ./bin/bootwright validate -f "$IN"
-./bin/bootwright setup --yes
+./bin/bootwright controller install --yes
 ./bin/bootwright context init --name "$C" --input-dir "$IN"
 ./bin/bootwright secret set --context "$C" --name openshift-pull-secret --value-file "${PULL_SECRET_FILE:?Set PULL_SECRET_FILE to the private pull-secret JSON file}" --yes
 if [ "$MIRROR_ENABLED" = "true" ]; then

@@ -70,7 +70,7 @@ func TestTheBoundaryGivesASessionItsOwnStatus(t *testing.T) {
 	exec := []string{"machine", "exec", "--name", "rhel-01", "uptime"}
 	rsh := []string{"machine", "rsh", "--name", "rhel-01"}
 	stop := []string{"machine", "stop", "--name", "rhel-01"}
-	setup := []string{"setup"}
+	setup := []string{"controller", "install"}
 	unverified := errors.New("no account")
 	sudoRefused := privilege.Outcome{ExitCode: 1, Diagnostic: &diagnostics.Diagnostic{Severity: "error", Code: "runtime.privilege", Message: "sudo is unavailable; run Bootwright as root"}}
 	interrupted := privilege.Outcome{ExitCode: 130, Diagnostic: &diagnostics.Diagnostic{Severity: "error", Code: "runtime.interrupted", Message: "operation interrupted"}}

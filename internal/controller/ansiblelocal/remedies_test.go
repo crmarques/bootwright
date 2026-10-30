@@ -12,10 +12,10 @@ import (
 // raises keeps its code in both and names the command of the scope that met
 // it: setup's own rerun, or the stage of the named context, never setup.
 func TestAdapterFailuresNameTheirScope(t *testing.T) {
-	for _, code := range []string{"controller.setup", "controller.identity", "controller.unknown", "controller.unsupported"} {
+	for _, code := range []string{"controller.install", "controller.identity", "controller.unknown", "controller.unsupported"} {
 		err := failure(code, "the Ansible operation has no complete result")
 		setup := diagnostics.Of(err)
-		if len(setup) != 1 || setup[0].Code != code || setup[0].Source != nil || !strings.HasSuffix(setup[0].Remediation, ", then rerun bootwright setup.") {
+		if len(setup) != 1 || setup[0].Code != code || setup[0].Source != nil || !strings.HasSuffix(setup[0].Remediation, ", then rerun bootwright controller install.") {
 			t.Errorf("setup scope: %+v", setup)
 		}
 		staged := diagnostics.Of(prerequisites.InStage(err, "lab"))

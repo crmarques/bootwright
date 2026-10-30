@@ -122,7 +122,7 @@ and converts none", and the same fresh-install remedy a registry version 5
 names ([contexts](../contexts.md#storage-locking-and-publication)): with a
 build that reads the record, destroy each environment and delete each context,
 then, as root, remove `/var/lib/bootwright` and `/var/lib/bootwright-staging`
-and run `bootwright setup`. No command rebuilds the record alone: it is
+and run `bootwright controller install`. No command rebuilds the record alone: it is
 published by the first binding of an apply on a root that holds none, and a
 root holding one never gets a second. The fresh install also drops the host's
 contexts with their Secrets and its stored media, which `bootwright context init`
@@ -171,7 +171,7 @@ would pass 4096 refuses with `controller.conflict`, saying that no command of
 this build frees a retained tool source, and names the two exits: run this
 context's controller stage on another controller host, or start this host
 afresh by destroying every environment and deleting every context on it, then,
-as root, removing `/var/lib/bootwright` and running `bootwright setup`
+as root, removing `/var/lib/bootwright` and running `bootwright controller install`
 (`TestToolSourcesPastTheBoundNameTheFreshStoreExit`).
 
 A tool area is bounded to 8 GiB total,
@@ -256,7 +256,7 @@ runtime digest. A record that cannot be read, or that carries another format,
 is another build's: a launch refuses `controller.state`, "the controller setup
 record was written by another Bootwright build", and one that finds `pending`
 refuses `controller.state`, "a controller setup (`<id>`) was interrupted
-before it finished", each with the remedy `run bootwright setup`. Setup
+before it finished", each with the remedy `run bootwright controller install`. Setup
 discards another build's subtree after confirmation and re-inspects an
 interrupted one ([setup flow](../controller.md#the-setup-flow)).
 

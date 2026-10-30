@@ -43,7 +43,7 @@ func TestUnreachablePublisherNamesItsHostAndCorrectableCondition(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			failure := transportFailure("bootstrap publisher", endpoint, &url.Error{Op: "Get", URL: endpoint, Err: test.cause})
 			diagnostic := singleDiagnostic(t, failure)
-			if diagnostic.Code != "controller.setup" || !strings.Contains(diagnostic.Message, "bootstrap publisher raw.githubusercontent.com") || !strings.Contains(diagnostic.Message, test.condition) {
+			if diagnostic.Code != "controller.install" || !strings.Contains(diagnostic.Message, "bootstrap publisher raw.githubusercontent.com") || !strings.Contains(diagnostic.Message, test.condition) {
 				t.Fatalf("message did not classify the failing publisher: %q", diagnostic.Message)
 			}
 			if !strings.Contains(diagnostic.Remediation, test.next) {
@@ -55,7 +55,7 @@ func TestUnreachablePublisherNamesItsHostAndCorrectableCondition(t *testing.T) {
 			// Setup reads its route from the environment that invoked it, so
 			// it names those variables and never a Machine it does not read.
 			setup := diagnostic.Remediation
-			if !strings.HasSuffix(setup, ", then rerun bootwright setup.") || strings.Contains(setup, "Machine") ||
+			if !strings.HasSuffix(setup, ", then rerun bootwright controller install.") || strings.Contains(setup, "Machine") ||
 				test.routable != strings.Contains(setup, ", or set HTTPS_PROXY to a proxy that reaches it and keep it out of NO_PROXY,") {
 				t.Fatalf("setup's remedy names a route or command setup does not take: %q", setup)
 			}
@@ -87,7 +87,7 @@ func TestToolCatalogFailuresNameTheStageThatReachedThem(t *testing.T) {
 	conflict.SHA256 = strings.Repeat("b", 64)
 	_, _, err = (&ToolCatalog{}).Select([]controller.ToolRequest{request}, []prerequisites.DependencySource{source, conflict})
 	stage := singleDiagnostic(t, prerequisites.InStage(err, "lab"))
-	if stage.Code != "controller.setup" || stage.Message != "retained tool release has conflicting publisher identities" ||
+	if stage.Code != "controller.install" || stage.Message != "retained tool release has conflicting publisher identities" ||
 		stage.Remediation != "Restore approved dependency sources or the retained tool areas, then run bootwright apply --stage controller --context lab." {
 		t.Fatalf("stage failure: %+v", stage)
 	}

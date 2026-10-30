@@ -231,3 +231,24 @@ type ProgressReporter interface {
 }
 
 type ListenerChecks func(context.Context, api.Catalog, string) ([]Check, error)
+
+type UninstallStore interface {
+	Uninstall(ctx context.Context, callback func(UninstallTransaction) error) error
+}
+
+type UninstallTransaction interface {
+	View() UninstallView
+	RemoveState(ctx context.Context) ([]string, error)
+}
+
+type HostPackageRemoval interface {
+	InstalledNames(ctx context.Context, names []string) ([]string, error)
+	EraseTest(ctx context.Context, names []string) error
+	RemovalPreview(ctx context.Context, names []string) (HostPackagePreview, error)
+	Remove(ctx context.Context, names []string, output RunOutput) error
+}
+
+type UninstallPresenter interface {
+	PresentUninstallPlan(context.Context, UninstallPlan) error
+	RemovalOutput() RunOutput
+}

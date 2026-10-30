@@ -97,8 +97,8 @@ func providedEverywhere(c command) reply {
 func message(t *testing.T, err error) (string, string) {
 	t.Helper()
 	found := diagnostics.Of(err)
-	if len(found) != 1 || found[0].Code != "controller.setup" {
-		t.Fatalf("not one controller.setup refusal: %v", err)
+	if len(found) != 1 || found[0].Code != "controller.install" {
+		t.Fatalf("not one controller.install refusal: %v", err)
 	}
 	return found[0].Message, found[0].Remediation
 }

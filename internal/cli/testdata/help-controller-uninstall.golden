@@ -1,0 +1,30 @@
+  bootwright / controller uninstall
+      Remove, on a host that holds no context and no installer media, the host packages
+      controller install recorded as its own, through the host's own dnf, then Bootwright's
+      state: /var/lib/bootwright and /var/lib/bootwright-staging. It never removes a package
+      present before Bootwright, a package a controller stage installed, or this executable. It
+      refuses before any effect while a context or an image remains, naming the commands that
+      remove each, while another command holds the store, and, without --keep-packages, when
+      the install record cannot say what install added or another installed package requires
+      one of them. The plan shows dnf's own removal preview and what stays before confirmation.
+      A host with nothing to remove prints Nothing to do. Review the plan before confirming;
+      --yes skips ordinary confirmation.
+
+  Usage
+    bootwright controller uninstall [flags]
+
+  Command flags
+      --keep-packages  Leave every host package installed and remove only Bootwright's state
+      --yes            Confirm the command's ordinary confirmation
+
+  Common flags
+      --ascii       Use ASCII status markers
+      --color       Select terminal colors (values: auto, always, never) · default auto
+      --detail      Select human detail (values: compact, full) · default compact
+      -h, --help    Show help for this command
+      -o, --output  Select output mode (values: text, json, yaml) · default text
+      --progress    Select progress animation (values: auto, always, never) · default auto
+      --width       Set presentation width (0: automatic) · default 0
+
+  Examples
+    bootwright controller uninstall

@@ -20,7 +20,7 @@ func controllerFailure(code, message, remediation string) error {
 }
 
 const toolSourcesRemedy = "no command of this build frees a retained tool source, because it never retires one; run this context's controller stage on another controller host, " +
-	"or start this host afresh: destroy every environment and delete every context on it, then, as root, remove /var/lib/bootwright and run bootwright setup"
+	"or start this host afresh: destroy every environment and delete every context on it, then, as root, remove /var/lib/bootwright and run bootwright controller install"
 
 // controllerVersionRemedy is the fresh install of a store whose controller
 // record another version wrote. No command rebuilds the record alone, so the

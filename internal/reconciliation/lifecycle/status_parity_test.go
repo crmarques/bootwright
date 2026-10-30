@@ -39,8 +39,8 @@ func decideCandidate(h *harness, verb reconciliation.Verb) candidateVerdict {
 			verdict.exits = append(verdict.exits, deletion+" --allow-orphans")
 		case strings.Contains(reported.Remediation, deletion):
 			verdict.exits = append(verdict.exits, deletion)
-		case strings.Contains(reported.Remediation, "bootwright setup"):
-			verdict.exits = append(verdict.exits, "bootwright setup")
+		case strings.Contains(reported.Remediation, "bootwright controller install"):
+			verdict.exits = append(verdict.exits, "bootwright controller install")
 		}
 	}
 	return verdict

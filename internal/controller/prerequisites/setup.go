@@ -254,7 +254,7 @@ func (s Service) install(ctx context.Context, current *inspection, run RunOutput
 		return nil, err
 	}
 	if len(still) != 0 {
-		return nil, failure("controller.setup", "dnf finished but nothing provides "+strings.Join(still, ", "), "check the host's dnf configuration, then run bootwright setup again")
+		return nil, failure("controller.install", "dnf finished but nothing provides "+strings.Join(still, ", "), "check the host's dnf configuration, then run bootwright controller install again")
 	}
 	return evidence, nil
 }
@@ -280,7 +280,7 @@ func (s Service) prepareRuntime(ctx context.Context, tx SetupTransaction, curren
 
 func (s Service) recordReceipt(ctx context.Context, tx SetupTransaction, current *inspection, state SetupState, id string, installed []HostPackageEvidence, previous *HostReceipt) error {
 	if !current.runtimeReady || current.runtime.Digest == "" {
-		return failure("controller.setup", "the controller runtime could not be verified after setup", setupCommand()+" again")
+		return failure("controller.install", "the controller runtime could not be verified after setup", setupCommand()+" again")
 	}
 	requirements, _ := BaselineHostRequirements("")
 	if current.python != "" {

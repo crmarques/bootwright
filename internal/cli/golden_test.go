@@ -384,7 +384,7 @@ func cliGoldens() []cliGolden {
 	unprepared := func() *lifecycle.StatusResult {
 		result := idle()
 		result.SetupChecks = []lifecycle.SetupCheck{{ID: "controller-binding", Status: "pending"}, {ID: "execution-bundle", Status: "not-ready"}}
-		result.NextSteps = []string{"bootwright setup"}
+		result.NextSteps = []string{"bootwright controller install"}
 		return result
 	}
 	// An idle context whose input declares a Secret with no stored material,
@@ -616,15 +616,15 @@ func cliGoldens() []cliGolden {
 
 		// Controller reports: an unpresented dry-run plan in text and JSON, a
 		// presented setup that changed the host, and a context's readiness.
-		{golden: "cli-setup-plan", args: "setup --dry-run", record: func(r *dispatchRecord) { r.result.controller = setupDryRun(platform) }},
-		{golden: "cli-setup-plan-json", args: "setup --dry-run --output json", record: func(r *dispatchRecord) {
+		{golden: "cli-setup-plan", args: "controller install --dry-run", record: func(r *dispatchRecord) { r.result.controller = setupDryRun(platform) }},
+		{golden: "cli-setup-plan-json", args: "controller install --dry-run --output json", record: func(r *dispatchRecord) {
 			r.result.controller = setupDryRun(platform)
 			r.result.controller.Warnings = []diagnostics.Diagnostic{{Severity: "warning", Code: "controller.untested-release", Message: "Fedora 45 is newer than the releases this build was tested on (43, 44); setup checks its floors and continues"}}
 		}},
-		{golden: "cli-setup-download", args: "setup --download-only --dest-dir wheels", record: func(r *dispatchRecord) {
+		{golden: "cli-setup-download", args: "controller install --download-only --dest-dir wheels", record: func(r *dispatchRecord) {
 			r.result.controller = setupDownload()
 		}},
-		{golden: "cli-setup-changed", args: "setup --yes", record: func(r *dispatchRecord) {
+		{golden: "cli-setup-changed", args: "controller install --yes", record: func(r *dispatchRecord) {
 			r.result.controller = &prerequisites.Report{
 				Platform: platform, Route: "direct", Outcome: "changed", PlanPresented: true,
 				Checks:      []prerequisites.Check{ready("host", "fedora 43/amd64"), ready("python-runtime", "Python 3.14.8 (/usr/bin/python3.14), ansible-core 2.21.5"), ready("host-packages", "openssh-clients, podman"), ready("setup-state", "complete")},
@@ -634,29 +634,29 @@ func cliGoldens() []cliGolden {
 		}},
 		// Refused setups: a confirmation refusal's remedy repeats the
 		// operator's invocation with --yes (internal/cli/confirmation.go).
-		{golden: "cli-setup-confirmation-refused", args: "setup", code: 1,
-			stderr: "  error  controller.setup\n" +
-				"    setup confirmation requires an interactive terminal\n" +
-				"    Next: review the plan, then repeat bootwright setup with --yes\n",
+		{golden: "cli-setup-confirmation-refused", args: "controller install", code: 1,
+			stderr: "  error  controller.install\n" +
+				"    install confirmation requires an interactive terminal\n" +
+				"    Next: review the plan, then repeat bootwright controller install with --yes\n",
 			record: func(r *dispatchRecord) {
 				r.result.controller = &prerequisites.Report{
 					Platform: platform, Route: "direct (no HTTPS_PROXY)", Outcome: "planned", PlanPresented: true, ProgressPresented: true,
 					Checks:  []prerequisites.Check{ready("host", "fedora 43/amd64"), {ID: "host-packages", Required: "openssh-clients, podman", Observed: "missing podman", Status: "not-ready", Scope: prerequisites.HostScope}},
 					Actions: []string{"Install host packages with dnf: podman"},
 				}
-				r.err = diagnostics.NewFailureWithRemediation("controller.setup", "setup confirmation requires an interactive terminal", "", "review the plan, then repeat bootwright setup with --yes")
+				r.err = diagnostics.NewFailureWithRemediation("controller.install", "install confirmation requires an interactive terminal", "", "review the plan, then repeat bootwright controller install with --yes")
 			}},
 		// A dry run over a state root this build cannot use reports the row
 		// and the store's refusal of it
 		// (internal/workspace/contextfs/root_inspection_linux_amd64.go).
-		{golden: "cli-setup-plan-state-root", args: "setup --dry-run", code: 1,
+		{golden: "cli-setup-plan-state-root", args: "controller install --dry-run", code: 1,
 			stderr: "  error  context.state\n" +
 				"    the state root is a directory owned by root:root with mode 0755, but it must be a directory\n" +
 				"    owned by root:root with mode 0700\n" +
 				"    Next: nothing repairs it, because Bootwright never changes the owner or mode of an existing\n" +
 				"    state root\n",
 			record: stateRootRefused},
-		{golden: "cli-setup-plan-state-root-json", args: "setup --dry-run --output json", code: 1, record: func(r *dispatchRecord) {
+		{golden: "cli-setup-plan-state-root-json", args: "controller install --dry-run --output json", code: 1, record: func(r *dispatchRecord) {
 			stateRootRefused(r)
 			r.result.controller.Warnings = []diagnostics.Diagnostic{{Severity: "warning", Code: "controller.untested-release", Message: "Fedora 45 is newer than the releases this build was tested on (43, 44); setup checks its floors and continues"}}
 		}},
@@ -692,10 +692,10 @@ func cliGoldens() []cliGolden {
 		{golden: "cli-preflight-controller-interrupted", args: "preflight controller", code: 1,
 			stderr: "  error  preflight.failed\n" +
 				"    required controller prerequisites are not ready\n" +
-				"    Next: run bootwright setup\n",
+				"    Next: run bootwright controller install\n",
 			record: func(r *dispatchRecord) {
 				r.result.controller = &prerequisites.Report{
-					Platform: platform, Route: "direct", Outcome: "not-ready", Next: "bootwright setup",
+					Platform: platform, Route: "direct", Outcome: "not-ready", Next: "bootwright controller install",
 					Checks: []prerequisites.Check{
 						ready("host", "fedora 43/amd64"),
 						ready("python-runtime", "Python 3.14.8 (/usr/bin/python3.14), ansible-core 2.21.5"),
@@ -708,11 +708,11 @@ func cliGoldens() []cliGolden {
 						Packages: "podman 5:5.8.1-1.fc43 (updates), openssh-clients 10.2p1-1.fc43 (present before bootwright)",
 					},
 				}
-				r.err = diagnostics.NewFailureWithRemediation("preflight.failed", "required controller prerequisites are not ready", "", "run bootwright setup")
+				r.err = diagnostics.NewFailureWithRemediation("preflight.failed", "required controller prerequisites are not ready", "", "run bootwright controller install")
 			}},
 		// A host that is already ready renders the same table and nothing else
 		// to do; its informational lines go to standard error.
-		{golden: "cli-setup-ready", args: "setup", stderr: "  warning  controller.loader-preload\n" +
+		{golden: "cli-setup-ready", args: "controller install", stderr: "  warning  controller.loader-preload\n" +
 			"    /etc/ld.so.preload is not empty, so it loads libraries into every process, root dnf runs\n" +
 			"    included; setup continues\n",
 			record: func(r *dispatchRecord) {
@@ -944,6 +944,11 @@ func cliGoldens() []cliGolden {
 		{golden: "cli-context-list-unfinished", args: "context list", record: unfinishedContexts},
 		{golden: "cli-controller-rebind", args: "controller rebind", record: rebound},
 		{golden: "cli-controller-rebind-json", args: "controller rebind --output json", record: rebound},
+		{golden: "cli-controller-uninstall", args: "controller uninstall --yes", record: uninstalled},
+		{golden: "cli-controller-uninstall-json", args: "controller uninstall --yes --output json", record: uninstalled},
+		{golden: "cli-controller-uninstall-nothing", args: "controller uninstall", record: func(r *dispatchRecord) {
+			r.result.uninstall = &prerequisites.UninstallResult{Outcome: "unchanged", Packages: []string{}, Paths: []string{}, Kept: []string{}}
+		}},
 		{golden: "cli-context-list-unfinished-json", args: "context list --output json", record: unfinishedContexts},
 		{golden: "cli-context-current", args: "context current", record: func(r *dispatchRecord) { r.result.current = &contexts.CurrentResult{Context: lab} }},
 		{golden: "cli-context-current-short", args: "context current --short", record: func(r *dispatchRecord) { r.result.current = &contexts.CurrentResult{Context: lab} }},
@@ -1312,7 +1317,7 @@ func TestEveryAvailableCommandHasAGolden(t *testing.T) {
 	jsonContracts := []string{
 		"add-ons list",
 		"validate", "preflight storage-cluster", "preflight clusters", "preflight infra", "preflight all", "render", "render effective", "status", "diff",
-		"secret check", "secret list", "secret info", "secret encryption status", "machine trust", "setup",
+		"secret check", "secret list", "secret info", "secret encryption status", "machine trust", "controller install",
 		"machine list", "machine info", "machine start", "machine stop", "machine restart", "media list", "cluster list", "cluster info",
 	}
 	implemented := map[string]bool{}
@@ -1362,7 +1367,7 @@ func setupDownload() *prerequisites.Report {
 
 func setupDryRun(platform prerequisites.Platform) *prerequisites.Report {
 	return &prerequisites.Report{
-		Platform: platform, Route: "direct", DryRun: true, Outcome: "planned", Next: "bootwright setup",
+		Platform: platform, Route: "direct", DryRun: true, Outcome: "planned", Next: "bootwright controller install",
 		Checks: []prerequisites.Check{
 			{ID: "host", Required: "the Fedora or RHEL family on amd64", Observed: "fedora 43/amd64", Status: "ready", Scope: prerequisites.HostScope},
 			{ID: "python-runtime", Required: "Python 3.14, 3.13, 3.12 with ansible-core 2.21.5", Observed: "Python 3.14.8 (/usr/bin/python3.14); runtime not verified without privilege", Status: "unverified", Scope: prerequisites.HostScope},
@@ -1460,6 +1465,12 @@ func unfinishedContexts(r *dispatchRecord) {
 
 func rebound(r *dispatchRecord) {
 	r.result.rebind = &prerequisites.RebindResult{Outcome: "rebound", Bindings: 2, Reservations: 5}
+}
+
+func uninstalled(r *dispatchRecord) {
+	r.result.uninstall = &prerequisites.UninstallResult{Outcome: "removed", Packages: []string{"podman", "python3.13"},
+		Paths: []string{"/var/lib/bootwright", "/var/lib/bootwright-staging"},
+		Kept:  []string{"openssh-clients (present before bootwright)", "the host packages a controller stage installed", "the bootwright executable"}}
 }
 
 func lifecycleRemedies(gaps []lifecycle.ReadinessGap) []string {

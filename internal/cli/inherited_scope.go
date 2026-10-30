@@ -26,7 +26,7 @@ var contextFreeCommands = map[string]bool{
 	"context init": true, "context update": true, "context use": true, "context list": true,
 	"context current": true, "context delete": true, "add-ons list": true,
 	"media add": true, "media list": true, "media delete": true,
-	"setup": true, "controller rebind": true,
+	"controller install": true, "controller rebind": true, "controller uninstall": true,
 	"version": true, "schema": true, "help": true,
 	"completion bash": true, "completion zsh": true, "completion fish": true, "completion powershell": true,
 }

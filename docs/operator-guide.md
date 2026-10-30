@@ -9,7 +9,7 @@ gate and which build it must match.
 
 ## Prepare a host
 
-`setup` prepares what every context on the host shares: the host packages
+`controller install` prepares what every context on the host shares: the host packages
 `openssh-clients` and `podman`, and the controller runtime that runs Ansible.
 [What setup admits and installs](#what-setup-admits-and-installs) says which
 hosts it accepts and what it changes on them. Every command that runs Ansible
@@ -34,8 +34,8 @@ Prepare the host once, from the repository root:
 ```sh
 make build
 ./bin/bootwright version
-./bin/bootwright setup --dry-run
-./bin/bootwright setup
+./bin/bootwright controller install --dry-run
+./bin/bootwright controller install
 ./bin/bootwright preflight controller
 ```
 
@@ -44,19 +44,19 @@ checkout, which `version` prints as its `Commit` and `Source` lines. A
 controller needs no checkout or Go toolchain: run `make build` on a
 Linux/amd64 workstation and copy `bin/bootwright`, a static executable that
 embeds its automation, to the controller, for example to /usr/local/bin;
-`bootwright version` prints the same `Commit` there. `setup`
+`bootwright version` prints the same `Commit` there. `controller install`
 prepares the foundation every context on the host shares and reads no desired
 state; the dry run previews it, and `preflight controller` reports what it
 proved. Each context's first `apply` then binds the context to this host
 ([binding](../specs/contexts.md#controller-relationship-and-host-binding)), and
 its `controller` stage installs the clients its graph selects
 ([controller](../specs/controller.md#the-controller-stage)). Media images live
-in one host-wide store that every context shares, so `setup` runs before the
+in one host-wide store that every context shares, so `controller install` runs before the
 first `media add`.
 
 ### What setup admits and installs
 
-Setup admits a host by family and floors, never by release name, and refuses
+`controller install` admits a host by family and floors, never by release name, and refuses
 anything else with `controller.unsupported` and its remedy before it changes
 anything: Fedora or RHEL, or a derivative whose `/etc/os-release` `ID_LIKE`
 names one, such as CentOS Stream, Rocky or Alma; amd64; a root-owned `rpm`
@@ -71,7 +71,7 @@ setup checks its floors and continues", which changes neither the result nor
 the exit status. A non-empty /etc/ld.so.preload is reported the same way, as
 `controller.loader-preload`.
 
-Setup installs only what is missing, and from two places:
+`controller install` installs only what is missing, and from two places:
 
 - **Host packages,** `openssh-clients` and `podman`, plus the `python3.X`
   package when no Python the lock serves is installed, come from the
@@ -92,7 +92,7 @@ Setup installs only what is missing, and from two places:
   ([the controller runtime](../specs/controller.md#the-controller-runtime)).
   Nothing is installed into the host's own Python.
 
-Before it asks for confirmation, setup runs `dnf install --assumeno` as root
+Before it asks for confirmation, `controller install` runs `dnf install --assumeno` as root
 for the missing packages and shows dnf's output verbatim in its plan, beside
 how many wheels the runtime downloads and how many it already has. The preview
 changes no package, though dnf may refresh its metadata cache as
@@ -115,11 +115,11 @@ setup, which downloads only the wheels it has not cached.
 A setup that installs host packages keeps what dnf printed in a
 [setup run](../specs/cli/output.md#setup-run-output),
 /var/lib/bootwright/setup/runs/setup-NNNNNN/run.output, which only root
-can read. The host keeps the newest 8 runs, and the `Logs` field of setup's
+can read. The host keeps the newest 8 runs, and the `Logs` field of its
 result names the run; a failure that run explains names its `run.output` in
 its remedy. A setup that was interrupted blocks every command that runs
 Ansible with `controller.state`, "a controller setup (`setup-000042`) was
-interrupted before it finished"; run `bootwright setup` again, which
+interrupted before it finished"; run `bootwright controller install` again, which
 re-inspects the host, names the interrupted run in its plan and continues
 after confirmation.
 
@@ -131,21 +131,21 @@ first apply.
 
 Preparing a host with no route to `files.pythonhosted.org` takes two steps.
 On any connected host, with no privilege, run
-`bootwright setup --download-only --dest-dir /srv/bootwright-wheels`: it writes
+`bootwright controller install --download-only --dest-dir /srv/bootwright-wheels`: it writes
 the locked wheels of every Python ABI, the pip wheel and a copy of `lock.json`
 there. Copy that directory to the offline host, or serve it over HTTPS, and run
-`bootwright setup --wheel-mirror file:///srv/bootwright-wheels` (or
+`bootwright controller install --wheel-mirror file:///srv/bootwright-wheels` (or
 `--wheel-mirror https://mirror.example/bootwright-wheels`) there. The mirror is
-untrusted transport: setup uses a file only when its size and SHA-256 match the
+untrusted transport: `controller install` uses a file only when its size and SHA-256 match the
 lock this build embeds, so a stale or tampered file is refused with its name.
-`bootwright setup --dry-run --output json` lists every locked file's URL and
+`bootwright controller install --dry-run --output json` lists every locked file's URL and
 SHA-256 for fetching them another way. Host packages already come from
 wherever the host's dnf is configured to read them, a local `file://`
 repository, a DVD or a Satellite mirror included.
 
 ### On a proxied network
 
-`setup`, `preflight controller` without `--context` and `media add --from-url`
+`controller install`, `preflight controller` without `--context` and `media add --from-url`
 run before any Environment exists, so they take their route from the invoking
 environment. Export `HTTPS_PROXY`, and `NO_PROXY` when internal hosts must be
 reached directly, before running them; the
@@ -153,7 +153,7 @@ reached directly, before running them; the
 says which values refuse. Everything a context drives uses that context's
 declared proxy instead, and exporting a variable does not change it.
 
-When the admitted route is a proxy, setup and the controller stage also hand
+When the admitted route is a proxy, `controller install` and the controller stage also hand
 it to the host's dnf as `https_proxy` and `no_proxy`; a `proxy=` in the
 host's dnf configuration wins over it. Nothing else from the environment
 reaches dnf, and a proxy that needs credentials stays unsupported
@@ -162,7 +162,7 @@ reaches dnf, and a proxy that needs credentials stays unsupported
 `sudo` clears the environment, so an unprivileged invocation forwards the
 variables to its elevated child on the sudo command line; a sudoers rule that
 grants neither `ALL` nor `SETENV` refuses that, and running as root avoids it.
-`bootwright setup --dry-run` never elevates, so the route it prints under
+`bootwright controller install --dry-run` never elevates, so the route it prints under
 `Route` in its scope block shows only how the values parse.
 `bootwright preflight controller` elevates and prints the same `Route` field,
 which confirms that the variables crossed sudo.
@@ -174,7 +174,7 @@ with, through dnf's `proxy=` or the forwarded route, so a proxy must also
 admit those: their mirrors, metalink or Satellite, whatever `dnf repolist -v`
 names. Bootwright names no repository host of its own. A proxy that admits
 only listed destinations must also admit HTTPS, on port 443, to these hosts,
-which setup and the controller stage contact, directly or through a redirect
+which `controller install` and the controller stage contact, directly or through a redirect
 the download follows; `media add --from-url` contacts the URL it is given. A
 proxy that inspects TLS re-signs every certificate, so its certificate
 authority must be in the host's system trust store, which every acquisition
@@ -269,9 +269,9 @@ the host's crypto policy; Bootwright's own executable and the `cryptography`
 wheel's bundled OpenSSL stay outside the host's FIPS-validated modules, so
 running it on a FIPS-mode controller claims no FIPS compliance
 ([security](../specs/security.md#the-controller-hosts-attacker-model)).
-`preflight controller`, like `setup`, reports the kernel's FIPS mode as its
+`preflight controller`, like `controller install`, reports the kernel's FIPS mode as its
 `FIPS mode` check with that statement; the check never changes readiness,
-except that a FIPS flag that cannot be read as 0 or 1 refuses setup and
+except that a FIPS flag that cannot be read as 0 or 1 refuses `controller install` and
 preflight with `controller.unsupported`.
 
 Under the FIPS crypto policy (`update-crypto-policies --show` prints `FIPS`),
@@ -298,7 +298,7 @@ created is not a supported controller for this build until that build's
 environments are retired and its store removed. Store commands refuse there
 ([contexts](../specs/contexts.md#storage-locking-and-publication)). Every build
 from before the setup v2 cut-over (X88) wrote registry version 5, which this
-build neither reads nor converts, so its first command, `setup` included,
+build neither reads nor converts, so its first command, `controller install` included,
 refuses before any plan with the `context.state` refusal and fresh-install
 remedy that [contexts](../specs/contexts.md#storage-locking-and-publication)
 states. The way across is a fresh install, in this order:
@@ -320,7 +320,7 @@ states. The way across is a fresh install, in this order:
    ```
 
 3. With this build, prepare the host as [above](#prepare-a-host), from
-   `setup --dry-run` on.
+   `controller install --dry-run` on.
 
 Never remove or move that store aside while the services it manages run: a
 context deleted without its destroy leaves its guests, units and listeners
@@ -351,6 +351,25 @@ that affirmation is `--recorded-host-retired`. Values named with
 list and the shell history. The
 [host binding](../specs/contexts.md#controller-relationship-and-host-binding)
 names the other exits.
+
+### Uninstalling Bootwright from this host
+
+Once every environment is destroyed, every context deleted and every image
+removed with `bootwright media delete`, remove what `controller install` added:
+
+```sh
+sudo bootwright controller uninstall
+```
+
+It refuses, naming the command that clears each, while a context or an image
+remains. Its plan shows `dnf remove --assumeno` for the packages the install
+receipt names as install's own, then removes them with dnf and removes
+`/var/lib/bootwright` and `/var/lib/bootwright-staging`. Packages present
+before Bootwright, packages a controller stage installed and the executable
+stay. `--keep-packages` removes only the state; it is also the way out when
+the install record was interrupted or written by another build. An
+interrupted uninstall is finished by the next one
+([uninstall flow](../specs/controller.md#the-uninstall-flow)).
 
 ## Network exposure
 
@@ -489,10 +508,10 @@ physical cluster node refuses until [B67](../specs/milestones/m3.md#b67).
 The automation is embedded in the executable and is no part of any setup
 identity: every command that runs Ansible unpacks the automation of the build
 in hand. A build that changes only `ansible/` or Go code therefore needs no
-`setup`, and neither does any build with the same runtime lock. A build whose
-lock changed needs one `setup`, which builds its runtime; until then `apply`
+`controller install`, and neither does any build with the same runtime lock. A build whose
+lock changed needs one `controller install`, which builds its runtime; until then `apply`
 refuses with `controller.state`, "the controller runtime for this build (<identity>) is not
-prepared", and the remedy `run bootwright setup`
+prepared", and the remedy `run bootwright controller install`
 ([the controller runtime](../specs/controller.md#the-controller-runtime)).
 A build from before the setup v2 cut-over cannot read this build's store, and
 this build cannot read its store: crossing it is the
@@ -540,7 +559,7 @@ words a step is presented in may differ. An incomplete destroy continues when
 the removal derived again from its own frozen plan consumes the same
 authorizations and every step's capability reads its frozen request. A fix that
 changes only automation, or only Go code that moves no version or pin, therefore
-continues the failed or unknown step with no `setup` between, as long as its
+continues the failed or unknown step with no `controller install` between, as long as its
 runtime lock and Python ABI are the operation's; a build with another lock
 refuses the continuation and names the build that registered it, whose
 runtime this host keeps.
@@ -559,7 +578,7 @@ A build that changes the local keyring's format cannot open a keyring the
 earlier format wrote: every access to it, `secret encryption init` included,
 refuses with `secret.store.implementation`, naming the persisted format and
 the way out. A context created before X21 keeps a `local-keyring-v3` keyring,
-so destroy it with the build that applied it, before running `setup` with
+so destroy it with the build that applied it, before running `controller install` with
 this one, and then delete it with `bootwright context delete --name <context>
 --purge` and create it again. An apply or destroy that binds no Secret meets
 the refusal only when it reaches the keyring, which can be after its effects.

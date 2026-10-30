@@ -187,7 +187,7 @@ func validateCommandFlags(command *cobra.Command, path string) string {
 		if path == "context update" && len(arrayValue(flags, "file")) == 0 && stringValue(flags, "input-dir") == "" {
 			return "context update requires --file or --input-dir"
 		}
-	case "setup":
+	case "controller install":
 		return validateSetupFlags(flags)
 	case "context delete":
 		if !boolValue(flags, "purge") {
@@ -282,7 +282,7 @@ func validateSetupFlags(flags *pflag.FlagSet) string {
 	download := boolValue(flags, "download-only")
 	switch {
 	case download && boolValue(flags, "dry-run"):
-		return "--download-only conflicts with --dry-run; setup --dry-run --output json lists the locked files"
+		return "--download-only conflicts with --dry-run; controller install --dry-run --output json lists the locked files"
 	case download && stringValue(flags, "dest-dir") == "":
 		return "--download-only requires --dest-dir"
 	case !download && flags.Changed("dest-dir"):

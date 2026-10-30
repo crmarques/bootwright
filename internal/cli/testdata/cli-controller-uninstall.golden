@@ -1,0 +1,14 @@
+  ✓ Controller uninstalled from this host
+
+  Removed host packages
+    podman
+    python3.13
+
+  Removed paths
+    /var/lib/bootwright
+    /var/lib/bootwright-staging
+
+  Kept
+    openssh-clients (present before bootwright)
+    the host packages a controller stage installed
+    the bootwright executable

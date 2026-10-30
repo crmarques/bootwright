@@ -43,7 +43,7 @@ func writeSetupDownload(out io.Writer, report *prerequisites.Report) error {
 		field{Label: "Outcome", Value: "downloaded"},
 		field{Label: "Written", Value: strconv.Itoa(len(report.Export.Files)+1) + " (" + strconv.Itoa(counts[prerequisites.OriginDownload]+counts[prerequisites.OriginMirror]) + " fetched, " +
 			strconv.Itoa(counts[prerequisites.OriginCache]) + " from the wheel cache, " + strconv.Itoa(counts[prerequisites.OriginPresent]) + " already there)"},
-		field{Label: "Next", Value: "bootwright setup --wheel-mirror " + (&url.URL{Scheme: "file", Path: report.Export.Directory}).String()},
+		field{Label: "Next", Value: "bootwright controller install --wheel-mirror " + (&url.URL{Scheme: "file", Path: report.Export.Directory}).String()},
 	)
 	return text.writeTo(out)
 }

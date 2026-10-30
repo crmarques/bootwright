@@ -99,19 +99,19 @@ func runProcess(ctx context.Context, launch prerequisites.PythonLaunch, tree sta
 	}
 	result := actionResult("failed", false)
 	if os.Geteuid() != boundary.owner || boundary.command == nil || !filepath.IsAbs(launch.Program) || !filepath.IsAbs(launch.Shim) || !filepath.IsAbs(tree.Path) || len(request.Tools) == 0 || len(request.Tools) > 128 {
-		return result, failure("controller.setup", "the authorized Ansible execution boundary is unavailable")
+		return result, failure("controller.install", "the authorized Ansible execution boundary is unavailable")
 	}
 	if err := requireClientStageCeiling(request); err != nil {
 		return result, err
 	}
 	job, err := os.MkdirTemp(boundary.jobParent, "bootwright-controller-")
 	if err != nil {
-		return result, failure("controller.setup", "private Ansible invocation storage is unavailable")
+		return result, failure("controller.install", "private Ansible invocation storage is unavailable")
 	}
 	defer os.RemoveAll(job)
 	scratch, err := os.MkdirTemp(boundary.scratchParent, "bootwright-scratch-")
 	if err != nil {
-		return result, failure("controller.setup", "private Ansible staging storage is unavailable")
+		return result, failure("controller.install", "private Ansible staging storage is unavailable")
 	}
 	defer os.RemoveAll(scratch)
 	if err := requireScratchCapacity(scratch, request); err != nil {
@@ -158,7 +158,7 @@ func writeInvocation(job string, launch prerequisites.PythonLaunch, request capa
 	} {
 		encoded, err := encode()
 		if err != nil || len(encoded) > 4<<20 || os.WriteFile(filepath.Join(job, name), encoded, 0600) != nil {
-			return failure("controller.setup", "the frozen Ansible invocation could not be materialized")
+			return failure("controller.install", "the frozen Ansible invocation could not be materialized")
 		}
 	}
 	return nil
@@ -298,11 +298,11 @@ func (run *protocolRun) outcome(ctx context.Context, ending adapterprotocol.Endi
 	case adapterprotocol.Aborted:
 		return run.result, ending.Failure
 	case adapterprotocol.ResultChannel:
-		return run.result, failure("controller.setup", "the Ansible result channel could not be opened")
+		return run.result, failure("controller.install", "the Ansible result channel could not be opened")
 	case adapterprotocol.AuthorizationChannel:
-		return run.result, failure("controller.setup", "the Ansible authorization channel could not be opened")
+		return run.result, failure("controller.install", "the Ansible authorization channel could not be opened")
 	case adapterprotocol.NotStarted:
-		return run.result, failure("controller.setup", "the qualified Ansible process could not start")
+		return run.result, failure("controller.install", "the qualified Ansible process could not start")
 	case adapterprotocol.Canceled:
 		if run.unauthorized(ending.Kind) {
 			return actionResult("failed", true), ctx.Err()
@@ -317,7 +317,7 @@ func (run *protocolRun) outcome(ctx context.Context, ending adapterprotocol.Endi
 	case adapterprotocol.RetainedOutput:
 		err = failure("controller.unknown", "Ansible descendants retained its output after it exited")
 	case adapterprotocol.FailedExit:
-		err = failure("controller.setup", "Ansible did not complete the authorized dependency operation")
+		err = failure("controller.install", "Ansible did not complete the authorized dependency operation")
 	case adapterprotocol.Incomplete:
 		err = failure("controller.unknown", "the Ansible structured result was incomplete")
 	case adapterprotocol.Invalid:
@@ -363,7 +363,7 @@ func requireScratchCapacity(scratch string, request capabilityRequest) error {
 	}
 	var statistics syscall.Statfs_t
 	if err := syscall.Statfs(scratch, &statistics); err != nil {
-		return failure("controller.setup", "Ansible staging storage cannot be measured")
+		return failure("controller.install", "Ansible staging storage cannot be measured")
 	}
 	// Keep headroom for archive expansion.
 	available := int64(statistics.Bavail) * statistics.Bsize

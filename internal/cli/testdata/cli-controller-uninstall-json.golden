@@ -1,0 +1,24 @@
+{
+  "schemaVersion": "v1alpha1",
+  "command": "controller uninstall",
+  "ok": true,
+  "exitCode": 0,
+  "result": {
+    "outcome": "removed",
+    "packages": [
+      "podman",
+      "python3.13"
+    ],
+    "paths": [
+      "/var/lib/bootwright",
+      "/var/lib/bootwright-staging"
+    ],
+    "kept": [
+      "openssh-clients (present before bootwright)",
+      "the host packages a controller stage installed",
+      "the bootwright executable"
+    ]
+  },
+  "diagnostics": [],
+  "logs": []
+}

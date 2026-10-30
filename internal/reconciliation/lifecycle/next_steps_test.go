@@ -367,7 +367,7 @@ func TestStatusOffersSetupWhereSetupGatesTheVerb(t *testing.T) {
 				h.workspace.controller.Exists, h.workspace.controller.Initialized = false, false
 				return h
 			},
-			steps: []string{"bootwright setup"}, gated: []reconciliation.Verb{reconciliation.Apply},
+			steps: []string{"bootwright controller install"}, gated: []reconciliation.Verb{reconciliation.Apply},
 		},
 		{
 			name: "a failed receipt and no operation",
@@ -376,7 +376,7 @@ func TestStatusOffersSetupWhereSetupGatesTheVerb(t *testing.T) {
 				failedReceipt(h)
 				return h
 			},
-			steps: []string{"bootwright setup"}, gated: []reconciliation.Verb{reconciliation.Apply},
+			steps: []string{"bootwright controller install"}, gated: []reconciliation.Verb{reconciliation.Apply},
 		},
 		{
 			name: "a failed receipt over an unknown apply",
@@ -386,7 +386,7 @@ func TestStatusOffersSetupWhereSetupGatesTheVerb(t *testing.T) {
 				failedReceipt(h)
 				return h
 			},
-			steps: []string{"bootwright setup"}, gated: []reconciliation.Verb{reconciliation.Apply, reconciliation.Destroy},
+			steps: []string{"bootwright controller install"}, gated: []reconciliation.Verb{reconciliation.Apply, reconciliation.Destroy},
 		},
 		{
 			name: "a failed receipt over a lagging apply",
@@ -395,7 +395,7 @@ func TestStatusOffersSetupWhereSetupGatesTheVerb(t *testing.T) {
 				failedReceipt(h)
 				return h
 			},
-			steps: []string{"bootwright apply --context lab", "bootwright setup"}, gated: []reconciliation.Verb{reconciliation.Destroy},
+			steps: []string{"bootwright apply --context lab", "bootwright controller install"}, gated: []reconciliation.Verb{reconciliation.Destroy},
 		},
 		{
 			name: "a failed receipt over a failed destroy",
@@ -405,7 +405,7 @@ func TestStatusOffersSetupWhereSetupGatesTheVerb(t *testing.T) {
 				failedReceipt(h)
 				return h
 			},
-			steps: []string{"bootwright setup"}, gated: []reconciliation.Verb{reconciliation.Destroy},
+			steps: []string{"bootwright controller install"}, gated: []reconciliation.Verb{reconciliation.Destroy},
 		},
 	} {
 		t.Run(row.name, func(t *testing.T) {
@@ -446,7 +446,7 @@ func requireSetupRefuses(t *testing.T, h *harness, verb reconciliation.Verb) {
 	}
 	reported := diagnostics.Of(err)
 	if len(reported) != 1 || (reported[0].Code != "controller.identity" && reported[0].Code != "controller.state") ||
-		!strings.Contains(reported[0].Remediation, "bootwright setup") {
+		!strings.Contains(reported[0].Remediation, "bootwright controller install") {
 		t.Fatalf("the %s status replaces with setup = %+v (%v), want a refusal naming setup", verb, reported, err)
 	}
 	if len(h.capability.applies) != applies || len(h.capability.destroys) != destroys || len(h.capability.observes) != observes {

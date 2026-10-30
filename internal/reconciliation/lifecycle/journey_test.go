@@ -1871,7 +1871,7 @@ func TestApplyRefusesAnUnpreparedControllerHost(t *testing.T) {
 	h := newHarness(t, "artifact-server-lab")
 	h.workspace.controller.Prepared = false
 	_, err := h.service.Apply(context.Background(), ApplyRequest{ContextName: "lab", SkipConfirmation: true})
-	if diagnostics.Of(err)[0].Code != "controller.identity" || !strings.Contains(diagnostics.Of(err)[0].Remediation, "bootwright setup") {
+	if diagnostics.Of(err)[0].Code != "controller.identity" || !strings.Contains(diagnostics.Of(err)[0].Remediation, "bootwright controller install") {
 		t.Fatalf("unprepared host error = %v", err)
 	}
 	if len(h.capability.applies) != 0 || h.workspace.binds != 0 {
@@ -2215,14 +2215,14 @@ func TestAnObservationThatNeverRanReportsWhy(t *testing.T) {
 		t.Fatal("an unproved effect completed")
 	}
 	h.capability.observeErr = diagnostics.NewFailureWithRemediation(
-		"controller.identity", "the controller runtime is unavailable", "", "run bootwright setup")
+		"controller.identity", "the controller runtime is unavailable", "", "run bootwright controller install")
 	resolved, err := h.service.Apply(context.Background(), ApplyRequest{ContextName: "lab", SkipConfirmation: true})
 	if err == nil {
 		t.Fatalf("a failed observation resolved cleanly = %+v", resolved.Receipt)
 	}
 	var named bool
 	for _, reported := range diagnostics.Of(err) {
-		if reported.Code == "controller.identity" && reported.Remediation == "run bootwright setup" {
+		if reported.Code == "controller.identity" && reported.Remediation == "run bootwright controller install" {
 			named = true
 		}
 		if strings.HasPrefix(reported.Message, "the outcome of artifact-server-lab is still unknown") {

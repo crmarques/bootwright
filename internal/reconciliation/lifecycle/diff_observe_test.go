@@ -420,7 +420,7 @@ func TestAnObservedDiffRefusesAnotherHostOrAnUnboundContext(t *testing.T) {
 		"another host": {func(f diffFixture) { f.service.host = testHost{identity: other} }, "this host is not the host the context is bound to", ""},
 		"an unbound context": {func(f diffFixture) { f.workspace.controller.State.Bindings = nil },
 			"this context is not bound to a controller host", "run bootwright diff --context lab without --observe"},
-		"no setup": {func(f diffFixture) { f.workspace.controller.Prepared = false }, "this host has no completed controller setup", "run bootwright setup"},
+		"no setup": {func(f diffFixture) { f.workspace.controller.Prepared = false }, "this host has no completed controller setup", "run bootwright controller install"},
 	} {
 		t.Run(name, func(t *testing.T) {
 			f, _, _ := observedFixture(t, "alpha")

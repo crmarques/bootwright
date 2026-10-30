@@ -44,11 +44,11 @@ func TestEveryAdapterRefusalClassMaps(t *testing.T) {
 			}
 			err, mapped := AdapterRefusal(check.reason, check.host, area, false)
 			var scoped *ScopedFailure
-			if !mapped || !errors.As(err, &scoped) || scoped.Code != "controller.setup" || scoped.Message != check.message || scoped.Routable != check.routable || scoped.Correction == "" {
+			if !mapped || !errors.As(err, &scoped) || scoped.Code != "controller.install" || scoped.Message != check.message || scoped.Routable != check.routable || scoped.Correction == "" {
 				t.Fatalf("AdapterRefusal(%q, %q) = %+v %v, want %q routable %v", check.reason, check.host, scoped, mapped, check.message, check.routable)
 			}
 			found := diagnostics.Of(err)
-			if len(found) != 1 || !strings.HasSuffix(found[0].Remediation, ", then rerun bootwright setup.") {
+			if len(found) != 1 || !strings.HasSuffix(found[0].Remediation, ", then rerun bootwright controller install.") {
 				t.Fatalf("the refusal renders %+v", found)
 			}
 			err, mapped = AdapterRefusal(check.reason, check.host, area, true)

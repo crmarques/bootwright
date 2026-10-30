@@ -27,19 +27,19 @@ intentional contract change; add future detail when a requested feature needs
 it.
 
 Agents never run `ansible-playbook` against a host, or a Bootwright command
-with effects (`apply`, `destroy`, `setup`, `media add`, `machine` or `cluster`
+with effects (`apply`, `destroy`, `controller install`/`uninstall`, `media add`, `machine` or `cluster`
 sessions, power or trust) or that reveals a secret, unless the owner asks in
 the conversation.
 
 For every tracked edit, follow
 [code-implementation](.agents/skills/code-implementation/SKILL.md), the single
 owner of verification, commits and integration, and the domain skills of [the
-skill index](.agents/skills/index.md). Repository guidance never authorizes a
+skill index](.agents/skills/index.md). Guidance never authorizes a
 push, release, or extra product scope.
 
-Commands (always through the pinned wrappers, never a bare `go`):
+Commands (through the pinned wrappers, never a bare `go`):
 
-- `make focus`: the checks this branch's diff selects.
+- `make focus`: checks this branch's diff selects.
 - `make quick`: formatting, vet, architecture suite, changed packages.
 - `make docs-check`: guidance links, cited paths and spec tables.
 - `./scripts/go test ./internal/<package>/...`: one package's tests.

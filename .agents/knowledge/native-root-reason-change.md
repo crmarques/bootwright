@@ -16,7 +16,7 @@ Observed 2026-10-14 on the owner's Fedora 44 controller (libdnf5 5.4.6.0, rpm
 the release, unprivileged through the BOOTWRIGHT_NATIVE_RESOLVE_QUALIFY
 harness X89 deleted.
 
-- Symptom: setup's native resolve refused `controller.setup: the provided
+- Symptom: setup's native resolve refused `controller.install: the provided
   native package solver refused its isolated dependency operation` with the
   generic remedy, after the metadata stage (about 40 s). The Go side mapped
   only the first line of the helper's stderr, `refused <class>`, and the class

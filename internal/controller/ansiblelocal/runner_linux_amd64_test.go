@@ -301,7 +301,7 @@ func TestAnUnstampedClientRefusalNamesTheReleaseStampCheck(t *testing.T) {
 			if len(found) != 1 || result.Outcome != want {
 				t.Fatalf("the refused client left the run %s (%v), want %s", result.Outcome, err, want)
 			}
-			named := found[0].Code == "controller.setup" && found[0].Message == "the oc of OpenShift client release 4.21.15 does not name its frozen release" &&
+			named := found[0].Code == "controller.install" && found[0].Message == "the oc of OpenShift client release 4.21.15 does not name its frozen release" &&
 				strings.Contains(found[0].Remediation, "passes the release-stamp check")
 			if named != check.named {
 				t.Fatalf("diagnostic %+v, want the release-stamp refusal: %v", found[0], check.named)
@@ -364,10 +364,10 @@ func TestARecordReadAfterTheFailedExitIsJudgedAsIfReadFirst(t *testing.T) {
 		{"a malformed record read after the exit", readAfter(malformed), "controller.unknown", incomplete, 5 * time.Second, nil, true, false},
 		{"a record out of its place read first", readFirst(misplaced), "controller.unknown", invalid, 5 * time.Second, nil, true, false},
 		{"a record out of its place read after the exit", readAfter(misplaced), "controller.unknown", invalid, 5 * time.Second, nil, true, false},
-		{"valid records read after the exit", readAfter(prepared + `{"phase":"continue"}\n` + completed), "controller.setup", failedExit, 5 * time.Second, nil, true, false},
-		{"a loaded record read after the exit", afterTheExit(`{"phase":"loaded"}\n` + prepared + `{"phase":"continue"}\n` + completed), "controller.setup", failedExit, 5 * time.Second, nil, false, false},
-		{"a continue record read after the exit", handoff + acknowledged(prepared) + afterTheExit(`{"phase":"continue"}\n`+completed), "controller.setup", failedExit, 5 * time.Second, nil, true, true},
-		{"a channel the drain closes after the exit", handoff + `(exec >/dev/null 2>&1 4<&-; sleep 5) & exit 2`, "controller.setup", failedExit, 200 * time.Millisecond, nil, true, false},
+		{"valid records read after the exit", readAfter(prepared + `{"phase":"continue"}\n` + completed), "controller.install", failedExit, 5 * time.Second, nil, true, false},
+		{"a loaded record read after the exit", afterTheExit(`{"phase":"loaded"}\n` + prepared + `{"phase":"continue"}\n` + completed), "controller.install", failedExit, 5 * time.Second, nil, false, false},
+		{"a continue record read after the exit", handoff + acknowledged(prepared) + afterTheExit(`{"phase":"continue"}\n`+completed), "controller.install", failedExit, 5 * time.Second, nil, true, true},
+		{"a channel the drain closes after the exit", handoff + `(exec >/dev/null 2>&1 4<&-; sleep 5) & exit 2`, "controller.install", failedExit, 200 * time.Millisecond, nil, true, false},
 	} {
 		t.Run(check.name, func(t *testing.T) {
 			launch, request, boundary := runnerFixture(t, "unused")
@@ -741,7 +741,7 @@ func TestAnAcknowledgementAfterAFailedExitKeepsThatExit(t *testing.T) {
 	} {
 		t.Run(check.name, func(t *testing.T) {
 			result, found := scriptedRun(t, check.script, nil)
-			if len(found) != 1 || found[0].Code != "controller.setup" || found[0].Message != "Ansible did not complete the authorized dependency operation" {
+			if len(found) != 1 || found[0].Code != "controller.install" || found[0].Message != "Ansible did not complete the authorized dependency operation" {
 				t.Fatalf("an acknowledgement nothing could receive reported %+v", found)
 			}
 			if result.Outcome != "failed" {
@@ -767,7 +767,7 @@ func TestAnUndeliveredContinueAcknowledgementAuthorizesNoInstallation(t *testing
 	} {
 		t.Run(check.name, func(t *testing.T) {
 			result, found := scriptedRun(t, check.script, nil)
-			if len(found) != 1 || found[0].Code != "controller.setup" || found[0].Message != "Ansible did not complete the authorized dependency operation" {
+			if len(found) != 1 || found[0].Code != "controller.install" || found[0].Message != "Ansible did not complete the authorized dependency operation" {
 				t.Fatalf("an undelivered continue acknowledgement reported %+v", found)
 			}
 			if result.Outcome != "failed" {

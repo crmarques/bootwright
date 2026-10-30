@@ -251,8 +251,8 @@ func (r *Runner) execute(ctx context.Context, command *cobra.Command, path strin
 	if err == nil && result.session != nil {
 		return result.session.ExitCode
 	}
-	setupJSON := (path == "setup" || path == "preflight controller") && selectedJSON(command)
-	if err != nil && !setupJSON && (path == "setup" || path == "preflight controller") && validControllerReport(result.controller) {
+	setupJSON := (path == "controller install" || path == "preflight controller") && selectedJSON(command)
+	if err != nil && !setupJSON && (path == "controller install" || path == "preflight controller") && validControllerReport(result.controller) {
 		if presentErr := writeControllerReport(r.config.Out, r.config.ErrOut, path, result.controller); presentErr != nil {
 			return 1
 		}
@@ -313,8 +313,8 @@ func (r *Runner) writeServiceDiagnostics(command *cobra.Command, path string, re
 	if usage {
 		exitCode = 2
 	}
-	if (path == "setup" || path == "preflight controller") && selectedStructured(command) && validControllerReport(result.controller) {
-		if path == "setup" && result.controller.DryRun {
+	if (path == "controller install" || path == "preflight controller") && selectedStructured(command) && validControllerReport(result.controller) {
+		if path == "controller install" && result.controller.DryRun {
 			return r.setupPlanFailure(path, result.controller, reported, exitCode)
 		}
 		if writeStructuredController(r.config.Out, path, result.controller, reported, exitCode) != nil {

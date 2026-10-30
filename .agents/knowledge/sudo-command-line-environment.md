@@ -28,7 +28,7 @@ $ sudo -n -- BWPROBE=1
 sudo: a password is required             # taken as the command
 ```
 
-So `-u #0 [-n] HTTPS_PROXY=... -- /path/bootwright setup` is correct, and
+So `-u #0 [-n] HTTPS_PROXY=... -- /path/bootwright controller install` is correct, and
 moving the assignment after `--` would make sudo try to execute a file named
 `HTTPS_PROXY=http://...`. `TestSupervisorPlacesRouteAssignmentsBeforeTheOptionTerminator`
 pins the exact vector; nothing else would catch a reordering, because the

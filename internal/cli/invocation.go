@@ -54,7 +54,7 @@ func ClassifyInvocation(args []string) InvocationClass {
 		return classification
 	}
 	ambient := contextFreeAcquisition(path, command.Flags())
-	if path == "setup" && (boolValue(command.Flags(), "dry-run") || boolValue(command.Flags(), "download-only")) {
+	if path == "controller install" && (boolValue(command.Flags(), "dry-run") || boolValue(command.Flags(), "download-only")) {
 		classification.AmbientRoute = ambient
 		return classification
 	}
@@ -73,13 +73,15 @@ func secretStdin(path string, flags *pflag.FlagSet) string {
 
 // contextFreeAcquisition decides from an admitted invocation's parsed flags
 // whether it acquires, or previews acquisition, before any context exists. One
-// command path can hold both shapes, so the path alone never decides: setup
+// command path can hold both shapes, so the path alone never decides: controller install
 // selects no context and always does, a controller preflight does only while
 // its final --context is empty, and a media import only from a URL.
 func contextFreeAcquisition(path string, flags *pflag.FlagSet) bool {
 	switch path {
-	case "setup":
+	case "controller install":
 		return true
+	case "controller uninstall":
+		return !boolValue(flags, "keep-packages")
 	case "preflight controller":
 		return stringValue(flags, "context") == ""
 	case "media add":
