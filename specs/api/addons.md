@@ -31,7 +31,7 @@ their kind-specific validation and built-in defaults.
 
 | Kind | Declares |
 | --- | --- |
-| `ClusterAddon` | One authored add-on definition; a reserved shape that validates but never runs. |
+| `ClusterAddon` | One authored add-on definition. An `olm` arm of the [executable shape](#executable-olm-add-ons) installs when a binding selects it; every other shape validates and is refused at `plan`. |
 | `ClusterAddonProfile` | One reusable selection of add-on configuration bound to clusters. |
 | `ClusterAddonBinding` | The add-ons of one cluster: its built-in packages and authored add-on bindings. |
 
@@ -112,46 +112,72 @@ records what a custom-package lifecycle would add.
 | `operatorGroup.name` | string | no | `namespace.name` | Applies only when the OperatorGroup block is present. |
 | `operatorGroup.targetNamespaces` | array of strings | no | `[namespace.name]` | Ordered non-empty namespace strings; an authored list replaces this default. |
 | `catalogSource` | object | no | — | Optional shipped CatalogSource. |
-| `catalogSource.name` | string | conditional | — | Required when the block is present. |
+| `catalogSource.name` | string | conditional | — | Required when the block is present; a DNS label other than `redhat-operators`, `certified-operators`, `community-operators` and `redhat-marketplace`. |
 | `catalogSource.image` | string | conditional | — | Required when the block is present. |
-| `catalogSource.displayName` | string | no | — | Optional display name. |
-| `catalogSource.publisher` | string | no | — | Optional publisher. |
-| `catalogSource.pollInterval` | string | no | — | Valid Go duration. |
-| `catalogSource.grpcPodConfig.securityContextConfig` | string | conditional | — | `legacy` or `restricted` when the block is present. |
+| `catalogSource.priority` | integer | conditional | — | Required when the block is present, with the package [Subscription](#subscription) rule. |
+| `catalogSource.pollInterval` | string | no | — | Positive Go duration. |
+| `catalogSource.securityContextConfig` | string | no | `restricted` | `legacy` or `restricted`. |
 | `subscription.name` | string | no | `subscription.package` | Kubernetes Subscription name. |
 | `subscription.package` | string | yes | — | OLM package. |
 | `subscription.channel` | string | yes | — | OLM channel. |
-| `subscription.startingCSV` | string | no | — | Optional starting CSV. |
+| `subscription.startingCSV` | string | yes | — | The exact CSV installed, and the only CSV Bootwright approves. |
 | `subscription.source` | string | yes after normalization | `catalogSource.name` when shipped | CatalogSource name. |
-| `subscription.sourceNamespace` | string | yes after normalization | `openshift-marketplace` | CatalogSource namespace. |
-| `subscription.installPlanApproval` | string | yes after normalization | `Automatic` | `Automatic` or `Manual`. |
-| `customResources` | array of objects | no | `[]` | Raw Kubernetes resources preserved as structured maps. |
+| `subscription.sourceNamespace` | string | yes after normalization | `openshift-marketplace` | CatalogSource namespace; `openshift-marketplace` when `catalogSource` is present. |
+| `customResources` | array of objects | no | `[]` | Ordered `{gate, resource}` entries. |
+| `customResources[].gate` | array of checks | yes | — | Non-empty; each check is one of the [readiness arms](#readiness) and must hold before the resource is created. |
+| `customResources[].resource` | object | yes | — | One raw Kubernetes resource preserved as a structured map. |
 
-The authored `subscription` defaults above (`installPlanApproval`
-`Automatic`, an optional `startingCSV`) are not the rules of the package
-[Subscription](#subscription), which requires `startingCSV` and approves only
-that CSV. No authored add-on runs, because the
-[lifecycle](../add-ons.md#refusal-table) refuses every binding that selects one.
-
-Not yet met: the authored defaults are not aligned with the package
-Subscription block, which the custom-package lifecycle of
-[B90](../milestones/m4.md#b90) requires before any authored add-on runs;
-tracked as B90. The full-platform nmstate example says so in a note.
+An authored `subscription` and `catalogSource` follow the package
+[Subscription](#subscription) rules: Bootwright subscribes `Manual` and
+approves only `startingCSV`. `catalogSource.displayName`, `publisher`,
+`grpcPodConfig` and `subscription.installPlanApproval` are
+[retired](../api.md#retired-fields).
 
 Omitting `operatorGroup` requests no group. `operatorGroup: {}` requests the
 namespace-named group targeting that namespace. An explicit `targetNamespaces`
 list remains as authored, including an empty list. Empty authored names are
 invalid, not a request for a default. `namespace.create` is unknown.
 
-A shipped catalog requires both name and image, and subscription source must
-match its name. When a shipped `catalogSource` is present and
-`namespace.management` is `managed`, `subscription.sourceNamespace` must differ from
-`namespace.name` because the CatalogSource namespace must already exist. Each
-custom resource requires string `apiVersion`, string `kind`, and
-`metadata.name`. A `kind: Secret` custom resource cannot carry `data` or
-`stringData` because authored desired state never embeds secret bytes. Other
-custom-resource keys remain an explicit open Kubernetes payload; the
-containing Bootwright schema remains closed.
+A shipped catalog requires name, image and priority, and subscription source
+must match its name. Bootwright creates the CatalogSource in
+`openshift-marketplace`, so `subscription.sourceNamespace` is
+`openshift-marketplace` when a shipped `catalogSource` is present.
+
+### Executable OLM add-ons
+
+An `olm` arm of the executable shape installs when a binding selects it, as one
+[instance](../add-ons.md#instances-and-blocks) of the add-on instance
+capability under the same [trust boundary](../add-ons.md#trust-boundary) as a
+built-in package. The shape has a managed namespace, an OperatorGroup targeting
+that namespace or every namespace, a required `startingCSV`, an owned catalog
+with an explicit `priority`, custom resources of its own namespace each behind a
+gate, and no inputs, Secret placement, manifest set or step. Every other shape
+validates and is refused at `plan`. Admission refuses these faults, each at its
+own indexed field:
+
+- `namespace.name` is `default`, `openshift`, `openshift-operators`,
+  `openshift-marketplace` or begins `kube-`; `namespace.labels` holds a key
+  under `bootwright.io/`.
+- A custom resource's `metadata` holds a member other than `name`, `namespace`,
+  `labels` and `annotations`, or a `labels` or `annotations` key under
+  `bootwright.io/`.
+- A custom resource lacks `metadata.namespace` or sets one other than
+  `namespace.name`.
+- A custom resource's API group is empty, has no dot, or is, or is a subdomain
+  of, `k8s.io`, `kubernetes.io`, `openshift.io`, `coreos.com` or `bootwright.io`.
+- A custom resource is a `Secret`: an authored add-on places no Secret.
+- A custom resource fails the content-safety rules of the
+  [cluster object program](../add-ons.md#the-cluster-object-program): a
+  `status`, `managedFields` or owner-mark member, or a template delimiter.
+- A custom resource's gate has no `resourceExists` check of
+  `apiextensions.k8s.io/v1` `CustomResourceDefinition` named `<plural>.<group>`,
+  because Bootwright cannot derive the plural from the kind.
+
+Not yet met: selection compiles no executable add-on into an instance, so the
+lifecycle still refuses every binding that selects an authored add-on, and the
+refusals that need a binding (another shape, an add-on named as a built-in
+package, a namespace, OLM package or catalog shared on one cluster) are not
+raised; tracked as [B90](../milestones/m4.md#b90).
 
 ### Manifest-set arm
 
@@ -166,7 +192,9 @@ contract's package, native-schema and content-safety gates.
 
 ### Readiness
 
-`readiness.timeout` is a positive Go duration and normalizes to `30m`.
+`readiness.timeout` is a positive Go duration of at most `5h50m` that is a
+whole number of seconds, and normalizes to `30m`; another value is refused at
+`$.spec.readiness.timeout` with `api.value`.
 `readiness.checks` is an ordered array. If it is still omitted on an OLM add-on
 after Environment defaults, built-in normalization supplies one `csvSucceeded`
 check with `namespace` equal to `olm.namespace.name` and `subscription` equal
@@ -183,8 +211,14 @@ Each check sets exactly one arm:
 | Arm | Exact fields |
 | --- | --- |
 | `csvSucceeded` | required `namespace` and `subscription` |
-| `condition` | required `apiVersion`, `kind`, `name`, and `condition: {type, status}`; optional `namespace` |
+| `condition` | required `apiVersion`, `kind`, `name`, and `condition: {type, status}` with `status` one of `True`, `False` and `Unknown`; optional `namespace` |
 | `resourceExists` | required `apiVersion`, `kind`, and `name`; optional `namespace` |
+
+No check of a gate, of `readiness.checks` or of a step's `requires` names a
+`v1` `Secret`: Bootwright reads none for an authored add-on. A `csvSucceeded`
+check of an OLM add-on names its own `namespace.name` and effective
+`subscription.name`. Each fault is refused at the check's indexed field with
+`api.invariant`.
 
 ### Steps
 
@@ -566,8 +600,8 @@ Environment kind defaults never select a package: a binding that declares no
 decides. After them, normalization materializes input `required`,
 readiness timeout, omitted OLM readiness checks, namespace management, present
 OperatorGroup name and target namespaces, and subscription name, source,
-source namespace and install-plan approval. These built-in defaults never
-create an OperatorGroup still omitted after Environment defaults or append to
+source namespace, and the OLM `catalogSource.securityContextConfig`. These
+built-in defaults never create an OperatorGroup still omitted after Environment defaults or append to
 a supplied readiness-check list. For a selected package, normalization
 materializes `timeout`, `subscription.source` (except for `fdf` and `gitlab`,
 which require it), `subscription.sourceNamespace` and

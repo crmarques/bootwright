@@ -409,6 +409,9 @@ These rules govern every new kind, field, arm, enum value and reference.
 | ClusterAddonBinding | `spec.packages.fdf.storageExportRef` | `spec.packages.fdf.cephConsumerRef`. |
 | ClusterAddonBinding | `spec.packages.gitops.bootstrap.credentials` | `spec.packages.gitops.bootstrap.credentialsRef`. |
 | ClusterAddon | `spec.inputs[].effects[].storageExportAttachment` | `cephConsumerAttachment`. |
+| ClusterAddon | `spec.olm.catalogSource.displayName`, `spec.olm.catalogSource.publisher` | Nothing: the CatalogSource Bootwright creates carries neither. |
+| ClusterAddon | `spec.olm.catalogSource.grpcPodConfig` | `spec.olm.catalogSource.securityContextConfig`, `legacy` or `restricted`. |
+| ClusterAddon | `spec.olm.subscription.installPlanApproval` | Nothing: Bootwright subscribes with Manual approval and approves only `subscription.startingCSV` ([OLM arm](api/addons.md#olm-arm)). |
 
 The unknown-field diagnostic for a listed path, authored on the object or under
 its kind's `spec.defaults` entry, says it is retired and names its replacement

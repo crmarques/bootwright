@@ -54,6 +54,10 @@ var retiredFields = []RetiredField{
 	{ClusterAddonBinding, "$.spec.packages.fdf.storageExportRef", "use spec.packages.fdf.cephConsumerRef, naming a CephConsumer"},
 	{ClusterAddonBinding, "$.spec.packages.gitops.bootstrap.credentials", "use spec.packages.gitops.bootstrap.credentialsRef"},
 	{ClusterAddon, "$.spec.inputs[].effects[].storageExportAttachment", "use cephConsumerAttachment"},
+	{ClusterAddon, "$.spec.olm.catalogSource.displayName", "remove it: the CatalogSource Bootwright creates carries no display name"},
+	{ClusterAddon, "$.spec.olm.catalogSource.publisher", "remove it: the CatalogSource Bootwright creates carries no publisher"},
+	{ClusterAddon, "$.spec.olm.catalogSource.grpcPodConfig", "use spec.olm.catalogSource.securityContextConfig, legacy or restricted"},
+	{ClusterAddon, "$.spec.olm.subscription.installPlanApproval", "remove it: Bootwright subscribes with Manual approval and approves only subscription.startingCSV"},
 }
 
 type RetiredValue struct {

@@ -7,6 +7,4 @@ spec:
   profileRefs: []
 
   addonRefs:
-    - openshift-virtualization
-    - nmstate
     - virtual-cluster-network

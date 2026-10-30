@@ -11,7 +11,18 @@ spec:
 
   addonRefs: []
 
+  # Illustrative channels and CSVs: replace them with the pairs your catalog serves.
   packages:
+    nmstate:
+      subscription:
+        channel: example-channel
+        startingCSV: kubernetes-nmstate-operator.v0.0.0
+
+    kubevirt:
+      subscription:
+        channel: example-channel
+        startingCSV: kubevirt-hyperconverged-operator.v0.0.0
+
     fdf:
       cephConsumerRef: ceph-multidc-01-odf-ocp-multidc-01
 

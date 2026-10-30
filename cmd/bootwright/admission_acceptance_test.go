@@ -159,13 +159,14 @@ func admissibleExampleSources(t *testing.T, withExtras bool) desiredstate.Source
 		case strings.Contains(body, "kind: Machine\n") && strings.Contains(body, "configRef: ocp-bare-metal-network"):
 			body = strings.ReplaceAll(body, "interface: ceph-public", "interface: bond0.200")
 		case strings.Contains(body, "kind: ClusterAddonBinding\n"):
-			head, _, found := strings.Cut(body, "  packages:\n")
-			if !found || !strings.Contains(body, "    fdf:\n") {
+			kept, _, found := strings.Cut(body, "    fdf:\n")
+			if !found {
 				t.Fatalf("%s: projection expects the fdf package", file.Path())
 			}
-			body = head
+			body = kept
 			if strings.Contains(body, "  profileRefs: []") {
-				body = mustReplaceOnce(t, file.Path(), body, "  addonRefs: []", "  addonRefs:\n    - nmstate")
+				head, _, _ := strings.Cut(body, "  packages:\n")
+				body = mustReplaceOnce(t, file.Path(), head, "  addonRefs: []", "  addonRefs:\n    - virtual-cluster-network") + "  packages:\n    nmstate:\n      subscription:\n        channel: example-channel\n        startingCSV: kubernetes-nmstate-operator.v0.0.0\n"
 			}
 		default:
 			files = append(files, file)
@@ -228,8 +229,8 @@ func requireObject(t *testing.T, catalog api.Catalog, kind api.Kind, name string
 // refuses those declarations explicitly rather than dropping them from input.
 func TestActualCLIRefusesFutureReferenceFeatures(t *testing.T) {
 	sources := exampleSources(t)
-	if len(sources.Files) != 103 {
-		t.Fatalf("reference discovery: got %d files, want 103", len(sources.Files))
+	if len(sources.Files) != 101 {
+		t.Fatalf("reference discovery: got %d files, want 101", len(sources.Files))
 	}
 	var out, errOut bytes.Buffer
 	code := run(context.Background(), []string{"validate", "-f", sources.Roots[0], "--output", "json"}, &out, &errOut)
@@ -450,7 +451,7 @@ func TestActualAdmissibleProjectionAdmitsEveryKindButTheRefusedFamilies(t *testi
 			t.Errorf("kind %s has no full-wiring positive admission coverage", kind)
 		}
 	}
-	if report.Counts != (compilation.Counts{FilesSeen: 91, ObjectsDecoded: 126}) {
+	if report.Counts != (compilation.Counts{FilesSeen: 89, ObjectsDecoded: 124}) {
 		t.Errorf("projection counts: %#v", report.Counts)
 	}
 	var warned []diagnostics.Diagnostic

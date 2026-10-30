@@ -21,7 +21,7 @@ func TestNormalizationPreservesPresenceAndOrder(t *testing.T) {
 	if !object.Spec().Equal(base) || got.Has("olm", "operatorGroup") || object.Spec().Has("readiness") {
 		t.Fatal("normalization changed authored presence or created an omitted OperatorGroup")
 	}
-	if got.Get("olm", "namespace", "management").Text() != "managed" || got.Get("olm", "subscription", "name").Text() != "example-operator" || got.Get("olm", "subscription", "source").Text() != "example-catalog" || got.Get("olm", "subscription", "sourceNamespace").Text() != "openshift-marketplace" || got.Get("olm", "subscription", "installPlanApproval").Text() != "Automatic" {
+	if got.Get("olm", "namespace", "management").Text() != "managed" || got.Get("olm", "subscription", "name").Text() != "example-operator" || got.Get("olm", "subscription", "source").Text() != "example-catalog" || got.Get("olm", "subscription", "sourceNamespace").Text() != "openshift-marketplace" || got.Has("olm", "subscription", "installPlanApproval") || got.Get("olm", "catalogSource", "securityContextConfig").Text() != "restricted" {
 		t.Fatal("OLM defaults were not resolved")
 	}
 	if got.Get("readiness", "timeout").Text() != "30m" || got.Get("readiness", "checks").Len() != 1 || got.Get("readiness", "checks").Items()[0].Get("csvSucceeded", "subscription").Text() != "example-operator" {
@@ -84,26 +84,14 @@ func TestAddonSemanticFailures(t *testing.T) {
 	}
 }
 
-func TestOLMCustomResourcesAndDefaults(t *testing.T) {
-	base := m("olm", m("namespace", m("name", s("operators")), "subscription", m("package", s("example"), "channel", s("stable"), "source", s("catalog")), "customResources", l(m("apiVersion", s("example.test/v1"), "kind", s("Widget"), "metadata", m("name", s("example")), "spec", m("count", api.IntegerValue("184467440737095516160"), "ratio", api.NumberValue("1.25"))))))
-	o, _ := Normalize(obj(api.ClusterAddon, "example", base), api.NewCatalog(nil))
+func TestOLMLabelsAndNormalizedDefaults(t *testing.T) {
+	o, _ := Normalize(obj(api.ClusterAddon, "example", executableSpec()), api.NewCatalog(nil))
 	if issues := Validate(o, api.NewCatalog(nil)); len(issues) != 0 {
 		t.Fatal(issues)
 	}
-	resource := o.Spec().Get("olm", "customResources").Items()[0]
+	resource := o.Spec().Get("olm", "customResources").Items()[0].Get("resource")
 	if resource.Get("spec", "count").Text() != "184467440737095516160" || resource.Get("spec", "ratio").Text() != "1.25" {
 		t.Fatal("native numeric values changed")
-	}
-	for _, payload := range []api.Value{
-		m("apiVersion", s("v1"), "kind", s("Secret"), "metadata", m("name", s("example")), "data", m()),
-		m("apiVersion", s("v1"), "kind", s("Secret"), "metadata", m("name", s("example")), "stringData", m("password", s("synthetic-private-marker"))),
-		m("apiVersion", s("v1"), "kind", s("ConfigMap"), "metadata", m("name", api.IntegerValue("1"))),
-	} {
-		bad := o.WithSpec(o.Spec().WithPath(l(payload), "olm", "customResources"))
-		issues := Validate(bad, api.NewCatalog(nil))
-		if len(issues) == 0 || strings.Contains(fmt.Sprint(issues), "synthetic-private-marker") {
-			t.Fatal("unsafe native resource validation")
-		}
 	}
 	for _, labels := range []api.Value{m("invalid key", s("value")), m("example.test/key", s(strings.Repeat("x", 64)))} {
 		if len(Validate(o.WithSpec(o.Spec().WithPath(labels, "olm", "namespace", "labels")), api.NewCatalog(nil))) == 0 {
@@ -112,6 +100,172 @@ func TestOLMCustomResourcesAndDefaults(t *testing.T) {
 	}
 	if issues := Validate(o.WithSpec(o.Spec().WithPath(m("example.test/key", s("")), "olm", "namespace", "labels")), api.NewCatalog(nil)); len(issues) != 0 {
 		t.Fatal(issues)
+	}
+}
+
+func executableSpec() api.Value {
+	crd := m("resourceExists", m("apiVersion", s("apiextensions.k8s.io/v1"), "kind", s("CustomResourceDefinition"), "name", s("widgets.example.test")))
+	resource := m("apiVersion", s("example.test/v1"), "kind", s("Widget"), "metadata", m("name", s("example"), "namespace", s("example-operator"), "labels", m("example.test/key", s("value"))), "spec", m("count", api.IntegerValue("184467440737095516160"), "ratio", api.NumberValue("1.25")))
+	return m("olm", m(
+		"namespace", m("name", s("example-operator")),
+		"catalogSource", m("name", s("example-catalog"), "image", s("registry.example.test/catalog:v1"), "priority", api.IntegerValue("100")),
+		"subscription", m("package", s("example"), "channel", s("stable"), "startingCSV", s("example.v1.0.0")),
+		"customResources", l(m("gate", l(crd), "resource", resource)),
+	), "readiness", m("timeout", s("45m")))
+}
+
+func executableIssues(t *testing.T, edit func(api.Value) api.Value) []api.Issue {
+	t.Helper()
+	o, _ := Normalize(obj(api.ClusterAddon, "example", edit(executableSpec())), api.NewCatalog(nil))
+	return Validate(o, api.NewCatalog(nil))
+}
+
+func hasIssue(issues []api.Issue, code, field string) bool {
+	return slices.ContainsFunc(issues, func(issue api.Issue) bool { return issue.Code == code && issue.Field == "$."+field })
+}
+
+func TestExecutableOLMShapeAdmitsAndRefusesEachRule(t *testing.T) {
+	const cr = "spec.olm.customResources[0]"
+	resourcePath := func(edit func(api.Value) api.Value) func(api.Value) api.Value {
+		return func(spec api.Value) api.Value {
+			item := spec.Get("olm", "customResources").Items()[0]
+			return spec.WithPath(l(item.With("resource", edit(item.Get("resource")))), "olm", "customResources")
+		}
+	}
+	gatePath := func(checks ...api.Value) func(api.Value) api.Value {
+		return func(spec api.Value) api.Value {
+			item := spec.Get("olm", "customResources").Items()[0]
+			return spec.WithPath(l(item.With("gate", l(checks...))), "olm", "customResources")
+		}
+	}
+	crd := func(name string) api.Value {
+		return m("resourceExists", m("apiVersion", s("apiextensions.k8s.io/v1"), "kind", s("CustomResourceDefinition"), "name", s(name)))
+	}
+	if issues := executableIssues(t, func(spec api.Value) api.Value { return spec }); len(issues) != 0 {
+		t.Fatal(issues)
+	}
+	for name, edit := range map[string]func(api.Value) api.Value{
+		"all-namespaces group":      func(v api.Value) api.Value { return v.WithPath(m("targetNamespaces", l()), "olm", "operatorGroup") },
+		"annotation":                resourcePath(func(r api.Value) api.Value { return r.WithPath(m("example.test/a", s("b")), "metadata", "annotations") }),
+		"timeout at the ceiling":    func(v api.Value) api.Value { return v.WithPath(s("5h50m"), "readiness", "timeout") },
+		"gate with a further check": gatePath(crd("widgets.example.test"), m("condition", m("apiVersion", s("apps/v1"), "kind", s("Deployment"), "name", s("x"), "namespace", s("example-operator"), "condition", m("type", s("Available"), "status", s("Unknown"))))),
+		"CSV check of its own": func(v api.Value) api.Value {
+			return v.WithPath(l(m("csvSucceeded", m("namespace", s("example-operator"), "subscription", s("example")))), "readiness", "checks")
+		},
+		"group that only looks nested": func(v api.Value) api.Value {
+			return gatePath(crd("widgets.example.notk8s.io"))(resourcePath(func(r api.Value) api.Value { return r.With("apiVersion", s("example.notk8s.io/v1")) })(v))
+		},
+	} {
+		t.Run("admits "+name, func(t *testing.T) {
+			if issues := executableIssues(t, edit); len(issues) != 0 {
+				t.Fatal(issues)
+			}
+		})
+	}
+	if issues := executableIssues(t, func(v api.Value) api.Value {
+		item := v.Get("olm", "customResources").Items()[0]
+		return v.WithPath(s("kubernetes-ops"), "olm", "namespace", "name").WithPath(l(item.WithPath(s("kubernetes-ops"), "resource", "metadata", "namespace")), "olm", "customResources")
+	}); len(issues) != 0 {
+		t.Fatal("a namespace that only begins with kube was refused", issues)
+	}
+	cases := []struct {
+		name, code, field string
+		edit              func(api.Value) api.Value
+	}{
+		{"default namespace", "api.invariant", "spec.olm.namespace.name", func(v api.Value) api.Value { return v.WithPath(s("default"), "olm", "namespace", "name") }},
+		{"openshift namespace", "api.invariant", "spec.olm.namespace.name", func(v api.Value) api.Value { return v.WithPath(s("openshift"), "olm", "namespace", "name") }},
+		{"operators namespace", "api.invariant", "spec.olm.namespace.name", func(v api.Value) api.Value { return v.WithPath(s("openshift-operators"), "olm", "namespace", "name") }},
+		{"marketplace namespace", "api.invariant", "spec.olm.namespace.name", func(v api.Value) api.Value { return v.WithPath(s("openshift-marketplace"), "olm", "namespace", "name") }},
+		{"kube namespace", "api.invariant", "spec.olm.namespace.name", func(v api.Value) api.Value { return v.WithPath(s("kube-system"), "olm", "namespace", "name") }},
+		{"bootwright namespace label", "api.invariant", "spec.olm.namespace.labels", func(v api.Value) api.Value {
+			return v.WithPath(m("bootwright.io/owner", s("x")), "olm", "namespace", "labels")
+		}},
+		{"default catalog name", "api.invariant", "spec.olm.catalogSource.name", func(v api.Value) api.Value { return v.WithPath(s("redhat-operators"), "olm", "catalogSource", "name") }},
+		{"foreign source namespace", "api.invariant", "spec.olm.subscription.sourceNamespace", func(v api.Value) api.Value {
+			return v.WithPath(s("example-operator"), "olm", "subscription", "sourceNamespace")
+		}},
+		{"fractional timeout", "api.value", "spec.readiness.timeout", func(v api.Value) api.Value { return v.WithPath(s("1500ms"), "readiness", "timeout") }},
+		{"timeout over ceiling", "api.value", "spec.readiness.timeout", func(v api.Value) api.Value { return v.WithPath(s("5h50m1s"), "readiness", "timeout") }},
+		{"metadata member", "api.invariant", cr + ".resource.metadata.ownerReferences", resourcePath(func(r api.Value) api.Value { return r.WithPath(l(), "metadata", "ownerReferences") })},
+		{"metadata finalizers", "api.invariant", cr + ".resource.metadata.finalizers", resourcePath(func(r api.Value) api.Value { return r.WithPath(l(), "metadata", "finalizers") })},
+		{"bootwright label", "api.invariant", cr + ".resource.metadata.labels", resourcePath(func(r api.Value) api.Value { return r.WithPath(m("bootwright.io/owner", s("x")), "metadata", "labels") })},
+		{"bootwright annotation", "api.invariant", cr + ".resource.metadata.annotations", resourcePath(func(r api.Value) api.Value {
+			return r.WithPath(m("bootwright.io/owner", s("x")), "metadata", "annotations")
+		})},
+		{"missing namespace", "api.required", cr + ".resource.metadata.namespace", resourcePath(func(r api.Value) api.Value { return r.With("metadata", m("name", s("example"))) })},
+		{"other namespace", "api.invariant", cr + ".resource.metadata.namespace", resourcePath(func(r api.Value) api.Value { return r.WithPath(s("other"), "metadata", "namespace") })},
+		{"core group", "api.invariant", cr + ".resource.apiVersion", resourcePath(func(r api.Value) api.Value { return r.With("apiVersion", s("v1")) })},
+		{"group without dot", "api.invariant", cr + ".resource.apiVersion", resourcePath(func(r api.Value) api.Value { return r.With("apiVersion", s("example/v1")) })},
+		{"k8s.io group", "api.invariant", cr + ".resource.apiVersion", resourcePath(func(r api.Value) api.Value { return r.With("apiVersion", s("k8s.io/v1")) })},
+		{"subdomain of k8s.io", "api.invariant", cr + ".resource.apiVersion", resourcePath(func(r api.Value) api.Value { return r.With("apiVersion", s("apps.k8s.io/v1")) })},
+		{"kubernetes.io group", "api.invariant", cr + ".resource.apiVersion", resourcePath(func(r api.Value) api.Value { return r.With("apiVersion", s("example.kubernetes.io/v1")) })},
+		{"openshift.io group", "api.invariant", cr + ".resource.apiVersion", resourcePath(func(r api.Value) api.Value { return r.With("apiVersion", s("config.openshift.io/v1")) })},
+		{"coreos.com group", "api.invariant", cr + ".resource.apiVersion", resourcePath(func(r api.Value) api.Value { return r.With("apiVersion", s("operators.coreos.com/v1")) })},
+		{"bootwright.io group", "api.invariant", cr + ".resource.apiVersion", resourcePath(func(r api.Value) api.Value { return r.With("apiVersion", s("bootwright.io/v1alpha1")) })},
+		{"secret kind", "api.invariant", cr + ".resource.kind", resourcePath(func(r api.Value) api.Value { return r.With("kind", s("Secret")) })},
+		{"status in body", "api.invariant", cr + ".resource", resourcePath(func(r api.Value) api.Value { return r.With("status", m("ready", api.BoolValue(true))) })},
+		{"template delimiter", "api.invariant", cr + ".resource", resourcePath(func(r api.Value) api.Value { return r.WithPath(s("{{ secret }}"), "spec", "value") })},
+		{"gate without CRD", "api.invariant", cr + ".gate", gatePath(m("resourceExists", m("apiVersion", s("example.test/v1"), "kind", s("Gadget"), "name", s("x"))))},
+		{"gate CRD of another group", "api.invariant", cr + ".gate", gatePath(crd("widgets.other.test"))},
+		{"gate CRD without plural", "api.invariant", cr + ".gate", gatePath(crd(".example.test"))},
+		{"gate CRD of a subgroup", "api.invariant", cr + ".gate", gatePath(crd("widgets.sub.example.test"))},
+		{"gate CRD wrong version", "api.invariant", cr + ".gate", gatePath(m("resourceExists", m("apiVersion", s("apiextensions.k8s.io/v1beta1"), "kind", s("CustomResourceDefinition"), "name", s("widgets.example.test"))))},
+		{"gate Secret", "api.invariant", cr + ".gate[1]", gatePath(crd("widgets.example.test"), m("resourceExists", m("apiVersion", s("v1"), "kind", s("Secret"), "name", s("s"), "namespace", s("example-operator"))))},
+		{"gate foreign CSV", "api.invariant", cr + ".gate[1].csvSucceeded", gatePath(crd("widgets.example.test"), m("csvSucceeded", m("namespace", s("other"), "subscription", s("example"))))},
+		{"gate invalid condition status", "api.value", cr + ".gate[1]", gatePath(crd("widgets.example.test"), m("condition", m("apiVersion", s("apps/v1"), "kind", s("Deployment"), "name", s("x"), "namespace", s("example-operator"), "condition", m("type", s("Available"), "status", s("Maybe")))))},
+		{"readiness Secret", "api.invariant", "spec.readiness.checks[0]", func(v api.Value) api.Value {
+			return v.WithPath(l(m("condition", m("apiVersion", s("v1"), "kind", s("Secret"), "name", s("s"), "namespace", s("example-operator"), "condition", m("type", s("x"), "status", s("True"))))), "readiness", "checks")
+		}},
+		{"readiness foreign namespace CSV", "api.invariant", "spec.readiness.checks[0].csvSucceeded", func(v api.Value) api.Value {
+			return v.WithPath(l(m("csvSucceeded", m("namespace", s("other"), "subscription", s("example")))), "readiness", "checks")
+		}},
+		{"readiness foreign subscription CSV", "api.invariant", "spec.readiness.checks[0].csvSucceeded", func(v api.Value) api.Value {
+			return v.WithPath(l(m("csvSucceeded", m("namespace", s("example-operator"), "subscription", s("other")))), "readiness", "checks")
+		}},
+		{"readiness invalid status", "api.value", "spec.readiness.checks[0]", func(v api.Value) api.Value {
+			return v.WithPath(l(m("condition", m("apiVersion", s("apps/v1"), "kind", s("Deployment"), "name", s("x"), "namespace", s("example-operator"), "condition", m("type", s("Available"), "status", s("yes"))))), "readiness", "checks")
+		}},
+		{"step requirement Secret", "api.invariant", "spec.steps[0].requires[0]", func(v api.Value) api.Value {
+			return v.With("steps", l(m("name", s("s"), "requires", l(m("resourceExists", m("apiVersion", s("v1"), "kind", s("Secret"), "name", s("s")))))))
+		}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			issues := executableIssues(t, tc.edit)
+			if !hasIssue(issues, tc.code, tc.field) {
+				t.Fatalf("want %s at %s, got %v", tc.code, tc.field, issues)
+			}
+			for _, issue := range issues {
+				if issue.Remediation == "" || strings.HasSuffix(issue.Message, ".") || issue.Message != strings.ToLower(issue.Message[:1])+issue.Message[1:] {
+					t.Fatalf("issue style: %+v", issue)
+				}
+			}
+		})
+	}
+	issues := executableIssues(t, func(v api.Value) api.Value {
+		return v.WithPath(l(m("gate", l(), "resource", v.Get("olm", "customResources").Items()[0].Get("resource").With("apiVersion", s("bootwright.io/v1")))), "olm", "customResources")
+	})
+	if len(issues) != 1 {
+		t.Fatalf("one fault must raise one diagnostic: %v", issues)
+	}
+}
+
+func TestExecutableOLMPartialFragments(t *testing.T) {
+	for _, spec := range []api.Value{
+		m("olm", m("customResources", l(m("resource", m("apiVersion", s("example.test/v1")))))),
+		m("olm", m("customResources", l(m("gate", l())))),
+		m("readiness", m("timeout", s("30m"), "checks", l(m("csvSucceeded", m("namespace", s("a"), "subscription", s("b")))))),
+	} {
+		if issues := ValidatePartial(obj(api.ClusterAddon, "", spec), api.NewCatalog(nil)); len(issues) != 0 {
+			t.Fatal("incomplete fragment rejected", issues)
+		}
+	}
+	bad := m("olm", m("namespace", m("name", s("default")), "customResources", l(m("resource", m("apiVersion", s("k8s.io/v1"), "kind", s("Secret"))))))
+	issues := ValidatePartial(obj(api.ClusterAddon, "", bad), api.NewCatalog(nil))
+	for _, field := range []string{"spec.olm.namespace.name", "spec.olm.customResources[0].resource.apiVersion", "spec.olm.customResources[0].resource.kind"} {
+		if !hasIssue(issues, "api.invariant", field) {
+			t.Fatalf("missing %s in %v", field, issues)
+		}
 	}
 }
 

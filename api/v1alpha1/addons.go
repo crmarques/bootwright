@@ -52,22 +52,21 @@ func addonOLMSchema() *Shape {
 		required("namespace", record(required("name", name()), defaulted("management", enumeration("managed", "external"), StringValue("managed")), field("labels", stringsMap()))),
 		field("operatorGroup", record(field("name", dns()), field("targetNamespaces", array(name())))),
 		field("catalogSource", record(
-			required("name", dns()), required("image", image()), field("displayName", text()), field("publisher", text()), field("pollInterval", duration()),
-			field("grpcPodConfig", record(required("securityContextConfig", enumeration("legacy", "restricted")))),
+			required("name", name()), required("image", image()), required("priority", integer("", "")), field("pollInterval", duration()),
+			defaulted("securityContextConfig", enumeration("legacy", "restricted"), StringValue("restricted")),
 		)),
 		required("subscription", record(
-			field("name", dns()), required("package", nonempty()), required("channel", nonempty()), field("startingCSV", nonempty()),
+			field("name", dns()), required("package", nonempty()), required("channel", nonempty()), required("startingCSV", nonempty()),
 			required("source", dns()), defaulted("sourceNamespace", name(), StringValue("openshift-marketplace")),
-			defaulted("installPlanApproval", enumeration("Automatic", "Manual"), StringValue("Automatic")),
 		)),
-		field("customResources", array(native())),
+		field("customResources", array(record(required("gate", nonemptyArray(array(addonReadinessSchema()))), required("resource", native())))),
 	)
 }
 
 func addonReadinessSchema() *Shape {
 	return choice(
 		field("csvSucceeded", record(required("namespace", name()), required("subscription", dns()))),
-		field("condition", record(required("apiVersion", nonempty()), required("kind", nonempty()), required("name", nonempty()), field("namespace", name()), required("condition", record(required("type", nonempty()), required("status", nonempty()))))),
+		field("condition", record(required("apiVersion", nonempty()), required("kind", nonempty()), required("name", nonempty()), field("namespace", name()), required("condition", record(required("type", nonempty()), required("status", enumeration("True", "False", "Unknown")))))),
 		field("resourceExists", record(required("apiVersion", nonempty()), required("kind", nonempty()), required("name", nonempty()), field("namespace", name()))),
 	)
 }

@@ -15,7 +15,10 @@ credential references, devices and topology are synthetic; consult the
   `ocp-01` and `ocp-02` (3 physical Machines each), and a stretch CephCluster
   of 7 Machines whose witness holds MON placement without OSD devices. Start at
   [environment.yaml](environment.yaml); the four Data Foundation bindings select
-  the built-in `fdf` package with separate managed CephConsumers.
+  the built-in `fdf` package with separate managed CephConsumers. The two
+  physical clusters also select the built-in `nmstate` and `kubevirt` packages,
+  and the `virtual-cluster-network` manifest-set add-on that their profile
+  selects requires the `nmstate` capability the package provides.
 - Resolving those errors would not make it deployable: physical OpenShift,
   KubeVirt, security choices and add-on realization have further lifecycle limits.
 - Placeholders: the Ceph entitlement sets `license.accept: true` for authoring

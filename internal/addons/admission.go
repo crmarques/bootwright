@@ -30,6 +30,9 @@ func Normalize(o api.Object, _ api.Catalog) (api.Object, []api.Issue) {
 			if image := olm.Get("catalogSource", "image"); image.Present() {
 				olm = olm.WithPath(api.StringValue(api.CanonicalImage(image.Text())), "catalogSource", "image")
 			}
+			if catalog := olm.Get("catalogSource"); catalog.Present() {
+				olm = olm.With("catalogSource", catalog.Default("securityContextConfig", api.StringValue("restricted")))
+			}
 			if ns := olm.Get("namespace"); ns.Present() {
 				olm = olm.With("namespace", ns.Default("management", api.StringValue("managed")))
 			}
@@ -44,7 +47,7 @@ func Normalize(o api.Object, _ api.Catalog) (api.Object, []api.Issue) {
 				if source := olm.Get("catalogSource", "name").Text(); source != "" {
 					sub = sub.Default("source", api.StringValue(source))
 				}
-				sub = sub.Default("sourceNamespace", api.StringValue("openshift-marketplace")).Default("installPlanApproval", api.StringValue("Automatic"))
+				sub = sub.Default("sourceNamespace", api.StringValue("openshift-marketplace"))
 				olm = olm.With("subscription", sub)
 			}
 			s = s.With("olm", olm)
@@ -144,8 +147,11 @@ func validateDeclaration(o api.Object, c api.Catalog, partial bool) []api.Issue 
 		if source := olm.Get("subscription", "source"); source.Present() && catalog.Get("name").Text() != "" && source.Text() != catalog.Get("name").Text() {
 			issues = append(issues, addonIssue("api.invariant", "spec.olm.subscription.source", "Subscription source must match the shipped CatalogSource name.", "set olm.subscription.source to olm.catalogSource.name"))
 		}
-		if (!partial || olm.Has("namespace", "management")) && olm.Get("namespace", "management").Text() != "external" && olm.Get("namespace", "name").Text() != "" && olm.Get("subscription", "sourceNamespace").Text() == olm.Get("namespace", "name").Text() {
-			issues = append(issues, addonIssue("api.invariant", "spec.olm.subscription.sourceNamespace", "A shipped CatalogSource must use a namespace distinct from a managed operator namespace.", "set olm.subscription.sourceNamespace to a namespace other than olm.namespace.name"))
+		if sourceNamespace := olm.Get("subscription", "sourceNamespace"); sourceNamespace.Present() && sourceNamespace.Text() != "openshift-marketplace" {
+			issues = append(issues, addonIssue("api.invariant", "spec.olm.subscription.sourceNamespace", "A shipped CatalogSource is created in openshift-marketplace, so subscription sourceNamespace must be openshift-marketplace.", "set olm.subscription.sourceNamespace to openshift-marketplace, or remove olm.catalogSource"))
+		}
+		if slices.Contains(DefaultCatalogs(), catalog.Get("name").Text()) {
+			issues = append(issues, addonIssue("api.invariant", "spec.olm.catalogSource.name", "Owned catalog "+catalog.Get("name").Text()+" has the name of a default catalog.", "choose a catalog name other than "+strings.Join(DefaultCatalogs(), ", ")))
 		}
 	}
 	for _, label := range olm.Get("namespace", "labels").Fields() {
@@ -154,24 +160,9 @@ func validateDeclaration(o api.Object, c api.Catalog, partial bool) []api.Issue 
 			break
 		}
 	}
-	for i, resource := range olm.Get("customResources").Items() {
-		if len(issues) >= maxIssues {
-			return issues[:maxIssues]
-		}
-		field := indexed("spec.olm.customResources", i)
-		for _, member := range []string{"apiVersion", "kind"} {
-			value := resource.Get(member)
-			if (!partial || value.Present()) && (value.Type() != api.String || value.Text() == "") {
-				issues = append(issues, addonIssue("api.value", field+"."+member, "A custom resource requires a non-empty string identity.", "set apiVersion and kind of the custom resource to non-empty strings"))
-			}
-		}
-		if name := resource.Get("metadata", "name"); (!partial || name.Present()) && (name.Type() != api.String || name.Text() == "") {
-			issues = append(issues, addonIssue("api.value", field+".metadata.name", "A custom resource requires a non-empty string name.", "set metadata.name of the custom resource to a non-empty string"))
-		}
-		if resource.Get("kind").Text() == "Secret" && (resource.Has("data") || resource.Has("stringData")) {
-			issues = append(issues, addonIssue("api.invariant", field, "Custom Secret resources cannot contain inline data or stringData.", "remove data and stringData from the custom Secret resource and supply the value through a Secret input"))
-		}
-	}
+	issues = append(issues, validateOLMNamespace(olm)...)
+	issues = append(issues, validateCustomResources(olm, partial)...)
+	issues = append(issues, validateReadiness(s, partial)...)
 	issues = append(issues, validateManifests(s.Get("manifestSet", "manifests"), "spec.manifestSet.manifests", partial)...)
 	inputsByName := uniqueNamedValues(s.Get("inputs"), "name")
 	for i, step := range s.Get("steps").Items() {
