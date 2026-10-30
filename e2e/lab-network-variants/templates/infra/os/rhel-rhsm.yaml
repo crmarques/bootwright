@@ -1,0 +1,15 @@
+{{- if .Values.registration.enabled }}
+apiVersion: bootwright.io/v1alpha1
+kind: Entitlement
+metadata:
+  name: rhel-rhsm
+
+spec:
+  type: redhatRhel
+
+  rhsm:
+    management: managed
+    organizationRef: rhsm-org
+    activationKeyRef: rhsm-key
+    connectToInsights: false
+{{- end }}

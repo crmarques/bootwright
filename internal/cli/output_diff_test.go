@@ -150,11 +150,80 @@ func TestDiffNamesWhatAnObservedComparisonReadAndDidNotCompare(t *testing.T) {
 		"Against:  what apply op-3f9a0c12 (done) realized, read live: 2 blocks observed, 1 unknown, 3 not projected\n",
 		"Build:    this executable plans 1 block of op-3f9a0c12 differently from the build that froze it; --observe does not read it\n",
 		"diff real/CephClient/rbd-reader desired/CephClient/rbd-reader\n# plan: same (ceph-client-rbd-reader); realized: done\n# not compared: spec.clusterRef, spec.role\n# ceph-pool-rbd-data: pool listed without its size\n",
-		"1 object differs: 1 changed, 0 added, 0 removed, 0 unknown; 1 unchanged; 1 compared as applied\n",
+		"1 object differs: 1 changed, 0 added, 0 removed, 0 unknown; 1 unchanged; 1 compared as applied; 1 object partially realized.\n",
 	} {
 		if !strings.Contains(text, want) {
 			t.Errorf("output lacks %q:\n%s", want, text)
 		}
+	}
+}
+
+func TestDiffReportsPartialRealizationWithoutComparedFieldDifferences(t *testing.T) {
+	for _, state := range []string{"partial", "present"} {
+		t.Run(state, func(t *testing.T) {
+			result := diffPartial()
+			result.Objects[0].Real.State = state
+			want := "No differences in compared fields: 1 object compared, 0 as applied; 1 object partially realized.\n"
+			if state == "present" {
+				want = "No differences: 1 object compared, 0 as applied.\n"
+			}
+			if text := writeDiffText(t, result); !strings.HasSuffix(text, want) {
+				t.Fatalf("comparison lacks footer %q:\n%s", want, text)
+			}
+			var out bytes.Buffer
+			status, err := writeDiffStatus(context.Background(), &out, result, true, true, stateencoding.YAML, stateencoding.JSON)
+			if err != nil || status != 0 {
+				t.Fatalf("JSON status = %d (%v), want 0", status, err)
+			}
+			var envelope struct {
+				Result diffResult
+			}
+			if err := json.Unmarshal(out.Bytes(), &envelope); err != nil {
+				t.Fatal(err)
+			}
+			comparison := envelope.Result
+			if comparison.Summary != (diffSummary{None: 1}) || len(comparison.Objects) != 1 {
+				t.Fatalf("JSON comparison changed: %+v", comparison)
+			}
+			object := comparison.Objects[0]
+			if object.Difference != differenceNone || object.Real.State != state || len(object.Patch) != 0 || string(object.Real.Document) != "null" || string(object.Desired.Document) != "null" {
+				t.Fatalf("JSON object changed: %+v", object)
+			}
+		})
+	}
+}
+
+func TestDiffSummaryNamesPartialRealizations(t *testing.T) {
+	for _, test := range []struct {
+		name   string
+		result func() *lifecycle.DiffResult
+		want   string
+	}{
+		{"several partial objects", func() *lifecycle.DiffResult {
+			result := diffPartial()
+			other := result.Objects[0]
+			other.Name = "rhel-02"
+			other.Real.Object, other.Desired = diffMachine(other.Name), diffMachine(other.Name)
+			result.Objects = append(result.Objects, other)
+			return result
+		}, "No differences in compared fields: 2 objects compared, 0 as applied; 2 objects partially realized.\n"},
+		{"partial object compared as applied", func() *lifecycle.DiffResult {
+			result := diffPartial()
+			result.Objects[0].Real.Source = "applied"
+			return result
+		}, "No differences in compared fields: 1 object compared, 1 as applied; 1 object partially realized.\n"},
+		{"partial beside field differences", diffObserved, "2 objects differ: 1 changed, 0 added, 0 removed, 1 unknown; 2 unchanged; 1 compared as applied; 1 object partially realized.\n"},
+		{"partial without a document normalizes to unknown", func() *lifecycle.DiffResult {
+			result := diffPartial()
+			result.Objects[0].Real.Object = nil
+			return result
+		}, "1 object differs: 0 changed, 0 added, 0 removed, 1 unknown; 0 unchanged; 0 compared as applied\n"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			if text := writeDiffText(t, test.result()); !strings.HasSuffix(text, test.want) {
+				t.Fatalf("comparison lacks footer %q:\n%s", test.want, text)
+			}
+		})
 	}
 }
 
@@ -206,7 +275,7 @@ func TestDiffSummaryNamesOneObjectInTheSingular(t *testing.T) {
 		{"several differ", diffSummary{Changed: 1, Added: 1}, 2, "2 objects differ: 1 changed, 1 added, 0 removed, 0 unknown; 0 unchanged"},
 	} {
 		t.Run(test.name, func(t *testing.T) {
-			if got := diffSummaryLine(result, test.summary, test.objects); got != test.want {
+			if got := diffSummaryLine(result, test.summary, test.objects, 0); got != test.want {
 				t.Fatalf("summary line = %q, want %q", got, test.want)
 			}
 		})
@@ -261,9 +330,11 @@ func TestDiffExitCodeExitsThreeOnlyOnADifferingOrUnknownObject(t *testing.T) {
 		{"differences with the flag", diffRecorded, []string{"diff", "--exit-code"}, 3},
 		{"an unknown object with the flag", diffUnknown, []string{"diff", "--exit-code"}, 3},
 		{"no difference with the flag", diffNone, []string{"diff", "--exit-code"}, 0},
+		{"partial with equal compared fields", diffPartial, []string{"diff", "--observe", "--exit-code"}, 0},
 		{"differences in JSON with the flag", diffRecorded, []string{"diff", "--exit-code", "--output", "json"}, 3},
 		{"differences in JSON without the flag", diffRecorded, []string{"diff", "--output", "json"}, 0},
 		{"no difference in JSON with the flag", diffNone, []string{"diff", "--exit-code", "--output", "json"}, 0},
+		{"partial with equal compared fields in JSON", diffPartial, []string{"diff", "--observe", "--exit-code", "--output", "json"}, 0},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			record := &dispatchRecord{}

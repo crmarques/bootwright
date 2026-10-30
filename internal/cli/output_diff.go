@@ -332,10 +332,14 @@ func displayDiff(result *lifecycle.DiffResult, rows []diffRow) diffResult {
 
 func diffText(result *lifecycle.DiffResult, rows []diffRow) string {
 	var text strings.Builder
+	partial := 0
 	for _, line := range diffHeader(result) {
 		text.WriteString(escapeDisplayLine(line) + "\n")
 	}
 	for _, row := range rows {
+		if row.object.Real.State == sidePartial {
+			partial++
+		}
 		if row.difference == differenceNone && row.object.Real.State != sidePartial {
 			continue
 		}
@@ -347,7 +351,7 @@ func diffText(result *lifecycle.DiffResult, rows []diffRow) string {
 			text.WriteString(escapeDisplayLine(line) + "\n")
 		}
 	}
-	text.WriteString("\n" + escapeDisplayLine(diffSummaryLine(result, diffSummaryOf(rows, result.Observed), len(rows))) + "\n")
+	text.WriteString("\n" + escapeDisplayLine(diffSummaryLine(result, diffSummaryOf(rows, result.Observed), len(rows), partial)) + "\n")
 	return text.String()
 }
 
@@ -437,19 +441,30 @@ func diffObjectLines(row diffRow) []string {
 	return lines
 }
 
-func diffSummaryLine(result *lifecycle.DiffResult, summary diffSummary, objects int) string {
+func diffSummaryLine(result *lifecycle.DiffResult, summary diffSummary, objects, partial int) string {
 	differing := summary.Changed + summary.Added + summary.Removed + summary.Unknown
+	var line string
 	if !diffDiffers(summary) {
-		line := "No differences: " + strconv.Itoa(objects) + " " + plural(objects, "object", "objects") + " compared"
+		line = "No differences"
+		if partial > 0 {
+			line += " in compared fields"
+		}
+		line += ": " + strconv.Itoa(objects) + " " + plural(objects, "object", "objects") + " compared"
 		if result.Observed {
 			line += ", " + strconv.Itoa(summary.Applied) + " as applied"
 		}
-		return line + "."
+		if partial == 0 {
+			return line + "."
+		}
+	} else {
+		line = strconv.Itoa(differing) + " " + plural(differing, "object differs", "objects differ") + ": " + strconv.Itoa(summary.Changed) + " changed, " + strconv.Itoa(summary.Added) + " added, " +
+			strconv.Itoa(summary.Removed) + " removed, " + strconv.Itoa(summary.Unknown) + " unknown; " + strconv.Itoa(summary.None) + " unchanged"
+		if result.Observed {
+			line += "; " + strconv.Itoa(summary.Applied) + " compared as applied"
+		}
 	}
-	line := strconv.Itoa(differing) + " " + plural(differing, "object differs", "objects differ") + ": " + strconv.Itoa(summary.Changed) + " changed, " + strconv.Itoa(summary.Added) + " added, " +
-		strconv.Itoa(summary.Removed) + " removed, " + strconv.Itoa(summary.Unknown) + " unknown; " + strconv.Itoa(summary.None) + " unchanged"
-	if result.Observed {
-		line += "; " + strconv.Itoa(summary.Applied) + " compared as applied"
+	if partial > 0 {
+		line += "; " + strconv.Itoa(partial) + " " + plural(partial, "object", "objects") + " partially realized."
 	}
 	return line
 }

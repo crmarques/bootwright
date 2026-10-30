@@ -1,3 +1,7 @@
+{{- $register := .Values.registration.enabled -}}
+{{- if and .Values.registration.updateWithinRelease (not $register) -}}
+{{- fail "registration.updateWithinRelease=true requires registration.enabled=true" -}}
+{{- end -}}
 apiVersion: bootwright.io/v1alpha1
 kind: MachineInstallProfile
 metadata:
@@ -10,7 +14,7 @@ spec:
     architecture: x86_64
 
   updates:
-    policy: none
+    policy: {{ if .Values.registration.updateWithinRelease }}withinRelease{{ else }}none{{ end }}
 
   installer:
     anaconda:
@@ -60,3 +64,20 @@ spec:
     security:
       selinux:
         mode: enforcing
+{{- if .Values.security.fips }}
+
+      fips:
+        enabled: true
+{{- end }}
+{{- if .Values.security.tpm2 }}
+
+      diskEncryption:
+        unlock:
+          tpm2: {}
+        recoveryPassphraseRef: luks-recovery
+{{- end }}
+{{- if $register }}
+
+  subscription:
+    entitlementRef: rhel-rhsm
+{{- end }}

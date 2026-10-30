@@ -32,6 +32,18 @@ guest:
   memoryMiB: 4096
   diskGiB: 40
 
+# fips installs each guest in FIPS mode; tpm2 encrypts its root disk and
+# unlocks it through the emulated TPM already supplied by the machine profile.
+security:
+  fips: false
+  tpm2: false
+
+# Registration uses the rhsm-org and rhsm-key Secrets. Updating within the
+# declared release requires registration and direct access to its repositories.
+registration:
+  enabled: false
+  updateWithinRelease: false
+
 # The VLAN guests attach to this bridge, which the runbook makes and Bootwright
 # never creates or removes. Its VLAN legs hold each VLAN network's gateway.
 externalBridge: br-nv

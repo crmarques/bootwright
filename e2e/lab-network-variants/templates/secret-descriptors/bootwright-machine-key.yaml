@@ -8,5 +8,5 @@ spec:
 
   source:
     generated:
-      keyType: ed25519
+      keyType: {{ if .Values.security.fips }}ecdsaP256{{ else }}ed25519{{ end }}
       comment: bootwright-machine-key

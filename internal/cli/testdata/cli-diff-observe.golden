@@ -27,4 +27,4 @@ diff real/InfraProvider/lab-libvirt desired/InfraProvider/lab-libvirt
 +        diskGiB: 80
          dataDisks: []
 
-2 objects differ: 1 changed, 0 added, 0 removed, 1 unknown; 2 unchanged; 1 compared as applied
+2 objects differ: 1 changed, 0 added, 0 removed, 1 unknown; 2 unchanged; 1 compared as applied; 1 object partially realized.

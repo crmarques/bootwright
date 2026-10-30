@@ -161,6 +161,13 @@ func diffRebuilt() *lifecycle.DiffResult {
 	return result
 }
 
+func diffPartial() *lifecycle.DiffResult {
+	result := diffObserved()
+	result.Objects = result.Objects[:1]
+	result.Blocks = lifecycle.DiffBlocks{Observed: 1}
+	return result
+}
+
 func diffLostRecord() *lifecycle.DiffResult {
 	result := diffUnknown()
 	result.Operation.State = "failed"
