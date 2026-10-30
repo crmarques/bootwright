@@ -3458,8 +3458,6 @@ holding such a clause, the clauses pending and the work they enable.
   of a stretch cluster with a provided tiebreaker (X205).
 - [D207](#d207): clauses (1) to (10), power and the live reading of KubeVirt
   Machines on a host the context builds and the reading's pin (X206).
-- [D210](#d210): clauses (1) to (5), the add-ons audit plan as items B981 to
-  B988, slices X227 to X231 and questions Q135 to Q138 (none active).
 
 ### D1
 
@@ -6296,7 +6294,7 @@ The [uninstall flow](../controller.md#the-uninstall-flow) owns the contract.
 
 ### D210
 
-**session-pending** (2026-10-30, the owner; the clauses after the owner's
+**accepted-by D211** (2026-10-30, the owner; the clauses after the owner's
 words are taken by the session, pending the owner's review). After
 [audit 002](../../audits/002-addons/report-final.md) the owner asked:
 "prepare a plan to implement using best practices and sound architecture the
@@ -6322,3 +6320,22 @@ commit.
 (5) The audit reports stay as written; each item names the audit finding it
 closes in its Alias cell, and the consolidated report's delivery sequence is
 superseded by this record.
+
+### D211
+
+**owner** (2026-10-30): "proceed implementation. i accept your recommendation
+for question for my decision". It accepts [D210](#d210), answers its open
+questions with their recommendations and authorizes the plan's
+implementation: (1) [Q135](m4.md#m4a-open-decisions) (b): Environment kind
+defaults fill only the package members a binding declares and never select
+one, which specifies [B986](m4.md#b986). (2) Q136 (a): a package added to a
+cluster after its apply completed is installed by one additive operation
+linked to the completed one; the owner's audit request asked for optional
+add-ons "added as needed by operator", so day-2 addition is wanted, and
+[B987](m4.md#b987) is defined and implemented after X227. (3) Q137 (b): no
+named presets until a repeated consumer; [B988](#b988) stays parked. (4) Q138
+(a): [B90](m4.md#b90)'s first slice is an authored OLM `ClusterAddon` compiled
+by the existing capability, defined and implemented after X229. (5) Slices
+X227 to X231 are authorized in their planned order, at most two active at a
+time; B987's and B90's slices are planned when their definitions close and
+are covered by this request.
