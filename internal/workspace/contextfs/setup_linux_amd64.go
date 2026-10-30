@@ -145,7 +145,7 @@ func (s *Store) mutateSetup(ctx context.Context, callback func(prerequisites.Set
 	if err != nil {
 		return err
 	}
-	defer held.Close()
+	defer unlockAndClose(held)
 	tx := &setupTransaction{store: s, dir: dir, active: true}
 	defer func() { tx.active = false }()
 	if err := tx.admit(ctx); err != nil {

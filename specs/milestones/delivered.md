@@ -10717,3 +10717,24 @@ CatalogSource name or share a hosted namespace are not compared with each other;
 this was found, not caused, and is parked as [B999](backlog.md#b999). The
 collection changed, so the owner's host needs `make build` and `controller
 install` before a live run. The operator-run gate on addons-sno stays open.
+
+### X243 — Update observation normalization
+
+**Items:** B1000 (new, 2026-10-30, recovery review).
+**Kind:** defect. **Owner:** Managed OS.
+
+The controller projects an absent or foreign native update inspection into
+the existing [neutral update evidence](../managed-os.md#update-within-release),
+which carries no kernel without an owned update record. The validated worker
+answer still reports its running kernel; recorded updates keep their metadata.
+Strict wire and installation-evidence validation, ownership, refusal paths
+and effect identity are unchanged. An absent update remains partial and a
+foreign update remains unknown; neither proves completion.
+
+A synthetic worker-to-module-to-installation-publication regression failed
+for both states before the fix, then passed. The two focused Python files
+passed 121 tests, and the existing Go test for partial and foreign updates
+passed. Independent correctness and security review passed. The delivering
+commit records the exact commands; full integration gates remain deferred
+until operator work finishes, as requested. This record claims no native
+acceptance.

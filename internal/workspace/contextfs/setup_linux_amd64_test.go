@@ -13,6 +13,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"syscall"
 	"testing"
 	"time"
 
@@ -572,6 +573,70 @@ func TestASecondSetupIsBusy(t *testing.T) {
 		}
 		return nil
 	})
+}
+
+func TestACompletedSetupUnlocksBeforeClosingItsSharedDescription(t *testing.T) {
+	for _, outcome := range []struct {
+		name string
+		err  error
+	}{
+		{name: "success"},
+		{name: "refused", err: state("setup refused")},
+		{name: "cancelled", err: context.Canceled},
+	} {
+		t.Run(outcome.name, func(t *testing.T) {
+			store := New(testOptions(filepath.Join(t.TempDir(), "state")))
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+			err := store.MutateSetup(ctx, func(prerequisites.SetupTransaction) error {
+				// A duplicate deterministically models the descriptor an unrelated
+				// fork shares until exec, without depending on process timing.
+				shared := duplicateSetupLock(t, store)
+				t.Cleanup(func() { syscall.Close(shared) })
+				competing := store.MutateSetup(context.Background(), func(prerequisites.SetupTransaction) error {
+					t.Fatal("another setup entered before the transaction returned")
+					return nil
+				})
+				if diagnostic := onlyDiagnostic(t, competing); diagnostic.Code != "lifecycle.lease" {
+					t.Fatalf("a concurrent setup refused with %#v", diagnostic)
+				}
+				if errors.Is(outcome.err, context.Canceled) {
+					cancel()
+				}
+				return outcome.err
+			})
+			if !errors.Is(err, outcome.err) {
+				t.Fatalf("setup returned %v, want %v", err, outcome.err)
+			}
+			mutateSetup(t, store, func(prerequisites.SetupTransaction) error { return nil })
+		})
+	}
+}
+
+func duplicateSetupLock(t *testing.T, store *Store) int {
+	t.Helper()
+	entries, err := os.ReadDir("/proc/self/fd")
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := filepath.Join(store.options.Root, setupSubtree, setupLockName)
+	for _, entry := range entries {
+		path, err := os.Readlink(filepath.Join("/proc/self/fd", entry.Name()))
+		if err != nil || path != want {
+			continue
+		}
+		descriptor, err := strconv.Atoi(entry.Name())
+		if err != nil {
+			t.Fatal(err)
+		}
+		shared, _, errno := syscall.Syscall(syscall.SYS_FCNTL, uintptr(descriptor), syscall.F_DUPFD_CLOEXEC, 0)
+		if errno != 0 {
+			t.Fatal(errno)
+		}
+		return int(shared)
+	}
+	t.Fatal("the active setup lock has no descriptor")
+	return -1
 }
 
 // A launch's rebuild waits for the setup lock instead of refusing, and stops

@@ -276,6 +276,10 @@ def interpret(operation, release, outcome, pin=""):
     if value["ok"]:
         update = dict(value["result"])
         updated = update.pop("changed")
+        # The worker reads the running kernel even without a record; only
+        # recorded updates carry metadata in installation evidence.
+        if update["state"] not in worker.RECORD_STATES:
+            update["kernel"] = ""
         return {"changed": updated, "evidence": update, "ok": True, "updated": updated}
     return refusal(value["reason"], value.get("cause"), value.get("detail"))
 

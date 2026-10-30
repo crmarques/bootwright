@@ -73,6 +73,16 @@ def test_only_the_operation_digest_and_release_reach_the_worker_over_the_pinned_
 ABSENT = {"changed": False, "kernel": KERNEL, "packages": 0, "pin": "", "rebooted": False, "release": "", "state": "absent", "transaction": 0}
 
 
+@pytest.mark.parametrize("state", ["pending", "upgraded", "complete"])
+def test_an_inspection_preserves_the_metadata_of_an_owned_update(tmp_path, state):
+    native = dict(RESULT, changed=False, state=state, rebooted=state == "complete")
+    popen = FakePopen(stdout=encoded({"ok": True, "result": native}))
+    outcome = module.execute(params(tmp_path, "inspect"), run=session(popen))
+    assert outcome == {"changed": False, "evidence": {key: value for key, value in native.items() if key != "changed"},
+                       "ok": True, "updated": False}
+    assert len(popen.calls) == 1
+
+
 @pytest.mark.parametrize("operation, popen, expected", [
     ("apply", FakePopen(timeout=True), {"changed": False, "ok": False, "reason": "transport", "cause": "timeout"}),
     ("apply", FakePopen(failure="start"), {"changed": False, "ok": False, "reason": "transport", "cause": "session"}),
@@ -96,7 +106,8 @@ ABSENT = {"changed": False, "kernel": KERNEL, "packages": 0, "pin": "", "reboote
     ("complete", FakePopen(stdout=encoded({"ok": True, "result": RESULT})),
      {"changed": False, "ok": False, "reason": "transport", "cause": "answer"}),
     ("inspect", FakePopen(stdout=encoded({"ok": True, "result": ABSENT})),
-     {"changed": False, "evidence": {key: value for key, value in ABSENT.items() if key != "changed"}, "ok": True, "updated": False}),
+     {"changed": False, "evidence": {key: value for key, value in dict(ABSENT, kernel="").items() if key != "changed"},
+      "ok": True, "updated": False}),
     ("inspect", FakePopen(stdout=encoded({"ok": True, "result": dict(ABSENT, release="9.8")})),
      {"changed": False, "ok": False, "reason": "transport", "cause": "answer"}),
     ("apply", FakePopen(stdout=encoded({"ok": False, "reason": "update-release-drift", "detail": "9.9@rhel-9-baseos"})),

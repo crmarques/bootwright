@@ -9,11 +9,14 @@ runner's protocol, so the action publishes only the ones the proof names.
 
 from __future__ import annotations
 
+import json
 from types import SimpleNamespace
 
 import pytest
 
 from ansible_collections.bootwright.core.plugins.action import managedos_install_protocol as protocol
+from ansible_collections.bootwright.core.plugins.module_utils import managedos_update_worker as worker
+from ansible_collections.bootwright.core.plugins.modules import managedos_update as update_module
 
 
 def run(args, monkeypatch):
@@ -235,6 +238,29 @@ def test_an_observation_publishes_an_unfinished_update(monkeypatch):
                                 monkeypatch)
         assert result == {"changed": False}
         assert published[0]["evidence"]["update"] == (read or dict(NONE, state="")) and published[0]["evidence"]["postcondition"] is False
+
+
+@pytest.mark.parametrize("state", ["absent", "foreign"])
+def test_an_inspection_without_an_owned_update_publishes_neutral_evidence(monkeypatch, state):
+    def owned(_request):
+        if state == "foreign":
+            raise worker.Refused("update-foreign")
+        return None
+
+    guest = SimpleNamespace(owned=owned, kernel=lambda: KERNEL)
+    native = worker.inspect_operation(guest, {"request": DIGEST, "release": "9.8"})
+    neutral = dict(NONE, state=state)
+    assert native == dict(neutral, changed=False, kernel=KERNEL)
+    wire = SimpleNamespace(timed_out=False, cause=None, code=0,
+                           stdout=(json.dumps({"ok": True, "result": native}) + "\n").encode())
+    outcome = update_module.interpret("inspect", "9.8", wire)
+    result, published = run(dict(proved(updateRequired=True, update=outcome["evidence"]),
+                                 phase="completed", outcome="unchanged", observed=True), monkeypatch)
+    assert outcome == {"changed": False, "evidence": neutral, "ok": True, "updated": False}
+    assert result == {"changed": False} and len(published) == 1
+    assert published[0]["evidence"]["update"] == neutral
+    assert published[0]["evidence"]["postcondition"] is False
+    assert native == dict(neutral, changed=False, kernel=KERNEL)
 
 
 @pytest.mark.parametrize("read", [
