@@ -1,0 +1,10 @@
+apiVersion: bootwright.io/v1alpha1
+kind: ClusterAddonBinding
+metadata:
+  name: widgets
+
+spec:
+  clusterRef: sno
+
+  addonRefs:
+    - widgets

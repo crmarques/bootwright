@@ -6,6 +6,8 @@ built-in packages M4 implements, their instances and blocks, the cluster
 object program, readiness and retirement, and the
 [add-on API](../api/addons.md) owns admission. Nothing here is implemented
 except the step shape recorded under [Steps](#steps), which admission enforces.
+B90's first slice takes only the normalized definition and the instance
+identity from this design; the rest stays here.
 
 A custom package adds the sections below to the built-in lifecycle.
 

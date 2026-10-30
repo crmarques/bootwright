@@ -99,6 +99,14 @@ func (r sharedResolver) Resolve(kind, implementation string) (Capability, bool) 
 	return plannedCapability{Capability: r.bound[position].Capability, plan: CapabilityPlan{Definitions: []reconciliation.BlockDefinition{}}}, true
 }
 
+// Replan makes the next invocation another build that plans these definitions.
+func (j *CapabilityJourney) Replan(plan CapabilityPlan) {
+	resolver := j.Service.capabilities.(sharedResolver)
+	resolver.plan = plan
+	j.Service.capabilities = resolver
+	j.Service.automation = testAutomation{digest: "9999999999999999999999999999999999999999999999999999999999999999"}
+}
+
 // Holding gives the journey's bound Secrets one more declaration's material.
 func (j *CapabilityJourney) Holding(name string, material secrets.Material) {
 	if j.harness.binder.material == nil {

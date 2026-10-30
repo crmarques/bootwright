@@ -1,0 +1,349 @@
+[
+  {
+    "id": "artifact-server-lab-artifacts",
+    "stage": "infrastructure-services",
+    "dependencies": [],
+    "impacts": [
+      "create-container-unit bootwright-lab-sno-authored-artifacts-lab-artifacts",
+      "create-path /var/lib/bootwright-services/lab-sno-authored/artifact-server/lab-artifacts",
+      "open-listener 192.0.2.1:8080",
+      "open-listener 192.0.2.1:8443"
+    ]
+  },
+  {
+    "id": "controller-prerequisites",
+    "stage": "controller",
+    "dependencies": [],
+    "impacts": [
+      "install-host-package libvirt-client",
+      "install-host-package libvirt-daemon",
+      "install-host-package libvirt-daemon-driver-network",
+      "install-host-package libvirt-daemon-driver-qemu",
+      "install-host-package libvirt-daemon-driver-storage-core",
+      "install-host-package nmstate",
+      "install-host-package qemu-img",
+      "install-host-package qemu-kvm",
+      "install-host-package swtpm",
+      "install-host-package swtpm-tools",
+      "publish-target-client helm latest",
+      "publish-target-client openshift-clients 4.21.15",
+      "publish-target-client openshift-install 4.21.15"
+    ]
+  },
+  {
+    "id": "dns-lab-dns",
+    "stage": "infrastructure-services",
+    "dependencies": [],
+    "impacts": [
+      "create-container-unit bootwright-lab-sno-authored-dns-lab-dns",
+      "create-path /var/lib/bootwright-services/lab-sno-authored/dns/lab-dns",
+      "open-listener 192.0.2.1:53"
+    ]
+  },
+  {
+    "id": "ntp-lab-ntp",
+    "stage": "infrastructure-services",
+    "dependencies": [],
+    "impacts": [
+      "create-container-unit bootwright-lab-sno-authored-ntp-lab-ntp",
+      "create-path /var/lib/bootwright-services/lab-sno-authored/ntp/lab-ntp",
+      "open-listener 192.0.2.1:123"
+    ]
+  },
+  {
+    "id": "proxy-lab-proxy",
+    "stage": "infrastructure-services",
+    "dependencies": [],
+    "impacts": [
+      "create-container-unit bootwright-lab-sno-authored-proxy-lab-proxy",
+      "create-path /var/lib/bootwright-services/lab-sno-authored/proxy/lab-proxy",
+      "open-listener 192.0.2.1:3128"
+    ]
+  },
+  {
+    "id": "substrate-host-lab-libvirt",
+    "stage": "substrates",
+    "dependencies": [],
+    "impacts": [
+      "create-bridge virbr-lab",
+      "create-libvirt-network bootwright-lab-sno-authored-lab-guests",
+      "create-libvirt-pool bootwright-lab-sno-authored-lab-libvirt-vmedia",
+      "create-path /var/lib/libvirt/images/bootwright/lab-sno-authored/providers/lab-libvirt/vmedia"
+    ]
+  },
+  {
+    "id": "cluster-media-sno",
+    "stage": "clusters",
+    "dependencies": [
+      "artifact-server-lab-artifacts"
+    ],
+    "impacts": [
+      "create-path /var/lib/bootwright-clusters/lab-sno-authored/sno",
+      "publish-content /var/lib/bootwright-services/lab-sno-authored/artifact-server/lab-artifacts/public/private/clusters/sno"
+    ]
+  },
+  {
+    "id": "machine-sno-01",
+    "stage": "machines",
+    "dependencies": [
+      "substrate-host-lab-libvirt"
+    ],
+    "impacts": [
+      "create-container-unit bootwright-lab-sno-authored-bmc-sno-01",
+      "create-disk /var/lib/libvirt/images/bootwright/lab-sno-authored/machines/sno-01/root.qcow2",
+      "create-libvirt-domain bootwright-lab-sno-authored-sno-01",
+      "create-path /var/lib/libvirt/images/bootwright/lab-sno-authored/machines/sno-01",
+      "open-listener 127.0.0.1:8000"
+    ]
+  },
+  {
+    "id": "cluster-install-sno",
+    "stage": "clusters",
+    "dependencies": [
+      "cluster-media-sno",
+      "dns-lab-dns",
+      "machine-sno-01",
+      "ntp-lab-ntp"
+    ],
+    "impacts": [
+      "install-cluster sno-01",
+      "power-on sno-01"
+    ]
+  },
+  {
+    "id": "addon-widgets-sno",
+    "stage": "add-ons",
+    "dependencies": [
+      "cluster-install-sno",
+      "cluster-media-sno"
+    ],
+    "impacts": [
+      "install-addon widgets sno"
+    ],
+    "request": {
+      "binding": "widgets",
+      "budgetSeconds": 1800,
+      "cluster": "sno",
+      "descriptor": "cfe1052fe2a5b961f4022bda6aae06e03e0756c0c19c951bb211c7466a94e60a",
+      "package": "widgets",
+      "placement": {
+        "connection": "local",
+        "machine": "controller"
+      },
+      "placementNamespaces": [],
+      "producedInputs": [
+        {
+          "kind": "OpenShiftCluster",
+          "object": "sno",
+          "output": "kubeconfig"
+        }
+      ],
+      "program": {
+        "checks": [
+          {
+            "csvSucceeded": {
+              "csv": "example-operator.v0.0.0",
+              "namespace": "example-operator",
+              "subscription": "example-operator"
+            }
+          },
+          {
+            "statusPhase": {
+              "apiVersion": "operators.coreos.com/v1alpha1",
+              "kind": "CatalogSource",
+              "name": "example-catalog",
+              "namespace": "openshift-marketplace",
+              "namespaced": true,
+              "path": "status.connectionState.lastObservedState",
+              "values": [
+                "READY"
+              ]
+            }
+          }
+        ],
+        "steps": [
+          {
+            "create": {
+              "apiVersion": "v1",
+              "body": {
+                "apiVersion": "v1",
+                "kind": "Namespace",
+                "metadata": {
+                  "name": "example-operator"
+                }
+              },
+              "desiredDigest": "59bae9ba2d1c0022ddf6acab69fb34e706d002633262da91389c0d7f7eeba081",
+              "kind": "Namespace",
+              "name": "example-operator",
+              "namespace": "",
+              "namespaced": false
+            },
+            "kind": "create"
+          },
+          {
+            "create": {
+              "apiVersion": "operators.coreos.com/v1",
+              "body": {
+                "apiVersion": "operators.coreos.com/v1",
+                "kind": "OperatorGroup",
+                "metadata": {
+                  "name": "example-operator",
+                  "namespace": "example-operator"
+                },
+                "spec": {
+                  "targetNamespaces": [
+                    "example-operator"
+                  ]
+                }
+              },
+              "desiredDigest": "7489d359b562b2fc07d102c4918a7308a540366abfdf007757c3b8b8c93d9642",
+              "kind": "OperatorGroup",
+              "name": "example-operator",
+              "namespace": "example-operator",
+              "namespaced": true
+            },
+            "kind": "create"
+          },
+          {
+            "create": {
+              "apiVersion": "operators.coreos.com/v1alpha1",
+              "body": {
+                "apiVersion": "operators.coreos.com/v1alpha1",
+                "kind": "CatalogSource",
+                "metadata": {
+                  "name": "example-catalog",
+                  "namespace": "openshift-marketplace"
+                },
+                "spec": {
+                  "grpcPodConfig": {
+                    "securityContextConfig": "restricted"
+                  },
+                  "image": "registry.example.test/example-operator/catalog@sha256:1111111111111111111111111111111111111111111111111111111111111111",
+                  "priority": -200,
+                  "sourceType": "grpc"
+                }
+              },
+              "desiredDigest": "ae5902f5acccfed4d944635189941e123110c0a1cdc87b79e75354f024aab29d",
+              "kind": "CatalogSource",
+              "name": "example-catalog",
+              "namespace": "openshift-marketplace",
+              "namespaced": true
+            },
+            "kind": "create"
+          },
+          {
+            "catalogReady": {
+              "apiVersion": "operators.coreos.com/v1alpha1",
+              "kind": "CatalogSource",
+              "name": "example-catalog",
+              "namespace": "openshift-marketplace",
+              "namespaced": true
+            },
+            "kind": "catalogReady"
+          },
+          {
+            "kind": "subscribe",
+            "subscribe": {
+              "approval": "exact",
+              "csv": "example-operator.v0.0.0",
+              "object": {
+                "apiVersion": "operators.coreos.com/v1alpha1",
+                "body": {
+                  "apiVersion": "operators.coreos.com/v1alpha1",
+                  "kind": "Subscription",
+                  "metadata": {
+                    "name": "example-operator",
+                    "namespace": "example-operator"
+                  },
+                  "spec": {
+                    "channel": "example-channel",
+                    "installPlanApproval": "Manual",
+                    "name": "example-operator",
+                    "source": "example-catalog",
+                    "sourceNamespace": "openshift-marketplace",
+                    "startingCSV": "example-operator.v0.0.0"
+                  }
+                },
+                "desiredDigest": "d48ba15f385a0d5c4c1a9fad96ce63d8b6c1608a02a9d83ecd98cb2727415fa6",
+                "kind": "Subscription",
+                "name": "example-operator",
+                "namespace": "example-operator",
+                "namespaced": true
+              }
+            }
+          },
+          {
+            "kind": "wait",
+            "wait": [
+              {
+                "resourceExists": {
+                  "apiVersion": "apiextensions.k8s.io/v1",
+                  "kind": "CustomResourceDefinition",
+                  "name": "widgets.example.test",
+                  "namespace": "",
+                  "namespaced": false
+                }
+              },
+              {
+                "statusPhase": {
+                  "apiVersion": "apiextensions.k8s.io/v1",
+                  "kind": "CustomResourceDefinition",
+                  "name": "widgets.example.test",
+                  "namespace": "",
+                  "namespaced": false,
+                  "path": "spec.scope",
+                  "values": [
+                    "Namespaced"
+                  ]
+                }
+              },
+              {
+                "statusPhase": {
+                  "apiVersion": "apiextensions.k8s.io/v1",
+                  "kind": "CustomResourceDefinition",
+                  "name": "widgets.example.test",
+                  "namespace": "",
+                  "namespaced": false,
+                  "path": "status.acceptedNames.kind",
+                  "values": [
+                    "Widget"
+                  ]
+                }
+              }
+            ]
+          },
+          {
+            "create": {
+              "apiVersion": "example.test/v1",
+              "body": {
+                "apiVersion": "example.test/v1",
+                "kind": "Widget",
+                "metadata": {
+                  "name": "example",
+                  "namespace": "example-operator"
+                },
+                "spec": {
+                  "size": 1
+                }
+              },
+              "desiredDigest": "96655a02739a70b17bd39d2e0c1b05a32d52f380b504aca007f77a95f637701a",
+              "kind": "Widget",
+              "name": "example",
+              "namespace": "example-operator",
+              "namespaced": true
+            },
+            "kind": "create"
+          }
+        ],
+        "version": "cluster-objects-v2"
+      },
+      "secrets": [],
+      "tool": {
+        "compatibility": "openshift",
+        "kind": "openshift-clients",
+        "version": "4.21.15"
+      },
+      "version": "addon-instance-request-v4"
+    }
+  }
+]

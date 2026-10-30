@@ -77,10 +77,11 @@ func validateAuthoredObjects(request Request) error {
 	if err != nil {
 		return err
 	}
-	namespace := ""
+	namespace, subscribes := "", 0
 	for _, step := range program.Steps {
 		if step.Subscribe != nil {
 			namespace = step.Subscribe.Object.Namespace
+			subscribes++
 		}
 	}
 	inside := func(ref co.Ref) bool {
@@ -93,7 +94,7 @@ func validateAuthoredObjects(request Request) error {
 		return ref.APIVersion == "operators.coreos.com/v1alpha1" && ref.Kind == "CatalogSource" && ref.Namespaced && ref.Namespace == "openshift-marketplace"
 	}
 	for _, step := range program.Steps {
-		if namespace == "" || step.Place != nil || step.ApproveDependent != nil || step.Create != nil && !inside(step.Create.Ref) || step.CatalogReady != nil && !inside(*step.CatalogReady) {
+		if namespace == "" || subscribes != 1 || step.Place != nil || step.ApproveDependent != nil || step.Create != nil && !inside(step.Create.Ref) || step.CatalogReady != nil && !inside(*step.CatalogReady) {
 			return refusal("add-on "+request.Package+" froze a program that reaches beyond its own namespace", "destroy the operation with the build that froze it, or plan again with this build")
 		}
 	}

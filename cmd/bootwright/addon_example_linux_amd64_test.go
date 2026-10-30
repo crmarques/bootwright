@@ -17,7 +17,7 @@ import (
 )
 
 func TestBuiltinAddonExamplePlansGolden(t *testing.T) {
-	for _, name := range []string{"lab-sno-nmstate", "lab-sno-metallb", "lab-sno-ordered", "lab-compact-df", "lab-compact-hub"} {
+	for _, name := range []string{"lab-sno-nmstate", "lab-sno-authored", "lab-sno-metallb", "lab-sno-ordered", "lab-compact-df", "lab-compact-hub"} {
 		t.Run(name, func(t *testing.T) {
 			state, _ := compileAcceptance(t, exampleDirectory(t, name))
 			resolver := buildCapabilities(systemClock{}, exampleControllerPorts(t), exampleMediaRecords{})

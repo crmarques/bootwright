@@ -244,6 +244,17 @@ lab-sno:
   ntp-lab-ntp
   proxy-lab-proxy
   substrate-host-lab-libvirt
+lab-sno-authored:
+  addon-widgets-sno
+  artifact-server-lab-artifacts
+  cluster-install-sno
+  cluster-media-sno
+  controller-prerequisites
+  dns-lab-dns
+  machine-sno-01
+  ntp-lab-ntp
+  proxy-lab-proxy
+  substrate-host-lab-libvirt
 lab-sno-metallb:
   addon-metallb-sno
   artifact-server-lab-artifacts

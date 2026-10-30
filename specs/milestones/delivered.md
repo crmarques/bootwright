@@ -10612,3 +10612,108 @@ takes back an additive apply alone ([B769](backlog.md#b769)).
 **Acceptance.** B575 completed in-tree. B987's in-tree gates pass and its exit
 evidence includes the owner's emulated rehearsal on addons-sno, so its row
 reads `awaiting operator acceptance`.
+
+### X235 — Executable authored OLM add-ons
+
+**Item:** B90's first slice ([D211](backlog.md#d211) (4),
+[Q138](m4.md#m4a-open-decisions) (a)), which awaits operator acceptance on
+[its row](m4.md#b90). **Kind:** product. **Owners:** Add-ons, with Workspace and Secrets.
+**Code commits:** the integration commits that carry this record, in order:
+`feat(api): admit an executable shape of authored OLM add-ons`;
+`feat(addons): select executable authored add-ons as instances`;
+`fix(addons): harden authored add-on admission`;
+`feat(addons): install executable authored add-ons through the instance capability`;
+`docs(addons): deliver executable authored add-ons with an example and journeys`.
+
+A `ClusterAddon` whose `olm` arm has the
+[executable shape](../api/addons.md#executable-olm-add-ons), selected directly
+or through profiles, is one instance of the add-on instance capability, compiled
+into the same request and
+[cluster object program](../add-ons.md#the-cluster-object-program) as a
+built-in package, and installed, observed and retired the same way under the
+same [trust boundary](../add-ons.md#trust-boundary).
+
+The first commit reshaped the authored OLM arm to the package Subscription
+rules (retiring `displayName`, `publisher`, `grpcPodConfig` and
+`installPlanApproval`; adding `catalogSource.priority` and
+`securityContextConfig`; requiring `startingCSV`) and admitted the shape, with
+the multidc example selecting the `nmstate` and `kubevirt` packages instead of
+authoring them (`TestExecutableOLMShapeAdmitsAndRefusesEachRule`,
+`TestAuthoredExecutableAddonAdmission`). The second synthesized an
+`addons.Package` named after the add-on, carrying the SHA-256 of its normalized
+spec as `Descriptor`, so instances order by capability and the five consumers
+that rebuild `<cluster>.<package>` needed no change
+(`TestAuthoredSynthesizesAPackageFromTheDefinition`,
+`TestAuthoredDescriptorFollowsTheNormalizedSpec`,
+`TestRegistryRefusesABuiltInPackageWithADescriptor`,
+`TestAnAuthoredAddOnNamedLikeABuiltInPackageIsRefusedAtItsSelectingEntry`,
+`TestAnAuthoredAddOnSharesNoNamespacePackageOrCatalogOnItsCluster`). The
+hardening commit closed the first two review rounds: case-insensitive Secret
+kinds and lowercased API groups, every `openshift-*` namespace and the
+reserved label prefixes, three more reserved groups, a catalog `priority` below
+`-100` and a `pollInterval` of at least one minute, and the Trust boundary's
+statement that an authored add-on's catalog image and CSV are code its author
+chooses.
+
+The request commit added the required `descriptor` member (empty for a package,
+64 hexadecimal digits for an authored add-on that places no Secret and has no
+placement namespaces), branched `StageTail` and the namespace guard on it, lifted
+the blanket authored refusal for the executable shape and kept one refusal row
+per other shape (`TestARegistryHoldingTheNameRefusesAFrozenAuthoredRequestYetRetirementStillWorks`,
+`TestADescriptorIsEmptyOrSixtyFourLowercaseHexDigitsAndAnAuthoredRequestPlacesNothing`,
+`TestAnExecutableAuthoredAddOnPlansAsAnInstance`). The security review blocked a
+scope gate bound to no kind: a `statusPhase` check of a definition's
+`spec.scope` would have passed for a kind another definition of the group
+serves, so a cluster-scoped resource authored with a namespace could be created
+cluster-wide. The fix binds each gate to exactly one definition of the resource's
+group and proves its `spec.scope` is `Namespaced` and its
+`status.acceptedNames.kind` is the resource's own kind
+(`TestAnAuthoredGateBindsExactlyOneCRDOfTheGroupAndTheResourceKind`,
+`TestAnAuthoredGateAlsoProvesItsKindIsNamespaced`,
+`TestAStatusPhaseMayReadAScopeOnlyFromACustomResourceDefinition`), and apply
+and observe refuse a frozen authored program that creates outside its namespace
+before any adapter call (`TestAnApplyOfATamperedAuthoredRequestRefusesBeforeAnyRunnerCall`).
+The security re-review approved it with one Low finding, which this commit
+closes: an authored program must hold exactly one `subscribe` step, so a
+tampered program cannot take its namespace from the last of several; the test
+above gained that case.
+
+This commit adds the journeys of
+`internal/reconciliation/lifecycle/addon_journey_test.go` over an authored
+add-on and the built-in fixture (fresh apply and a lost outcome resolved by
+observation, a settled apply that contacts nothing, a foreign object refused,
+another installed CSV reported and never approved, retirement that contacts
+nothing), `TestAnAuthoredAddonMakesTheAdapterCallsAndBlockEffectsOfABuiltInPackage`
+holding their calls and block effects equal, and
+`TestAuthoredDescriptorEditChangesTheFrozenRequest`, where an edited definition
+freezes another request and another build refuses to continue the operation as it
+does for a changed package. The example
+[lab-sno-authored](../../examples/add-ons/lab-sno-authored/README.md) plans
+under `TestBuiltinAddonExamplePlansGolden` with its plan, effective-state and
+block-identity goldens, and the [operator guide](../../docs/operator-guide.md#add-ons)
+routes to it.
+
+**Contract moved.** `addon-instance-v1`: `requestVersion` in
+`internal/addons/instance/catalog.go` moved to `addon-instance-request-v4`
+because the request gained a member, so the content digest moved with it; the
+role's version assertions and argument specs follow, and the request, plan and
+contract goldens changed in the new member, the version and the digest. No
+reader of the earlier request is kept. The cluster object program version stays:
+only an authored request, already frozen under the new request version that
+earlier builds refuse, carries the `spec.scope` check, and a build that cannot
+validate a program refuses it.
+
+**Reviews.** Each commit after the first had a complex-tier review, three
+rounds in all; the findings they raised (H1, L1 to L5, M1 to M5) are closed in
+the hardening and request commits. The security review before integration
+blocked the kind-unbound scope gate, and its re-review approved the fix.
+
+**Limitations.** An operator whose custom resources live under a reserved API
+group (`openshift.io`, among others) cannot use this slice, nor can one whose
+resources are cluster-scoped ([B990](backlog.md#b990)). An authored add-on's
+catalog image and CSV are code its author chooses, so the custom-resource rules
+are defense in depth, not containment. Two built-in packages that create one
+CatalogSource name or share a hosted namespace are not compared with each other;
+this was found, not caused, and is parked as [B999](backlog.md#b999). The
+collection changed, so the owner's host needs `make build` and `controller
+install` before a live run. The operator-run gate on addons-sno stays open.

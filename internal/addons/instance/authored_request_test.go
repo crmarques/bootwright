@@ -2,6 +2,7 @@ package instance
 
 import (
 	"context"
+	"encoding/json"
 	"reflect"
 	"strings"
 	"testing"
@@ -278,17 +279,47 @@ func TestAnApplyOfATamperedAuthoredRequestRefusesBeforeAnyRunnerCall(t *testing.
 		return co.Object{Ref: co.Ref{APIVersion: "v1", Kind: "ConfigMap", Namespace: namespace, Name: name, Namespaced: true}, Body: api.MapValue(api.FieldValue{Name: "apiVersion", Value: api.StringValue("v1")}, api.FieldValue{Name: "kind", Value: api.StringValue("ConfigMap")}, api.FieldValue{Name: "metadata", Value: api.MapValue(api.FieldValue{Name: "name", Value: api.StringValue(name)}, api.FieldValue{Name: "namespace", Value: api.StringValue(namespace)})})}
 	}
 	cluster := co.Object{Ref: co.Ref{APIVersion: "v1", Kind: "Namespace", Name: "elsewhere"}, Body: api.MapValue(api.FieldValue{Name: "apiVersion", Value: api.StringValue("v1")}, api.FieldValue{Name: "kind", Value: api.StringValue("Namespace")}, api.FieldValue{Name: "metadata", Value: api.MapValue(api.FieldValue{Name: "name", Value: api.StringValue("elsewhere")})})}
-	for name, extra := range map[string]co.Object{"another namespace": namespaced("stray", "kube-system"), "a cluster-scoped object": cluster, "in the same namespace": namespaced("inside", "widget-ns")} {
+	objectStep := func(object co.Object) func(*testing.T, co.Program) co.Step {
+		return func(t *testing.T, _ co.Program) co.Step {
+			entry, err := co.NewObjectEntry(object)
+			if err != nil {
+				t.Fatal(err)
+			}
+			return co.Step{Kind: "create", Create: &entry}
+		}
+	}
+	secondSubscribe := func(t *testing.T, program co.Program) co.Step {
+		for _, step := range program.Steps {
+			if step.Subscribe != nil {
+				again := *step.Subscribe
+				again.Object.Ref.Namespace = "kube-system"
+				var body map[string]any
+				if err := json.Unmarshal(again.Object.Body, &body); err != nil {
+					t.Fatal(err)
+				}
+				body["metadata"].(map[string]any)["namespace"] = "kube-system"
+				var err error
+				if again.Object.Body, err = json.Marshal(body); err != nil {
+					t.Fatal(err)
+				}
+				again.Object.DesiredDigest = co.DesiredDigest(again.Object.Body)
+				return co.Step{Kind: "subscribe", Subscribe: &again}
+			}
+		}
+		t.Fatal("the authored program has no subscribe step")
+		return co.Step{}
+	}
+	for name, extra := range map[string]func(*testing.T, co.Program) co.Step{"another namespace": objectStep(namespaced("stray", "kube-system")), "a cluster-scoped object": objectStep(cluster), "in the same namespace": objectStep(namespaced("inside", "widget-ns")), "a second subscribe step first": secondSubscribe} {
 		t.Run(name, func(t *testing.T) {
 			program, err := request.Objects()
 			if err != nil {
 				t.Fatal(err)
 			}
-			entry, err := co.NewObjectEntry(extra)
-			if err != nil {
-				t.Fatal(err)
+			if name == "a second subscribe step first" {
+				program.Steps = append([]co.Step{extra(t, program)}, program.Steps...)
+			} else {
+				program.Steps = append(program.Steps, extra(t, program))
 			}
-			program.Steps = append(program.Steps, co.Step{Kind: "create", Create: &entry})
 			tampered := request
 			if tampered.Program, err = co.Freeze(program, co.Options{Namespace: "widget-ns"}); err != nil {
 				t.Fatal(err)

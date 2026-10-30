@@ -538,6 +538,12 @@ section routes the journey; each linked section owns its rules.
 - Start from a worked binding in the `add-ons` category of the
   [examples](../examples/README.md). Their channels and CSVs are illustrative:
   read the pair your catalog serves with the lookup `add-ons info` prints.
+- Install an operator Bootwright does not ship: author a `ClusterAddon` of the
+  [executable OLM shape](../specs/api/addons.md#executable-olm-add-ons), select
+  it under `spec.addonRefs` of a binding, and start from the
+  [lab-sno-authored](../examples/add-ons/lab-sno-authored/README.md) example.
+  Its catalog image and CSV are code you choose, under the
+  [trust boundary](../specs/add-ons.md#trust-boundary).
 - Try one in the lab: the [lab-sno runbook](../e2e/lab-sno/runbook.md#inputs)
   turns the NMState and MetalLB bindings on with its `--set addons.*` flags.
 - Share a channel and CSV across bindings with Environment kind defaults: a

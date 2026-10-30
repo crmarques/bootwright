@@ -240,6 +240,7 @@ Alias cell.
 | [B988](#b988) | new, 2026-10-30 (D210; audit 002 F11) | product | Add-ons, with API | A `ClusterAddonProfile` carries built-in packages as a named preset | No repeated consumer; Q26 (a) chose profiles without packages |
 | [B990](#b990) | new, 2026-10-30 (D211; B90 first slice) | product | Add-ons | An authored add-on creates a cluster-scoped custom resource once a program check proves the kind's scope | No consumer; the first slice admits only namespaced resources in the add-on's own namespace |
 | [B998](#b998) | new, 2026-10-30 (X234) | enabling | State reconciliation | A resolution of a predecessor's block reserves the room of the lineage's removal | Found in X234 review; the reserve rule reads one apply today and holds in the shipped cases |
+| [B999](#b999) | new, 2026-10-30 (X235 review; pre-existing) | defect | Add-ons | Selection reports two built-in packages that create one CatalogSource name or share one hosted namespace on a cluster | No profile selects two such packages today; the check belongs with the package-facts selection rules, not B90's authored slice |
 | [B771](#b771) | new, 2026-10-20 (D173); folds B365 | defect | Add-ons, with Workspace | The `add-ons/_store` selection exception, its marker and its reader rules leave the input reader | Dead surface now that B89 is retired; removing input-reader rules is not needed by any M4 package |
 | [B772](#b772) | new, 2026-10-20 (D173) | product | Add-ons | A package installed through OLM v1 (`ClusterExtension`) | ODF/FDF, ACM, MCE and GitLab do not qualify; own-namespace installs are Technology Preview |
 | [B773](#b773) | new, 2026-10-20 (D173) | product | Add-ons | A registry credential merged into a cluster's global pull secret with an exact-entry receipt | Its inverse never runs under retirement; the install pull secret carries entitlements from first boot |
@@ -3139,6 +3140,23 @@ lineage's removal needs. Found in the review of X234 commit 4 and parked, as the
 retained-operation bound keeps one removal's room and the case needs a context
 near the entry bound. **Revive when** an estate nears the bound; the fix passes
 the lineage to `AdmitAttempt` for a resolution of a predecessor's block.
+
+### B999
+
+Selection compares the namespace, OLM package and CatalogSource of an authored
+add-on ([B90](m4.md#b90), X235) with every other instance on its cluster, but
+two built-in packages are never compared with each other: two packages that
+create a CatalogSource of one name in `openshift-marketplace`, or that share a
+namespace KubeVirt hosts for the cluster, are neither reported nor refused, and
+the later one's apply would meet the earlier one's object. Found on 2026-10-30
+by X235's review; no shipped package pair collides today. Parked because no
+selectable pair of built-in packages declares such a collision, and the fix
+changes selection for every package. **Revive when** a built-in package adds an
+owned catalog or a hosted namespace that another package can also declare; the
+outcome is one admission diagnostic per shared identity on the later instance,
+as the authored add-on's
+[shared identities](../api/addons.md#admission-diagnostics) are reported, with
+a test over a synthetic package pair.
 
 ## Audit remediation (2026-10-26)
 
