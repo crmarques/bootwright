@@ -26,10 +26,11 @@ type selectedMember struct {
 	provides, requires   []string
 	afterRefs            []string
 	last                 bool
+	authored, shadows    bool
 }
 
 func (m selectedMember) subject() string {
-	if m.pkg != nil {
+	if m.pkg != nil && !m.authored {
 		return "package " + m.name
 	}
 	return "ClusterAddon/" + m.name
@@ -53,7 +54,16 @@ func Instances(c api.Catalog, r Registry) ([]SelectedInstance, []SelectionIssue)
 			incomplete[cluster] = true
 		}
 		for _, a := range selected {
-			clusters[cluster] = append(clusters[cluster], selectedMember{binding: b.Name(), name: a.Name(), field: selectionField(b, a.Name(), c), provides: a.Spec().Get("provides").Strings(), requires: a.Spec().Get("requires").Strings(), afterRefs: b.Spec().Get("afterRefs").Strings()})
+			member := selectedMember{binding: b.Name(), name: a.Name(), field: selectionField(b, a.Name(), c), provides: a.Spec().Get("provides").Strings(), requires: a.Spec().Get("requires").Strings(), afterRefs: b.Spec().Get("afterRefs").Strings()}
+			if synthesized, err := Authored(a); err == nil {
+				if _, builtin := r.Find(a.Name()); builtin {
+					member.shadows = true
+				} else {
+					member.pkg, member.authored = &synthesized, true
+					member.config = authoredConfig(a, synthesized.Budget)
+				}
+			}
+			clusters[cluster] = append(clusters[cluster], member)
 		}
 		for _, f := range b.Spec().Get("packages").Fields() {
 			p, ok := r.Find(f.Name)
@@ -95,6 +105,7 @@ func Instances(c api.Catalog, r Registry) ([]SelectedInstance, []SelectionIssue)
 			issues = append(issues, SelectionIssue{Binding: m.binding, Issue: issue})
 		}
 		validateMemberUniqueness(cluster, members, add)
+		validateAuthoredIdentity(cluster, members, add)
 		after, cycle := authoredOrder(cluster, ordered[cluster])
 		if cycle != nil {
 			issues = append(issues, *cycle)
@@ -287,7 +298,7 @@ func validateMemberUniqueness(cluster string, members []selectedMember, add sele
 		if previous, ok := seen[key]; ok {
 			first := members[previous]
 			remedy := fmt.Sprintf("bind %s to %s through one ClusterAddonBinding only", m.name, cluster)
-			if m.pkg != nil {
+			if m.pkg != nil && !m.authored {
 				remedy = fmt.Sprintf("select package %s for %s in one ClusterAddonBinding only", m.name, cluster)
 			}
 			add(m, "api.duplicate", fmt.Sprintf("%s is already bound to OpenShiftCluster/%s by ClusterAddonBinding/%s", key, cluster, first.binding), remedy)

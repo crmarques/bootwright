@@ -289,3 +289,27 @@ func TestFIPSAndOrdinaryClustersKeepDistinctInstallerTools(t *testing.T) {
 		}
 	}
 }
+
+func TestAnAuthoredKubeVirtProviderRequestsVirtctlOnce(t *testing.T) {
+	crd := api.MapValue().With("resourceExists", api.MapValue().With("apiVersion", api.StringValue("apiextensions.k8s.io/v1")).With("kind", api.StringValue("CustomResourceDefinition")).With("name", api.StringValue("widgets.example.test")))
+	resource := api.MapValue().With("apiVersion", api.StringValue("example.test/v1")).With("kind", api.StringValue("Widget")).With("metadata", api.MapValue().With("name", api.StringValue("widget")).With("namespace", api.StringValue("provider-ns")))
+	spec := api.MapValue().With("provides", api.StringList("kubevirt")).WithPath(api.MapValue(), "olm", "operatorGroup").WithPath(api.StringValue("provider-ns"), "olm", "namespace", "name").
+		WithPath(api.MapValue().With("package", api.StringValue("provider")).With("channel", api.StringValue("stable")).With("startingCSV", api.StringValue("provider.v1")).With("source", api.StringValue("redhat-operators")), "olm", "subscription").
+		WithPath(api.ListValue(api.MapValue().With("gate", api.ListValue(crd)).With("resource", resource)), "olm", "customResources")
+	provider, _ := addons.Normalize(api.NewObject(api.ClusterAddon, "authvirt", api.Value{}, spec), api.NewCatalog(nil))
+	objects := append(selectionObjects(), provider, api.NewObject(api.ClusterAddonBinding, "binding", api.Value{}, api.MapValue().With("clusterRef", api.StringValue("cluster")).With("addonRefs", api.StringList("authvirt"))))
+	catalog := api.NewCatalog(objects)
+	if instances, issues := addons.Instances(catalog, addons.Registry{}); len(issues) != 0 || len(instances) != 1 {
+		t.Fatalf("%+v %+v", instances, issues)
+	}
+	tools, err := controller.SelectToolsWithRegistry(catalog, addons.Registry{})
+	count := 0
+	for _, tool := range tools {
+		if tool.Kind == "virtctl" {
+			count++
+		}
+	}
+	if err != nil || count != 1 {
+		t.Fatalf("virtctl requested %d times: %+v %v", count, tools, err)
+	}
+}

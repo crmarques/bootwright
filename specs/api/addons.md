@@ -173,11 +173,22 @@ own indexed field:
   `apiextensions.k8s.io/v1` `CustomResourceDefinition` named `<plural>.<group>`,
   because Bootwright cannot derive the plural from the kind.
 
-Not yet met: selection compiles no executable add-on into an instance, so the
-lifecycle still refuses every binding that selects an authored add-on, and the
-refusals that need a binding (another shape, an add-on named as a built-in
-package, a namespace, OLM package or catalog shared on one cluster) are not
-raised; tracked as [B90](../milestones/m4.md#b90).
+- The name is longer than `addons.MaxPackageNameBytes`, because an add-on
+  selected as an instance is named like a package. It is reported at
+  `$.metadata.name` for the executable shape only.
+
+Selection compiles an executable add-on into an instance named after the
+add-on, with the digest of its normalized spec as its descriptor. Its
+`provides` and `requires` order it by capability beside packages, its readiness
+checks other than `csvSucceeded` become program checks (the program already
+holds the one `csvSucceeded` check that `startingCSV` pins), and each custom
+resource becomes one program phase behind its gate. Selection reports an
+add-on that shares a name, namespace, OLM package or CatalogSource with another
+instance as an [admission diagnostic](#admission-diagnostics).
+
+Not yet met: the request does not yet carry the descriptor, so the lifecycle
+still refuses every binding that selects an authored add-on; tracked as
+[B90](../milestones/m4.md#b90).
 
 ### Manifest-set arm
 
@@ -308,12 +319,21 @@ authored positions in the document, as
 | An add-on is bound twice to one cluster | `api.duplicate` | the selecting entry in the later binding in canonical order | `ClusterAddon/<addon> is already bound to OpenShiftCluster/<cluster> by ClusterAddonBinding/<binding>` | `bind <addon> to <cluster> through one ClusterAddonBinding only` |
 | A package is bound twice to one cluster | `api.duplicate` | `$.spec.packages.<package>` of the later binding in canonical order | `package <package> is already bound to OpenShiftCluster/<cluster> by ClusterAddonBinding/<binding>` | `select package <package> for <cluster> in one ClusterAddonBinding only` |
 | Two last packages on one cluster | `api.invariant` | `$.spec.packages.<package>` of the later binding in canonical order | `packages <first> and <second> both run last on OpenShiftCluster/<cluster>` | `select one of <first> and <second> for <cluster>` |
+| An authored add-on has a built-in package's name | `api.invariant` | the selecting entry: `$.spec.addonRefs[<k>]` or `$.spec.profileRefs[<i>]` through which the binding reaches the add-on | `ClusterAddon/<addon> has the name of built-in package <addon>` | `rename ClusterAddon/<addon>; bootwright add-ons list names the built-in packages` |
+| An authored add-on shares a namespace with another instance | `api.invariant` | the selecting entry of the later add-on in canonical order | `ClusterAddon/<addon> uses namespace <namespace>, which <subject> also uses on OpenShiftCluster/<cluster>` (`<subject>` is `ClusterAddon/<other>` or `package <package>`; a package's namespace is its OLM namespace or one of its Secret placement namespaces) | `set olm.namespace.name of ClusterAddon/<addon> to a namespace that no other package or add-on selected for the cluster uses` |
+| An authored add-on shares an OLM package with another instance | `api.invariant` | the selecting entry of the later add-on in canonical order | `ClusterAddon/<addon> uses OLM package <package>, which <subject> also uses on OpenShiftCluster/<cluster>` | `select one of ClusterAddon/<addon> and <subject> for the cluster, because OLM package <package> installs once` |
+| An authored add-on shares a CatalogSource with another instance | `api.invariant` | the selecting entry of the later add-on in canonical order | `ClusterAddon/<addon> uses CatalogSource <catalog>, which <subject> also uses on OpenShiftCluster/<cluster>` (the other instance owns the catalog or subscribes to it) | `set olm.catalogSource.name of ClusterAddon/<addon> to a CatalogSource name that no other package or add-on selected for the cluster uses` |
 | A configuration names an unselected add-on | `api.reference` | `$.spec.addonConfigs[<i>].addonRef` | `ClusterAddon/<addon> is configured but not selected by this binding` | `select <addon> through spec.addonRefs or a profile, or remove this spec.addonConfigs entry` |
 | A binding selects nothing | `api.invariant` | `$.spec` | `the binding selects no profile, add-on or package` | `add a package to spec.packages, a profile to spec.profileRefs or an add-on to spec.addonRefs` |
 | Profile expansion returns to a profile | `api.invariant` | `$.spec.profileRefs[<i>]` | `profile expansion returns to ClusterAddonProfile/<profile>` | `remove the reference to <profile> from this list or from a profile it expands` |
 | An ordering names a binding of another cluster | `api.invariant` | `$.spec.afterRefs[<i>]` | `spec.afterRefs names ClusterAddonBinding/<other>, which binds OpenShiftCluster/<other cluster>, not OpenShiftCluster/<cluster>` | `name a binding of OpenShiftCluster/<cluster>, or remove <other> from spec.afterRefs` |
 | Bindings order each other in a cycle | `api.invariant` | `$.spec.afterRefs[<i>]` of the cycle's first binding in canonical order, at its first entry on the cycle | `spec.afterRefs of the bindings of OpenShiftCluster/<cluster> form a cycle through <binding list>` | `remove one spec.afterRefs entry among <binding list> to break the cycle` |
 | Authored ordering closes a cycle with capability or last-package edges | `api.invariant` | `$.spec.afterRefs[<i>]` of the first cycle member in canonical order with an authored edge on the cycle | `ordering of the packages and add-ons selected for OpenShiftCluster/<cluster> forms a cycle through <member list> once spec.afterRefs applies` | `remove one spec.afterRefs or requires entry among <member list> to break the cycle` |
+
+These four rows apply to an add-on of the executable shape only, because only
+that shape becomes an instance. An add-on is reported against the instances
+selected before it, never against a later add-on, so two add-ons sharing an
+identity yield one diagnostic.
 
 A `spec.afterRefs` entry naming no binding is reported by the reference rule
 at its own indexed field. A binding cycle is reported instead of, never beside,

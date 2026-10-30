@@ -1,6 +1,7 @@
 package addons
 
 import (
+	"fmt"
 	"path"
 	"slices"
 	"strconv"
@@ -161,6 +162,9 @@ func validateDeclaration(o api.Object, c api.Catalog, partial bool) []api.Issue 
 		}
 	}
 	issues = append(issues, validateOLMNamespace(olm)...)
+	if !partial && len(o.Name()) > MaxPackageNameBytes && authoredShapeRefusal(o) == "" {
+		issues = append(issues, addonIssue("api.invariant", "metadata.name", fmt.Sprintf("Executable add-on name %s is longer than the %d bytes an add-on selected as an instance may have.", o.Name(), MaxPackageNameBytes), fmt.Sprintf("rename ClusterAddon/%s to at most %d bytes", o.Name(), MaxPackageNameBytes)))
+	}
 	issues = append(issues, validateCustomResources(olm, partial)...)
 	issues = append(issues, validateReadiness(s, partial)...)
 	issues = append(issues, validateManifests(s.Get("manifestSet", "manifests"), "spec.manifestSet.manifests", partial)...)

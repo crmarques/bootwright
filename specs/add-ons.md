@@ -64,10 +64,10 @@ declarations hold, never against a live system.
 
 A binding selects a built-in package by naming it under
 [`spec.packages`](api/addons.md#built-in-packages); the member's value is the
-package's configuration. Package names and authored `ClusterAddon` names are
-separate namespaces and nothing resolves one through the other, so neither
-shadows the other. A package is bound to one cluster at most once across that
-cluster's bindings. The capability graph spans the packages and authored
+package's configuration. An authored add-on a binding selects never has a
+built-in package's name, because both name an instance; selection refuses the
+add-on at its selecting entry, and nothing resolves one name through the other.
+A package is bound to one cluster at most once across that cluster's bindings. The capability graph spans the packages and authored
 add-ons that every binding of the cluster selects. Each package owns its OLM
 namespace, which no other package or Subscription shares.
 

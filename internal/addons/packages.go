@@ -53,6 +53,7 @@ type Package struct {
 	OLM                 *OLM
 	Admit               func(Instance, ClusterFacts) []api.Issue
 	Render              func(Instance) (Rendered, error)
+	Descriptor          string
 }
 type CephConsumerUse struct{ Field, Name string }
 type OLM struct {
@@ -193,10 +194,11 @@ func NewRegistryWithExamples(entries []Package, examples map[string][]api.Value)
 		if !validSummary(p.Summary) {
 			return Registry{}, fmt.Errorf("package %q has an empty, overlong or control-character summary", p.Name)
 		}
-		for i, c := range p.Name {
-			if !(c >= 'a' && c <= 'z' || c >= '0' && c <= '9' || c == '-' && i > 0 && i < len(p.Name)-1) {
-				return Registry{}, fmt.Errorf("invalid package name %q", p.Name)
-			}
+		if !validPackageName(p.Name) {
+			return Registry{}, fmt.Errorf("invalid package name %q", p.Name)
+		}
+		if p.Descriptor != "" {
+			return Registry{}, fmt.Errorf("built-in package %q carries an authored descriptor", p.Name)
 		}
 		if names[p.Name] {
 			return Registry{}, fmt.Errorf("duplicate package %q", p.Name)
@@ -236,6 +238,17 @@ func NewRegistryWithExamples(entries []Package, examples map[string][]api.Value)
 		return 0
 	})
 	return r, nil
+}
+func validPackageName(name string) bool {
+	if name == "" || len(name) > MaxPackageNameBytes {
+		return false
+	}
+	for i, c := range name {
+		if !(c >= 'a' && c <= 'z' || c >= '0' && c <= '9' || c == '-' && i > 0 && i < len(name)-1) {
+			return false
+		}
+	}
+	return true
 }
 func validSummary(summary string) bool {
 	if summary == "" || len(summary) > MaxSummaryBytes {
