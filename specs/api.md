@@ -411,6 +411,7 @@ These rules govern every new kind, field, arm, enum value and reference.
 | ClusterAddon | `spec.inputs[].effects[].storageExportAttachment` | `cephConsumerAttachment`. |
 | ClusterAddon | `spec.olm.catalogSource.displayName`, `spec.olm.catalogSource.publisher` | Nothing: the CatalogSource Bootwright creates carries neither. |
 | ClusterAddon | `spec.olm.catalogSource.grpcPodConfig` | `spec.olm.catalogSource.securityContextConfig`, `legacy` or `restricted`. |
+| ClusterAddon | `spec.olm.customResources[].apiVersion`, `spec.olm.customResources[].kind` | Wrap the resource: each `customResources[]` entry is `{gate, resource}`, with `gate` the checks that must hold first and `resource` the custom resource ([OLM arm](api/addons.md#olm-arm)). |
 | ClusterAddon | `spec.olm.subscription.installPlanApproval` | Nothing: Bootwright subscribes with Manual approval and approves only `subscription.startingCSV` ([OLM arm](api/addons.md#olm-arm)). |
 
 The unknown-field diagnostic for a listed path, authored on the object or under

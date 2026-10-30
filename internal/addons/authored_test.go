@@ -69,7 +69,7 @@ func TestAuthoredSynthesizesAPackageFromTheDefinition(t *testing.T) {
 		t.Fatalf("authored csvSucceeded must be dropped beside the pinned one subscribe prepends: %+v", rendered.Checks)
 	}
 	config := authoredConfig(o, p.Budget)
-	if config.Get("timeout").Text() != "45m0s" || config.Get("subscription", "startingCSV").Text() != "example.v1.0.0" || config.Get("subscription", "catalogSource", "priority").Text() != "100" || config.Get("subscription", "catalogSource", "securityContextConfig").Text() != "restricted" || config.Get("subscription", "sourceNamespace").Text() != "openshift-marketplace" {
+	if config.Get("timeout").Text() != "45m0s" || config.Get("subscription", "startingCSV").Text() != "example.v1.0.0" || config.Get("subscription", "catalogSource", "priority").Text() != "-200" || config.Get("subscription", "catalogSource", "securityContextConfig").Text() != "restricted" || config.Get("subscription", "sourceNamespace").Text() != "openshift-marketplace" {
 		t.Fatalf("%v", config)
 	}
 }
@@ -176,7 +176,7 @@ func TestAuthoredDescriptorFollowsTheNormalizedSpec(t *testing.T) {
 			return spec.WithPath(s("registry.example.test/catalog:v2"), "olm", "catalogSource", "image")
 		},
 		"priority": func(spec api.Value) api.Value {
-			return spec.WithPath(api.IntegerValue("101"), "olm", "catalogSource", "priority")
+			return spec.WithPath(api.IntegerValue("-201"), "olm", "catalogSource", "priority")
 		},
 		"label": func(spec api.Value) api.Value {
 			return spec.WithPath(m("example.test/a", s("b")), "olm", "namespace", "labels")

@@ -388,7 +388,7 @@ func executableAuthoredAddOn(t *testing.T, name string) api.Object {
 	spec := api.MapValue(field("olm", api.MapValue(
 		field("namespace", api.MapValue(field("name", text("widget-ns")))),
 		field("operatorGroup", api.MapValue()),
-		field("catalogSource", api.MapValue(field("name", text("widget-catalog")), field("image", text("registry.example.test/catalog:v1")), field("priority", api.IntegerValue("100")))),
+		field("catalogSource", api.MapValue(field("name", text("widget-catalog")), field("image", text("registry.example.test/catalog:v1")), field("priority", api.IntegerValue("-200")))),
 		field("subscription", api.MapValue(field("package", text("widget")), field("channel", text("stable")), field("startingCSV", text("widget.v1.0.0")))),
 		field("customResources", api.ListValue(api.MapValue(field("gate", api.ListValue(crd)), field("resource", resource)))),
 	)))

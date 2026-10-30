@@ -108,7 +108,7 @@ func executableSpec() api.Value {
 	resource := m("apiVersion", s("example.test/v1"), "kind", s("Widget"), "metadata", m("name", s("example"), "namespace", s("example-operator"), "labels", m("example.test/key", s("value"))), "spec", m("count", api.IntegerValue("184467440737095516160"), "ratio", api.NumberValue("1.25")))
 	return m("olm", m(
 		"namespace", m("name", s("example-operator")),
-		"catalogSource", m("name", s("example-catalog"), "image", s("registry.example.test/catalog:v1"), "priority", api.IntegerValue("100")),
+		"catalogSource", m("name", s("example-catalog"), "image", s("registry.example.test/catalog:v1"), "priority", api.IntegerValue("-200")),
 		"subscription", m("package", s("example"), "channel", s("stable"), "startingCSV", s("example.v1.0.0")),
 		"customResources", l(m("gate", l(crd), "resource", resource)),
 	), "readiness", m("timeout", s("45m")))
@@ -126,6 +126,7 @@ func hasIssue(issues []api.Issue, code, field string) bool {
 
 func TestExecutableOLMShapeAdmitsAndRefusesEachRule(t *testing.T) {
 	const cr = "spec.olm.customResources[0]"
+	const echoed = "do-not-echo"
 	resourcePath := func(edit func(api.Value) api.Value) func(api.Value) api.Value {
 		return func(spec api.Value) api.Value {
 			item := spec.Get("olm", "customResources").Items()[0]
@@ -155,6 +156,19 @@ func TestExecutableOLMShapeAdmitsAndRefusesEachRule(t *testing.T) {
 		"group that only looks nested": func(v api.Value) api.Value {
 			return gatePath(crd("widgets.example.notk8s.io"))(resourcePath(func(r api.Value) api.Value { return r.With("apiVersion", s("example.notk8s.io/v1")) })(v))
 		},
+		"x-k8s.io group": func(v api.Value) api.Value {
+			return gatePath(crd("clusters.cluster.x-k8s.io"))(resourcePath(func(r api.Value) api.Value { return r.With("apiVersion", s("cluster.x-k8s.io/v1")) })(v))
+		},
+		"label key that only looks nested": func(v api.Value) api.Value {
+			return v.WithPath(m("x-k8s.io/key", s("v"), "notopenshift.io/key", s("v"), "example.test/kubernetes.io", s("v")), "olm", "namespace", "labels")
+		},
+		"priority just below the default catalogs": func(v api.Value) api.Value {
+			return v.WithPath(api.IntegerValue("-101"), "olm", "catalogSource", "priority")
+		},
+		"smallest 32-bit priority": func(v api.Value) api.Value {
+			return v.WithPath(api.IntegerValue("-2147483648"), "olm", "catalogSource", "priority")
+		},
+		"poll interval of one minute": func(v api.Value) api.Value { return v.WithPath(s("1m"), "olm", "catalogSource", "pollInterval") },
 	} {
 		t.Run("admits "+name, func(t *testing.T) {
 			if issues := executableIssues(t, edit); len(issues) != 0 {
@@ -162,11 +176,13 @@ func TestExecutableOLMShapeAdmitsAndRefusesEachRule(t *testing.T) {
 			}
 		})
 	}
-	if issues := executableIssues(t, func(v api.Value) api.Value {
-		item := v.Get("olm", "customResources").Items()[0]
-		return v.WithPath(s("kubernetes-ops"), "olm", "namespace", "name").WithPath(l(item.WithPath(s("kubernetes-ops"), "resource", "metadata", "namespace")), "olm", "customResources")
-	}); len(issues) != 0 {
-		t.Fatal("a namespace that only begins with kube was refused", issues)
+	for _, namespace := range []string{"kubernetes-ops", "openshifty", "defaults"} {
+		if issues := executableIssues(t, func(v api.Value) api.Value {
+			item := v.Get("olm", "customResources").Items()[0]
+			return v.WithPath(s(namespace), "olm", "namespace", "name").WithPath(l(item.WithPath(s(namespace), "resource", "metadata", "namespace")), "olm", "customResources")
+		}); len(issues) != 0 {
+			t.Fatal("a namespace that only begins like a reserved one was refused", namespace, issues)
+		}
 	}
 	cases := []struct {
 		name, code, field string
@@ -177,9 +193,40 @@ func TestExecutableOLMShapeAdmitsAndRefusesEachRule(t *testing.T) {
 		{"operators namespace", "api.invariant", "spec.olm.namespace.name", func(v api.Value) api.Value { return v.WithPath(s("openshift-operators"), "olm", "namespace", "name") }},
 		{"marketplace namespace", "api.invariant", "spec.olm.namespace.name", func(v api.Value) api.Value { return v.WithPath(s("openshift-marketplace"), "olm", "namespace", "name") }},
 		{"kube namespace", "api.invariant", "spec.olm.namespace.name", func(v api.Value) api.Value { return v.WithPath(s("kube-system"), "olm", "namespace", "name") }},
+		{"openshift-config namespace", "api.invariant", "spec.olm.namespace.name", func(v api.Value) api.Value { return v.WithPath(s("openshift-config"), "olm", "namespace", "name") }},
+		{"openshift-monitoring namespace", "api.invariant", "spec.olm.namespace.name", func(v api.Value) api.Value { return v.WithPath(s("openshift-monitoring"), "olm", "namespace", "name") }},
+		{"kube-public namespace", "api.invariant", "spec.olm.namespace.name", func(v api.Value) api.Value { return v.WithPath(s("kube-public"), "olm", "namespace", "name") }},
 		{"bootwright namespace label", "api.invariant", "spec.olm.namespace.labels", func(v api.Value) api.Value {
-			return v.WithPath(m("bootwright.io/owner", s("x")), "olm", "namespace", "labels")
+			return v.WithPath(m("bootwright.io/owner", s(echoed)), "olm", "namespace", "labels")
 		}},
+		{"openshift.io namespace label", "api.invariant", "spec.olm.namespace.labels", func(v api.Value) api.Value {
+			return v.WithPath(m("openshift.io/cluster-monitoring", s(echoed)), "olm", "namespace", "labels")
+		}},
+		{"kubernetes.io namespace label", "api.invariant", "spec.olm.namespace.labels", func(v api.Value) api.Value {
+			return v.WithPath(m("kubernetes.io/metadata.name", s(echoed)), "olm", "namespace", "labels")
+		}},
+		{"k8s.io namespace label", "api.invariant", "spec.olm.namespace.labels", func(v api.Value) api.Value {
+			return v.WithPath(m("k8s.io/owner", s(echoed)), "olm", "namespace", "labels")
+		}},
+		{"subdomain namespace label", "api.invariant", "spec.olm.namespace.labels", func(v api.Value) api.Value {
+			return v.WithPath(m("pod-security.kubernetes.io/enforce", s(echoed)), "olm", "namespace", "labels")
+		}},
+		{"high catalog priority", "api.value", "spec.olm.catalogSource.priority", func(v api.Value) api.Value {
+			return v.WithPath(api.IntegerValue("100"), "olm", "catalogSource", "priority")
+		}},
+		{"zero catalog priority", "api.value", "spec.olm.catalogSource.priority", func(v api.Value) api.Value {
+			return v.WithPath(api.IntegerValue("0"), "olm", "catalogSource", "priority")
+		}},
+		{"catalog priority of redhat-operators", "api.value", "spec.olm.catalogSource.priority", func(v api.Value) api.Value {
+			return v.WithPath(api.IntegerValue("-100"), "olm", "catalogSource", "priority")
+		}},
+		{"catalog priority beyond 32 bits", "api.value", "spec.olm.catalogSource.priority", func(v api.Value) api.Value {
+			return v.WithPath(api.IntegerValue("-2147483649"), "olm", "catalogSource", "priority")
+		}},
+		{"catalog priority beyond 64 bits", "api.value", "spec.olm.catalogSource.priority", func(v api.Value) api.Value {
+			return v.WithPath(api.IntegerValue("-92233720368547758080"), "olm", "catalogSource", "priority")
+		}},
+		{"fast catalog polling", "api.value", "spec.olm.catalogSource.pollInterval", func(v api.Value) api.Value { return v.WithPath(s("59s"), "olm", "catalogSource", "pollInterval") }},
 		{"default catalog name", "api.invariant", "spec.olm.catalogSource.name", func(v api.Value) api.Value { return v.WithPath(s("redhat-operators"), "olm", "catalogSource", "name") }},
 		{"foreign source namespace", "api.invariant", "spec.olm.subscription.sourceNamespace", func(v api.Value) api.Value {
 			return v.WithPath(s("example-operator"), "olm", "subscription", "sourceNamespace")
@@ -188,10 +235,13 @@ func TestExecutableOLMShapeAdmitsAndRefusesEachRule(t *testing.T) {
 		{"timeout over ceiling", "api.value", "spec.readiness.timeout", func(v api.Value) api.Value { return v.WithPath(s("5h50m1s"), "readiness", "timeout") }},
 		{"metadata member", "api.invariant", cr + ".resource.metadata.ownerReferences", resourcePath(func(r api.Value) api.Value { return r.WithPath(l(), "metadata", "ownerReferences") })},
 		{"metadata finalizers", "api.invariant", cr + ".resource.metadata.finalizers", resourcePath(func(r api.Value) api.Value { return r.WithPath(l(), "metadata", "finalizers") })},
-		{"bootwright label", "api.invariant", cr + ".resource.metadata.labels", resourcePath(func(r api.Value) api.Value { return r.WithPath(m("bootwright.io/owner", s("x")), "metadata", "labels") })},
-		{"bootwright annotation", "api.invariant", cr + ".resource.metadata.annotations", resourcePath(func(r api.Value) api.Value {
-			return r.WithPath(m("bootwright.io/owner", s("x")), "metadata", "annotations")
+		{"bootwright label", "api.invariant", cr + ".resource.metadata.labels", resourcePath(func(r api.Value) api.Value {
+			return r.WithPath(m("bootwright.io/owner", s(echoed)), "metadata", "labels")
 		})},
+		{"bootwright annotation", "api.invariant", cr + ".resource.metadata.annotations", resourcePath(func(r api.Value) api.Value {
+			return r.WithPath(m("bootwright.io/owner", s(echoed)), "metadata", "annotations")
+		})},
+		{"metadata generateName", "api.invariant", cr + ".resource.metadata.generateName", resourcePath(func(r api.Value) api.Value { return r.WithPath(s("widget-"), "metadata", "generateName") })},
 		{"missing namespace", "api.required", cr + ".resource.metadata.namespace", resourcePath(func(r api.Value) api.Value { return r.With("metadata", m("name", s("example"))) })},
 		{"other namespace", "api.invariant", cr + ".resource.metadata.namespace", resourcePath(func(r api.Value) api.Value { return r.WithPath(s("other"), "metadata", "namespace") })},
 		{"core group", "api.invariant", cr + ".resource.apiVersion", resourcePath(func(r api.Value) api.Value { return r.With("apiVersion", s("v1")) })},
@@ -202,7 +252,14 @@ func TestExecutableOLMShapeAdmitsAndRefusesEachRule(t *testing.T) {
 		{"openshift.io group", "api.invariant", cr + ".resource.apiVersion", resourcePath(func(r api.Value) api.Value { return r.With("apiVersion", s("config.openshift.io/v1")) })},
 		{"coreos.com group", "api.invariant", cr + ".resource.apiVersion", resourcePath(func(r api.Value) api.Value { return r.With("apiVersion", s("operators.coreos.com/v1")) })},
 		{"bootwright.io group", "api.invariant", cr + ".resource.apiVersion", resourcePath(func(r api.Value) api.Value { return r.With("apiVersion", s("bootwright.io/v1alpha1")) })},
+		{"open-cluster-management.io group", "api.invariant", cr + ".resource.apiVersion", resourcePath(func(r api.Value) api.Value { return r.With("apiVersion", s("cluster.open-cluster-management.io/v1")) })},
+		{"cert-manager.io group", "api.invariant", cr + ".resource.apiVersion", resourcePath(func(r api.Value) api.Value { return r.With("apiVersion", s("cert-manager.io/v1")) })},
+		{"argoproj.io group", "api.invariant", cr + ".resource.apiVersion", resourcePath(func(r api.Value) api.Value { return r.With("apiVersion", s("argoproj.io/v1alpha1")) })},
+		{"mixed-case reserved group", "api.invariant", cr + ".resource.apiVersion", resourcePath(func(r api.Value) api.Value { return r.With("apiVersion", s("Config.OpenShift.IO/v1")) })},
+		{"mixed-case reserved subdomain", "api.invariant", cr + ".resource.apiVersion", resourcePath(func(r api.Value) api.Value { return r.With("apiVersion", s("Apps.K8S.io/v1")) })},
 		{"secret kind", "api.invariant", cr + ".resource.kind", resourcePath(func(r api.Value) api.Value { return r.With("kind", s("Secret")) })},
+		{"lowercase secret kind", "api.invariant", cr + ".resource.kind", resourcePath(func(r api.Value) api.Value { return r.With("kind", s("secret")) })},
+		{"uppercase secret kind", "api.invariant", cr + ".resource.kind", resourcePath(func(r api.Value) api.Value { return r.With("kind", s("SECRET")) })},
 		{"status in body", "api.invariant", cr + ".resource", resourcePath(func(r api.Value) api.Value { return r.With("status", m("ready", api.BoolValue(true))) })},
 		{"template delimiter", "api.invariant", cr + ".resource", resourcePath(func(r api.Value) api.Value { return r.WithPath(s("{{ secret }}"), "spec", "value") })},
 		{"gate without CRD", "api.invariant", cr + ".gate", gatePath(m("resourceExists", m("apiVersion", s("example.test/v1"), "kind", s("Gadget"), "name", s("x"))))},
@@ -210,9 +267,14 @@ func TestExecutableOLMShapeAdmitsAndRefusesEachRule(t *testing.T) {
 		{"gate CRD without plural", "api.invariant", cr + ".gate", gatePath(crd(".example.test"))},
 		{"gate CRD of a subgroup", "api.invariant", cr + ".gate", gatePath(crd("widgets.sub.example.test"))},
 		{"gate CRD wrong version", "api.invariant", cr + ".gate", gatePath(m("resourceExists", m("apiVersion", s("apiextensions.k8s.io/v1beta1"), "kind", s("CustomResourceDefinition"), "name", s("widgets.example.test"))))},
+		{"gate CRD plural with several dots", "api.invariant", cr + ".gate", gatePath(crd("a.b.widgets.example.test"))},
+		{"gate lowercase Secret", "api.invariant", cr + ".gate[1]", gatePath(crd("widgets.example.test"), m("resourceExists", m("apiVersion", s("v1"), "kind", s("secret"), "name", s("s"), "namespace", s("example-operator"))))},
 		{"gate Secret", "api.invariant", cr + ".gate[1]", gatePath(crd("widgets.example.test"), m("resourceExists", m("apiVersion", s("v1"), "kind", s("Secret"), "name", s("s"), "namespace", s("example-operator"))))},
 		{"gate foreign CSV", "api.invariant", cr + ".gate[1].csvSucceeded", gatePath(crd("widgets.example.test"), m("csvSucceeded", m("namespace", s("other"), "subscription", s("example"))))},
 		{"gate invalid condition status", "api.value", cr + ".gate[1]", gatePath(crd("widgets.example.test"), m("condition", m("apiVersion", s("apps/v1"), "kind", s("Deployment"), "name", s("x"), "namespace", s("example-operator"), "condition", m("type", s("Available"), "status", s("Maybe")))))},
+		{"readiness lowercase Secret", "api.invariant", "spec.readiness.checks[0]", func(v api.Value) api.Value {
+			return v.WithPath(l(m("condition", m("apiVersion", s("v1"), "kind", s("secret"), "name", s("s"), "namespace", s("example-operator"), "condition", m("type", s("x"), "status", s("True"))))), "readiness", "checks")
+		}},
 		{"readiness Secret", "api.invariant", "spec.readiness.checks[0]", func(v api.Value) api.Value {
 			return v.WithPath(l(m("condition", m("apiVersion", s("v1"), "kind", s("Secret"), "name", s("s"), "namespace", s("example-operator"), "condition", m("type", s("x"), "status", s("True"))))), "readiness", "checks")
 		}},
@@ -236,6 +298,9 @@ func TestExecutableOLMShapeAdmitsAndRefusesEachRule(t *testing.T) {
 				t.Fatalf("want %s at %s, got %v", tc.code, tc.field, issues)
 			}
 			for _, issue := range issues {
+				if strings.Contains(issue.Message+issue.Remediation, echoed) || strings.Contains(issue.Message+issue.Remediation, "registry.example.test") {
+					t.Fatalf("diagnostic echoes a value: %+v", issue)
+				}
 				if issue.Remediation == "" || strings.HasSuffix(issue.Message, ".") || issue.Message != strings.ToLower(issue.Message[:1])+issue.Message[1:] {
 					t.Fatalf("issue style: %+v", issue)
 				}
@@ -258,6 +323,18 @@ func TestExecutableOLMPartialFragments(t *testing.T) {
 	} {
 		if issues := ValidatePartial(obj(api.ClusterAddon, "", spec), api.NewCatalog(nil)); len(issues) != 0 {
 			t.Fatal("incomplete fragment rejected", issues)
+		}
+	}
+	catalog := func(fields ...any) api.Value { return m("olm", m("catalogSource", m(fields...))) }
+	if issues := ValidatePartial(obj(api.ClusterAddon, "", catalog("name", s("only-a-name"))), api.NewCatalog(nil)); len(issues) != 0 {
+		t.Fatal("a catalog without a priority or interval rejected", issues)
+	}
+	for field, fragment := range map[string]api.Value{
+		"spec.olm.catalogSource.priority":     catalog("priority", api.IntegerValue("5")),
+		"spec.olm.catalogSource.pollInterval": catalog("pollInterval", s("10s")),
+	} {
+		if issues := ValidatePartial(obj(api.ClusterAddon, "", fragment), api.NewCatalog(nil)); !hasIssue(issues, "api.value", field) {
+			t.Fatalf("missing %s in %v", field, issues)
 		}
 	}
 	bad := m("olm", m("namespace", m("name", s("default")), "customResources", l(m("resource", m("apiVersion", s("k8s.io/v1"), "kind", s("Secret"))))))

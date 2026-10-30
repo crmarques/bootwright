@@ -24,7 +24,7 @@ spec:
     catalogSource:
       name: widgets-catalog
       image: registry.example.test/widgets/catalog:v1
-      priority: 100
+      priority: -200
     subscription:
       package: widgets
       channel: example-channel
@@ -56,9 +56,15 @@ func TestAuthoredExecutableAddonAdmission(t *testing.T) {
 	}
 	for _, test := range []struct{ name, from, to, field string }{
 		{"reserved namespace", "name: widgets-operator\n    catalog", "name: openshift-operators\n    catalog", "$.spec.olm.namespace.name"},
+		{"openshift-prefixed namespace", "name: widgets-operator\n    catalog", "name: openshift-config\n    catalog", "$.spec.olm.namespace.name"},
+		{"reserved namespace label", "      name: widgets-operator\n    catalog", "      name: widgets-operator\n      labels: {kubernetes.io/metadata.name: widgets}\n    catalog", "$.spec.olm.namespace.labels"},
+		{"catalog priority above redhat-operators", "priority: -200", "priority: 100", "$.spec.olm.catalogSource.priority"},
+		{"catalog polled every second", "priority: -200\n", "priority: -200\n      pollInterval: 1s\n", "$.spec.olm.catalogSource.pollInterval"},
 		{"default catalog name", "name: widgets-catalog", "name: community-operators", "$.spec.olm.catalogSource.name"},
 		{"foreign source namespace", "      package: widgets\n", "      package: widgets\n      sourceNamespace: widgets-operator\n", "$.spec.olm.subscription.sourceNamespace"},
 		{"reserved group", "apiVersion: example.test/v1", "apiVersion: operators.coreos.com/v1", "$.spec.olm.customResources[0].resource.apiVersion"},
+		{"argoproj group", "apiVersion: example.test/v1", "apiVersion: argoproj.io/v1alpha1", "$.spec.olm.customResources[0].resource.apiVersion"},
+		{"lowercase secret", "kind: Widget", "kind: secret", "$.spec.olm.customResources[0].resource.kind"},
 		{"other namespace", "namespace: widgets-operator\n", "namespace: elsewhere\n", "$.spec.olm.customResources[0].resource.metadata.namespace"},
 		{"missing CRD gate", "name: widgets.example.test", "name: widgets.other.test", "$.spec.olm.customResources[0].gate"},
 		{"unknown condition status", "          - resourceExists:", "          - condition: {apiVersion: apps/v1, kind: Deployment, name: x, namespace: widgets-operator, condition: {type: Available, status: Maybe}}\n          - resourceExists:", "$.spec.olm.customResources[0].gate[0].condition.condition.status"},

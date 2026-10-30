@@ -57,6 +57,8 @@ var retiredFields = []RetiredField{
 	{ClusterAddon, "$.spec.olm.catalogSource.displayName", "remove it: the CatalogSource Bootwright creates carries no display name"},
 	{ClusterAddon, "$.spec.olm.catalogSource.publisher", "remove it: the CatalogSource Bootwright creates carries no publisher"},
 	{ClusterAddon, "$.spec.olm.catalogSource.grpcPodConfig", "use spec.olm.catalogSource.securityContextConfig, legacy or restricted"},
+	{ClusterAddon, "$.spec.olm.customResources[].apiVersion", "wrap the resource as {gate, resource}: gate holds the checks that must hold first and resource the custom resource"},
+	{ClusterAddon, "$.spec.olm.customResources[].kind", "wrap the resource as {gate, resource}: gate holds the checks that must hold first and resource the custom resource"},
 	{ClusterAddon, "$.spec.olm.subscription.installPlanApproval", "remove it: Bootwright subscribes with Manual approval and approves only subscription.startingCSV"},
 }
 

@@ -1,7 +1,7 @@
 package addons
 
 import (
-	"slices"
+	"math"
 	"strings"
 	"time"
 
@@ -10,24 +10,58 @@ import (
 )
 
 var (
-	reservedNamespaces = []string{"default", "openshift", "openshift-operators", "openshift-marketplace"}
-	reservedGroups     = []string{"k8s.io", "kubernetes.io", "openshift.io", "coreos.com", "bootwright.io"}
+	reservedGroups        = []string{"k8s.io", "kubernetes.io", "openshift.io", "coreos.com", "bootwright.io", "open-cluster-management.io", "cert-manager.io", "argoproj.io"}
+	reservedLabelPrefixes = []string{"bootwright.io", "openshift.io", "kubernetes.io", "k8s.io"}
 )
 
 const (
 	reservedLabelPrefix = "bootwright.io/"
 	crdAPIVersion       = "apiextensions.k8s.io/v1"
 	crdKind             = "CustomResourceDefinition"
+	defaultCatalogRank  = -100
+	minPollInterval     = time.Minute
 )
 
 func validateOLMNamespace(olm api.Value) []api.Issue {
 	issues := []api.Issue{}
-	if name := olm.Get("namespace", "name").Text(); strings.HasPrefix(name, "kube-") || slices.Contains(reservedNamespaces, name) {
-		issues = append(issues, addonIssue("api.invariant", "spec.olm.namespace.name", "Add-on namespace "+name+" is reserved.", "choose a namespace other than default, openshift, openshift-operators, openshift-marketplace and kube-*"))
+	if name := olm.Get("namespace", "name").Text(); reservedNamespace(name) {
+		issues = append(issues, addonIssue("api.invariant", "spec.olm.namespace.name", "Add-on namespace "+name+" is reserved.", "choose a namespace other than default, openshift, openshift-* and kube-*"))
 	}
 	for _, label := range olm.Get("namespace", "labels").Fields() {
-		if strings.HasPrefix(label.Name, reservedLabelPrefix) {
-			issues = append(issues, addonIssue("api.invariant", "spec.olm.namespace.labels", "Namespace label "+label.Name+" is under the Bootwright-owned bootwright.io/ prefix.", "remove the label; keys under bootwright.io/ belong to Bootwright"))
+		if reservedLabelKey(label.Name) {
+			issues = append(issues, addonIssue("api.invariant", "spec.olm.namespace.labels", "Namespace label "+label.Name+" is under a prefix that belongs to Bootwright, Kubernetes or OpenShift.", "remove the label; keys under bootwright.io/, openshift.io/, kubernetes.io/ and k8s.io/, and their subdomains, are reserved"))
+		}
+	}
+	return issues
+}
+
+func reservedNamespace(name string) bool {
+	return name == "default" || name == "openshift" || strings.HasPrefix(name, "openshift-") || strings.HasPrefix(name, "kube-")
+}
+
+func reservedLabelKey(key string) bool {
+	prefix, _, found := strings.Cut(strings.ToLower(key), "/")
+	if !found {
+		return false
+	}
+	for _, reserved := range reservedLabelPrefixes {
+		if prefix == reserved || strings.HasSuffix(prefix, "."+reserved) {
+			return true
+		}
+	}
+	return false
+}
+
+func validateCatalogSource(olm api.Value) []api.Issue {
+	issues := []api.Issue{}
+	if priority := olm.Get("catalogSource", "priority"); priority.Present() {
+		if n, ok := priority.Int64(); !ok || n >= defaultCatalogRank || n < math.MinInt32 {
+			issues = append(issues, addonIssue("api.value", "spec.olm.catalogSource.priority", "An authored catalog priority must be an integer below -100, the priority of redhat-operators, within 32 bits.", "set catalogSource.priority between -2147483648 and -101, so the catalog never outranks redhat-operators when OLM resolves dependencies"))
+		}
+	}
+	if poll := olm.Get("catalogSource", "pollInterval"); poll.Present() {
+		if interval, err := time.ParseDuration(poll.Text()); err == nil && interval > 0 && interval < minPollInterval {
+			issues = append(issues, addonIssue("api.value", "spec.olm.catalogSource.pollInterval", "Catalog pollInterval must be at least 1m.", "set catalogSource.pollInterval to 1m or more, or remove it"))
 		}
 	}
 	return issues
@@ -91,11 +125,11 @@ func validateCustomResource(resource, gate api.Value, namespace, field string, p
 			group = prefix
 		}
 		if apiVersion.Text() != "" && !validGroup(group) {
-			issues = append(issues, addonIssue("api.invariant", field+".apiVersion", "Custom resource API group "+quotedGroup(group)+" is not an add-on API group.", "use a custom resource whose group has a dot and is not k8s.io, kubernetes.io, openshift.io, coreos.com or bootwright.io, or a subdomain of one of them"))
+			issues = append(issues, addonIssue("api.invariant", field+".apiVersion", "Custom resource API group "+quotedGroup(group)+" is not an add-on API group.", "use a custom resource whose group has a dot and is not "+strings.Join(reservedGroups[:len(reservedGroups)-1], ", ")+" or "+reservedGroups[len(reservedGroups)-1]+", or a subdomain of one of them"))
 			group = ""
 		}
 	}
-	if kind.Type() == api.String && kind.Text() == "Secret" {
+	if kind.Type() == api.String && strings.EqualFold(kind.Text(), "Secret") {
 		issues = append(issues, addonIssue("api.invariant", field+".kind", "A custom resource cannot be a Secret.", "remove the Secret custom resource; an authored add-on places no Secret"))
 	}
 	if group != "" && (gate.Present() || !partial) && !gateNamesCRD(gate, group) {
@@ -115,6 +149,7 @@ func validGroup(group string) bool {
 	if group == "" || !strings.Contains(group, ".") {
 		return false
 	}
+	group = strings.ToLower(group)
 	for _, reserved := range reservedGroups {
 		if group == reserved || strings.HasSuffix(group, "."+reserved) {
 			return false
@@ -200,7 +235,7 @@ func validateChecks(checks api.Value, field, namespace, subscription string, own
 
 func secretCheck(check api.Value) bool {
 	for _, arm := range []string{"condition", "resourceExists"} {
-		if resource := check.Get(arm); resource.Get("kind").Text() == "Secret" && resource.Get("apiVersion").Text() == "v1" {
+		if resource := check.Get(arm); strings.EqualFold(resource.Get("kind").Text(), "Secret") && resource.Get("apiVersion").Text() == "v1" {
 			return true
 		}
 	}

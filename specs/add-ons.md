@@ -22,6 +22,12 @@ makes its package lifecycle-ineligible regardless of origin. The
 [compiler boundary](api.md#compiler-boundary) applies to declarations and
 provenance markers.
 
+An authored OLM add-on's catalog image and ClusterServiceVersion are code the
+author chooses, and the operator they install runs with the privileges that
+code requests. The admission rules on its custom resources, namespace and
+catalog priority are [defense in depth](api/addons.md#executable-olm-add-ons),
+not a containment boundary.
+
 Nothing is discovered ambiently. Working directories, `PATH`, environment
 variables, user configuration, Ansible paths, network registries and global
 plugin locations contribute no package, and desired state and package fields

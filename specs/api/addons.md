@@ -114,8 +114,8 @@ records what a custom-package lifecycle would add.
 | `catalogSource` | object | no | — | Optional shipped CatalogSource. |
 | `catalogSource.name` | string | conditional | — | Required when the block is present; a DNS label other than `redhat-operators`, `certified-operators`, `community-operators` and `redhat-marketplace`. |
 | `catalogSource.image` | string | conditional | — | Required when the block is present. |
-| `catalogSource.priority` | integer | conditional | — | Required when the block is present, with the package [Subscription](#subscription) rule. |
-| `catalogSource.pollInterval` | string | no | — | Positive Go duration. |
+| `catalogSource.priority` | integer | conditional | — | Required when the block is present, with the package [Subscription](#subscription) rule; an authored value is below `-100` and within a 32-bit signed integer. |
+| `catalogSource.pollInterval` | string | no | — | Go duration of at least `1m`. |
 | `catalogSource.securityContextConfig` | string | no | `restricted` | `legacy` or `restricted`. |
 | `subscription.name` | string | no | `subscription.package` | Kubernetes Subscription name. |
 | `subscription.package` | string | yes | — | OLM package. |
@@ -131,7 +131,10 @@ An authored `subscription` and `catalogSource` follow the package
 [Subscription](#subscription) rules: Bootwright subscribes `Manual` and
 approves only `startingCSV`. `catalogSource.displayName`, `publisher`,
 `grpcPodConfig` and `subscription.installPlanApproval` are
-[retired](../api.md#retired-fields).
+[retired](../api.md#retired-fields), as are the top-level `apiVersion` and `kind` of
+a `customResources` entry written as the resource itself instead of
+`{gate, resource}`. `catalogSource.name` is a DNS label, narrower than the DNS
+name it once accepted.
 
 Omitting `operatorGroup` requests no group. `operatorGroup: {}` requests the
 namespace-named group targeting that namespace. An explicit `targetNamespaces`
@@ -155,17 +158,25 @@ gate, and no inputs, Secret placement, manifest set or step. Every other shape
 validates and is refused at `plan`. Admission refuses these faults, each at its
 own indexed field:
 
-- `namespace.name` is `default`, `openshift`, `openshift-operators`,
-  `openshift-marketplace` or begins `kube-`; `namespace.labels` holds a key
-  under `bootwright.io/`.
+- `namespace.name` is `default`, `openshift` or begins `openshift-` or `kube-`;
+  `namespace.labels` holds a key whose prefix, the part before `/`, is
+  `bootwright.io`, `openshift.io`, `kubernetes.io` or `k8s.io`, or a subdomain
+  of one of them.
+- `catalogSource.priority` is not below `-100`, the priority of
+  `redhat-operators`, because the catalog serves dependency resolution for every
+  Subscription on the cluster, or does not fit a 32-bit signed integer;
+  `catalogSource.pollInterval` is shorter than `1m`.
 - A custom resource's `metadata` holds a member other than `name`, `namespace`,
   `labels` and `annotations`, or a `labels` or `annotations` key under
   `bootwright.io/`.
 - A custom resource lacks `metadata.namespace` or sets one other than
   `namespace.name`.
 - A custom resource's API group is empty, has no dot, or is, or is a subdomain
-  of, `k8s.io`, `kubernetes.io`, `openshift.io`, `coreos.com` or `bootwright.io`.
-- A custom resource is a `Secret`: an authored add-on places no Secret.
+  of, `k8s.io`, `kubernetes.io`, `openshift.io`, `coreos.com`, `bootwright.io`,
+  `open-cluster-management.io`, `cert-manager.io` or `argoproj.io`, compared in
+  lower case.
+- A custom resource is a `Secret`, whatever its letter case: an authored add-on
+  places no Secret.
 - A custom resource fails the content-safety rules of the
   [cluster object program](../add-ons.md#the-cluster-object-program): a
   `status`, `managedFields` or owner-mark member, or a template delimiter.
@@ -226,7 +237,7 @@ Each check sets exactly one arm:
 | `resourceExists` | required `apiVersion`, `kind`, and `name`; optional `namespace` |
 
 No check of a gate, of `readiness.checks` or of a step's `requires` names a
-`v1` `Secret`: Bootwright reads none for an authored add-on. A `csvSucceeded`
+`v1` `Secret`, whatever the letter case of its kind: Bootwright reads none for an authored add-on. A `csvSucceeded`
 check of an OLM add-on names its own `namespace.name` and effective
 `subscription.name`. Each fault is refused at the check's indexed field with
 `api.invariant`.
