@@ -1,0 +1,245 @@
+{
+  "binding": "binding",
+  "budgetSeconds": 3600,
+  "cluster": "cluster",
+  "package": "fdf",
+  "placement": {
+    "connection": "local",
+    "machine": "controller"
+  },
+  "placementNamespaces": [],
+  "producedInputs": [
+    {
+      "kind": "OpenShiftCluster",
+      "object": "cluster",
+      "output": "kubeconfig"
+    },
+    {
+      "kind": "CephConsumer",
+      "object": "export",
+      "output": "external-details"
+    }
+  ],
+  "program": {
+    "checks": [
+      {
+        "csvSucceeded": {
+          "csv": "operator.v1",
+          "namespace": "openshift-storage",
+          "subscription": "odf-operator"
+        }
+      },
+      {
+        "statusPhase": {
+          "apiVersion": "ocs.openshift.io/v1",
+          "kind": "StorageCluster",
+          "name": "ocs-external-storagecluster",
+          "namespace": "openshift-storage",
+          "namespaced": true,
+          "path": "",
+          "values": [
+            "Ready"
+          ]
+        }
+      },
+      {
+        "condition": {
+          "apiVersion": "ocs.openshift.io/v1",
+          "kind": "StorageCluster",
+          "name": "ocs-external-storagecluster",
+          "namespace": "openshift-storage",
+          "namespaced": true,
+          "status": "True",
+          "type": "ReconcileComplete"
+        }
+      },
+      {
+        "statusPhase": {
+          "apiVersion": "noobaa.io/v1alpha1",
+          "kind": "NooBaa",
+          "name": "noobaa",
+          "namespace": "openshift-storage",
+          "namespaced": true,
+          "path": "",
+          "values": [
+            "Ready"
+          ]
+        }
+      },
+      {
+        "resourceExists": {
+          "apiVersion": "storage.k8s.io/v1",
+          "kind": "StorageClass",
+          "name": "ocs-external-storagecluster-ceph-rbd",
+          "namespace": "",
+          "namespaced": false
+        }
+      },
+      {
+        "resourceExists": {
+          "apiVersion": "storage.k8s.io/v1",
+          "kind": "StorageClass",
+          "name": "ocs-external-storagecluster-cephfs",
+          "namespace": "",
+          "namespaced": false
+        }
+      },
+      {
+        "resourceExists": {
+          "apiVersion": "storage.k8s.io/v1",
+          "kind": "StorageClass",
+          "name": "openshift-storage.noobaa.io",
+          "namespace": "",
+          "namespaced": false
+        }
+      }
+    ],
+    "steps": [
+      {
+        "create": {
+          "apiVersion": "v1",
+          "body": {
+            "apiVersion": "v1",
+            "kind": "Namespace",
+            "metadata": {
+              "labels": {
+                "openshift.io/cluster-monitoring": "true"
+              },
+              "name": "openshift-storage"
+            }
+          },
+          "desiredDigest": "cbbccd7a95e25aaa2a7e49ed6abac587296a330c1b5b389b97f928055db0f7a3",
+          "kind": "Namespace",
+          "name": "openshift-storage",
+          "namespace": "",
+          "namespaced": false
+        },
+        "kind": "create"
+      },
+      {
+        "create": {
+          "apiVersion": "operators.coreos.com/v1",
+          "body": {
+            "apiVersion": "operators.coreos.com/v1",
+            "kind": "OperatorGroup",
+            "metadata": {
+              "name": "openshift-storage",
+              "namespace": "openshift-storage"
+            },
+            "spec": {
+              "targetNamespaces": [
+                "openshift-storage"
+              ]
+            }
+          },
+          "desiredDigest": "8bdf442246b942b751421f01ce27228fcd4a1e1f20ca487b9e24a721445851fb",
+          "kind": "OperatorGroup",
+          "name": "openshift-storage",
+          "namespace": "openshift-storage",
+          "namespaced": true
+        },
+        "kind": "create"
+      },
+      {
+        "kind": "subscribe",
+        "subscribe": {
+          "approval": "operatorManaged",
+          "csv": "operator.v1",
+          "object": {
+            "apiVersion": "operators.coreos.com/v1alpha1",
+            "body": {
+              "apiVersion": "operators.coreos.com/v1alpha1",
+              "kind": "Subscription",
+              "metadata": {
+                "name": "odf-operator",
+                "namespace": "openshift-storage"
+              },
+              "spec": {
+                "channel": "stable",
+                "installPlanApproval": "Manual",
+                "name": "odf-operator",
+                "source": "redhat-operators",
+                "sourceNamespace": "openshift-marketplace",
+                "startingCSV": "operator.v1"
+              }
+            },
+            "desiredDigest": "929956311ff36aa8ecf40a9622704398d6f128d5dc0a040803b8c3a7b36434af",
+            "kind": "Subscription",
+            "name": "odf-operator",
+            "namespace": "openshift-storage",
+            "namespaced": true
+          }
+        }
+      },
+      {
+        "kind": "wait",
+        "wait": [
+          {
+            "condition": {
+              "apiVersion": "apiextensions.k8s.io/v1",
+              "kind": "CustomResourceDefinition",
+              "name": "storageclusters.ocs.openshift.io",
+              "namespace": "",
+              "namespaced": false,
+              "status": "True",
+              "type": "Established"
+            }
+          }
+        ]
+      },
+      {
+        "kind": "place",
+        "place": {
+          "desiredDigest": "969cbb2e8d815781fb22cb9d271cf20bd6d233d8c4123bc14bc0a3c0fbab58b7",
+          "keys": null,
+          "name": "rook-ceph-external-cluster-details",
+          "namespace": "openshift-storage",
+          "produced": {
+            "kind": "CephConsumer",
+            "object": "export",
+            "output": "external-details"
+          },
+          "producedKey": "external_cluster_details",
+          "type": "Opaque"
+        }
+      },
+      {
+        "create": {
+          "apiVersion": "ocs.openshift.io/v1",
+          "body": {
+            "apiVersion": "ocs.openshift.io/v1",
+            "kind": "StorageCluster",
+            "metadata": {
+              "name": "ocs-external-storagecluster",
+              "namespace": "openshift-storage"
+            },
+            "spec": {
+              "externalStorage": {
+                "enable": true
+              },
+              "managedResources": {
+                "cephBlockPools": {
+                  "defaultStorageClass": false
+                }
+              }
+            }
+          },
+          "desiredDigest": "dece6ac0d70c5d87d7c68947e5459fc91da6358aa1a83dd05319b73f1a2b2e09",
+          "kind": "StorageCluster",
+          "name": "ocs-external-storagecluster",
+          "namespace": "openshift-storage",
+          "namespaced": true
+        },
+        "kind": "create"
+      }
+    ],
+    "version": "cluster-objects-v2"
+  },
+  "secrets": [],
+  "tool": {
+    "compatibility": "openshift",
+    "kind": "openshift-clients",
+    "version": "4.20"
+  },
+  "version": "addon-instance-request-v3"
+}

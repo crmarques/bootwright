@@ -168,6 +168,9 @@ func coverageViolations(rows []coverageRow, notYetMet string, registry addons.Re
 		if says := strings.Contains(strings.Join(row.cells, " | "), operatorManagedIn); says != managed {
 			violations = append(violations, fmt.Sprintf("row %s says operator-managed %t, the registry %t", p.Name, says, managed))
 		}
+		if managed && !strings.Contains(strings.Join(row.cells, " | "), p.OLM.OperatorManagedReason) {
+			violations = append(violations, fmt.Sprintf("row %s does not state the operator-managed reason %q", p.Name, p.OLM.OperatorManagedReason))
+		}
 	}
 	for name, row := range byName {
 		items := itemLinkTarget.FindAllStringSubmatch(row.cells[6], -1)
@@ -222,12 +225,13 @@ func TestBuiltinPackageCoverageParityRefusesADrift(t *testing.T) {
 		notYetMet string
 		want      string
 	}{
-		"provided token":       {mutate("nmstate", 2, "provides `nmstate`", "provides none"), notYetMet, "row nmstate provides"},
-		"required token":       {mutate("gitops", 2, "requires none", "requires `certManager`"), notYetMet, "row gitops requires"},
-		"configuration":        {mutate("metallb", 3, "`pools[]`", "`ranges[]`"), notYetMet, "row metallb names configuration members"},
-		"timeout default":      {mutate("kubevirt", 3, "default `45m`", "default `30m`"), notYetMet, "row kubevirt timeout default"},
-		"operator-managed row": {mutate("fdf", 1, "operator-managed", "exact"), notYetMet, "row fdf says operator-managed"},
-		"absent row unnamed":   {rows, "Not yet met: nothing.", "is absent from the registry but"},
+		"provided token":          {mutate("nmstate", 2, "provides `nmstate`", "provides none"), notYetMet, "row nmstate provides"},
+		"required token":          {mutate("gitops", 2, "requires none", "requires `certManager`"), notYetMet, "row gitops requires"},
+		"configuration":           {mutate("metallb", 3, "`pools[]`", "`ranges[]`"), notYetMet, "row metallb names configuration members"},
+		"timeout default":         {mutate("kubevirt", 3, "default `45m`", "default `30m`"), notYetMet, "row kubevirt timeout default"},
+		"operator-managed row":    {mutate("fdf", 1, "operator-managed", "exact"), notYetMet, "row fdf says operator-managed"},
+		"operator-managed reason": {mutate("fdf", 1, "approves its own later plans", "approves later plans"), notYetMet, "row fdf does not state the operator-managed reason"},
+		"absent row unnamed":      {rows, "Not yet met: nothing.", "is absent from the registry but"},
 	} {
 		t.Run(name, func(t *testing.T) {
 			got := coverageViolations(test.rows, test.notYetMet, Builtin(), shape)
@@ -244,5 +248,45 @@ func TestBuiltinPackageCoverageParityRefusesADrift(t *testing.T) {
 	}
 	if got := coverageViolations(slices.DeleteFunc(slices.Clone(rows), func(r coverageRow) bool { return r.name == "acm" }), notYetMet, Builtin(), shape); !slices.ContainsFunc(got, func(v string) bool { return strings.Contains(v, "registry package acm has no row") }) {
 		t.Fatalf("a registry package without a row was not refused: %q", got)
+	}
+}
+
+func TestDefinedCapabilityTokensAreDefinedByTheAddOnAPISpec(t *testing.T) {
+	data, err := os.ReadFile("../../../specs/api/addons.md")
+	if err != nil {
+		t.Fatal(err)
+	}
+	spec := string(data)
+	if !strings.Contains(spec, "`DefinedCapabilityTokens`") {
+		t.Error("specs/api/addons.md does not name the Go list DefinedCapabilityTokens")
+	}
+	for _, token := range api.DefinedCapabilityTokens() {
+		if !regexp.MustCompile("\\b(providing|provides) `" + regexp.QuoteMeta(token) + "`").MatchString(spec) {
+			t.Errorf("specs/api/addons.md never defines the meaning of the listed token %s with \"providing `%s`\" or \"provides `%s`\"", token, token, token)
+		}
+	}
+}
+
+func TestLiteralCapabilityTokenReadersNameDefinedTokens(t *testing.T) {
+	defined := api.DefinedCapabilityTokens()
+	for file, tokens := range map[string][]string{
+		"internal/addons/bindings.go":                              {"dataFoundation"},
+		"internal/addons/admission.go":                             {"dataFoundation"},
+		"cmd/bootwright/wiring_reconciliation.go":                  {"kubevirt"},
+		"internal/controller/tools.go":                             {"kubevirt"},
+		"internal/containercluster/openshift/network_admission.go": {"nmstate"},
+	} {
+		data, err := os.ReadFile("../../../" + file)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, token := range tokens {
+			if !strings.Contains(string(data), `"`+token+`"`) {
+				t.Errorf("%s no longer reads the token %s; remove it from this table", file, token)
+			}
+			if !slices.Contains(defined, token) {
+				t.Errorf("%s reads the token %s, which DefinedCapabilityTokens does not list", file, token)
+			}
+		}
 	}
 }

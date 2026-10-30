@@ -10299,3 +10299,47 @@ an operation frozen by an earlier build refuses continuation as
 the operator destroys it with the build that froze it.
 [Instances and blocks](../add-ons.md#instances-and-blocks) names the member and
 the constant.
+
+### X230 — Add-on packages without name-keyed generic code
+
+**Items:** B985 ([D210](backlog.md#d210), [D211](backlog.md#d211); audit 002
+F05, F06, F07, F19).
+**Kind:** enabling. **Owners:** Add-ons, with API.
+**Code commit:** the integration commit that carries this record.
+
+Generic add-on code no longer branches on a package name, and its limits and
+harness have one source each. `DefinedCapabilityTokens` in `api/v1alpha1`
+replaces the literal reader map of `NewRegistryWithExamples`; it adds
+`certManager`, whose meaning
+[package certmgr](../api/addons.md#package-certmgr) and
+[package gitlab](../api/addons.md#package-gitlab) already define, so a registry
+holding a provider of `certManager` and no consumer constructs, and
+[ClusterAddon](../api/addons.md#clusteraddon) names the list instead of copying
+its tokens (`TestDefinedCapabilityTokensAreDefinedByTheAddOnAPISpec`). The
+operator-managed approval is legal when `OLM.OperatorManagedReason` states a
+reason and refused otherwise, and an exact package may not carry one; `fdf` sets
+it, and the coverage parity test holds its row to the reason. MetalLB's pool
+defaulting and ordering moved into `normalizeMetalLB` with `SortedNamed`
+exported. `Package.Consumes` declares the `CephConsumer` objects a configuration
+names; the one-consumer rule of `ValidatePackages`, `StorageAttachments`, which
+now takes the registry where `cmd/bootwright/wiring_desiredstate.go` builds
+selection, and the `Requires` of `renderFDF` iterate it. `MaxBudget`,
+`MaxPackageNameBytes` and `DefaultCatalogs` are the one source of the ceiling,
+the name length and the default catalogs, with
+`TestLongestAdmittedPackageNameYieldsAValidBlockIdentity`.
+
+The package harness composes through `frozenProgram`, which handles an absent
+`OLM` and both phase groups, `firstPhaseOpensWithCRDGate` states the CRD-gate
+expectation per package, `TestListUsesOnlyImmutableRegistry` derives its rows
+from the registry, and `TestBuiltinPackageRequestGoldens` renders one request
+per built-in package through `Render` with fixed facts. Synthetic non-OLM,
+Before-phase and second-consumer packages pass the same rules with no generic
+edit. The recipe is the section "Adding a built-in add-on package" of
+[extend-implementation](../../.agents/skills/extend-implementation/SKILL.md#adding-a-built-in-add-on-package).
+A scratch package added from the recipe alone (a `certManager` provider and an
+operator-managed consumer with `Consumes`, `Normalize` and a Before phase)
+selected, validated, attached and rendered a request with no generic Go edited.
+
+No request, program or contract version moved. The six request goldens are new;
+rendered by the code before the change they are byte-identical, and every
+existing request, plan, effective-state and contract golden is unchanged.

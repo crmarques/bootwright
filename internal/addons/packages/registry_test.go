@@ -3,8 +3,10 @@ package packages
 import (
 	"net/netip"
 	"reflect"
+	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/addons"
@@ -81,35 +83,52 @@ func TestSecondaryInterfaceAdmissionAndReservedAddresses(t *testing.T) {
 		t.Fatal(issues)
 	}
 }
+
+var firstPhaseOpensWithCRDGate = map[string]bool{"acm": true, "fdf": true, "gitops": false, "kubevirt": true, "metallb": true, "nmstate": true}
+
+func assertPureProgram(t *testing.T, p addons.Package, i addons.Instance, wantCRDGate bool) {
+	t.Helper()
+	a, err := p.Render(i)
+	if err != nil {
+		t.Fatal(err)
+	}
+	b, err := p.Render(i)
+	if err != nil || !reflect.DeepEqual(a, b) {
+		t.Fatal("render not deterministic")
+	}
+	if wantCRDGate && (len(a.After) == 0 || len(a.After[0].Gate) == 0 || a.After[0].Gate[0].Condition.Type != "Established") {
+		t.Fatal("operand has no CRD gate")
+	}
+	for _, phase := range slices.Concat(a.Before, a.After) {
+		if _, err := co.CompilePhase(phase); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if len(a.Checks) == 0 {
+		t.Fatal("no readiness")
+	}
+	frozenProgram(t, p, a)
+}
+
 func TestShippedPackagesRenderPurePrograms(t *testing.T) {
 	r := Builtin()
 	for _, p := range r.Packages() {
 		t.Run(p.Name, func(t *testing.T) {
+			wantCRDGate, declared := firstPhaseOpensWithCRDGate[p.Name]
+			if !declared {
+				t.Fatalf("state in firstPhaseOpensWithCRDGate whether package %s opens its operand phase with a CRD gate", p.Name)
+			}
 			v := packageTestConfig(p.Name)
 			if p.Name == "metallb" {
 				v = config(pool("services", "192.0.2.80-192.0.2.90"))
 			}
-			i := addons.Instance{Cluster: "cluster", Binding: "binding", Config: v}
-			a, err := p.Render(i)
-			if err != nil {
-				t.Fatal(err)
-			}
-			b, err := p.Render(i)
-			if err != nil || !reflect.DeepEqual(a, b) {
-				t.Fatal("render not deterministic")
-			}
-			if p.Name != "gitops" && (len(a.After) == 0 || len(a.After[0].Gate) == 0 || a.After[0].Gate[0].Condition.Type != "Established") {
-				t.Fatal("operand has no CRD gate")
-			}
-			for _, phase := range a.After {
-				if _, err := co.CompilePhase(phase); err != nil {
-					t.Fatal(err)
-				}
-			}
-			if len(a.Checks) == 0 {
-				t.Fatal("no readiness")
-			}
+			assertPureProgram(t, p, addons.Instance{Cluster: "cluster", Binding: "binding", Config: v}, wantCRDGate)
 		})
+	}
+	for name := range firstPhaseOpensWithCRDGate {
+		if _, found := r.Find(name); !found {
+			t.Errorf("firstPhaseOpensWithCRDGate names %s, which the registry does not hold", name)
+		}
 	}
 	entries := r.Packages()
 	entries[0].OLM.Namespace = "changed"
@@ -117,6 +136,33 @@ func TestShippedPackagesRenderPurePrograms(t *testing.T) {
 	again := r.Packages()
 	if again[0].OLM.Namespace == "changed" || len(again[0].Provides) != len(entries[0].Provides)-1 {
 		t.Fatal("registry exposes mutable state")
+	}
+}
+
+func TestSyntheticPackagesPassTheRenderHarness(t *testing.T) {
+	phaseOf := func(name string) co.Phase {
+		return co.Phase{Objects: []co.Object{object("v1", "ConfigMap", "synthetic", name, api.Value{})}}
+	}
+	exists := []co.Check{{ResourceExists: &co.Ref{APIVersion: "v1", Kind: "ConfigMap", Namespace: "synthetic", Name: "after", Namespaced: true}}}
+	for name, p := range map[string]addons.Package{
+		"without OLM": {Name: "plain", Summary: "synthetic package without an operator", Budget: time.Minute, Render: func(addons.Instance) (addons.Rendered, error) {
+			return addons.Rendered{After: []co.Phase{phaseOf("after")}, Checks: exists}, nil
+		}},
+		"before phase only": {Name: "early", Summary: "synthetic package with a Before phase", Budget: time.Minute, Render: func(addons.Instance) (addons.Rendered, error) {
+			return addons.Rendered{Before: []co.Phase{phaseOf("before")}, Checks: exists}, nil
+		}},
+		"both phases with OLM": {Name: "both", Summary: "synthetic package with both phase groups", Budget: time.Minute, OLM: &addons.OLM{Namespace: "synthetic-operator", OperatorGroup: addons.OwnNamespace, GroupName: "synthetic", Subscription: "synthetic", Package: "synthetic", DefaultSource: "redhat-operators", Approval: addons.Exact}, Render: func(addons.Instance) (addons.Rendered, error) {
+			return addons.Rendered{Before: []co.Phase{phaseOf("before")}, After: []co.Phase{phaseOf("after")}, Checks: exists}, nil
+		}},
+	} {
+		t.Run(name, func(t *testing.T) {
+			registry, err := addons.NewRegistry([]addons.Package{p})
+			if err != nil {
+				t.Fatal(err)
+			}
+			found, _ := registry.Find(p.Name)
+			assertPureProgram(t, found, addons.Instance{Cluster: "cluster", Binding: "binding", Config: api.MapValue()}, false)
+		})
 	}
 }
 func TestIPv6IntervalsAreBounded(t *testing.T) {

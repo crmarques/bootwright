@@ -54,6 +54,39 @@ says.
   needed no edit to the general flow.
 - Update the observable-field table when the implementation projects state.
 
+## Adding a built-in add-on package
+
+No generic add-on code names a package; a descriptor declares each fact the
+generic code reads. Touch, in order:
+
+1. `api/v1alpha1`: the `spec.packages` member and its Go configuration type;
+   its `timeout` schema default equals the descriptor's `Budget`, at most
+   `addons.MaxBudget` (`TestPackageTimeoutDefaultsEqualTheirBudgets`). A name
+   is at most `addons.MaxPackageNameBytes`.
+2. `internal/addons/packages/<name>.go`: the `addons.Package` with `Summary`,
+   `Provides` and `Requires`, `Normalize` (defaults and ordering belong here,
+   never in `NormalizePackages`), `Admit`, `Render`, and `Consumes` when
+   the configuration names a `CephConsumer` (`Render` derives its `Requires`
+   from it). An `OLM` operator that approves its own plans sets
+   `OperatorManagedReason`; no other package may.
+3. `Builtin` in `registry.go`: one entry.
+4. A token it provides ahead of its first consumer is added to
+   `DefinedCapabilityTokens`, an API edit that
+   [specs/api/addons.md](../../../specs/api/addons.md#clusteraddon) defines;
+   any other token needs a reader in the registry.
+5. Tests: an admission test per rule, a row in `firstPhaseOpensWithCRDGate`,
+   the render golden (`TestPackageRenderGoldens`) and the request golden
+   (`TestBuiltinPackageRequestGoldens`, fed by `authoredPackageConfig`), a
+   row in `TestSchemaMaximalPackagesCompileDecodePlanAndCoverEveryMember`,
+   and the `internal/addons/catalog` listing and description tests.
+6. Records: its row in the
+   [coverage table](../../../specs/add-on-coverage.md#built-in-packages) (the
+   parity test holds it), its API section, a
+   [knowledge](../../knowledge/index.md) page for any native fact, and the
+   milestone item. The request is a contract path: state `Contract:` in the
+   commit.
+7. Gates: `make focus`, then `make quick` and `make docs-check`.
+
 ## Report
 
 List the touch set, any seam added, the digest decision and the gates run.

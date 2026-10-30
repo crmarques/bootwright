@@ -1,5 +1,11 @@
 package v1alpha1
 
+import "slices"
+
+var definedCapabilityTokens = []string{"certManager", "dataFoundation", "kubevirt", "metallb", "nmstate"}
+
+func DefinedCapabilityTokens() []string { return slices.Clone(definedCapabilityTokens) }
+
 func init() {
 	register(ClusterAddon, addonSchema)
 	register(ClusterAddonProfile, addonProfileSchema)

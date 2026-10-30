@@ -79,8 +79,8 @@ one, so Argo CD starts only after the objects of those blocks are complete. A
 block of another stage that reaches the cluster's API is not among them and is
 not waited for.
 
-A package's configuration may name a `CephConsumer` it consumes. The
-consumer, its storage cluster and their chain join the consuming cluster's
+A package's configuration may name a `CephConsumer` it consumes, declared
+by its descriptor's `Consumes`. The consumer, its storage cluster and their chain join the consuming cluster's
 [selection closure](api/environment.md#cluster-selection), the
 instance requires the consumer's block, and one consumer is consumed by at
 most one package instance across the input. The consumer's external-cluster
@@ -114,7 +114,8 @@ bounds); an admission test per rule, among them
 its `spec.packages` schema present, that compiles, decodes into its Go
 configuration type and plans (`TestSchemaMaximalPackagesCompileDecodePlanAndCoverEveryMember`);
 a schema `timeout` default equal to its `Budget`
-(`TestPackageTimeoutDefaultsEqualTheirBudgets`); render and plan goldens; a
+(`TestPackageTimeoutDefaultsEqualTheirBudgets`); render, request and plan
+goldens (`TestBuiltinPackageRequestGoldens`); a
 fake-cluster journey (fresh apply, continuation `unchanged`, unknown resolved
 by observation, a foreign object refused, a plan of another CSV never approved,
 retirement contacting nothing); and parity with its coverage row
@@ -319,7 +320,9 @@ diagnosed follows the bound of [Readiness](#readiness).
 
 A package whose operator approves the Manual InstallPlans of its own
 namespace states the operator-managed approval policy and its reason in
-its [coverage row](add-on-coverage.md#built-in-packages). Until the
+its descriptor's `OperatorManagedReason`, which the registry requires for
+that policy and which its [coverage row](add-on-coverage.md#built-in-packages)
+repeats. Until the
 Subscription's installed CSV is the `startingCSV`, Bootwright approves
 only the plan the Subscription owns whose CSV list is exactly the
 `startingCSV`, by the same tests, and fails a plan of its Subscription that

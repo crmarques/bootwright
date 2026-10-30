@@ -152,13 +152,6 @@ func NormalizePackages(o api.Object, r Registry) (api.Object, []api.Issue) {
 				v = v.With("subscription", sub.Default("sourceNamespace", api.StringValue("openshift-marketplace")))
 			}
 		}
-		if p.Name == "metallb" {
-			pools := v.Get("pools").Items()
-			for i := range pools {
-				pools[i] = pools[i].Default("autoAssign", api.BoolValue(true))
-			}
-			v = v.With("pools", sortedNamed(api.ListValue(pools...), "name"))
-		}
 		if p.Normalize != nil {
 			v = p.Normalize(v)
 		}
@@ -169,21 +162,51 @@ func NormalizePackages(o api.Object, r Registry) (api.Object, []api.Issue) {
 	}
 	return o.WithSpec(spec), nil
 }
+
+var budgetCeiling = strings.TrimSuffix(MaxBudget.String(), "0s")
+
+type consumedConsumer struct{ Package, Field, Name string }
+
+func (r Registry) consumption(binding api.Object) []consumedConsumer {
+	var uses []consumedConsumer
+	for _, f := range binding.Spec().Get("packages").Fields() {
+		p, ok := r.Find(f.Name)
+		if !ok || p.Consumes == nil {
+			continue
+		}
+		for _, use := range p.Consumes(f.Value) {
+			uses = append(uses, consumedConsumer{Package: p.Name, Field: use.Field, Name: use.Name})
+		}
+	}
+	return uses
+}
+
 func ValidatePackages(o api.Object, c api.Catalog, r Registry, facts ClusterFacts) []api.Issue {
 	if o.Kind() != api.ClusterAddonBinding {
 		return nil
 	}
 	issues := []api.Issue{}
-	if ref := o.Spec().Get("packages", "fdf", "cephConsumerRef").Text(); ref != "" {
+	if mine := r.consumption(o); len(mine) > 0 {
 		bindings := c.OfKind(api.ClusterAddonBinding)
 		slices.SortFunc(bindings, func(a, b api.Object) int { return strings.Compare(a.Name(), b.Name()) })
-		for _, earlier := range bindings {
-			if earlier.Name() >= o.Name() {
-				break
+		named := map[string]consumedConsumer{}
+		for _, use := range mine {
+			if first, repeated := named[use.Name]; repeated {
+				issues = append(issues, api.Issue{Code: "api.duplicate", Field: "$.spec.packages." + use.Package + "." + use.Field, Message: "CephConsumer/" + use.Name + " is already consumed by package " + first.Package + " of the same ClusterAddonBinding", Remediation: "give each consuming package its own CephConsumer"})
+				continue
 			}
-			if earlier.Spec().Get("packages", "fdf", "cephConsumerRef").Text() == ref {
-				issues = append(issues, api.Issue{Code: "api.duplicate", Field: "$.spec.packages.fdf.cephConsumerRef", Message: "CephConsumer/" + ref + " is already consumed by package fdf of ClusterAddonBinding/" + earlier.Name(), Remediation: "give each consuming cluster its own CephConsumer"})
-				break
+			named[use.Name] = use
+		earlier:
+			for _, other := range bindings {
+				if other.Name() >= o.Name() {
+					break
+				}
+				for _, taken := range r.consumption(other) {
+					if taken.Name == use.Name {
+						issues = append(issues, api.Issue{Code: "api.duplicate", Field: "$.spec.packages." + use.Package + "." + use.Field, Message: "CephConsumer/" + use.Name + " is already consumed by package " + taken.Package + " of ClusterAddonBinding/" + other.Name(), Remediation: "give each consuming cluster its own CephConsumer"})
+						break earlier
+					}
+				}
 			}
 		}
 	}
@@ -204,8 +227,8 @@ func ValidatePackages(o api.Object, c api.Catalog, r Registry, facts ClusterFact
 		}
 		v := f.Value
 		budget, err := time.ParseDuration(v.Get("timeout").Text())
-		if err != nil || budget <= 0 || budget > 5*time.Hour+50*time.Minute {
-			add("timeout", "package "+p.Name+" timeout must be positive and at most 5h50m", "set timeout to a positive duration no greater than 5h50m")
+		if err != nil || budget <= 0 || budget > MaxBudget {
+			add("timeout", "package "+p.Name+" timeout must be positive and at most "+budgetCeiling, "set timeout to a positive duration no greater than "+budgetCeiling)
 		} else if budget%time.Second != 0 {
 			add("timeout", "package "+p.Name+" timeout must be a whole number of seconds", "set timeout to a whole number of seconds, such as 90s")
 		}
@@ -217,7 +240,7 @@ func ValidatePackages(o api.Object, c api.Catalog, r Registry, facts ClusterFact
 			}
 			if catalog := sub.Get("catalogSource"); catalog.Present() {
 				name := catalog.Get("name").Text()
-				if slices.Contains([]string{"redhat-operators", "certified-operators", "community-operators", "redhat-marketplace"}, name) {
+				if slices.Contains(defaultCatalogs, name) {
 					add("subscription.catalogSource.name", "owned catalog "+name+" has the name of a default catalog", "choose a catalog name other than a default catalog")
 				}
 				if source != name {

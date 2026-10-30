@@ -6,6 +6,7 @@ import (
 	"slices"
 	"time"
 
+	"github.com/crmarques/bootwright/internal/addons"
 	"github.com/crmarques/bootwright/internal/addons/clusterobjects"
 	"github.com/crmarques/bootwright/internal/machine"
 	"github.com/crmarques/bootwright/internal/reconciliation"
@@ -70,7 +71,7 @@ func (r Request) validate() error {
 	if r.Version != requestVersion || !reconciliation.ValidSegment(r.Cluster) || !reconciliation.ValidSegment(r.Package) || !reconciliation.ValidSegment(r.Binding) || !reconciliation.ValidSegment(BlockID(r.Package, r.Cluster)) {
 		return fmt.Errorf("invalid add-on instance identity")
 	}
-	if r.BudgetSeconds <= 0 || r.BudgetSeconds > int64((5*time.Hour+50*time.Minute)/time.Second) || r.Deadline() > lifecycle.MaxDeadline {
+	if r.BudgetSeconds <= 0 || r.BudgetSeconds > int64(addons.MaxBudget/time.Second) || r.Deadline() > lifecycle.MaxDeadline {
 		return fmt.Errorf("invalid add-on instance budget")
 	}
 	if !r.Placement.Local() || r.Placement.Machine == "" || r.Placement.Address != "" || r.Placement.PrivateKeyRef != "" || r.Placement.KnownHostsRef != "" || r.Placement.Port != 0 || r.Placement.User != "" {

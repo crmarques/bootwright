@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/netip"
 	"slices"
+	"strings"
 	"time"
 	"unicode"
 
@@ -14,7 +15,15 @@ import (
 	"github.com/crmarques/bootwright/internal/reconciliation"
 )
 
-const MaxSummaryBytes = 120
+const (
+	MaxSummaryBytes     = 120
+	MaxPackageNameBytes = 9
+	MaxBudget           = 5*time.Hour + 50*time.Minute
+)
+
+var defaultCatalogs = []string{"redhat-operators", "certified-operators", "community-operators", "redhat-marketplace"}
+
+func DefaultCatalogs() []string { return slices.Clone(defaultCatalogs) }
 
 type GroupShape string
 
@@ -40,16 +49,19 @@ type Package struct {
 	PlacementNamespaces []string
 	Normalize           func(api.Value) api.Value
 	Budget              time.Duration
+	Consumes            func(api.Value) []CephConsumerUse
 	OLM                 *OLM
 	Admit               func(Instance, ClusterFacts) []api.Issue
 	Render              func(Instance) (Rendered, error)
 }
+type CephConsumerUse struct{ Field, Name string }
 type OLM struct {
 	Namespace                                       string
 	NamespaceLabels                                 map[string]string
 	OperatorGroup                                   GroupShape
 	GroupName, Subscription, Package, DefaultSource string
 	Approval                                        Approval
+	OperatorManagedReason                           string
 }
 type Instance struct {
 	Cluster, Binding string
@@ -158,7 +170,10 @@ func NewRegistry(entries []Package) (Registry, error) { return NewRegistryWithEx
 func NewRegistryWithExamples(entries []Package, examples map[string][]api.Value) (Registry, error) {
 	r := Registry{}
 	names, namespaces, operators := map[string]bool{}, map[string]bool{}, map[string]bool{}
-	readers := map[string]bool{"kubevirt": true, "dataFoundation": true, "metallb": true, "nmstate": true}
+	readers := map[string]bool{}
+	for _, token := range api.DefinedCapabilityTokens() {
+		readers[token] = true
+	}
 	for _, p := range entries {
 		for _, token := range p.Requires {
 			readers[token] = true
@@ -172,7 +187,7 @@ func NewRegistryWithExamples(entries []Package, examples map[string][]api.Value)
 		}
 	}
 	for _, p := range entries {
-		if len(p.Name) == 0 || len(p.Name) > 9 || p.Render == nil || p.Budget <= 0 || p.Budget > 5*time.Hour+50*time.Minute {
+		if len(p.Name) == 0 || len(p.Name) > MaxPackageNameBytes || p.Render == nil || p.Budget <= 0 || p.Budget > MaxBudget {
 			return Registry{}, fmt.Errorf("invalid package %q", p.Name)
 		}
 		if !validSummary(p.Summary) {
@@ -196,7 +211,8 @@ func NewRegistryWithExamples(entries []Package, examples map[string][]api.Value)
 			}
 		}
 		if p.OLM != nil {
-			if p.OLM.Approval != Exact && (p.OLM.Approval != OperatorManaged || p.Name != "fdf") {
+			managed := p.OLM.Approval == OperatorManaged && strings.TrimSpace(p.OLM.OperatorManagedReason) != "" && validSummary(p.OLM.OperatorManagedReason)
+			if !managed && (p.OLM.Approval != Exact || p.OLM.OperatorManagedReason != "") {
 				return Registry{}, fmt.Errorf("package %q has an unqualified OLM approval policy", p.Name)
 			}
 			if p.OLM.Namespace == "" || p.OLM.Namespace == "openshift-operators" || namespaces[p.OLM.Namespace] {

@@ -1,0 +1,138 @@
+{
+  "binding": "binding",
+  "budgetSeconds": 1200,
+  "cluster": "cluster",
+  "package": "gitops",
+  "placement": {
+    "connection": "local",
+    "machine": "controller"
+  },
+  "placementNamespaces": [
+    "openshift-gitops"
+  ],
+  "producedInputs": [
+    {
+      "kind": "OpenShiftCluster",
+      "object": "cluster",
+      "output": "kubeconfig"
+    }
+  ],
+  "program": {
+    "checks": [
+      {
+        "csvSucceeded": {
+          "csv": "operator.v1",
+          "namespace": "openshift-gitops-operator",
+          "subscription": "openshift-gitops-operator"
+        }
+      },
+      {
+        "statusPhase": {
+          "apiVersion": "argoproj.io/v1beta1",
+          "kind": "ArgoCD",
+          "name": "openshift-gitops",
+          "namespace": "openshift-gitops",
+          "namespaced": true,
+          "path": "status.server",
+          "values": [
+            "Running"
+          ]
+        }
+      },
+      {
+        "statusPhase": {
+          "apiVersion": "argoproj.io/v1beta1",
+          "kind": "ArgoCD",
+          "name": "openshift-gitops",
+          "namespace": "openshift-gitops",
+          "namespaced": true,
+          "path": "status.phase",
+          "values": [
+            "Available"
+          ]
+        }
+      }
+    ],
+    "steps": [
+      {
+        "create": {
+          "apiVersion": "v1",
+          "body": {
+            "apiVersion": "v1",
+            "kind": "Namespace",
+            "metadata": {
+              "labels": {
+                "openshift.io/cluster-monitoring": "true"
+              },
+              "name": "openshift-gitops-operator"
+            }
+          },
+          "desiredDigest": "f01a99da420d3afce8340b9b8085562248cd06b9cdbec7376956a6940f528082",
+          "kind": "Namespace",
+          "name": "openshift-gitops-operator",
+          "namespace": "",
+          "namespaced": false
+        },
+        "kind": "create"
+      },
+      {
+        "create": {
+          "apiVersion": "operators.coreos.com/v1",
+          "body": {
+            "apiVersion": "operators.coreos.com/v1",
+            "kind": "OperatorGroup",
+            "metadata": {
+              "name": "openshift-gitops-operator",
+              "namespace": "openshift-gitops-operator"
+            }
+          },
+          "desiredDigest": "e153b7c642142960560a49fe04089f88854e3361e40c6f8600077598a94b0333",
+          "kind": "OperatorGroup",
+          "name": "openshift-gitops-operator",
+          "namespace": "openshift-gitops-operator",
+          "namespaced": true
+        },
+        "kind": "create"
+      },
+      {
+        "kind": "subscribe",
+        "subscribe": {
+          "approval": "exact",
+          "csv": "operator.v1",
+          "object": {
+            "apiVersion": "operators.coreos.com/v1alpha1",
+            "body": {
+              "apiVersion": "operators.coreos.com/v1alpha1",
+              "kind": "Subscription",
+              "metadata": {
+                "name": "openshift-gitops-operator",
+                "namespace": "openshift-gitops-operator"
+              },
+              "spec": {
+                "channel": "stable",
+                "installPlanApproval": "Manual",
+                "name": "openshift-gitops-operator",
+                "source": "redhat-operators",
+                "sourceNamespace": "openshift-marketplace",
+                "startingCSV": "operator.v1"
+              }
+            },
+            "desiredDigest": "20f44a215cf3fb4f39a7b299325382f26821b2629ec9876b5689730206c98fb3",
+            "kind": "Subscription",
+            "name": "openshift-gitops-operator",
+            "namespace": "openshift-gitops-operator",
+            "namespaced": true
+          }
+        }
+      }
+    ],
+    "version": "cluster-objects-v2"
+  },
+  "secrets": [],
+  "tool": {
+    "compatibility": "openshift",
+    "kind": "openshift-clients",
+    "version": "4.20"
+  },
+  "version": "addon-instance-request-v3"
+}

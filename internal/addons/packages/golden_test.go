@@ -8,6 +8,7 @@ import (
 	"net/netip"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -124,6 +125,39 @@ func lineDiff(want, got string) string {
 	return out.String()
 }
 
+func frozenProgram(t *testing.T, p addons.Package, rendered addons.Rendered) []byte {
+	t.Helper()
+	program := co.Program{Version: co.Version, Steps: []co.Step{}, Checks: rendered.Checks}
+	for _, phase := range slices.Concat(rendered.Before, rendered.After) {
+		steps, err := co.CompilePhase(phase)
+		if err != nil {
+			t.Fatal(err)
+		}
+		program.Steps = append(program.Steps, steps...)
+	}
+	options := co.Options{PlacementNamespaces: p.PlacementNamespaces}
+	if p.OLM != nil {
+		options.Namespace = p.OLM.Namespace
+	}
+	data, err := co.Freeze(program, options)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := co.ThawVersion(data, options); err != nil {
+		t.Fatal(err)
+	}
+	return data
+}
+
+func renderedGolden(t *testing.T, name string, p addons.Package, instance addons.Instance) {
+	t.Helper()
+	rendered, err := p.Render(instance)
+	if err != nil {
+		t.Fatal(err)
+	}
+	matchesGolden(t, name, frozenProgram(t, p, rendered), false)
+}
+
 func TestPackageRenderGoldens(t *testing.T) {
 	for _, p := range Builtin().Packages() {
 		t.Run(p.Name, func(t *testing.T) {
@@ -131,51 +165,14 @@ func TestPackageRenderGoldens(t *testing.T) {
 			if p.Name == "metallb" {
 				configuration = config(pool("services", "192.0.2.80-192.0.2.90"))
 			}
-			rendered, err := p.Render(addons.Instance{Cluster: "cluster", Binding: "binding", Config: configuration})
-			if err != nil {
-				t.Fatal(err)
-			}
-			program := co.Program{Version: co.Version, Steps: []co.Step{}, Checks: rendered.Checks}
-			for _, phase := range rendered.After {
-				steps, err := co.CompilePhase(phase)
-				if err != nil {
-					t.Fatal(err)
-				}
-				program.Steps = append(program.Steps, steps...)
-			}
-			data, err := co.Freeze(program, co.Options{Namespace: p.OLM.Namespace})
-			if err != nil {
-				t.Fatal(err)
-			}
-			matchesGolden(t, p.Name, data, false)
-			if _, err := co.ThawVersion(data, co.Options{Namespace: p.OLM.Namespace}); err != nil {
-				t.Fatal(err)
-			}
+			renderedGolden(t, p.Name, p, addons.Instance{Cluster: "cluster", Binding: "binding", Config: configuration})
 		})
 	}
 }
 
 func TestKubeVirtHostedRenderGolden(t *testing.T) {
-	rendered, err := renderKubeVirt(addons.Instance{Cluster: "host", Binding: "binding", Config: packageTestConfig("kubevirt"), Facts: hostedFacts()})
-	if err != nil {
-		t.Fatal(err)
-	}
-	program := co.Program{Version: co.Version, Steps: []co.Step{}, Checks: rendered.Checks}
-	for _, phase := range rendered.After {
-		steps, err := co.CompilePhase(phase)
-		if err != nil {
-			t.Fatal(err)
-		}
-		program.Steps = append(program.Steps, steps...)
-	}
-	data, err := co.Freeze(program, co.Options{Namespace: "openshift-cnv"})
-	if err != nil {
-		t.Fatal(err)
-	}
-	matchesGolden(t, "kubevirt-hosted", data, false)
-	if _, err := co.ThawVersion(data, co.Options{Namespace: "openshift-cnv"}); err != nil {
-		t.Fatal(err)
-	}
+	p, _ := Builtin().Find("kubevirt")
+	renderedGolden(t, "kubevirt-hosted", p, addons.Instance{Cluster: "host", Binding: "binding", Config: packageTestConfig("kubevirt"), Facts: hostedFacts()})
 }
 
 func maximumPools() []api.Value {
@@ -210,31 +207,19 @@ func TestMetalLBAdditionalRenderGoldens(t *testing.T) {
 			if issues := admitPools(instance, test.facts); len(issues) != 0 {
 				t.Fatalf("golden configuration is not admitted: %+v", issues)
 			}
-			rendered, err := renderMetalLB(instance)
+			p, _ := Builtin().Find("metallb")
+			rendered, err := p.Render(instance)
 			if err != nil {
 				t.Fatal(err)
 			}
-			program := co.Program{Version: co.Version, Steps: []co.Step{}, Checks: rendered.Checks}
 			objects := 0
 			for _, phase := range rendered.After {
 				objects += len(phase.Objects)
-				steps, err := co.CompilePhase(phase)
-				if err != nil {
-					t.Fatal(err)
-				}
-				program.Steps = append(program.Steps, steps...)
 			}
 			if objects != test.objects {
 				t.Fatalf("objects: %d", objects)
 			}
-			data, err := co.Freeze(program, co.Options{Namespace: "metallb-system"})
-			if err != nil {
-				t.Fatal(err)
-			}
-			matchesGolden(t, test.name, data, false)
-			if _, err := co.ThawVersion(data, co.Options{Namespace: "metallb-system"}); err != nil {
-				t.Fatal(err)
-			}
+			matchesGolden(t, test.name, frozenProgram(t, p, rendered), false)
 		})
 	}
 	for _, configuration := range []api.Value{

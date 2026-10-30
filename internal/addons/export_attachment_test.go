@@ -45,7 +45,7 @@ func TestBuiltinExportClosureRetainsBothSidesAndResourceChain(t *testing.T) {
 			env := object(api.Environment, "environment", api.FieldValue{Name: "containerClusters", Value: api.StringList(tc.container)}, api.FieldValue{Name: "storageClusters", Value: api.StringList(tc.storage)})
 			c := api.NewCatalog(append(append([]api.Object{}, base...), env))
 			attachments := []environment.Attachment{}
-			for _, a := range addons.StorageAttachments(c) {
+			for _, a := range addons.StorageAttachments(c, packages.Builtin()) {
 				attachments = append(attachments, environment.Attachment{ClusterRef: a.ClusterRef, ConsumerRef: a.ConsumerRef})
 			}
 			selected := environment.Select(c, attachments, testClusterMembers).Catalog

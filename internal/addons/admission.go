@@ -24,7 +24,7 @@ func Normalize(o api.Object, _ api.Catalog) (api.Object, []api.Issue) {
 			for i := range inputs {
 				inputs[i] = inputs[i].Default("required", api.BoolValue(true))
 			}
-			s = s.With("inputs", sortedNamed(api.ListValue(inputs...), "name"))
+			s = s.With("inputs", SortedNamed(api.ListValue(inputs...), "name"))
 		}
 		if olm := s.Get("olm"); olm.Present() {
 			if image := olm.Get("catalogSource", "image"); image.Present() {
@@ -75,10 +75,10 @@ func Normalize(o api.Object, _ api.Catalog) (api.Object, []api.Issue) {
 			configs := s.Get("addonConfigs").Items()
 			for i := range configs {
 				if configs[i].Has("inputs") {
-					configs[i] = configs[i].With("inputs", sortedNamed(configs[i].Get("inputs"), "name"))
+					configs[i] = configs[i].With("inputs", SortedNamed(configs[i].Get("inputs"), "name"))
 				}
 			}
-			s = s.With("addonConfigs", sortedNamed(api.ListValue(configs...), "addonRef"))
+			s = s.With("addonConfigs", SortedNamed(api.ListValue(configs...), "addonRef"))
 		}
 	default:
 		return o, nil
@@ -262,7 +262,7 @@ func sortedStrings(value api.Value) api.Value {
 	return api.StringList(items...)
 }
 
-func sortedNamed(value api.Value, key string) api.Value {
+func SortedNamed(value api.Value, key string) api.Value {
 	items := value.Items()
 	slices.SortStableFunc(items, func(a, b api.Value) int { return strings.Compare(a.Get(key).Text(), b.Get(key).Text()) })
 	return api.ListValue(items...)

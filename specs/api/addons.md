@@ -54,9 +54,9 @@ unknown arms are invalid; the selected arm must satisfy its required fields.
 Add-on capability tokens match `^[A-Za-z0-9][A-Za-z0-9._-]*$` and are unique
 in each list. They name what an add-on or package provides to a cluster, not a
 lifecycle capability. `provides` and `requires` are not
-closed enums. The names `kubevirt`, `dataFoundation`, `metallb` and `nmstate`
-have defined downstream meanings, but all valid tokens participate in
-dependency ordering. A built-in package
+closed enums. The tokens of `DefinedCapabilityTokens` in `api/v1alpha1` have
+defined downstream meanings, which the [package sections](#built-in-packages)
+define, but all valid tokens participate in dependency ordering. A built-in package
 provides `metallb` when it answers `LoadBalancer` Service addresses
 ([package metallb](#package-metallb)); a package or add-on that needs such an
 address requires it. An add-on with any `provides` value requires at least one
@@ -302,8 +302,8 @@ the package's readiness timeout; a fraction of a second is refused at
 its configuration against the bound `OpenShiftCluster` and the effective
 catalog, never a live system.
 
-Registry construction proves that every provided capability token has a reader or a
-defined downstream meaning. `NewRegistryWithExamples` accepts explicit
+Registry construction proves that every provided capability token has a reader or is
+in `DefinedCapabilityTokens`, so adding a token without a reader is an API edit. `NewRegistryWithExamples` accepts explicit
 configuration examples to prove conditional `RequiresFor` readers;
 `NewRegistry` supplies none. These examples establish registry conformance,
 while instance selection evaluates `RequiresFor` against each binding's

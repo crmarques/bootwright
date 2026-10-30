@@ -181,7 +181,7 @@ func TestTypedBindingInputsAndStorageAttachments(t *testing.T) {
 	if issues := Validate(binding, catalog); len(issues) != 0 {
 		t.Fatal(issues)
 	}
-	if got := StorageAttachments(catalog); !reflect.DeepEqual(got, []Attachment{{ClusterRef: "cluster", ConsumerRef: "export"}}) {
+	if got := StorageAttachments(catalog, Registry{}); !reflect.DeepEqual(got, []Attachment{{ClusterRef: "cluster", ConsumerRef: "export"}}) {
 		t.Fatalf("attachments = %v", got)
 	}
 	for _, altered := range []api.Object{
@@ -191,7 +191,7 @@ func TestTypedBindingInputsAndStorageAttachments(t *testing.T) {
 		addon.WithSpec(addon.Spec().With("inputs", l(input.With("secretType", s("token"))))),
 		addon.WithSpec(addon.Spec().With("inputs", l(input, input))),
 	} {
-		if got := StorageAttachments(api.NewCatalog([]api.Object{altered, export, binding})); len(got) != 0 {
+		if got := StorageAttachments(api.NewCatalog([]api.Object{altered, export, binding}), Registry{}); len(got) != 0 {
 			t.Fatal("undeclared or invalid storage relationship inferred", got)
 		}
 	}
@@ -203,7 +203,7 @@ func TestTypedBindingInputsAndStorageAttachments(t *testing.T) {
 		t.Fatal("required input or Secret type mismatch accepted", issues)
 	}
 	configOnly := binding.WithSpec(binding.Spec().With("addonRefs", api.StringList("other")))
-	if !hasCode(Validate(configOnly, api.NewCatalog([]api.Object{addon, export, manifestAddon("other"), configOnly})), "api.reference") || len(StorageAttachments(api.NewCatalog([]api.Object{addon, export, manifestAddon("other"), configOnly}))) != 0 {
+	if !hasCode(Validate(configOnly, api.NewCatalog([]api.Object{addon, export, manifestAddon("other"), configOnly})), "api.reference") || len(StorageAttachments(api.NewCatalog([]api.Object{addon, export, manifestAddon("other"), configOnly}), Registry{})) != 0 {
 		t.Fatal("configuration selected an unbound add-on")
 	}
 }

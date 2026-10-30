@@ -1,0 +1,192 @@
+{
+  "binding": "binding",
+  "budgetSeconds": 2700,
+  "cluster": "cluster",
+  "package": "acm",
+  "placement": {
+    "connection": "local",
+    "machine": "controller"
+  },
+  "placementNamespaces": [],
+  "producedInputs": [
+    {
+      "kind": "OpenShiftCluster",
+      "object": "cluster",
+      "output": "kubeconfig"
+    }
+  ],
+  "program": {
+    "checks": [
+      {
+        "csvSucceeded": {
+          "csv": "operator.v1",
+          "namespace": "open-cluster-management",
+          "subscription": "acm-operator-subscription"
+        }
+      },
+      {
+        "statusPhase": {
+          "apiVersion": "operator.open-cluster-management.io/v1",
+          "kind": "MultiClusterHub",
+          "name": "multiclusterhub",
+          "namespace": "open-cluster-management",
+          "namespaced": true,
+          "path": "status.phase",
+          "values": [
+            "Running"
+          ]
+        }
+      },
+      {
+        "csvSucceeded": {
+          "csv": "engine.v1",
+          "namespace": "multicluster-engine",
+          "subscription": "multicluster-engine"
+        }
+      }
+    ],
+    "steps": [
+      {
+        "create": {
+          "apiVersion": "v1",
+          "body": {
+            "apiVersion": "v1",
+            "kind": "Namespace",
+            "metadata": {
+              "name": "open-cluster-management"
+            }
+          },
+          "desiredDigest": "c69fc6b3b8c55c04a54f9fa25e668a74eb6d489d84e4c5e49d016cd43f9d7618",
+          "kind": "Namespace",
+          "name": "open-cluster-management",
+          "namespace": "",
+          "namespaced": false
+        },
+        "kind": "create"
+      },
+      {
+        "create": {
+          "apiVersion": "operators.coreos.com/v1",
+          "body": {
+            "apiVersion": "operators.coreos.com/v1",
+            "kind": "OperatorGroup",
+            "metadata": {
+              "name": "open-cluster-management",
+              "namespace": "open-cluster-management"
+            },
+            "spec": {
+              "targetNamespaces": [
+                "open-cluster-management"
+              ]
+            }
+          },
+          "desiredDigest": "a92efb03f34fc2d6b9300487fd43429eb94014894f8ab61f1d46e1fa2459f40a",
+          "kind": "OperatorGroup",
+          "name": "open-cluster-management",
+          "namespace": "open-cluster-management",
+          "namespaced": true
+        },
+        "kind": "create"
+      },
+      {
+        "kind": "subscribe",
+        "subscribe": {
+          "approval": "exact",
+          "csv": "operator.v1",
+          "object": {
+            "apiVersion": "operators.coreos.com/v1alpha1",
+            "body": {
+              "apiVersion": "operators.coreos.com/v1alpha1",
+              "kind": "Subscription",
+              "metadata": {
+                "name": "acm-operator-subscription",
+                "namespace": "open-cluster-management"
+              },
+              "spec": {
+                "channel": "stable",
+                "installPlanApproval": "Manual",
+                "name": "advanced-cluster-management",
+                "source": "redhat-operators",
+                "sourceNamespace": "openshift-marketplace",
+                "startingCSV": "operator.v1"
+              }
+            },
+            "desiredDigest": "1b9845f2ac51ca78962c1567add57320bf6c819b44f26eacadb8f8f49b7cb73a",
+            "kind": "Subscription",
+            "name": "acm-operator-subscription",
+            "namespace": "open-cluster-management",
+            "namespaced": true
+          }
+        }
+      },
+      {
+        "kind": "wait",
+        "wait": [
+          {
+            "condition": {
+              "apiVersion": "apiextensions.k8s.io/v1",
+              "kind": "CustomResourceDefinition",
+              "name": "multiclusterhubs.operator.open-cluster-management.io",
+              "namespace": "",
+              "namespaced": false,
+              "status": "True",
+              "type": "Established"
+            }
+          }
+        ]
+      },
+      {
+        "create": {
+          "apiVersion": "operator.open-cluster-management.io/v1",
+          "body": {
+            "apiVersion": "operator.open-cluster-management.io/v1",
+            "kind": "MultiClusterHub",
+            "metadata": {
+              "annotations": {
+                "installer.open-cluster-management.io/mce-subscription-spec": "{\"channel\":\"stable\",\"installPlanApproval\":\"Manual\",\"source\":\"redhat-operators\",\"sourceNamespace\":\"openshift-marketplace\",\"startingCSV\":\"engine.v1\"}"
+              },
+              "name": "multiclusterhub",
+              "namespace": "open-cluster-management"
+            },
+            "spec": {
+              "disableHubSelfManagement": false
+            }
+          },
+          "desiredDigest": "f50adfa98285214cade3eba52c23306d2adf3eb0d9c0581c36887e38158d9503",
+          "kind": "MultiClusterHub",
+          "name": "multiclusterhub",
+          "namespace": "open-cluster-management",
+          "namespaced": true
+        },
+        "kind": "create"
+      },
+      {
+        "approveDependent": {
+          "channel": "stable",
+          "creator": {
+            "apiVersion": "operator.open-cluster-management.io/v1",
+            "kind": "MultiClusterHub",
+            "name": "multiclusterhub",
+            "namespace": "open-cluster-management",
+            "namespaced": true
+          },
+          "csv": "engine.v1",
+          "namespace": "multicluster-engine",
+          "package": "multicluster-engine",
+          "source": "redhat-operators",
+          "sourceNamespace": "openshift-marketplace",
+          "subscription": "multicluster-engine"
+        },
+        "kind": "approveDependent"
+      }
+    ],
+    "version": "cluster-objects-v2"
+  },
+  "secrets": [],
+  "tool": {
+    "compatibility": "openshift",
+    "kind": "openshift-clients",
+    "version": "4.20"
+  },
+  "version": "addon-instance-request-v3"
+}

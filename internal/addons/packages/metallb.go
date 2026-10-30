@@ -9,7 +9,14 @@ import (
 )
 
 func metallb() addons.Package {
-	return addons.Package{Name: "metallb", Summary: "MetalLB load balancer with optional layer 2 address pools", Provides: []string{"metallb"}, Budget: 30 * time.Minute, OLM: &addons.OLM{Namespace: "metallb-system", OperatorGroup: addons.AllNamespaces, GroupName: "metallb-operator", Subscription: "metallb-operator-sub", Package: "metallb-operator", DefaultSource: "redhat-operators", Approval: addons.Exact}, Admit: admitPools, Render: renderMetalLB}
+	return addons.Package{Name: "metallb", Summary: "MetalLB load balancer with optional layer 2 address pools", Provides: []string{"metallb"}, Budget: 30 * time.Minute, Normalize: normalizeMetalLB, OLM: &addons.OLM{Namespace: "metallb-system", OperatorGroup: addons.AllNamespaces, GroupName: "metallb-operator", Subscription: "metallb-operator-sub", Package: "metallb-operator", DefaultSource: "redhat-operators", Approval: addons.Exact}, Admit: admitPools, Render: renderMetalLB}
+}
+func normalizeMetalLB(v api.Value) api.Value {
+	pools := v.Get("pools").Items()
+	for i := range pools {
+		pools[i] = pools[i].Default("autoAssign", api.BoolValue(true))
+	}
+	return v.With("pools", addons.SortedNamed(api.ListValue(pools...), "name"))
 }
 func renderMetalLB(i addons.Instance) (addons.Rendered, error) {
 	config, err := addons.Decode[api.MetalLBConfig](i.Config)

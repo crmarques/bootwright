@@ -1,0 +1,173 @@
+{
+  "binding": "binding",
+  "budgetSeconds": 2700,
+  "cluster": "cluster",
+  "package": "kubevirt",
+  "placement": {
+    "connection": "local",
+    "machine": "controller"
+  },
+  "placementNamespaces": [],
+  "producedInputs": [
+    {
+      "kind": "OpenShiftCluster",
+      "object": "cluster",
+      "output": "kubeconfig"
+    }
+  ],
+  "program": {
+    "checks": [
+      {
+        "csvSucceeded": {
+          "csv": "operator.v1",
+          "namespace": "openshift-cnv",
+          "subscription": "hco-operatorhub"
+        }
+      },
+      {
+        "condition": {
+          "apiVersion": "hco.kubevirt.io/v1beta1",
+          "kind": "HyperConverged",
+          "name": "kubevirt-hyperconverged",
+          "namespace": "openshift-cnv",
+          "namespaced": true,
+          "status": "True",
+          "type": "Available"
+        }
+      },
+      {
+        "condition": {
+          "apiVersion": "hco.kubevirt.io/v1beta1",
+          "kind": "HyperConverged",
+          "name": "kubevirt-hyperconverged",
+          "namespace": "openshift-cnv",
+          "namespaced": true,
+          "status": "False",
+          "type": "Degraded"
+        }
+      }
+    ],
+    "steps": [
+      {
+        "create": {
+          "apiVersion": "v1",
+          "body": {
+            "apiVersion": "v1",
+            "kind": "Namespace",
+            "metadata": {
+              "labels": {
+                "openshift.io/cluster-monitoring": "true"
+              },
+              "name": "openshift-cnv"
+            }
+          },
+          "desiredDigest": "8e9157539e88b0fddda300850e769da00254b1233f598841dacaa89ee7bc8eb1",
+          "kind": "Namespace",
+          "name": "openshift-cnv",
+          "namespace": "",
+          "namespaced": false
+        },
+        "kind": "create"
+      },
+      {
+        "create": {
+          "apiVersion": "operators.coreos.com/v1",
+          "body": {
+            "apiVersion": "operators.coreos.com/v1",
+            "kind": "OperatorGroup",
+            "metadata": {
+              "name": "kubevirt-hyperconverged-group",
+              "namespace": "openshift-cnv"
+            },
+            "spec": {
+              "targetNamespaces": [
+                "openshift-cnv"
+              ]
+            }
+          },
+          "desiredDigest": "d670ebbb19e9d77501b023939211c19b826abc2de640a1aa653362beac222022",
+          "kind": "OperatorGroup",
+          "name": "kubevirt-hyperconverged-group",
+          "namespace": "openshift-cnv",
+          "namespaced": true
+        },
+        "kind": "create"
+      },
+      {
+        "kind": "subscribe",
+        "subscribe": {
+          "approval": "exact",
+          "csv": "operator.v1",
+          "object": {
+            "apiVersion": "operators.coreos.com/v1alpha1",
+            "body": {
+              "apiVersion": "operators.coreos.com/v1alpha1",
+              "kind": "Subscription",
+              "metadata": {
+                "name": "hco-operatorhub",
+                "namespace": "openshift-cnv"
+              },
+              "spec": {
+                "channel": "stable",
+                "installPlanApproval": "Manual",
+                "name": "kubevirt-hyperconverged",
+                "source": "redhat-operators",
+                "sourceNamespace": "openshift-marketplace",
+                "startingCSV": "operator.v1"
+              }
+            },
+            "desiredDigest": "0bfc0ae57742a3090528fea496f97f9d66fdce26070be32906b2afb02aad0387",
+            "kind": "Subscription",
+            "name": "hco-operatorhub",
+            "namespace": "openshift-cnv",
+            "namespaced": true
+          }
+        }
+      },
+      {
+        "kind": "wait",
+        "wait": [
+          {
+            "condition": {
+              "apiVersion": "apiextensions.k8s.io/v1",
+              "kind": "CustomResourceDefinition",
+              "name": "hyperconvergeds.hco.kubevirt.io",
+              "namespace": "",
+              "namespaced": false,
+              "status": "True",
+              "type": "Established"
+            }
+          }
+        ]
+      },
+      {
+        "create": {
+          "apiVersion": "hco.kubevirt.io/v1beta1",
+          "body": {
+            "apiVersion": "hco.kubevirt.io/v1beta1",
+            "kind": "HyperConverged",
+            "metadata": {
+              "name": "kubevirt-hyperconverged",
+              "namespace": "openshift-cnv"
+            },
+            "spec": {}
+          },
+          "desiredDigest": "464c8c6778ad2c6b43a078eb5b865953a8d129245d06988e700f61752bad69d0",
+          "kind": "HyperConverged",
+          "name": "kubevirt-hyperconverged",
+          "namespace": "openshift-cnv",
+          "namespaced": true
+        },
+        "kind": "create"
+      }
+    ],
+    "version": "cluster-objects-v2"
+  },
+  "secrets": [],
+  "tool": {
+    "compatibility": "openshift",
+    "kind": "openshift-clients",
+    "version": "4.20"
+  },
+  "version": "addon-instance-request-v3"
+}

@@ -158,6 +158,13 @@ a manual `controller install` on a host missing something, as the
 [operator guide](operator-guide.md#prepare-a-host) describes, recorded as the
 [setup row](acceptance.md#setup-v2-fresh-install-row).
 
+### Built-in add-on packages
+
+A new package joins the registry, the render and request goldens and the
+coverage parity test by the
+[recipe](../.agents/skills/extend-implementation/SKILL.md#adding-a-built-in-add-on-package),
+which touches no generic add-on code.
+
 ## Lock refresh and tested hosts
 
 `controller install` admits any Fedora or RHEL host on Linux/amd64, a derivative whose

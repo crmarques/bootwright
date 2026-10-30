@@ -55,23 +55,12 @@ func TestHubPackageRenderGoldens(t *testing.T) {
 			p, _ := Builtin().Find(tc.pkg)
 			v := p.Normalize(tc.change(packageTestConfig(tc.pkg)))
 			rendered, err := p.Render(addons.Instance{Cluster: "cluster", Binding: "binding", Config: v})
-			program := co.Program{Version: co.Version, Steps: []co.Step{}, Checks: rendered.Checks}
-			for _, phase := range rendered.After {
-				steps, e := co.CompilePhase(phase)
-				if e != nil {
-					t.Fatal(e)
-				}
-				program.Steps = append(program.Steps, steps...)
-			}
-			data, err := co.Freeze(program, co.Options{Namespace: p.OLM.Namespace, PlacementNamespaces: p.PlacementNamespaces})
 			if err != nil {
 				t.Fatal(err)
 			}
+			data := frozenProgram(t, p, rendered)
 			matchesGolden(t, tc.name, data, false)
-			if _, err := co.ThawVersion(data, co.Options{Namespace: p.OLM.Namespace, PlacementNamespaces: p.PlacementNamespaces}); err != nil {
-				t.Fatal(err)
-			}
-			program = co.Program{}
+			program := co.Program{}
 			if err := json.Unmarshal(data, &program); err != nil {
 				t.Fatal(err)
 			}

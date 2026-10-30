@@ -189,14 +189,12 @@ func validateBinding(binding api.Object, c api.Catalog) []api.Issue {
 
 type Attachment struct{ ClusterRef, ConsumerRef string }
 
-// StorageAttachments returns only relationships declared by selected typed
-// storage inputs and their effects. It does not interpret arbitrary strings.
-func StorageAttachments(c api.Catalog) []Attachment {
+func StorageAttachments(c api.Catalog, r Registry) []Attachment {
 	seen := map[Attachment]bool{}
 	profiles, definitions := uniqueObjects(c.OfKind(api.ClusterAddonProfile)), uniqueObjects(c.OfKind(api.ClusterAddon))
 	for _, binding := range c.OfKind(api.ClusterAddonBinding) {
-		if ref := binding.Spec().Get("packages", "fdf", "cephConsumerRef"); ref.Type() == api.String && ref.Text() != "" {
-			seen[Attachment{ClusterRef: binding.Spec().Get("clusterRef").Text(), ConsumerRef: ref.Text()}] = true
+		for _, use := range r.consumption(binding) {
+			seen[Attachment{ClusterRef: binding.Spec().Get("clusterRef").Text(), ConsumerRef: use.Name}] = true
 		}
 		// Validation owns selection diagnostics; this projection grants no effects.
 		selected, _, _ := expandIndexed(binding, c, profiles, definitions)

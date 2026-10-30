@@ -1215,7 +1215,8 @@ package changes the request another build compares. A custom package would
 also bind the exact package, catalog snapshot and payload manifest the
 [add-ons design](deferred/add-ons-design.md#package-standard) defines.
 Package discovery never replaces the allowlisted registry or introduces
-executable authority at runtime.
+executable authority at runtime. A new built-in package follows the
+[recipe](../.agents/skills/extend-implementation/SKILL.md#adding-a-built-in-add-on-package).
 
 ## Data, state, and effects
 

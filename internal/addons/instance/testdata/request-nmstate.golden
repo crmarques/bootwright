@@ -1,0 +1,168 @@
+{
+  "binding": "binding",
+  "budgetSeconds": 1800,
+  "cluster": "cluster",
+  "package": "nmstate",
+  "placement": {
+    "connection": "local",
+    "machine": "controller"
+  },
+  "placementNamespaces": [],
+  "producedInputs": [
+    {
+      "kind": "OpenShiftCluster",
+      "object": "cluster",
+      "output": "kubeconfig"
+    }
+  ],
+  "program": {
+    "checks": [
+      {
+        "csvSucceeded": {
+          "csv": "operator.v1",
+          "namespace": "openshift-nmstate",
+          "subscription": "kubernetes-nmstate-operator"
+        }
+      },
+      {
+        "condition": {
+          "apiVersion": "nmstate.io/v1",
+          "kind": "NMState",
+          "name": "nmstate",
+          "namespace": "",
+          "namespaced": false,
+          "status": "True",
+          "type": "Available"
+        }
+      },
+      {
+        "condition": {
+          "apiVersion": "apps/v1",
+          "kind": "Deployment",
+          "name": "nmstate-webhook",
+          "namespace": "openshift-nmstate",
+          "namespaced": true,
+          "status": "True",
+          "type": "Available"
+        }
+      }
+    ],
+    "steps": [
+      {
+        "create": {
+          "apiVersion": "v1",
+          "body": {
+            "apiVersion": "v1",
+            "kind": "Namespace",
+            "metadata": {
+              "name": "openshift-nmstate"
+            }
+          },
+          "desiredDigest": "dc1f67b3dbf29871a0966d34f946322c6fb91ea5cfa3e06afa6c0250319fb743",
+          "kind": "Namespace",
+          "name": "openshift-nmstate",
+          "namespace": "",
+          "namespaced": false
+        },
+        "kind": "create"
+      },
+      {
+        "create": {
+          "apiVersion": "operators.coreos.com/v1",
+          "body": {
+            "apiVersion": "operators.coreos.com/v1",
+            "kind": "OperatorGroup",
+            "metadata": {
+              "name": "openshift-nmstate",
+              "namespace": "openshift-nmstate"
+            },
+            "spec": {
+              "targetNamespaces": [
+                "openshift-nmstate"
+              ]
+            }
+          },
+          "desiredDigest": "0afe966e438aef673ece640c38fd4c54c1cca44bc315dda78d5392275c0ec2c4",
+          "kind": "OperatorGroup",
+          "name": "openshift-nmstate",
+          "namespace": "openshift-nmstate",
+          "namespaced": true
+        },
+        "kind": "create"
+      },
+      {
+        "kind": "subscribe",
+        "subscribe": {
+          "approval": "exact",
+          "csv": "operator.v1",
+          "object": {
+            "apiVersion": "operators.coreos.com/v1alpha1",
+            "body": {
+              "apiVersion": "operators.coreos.com/v1alpha1",
+              "kind": "Subscription",
+              "metadata": {
+                "name": "kubernetes-nmstate-operator",
+                "namespace": "openshift-nmstate"
+              },
+              "spec": {
+                "channel": "stable",
+                "installPlanApproval": "Manual",
+                "name": "kubernetes-nmstate-operator",
+                "source": "redhat-operators",
+                "sourceNamespace": "openshift-marketplace",
+                "startingCSV": "operator.v1"
+              }
+            },
+            "desiredDigest": "cd78ae50a697d0f8e364e27cd9a5bfd109ee198b348bccbf47e6d9fadeeebce4",
+            "kind": "Subscription",
+            "name": "kubernetes-nmstate-operator",
+            "namespace": "openshift-nmstate",
+            "namespaced": true
+          }
+        }
+      },
+      {
+        "kind": "wait",
+        "wait": [
+          {
+            "condition": {
+              "apiVersion": "apiextensions.k8s.io/v1",
+              "kind": "CustomResourceDefinition",
+              "name": "nmstates.nmstate.io",
+              "namespace": "",
+              "namespaced": false,
+              "status": "True",
+              "type": "Established"
+            }
+          }
+        ]
+      },
+      {
+        "create": {
+          "apiVersion": "nmstate.io/v1",
+          "body": {
+            "apiVersion": "nmstate.io/v1",
+            "kind": "NMState",
+            "metadata": {
+              "name": "nmstate"
+            }
+          },
+          "desiredDigest": "13bc93a42eb57ae1b9ee23f6417dee32385249e6c978e6494d4ba78d70dab288",
+          "kind": "NMState",
+          "name": "nmstate",
+          "namespace": "",
+          "namespaced": false
+        },
+        "kind": "create"
+      }
+    ],
+    "version": "cluster-objects-v2"
+  },
+  "secrets": [],
+  "tool": {
+    "compatibility": "openshift",
+    "kind": "openshift-clients",
+    "version": "4.20"
+  },
+  "version": "addon-instance-request-v3"
+}

@@ -31,7 +31,8 @@ func wireCompiler() compilation.Compiler { return wireCompilerWithRegistry(addon
 
 func wireCompilerWithRegistry(registry addons.Registry) compilation.Compiler {
 	members := clusterMembers()
-	selection := compilation.NewGraphSelector(addons.StorageAttachments, func(catalog api.Catalog, attachments []environment.Attachment) environment.Selection {
+	attachments := func(catalog api.Catalog) []addons.Attachment { return addons.StorageAttachments(catalog, registry) }
+	selection := compilation.NewGraphSelector(attachments, func(catalog api.Catalog, attachments []environment.Attachment) environment.Selection {
 		return environment.Select(catalog, attachments, members)
 	})
 	return compilation.NewCompiler(yamlstream.Parser{}, selection.Select, compilation.Rules{Normalize: environment.Normalize, Validate: func(o api.Object, c api.Catalog) []api.Issue {
