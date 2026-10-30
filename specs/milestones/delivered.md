@@ -10255,3 +10255,47 @@ inherited leaves and `authored` for the declared one),
 `TestKindDefaultsInheritNoMemberWhenNoneIsDeclared` and
 `TestKindDefaultsRaiseNoDuplicateAcrossBindings` hold the four observed rows.
 No request, program or contract version moved.
+
+### X229 — Placement namespaces in the frozen add-on request
+
+**Items:** B984 ([D210](backlog.md#d210), [D211](backlog.md#d211); audit 002
+F04).
+**Kind:** safety. **Owners:** Add-ons, with Secrets.
+**Code commit:** the integration commit that carries this record.
+
+`Request.Objects()` rebuilt a program's Secret-placement namespaces from the
+package name, so a descriptor renamed from `gitops` to `fixture` with the same
+`PlacementNamespaces` rendered, then refused `Canonical()` with
+`Secret placement openshift-gitops/bootwright-bootstrap-repository: invalid
+source or namespace`. The frozen add-on request now carries
+`placementNamespaces`, the sorted unique namespaces its package declares for
+Secret placement. `Render` fills it from the registry entry, `Objects()` builds
+its options from it and never from the package name, `validate()` refuses a
+member that is nil, unsorted, repeated or not a valid namespace name, and
+`Apply` and `Observe` refuse, as a `lifecycle.state` refusal naming the package
+and before any adapter call, a frozen request whose member differs from this
+build's registry entry; `Destroy`, `Removal`, `Quiescent` and `ObserveRemoval`
+do not compare it, so an operation frozen by another build can still be retired.
+A placement outside the
+program's own namespaces and the member still refuses in the cluster object
+program's validation. The tests are
+`TestEachPackageFreezesItsOwnPlacementNamespaces`,
+`TestPlacementIntoAnUndeclaredNamespaceRefuses`,
+`TestEditedPlacementNamespacesRefuseAtDecode`,
+`TestValidateNamespacesRefusesWhatDiffersFromTheRegistry`,
+`TestApplyAndObserveRefuseAFrozenRequestWhoseNamespacesWereWidened`,
+`TestARequestOfTheEarlierVersionRefusesAtRetirement`,
+`TestGitOpsPlacementIntoKubeSystemRefuses` and the F04 regression
+`TestRenamedGitOpsDescriptorStillRendersItsPlacement`.
+
+**Contract moved.** `addon-instance-v1`: `requestVersion` in
+`internal/addons/instance/catalog.go` moved, so the content digest moved with
+it; the role's version assertions and `meta/argument_specs.yml` follow, and the
+collection otherwise never reads the allowlist. The request goldens, the five
+add-on plan goldens and `addon-instance-v1.golden` changed only in the new
+member, the version and the digest. No reader of the earlier request is kept:
+an operation frozen by an earlier build refuses continuation as
+[continuation](../state-reconciliation.md#continuation-and-removal) states, and
+the operator destroys it with the build that froze it.
+[Instances and blocks](../add-ons.md#instances-and-blocks) names the member and
+the constant.

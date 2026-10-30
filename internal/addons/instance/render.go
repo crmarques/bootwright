@@ -50,7 +50,8 @@ func Render(selected addons.SelectedInstance, facts addons.ClusterFacts, control
 	if err := appendPhases(&program, rendered.After); err != nil {
 		return Request{}, nil, err
 	}
-	options := co.Options{PlacementNamespaces: slices.Clone(p.PlacementNamespaces)}
+	placementNamespaces := declaredNamespaces(p)
+	options := co.Options{PlacementNamespaces: slices.Clone(placementNamespaces)}
 	if p.OLM != nil {
 		options.Namespace = p.OLM.Namespace
 	}
@@ -74,7 +75,7 @@ func Render(selected addons.SelectedInstance, facts addons.ClusterFacts, control
 	}
 	slices.Sort(secrets)
 	secrets = slices.Compact(secrets)
-	request := Request{Binding: instance.Binding, BudgetSeconds: int64(budget / time.Second), Cluster: instance.Cluster, Package: p.Name, Placement: machine.Placement{Connection: machine.ConnectionLocal, Machine: controller}, ProducedInputs: produced, Program: data, Secrets: secrets, Tool: Tool{Compatibility: "openshift", Kind: "openshift-clients", Version: facts.Release}, Version: requestVersion}
+	request := Request{Binding: instance.Binding, BudgetSeconds: int64(budget / time.Second), Cluster: instance.Cluster, Package: p.Name, Placement: machine.Placement{Connection: machine.ConnectionLocal, Machine: controller}, PlacementNamespaces: placementNamespaces, ProducedInputs: produced, Program: data, Secrets: secrets, Tool: Tool{Compatibility: "openshift", Kind: "openshift-clients", Version: facts.Release}, Version: requestVersion}
 	requires := []reconciliation.ObjectRef{{Kind: "OpenShiftCluster", Object: instance.Cluster}}
 	for _, provider := range selected.Providers {
 		if provider.Package != "" {
@@ -86,6 +87,11 @@ func Render(selected addons.SelectedInstance, facts addons.ClusterFacts, control
 	return request, requires, err
 }
 
+func declaredNamespaces(p addons.Package) []string {
+	namespaces := slices.Clone(p.PlacementNamespaces)
+	slices.Sort(namespaces)
+	return append([]string{}, slices.Compact(namespaces)...)
+}
 func appendPhases(program *co.Program, phases []co.Phase) error {
 	for _, phase := range phases {
 		steps, err := co.CompilePhase(phase)

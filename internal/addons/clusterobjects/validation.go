@@ -270,6 +270,8 @@ func conditionStatus(status string) bool {
 	return status == "True" || status == "False" || status == "Unknown"
 }
 
+func ValidNamespace(value string) bool { return validName(value) }
+
 func AllowedProduced(ref ProducedRef) bool {
 	return ref.Kind == "CephConsumer" && ref.Output == "external-details" && validName(ref.Object)
 }

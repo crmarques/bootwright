@@ -402,13 +402,13 @@ type contractExample struct {
 	plans   map[lifecycle.CapabilityBinding]lifecycle.CapabilityPlan
 }
 
-func contractExampleOf(t *testing.T, resolver capabilityResolver, name string) contractExample {
+func contractExampleOf(t *testing.T, resolver capabilityResolver, runner *contractRunner, name string) contractExample {
 	t.Helper()
 	if name == "contract-secondary-network" {
 		return contractNetworkExample(t, resolver)
 	}
 	if name == "addon-fixture" {
-		contractInstallFixtureRegistry(t, resolver, nil)
+		contractInstallFixtureRegistry(t, resolver, runner)
 	}
 	state, _ := compileAcceptance(t, contractSources(t, contractSourceName(name)))
 	if name == "addon-fixture" {
@@ -500,7 +500,7 @@ func TestEveryCapabilityHonoursTheCapabilityContract(t *testing.T) {
 	for _, row := range append(contractRows(), contractDoubleRow()) {
 		example, built := examples[row.example]
 		if !built {
-			example = contractExampleOf(t, resolver, row.example)
+			example = contractExampleOf(t, resolver, runner, row.example)
 			examples[row.example] = example
 		}
 		capability, ok := resolver.Resolve(row.kind, row.implementation)

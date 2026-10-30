@@ -6281,7 +6281,7 @@ cost model". Taken by the session, pending the owner's review:
 [B987](m4.md#b987) and the parked [B988](#b988), with slices X227 to X231 in
 M4's Planned slices; none is active, nothing is implemented, and an
 implementer takes a slice only on the owner's explicit request, in the order
-X227 (B981, B982), X228 (B983), X229 (B984), X230 (B985), then X231 (B986)
+X227 (B981, B982), X228 (B983), X229 ([B984](delivered.md#x229--placement-namespaces-in-the-frozen-add-on-request)), X230 (B985), then X231 (B986)
 once Q135 is answered.
 (2) The decisions the plan needs are open questions Q135 to Q138 on M4's
 page, each with a recommendation: Q135 kind defaults never select a package;

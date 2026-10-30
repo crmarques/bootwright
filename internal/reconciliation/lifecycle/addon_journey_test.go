@@ -116,6 +116,10 @@ func addonJourney(t *testing.T, lost bool) (*lifecycle.CapabilityJourney, *addon
 		return addons.Rendered{After: []co.Phase{{Secrets: []co.SecretPlacement{{Secret: "addon-password", Namespace: "fixture", Name: "credentials", Type: "Opaque", Keys: []co.KeyPart{{Key: "username", Part: "username"}, {Key: "password", Part: "password"}}}}}}}, nil
 	}}
 	sub := api.MapValue(api.FieldValue{Name: "channel", Value: api.StringValue("stable")}, api.FieldValue{Name: "source", Value: api.StringValue("catalog")}, api.FieldValue{Name: "sourceNamespace", Value: api.StringValue("openshift-marketplace")}, api.FieldValue{Name: "startingCSV", Value: api.StringValue("fixture.v1.0.0")})
+	registry, err := addons.NewRegistry([]addons.Package{pkg})
+	if err != nil {
+		t.Fatal(err)
+	}
 	request, requires, err := instance.Render(addons.SelectedInstance{Package: pkg, Instance: addons.Instance{Cluster: installedCluster, Binding: "fixture-binding", Config: api.MapValue(api.FieldValue{Name: "subscription", Value: sub})}}, addons.ClusterFacts{Name: installedCluster, Release: installedRelease}, "controller")
 	if err != nil {
 		t.Fatal(err)
@@ -127,7 +131,7 @@ func addonJourney(t *testing.T, lost bool) (*lifecycle.CapabilityJourney, *addon
 	definition := reconciliation.BlockDefinition{ID: instance.BlockID("fixture", installedCluster), Description: "install add-on fixture", Stage: reconciliation.StageAddOns, Kind: instance.Kind, Object: instance.Object(installedCluster, "fixture"), Implementation: instance.Implementation, ContentDigest: instance.ContentDigest(), Request: data, Requires: requires}
 	adapter := &addonAdapter{lost: lost}
 	cluster := &installer{completed: true}
-	journey := lifecycle.NewBoundJourney(t, []lifecycle.BoundCapability{{Binding: lifecycle.CapabilityBinding{Kind: agentinstall.Kind, Implementation: agentinstall.InstallImplementation}, Capability: retainedInstaller{agentinstall.NewInstall(cluster)}}, {Binding: lifecycle.CapabilityBinding{Kind: instance.Kind, Implementation: instance.Implementation}, Capability: locatedAddon{instance.New(adapter, addons.Registry{}, nil)}}}, lifecycle.CapabilityPlan{Definitions: []reconciliation.BlockDefinition{producer, definition}, Secrets: append(producerRequest.SecretReferences(), "addon-password")})
+	journey := lifecycle.NewBoundJourney(t, []lifecycle.BoundCapability{{Binding: lifecycle.CapabilityBinding{Kind: agentinstall.Kind, Implementation: agentinstall.InstallImplementation}, Capability: retainedInstaller{agentinstall.NewInstall(cluster)}}, {Binding: lifecycle.CapabilityBinding{Kind: instance.Kind, Implementation: instance.Implementation}, Capability: locatedAddon{instance.New(adapter, registry, nil)}}}, lifecycle.CapabilityPlan{Definitions: []reconciliation.BlockDefinition{producer, definition}, Secrets: append(producerRequest.SecretReferences(), "addon-password")})
 	journey.Holding("addon-password", secrets.NewMaterial(map[secrets.Part][]byte{secrets.UsernamePart: []byte("fixture-user"), secrets.PasswordPart: []byte("private-addon-password\n")}))
 	return journey, adapter, definition.ID
 }

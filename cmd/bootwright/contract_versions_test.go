@@ -146,7 +146,7 @@ func validated(reason string) automationFormat {
 func automationFormats() map[string]automationFormat {
 	host, core := persistedBy(ceph.HostImplementation), persistedBy(ceph.Implementation)
 	formats := map[string]automationFormat{
-		"addon-instance-request-v2":  {class: formatMirrored},
+		"addon-instance-request-v3":  {class: formatMirrored},
 		"ceph-export-request-v3":     {class: formatMirrored},
 		"ceph-export-evidence-v1":    {class: formatMirrored},
 		"cluster-network-request-v2": {class: formatMirrored},
@@ -711,7 +711,8 @@ func contractIdentitiesInSchema(t *testing.T, version contractVersion, identitie
 // real capability plans it on the examples the capability contract plans.
 func contractOfferedImplementations(t *testing.T, versions []contractVersion) {
 	t.Helper()
-	resolver := buildCapabilitiesWith(systemClock{}, exampleControllerPorts(t), &contractRunner{}, exampleMediaRecords{})
+	runner := &contractRunner{}
+	resolver := buildCapabilitiesWith(systemClock{}, exampleControllerPorts(t), runner, exampleMediaRecords{})
 	offered, listed := map[string]bool{}, map[string]string{}
 	for _, binding := range resolver.Bindings() {
 		offered[binding.Implementation] = true
@@ -737,7 +738,7 @@ func contractOfferedImplementations(t *testing.T, versions []contractVersion) {
 			continue
 		}
 		examples[row.example] = true
-		for _, block := range contractExampleOf(t, resolver, row.example).plan.Blocks {
+		for _, block := range contractExampleOf(t, resolver, runner, row.example).plan.Blocks {
 			planned[block.Implementation] = true
 			if digest, ok := listed[block.Implementation]; ok && block.ContentDigest != digest {
 				t.Errorf("%s plans %s under content digest %s, not the %s its contract version names", block.Implementation, block.ID, block.ContentDigest, digest)

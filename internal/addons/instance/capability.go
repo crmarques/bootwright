@@ -174,6 +174,9 @@ func (c Capability) run(ctx context.Context, execution lifecycle.Execution, oper
 	if err != nil {
 		return lifecycle.RunResult{}, request, err
 	}
+	if err := validateNamespaces(request, c.registry); err != nil {
+		return lifecycle.RunResult{}, request, err
+	}
 	program, err := request.Objects()
 	if err != nil {
 		return lifecycle.RunResult{}, request, err

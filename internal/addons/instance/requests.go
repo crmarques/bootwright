@@ -18,16 +18,17 @@ type Tool struct {
 	Version       string `json:"version"`
 }
 type Request struct {
-	Binding        string                    `json:"binding"`
-	BudgetSeconds  int64                     `json:"budgetSeconds"`
-	Cluster        string                    `json:"cluster"`
-	Package        string                    `json:"package"`
-	Placement      machine.Placement         `json:"placement"`
-	ProducedInputs []lifecycle.ProducedInput `json:"producedInputs"`
-	Program        json.RawMessage           `json:"program"`
-	Secrets        []string                  `json:"secrets"`
-	Tool           Tool                      `json:"tool"`
-	Version        string                    `json:"version"`
+	Binding             string                    `json:"binding"`
+	BudgetSeconds       int64                     `json:"budgetSeconds"`
+	Cluster             string                    `json:"cluster"`
+	Package             string                    `json:"package"`
+	Placement           machine.Placement         `json:"placement"`
+	PlacementNamespaces []string                  `json:"placementNamespaces"`
+	ProducedInputs      []lifecycle.ProducedInput `json:"producedInputs"`
+	Program             json.RawMessage           `json:"program"`
+	Secrets             []string                  `json:"secrets"`
+	Tool                Tool                      `json:"tool"`
+	Version             string                    `json:"version"`
 }
 
 func (r Request) SecretReferences() []string {
@@ -57,10 +58,7 @@ func (r Request) Objects() (clusterobjects.Program, error) {
 	if err != nil {
 		return p, err
 	}
-	options := clusterobjects.Options{}
-	if r.Package == "gitops" {
-		options.PlacementNamespaces = []string{"openshift-gitops"}
-	}
+	options := clusterobjects.Options{PlacementNamespaces: slices.Clone(r.PlacementNamespaces)}
 	for _, step := range p.Steps {
 		if step.Subscribe != nil {
 			options.Namespace = step.Subscribe.Object.Namespace
@@ -86,6 +84,9 @@ func (r Request) validate() error {
 	}
 	if !slices.IsSorted(r.Secrets) || len(slices.Compact(slices.Clone(r.Secrets))) != len(r.Secrets) {
 		return fmt.Errorf("invalid add-on Secret references")
+	}
+	if r.PlacementNamespaces == nil || !slices.IsSorted(r.PlacementNamespaces) || len(slices.Compact(slices.Clone(r.PlacementNamespaces))) != len(r.PlacementNamespaces) || slices.ContainsFunc(r.PlacementNamespaces, func(namespace string) bool { return !clusterobjects.ValidNamespace(namespace) }) {
+		return fmt.Errorf("invalid add-on placement namespaces")
 	}
 	program, err := r.Objects()
 	if err != nil {

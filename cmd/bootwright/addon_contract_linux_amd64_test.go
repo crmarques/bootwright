@@ -60,7 +60,7 @@ func (c contractAddonCapability) Plan(ctx context.Context, input lifecycle.PlanI
 func (c contractAddonCapability) Unsupported(state *compilation.State) []lifecycle.Refusal {
 	return c.planner.Unsupported(state)
 }
-func contractInstallFixtureRegistry(t *testing.T, resolver capabilityResolver, _ *contractRunner) {
+func contractInstallFixtureRegistry(t *testing.T, resolver capabilityResolver, runner *contractRunner) {
 	t.Helper()
 	registry, err := addons.NewRegistry(append(packages.Builtin().Packages(), addons.Package{Name: "fixture", Summary: "fixture package", Budget: time.Minute, OLM: &addons.OLM{Namespace: "fixture", OperatorGroup: addons.OwnNamespace, GroupName: "fixture", Subscription: "fixture", Package: "fixture", DefaultSource: "catalog", Approval: addons.Exact}, Render: func(addons.Instance) (addons.Rendered, error) { return addons.Rendered{}, nil }}))
 	if err != nil {
@@ -68,7 +68,7 @@ func contractInstallFixtureRegistry(t *testing.T, resolver capabilityResolver, _
 	}
 	for i := range resolver {
 		if resolver[i].implementation == instance.Implementation {
-			resolver[i].capability = contractAddonCapability{Capability: resolver[i].capability, planner: instance.New(nil, registry, openshift.AddonFacts)}
+			resolver[i].capability = contractAddonCapability{Capability: instance.New(runner, registry, openshift.AddonFacts), planner: instance.New(nil, registry, openshift.AddonFacts)}
 		}
 	}
 }

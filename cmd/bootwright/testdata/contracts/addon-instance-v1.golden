@@ -1,6 +1,6 @@
 implementation: addon-instance-v1
-content-digest: dcaac583985bad147820a2d68fde4f8e3f7a680be945c0b0cc4dd86ad54b2598
-request-version: addon-instance-request-v2
+content-digest: 07188be59712642b6c38ef1ad1c2999774aa5860762bc81eb145ad1c4d2b2402
+request-version: addon-instance-request-v3
 automation-formats: none
 mark-formats: bootwright.cluster-objects.owner-v1, bootwright.io/owner
 proof-ids: none
@@ -29,6 +29,7 @@ request-schema:
   placement.port int omitempty
   placement.privateKeyRef string omitempty
   placement.user string omitempty
+  placementNamespaces []string
   producedInputs []struct lifecycle.ProducedInput
   producedInputs[].kind string
   producedInputs[].object string

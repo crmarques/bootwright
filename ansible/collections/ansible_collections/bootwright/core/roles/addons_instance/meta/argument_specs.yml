@@ -27,6 +27,11 @@ argument_specs:
             type: dict
             required: true
             description: Frozen placement field.
+          placementNamespaces:
+            type: list
+            required: true
+            description: Frozen placementNamespaces field.
+            elements: str
           producedInputs:
             type: list
             required: true
@@ -49,7 +54,7 @@ argument_specs:
             type: str
             required: true
             description: Frozen version field.
-            choices: [addon-instance-request-v2]
+            choices: [addon-instance-request-v3]
 
       bootwright_addon_instance_material:
         type: dict
@@ -89,6 +94,11 @@ argument_specs:
             type: dict
             required: true
             description: Frozen placement field.
+          placementNamespaces:
+            type: list
+            required: true
+            description: Frozen placementNamespaces field.
+            elements: str
           producedInputs:
             type: list
             required: true
@@ -111,7 +121,7 @@ argument_specs:
             type: str
             required: true
             description: Frozen version field.
-            choices: [addon-instance-request-v2]
+            choices: [addon-instance-request-v3]
 
       bootwright_addon_instance_material:
         type: dict

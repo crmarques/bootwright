@@ -158,11 +158,18 @@ block in the `add-ons` stage:
 
 Dependency edges, derived and [authored](api/addons.md#clusteraddonbinding), order instances, and an apply can [stop after one instance](state-reconciliation.md#stopping-after-an-add-on-instance); the order of the instance function
 (dependency order, then binding name, then package name) only breaks ties. The
-request, version `addon-instance-request-v2`, freezes the cluster, binding and
+request, version `requestVersion` in `internal/addons/instance/catalog.go`,
+freezes the cluster, binding and
 package, the controller placement, the `oc` of the cluster's exact release, one
 readiness budget in seconds, the rendered program, the names of the Secrets it
-places and its produced inputs by producer kind, object and output, never
-their bytes. The content digest covers the implementation, request, evidence
+places, the sorted unique `placementNamespaces` its package declares for those
+placements, which every reader of the request takes from it and never from the
+package name, and its produced inputs by producer kind, object and output,
+never their bytes. Apply and observation refuse, before any cluster contact, a
+frozen request whose namespaces differ from this build's registry entry for its
+package; retiring one still works, and another build's continuation is guarded
+by the [block comparison](state-reconciliation.md#continuation-and-removal).
+The content digest covers the implementation, request, evidence
 and program versions and the ownership and approval rule tags; a change to what
 a package renders changes the request, so another build continues an operation
 only when re-planning yields the same request.

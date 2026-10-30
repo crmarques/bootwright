@@ -24,6 +24,14 @@ func fixturePackage() addons.Package {
 		return addons.Rendered{After: []co.Phase{{Gate: []co.Check{{ResourceExists: &co.Ref{APIVersion: "apiextensions.k8s.io/v1", Kind: "CustomResourceDefinition", Name: "fixtures.example.test"}}}, Objects: []co.Object{nativeObject("example.test/v1", "Fixture", "fixture-operator", "fixture", api.MapValue())}}}, Checks: []co.Check{{Condition: &co.ConditionCheck{Ref: co.Ref{APIVersion: "example.test/v1", Kind: "Fixture", Namespace: "fixture-operator", Name: "fixture", Namespaced: true}, Type: "Available", Status: "True"}}}}, nil
 	}}
 }
+func fixtureRegistry(t *testing.T) addons.Registry {
+	t.Helper()
+	registry, err := addons.NewRegistry([]addons.Package{fixturePackage()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return registry
+}
 func fixtureConfig() api.Value {
 	return api.MapValue(api.FieldValue{Name: "subscription", Value: api.MapValue(api.FieldValue{Name: "channel", Value: api.StringValue("stable")}, api.FieldValue{Name: "source", Value: api.StringValue("catalog")}, api.FieldValue{Name: "sourceNamespace", Value: api.StringValue("openshift-marketplace")}, api.FieldValue{Name: "startingCSV", Value: api.StringValue("fixture.v1.0.0")})})
 }
@@ -108,7 +116,7 @@ func TestApplyObserveAndRetirement(t *testing.T) {
 	execution := fixtureExecution(t, request)
 	evidence := fixtureEvidence(t, request, execution.Block.RequestDigest)
 	runner := &scriptedRunner{result: lifecycle.RunResult{Outcome: "changed", Evidence: encoded(t, evidence)}}
-	capability := New(runner, addons.Registry{}, nil)
+	capability := New(runner, fixtureRegistry(t), nil)
 	result, err := capability.Apply(context.Background(), execution)
 	if err != nil || result.Outcome != reconciliation.OutcomeChanged {
 		t.Fatalf("%+v %v", result, err)
@@ -146,7 +154,7 @@ func TestObservationProofsAndRecordedReceipt(t *testing.T) {
 	base := fixtureEvidence(t, request, execution.Block.RequestDigest)
 	execution.PreviousEvidence = encoded(t, base)
 	runner := &scriptedRunner{}
-	capability := New(runner, addons.Registry{}, nil)
+	capability := New(runner, fixtureRegistry(t), nil)
 	for name, test := range map[string]struct {
 		change func(*Evidence)
 		want   reconciliation.EffectState
@@ -276,7 +284,7 @@ func TestDeclaredSecretPlacementLendsOnlyMappedPartsGolden(t *testing.T) {
 	defer execution.Material["credentials"].Clear()
 	defer execution.Material["unrelated"].Clear()
 	runner := &scriptedRunner{}
-	capability := New(runner, addons.Registry{}, nil)
+	capability := New(runner, fixtureRegistry(t), nil)
 	_, _ = capability.Apply(context.Background(), execution)
 	if len(runner.calls) != 1 {
 		t.Fatal("no adapter call")
@@ -334,7 +342,7 @@ func TestPartialEvidenceRetainsReceiptsAndInvalidEvidenceDoesNotPersist(t *testi
 				valid = false
 			}
 			runner.result = lifecycle.RunResult{Outcome: "changed", Evidence: encoded(t, evidence)}
-			capability := New(runner, addons.Registry{}, nil)
+			capability := New(runner, fixtureRegistry(t), nil)
 			applied, err := capability.Apply(context.Background(), execution)
 			if err == nil || applied.Outcome != reconciliation.OutcomeUnknown {
 				t.Fatalf("apply = %#v, %v", applied, err)

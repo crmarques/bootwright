@@ -104,7 +104,7 @@ func (r digestRecipe) pins() []string {
 // restated here.
 func contractRecipes() map[string]digestRecipe {
 	recipes := map[string]digestRecipe{
-		instance.Implementation: digestOf(partImplementation(instance.Implementation), partRequest("addon-instance-request-v2"), partVersion("addon-instance-evidence-v3"),
+		instance.Implementation: digestOf(partImplementation(instance.Implementation), partRequest("addon-instance-request-v3"), partVersion("addon-instance-evidence-v3"),
 			partVersion(clusterobjects.Version), partPin(clusterobjects.OwnerDomain), partPin(clusterobjects.ObjectDomain), partPin(clusterobjects.ExactRule),
 			partPin(clusterobjects.OperatorManagedRule), partPin(clusterobjects.DependentExactRule)),
 		networking.Implementation: digestOf(partImplementation(networking.Implementation), partRequest("cluster-network-request-v2"), partVersion("cluster-network-evidence-v3"),

@@ -4,9 +4,20 @@ import (
 	"slices"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
+	"github.com/crmarques/bootwright/internal/addons"
 	"github.com/crmarques/bootwright/internal/secrets"
 )
 
+func validateNamespaces(request Request, registry addons.Registry) error {
+	pkg, ok := registry.Find(request.Package)
+	if !ok {
+		return refusal("add-on package "+request.Package+" is not in this build", "select a built-in package")
+	}
+	if !slices.Equal(request.PlacementNamespaces, declaredNamespaces(pkg)) {
+		return refusal("add-on package "+request.Package+" declares different Secret placement namespaces than its request", "destroy the operation with the build that froze it, or plan again with this build")
+	}
+	return nil
+}
 func validatePlacements(request Request, catalog api.Catalog) error {
 	program, err := request.Objects()
 	if err != nil {

@@ -164,6 +164,7 @@
         "connection": "local",
         "machine": "controller"
       },
+      "placementNamespaces": [],
       "producedInputs": [
         {
           "kind": "OpenShiftCluster",
@@ -344,7 +345,7 @@
         "kind": "openshift-clients",
         "version": "4.21.15"
       },
-      "version": "addon-instance-request-v2"
+      "version": "addon-instance-request-v3"
     }
   },
   {
@@ -367,6 +368,9 @@
         "connection": "local",
         "machine": "controller"
       },
+      "placementNamespaces": [
+        "openshift-gitops"
+      ],
       "producedInputs": [
         {
           "kind": "OpenShiftCluster",
@@ -586,7 +590,7 @@
         "kind": "openshift-clients",
         "version": "4.21.15"
       },
-      "version": "addon-instance-request-v2"
+      "version": "addon-instance-request-v3"
     }
   }
 ]
