@@ -1,5 +1,5 @@
 implementation: os-install-anaconda-v1
-content-digest: 5ef6b1601b711cbfe591bddc3c7efae3a9ed5b22f506a56d7a5b2da3d8246270
+content-digest: 32630c472ec14dc2a32d274a6e45d89722cb5c532d20eb7a492b3b850d11827a
 request-version: os-install-anaconda-v21
 automation-formats: none
 mark-formats: none

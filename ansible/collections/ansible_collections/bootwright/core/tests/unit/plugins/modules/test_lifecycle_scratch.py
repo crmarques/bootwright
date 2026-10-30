@@ -11,8 +11,24 @@ from ansible_collections.bootwright.core.plugins.modules import lifecycle_scratc
 
 
 def call(parent, job, scope="managedos-install", state="present"):
-    root = str(parent / ("bootwright-run-scratch-%d-1" % job))
+    root = str(parent / ("bootwright-scratch-%d-1" % job))
     return Path(scratch.manage(root, scope, state, str(parent), os.getuid(), remove_root=True))
+
+
+@pytest.mark.parametrize("prefix", ["bootwright-scratch-", "bootwright-run-scratch-"])
+@pytest.mark.parametrize("scope", sorted(scratch.SCOPES))
+def test_current_and_legacy_runner_names_create_and_clean_only_their_scope(tmp_path, prefix, scope):
+    root = tmp_path / (prefix + "4294967295-4294967295")
+    other = next(name for name in sorted(scratch.SCOPES) if name != scope)
+    directory = Path(scratch.manage(str(root), scope, "present", str(tmp_path), os.getuid(), remove_root=True))
+    sibling = Path(scratch.manage(str(root), other, "present", str(tmp_path), os.getuid(), remove_root=True))
+    (directory / "private").write_text("owned")
+    (sibling / "private").write_text("keep")
+    scratch.manage(str(root), scope, "absent", str(tmp_path), os.getuid(), remove_root=True)
+    assert not directory.exists()
+    assert (sibling / "private").read_text() == "keep"
+    scratch.manage(str(root), other, "absent", str(tmp_path), os.getuid(), remove_root=True)
+    assert not root.exists()
 
 
 def test_two_installs_keep_their_own_connection_files(tmp_path):
@@ -82,9 +98,9 @@ def test_cleanup_refuses_unsafe_directories_without_removing_files(tmp_path, cha
 
 
 @pytest.mark.parametrize("root,scope", [
-    ("bootwright-run-scratch-1-1", "../other"),
-    ("bootwright-run-scratch-1-1/..", "libvirt-host"),
-    ("bootwright-run-scratch-1", "libvirt-host"),
+    ("bootwright-scratch-1-1", "../other"),
+    ("bootwright-scratch-1-1/..", "libvirt-host"),
+    ("bootwright-scratch-1", "libvirt-host"),
     ("other", "libvirt-host"),
 ])
 def test_only_runner_names_and_known_scopes_are_accepted(tmp_path, root, scope):
@@ -102,7 +118,7 @@ def test_present_never_reuses_an_existing_scope(tmp_path):
 
 
 def test_local_cleanup_preserves_the_live_runners_temporary_directory(tmp_path):
-    root = tmp_path / "bootwright-run-scratch-1-1"
+    root = tmp_path / "bootwright-scratch-1-1"
     scope = scratch.manage(str(root), "libvirt-host", "present", str(tmp_path), os.getuid())
     Path(scope, "network.xml").write_text("private")
     scratch.manage(str(root), "libvirt-host", "absent", str(tmp_path), os.getuid())
@@ -113,7 +129,7 @@ def test_local_cleanup_preserves_the_live_runners_temporary_directory(tmp_path):
 def test_present_creates_the_private_parent_beneath_the_staging_parent(tmp_path):
     staging = tmp_path / "bootwright-staging"
     parent = staging / "runs"
-    root = parent / "bootwright-run-scratch-1-1"
+    root = parent / "bootwright-scratch-1-1"
     scope = Path(scratch.manage(str(root), "libvirt-host", "present", str(parent), os.getuid(), remove_root=True))
     assert scope.is_dir()
     assert parent.stat().st_mode & 0o777 == 0o700
@@ -124,7 +140,7 @@ def test_present_creates_the_private_parent_beneath_the_staging_parent(tmp_path)
 
 def test_absent_with_no_parent_creates_nothing(tmp_path):
     parent = tmp_path / "bootwright-staging" / "runs"
-    root = parent / "bootwright-run-scratch-1-1"
+    root = parent / "bootwright-scratch-1-1"
     scratch.manage(str(root), "libvirt-host", "absent", str(parent), os.getuid(), remove_root=True)
     assert list(tmp_path.iterdir()) == []
 
@@ -137,7 +153,7 @@ def test_an_unsafe_parent_refuses_before_any_scratch_is_touched(tmp_path, unsafe
     parent = staging / "runs"
     target = tmp_path / "elsewhere"
     target.mkdir(mode=0o700)
-    (target / "bootwright-run-scratch-1-1").mkdir(mode=0o700)
+    (target / "bootwright-scratch-1-1").mkdir(mode=0o700)
     owner = os.getuid()
     if unsafe == "parent-link":
         parent.symlink_to(target, target_is_directory=True)
@@ -149,10 +165,10 @@ def test_an_unsafe_parent_refuses_before_any_scratch_is_touched(tmp_path, unsafe
             owner += 1
         else:
             staging.chmod(0o777)
-    root = parent / "bootwright-run-scratch-1-1"
+    root = parent / "bootwright-scratch-1-1"
     with pytest.raises(ValueError, match="the run scratch parent .* remove it or make it a directory owned by user"):
         scratch.manage(str(root), "libvirt-host", state, str(parent), owner, remove_root=True)
-    assert list((target / "bootwright-run-scratch-1-1").iterdir()) == []
+    assert list((target / "bootwright-scratch-1-1").iterdir()) == []
     assert unsafe == "parent-link" or list(parent.iterdir()) == []
 
 
@@ -166,5 +182,5 @@ def test_a_parent_on_a_noexec_filesystem_refuses_naming_the_remount(tmp_path, mo
 
     monkeypatch.setattr(scratch.os, "statvfs", Answer)
     with pytest.raises(ValueError, match="lies on a noexec filesystem; remount it with exec"):
-        scratch.manage(str(parent / "bootwright-run-scratch-1-1"), "libvirt-host", "present", str(parent), os.getuid())
+        scratch.manage(str(parent / "bootwright-scratch-1-1"), "libvirt-host", "present", str(parent), os.getuid())
     assert list(parent.iterdir()) == []

@@ -32,6 +32,7 @@ func harmlessPolicy(data, name string) bool {
 	known := map[string]bool{"priority": true, "disable": true, "target": true, "ingress-zones": true, "egress-zones": true, "services": true, "ports": true, "protocols": true, "masquerade": true, "forward-ports": true, "source-ports": true, "icmp-blocks": true, "rich rules": true}
 	fields := map[string]string{}
 	rules := false
+	hasICMPRules := false
 	for index, line := range strings.Split(data, "\n") {
 		line = strings.TrimSpace(line)
 		if index == 0 {
@@ -44,6 +45,7 @@ func harmlessPolicy(data, name string) bool {
 			if !icmpAcceptRule(line) {
 				return false
 			}
+			hasICMPRules = true
 			continue
 		}
 		key, value, ok := strings.Cut(line, ":")
@@ -66,7 +68,7 @@ func harmlessPolicy(data, name string) bool {
 			return false
 		}
 	}
-	if fields["target"] != "CONTINUE" || fields["masquerade"] != "no" || fields["disable"] != "" && fields["disable"] != "no" {
+	if fields["masquerade"] != "no" || fields["disable"] != "" && fields["disable"] != "no" {
 		return false
 	}
 	if _, err := strconv.ParseInt(fields["priority"], 10, 32); err != nil {
@@ -78,15 +80,27 @@ func harmlessPolicy(data, name string) bool {
 		}
 	}
 	for _, key := range []string{"ingress-zones", "egress-zones"} {
-		zones := strings.Fields(fields[key])
-		if len(zones) == 0 || len(zones) > 128 {
+		if !validPolicyZones(fields[key]) {
 			return false
 		}
-		for _, zone := range zones {
-			if !safeName(zone) {
-				return false
-			}
+	}
+	if fields["target"] == "CONTINUE" {
+		return true
+	}
+	return fields["target"] == "ACCEPT" && !hasICMPRules && fields["ingress-zones"] != "HOST" && fields["egress-zones"] != "HOST"
+}
+
+func validPolicyZones(value string) bool {
+	zones := strings.Fields(value)
+	if len(zones) == 0 || len(zones) > 128 {
+		return false
+	}
+	seen := map[string]bool{}
+	for _, zone := range zones {
+		if !safeName(zone) || seen[zone] || (zone == "ANY" || zone == "HOST") && len(zones) != 1 {
+			return false
 		}
+		seen[zone] = true
 	}
 	return true
 }
@@ -126,14 +140,8 @@ func activePolicies(data string) ([]string, bool) {
 		if len(names) == 0 || !ok || (key != "ingress-zones" && key != "egress-zones") || fields[key] {
 			return nil, false
 		}
-		zones := strings.Fields(value)
-		if len(zones) == 0 || len(zones) > 128 {
+		if !validPolicyZones(value) {
 			return nil, false
-		}
-		for _, zone := range zones {
-			if !safeName(zone) {
-				return nil, false
-			}
 		}
 		fields[key] = true
 	}

@@ -149,7 +149,9 @@ def test_register_runs_after_network_and_before_the_completion_inspection():
     completed = only(applied, lambda task: (task.get(PROTOCOL) or {}).get("phase") == "completed", "publish the completion")
     updated = only(applied, included("update.yml"), "update the machine within its release")
     assert withdrawn < network < converged < encryption < security < registered < named < refused < updated < inspected < completed
-    assert registered + 1 == named and named + 1 == refused and refused + 1 == updated and updated + 1 == inspected
+    assert registered + 1 == named and named + 1 == refused
+    for intervening in (applied[refused + 1:updated], applied[updated + 1:inspected]):
+        assert all(task.get(PROTOCOL, {}).get("phase") == "group" for task in intervening)
     assert applied[registered]["when"] == [REGISTERING]
     assert holds(applied[registered]["when"]) and not holds(applied[registered]["when"], False)
 

@@ -628,6 +628,16 @@
         status: ok
       no_log: true
 
+    - name: Report installed security verification
+      bootwright.core.managedos_install_protocol:
+        phase: group
+        group: verify-security
+        status: running
+      when: >-
+        bootwright_os_install_request.diskEncryption is defined
+        or 'fips=1' in (bootwright_os_install_request.installerArguments | default([]))
+      no_log: true
+
     - name: Read whether the root disk is encrypted after its network converged
       ansible.builtin.include_tasks: root_encryption.yml
 
@@ -670,6 +680,24 @@
       when:
         - managedos_install_anaconda_fips_requested | bool
         - not (managedos_install_anaconda_fips | bool)
+
+    - name: Report installed security verification completion
+      bootwright.core.managedos_install_protocol:
+        phase: group
+        group: verify-security
+        status: ok
+      when: >-
+        bootwright_os_install_request.diskEncryption is defined
+        or 'fips=1' in (bootwright_os_install_request.installerArguments | default([]))
+      no_log: true
+
+    - name: Report subscription registration
+      bootwright.core.managedos_install_protocol:
+        phase: group
+        group: register-subscription
+        status: running
+      when: bootwright_os_install_request.registration is defined
+      no_log: true
 
     # A removal unregisters only an installation whose apply recorded this
     # proof, so the proof is recorded before the machine is registered.
@@ -740,9 +768,40 @@
         - bootwright_os_install_request.registration is defined
         - not (managedos_install_anaconda_registration_result.ok | default(false) | bool)
 
+    - name: Report subscription registration completion
+      bootwright.core.managedos_install_protocol:
+        phase: group
+        group: register-subscription
+        status: ok
+      when: bootwright_os_install_request.registration is defined
+      no_log: true
+
+    - name: Report package update and verification
+      bootwright.core.managedos_install_protocol:
+        phase: group
+        group: update-packages
+        status: running
+      when: "'update' in bootwright_os_install_request"
+      no_log: true
+
     - name: Update the installed machine within its release after its registration
       ansible.builtin.include_tasks: update.yml
       when: "'update' in bootwright_os_install_request"
+
+    - name: Report package update and verification completion
+      bootwright.core.managedos_install_protocol:
+        phase: group
+        group: update-packages
+        status: ok
+      when: "'update' in bootwright_os_install_request"
+      no_log: true
+
+    - name: Report installation completion verification
+      bootwright.core.managedos_install_protocol:
+        phase: group
+        group: verify-completion
+        status: running
+      no_log: true
 
     - name: Prove everything this installation publishes is in place
       bootwright.core.managedos_install_inspect:
@@ -759,6 +818,13 @@
         state: absent
         remove_root: "{{ bootwright_os_install_request.placement.connection == 'ssh' }}"
       when: managedos_install_anaconda_scratch_ready is succeeded
+
+- name: Report installation completion verification completion
+  bootwright.core.managedos_install_protocol:
+    phase: group
+    group: verify-completion
+    status: ok
+  no_log: true
 
 - name: Publish bounded installation completion evidence
   bootwright.core.managedos_install_protocol:

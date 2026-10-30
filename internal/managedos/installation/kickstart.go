@@ -12,7 +12,7 @@ import (
 	"github.com/crmarques/bootwright/internal/substrate"
 )
 
-const kickstartVersion = "kickstart-anaconda-v15"
+const kickstartVersion = "kickstart-anaconda-v17"
 
 // guestHostKeys are the keys a guest-agent installation generates here rather
 // than at first boot, so the republished copy is the key sshd presents. Each
@@ -274,6 +274,13 @@ func guardKickstartValues(input Installation) error {
 				return refusal("api.value", field.class+" holds a character a Kickstart directive cannot carry",
 					"correct "+field.source)
 			}
+		}
+	}
+	for _, option := range input.BondOptions {
+		name, value, paired := strings.Cut(option, "=")
+		if !paired || !bondOptionName.MatchString(name) || value == "" {
+			return refusal("api.value", "a bond option is not a name=value pair its network configuration can carry",
+				"correct link-aggregation of the install bond in the Machine's NMState network configuration")
 		}
 	}
 	return nil

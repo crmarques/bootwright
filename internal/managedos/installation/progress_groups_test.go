@@ -21,6 +21,8 @@ const roleTasks = "collections/ansible_collections/bootwright/core/roles/managed
 // the declared order, and no group it does not declare.
 func TestTheRoleReportsEveryGroupThePlanDeclares(t *testing.T) {
 	request, _ := onlyRequest(t, labCatalog(registeringProfile(), rhelEntitlement()))
+	request.DiskEncryption = &DiskEncryption{}
+	request.Update = &Update{}
 	for verb, file := range map[reconciliation.Verb]string{reconciliation.Apply: "apply.yml", reconciliation.Destroy: "destroy.yml"} {
 		var declared []string
 		for _, group := range groups(verb, request) {

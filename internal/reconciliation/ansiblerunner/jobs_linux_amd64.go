@@ -27,7 +27,7 @@ import (
 // scratch is tied to the job that made it without anything written inside it.
 const (
 	jobPrefix     = "bootwright-run-"
-	scratchPrefix = "bootwright-run-scratch-"
+	scratchPrefix = "bootwright-scratch-"
 	lockName      = "lock"
 	holderName    = "holder"
 	recordName    = "record"
@@ -727,6 +727,9 @@ func jobSuffix(name string) (string, bool) {
 
 func scratchJob(name string) (string, bool) {
 	rest, ok := strings.CutPrefix(name, scratchPrefix)
+	if !ok {
+		rest, ok = strings.CutPrefix(name, "bootwright-run-scratch-")
+	}
 	job, random, paired := strings.Cut(rest, "-")
 	return job, ok && paired && runSuffix(job) && runSuffix(random)
 }

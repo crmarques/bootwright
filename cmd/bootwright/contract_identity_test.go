@@ -127,7 +127,7 @@ func contractRecipes() map[string]digestRecipe {
 		installation.TreeImplementation:  digestOf(partImplementation(installation.TreeImplementation), partVersion(installation.TreeEvidenceVersion)),
 		installation.EraseImplementation: {separator: ":", parts: []digestPart{partImplementation(installation.EraseImplementation), partPin("descriptor-diskseq-full-readback-receipt-v1")}},
 		installation.Implementation: digestOf(partDomain("bootwright.managedos.install-anaconda-v1"), partImplementation(installation.Implementation), partRequest("os-install-anaconda-v21"),
-			partVersion("kickstart-anaconda-v15"), partPin("os"), partPin("private"), partPin("public"), partPin(installation.MarkerPath), partPin(installation.HostKeyPath),
+			partVersion("kickstart-anaconda-v17"), partPin("os"), partPin("private"), partPin("public"), partPin(installation.MarkerPath), partPin(installation.HostKeyPath),
 			partPin(installation.NetworkDocumentPath), partPin(installation.NetworkMarkerPath), partPin(strconv.Itoa(300)), partPin("lorax,xorriso"), partPin("proved-installation-disk-boot,replay-safe-unread-registration")),
 		agentinstall.MediaImplementation: digestOf(partDomain("bootwright.containercluster.media-agent-v1"), partImplementation(agentinstall.MediaImplementation), partRequest("cluster-media-agent-v9"),
 			partPin("clusters"), partPin(agentinstall.ImageFile), partPin("/var/lib/bootwright-clusters"), partPin("openshift-install")),

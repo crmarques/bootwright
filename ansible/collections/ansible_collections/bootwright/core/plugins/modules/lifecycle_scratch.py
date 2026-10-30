@@ -93,7 +93,7 @@ def owned(path, owner, mode, create):
 def manage(root, scope, state, parent_path=PARENT, owner=0, remove_root=False):
     name = os.path.basename(root)
     if (os.path.dirname(root) != parent_path
-            or not re.fullmatch(r"bootwright-run-scratch-[0-9]+-[0-9]+", name)
+            or not re.fullmatch(r"(?:bootwright-scratch-|bootwright-run-scratch-)[0-9]+-[0-9]+", name)
             or scope not in SCOPES or state not in ("present", "absent")):
         raise ValueError("scratch is not a runner-issued role directory")
     present = state == "present"

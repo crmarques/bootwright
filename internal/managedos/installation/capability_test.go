@@ -819,7 +819,9 @@ func TestDeliveredKeyMatchesRefusesAnotherType(t *testing.T) {
 func TestTheApplyDeclaresNetworkConvergence(t *testing.T) {
 	request, _ := onlyRequest(t, labCatalog())
 	apply := groups(reconciliation.Apply, request)
-	if len(apply) < 2 || apply[len(apply)-2].ID != "verify-installation" || apply[len(apply)-1].ID != "converge-network" {
+	ids := groupIDs(apply)
+	verification := slices.Index(ids, "verify-installation")
+	if verification < 0 || verification+1 >= len(ids) || ids[verification+1] != "converge-network" {
 		t.Fatalf("apply groups = %+v", apply)
 	}
 	for _, group := range groups(reconciliation.Destroy, request) {

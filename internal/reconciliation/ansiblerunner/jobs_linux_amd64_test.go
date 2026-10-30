@@ -90,7 +90,7 @@ func runNames(t *testing.T, parent string) []string {
 	}
 	var names []string
 	for _, entry := range entries {
-		if strings.HasPrefix(entry.Name(), jobPrefix) {
+		if strings.HasPrefix(entry.Name(), jobPrefix) || strings.HasPrefix(entry.Name(), "bootwright-scratch-") {
 			names = append(names, entry.Name())
 		}
 	}
@@ -250,6 +250,8 @@ func TestAStaleRunDirectoryIsRemovedWithItsSecretFiles(t *testing.T) {
 	}
 	plant(t, filepath.Join(runner.scratchParent, "bootwright-run-scratch-4242-7"), map[string]string{"image/boot.iso": "image"})
 	plant(t, filepath.Join(runner.scratchParent, "bootwright-run-scratch-5151-9"), map[string]string{"snapshot": "state"})
+	plant(t, filepath.Join(runner.scratchParent, "bootwright-scratch-4242-8"), map[string]string{"image/boot.iso": "image"})
+	plant(t, filepath.Join(runner.scratchParent, "bootwright-scratch-5151-10"), map[string]string{"snapshot": "state"})
 	var output bytes.Buffer
 	if _, err := runner.Run(context.Background(), adapterRequest(t, &output)); err != nil {
 		t.Fatalf("the run beside a stale job failed: %v", err)

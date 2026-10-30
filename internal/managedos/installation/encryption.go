@@ -137,6 +137,7 @@ func encryptionPreLines(input Installation) []string {
 		"exit 1",
 		"fi",
 	}
+	lines = append(lines, encryptionNetworkLines(input)...)
 	lines = append(lines, recoveryFetchLines()...)
 	return append(lines,
 		"bootwright_class='^[]!$%&(-[^-~]{8,256}$'",

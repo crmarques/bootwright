@@ -5,6 +5,7 @@ package ansiblerunner
 import (
 	"bytes"
 	"context"
+	"net"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -25,6 +26,32 @@ func TestTheRunnerScratchesBeneathTheStagingParent(t *testing.T) {
 		runner.scratchParent != filepath.Join(stagelocal.StagingParent, "runs") {
 		t.Fatalf("the runner's parents are job %s, staging %s and scratch %s", runner.jobParent, runner.stagingParent, runner.scratchParent)
 	}
+}
+
+// Python's multiprocessing manager appends a private directory and socket
+// name to TMPDIR. Exercise the longest runner name with that actual suffix:
+// a failed bind is otherwise hidden by Ansible's RPC startup timeout.
+func TestTheLongestScratchPathFitsTheAnsibleRPCSocket(t *testing.T) {
+	base, err := os.MkdirTemp("/tmp", "bw-rpc-")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.RemoveAll(base) })
+	padding := len(scratchParent) - len(base) - 1
+	if padding < 1 {
+		t.Fatal("test parent cannot match the production path length")
+	}
+	parent := filepath.Join(base, strings.Repeat("p", padding))
+	directory := filepath.Join(parent, scratchPrefix+"4294967295-4294967295", "pymp-12345678")
+	if err := os.MkdirAll(directory, 0700); err != nil {
+		t.Fatal(err)
+	}
+	socket := filepath.Join(directory, "sock-0123456789ab")
+	listener, err := net.Listen("unix", socket)
+	if err != nil {
+		t.Fatalf("Ansible RPC socket at %d bytes cannot bind: %v", len(socket), err)
+	}
+	listener.Close()
 }
 
 // A run creates the staging parent and the scratch parent beneath it when

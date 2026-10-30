@@ -243,6 +243,16 @@ func groups(verb reconciliation.Verb, request Request) []reconciliation.Group {
 		{"verify-installation", "prove the installed machine answers on the key it reported"},
 		{"converge-network", "apply the declared network, restart the machine and prove its network"},
 	}
+	if request.DiskEncryption != nil || slices.Contains(request.InstallerArguments, fipsArgument) {
+		steps = append(steps, [2]string{"verify-security", "verify the requested security settings"})
+	}
+	if request.Registration != nil {
+		steps = append(steps, [2]string{"register-subscription", "register the machine with its subscription service"})
+	}
+	if request.Update != nil {
+		steps = append(steps, [2]string{"update-packages", "update packages within the declared release, restart if needed and verify the result"})
+	}
+	steps = append(steps, [2]string{"verify-completion", "collect final installation evidence"})
 	if verb == reconciliation.Destroy {
 		steps = [][2]string{
 			{"remove-published", "remove the published installer image"},
