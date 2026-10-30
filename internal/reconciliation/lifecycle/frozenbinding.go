@@ -186,7 +186,9 @@ func frozenReopenOf(ctx context.Context, store OperationStore) (frozenReopen, er
 	if err != nil {
 		return frozenReopen{}, err
 	}
-	if operation.Verb == reconciliation.Destroy && (operation.State == reconciliation.OperationDone || !pendingRemains(plan, states)) {
+	held := standingOf(operation, plan, states)
+	own := classify(operation.Verb, held)
+	if operation.Verb == reconciliation.Destroy && (own == transitionSettle || own == transitionRefuse || !held.pending) {
 		return frozenReopen{}, nil
 	}
 	binding := firstBinding(operation.Bindings)
@@ -204,9 +206,7 @@ func frozenReopenOf(ctx context.Context, store OperationStore) (frozenReopen, er
 	}
 	return frozenReopen{
 		operation: operation, binding: binding, objects: objectsOf(coveredBy(operation, plan, states)),
-		finalizes: operation.Verb == reconciliation.Apply && !pendingRemains(plan, states) && slices.Contains([]reconciliation.OperationState{
-			reconciliation.OperationRunning, reconciliation.OperationUnknown, reconciliation.OperationFailed,
-		}, operation.State),
+		finalizes: operation.Verb == reconciliation.Apply && own == transitionFinalize,
 	}, nil
 }
 

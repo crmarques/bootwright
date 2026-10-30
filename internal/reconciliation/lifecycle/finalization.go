@@ -32,15 +32,12 @@ import (
 // Records that hold a block that is not done prove no completion, so they are
 // never finalized. Anything else returns no mark and keeps its decision.
 func finalization(ctx context.Context, view View, store OperationStore, verb reconciliation.Verb, operation operationstore.Operation, frozen reconciliation.Plan, states map[string]reconciliation.BlockState, attempts map[string]int) (transition, error) {
-	if pendingRemains(frozen, states) {
+	held := standingOf(operation, frozen, states)
+	switch {
+	case held.pending:
 		return transition{}, nil
-	}
-	switch operation.State {
-	case reconciliation.OperationRunning, reconciliation.OperationUnknown, reconciliation.OperationFailed:
-		if operation.Verb != verb {
-			return transition{}, nil
-		}
-	case reconciliation.OperationDone:
+	case classify(verb, held) == transitionFinalize:
+	case operation.State == reconciliation.OperationDone:
 		finished, err := finalized(view, operation)
 		if err != nil || finished {
 			return transition{}, err

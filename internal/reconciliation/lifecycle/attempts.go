@@ -688,12 +688,12 @@ func terminalFailure(contextName string, operation operationstore.Operation, pla
 // incomplete operation a block that reads unknown is resolved before anything
 // else starts, whatever state the operation records.
 func nextAction(operation operationstore.Operation, frozen reconciliation.Plan, states map[string]reconciliation.BlockState) string {
-	switch {
-	case operation.State == reconciliation.OperationDone:
+	switch classify(operation.Verb, standingOf(operation, frozen, states)) {
+	case transitionSettle, transitionRefuse:
 		return "none"
-	case operation.Verb == reconciliation.Destroy && operation.State == reconciliation.OperationFailed && pendingRemains(frozen, states):
+	case transitionReplaceRemoval:
 		return string(reconciliation.Destroy)
-	case slices.ContainsFunc(frozen.Blocks, func(block reconciliation.Block) bool { return states[block.ID] == reconciliation.BlockUnknown }):
+	case transitionResolve:
 		return "resolve"
 	}
 	return "continue-" + string(operation.Verb)

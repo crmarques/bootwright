@@ -152,19 +152,13 @@ func (s Service) Plan(ctx context.Context, request PlanRequest) (*PlanResult, er
 // returns that decision and the durable state it was read from, before any
 // finalization it previews.
 func (s Service) preview(ctx context.Context, view View, selection reconciliation.Selection) (*PlanResult, transition, basis, error) {
-	verb, err := s.previewed(ctx, view)
+	decided, verb, err := s.decideAs(ctx, view, "", selection)
 	if err != nil {
 		return nil, transition{}, basis{}, err
 	}
-	// A destroy accepts no stage selection, so its decision takes none, as
-	// Destroy passes none.
 	decideSelection := selection
 	if verb == reconciliation.Destroy {
 		decideSelection = reconciliation.Selection{}
-	}
-	decided, err := s.decide(ctx, view, verb, decideSelection)
-	if err != nil {
-		return nil, transition{}, basis{}, err
 	}
 	marked, finalizes := decided, decided.finalize
 	if finalizes {
@@ -202,31 +196,6 @@ func (s Service) preview(ctx context.Context, view View, selection reconciliatio
 	}
 	result.Context, result.Bound = view.Identity(), s.Concurrency()
 	return &result, decided, marked.basis, nil
-}
-
-// previewed is the verb a preview decides as: a fresh apply over no operation
-// or a completed destroy, the destroy of a completed apply, and an incomplete
-// operation's own verb.
-func (s Service) previewed(ctx context.Context, view View) (reconciliation.Verb, error) {
-	store := s.store(view)
-	index, err := store.Index(ctx)
-	if err != nil {
-		return "", err
-	}
-	if index.Current == "" {
-		return reconciliation.Apply, nil
-	}
-	operation, err := store.ReadOperation(ctx, index.Current)
-	if err != nil {
-		return "", err
-	}
-	switch {
-	case operation.State != reconciliation.OperationDone:
-		return operation.Verb, nil
-	case operation.Verb == reconciliation.Apply:
-		return reconciliation.Destroy, nil
-	}
-	return reconciliation.Apply, nil
 }
 
 func steps(plan reconciliation.Plan, states map[string]reconciliation.BlockState) []PlanStep {
