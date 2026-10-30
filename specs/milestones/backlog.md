@@ -238,6 +238,7 @@ Alias cell.
 | [B748](#b748) | new, 2026-10-20 (D172) | product | Container cluster | OKD clusters through the agent installer | M3's coverage is OpenShift; OKD's release, client and image sources need their own definition, and its refusal row stays |
 | [B769](#b769) | new, 2026-10-20 (D173) | product | Add-ons | One add-on instance removed online from a cluster that stays | M4 retires instances with their cluster; [D153](#d153) refuses changing a completed apply's selection |
 | [B770](#b770) | new, 2026-10-20 (D173) | product | Add-ons | `preflight add-ons` reports add-on prerequisites before an apply | No check is provable before the cluster exists; apply-time gates name their failures |
+| [B988](#b988) | new, 2026-10-30 (D210; audit 002 F11) | product | Add-ons, with API | A `ClusterAddonProfile` carries built-in packages as a named preset | No repeated consumer; Q26 (a) chose profiles without packages |
 | [B771](#b771) | new, 2026-10-20 (D173); folds B365 | defect | Add-ons, with Workspace | The `add-ons/_store` selection exception, its marker and its reader rules leave the input reader | Dead surface now that B89 is retired; removing input-reader rules is not needed by any M4 package |
 | [B772](#b772) | new, 2026-10-20 (D173) | product | Add-ons | A package installed through OLM v1 (`ClusterExtension`) | ODF/FDF, ACM, MCE and GitLab do not qualify; own-namespace installs are Technology Preview |
 | [B773](#b773) | new, 2026-10-20 (D173) | product | Add-ons | A registry credential merged into a cluster's global pull secret with an exact-entry receipt | Its inverse never runs under retirement; the install pull secret carries entitlements from first boot |
@@ -3145,6 +3146,19 @@ still refuse before effects. Require independent safety review and the
 [safety verification gates](../../.agents/skills/code-implementation/SKILL.md#safety-class)
 when implementing and integrating the change.
 
+### B988
+
+A `ClusterAddonProfile` that carries `spec.packages` as a named preset of
+built-in packages: a binding selecting the profile inherits its packages, a
+binding's own member overrides the profile's, two profiles supplying one
+package refuse, and `render effective --origins` names the profile. Parked
+on 2026-10-30 ([D210](#d210)): Environment kind defaults and input templates
+serve today's estates, and [Q26](m4.md#m4a-open-decisions) (a) excluded
+packages from profiles. **Revive when** an estate declares one package set on
+three or more cluster shapes; the decision is [Q137](m4.md#m4a-open-decisions),
+and the expansion, cycle and last-package tests of
+[admission](../api/addons.md#admission-diagnostics) extend with it.
+
 ## Audit remediation (2026-10-26)
 
 The [2026-10-26 spec audit](../../audits/001-spec/report-final.md) ordered its
@@ -3444,6 +3458,8 @@ holding such a clause, the clauses pending and the work they enable.
   of a stretch cluster with a provided tiebreaker (X205).
 - [D207](#d207): clauses (1) to (10), power and the live reading of KubeVirt
   Machines on a host the context builds and the reading's pin (X206).
+- [D210](#d210): clauses (1) to (5), the add-ons audit plan as items B981 to
+  B988, slices X227 to X231 and questions Q135 to Q138 (none active).
 
 ### D1
 
@@ -6277,3 +6293,32 @@ not known;
 (8) packages are removed before the state, and the state is renamed away
 before it is deleted, so running uninstall again finishes an interrupted one.
 The [uninstall flow](../controller.md#the-uninstall-flow) owns the contract.
+
+### D210
+
+**session-pending** (2026-10-30, the owner; the clauses after the owner's
+words are taken by the session, pending the owner's review). After
+[audit 002](../../audits/002-addons/report-final.md) the owner asked:
+"prepare a plan to implement using best practices and sound architecture the
+gaps ... do not implement yet. when the plan is done i will use other lower
+cost model". Taken by the session, pending the owner's review:
+(1) The audit's work packages are M4 items [B981](m4.md#b981) to
+[B987](m4.md#b987) and the parked [B988](#b988), with slices X227 to X231 in
+M4's Planned slices; none is active, nothing is implemented, and an
+implementer takes a slice only on the owner's explicit request, in the order
+X227 (B981, B982), X228 (B983), X229 (B984), X230 (B985), then X231 (B986)
+once Q135 is answered.
+(2) The decisions the plan needs are open questions Q135 to Q138 on M4's
+page, each with a recommendation: Q135 kind defaults never select a package;
+Q136 an additive apply only if the owner wants day-2 additions, after X227;
+Q137 presets only with a repeated consumer; Q138 B90's first slice as an
+authored OLM definition compiled by the existing capability, after X229.
+(3) Routing follows the owner's model table: X229 and the definitions of
+B987 and B90 are complex; the other slices are routine, X230 with a
+complex-tier review of its registry rules.
+(4) [B770](#b770) and [B769](#b769) stay parked; [B884](m4.md#b884) and
+[B886](m4.md#b886) keep their definitions, and B884 may land as X227's first
+commit.
+(5) The audit reports stay as written; each item names the audit finding it
+closes in its Alias cell, and the consolidated report's delivery sequence is
+superseded by this record.
