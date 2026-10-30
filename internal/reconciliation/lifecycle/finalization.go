@@ -100,17 +100,17 @@ func holdsReservation(view View) bool {
 }
 
 // releaseSet is every Secret binding a completed removal gives back: the one it
-// reopened, which its record names, and each binding of the apply it removed.
+// reopened, which its record names, and each binding of the applies it removed.
 func releaseSet(ctx context.Context, store OperationStore, operation operationstore.Operation) ([]string, error) {
 	release := joinBindings(nil, operation.Bindings...)
 	if operation.Source == "" {
 		return release, nil
 	}
-	applied, err := store.ReadOperation(ctx, operation.Source)
+	held, err := sourceBindings(ctx, store, operation.Source)
 	if err != nil {
 		return nil, err
 	}
-	return joinBindings(release, applied.Bindings...), nil
+	return joinBindings(release, held...), nil
 }
 
 func joinBindings(set []string, bindings ...string) []string {

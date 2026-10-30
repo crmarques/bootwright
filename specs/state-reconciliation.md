@@ -521,6 +521,8 @@ complete, synchronized bytes.
 | destroy failed | start a fresh destroy of what it has not removed |
 | destroy unknown | continue it, resolving every unproved block first and then retrying what resolution leaves `failed` (D146) |
 
+For an apply that names a predecessor, every fresh destroy these rows start also takes back the whole frozen plan of each predecessor ([continuation and removal](#continuation-and-removal)).
+
 Before any row, an operation whose blocks are all `done` is
 [finalized](#lifecycle-unit) first while its record, evidence, reservations or
 Secret bindings do not yet say it completed; a running, unknown or failed one
@@ -827,6 +829,52 @@ failure, it re-reads that record before it writes the operation.
 | `done` | every block is `done` |
 | `paused` | its execution paused: it stopped uncancelled with work left, no log fault and every start recorded |
 | `running` | otherwise |
+
+### Access-credential rebind
+
+An access credential rotated at its endpoint after an operation bound it, such
+as a management controller's password, a provider's kubeconfig, a vCenter
+login or a registry login, would strand that operation's continuation and
+removal, because both present the bound version, which the endpoint now
+refuses. The access-credential rebind is the one recorded exit beside the two
+a [lost binding](#continuation-and-removal) names (D37), and it is not the
+bounded run's rebind, which binds nothing and names no operation. An `apply`
+or `destroy` that continues an operation or removes one names each such Secret
+with `--authorize rebind=<secret>` (D183, Q70). Before anything is confirmed,
+bound or registered, and after the plan's own tokens are authorized, each named
+Secret must meet every condition below, or the invocation refuses
+`lifecycle.authorization` naming the condition and the command without that
+token:
+
+- the transition reopens a frozen binding, so a fresh apply and a verb that
+  settles or finalizes take no rebind;
+- that binding pins a version of the Secret, and the Secret's current version,
+  read and validated as a binding reads one, is another version;
+- every block of the plan whose frozen request names the Secret reads it, through
+  its capability, as an access credential it presents only to authenticate. A
+  block that names it for any other reason, or whose capability reads no
+  access credential, rests on the bound version as effect material and refuses
+  the rebind, naming the step.
+
+Today the bare-metal Machine, the managed-OS installation and its physical
+erase of a bare-metal target, and the agent installation's bare-metal nodes
+present their management controller's `credentialsRef`, the KubeVirt blocks
+their `kubeconfigRef`, and the Ceph cluster, host and image blocks the
+registry login. An emulated BMC's
+credentials are effect material its libvirt host gave the emulator, and a
+trust anchor (`trustBundleRef`, `knownHostsRef`) is never presented, so neither
+is rebound. A vSphere arm will name its vCenter login likewise.
+
+The rebind issues a new binding version: a binding equal to the reopened one
+except that each named Secret is pinned to its current version. A fresh removal
+registers with it; a continuation writes it into its operation's record as it
+resumes, so every later attempt and the removal that follows reopen it. The
+operation log records the binding it replaced, the one it issued and the
+Secrets rebound. The replaced binding stays until the operation that names it
+is released, and a rebind whose fresh removal provably did not register is
+released at once. Every ownership proof the plan runs is unchanged: the
+rebound credential only reaches the endpoint, and what the block proves it
+owns is proved as before.
 
 ## Plan and execution
 
@@ -1849,51 +1897,25 @@ from.
 Destroy retains evidence until positive removal or positive absence is durable.
 It accepts no stage selection.
 
-### Access-credential rebind
+#### Removal over a lineage
 
-An access credential rotated at its endpoint after an operation bound it, such
-as a management controller's password, a provider's kubeconfig, a vCenter
-login or a registry login, would strand that operation's continuation and
-removal, because both present the bound version, which the endpoint now
-refuses. The access-credential rebind is the one recorded exit beside the two
-a [lost binding](#continuation-and-removal) names (D37), and it is not the
-bounded run's rebind, which binds nothing and names no operation. An `apply`
-or `destroy` that continues an operation or removes one names each such Secret
-with `--authorize rebind=<secret>` (D183, Q70). Before anything is confirmed,
-bound or registered, and after the plan's own tokens are authorized, each named
-Secret must meet every condition below, or the invocation refuses
-`lifecycle.authorization` naming the condition and the command without that
-token:
+An apply that names a predecessor is the head of a lineage, and one `destroy`
+takes the whole lineage back. The owned set is the blocks the head started and
+every predecessor's whole frozen plan. The removal plan is the inverse of the
+lineage's plan, each prerequisite folded into a dependency, so an added
+instance retires before the blocks of its cluster. The removal names the head
+as its source and resolves each unproved block into the records of the apply
+that owns it before it registers. A failed removal is replaced by a fresh one
+over what it has not removed, as for one apply. No removal takes back an
+additive apply alone, because instances retire offline and would leave the
+objects they created unmanaged. A predecessor record the store lost refuses
+the removal, as a lost frozen plan does.
 
-- the transition reopens a frozen binding, so a fresh apply and a verb that
-  settles or finalizes take no rebind;
-- that binding pins a version of the Secret, and the Secret's current version,
-  read and validated as a binding reads one, is another version;
-- every block of the plan whose frozen request names the Secret reads it, through
-  its capability, as an access credential it presents only to authenticate. A
-  block that names it for any other reason, or whose capability reads no
-  access credential, rests on the bound version as effect material and refuses
-  the rebind, naming the step.
-
-Today the bare-metal Machine, the managed-OS installation and its physical
-erase of a bare-metal target, and the agent installation's bare-metal nodes
-present their management controller's `credentialsRef`, the KubeVirt blocks
-their `kubeconfigRef`, and the Ceph cluster, host and image blocks the
-registry login. An emulated BMC's
-credentials are effect material its libvirt host gave the emulator, and a
-trust anchor (`trustBundleRef`, `knownHostsRef`) is never presented, so neither
-is rebound. A vSphere arm will name its vCenter login likewise.
-
-The rebind issues a new binding version: a binding equal to the reopened one
-except that each named Secret is pinned to its current version. A fresh removal
-registers with it; a continuation writes it into its operation's record as it
-resumes, so every later attempt and the removal that follows reopen it. The
-operation log records the binding it replaced, the one it issued and the
-Secrets rebound. The replaced binding stays until the operation that names it
-is released, and a rebind whose fresh removal provably did not register is
-released at once. Every ownership proof the plan runs is unchanged: the
-rebound credential only reaches the endpoint, and what the block proves it
-owns is proved as before.
+The removal reopens one Secret binding: its own if an
+[access-credential rebind](#access-credential-rebind) replaced it, otherwise
+the first binding of the root apply, never the head's. A rebind may name only
+Secrets that binding holds. Its completion releases the bindings of every
+apply of the lineage.
 
 ## Comparing desired and real state
 

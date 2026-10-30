@@ -449,23 +449,46 @@ func TestADependencyClosureReadsEachBlocksEvidenceFromItsOwner(t *testing.T) {
 
 func TestAControllerStageThePredecessorHoldsAnswersTheAdditionsLookup(t *testing.T) {
 	ctx := context.Background()
-	h, locator := stagedToolHarness(t)
+	h, _ := stagedToolHarness(t)
 	f := newLineageFixture(t, h, stagedDefinition("gateway", reconciliation.StageInfrastructureServices, "artifacts"))
 	if _, held := f.headPlan.Block("controller-prerequisites"); held {
 		t.Fatal("the addition holds the controller stage")
 	}
-	for name, operation := range map[string]operationstore.Operation{
-		"an apply": f.head, "a removal": {Verb: reconciliation.Destroy, Source: f.head.ID},
+	merged, err := reconciliation.Lineage(f.rootPlan, f.headPlan)
+	if err != nil {
+		t.Fatal(err)
+	}
+	removal, err := merged.Inverse()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for name, held := range map[string]struct {
+		operation operationstore.Operation
+		plan      reconciliation.Plan
+	}{
+		"an apply":              {f.head, f.headPlan},
+		"a removal":             {operationstore.Operation{Verb: reconciliation.Destroy, Source: f.head.ID}, removal},
+		"the root":              {f.root, f.rootPlan},
+		"a removal of the root": {operationstore.Operation{Verb: reconciliation.Destroy, Source: f.root.ID}, f.rootPlan},
 	} {
-		located, err := h.service.locateTool(ctx, f.store, prerequisites.StorageView{Prepared: true}, "lab", operation, f.headPlan, installer)
+		located, err := h.service.locateTool(ctx, f.store, prerequisites.StorageView{Prepared: true}, "lab", held.operation, held.plan, installer)
 		if err != nil || located != locatedFromTheStageProof {
 			t.Fatalf("%s located %q (%v), want %q", name, located, err, locatedFromTheStageProof)
 		}
 	}
-	_ = locator
-	root, err := h.service.locateTool(ctx, f.store, prerequisites.StorageView{Prepared: true}, "lab", f.root, f.rootPlan, installer)
-	if err != nil || root != locatedFromTheStageProof {
-		t.Fatalf("the root located %q (%v)", root, err)
+}
+
+func TestADestroyWhosePlanLacksTheControllerStageRefusesWhateverItsSourceHolds(t *testing.T) {
+	ctx := context.Background()
+	h, _ := stagedToolHarness(t)
+	f := newLineageFixture(t, h, stagedDefinition("gateway", reconciliation.StageInfrastructureServices, "artifacts"))
+	for name, source := range map[string]string{"the root": f.root.ID, "the addition": f.head.ID} {
+		removal := operationstore.Operation{Verb: reconciliation.Destroy, Source: source}
+		_, err := h.service.locateTool(ctx, f.store, prerequisites.StorageView{Prepared: true}, "lab", removal, f.headPlan, installer)
+		reported := diagnostics.Of(err)
+		if len(reported) != 1 || reported[0].Code != "controller.state" {
+			t.Fatalf("a destroy of %s without the stage located: %+v (%v)", name, reported, err)
+		}
 	}
 }
 

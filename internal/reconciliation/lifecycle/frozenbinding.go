@@ -193,13 +193,20 @@ func frozenReopenOf(ctx context.Context, store OperationStore) (frozenReopen, er
 	}
 	binding := firstBinding(operation.Bindings)
 	if operation.Verb == reconciliation.Destroy && operation.State == reconciliation.OperationFailed && operation.Source != "" {
-		applied, err := store.ReadOperation(ctx, operation.Source)
+		held, err := sourceLineage(ctx, store, operation.Source)
 		if err != nil {
 			return frozenReopen{}, err
 		}
-		if inherited := firstBinding(applied.Bindings); inherited != "" && binding == "" {
+		if inherited := firstBinding(held[0].operation.Bindings); inherited != "" && binding == "" {
 			binding = inherited
 		}
+	}
+	if operation.Verb == reconciliation.Apply && operation.State == reconciliation.OperationDone && operation.Predecessor != "" {
+		root, err := removalBinding(ctx, store, operation)
+		if err != nil {
+			return frozenReopen{}, err
+		}
+		binding = root
 	}
 	if binding == "" {
 		return frozenReopen{}, nil

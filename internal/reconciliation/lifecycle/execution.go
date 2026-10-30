@@ -69,8 +69,9 @@ type transition struct {
 	// stops is what a fresh removal's quiescence gate observes on the host:
 	// the objects of its blocks whose capability probes quiescence, in plan
 	// order.
-	stops      []string
-	sameBlocks sameBlocksProof
+	stops       []string
+	sameBlocks  sameBlocksProof
+	lineagePlan reconciliation.Plan
 	// basis is the durable state this transition was planned from. For a fresh
 	// removal it is the incomplete operation the removal takes the place of,
 	// which is the context's current operation. It is not always source: a
@@ -474,6 +475,14 @@ func (s Service) decideFrom(ctx context.Context, view View, verb reconciliation.
 // not due. A preview also takes it over the record a due finalization would
 // leave, so it decides as the verb does once that finalization is done.
 func (s Service) decideOver(ctx context.Context, view View, store OperationStore, verb reconciliation.Verb, selection reconciliation.Selection, operation operationstore.Operation, frozen reconciliation.Plan, states map[string]reconciliation.BlockState, attempts map[string]int) (transition, error) {
+	decided, err := s.decideBy(ctx, view, store, verb, selection, operation, frozen, states, attempts)
+	if err != nil {
+		return decided, err
+	}
+	return withLineagePlan(ctx, store, decided, operation, frozen, states)
+}
+
+func (s Service) decideBy(ctx context.Context, view View, store OperationStore, verb reconciliation.Verb, selection reconciliation.Selection, operation operationstore.Operation, frozen reconciliation.Plan, states map[string]reconciliation.BlockState, attempts map[string]int) (transition, error) {
 	name := view.Identity().Name
 	switch classify(verb, standingOf(operation, frozen, states)) {
 	case transitionFinalize:
@@ -497,8 +506,11 @@ func (s Service) decideOver(ctx context.Context, view View, store OperationStore
 		return settledDestroy(ctx, store, transition{noop: true, verb: verb, operation: operation, plan: frozen, states: states}), nil
 	case transitionFresh:
 		if operation.Verb == reconciliation.Apply {
-			decided, err := s.freshDestroy(ctx, name, operation.Executable, operation.ID, firstBinding(operation.Bindings),
-				operation.Bindings, completedOwnership(frozen), false)
+			scope, err := removalOver(ctx, store, operation, frozen, completedOwnership(frozen))
+			if err != nil {
+				return transition{}, err
+			}
+			decided, err := s.freshDestroy(ctx, name, operation.Executable, operation.ID, scope, false)
 			if err != nil {
 				return transition{}, err
 			}
@@ -525,11 +537,11 @@ func (s Service) decideOver(ctx context.Context, view View, store OperationStore
 	}
 	decided := transition{verb: verb, operation: operation, plan: frozen, states: states, source: operation.Source, selection: selection}
 	if verb == reconciliation.Destroy && operation.Source != "" {
-		applied, err := store.ReadOperation(ctx, operation.Source)
+		released, err := sourceBindings(ctx, store, operation.Source)
 		if err != nil {
 			return transition{}, err
 		}
-		decided.release = applied.Bindings
+		decided.release = released
 	}
 	decided.sameBlocks = s.proveSameBlocks(ctx, view, operation, frozen, states)
 	return plannedFrom(decided, operation, states, attempts), nil
@@ -886,35 +898,25 @@ func (s Service) supersede(ctx context.Context, view View, store OperationStore,
 				return transition{}, err
 			}
 		}
-		decided, err := s.freshDestroy(ctx, name, operation.Executable, operation.ID, firstBinding(operation.Bindings),
-			operation.Bindings, owned, startedNothing)
+		scope, err := removalOver(ctx, store, operation, frozen, owned)
+		if err != nil {
+			return transition{}, err
+		}
+		decided, err := s.freshDestroy(ctx, name, operation.Executable, operation.ID, scope, startedNothing)
 		if err != nil {
 			return transition{}, err
 		}
 		return plannedFrom(decided, operation, states, attempts), nil
 	}
 	// A superseded removal is continued by nothing, so its own binding is
-	// released beside the apply's once the replacement completes. The one it
-	// reopens is the removal's own, which differs from the apply's only after
-	// an access-credential rebind.
-	release := slices.Clone(operation.Bindings)
-	reopen := firstBinding(operation.Bindings)
-	if operation.Source != "" {
-		applied, err := store.ReadOperation(ctx, operation.Source)
-		if err != nil {
-			return transition{}, err
-		}
-		for _, binding := range applied.Bindings {
-			if !slices.Contains(release, binding) {
-				release = append(release, binding)
-			}
-		}
-		if inherited := firstBinding(applied.Bindings); inherited != "" && reopen == "" {
-			reopen = inherited
-		}
+	// released beside the lineage's once the replacement completes. The one it
+	// reopens is the removal's own, which differs from the lineage root's only
+	// after an access-credential rebind.
+	scope, err := replacementOf(ctx, store, operation, reconciliation.RemainingSubset(frozen, states))
+	if err != nil {
+		return transition{}, err
 	}
-	decided, err := s.freshDestroy(ctx, name, operation.Executable, operation.Source, reopen, release,
-		reconciliation.RemainingSubset(frozen, states), false)
+	decided, err := s.freshDestroy(ctx, name, operation.Executable, operation.Source, scope, false)
 	if err != nil {
 		return transition{}, err
 	}
@@ -981,19 +983,19 @@ func firstBinding(bindings []string) string {
 // an empty set means the operation contradicts its own block records, and a
 // removal of nothing would release the material the effects still on the host
 // need, so it refuses.
-func (s Service) freshDestroy(ctx context.Context, contextName string, frozenBy operationstore.Executable, source, reopen string, release []string, owned reconciliation.Plan, startedNothing bool) (transition, error) {
-	if len(owned.Blocks) == 0 && !startedNothing {
+func (s Service) freshDestroy(ctx context.Context, contextName string, frozenBy operationstore.Executable, source string, scope removalScope, startedNothing bool) (transition, error) {
+	if scope.started == 0 && !startedNothing {
 		return transition{}, failure("lifecycle.state",
 			"the operation this removal supersedes records no block it still owns",
 			reviewStatus(contextName))
 	}
-	plan, err := s.removalOf(ctx, owned, frozenBy)
+	plan, err := s.removalOf(ctx, scope.owned, frozenBy)
 	if err != nil {
 		return transition{}, err
 	}
 	return transition{
 		fresh: true, verb: reconciliation.Destroy, plan: plan,
-		source: source, reopen: reopen, release: release, stops: s.stops(plan),
+		source: source, reopen: scope.reopen, release: scope.release, stops: s.stops(plan),
 	}, nil
 }
 
@@ -1105,7 +1107,7 @@ func (s Service) present(ctx context.Context, name string, decided transition) e
 // before they confirm, and what plan previews of the same transition.
 func (s Service) presentation(decided transition) PlanResult {
 	result := planPreview(decided.plan, decided.states, decided.selection)
-	result.Verb, result.Warnings = string(decided.verb), s.removalWarnings(decided.plan)
+	result.Verb, result.Warnings = string(decided.verb), s.removalWarnings(decided.removed())
 	result.Continuation = !decided.fresh
 	// Ordinary removal keeps its pre-registration gate. An online removal's
 	// later Machine boundary is re-proved on each continuation that needs it.
@@ -1375,20 +1377,69 @@ func (s Service) proveRemovable(ctx context.Context, tx Transaction, store Opera
 	if err != nil {
 		return err
 	}
+	members, err := resolutionMembers(ctx, store, lineageMember{operation: replaced, plan: frozen, states: states})
+	if err != nil {
+		return err
+	}
+	declared, faulted := 0, false
+	for _, member := range members {
+		declared += len(unprovedBlocks(member.plan, member.states))
+		faulted = faulted || member.operation.LogFault
+	}
+	if declared == 0 && !faulted {
+		return nil
+	}
+	observed := s
+	reporter := &resolutionProgress{report: s.report, declared: declared}
+	observed.options.Progress = reporter
+	var settled memberResolution
+	for _, member := range members {
+		if settled, err = observed.resolveMember(ctx, tx, store, approved, decided, material, member); err != nil {
+			return err
+		}
+		if len(settled.left) != 0 || settled.fault != nil {
+			break
+		}
+	}
+	if declared == 0 {
+		return nil
+	}
+	left, fault, cause := settled.left, settled.fault, settled.cause
+	if len(left) == 0 && fault == nil {
+		s.reportResolution(ctx, ProgressEvent{Status: "ok"})
+		return nil
+	}
+	s.reportResolution(ctx, ProgressEvent{Status: "unknown"})
+	var unresolved error
+	if len(left) != 0 {
+		unresolved = failure("lifecycle.unknown",
+			"this removal cannot prove what these effects left behind, so it registered nothing: "+strings.Join(left, ", "),
+			"do what the diagnostic of each reports, then repeat "+contextCommand(name, string(reconciliation.Destroy), authorizingUnfixed(decided.plan)...))
+	}
+	return withCause(fault, withCause(cause, unresolved))
+}
+
+type memberResolution struct {
+	left         []string
+	fault, cause error
+}
+
+func (s Service) resolveMember(ctx context.Context, tx Transaction, store OperationStore, approved approved, decided transition, material map[string]secrets.Material, member lineageMember) (memberResolution, error) {
+	replaced, frozen, states := member.operation, member.plan, member.states
 	unproved := unprovedBlocks(frozen, states)
 	if len(unproved) == 0 && !replaced.LogFault {
-		return nil
+		return memberResolution{}, nil
 	}
 	replaced, log, err := restore(ctx, store, replaced)
 	if err != nil {
-		return err
+		return memberResolution{}, err
 	}
 	work, cancel := context.WithCancel(ctx)
 	defer cancel()
 	logging := newLogBoundary(store, replaced.ID, cancel)
 	defer logging.close(ctx, log)
 	if len(unproved) == 0 {
-		return nil
+		return memberResolution{}, nil
 	}
 	// A failed apply may hold a running block in place of the failed one it was
 	// retrying, and a resolution may prove that block done. The apply first
@@ -1397,38 +1448,23 @@ func (s Service) proveRemovable(ctx context.Context, tx Transaction, store Opera
 	// failed apply that no block accounts for.
 	if replaced.Verb == reconciliation.Apply && replaced.State == reconciliation.OperationFailed {
 		if err := s.recordFromBlocks(ctx, tx, store, replaced, frozen, states); err != nil {
-			return err
+			return memberResolution{}, err
 		}
 	}
-	observed := s
-	reporter := &resolutionProgress{report: s.report, declared: len(unproved)}
-	observed.options.Progress = reporter
 	// An apply's block its own observation proves completed is resolved done,
 	// with what it produced captured before any inverse runs (D123); any other
 	// is resolved by this removal's own check (D119), which proves what it
 	// takes back is this context's own, or absent, rather than that the apply's
 	// frozen request was realized.
 	removal := replaced.Verb == reconciliation.Apply
-	cause := observed.observe(work, tx, store, approved, logging, replaced, frozen, states, material, removal, decided.plan)
+	cause := s.observe(work, tx, store, approved, logging, replaced, frozen, states, material, removal, decided.plan)
 	logging.close(ctx, log)
 	if err := s.recordFromBlocks(recordingContext(ctx), tx, store, replaced, frozen, states); err != nil {
-		return err
+		return memberResolution{}, err
 	}
 	// A log fault refuses the removal even when every observation proved its
 	// block, because the removal's own effects would follow.
-	remaining, fault := unprovedBlocks(frozen, states), logging.err()
-	if len(remaining) == 0 && fault == nil {
-		s.reportResolution(ctx, ProgressEvent{Status: "ok"})
-		return nil
-	}
-	s.reportResolution(ctx, ProgressEvent{Status: "unknown"})
-	var unresolved error
-	if len(remaining) != 0 {
-		unresolved = failure("lifecycle.unknown",
-			"this removal cannot prove what these effects left behind, so it registered nothing: "+strings.Join(remaining, ", "),
-			"do what the diagnostic of each reports, then repeat "+contextCommand(name, string(reconciliation.Destroy), authorizingUnfixed(decided.plan)...))
-	}
-	return withCause(fault, withCause(cause, unresolved))
+	return memberResolution{left: unprovedBlocks(frozen, states), fault: logging.err(), cause: cause}, nil
 }
 
 // verifyBasis proves the context still holds exactly the durable state a

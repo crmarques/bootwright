@@ -118,7 +118,9 @@ func (s Service) readDiff(ctx context.Context, view View) (diffRead, error) {
 	}
 	read.input = inputState(view, read.operation, read.owning)
 	read.basis = recorded(read.operation, read.states, attempts)
-	read.binding = firstBinding(read.owning.Bindings)
+	if read.binding, err = removalBinding(ctx, store, read.owning); err != nil {
+		return diffRead{}, err
+	}
 	read.digest = inputDigest(view)
 	return read, nil
 }

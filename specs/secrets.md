@@ -287,7 +287,10 @@ verifies the server against it, under the
 is lent its certificate alone. A
 registration that provably did not happen releases the binding it created, and
 one that may have happened keeps it, because the operation it may have
-registered reopens it for every later attempt and its removal. A binding no
+registered reopens it for every later attempt and its removal. An additive
+apply's binding is reopened only for its own attempts; the removal of its
+lineage reopens the root apply's binding and releases every member's
+([continuation and removal](state-reconciliation.md#removal-over-a-lineage)). A binding no
 operation names, which an interrupted registration leaves, is released under
 the [collection rule](state-reconciliation.md#context-mutation-evidence): after
 the context's next fresh registration, a removal's finalization, or a destroy's

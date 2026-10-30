@@ -17,6 +17,9 @@ type lineageMember struct {
 type lineage []lineageMember
 
 func lineageOf(ctx context.Context, store recordReader, head lineageMember) (lineage, error) {
+	if head.operation.Verb != reconciliation.Apply {
+		return nil, failure("lifecycle.state", "the operation "+head.operation.ID+" heads a lineage and is no apply", "restore the context store")
+	}
 	chain := lineage{head}
 	seen := map[string]bool{head.operation.ID: true}
 	for id := head.operation.Predecessor; id != ""; {
@@ -58,6 +61,9 @@ func appliedLineage(ctx context.Context, store recordReader, operation operation
 		var err error
 		if applied, err = store.ReadOperation(ctx, operation.Source); err != nil {
 			return nil, err
+		}
+		if applied.Verb != reconciliation.Apply {
+			return nil, notAnApply()
 		}
 	}
 	plan, err := store.ReadPlan(ctx, applied.ID)
@@ -166,6 +172,9 @@ func ownerID(ctx context.Context, store recordReader, operation operationstore.O
 	if err != nil {
 		return "", err
 	}
+	if applied.Verb != reconciliation.Apply {
+		return "", notAnApply()
+	}
 	return ownerIn(ctx, store, applied, block)
 }
 
@@ -187,7 +196,7 @@ func routedIn(ctx context.Context, store recordReader, applied operationstore.Op
 }
 
 func predecessorLineage(ctx context.Context, store recordReader, operation operationstore.Operation) (lineage, error) {
-	if operation.Verb == reconciliation.Apply && operation.Predecessor == "" {
+	if operation.Verb != reconciliation.Apply || operation.Predecessor == "" {
 		return nil, nil
 	}
 	return appliedLineage(ctx, store, operation)
@@ -198,7 +207,14 @@ func sourceLineage(ctx context.Context, store recordReader, source string) (line
 	if err != nil {
 		return nil, err
 	}
+	if applied.Verb != reconciliation.Apply {
+		return nil, notAnApply()
+	}
 	return appliedLineage(ctx, store, applied)
+}
+
+func notAnApply() error {
+	return failure("lifecycle.state", "the operation this removal takes back is no apply", "restore the context store")
 }
 
 func appliedView(ctx context.Context, store recordReader, applied operationstore.Operation, plan reconciliation.Plan, states map[string]reconciliation.BlockState) (reconciliation.Plan, map[string]reconciliation.BlockState, error) {

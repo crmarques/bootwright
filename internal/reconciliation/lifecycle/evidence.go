@@ -50,15 +50,21 @@ func (s Service) Evidence(ctx context.Context, contextName, kind, object string)
 		if err != nil {
 			return err
 		}
-		for _, block := range plan.Blocks {
-			if block.Kind != kind || block.Object != object {
-				continue
+		owners, err := evidenceOwners(ctx, store, lineageMember{operation: operation, plan: plan})
+		if err != nil {
+			return err
+		}
+		for _, owner := range owners {
+			for _, block := range owner.plan.Blocks {
+				if block.Kind != kind || block.Object != object {
+					continue
+				}
+				evidence, err := blockEvidence(ctx, store, owner.operation.ID, block, owner.operation.Verb)
+				if err != nil {
+					return err
+				}
+				found = append(found, evidence)
 			}
-			evidence, err := blockEvidence(ctx, store, operation.ID, block, operation.Verb)
-			if err != nil {
-				return err
-			}
-			found = append(found, evidence)
 		}
 		return nil
 	})
@@ -66,6 +72,13 @@ func (s Service) Evidence(ctx context.Context, contextName, kind, object string)
 		return nil, err
 	}
 	return found, nil
+}
+
+func evidenceOwners(ctx context.Context, store recordReader, current lineageMember) ([]lineageMember, error) {
+	if current.operation.Verb != reconciliation.Apply || current.operation.Predecessor == "" {
+		return []lineageMember{current}, nil
+	}
+	return lineageOf(ctx, store, current)
 }
 
 // provedDependencies reads direct dependencies in frozen plan order for apply.

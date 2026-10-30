@@ -1776,7 +1776,7 @@ func TestAnApplyKeepsTheResolutionsARemovalMakesBeforeItRegisters(t *testing.T) 
 	if _, size, err = store.held(ctx, "", ""); err != nil {
 		t.Fatal(err)
 	}
-	_, reserved, err := store.removalReserve(operation, plan)
+	_, reserved, err := store.removalReserve(ctx, operation, plan)
 	if err != nil {
 		t.Fatal(err)
 	}

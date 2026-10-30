@@ -40,7 +40,7 @@ type Store struct {
 	room     int64
 	attempts sync.Mutex
 	inflight map[string]int
-	reserves map[string]int64
+	reserves map[string]reservation
 }
 
 func New(area Area, clock func() time.Time) *Store {
@@ -295,7 +295,7 @@ func (s *Store) AdmitAttempt(ctx context.Context, operation Operation, plan reco
 	keptEntries, keptBytes := 0, int64(0)
 	apply := operation.Verb == reconciliation.Apply && !removal
 	if operation.Verb == reconciliation.Apply {
-		if keptEntries, keptBytes, err = s.removalReserve(operation, plan); err != nil {
+		if keptEntries, keptBytes, err = s.removalReserve(ctx, operation, plan); err != nil {
 			return nil, err
 		}
 	}
@@ -358,13 +358,18 @@ func (s *Store) resolutions(ctx context.Context, id string, plan reconciliation.
 	return len(blocks), nil
 }
 
-func (s *Store) removalReserve(operation Operation, plan reconciliation.Plan) (int, int64, error) {
-	removal, err := plan.Inverse()
+type reservation struct {
+	entries int
+	bytes   int64
+}
+
+func (s *Store) removalReserve(ctx context.Context, operation Operation, plan reconciliation.Plan) (int, int64, error) {
+	if kept, read := s.reserves[operation.ID]; read {
+		return kept.entries, kept.bytes, nil
+	}
+	removal, err := s.removalOf(ctx, operation, plan)
 	if err != nil {
 		return 0, 0, err
-	}
-	if kept, read := s.reserves[operation.ID]; read {
-		return AdmissionEntries(removal), kept, nil
 	}
 	encodedPlan, err := encode(removal, MaxPlanBytes)
 	if err != nil {
@@ -374,12 +379,45 @@ func (s *Store) removalReserve(operation Operation, plan reconciliation.Plan) (i
 	if err != nil {
 		return 0, 0, err
 	}
-	kept := int64(len(encodedPlan)+len(record)+MaxIndexBytes) + int64(len(removal.Blocks))*FirstPassBlockBytes
+	kept := reservation{
+		entries: AdmissionEntries(removal),
+		bytes:   int64(len(encodedPlan)+len(record)+MaxIndexBytes) + int64(len(removal.Blocks))*FirstPassBlockBytes,
+	}
 	if s.reserves == nil {
-		s.reserves = map[string]int64{}
+		s.reserves = map[string]reservation{}
 	}
 	s.reserves[operation.ID] = kept
-	return AdmissionEntries(removal), kept, nil
+	return kept.entries, kept.bytes, nil
+}
+
+func (s *Store) removalOf(ctx context.Context, operation Operation, plan reconciliation.Plan) (reconciliation.Plan, error) {
+	if operation.Predecessor == "" {
+		return plan.Inverse()
+	}
+	plans := []reconciliation.Plan{plan}
+	seen := map[string]bool{operation.ID: true}
+	for id := operation.Predecessor; id != ""; {
+		if seen[id] || len(seen) >= MaxOperations {
+			return reconciliation.Plan{}, recordError("the applies this operation adds to name one another in a cycle or exceed the operations a context retains")
+		}
+		seen[id] = true
+		predecessor, _, err := s.readOperation(ctx, id)
+		if err != nil {
+			return reconciliation.Plan{}, err
+		}
+		earlier, err := s.ReadPlan(ctx, id)
+		if err != nil {
+			return reconciliation.Plan{}, err
+		}
+		plans = append(plans, earlier)
+		id = predecessor.Predecessor
+	}
+	slices.Reverse(plans)
+	lineage, err := reconciliation.Lineage(plans...)
+	if err != nil {
+		return reconciliation.Plan{}, err
+	}
+	return lineage.Inverse()
 }
 
 // held counts the entries beneath target as the area's entry bound counts

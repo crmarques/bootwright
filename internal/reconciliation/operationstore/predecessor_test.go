@@ -188,3 +188,58 @@ func TestPrerequisitesRefuseBesideARecordThatNamesNoPredecessor(t *testing.T) {
 		t.Fatalf("reading prerequisites beside a record without a predecessor: %v", diagnostics.Of(err))
 	}
 }
+
+// An additive apply's attempts keep free what the one removal of its whole
+// lineage needs, so an attempt of a plan that cannot be inverted alone is
+// admitted, and the reserve is that of the lineage's inverse.
+func TestAnAdditiveApplyKeepsTheReserveOfItsWholeLineagesRemoval(t *testing.T) {
+	ctx := context.Background()
+	store, _ := newStore(t)
+	root := goldenPlan(t)
+	applied := testOperation(t, root)
+	if _, err := store.Index(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.Register(ctx, applied, root); err != nil {
+		t.Fatal(err)
+	}
+	added := additivePlan(t)
+	operation := additiveOperation(t, added, applied.ID)
+	if err := store.Register(ctx, operation, added); err != nil {
+		t.Fatal(err)
+	}
+	release, err := store.AdmitAttempt(ctx, operation, added, "gateway-lab", false)
+	if err != nil {
+		t.Fatalf("an attempt of the additive apply refused: %+v", diagnostics.Of(err))
+	}
+	release()
+	whole, err := reconciliation.Lineage(root, added)
+	if err != nil {
+		t.Fatal(err)
+	}
+	removal, err := whole.Inverse()
+	if err != nil {
+		t.Fatal(err)
+	}
+	entries, kept, err := store.removalReserve(ctx, operation, added)
+	if err != nil || entries != AdmissionEntries(removal) {
+		t.Fatalf("the additive apply keeps %d entries (%v), want its lineage removal's %d", entries, err, AdmissionEntries(removal))
+	}
+	rootOnly, err := root.Inverse()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, alone, err := store.removalReserve(ctx, applied, root); err != nil || alone >= kept || len(removal.Blocks) <= len(rootOnly.Blocks) {
+		t.Fatalf("the lineage keeps %d bytes beside the root's %d (%v)", kept, alone, err)
+	}
+}
+
+func TestTheReserveOfAnAdditiveApplyRefusesALineageItCannotRead(t *testing.T) {
+	ctx := context.Background()
+	store, _ := newStore(t)
+	added := additivePlan(t)
+	operation := additiveOperation(t, added, "op-"+strings.Repeat("77", 16))
+	if _, _, err := store.removalReserve(ctx, operation, added); err == nil {
+		t.Fatal("a reserve was computed over a predecessor that has no record")
+	}
+}
