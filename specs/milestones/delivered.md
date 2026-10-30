@@ -10116,3 +10116,26 @@ The regression probe failed before the correction and passed afterwards;
 `make focus` and independent safety review passed. The integrating commit
 records the full verification commands and their results, including
 `make check` and `make race`. Existing operator-acceptance gates remain open.
+
+### X233 — Permission fixture modes
+
+**Item:** B989. **Kind:** defect. **Owner:** Workspace verification.
+
+The permission fixtures in `operations_diagnostics_linux_amd64_test.go` and
+`root_inspection_linux_amd64_test.go` explicitly establish their intentionally
+foreign mode `0755` under
+[store permissions](../contexts.md#storage-locking-and-publication).
+Inherited umask `077` had made their `Mkdir(0755)` calls create safe mode
+`0700`; the five affected tests failed under `077` and passed under `022`
+before the correction. This is the necessary pre-existing gate correction
+for X232 under the [defect rule](../../AGENTS.md), recorded in
+[D212](backlog.md#d212), and changes no runtime contract.
+
+The regressions are `TestAForeignOperationEntryIsRefusedByName`,
+`TestAnEntryThatRefusesOnlyWhileItIsPublishedDoesNotRefuseTheWrite`,
+`TestAForeignOperationEntryNamesWhatRefusedIt`,
+`TestTheStateRootInspectionNamesARootThisBuildCannotUse` and
+`TestTheStateRootInspectionIsTheStoresOwn`. The integrating commit records
+uncached probes under inherited masks `077` and `022`, plus the full gate
+commands and results for this correction and X232's implementation commit.
+[B673](backlog.md#b673) remains separately open.

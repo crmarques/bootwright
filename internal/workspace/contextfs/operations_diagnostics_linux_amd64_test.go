@@ -35,6 +35,9 @@ func TestAForeignOperationEntryIsRefusedByName(t *testing.T) {
 	if err := os.Mkdir(foreign, 0755); err != nil {
 		t.Fatal(err)
 	}
+	if err := os.Chmod(foreign, 0755); err != nil {
+		t.Fatal(err)
+	}
 	err := store.MutateLifecycle(ctx, "example", func(tx lifecycle.Transaction) error {
 		return tx.Operations().WriteExclusive(ctx, "index.json", []byte("{}\n"))
 	})
@@ -113,6 +116,9 @@ func TestAnEntryThatRefusesOnlyWhileItIsPublishedDoesNotRefuseTheWrite(t *testin
 	if err := os.Mkdir(publishing, 0755); err != nil {
 		t.Fatal(err)
 	}
+	if err := os.Chmod(publishing, 0755); err != nil {
+		t.Fatal(err)
+	}
 	confirmed := false
 	store.fail = func(name string) error {
 		if name != "confirm-operation-entry" || confirmed {
@@ -142,6 +148,9 @@ func TestAForeignOperationEntryNamesWhatRefusedIt(t *testing.T) {
 	root := operationsRoot(t, store, "example")
 	foreign := filepath.Join(root, "op-1")
 	if err := os.Mkdir(foreign, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(foreign, 0755); err != nil {
 		t.Fatal(err)
 	}
 	err := store.MutateLifecycle(ctx, "example", func(tx lifecycle.Transaction) error {

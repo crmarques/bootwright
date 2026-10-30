@@ -40,6 +40,9 @@ func TestTheStateRootInspectionNamesARootThisBuildCannotUse(t *testing.T) {
 			if err := os.Mkdir(store.options.Root, 0755); err != nil {
 				t.Fatal(err)
 			}
+			if err := os.Chmod(store.options.Root, 0755); err != nil {
+				t.Fatal(err)
+			}
 		}, listable: true, observed: "a directory owned by " + owner + " with mode 0755", status: "not-ready",
 			message: "the state root is a directory owned by " + owner + " with mode 0755, but it must be a directory owned by " + owner + " with mode 0700", remediation: unsafeRootRemediation},
 		{name: "a file in place of the root", lay: func(t *testing.T, store *Store, _ desiredstate.Sources) {
@@ -101,6 +104,9 @@ func inspectedEntries(t *testing.T, root string) [][]rootEntrySnapshot {
 func TestTheStateRootInspectionIsTheStoresOwn(t *testing.T) {
 	store, _ := fixture(t)
 	if err := os.Mkdir(store.options.Root, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(store.options.Root, 0755); err != nil {
 		t.Fatal(err)
 	}
 	inspection, err := store.InspectStateRoot(context.Background())

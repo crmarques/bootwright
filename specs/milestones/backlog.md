@@ -6329,3 +6329,9 @@ request. It authorizes accepting exactly `COLORTERM` at direct and supervised
 sudo entry and discarding it before any subprocess, with the owning security
 contract, sudo guidance and executable safety evidence. The other inherited
 variable refusals and all existing operator-acceptance gates remain in force.
+
+X232's integration gate exposed [B989](delivered.md#x233--permission-fixture-modes),
+a pre-existing permission fixture defect under an inherited restrictive umask.
+The session applies the repository's [pre-existing-defect rule](../../AGENTS.md) as X233 to correct
+that necessary gate blocker in its own commit. This adds no owner decision
+or product scope; [B673](#b673) remains separately open.
