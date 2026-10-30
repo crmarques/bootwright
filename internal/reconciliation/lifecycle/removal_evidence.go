@@ -23,7 +23,7 @@ func removalRecords(ctx context.Context, store recordReader, operation operation
 	if err != nil {
 		return nil, nil, err
 	}
-	original, err := store.ReadPlan(ctx, operation.Source)
+	held, err := sourceLineage(ctx, store, operation.Source)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -54,11 +54,15 @@ func removalRecords(ctx context.Context, store recordReader, operation operation
 		if removed.State != reconciliation.BlockDone || len(removed.Evidence) == 0 {
 			continue
 		}
-		appliedBlock, found := original.Block(dependency.ID)
+		owner, err := held.routed(dependency.ID)
+		if err != nil {
+			return nil, nil, err
+		}
+		appliedBlock, found := owner.plan.Block(dependency.ID)
 		if !found {
 			return nil, nil, failure("lifecycle.state", "the removal dependency has no original apply identity", "")
 		}
-		applied, err := blockEvidence(ctx, store, operation.Source, appliedBlock, reconciliation.Apply)
+		applied, err := blockEvidence(ctx, store, owner.operation.ID, appliedBlock, reconciliation.Apply)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -92,7 +96,11 @@ func originalRemovalDependents(ctx context.Context, store recordReader, operatio
 	if operation.Verb != reconciliation.Destroy {
 		return nil, nil
 	}
-	original, err := store.ReadPlan(ctx, operation.Source)
+	held, err := sourceLineage(ctx, store, operation.Source)
+	if err != nil {
+		return nil, err
+	}
+	original, err := held.plan()
 	if err != nil {
 		return nil, err
 	}
@@ -119,11 +127,16 @@ func originalRemovalDependents(ctx context.Context, store recordReader, operatio
 		if candidate.ID == block || !wanted[candidate.ID] {
 			continue
 		}
-		proof, err := blockEvidence(ctx, store, operation.Source, candidate, reconciliation.Apply)
+		owner, err := held.routed(candidate.ID)
 		if err != nil {
 			return nil, err
 		}
-		proof.Block, _ = original.Block(candidate.ID)
+		frozen, _ := owner.plan.Block(candidate.ID)
+		proof, err := blockEvidence(ctx, store, owner.operation.ID, frozen, reconciliation.Apply)
+		if err != nil {
+			return nil, err
+		}
+		proof.Block = frozen
 		proof.Evidence = slices.Clone(proof.Evidence)
 		proved = append(proved, proof)
 	}

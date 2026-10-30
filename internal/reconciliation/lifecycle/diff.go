@@ -149,23 +149,12 @@ func (s Service) owningApply(ctx context.Context, store recordReader, current op
 	case current.ID == "":
 		return operationstore.Operation{}, reconciliation.Plan{}, nil, nil
 	case current.Verb == reconciliation.Apply:
-		return current, plan, states, nil
+		merged, reached, err := appliedView(ctx, store, current, plan, states)
+		return current, merged, reached, err
 	case current.Source == "":
 		return operationstore.Operation{}, reconciliation.Plan{}, nil, nil
 	}
-	applied, err := store.ReadOperation(ctx, current.Source)
-	if err != nil {
-		return operationstore.Operation{}, reconciliation.Plan{}, nil, err
-	}
-	frozen, err := store.ReadPlan(ctx, applied.ID)
-	if err != nil {
-		return operationstore.Operation{}, reconciliation.Plan{}, nil, err
-	}
-	reached, err := store.BlockStates(ctx, applied.ID, frozen)
-	if err != nil {
-		return operationstore.Operation{}, reconciliation.Plan{}, nil, err
-	}
-	return applied, frozen, reached, nil
+	return removedApply(ctx, store, current.Source)
 }
 
 func (s Service) appliedCatalog(ctx context.Context, view View, owning operationstore.Operation, desired *compilation.State) (api.Catalog, desiredstate.Sources, string) {

@@ -9,16 +9,7 @@ import (
 	api "github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/diagnostics"
 	"github.com/crmarques/bootwright/internal/reconciliation"
-	"github.com/crmarques/bootwright/internal/reconciliation/operationstore"
 )
-
-// owningApply uses durable lineage, independent of mutable context names.
-func owningApply(operation operationstore.Operation) string {
-	if operation.Verb == reconciliation.Apply {
-		return operation.ID
-	}
-	return operation.Source
-}
 
 // onlineRemoval follows frozen dependencies and capability opt-in, never kind alone.
 type onlineRemoval struct {
@@ -366,7 +357,10 @@ func (c *scheduler) proveOnlineBoundary(ctx context.Context, block reconciliatio
 			skip[candidate.ID] = true
 		}
 	}
-	err := c.service.proveQuiescent(ctx, c.store, c.tx.Identity().Name, c.approved, c.plan, c.material, owningApply(c.operation), skip)
+	held, err := appliedLineage(ctx, c.store, c.operation)
+	if err == nil {
+		err = c.service.proveQuiescent(ctx, c.store, c.tx.Identity().Name, c.approved, c.plan, c.material, held, skip)
+	}
 	if err != nil {
 		c.onlineBlocked = true
 		c.causes[block.ID] = err
@@ -395,7 +389,11 @@ func (c *scheduler) provePreStopBoundary(ctx context.Context, block reconciliati
 	if len(c.running) != 0 {
 		return false
 	}
-	if err := c.service.proveQuiescent(ctx, c.store, c.tx.Identity().Name, c.approved, c.plan, c.material, owningApply(c.operation), skip); err != nil {
+	held, err := appliedLineage(ctx, c.store, c.operation)
+	if err == nil {
+		err = c.service.proveQuiescent(ctx, c.store, c.tx.Identity().Name, c.approved, c.plan, c.material, held, skip)
+	}
+	if err != nil {
 		c.onlineBlocked = true
 		c.causes[block.ID] = err
 		return false

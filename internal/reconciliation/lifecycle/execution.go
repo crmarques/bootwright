@@ -617,7 +617,11 @@ func (s Service) settleApply(ctx context.Context, view View, operation operation
 	if inputDrift(view, operation) != "" {
 		return transition{}, s.changedInput(ctx, view, operation)
 	}
-	if unfinished := unfinishedBlocks(frozen, states); len(unfinished) != 0 {
+	unfinished, err := unfinishedOver(ctx, s.store(view), operation, frozen, states)
+	if err != nil {
+		return transition{}, err
+	}
+	if len(unfinished) != 0 {
 		return transition{}, failure("lifecycle.state",
 			"the completed apply "+operation.ID+" records no block completion for these blocks, so this input cannot be proved applied: "+strings.Join(unfinished, ", "),
 			unfinishedApplyExits(view))
@@ -1168,8 +1172,13 @@ func (s Service) execute(ctx context.Context, name string, decided transition) (
 	var result *OperationResult
 	var completion removalCompletion
 	var unreleased error
+	var kept []string
+	var keptErr error
 	err = s.workspace.MutateLifecycle(ctx, name, func(tx Transaction) error {
 		result, err = s.run(ctx, tx, decided, binding, material, record)
+		if decided.fresh && decided.verb == reconciliation.Apply && result != nil && result.Receipt.Operation != "" {
+			kept, keptErr = lineageBindings(recordingContext(ctx), s.store(tx), result.Receipt.Operation)
+		}
 		// The state a completed removal's record left is captured here, after
 		// finish wrote it, because the pristine publication re-proves exactly
 		// that once the releases are done. What it gives back is what its
@@ -1202,8 +1211,8 @@ func (s Service) execute(ctx context.Context, name string, decided transition) (
 			err, collect = withCause(err, incompleteRemoval(name, unreleased)), false
 		}
 	}
-	if collect {
-		s.collect(ctx, name, held, joinBindings(slices.Clone(decided.release), binding))
+	if collect && keptErr == nil {
+		s.collect(ctx, name, held, joinBindings(joinBindings(slices.Clone(decided.release), binding), kept...))
 	}
 	return result, err
 }
@@ -1287,7 +1296,11 @@ func (s Service) run(ctx context.Context, tx Transaction, decided transition, bi
 		boundary := s.onlineRemoval(decided.plan)
 		skip := maps.Clone(boundary.machines)
 		maps.Copy(skip, boundary.preStopMachines)
-		if err := s.proveQuiescent(ctx, store, tx.Identity().Name, located, decided.plan, material, decided.source, skip); err != nil {
+		held, err := sourceLineage(ctx, store, decided.source)
+		if err != nil {
+			return nil, err
+		}
+		if err := s.proveQuiescent(ctx, store, tx.Identity().Name, located, decided.plan, material, held, skip); err != nil {
 			return nil, err
 		}
 	}
@@ -1606,7 +1619,7 @@ func (s Service) reportResolution(ctx context.Context, event ProgressEvent) {
 // discovering the next obstacle each time they repeat the command. A probe
 // that cannot read its target reports live, because an environment that cannot
 // prove it is idle is never assumed to be.
-func (s Service) proveQuiescent(ctx context.Context, store OperationStore, contextName string, approved approved, plan reconciliation.Plan, material map[string]secrets.Material, applyOperation string, skip map[string]bool) error {
+func (s Service) proveQuiescent(ctx context.Context, store OperationStore, contextName string, approved approved, plan reconciliation.Plan, material map[string]secrets.Material, held lineage, skip map[string]bool) error {
 	var live, stops, remedies []string
 	generic := false
 	blocks := slices.DeleteFunc(slices.Clone(plan.Blocks), func(block reconciliation.Block) bool { return skip[block.ID] })
@@ -1630,11 +1643,15 @@ func (s Service) proveQuiescent(ctx context.Context, store OperationStore, conte
 				Group: block.ID, Detail: block.Kind + "/" + block.Object, Status: "running",
 				Completed: index, Declared: len(blocks),
 			})
+			applyOperation, err := held.ownerFor(block.ID)
+			if err != nil {
+				return err
+			}
 			applyProved, err := applyDependencies(ctx, store, applyOperation, block.ID)
 			if err != nil {
 				return err
 			}
-			lend, release, err := s.producedLender(block, planDefinitions(plan), true, s.producedInContext(contextName))
+			lend, release, err := s.producedLender(block, held.lending(plan), true, s.producedInContext(contextName))
 			if err != nil {
 				return err
 			}

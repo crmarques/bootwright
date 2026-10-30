@@ -198,14 +198,18 @@ func installFroze(read *diffRead) string {
 }
 
 func (s Service) inspection(ctx context.Context, view RunView, store recordReader, approved approved, launch prerequisites.PythonLaunch, read *diffRead, block reconciliation.Block, material map[string]secrets.Material) (Execution, error) {
-	proved, err := applyDependencies(ctx, store, read.owning.ID, block.ID)
+	owner, err := routedIn(ctx, store, read.owning, block.ID)
+	if err != nil {
+		return Execution{}, err
+	}
+	proved, err := applyDependencies(ctx, store, owner.ID, block.ID)
 	if err != nil {
 		return Execution{}, err
 	}
 	setup := view.Controller()
 	execution := Execution{
-		Context: view.Identity().Name, Incarnation: view.Identity().Incarnation, ApplyOperation: read.owning.ID, ApplyProved: proved, Block: block,
-		Launch: launch, Material: material,
+		Context: view.Identity().Name, Incarnation: view.Identity().Incarnation, ApplyOperation: owner.ID, ApplyProved: proved, Block: block,
+		Launch: launch, Material: material, ApplyRegistered: owner.Created,
 		LocateTool: func(inner context.Context, tool controller.InstalledTool) (string, error) {
 			return s.locateTool(inner, store, setup, read.context.Name, read.owning, read.owningPlan, tool)
 		},
@@ -233,8 +237,7 @@ func (s Service) inspect(ctx context.Context, view RunView, store recordReader, 
 		}
 		defer release()
 		execution.LendProduced = lend
-		execution.ApplyRegistered = read.owning.Created
-		execution.PreviousEvidence, err = previousBlockEvidence(ctx, store, read.owning.ID, block.ID)
+		execution.PreviousEvidence, err = previousBlockEvidence(ctx, store, execution.ApplyOperation, block.ID)
 		if err != nil {
 			return err
 		}

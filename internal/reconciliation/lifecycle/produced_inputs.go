@@ -180,26 +180,40 @@ func (s Service) producedInContext(name string) producedRead {
 }
 
 func (s Service) prepareProducedExecution(ctx context.Context, tx Transaction, store OperationStore, operation operationstore.Operation, plan reconciliation.Plan, execution *Execution) (func(), error) {
+	definitions := planDefinitions(plan)
 	registered := operation.Created
-	if operation.Verb == reconciliation.Destroy {
-		var err error
-		plan, err = store.ReadPlan(ctx, operation.Source)
-		if err != nil {
+	owner := operation.ID
+	var held lineage
+	var err error
+	switch {
+	case operation.Verb == reconciliation.Destroy:
+		if held, err = appliedLineage(ctx, store, operation); err != nil {
 			return nil, err
 		}
-		original, err := store.ReadOperation(ctx, operation.Source)
-		if err != nil {
+		if len(held) == 0 {
+			return nil, failure("lifecycle.state", "the removal names no apply to borrow produced inputs from", "restore the context store")
+		}
+		definitions = held.lending(held.head().plan)
+	case operation.Predecessor != "":
+		if held, err = lineageOf(ctx, store, lineageMember{operation: operation, plan: plan}); err != nil {
 			return nil, err
 		}
-		registered = original.Created
+		definitions = held.lending(plan)
 	}
-	lend, release, err := s.producedLender(execution.Block, planDefinitions(plan), operation.Verb == reconciliation.Destroy, s.producedInTransaction(tx))
+	if len(held) != 0 {
+		member, err := held.routed(execution.Block.ID)
+		if err != nil {
+			return nil, err
+		}
+		owner, registered = member.operation.ID, member.operation.Created
+	}
+	lend, release, err := s.producedLender(execution.Block, definitions, operation.Verb == reconciliation.Destroy, s.producedInTransaction(tx))
 	if err != nil {
 		return nil, err
 	}
 	execution.LendProduced = lend
 	execution.ApplyRegistered = registered
-	previous, err := previousBlockEvidence(ctx, store, owningApply(operation), execution.Block.ID)
+	previous, err := previousBlockEvidence(ctx, store, owner, execution.Block.ID)
 	if err != nil {
 		release()
 		return nil, err

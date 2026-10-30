@@ -392,9 +392,14 @@ Every other
 operation directory is kept for audit and never named by the index: a
 completed operation, one a removal superseded, and the unreferenced directory
 an interrupted registration leaves once its plan landed. A later command reads
-one again only as the current operation's `source` or, for `status`, as the
+one again only as the current operation's `source`, or as a member of the
+lineage of the current operation or of its `source`, or, for `status`, as the
 removal the current one replaces, and that one's own, and each counts toward the
-[retained-operation bound](contexts.md#storage-locking-and-publication). A
+[retained-operation bound](contexts.md#storage-locking-and-publication). The
+lineage of an apply is that apply and the predecessors its records name, read
+back oldest first through each one's own `predecessor`; a record that is missing,
+is no apply, repeats one already read, or lies beyond that bound refuses
+`lifecycle.state`, so no walk ever reads its head as a root. A
 fresh apply's `<operation-id>/` exists, holding only its empty `blocks/` and
 `logs/`, from the transaction that raises its
 [evidence](#context-mutation-evidence); its identity is allocated against every
@@ -470,6 +475,8 @@ when exactly one member is spelled `build` in any case and it holds a valid
 build in its canonical encoding, with the remedy to continue or remove the
 operation with that build; when that build is the unmodified running
 executable, the refusal says the record names it and offers no such remedy.
+
+### Record encoding and versions
 
 Records are closed, canonical, bounded JSON published atomically beneath held
 verified handles, with the directory and file modes of

@@ -309,3 +309,95 @@ func TestLineageRefusesWhatIsNotOneLineage(t *testing.T) {
 		t.Fatalf("a held prerequisite refused: %v", diagnostics.Of(err))
 	}
 }
+
+func TestAnAddedBlockKeepsItsAddedDependenciesAndMovesTheLineageOnesToPrerequisites(t *testing.T) {
+	root := planOf(t, definition("net"), definition("cluster", "net"))
+	fresh := planOf(t, definition("net"), definition("cluster", "net"), definition("sidecar", "cluster"), definition("instance", "cluster", "sidecar"))
+	added, err := Additive(fresh, root)
+	if err != nil {
+		t.Fatalf("adding: %v", diagnostics.Of(err))
+	}
+	instance, _ := added.Block("instance")
+	if !slices.Equal(instance.Dependencies, []string{"sidecar"}) || !slices.Equal(instance.Prerequisites, []string{"cluster"}) {
+		t.Fatalf("instance carries dependencies %v and prerequisites %v", instance.Dependencies, instance.Prerequisites)
+	}
+	sidecar, _ := added.Block("sidecar")
+	if len(sidecar.Dependencies) != 0 || !slices.Equal(sidecar.Prerequisites, []string{"cluster"}) {
+		t.Fatalf("sidecar carries dependencies %v and prerequisites %v", sidecar.Dependencies, sidecar.Prerequisites)
+	}
+	if got := ids(Ready(added, map[string]BlockState{})); !slices.Equal(got, []string{"sidecar"}) {
+		t.Fatalf("ready = %v, want only the sidecar: the instance waits for it, not for the lineage", got)
+	}
+	joined, err := Lineage(root, added)
+	if err != nil || !reflect.DeepEqual(joined, fresh) {
+		t.Fatalf("the lineage is not the fresh plan (%v):\n%+v\n%+v", diagnostics.Of(err), joined, fresh)
+	}
+}
+
+func TestAnAdditionAcrossATwoPlanLineageHoldsPrerequisitesInBothPlans(t *testing.T) {
+	root := planOf(t, definition("net"), definition("cluster", "net"))
+	first := mustAdd(t, planOf(t, definition("net"), definition("cluster", "net"), definition("alpha", "cluster")), root)
+	fresh := planOf(t, definition("net"), definition("cluster", "net"), definition("alpha", "cluster"),
+		definition("bravo", "cluster", "alpha"), definition("charlie", "alpha", "bravo"), definition("delta", "net"))
+	second, err := Additive(fresh, root, first)
+	if err != nil {
+		t.Fatalf("adding: %v", diagnostics.Of(err))
+	}
+	if got := ids(second.Blocks); !slices.Equal(got, []string{"bravo", "delta", "charlie"}) {
+		t.Fatalf("the addition holds %v", got)
+	}
+	bravo, _ := second.Block("bravo")
+	if len(bravo.Dependencies) != 0 || !slices.Equal(bravo.Prerequisites, []string{"alpha", "cluster"}) {
+		t.Fatalf("bravo carries dependencies %v and prerequisites %v, want both plans' blocks as prerequisites", bravo.Dependencies, bravo.Prerequisites)
+	}
+	charlie, _ := second.Block("charlie")
+	if !slices.Equal(charlie.Dependencies, []string{"bravo"}) || !slices.Equal(charlie.Prerequisites, []string{"alpha"}) {
+		t.Fatalf("charlie carries dependencies %v and prerequisites %v", charlie.Dependencies, charlie.Prerequisites)
+	}
+	delta, _ := second.Block("delta")
+	if len(delta.Dependencies) != 0 || !slices.Equal(delta.Prerequisites, []string{"net"}) {
+		t.Fatalf("delta carries dependencies %v and prerequisites %v", delta.Dependencies, delta.Prerequisites)
+	}
+	joined, err := Lineage(root, first, second)
+	if err != nil || !reflect.DeepEqual(joined, fresh) {
+		t.Fatalf("the lineage is not the fresh plan (%v):\n%+v\n%+v", diagnostics.Of(err), joined, fresh)
+	}
+}
+
+func mustAdd(t *testing.T, fresh Plan, owned ...Plan) Plan {
+	t.Helper()
+	added, err := Additive(fresh, owned...)
+	if err != nil {
+		t.Fatalf("adding: %v", diagnostics.Of(err))
+	}
+	return added
+}
+
+func TestALineageBlockDifferingOnlyInImpactsOrGroupTextIsAcceptedAndKeepsItsFrozenText(t *testing.T) {
+	root := planOf(t, definition("net"), definition("cluster", "net"))
+	reworded := definition("cluster", "net")
+	reworded.Impacts = []string{"create-container-unit", "restart-the-service"}
+	reworded.Groups = []Group{{ID: "start-service", Description: "bring the service up", Machines: []string{"controller"}}}
+	fresh := planOf(t, definition("net"), reworded, definition("instance", "cluster"))
+	added, err := Additive(fresh, root)
+	if err != nil {
+		t.Fatalf("a text-only difference refused: %v", diagnostics.Of(err))
+	}
+	if got := ids(added.Blocks); !slices.Equal(got, []string{"instance"}) {
+		t.Fatalf("the addition holds %v, not only the added block", got)
+	}
+	joined, err := Lineage(root, added)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cluster, _ := joined.Block("cluster")
+	frozen, _ := root.Block("cluster")
+	if !reflect.DeepEqual(cluster.Impacts, frozen.Impacts) || !reflect.DeepEqual(cluster.Groups, frozen.Groups) {
+		t.Fatalf("the lineage reworded a frozen block: %+v", cluster)
+	}
+	changed := definition("cluster", "net")
+	changed.Groups = []Group{{ID: "start-service", Description: "start the service", Machines: []string{"other"}}}
+	if _, err := Additive(planOf(t, definition("net"), changed, definition("instance", "cluster")), root); err == nil {
+		t.Fatal("a group on other machines is a different freeze but was admitted")
+	}
+}

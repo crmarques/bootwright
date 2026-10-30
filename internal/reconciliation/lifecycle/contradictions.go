@@ -151,7 +151,7 @@ func uncontinuable(ctx context.Context, store OperationStore, operation operatio
 // no block record of it, so a record it lost contradicts nothing that follows.
 func recordContradictions(ctx context.Context, store OperationStore, operation operationstore.Operation, frozen reconciliation.Plan, states map[string]reconciliation.BlockState, attempts map[string]int) ([]string, error) {
 	if operation.State == reconciliation.OperationDone {
-		return unfinishedBlocks(frozen, states), nil
+		return unfinishedOver(ctx, store, operation, frozen, states)
 	}
 	if operation.Verb == reconciliation.Destroy {
 		if nextAction(operation, frozen, states) == string(reconciliation.Destroy) {

@@ -52,7 +52,7 @@ func (s Service) attempt(ctx context.Context, tx Transaction, store OperationSto
 	if err := s.claimProved(ctx, tx, plan, block, proved); err != nil {
 		return "", err
 	}
-	applyProved, preparations, err := applyRecords(ctx, store, owningApply(operation), block.ID)
+	applyProved, preparations, err := ownedApplyRecords(ctx, store, operation, block.ID)
 	if err != nil {
 		return "", err
 	}
@@ -208,7 +208,7 @@ func (s Service) resolveUnknown(ctx context.Context, tx Transaction, store Opera
 	if err != nil {
 		return "", err
 	}
-	applyProved, preparations, err := applyRecords(ctx, store, owningApply(operation), block.ID)
+	applyProved, preparations, err := ownedApplyRecords(ctx, store, operation, block.ID)
 	if err != nil {
 		return "", err
 	}
@@ -493,9 +493,13 @@ func (s Service) invoke(ctx context.Context, tx Transaction, store OperationStor
 				return store.RecordPreparation(inner, operation.ID, block.ID, attempt, slices.Clone(preparation))
 			}
 		}
+		owner, ownerErr := ownerID(ctx, store, operation, block.ID)
+		if ownerErr != nil {
+			return ownerErr
+		}
 		execution := Execution{
 			Operation: operation.ID, Context: tx.Identity().Name, Incarnation: tx.Identity().Incarnation, Continuation: continuation, Attempt: attempt, Resolution: resolution, Block: block,
-			ApplyOperation: owningApply(operation), ApplyProved: applyProved, ApplyPreparations: clonedPreparations(preparations), Prepare: prepare, Released: s.released(ctx, block),
+			ApplyOperation: owner, ApplyProved: applyProved, ApplyPreparations: clonedPreparations(preparations), Prepare: prepare, Released: s.released(ctx, block),
 			Launch: launch, Material: material, Proved: proved,
 			LocateTool: func(inner context.Context, tool controller.InstalledTool) (string, error) {
 				return s.locateTool(inner, store, view, tx.Identity().Name, operation, plan, tool)
@@ -553,13 +557,23 @@ func stageReading(err error, block reconciliation.Block, verb reconciliation.Ver
 // proves no closure, and recovering the closure again from the host's shared
 // sources would move a latest client to a release another context retained.
 func (s Service) locateTool(ctx context.Context, store recordReader, view prerequisites.StorageView, contextName string, operation operationstore.Operation, plan reconciliation.Plan, tool controller.InstalledTool) (string, error) {
-	index := slices.IndexFunc(plan.Blocks, func(block reconciliation.Block) bool { return block.Stage == reconciliation.StageController })
-	if index < 0 {
+	stage, found := controllerStage(plan)
+	if !found {
+		held, err := predecessorLineage(ctx, store, operation)
+		if err != nil {
+			return "", err
+		}
+		for _, member := range slices.Backward(held) {
+			if stage, found = controllerStage(member.plan); found {
+				break
+			}
+		}
+	}
+	if !found {
 		return "", failure("controller.state",
 			"the "+tool.Executable+" of release "+tool.Version+" is not installed on this controller",
 			"run "+contextCommand(contextName, string(reconciliation.Apply), "--stage", string(reconciliation.StageController)))
 	}
-	stage := plan.Blocks[index]
 	capability, ok := s.capabilities.Resolve(stage.Kind, stage.Implementation)
 	locator, locates := capability.(ToolLocator)
 	if !ok || !locates {
@@ -567,15 +581,31 @@ func (s Service) locateTool(ctx context.Context, store recordReader, view prereq
 			"this executable cannot locate the clients the controller stage of this operation installed",
 			"install the executable that registered this operation")
 	}
-	applied := operation.ID
-	if operation.Verb == reconciliation.Destroy {
-		applied = operation.Source
+	applied, err := ownerID(ctx, store, operation, stage.ID)
+	if err != nil {
+		return "", err
 	}
 	proved, err := blockEvidence(ctx, store, applied, stage, reconciliation.Apply)
 	if err != nil {
 		return "", err
 	}
 	return locator.LocateTool(ctx, view, stage, proved, tool)
+}
+
+func controllerStage(plan reconciliation.Plan) (reconciliation.Block, bool) {
+	index := slices.IndexFunc(plan.Blocks, func(block reconciliation.Block) bool { return block.Stage == reconciliation.StageController })
+	if index < 0 {
+		return reconciliation.Block{}, false
+	}
+	return plan.Blocks[index], true
+}
+
+func ownedApplyRecords(ctx context.Context, store recordReader, operation operationstore.Operation, block string) ([]BlockEvidence, []json.RawMessage, error) {
+	owner, err := ownerID(ctx, store, operation, block)
+	if err != nil {
+		return nil, nil, err
+	}
+	return applyRecords(ctx, store, owner, block)
 }
 
 func (s Service) report(ctx context.Context, event ProgressEvent) {
@@ -739,10 +769,14 @@ func (s Service) replayEffect(ctx context.Context, store OperationStore, operati
 
 func (s Service) replayable(ctx context.Context, store OperationStore, operation operationstore.Operation, block reconciliation.Block, capability Capability, attempt int) bool {
 	removal, err := capability.Removal(ctx, block)
-	if err != nil || !removal.ReplaySafe || operation.Verb != reconciliation.Destroy || owningApply(operation) == "" {
+	if err != nil || !removal.ReplaySafe || operation.Verb != reconciliation.Destroy {
 		return false
 	}
-	if applied, err := store.Block(ctx, owningApply(operation), block.ID); err != nil || applied.Attempts < 1 {
+	owner, err := ownerID(ctx, store, operation, block.ID)
+	if err != nil || owner == "" {
+		return false
+	}
+	if applied, err := store.Block(ctx, owner, block.ID); err != nil || applied.Attempts < 1 {
 		return false
 	}
 	for number := 1; number <= attempt; number++ {

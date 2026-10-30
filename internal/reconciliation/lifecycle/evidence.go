@@ -85,6 +85,25 @@ func provedDependencies(ctx context.Context, store OperationStore, operation ope
 		}
 		proved = append(proved, evidence)
 	}
+	if len(block.Prerequisites) == 0 {
+		return proved, nil
+	}
+	held, err := lineageOf(ctx, store, lineageMember{operation: operation, plan: plan})
+	if err != nil {
+		return nil, err
+	}
+	for _, id := range block.Prerequisites {
+		owner, found := held.ownerOf(id)
+		if !found {
+			return nil, failure("lifecycle.state", "no apply of the lineage of "+operation.ID+" holds the prerequisite "+id, "restore the context store")
+		}
+		prerequisite, _ := owner.plan.Block(id)
+		evidence, err := blockEvidence(ctx, store, owner.operation.ID, prerequisite, operation.Verb)
+		if err != nil {
+			return nil, err
+		}
+		proved = append(proved, evidence)
+	}
 	return proved, nil
 }
 
@@ -101,6 +120,15 @@ func applyDependencies(ctx context.Context, store recordReader, applyOperation, 
 	plan, err := store.ReadPlan(ctx, applyOperation)
 	if err != nil {
 		return nil, err
+	}
+	held := lineage{{operation: operation, plan: plan}}
+	if operation.Predecessor != "" {
+		if held, err = lineageOf(ctx, store, held[0]); err != nil {
+			return nil, err
+		}
+		if plan, err = held.plan(); err != nil {
+			return nil, err
+		}
 	}
 	index := slices.IndexFunc(plan.Blocks, func(block reconciliation.Block) bool { return block.ID == blockID })
 	if index < 0 {
@@ -126,11 +154,12 @@ func applyDependencies(ctx context.Context, store recordReader, applyOperation, 
 		if !dependencies[dependency.ID] {
 			continue
 		}
-		evidence, err := blockEvidence(ctx, store, applyOperation, dependency, reconciliation.Apply)
+		owner, _ := held.ownerOf(dependency.ID)
+		evidence, err := blockEvidence(ctx, store, owner.operation.ID, dependency, reconciliation.Apply)
 		if err != nil {
 			return nil, err
 		}
-		evidence.Block, _ = plan.Block(dependency.ID)
+		evidence.Block, _ = owner.plan.Block(dependency.ID)
 		evidence.Evidence = slices.Clone(evidence.Evidence)
 		proved = append(proved, evidence)
 	}

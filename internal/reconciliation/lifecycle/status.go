@@ -86,6 +86,11 @@ func (s Service) Ownership(ctx context.Context, contextName string) (map[string]
 		if err != nil {
 			return err
 		}
+		if operation.Verb == reconciliation.Apply {
+			if plan, states, err = appliedView(ctx, store, operation, plan, states); err != nil {
+				return err
+			}
+		}
 		if err := recordReleased(ctx, store, operation, owned); err != nil {
 			return err
 		}
@@ -139,7 +144,11 @@ func removedApply(ctx context.Context, store recordReader, source string) (opera
 	if err != nil {
 		return operationstore.Operation{}, reconciliation.Plan{}, nil, err
 	}
-	return applied, plan, states, nil
+	merged, reached, err := appliedView(ctx, store, applied, plan, states)
+	if err != nil {
+		return operationstore.Operation{}, reconciliation.Plan{}, nil, err
+	}
+	return applied, merged, reached, nil
 }
 
 // recordOwnership keeps the least settled state reported for one object, so a
@@ -337,7 +346,11 @@ func idleSteps(view View, unindexed []string) []string {
 func (s Service) offered(ctx context.Context, view View, store OperationStore, operation operationstore.Operation, frozen reconciliation.Plan, states map[string]reconciliation.BlockState, next string, contradicted []string) ([]string, error) {
 	steps := []string{}
 	if operation.State == reconciliation.OperationDone {
-		unfinished := len(unfinishedBlocks(frozen, states)) != 0
+		held, err := unfinishedOver(ctx, store, operation, frozen, states)
+		if err != nil {
+			return nil, err
+		}
+		unfinished := len(held) != 0
 		if operation.Verb == reconciliation.Apply && operation.LogFault && inputDrift(view, operation) == "" && !unfinished {
 			return []string{contextCommand(view.Identity().Name, string(reconciliation.Apply))}, nil
 		}
@@ -550,6 +563,12 @@ func refusedServices(services []ServiceSummary, refused []string) []ServiceSumma
 // completed removal whose block record does not read done. An object neither
 // names has no entry.
 func realizations(ctx context.Context, store recordReader, operation operationstore.Operation, frozen reconciliation.Plan, states map[string]reconciliation.BlockState) (map[string]RealizationStatus, error) {
+	if operation.Verb == reconciliation.Apply {
+		var err error
+		if frozen, states, err = appliedView(ctx, store, operation, frozen, states); err != nil {
+			return nil, err
+		}
+	}
 	reached := reachedByObject(frozen, states)
 	realized := make(map[string]RealizationStatus, len(reached))
 	if operation.Verb != reconciliation.Destroy {
