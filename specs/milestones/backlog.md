@@ -210,7 +210,6 @@ Alias cell.
 | [B670](#b670) | new, 2026-10-19 (X103) | safety | CLI and Secrets | Structured exports are encoded into an owned buffer cleared after the write, or documented as transient copies | No spec requires clearing output copies, and Go strings make complete clearing impossible without a custom encoder |
 | [B671](#b671) | new, 2026-10-19 (X103) | enabling | Infrastructure components and `cmd/bootwright` tests | A plan test pins the block set of the `lab-services` apply and destroy plans | Test hardening; no defect shown |
 | [B672](#b672) | new, 2026-10-19 (X103) | enabling | Developer tooling | `make docs-check` runs the pinned yamllint over tracked example YAML, or the formatting reference records the omission | Gate hardening; no example fails today |
-| [B673](#b673) | new, 2026-10-19 (X103) | defect | Workspace contextfs tests | `TestAnInterruptedPublicationLeavesAUsableStoreAndItsRetryConverges` is deterministic under concurrent gate runs, or its cause is recorded | It does not reproduce cheaply |
 | [B674](#b674) | new, 2026-10-19 (X102) | safety | Ceph host lifecycle, with B491 | A release whose cluster block never started removes the owned host runtime tree and any broker scratch | A new destructive host effect needing its own removal proof |
 | [B675](#b675) | new, 2026-10-19 (X102) | product | Storage, Ceph Call Home | `spec.distribution.ibm.callHome: disabled` passes the opt-out flag when the selected build declares it | Keyed on artifact facts, not a version label; a feature gap outside a defect slice |
 | [B676](#b676) | new, 2026-10-19 (X103) | product | Controller | `spec.dependencyVersions.libvirt` honours a NEVRA pin through host `dnf`, or the field leaves the grammar | Implementation scope, not a compatibility rule |
@@ -268,7 +267,6 @@ Alias cell.
 | [B795](#b795) | new, 2026-10-20 (D173) | product | Add-ons, with Secrets | GitLab trusts a declared CA bundle toward its object storage, PostgreSQL and Redis | The chart's custom-CA and TLS keys are unverified; the profile reaches its services without a private CA |
 | [B797](#b797) | new, 2026-10-21 (X56) | product | Storage | A StorageObjectBucket's declared policy changes after completion | A completed bucket refuses `object-bucket-identity` on a changed policy; a day-2 update is a state-contract change no milestone needs |
 | [B798](#b798) | new, 2026-10-23 (M3 verification) | defect | Verification tooling | The full Ansible unit gate selects its intended worker mode explicitly | Pre-existing tooling behavior outside the requested product change |
-| [B799](#b799) | new, 2026-10-23 (M3 verification) | defect | Workspace | Setup interruption retries identify any remaining setup-lock holder | Pre-existing intermittent refusal; its cause is unproved |
 | [B857](#b857) | new, 2026-10-27 (lane I) | enabling | Desired state | The audit 5.7 operator tasks run on the reshaped API | B814's paper check was not run before X171 |
 | [B867](#b867) | new, 2026-10-27 (lane R review) | safety | Storage | The Ceph incarnation rule is confirmed on a live cluster | The monitor map's creation time was chosen without a live run |
 | [B881](#b881) | new, 2026-10-28 (X190 review) | safety | State reconciliation, with Substrate | A cancelled or deadline-ended firmware power cycle still forces its machine off | The adapter supervisor kills the worker with no grace; a grace changes every adapter's termination |
@@ -2262,31 +2260,6 @@ records the deliberate omission. **Why parked:** gate hardening, and no example
 fails today. **Requires:** none. **Definition:** `Specified`. **Exit
 evidence:** the gate failing on a deliberately malformed example, then passing.
 
-### B673
-
-A test fails under concurrent gate runs: the controller-setup lease conflict in
-`TestAnInterruptedPublicationLeavesAUsableStoreAndItsRetryConverges` (reported
-in d9e67eb11, 2dc470bff, 7e3963d91 and 77e0be76c). The firewall access-time
-case (ce9767849) is [B633](#b633)'s. Found by the audit
-(`process-compliance-4`). **Outcome:** the test is deterministic under
-concurrent gate runs, or its cause is recorded. **Why parked:** it does not
-reproduce cheaply. **Requires:** none. **Definition:** `Needs definition`.
-**Exit evidence:** repeated concurrent gate runs (`make -j check race quick
-docs-check`) with no lease conflict.
-
-**2026-10-21 observation:** the default parallel `make check` and an isolated
-rerun of the unchanged baseline reproduced a different setup-checkpoint lease
-failure. A serial full-package run with `GOMAXPROCS=1` passed. This is evidence
-of recurrence, not a diagnosis or proof that serialization fixes the cause.
-The full integration gate after temporary-directory cleanup remains unrun.
-
-**2026-10-30 observation:** X225's integration gate reproduced the lease
-conflict at `setup/refused/007-after-setup-state-rename` while `make check`
-overlapped `make race`, with no workspace implementation changes. After the
-race suite finished, the whole checkpoint test passed with `-count=1` and its
-default parallelism. The integration commits record the complete gate rerun.
-This recurrence and isolated pass do not diagnose or close the flake.
-
 ### B674
 
 Releasing a Ceph host whose cluster block never started retains the owned
@@ -2900,23 +2873,6 @@ or their pass/fail behavior. **Exit evidence:** a harness regression over the
 actual generated pytest command and the full Ansible gate. **Why parked:**
 this pre-existing verification behavior is recorded separately from M3's
 product implementation; no failed test is reclassified as passed.
-
-### B799
-
-Investigate transient setup-lock refusals in the parallel publication
-checkpoint harness. During B18 verification on 2026-10-23, two default
-concurrency package runs reported `lifecycle.lease` (controller setup held)
-when retrying interrupted setup publications; a full race-enabled run passed.
-The failures included refused creation and killed/cancelled
-`before-setup-state-rename` checkpoints. `lockSetup` currently releases its
-flock by closing the descriptor, whereas root and context locks explicitly
-unlock first. An unrelated checkpoint helper could briefly inherit the
-close-on-exec descriptor between fork and exec; this is a hypothesis, not a
-proved cause. Parked as a pre-existing defect outside B18. **Revival needs:**
-a focused reproduction that identifies the remaining lock holder. **Exit
-evidence:** parallel interruption/retry probes and a justified release fix,
-considering an explicit unlock before close without weakening exclusion or
-adding a retry that conceals a live owner.
 
 ### B857
 
@@ -5309,7 +5265,7 @@ session's recommendations", accepting: (1) updates are on by default
 update source; (2) `spec.os.version` is always an exact `<major>.<minor>`,
 never major-only; (3) `withinRelease` beside TPM2 disk-encryption `pcrIds`
 holding 4, 8 or 9 refuses at admission. This authorizes
-[B876](m1.md#b876) as slice X189 on M1 alone, out of sequence; the contract
+[B876](delivered.md#x246--bounded-managed-os-operator-acceptance) as slice X189 on M1 alone, out of sequence; the contract
 is [update within release](../managed-os.md#update-within-release). It closes
 the pre-existing defect that no code reads `spec.os.version`. Satellite
 registration is not authorized and is parked as [B877](m1.md#b877). The operator
@@ -5341,7 +5297,7 @@ words are taken by the session, pending the owner's review). The request:
 "Plan and implement the support for operator declare his internal satellite
 instance and how bootwright will use it to configure machines with rhel SO".
 It authorizes [B877](m1.md#b877) as slice X194 on M1, out of sequence, and is
-the dated waiver of B877's Requires on [B876](m1.md#b876), delivered in-tree
+the dated waiver of B877's Requires on [B876](delivered.md#x246--bounded-managed-os-operator-acceptance), delivered in-tree
 and awaiting operator acceptance, for implementation only. The owner then
 asked how the feature affects repository configuration and package updates
 after provisioning under the declared release, which clauses (6) and (7)
@@ -6236,12 +6192,12 @@ shared preparation, installation, verification, required drills and cleanup.
 A selected variant succeeds only as a complete run; planned negative tests
 retain their explicit expected outcomes.
 
-The 2026-10-30 E2E follow-up adds [B978](m1.md#b978) to X225: shorten
+The 2026-10-30 E2E follow-up adds [B978](delivered.md#x246--bounded-managed-os-operator-acceptance) to X225: shorten
 invocation scratch names so Ansible's local RPC socket fits, preserving
 private custody and cleanup of earlier names. This is a runner correction,
 with no change to a frozen request or host effect identity.
 
-The same delegation covers [B979](m1.md#b979): an encrypted install brings
+The same delegation covers [B979](delivered.md#x246--bounded-managed-os-operator-acceptance): an encrypted install brings
 up its declared network before its pre-script fetches recovery material.
 The correction retains the supported install topologies, TPM proof and
 verified TLS; a frozen installation is removed and planned again rather than
@@ -6344,8 +6300,10 @@ are covered by this request.
 **delegated** (2026-10-30, the owner). The owner asked to "implement all
 backlogs you created in this session". The session created B973, B974, B977,
 B978, B979 and B980. [X225](delivered.md#x225--e2e-execution-and-runbook-corrections)
-delivered their in-tree work except [B977](delivered.md#x232--sudo-terminal-hint-admission); B978 and B979 retain
-operator acceptance on M1. This request promotes B977 from parked Candidate
+delivered their in-tree work except [B977](delivered.md#x232--sudo-terminal-hint-admission); B978 and B979 retained
+operator acceptance on M1 at this delegation. Their later acceptance is
+recorded in [X246](delivered.md#x246--bounded-managed-os-operator-acceptance).
+This request promotes B977 from parked Candidate
 to Specified on M1 as named safety slice X232, out of sequence by the owner's
 request. It authorizes accepting exactly `COLORTERM` at direct and supervised
 sudo entry and discarding it before any subprocess, with the owning security
@@ -6356,4 +6314,38 @@ X232's integration gate exposed [B989](delivered.md#x233--permission-fixture-mod
 a pre-existing permission fixture defect under an inherited restrictive umask.
 The session applies the repository's [pre-existing-defect rule](../../AGENTS.md) as X233 to correct
 that necessary gate blocker in its own commit. This adds no owner decision
-or product scope; [B673](#b673) remains separately open.
+or product scope; B673 remained separately open at this delegation and was
+later completed in [X247](delivered.md#x247--setup-lease-release).
+
+### D213
+
+**owner** (2026-10-31): "while we proceed the tests, rebase main and mark all
+backlog items we tested so far as done". This accepts the actually completed
+operator gates recorded in
+[X246](delivered.md#x246--bounded-managed-os-operator-acceptance): B77,
+B876, B978 and B979, plus B75's guest-FIPS arm and B76's normal hosted
+registration and owned-unregistration arm. The clean-build, item-specific
+qualification and its private operation-log digests are recorded in the
+[acceptance ledger](../../docs/acceptance.md#ledger).
+
+The owner chose normal unregistration and left B76's manual service-side
+consumer-removal and `--unregistered` gate open. Guest FIPS does not satisfy
+B346's FIPS-controller gate. B74 and B326 retain their whole-case operator
+gates: the wider three-shape run changed builds and remains an observation.
+No unrun physical-host, Satellite/Capsule or other profile is accepted, and
+this decision supplies no waiver of the complete clean-build E2E-case rule.
+
+### D214
+
+**owner** (2026-10-31): "fix any issue you find in full check gates". The
+full gate reproduced [B673](delivered.md#x247--setup-lease-release)'s controller-setup lease conflict.
+This promoted B673 and the same bounded release investigation recorded by
+[B799](delivered.md#x247--setup-lease-release) from parked to Specified on M1
+as defect slice X247, out of sequence under the explicit request. Scope is the diagnosed
+setup-lease release defect and its deterministic regression, while preserving
+the existing lock-custody and publication contracts. A controlled retained
+descriptor identifies a remaining lock holder without claiming to identify
+the process that caused each historical intermittent failure.
+The change receives the independent review and race verification required
+for contextfs concurrency. No unrelated product feature, native effect or
+operator-acceptance waiver is authorized.

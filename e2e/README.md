@@ -17,7 +17,7 @@ accepts and the evidence each needs. Record each accepted run as a row of the
 
 | Case | Guests | CPUs | Memory (GiB) | Disk (GiB) | Accepts |
 | --- | --- | --- | --- | --- | --- |
-| [lab-rhel](lab-rhel/runbook.md) | 1 | 3 | 6 | 50 | [B75](../specs/milestones/m1.md#b75), [B76](../specs/milestones/m1.md#b76), [B77](../specs/milestones/m1.md#b77), [B876](../specs/milestones/m1.md#b876) |
+| [lab-rhel](lab-rhel/runbook.md) | 1 | 3 | 6 | 50 | [B75](../specs/milestones/m1.md#b75), [B76](../specs/milestones/m1.md#b76), [B77](../specs/milestones/delivered.md#x246--bounded-managed-os-operator-acceptance), [B876](../specs/milestones/delivered.md#x246--bounded-managed-os-operator-acceptance) |
 | [lab-baremetal-rehearsal](lab-baremetal-rehearsal/runbook.md) | 1, two contexts | 5 | 10 | 70 | [B73](../specs/milestones/m1.md#b73), [B496](../specs/milestones/m1.md#b496) |
 | [lab-network-variants](lab-network-variants/runbook.md) | 3 | 7 | 14 | 130 | [B74](../specs/milestones/m1.md#b74), [B326](../specs/milestones/m1.md#b326) |
 | [lab-3-nodes-ceph](lab-3-nodes-ceph/runbook.md) | 3 | 13 | 26 | 220 | [B626](../specs/milestones/m2.md#b626), one run per release |

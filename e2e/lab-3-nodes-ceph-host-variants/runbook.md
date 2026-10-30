@@ -25,7 +25,7 @@ P5, with its measured budget fields. The same checks rehearse
 [B74](../../specs/milestones/m1.md#b74),
 [B75](../../specs/milestones/m1.md#b75),
 [B76](../../specs/milestones/m1.md#b76) and
-[B77](../../specs/milestones/m1.md#b77) on a Ceph host; those items are accepted
+[B77](../../specs/milestones/delivered.md#x246--bounded-managed-os-operator-acceptance) on a Ceph host; those items are accepted
 through [lab-rhel](../lab-rhel/runbook.md) and
 [lab-network-variants](../lab-network-variants/runbook.md), and
 [B346](../../specs/milestones/m1.md#b346) needs a FIPS-mode controller.

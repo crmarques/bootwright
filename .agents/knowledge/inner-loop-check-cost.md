@@ -58,3 +58,24 @@ as [B798](../../specs/milestones/backlog.md#b798), with no failure waived.
 - Go caches a test result while the test binary and the files it opened are
   unchanged. A constant nothing reads leaves the binary unchanged, so a timing
   probe needs a change the linker keeps, such as an `init` function.
+
+## A setup lease that survives its callback
+
+Before X247, `Store.mutateSetup` closed its locked file without explicitly
+unlocking it. Linux flock locks belong to the open file description: an
+unrelated fork can retain that description until exec even when the parent
+descriptor has close-on-exec set. Closing the parent's descriptor then leaves
+the setup lease held, so an immediate retry can report `lifecycle.lease`.
+This reproduces a mechanism for the setup lease failures recorded as B673;
+an isolated pass alone did not diagnose it.
+
+The existing `unlockAndClose` helper now releases the setup lock when the
+transaction returns, following
+[the lock lifetime contract](../../specs/contexts.md#storage-locking-and-publication).
+`TestACompletedSetupUnlocksBeforeClosingItsSharedDescription` in
+[setup_linux_amd64_test.go](../../internal/workspace/contextfs/setup_linux_amd64_test.go)
+keeps a duplicated descriptor open against the same file description through
+success, refusal and cancellation. It proves exclusion during the callback and immediate retry
+afterward without a process-timing assumption. The whole interruption harness
+and concurrent gates remain necessary checks; do not hide a lease failure by
+serializing the tests or adding retries.

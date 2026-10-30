@@ -6,7 +6,7 @@ investigating or designing, then open only the relevant page.
 
 | Area or symptom | Page |
 | --- | --- |
-| Slow gate, `make check` minutes, `make quick` selecting everything, `origin/main` behind local `main`, pytest-xdist `-n auto`, `use of fork() may lead to deadlocks`, a self-signalling test failing only in parallel, `permission denied` from `./...` in the primary checkout, a cached Go test after a change | [inner-loop-check-cost.md](inner-loop-check-cost.md) |
+| Slow gate, checkpoint harness `lifecycle.lease`, controller setup held by another command, fork-shared file description, `make check` minutes, `make quick` selecting everything, `origin/main` behind local `main`, pytest-xdist `-n auto`, `use of fork() may lead to deadlocks`, a self-signalling test failing only in parallel, `permission denied` from `./...` in the primary checkout, a cached Go test after a change | [inner-loop-check-cost.md](inner-loop-check-cost.md) |
 | Desired-state API, `v1alpha1`, kind catalog with CephClient, controller Machine and proxy, historical 27-to-21-kind alignment | [api-alignment.md](api-alignment.md) |
 | IBM Ceph version constraints, `9.9.2.0`, Ceph `20.2.2`, guest/RPM/container coordinates, SDK/import changes, listener replacement, bootstrap `accept-license`, `no hosts defined`, Call Home initialization, MON license acceptance, source versus actual-image qualification | [ibm-ceph-version-constraints.md](ibm-ceph-version-constraints.md) |
 | IBM Ceph auxiliary images of one release, `9.9.1` `DefaultImages`, haproxy/keepalived/monitoring/nvmeof/samba/nginx/oauth2-proxy references, floating nginx `latest`, `KNOWN_SERVICE_TYPES`, oauth2-proxy `ssl_insecure_skip_verify` template | [ibm-ceph-auxiliary-images.md](ibm-ceph-auxiliary-images.md) |

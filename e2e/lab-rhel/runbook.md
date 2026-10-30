@@ -7,9 +7,9 @@ encryption, RHSM registration and an update within the release. Context
 `lab-rhel`; 1 guest of 2 vCPU and 4 GiB.
 
 It accepts [B75](../../specs/milestones/m1.md#b75) (FIPS),
-[B77](../../specs/milestones/m1.md#b77) (TPM2),
+[B77](../../specs/milestones/delivered.md#x246--bounded-managed-os-operator-acceptance) (TPM2),
 [B76](../../specs/milestones/m1.md#b76) (registration) and
-[B876](../../specs/milestones/m1.md#b876) (update within the release), one
+[B876](../../specs/milestones/delivered.md#x246--bounded-managed-os-operator-acceptance) (update within the release), one
 ledger row per toggle run.
 
 Run every numbered step in order in one Bash session. A successful run includes
@@ -201,9 +201,10 @@ Require a `tpm2` pin on that root partition.
 ```
 
 Require `Overall Status: Registered` (or `Disabled` under Simple Content
-Access) and record the `system identity` UUID; the console's
-inventory lists the system under that UUID. Unregistration is checked in
-[Destroy](#destroy).
+Access), a successful identity read and a private record of the exact
+`system identity` UUID before destroy. Record console Inventory observations
+as [supplementary evidence](#registration-evidence-and-inventory).
+Unregistration is checked in [Destroy](#destroy).
 
 **Update within the release (B876).** Run this block when
 `UPDATE_WITHIN_RELEASE=true`:
@@ -229,6 +230,40 @@ means no package changes and needs no history entry. Require
 9.8, and check-update exit code `0` (`100` means updates are available).
 The [update contract](../../specs/managed-os.md#update-within-release) owns
 these files.
+
+#### Registration evidence and Inventory
+
+Hybrid Cloud Console Inventory profiles are separate from live RHSM consumer
+state. Profiles can remain after RHSM unregistration
+([Red Hat KB](https://access.redhat.com/solutions/7129591)); deleted Inventory
+entries can reappear while a collector remains registered
+([Inventory deletion documentation](https://docs.redhat.com/en/documentation/red_hat_lightspeed/1-latest/html/viewing_and_managing_system_inventory/assessing-and-filtering)).
+Record before/after Inventory observations privately as supplementary evidence.
+Neither Inventory presence nor absence proves consumer registration or removal;
+normal teardown does not wait for an Inventory entry to disappear.
+
+Normal removal requires recorded native `registration.state: unregistered`
+and a `registration.consumer` exactly matching the identity UUID saved before
+destroy, tied to that successful owned installation. A generic `done` row,
+`retained`, `foreign` or an uncorrelated `absent` does not pass this check.
+
+As root, locate the current destroy operation named by `status` under
+`/var/lib/bootwright/contexts/<context>/state/operations/<destroy-id>/blocks/os-install-<machine>/`.
+Its `state.json` must say `done`; `attempts` names the latest attempt number,
+padded to six digits in `attempt-<number>.json`. Inspect that completed
+attempt's `evidence.registration.state` and `evidence.registration.consumer`
+and retain only the required proof and UUID comparison privately. The record
+locator follows [the operation store](../../internal/reconciliation/operationstore/store.go);
+the registration fields follow [installation evidence](../../internal/managedos/installation/evidence.go).
+Missing or inconclusive native evidence keeps the checkpoint open.
+
+If an authoritative subscription-service consumer lookup is available,
+record its answer for that exact UUID; a contradictory answer stops the run.
+If unavailable, mark that lookup `unobserved` and retain the completed native
+proof. Manual `--unregistered` requires actual removal of that consumer through
+the service's verified, supported tools. Deleting an Inventory row alone never
+supplies that acknowledgement; if no supported consumer-removal path can be
+verified, keep the manual gate open and do not acknowledge it.
 
 ## Acceptance drills
 
@@ -277,17 +312,28 @@ Run the first destroy while the guest is still running:
 ```
 
 Expect a pause naming the guest to stop. With `REGISTER=true`, destroy first
-unregisters the guest. Verify its consumer UUID is gone from the console and
-that the following identity check reports it is no longer registered. That
-check is expected to return nonzero:
+unregisters the guest. Inspect the current removal's blocks:
 
 ```sh
-if [ "$REGISTER" = true ]; then
-  ./bin/bootwright machine exec --context "$CONTEXT" --name "$MACHINE" -- sudo subscription-manager identity
-fi
+./bin/bootwright status --context "$CONTEXT"
 ```
 
-Stop the guest and complete removal:
+With registration selected, require `os-install-rhel-01` to be `done`,
+including its pre-stop `unregister-subscription` work for the registration
+this installation owned. Require recorded `registration.state: unregistered`
+and `registration.consumer` matching the exact identity UUID privately saved
+in step 8; `done` alone is insufficient. Follow the
+[Inventory and consumer evidence rules](#registration-evidence-and-inventory),
+retaining proof privately. Missing ownership/identity correlation, unfinished
+work or contradictory consumer evidence stops the run before guest stop or
+context purge; an unavailable external lookup is recorded as `unobserved`.
+
+Installed SSH access is unavailable while destroy is current, even while the
+guest still runs. An `access.target`, host-key or other command error proves
+no unregistration. Do not apply again or change SSH trust to attempt an
+identity check during destroy.
+
+After those checks pass, stop the guest and complete removal:
 
 ```sh
 ./bin/bootwright machine stop --context "$CONTEXT" --name "$MACHINE" --yes
@@ -343,8 +389,12 @@ fi
 ```
 
 Require `registration-unreachable`, naming `--unregistered`. This refusal is
-expected. Remove the new consumer through the subscription console and verify
-that its UUID is gone. Only then run:
+expected. Use the subscription service's verified, supported consumer-removal
+tools to remove the exact consumer UUID saved for this new installation and
+retain proof of that removal. Deleting its Inventory profile is insufficient;
+follow the [evidence rules](#registration-evidence-and-inventory). If actual
+consumer removal cannot be verified, leave this gate open and do not run the
+acknowledgement below. Only after verified removal run:
 
 ```sh
 if [ "$REGISTER" = true ]; then

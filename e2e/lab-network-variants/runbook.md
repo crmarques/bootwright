@@ -392,11 +392,14 @@ Require `VERSION_ID="9.8"` on all three. For each enabled feature:
   characters; never infer one guest's root device from another's. Require a
   `tpm2` pin on that partition. A vTPM without the encrypted root does not pass.
 - **RHSM:** `Overall Status: Registered` (or `Disabled` under Simple Content
-  Access), a successful identity read, and that consumer UUID present in the
-  subscription service console. Read the UUID privately from the corresponding
-  `RUN_DIR` file and retain the mapping for the removal check.
+  Access) and a successful identity read. Read the exact consumer UUID privately
+  from the corresponding `RUN_DIR` file and retain the installation/identity
+  mapping for removal. Record Inventory observations only as
+  [supplementary evidence](../lab-rhel/runbook.md#registration-evidence-and-inventory).
 - **Update:** release variable `9.8`, `Release: 9.8`, and `update.json` with
-  `state: complete`, `release: 9.8` and `pin: release`. For its exact nonzero
+  `state: complete` and `pin: release`. The release-variable,
+  subscription-manager and `/etc/os-release` reads above prove release 9.8
+  separately from the update record. For its exact nonzero
   `transaction`, require DNF history success and `Comment` equal to
   `bootwright:` followed by that record's `request`. Transaction `0` is valid
   when no package changed and needs no history entry. `dnf check-update` must
@@ -489,26 +492,31 @@ own command block; inspect it before running any subsequent commands:
 ./bin/bootwright destroy --context "$CONTEXT" --authorize data-loss
 ```
 
-With registration selected, verify all three recorded consumer UUIDs are gone
-from the subscription console, and run:
+Inspect the current removal's blocks:
 
-```bash
-if [ "$REGISTER" = true ]; then
-    for MACHINE in nv-bond nv-vlan nv-vlan-bond; do
-        if ./bin/bootwright machine exec --context "$CONTEXT" --name "$MACHINE" -- sudo -n subscription-manager identity > "$RUN_DIR/$CONTEXT.$MACHINE.rhsm-after-unregister" 2>&1; then
-            printf '%s is still registered; stop and inspect the removal.\n' "$MACHINE" >&2
-            break
-        else
-            printf '%s identity exit code after unregistration: %s\n' "$MACHINE" "$?"
-        fi
-    done
-fi
+```sh
+./bin/bootwright status --context "$CONTEXT"
 ```
 
-Each saved result must specifically say the system is no longer registered;
-an SSH, sudo or unrelated error is not evidence of unregistration. Keep the
-console and identity observations private. Do not stop the guests until these
-checks pass. Without registration, only the `lifecycle.live` checkpoint applies.
+With `REGISTER=true`, require `os-install-nv-bond`, `os-install-nv-vlan` and
+`os-install-nv-vlan-bond` to be `done`, including their pre-stop
+`unregister-subscription` work for the registrations those installations owned.
+For each completed removal, require recorded `registration.state: unregistered`
+and `registration.consumer` matching the exact UUID saved in its private
+identity file before destroy, tied to that successful owned installation.
+A generic `done` row is insufficient. Follow the shared native record locator and
+[Inventory and consumer evidence rules](../lab-rhel/runbook.md#registration-evidence-and-inventory):
+Inventory before/after observations are supplementary; an authoritative
+consumer lookup is recorded when available, otherwise `unobserved`.
+Missing ownership/identity correlation, unfinished removal or contradictory
+consumer evidence stops the run before guest stop or context purge. Retain
+the proof privately. Without registration, only the `lifecycle.live`
+checkpoint applies.
+
+Installed SSH access is unavailable while destroy is current, even while a
+guest still runs. An `access.target`, host-key or other command error proves
+no unregistration. Keep destroy current; do not run apply again or change SSH
+trust to try a post-destroy identity check.
 
 Stop the named guests, then require removal to complete:
 
@@ -642,8 +650,13 @@ fi
 
 Require `registration-unreachable`, naming `--unregistered`. This is the
 expected refusal, not successful teardown. Use this installation's private
-identity record to remove its consumer through the subscription service UI.
-Verify that exact UUID is absent there before acknowledging it:
+identity record to remove its exact consumer through the subscription service's
+verified, supported consumer-removal tools and retain proof. Deleting an
+Inventory row is insufficient; follow the shared
+[evidence rules](../lab-rhel/runbook.md#registration-evidence-and-inventory).
+If no supported removal path or its result can be verified, keep this manual
+gate open and do not acknowledge unregistration. Only after verified consumer
+removal run:
 
 ```bash
 if [ "$REGISTER" = true ] && [ "$MANUAL_UNREGISTRATION" = true ]; then
@@ -660,21 +673,30 @@ if [ "$REGISTER" = true ] && [ "$MANUAL_UNREGISTRATION" != true ]; then
 fi
 ```
 
-Verify its consumer UUID is absent in the subscription service UI and that
-identity specifically reports unregistered, not an access failure:
+For that normal registered path, inspect the removal status:
 
 ```bash
 if [ "$REGISTER" = true ] && [ "$MANUAL_UNREGISTRATION" != true ]; then
-    if ./bin/bootwright machine exec --context "$CUTOFF_CONTEXT" --name nv-bond -- sudo -n subscription-manager identity > "$RUN_DIR/$CUTOFF_CONTEXT.nv-bond.rhsm-after-unregister" 2>&1; then
-        printf 'The guest is still registered; stop and inspect removal.\n' >&2
-    else
-        printf 'Identity exit code after unregistration: %s\n' "$?"
-    fi
+    ./bin/bootwright status --context "$CUTOFF_CONTEXT"
 fi
 ```
 
-Only after those checks, stop and complete normal removal. This is also the
-stop-first path when registration was not selected. The manual path already
+Require `os-install-nv-bond` to be `done`, including its
+owned `unregister-subscription` work. Require recorded
+`registration.state: unregistered` and `registration.consumer` matching the
+exact identity UUID saved before destroy for this successful installation;
+`done` alone is insufficient. Follow the
+[same evidence rules as the three-guest removal](#9-destroy-the-three-guest-context),
+keeping Inventory observations supplementary and any unavailable authoritative
+consumer lookup `unobserved`. Keep the native removal proof private.
+Installed SSH access is unavailable during the current destroy;
+neither an access error nor a failed command proves unregistration. Do not
+apply again or change SSH trust for an identity check. Missing ownership or
+identity proof, unfinished removal or contradictory consumer evidence stops
+this path before guest stop and context purge.
+
+Only after the owned native removal proof passes, stop and complete normal registered removal.
+Without registration, use the stop-first path below. The manual path already
 completed removal with its acknowledgement above:
 
 ```bash
@@ -732,11 +754,11 @@ Cached media remains.
 | [B74](../../specs/milestones/m1.md#b74) | All three install shapes, permanent interface pins, unsupported bond mode refusal, links/routes, reboot and install Ctrl-C/replay |
 | [B326](../../specs/milestones/m1.md#b326) | Final network, reboot, MTU drift/restoration, the separately witnessed convergence Ctrl-C/replay and cutoff rollback/recovery |
 | [B75](../../specs/milestones/m1.md#b75) | `FIPS=true`: native FIPS, kernel argument, crypto policy and ECDSA proofs on each guest before and after reboot |
-| [B76](../../specs/milestones/m1.md#b76) | `REGISTER=true`: normal pre-stop unregistration of the three guests plus the optional corrected-cutoff manual-removal refusal and service-side UUID removal; skipping the latter leaves that gate open |
-| [B77](../../specs/milestones/m1.md#b77) | `TPM2=true`: encrypted roots, TPM2 bindings, unattended unlock after reboot and real/wrong recovery-passphrase checks |
-| [B876](../../specs/milestones/m1.md#b876) | `UPDATE_WITHIN_RELEASE=true`: complete update record, exact successful DNF transaction or valid zero, release pin and no remaining updates within 9.8 |
-| [B978](../../specs/milestones/m1.md#b978) | Installer and observation invocations complete without an Ansible local RPC socket path failure |
-| [B979](../../specs/milestones/m1.md#b979) | `TPM2=true`: encrypted installation obtains recovery material over the declared bond/VLAN installation network |
+| [B76](../../specs/milestones/m1.md#b76) | `REGISTER=true`: owned pre-stop unregistration of the three guests plus the optional corrected-cutoff manual-removal refusal and verified service-side consumer removal; Inventory observations are supplementary, and skipping the manual path leaves that gate open |
+| [B77](../../specs/milestones/delivered.md#x246--bounded-managed-os-operator-acceptance) | `TPM2=true`: encrypted roots, TPM2 bindings, unattended unlock after reboot and real/wrong recovery-passphrase checks |
+| [B876](../../specs/milestones/delivered.md#x246--bounded-managed-os-operator-acceptance) | `UPDATE_WITHIN_RELEASE=true`: complete update record, exact successful DNF transaction or valid zero, release pin and no remaining updates within 9.8 |
+| [B978](../../specs/milestones/delivered.md#x246--bounded-managed-os-operator-acceptance) | Installer and observation invocations complete without an Ansible local RPC socket path failure |
+| [B979](../../specs/milestones/delivered.md#x246--bounded-managed-os-operator-acceptance) | `TPM2=true`: encrypted installation obtains recovery material over the declared bond/VLAN installation network |
 
 [B346](../../specs/milestones/m1.md#b346) needs a FIPS-mode controller; FIPS
 guests alone do not qualify it. [B624](../../specs/milestones/backlog.md#b624)'s

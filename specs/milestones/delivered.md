@@ -3199,9 +3199,10 @@ and the bytes, with the error log kept at warn. The MAC proof stays strict and
 its refusal names each declared NIC the inventory lacks and each member that
 proved nothing by position, never a reported value. The knowledge page on
 physical BMCs is rewritten from the captures without host names or serials, with
-the RSA premise and its check, and each of [B74](m1.md#b74) to
-[B77](m1.md#b77) points to the pre-rewrite page that holds its field lessons.
-Each of them retains its own implementation and host-qualification gates.
+the RSA premise and its check. At this delivery, each of [B74](m1.md#b74) to
+[B77](#x246--bounded-managed-os-operator-acceptance) pointed to the pre-rewrite
+page holding its field lessons and retained its own implementation and
+host-qualification gates.
 
 **Review:** four sub-items in two lanes integrated without a conflict and with
 one integration fix: the insert bound grew by 3 minutes (36m20s to 39m20s) for
@@ -7246,7 +7247,7 @@ owner's.
 **Constraints left behind:** `latest` still resolves a stable release only. A
 rescue declaration is still refused. Follow-ups: owner questions
 B651, B655 and B656, closed in [X104](#x104--owner-answers-of-2026-10-19); parked
-[B665](backlog.md#b665) to [B673](backlog.md#b673), [B676](backlog.md#b676),
+[B665](backlog.md#b665) to [B673](#x247--setup-lease-release), [B676](backlog.md#b676),
 [B680](delivered.md#b680) and [B681](backlog.md#b681), which holds the edges the
 lanes left.
 
@@ -10031,8 +10032,9 @@ The request goldens now pass the plan guard, which
 **Code commit:** `d0376aaa4`; the companion documentation commit
 records this delivery under [D208](backlog.md#d208).
 
-[B978](m1.md#b978) and [B979](m1.md#b979) are delivered in-tree and
-retain operator acceptance on M1.
+[B978](#x246--bounded-managed-os-operator-acceptance) and
+[B979](#x246--bounded-managed-os-operator-acceptance) were delivered in-tree
+with operator acceptance remaining on M1; X246 later records that acceptance.
 
 B973 qualifies empty forwarding policies without weakening the interface-zone
 proof of [host listener admission](../controller.md#results-and-qualification).
@@ -10060,10 +10062,12 @@ checks use full device paths, readable update records, transaction comments
 and exact negative-test exit codes.
 
 The integration commits record the full verification commands, results and
-independent safety review, including the initial [B673](backlog.md#b673)
+independent safety review, including the initial [B673](#x247--setup-lease-release)
 checkpoint-harness recurrence and the subsequent isolated checks. The
-remaining gates for B978 and B979 require
-owner-accepted complete operator runs; no live acceptance is claimed here.
+remaining gates for B978 and B979 required
+owner-accepted complete operator runs; no live acceptance was claimed at this
+delivery. [X246](#x246--bounded-managed-os-operator-acceptance) records the
+later bounded operator acceptance.
 B977 was parked at this delivery; [D212](backlog.md#d212) later promotes it
 for [X232](#x232--sudo-terminal-hint-admission). The established OS-feature and
 physical-host acceptance items retain their own gates.
@@ -10138,7 +10142,8 @@ The regressions are `TestAForeignOperationEntryIsRefusedByName`,
 `TestTheStateRootInspectionIsTheStoresOwn`. The integrating commit records
 uncached probes under inherited masks `077` and `022`, plus the full gate
 commands and results for this correction and X232's implementation commit.
-[B673](backlog.md#b673) remains separately open.
+B673 remained separately open at this delivery;
+[X247](#x247--setup-lease-release) later records its correction.
 
 ### X228 — Add-on admission agrees with planning
 
@@ -10482,7 +10487,11 @@ parity; the invalid update combination failed before publishing output. An
 independent template review passed. All 44 case shell blocks passed `bash -n`.
 Final `make docs-check` and `make check` passed. The held-directory filesystem
 test was skipped in each applicable unit suite; the integration commit records
-the commands and results. Selected native acceptance remains pending.
+the commands and results. Selected native acceptance remained pending at this
+delivery.
+Later item-specific acceptance is recorded in
+[X246](#x246--bounded-managed-os-operator-acceptance), without accepting the
+whole case.
 
 ### X234 — Additive apply of add-on instances
 
@@ -10734,7 +10743,146 @@ foreign update remains unknown; neither proves completion.
 A synthetic worker-to-module-to-installation-publication regression failed
 for both states before the fix, then passed. The two focused Python files
 passed 121 tests, and the existing Go test for partial and foreign updates
-passed. Independent correctness and security review passed. The delivering
-commit records the exact commands; full integration gates remain deferred
-until operator work finishes, as requested. This record claims no native
-acceptance.
+passed. Independent correctness and security review passed. The integrating
+commits record the exact commands and final concurrent-gate results,
+including the initial B673 recurrence corrected in
+[X247](#x247--setup-lease-release). This record claims no native acceptance.
+
+### X244 — Update record proof
+
+**Items:** B1001 (new, 2026-10-30, runbook review).
+**Kind:** defect. **Owner:** CLI.
+
+The [network-variants update check](../../e2e/lab-network-variants/runbook.md#verify-the-selected-features-on-each-guest)
+uses the existing native release checks to prove the declared release,
+following [update within release](../managed-os.md#update-within-release).
+The guest record supplies completion, pin, request and transaction rather
+than a release field. The correction keeps the existing update and release
+proofs; no command, worker format or acceptance gate changes.
+
+The integrating commit records `make docs-check`, `git diff --check` and
+the final concurrent-gate commands and results. Bounded operator acceptance
+is recorded separately in
+[X246](#x246--bounded-managed-os-operator-acceptance).
+
+### X245 — Registration removal proof
+
+**Items:** B1002 (new, 2026-10-30, runbook review).
+**Kind:** defect. **Owner:** CLI.
+
+The normal registration-removal checkpoints in
+[network-variants](../../e2e/lab-network-variants/runbook.md#9-destroy-the-three-guest-context)
+and [lab-rhel](../../e2e/lab-rhel/runbook.md#10-remove-the-installation) now use
+completed owned pre-stop removal blocks tied to the successful installation
+and exact consumer UUID saved before destroy: the recorded native
+registration state must be `unregistered` and its consumer must match that
+saved identity. A generic `done`, retained/foreign registration or
+uncorrelated absent result is insufficient. The runbooks locate only the
+corresponding completed attempt evidence, following
+[registration removal](../managed-os.md#registration).
+Installed SSH access stays unavailable during the current destroy, so a
+command or host-key refusal cannot substitute for proof. Inventory profiles
+are supplementary observations, separate from live RHSM consumers; an
+unavailable authoritative consumer lookup is recorded as unobserved. Normal
+guest stop and purge wait for native owned-removal proof. Manual
+`--unregistered` still requires verified service-side consumer removal, never
+just deletion of an Inventory row; an unverified removal keeps that gate open.
+No runtime, trust or specification contract changes.
+
+The integrating commit records runbook `bash -n`, `make docs-check`,
+`git diff --check` and the final concurrent-gate commands and results.
+Bounded operator acceptance is recorded separately in
+[X246](#x246--bounded-managed-os-operator-acceptance).
+
+### X246 — Bounded managed-OS operator acceptance
+
+**Items:** B77 (disk-encryption arm), B876 (update within release), B978
+(lifecycle scratch paths) and B979 (encrypted-installer network activation).
+**Kind:** safety. **Owners:** Managed OS, Reconciliation and Secrets.
+**Decision:** [D213](backlog.md#d213).
+
+The owner accepts the bounded native qualifications in the
+[acceptance ledger](../../docs/acceptance.md#ledger) on clean build
+`20b0f0ec28700a6ae4912f38f787c401634a1793`. It descends from B77's registered
+baseline `d129085a1835bd09618b79ac3d1342085b631709` and the registered baseline
+`c5d139889135cbc45c429fa4e04ad6a4da140a31` for B876, B978 and B979. Their
+in-tree implementation and verification remain with X60, X189 and
+[X225](#x225--e2e-execution-and-runbook-corrections).
+
+B77's virtual-Machine gate passed an
+[encrypted-root installation](../managed-os.md#root-disk-encryption), TPM2
+unlock after reboot and positive and negative recovery-passphrase checks.
+B876's hosted-subscription rehearsal passed the
+[declared-release and update proofs](../managed-os.md#update-within-release),
+including the owned successful transaction, retained release pin and fresh
+repository check with no pending updates. A complete lifecycle exercised
+B978's [bounded scratch path](../security.md#process-boundary) without a local
+RPC socket startup failure. The complete encrypted installation exercised
+B979's declared installer network before recovery-material fetch. Expected
+network rollback and its repeated refusal, removal of the failed installation,
+fresh corrected installation, reboot, normal registered removal and verified
+private evidence completed on that clean build. Exact commands, environment
+details, outcomes and operation-log digests are retained locally; the ledger
+carries the archive digests.
+
+The same evidence satisfies B75's native guest-FIPS arm and B76's normal
+hosted-registration and owned-unregistration arm. [B75](m1.md#b75) still
+requires [B346](m1.md#b346)'s FIPS-controller qualification;
+[B76](m1.md#b76)'s manual service-side removal and `--unregistered` gate
+remains open by the owner's choice. Physical-host qualification remains with
+[B78](m1.md#b78), and [B877](m1.md#b877)'s Satellite/Capsule rehearsal is
+separate.
+
+The wider three-shape networking run used mixed builds and remains an
+observation. Neither [B74](m1.md#b74), [B326](m1.md#b326) nor the whole E2E
+case is accepted by this record. Existing in-tree deliveries remain complete;
+this record changes only the supported operator-acceptance status.
+
+### X247 — Setup lease release
+
+**Items:** B673 (new, 2026-10-19, X103) and B799 (new, 2026-10-23, M3
+verification), promoted from parked on 2026-10-31 under
+[D214](backlog.md#d214). **Kind:** defect. **Owner:** Workspace contextfs.
+
+Setup mutation now uses the shared `unlockAndClose` release path under the
+[storage and locking contract](../contexts.md#storage-locking-and-publication).
+Closing its descriptor alone left the kernel lock held while another
+descriptor retained the same open file description. Explicit unlock releases
+the lease when the transaction ends, including refusal and cancellation;
+while it is active, competing setup mutations still refuse. Lock custody,
+publication ordering and error propagation are unchanged, and no retry hides
+a live owner.
+
+`TestACompletedSetupUnlocksBeforeClosingItsSharedDescription` deterministically
+retains a duplicate descriptor through each of `success`, `refused` and
+`cancelled`. All three cases failed before the correction and pass with it;
+each also proves a competing transaction cannot enter while the original
+transaction is active, then proves immediate reacquisition after it returns.
+This identifies a retained lock holder for B799's focused reproduction and
+qualifies B673's release defect. It does not identify the spontaneous process
+that held a descriptor in every historical intermittent failure.
+
+**Preserved observations:** B673 was found by X103's
+`process-compliance-4` audit after setup-publication checkpoint refusals
+recorded in d9e67eb11, 2dc470bff, 7e3963d91 and 77e0be76c. The 2026-10-21
+parallel and unchanged-baseline reruns reproduced a setup-checkpoint lease
+failure, while a serial `GOMAXPROCS=1` package run passed. On 2026-10-30,
+X225 reproduced `setup/refused/007-after-setup-state-rename` while `make check`
+overlapped `make race`; the isolated unchanged checkpoint test then passed.
+Those observations established recurrence without diagnosing its holder.
+The separate firewall access-time case remains [B633](backlog.md#b633)'s.
+B799's 2026-10-23 B18 verification saw two default-concurrency refusals across
+refused creation and killed/cancelled `before-setup-state-rename` checkpoints,
+while a full race run passed. Its fork-to-exec descriptor-inheritance
+explanation remained a hypothesis; the controlled regression does not change
+that historical attribution.
+
+**Verification:** the integrating commit records exact commands and results
+for the fail-first regression, repeated parallel interruption/retry probes,
+independent safety review, the complete concurrent
+`make -j4 check race quick docs-check` gate and the subsequent concurrent
+`make -j4 test race quick docs-check` repetition. The full checkpoint test
+also passed three repetitions, and the additional contextfs race suite
+passed. Existing in-tree and operator-acceptance records retain their scopes;
+this fixes the bounded gate blocker without accepting any additional native
+profile.
