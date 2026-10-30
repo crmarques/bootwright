@@ -61,9 +61,10 @@ type BlockDefinition struct {
 	Stage       Stage  `json:"stage"`
 	// Requires resolves into Dependencies before the plan freezes, so a frozen
 	// block carries only the block identities it waits for.
-	Requires     []ObjectRef `json:"-"`
-	Dependencies []string    `json:"dependencies"`
-	Family       string      `json:"-"`
+	Requires      []ObjectRef `json:"-"`
+	Dependencies  []string    `json:"dependencies"`
+	Prerequisites []string    `json:"prerequisites,omitempty"`
+	Family        string      `json:"-"`
 	// Exclusive names host resources this block does not share while it runs.
 	// Two blocks that name one key never run at the same time, even when the
 	// graph would allow it, because the graph orders what one block needs from
@@ -110,6 +111,9 @@ func NewPlan(verb Verb, definitions []BlockDefinition) (Plan, error) {
 	if err != nil {
 		return Plan{}, err
 	}
+	if err := checkPrerequisites(verb, resolved); err != nil {
+		return Plan{}, err
+	}
 	ordered, err := order(resolved)
 	if err != nil {
 		return Plan{}, err
@@ -131,6 +135,9 @@ func deliberate(definition BlockDefinition) BlockDefinition {
 	if definition.Dependencies == nil {
 		definition.Dependencies = []string{}
 	}
+	if len(definition.Prerequisites) == 0 {
+		definition.Prerequisites = nil
+	}
 	if definition.Impacts == nil {
 		definition.Impacts = []string{}
 	}
@@ -150,6 +157,11 @@ func deliberate(definition BlockDefinition) BlockDefinition {
 // The result is built through NewPlan so a removal is ordered by the one
 // canonical rule every plan obeys and can be rebuilt from its own record.
 func (p Plan) Inverse() (Plan, error) {
+	for _, block := range p.Blocks {
+		if len(block.Prerequisites) != 0 {
+			return Plan{}, planError("lifecycle plan with prerequisites cannot be inverted without the plans that hold them")
+		}
+	}
 	dependents := map[string][]string{}
 	for _, block := range p.Blocks {
 		for _, dependency := range block.Dependencies {
@@ -262,6 +274,24 @@ func resolveRequirements(definitions []BlockDefinition) ([]BlockDefinition, erro
 		resolved = append(resolved, definition)
 	}
 	return resolved, nil
+}
+
+func checkPrerequisites(verb Verb, definitions []BlockDefinition) error {
+	own := make(map[string]bool, len(definitions))
+	for _, definition := range definitions {
+		own[definition.ID] = true
+	}
+	for _, definition := range definitions {
+		if len(definition.Prerequisites) != 0 && verb != Apply {
+			return planError("only an apply plan carries prerequisites")
+		}
+		for _, prerequisite := range definition.Prerequisites {
+			if own[prerequisite] {
+				return planError("lifecycle block prerequisite is a block of its own plan")
+			}
+		}
+	}
+	return nil
 }
 
 // order writes the plan wave by wave: every block sits after each block it
@@ -432,6 +462,14 @@ func validateDefinition(definition BlockDefinition) error {
 	if !uniqueSorted(definition.Dependencies) {
 		return planError("lifecycle block dependencies must be unique and ordered")
 	}
+	if len(definition.Prerequisites) > MaxBlocks || !uniqueSorted(definition.Prerequisites) {
+		return planError("lifecycle block prerequisites must be bounded, unique and ordered")
+	}
+	for _, prerequisite := range definition.Prerequisites {
+		if !ValidSegment(prerequisite) {
+			return planError("lifecycle block prerequisite is not a safe segment")
+		}
+	}
 	if !uniqueSorted(definition.Consumes) {
 		return planError("lifecycle block authorizations must be unique and ordered")
 	}
@@ -527,6 +565,7 @@ func uniqueSorted(values []string) bool {
 func clone(definition BlockDefinition) BlockDefinition {
 	definition.Requires, definition.Family = nil, ""
 	definition.Dependencies = slices.Clone(definition.Dependencies)
+	definition.Prerequisites = slices.Clone(definition.Prerequisites)
 	definition.Exclusive = slices.Clone(definition.Exclusive)
 	definition.Impacts = slices.Clone(definition.Impacts)
 	definition.Consumes = slices.Clone(definition.Consumes)

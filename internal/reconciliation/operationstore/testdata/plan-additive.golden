@@ -1,0 +1,27 @@
+{
+  "verb": "apply",
+  "blocks": [
+    {
+      "id": "gateway-lab",
+      "description": "serve a gateway for lab",
+      "stage": "infrastructure-services",
+      "dependencies": [],
+      "prerequisites": [
+        "server-lab"
+      ],
+      "impacts": [
+        "create-container-unit gateway"
+      ],
+      "consumes": [],
+      "groups": [],
+      "kind": "ArtifactServer",
+      "object": "gateway",
+      "implementation": "artifact-server-nginx-v1",
+      "contentDigest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "request": {
+        "name": "gateway"
+      },
+      "requestDigest": "0ff86921f5888520403f2a80e4ebcaa3cd8cb7a4866a31939625c51ec66d6203"
+    }
+  ]
+}

@@ -192,6 +192,7 @@ type Operation struct {
 	Closure          *Closure                      `json:"closure,omitempty"`
 	Source           string                        `json:"source"`
 	Replaces         string                        `json:"replaces,omitempty"`
+	Predecessor      string                        `json:"predecessor,omitempty"`
 	Bindings         []string                      `json:"bindings"`
 	State            reconciliation.OperationState `json:"state"`
 	LogFault         bool                          `json:"logFault"`
@@ -337,6 +338,9 @@ func validateOperation(operation Operation) error {
 	}
 	if operation.Replaces != "" && (operation.Verb != reconciliation.Destroy || !reconciliation.ValidOperationID(operation.Replaces) || operation.Replaces == operation.ID || operation.Replaces == operation.Source) {
 		return recordError("lifecycle operation replacement is invalid")
+	}
+	if operation.Predecessor != "" && (operation.Verb != reconciliation.Apply || !reconciliation.ValidOperationID(operation.Predecessor) || operation.Predecessor == operation.ID) {
+		return recordError("lifecycle operation predecessor is invalid")
 	}
 	for _, value := range []string{operation.Context, operation.Revision, operation.InputDigest, operation.PlanDigest, operation.AutomationDigest} {
 		if value == "" || len(value) > maxIdentifier {

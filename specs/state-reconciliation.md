@@ -408,7 +408,8 @@ automation identities, executable identity, the Python and Ansible
 [execution closure](#dependency-safety-during-recovery) it registered with,
 secret bindings, durable state and log-fault flag. The `operation.json` of a
 removal that replaces a failed removal also names that removal (`replaces`),
-an optional member, below. `plan.json` is the
+and an apply that adds to a completed one names it (`predecessor`), each an
+optional member, below. `plan.json` is the
 immutable frozen plan: every block with its
 description, dependencies, impacts, presentation groups, resolved
 implementation identity, content digest and canonical secret-free request.
@@ -416,7 +417,10 @@ A block's dependencies, impacts, consumed authorizations and groups are always
 lists, `[]` when empty and never `null`; a plan an earlier build froze with
 `null` there is not a plan this executable could have produced, and it refuses
 with the remedy to destroy the context with the build that registered the
-operation.
+operation. A block may carry `prerequisites`, an optional member: predecessor
+blocks it waits for, which scheduling never counts and the plan digest covers
+only when present; one beside a record naming no `predecessor` refuses
+`lifecycle.state`.
 Block records carry the block state and the number of attempts started, one
 less than the next attempt's number; attempt and
 resolution records carry their block, attempt and resolution numbers, phase,
@@ -454,7 +458,7 @@ neither moves the attempt's outcome or its block's state.
 [The output contract](cli/output.md#private-operation-logs) owns the `logs/`
 tree.
 
-`replaces`, `failure`, `warnings`, `build` and `removal` are optional members: each was added without
+`replaces`, `predecessor`, `prerequisites`, `failure`, `warnings`, `build` and `removal` are optional members: each was added without
 moving its record's version, because a record that omits one means what a
 record written before it meant. A member whose omission would mean anything
 else moves its record's version. An optional member is compatible one way only:

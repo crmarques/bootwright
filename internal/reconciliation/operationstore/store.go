@@ -124,6 +124,9 @@ func (s *Store) Register(ctx context.Context, operation Operation, plan reconcil
 	if plan.Verb != operation.Verb {
 		return recordError("lifecycle plan and operation disagree about the verb")
 	}
+	if err := checkPredecessor(operation, plan); err != nil {
+		return err
+	}
 	claimed, err := s.Claimed(ctx)
 	if err != nil {
 		return err
@@ -648,7 +651,22 @@ func (s *Store) ReadPlan(ctx context.Context, id string) (reconciliation.Plan, e
 	if operation.PlanDigest != stored || operation.Verb != plan.Verb {
 		return reconciliation.Plan{}, recordError("the frozen plan is not the plan its operation recorded")
 	}
+	if err := checkPredecessor(operation, plan); err != nil {
+		return reconciliation.Plan{}, err
+	}
 	return plan, nil
+}
+
+func checkPredecessor(operation Operation, plan reconciliation.Plan) error {
+	if operation.Predecessor != "" {
+		return nil
+	}
+	for _, block := range plan.Blocks {
+		if len(block.Prerequisites) != 0 {
+			return recordError("the frozen plan holds prerequisites beside an operation that names no predecessor")
+		}
+	}
+	return nil
 }
 
 func (s *Store) unrecognizedStage(ctx context.Context, id string, stage reconciliation.Stage) error {

@@ -1,0 +1,26 @@
+{
+  "version": 2,
+  "id": "op-efefefefefefefefefefefefefefefef",
+  "verb": "apply",
+  "context": "example",
+  "revision": "rev-efefefefefefefefefefefefefefefef",
+  "inputDigest": "1111111111111111111111111111111111111111111111111111111111111111",
+  "planDigest": "be97db6703e0a8a900c22c0cc76639b8e4ad44fc845a890b3a31ee8cad349d4d",
+  "automationDigest": "2222222222222222222222222222222222222222222222222222222222222222",
+  "executable": {
+    "version": "devel",
+    "commit": "abcdef1"
+  },
+  "closure": {
+    "digest": "3333333333333333333333333333333333333333333333333333333333333333",
+    "python": "3.14",
+    "ansible": "2.21.4"
+  },
+  "source": "",
+  "predecessor": "op-abababababababababababababababab",
+  "bindings": [],
+  "state": "running",
+  "logFault": false,
+  "created": "2026-09-11T12:00:00Z",
+  "updated": "2026-09-11T12:00:00Z"
+}
