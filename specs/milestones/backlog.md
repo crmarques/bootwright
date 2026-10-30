@@ -238,6 +238,7 @@ Alias cell.
 | [B769](#b769) | new, 2026-10-20 (D173) | product | Add-ons | One add-on instance removed online from a cluster that stays | M4 retires instances with their cluster; [D153](#d153) refuses changing a completed apply's selection |
 | [B770](#b770) | new, 2026-10-20 (D173) | product | Add-ons | `preflight add-ons` reports add-on prerequisites before an apply | No check is provable before the cluster exists; apply-time gates name their failures |
 | [B988](#b988) | new, 2026-10-30 (D210; audit 002 F11) | product | Add-ons, with API | A `ClusterAddonProfile` carries built-in packages as a named preset | No repeated consumer; Q26 (a) chose profiles without packages |
+| [B990](#b990) | new, 2026-10-30 (D211; B90 first slice) | product | Add-ons | An authored add-on creates a cluster-scoped custom resource once a program check proves the kind's scope | No consumer; the first slice admits only namespaced resources in the add-on's own namespace |
 | [B771](#b771) | new, 2026-10-20 (D173); folds B365 | defect | Add-ons, with Workspace | The `add-ons/_store` selection exception, its marker and its reader rules leave the input reader | Dead surface now that B89 is retired; removing input-reader rules is not needed by any M4 package |
 | [B772](#b772) | new, 2026-10-20 (D173) | product | Add-ons | A package installed through OLM v1 (`ClusterExtension`) | ODF/FDF, ACM, MCE and GitLab do not qualify; own-namespace installs are Technology Preview |
 | [B773](#b773) | new, 2026-10-20 (D173) | product | Add-ons | A registry credential merged into a cluster's global pull secret with an exact-entry receipt | Its inverse never runs under retirement; the install pull secret carries entitlements from first boot |
@@ -3112,6 +3113,17 @@ packages from profiles. **Revive when** an estate declares one package set on
 three or more cluster shapes; the decision is [Q137](m4.md#m4a-open-decisions),
 and the expansion, cycle and last-package tests of
 [admission](../api/addons.md#admission-diagnostics) extend with it.
+
+### B990
+
+An authored add-on ([B90](m4.md#b90)) whose custom resource is
+cluster-scoped: the cluster object program first proves, read-only, that the
+kind is cluster-scoped and that its group is outside the reserved groups,
+then creates the resource create-only under ownership receipts. Parked on
+2026-10-30 ([D211](#d211)): B90's first slice admits only namespaced
+resources in the add-on's own namespace, because the program cannot prove a
+kind's scope today. **Revive when** an operator needs a cluster-scoped custom
+resource from an authored add-on.
 
 ## Audit remediation (2026-10-26)
 
