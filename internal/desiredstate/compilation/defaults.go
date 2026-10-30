@@ -14,6 +14,9 @@ func inherit(value, fallback api.Value, shape *api.Shape, path string, root bool
 		return value
 	}
 	if !value.Present() {
+		if shape != nil && shape.MembersSelect {
+			return value
+		}
 		markInherited(recipient, environment, fallback, path)
 		return fallback
 	}
@@ -52,11 +55,13 @@ func inherit(value, fallback api.Value, shape *api.Shape, path string, root bool
 	}
 	result := value
 	for _, f := range shape.Fields {
-		if blocked[f.Name] || !fallback.Has(f.Name) {
+		if blocked[f.Name] || !fallback.Has(f.Name) || shape.MembersSelect && !value.Has(f.Name) {
 			continue
 		}
-		child := inherit(value.Get(f.Name), fallback.Get(f.Name), f.Shape, path+"."+f.Name, false, recipient, environment)
-		result = result.With(f.Name, child)
+		child := inherit(value.Get(f.Name), fallback.Get(f.Name), f.Shape, path+"."+f.Name, shape.MembersSelect, recipient, environment)
+		if child.Present() {
+			result = result.With(f.Name, child)
+		}
 	}
 	return result
 }

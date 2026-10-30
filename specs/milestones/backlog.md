@@ -6305,7 +6305,7 @@ for question for my decision". It accepts [D210](#d210), answers its open
 questions with their recommendations and authorizes the plan's
 implementation: (1) [Q135](m4.md#m4a-open-decisions) (b): Environment kind
 defaults fill only the package members a binding declares and never select
-one, which specifies [B986](m4.md#b986). (2) Q136 (a): a package added to a
+one, which specifies [B986](delivered.md#x231--kind-defaults-never-select-a-package). (2) Q136 (a): a package added to a
 cluster after its apply completed is installed by one additive operation
 linked to the completed one; the owner's audit request asked for optional
 add-ons "added as needed by operator", so day-2 addition is wanted, and

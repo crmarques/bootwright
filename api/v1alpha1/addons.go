@@ -145,5 +145,7 @@ func kubevirtPackageSchema() *Shape {
 func addonPackagesSchema() *Shape {
 	metallb := packageBaseSchema()
 	metallb.Fields = append(metallb.Fields, field("pools", named(record(required("name", name()), required("addresses", nonemptyArray(array(nonempty()))), defaulted("autoAssign", boolean(), BoolValue(true)), field("l2", record(field("interface", nonempty())))))))
-	return record(field("nmstate", packageBaseSchema()), field("kubevirt", kubevirtPackageSchema()), field("metallb", metallb), field("fdf", fdfPackageSchema()), field("acm", acmPackageSchema()), field("gitops", gitopsPackageSchema()))
+	packages := record(field("nmstate", packageBaseSchema()), field("kubevirt", kubevirtPackageSchema()), field("metallb", metallb), field("fdf", fdfPackageSchema()), field("acm", acmPackageSchema()), field("gitops", gitopsPackageSchema()))
+	packages.MembersSelect = true
+	return packages
 }

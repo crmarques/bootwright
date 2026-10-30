@@ -560,7 +560,10 @@ Not yet met: the `gitlab` package does not exist; tracked as
 
 ## Normalization and canonical state
 
-After Environment kind defaults, normalization materializes input `required`,
+Environment kind defaults never select a package: a binding that declares no
+`spec.packages` member selects none through them, as the
+[Kind defaults](environment.md#kind-defaults) rule for members that select
+decides. After them, normalization materializes input `required`,
 readiness timeout, omitted OLM readiness checks, namespace management, present
 OperatorGroup name and target namespaces, and subscription name, source,
 source namespace and install-plan approval. These built-in defaults never

@@ -13,29 +13,30 @@ type Field struct {
 }
 
 type Shape struct {
-	Type         ValueType
-	Fields       []Field
-	Element      *Shape
-	Alternatives []*Shape
-	Open         bool
-	KindDefaults bool
-	Atomic       bool
-	Rule         string
-	Enums        []string
-	Minimum      string
-	Maximum      string
-	MinLength    int
-	Unique       bool
-	NameKey      string
-	Reference    []Kind
-	Category     Category
-	Nested       ReferenceClass
-	Scope        *Scope
-	SecretTypes  []string
-	Arms         []string
-	AllowEmpty   bool
-	Suppress     []Suppression
-	Permits      []Permission
+	Type          ValueType
+	Fields        []Field
+	Element       *Shape
+	Alternatives  []*Shape
+	Open          bool
+	KindDefaults  bool
+	MembersSelect bool
+	Atomic        bool
+	Rule          string
+	Enums         []string
+	Minimum       string
+	Maximum       string
+	MinLength     int
+	Unique        bool
+	NameKey       string
+	Reference     []Kind
+	Category      Category
+	Nested        ReferenceClass
+	Scope         *Scope
+	SecretTypes   []string
+	Arms          []string
+	AllowEmpty    bool
+	Suppress      []Suppression
+	Permits       []Permission
 }
 
 type Permission struct {

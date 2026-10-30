@@ -540,6 +540,9 @@ section routes the journey; each linked section owns its rules.
   read the pair your catalog serves with the lookup `add-ons info` prints.
 - Try one in the lab: the [lab-sno runbook](../e2e/lab-sno/runbook.md#inputs)
   turns the NMState and MetalLB bindings on with its `--set addons.*` flags.
+- Share a channel and CSV across bindings with Environment kind defaults: a
+  default fills only the packages a binding declares and never selects one
+  ([the rule](../specs/api/environment.md#kind-defaults)).
 - Run it: `validate`, `plan` and `apply` as for any journey. `apply --until
   <cluster>.<package>` pauses after one instance
   ([stopping after an add-on instance](../specs/state-reconciliation.md#stopping-after-an-add-on-instance)),

@@ -10224,3 +10224,34 @@ removed the stale Not yet met line of
 No request, program or contract version moved. The `commands.md` catalog
 section kept its size ceiling by dropping a sentence that restated the three
 selector rules its test already holds.
+
+### X231 — Kind defaults never select a package
+
+**Items:** B986 ([D211](backlog.md#d211), [Q135](m4.md#m4a-open-decisions) (b)).
+**Kind:** product. **Owners:** API, with Add-ons.
+**Code commit:** the integration commit that carries this record.
+
+Environment kind defaults for `ClusterAddonBinding.spec.packages` fill only the
+package members a binding declares and never add one, under the
+[Kind defaults](../api/environment.md#kind-defaults) rule for a record whose
+members select. Audit 002's probe found a default member selecting its package
+on every binding that left `packages` absent or declared another member, and a
+second binding on one cluster raising `api.duplicate` for it. `Shape` gained
+`MembersSelect`, set by the `spec.packages` schema and honored by `inherit`: an
+absent value returns absent instead of the fallback, the member loop skips a
+member the value does not hold, and a declared member is walked as a container
+of attributes, so `nmstate: {}` inherits the default's fields although rule 4
+says an explicit empty nested object requests no inheritance. The exception is
+stated in rule 4 because the key alone is the selection, and an empty member
+that inherited nothing could not be written. An absent or empty `packages`
+still selects nothing and is refused as such. The
+[normalization](../api/addons.md#normalization-and-canonical-state) section
+states the consequence and the [operator guide](../../docs/operator-guide.md#add-ons)
+links the rule.
+
+`TestKindDefaultsNeverSelectAPackage`, `TestKindDefaultsFillADeclaredMember`
+(with origins from the compilation state, `defaults.ClusterAddonBinding` for the
+inherited leaves and `authored` for the declared one),
+`TestKindDefaultsInheritNoMemberWhenNoneIsDeclared` and
+`TestKindDefaultsRaiseNoDuplicateAcrossBindings` hold the four observed rows.
+No request, program or contract version moved.

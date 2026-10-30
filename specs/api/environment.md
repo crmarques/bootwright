@@ -283,7 +283,11 @@ Defaults obey these rules in order:
    remains explicit and must be valid. An explicit empty nested object is a
    whole authored value; it does not request Environment inheritance. The
    recipient's root `spec` is the container of attributes, not such a nested
-   value. Explicit null is invalid and never requests fallback.
+   value. Explicit null is invalid and never requests fallback. A record whose
+   members select, `ClusterAddonBinding.spec.packages` alone, is the exception:
+   a default fills only the members the recipient declares and never adds one,
+   so an absent or empty record inherits no member, and a declared member,
+   `nmstate: {}` included, inherits the fields it omits.
 5. Lists, open/native maps, authentication and proxy choices, `install.nodeSSH`, and
    `Secret.source` are whole values. Copy them only when absent; never append
    records, patch native payloads, or combine different key/source material.
