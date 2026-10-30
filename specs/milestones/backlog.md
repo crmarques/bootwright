@@ -153,7 +153,6 @@ Alias cell.
 | [B570](#b570) | new, 2026-10-14 (X91 audit) | defect | State reconciliation | A fresh destroy records a host-free removal answer on the apply's block only after quiescence is proved | Found by the X91 audit; no milestone depends on it: it changes the D119 table and rides with the check-naming item B460 |
 | [B571](#b571) | new, 2026-10-14 (X91 audit) | safety | Infrastructure services and Substrate | A retained, running physical system blocks the removal of the services it uses | Found by the X91 audit; no milestone depends on it: the operator's destroy is explicit and the contract states the quiescence rule (B70) |
 | [B573](#b573) | new, 2026-10-14 (X91 audit) | safety | Storage | A Ceph remote worker ends on cancellation or disconnect, or the engine waits out its budget | Found by the X91 audit; no milestone depends on it: the bootstrap marker fences the one destructive race |
-| [B575](#b575) | new, 2026-10-14 (X91 audit) | enabling | State reconciliation | One pure classifier replaces the five parallel transition derivations | Found by the X91 audit; no consumer until the first scenario slice after X91, whose first step it is |
 | [B576](#b576) | new, 2026-10-14 (X91 audit) | defect | Substrate | Libvirt machine evidence proves the frozen definition the spec claims, and a redefine reports changed | D155 accepts the evidence and redefine correction for a future named slice; `diff` does not compare unproved fields meanwhile |
 | [B577](#b577) | new, 2026-10-14 (X91 audit) | enabling | Storage | Ceph pool and client requests stop embedding the cluster request | Found by the X91 audit; no milestone depends on it: adding one pool already moves no sibling's digest; a prerequisite of the first Ceph delta scenario |
 | [B578](#b578) | new, 2026-10-14 (X91 audit) | defect | State reconciliation and CLI | `status` lists realized objects that are no longer declared | Found by the X91 audit; no milestone depends on it: `diff` already lists them and `apply` refuses before any effect |
@@ -1526,28 +1525,6 @@ wait, or a worker that ends on channel EOF, before any delta re-runs a Ceph
 block. SSH qualification is already open in M2. **Exit evidence:** the spec
 clause and comment now; a test that a canceled remote worker ends, or that the
 engine waits its budget before it resolves.
-
-### B575
-
-The transition rule is restated in about five derivations. `decideOver`
-(`internal/reconciliation/lifecycle/execution.go:367-423`) alone gates effects;
-`previewed` (`internal/reconciliation/lifecycle/service.go:178-198`),
-`supersedable` (`internal/reconciliation/lifecycle/execution.go:670-675`),
-`nextAction` (`internal/reconciliation/lifecycle/attempts.go:572-582`, consumed
-by `continuationCommand` and `status`) and `frozenReopenOf`
-(`internal/reconciliation/lifecycle/frozenbinding.go:168-207`) re-derive parts of
-the same facts. Only `TestTransitionTablesMatchSpec` drives `decide`;
-`previewed`, `nextAction` and `frozenReopenOf` have no row-level test. **Impact:**
-drift can only mislead `plan` or `status`, because effects pass through
-`decideOver`; every new scenario would be threaded through five places by hand.
-**Smallest fix:** `decide` reports the verb it chose, so `previewed` goes; one
-pure `classify()` over the operation's verb and state and its pending and unknown
-blocks returns a kind (fresh, continue, resolve, finalize, replace-removal,
-settle or refuse); `decideOver`, `nextAction` and `frozenReopenOf` switch on it;
-the `stateMachineRows` cases also assert the previewed verb and `nextAction`. It
-is the first step of the first scenario slice after X91. **Exit evidence:** the
-refactor with no behavior change, `TestTransitionTablesMatchSpec` green, and a
-row-level test of each derived view.
 
 ### B576
 

@@ -2,7 +2,7 @@
 
 A named slice revives this design when an operator asks for one more apply
 scenario over a completed apply. Its first step is
-[B575](../milestones/backlog.md#b575), and decision D153 accepts the rule
+[B575](../milestones/m4.md#b575), and decision D153 accepts the rule
 that each new scenario is its own slice. Until then
 [state reconciliation](../state-reconciliation.md) owns what `apply` admits,
 [day-2 operations stay outside scope](../project.md#design-priorities-and-non-goals),
@@ -90,7 +90,7 @@ cluster and its pools, and the operator adds one `CephPool`.
    - Pool `size` and `min_size` drift is refused or reported, not silently
      converged ([B587](../milestones/backlog.md#b587)).
    - One pure classifier replaces the parallel transition derivations
-     ([B575](../milestones/backlog.md#b575)); it is the slice's first step.
+     ([B575](../milestones/m4.md#b575)); it is the slice's first step.
    - A retention rule bounds the operations a union lineage keeps
      ([B258](../milestones/backlog.md#b258)).
 3. **Spec.** Add one row to the
