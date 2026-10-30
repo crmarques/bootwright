@@ -909,6 +909,11 @@ unknown beats everything, an absent real side beside a declared object is
 `none`, and the rest are `changed`. A line the object's hunks do not hold is
 never a difference.
 
+A partial realization is separate from an encoded field difference: its
+compared fields can be equal while its real state is `partial`. When the
+encoded fields are equal, the object has difference `none`; its partial state
+alone does not make `--exit-code` return `3`.
+
 The result closes after a blank line with
 `<d> objects differ: <c> changed, <a> added, <r> removed, <u> unknown; <n> unchanged`,
 or, when nothing differs, `No differences: <n> objects compared.` A count of
@@ -919,6 +924,14 @@ before the closing period, counting the present or partial objects whose
 real side is the applied object. The
 [JSON result](cli/output.md#diff-results) carries the same membership and the
 same patch lines.
+
+When any normalized real side is `partial`, the human summary appends
+`; <p> objects partially realized.` (`1 object partially realized.` for one),
+counted independently of its field differences. If no encoded field differs,
+the line begins `No differences in compared fields` instead of `No differences`;
+the object and as-applied counts stay the same. With no partial real side,
+the summary is unchanged. JSON keeps its existing fields and counts; each
+object's `real.state` carries its realization state.
 
 ## Resource inspection and explicit access
 

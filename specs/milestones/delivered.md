@@ -10343,3 +10343,143 @@ selected, validated, attached and rendered a request with no generic Go edited.
 No request, program or contract version moved. The six request goldens are new;
 rendered by the code before the change they are byte-identical, and every
 existing request, plan, effective-state and contract golden is unchanged.
+
+### X236 — Network-variants interruption instructions
+
+**Items:** B991 (new, 2026-10-30, runbook review).
+**Kind:** defect. **Owners:** CLI, with Managed OS.
+
+The [network-variants runbook](../../e2e/lab-network-variants/runbook.md#6-install-with-the-required-interruption-drills)
+now names the visible progress descriptions instead of an internal group ID,
+and separates the two interruption drills. Installer replay accounts for
+[cancellation](../managed-os.md#quiescence-and-cancellation) and the
+[powered-off completion boundary](../managed-os.md#completion): the operator
+inspects the interrupted attempt and each affected guest before retrying.
+Optional stopping is limited to guests confirmed still in the installer wait.
+It changes no runtime contract or refusal, and claims no live acceptance for
+[B74](m1.md#b74) or [B326](m1.md#b326).
+
+The interruption commands run separately from the follow-up status checks,
+and each drill names the exact `[RUNNING]` text and the moment to press Ctrl-C.
+The delivering commits record shell syntax and documentation verification
+commands and results.
+
+### X237 — Network-variants permanent interface addresses
+
+**Items:** B992 (new, 2026-10-30, runbook review).
+**Kind:** defect. **Owners:** Managed OS, with CLI.
+
+The [network-variants interface check](../../e2e/lab-network-variants/runbook.md#7-verify-installation-and-final-network)
+now compares the `Permanent HW addr` for each bond slave on `nv-bond` and
+`nv-vlan-bond` with its domain-interface MAC, and keeps the ordinary `nic0`
+comparison on unbonded `nv-vlan`. It lists all three domains for checking the
+[installation interface pins](../managed-os.md#derived-installation), allowing
+bond members to share a current MAC as [network convergence](../managed-os.md#network-convergence)
+describes. No runtime behavior changes, and no [B74](m1.md#b74) or
+[B326](m1.md#b326) operator acceptance is claimed.
+
+All 24 shell blocks passed `bash -n`; `make docs-check` passed. The delivering
+commit records the exact checks and results. Final integration verification
+is recorded in the documentation commit.
+
+### X238 — Network-variants reboot proof
+
+**Items:** B993 (new, 2026-10-30, runbook review).
+**Kind:** defect. **Owners:** CLI, with Managed OS.
+
+The [network-variants reboot check](../../e2e/lab-network-variants/runbook.md#7-verify-installation-and-final-network)
+now compares each Machine's network marker with its running boot ID and uses
+live diff to prove [network convergence after reboot](../managed-os.md#network-convergence).
+Machine info confirms lifecycle `applied`, within its
+[inventory result](../cli/output.md#machine-results); the runbook no longer
+promises raw installation evidence from that command. No runtime behavior
+changes, and no [B74](m1.md#b74) or [B326](m1.md#b326) acceptance is claimed.
+
+All 24 shell blocks passed `bash -n`; `make docs-check` passed. The delivering
+commit records the exact checks and results. Final integration verification
+is recorded in the documentation commit.
+
+### X239 — Partial realization in human diff summaries
+
+**Items:** B994 (new, 2026-10-30, output review).
+**Kind:** defect. **Owner:** CLI.
+
+The [human diff summary](../cli.md#desired-and-realized-state-comparison)
+counts normalized partial real sides independently of encoded field
+differences. It qualifies a field-equal comparison and appends the partial
+object count; classifications, patches, JSON and `--exit-code` stay unchanged.
+The [network-variants drift check](../../e2e/lab-network-variants/runbook.md#8-check-drift-and-reboot)
+uses the partial note and a direct MTU read even on builds with the former
+footer. [B624](backlog.md#b624)'s network projection remains parked, and no
+[B74](m1.md#b74) or [B326](m1.md#b326) acceptance is claimed.
+
+`TestDiffReportsPartialRealizationWithoutComparedFieldDifferences` failed
+before the correction. Targeted diff tests, diff goldens, all 24 runbook shell
+blocks' `bash -n` checks and `make docs-check` passed; the delivering commit
+records the exact commands and results. Final integration verification is
+recorded in the documentation commit.
+
+### X240 — Private evidence before network-variants context purge
+
+**Items:** B995 (new, 2026-10-30, runbook review).
+**Kind:** defect. **Owner:** CLI.
+
+Both network-variants context purges now require the shared
+[evidence-preservation step](../../e2e/README.md#preserve-evidence-before-context-purge).
+It retains [operation and bounded-run logs](../cli/output.md#private-operation-logs)
+and final status outside temporary cleanup before
+[permanent deletion](../contexts.md#permanent-deletion), with source-path
+[acceptance digests](../../docs/acceptance.md) and archive integrity checks.
+The private destination is verified as ignored before creation; each attempt
+has its own directory. Input snapshots, keyrings, frozen records and trust
+data are excluded. No product behavior or operator acceptance changes.
+
+All 40 shared and case shell blocks passed `bash -n`. A synthetic archive probe
+passed selection, byte integrity, unusual filenames, secret and link exclusion,
+unique private directories, digest mapping and failure-stop checks. The
+delivering commit records documentation verification commands and results.
+Final integration verification is recorded in the documentation commit.
+
+### X241 — Cutoff refusal in retained adapter output
+
+**Items:** B996 (new, 2026-10-30, runbook review).
+**Kind:** defect. **Owners:** CLI, with Managed OS.
+
+The [cutoff runbook](../../e2e/lab-network-variants/runbook.md#10-verify-a-declaration-that-cuts-the-controller-off)
+now lets installation finish before the deliberate network failure and checks
+the diagnostic-named [retained adapter output](../cli/output.md#private-operation-logs)
+for the expected failed task and [network recovery reason](../managed-os.md#network-convergence).
+It separates the repeated failure check from guest removal and corrected
+installation. A generic outer adapter error alone passes neither check.
+No runtime behavior or B74/B326 operator acceptance changes.
+
+All 27 case shell blocks passed `bash -n`; `make docs-check` passed. The
+delivering commit records the exact checks and results. Final integration verification
+is recorded in the documentation commit.
+
+### X242 — Network-variants security and update choices
+
+**Items:** B997 (new, 2026-10-30, owner request).
+**Kind:** enabling. **Owners:** CLI, with Managed OS.
+
+The [network-variants case](../../e2e/lab-network-variants/runbook.md) exposes
+optional [FIPS](../managed-os.md#fips-mode),
+[TPM2 root encryption](../managed-os.md#root-disk-encryption), hosted
+[RHSM registration](../managed-os.md#registration) and
+[updates within the declared release](../managed-os.md#update-within-release)
+through existing contracts. All defaults stay false and the default rendered
+objects stay byte-identical. Updates without registration fail at rendering.
+The same choices reach every render, including both cutoff declarations.
+
+The runbook covers direct VLAN egress, private credential inputs, per-guest
+native and recovery proofs, both interruption checkpoints and normal or manual
+registration removal. The selected-arm operator gates remain on B74, B326,
+B75, B76, B77, B876, B978 and B979; no live acceptance is claimed here.
+FIPS guests do not qualify B346's FIPS-controller gate, and B624 stays parked.
+
+Seven real render/validation combinations passed, with exact default-output
+parity; the invalid update combination failed before publishing output. An
+independent template review passed. All 44 case shell blocks passed `bash -n`.
+Final `make docs-check` and `make check` passed. The held-directory filesystem
+test was skipped in each applicable unit suite; the integration commit records
+the commands and results. Selected native acceptance remains pending.

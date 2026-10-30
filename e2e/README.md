@@ -62,6 +62,7 @@ Use these names consistently:
 | `INPUT_DIR` | Rendered desired-state directory |
 | `CONTROLLER_ADDRESS` | Host address on which the services listen |
 | `RUN_DIR` | Private temporary directory for case files and firewall cleanup records |
+| `EVIDENCE_CONTEXT` | Context whose completed run is being preserved before purge |
 | `HOST_CHECKS` | Private record of diagnostic packages installed for this run |
 | `FIREWALL_PORTS` | Case's array of listener ports to admit |
 
@@ -71,6 +72,64 @@ host. Credentials come from private files, never literal values in commands.
 Record results using the [acceptance ledger](../docs/acceptance.md); only the
 human owner accepts a run, and confidential environment details stay in the
 private evidence archive.
+
+## Preserve evidence before context purge
+
+After destroy and the final status check, while no command is active for the
+context, set `EVIDENCE_CONTEXT` as the case directs and run this Bash block
+from the checkout. Context purge removes operation and power logs; it makes no
+archive. This step keeps only their logs and adapter output plus final status,
+outside `RUN_DIR`, under a Git-verified ignored shared-cache directory, so
+removing a task worktree keeps the evidence. It excludes input
+revisions, keyrings, frozen plans and records, registry and SSH-trust data.
+Bounded power output retains only the newest 16 runs; preserve earlier
+checkpoints separately when the case needs them.
+
+```bash
+(
+    set -euo pipefail
+    umask 077
+    : "${EVIDENCE_CONTEXT:?Set the context to preserve}"
+    sudo -v
+    EVIDENCE_CACHE=$(./scripts/cache-dir)
+    EVIDENCE_ROOT="$EVIDENCE_CACHE/e2e-evidence"
+    git -C "$(dirname -- "$EVIDENCE_CACHE")" check-ignore -q -- "$EVIDENCE_ROOT/.ignore-check"
+    test ! -L "$EVIDENCE_ROOT"
+    mkdir -p -m 0700 -- "$EVIDENCE_ROOT"
+    chmod 0700 -- "$EVIDENCE_ROOT"
+    EVIDENCE_DIR=$(mktemp -d "$EVIDENCE_ROOT/${EVIDENCE_CONTEXT}.XXXXXXXX")
+    STATE_DIR="/var/lib/bootwright/contexts/$EVIDENCE_CONTEXT/state"
+    ./bin/bootwright status --context "$EVIDENCE_CONTEXT" --output json > "$EVIDENCE_DIR/status.json"
+    sudo bash -euo pipefail -c '
+        find "$1/operations" -mindepth 2 -maxdepth 2 -type d -name logs -print0 |
+            sort -z | while IFS= read -r -d "" LOGS; do
+                OPERATION_ID=$(basename -- "$(dirname -- "$LOGS")")
+                DIGEST=$(find "$LOGS" -type f -print0 | sort -z | xargs -0 sha256sum | sha256sum)
+                printf "%s\t%s\t%s\n" "$OPERATION_ID" "$LOGS" "$DIGEST"
+            done
+    ' _ "$STATE_DIR" > "$EVIDENCE_DIR/operation-log-digests.tsv"
+    test -s "$EVIDENCE_DIR/operation-log-digests.tsv"
+    sudo bash -euo pipefail -c '
+        cd -- "$1"
+        find operations runs -type f \( -path "operations/*/logs/*" -o -path "runs/*/run.output" \) -print0 |
+            sort -z | tar -cf - --null --no-recursion -T -
+    ' _ "$STATE_DIR" | gzip > "$EVIDENCE_DIR/logs.tar.gz"
+    cd -- "$EVIDENCE_DIR"
+    gzip -t logs.tar.gz
+    tar -tzf logs.tar.gz > archive-files.txt
+    test -s archive-files.txt
+    sha256sum logs.tar.gz status.json archive-files.txt operation-log-digests.tsv > SHA256SUMS
+    sha256sum -c SHA256SUMS
+    printf 'Evidence verified and retained: %s\n' "$EVIDENCE_DIR"
+)
+```
+
+Proceed to purge only after this succeeds. On failure, keep the context and
+the partial evidence directory, correct the cause and repeat into a new
+directory. The private mapping records each original log path and its
+[acceptance digest](../docs/acceptance.md) before purge; archive checksums
+protect the retained bytes. Retain `.cache/e2e-evidence` through temporary-file
+cleanup and owner acceptance. No live acceptance is implied by archiving.
 
 ## Prepare the host
 
