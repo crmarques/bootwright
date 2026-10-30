@@ -148,6 +148,31 @@ func (l lineage) ownerFor(block string) (string, error) {
 	return owner.operation.ID, err
 }
 
+func lineageEntries(ctx context.Context, store recordReader, operation operationstore.Operation, plan reconciliation.Plan, states map[string]reconciliation.BlockState) ([]LineageEntry, error) {
+	if operation.Verb != reconciliation.Apply || operation.Predecessor == "" {
+		return nil, nil
+	}
+	chain, err := lineageOf(ctx, store, lineageMember{operation: operation, plan: plan, states: states})
+	if err != nil {
+		return nil, err
+	}
+	entries := make([]LineageEntry, 0, len(chain))
+	for _, member := range chain {
+		entries = append(entries, LineageEntry{Operation: member.operation.ID, Verb: string(member.operation.Verb), State: string(member.operation.State)})
+	}
+	return entries, nil
+}
+
+func (l lineage) owned() []OwnedBlock {
+	var held []OwnedBlock
+	for _, member := range l {
+		for _, block := range member.plan.Blocks {
+			held = append(held, OwnedBlock{Operation: member.operation.ID, Block: block})
+		}
+	}
+	return held
+}
+
 func (l lineage) lending(plan reconciliation.Plan) []reconciliation.BlockDefinition {
 	definitions := planDefinitions(plan)
 	if len(l) < 2 {

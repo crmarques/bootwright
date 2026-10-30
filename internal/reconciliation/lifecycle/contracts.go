@@ -428,8 +428,13 @@ type ApplyOnlyMaterial interface {
 	ReadsMaterialOnlyInApply(reconciliation.Block) bool
 }
 
+type OwnedBlock struct {
+	Operation string
+	Block     reconciliation.Block
+}
+
 type AddedUnresolvedReporter interface {
-	UnresolvedAdded(reconciliation.Verb, reconciliation.Block, json.RawMessage) (Unresolved, bool)
+	UnresolvedAdded(reconciliation.Verb, reconciliation.Block, json.RawMessage, []OwnedBlock) (Unresolved, bool)
 }
 
 // Unresolved is why one effect's outcome stayed unknown, in the operator's
@@ -446,10 +451,10 @@ type Unresolved struct {
 // Composition binds it to the Workspace-held area for each invocation.
 type OperationStore interface {
 	Index(context.Context) (operationstore.Index, error)
-	// Claim creates a fresh apply's operation directory, empty, before it binds
-	// anything, once the area admits the plan it will register; Register then
-	// fills that directory under the same identity.
-	Claim(context.Context, string, reconciliation.Plan) error
+	// ClaimAdding creates a fresh apply's operation directory, empty, before it
+	// binds anything, once the area admits the plan it will register and the
+	// lineage of the predecessor named last; Register then fills it.
+	ClaimAdding(context.Context, string, reconciliation.Plan, string) error
 	// Claimed names every operation directory. Only a reclaim removes one,
 	// so a directory added since a listing was taken proves a newer claim.
 	Claimed(context.Context) ([]string, error)

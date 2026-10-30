@@ -151,7 +151,7 @@ func (s *Store) Register(ctx context.Context, operation Operation, plan reconcil
 	if err != nil {
 		return err
 	}
-	if err := s.admit(ctx, operation.ID, plan, len(encodedPlan)+len(encoded)+len(index)); err != nil {
+	if err := s.admit(ctx, operation.ID, plan, operation.Predecessor, len(encodedPlan)+len(encoded)+len(index)); err != nil {
 		return err
 	}
 	if err := s.ensureOperation(ctx, operation.ID); err != nil {
@@ -179,6 +179,10 @@ func (s *Store) Register(ctx context.Context, operation Operation, plan reconcil
 // directory, and refuses at the retained-operation bound for the plan the
 // operation will register exactly as that registration does.
 func (s *Store) Claim(ctx context.Context, id string, plan reconciliation.Plan) error {
+	return s.ClaimAdding(ctx, id, plan, "")
+}
+
+func (s *Store) ClaimAdding(ctx context.Context, id string, plan reconciliation.Plan, predecessor string) error {
 	if !reconciliation.ValidOperationID(id) {
 		return recordError("lifecycle operation identity is invalid")
 	}
@@ -192,7 +196,7 @@ func (s *Store) Claim(ctx context.Context, id string, plan reconciliation.Plan) 
 	if slices.Contains(claimed, id) {
 		return recordError("the lifecycle operation identity already has a directory")
 	}
-	if err := s.admit(ctx, id, plan, 0); err != nil {
+	if err := s.admit(ctx, id, plan, predecessor, 0); err != nil {
 		return err
 	}
 	return s.ensureOperation(ctx, id)
@@ -241,18 +245,26 @@ func admitOperations(retained int, plan reconciliation.Plan) error {
 // directory a claim created for id is what its registration fills, so it is
 // left out of what the area holds. registration is what the registration
 // writes, which a claim does not know and an apply does not need.
-func (s *Store) admit(ctx context.Context, id string, plan reconciliation.Plan, registration int) error {
+func (s *Store) admit(ctx context.Context, id string, plan reconciliation.Plan, predecessor string, registration int) error {
 	held, size, err := s.held(ctx, "", id)
 	if err != nil {
 		return err
 	}
-	if needed := AdmissionEntries(plan); held+needed > MaxEntries {
+	entries := AdmissionEntries(plan)
+	if predecessor != "" {
+		removal, err := s.lineageRemoval(ctx, id, predecessor, plan)
+		if err != nil {
+			return err
+		}
+		entries += FirstPassEntries(removal) - FirstPassEntries(plan)
+	}
+	if held+entries > MaxEntries {
 		holds := fmt.Sprintf("%s: its operation area holds %d of its %d entries", retainedMaximum, held, MaxEntries)
 		if plan.Verb == reconciliation.Destroy {
-			return refuseAtTheBound(fmt.Sprintf("%s, and this removal needs %d more for its first attempts and the writes that complete them", holds, needed))
+			return refuseAtTheBound(fmt.Sprintf("%s, and this removal needs %d more for its first attempts and the writes that complete them", holds, entries))
 		}
 		return refuseAtTheBound(fmt.Sprintf("%s, and this apply needs %d more: %d for its first attempts and those of the removal that takes it back, and the %d it keeps for later attempts",
-			holds, needed, needed-ReservedEntries, ReservedEntries))
+			holds, entries, entries-ReservedEntries, ReservedEntries))
 	}
 	needed := AdmissionBytes(plan, registration)
 	if size+needed <= MaxBytes {
@@ -367,7 +379,7 @@ func (s *Store) removalReserve(ctx context.Context, operation Operation, plan re
 	if kept, read := s.reserves[operation.ID]; read {
 		return kept.entries, kept.bytes, nil
 	}
-	removal, err := s.removalOf(ctx, operation, plan)
+	removal, err := s.lineageRemoval(ctx, operation.ID, operation.Predecessor, plan)
 	if err != nil {
 		return 0, 0, err
 	}
@@ -390,13 +402,13 @@ func (s *Store) removalReserve(ctx context.Context, operation Operation, plan re
 	return kept.entries, kept.bytes, nil
 }
 
-func (s *Store) removalOf(ctx context.Context, operation Operation, plan reconciliation.Plan) (reconciliation.Plan, error) {
-	if operation.Predecessor == "" {
+func (s *Store) lineageRemoval(ctx context.Context, own, predecessor string, plan reconciliation.Plan) (reconciliation.Plan, error) {
+	if predecessor == "" {
 		return plan.Inverse()
 	}
 	plans := []reconciliation.Plan{plan}
-	seen := map[string]bool{operation.ID: true}
-	for id := operation.Predecessor; id != ""; {
+	seen := map[string]bool{own: true}
+	for id := predecessor; id != ""; {
 		if seen[id] || len(seen) >= MaxOperations {
 			return reconciliation.Plan{}, recordError("the applies this operation adds to name one another in a cycle or exceed the operations a context retains")
 		}

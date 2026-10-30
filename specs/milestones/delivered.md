@@ -10483,3 +10483,132 @@ independent template review passed. All 44 case shell blocks passed `bash -n`.
 Final `make docs-check` and `make check` passed. The held-directory filesystem
 test was skipped in each applicable unit suite; the integration commit records
 the commands and results. Selected native acceptance remains pending.
+
+### X234 — Additive apply of add-on instances
+
+**Item:** B575 ([D211](backlog.md#d211), [Q136](m4.md#m4a-open-decisions)); B987
+passed its in-tree gates and awaits operator acceptance on
+[its M4 row](m4.md#b987).
+**Kind:** product. **Owners:** Reconciliation, with Add-ons and Secrets.
+**Code commit:** the integration commit that carries this record.
+
+A package or binding added to a cluster that a completed apply installed is
+installed by an [additive apply](../state-reconciliation.md#additive-apply):
+`apply` registers a second operation whose record names the completed one as
+its `predecessor`, whose frozen plan holds only the added instance blocks with
+their edges into the predecessor frozen as `prerequisites`, and which runs none
+of the predecessor's blocks. One `destroy` takes the whole lineage back, the
+added instances before their cluster. It is the fourth scenario of the
+[state machine](../state-reconciliation.md#state-machine), added by
+[D153](backlog.md#d153)'s recipe, and `plan`, `status`, `diff` and the deletion
+inventory read the lineage. The slice's commits, in order:
+
+1. `refactor(reconciliation): classify transitions once` (B575)
+2. `feat(reconciliation): freeze predecessors and prerequisites`
+3. `fix(reconciliation): refuse a due finalization in decideOver`
+4. `refactor(lifecycle): route each block to the apply that owns it`
+5. `feat(lifecycle): take a lineage back in one removal`
+6. `feat(reconciliation): admit an additive apply of add-on instances`
+7. `feat(lifecycle): present and document additive applies`
+
+The third is the follow-up of the first commit's review; the design planned
+six commits.
+
+**B575** replaced the five parallel transition derivations with one pure
+classifier: `decide` reports the verb it chose, so `previewed` is gone, and
+`decideOver`, `nextAction` and `frozenReopenOf` switch on the kind
+`classify` returns. `TestClassifyTransitionKinds`,
+`TestSupersedableIsTheReplacementClassification` and the row-level assertions
+of `stateMachineRows` hold each derived view, and
+`TestADecisionOverAFinalizationDueRefusesWithoutEffect` the follow-up.
+
+**Format and lineage.** `predecessor` on the operation record and
+`prerequisites` on a frozen block are optional members, so an earlier build
+refuses a record that holds either. `reconciliation.Additive` and
+`reconciliation.Lineage` build and fold the plans
+(`TestLineageOfAnAdditionRestoresTheFreshPlan`,
+`TestAPlanWithoutPrerequisitesEncodesAndDigestsAsBefore`,
+`TestPrerequisitesAreHashedAndExcludedFromSchedulingAndDependencies`,
+`TestAnAdditiveApplyRecordMatchesItsGolden`). Every site that assumed one apply
+owns every block routes through the lineage walk
+(`TestEachBlockRoutesToTheApplyWhoseFrozenPlanHoldsIt`,
+`TestALineageWalkRefusesWhatIsNotOneBoundedChainOfApplies`,
+`TestEveryBindingTheLineageHoldsIsKept`), and one removal takes the lineage
+back and resolves each unproved block into its owner's records
+(`TestOneDestroyTakesTheWholeLineageBackTheAddedBlockFirst`,
+`TestAFailedLineageRemovalIsReplacedOverWhatItHasNotRemoved`,
+`TestARemovalReopensTheRootsBindingNotTheHeads`).
+
+**Admission.** `settleApply` admits the addition before the changed-input
+refusal when the lineage reads done, the comparison shows only added bindings,
+package members the frozen binding lacks and the Secrets the added blocks name
+for the first time, this build plans every lineage block as frozen and one
+more, each added block's capability admits it through `DeltaAdmitter`, states
+it reads bound Secrets only in its own apply attempts, planning the added blocks
+needs no host or SSH reservation, and every produced input has a lineage producer with a proved custody entry;
+otherwise it refuses `lifecycle.state` naming the block.
+`TestApplyAdmitsOnlyTheFourScenarios`,
+`TestAContextAppliedWithoutPackagesGainsAnInstanceInASecondOperation`,
+`TestAnAdditiveApplyRefusesWhatItDoesNotAddNamingTheBlock`,
+`TestAnAdditiveApplyAdmitsOnlyANewSecretAnAddedBlockNames`,
+`TestAnAdditionThatNeedsAHostReservationRefusesWhileOneThePlanHeldIsAdmitted`,
+`TestAnInterruptedAdditiveApplyContinuesWithoutRerunningTheLineage`,
+`TestAnAdditiveRegistrationCrashedBeforeItsIndexWriteLeavesThePredecessorCurrent`
+and `TestAContinuationRefusesWhenAPrerequisiteNoLongerReadsDone` hold the
+journeys; `TestAnAdditionIsAdmittedOnlyOnAClusterTheLineageInstalled`,
+`TestAnInstanceReadsBoundSecretsOnlyInItsOwnApplyAttempts` and
+`TestOnlyAnApplyIsLentSecretPlacementMaterial` hold the capability's side.
+The store admits an additive registration and its claim against the removal of
+the whole lineage (`TestAnAdditiveApplyIsAdmittedAgainstItsLineagesRemoval`),
+and an unresolved added instance names the object's owner or the continuation
+and never invites deleting an object another instance of the lineage declares
+(`TestAnUnresolvedAddedInstanceNeverInvitesDeletingAnObjectAnotherInstanceDeclares`,
+`TestAnInstanceIsExplainedByTheApplyThatHoldsIt`).
+
+**Presentation.** `plan` opens an additive apply's preview with `adds to
+operation <id>; runs none of its blocks` and a lineage destroy's with `Takes
+back`; `status` lists the lineage; `diff` reports `adds` and names `apply` as
+the next command, and without `--observe` proves no custody
+(`TestADiffWithoutObserveDoesNotProveTheCustodyOfAnAddition`). The goldens
+`cli-plan-adds`, `cli-plan-lineage-destroy`, `cli-diff-adds` and
+`cli-status-lineage` (each with its JSON form) hold the bytes, and
+[the output tables](../cli/output.md) document the new members `addsTo`,
+`takesBack`, `adds` and `lifecycle.lineage`.
+`TestTheOrderedExampleIsAnAdditionToTheNMStateExample` plans the addition of
+`lab-sno-ordered`'s MetalLB binding to `lab-sno-nmstate` with the real compiler
+and capabilities; the example harness runs no apply, so the registered second
+operation is held by the journeys above. The
+[operator guide](../../docs/operator-guide.md#add-ons) links the journey.
+
+**Contract.** None moved: the operation record and the plan gained optional
+members, so the versions stay and an earlier build refuses such a record.
+
+**Reviews.** Each commit but the last had a complex-tier review, and every
+follow-up landed before the slice closed. The classifier's became its fix
+commit. The review of the format commit asked for the removal reserve over the
+lineage, lineage membership read from `predecessor` rather than from
+`prerequisites`, and removal warnings through the lineage; these landed with
+the routing and removal commits. The routing review decided which binding a
+lineage removal reopens and that an added block's capability states its
+material premise. The removal review found the predecessor-resolution reserve
+gap, parked as [B998](backlog.md#b998), and its other follow-ups landed with
+the admission commit. The admission review's follow-ups close here: the
+registration and claim are admitted against the lineage's removal, the
+unresolved remedy names the owner of an object another instance declares, an
+explained block is routed to its owner, an addition that needs a reservation
+refuses, `diff` proves custody only with `--observe`, a driver test holds the
+material premise, and a Secret the added blocks name for the first time is
+admitted.
+
+**Limitations.** A cluster whose last package is `gitops` cannot take an
+addition, because the existing instances would wait for the new one and the
+comparison refuses, and a context applied by a build that froze its instances
+differently cannot take one. An addition
+needs only added bindings, added package members and their new Secrets; a
+Machine, cluster, network, storage or service change, a changed or removed
+instance and an imported cluster stay with `destroy` and `apply`. No removal
+takes back an additive apply alone ([B769](backlog.md#b769)).
+
+**Acceptance.** B575 completed in-tree. B987's in-tree gates pass and its exit
+evidence includes the owner's emulated rehearsal on addons-sno, so its row
+reads `awaiting operator acceptance`.

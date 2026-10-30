@@ -1,0 +1,42 @@
+  ✓ Context lab
+
+      Mode  ready
+
+  Setup
+  [OK]   Controller binding
+
+  Desired
+      Revision         rev-3b8d0f5a9c1e4d7b2a6f8c0e1d3b5a7f
+      Environment      lab
+      Files seen       6
+      Objects decoded  6
+
+  Clusters
+  State   Cluster
+  [OK]    OpenShiftCluster/ocp-01
+
+  Secrets
+    Declared  1
+    Bindings  1
+
+  Next steps
+    bootwright destroy --context lab
+
+  Lifecycle
+    Operation  op-0a4b8c2d6e1f3a5b7c9d0e2f4a6b8c1d
+    Verb       apply
+    State      done
+    Next       none
+
+  Lineage
+    Operation  op-6f1c2a9e0b7d4c3f8a5e2d1b0c9f8e7a  apply  done
+    Operation  op-0a4b8c2d6e1f3a5b7c9d0e2f4a6b8c1d  apply  done
+
+  Add-ons
+    [DONE] install the add-on metallb on ocp-01
+
+      Registered by  1.4.0 (9f2c1ab)
+      Logs           /var/lib/bootwright/contexts/lab/state/operations/op-0a4b8c2d6e1f3a5b7c9d0e2f4a6b8c1d/logs
+
+  Handoff
+    ready

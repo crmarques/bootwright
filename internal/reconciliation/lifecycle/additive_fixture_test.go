@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
+	"github.com/crmarques/bootwright/internal/controller/prerequisites"
 	"github.com/crmarques/bootwright/internal/desiredstate/compilation"
 	"github.com/crmarques/bootwright/internal/diagnostics"
 	"github.com/crmarques/bootwright/internal/reconciliation"
@@ -17,7 +18,10 @@ import (
 
 const addonSecret = "addon-secret"
 
-type planningCapability struct{ *lendingCapability }
+type planningCapability struct {
+	*lendingCapability
+	reserves string
+}
 
 func (c *planningCapability) Plan(ctx context.Context, input PlanInput) (CapabilityPlan, error) {
 	plan, err := c.testCapability.Plan(ctx, input)
@@ -42,6 +46,9 @@ func (c *planningCapability) Plan(ctx context.Context, input PlanInput) (Capabil
 		definitions = append(definitions, block)
 	}
 	plan.Definitions = definitions
+	if slices.Contains(members, c.reserves) {
+		plan.Reservations = append(plan.Reservations, prerequisites.HostReservation{Context: input.Context.Name, Kind: "listener", Service: c.reserves, Keys: []string{"tcp:" + c.reserves}})
+	}
 	return plan, nil
 }
 
@@ -73,7 +80,7 @@ func (c *addonCapability) ReadsMaterialOnlyInApply(block reconciliation.Block) b
 	return strings.HasPrefix(block.ID, "addon-")
 }
 
-func (c *addonCapability) UnresolvedAdded(reconciliation.Verb, reconciliation.Block, json.RawMessage) (Unresolved, bool) {
+func (c *addonCapability) UnresolvedAdded(reconciliation.Verb, reconciliation.Block, json.RawMessage, []OwnedBlock) (Unresolved, bool) {
 	return Unresolved{Reason: "an object is foreign", Remedy: "remove the object"}, true
 }
 
@@ -123,7 +130,7 @@ func installAddons(h *harness, producer string, initial ...api.Object) *additive
 			references["addon-"+member] = []ProducedInput{{Kind: "ArtifactServer", Object: producer, Output: "access"}}
 		}
 	}
-	planning := &planningCapability{&lendingCapability{testCapability: h.capability, references: references}}
+	planning := &planningCapability{lendingCapability: &lendingCapability{testCapability: h.capability, references: references}}
 	c := &addonCapability{planning}
 	h.service.capabilities = testResolver{capability: c}
 	h.binder.material[addonSecret] = secrets.NewMaterial(nil)

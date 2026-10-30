@@ -1,0 +1,14 @@
+  Apply plan
+
+    adds to operation op-6f1c2a9e0b7d4c3f8a5e2d1b0c9f8e7a; runs none of its blocks
+
+  Plan
+  Add-ons · 1 block
+    ○ 1. install the add-on metallb on ocp-01 · pending · start
+      create-subscription metallb-operator
+
+    Concurrency  1 wave, widest 1 step
+operation: none
+verb: plan
+state: preview
+next: apply

@@ -1,0 +1,50 @@
+{
+  "schemaVersion": "v1alpha1",
+  "command": "plan",
+  "ok": true,
+  "exitCode": 0,
+  "result": {
+    "context": {
+      "name": "lab",
+      "mode": ""
+    },
+    "verb": "apply",
+    "steps": [
+      {
+        "id": "addon-metallb-ocp-01",
+        "description": "install the add-on metallb on ocp-01",
+        "kind": "",
+        "object": "",
+        "stage": "add-ons",
+        "impacts": [
+          "create-subscription metallb-operator"
+        ],
+        "state": "pending",
+        "selection": "start",
+        "waitsOn": "",
+        "after": [],
+        "wave": 1,
+        "consumes": []
+      }
+    ],
+    "stages": [],
+    "waves": 1,
+    "widest": 1,
+    "bound": 1,
+    "startable": 1,
+    "deferred": 0,
+    "continuation": false,
+    "finalizes": false,
+    "addsTo": "op-6f1c2a9e0b7d4c3f8a5e2d1b0c9f8e7a",
+    "stops": [],
+    "stopsAfterOnline": [],
+    "receipt": {
+      "operation": "none",
+      "verb": "plan",
+      "state": "preview",
+      "next": "apply"
+    }
+  },
+  "diagnostics": [],
+  "logs": []
+}

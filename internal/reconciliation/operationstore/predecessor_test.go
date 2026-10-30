@@ -11,6 +11,7 @@ import (
 
 	"github.com/crmarques/bootwright/internal/diagnostics"
 	"github.com/crmarques/bootwright/internal/reconciliation"
+	"github.com/crmarques/bootwright/internal/reconciliation/operationstore/areadouble"
 )
 
 // additivePlan is an apply that adds one block to the lineage goldenPlan makes,
@@ -178,12 +179,16 @@ func TestPrerequisitesRefuseBesideARecordThatNamesNoPredecessor(t *testing.T) {
 	if _, err := registered.Index(ctx); err != nil {
 		t.Fatal(err)
 	}
-	operation := additiveOperation(t, added, "op-"+strings.Repeat("ab", 16))
+	applied := testOperation(t, goldenPlan(t))
+	if err := registered.Register(ctx, applied, goldenPlan(t)); err != nil {
+		t.Fatal(err)
+	}
+	operation := additiveOperation(t, added, applied.ID)
 	if err := registered.Register(ctx, operation, added); err != nil {
 		t.Fatal(err)
 	}
 	record := string(area.files[path.Join(operation.ID, "operation.json")])
-	area.files[path.Join(operation.ID, "operation.json")] = []byte(strings.Replace(record, `"predecessor":"op-`+strings.Repeat("ab", 16)+`",`, "", 1))
+	area.files[path.Join(operation.ID, "operation.json")] = []byte(strings.Replace(record, `"predecessor":"`+applied.ID+`",`, "", 1))
 	if _, err := New(area, fixedClock()).ReadPlan(ctx, operation.ID); !slices.Equal(diagnostics.Of(err), diagnostics.Of(want)) {
 		t.Fatalf("reading prerequisites beside a record without a predecessor: %v", diagnostics.Of(err))
 	}
@@ -241,5 +246,72 @@ func TestTheReserveOfAnAdditiveApplyRefusesALineageItCannotRead(t *testing.T) {
 	operation := additiveOperation(t, added, "op-"+strings.Repeat("77", 16))
 	if _, _, err := store.removalReserve(ctx, operation, added); err == nil {
 		t.Fatal("a reserve was computed over a predecessor that has no record")
+	}
+}
+
+// An additive apply is admitted only while the area also holds the first pass
+// of the one removal that takes its whole lineage back. With room for the
+// added plan's own removal but not for the lineage's, a claim and a
+// registration both refuse at the bound and create nothing, and one more free
+// entry per extra lineage block admits both.
+func TestAnAdditiveApplyIsAdmittedAgainstItsLineagesRemoval(t *testing.T) {
+	ctx := context.Background()
+	store, area := newStore(t)
+	root := goldenPlan(t)
+	applied := testOperation(t, root)
+	if _, err := store.Index(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.Register(ctx, applied, root); err != nil {
+		t.Fatal(err)
+	}
+	added := additivePlan(t)
+	operation := additiveOperation(t, added, applied.ID)
+	whole, err := reconciliation.Lineage(root, added)
+	if err != nil {
+		t.Fatal(err)
+	}
+	removal, err := whole.Inverse()
+	if err != nil {
+		t.Fatal(err)
+	}
+	extra := FirstPassEntries(removal) - FirstPassEntries(added)
+	if extra <= 0 {
+		t.Fatalf("the lineage removal holds %d first-pass entries beside the addition's %d", FirstPassEntries(removal), FirstPassEntries(added))
+	}
+	held, _, err := store.held(ctx, "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	padding := MaxEntries - held - AdmissionEntries(added) - extra + 1
+	for index := range padding {
+		area.files["retained/record-"+FormatIndex(index)] = []byte("{}\n")
+	}
+	if alone := MaxEntries - (held + padding); alone < AdmissionEntries(added) {
+		t.Fatalf("the area leaves %d entries, which does not admit the addition alone (%d)", alone, AdmissionEntries(added))
+	}
+	refused := func(err error) {
+		t.Helper()
+		reported := diagnostics.Of(err)
+		if len(reported) != 1 || reported[0].Code != "lifecycle.state" || !strings.Contains(reported[0].Message, "retained the maximum number of lifecycle operations") ||
+			!strings.Contains(reported[0].Message, "this apply needs") || areadouble.IsDirectory(area.files, area.directories, operation.ID) {
+			t.Fatalf("admission reported %+v, want the retained-operation refusal naming the bound with nothing created", reported)
+		}
+	}
+	refused(store.ClaimAdding(ctx, operation.ID, added, applied.ID))
+	refused(store.Register(ctx, operation, added))
+	free := MaxEntries - AdmissionEntries(added) - extra
+	now, _, err := store.held(ctx, "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for index := range now - free {
+		delete(area.files, "retained/record-"+FormatIndex(index))
+	}
+	if err := store.ClaimAdding(ctx, operation.ID, added, applied.ID); err != nil {
+		t.Fatalf("the claim refused with the lineage removal's room free: %+v", diagnostics.Of(err))
+	}
+	if err := store.Register(ctx, operation, added); err != nil {
+		t.Fatalf("the registration refused with the lineage removal's room free: %+v", diagnostics.Of(err))
 	}
 }

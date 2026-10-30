@@ -82,13 +82,20 @@ type statusSecrets struct {
 // statusLifecycle leaves out the registering build and the host log directory,
 // which only a person reads.
 type statusLifecycle struct {
-	Operation    string        `json:"operation"`
-	Verb         string        `json:"verb"`
-	State        string        `json:"state"`
-	Next         string        `json:"next"`
-	AnotherBuild bool          `json:"anotherBuild"`
-	Blocks       []statusBlock `json:"blocks"`
-	Logs         []string      `json:"logs"`
+	Operation    string          `json:"operation"`
+	Verb         string          `json:"verb"`
+	State        string          `json:"state"`
+	Next         string          `json:"next"`
+	AnotherBuild bool            `json:"anotherBuild"`
+	Lineage      []statusLineage `json:"lineage,omitempty"`
+	Blocks       []statusBlock   `json:"blocks"`
+	Logs         []string        `json:"logs"`
+}
+
+type statusLineage struct {
+	Operation string `json:"operation"`
+	Verb      string `json:"verb"`
+	State     string `json:"state"`
 }
 
 type statusBlock struct {
@@ -147,6 +154,11 @@ func displayStatus(result *lifecycle.StatusResult) statusResult {
 			Operation: escapeDisplayLine(summary.Operation), Verb: escapeDisplayLine(summary.Verb),
 			State: escapeDisplayLine(summary.State), Next: escapeDisplayLine(summary.Next),
 			AnotherBuild: summary.AnotherBuild, Blocks: blocks, Logs: displayLines(summary.Logs),
+		}
+		for _, entry := range summary.Lineage {
+			out.Lifecycle.Lineage = append(out.Lifecycle.Lineage, statusLineage{
+				Operation: escapeDisplayLine(entry.Operation), Verb: escapeDisplayLine(entry.Verb), State: escapeDisplayLine(entry.State),
+			})
 		}
 	}
 	return out
@@ -323,6 +335,14 @@ func writeStatusLifecycle(text *display, result *lifecycle.StatusResult) {
 		field{Label: "State", Value: displayValue(summary.State)},
 		field{Label: "Next", Value: displayValue(summary.Next)},
 	)
+	if len(summary.Lineage) != 0 {
+		text.section("Lineage")
+		lineage := make([]field, 0, len(summary.Lineage))
+		for _, entry := range summary.Lineage {
+			lineage = append(lineage, field{Label: "Operation", Value: displayValue(entry.Operation) + "  " + displayValue(entry.Verb) + "  " + displayValue(entry.State)})
+		}
+		text.verbatimFields(lineage...)
+	}
 	if len(summary.Blocks) != 0 {
 		text.section("")
 		text.lifecycleOutcomes(summary.Blocks)

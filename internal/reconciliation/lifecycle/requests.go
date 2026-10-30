@@ -350,6 +350,12 @@ type SecretSummary struct {
 	Bindings int
 }
 
+type LineageEntry struct {
+	Operation string
+	Verb      string
+	State     string
+}
+
 type LifecycleSummary struct {
 	Operation string
 	Verb      string
@@ -357,6 +363,7 @@ type LifecycleSummary struct {
 	Next      string
 	Blocks    []BlockResult
 	Logs      []string
+	Lineage   []LineageEntry
 	// Executable is the identity of the build that registered this operation.
 	// A removal is planned from what that build froze, so an operator reads the
 	// remedy for a request this one cannot read before meeting the refusal.

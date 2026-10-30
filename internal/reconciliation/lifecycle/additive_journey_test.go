@@ -312,3 +312,133 @@ func TestAnInterruptedAdditiveApplyIsContinuedByAnotherBuildThatFreezesTheSameBl
 		t.Fatalf("continuation under another build = %+v (%v)", result, diagnostics.Of(err))
 	}
 }
+
+// An instance the root apply holds is explained as a plain apply's whichever
+// operation the explanation is asked through, and only an instance of an
+// additive apply that has not completed is explained as an addition.
+func TestAnInstanceIsExplainedByTheApplyThatHoldsIt(t *testing.T) {
+	f := newAdditiveFixture(t, addonBinding("cluster", "nmstate"))
+	f.root(t)
+	f.publish("rev-2", addonBinding("cluster", "nmstate", "metallb"))
+	f.capability.errorFor = map[string]error{"addon-metallb": errors.New("seeded failure")}
+	if _, err := apply(f.harness); err == nil {
+		t.Fatal("the seeded failure did not fire")
+	}
+	head, plan := headPlan(t, f.harness)
+	if head.State == reconciliation.OperationDone {
+		t.Fatalf("the additive apply is %s", head.State)
+	}
+	ctx, store := context.Background(), lineageReader(f.harness)
+	added, held := plan.Block("addon-metallb")
+	if !held {
+		t.Fatal("the additive plan holds no addon-metallb")
+	}
+	rootPlan, err := store.ReadPlan(ctx, head.Predecessor)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rooted, held := rootPlan.Block("addon-nmstate")
+	if !held {
+		t.Fatal("the root plan holds no addon-nmstate")
+	}
+	if got := f.service.explainIn(ctx, store, head, reconciliation.Apply, added, nil); got.Remedy != "remove the object" {
+		t.Errorf("an instance of the additive apply is explained %+v", got)
+	}
+	if got := f.service.explainIn(ctx, store, head, reconciliation.Apply, rooted, nil); got.Remedy != "destroy and apply again" {
+		t.Errorf("an instance of the root apply seen through the additive head is explained %+v", got)
+	}
+	head.State = reconciliation.OperationDone
+	if got := f.service.explainIn(ctx, store, head, reconciliation.Apply, added, nil); got.Remedy != "destroy and apply again" {
+		t.Errorf("an instance of a completed additive apply is explained %+v", got)
+	}
+}
+
+func TestAnAdditionThatNeedsAHostReservationRefusesWhileOneThePlanHeldIsAdmitted(t *testing.T) {
+	f := newAdditiveFixture(t)
+	f.capability.reserves = "metallb"
+	f.root(t)
+	f.publish("rev-2", addonBinding("cluster", "metallb"))
+	ran := len(f.capability.applies)
+	f.refusedWith(t, "host reservation", "additive apply never takes")
+	if len(f.capability.applies) != ran {
+		t.Fatalf("a refused apply ran %v", f.capability.applies[ran:])
+	}
+
+	held := newAdditiveFixture(t, addonBinding("cluster", "metallb"))
+	held.capability.reserves = "metallb"
+	held.root(t)
+	held.publish("rev-2", addonBinding("cluster", "metallb", "nmstate"))
+	if _, err := apply(held.harness); err != nil {
+		t.Fatalf("an addition beside a reservation the frozen plan held refused: %+v", diagnostics.Of(err))
+	}
+	if head, _ := durableOperation(t, held.harness); head.Predecessor == "" {
+		t.Fatalf("the apply was no addition: %+v", head)
+	}
+}
+
+func TestADiffWithoutObserveDoesNotProveTheCustodyOfAnAddition(t *testing.T) {
+	f := newAdditiveFixture(t)
+	f.root(t)
+	f.publish("rev-2", addonBinding("cluster", "nmstate"))
+	f.binder.produced = nil
+	result, err := f.service.Diff(context.Background(), DiffRequest{ContextName: testContextName})
+	if err != nil || !result.Adds {
+		t.Fatalf("diff = %+v (%v), want an addition predicted without proving custody", result, err)
+	}
+	f.refusedWith(t, "addon-nmstate cannot be added", "missing")
+}
+
+func secretObject(name, source string) api.Object {
+	return api.NewObject(api.Secret, name, api.Value{}, api.MapValue(api.FieldValue{Name: "source", Value: api.StringValue(source)}))
+}
+
+// A Secret the added instance names for the first time is added beside it; a
+// Secret that no added block names, that a lineage block already names, or
+// that changed or went away is no addition.
+func TestAnAdditiveApplyAdmitsOnlyANewSecretAnAddedBlockNames(t *testing.T) {
+	f := newAdditiveFixture(t)
+	f.root(t)
+	f.publish("rev-2", addonBinding("cluster", "nmstate"), secretObject(addonSecret, "file:one"))
+	if result, err := apply(f.harness); err != nil || result.Receipt.State != "done" {
+		t.Fatalf("an added Secret the added block names refused: %+v (%v)", result, diagnostics.Of(err))
+	}
+	if head, _ := durableOperation(t, f.harness); head.Predecessor == "" {
+		t.Fatalf("the apply was no addition: %+v", head)
+	}
+	refused := map[string]struct {
+		initial, next []api.Object
+		fragments     []string
+	}{
+		"an added Secret no added block names": {
+			next:      []api.Object{addonBinding("cluster", "nmstate"), secretObject("unrelated", "file:one")},
+			fragments: []string{"Secret unrelated is added", "no added block names it"},
+		},
+		"an added Secret a lineage block already names": {
+			initial:   []api.Object{addonBinding("cluster", "nmstate")},
+			next:      []api.Object{addonBinding("cluster", "nmstate", "metallb"), secretObject(addonSecret, "file:one")},
+			fragments: []string{"Secret " + addonSecret + " is added"},
+		},
+		"a changed Secret": {
+			initial:   []api.Object{secretObject(addonSecret, "file:one")},
+			next:      []api.Object{addonBinding("cluster", "nmstate"), secretObject(addonSecret, "file:two")},
+			fragments: []string{"changes Secret/" + addonSecret},
+		},
+		"a removed Secret": {
+			initial:   []api.Object{secretObject(addonSecret, "file:one")},
+			next:      []api.Object{addonBinding("cluster", "nmstate")},
+			fragments: []string{"removes Secret/" + addonSecret},
+		},
+	}
+	for name, test := range refused {
+		t.Run(name, func(t *testing.T) {
+			f := newAdditiveFixture(t, test.initial...)
+			f.root(t)
+			ran := len(f.capability.applies)
+			f.publish("rev-2", test.next...)
+			f.refusedWith(t, test.fragments...)
+			if len(f.capability.applies) != ran {
+				t.Fatalf("a refused apply ran %v", f.capability.applies[ran:])
+			}
+		})
+	}
+}

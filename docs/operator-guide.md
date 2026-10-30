@@ -550,6 +550,10 @@ section routes the journey; each linked section owns its rules.
   holds.
 - Run it again: what a settled apply and a changed binding do is the
   [lifecycle unit](../specs/state-reconciliation.md#lifecycle-unit)'s rule.
+- Add one later: put a package or a binding in the input of a completed
+  context and run `apply`; the [additive apply](../specs/state-reconciliation.md#additive-apply)
+  states what it admits and what refuses, and `destroy` takes back both applies
+  ([continuation and removal](../specs/state-reconciliation.md#continuation-and-removal)).
 - Remove it: `destroy` retires the instance with its cluster
   ([retirement](../specs/add-ons.md#retirement)).
 

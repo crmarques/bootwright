@@ -2,7 +2,6 @@ package instance
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"slices"
 
@@ -190,34 +189,6 @@ func (c Capability) run(ctx context.Context, execution lifecycle.Execution, oper
 	result, err := driver.Run(ctx, c.runner, execution, operation, driver.Config{Placements: placements, Implementation: Implementation, Variable: "bootwright_addon_instance", EvidenceVersion: evidenceVersion, Placement: request.Placement, Tool: controller.InstalledTool{Kind: request.Tool.Kind, Compatibility: request.Tool.Compatibility, Version: request.Tool.Version, Executable: "oc"}, BudgetSeconds: request.BudgetSeconds, ProducedInput: request.ProducedInputs[0]})
 	return result, request, err
 }
-func (c Capability) Unresolved(verb reconciliation.Verb, block reconciliation.Block, data json.RawMessage) (lifecycle.Unresolved, bool) {
-	return c.unresolved(verb, block, data, "destroy and apply again")
-}
-
-func (c Capability) UnresolvedAdded(verb reconciliation.Verb, block reconciliation.Block, data json.RawMessage) (lifecycle.Unresolved, bool) {
-	return c.unresolved(verb, block, data, "remove or correct the object on the cluster")
-}
-
-func (c Capability) unresolved(verb reconciliation.Verb, block reconciliation.Block, data json.RawMessage, remedy string) (lifecycle.Unresolved, bool) {
-	request, err := DecodeRequest(block.Request)
-	if err != nil || verb == reconciliation.Destroy {
-		return lifecycle.Unresolved{}, false
-	}
-	evidence, err := decodeEvidence(data, block.RequestDigest)
-	if err != nil {
-		return lifecycle.Unresolved{}, false
-	}
-	for _, object := range evidence.Observations {
-		if object.Ownership == co.Foreign || object.Ownership == co.Unknown {
-			return lifecycle.Unresolved{Reason: object.Kind + "/" + object.Namespace + "/" + object.Name + " is foreign or could not be read", Remedy: remedy}, true
-		}
-	}
-	for _, olm := range evidence.OLM {
-		return lifecycle.Unresolved{Reason: "Subscription/" + olm.Namespace + "/" + olm.Subscription + " reports CSV " + olm.InstalledCSV + " without proving the declared installation", Remedy: remedy}, true
-	}
-	return lifecycle.Unresolved{Reason: "add-on " + request.Package + " on " + request.Cluster + " did not prove its objects and checks", Remedy: remedy}, true
-}
-
 func (c Capability) ReadsMaterialOnlyInApply(block reconciliation.Block) bool {
 	_, err := DecodeRequest(block.Request)
 	return err == nil

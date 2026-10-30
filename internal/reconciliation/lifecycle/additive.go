@@ -2,10 +2,12 @@ package lifecycle
 
 import (
 	"context"
+	"reflect"
 	"slices"
 	"strings"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
+	"github.com/crmarques/bootwright/internal/controller/prerequisites"
 	"github.com/crmarques/bootwright/internal/desiredstate/compilation"
 	"github.com/crmarques/bootwright/internal/reconciliation"
 	"github.com/crmarques/bootwright/internal/reconciliation/operationstore"
@@ -20,27 +22,29 @@ type additiveAdmission struct {
 
 const packagesPath = "spec.packages"
 
-func addsBindings(before, after api.Catalog, changes []objectChange) bool {
-	if len(changes) == 0 {
-		return false
-	}
+func addsBindings(before api.Catalog, changes []objectChange) (bool, []string) {
+	var added []string
+	bindings := false
 	for _, change := range changes {
 		kind, name, _ := strings.Cut(change.identity, "/")
-		if kind != string(api.ClusterAddonBinding) {
-			return false
-		}
-		switch change.change {
-		case reconciliation.Added:
-		case reconciliation.Changed:
+		switch {
+		case kind == string(api.Secret) && change.change == reconciliation.Added:
+			added = append(added, name)
+		case kind != string(api.ClusterAddonBinding):
+			return false, nil
+		case change.change == reconciliation.Added:
+			bindings = true
+		case change.change == reconciliation.Changed:
 			previous, found := before.Find(api.ClusterAddonBinding, name)
 			if !found || !addsPackageMembers(previous, change.fields) {
-				return false
+				return false, nil
 			}
+			bindings = true
 		default:
-			return false
+			return false, nil
 		}
 	}
-	return true
+	return bindings, added
 }
 
 func addsPackageMembers(previous api.Object, fields []string) bool {
@@ -59,12 +63,16 @@ func addsPackageMembers(previous api.Object, fields []string) bool {
 	return true
 }
 
-func (s Service) additive(ctx context.Context, view View, store recordReader, operation operationstore.Operation, frozen reconciliation.Plan, states map[string]reconciliation.BlockState) (*additiveAdmission, error) {
+func (s Service) additive(ctx context.Context, view View, store recordReader, operation operationstore.Operation, frozen reconciliation.Plan, states map[string]reconciliation.BlockState, proveCustody bool) (*additiveAdmission, error) {
 	if operation.Verb != reconciliation.Apply || operation.State != reconciliation.OperationDone || inputDrift(view, operation) == "" {
 		return nil, nil
 	}
 	before, after, ok := s.compiledBoth(ctx, view, operation)
-	if !ok || !addsBindings(before.Effective(), after.Effective(), objectChanges(before.Effective(), after.Effective())) {
+	if !ok {
+		return nil, nil
+	}
+	adds, addedSecrets := addsBindings(before.Effective(), objectChanges(before.Effective(), after.Effective()))
+	if !adds {
 		return nil, nil
 	}
 	unfinished, err := unfinishedOver(ctx, store, operation, frozen, states)
@@ -100,15 +108,68 @@ func (s Service) additive(ctx context.Context, view View, store recordReader, op
 	if delta.Count(reconciliation.Added) == 0 {
 		return nil, nil
 	}
+	if err := s.refuseNewReservations(ctx, view, before, planned); err != nil {
+		return nil, err
+	}
 	admission, err := s.admission(ctx, view, chain, held, fresh)
 	if err != nil {
 		return nil, err
 	}
 	admission.controller = planned.controller
+	if err := s.refuseUnnamedSecrets(view, chain, admission, addedSecrets); err != nil {
+		return nil, err
+	}
+	if !proveCustody {
+		return admission, nil
+	}
 	if err := s.custodyProved(ctx, view, chain, admission.plan); err != nil {
 		return nil, err
 	}
 	return admission, nil
+}
+
+func (s Service) refuseNewReservations(ctx context.Context, view View, before *compilation.State, after capabilityBinding) error {
+	_, held, err := s.planFrom(ctx, view, before, reconciliation.Apply)
+	if err != nil {
+		return err
+	}
+	unheld := func(reservation prerequisites.HostReservation) bool {
+		return !slices.ContainsFunc(held.reservations, func(other prerequisites.HostReservation) bool { return reflect.DeepEqual(reservation, other) })
+	}
+	unkeyed := func(claim hostKeyedClaim) bool {
+		return !slices.ContainsFunc(held.hostKeyed, func(other hostKeyedClaim) bool { return reflect.DeepEqual(claim, other) })
+	}
+	if slices.ContainsFunc(after.reservations, unheld) || slices.ContainsFunc(after.hostKeyed, unkeyed) {
+		return failure("lifecycle.state", "the added blocks need a host reservation or an SSH reservation, which an additive apply never takes", changeRemedy(view))
+	}
+	return nil
+}
+
+func (s Service) refuseUnnamedSecrets(view View, chain lineage, admission *additiveAdmission, added []string) error {
+	if len(added) == 0 {
+		return nil
+	}
+	var held []string
+	for _, member := range chain {
+		for _, block := range member.plan.Blocks {
+			capability, found := s.capabilities.Resolve(block.Kind, block.Implementation)
+			referencer, names := capability.(SecretReferencer)
+			if !found || !names {
+				return failure("lifecycle.state", "the block "+block.ID+" cannot name the Secrets it references, so no Secret is added beside it", changeRemedy(view))
+			}
+			references, err := referencer.SecretReferences(block)
+			if err != nil {
+				return err
+			}
+			held = append(held, references...)
+		}
+	}
+	for _, name := range added {
+		if !slices.Contains(admission.secrets, name) || slices.Contains(held, name) {
+			return failure("lifecycle.state", "the Secret "+name+" is added, and no added block names it for the first time, so the input is no addition to the completed apply", changeRemedy(view))
+		}
+	}
+	return nil
 }
 
 func (s Service) compiledBoth(ctx context.Context, view View, operation operationstore.Operation) (before, after *compilation.State, ok bool) {

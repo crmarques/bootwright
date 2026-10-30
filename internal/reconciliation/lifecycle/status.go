@@ -255,13 +255,9 @@ func (s Service) status(ctx context.Context, view View) (*StatusResult, *api.Cat
 	if err := s.explainUnproved(ctx, store, operation, plan, blocks, continuationCommand(view.Identity().Name, operation, plan, states)); err != nil {
 		return nil, nil, err
 	}
-	summary := &LifecycleSummary{
-		Operation: operation.ID, Verb: string(operation.Verb), State: string(operation.State),
-		Next: nextAction(operation, plan, states), Blocks: blocks, Logs: logs,
-		Executable: buildIdentity(operation.Executable), AnotherBuild: s.otherBuild(operation),
-	}
-	if summary.Logs == nil {
-		summary.Logs = []string{}
+	summary, err := s.lifecycleSummary(ctx, store, operation, plan, states, blocks, logs)
+	if err != nil {
+		return nil, nil, err
 	}
 	result.Lifecycle = summary
 	result.Warnings, result.LogLocation = attemptWarnings(ctx, store, operation.ID, plan, attempts), store.LogDirectory(operation.ID)
@@ -279,6 +275,20 @@ func (s Service) status(ctx context.Context, view View) (*StatusResult, *api.Cat
 		return nil, nil, err
 	}
 	return result, selected, nil
+}
+
+func (s Service) lifecycleSummary(ctx context.Context, store OperationStore, operation operationstore.Operation, plan reconciliation.Plan, states map[string]reconciliation.BlockState, blocks []BlockResult, logs []string) (*LifecycleSummary, error) {
+	summary := &LifecycleSummary{
+		Operation: operation.ID, Verb: string(operation.Verb), State: string(operation.State),
+		Next: nextAction(operation, plan, states), Blocks: blocks, Logs: logs,
+		Executable: buildIdentity(operation.Executable), AnotherBuild: s.otherBuild(operation),
+	}
+	if summary.Logs == nil {
+		summary.Logs = []string{}
+	}
+	var err error
+	summary.Lineage, err = lineageEntries(ctx, store, operation, plan, states)
+	return summary, err
 }
 
 func attemptWarnings(ctx context.Context, store OperationStore, operation string, plan reconciliation.Plan, attempts map[string]int) []diagnostics.Diagnostic {

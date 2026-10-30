@@ -1,0 +1,81 @@
+{
+  "schemaVersion": "v1alpha1",
+  "command": "status",
+  "ok": true,
+  "exitCode": 0,
+  "result": {
+    "context": {
+      "name": "lab",
+      "mode": "ready"
+    },
+    "setupChecks": [
+      {
+        "id": "controller-binding",
+        "status": "ready"
+      }
+    ],
+    "desired": {
+      "revision": "rev-3b8d0f5a9c1e4d7b2a6f8c0e1d3b5a7f",
+      "environment": "lab",
+      "counts": {
+        "filesSeen": 6,
+        "objectsDecoded": 6
+      }
+    },
+    "clusters": [
+      {
+        "name": "ocp-01",
+        "kind": "OpenShiftCluster",
+        "status": "done"
+      }
+    ],
+    "storageClusters": [],
+    "shared": [],
+    "secrets": {
+      "declared": 1,
+      "bindings": 1
+    },
+    "readiness": [],
+    "nextSteps": [
+      "bootwright destroy --context lab"
+    ],
+    "lifecycle": {
+      "operation": "op-0a4b8c2d6e1f3a5b7c9d0e2f4a6b8c1d",
+      "verb": "apply",
+      "state": "done",
+      "next": "none",
+      "anotherBuild": false,
+      "lineage": [
+        {
+          "operation": "op-6f1c2a9e0b7d4c3f8a5e2d1b0c9f8e7a",
+          "verb": "apply",
+          "state": "done"
+        },
+        {
+          "operation": "op-0a4b8c2d6e1f3a5b7c9d0e2f4a6b8c1d",
+          "verb": "apply",
+          "state": "done"
+        }
+      ],
+      "blocks": [
+        {
+          "id": "addon-metallb-ocp-01",
+          "description": "install the add-on metallb on ocp-01",
+          "stage": "add-ons",
+          "state": "done",
+          "attempts": 1
+        }
+      ],
+      "logs": [
+        "contexts/lab/state/operations/op-0a4b8c2d6e1f3a5b7c9d0e2f4a6b8c1d/logs/operation.jsonl"
+      ]
+    },
+    "handoff": {
+      "ready": true,
+      "reasons": []
+    },
+    "contradictions": []
+  },
+  "diagnostics": [],
+  "logs": []
+}

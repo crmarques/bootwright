@@ -244,7 +244,7 @@ Successful result objects have stable top-level fields:
 | `secret set`, `secret generate`, `secret delete` | `context`, optional `name`, `changed`, `unchanged`, `changedNames`, `unchangedNames`, `parts` |
 | `secret encryption init`, `secret encryption rotate` | `context`, `implementation`, `activeKey`, `changed`, `retiredKeys`, `reencryptedVersions`, `reencryptedParts` |
 | `media add`, `media delete` | `name`, `outcome`, `size`, optional `sha256` |
-| `plan` | `context`, `verb`, `steps`, `stages`, optional `until`, `waves`, `widest`, `bound`, `startable`, `deferred`, `continuation`, `finalizes`, optional `anotherBuild`, `stops`, `stopsAfterOnline`, optional `checks`, `receipt` |
+| `plan` | `context`, `verb`, `steps`, `stages`, optional `until`, `waves`, `widest`, `bound`, `startable`, `deferred`, `continuation`, `finalizes`, optional `addsTo`, optional `takesBack`, optional `anotherBuild`, `stops`, `stopsAfterOnline`, optional `checks`, `receipt` |
 | `apply`, `destroy` | `context`, `verb`, `steps`, `blocks`, `settled`, `recovered`, `next`, `receipt` |
 | `add-ons list` | `addOns` (each: `name`, `provides`, `requires`, `olmPackage`, `defaultSource`, `configuration`) |
 | `add-ons info` | `package` (`name`, `summary`, `provides`, `requires`, `requiresMeaning`, `olmPackage`, `defaultSource`, `secretNamespaces`, `lookup`, `configuration`, `binding`; each configuration entry: `path`, `type`, `required`, `requiredWithin`, `default`, `values`) |
@@ -254,7 +254,7 @@ Successful result objects have stable top-level fields:
 | `validate` | `counts`, `excludedContainerClusters`, `excludedStorageClusters`, `advisories` |
 | `preflight infra`, `preflight clusters`, `preflight container-cluster`, `preflight storage-cluster`, `preflight add-ons`, `preflight all` | `context`, `target`, `checks`, `summary` |
 | `status` | `context`, `setupChecks`, `desired`, `clusters`, `storageClusters`, `shared`, `secrets`, `readiness`, `nextSteps`, `lifecycle`, `handoff`, `contradictions` |
-| `diff` | `context`, `operation`, `input`, `plan`, `observed`, `blocks`, `objects`, `summary` |
+| `diff` | `context`, `operation`, `input`, optional `adds`, `plan`, `observed`, `blocks`, `objects`, `summary` |
 | `render` | optional `inputDir`, `outputDir`, `effectiveStatePath`, `objects` |
 | `render effective` | `counts`, `effectiveState`, and with `--origins` `origins` |
 | `render installer` | `clusters` |
@@ -297,7 +297,10 @@ what an `apply` or `destroy` reached for those blocks: `id`, `description`,
 instance, as `<cluster>.<package>`, when one was given; `waves`, `widest`, `bound`, `startable`
 and `deferred` are the counts of the `Concurrency` and selection fields below;
 `continuation` and `finalizes` say whether a preview continues an operation or
-only completes its finalization; `stops` and `stopsAfterOnline` name the
+only completes its finalization; `addsTo` names the apply an
+[additive apply](../state-reconciliation.md#additive-apply) adds to, and
+`takesBack` lists, oldest first, the applies a `destroy` takes back when that
+apply has predecessors, each omitted otherwise; `stops` and `stopsAfterOnline` name the
 Machines of `Stop first` and `Stop after online cleanup`; `anotherBuild` carries
 `registeredBy` and the `steps` places this build runs; `authorizations`, present
 when the plan consumes one, lists each required token bound to the digest of
@@ -788,7 +791,9 @@ with no step left to run under this build carry no such field. A fresh
 `destroy`'s plan, previewed or presented, adds a `Stop first` field naming in
 plan order the Machines whose initial removal quiescence gate observes on the host,
 as `Stop first  rhel-01, rhel-02`, because that gate follows the prompt; a
-continuation is not gated again and carries none. Every
+continuation is not gated again and carries none. An additive apply's plan
+opens with `adds to operation <id>; runs none of its blocks`, and a `destroy`
+of a lineage closes with `Takes back  <id>, then <id>` beside `takesBack`. Every
 presentation of a plan that consumes an authorization closes with a `Requires`
 field naming each token the whole frozen plan requires, bound to the digest of
 the steps that consume it, and those steps, as
@@ -833,7 +838,7 @@ probe. Its result orders these fields:
 | `secrets` | `declared`, the Secret objects the selected input declares, and `bindings`, the Secret bindings the current operation's record holds: one per operation however many Secrets it covers, and 0 beside no operation and once a completed removal finalized, which its pristine evidence proves without reading the keyring. |
 | `readiness` | Ordered `{kind, name, state, remedy}` rows for what the next `plan` and `apply` read from the selected input and the host does not hold: each declared Secret whose material is `missing` or `stale` as [`secret check`](../secrets.md) reports it (`kind` `secret`, ordered by name), then each installer image a MachineImage's `bootMedia` or a MachineInstallProfile's `hostedTree.fromMedia` names that [`media list`](../managed-os.md) does not show (`kind` `media`, `state` `missing`, ordered by name). `remedy` is the command that supplies it: `bootwright secret set --context <name> --name <secret> ...` or `bootwright secret generate ...` as `secret check` names it, and `bootwright media add --name <image> --from-file <path>`, with `<path>` left for the operator. The rows come from the keyring's metadata and the media store's records alone, never from Secret material or image bytes, under the shared reads those commands take, and run no effect. `[]` beside an operation, where the frozen plan and its Secret binding decide, while a deletion or `bootwright controller install` is the only step, when nothing is missing, and when a read fails (`secret check` and `media list` report the failure); a failed read leaves only its own rows out. Human output has a Readiness section listing each row's state and `Kind/name`, omitted when empty. |
 | `nextSteps` | Ordered command strings whose decision would pass over the records `status` read, as the [lifecycle receipt](../cli.md#lifecycle-receipt) states; empty when none would. Each `readiness` remedy, in row order, precedes the `plan` step. |
-| `lifecycle` | `null` when no operation exists, else `operation`, `verb`, `state`, `next` (the receipt's action token, which the human Lifecycle `Next` row prints as the receipt does; the command it maps to is in `nextSteps`), `anotherBuild` (boolean: the build in hand is not the one that registered the operation, by the rule of [another build](../state-reconciliation.md#dependency-safety-during-recovery)), ordered `blocks` of `{id, description, stage, state, attempts}`, and `logs` of safe paths relative to the state root, in the order and form the envelope's [`logs`](#private-operation-logs) list them. A block that is `unknown` or `running` adds `unresolved`, `{reason, remedy}`: why its outcome is unproved and what the operator does, which for a block no resolution observed is the exact command, with `--context` and the frozen plan's `--authorize` tokens, that observes it, as its [resolution](../state-reconciliation.md#attempts-and-unknown-outcomes) names them; every other block omits it. |
+| `lifecycle` | `null` when no operation exists, else `operation`, `verb`, `state`, `next` (the receipt's action token, which the human Lifecycle `Next` row prints as the receipt does; the command it maps to is in `nextSteps`), `anotherBuild` (boolean: the build in hand is not the one that registered the operation, by the rule of [another build](../state-reconciliation.md#dependency-safety-during-recovery)), `lineage` (present only when the operation is an [additive apply](../state-reconciliation.md#additive-apply): the applies it adds to, root first and itself last, each `{operation, verb, state}`), ordered `blocks` of `{id, description, stage, state, attempts}`, and `logs` of safe paths relative to the state root, in the order and form the envelope's [`logs`](#private-operation-logs) list them. A block that is `unknown` or `running` adds `unresolved`, `{reason, remedy}`: why its outcome is unproved and what the operator does, which for a block no resolution observed is the exact command, with `--context` and the frozen plan's `--authorize` tokens, that observes it, as its [resolution](../state-reconciliation.md#attempts-and-unknown-outcomes) names them; every other block omits it. |
 | `handoff` | `{ready, reasons}` derived from the [handoff predicate](../state-reconciliation.md#bootstrap-completion-and-gitops-readiness), with a boolean `ready` and ordered reason strings; `reasons` is `[]` when ready. Human output has a Handoff section with `ready`, or `not ready` followed by each reason. A completed apply with a latched log fault over unchanged input offers the settled apply in `nextSteps` as the invocation that [restores](../state-reconciliation.md#converging-an-effect) that boundary. |
 | `contradictions` | Ordered strings naming what the context's durable records contradict, each worded as the [refusal](../state-reconciliation.md#continuation-and-removal) over those records names it, and last an operation whose continuation or removal reopens a frozen Secret binding the context's keyring no longer lists, or whose keyring listing fails reporting the material corrupt or undecryptable; empty when nothing does. |
 
@@ -888,7 +893,8 @@ stamped with no version, followed by `, another build than this one` when
 record names no executable), and the host directory of its logs, which JSON
 leaves out, and an `Unresolved <block>` section follows it for each block that
 carries `unresolved`, with its
-`Reason` and `Remedy`.
+`Reason` and `Remedy`. A `Lineage` section follows the Lifecycle fields when
+`lineage` is present, one `Operation` row of the id, verb and state of each apply.
 
 An `apply` or `destroy` reports each warning its attempts' adapters returned
 with a completed result ([adapter warnings](../architecture.md#the-adapter-result-protocol))
@@ -914,6 +920,7 @@ object of `objects` beside the unified `patch` lines the text result prints:
 | `context` | `name` of the resolved context and `revision` of its selected input. |
 | `operation` | `id`, `verb` and `state` of the current operation, `apply` and `revision` of the apply the comparison reads (the current apply, or the apply a removal takes back), and `applied`: `readable`, or the reason that apply's input revision cannot be read. Every value is `""` when the context holds no operation. |
 | `input` | `none`, `unchanged` or `changed`, by the [comparison rules](../state-reconciliation.md#comparing-desired-and-real-state). |
+| `adds` | `true`, and omitted otherwise, when `input` is `changed` and an [additive apply](../state-reconciliation.md#additive-apply) admits the change; `diff` without `--observe` predicts that admission without proving the custody of the produced material the added instances borrow. |
 | `plan` | `state` (`none`, `same`, `differs` or `unplanned`), the planner's `reason` when `unplanned`, the counts of `changed`, `added` and `removed` blocks, and `rebuilt`, the ids of the blocks another build plans differently. |
 | `observed`, `blocks` | Whether the comparison read a host, and the counts of blocks `observed`, left `unknown` and `unprojected`. Without a host read they are `false` and zeros. |
 | `objects` | Every declared, applied or planned object in API kind order and then name, except one that is both undeclared and absent. |

@@ -463,7 +463,7 @@ func (s Service) decideFrom(ctx context.Context, view View, verb reconciliation.
 	}
 	if verb == "" {
 		held := standing{held: true, verb: operation.Verb, state: operation.State}
-		admitted, _ := s.additive(ctx, view, store, operation, frozen, states)
+		admitted, _ := s.additive(ctx, view, store, operation, frozen, states, true)
 		held.additive = admitted != nil
 		if verb = chosenVerb(held); verb == reconciliation.Destroy {
 			selection = reconciliation.Selection{}
@@ -493,7 +493,7 @@ func (s Service) decideBy(ctx context.Context, view View, store OperationStore, 
 	var admitted *additiveAdmission
 	var refused error
 	if verb == reconciliation.Apply {
-		admitted, refused = s.additive(ctx, view, store, operation, frozen, states)
+		admitted, refused = s.additive(ctx, view, store, operation, frozen, states, true)
 		held.additive = admitted != nil
 	}
 	switch classify(verb, held) {

@@ -92,11 +92,47 @@ func TestAnUnresolvedAddedInstanceNamesTheContinuationNotADestroy(t *testing.T) 
 	if !ok || plain.Remedy != "destroy and apply again" {
 		t.Fatalf("a plain apply's instance is explained %+v", plain)
 	}
-	added, ok := capability.UnresolvedAdded(reconciliation.Apply, block, encoded(t, evidence))
+	added, ok := capability.UnresolvedAdded(reconciliation.Apply, block, encoded(t, evidence), nil)
 	if !ok || added.Reason != plain.Reason || strings.Contains(added.Remedy, "destroy") || added.Remedy == "" {
 		t.Fatalf("an added instance is explained %+v beside %+v", added, plain)
 	}
-	if _, ok := capability.UnresolvedAdded(reconciliation.Destroy, block, encoded(t, evidence)); ok {
+	if _, ok := capability.UnresolvedAdded(reconciliation.Destroy, block, encoded(t, evidence), nil); ok {
 		t.Fatal("a removal was explained as an addition")
+	}
+}
+
+func TestAnUnresolvedAddedInstanceNeverInvitesDeletingAnObjectAnotherInstanceDeclares(t *testing.T) {
+	request := fixtureRequest(t)
+	block := fixtureBlock(t, request)
+	evidence := fixtureEvidence(t, request, block.RequestDigest)
+	evidence.Observations[0].Ownership = co.Foreign
+	capability := New(nil, fixtureRegistry(t), nil)
+	sibling := block
+	sibling.ID = "addon-sibling"
+	otherCluster := fixtureRequest(t)
+	otherCluster.Cluster = "elsewhere"
+	otherCluster.ProducedInputs = []lifecycle.ProducedInput{{Kind: "OpenShiftCluster", Object: "elsewhere", Output: "kubeconfig"}}
+	elsewhere := fixtureBlock(t, otherCluster)
+	elsewhere.ID = "addon-elsewhere"
+	for name, test := range map[string]struct {
+		lineage []lifecycle.OwnedBlock
+		holds   string
+		deletes bool
+	}{
+		"a sibling instance of the lineage declares it": {lineage: []lifecycle.OwnedBlock{{Operation: "op-root", Block: sibling}}, holds: "op-root"},
+		"the block itself is no owner":                  {lineage: []lifecycle.OwnedBlock{{Operation: "op-self", Block: block}}, deletes: true},
+		"an instance of another cluster is no owner":    {lineage: []lifecycle.OwnedBlock{{Operation: "op-other", Block: elsewhere}}, deletes: true},
+		"no instance of the lineage declares it":        {deletes: true},
+	} {
+		unresolved, ok := capability.UnresolvedAdded(reconciliation.Apply, block, encoded(t, evidence), test.lineage)
+		if !ok {
+			t.Fatalf("%s: nothing explained", name)
+		}
+		switch {
+		case test.deletes && (!strings.Contains(unresolved.Remedy, "if no add-on of this context owns it") || strings.Contains(unresolved.Remedy, "op-")):
+			t.Errorf("%s: the remedy reads %q", name, unresolved.Remedy)
+		case !test.deletes && (!strings.Contains(unresolved.Remedy, test.holds) || strings.Contains(unresolved.Remedy, "remove") || strings.Contains(unresolved.Remedy, "destroy")):
+			t.Errorf("%s: the remedy reads %q", name, unresolved.Remedy)
+		}
 	}
 }

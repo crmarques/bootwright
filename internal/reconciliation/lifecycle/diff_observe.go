@@ -247,10 +247,10 @@ func (s Service) inspect(ctx context.Context, view RunView, store recordReader, 
 		observation = observed
 		return err
 	})
-	return s.reading(read, block, observation, err)
+	return s.reading(ctx, store, read, block, observation, err)
 }
 
-func (s Service) reading(read *diffRead, block reconciliation.Block, observation Observation, err error) blockReading {
+func (s Service) reading(ctx context.Context, store recordReader, read *diffRead, block reconciliation.Block, observation Observation, err error) blockReading {
 	if err == nil {
 		switch observation.Effect {
 		case reconciliation.EffectNoEffect:
@@ -261,7 +261,7 @@ func (s Service) reading(read *diffRead, block reconciliation.Block, observation
 			return blockReading{state: sidePresent, evidence: observation.Evidence}
 		}
 	}
-	explained := s.explain(read.owning, reconciliation.Apply, block, observation.Evidence)
+	explained := s.explainIn(ctx, store, read.owning, reconciliation.Apply, block, observation.Evidence)
 	reading := blockReading{state: sideUnknown, reason: explained.Reason, remedy: explained.Remedy}
 	if explained == unexplained {
 		reading.remedy = "restore what the reason names, then " + repeatObserved(read.context.Name)

@@ -1,0 +1,15 @@
+  Destroy plan
+
+  Plan
+  Add-ons · 1 block
+    ○ 1. retire the add-on metallb on ocp-01 · pending · start
+
+  Clusters · 1 block
+    ○ 2. remove the cluster ocp-01 · pending · start
+
+    Concurrency  2 waves, widest 1 step
+    Takes back   op-6f1c2a9e0b7d4c3f8a5e2d1b0c9f8e7a, then op-0a4b8c2d6e1f3a5b7c9d0e2f4a6b8c1d
+operation: op-0a4b8c2d6e1f3a5b7c9d0e2f4a6b8c1d
+verb: plan
+state: preview
+next: destroy

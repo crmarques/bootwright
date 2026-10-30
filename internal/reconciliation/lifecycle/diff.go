@@ -66,7 +66,7 @@ func (s Service) Diff(ctx context.Context, request DiffRequest) (*DiffResult, er
 	}
 	var read diffRead
 	err = s.workspace.ReadLifecycle(ctx, name, func(view View) error {
-		value, err := s.readDiff(ctx, view)
+		value, err := s.readDiff(ctx, view, request.Observe)
 		read = value
 		return err
 	})
@@ -81,7 +81,7 @@ func (s Service) Diff(ctx context.Context, request DiffRequest) (*DiffResult, er
 	return read.result(), nil
 }
 
-func (s Service) readDiff(ctx context.Context, view View) (diffRead, error) {
+func (s Service) readDiff(ctx context.Context, view View, observed bool) (diffRead, error) {
 	var store recordReader = s.store(view)
 	read := diffRead{context: view.Identity()}
 	index, err := store.Index(ctx)
@@ -119,7 +119,7 @@ func (s Service) readDiff(ctx context.Context, view View) (diffRead, error) {
 	}
 	read.input = inputState(view, read.operation, read.owning)
 	if read.input == diffChanged && read.operation.ID == read.owning.ID {
-		added, _ := s.additive(ctx, view, store, read.owning, read.owningPlan, read.owningStates)
+		added, _ := s.additive(ctx, view, store, read.owning, read.owningPlan, read.owningStates, observed)
 		read.adds = added != nil
 	}
 	read.basis = recorded(read.operation, read.states, attempts)

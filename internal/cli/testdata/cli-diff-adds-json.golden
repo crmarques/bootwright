@@ -1,0 +1,71 @@
+{
+  "schemaVersion": "v1alpha1",
+  "command": "diff",
+  "ok": true,
+  "exitCode": 0,
+  "result": {
+    "context": {
+      "name": "lab",
+      "revision": "rev-1b7e55a0"
+    },
+    "operation": {
+      "id": "op-3f9a0c12",
+      "verb": "apply",
+      "state": "done",
+      "apply": "op-3f9a0c12",
+      "revision": "rev-1b7e55a0",
+      "applied": "readable"
+    },
+    "input": "changed",
+    "adds": true,
+    "plan": {
+      "state": "differs",
+      "reason": "",
+      "changed": 0,
+      "added": 1,
+      "removed": 0,
+      "rebuilt": []
+    },
+    "observed": false,
+    "blocks": {
+      "observed": 0,
+      "unknown": 0,
+      "unprojected": 0
+    },
+    "objects": [
+      {
+        "kind": "CephClient",
+        "name": "rbd-reader",
+        "difference": "none",
+        "plan": "same",
+        "blocks": [
+          "ceph-client-rbd-reader"
+        ],
+        "realization": "done",
+        "real": {
+          "source": "applied",
+          "state": "present",
+          "document": null,
+          "notCompared": [],
+          "notes": [],
+          "reason": "",
+          "remedy": ""
+        },
+        "desired": {
+          "document": null
+        },
+        "patch": []
+      }
+    ],
+    "summary": {
+      "none": 1,
+      "changed": 0,
+      "added": 0,
+      "removed": 0,
+      "unknown": 0,
+      "applied": 0
+    }
+  },
+  "diagnostics": [],
+  "logs": []
+}

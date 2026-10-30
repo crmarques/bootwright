@@ -1,0 +1,6 @@
+Context:  lab at input revision rev-1b7e55a0
+Against:  apply op-3f9a0c12 (done) of input revision rev-1b7e55a0, as its records prove; no host was contacted
+Input:    changed since op-3f9a0c12; bootwright apply adds it to that apply without running any of its blocks
+Plan:     this executable plans 0 blocks differently, 1 more and 0 fewer
+
+No differences: 1 object compared.

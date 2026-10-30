@@ -288,7 +288,7 @@ func (s Service) resolveUnknown(ctx context.Context, tx Transaction, store Opera
 	case resolvedEffect == reconciliation.EffectPartial || resolvedEffect == reconciliation.EffectInconclusive:
 		return state, failure("lifecycle.state", retriedEffect[resolvedEffect], resolutionRemedy(tx.Identity().Name, operation.Verb, plan, true))
 	}
-	explanation := s.explain(operation, verb, observed, observation.Evidence)
+	explanation := s.explainIn(ctx, store, operation, verb, observed, observation.Evidence)
 	_ = boundary.append(ctx, log, operationstore.LogRecord{Event: "unresolved", Block: block.ID, Detail: explanation.Reason})
 	return state, unresolvedFailure(block.ID, explanation, command)
 }

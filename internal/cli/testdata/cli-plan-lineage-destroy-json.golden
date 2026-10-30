@@ -1,0 +1,67 @@
+{
+  "schemaVersion": "v1alpha1",
+  "command": "plan",
+  "ok": true,
+  "exitCode": 0,
+  "result": {
+    "context": {
+      "name": "lab",
+      "mode": ""
+    },
+    "verb": "destroy",
+    "steps": [
+      {
+        "id": "addon-metallb-ocp-01",
+        "description": "retire the add-on metallb on ocp-01",
+        "kind": "",
+        "object": "",
+        "stage": "add-ons",
+        "impacts": [],
+        "state": "pending",
+        "selection": "start",
+        "waitsOn": "",
+        "after": [],
+        "wave": 1,
+        "consumes": []
+      },
+      {
+        "id": "cluster-ocp-01",
+        "description": "remove the cluster ocp-01",
+        "kind": "",
+        "object": "",
+        "stage": "clusters",
+        "impacts": [],
+        "state": "pending",
+        "selection": "start",
+        "waitsOn": "",
+        "after": [
+          1
+        ],
+        "wave": 2,
+        "consumes": []
+      }
+    ],
+    "stages": [],
+    "waves": 2,
+    "widest": 1,
+    "bound": 1,
+    "startable": 2,
+    "deferred": 0,
+    "continuation": false,
+    "finalizes": false,
+    "takesBack": [
+      "op-6f1c2a9e0b7d4c3f8a5e2d1b0c9f8e7a",
+      "op-0a4b8c2d6e1f3a5b7c9d0e2f4a6b8c1d"
+    ],
+    "stops": [],
+    "stopsAfterOnline": [],
+    "receipt": {
+      "operation": "op-0a4b8c2d6e1f3a5b7c9d0e2f4a6b8c1d",
+      "verb": "plan",
+      "state": "preview",
+      "next": "destroy"
+    }
+  },
+  "diagnostics": [],
+  "logs": []
+}

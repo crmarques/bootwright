@@ -133,7 +133,7 @@ func (s Service) protect(ctx context.Context, name string, decided transition, r
 		if err != nil {
 			return err
 		}
-		if err := store.Claim(ctx, identity, decided.plan); err != nil {
+		if err := store.ClaimAdding(ctx, identity, decided.plan, decided.predecessor); err != nil {
 			claimed, listed := store.Claimed(recordingContext(ctx))
 			record.raised = listed != nil || slices.Contains(claimed, identity)
 			return atTheBound(ctx, tx, store, reconciliation.Apply, err)

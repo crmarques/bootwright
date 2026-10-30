@@ -232,7 +232,7 @@ one `ResolutionTransition` caller guard it, and `LastResolution` (:957) parses
 entry names differently. Decision: the store refuses an inadmissible
 transition before a second caller exists.
 
-**[B575](../../specs/milestones/m4.md#b575),
+**[B575](../../specs/milestones/delivered.md#x234--additive-apply-of-add-on-instances),
 [B580](../../specs/milestones/backlog.md#b580),
 [B581](../../specs/milestones/backlog.md#b581): the transition rule is
 restated.** `previewed` (`internal/reconciliation/lifecycle/service.go:178`),
