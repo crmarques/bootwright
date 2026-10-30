@@ -42,6 +42,7 @@ type diffRead struct {
 	applied       api.Catalog
 	appliedReason string
 	input         string
+	adds          bool
 	fresh         reconciliation.Plan
 	planReason    string
 	delta         reconciliation.Delta
@@ -117,6 +118,10 @@ func (s Service) readDiff(ctx context.Context, view View) (diffRead, error) {
 		return diffRead{}, err
 	}
 	read.input = inputState(view, read.operation, read.owning)
+	if read.input == diffChanged && read.operation.ID == read.owning.ID {
+		added, _ := s.additive(ctx, view, store, read.owning, read.owningPlan, read.owningStates)
+		read.adds = added != nil
+	}
 	read.basis = recorded(read.operation, read.states, attempts)
 	if read.binding, err = removalBinding(ctx, store, read.owning); err != nil {
 		return diffRead{}, err
@@ -259,7 +264,7 @@ func (r diffRead) result() *DiffResult {
 	if r.owning.ID != "" {
 		operation.Applied = cmp.Or(r.appliedReason, diffReadable)
 	}
-	return &DiffResult{Context: r.context, Operation: operation, Input: r.input, Plan: plan, Observed: r.observed, Blocks: r.blocks, Objects: joinObjects(r)}
+	return &DiffResult{Context: r.context, Operation: operation, Input: r.input, Adds: r.adds, Plan: plan, Observed: r.observed, Blocks: r.blocks, Objects: joinObjects(r)}
 }
 
 type objectPlan struct {

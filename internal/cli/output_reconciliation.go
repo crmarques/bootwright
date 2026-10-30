@@ -152,6 +152,10 @@ func writeLifecycleSteps(text *display, result lifecycle.PlanResult) {
 		text.lines([]string{"no blocks"})
 		return
 	}
+	if result.AddsTo != "" {
+		text.section("")
+		text.lines([]string{"adds to operation " + result.AddsTo + "; runs none of its blocks"})
+	}
 	text.section("Plan")
 	text.lifecycleSteps(result)
 	var closing []field
@@ -172,6 +176,9 @@ func writeLifecycleSteps(text *display, result lifecycle.PlanResult) {
 	}
 	// A fresh removal refuses while any Machine it takes back runs, after the
 	// prompt, so the plan names them before it is confirmed.
+	if len(result.TakesBack) != 0 {
+		closing = append(closing, field{Label: "Takes back", Value: strings.Join(result.TakesBack, ", then ")})
+	}
 	if len(result.Stops) != 0 {
 		closing = append(closing, field{Label: "Stop first", Value: strings.Join(result.Stops, ", ")})
 	}

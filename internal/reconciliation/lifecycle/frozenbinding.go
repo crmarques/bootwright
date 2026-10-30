@@ -201,7 +201,7 @@ func frozenReopenOf(ctx context.Context, store OperationStore) (frozenReopen, er
 			binding = inherited
 		}
 	}
-	if operation.Verb == reconciliation.Apply && operation.State == reconciliation.OperationDone && operation.Predecessor != "" {
+	if operation.Verb == reconciliation.Apply && operation.Predecessor != "" {
 		root, err := removalBinding(ctx, store, operation)
 		if err != nil {
 			return frozenReopen{}, err

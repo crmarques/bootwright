@@ -6,20 +6,25 @@ scenario over a completed apply. Its first step is
 that each new scenario is its own slice. Until then
 [state reconciliation](../state-reconciliation.md) owns what `apply` admits,
 [day-2 operations stay outside scope](../project.md#design-priorities-and-non-goals),
-and every changed input over a completed apply refuses. `Compare`, the
-changed-input branch and the scenario guard exist; the admission port, the
-union plan and every admission described below do not.
+and every changed input over a completed apply refuses, except the
+[additive apply](../state-reconciliation.md#additive-apply) of add-on
+instances (D211), the first scenario this design produced. `Compare`, the
+changed-input branch, the scenario guard and the admission port exist; the
+union plan, which the additive apply replaced with a second operation naming
+the first as its predecessor, and every other admission described below do
+not.
 
 ## The admitted scenarios
 
-Decision D153 names the three scenarios `apply` admits. The contract states
-each one; the rows only point at the rule that owns it.
+Decision D153 names the three scenarios `apply` admits and D211 adds a fourth.
+The contract states each one; the rows only point at the rule that owns it.
 
 | Scenario | Owning rule |
 | --- | --- |
 | Nothing is realized: no operation, or a completed destroy | [Lifecycle unit](../state-reconciliation.md#lifecycle-unit) and the first row of the [state machine](../state-reconciliation.md#state-machine) |
 | Partly realized: a running, failed, paused or unknown apply | [Continuation and removal](../state-reconciliation.md#continuation-and-removal), [dependency safety during recovery](../state-reconciliation.md#dependency-safety-during-recovery) and [attempts and unknown outcomes](../state-reconciliation.md#attempts-and-unknown-outcomes) |
 | Already realized: a completed apply under its unchanged input | [Lifecycle unit](../state-reconciliation.md#lifecycle-unit) and the `apply done` row of the [state machine](../state-reconciliation.md#state-machine) |
+| Add-on instances added to a cluster a completed apply installed | [Additive apply](../state-reconciliation.md#additive-apply) and the `apply done` row of the [state machine](../state-reconciliation.md#state-machine) |
 
 "Absent" and "done" are read from durable records, not from the host.
 [Comparing desired and real state](../state-reconciliation.md#comparing-desired-and-real-state)
@@ -57,10 +62,10 @@ one optional port. Nothing below admits anything.
   frozen plan and the added blocks. Carried blocks enter as `done` through a
   carried record naming the prior operation's record digest. Destroy stays one
   inversion of the plan the index names as current.
-- **Guard.** `TestApplyAdmitsOnlyTheThreeScenarios` in
+- **Guard.** `TestApplyAdmitsOnlyTheFourScenarios` in
   `internal/reconciliation/lifecycle/transitions_spec_test.go` pins where each
   apply decision may appear: `fresh apply` only with no operation or a
-  completed destroy, `settle` only on `apply done`, `continue` only on a
+  completed destroy, `add` and `settle` only on `apply done`, `continue` only on a
   running, failed, paused or unknown apply, and `finalize` only on a failed
   apply whose blocks are all `done`. A new scenario edits this test, the
   state-machine row, its `stateMachineRows` case and the code in one commit;

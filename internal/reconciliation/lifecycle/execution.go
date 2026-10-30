@@ -72,6 +72,8 @@ type transition struct {
 	stops       []string
 	sameBlocks  sameBlocksProof
 	lineagePlan reconciliation.Plan
+	predecessor string
+	takes       []string
 	// basis is the durable state this transition was planned from. For a fresh
 	// removal it is the incomplete operation the removal takes the place of,
 	// which is the context's current operation. It is not always source: a
@@ -455,14 +457,17 @@ func (s Service) decideFrom(ctx context.Context, view View, verb reconciliation.
 	if err != nil {
 		return transition{}, verb, err
 	}
-	if verb == "" {
-		if verb = chosenVerb(standing{held: true, verb: operation.Verb, state: operation.State}); verb == reconciliation.Destroy {
-			selection = reconciliation.Selection{}
-		}
-	}
 	states, attempts, err := blockRecords(ctx, store, operation.ID, frozen)
 	if err != nil {
 		return transition{}, verb, err
+	}
+	if verb == "" {
+		held := standing{held: true, verb: operation.Verb, state: operation.State}
+		admitted, _ := s.additive(ctx, view, store, operation, frozen, states)
+		held.additive = admitted != nil
+		if verb = chosenVerb(held); verb == reconciliation.Destroy {
+			selection = reconciliation.Selection{}
+		}
 	}
 	if marked, err := finalization(ctx, view, store, verb, operation, frozen, states, attempts); err != nil || marked.finalize {
 		return marked, verb, err
@@ -484,7 +489,20 @@ func (s Service) decideOver(ctx context.Context, view View, store OperationStore
 
 func (s Service) decideBy(ctx context.Context, view View, store OperationStore, verb reconciliation.Verb, selection reconciliation.Selection, operation operationstore.Operation, frozen reconciliation.Plan, states map[string]reconciliation.BlockState, attempts map[string]int) (transition, error) {
 	name := view.Identity().Name
-	switch classify(verb, standingOf(operation, frozen, states)) {
+	held := standingOf(operation, frozen, states)
+	var admitted *additiveAdmission
+	var refused error
+	if verb == reconciliation.Apply {
+		admitted, refused = s.additive(ctx, view, store, operation, frozen, states)
+		held.additive = admitted != nil
+	}
+	switch classify(verb, held) {
+	case transitionAdd:
+		decided, err := s.additiveTransition(view, operation, admitted, selection)
+		if err != nil {
+			return transition{}, err
+		}
+		return plannedFrom(decided, operation, states, attempts), nil
 	case transitionFinalize:
 		return transition{}, failure("lifecycle.state",
 			"the "+string(operation.Verb)+" "+operation.ID+" is due its finalization, which no decision over its record may skip",
@@ -500,7 +518,7 @@ func (s Service) decideBy(ctx context.Context, view View, store OperationStore, 
 			deletionExit(view))
 	case transitionSettle:
 		if operation.Verb == reconciliation.Apply {
-			decided, err := s.settleApply(ctx, view, operation, frozen, states)
+			decided, err := s.settleApply(ctx, view, operation, frozen, states, refused)
 			return plannedFrom(decided, operation, states, attempts), err
 		}
 		return settledDestroy(ctx, store, transition{noop: true, verb: verb, operation: operation, plan: frozen, states: states}), nil
@@ -625,8 +643,11 @@ func (s Service) finishSettled(ctx context.Context, name string, decided transit
 // while every block of the frozen plan is done, because the settled verb reports
 // that completion: a block whose record reads anything else, a lost one included,
 // contradicts it, and nothing then proves the input applied.
-func (s Service) settleApply(ctx context.Context, view View, operation operationstore.Operation, frozen reconciliation.Plan, states map[string]reconciliation.BlockState) (transition, error) {
+func (s Service) settleApply(ctx context.Context, view View, operation operationstore.Operation, frozen reconciliation.Plan, states map[string]reconciliation.BlockState, additiveRefusal error) (transition, error) {
 	if inputDrift(view, operation) != "" {
+		if additiveRefusal != nil {
+			return transition{}, additiveRefusal
+		}
 		return transition{}, s.changedInput(ctx, view, operation)
 	}
 	unfinished, err := unfinishedOver(ctx, s.store(view), operation, frozen, states)
@@ -684,7 +705,7 @@ func inputDrift(view View, operation operationstore.Operation) string {
 func (s Service) changedInput(ctx context.Context, view View, operation operationstore.Operation) error {
 	const message = "the desired state changed after this apply completed"
 	name := view.Identity().Name
-	remedy := "take back what it owns with " + contextCommand(name, string(reconciliation.Destroy)) + ", then run " + contextCommand(name, string(reconciliation.Apply))
+	remedy := changeRemedy(view)
 	named, ok := s.namedChange(ctx, view, operation)
 	if err := ctx.Err(); err != nil {
 		return err
@@ -995,7 +1016,7 @@ func (s Service) freshDestroy(ctx context.Context, contextName string, frozenBy 
 	}
 	return transition{
 		fresh: true, verb: reconciliation.Destroy, plan: plan,
-		source: source, reopen: scope.reopen, release: scope.release, stops: s.stops(plan),
+		source: source, reopen: scope.reopen, release: scope.release, stops: s.stops(plan), takes: scope.operations,
 	}, nil
 }
 
@@ -1109,6 +1130,10 @@ func (s Service) presentation(decided transition) PlanResult {
 	result := planPreview(decided.plan, decided.states, decided.selection)
 	result.Verb, result.Warnings = string(decided.verb), s.removalWarnings(decided.removed())
 	result.Continuation = !decided.fresh
+	result.AddsTo = decided.predecessor
+	if decided.verb == reconciliation.Destroy && len(decided.takes) > 1 {
+		result.TakesBack = slices.Clone(decided.takes)
+	}
 	// Ordinary removal keeps its pre-registration gate. An online removal's
 	// later Machine boundary is re-proved on each continuation that needs it.
 	if decided.fresh && decided.verb == reconciliation.Destroy {
@@ -1817,8 +1842,10 @@ func (s Service) register(ctx context.Context, tx Transaction, store OperationSt
 		identity = allocated
 	}
 	closure := located.closure
-	if err := s.reserve(ctx, tx, decided, material); err != nil {
-		return fail(err)
+	if decided.predecessor == "" {
+		if err := s.reserve(ctx, tx, decided, material); err != nil {
+			return fail(err)
+		}
 	}
 	digest, err := decided.plan.Digest()
 	if err != nil {
@@ -1835,7 +1862,7 @@ func (s Service) register(ctx context.Context, tx Transaction, store OperationSt
 		InputDigest: inputDigest(tx), PlanDigest: digest, AutomationDigest: s.automation.CatalogDigest(),
 		Executable: operationstore.Executable{Version: s.options.Executable.Version, Commit: s.options.Executable.Commit},
 		Closure:    &closure,
-		Source:     decided.source, Bindings: bindings, State: reconciliation.OperationRunning,
+		Source:     decided.source, Predecessor: decided.predecessor, Bindings: bindings, State: reconciliation.OperationRunning,
 		Created: stamp, Updated: stamp,
 	}
 	if decided.verb == reconciliation.Destroy && decided.basis.record.Verb == reconciliation.Destroy &&
@@ -1925,7 +1952,18 @@ func (s Service) reprove(ctx context.Context, tx Transaction, store OperationSto
 		}
 		_ = log.Close(recordingContext(ctx))
 	}
+	if decided.predecessor != "" {
+		return s.proveHostBinding(ctx, tx, previous)
+	}
 	return s.establishBinding(ctx, tx, decided.binding.controller)
+}
+
+func (s Service) proveHostBinding(ctx context.Context, tx Transaction, previous operationstore.Operation) error {
+	host, err := s.host.Identity(ctx)
+	if err != nil {
+		return err
+	}
+	return verifyHostBinding(tx.Controller(), tx.Identity(), host, unboundExit(tx, previous), false)
 }
 
 // reserve claims the exclusive host resources the plan needs before any effect.
@@ -2006,6 +2044,9 @@ func (s Service) verifyContinuation(ctx context.Context, view View, operation op
 		return err
 	}
 	if err := verifyHostBinding(view.Controller(), view.Identity(), host, unboundExit(view, operation), false); err != nil {
+		return err
+	}
+	if err := s.prerequisitesRefusal(ctx, view, operation); err != nil {
 		return err
 	}
 	return s.closureRefusal(ctx, view, operation, located)

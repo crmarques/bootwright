@@ -84,7 +84,8 @@ const exitByDeletion = "none: `apply` and `destroy` refuse, naming `context dele
 // stateMachineRows is what each row of the state machine means, keyed by the
 // durable state it names: the exact transition it states, and the durable
 // states it covers with the decision each verb takes there. A decision is
-// "fresh apply" or "fresh destroy" for a registration, "continue" for a
+// "fresh apply" or "fresh destroy" for a registration, "add" for an additive
+// apply, "continue" for a
 // continuation or resolution of the operation itself, "finalize", "settle",
 // "release" for what an interrupted registration left, or "refuse".
 func stateMachineRows() map[string]stateMachineRow {
@@ -186,9 +187,18 @@ func stateMachineRows() map[string]stateMachineRow {
 			},
 		},
 		"apply done": {
-			transition: "start a fresh destroy of its whole frozen plan, which first resolves every unproved block; an `apply` of the unchanged input settles without effect, and of a changed input refuses; that apply refuses while a block of the plan is not `done`, naming that destroy and `context delete --purge`",
+			transition: "start a fresh destroy of its whole frozen plan and its predecessors', which first resolves every unproved block; an `apply` of the unchanged input settles without effect, of an input that only adds add-on instances starts an [additive apply](#additive-apply), and of any other changed input refuses; that apply refuses while a block of these plans is not `done`, naming that destroy and `context delete --purge`",
 			cases: map[string]stateMachineCase{
 				"a completed apply": {arrange: func(t *testing.T, h *harness) { completeApply(t, h) }, apply: "settle", destroy: "fresh destroy", previewed: reconciliation.Destroy, next: "none", reopens: true, shown: planning("destroy")},
+				"a completed apply under an input that only adds an instance": {
+					arrange: additiveOver(false), apply: "add", destroy: "fresh destroy", previewed: reconciliation.Apply, next: "none", reopens: true, shown: planning("apply"),
+				},
+				"a completed additive apply": {
+					arrange: additiveOver(true), apply: "settle", destroy: "fresh destroy", previewed: reconciliation.Destroy, next: "none", reopens: true, shown: planning("destroy"),
+				},
+				"a completed apply under an input that mixes an addition with a change": {
+					arrange: additiveMixed, apply: "refuse", destroy: "fresh destroy", previewed: reconciliation.Destroy, next: "none", reopens: true, shown: planning("destroy"),
+				},
 				"a completed apply under a changed input": {
 					arrange: func(t *testing.T, h *harness) {
 						completeApply(t, h)
@@ -286,23 +296,42 @@ func changedOver(after *compilation.State) func(*testing.T, *harness) {
 	}
 }
 
+func additiveOver(completed bool) func(*testing.T, *harness) {
+	return func(t *testing.T, h *harness) {
+		f := installAddons(h, "", addonBinding("cluster"))
+		completeApply(t, h)
+		f.publish("rev-2", addonBinding("cluster", "nmstate"))
+		if completed {
+			completeApply(t, h)
+		}
+	}
+}
+
+func additiveMixed(t *testing.T, h *harness) {
+	f := installAddons(h, "", serverObject("alpha", "v1"))
+	completeApply(t, h)
+	f.publish("rev-2", serverObject("alpha", "v2"), addonBinding("cluster", "nmstate"))
+}
+
 // admittedApply is where each apply decision may appear: a fresh apply only
-// over no operation, a settle only over a completed apply, a continuation only
-// over an incomplete apply and a finalization only over a failed apply whose
-// blocks are all done. Every other durable state refuses an apply.
+// over no operation, an add and a settle only over a completed apply, a
+// continuation only over an incomplete apply and a finalization only over a
+// failed apply whose blocks are all done. Every other durable state refuses an
+// apply.
 var admittedApply = map[string][]string{
 	"fresh apply": {"no operation, or completed destroy"},
+	"add":         {"apply done"},
 	"settle":      {"apply done"},
 	"continue":    {"apply running", "apply failed", "apply paused", "apply unknown"},
 	"finalize":    {"apply failed, every block `done`"},
 	"refuse":      nil,
 }
 
-// TestApplyAdmitsOnlyTheThreeScenarios holds every apply decision the state
+// TestApplyAdmitsOnlyTheFourScenarios holds every apply decision the state
 // machine declares to a fresh apply, a continuation or finalization of the
-// same apply, a settle, or a refusal, each in its own rows. A new scenario
-// edits this test, the row and the code together.
-func TestApplyAdmitsOnlyTheThreeScenarios(t *testing.T) {
+// same apply, a settle, an add, or a refusal, each in its own rows. A new
+// scenario edits this test, the row and the code together.
+func TestApplyAdmitsOnlyTheFourScenarios(t *testing.T) {
 	for row, known := range stateMachineRows() {
 		for name, test := range known.cases {
 			rows, admitted := admittedApply[test.apply]
@@ -398,6 +427,8 @@ func decisionNamed(decided transition) string {
 		return "release"
 	case decided.noop:
 		return "settle"
+	case decided.fresh && decided.predecessor != "":
+		return "add"
 	case decided.fresh:
 		return "fresh " + string(decided.verb)
 	}

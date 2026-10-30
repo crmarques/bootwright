@@ -18,18 +18,22 @@ Supported operation modes are:
 
 - a fresh full-context `apply`, optionally stopping at a stage boundary or
   after a named add-on instance;
+- an [additive apply](#additive-apply) of add-on instances to a cluster a
+  completed apply installed, a second operation beside the completed one;
 - continuation of a paused, interrupted or failed `apply`, or of an
   interrupted `destroy`, against its exact frozen plan; and
-- a `destroy` of everything the apply [owns](#continuation-and-removal),
-  whether that apply completed or stopped at a boundary, at a failure, or at an
-  interruption.
+- a `destroy` of everything the apply and the applies it adds to
+  [own](#continuation-and-removal), whether that apply completed or stopped at
+  a boundary, at a failure, or at an interruption.
 
-There is no reconciliation of changed desired state or of drift, and no partial
-planning, adoption, reclaim of ownership, or force path. The one reclaim this
+There is no reconciliation of changed desired state or of drift beyond the
+additive apply, and no partial planning, adoption, reclaim of ownership, or
+force path. The one reclaim this
 contract performs is the [housekeeping](#context-mutation-evidence) of
 operation directories that hold nothing. A completed apply must be destroyed
-before an apply of *changed* desired state can start, and an edited input
-refuses by naming that removal.
+before an apply of *changed* desired state can start, unless the change only
+[adds add-on instances](#additive-apply), and an edited input refuses by naming
+that removal.
 The refusal also names what changed: up to five objects the input adds,
 changes, with up to three field paths each, or removes. It says when the bytes
 changed but declare the same objects, or repeat the bytes that apply froze, and
@@ -149,7 +153,59 @@ reports only that it settled.
 
 Plans remain complete and immutable; later artifact generation cannot append
 blocks or expand the operation. Expansion requires destroy followed by fresh
-apply.
+apply, except the [additive apply](#additive-apply), which freezes a second
+plan and changes none.
+
+### Additive apply
+
+An `apply` over a completed apply under a changed input is an additive apply
+when the input only adds add-on instances to clusters that apply installed. It
+registers a new operation, an apply whose record names the completed apply as
+its `predecessor` ([operation records](#operation-records)). No block of the
+completed apply runs again and none of its records changes. An apply and the
+applies it adds to are its lineage, oldest first.
+
+The `apply` admits the addition only when all of these hold, and otherwise
+keeps the changed-input refusal, naming the first block that differs:
+
+- the completed apply and every predecessor read `done`, every block of their
+  plans `done`;
+- the frozen revision compiles and the objects it differs from the selected
+  input by are only added `ClusterAddonBinding` objects, or bindings whose every
+  changed path is `spec.packages.<member>` for a member the frozen binding does
+  not declare; a change list cut at its bound refuses;
+- this executable plans the selected input and the
+  [comparison](#comparing-desired-and-real-state) of the lineage's plan with
+  that plan shows every lineage block the same and at least one block added. A
+  lineage block it would freeze differently refuses `lifecycle.state`, naming
+  it; so does an existing instance that would wait for the added one, as the
+  instances of a cluster wait for its last package;
+- each added block's capability admits it through the optional `DeltaAdmitter`
+  port, which only the add-on instance implements, for a cluster the lineage
+  installed, and states that the block reads bound Secret material only in its
+  own apply attempts. A capability without either refuses the addition;
+- each produced input an added block borrows has a producer in the lineage and
+  a proved entry in the context's [custody](#produced-material-custody).
+
+The registration is a fresh apply's, with these differences. Its plan holds
+only the added blocks, and their edges into the lineage are frozen as
+`prerequisites`, which scheduling never counts. It freezes the whole selected
+revision as its input, so a repeated `apply` settles over it. It binds only the
+Secrets its blocks place, in a binding of its own, and keeps every binding the
+lineage holds. It reserves nothing and claims no host: it proves the host
+binding as a continuation does. The ownership mark of an added block hashes
+this operation's identity. A registration that provably did not happen restores
+the completed apply's projection, and that apply stays the current operation.
+
+A continuation of an interrupted additive apply re-proves that every
+prerequisite still reads `done` in its owner's records, and refuses
+`lifecycle.state` naming one that does not. `plan` previews the additive apply
+with the line `adds to operation <id>; runs none of its blocks`, and no
+`--authorize` token is demanded. One `destroy` takes the whole lineage back
+([removal over a lineage](#removal-over-a-lineage)); no removal takes back an
+additive apply alone. An addition never adds, changes or removes a Machine,
+cluster, network, storage or service block, and never reaches an imported
+cluster.
 
 ## Context mutation evidence
 
@@ -516,12 +572,12 @@ complete, synchronized bytes.
 | apply failed, every block `done` | an `apply` finalizes it, recording it `done` and publishing its projection, or start a fresh destroy of its whole frozen plan |
 | apply paused | continue that exact apply under any stage selection, or start a fresh destroy of the blocks it started |
 | apply unknown | continue it, resolving every unproved block first and then retrying what resolution leaves `failed` (D146), or start a fresh destroy of the blocks it started, which resolves them first |
-| apply done | start a fresh destroy of its whole frozen plan, which first resolves every unproved block; an `apply` of the unchanged input settles without effect, and of a changed input refuses; that apply refuses while a block of the plan is not `done`, naming that destroy and `context delete --purge` |
+| apply done | start a fresh destroy of its whole frozen plan and its predecessors', which first resolves every unproved block; an `apply` of the unchanged input settles without effect, of an input that only adds add-on instances starts an [additive apply](#additive-apply), and of any other changed input refuses; that apply refuses while a block of these plans is not `done`, naming that destroy and `context delete --purge` |
 | destroy running | continue that exact destroy |
 | destroy failed | start a fresh destroy of what it has not removed |
 | destroy unknown | continue it, resolving every unproved block first and then retrying what resolution leaves `failed` (D146) |
 
-For an apply that names a predecessor, every fresh destroy these rows start also takes back the whole frozen plan of each predecessor ([continuation and removal](#continuation-and-removal)).
+For an apply that names a predecessor, every fresh destroy these rows start also takes back the whole frozen plan of each predecessor ([removal over a lineage](#removal-over-a-lineage)).
 
 Before any row, an operation whose blocks are all `done` is
 [finalized](#lifecycle-unit) first while its record, evidence, reservations or
@@ -717,8 +773,8 @@ clears the mark, and the entry is withdrawn as every entry is. No record, log,
 evidence or adapter output carries
 the material.
 
-A block may name, as a *produced input*, an output another block of its plan
-produces, by that block's kind and object and the output's name: today a
+A block may name, as a *produced input*, an output another block of its plan,
+or for an additive apply of its lineage, produces, by that block's kind and object and the output's name: today a
 cluster's `kubeconfig`. Planning resolves it to the producing block, depends on
 that block, and freezes the reference, never the bytes. Each apply attempt and
 observation of the consumer receives the custody entry as an operation-scoped
@@ -750,6 +806,8 @@ bootstrapped again under the same fsid relies on that creation time
 recorded with no identity is replaced and records the one presented; a
 recapture that presents none keeps the recorded one. An entry
 custody marks unproved is replaced by a proved capture whatever it presents.
+Custody is the context's: a block of an additive apply borrows the entry a block
+of its lineage captured, and never captures, copies or replaces it.
 
 A capability whose runs must not hold a produced entry itself borrows it for
 a *lend*: a run of operation `lend` that is handed the entry alone, mints from
@@ -829,52 +887,6 @@ failure, it re-reads that record before it writes the operation.
 | `done` | every block is `done` |
 | `paused` | its execution paused: it stopped uncancelled with work left, no log fault and every start recorded |
 | `running` | otherwise |
-
-### Access-credential rebind
-
-An access credential rotated at its endpoint after an operation bound it, such
-as a management controller's password, a provider's kubeconfig, a vCenter
-login or a registry login, would strand that operation's continuation and
-removal, because both present the bound version, which the endpoint now
-refuses. The access-credential rebind is the one recorded exit beside the two
-a [lost binding](#continuation-and-removal) names (D37), and it is not the
-bounded run's rebind, which binds nothing and names no operation. An `apply`
-or `destroy` that continues an operation or removes one names each such Secret
-with `--authorize rebind=<secret>` (D183, Q70). Before anything is confirmed,
-bound or registered, and after the plan's own tokens are authorized, each named
-Secret must meet every condition below, or the invocation refuses
-`lifecycle.authorization` naming the condition and the command without that
-token:
-
-- the transition reopens a frozen binding, so a fresh apply and a verb that
-  settles or finalizes take no rebind;
-- that binding pins a version of the Secret, and the Secret's current version,
-  read and validated as a binding reads one, is another version;
-- every block of the plan whose frozen request names the Secret reads it, through
-  its capability, as an access credential it presents only to authenticate. A
-  block that names it for any other reason, or whose capability reads no
-  access credential, rests on the bound version as effect material and refuses
-  the rebind, naming the step.
-
-Today the bare-metal Machine, the managed-OS installation and its physical
-erase of a bare-metal target, and the agent installation's bare-metal nodes
-present their management controller's `credentialsRef`, the KubeVirt blocks
-their `kubeconfigRef`, and the Ceph cluster, host and image blocks the
-registry login. An emulated BMC's
-credentials are effect material its libvirt host gave the emulator, and a
-trust anchor (`trustBundleRef`, `knownHostsRef`) is never presented, so neither
-is rebound. A vSphere arm will name its vCenter login likewise.
-
-The rebind issues a new binding version: a binding equal to the reopened one
-except that each named Secret is pinned to its current version. A fresh removal
-registers with it; a continuation writes it into its operation's record as it
-resumes, so every later attempt and the removal that follows reopen it. The
-operation log records the binding it replaced, the one it issued and the
-Secrets rebound. The replaced binding stays until the operation that names it
-is released, and a rebind whose fresh removal provably did not register is
-released at once. Every ownership proof the plan runs is unchanged: the
-rebound credential only reaches the endpoint, and what the block proves it
-owns is proved as before.
 
 ## Plan and execution
 
@@ -1940,7 +1952,10 @@ It compares three sides:
 
 The owning apply is the current operation when it is an apply, the apply a
 current removal takes back, and none when the context holds no operation or
-its removal names no apply. The comparison reads, in order: the operation
+its removal names no apply. When that apply names a predecessor, the realized
+side is its [lineage](#additive-apply): the plans and block records of every
+apply of it, each block read from the apply that holds it. The comparison
+reads, in order: the operation
 index, the current operation, its frozen plan and block records, what those
 records prove about each object (the realization `status` reports), the owning
 apply's records, the revision it froze, both compilations, a fresh plan of the
@@ -2489,3 +2504,49 @@ immutable plans, durable continuation, leases, exact ownership, and private
 attempt logs. [The CLI contract](cli.md) must cover the complete journey,
 including confirmation/authorization, results, diagnostics, cancellation, and
 recovery.
+
+### Access-credential rebind
+
+An access credential rotated at its endpoint after an operation bound it, such
+as a management controller's password, a provider's kubeconfig, a vCenter
+login or a registry login, would strand that operation's continuation and
+removal, because both present the bound version, which the endpoint now
+refuses. The access-credential rebind is the one recorded exit beside the two
+a [lost binding](#continuation-and-removal) names (D37), and it is not the
+bounded run's rebind, which binds nothing and names no operation. An `apply`
+or `destroy` that continues an operation or removes one names each such Secret
+with `--authorize rebind=<secret>` (D183, Q70). Before anything is confirmed,
+bound or registered, and after the plan's own tokens are authorized, each named
+Secret must meet every condition below, or the invocation refuses
+`lifecycle.authorization` naming the condition and the command without that
+token:
+
+- the transition reopens a frozen binding, so a fresh apply and a verb that
+  settles or finalizes take no rebind;
+- that binding pins a version of the Secret, and the Secret's current version,
+  read and validated as a binding reads one, is another version;
+- every block of the plan whose frozen request names the Secret reads it, through
+  its capability, as an access credential it presents only to authenticate. A
+  block that names it for any other reason, or whose capability reads no
+  access credential, rests on the bound version as effect material and refuses
+  the rebind, naming the step.
+
+Today the bare-metal Machine, the managed-OS installation and its physical
+erase of a bare-metal target, and the agent installation's bare-metal nodes
+present their management controller's `credentialsRef`, the KubeVirt blocks
+their `kubeconfigRef`, and the Ceph cluster, host and image blocks the
+registry login. An emulated BMC's
+credentials are effect material its libvirt host gave the emulator, and a
+trust anchor (`trustBundleRef`, `knownHostsRef`) is never presented, so neither
+is rebound. A vSphere arm will name its vCenter login likewise.
+
+The rebind issues a new binding version: a binding equal to the reopened one
+except that each named Secret is pinned to its current version. A fresh removal
+registers with it; a continuation writes it into its operation's record as it
+resumes, so every later attempt and the removal that follows reopen it. The
+operation log records the binding it replaced, the one it issued and the
+Secrets rebound. The replaced binding stays until the operation that names it
+is released, and a rebind whose fresh removal provably did not register is
+released at once. Every ownership proof the plan runs is unchanged: the
+rebound credential only reaches the endpoint, and what the block proves it
+owns is proved as before.

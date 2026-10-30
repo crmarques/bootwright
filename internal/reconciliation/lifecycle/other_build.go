@@ -35,7 +35,11 @@ func (s Service) proveSameBlocks(ctx context.Context, view View, operation opera
 		return sameBlocksProof{refusal: failure("lifecycle.state",
 			"this executable cannot plan this operation again to prove it freezes the same blocks"+detail, remediation)}
 	}
-	if change, differs := reconciliation.Compare(frozen, fresh).First(); differs {
+	held, _, err := appliedView(ctx, s.store(view), operation, frozen, states)
+	if err != nil {
+		return sameBlocksProof{refusal: err}
+	}
+	if change, differs := reconciliation.Compare(held, fresh).First(); differs {
 		return sameBlocksProof{refusal: failure("lifecycle.state",
 			"this executable would freeze the block "+change.Block+" differently from the plan this operation froze", remediation)}
 	}

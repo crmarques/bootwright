@@ -37,13 +37,18 @@ func unobservedBy(command string) Unresolved {
 // return reaches the capability empty, whether it was never recorded or was
 // recorded as null, so the refusal after an observation and a later status
 // read the same thing.
-func (s Service) explain(verb reconciliation.Verb, block reconciliation.Block, evidence json.RawMessage) Unresolved {
+func (s Service) explain(operation operationstore.Operation, verb reconciliation.Verb, block reconciliation.Block, evidence json.RawMessage) Unresolved {
 	if bytes.Equal(bytes.TrimSpace(evidence), []byte("null")) {
 		evidence = nil
 	}
 	capability, ok := s.capabilities.Resolve(block.Kind, block.Implementation)
 	if !ok {
 		return unexplained
+	}
+	if added, ok := capability.(AddedUnresolvedReporter); ok && operation.Verb == reconciliation.Apply && operation.Predecessor != "" {
+		if unresolved, ok := added.UnresolvedAdded(verb, block, evidence); ok && unresolved.Reason != "" && unresolved.Remedy != "" {
+			return unresolved
+		}
 	}
 	reporter, ok := capability.(UnresolvedReporter)
 	if !ok {
@@ -125,13 +130,13 @@ func (s Service) unresolvedOf(ctx context.Context, store OperationStore, operati
 	// A removal's record is read for the removal first, as its refusal read
 	// it; a record without the member as earlier builds read it.
 	if resolution.Removal {
-		if explained := s.explain(reconciliation.Destroy, block, resolution.Evidence); explained != unexplained {
+		if explained := s.explain(operation, reconciliation.Destroy, block, resolution.Evidence); explained != unexplained {
 			return explained, nil
 		}
 	}
-	explained := s.explain(operation.Verb, block, resolution.Evidence)
+	explained := s.explain(operation, operation.Verb, block, resolution.Evidence)
 	if explained == unexplained && !resolution.Removal && operation.Verb == reconciliation.Apply {
-		explained = s.explain(reconciliation.Destroy, block, resolution.Evidence)
+		explained = s.explain(operation, reconciliation.Destroy, block, resolution.Evidence)
 	}
 	return explained, nil
 }

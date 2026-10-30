@@ -177,9 +177,13 @@ only when re-planning yields the same request.
 
 An attempt runs under one absolute deadline, its start plus the budget, which
 mutation consumes; the run deadline is the budget plus ten minutes, and
-admission bounds a budget at `5h50m`. An instance is never added to or removed
-from a completed apply, and repeating `apply` over a completed apply contacts no
-cluster ([lifecycle unit](state-reconciliation.md#lifecycle-unit),
+admission bounds a budget at `5h50m`. An instance is never removed from a
+completed apply; one added to a cluster the apply installed is installed by an
+[additive apply](state-reconciliation.md#additive-apply), and repeating `apply`
+over a completed apply under its unchanged input contacts no cluster. An
+addition that would make an existing instance wait, as a last package installed
+on that cluster does, refuses
+([lifecycle unit](state-reconciliation.md#lifecycle-unit),
 [D153](milestones/backlog.md#d153)).
 
 ## The cluster object program
@@ -218,9 +222,10 @@ Bootwright creates an object only when it is absent and never patches,
 applies over, adopts or deletes an existing one; the exceptions are the
 [approvals](#olm-installation) of InstallPlans. Each created object carries
 the owner annotation, its mark: the SHA-256 of the domain
-`bootwright.cluster-objects.owner-v1`, NUL, the apply operation's identity,
-NUL, the block's identity, NUL and the object's group, kind, namespace and
-name, so the mark read from one object never matches another. Creation names
+`bootwright.cluster-objects.owner-v1`, NUL, the identity of the apply whose
+plan holds the block, NUL, the block's identity, NUL and the object's group,
+kind, namespace and name, so the mark read from one object never matches
+another. Creation names
 the field manager `bootwright-` followed by the first 32 hexadecimal digits of
 the per-block value, the same SHA-256 without the object's identity. Both are
 unique to the operation and stable across continuation, resolution and
@@ -415,8 +420,11 @@ every check once: every object own and equal with every check holding is
 completion; every object absent is no effect; some own objects with the rest
 absent, not ready or not equal to its declared body is a partial realization; a
 foreign object, a failed read or an installed CSV other than the expected one
-is unknown, whose remedy is to destroy and apply again. An own object that
-differs from its declared body, as when Argo CD or an operator changes a
+is unknown, whose remedy is to destroy and apply again, except for an instance
+an [additive apply](state-reconciliation.md#additive-apply) added, whose remedy
+is to remove or correct the object and repeat `apply`, which observes it again,
+because a `destroy` takes the whole lineage and its cluster back. An own
+object that differs from its declared body, as when Argo CD or an operator changes a
 declared field, is that partial realization: the observation records which
 object differs and repairs nothing, and the first differing field is named
 only by the apply attempt that finds it. A continuation never re-renders: it
@@ -428,8 +436,9 @@ realization, never repairs it and shows no field values for an instance.
 
 An instance is retired with its cluster and never removed online. Every
 instance requires its cluster's installation block, and a removal holds every
-block its apply started, so every removal that holds an instance also removes
-that cluster from management, after the instance. The instance's removal runs
+block its apply and the applies that apply adds to started, so every removal
+that holds an instance also removes that cluster from management, after the
+instance. The instance's removal runs
 nothing and contacts no cluster: its removal completes, and its removal check
 is answered, from its frozen request. A virtual cluster's objects leave with
 its nodes' disks; a physical cluster keeps running after its context is

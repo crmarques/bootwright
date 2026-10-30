@@ -419,6 +419,19 @@ type ToolLocator interface {
 	LocateTool(context.Context, prerequisites.StorageView, reconciliation.Block, BlockEvidence, controller.InstalledTool) (string, error)
 }
 
+// DeltaAdmitter admits a block an additive apply adds beside its lineage.
+type DeltaAdmitter interface {
+	AdmitAdded(lineage reconciliation.Plan, added reconciliation.Block) error
+}
+
+type ApplyOnlyMaterial interface {
+	ReadsMaterialOnlyInApply(reconciliation.Block) bool
+}
+
+type AddedUnresolvedReporter interface {
+	UnresolvedAdded(reconciliation.Verb, reconciliation.Block, json.RawMessage) (Unresolved, bool)
+}
+
 // Unresolved is why one effect's outcome stayed unknown, in the operator's
 // terms: the foreign object, named, the target that could not be read, with
 // its host or endpoint, or the listener with nothing of the target behind it.

@@ -855,8 +855,7 @@ the exit status say whether the comparison found anything: `3` when any object
 is `changed`, `added`, `removed` or `unknown`, and `0` when none is, so a script
 can test for drift. Status `3` is not a failure: standard error stays empty,
 the result is the one the command writes without the flag, and a structured
-result carries `ok` `false` and `exitCode` `3` with no diagnostic
-(`TestDiffExitCodeExitsThreeOnlyOnADifferingOrUnknownObject`).
+result carries `ok` `false` and `exitCode` `3` with no diagnostic.
 
 The text result opens with these header lines, each value starting at column 11:
 
@@ -864,7 +863,7 @@ The text result opens with these header lines, each value starting at column 11:
 | --- | --- |
 | `Context` | `<name> at input revision <selected revision>` |
 | `Against` | `nothing; this context holds no operation, so nothing is realized`, or `apply <id> (<state>) of input revision <revision>, as its records prove; no host was contacted`, or `destroy <id> (<state>) of apply <id>, as its records prove; no host was contacted`, or, with `--observe`, `what apply <id> (<state>) realized, read live: <n> blocks observed, <u> unknown, <p> not projected` |
-| `Input` | `not applied yet`; `unchanged since <apply>`, or `unchanged since <apply>, which the removal in progress takes back`; each ends with `; bootwright status --context <name> names the next step`. Or `changed since <apply>; bootwright apply refuses it until bootwright destroy --context <name> takes back what that apply owns` |
+| `Input` | `not applied yet`; `unchanged since <apply>`, or `unchanged since <apply>, which the removal in progress takes back`; each ends with `; bootwright status --context <name> names the next step`. Or `changed since <apply>; bootwright apply refuses it until bootwright destroy --context <name> takes back what that apply owns`, or, when an [additive apply](state-reconciliation.md#additive-apply) admits it, `changed since <apply>; bootwright apply adds it to that apply without running any of its blocks` |
 | `Plan` | `this executable plans the same blocks`; `this executable plans <c> blocks differently, <a> more and <r> fewer`; `this executable no longer plans the input: <message>`; or `no apply froze a plan to compare with` |
 | `Build` | Only when another build than the one that registered the apply plans some of its blocks differently: `this executable plans <k> blocks of <apply> differently from the build that froze them`, followed with `--observe` by `; --observe does not read them` |
 
@@ -891,7 +890,7 @@ declares it, or `real`: the fields an `--observe` read projected, beside the
 desired object reduced to those same fields. A `# not compared:` line names,
 for a `real` side only, the declared paths no projection observed, at most 12
 and then `and <n> more`; they are never a difference. The plan line reads
-`# plan: none` for an object no block realizes, and `realized` reads `none`
+`# plan: added` for an added instance that additive apply admits, `# plan: none` for an object no block realizes, and `realized` reads `none`
 for an object the operation does not name. A `#` line carries a note, then the reason and remedy of an absent or
 unknown real side. The `---` side is `/dev/null` when the real side is absent,
 and the `+++` side is `/dev/null` when the object is no longer declared. The

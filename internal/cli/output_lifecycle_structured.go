@@ -67,6 +67,8 @@ type planPresentation struct {
 	Deferred         int                     `json:"deferred"`
 	Continuation     bool                    `json:"continuation"`
 	Finalizes        bool                    `json:"finalizes"`
+	AddsTo           string                  `json:"addsTo,omitempty"`
+	TakesBack        []string                `json:"takesBack,omitempty"`
 	AnotherBuild     *planBuildPresentation  `json:"anotherBuild,omitempty"`
 	Stops            []string                `json:"stops"`
 	StopsAfterOnline []string                `json:"stopsAfterOnline"`
@@ -81,6 +83,7 @@ func displayPlan(result *lifecycle.PlanResult) planPresentation {
 	for _, check := range result.Checks {
 		shown.Checks = append(shown.Checks, planCheckPresentation{ID: escapeDisplayLine(check.ID), Status: escapeDisplayLine(check.Status), Summary: escapeDisplayLine(check.Summary), Remedy: escapeDisplayLine(check.Remedy)})
 	}
+	shown.AddsTo, shown.TakesBack = escapeDisplayLine(result.AddsTo), displayLines(result.TakesBack)
 	if b := result.AnotherBuild; b != nil {
 		shown.AnotherBuild = &planBuildPresentation{RegisteredBy: escapeDisplayLine(b.RegisteredBy), Steps: append([]int{}, b.Steps...)}
 	}

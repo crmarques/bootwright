@@ -5923,7 +5923,7 @@ when the frozen revision cannot be read or compiled
 never changed: `inputDrift` is the one predicate that tells a revision change
 from a bytes change. The slice adds no transition, record kind, record version
 or content digest; the state-table rows are unchanged, six `apply done` cases
-join `stateMachineRows`, and `TestApplyAdmitsOnlyTheThreeScenarios` pins where
+join `stateMachineRows`, and `TestApplyAdmitsOnlyTheFourScenarios` pins where
 each apply decision may appear. The design for one more scenario lives in
 [reconciliation scenarios](../deferred/reconciliation-scenarios.md).
 
@@ -6001,7 +6001,7 @@ property of the engine rather than of each call site.
 `TestAConflictingLeafIsOnlyANoteOnBothSides`,
 `TestMergeUnionsAndExcludesConflicts`,
 `TestPruneKeepsOnlyObservedLeavesAndNamesTheRest`,
-`TestApplyAdmitsOnlyTheThreeScenarios`,
+`TestApplyAdmitsOnlyTheFourScenarios`,
 `TestEveryChangedInputOverACompletedApplyRefuses`,
 `TestAChangedInputOverACompletedApplyNamesWhatChanged`,
 `TestANamedChangeIsBoundedToFiveObjects`,

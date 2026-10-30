@@ -21,6 +21,10 @@ func TestClassifyTransitionKinds(t *testing.T) {
 	held := func(verb reconciliation.Verb, state reconciliation.OperationState, shape blocks) standing {
 		return standing{held: true, verb: verb, state: state, pending: shape.pending, unknown: shape.unknown}
 	}
+	additive := func(held standing) standing {
+		held.additive = true
+		return held
+	}
 	running, paused, failed, unknown, done := reconciliation.OperationRunning, reconciliation.OperationPaused, reconciliation.OperationFailed,
 		reconciliation.OperationUnknown, reconciliation.OperationDone
 	for name, row := range map[string]struct {
@@ -42,6 +46,8 @@ func TestClassifyTransitionKinds(t *testing.T) {
 		"an apply over a paused apply, every block done":     {apply, held(apply, paused, settled), transitionContinue, apply},
 		"an apply over a completed apply":                    {apply, held(apply, done, settled), transitionSettle, destroy},
 		"an apply over a completed apply missing a block":    {apply, held(apply, done, behind), transitionSettle, destroy},
+		"an apply over a completed apply under an addition":  {apply, additive(held(apply, done, settled)), transitionAdd, apply},
+		"a destroy over a completed apply under an addition": {destroy, additive(held(apply, done, settled)), transitionFresh, apply},
 		"a destroy over a running apply":                     {destroy, held(apply, running, behind), transitionReplaceRemoval, apply},
 		"a destroy over a paused apply":                      {destroy, held(apply, paused, behind), transitionReplaceRemoval, apply},
 		"a destroy over a failed apply":                      {destroy, held(apply, failed, behind), transitionReplaceRemoval, apply},

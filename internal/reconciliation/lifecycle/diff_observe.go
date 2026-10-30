@@ -261,7 +261,7 @@ func (s Service) reading(read *diffRead, block reconciliation.Block, observation
 			return blockReading{state: sidePresent, evidence: observation.Evidence}
 		}
 	}
-	explained := s.explain(reconciliation.Apply, block, observation.Evidence)
+	explained := s.explain(read.owning, reconciliation.Apply, block, observation.Evidence)
 	reading := blockReading{state: sideUnknown, reason: explained.Reason, remedy: explained.Remedy}
 	if explained == unexplained {
 		reading.remedy = "restore what the reason names, then " + repeatObserved(read.context.Name)

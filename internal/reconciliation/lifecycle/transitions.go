@@ -16,15 +16,17 @@ const (
 	transitionFinalize       transitionKind = "finalize"
 	transitionReplaceRemoval transitionKind = "replace-removal"
 	transitionSettle         transitionKind = "settle"
+	transitionAdd            transitionKind = "add"
 	transitionRefuse         transitionKind = "refuse"
 )
 
 type standing struct {
-	held    bool
-	verb    reconciliation.Verb
-	state   reconciliation.OperationState
-	pending bool
-	unknown bool
+	held     bool
+	verb     reconciliation.Verb
+	state    reconciliation.OperationState
+	pending  bool
+	unknown  bool
+	additive bool
 }
 
 func standingOf(operation operationstore.Operation, frozen reconciliation.Plan, states map[string]reconciliation.BlockState) standing {
@@ -60,6 +62,8 @@ func classify(requested reconciliation.Verb, held standing) transitionKind {
 		return transitionContinue
 	case held.verb == reconciliation.Destroy && held.pending:
 		return transitionRefuse
+	case held.verb == requested && requested == reconciliation.Apply && held.additive:
+		return transitionAdd
 	case held.verb == requested:
 		return transitionSettle
 	}
@@ -77,7 +81,7 @@ func chosenVerb(held standing) reconciliation.Verb {
 		return reconciliation.Apply
 	case held.state != reconciliation.OperationDone:
 		return held.verb
-	case held.verb == reconciliation.Apply:
+	case held.verb == reconciliation.Apply && !held.additive:
 		return reconciliation.Destroy
 	}
 	return reconciliation.Apply

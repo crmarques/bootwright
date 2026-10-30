@@ -34,6 +34,7 @@ type diffResult struct {
 	Context   diffContext   `json:"context"`
 	Operation diffOperation `json:"operation"`
 	Input     string        `json:"input"`
+	Adds      bool          `json:"adds,omitempty"`
 	Plan      diffPlan      `json:"plan"`
 	Observed  bool          `json:"observed"`
 	Blocks    diffBlocks    `json:"blocks"`
@@ -318,7 +319,7 @@ func displayDiff(result *lifecycle.DiffResult, rows []diffRow) diffResult {
 			ID: escapeDisplayLine(operation.ID), Verb: escapeDisplayLine(operation.Verb), State: escapeDisplayLine(operation.State),
 			Apply: escapeDisplayLine(operation.Apply), Revision: escapeDisplayLine(operation.Revision), Applied: escapeDisplayLine(operation.Applied),
 		},
-		Input: escapeDisplayLine(result.Input),
+		Input: escapeDisplayLine(result.Input), Adds: result.Adds,
 		Plan: diffPlan{
 			State: escapeDisplayLine(plan.State), Reason: escapeDisplayLine(plan.Reason),
 			Changed: plan.Changed, Added: plan.Added, Removed: plan.Removed, Rebuilt: displayLines(plan.Rebuilt),
@@ -393,6 +394,8 @@ func diffInput(result *lifecycle.DiffResult) string {
 	switch {
 	case result.Input == "none":
 		return "not applied yet" + next
+	case result.Input == "changed" && result.Adds:
+		return "changed since " + operation.Apply + "; bootwright apply adds it to that apply without running any of its blocks"
 	case result.Input == "changed":
 		return "changed since " + operation.Apply + "; bootwright apply refuses it until bootwright destroy --context " + name + " takes back what that apply owns"
 	case operation.Verb == "destroy":

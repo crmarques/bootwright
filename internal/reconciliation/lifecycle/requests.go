@@ -26,6 +26,7 @@ type DiffResult struct {
 	Context   ContextIdentity
 	Operation DiffOperation
 	Input     string
+	Adds      bool
 	Plan      DiffPlan
 	Observed  bool
 	Blocks    DiffBlocks
@@ -157,6 +158,8 @@ type PlanResult struct {
 	Startable    int
 	Deferred     int
 	Continuation bool
+	AddsTo       string
+	TakesBack    []string
 	// Finalizes marks a preview whose verb only completes the operation's
 	// interrupted finalization and then settles, running no block.
 	Finalizes bool

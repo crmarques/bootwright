@@ -12,10 +12,11 @@ import (
 // removalScope is what a fresh removal takes back and the Secret bindings it
 // reopens and releases; started counts the blocks the lineage's head started.
 type removalScope struct {
-	owned   reconciliation.Plan
-	started int
-	reopen  string
-	release []string
+	owned      reconciliation.Plan
+	started    int
+	reopen     string
+	release    []string
+	operations []string
 }
 
 func removalOver(ctx context.Context, store recordReader, applied operationstore.Operation, frozen, started reconciliation.Plan) (removalScope, error) {
@@ -35,6 +36,7 @@ func removalOver(ctx context.Context, store recordReader, applied operationstore
 		return removalScope{}, unremovable(applied, err)
 	}
 	scope.reopen, scope.release = firstBinding(held[0].operation.Bindings), held.bindings()
+	scope.operations = held.operationIDs()
 	return scope, nil
 }
 
@@ -56,6 +58,7 @@ func replacementOf(ctx context.Context, store recordReader, removal operationsto
 		return removalScope{}, err
 	}
 	scope.release = joinBindings(scope.release, held.released()...)
+	scope.operations = held.operationIDs()
 	if scope.reopen == "" {
 		scope.reopen = firstBinding(held[0].operation.Bindings)
 	}
@@ -114,4 +117,12 @@ func resolutionMembers(ctx context.Context, store recordReader, head lineageMemb
 	}
 	slices.Reverse(held)
 	return held, nil
+}
+
+func (l lineage) operationIDs() []string {
+	ids := make([]string, 0, len(l))
+	for _, member := range l {
+		ids = append(ids, member.operation.ID)
+	}
+	return ids
 }

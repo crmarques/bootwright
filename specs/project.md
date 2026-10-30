@@ -138,7 +138,8 @@ Day-2 operations are outside the current scope, including ongoing drift repair
 and publication of application or fleet GitOps content. Bootwright's lifecycle
 remains limited to bootstrap, exact continuation and removal of recorded owned
 state. Selected day-2 operations may be added in the future when requested and
-explicitly defined.
+explicitly defined. The first selected one is the additive apply of add-on
+instances (D211).
 
 The admitted operator utilities are the exception: `machine start`, `stop` and
 `restart`; `rsh` and `exec` sessions on Machines and clusters; `machine trust`;

@@ -70,7 +70,7 @@ refuses any operation but `observe`, and an allowlist test
 (`cmd/bootwright/observe_playbooks_test.go:325`) checks every observe task.
 `TestTransitionTablesMatchSpec`
 (`internal/reconciliation/lifecycle/transitions_spec_test.go:33`) drives
-`decide` only, and `TestApplyAdmitsOnlyTheThreeScenarios` pins where each
+`decide` only, and `TestApplyAdmitsOnlyTheFourScenarios` pins where each
 apply decision may appear. `Service.Diff`
 (`internal/reconciliation/lifecycle/diff.go:58`) reads records under
 `ReadLifecycle` and decides nothing; with observation, `observeDiff`

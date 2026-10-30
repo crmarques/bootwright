@@ -191,6 +191,14 @@ func (c Capability) run(ctx context.Context, execution lifecycle.Execution, oper
 	return result, request, err
 }
 func (c Capability) Unresolved(verb reconciliation.Verb, block reconciliation.Block, data json.RawMessage) (lifecycle.Unresolved, bool) {
+	return c.unresolved(verb, block, data, "destroy and apply again")
+}
+
+func (c Capability) UnresolvedAdded(verb reconciliation.Verb, block reconciliation.Block, data json.RawMessage) (lifecycle.Unresolved, bool) {
+	return c.unresolved(verb, block, data, "remove or correct the object on the cluster")
+}
+
+func (c Capability) unresolved(verb reconciliation.Verb, block reconciliation.Block, data json.RawMessage, remedy string) (lifecycle.Unresolved, bool) {
 	request, err := DecodeRequest(block.Request)
 	if err != nil || verb == reconciliation.Destroy {
 		return lifecycle.Unresolved{}, false
@@ -201,13 +209,32 @@ func (c Capability) Unresolved(verb reconciliation.Verb, block reconciliation.Bl
 	}
 	for _, object := range evidence.Observations {
 		if object.Ownership == co.Foreign || object.Ownership == co.Unknown {
-			return lifecycle.Unresolved{Reason: object.Kind + "/" + object.Namespace + "/" + object.Name + " is foreign or could not be read", Remedy: "destroy and apply again"}, true
+			return lifecycle.Unresolved{Reason: object.Kind + "/" + object.Namespace + "/" + object.Name + " is foreign or could not be read", Remedy: remedy}, true
 		}
 	}
 	for _, olm := range evidence.OLM {
-		return lifecycle.Unresolved{Reason: "Subscription/" + olm.Namespace + "/" + olm.Subscription + " reports CSV " + olm.InstalledCSV + " without proving the declared installation", Remedy: "destroy and apply again"}, true
+		return lifecycle.Unresolved{Reason: "Subscription/" + olm.Namespace + "/" + olm.Subscription + " reports CSV " + olm.InstalledCSV + " without proving the declared installation", Remedy: remedy}, true
 	}
-	return lifecycle.Unresolved{Reason: "add-on " + request.Package + " on " + request.Cluster + " did not prove its objects and checks", Remedy: "destroy and apply again"}, true
+	return lifecycle.Unresolved{Reason: "add-on " + request.Package + " on " + request.Cluster + " did not prove its objects and checks", Remedy: remedy}, true
+}
+
+func (c Capability) ReadsMaterialOnlyInApply(block reconciliation.Block) bool {
+	_, err := DecodeRequest(block.Request)
+	return err == nil
+}
+
+func (c Capability) AdmitAdded(lineage reconciliation.Plan, added reconciliation.Block) error {
+	request, err := DecodeRequest(added.Request)
+	if err != nil {
+		return refusal("the add-on instance "+added.ID+" cannot be added: "+err.Error(), "")
+	}
+	cluster := request.ProducedInputs[0]
+	if !slices.ContainsFunc(lineage.Blocks, func(block reconciliation.Block) bool {
+		return block.Kind == cluster.Kind && block.Object == cluster.Object
+	}) {
+		return refusal("the add-on "+request.Package+" cannot be added: the completed apply did not install the cluster "+request.Cluster, "declare it on a cluster that apply installed, or take the apply back and apply again")
+	}
+	return nil
 }
 
 func (c Capability) RetiresOffline() bool { return true }

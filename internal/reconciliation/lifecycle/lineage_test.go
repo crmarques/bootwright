@@ -515,7 +515,7 @@ func TestSettlingSeesEveryPlanOfTheLineage(t *testing.T) {
 	}
 	var decided transition
 	err = h.workspace.ReadLifecycle(ctx, testContextName, func(view View) (settleErr error) {
-		decided, settleErr = h.service.settleApply(ctx, view, f.head, f.headPlan, headStates)
+		decided, settleErr = h.service.settleApply(ctx, view, f.head, f.headPlan, headStates, nil)
 		return settleErr
 	})
 	requireStateRefusal(t, err, "producer-a (running)")
