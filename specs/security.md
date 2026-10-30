@@ -450,14 +450,21 @@ build output is re-executed through `/proc/<pid>/exe`. Every root invocation
 whose parent is the qualified sudo, a supervised child or a command an
 operator ran with sudo by hand, refuses `runtime.privilege` before it acts on
 any variable outside what sudo sets, the
-[route vocabulary](controller.md#the-context-free-acquisition-route) and the
+[route vocabulary](controller.md#the-context-free-acquisition-route), the
 PAM session variables `KRB5CCNAME`, `DBUS_SESSION_BUS_ADDRESS`,
-`XDG_RUNTIME_DIR`, `XDG_SESSION_*`, `XDG_SEAT` and `XDG_VTNR`, so a `SETENV`
-tag admits nothing more. It unsets those session variables before it starts
-any process. A host whose PAM stack, `/etc/environment` or pam_env
-configuration exports any other variable into sudo's commands refuses naming
-it; `env -i PATH=/usr/bin:/bin sudo -u '#0' -- /usr/bin/env` lists what a
-root command receives there.
+`XDG_RUNTIME_DIR`, `XDG_SESSION_*`, `XDG_SEAT` and `XDG_VTNR`, and the exact
+terminal hint `COLORTERM`. A `SETENV` tag admits no further variable names;
+execution-affecting variables such as `GODEBUG` and `ANSIBLE_CONFIG` still
+refuse before effects.
+
+It unsets those session variables and `COLORTERM` before it starts any
+process, without interpreting or using the hint's value. A failed removal
+refuses `runtime.privilege` before a process starts. `COLORTERM` needs no sudo
+or PAM configuration change. A host whose PAM stack, `/etc/environment` or
+pam_env configuration exports any other variable into sudo's commands refuses
+naming it; `env -i PATH=/usr/bin:/bin sudo -u '#0' -- /usr/bin/env` lists what a
+root command receives there. This sudo-entry guard does not inspect or strip
+the environment of a root process that was not started by qualified sudo.
 
 No password enters Bootwright
 memory, argv, environment, durable state or output. Per-user selection is

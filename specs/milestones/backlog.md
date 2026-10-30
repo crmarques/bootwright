@@ -282,7 +282,6 @@ Alias cell.
 | [B967](#b967) | new, 2026-10-29 (X220) | enabling | Verification tooling | The selection logic of `scripts/quick-test` and `scripts/check-commits` moves behind `scripts/tools` launchers | Both scripts are named shell exceptions that work; no gate fails until the move |
 | [B968](#b968) | new, 2026-10-29 (X216) | enabling | CLI | CLI help and output name cluster and storage kinds from the family registry, and the family-neutral check covers `internal/cli` | About 24 help and output strings name kinds directly and the help goldens pin them; the check exempts `internal/cli` meanwhile |
 | [B969](#b969) | new, 2026-10-29 (X216) | enabling | Storage | The six storage requirements no example plans become reference-edge rows | `CephClient`, `CephNFSExport` and `CephSMBResource` `filesystemRef` and the three `CephObjectGateway` `spec.pools` references order blocks in code, but the catalog test needs a planned example per row, so they carry a reason meanwhile |
-| [B977](#b977) | new, 2026-10-30 (owner request) | safety | Controller privilege, with CLI | Direct sudo accepts and discards `COLORTERM` without admitting execution-affecting variables | Owner requested future work; narrowing the refusal needs a named safety slice and an owning contract update |
 
 ### B82
 
@@ -3123,28 +3122,6 @@ references that emit requirements a reason instead of a
 example plans them. **Outcome:** examples or fixtures plan each edge, the rows
 exist and the reasons are gone. **Exit evidence:** the edge-catalog test with
 the six rows.
-
-### B977
-
-**Owner:** Controller privilege, with CLI. **Kind:** safety.
-**Requires:** owner promotion into a named safety slice. **Definition:**
-Candidate. **Delivery:** not started. Parked at the owner's request on
-2026-10-30; recording this item changes no current privilege behavior.
-
-The [local context privilege](../security.md#local-context-privilege) guard
-currently refuses a sudo-started invocation that receives `COLORTERM`.
-**Outcome:** accept this terminal color hint and discard it before starting
-any subprocess, with no broader inherited-environment admission. Update the
-owning security contract and [sudo guidance](../../docs/operator-guide.md#the-sudo-rule)
-with the implementation; the remedy should not require changing system-wide
-sudo or PAM configuration for this hint.
-
-**Exit evidence:** host-independent regressions for direct and supervised
-sudo entry, including proof that `COLORTERM` never reaches subprocesses and
-that execution-affecting variables such as `GODEBUG` and `ANSIBLE_CONFIG`
-still refuse before effects. Require independent safety review and the
-[safety verification gates](../../.agents/skills/code-implementation/SKILL.md#safety-class)
-when implementing and integrating the change.
 
 ### B988
 
@@ -6339,3 +6316,16 @@ by the existing capability, defined and implemented after X229. (5) Slices
 X227 to X231 are authorized in their planned order, at most two active at a
 time; B987's and B90's slices are planned when their definitions close and
 are covered by this request.
+
+### D212
+
+**delegated** (2026-10-30, the owner). The owner asked to "implement all
+backlogs you created in this session". The session created B973, B974, B977,
+B978, B979 and B980. [X225](delivered.md#x225--e2e-execution-and-runbook-corrections)
+delivered their in-tree work except [B977](delivered.md#x232--sudo-terminal-hint-admission); B978 and B979 retain
+operator acceptance on M1. This request promotes B977 from parked Candidate
+to Specified on M1 as named safety slice X232, out of sequence by the owner's
+request. It authorizes accepting exactly `COLORTERM` at direct and supervised
+sudo entry and discarding it before any subprocess, with the owning security
+contract, sudo guidance and executable safety evidence. The other inherited
+variable refusals and all existing operator-acceptance gates remain in force.

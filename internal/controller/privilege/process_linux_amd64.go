@@ -208,9 +208,9 @@ func confirmSudoEnvironment(environ []string, sudoStarted bool, unset func(strin
 		return refusal
 	}
 	for _, entry := range environ {
-		if name, _, _ := strings.Cut(entry, "="); sessionVariable(name) {
+		if name, _, _ := strings.Cut(entry, "="); discardedVariable(name) {
 			if err := unset(name); err != nil {
-				return &diagnostics.Diagnostic{Severity: "error", Code: "runtime.privilege", Message: "the session variable " + name + " cannot be removed before Bootwright starts a process; nothing was done"}
+				return &diagnostics.Diagnostic{Severity: "error", Code: "runtime.privilege", Message: "the environment variable " + name + " cannot be removed before Bootwright starts a process; nothing was done"}
 			}
 		}
 	}
@@ -233,13 +233,13 @@ var sudoVariables = []string{"HOME", "LOGNAME", "USER", "USERNAME", "MAIL", "SHE
 
 var sessionVariables = []string{"KRB5CCNAME", "DBUS_SESSION_BUS_ADDRESS", "XDG_RUNTIME_DIR", "XDG_SEAT", "XDG_VTNR"}
 
-func sessionVariable(name string) bool {
-	return slices.Contains(sessionVariables, name) || strings.HasPrefix(name, "XDG_SESSION_")
+func discardedVariable(name string) bool {
+	return name == "COLORTERM" || slices.Contains(sessionVariables, name) || strings.HasPrefix(name, "XDG_SESSION_")
 }
 
 func childVariable(name string) bool {
 	return slices.Contains(sudoVariables, name) || slices.Contains(controller.ProxyEnvironmentNames, name) ||
-		strings.HasPrefix(name, "LC_") || sessionVariable(name)
+		strings.HasPrefix(name, "LC_") || discardedVariable(name)
 }
 
 func printableName(name string) string {

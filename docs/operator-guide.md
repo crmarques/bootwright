@@ -208,14 +208,20 @@ that absolute path, so a rule naming it admits exactly that binary:
 
 The elevated child confirms it is that file, so install it to a path without
 spaces. Every root invocation sudo starts, including one you run with sudo by
-hand, refuses any variable that sudo, the acquisition route or the PAM session
-variables `KRB5CCNAME`, `DBUS_SESSION_BUS_ADDRESS`, `XDG_RUNTIME_DIR`,
-`XDG_SESSION_*`, `XDG_SEAT` and `XDG_VTNR` did not set, and unsets those
-session variables before it starts anything. A host whose PAM stack,
-`/etc/environment` or pam_env configuration exports another variable refuses
-naming it; to see what a root command receives, run
-`env -i PATH=/usr/bin:/bin sudo -u '#0' -- /usr/bin/env`. Any other executable, such as your own
-build output, is re-executed through `sudo -u '#0' -- /proc/<pid>/exe`, which
+hand, accepts the terminal hint `COLORTERM` and discards it before any
+subprocess. It requires no sudo or PAM configuration change for this hint.
+Bootwright also discards the admitted PAM session variables `KRB5CCNAME`,
+`DBUS_SESSION_BUS_ADDRESS`, `XDG_RUNTIME_DIR`, `XDG_SESSION_*`, `XDG_SEAT` and
+`XDG_VTNR`. A failure to discard one refuses `runtime.privilege` before a
+process starts.
+
+Variables outside what sudo sets, the acquisition route, those session
+variables and `COLORTERM` still refuse before effects, including `GODEBUG` and
+`ANSIBLE_CONFIG`. A host whose PAM stack, `/etc/environment` or pam_env
+configuration exports another variable refuses naming it; to see what a root
+command receives, run `env -i PATH=/usr/bin:/bin sudo -u '#0' -- /usr/bin/env`.
+Any other executable, such as your own build output, is re-executed through
+`sudo -u '#0' -- /proc/<pid>/exe`, which
 `ALL` matches, as `%wheel ALL=(ALL) ALL` grants, and so does a
 `/proc/[0-9]*/exe` rule. Every running program has such a path, so that rule is
 `ALL` in effect unless a `sha256:<digest>` before the command pins it to one

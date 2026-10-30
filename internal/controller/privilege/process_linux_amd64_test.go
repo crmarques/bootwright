@@ -26,6 +26,23 @@ import (
 func TestMain(m *testing.M) {
 	if len(os.Args) == 2 {
 		switch os.Args[1] {
+		case "__bootwright_discard_terminal_hint":
+			if refusal := confirmSudoEnvironment(os.Environ(), true, os.Unsetenv); refusal != nil {
+				fmt.Fprintln(os.Stderr, refusal.Message)
+				os.Exit(2)
+			}
+			child := exec.Command(os.Args[0], "__bootwright_check_terminal_hint")
+			child.Stdout, child.Stderr = os.Stdout, os.Stderr
+			if child.Run() != nil {
+				os.Exit(2)
+			}
+			os.Exit(0)
+		case "__bootwright_check_terminal_hint":
+			if _, found := os.LookupEnv("COLORTERM"); found {
+				os.Exit(2)
+			}
+			fmt.Println("hint absent")
+			os.Exit(0)
 		case "__bootwright_account_root", "__bootwright_account_user":
 			uid, gid, home := 0, 0, "/root"
 			if os.Args[1] == "__bootwright_account_user" {

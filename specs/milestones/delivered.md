@@ -10064,7 +10064,8 @@ independent safety review, including the initial [B673](backlog.md#b673)
 checkpoint-harness recurrence and the subsequent isolated checks. The
 remaining gates for B978 and B979 require
 owner-accepted complete operator runs; no live acceptance is claimed here.
-[B977](backlog.md#b977) remains parked, and the established OS-feature and
+B977 was parked at this delivery; [D212](backlog.md#d212) later promotes it
+for [X232](#x232--sudo-terminal-hint-admission). The established OS-feature and
 physical-host acceptance items retain their own gates.
 
 ### X226 — Controller install and uninstall
@@ -10092,3 +10093,26 @@ finishes an interrupted one. `TestAnUninstallRemovesThePackagesBeforeTheState`,
 operator installs with dnf between uninstall's last erase test and its removal,
 which requires one being removed, is removed with it. The operator gate is an
 uninstall followed by a fresh install on a disposable controller host.
+
+### X232 — Sudo terminal hint admission
+
+**Item:** B977 ([D212](backlog.md#d212)). **Kind:** safety. **Owners:**
+Controller privilege, with CLI.
+
+Direct and supervised sudo entry admit exactly `COLORTERM` under
+[local context privilege](../security.md#local-context-privilege), discard it
+before subprocesses, and refuse if removal fails. The
+[sudo guidance](../../docs/operator-guide.md#the-sudo-rule) explains that this
+hint requires no sudo or PAM configuration change.
+`TestSudoDiscardsOnlyTheExactTerminalColorHint` exercises both entry paths and
+uninterpreted hint values; `TestSudoColorHintDoesNotAdmitForeignVariables`
+retains the execution-affecting and neighboring-name refusals.
+`TestSudoRefusesATerminalColorHintItCannotRemove` holds fail-closed removal
+and leaves a process without a proved sudo parent alone.
+`TestSudoColorHintDoesNotReachSubprocesses` proves the inherited environment
+no longer carries the hint.
+
+The regression probe failed before the correction and passed afterwards;
+`make focus` and independent safety review passed. The integrating commit
+records the full verification commands and their results, including
+`make check` and `make race`. Existing operator-acceptance gates remain open.
