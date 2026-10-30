@@ -55,14 +55,14 @@ func (c Capability) Plan(ctx context.Context, input lifecycle.PlanInput) (lifecy
 	for _, selection := range selected {
 		request, requires, err := Render(selection, c.facts(input.State.Effective(), selection.Instance.Cluster), controllerName)
 		if err != nil {
-			return plan, err
+			return plan, unrenderableRefusal(selection, err)
 		}
 		if err := validatePlacements(request, input.State.Effective()); err != nil {
 			return plan, err
 		}
 		data, err := request.Canonical()
 		if err != nil {
-			return plan, err
+			return plan, unrenderableRefusal(selection, err)
 		}
 		plan.Definitions = append(plan.Definitions, reconciliation.BlockDefinition{ID: BlockID(request.Package, request.Cluster), Description: "install add-on " + request.Package + " on " + request.Cluster, Stage: reconciliation.StageAddOns, Requires: requires, Impacts: []string{"install-addon " + request.Package + " " + request.Cluster}, Groups: groups(request), Kind: Kind, Object: Object(request.Cluster, request.Package), Implementation: Implementation, ContentDigest: ContentDigest(), Request: data})
 		if input.Verb == reconciliation.Destroy {

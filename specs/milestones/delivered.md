@@ -10139,3 +10139,40 @@ The regressions are `TestAForeignOperationEntryIsRefusedByName`,
 uncached probes under inherited masks `077` and `022`, plus the full gate
 commands and results for this correction and X232's implementation commit.
 [B673](backlog.md#b673) remains separately open.
+
+### X228 — Add-on admission agrees with planning
+
+**Items:** B983.
+**Kind:** defect. **Owners:** Add-ons, with API.
+
+A package `timeout` that is not a whole number of seconds passed `validate` and
+then failed planning with a bare error. `ValidatePackages` now refuses it at
+`$.spec.packages.<name>.timeout` with `api.value`, and
+[built-in packages](../api/addons.md#built-in-packages) states the rule.
+`TestPackageTimeoutAdmission` runs `500ms`, `1500ms`, `1s`, `1.5m`, `5h50m`
+and `5h50m1s` through production compilation and planning.
+
+`Unsupported` of the add-on capability refuses every render or request
+canonicalization failure under the new "A package that cannot be rendered" row
+of [the refusal table](../add-ons.md#refusal-table), keeping the oversized
+instance row for bound errors, and `Plan` wraps any render error that reaches
+it as a `lifecycle.state` refusal with a remedy. The table is now held to the
+code by `TestAddOnRefusalTableMatchesUnsupported` and
+`TestAnUnrenderablePackageIsRefusedNotReturnedBare`.
+
+The qualification claims of
+[package qualification](../add-ons.md#package-qualification) are tested:
+`TestSchemaMaximalPackagesCompileDecodePlanAndCoverEveryMember` compiles one
+schema-maximal binding per package, with every member of its `spec.packages`
+schema authored, decodes it into the Go configuration type and plans it;
+`TestPackageTimeoutDefaultsEqualTheirBudgets` pairs each schema `timeout`
+default with its descriptor `Budget`; and
+`TestBuiltinPackageCoverageRowsMatchTheRegistry`, with
+`TestBuiltinPackageCoverageParityRefusesADrift`, holds the
+[coverage rows](../add-on-coverage.md#built-in-packages) to the registry's
+names, provided and required tokens, top-level configuration members, timeout
+defaults and operator-managed approval, and requires each absent package's
+item to be named by the page's Not yet met line. The three joined
+`test/architecture/testdata/docs-checks.txt`. The unreferenced goldens
+`help-add-ons-add.golden` and `help-add-ons-delete.golden` are deleted. The
+request and evidence schemas are unchanged.

@@ -28,23 +28,34 @@ func (c Capability) Unsupported(state *compilation.State) []lifecycle.Refusal {
 	selected, _ := addons.Instances(catalog, c.registry)
 	controllerName, _ := lifecycle.ControllerMachine(catalog)
 	for _, selection := range selected {
-		_, _, err := Render(selection, c.facts(catalog, selection.Instance.Cluster), controllerName)
+		request, _, err := Render(selection, c.facts(catalog, selection.Instance.Cluster), controllerName)
+		if err == nil {
+			_, err = request.Canonical()
+		}
 		if err == nil {
 			continue
 		}
-		bound := ""
-		for _, candidate := range []string{"64 owned objects", "32 checks", "96 steps", "request bound"} {
-			if strings.Contains(err.Error(), candidate) {
-				bound = candidate
-				break
-			}
+		binding, ok := catalog.Find(api.ClusterAddonBinding, selection.Instance.Binding)
+		if !ok {
+			continue
 		}
-		if bound != "" {
-			binding, ok := catalog.Find(api.ClusterAddonBinding, selection.Instance.Binding)
-			if ok {
-				result = append(result, lifecycle.RefusalOf(binding, fmt.Sprintf("the program of package %s for %s passes its %s", selection.Package.Name, selection.Instance.Cluster, bound), "reduce the configuration of package "+selection.Package.Name+" in "+binding.Identity()))
-			}
-		}
+		reason, remedy := unrenderable(selection, binding.Identity(), err)
+		result = append(result, lifecycle.RefusalOf(binding, reason, remedy))
 	}
 	return lifecycle.SortRefusals(result)
+}
+
+func unrenderable(selection addons.SelectedInstance, binding string, err error) (string, string) {
+	name, cluster := selection.Package.Name, selection.Instance.Cluster
+	for _, bound := range []string{"64 owned objects", "32 checks", "96 steps", "request bound"} {
+		if strings.Contains(err.Error(), bound) {
+			return fmt.Sprintf("the program of package %s for %s passes its %s", name, cluster, bound), "reduce the configuration of package " + name + " in " + binding
+		}
+	}
+	return fmt.Sprintf("package %s cannot be rendered for %s: %s", name, cluster, err), "correct the configuration of package " + name + " in " + binding
+}
+
+func unrenderableRefusal(selection addons.SelectedInstance, err error) error {
+	reason, remedy := unrenderable(selection, string(api.ClusterAddonBinding)+"/"+selection.Instance.Binding, err)
+	return refusal(reason, remedy)
 }

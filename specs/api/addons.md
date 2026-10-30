@@ -296,9 +296,11 @@ Each member of `spec.packages` is named after one
 executable; an unknown member is an unknown field. Its value is that
 package's closed configuration, and diagnostics name fields under
 `$.spec.packages.<name>`. Every package accepts `timeout`, a positive Go
-duration of at most `5h50m` that defaults to the package's readiness
-timeout. A package's own rules check its configuration against the bound
-`OpenShiftCluster` and the effective catalog, never a live system.
+duration of at most `5h50m` that is a whole number of seconds and defaults to
+the package's readiness timeout; a fraction of a second is refused at
+`$.spec.packages.<name>.timeout` with `api.value`. A package's own rules check
+its configuration against the bound `OpenShiftCluster` and the effective
+catalog, never a live system.
 
 Registry construction proves that every provided capability token has a reader or a
 defined downstream meaning. `NewRegistryWithExamples` accepts explicit

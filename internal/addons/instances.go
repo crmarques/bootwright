@@ -206,6 +206,8 @@ func ValidatePackages(o api.Object, c api.Catalog, r Registry, facts ClusterFact
 		budget, err := time.ParseDuration(v.Get("timeout").Text())
 		if err != nil || budget <= 0 || budget > 5*time.Hour+50*time.Minute {
 			add("timeout", "package "+p.Name+" timeout must be positive and at most 5h50m", "set timeout to a positive duration no greater than 5h50m")
+		} else if budget%time.Second != 0 {
+			add("timeout", "package "+p.Name+" timeout must be a whole number of seconds", "set timeout to a whole number of seconds, such as 90s")
 		}
 		if p.OLM != nil {
 			sub := v.Get("subscription")

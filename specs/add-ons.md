@@ -109,10 +109,16 @@ check; its schema and its Go configuration type agree); purity and
 determinism of its hooks; content safety of its rendered program at its
 largest admitted configuration (no `Secret` object, reserved key, `status`,
 managed fields or template delimiter, every Secret part used once, within the
-bounds); an admission test per rule; render and plan goldens; a fake-cluster
-journey (fresh apply, continuation `unchanged`, unknown resolved by
-observation, a foreign object refused, a plan of another CSV never approved,
-retirement contacting nothing); and parity with its coverage row. Its
+bounds); an admission test per rule, among them
+`TestPackageTimeoutAdmission`; a schema-maximal configuration, every member of
+its `spec.packages` schema present, that compiles, decodes into its Go
+configuration type and plans (`TestSchemaMaximalPackagesCompileDecodePlanAndCoverEveryMember`);
+a schema `timeout` default equal to its `Budget`
+(`TestPackageTimeoutDefaultsEqualTheirBudgets`); render and plan goldens; a
+fake-cluster journey (fresh apply, continuation `unchanged`, unknown resolved
+by observation, a foreign object refused, a plan of another CSV never approved,
+retirement contacting nothing); and parity with its coverage row
+(`TestBuiltinPackageCoverageRowsMatchTheRegistry`). Its
 submilestone's operator gate qualifies it on a real cluster.
 
 ## The package listing
@@ -474,15 +480,19 @@ operator owns.
 ### Refusal table
 
 Each row is one refusal of the add-on instance capability, and a refusal-table
-test of that capability's package holds its `Unsupported` to it. Its reason
-and remedy are the diagnostic's message and remediation, in which `<addon>` is
-the refused ClusterAddon, `<binding>` the binding, `<package>` the package,
-`<cluster>` the bound cluster and `<bound>` the bound passed.
+test of that capability's package, `TestAddOnRefusalTableMatchesUnsupported`,
+holds its `Unsupported` to it. Its reason and remedy are the diagnostic's
+message and remediation, in which `<addon>` is the refused ClusterAddon,
+`<binding>` the binding, `<package>` the package, `<cluster>` the bound
+cluster, `<bound>` the bound passed and `<error>` the renderer's own error.
+Planning wraps any render error that reaches it the same way, so none reaches
+the operator bare.
 
 | Refusal | Path | Reason | Remedy |
 | --- | --- | --- | --- |
 | An authored add-on | a `ClusterAddon` a binding selects, directly or through a profile | `<addon> is an authored add-on, which needs the custom-package lifecycle this executable does not offer` | `select a built-in package under spec.packages of <binding>, or remove <addon> from its selection` |
 | An oversized instance | a package whose rendered program for `<cluster>` passes a bound | `the program of package <package> for <cluster> passes its <bound>` | `reduce the configuration of package <package> in <binding>` |
+| A package that cannot be rendered | a package whose rendering or request canonicalization fails for `<cluster>` for any other reason | `package <package> cannot be rendered for <cluster>: <error>` | `correct the configuration of package <package> in <binding>` |
 
 ## Design
 
