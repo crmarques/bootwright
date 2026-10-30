@@ -34,6 +34,9 @@ func (s sharedIdentity) remedy(m, other selectedMember) string {
 	case "package":
 		return fmt.Sprintf("select one of %s and %s for the cluster, because OLM package %s installs once", m.subject(), other.subject(), s.name)
 	}
+	if s.kind == "source" {
+		return fmt.Sprintf("set olm.subscription.source of %s to a catalog that no other add-on selected for the cluster owns", m.subject())
+	}
 	return fmt.Sprintf("set olm.catalogSource.name of %s to a CatalogSource name that no other package or add-on selected for the cluster uses", m.subject())
 }
 
@@ -49,11 +52,13 @@ func sharedIdentities(m, other selectedMember) []sharedIdentity {
 	if slices.Contains(namespaces, m.pkg.OLM.Namespace) {
 		shared = append([]sharedIdentity{{"namespace", m.pkg.OLM.Namespace, "namespace"}}, shared...)
 	}
-	if catalog := m.config.Get("subscription", "catalogSource", "name").Text(); catalog != "" {
-		subscription := other.config.Get("subscription")
-		if subscription.Get("catalogSource", "name").Text() == catalog || subscription.Get("source").Text() == catalog {
-			shared = append(shared, sharedIdentity{"CatalogSource", catalog, "catalog"})
-		}
+	owned, source := m.config.Get("subscription", "catalogSource", "name").Text(), m.config.Get("subscription", "source").Text()
+	otherOwned, otherSource := other.config.Get("subscription", "catalogSource", "name").Text(), other.config.Get("subscription", "source").Text()
+	switch {
+	case owned != "" && (owned == otherOwned || owned == otherSource):
+		shared = append(shared, sharedIdentity{"CatalogSource", owned, "catalog"})
+	case otherOwned != "" && source == otherOwned:
+		shared = append(shared, sharedIdentity{"CatalogSource", source, "source"})
 	}
 	return shared
 }

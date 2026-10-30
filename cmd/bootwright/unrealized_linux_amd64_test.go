@@ -3,12 +3,14 @@
 package main
 
 import (
+	"fmt"
 	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
+	"github.com/crmarques/bootwright/internal/addons"
 	"github.com/crmarques/bootwright/internal/desiredstate"
 	"github.com/crmarques/bootwright/internal/diagnostics"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
@@ -37,6 +39,36 @@ func patchedSources(t *testing.T, sources desiredstate.Sources, suffix, old, rep
 	return sources
 }
 
+const unrealizedAddOnHead = `apiVersion: bootwright.io/v1alpha1
+kind: ClusterAddon
+metadata:
+  name: extra
+spec:
+`
+
+const unrealizedAddOnOLM = `  olm:
+    namespace:
+      name: extra-operator
+%s
+    operatorGroup: {}
+    catalogSource:
+      name: extra-catalog
+      image: registry.example.test/extra/catalog:v1
+      priority: -200
+    subscription:
+      package: extra
+      channel: stable
+      startingCSV: extra.v1.0.0
+`
+
+// addOnSources binds one ClusterAddon, written beside the lab-sno-nmstate
+// example, to that example's cluster.
+func addOnSources(t *testing.T, definition string, files map[string]string) desiredstate.Sources {
+	t.Helper()
+	files["add-ons/extra/add-on.yaml"] = definition
+	return patchedSources(t, exampleDirectory(t, "lab-sno-nmstate"), "add-ons/binding.yaml", "  packages:\n", "  addonRefs:\n    - extra\n\n  packages:\n", files)
+}
+
 // unrealizedFixtures are admitted graphs that, between them, declare every
 // row of the table: the admissible projection declares most, and an edited
 // example each of the rest.
@@ -53,16 +85,29 @@ func unrealizedFixtures(t *testing.T) map[string]desiredstate.Sources {
 			"  controller:\n    machineRef: controller\n", "  controller:\n    machineRef: controller\n\n  dependencyVersions:\n    libvirt: 10.0.0\n", nil),
 		"Insights enrollment": patchedSources(t, exampleDirectory(t, hostVariants), "storage/rhel-entitlement.yaml",
 			"connectToInsights: false", "connectToInsights: true", nil),
+		"a manifest-set add-on": addOnSources(t, unrealizedAddOnHead+"  manifestSet:\n    manifests:\n      - path: manifests/extra.yaml\n", map[string]string{}),
+		"an external namespace": addOnSources(t, unrealizedAddOnHead+fmt.Sprintf(unrealizedAddOnOLM, "      management: external"), map[string]string{}),
+		"an add-on with inputs": addOnSources(t, unrealizedAddOnHead+fmt.Sprintf(unrealizedAddOnOLM, "")+"  inputs:\n    - name: machine\n      resourceKind: Machine\n      required: false\n", map[string]string{}),
+		"an add-on with steps":  addOnSources(t, unrealizedAddOnHead+fmt.Sprintf(unrealizedAddOnOLM, "")+"  steps:\n    - name: extra\n      gates: apply\n      manifests:\n        - path: manifests/extra.yaml\n", map[string]string{}),
 		"serving certificates": patchedSources(t, exampleDirectory(t, "lab-sno"), cluster, "    mode: connected\n",
 			"    mode: connected\n\n    servingCertificates:\n      ingress:\n        defaultCertificateRef: artifact-server-tls\n", nil),
 	}
 }
 
 // refusesDeclaration says whether a plan refusal names the declaring object,
-// or the Machine whose install profile is, or subscribes to, the object.
+// the Machine whose install profile is, or subscribes to, the object, or the
+// binding that selects the ClusterAddon.
 func refusesDeclaration(refusal lifecycle.Refusal, object api.Object, catalog api.Catalog) bool {
 	if refusal.Kind == string(object.Kind()) && refusal.Name == object.Name() {
 		return true
+	}
+	if object.Kind() == api.ClusterAddon {
+		binding, found := catalog.Find(api.ClusterAddonBinding, refusal.Name)
+		if refusal.Kind != string(api.ClusterAddonBinding) || !found {
+			return false
+		}
+		selected, _ := addons.ExpandBinding(binding, catalog)
+		return slices.ContainsFunc(selected, func(addon api.Object) bool { return addon.Name() == object.Name() })
 	}
 	machine, found := catalog.Find(api.Machine, refusal.Name)
 	if refusal.Kind != string(api.Machine) || !found {

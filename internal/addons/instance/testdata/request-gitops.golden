@@ -2,6 +2,7 @@
   "binding": "binding",
   "budgetSeconds": 1200,
   "cluster": "cluster",
+  "descriptor": "",
   "package": "gitops",
   "placement": {
     "connection": "local",
@@ -134,5 +135,5 @@
     "kind": "openshift-clients",
     "version": "4.20"
   },
-  "version": "addon-instance-request-v3"
+  "version": "addon-instance-request-v4"
 }

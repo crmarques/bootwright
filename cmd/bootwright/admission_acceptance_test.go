@@ -349,9 +349,8 @@ func referenceRefusals() []diagnosticTuple {
 				result = append(result, diagnosticTuple{"api.invariant", "OpenShiftCluster", name, fmt.Sprintf("$.spec.nodes[%d].machineRef", index)})
 			}
 		}
-		result = append(result, diagnosticTuple{"api.unrealized", "ClusterAddonBinding", name + "-addons", "$.spec.profileRefs"})
 	}
-	return result
+	return append(result, diagnosticTuple{"api.unrealized", "ClusterAddon", "virtual-cluster-network", "$.spec.manifestSet"})
 }
 
 // expandedRefusals adds what the acceptance extras contribute to the

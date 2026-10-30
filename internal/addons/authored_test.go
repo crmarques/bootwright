@@ -1,6 +1,7 @@
 package addons
 
 import (
+	"reflect"
 	"slices"
 	"strings"
 	"testing"
@@ -59,7 +60,9 @@ func TestAuthoredSynthesizesAPackageFromTheDefinition(t *testing.T) {
 	}
 	phase := rendered.After[0]
 	crd := clusterobjects.Ref{APIVersion: "apiextensions.k8s.io/v1", Kind: "CustomResourceDefinition", Name: "widgets.example.test"}
-	if len(phase.Gate) != 1 || phase.Gate[0].ResourceExists == nil || *phase.Gate[0].ResourceExists != crd || len(phase.Secrets) != 0 || len(phase.Approvals) != 0 {
+	scope := clusterobjects.PhaseCheck{Ref: crd, Path: clusterobjects.ScopePath, Values: []string{"Namespaced"}}
+	accepted := clusterobjects.PhaseCheck{Ref: crd, Path: "status.acceptedNames.kind", Values: []string{"Widget"}}
+	if len(phase.Gate) != 3 || phase.Gate[0].ResourceExists == nil || *phase.Gate[0].ResourceExists != crd || phase.Gate[1].StatusPhase == nil || !reflect.DeepEqual(*phase.Gate[1].StatusPhase, scope) || phase.Gate[2].StatusPhase == nil || !reflect.DeepEqual(*phase.Gate[2].StatusPhase, accepted) || len(phase.Secrets) != 0 || len(phase.Approvals) != 0 {
 		t.Fatalf("%+v", phase)
 	}
 	if len(phase.Objects) != 1 || phase.Objects[0].Ref != (clusterobjects.Ref{APIVersion: "example.test/v1", Kind: "Widget", Namespace: "example-operator", Name: "example", Namespaced: true}) {
@@ -114,7 +117,7 @@ func TestAuthoredGroupShapesAndNonExecutableShapes(t *testing.T) {
 		"two targets": {func(spec api.Value) api.Value {
 			return spec.WithPath(api.StringList("example-operator", "elsewhere"), "olm", "operatorGroup", "targetNamespaces")
 		}, "other namespaces"},
-		"no olm": {func(spec api.Value) api.Value { return m("manifestSet", m("manifests", manifests("manifests/a.yaml"))) }, "no olm arm"},
+		"no olm": {func(spec api.Value) api.Value { return m("manifestSet", m("manifests", manifests("manifests/a.yaml"))) }, "manifest set"},
 	} {
 		t.Run(name, func(t *testing.T) {
 			o, _ := Normalize(obj(api.ClusterAddon, "example", test.edit(executableSpec().WithPath(m(), "olm", "operatorGroup"))), api.NewCatalog(nil))
@@ -217,5 +220,39 @@ func TestRegistryRefusesABuiltInPackageWithADescriptor(t *testing.T) {
 	}
 	if _, err := NewRegistry([]Package{authored}); err == nil {
 		t.Fatal("a synthesized authored package entered the built-in registry")
+	}
+}
+
+func TestAnAuthoredGateBindsExactlyOneCRDOfTheGroupAndTheResourceKind(t *testing.T) {
+	crd := func(name string) api.Value {
+		return m("resourceExists", m("apiVersion", s("apiextensions.k8s.io/v1"), "kind", s("CustomResourceDefinition"), "name", s(name)))
+	}
+	withGate := func(checks ...api.Value) api.Object {
+		return authoredDefinition(t, "example", func(spec api.Value) api.Value {
+			item := spec.Get("olm", "customResources").Items()[0]
+			return spec.WithPath(l(item.With("gate", l(checks...))), "olm", "customResources")
+		})
+	}
+	for name, gate := range map[string][]api.Value{
+		"none":    {crd("widgets.other.test")},
+		"several": {crd("foos.example.test"), crd("widgets.example.test")},
+		"dotted":  {crd("a.widgets.example.test")},
+	} {
+		if _, err := Authored(withGate(gate...)); err == nil || !strings.Contains(err.Error(), "exactly one CustomResourceDefinition of group example.test") {
+			t.Fatalf("%s: %v", name, err)
+		}
+	}
+	foos := withGate(crd("foos.example.test"))
+	p, err := Authored(foos)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rendered, err := p.Render(Instance{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	gate := rendered.After[0].Gate
+	if len(gate) != 3 || gate[1].StatusPhase.Name != "foos.example.test" || gate[2].StatusPhase.Path != "status.acceptedNames.kind" || !slices.Equal(gate[2].StatusPhase.Values, []string{"Widget"}) {
+		t.Fatalf("the Widget resource is gated on the foos definition's own accepted kind: %+v", gate)
 	}
 }

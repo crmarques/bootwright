@@ -1,6 +1,8 @@
 package instance
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"slices"
@@ -22,6 +24,7 @@ type Request struct {
 	Binding             string                    `json:"binding"`
 	BudgetSeconds       int64                     `json:"budgetSeconds"`
 	Cluster             string                    `json:"cluster"`
+	Descriptor          string                    `json:"descriptor"`
 	Package             string                    `json:"package"`
 	Placement           machine.Placement         `json:"placement"`
 	PlacementNamespaces []string                  `json:"placementNamespaces"`
@@ -67,9 +70,16 @@ func (r Request) Objects() (clusterobjects.Program, error) {
 	}
 	return clusterobjects.ThawVersion(r.Program, options)
 }
+func validDescriptor(value string) bool {
+	decoded, err := hex.DecodeString(value)
+	return err == nil && len(decoded) == sha256.Size && hex.EncodeToString(decoded) == value
+}
 func (r Request) validate() error {
 	if r.Version != requestVersion || !reconciliation.ValidSegment(r.Cluster) || !reconciliation.ValidSegment(r.Package) || !reconciliation.ValidSegment(r.Binding) || !reconciliation.ValidSegment(BlockID(r.Package, r.Cluster)) {
 		return fmt.Errorf("invalid add-on instance identity")
+	}
+	if r.Descriptor != "" && (!validDescriptor(r.Descriptor) || len(r.PlacementNamespaces) != 0 || len(r.Secrets) != 0) {
+		return fmt.Errorf("invalid add-on descriptor")
 	}
 	if r.BudgetSeconds <= 0 || r.BudgetSeconds > int64(addons.MaxBudget/time.Second) || r.Deadline() > lifecycle.MaxDeadline {
 		return fmt.Errorf("invalid add-on instance budget")
@@ -79,6 +89,9 @@ func (r Request) validate() error {
 	}
 	if r.Tool.Kind != "openshift-clients" || r.Tool.Compatibility != "openshift" || r.Tool.Version == "" {
 		return fmt.Errorf("invalid add-on instance client")
+	}
+	if r.Descriptor != "" && len(r.ProducedInputs) != 1 {
+		return fmt.Errorf("an authored add-on places no Secret")
 	}
 	if len(r.ProducedInputs) < 1 || r.ProducedInputs[0] != (lifecycle.ProducedInput{Kind: "OpenShiftCluster", Object: r.Cluster, Output: "kubeconfig"}) {
 		return fmt.Errorf("add-on instance must name its cluster kubeconfig")

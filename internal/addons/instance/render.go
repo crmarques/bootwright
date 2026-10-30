@@ -16,6 +16,9 @@ import (
 func Render(selected addons.SelectedInstance, facts addons.ClusterFacts, controller string) (Request, []reconciliation.ObjectRef, error) {
 	p, instance := selected.Package, selected.Instance
 	instance.Facts = facts
+	if hostedNamespace(p, facts) {
+		return Request{}, nil, fmt.Errorf("namespace %s of add-on %s is a namespace KubeVirt hosts for %s", p.OLM.Namespace, p.Name, instance.Cluster)
+	}
 	rendered, err := p.Render(instance)
 	if err != nil {
 		return Request{}, nil, err
@@ -75,7 +78,7 @@ func Render(selected addons.SelectedInstance, facts addons.ClusterFacts, control
 	}
 	slices.Sort(secrets)
 	secrets = slices.Compact(secrets)
-	request := Request{Binding: instance.Binding, BudgetSeconds: int64(budget / time.Second), Cluster: instance.Cluster, Package: p.Name, Placement: machine.Placement{Connection: machine.ConnectionLocal, Machine: controller}, PlacementNamespaces: placementNamespaces, ProducedInputs: produced, Program: data, Secrets: secrets, Tool: Tool{Compatibility: "openshift", Kind: "openshift-clients", Version: facts.Release}, Version: requestVersion}
+	request := Request{Binding: instance.Binding, BudgetSeconds: int64(budget / time.Second), Cluster: instance.Cluster, Descriptor: p.Descriptor, Package: p.Name, Placement: machine.Placement{Connection: machine.ConnectionLocal, Machine: controller}, PlacementNamespaces: placementNamespaces, ProducedInputs: produced, Program: data, Secrets: secrets, Tool: Tool{Compatibility: "openshift", Kind: "openshift-clients", Version: facts.Release}, Version: requestVersion}
 	requires := []reconciliation.ObjectRef{{Kind: "OpenShiftCluster", Object: instance.Cluster}}
 	for _, provider := range selected.Providers {
 		if provider.Package != "" {
@@ -85,6 +88,10 @@ func Render(selected addons.SelectedInstance, facts addons.ClusterFacts, control
 	requires = append(requires, rendered.Requires...)
 	_, err = request.Canonical()
 	return request, requires, err
+}
+
+func hostedNamespace(p addons.Package, facts addons.ClusterFacts) bool {
+	return p.Descriptor != "" && p.OLM != nil && slices.ContainsFunc(facts.HostedNamespaces, func(hosted addons.HostedNamespace) bool { return hosted.Name == p.OLM.Namespace })
 }
 
 func declaredNamespaces(p addons.Package) []string {

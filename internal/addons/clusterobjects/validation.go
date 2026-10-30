@@ -15,6 +15,19 @@ var kindName = regexp.MustCompile(`^[A-Za-z][A-Za-z0-9]*$`)
 var dataKey = regexp.MustCompile(`^[A-Za-z0-9._-]+$`)
 var phasePath = regexp.MustCompile(`^status\.[A-Za-z][A-Za-z0-9]*(\.[A-Za-z][A-Za-z0-9]*)*$`)
 
+const (
+	ScopePath  = "spec.scope"
+	crdVersion = "apiextensions.k8s.io/v1"
+	crdKind    = "CustomResourceDefinition"
+)
+
+func validPhasePath(phase *PhaseCheck) bool {
+	if phase.Path == "" || phasePath.MatchString(phase.Path) {
+		return true
+	}
+	return phase.Path == ScopePath && phase.APIVersion == crdVersion && phase.Kind == crdKind && !phase.Namespaced && phase.Namespace == ""
+}
+
 func validName(value string) bool {
 	if len(value) == 0 || len(value) > 253 || !dnsName.MatchString(value) {
 		return false
@@ -254,7 +267,7 @@ func validateCheck(check Check) error {
 		if err := validateRef(phase.Ref); err != nil {
 			return err
 		}
-		if (phase.Path != "" && !phasePath.MatchString(phase.Path)) || len(phase.Values) == 0 {
+		if !validPhasePath(phase) || len(phase.Values) == 0 {
 			return fmt.Errorf("invalid status phase check")
 		}
 		for _, value := range phase.Values {

@@ -1,6 +1,6 @@
 implementation: addon-instance-v1
-content-digest: 07188be59712642b6c38ef1ad1c2999774aa5860762bc81eb145ad1c4d2b2402
-request-version: addon-instance-request-v3
+content-digest: 251bd2e48a7c5860ef6b8240e45c83b54dc30d5132b539a199776fb7c5319731
+request-version: addon-instance-request-v4
 automation-formats: none
 mark-formats: bootwright.cluster-objects.owner-v1, bootwright.io/owner
 proof-ids: none
@@ -20,6 +20,7 @@ request-schema:
   binding string
   budgetSeconds int64
   cluster string
+  descriptor string
   package string
   placement struct machine.Placement
   placement.address string omitempty

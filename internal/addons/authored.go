@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"slices"
+	"strings"
 	"time"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
@@ -14,27 +15,37 @@ import (
 
 const authoredSummary = "Authored OLM add-on"
 
-func authoredShapeRefusal(definition api.Object) string {
+type ShapeRefusal string
+
+const (
+	ShapeManifestSet ShapeRefusal = "it declares a manifest set"
+	ShapeSteps       ShapeRefusal = "it declares steps"
+	ShapeInputs      ShapeRefusal = "it declares inputs"
+	ShapeExternal    ShapeRefusal = "its namespace is external"
+	ShapeNoGroup     ShapeRefusal = "it declares no OperatorGroup"
+	ShapeTargets     ShapeRefusal = "its OperatorGroup targets other namespaces"
+	shapeNotAddOn    ShapeRefusal = "it is not a ClusterAddon"
+)
+
+func AuthoredShapeRefusal(definition api.Object) ShapeRefusal {
 	spec := definition.Spec()
 	olm := spec.Get("olm")
 	switch {
 	case definition.Kind() != api.ClusterAddon:
-		return "it is not a ClusterAddon"
-	case !olm.Present():
-		return "it has no olm arm"
-	case spec.Has("manifestSet"):
-		return "it declares a manifest set"
+		return shapeNotAddOn
+	case spec.Has("manifestSet") || !olm.Present():
+		return ShapeManifestSet
 	case spec.Get("steps").Len() > 0:
-		return "it declares steps"
+		return ShapeSteps
 	case spec.Get("inputs").Len() > 0:
-		return "it declares inputs"
+		return ShapeInputs
 	case olm.Get("namespace", "management").Text() == "external":
-		return "its namespace is external"
+		return ShapeExternal
 	case !olm.Get("operatorGroup").Present():
-		return "it declares no OperatorGroup"
+		return ShapeNoGroup
 	}
 	if _, ok := authoredGroupShape(olm); !ok {
-		return "its OperatorGroup targets other namespaces"
+		return ShapeTargets
 	}
 	return ""
 }
@@ -51,7 +62,8 @@ func authoredGroupShape(olm api.Value) (GroupShape, bool) {
 }
 
 func ExecutableAuthored(definition api.Object) bool {
-	return authoredShapeRefusal(definition) == "" && len(definition.Name()) <= MaxPackageNameBytes
+	_, err := Authored(definition)
+	return err == nil
 }
 
 func DescriptorDigest(spec api.Value) (string, error) {
@@ -65,7 +77,7 @@ func DescriptorDigest(spec api.Value) (string, error) {
 
 func Authored(definition api.Object) (Package, error) {
 	identity := definition.Identity()
-	if reason := authoredShapeRefusal(definition); reason != "" {
+	if reason := AuthoredShapeRefusal(definition); reason != "" {
 		return Package{}, fmt.Errorf("%s is not an executable add-on: %s", identity, reason)
 	}
 	name := definition.Name()
@@ -144,6 +156,11 @@ func renderAuthored(definition api.Object) (Rendered, error) {
 			return Rendered{}, fmt.Errorf("%s custom resource %d gate: %w", definition.Identity(), i, err)
 		}
 		resource, metadata := entry.Get("resource"), entry.Get("resource", "metadata")
+		bound, err := kindBoundChecks(gate, resource.Get("apiVersion").Text(), resource.Get("kind").Text())
+		if err != nil {
+			return Rendered{}, fmt.Errorf("%s custom resource %d gate: %w", definition.Identity(), i, err)
+		}
+		gate = append(gate, bound...)
 		ref := clusterobjects.Ref{APIVersion: resource.Get("apiVersion").Text(), Kind: resource.Get("kind").Text(), Namespace: metadata.Get("namespace").Text(), Name: metadata.Get("name").Text(), Namespaced: true}
 		rendered.After = append(rendered.After, clusterobjects.Phase{Gate: gate, Objects: []clusterobjects.Object{{Ref: ref, Body: resource}}})
 	}
@@ -168,4 +185,26 @@ func authoredChecks(checks api.Value, dropCSV bool) ([]clusterobjects.Check, err
 		result = append(result, program)
 	}
 	return result, nil
+}
+
+func kindBoundChecks(gate []clusterobjects.Check, apiVersion, kind string) ([]clusterobjects.Check, error) {
+	group, _, _ := strings.Cut(apiVersion, "/")
+	var crds []clusterobjects.Ref
+	for _, check := range gate {
+		crd := check.ResourceExists
+		plural, found := "", false
+		if crd != nil && crd.APIVersion == crdAPIVersion && crd.Kind == crdKind {
+			plural, found = strings.CutSuffix(crd.Name, "."+group)
+		}
+		if found && plural != "" && !strings.Contains(plural, ".") {
+			crds = append(crds, *crd)
+		}
+	}
+	if len(crds) != 1 {
+		return nil, fmt.Errorf("the gate must name exactly one CustomResourceDefinition of group %s, not %d", group, len(crds))
+	}
+	phase := func(path, value string) clusterobjects.Check {
+		return clusterobjects.Check{StatusPhase: &clusterobjects.PhaseCheck{Ref: crds[0], Path: path, Values: []string{value}}}
+	}
+	return []clusterobjects.Check{phase(clusterobjects.ScopePath, "Namespaced"), phase("status.acceptedNames.kind", kind)}, nil
 }

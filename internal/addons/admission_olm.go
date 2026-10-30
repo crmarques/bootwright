@@ -2,6 +2,7 @@ package addons
 
 import (
 	"math"
+	"strconv"
 	"strings"
 	"time"
 
@@ -132,8 +133,13 @@ func validateCustomResource(resource, gate api.Value, namespace, field string, p
 	if kind.Type() == api.String && strings.EqualFold(kind.Text(), "Secret") {
 		issues = append(issues, addonIssue("api.invariant", field+".kind", "A custom resource cannot be a Secret.", "remove the Secret custom resource; an authored add-on places no Secret"))
 	}
-	if group != "" && (gate.Present() || !partial) && !gateNamesCRD(gate, group) {
-		issues = append(issues, addonIssue("api.invariant", strings.TrimSuffix(field, ".resource")+".gate", "The gate of a "+group+" custom resource does not prove its CustomResourceDefinition.", "add a resourceExists check of "+crdAPIVersion+" "+crdKind+" named <plural>."+group+" to the gate"))
+	if group != "" && (gate.Present() || !partial) {
+		switch crds := gateCRDNames(gate, group); {
+		case len(crds) == 0:
+			issues = append(issues, addonIssue("api.invariant", strings.TrimSuffix(field, ".resource")+".gate", "The gate of a "+group+" custom resource does not prove its CustomResourceDefinition.", "add a resourceExists check of "+crdAPIVersion+" "+crdKind+" named <plural>."+group+" of the resource kind to the gate"))
+		case len(crds) > 1:
+			issues = append(issues, addonIssue("api.invariant", strings.TrimSuffix(field, ".resource")+".gate", "The gate of a "+group+" custom resource names "+strconv.Itoa(len(crds))+" CustomResourceDefinitions of that group, so it binds none of them to the resource kind.", "keep only the resourceExists check of "+crdAPIVersion+" "+crdKind+" named <plural>."+group+" of the resource kind in the gate"))
+		}
 	}
 	complete := apiVersion.Type() == api.String && kind.Type() == api.String && name.Type() == api.String && ns.Type() == api.String && namespace != "" && ns.Text() == namespace
 	if len(issues) == 0 && complete && apiVersion.Text() != "" && kind.Text() != "" && name.Text() != "" {
@@ -165,18 +171,18 @@ func quotedGroup(group string) string {
 	return group
 }
 
-func gateNamesCRD(gate api.Value, group string) bool {
+func gateCRDNames(gate api.Value, group string) []string {
+	names := []string{}
 	for _, check := range gate.Items() {
 		exists := check.Get("resourceExists")
 		if exists.Get("apiVersion").Text() != crdAPIVersion || exists.Get("kind").Text() != crdKind {
 			continue
 		}
-		plural, found := strings.CutSuffix(exists.Get("name").Text(), "."+group)
-		if found && plural != "" && !strings.Contains(plural, ".") {
-			return true
+		if plural, found := strings.CutSuffix(exists.Get("name").Text(), "."+group); found && plural != "" && !strings.Contains(plural, ".") {
+			names = append(names, exists.Get("name").Text())
 		}
 	}
-	return false
+	return names
 }
 
 func effectiveSubscription(olm api.Value) string {

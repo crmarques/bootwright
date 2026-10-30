@@ -12,7 +12,7 @@ import (
 const (
 	Kind            = "ClusterAddonBinding"
 	Implementation  = "addon-instance-v1"
-	requestVersion  = "addon-instance-request-v3"
+	requestVersion  = "addon-instance-request-v4"
 	evidenceVersion = "addon-instance-evidence-v3"
 )
 

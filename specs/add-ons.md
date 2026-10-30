@@ -26,7 +26,14 @@ An authored OLM add-on's catalog image and ClusterServiceVersion are code the
 author chooses, and the operator they install runs with the privileges that
 code requests. The admission rules on its custom resources, namespace and
 catalog priority are [defense in depth](api/addons.md#executable-olm-add-ons),
-not a containment boundary.
+not a containment boundary. One of them is a guard at execution: each custom
+resource's gate names exactly one `CustomResourceDefinition` of the resource's
+API group and also holds a check that the definition's `spec.scope` is
+`Namespaced` and a check that its `status.acceptedNames.kind` is the
+resource's own kind. The gate therefore proves the resource's own kind is
+namespaced, and a cluster-scoped kind, or a kind another definition of the
+group serves, never passes its gate and nothing is created. `spec.scope` is a
+path only a `statusPhase` check of a `CustomResourceDefinition` may read.
 
 Nothing is discovered ambiently. Working directories, `PATH`, environment
 variables, user configuration, Ansible paths, network registries and global
@@ -93,10 +100,12 @@ most one package instance across the input. The consumer's external-cluster
 details reach the cluster only as an [owned Secret](#owned-secrets) placed
 from the consumer block's produced material.
 
-An authored `ClusterAddon` is admitted declaration data. A binding that
-selects one, directly or through a profile, is refused at `plan` and `apply`
-under the [refusal table](#refusal-table): authored packages need the
-custom-package lifecycle of [B90](milestones/m4.md#b90). `ClusterAddon` and
+An authored `ClusterAddon` of the executable shape, a managed namespace and an
+OperatorGroup of its own namespace or all, is selected as an instance named
+after the add-on ([instances and blocks](#instances-and-blocks)). A binding that
+selects one of any other shape, directly or through a profile, is refused at
+`plan` and `apply` under the [refusal table](#refusal-table), and
+[B90](milestones/m4.md#b90) tracks the rest. `ClusterAddon` and
 `ClusterAddonProfile` are definitions that perform nothing by themselves; a
 binding's selection is what has effects.
 
@@ -151,14 +160,15 @@ facts ([output](cli/output.md)).
 
 ## Instances and blocks
 
-Each package a binding selects is one instance, and each instance is one
-block in the `add-ons` stage:
+Each package a binding selects, and each authored add-on of the executable
+shape, is one instance, and each instance is one block in the `add-ons` stage;
+an authored instance is named after its add-on, in place of `<package>` below:
 
 | Member | Value |
 | --- | --- |
 | Identity | `addon-<package>-<cluster>`, [hashing an identity over 63 bytes](state-reconciliation.md#durable-identities-and-private-paths) |
 | Kind and object | `ClusterAddonBinding`, `<cluster>.<package>` |
-| Implementation | `addon-instance-v1`, for every package |
+| Implementation | `addon-instance-v1`, for every package and authored add-on |
 | Requirements | the cluster's blocks; every instance on the same cluster that provides a capability the package requires; every instance that a binding named by its binding's [`spec.afterRefs`](api/addons.md#clusteraddonbinding) selects; the installation block's `kubeconfig` as a [produced input](state-reconciliation.md#produced-material-custody); the objects the package's configuration references that another block realizes, with their produced material when a Secret placement takes it; and, for a [last package](#built-in-packages-and-selection), every other block of the `add-ons` stage that requires the same cluster's installation block: every other instance on that cluster and, when the cluster has one, its [cluster network block](openshift-clusters.md#post-installation-network-configuration) |
 | Apply description and impact | `install add-on <package> on <cluster>`; `install-addon <package> <cluster>` |
 | Removal description and impact | `retire add-on <package> with <cluster>`, saying its objects leave with the cluster's disks or stay on a cluster that keeps running; no impact |
@@ -167,7 +177,7 @@ Dependency edges, derived and [authored](api/addons.md#clusteraddonbinding), ord
 (dependency order, then binding name, then package name) only breaks ties. The
 request, version `requestVersion` in `internal/addons/instance/catalog.go`,
 freezes the cluster, binding and
-package, the controller placement, the `oc` of the cluster's exact release, one
+package, the `descriptor`, the controller placement, the `oc` of the cluster's exact release, one
 readiness budget in seconds, the rendered program, the names of the Secrets it
 places, the sorted unique `placementNamespaces` its package declares for those
 placements, which every reader of the request takes from it and never from the
@@ -176,6 +186,15 @@ never their bytes. Apply and observation refuse, before any cluster contact, a
 frozen request whose namespaces differ from this build's registry entry for its
 package; retiring one still works, and another build's continuation is guarded
 by the [block comparison](state-reconciliation.md#continuation-and-removal).
+The `descriptor` is empty for a built-in package and, for an authored add-on,
+the 64 lowercase hexadecimal digits of the SHA-256 of its normalized
+definition, so an edited definition changes the request. An authored request
+has no `placementNamespaces` and no Secret, and it is never looked up as a
+registry package: apply and observation refuse it with `lifecycle.state`,
+naming the package, when this build's registry holds a package of its name or
+when its frozen program creates anything outside the add-on's own namespace
+other than that Namespace and the CatalogSource in `openshift-marketplace`,
+before any adapter call, while retiring it still works.
 The content digest covers the implementation, request, evidence
 and program versions and the ownership and approval rule tags; a change to what
 a package renders changes the request, so another build continues an operation
@@ -299,7 +318,7 @@ removal entry point: an instance is [retired](#retirement).
 
 ## OLM installation
 
-A package that installs an operator creates its owned namespace, its
+A package or authored add-on that installs an operator creates its owned namespace, its
 OperatorGroup, its owned CatalogSource in `openshift-marketplace` when the
 configuration declares one (with the configuration's explicit priority, then a
 wait for `READY`), and one Subscription with `installPlanApproval: Manual` and
@@ -418,6 +437,7 @@ only a `CephConsumer`'s `external-details`. Planning refuses any other
 producer kind or output, in particular every `kubeconfig` and `dashboard`
 output, naming the placement.
 
+An authored add-on places no Secret.
 
 ## Observation and continuation
 
@@ -523,19 +543,27 @@ test of that capability's package, `TestAddOnRefusalTableMatchesUnsupported`,
 holds its `Unsupported` to it. Its reason and remedy are the diagnostic's
 message and remediation, in which `<addon>` is the refused ClusterAddon,
 `<binding>` the binding, `<package>` the package, `<cluster>` the bound
-cluster, `<bound>` the bound passed and `<error>` the renderer's own error.
-Planning wraps any render error that reaches it the same way, so none reaches
+cluster, `<bound>` the bound passed, `<namespace>` the hosted namespace and
+`<error>` the renderer's own error. Planning wraps any render error that reaches it the same way, so none reaches
 the operator bare.
 
 | Refusal | Path | Reason | Remedy |
 | --- | --- | --- | --- |
-| An authored add-on | a `ClusterAddon` a binding selects, directly or through a profile | `<addon> is an authored add-on, which needs the custom-package lifecycle this executable does not offer` | `select a built-in package under spec.packages of <binding>, or remove <addon> from its selection` |
+| An authored manifest set | a `ClusterAddon` a binding selects, directly or through a profile, that declares `spec.manifestSet` | `<addon> declares a manifest set, which this executable does not install` | `remove spec.manifestSet from <addon> and declare an olm arm, or remove <addon> from the selection of <binding>` |
+| An authored add-on with steps | a selected `ClusterAddon` that declares `spec.steps` | `<addon> declares steps, which this executable does not run` | `remove spec.steps from <addon>, or remove <addon> from the selection of <binding>` |
+| An authored add-on with inputs | a selected `ClusterAddon` that declares `spec.inputs` | `<addon> declares inputs, which this executable does not place` | `remove spec.inputs from <addon>, or remove <addon> from the selection of <binding>` |
+| An authored external namespace | a selected `ClusterAddon` whose `spec.olm.namespace.management` is `external` | `<addon> declares an external namespace, which this executable does not install into` | `set spec.olm.namespace.management of <addon> to managed, or remove <addon> from the selection of <binding>` |
+| An authored add-on with no OperatorGroup | a selected `ClusterAddon` with no `spec.olm.operatorGroup` | `<addon> declares no OperatorGroup, which this executable needs to install its operator` | `declare spec.olm.operatorGroup of <addon>, or remove <addon> from the selection of <binding>` |
+| An authored OperatorGroup targeting other namespaces | a selected `ClusterAddon` whose OperatorGroup targets neither its own namespace nor all | `<addon> targets namespaces other than its own or all, which this executable does not install` | `set spec.olm.operatorGroup.targetNamespaces of <addon> to its own namespace or an empty list, or remove <addon> from the selection of <binding>` |
 | An oversized instance | a package whose rendered program for `<cluster>` passes a bound | `the program of package <package> for <cluster> passes its <bound>` | `reduce the configuration of package <package> in <binding>` |
 | A package that cannot be rendered | a package whose rendering or request canonicalization fails for `<cluster>` for any other reason | `package <package> cannot be rendered for <cluster>: <error>` | `correct the configuration of package <package> in <binding>` |
+| An oversized authored add-on | an executable authored add-on whose rendered program for `<cluster>` passes a bound | `the program of <addon> for <cluster> passes its <bound>` | `reduce the custom resources or readiness checks of <addon>` |
+| An authored add-on that cannot be rendered | a selected `ClusterAddon` of the executable shape whose synthesis, rendering or request canonicalization fails for `<cluster>` for any other reason | `<addon> cannot be rendered for <cluster>: <error>` | `correct <addon>` |
+| An authored hosted namespace | an executable authored add-on whose `spec.olm.namespace.name` is a namespace KubeVirt hosts for `<cluster>` | `<addon> uses namespace <namespace>, which KubeVirt hosts for <cluster>` | `set spec.olm.namespace.name of <addon> to a namespace that is not hosted for <cluster>` |
 
 ## Design
 
-Authored (custom) packages, custom catalogs, a versioned host interface for
+Authored manifest sets, custom catalogs, a versioned host interface for
 drivers outside the executable, and step semantics remain in the
 [add-ons design](deferred/add-ons-design.md), which
 [B90](milestones/m4.md#b90) revives.

@@ -159,6 +159,7 @@
       "binding": "compact-hub",
       "budgetSeconds": 2700,
       "cluster": "compact",
+      "descriptor": "",
       "package": "acm",
       "placement": {
         "connection": "local",
@@ -345,7 +346,7 @@
         "kind": "openshift-clients",
         "version": "4.21.15"
       },
-      "version": "addon-instance-request-v3"
+      "version": "addon-instance-request-v4"
     }
   },
   {
@@ -363,6 +364,7 @@
       "binding": "compact-hub",
       "budgetSeconds": 1200,
       "cluster": "compact",
+      "descriptor": "",
       "package": "gitops",
       "placement": {
         "connection": "local",
@@ -590,7 +592,7 @@
         "kind": "openshift-clients",
         "version": "4.21.15"
       },
-      "version": "addon-instance-request-v3"
+      "version": "addon-instance-request-v4"
     }
   }
 ]

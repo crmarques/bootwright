@@ -42,7 +42,7 @@ func TestSelectionRefusalsPointAtTheEntry(t *testing.T) {
 			at := []diagnostics.Diagnostic{}
 			for _, d := range found {
 				golden.WriteString(row.name + ": " + refusalLine(d) + "\n")
-				if list, _, _ := strings.Cut(row.field, "["); strings.HasPrefix(d.Field, list) {
+				if list, _, _ := strings.Cut(row.field, "["); strings.HasPrefix(d.Field, list) && d.Code == row.code {
 					at = append(at, d)
 				}
 				if strings.Contains(d.Message+"; "+d.Remediation, refusalSentinel) {

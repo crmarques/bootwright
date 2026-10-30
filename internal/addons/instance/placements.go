@@ -5,11 +5,18 @@ import (
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/addons"
+	co "github.com/crmarques/bootwright/internal/addons/clusterobjects"
 	"github.com/crmarques/bootwright/internal/secrets"
 )
 
 func validateNamespaces(request Request, registry addons.Registry) error {
 	pkg, ok := registry.Find(request.Package)
+	if request.Descriptor != "" {
+		if ok {
+			return refusal("add-on "+request.Package+" was frozen as an authored add-on, and this build has a built-in package of that name", "destroy the operation with the build that froze it, or rename the ClusterAddon and plan again")
+		}
+		return validateAuthoredObjects(request)
+	}
 	if !ok {
 		return refusal("add-on package "+request.Package+" is not in this build", "select a built-in package")
 	}
@@ -60,6 +67,34 @@ func validatePlacements(request Request, catalog api.Catalog) error {
 					return refusal("TLS placement "+p.Name+" maps the wrong certificate part", "correct the package TLS mapping")
 				}
 			}
+		}
+	}
+	return nil
+}
+
+func validateAuthoredObjects(request Request) error {
+	program, err := request.Objects()
+	if err != nil {
+		return err
+	}
+	namespace := ""
+	for _, step := range program.Steps {
+		if step.Subscribe != nil {
+			namespace = step.Subscribe.Object.Namespace
+		}
+	}
+	inside := func(ref co.Ref) bool {
+		switch {
+		case ref.Namespaced && ref.Namespace == namespace:
+			return true
+		case ref.APIVersion == "v1" && ref.Kind == "Namespace" && !ref.Namespaced && ref.Name == namespace:
+			return true
+		}
+		return ref.APIVersion == "operators.coreos.com/v1alpha1" && ref.Kind == "CatalogSource" && ref.Namespaced && ref.Namespace == "openshift-marketplace"
+	}
+	for _, step := range program.Steps {
+		if namespace == "" || step.Place != nil || step.ApproveDependent != nil || step.Create != nil && !inside(step.Create.Ref) || step.CatalogReady != nil && !inside(*step.CatalogReady) {
+			return refusal("add-on "+request.Package+" froze a program that reaches beyond its own namespace", "destroy the operation with the build that froze it, or plan again with this build")
 		}
 	}
 	return nil

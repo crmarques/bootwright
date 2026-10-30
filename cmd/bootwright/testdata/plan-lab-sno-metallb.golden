@@ -124,6 +124,7 @@
       "binding": "metallb",
       "budgetSeconds": 1800,
       "cluster": "sno",
+      "descriptor": "",
       "package": "metallb",
       "placement": {
         "connection": "local",
@@ -358,7 +359,7 @@
         "kind": "openshift-clients",
         "version": "4.21.15"
       },
-      "version": "addon-instance-request-v3"
+      "version": "addon-instance-request-v4"
     }
   }
 ]

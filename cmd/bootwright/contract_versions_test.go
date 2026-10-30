@@ -146,7 +146,7 @@ func validated(reason string) automationFormat {
 func automationFormats() map[string]automationFormat {
 	host, core := persistedBy(ceph.HostImplementation), persistedBy(ceph.Implementation)
 	formats := map[string]automationFormat{
-		"addon-instance-request-v3":  {class: formatMirrored},
+		"addon-instance-request-v4":  {class: formatMirrored},
 		"ceph-export-request-v3":     {class: formatMirrored},
 		"ceph-export-evidence-v1":    {class: formatMirrored},
 		"cluster-network-request-v2": {class: formatMirrored},

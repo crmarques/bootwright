@@ -163,7 +163,7 @@ func validateDeclaration(o api.Object, c api.Catalog, partial bool) []api.Issue 
 	}
 	issues = append(issues, validateOLMNamespace(olm)...)
 	issues = append(issues, validateCatalogSource(olm)...)
-	if !partial && len(o.Name()) > MaxPackageNameBytes && authoredShapeRefusal(o) == "" {
+	if !partial && len(o.Name()) > MaxPackageNameBytes && AuthoredShapeRefusal(o) == "" {
 		issues = append(issues, addonIssue("api.invariant", "metadata.name", fmt.Sprintf("Executable add-on name %s is longer than the %d bytes an add-on selected as an instance may have.", o.Name(), MaxPackageNameBytes), fmt.Sprintf("rename ClusterAddon/%s to at most %d bytes", o.Name(), MaxPackageNameBytes)))
 	}
 	issues = append(issues, validateCustomResources(olm, partial)...)

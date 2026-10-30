@@ -2,7 +2,7 @@
 - name: Validate the frozen add-on instance version
   ansible.builtin.assert:
     that:
-      - bootwright_addon_instance_request.version == 'addon-instance-request-v3'
+      - bootwright_addon_instance_request.version == 'addon-instance-request-v4'
     quiet: true
     fail_msg: The frozen add-on instance request version is unsupported.
 

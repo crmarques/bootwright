@@ -607,6 +607,7 @@
       "binding": "compact-data-foundation",
       "budgetSeconds": 3600,
       "cluster": "compact",
+      "descriptor": "",
       "package": "fdf",
       "placement": {
         "connection": "local",
@@ -905,7 +906,7 @@
         "kind": "openshift-clients",
         "version": "4.21.15"
       },
-      "version": "addon-instance-request-v3"
+      "version": "addon-instance-request-v4"
     }
   }
 ]

@@ -56,14 +56,20 @@ proves each row warned and refused at `plan`.
 | OpenShiftCluster | `spec.distribution.type: okd` | [B748](milestones/backlog.md#b748) |
 | OpenShiftCluster | `spec.install.mode: disconnected` | [B69](milestones/m3.md#b69) |
 | OpenShiftCluster | `spec.install.servingCertificates` | [B723](milestones/m3.md#b723) |
-| ClusterAddonBinding | `spec.addonRefs` | [B90](milestones/m4.md#b90) |
-| ClusterAddonBinding | `spec.profileRefs` | [B90](milestones/m4.md#b90) |
+| ClusterAddon | `spec.manifestSet` | [B90](milestones/m4.md#b90) |
+| ClusterAddon | `spec.olm.namespace.management: external` | [B90](milestones/m4.md#b90) |
+| ClusterAddon | `spec.inputs` | none tracked |
+| ClusterAddon | `spec.steps` | none tracked |
 | CustomPlaybook | `spec.enabled: true` | [B102](milestones/backlog.md#b102) |
 | Entitlement | `spec.rhsm.connectToInsights: true` | none tracked |
 | Environment | `spec.dependencyVersions.libvirt other than latest` | [B676](milestones/backlog.md#b676) |
 
 An install-profile row is refused on each Machine that selects the profile, and
-an Entitlement row on each Machine whose install profile subscribes to it. The
+an Entitlement row on each Machine whose install profile subscribes to it.
+A `ClusterAddon` row is refused on each binding that selects it, directly or
+through a profile. The OperatorGroup shapes of a `ClusterAddon` that no
+declaration path names, none and other target namespaces, are refused at `plan`
+by the [refusal table](add-ons.md#refusal-table) only. The
 `dependencyVersions.libvirt` row is refused when the controller selects the
 libvirt client.
 Other plan-time refusals, such as bounds, placements and trust shapes, stay in

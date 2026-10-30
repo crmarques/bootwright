@@ -291,3 +291,28 @@ func TestVocabularyGolden(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+func TestAStatusPhaseMayReadAScopeOnlyFromACustomResourceDefinition(t *testing.T) {
+	crd := Ref{APIVersion: "apiextensions.k8s.io/v1", Kind: "CustomResourceDefinition", Name: "widgets.example.test"}
+	other := Ref{APIVersion: "example.test/v1", Kind: "Widget", Namespace: "widget-ns", Name: "widget", Namespaced: true}
+	for name, test := range map[string]struct {
+		ref   Ref
+		path  string
+		valid bool
+	}{
+		"scope of a definition":   {crd, ScopePath, true},
+		"status of a definition":  {crd, "status.phase", true},
+		"scope of a namespaced":   {other, ScopePath, false},
+		"spec of a definition":    {crd, "spec.group", false},
+		"scope under a namespace": {Ref{APIVersion: crd.APIVersion, Kind: crd.Kind, Namespace: "widget-ns", Name: crd.Name, Namespaced: true}, ScopePath, false},
+		"scope of another group":  {Ref{APIVersion: "v1", Kind: "CustomResourceDefinition", Name: "widgets.example.test"}, ScopePath, false},
+		"scope of another kind":   {Ref{APIVersion: crd.APIVersion, Kind: "APIService", Name: crd.Name}, ScopePath, false},
+	} {
+		t.Run(name, func(t *testing.T) {
+			err := ValidateCheck(Check{StatusPhase: &PhaseCheck{Ref: test.ref, Path: test.path, Values: []string{"Namespaced"}}})
+			if (err == nil) != test.valid {
+				t.Fatalf("valid %v, err %v", test.valid, err)
+			}
+		})
+	}
+}

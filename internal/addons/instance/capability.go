@@ -99,8 +99,12 @@ func (c Capability) StageTail(block reconciliation.BlockDefinition) (reconciliat
 	if err != nil {
 		return reconciliation.ObjectRef{}, false, err
 	}
+	cluster := reconciliation.ObjectRef{Kind: "OpenShiftCluster", Object: request.Cluster}
+	if request.Descriptor != "" {
+		return cluster, false, nil
+	}
 	pkg, ok := c.registry.Find(request.Package)
-	return reconciliation.ObjectRef{Kind: "OpenShiftCluster", Object: request.Cluster}, ok && pkg.Last, nil
+	return cluster, ok && pkg.Last, nil
 }
 func (c Capability) Removal(ctx context.Context, block reconciliation.Block) (lifecycle.Removal, error) {
 	if err := ctx.Err(); err != nil {

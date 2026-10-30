@@ -266,6 +266,7 @@ func TestExecutableOLMShapeAdmitsAndRefusesEachRule(t *testing.T) {
 		{"gate CRD of another group", "api.invariant", cr + ".gate", gatePath(crd("widgets.other.test"))},
 		{"gate CRD without plural", "api.invariant", cr + ".gate", gatePath(crd(".example.test"))},
 		{"gate CRD of a subgroup", "api.invariant", cr + ".gate", gatePath(crd("widgets.sub.example.test"))},
+		{"gate with several CRDs of the group", "api.invariant", cr + ".gate", gatePath(crd("foos.example.test"), crd("widgets.example.test"))},
 		{"gate CRD wrong version", "api.invariant", cr + ".gate", gatePath(m("resourceExists", m("apiVersion", s("apiextensions.k8s.io/v1beta1"), "kind", s("CustomResourceDefinition"), "name", s("widgets.example.test"))))},
 		{"gate CRD plural with several dots", "api.invariant", cr + ".gate", gatePath(crd("a.b.widgets.example.test"))},
 		{"gate lowercase Secret", "api.invariant", cr + ".gate[1]", gatePath(crd("widgets.example.test"), m("resourceExists", m("apiVersion", s("v1"), "kind", s("secret"), "name", s("s"), "namespace", s("example-operator"))))},

@@ -182,7 +182,9 @@ own indexed field:
   `status`, `managedFields` or owner-mark member, or a template delimiter.
 - A custom resource's gate has no `resourceExists` check of
   `apiextensions.k8s.io/v1` `CustomResourceDefinition` named `<plural>.<group>`,
-  because Bootwright cannot derive the plural from the kind.
+  because Bootwright cannot derive the plural from the kind, or has several, so
+  that no definition is bound to the resource's kind: the gate names exactly
+  one, the definition of the resource's own kind.
 
 - The name is longer than `addons.MaxPackageNameBytes`, because an add-on
   selected as an instance is named like a package. It is reported at
@@ -197,9 +199,19 @@ resource becomes one program phase behind its gate. Selection reports an
 add-on that shares a name, namespace, OLM package or CatalogSource with another
 instance as an [admission diagnostic](#admission-diagnostics).
 
-Not yet met: the request does not yet carry the descriptor, so the lifecycle
-still refuses every binding that selects an authored add-on; tracked as
-[B90](../milestones/m4.md#b90).
+The instance's request freezes the descriptor, so an edited definition changes
+the request and another build continues an operation only when it freezes the
+same one ([instances and blocks](../add-ons.md#instances-and-blocks)). Selection
+appends to each custom resource's gate, for its one `resourceExists` check of a
+`CustomResourceDefinition` of the resource's API group, a `statusPhase` check of
+that definition's `spec.scope` for `Namespaced` and one of its
+`status.acceptedNames.kind` for the resource's own kind, so the gate proves the
+resource's own kind is namespaced: a cluster-scoped kind, or a kind that
+another definition of the group serves, never passes its gate, nothing is
+created, and the attempt fails at its deadline naming the check ([trust boundary](../add-ons.md#trust-boundary)). An add-on of
+the executable shape whose `namespace.name` is a namespace KubeVirt hosts for
+its cluster, a failing synthesis and a program over the bounds are refused at
+`plan` under the [refusal table](../add-ons.md#refusal-table).
 
 ### Manifest-set arm
 
@@ -223,8 +235,11 @@ check with `namespace` equal to `olm.namespace.name` and `subscription` equal
 to the effective `olm.subscription.name`. This applies when `readiness` is omitted too.
 Manifest-set add-ons default to no checks.
 
-An authored check list replaces the default completely; no hidden check is
-appended. An explicit `[]` selects no checks and therefore fails when
+An authored check list replaces the default completely, and no check is
+appended to it. An executable add-on's installation holds the one `csvSucceeded`
+check that its `startingCSV` pins before every authored check, so an authored
+`csvSucceeded` check of `readiness.checks` adds nothing to an executable
+add-on's program. An explicit `[]` selects no checks and therefore fails when
 `provides` is non-empty. These defaults apply only to top-level
 `readiness.checks`, not to a step's `requires` list. Every authored check must
 supply its arm's required fields; no missing identity is inferred inside it.
@@ -333,7 +348,7 @@ authored positions in the document, as
 | An authored add-on has a built-in package's name | `api.invariant` | the selecting entry: `$.spec.addonRefs[<k>]` or `$.spec.profileRefs[<i>]` through which the binding reaches the add-on | `ClusterAddon/<addon> has the name of built-in package <addon>` | `rename ClusterAddon/<addon>; bootwright add-ons list names the built-in packages` |
 | An authored add-on shares a namespace with another instance | `api.invariant` | the selecting entry of the later add-on in canonical order | `ClusterAddon/<addon> uses namespace <namespace>, which <subject> also uses on OpenShiftCluster/<cluster>` (`<subject>` is `ClusterAddon/<other>` or `package <package>`; a package's namespace is its OLM namespace or one of its Secret placement namespaces) | `set olm.namespace.name of ClusterAddon/<addon> to a namespace that no other package or add-on selected for the cluster uses` |
 | An authored add-on shares an OLM package with another instance | `api.invariant` | the selecting entry of the later add-on in canonical order | `ClusterAddon/<addon> uses OLM package <package>, which <subject> also uses on OpenShiftCluster/<cluster>` | `select one of ClusterAddon/<addon> and <subject> for the cluster, because OLM package <package> installs once` |
-| An authored add-on shares a CatalogSource with another instance | `api.invariant` | the selecting entry of the later add-on in canonical order | `ClusterAddon/<addon> uses CatalogSource <catalog>, which <subject> also uses on OpenShiftCluster/<cluster>` (the other instance owns the catalog or subscribes to it) | `set olm.catalogSource.name of ClusterAddon/<addon> to a CatalogSource name that no other package or add-on selected for the cluster uses` |
+| An authored add-on shares a CatalogSource with another instance | `api.invariant` | the selecting entry of the later add-on in canonical order | `ClusterAddon/<addon> uses CatalogSource <catalog>, which <subject> also uses on OpenShiftCluster/<cluster>` (either instance owns the catalog and the other owns or subscribes to it) | `set olm.catalogSource.name of ClusterAddon/<addon> to a CatalogSource name that no other package or add-on selected for the cluster uses` (an add-on that only subscribes: `set olm.subscription.source of ClusterAddon/<addon> to a catalog that no other add-on selected for the cluster owns`) |
 | A configuration names an unselected add-on | `api.reference` | `$.spec.addonConfigs[<i>].addonRef` | `ClusterAddon/<addon> is configured but not selected by this binding` | `select <addon> through spec.addonRefs or a profile, or remove this spec.addonConfigs entry` |
 | A binding selects nothing | `api.invariant` | `$.spec` | `the binding selects no profile, add-on or package` | `add a package to spec.packages, a profile to spec.profileRefs or an add-on to spec.addonRefs` |
 | Profile expansion returns to a profile | `api.invariant` | `$.spec.profileRefs[<i>]` | `profile expansion returns to ClusterAddonProfile/<profile>` | `remove the reference to <profile> from this list or from a profile it expands` |
@@ -341,10 +356,15 @@ authored positions in the document, as
 | Bindings order each other in a cycle | `api.invariant` | `$.spec.afterRefs[<i>]` of the cycle's first binding in canonical order, at its first entry on the cycle | `spec.afterRefs of the bindings of OpenShiftCluster/<cluster> form a cycle through <binding list>` | `remove one spec.afterRefs entry among <binding list> to break the cycle` |
 | Authored ordering closes a cycle with capability or last-package edges | `api.invariant` | `$.spec.afterRefs[<i>]` of the first cycle member in canonical order with an authored edge on the cycle | `ordering of the packages and add-ons selected for OpenShiftCluster/<cluster> forms a cycle through <member list> once spec.afterRefs applies` | `remove one spec.afterRefs or requires entry among <member list> to break the cycle` |
 
-These four rows apply to an add-on of the executable shape only, because only
-that shape becomes an instance. An add-on is reported against the instances
-selected before it, never against a later add-on, so two add-ons sharing an
-identity yield one diagnostic.
+The four rows above apply to an add-on of the executable shape only, because
+only that shape becomes an instance. An add-on is reported against the instances
+selected before it, never against a later add-on, so each identity two
+instances share yields one diagnostic, on the later of the two. A catalog is
+shared when either instance owns a `catalogSource` named like the other's
+`catalogSource` or `subscription.source`, whichever instance is later; an add-on
+that only subscribes is reported with the remedy `set olm.subscription.source of
+ClusterAddon/<addon> to a catalog that no other add-on selected for the cluster
+owns`.
 
 A `spec.afterRefs` entry naming no binding is reported by the reference rule
 at its own indexed field. A binding cycle is reported instead of, never beside,

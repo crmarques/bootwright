@@ -144,3 +144,42 @@ func TestTwoAuthoredAddOnsReportASharedIdentityOnTheLaterOne(t *testing.T) {
 		}
 	}
 }
+
+func subscribeOnly(t *testing.T, name, source string) api.Object {
+	return authoredWith(t, name, func(spec api.Value) api.Value {
+		olm := spec.Get("olm").Without("catalogSource")
+		olm = olm.WithPath(s(name+"-operator"), "namespace", "name").WithPath(s(name), "subscription", "package")
+		olm = olm.WithPath(s(source), "subscription", "source").WithPath(s("openshift-marketplace"), "subscription", "sourceNamespace")
+		return spec.With("olm", olm)
+	})
+}
+
+func TestACatalogCollisionIsReportedOnTheLaterAddOnWhicheverSideOnlySubscribes(t *testing.T) {
+	owner := authoredWith(t, "alpha", nil)
+	later := subscribeOnly(t, "beta", "example-catalog")
+	_, issues := Instances(api.NewCatalog([]api.Object{authoredBinding("binding", []string{"alpha", "beta"}, api.Value{}), owner, later}), mustRegistry(t, fixture("builtin")))
+	if len(issues) != 1 || issues[0].Issue.Field != "$.spec.addonRefs[1]" || issues[0].Issue.Message != "ClusterAddon/beta uses CatalogSource example-catalog, which ClusterAddon/alpha also uses on OpenShiftCluster/cluster" || issues[0].Issue.Remediation != "set olm.subscription.source of ClusterAddon/beta to a catalog that no other add-on selected for the cluster owns" {
+		t.Fatalf("subscribe-only after the owner: %+v", issues)
+	}
+	earlier := subscribeOnly(t, "alpha", "example-catalog")
+	later = authoredWith(t, "beta", func(spec api.Value) api.Value {
+		return spec.WithPath(s("beta-operator"), "olm", "namespace", "name").WithPath(s("beta"), "olm", "subscription", "package")
+	})
+	_, issues = Instances(api.NewCatalog([]api.Object{authoredBinding("binding", []string{"alpha", "beta"}, api.Value{}), earlier, later}), mustRegistry(t, fixture("builtin")))
+	if len(issues) != 1 || issues[0].Issue.Field != "$.spec.addonRefs[1]" || issues[0].Issue.Message != "ClusterAddon/beta uses CatalogSource example-catalog, which ClusterAddon/alpha also uses on OpenShiftCluster/cluster" || !strings.Contains(issues[0].Issue.Remediation, "olm.catalogSource.name of ClusterAddon/beta") {
+		t.Fatalf("owner after the subscribe-only: %+v", issues)
+	}
+	unrelated := subscribeOnly(t, "gamma", "redhat-operators")
+	if _, issues := Instances(api.NewCatalog([]api.Object{authoredBinding("binding", []string{"alpha", "gamma"}, api.Value{}), owner, unrelated}), mustRegistry(t, fixture("builtin"))); len(issues) != 0 {
+		t.Fatal(issues)
+	}
+}
+
+func TestAShadowingAddOnIsReportedAtTheProfileEntryThatSelectsIt(t *testing.T) {
+	profile := obj(api.ClusterAddonProfile, "profile", m("addonRefs", api.StringList("example")))
+	binding := obj(api.ClusterAddonBinding, "binding", m("clusterRef", s("cluster"), "profileRefs", api.StringList("profile")))
+	_, issues := Instances(api.NewCatalog([]api.Object{binding, profile, authoredWith(t, "example", nil)}), mustRegistry(t, fixture("example")))
+	if len(issues) != 1 || issues[0].Issue.Field != "$.spec.profileRefs[0]" || issues[0].Issue.Message != "ClusterAddon/example has the name of built-in package example" {
+		t.Fatalf("%+v", issues)
+	}
+}
