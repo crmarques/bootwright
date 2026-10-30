@@ -627,6 +627,14 @@ unless `--yes` was supplied. Under `--yes`, or input that cannot answer a
 prompt, an authorization must carry that digest. A flag bypasses no state or
 safety gate.
 
+The add-on journey runs these commands in order: `add-ons list` and `add-ons info
+--name <package>` choose a package and give its binding skeleton, `validate`
+admits the binding, `plan` previews the `add-ons` stage, `apply` installs it
+(`apply --until <cluster>.<package>` pauses after one
+[instance](state-reconciliation.md#stopping-after-an-add-on-instance)), `status`
+reports its readiness and `destroy` [retires](add-ons.md#retirement) it. The
+[operator guide](../docs/operator-guide.md#add-ons) routes it.
+
 ### Stage selection
 
 `plan` and `apply` accept the [`--stage` flag](cli/commands.md#flag-relationships-and-safeguards);

@@ -6,6 +6,7 @@ metadata:
 spec:
   clusterRef: sno
 
+  # Illustrative channel and CSV: replace them with the pair your catalog serves.
   packages:
     metallb:
       subscription:

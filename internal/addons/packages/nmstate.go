@@ -9,7 +9,7 @@ import (
 )
 
 func nmstate() addons.Package {
-	return addons.Package{Name: "nmstate", Provides: []string{"nmstate"}, Budget: 30 * time.Minute, OLM: &addons.OLM{Namespace: "openshift-nmstate", OperatorGroup: addons.OwnNamespace, GroupName: "openshift-nmstate", Subscription: "kubernetes-nmstate-operator", Package: "kubernetes-nmstate-operator", DefaultSource: "redhat-operators", Approval: addons.Exact}, Render: func(i addons.Instance) (addons.Rendered, error) {
+	return addons.Package{Name: "nmstate", Summary: "Kubernetes NMState operator for node network configuration", Provides: []string{"nmstate"}, Budget: 30 * time.Minute, OLM: &addons.OLM{Namespace: "openshift-nmstate", OperatorGroup: addons.OwnNamespace, GroupName: "openshift-nmstate", Subscription: "kubernetes-nmstate-operator", Package: "kubernetes-nmstate-operator", DefaultSource: "redhat-operators", Approval: addons.Exact}, Render: func(i addons.Instance) (addons.Rendered, error) {
 		if _, err := addons.Decode[api.NMStateConfig](i.Config); err != nil {
 			return addons.Rendered{}, err
 		}

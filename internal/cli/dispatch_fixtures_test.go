@@ -87,6 +87,10 @@ func (s addOnCatalogSpy) List(ctx context.Context, request addoncatalog.ListRequ
 	return s.record.result.addOns, s.record.called(ctx, "add-ons list", request)
 }
 
+func (s addOnCatalogSpy) Describe(ctx context.Context, request addoncatalog.DescribeRequest) (*addoncatalog.DescribeResult, error) {
+	return s.record.result.addOnInfo, s.record.called(ctx, "add-ons info", request)
+}
+
 type secretsSpy struct{ record *dispatchRecord }
 
 func (s secretsSpy) Set(ctx context.Context, request custody.SetRequest) (*custody.MutationResult, error) {

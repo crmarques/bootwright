@@ -12,7 +12,7 @@ import (
 )
 
 func gitops() addons.Package {
-	return addons.Package{Name: "gitops", Last: true, PlacementNamespaces: []string{"openshift-gitops"}, Budget: 20 * time.Minute, Normalize: normalizeGitOps, OLM: &addons.OLM{Namespace: "openshift-gitops-operator", NamespaceLabels: map[string]string{"openshift.io/cluster-monitoring": "true"}, OperatorGroup: addons.AllNamespaces, GroupName: "openshift-gitops-operator", Subscription: "openshift-gitops-operator", Package: "openshift-gitops-operator", DefaultSource: "redhat-operators", Approval: addons.Exact}, Admit: admitGitOps, Render: renderGitOps}
+	return addons.Package{Name: "gitops", Summary: "OpenShift GitOps (Argo CD) with an optional bootstrap Application, installed last", Last: true, PlacementNamespaces: []string{"openshift-gitops"}, Budget: 20 * time.Minute, Normalize: normalizeGitOps, OLM: &addons.OLM{Namespace: "openshift-gitops-operator", NamespaceLabels: map[string]string{"openshift.io/cluster-monitoring": "true"}, OperatorGroup: addons.AllNamespaces, GroupName: "openshift-gitops-operator", Subscription: "openshift-gitops-operator", Package: "openshift-gitops-operator", DefaultSource: "redhat-operators", Approval: addons.Exact}, Admit: admitGitOps, Render: renderGitOps}
 }
 
 func normalizeGitOps(v api.Value) api.Value {

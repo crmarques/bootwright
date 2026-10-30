@@ -2112,9 +2112,6 @@ over the whole environment, as the
 (pending the owner's Q60 under [D173](milestones/backlog.md#d173)), and
 transfers no ownership.
 
-Not yet met: no apply creates a bootstrap object; tracked as
-[B765](milestones/m4.md#b765).
-
 `status` reports the predicate as its handoff section: ready, or each reason it
 is not, in this order: no apply recorded or a destroy as the latest operation,
 the apply not `done`, each block not `done` in plan order, each `unknown` block,

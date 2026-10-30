@@ -20,7 +20,7 @@ import (
 )
 
 func fixturePackage() addons.Package {
-	return addons.Package{Name: "fixture", Budget: time.Minute, OLM: &addons.OLM{Namespace: "fixture-operator", OperatorGroup: addons.OwnNamespace, GroupName: "fixture", Subscription: "fixture", Package: "fixture", DefaultSource: "catalog", Approval: addons.Exact}, Render: func(i addons.Instance) (addons.Rendered, error) {
+	return addons.Package{Name: "fixture", Summary: "fixture package", Budget: time.Minute, OLM: &addons.OLM{Namespace: "fixture-operator", OperatorGroup: addons.OwnNamespace, GroupName: "fixture", Subscription: "fixture", Package: "fixture", DefaultSource: "catalog", Approval: addons.Exact}, Render: func(i addons.Instance) (addons.Rendered, error) {
 		return addons.Rendered{After: []co.Phase{{Gate: []co.Check{{ResourceExists: &co.Ref{APIVersion: "apiextensions.k8s.io/v1", Kind: "CustomResourceDefinition", Name: "fixtures.example.test"}}}, Objects: []co.Object{nativeObject("example.test/v1", "Fixture", "fixture-operator", "fixture", api.MapValue())}}}, Checks: []co.Check{{Condition: &co.ConditionCheck{Ref: co.Ref{APIVersion: "example.test/v1", Kind: "Fixture", Namespace: "fixture-operator", Name: "fixture", Namespaced: true}, Type: "Available", Status: "True"}}}}, nil
 	}}
 }

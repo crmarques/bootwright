@@ -1,0 +1,14 @@
+apiVersion: bootwright.io/v1alpha1
+kind: ClusterAddonBinding
+metadata:
+  name: nmstate
+
+spec:
+  clusterRef: sno
+
+  # Illustrative channel and CSV: replace them with the pair your catalog serves.
+  packages:
+    nmstate:
+      subscription:
+        channel: example-channel
+        startingCSV: kubernetes-nmstate-operator.v0.0.0

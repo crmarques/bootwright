@@ -873,7 +873,7 @@ var askRuleMarkers = []struct{ phrase, flag string }{
 var askRuleNoAsk = map[string]string{
 	"context init": "local", "context update": "local", "context use": "local",
 	"context list": "read local state", "context current": "read local state",
-	"context delete": "never resource mutation", "add-ons list": "read executable registry",
+	"context delete": "never resource mutation", "add-ons list": "read executable registry", "add-ons info": "read executable registry",
 	"secret set": "local confidential write", "secret generate": "generated-material batch",
 	"secret check": "no values emitted", "secret list": "read confidential-store metadata",
 	"secret info": "read confidential-store metadata only", "secret delete": "local logical deletion",

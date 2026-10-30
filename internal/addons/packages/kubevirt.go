@@ -56,7 +56,7 @@ func MachineAccess() [][3]string {
 }
 
 func kubevirt() addons.Package {
-	return addons.Package{Name: "kubevirt", Provides: []string{"kubevirt"}, Budget: 45 * time.Minute, OLM: &addons.OLM{Namespace: "openshift-cnv", NamespaceLabels: map[string]string{"openshift.io/cluster-monitoring": "true"}, OperatorGroup: addons.OwnNamespace, GroupName: "kubevirt-hyperconverged-group", Subscription: "hco-operatorhub", Package: "kubevirt-hyperconverged", DefaultSource: "redhat-operators", Approval: addons.Exact}, Render: renderKubeVirt}
+	return addons.Package{Name: "kubevirt", Summary: "OpenShift Virtualization (KubeVirt) with its HyperConverged instance", Provides: []string{"kubevirt"}, Budget: 45 * time.Minute, OLM: &addons.OLM{Namespace: "openshift-cnv", NamespaceLabels: map[string]string{"openshift.io/cluster-monitoring": "true"}, OperatorGroup: addons.OwnNamespace, GroupName: "kubevirt-hyperconverged-group", Subscription: "hco-operatorhub", Package: "kubevirt-hyperconverged", DefaultSource: "redhat-operators", Approval: addons.Exact}, Render: renderKubeVirt}
 }
 
 func renderKubeVirt(i addons.Instance) (addons.Rendered, error) {

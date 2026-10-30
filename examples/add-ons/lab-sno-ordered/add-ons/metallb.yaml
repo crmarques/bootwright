@@ -1,0 +1,23 @@
+apiVersion: bootwright.io/v1alpha1
+kind: ClusterAddonBinding
+metadata:
+  name: metallb
+
+spec:
+  clusterRef: sno
+
+  afterRefs:
+    - nmstate
+
+  # Illustrative channel and CSV: replace them with the pair your catalog serves.
+  packages:
+    metallb:
+      subscription:
+        channel: example-channel
+        startingCSV: metallb-operator.v0.0.0
+
+      pools:
+        - name: services
+
+          addresses:
+            - 198.51.100.128-198.51.100.135

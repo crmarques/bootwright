@@ -128,6 +128,20 @@ its name, provided and required capabilities, OLM package, default catalog
 source and configuration members. It reads no context, file or network. No
 command registers, replaces or deletes a package.
 
+`bootwright add-ons info --name <package>` describes one package the same way:
+its one-line purpose (a required `Summary` of at most 120 bytes that the
+registry refuses to hold empty or with a control character), the capabilities
+it provides and requires, with the meaning of "requires"
+([built-in packages](#built-in-packages-and-selection)), its OLM package and
+default catalog source, every leaf field path of its
+[`spec.packages` member](api/addons.md#built-in-packages) with whether it is
+required and its default, derived from the schema, the namespaces it may place
+Secrets in, the PackageManifest lookup in `openshift-marketplace` that answers
+a channel and CSV, and a binding skeleton whose required leaves are `<field>`
+placeholders and which validates once they are replaced. An unknown name is the
+`access.target` refusal that names `add-ons list`. Text and JSON carry the same
+facts ([output](cli/output.md)).
+
 ## Instances and blocks
 
 Each package a binding selects is one instance, and each instance is one

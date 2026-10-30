@@ -1,0 +1,182 @@
+{
+  "schemaVersion": "v1alpha1",
+  "command": "add-ons info",
+  "ok": true,
+  "exitCode": 0,
+  "result": {
+    "package": {
+      "name": "gitops",
+      "summary": "OpenShift GitOps (Argo CD) with an optional bootstrap Application, installed last",
+      "provides": [],
+      "requires": [],
+      "requiresMeaning": "another instance selected for the same cluster must provide each required capability",
+      "olmPackage": "openshift-gitops-operator",
+      "defaultSource": "redhat-operators",
+      "secretNamespaces": [
+        "openshift-gitops",
+        "openshift-gitops-operator"
+      ],
+      "lookup": "oc get packagemanifest openshift-gitops-operator -n openshift-marketplace -o json",
+      "configuration": [
+        {
+          "path": "subscription.channel",
+          "type": "string",
+          "required": true,
+          "requiredWithin": "",
+          "default": "",
+          "values": []
+        },
+        {
+          "path": "subscription.startingCSV",
+          "type": "string",
+          "required": true,
+          "requiredWithin": "",
+          "default": "",
+          "values": []
+        },
+        {
+          "path": "subscription.source",
+          "type": "DNS name",
+          "required": false,
+          "requiredWithin": "",
+          "default": "redhat-operators",
+          "values": []
+        },
+        {
+          "path": "subscription.sourceNamespace",
+          "type": "name",
+          "required": false,
+          "requiredWithin": "",
+          "default": "openshift-marketplace",
+          "values": []
+        },
+        {
+          "path": "subscription.catalogSource.name",
+          "type": "name",
+          "required": false,
+          "requiredWithin": "subscription.catalogSource",
+          "default": "",
+          "values": []
+        },
+        {
+          "path": "subscription.catalogSource.image",
+          "type": "image reference",
+          "required": false,
+          "requiredWithin": "subscription.catalogSource",
+          "default": "",
+          "values": []
+        },
+        {
+          "path": "subscription.catalogSource.priority",
+          "type": "integer",
+          "required": false,
+          "requiredWithin": "subscription.catalogSource",
+          "default": "",
+          "values": []
+        },
+        {
+          "path": "subscription.catalogSource.pollInterval",
+          "type": "duration",
+          "required": false,
+          "requiredWithin": "",
+          "default": "",
+          "values": []
+        },
+        {
+          "path": "subscription.catalogSource.securityContextConfig",
+          "type": "string",
+          "required": false,
+          "requiredWithin": "",
+          "default": "restricted",
+          "values": [
+            "legacy",
+            "restricted"
+          ]
+        },
+        {
+          "path": "timeout",
+          "type": "duration",
+          "required": false,
+          "requiredWithin": "",
+          "default": "20m",
+          "values": []
+        },
+        {
+          "path": "bootstrap.repoURL",
+          "type": "string",
+          "required": false,
+          "requiredWithin": "bootstrap",
+          "default": "",
+          "values": []
+        },
+        {
+          "path": "bootstrap.targetRevision",
+          "type": "string",
+          "required": false,
+          "requiredWithin": "bootstrap",
+          "default": "",
+          "values": []
+        },
+        {
+          "path": "bootstrap.path",
+          "type": "string",
+          "required": false,
+          "requiredWithin": "bootstrap",
+          "default": "",
+          "values": []
+        },
+        {
+          "path": "bootstrap.destinationNamespace",
+          "type": "name",
+          "required": false,
+          "requiredWithin": "bootstrap",
+          "default": "",
+          "values": []
+        },
+        {
+          "path": "bootstrap.credentialsRef",
+          "type": "name of Secret",
+          "required": false,
+          "requiredWithin": "",
+          "default": "",
+          "values": []
+        },
+        {
+          "path": "bootstrap.access.clusterRole",
+          "type": "DNS name",
+          "required": false,
+          "requiredWithin": "bootstrap.access",
+          "default": "",
+          "values": []
+        },
+        {
+          "path": "bootstrap.sync.automated",
+          "type": "boolean",
+          "required": false,
+          "requiredWithin": "",
+          "default": "true",
+          "values": []
+        },
+        {
+          "path": "bootstrap.sync.prune",
+          "type": "boolean",
+          "required": false,
+          "requiredWithin": "",
+          "default": "false",
+          "values": []
+        },
+        {
+          "path": "bootstrap.sync.selfHeal",
+          "type": "boolean",
+          "required": false,
+          "requiredWithin": "",
+          "default": "false",
+          "values": []
+        }
+      ],
+      "binding": "apiVersion: bootwright.io/v1alpha1\nkind: ClusterAddonBinding\nmetadata:\n  name: gitops\nspec:\n  clusterRef: <clusterRef>\n  packages:\n    gitops:\n      subscription:\n        channel: <channel>\n        startingCSV: <startingCSV>\n        source: redhat-operators\n"
+    }
+  },
+  "diagnostics": [],
+  "logs": []
+}

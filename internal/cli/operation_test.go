@@ -23,6 +23,7 @@ func TestOperationBoundaryIsLazyForInformationalMalformedAndUnavailablePaths(t *
 		"context init --name example -f one -f two", "context delete --name example --purge=false",
 		"validate --output json --unknown", "render effective -f input", "render --output json",
 		"add-ons list",
+		"add-ons info --name metallb",
 		"preflight add-ons",
 		"cluster oc --name example get pods",
 		"render installer", "render storage",

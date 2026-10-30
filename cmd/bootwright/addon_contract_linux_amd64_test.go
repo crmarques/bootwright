@@ -62,7 +62,7 @@ func (c contractAddonCapability) Unsupported(state *compilation.State) []lifecyc
 }
 func contractInstallFixtureRegistry(t *testing.T, resolver capabilityResolver, _ *contractRunner) {
 	t.Helper()
-	registry, err := addons.NewRegistry(append(packages.Builtin().Packages(), addons.Package{Name: "fixture", Budget: time.Minute, OLM: &addons.OLM{Namespace: "fixture", OperatorGroup: addons.OwnNamespace, GroupName: "fixture", Subscription: "fixture", Package: "fixture", DefaultSource: "catalog", Approval: addons.Exact}, Render: func(addons.Instance) (addons.Rendered, error) { return addons.Rendered{}, nil }}))
+	registry, err := addons.NewRegistry(append(packages.Builtin().Packages(), addons.Package{Name: "fixture", Summary: "fixture package", Budget: time.Minute, OLM: &addons.OLM{Namespace: "fixture", OperatorGroup: addons.OwnNamespace, GroupName: "fixture", Subscription: "fixture", Package: "fixture", DefaultSource: "catalog", Approval: addons.Exact}, Render: func(addons.Instance) (addons.Rendered, error) { return addons.Rendered{}, nil }}))
 	if err != nil {
 		t.Fatal(err)
 	}

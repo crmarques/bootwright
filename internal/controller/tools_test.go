@@ -257,7 +257,7 @@ func TestTargetToolsUseTheClusterReleaseGrammar(t *testing.T) {
 }
 
 func TestTargetToolsReadPackageCapabilityFromInstanceSelection(t *testing.T) {
-	registry, err := addons.NewRegistry([]addons.Package{{Name: "fixture", Provides: []string{"kubevirt"}, Budget: time.Minute, Render: func(addons.Instance) (addons.Rendered, error) { return addons.Rendered{}, nil }}})
+	registry, err := addons.NewRegistry([]addons.Package{{Name: "fixture", Summary: "fixture package", Provides: []string{"kubevirt"}, Budget: time.Minute, Render: func(addons.Instance) (addons.Rendered, error) { return addons.Rendered{}, nil }}})
 	if err != nil {
 		t.Fatal(err)
 	}

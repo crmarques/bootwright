@@ -112,7 +112,7 @@ func addonJourney(t *testing.T, lost bool) (*lifecycle.CapabilityJourney, *addon
 		t.Fatal(err)
 	}
 	producer := reconciliation.BlockDefinition{ID: producerRequest.Identity.Block, Description: "install cluster", Stage: reconciliation.StageClusters, Kind: agentinstall.Kind, Object: installedCluster, Implementation: agentinstall.InstallImplementation, ContentDigest: agentinstall.InstallContentDigest(), Request: producerData}
-	pkg := addons.Package{Name: "fixture", Budget: time.Minute, OLM: &addons.OLM{Namespace: "fixture", OperatorGroup: addons.OwnNamespace, GroupName: "fixture", Subscription: "fixture", Package: "fixture", DefaultSource: "catalog", Approval: addons.Exact}, Render: func(addons.Instance) (addons.Rendered, error) {
+	pkg := addons.Package{Name: "fixture", Summary: "fixture package", Budget: time.Minute, OLM: &addons.OLM{Namespace: "fixture", OperatorGroup: addons.OwnNamespace, GroupName: "fixture", Subscription: "fixture", Package: "fixture", DefaultSource: "catalog", Approval: addons.Exact}, Render: func(addons.Instance) (addons.Rendered, error) {
 		return addons.Rendered{After: []co.Phase{{Secrets: []co.SecretPlacement{{Secret: "addon-password", Namespace: "fixture", Name: "credentials", Type: "Opaque", Keys: []co.KeyPart{{Key: "username", Part: "username"}, {Key: "password", Part: "password"}}}}}}}, nil
 	}}
 	sub := api.MapValue(api.FieldValue{Name: "channel", Value: api.StringValue("stable")}, api.FieldValue{Name: "source", Value: api.StringValue("catalog")}, api.FieldValue{Name: "sourceNamespace", Value: api.StringValue("openshift-marketplace")}, api.FieldValue{Name: "startingCSV", Value: api.StringValue("fixture.v1.0.0")})

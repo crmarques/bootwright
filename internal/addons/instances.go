@@ -263,7 +263,11 @@ func validateMemberUniqueness(cluster string, members []selectedMember, add sele
 		key := m.subject()
 		if previous, ok := seen[key]; ok {
 			first := members[previous]
-			add(m, "api.duplicate", fmt.Sprintf("%s is already bound to OpenShiftCluster/%s by ClusterAddonBinding/%s", key, cluster, first.binding), fmt.Sprintf("bind %s to %s through one ClusterAddonBinding only", m.name, cluster))
+			remedy := fmt.Sprintf("bind %s to %s through one ClusterAddonBinding only", m.name, cluster)
+			if m.pkg != nil {
+				remedy = fmt.Sprintf("select package %s for %s in one ClusterAddonBinding only", m.name, cluster)
+			}
+			add(m, "api.duplicate", fmt.Sprintf("%s is already bound to OpenShiftCluster/%s by ClusterAddonBinding/%s", key, cluster, first.binding), remedy)
 		} else {
 			seen[key] = i
 		}

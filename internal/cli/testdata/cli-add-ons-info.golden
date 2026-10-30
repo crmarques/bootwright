@@ -1,0 +1,41 @@
+metallb
+MetalLB load balancer with optional layer 2 address pools
+
+Provides: metallb
+Requires: none
+Requires means: another instance selected for the same cluster must provide each required capability
+OLM package: metallb-operator
+Default source: redhat-operators
+Secret namespaces: metallb-system
+Channel and CSV lookup: oc get packagemanifest metallb-operator -n openshift-marketplace -o json
+
+Configuration under spec.packages.metallb:
+  FIELD                                             TYPE                        REQUIRED                                DEFAULT
+  subscription.channel                              string                      required                                none
+  subscription.startingCSV                          string                      required                                none
+  subscription.source                               DNS name                    optional                                redhat-operators
+  subscription.sourceNamespace                      name                        optional                                openshift-marketplace
+  subscription.catalogSource.name                   name                        required in subscription.catalogSource  none
+  subscription.catalogSource.image                  image reference             required in subscription.catalogSource  none
+  subscription.catalogSource.priority               integer                     required in subscription.catalogSource  none
+  subscription.catalogSource.pollInterval           duration                    optional                                none
+  subscription.catalogSource.securityContextConfig  string (legacy|restricted)  optional                                restricted
+  timeout                                           duration                    optional                                30m
+  pools[].name                                      name                        required in pools[]                     none
+  pools[].addresses                                 list of string              required in pools[]                     none
+  pools[].autoAssign                                boolean                     optional                                true
+  pools[].l2.interface                              string                      optional                                none
+
+Binding skeleton (replace each <field>):
+apiVersion: bootwright.io/v1alpha1
+kind: ClusterAddonBinding
+metadata:
+  name: metallb
+spec:
+  clusterRef: <clusterRef>
+  packages:
+    metallb:
+      subscription:
+        channel: <channel>
+        startingCSV: <startingCSV>
+        source: redhat-operators

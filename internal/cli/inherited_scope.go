@@ -24,7 +24,7 @@ var (
 
 var contextFreeCommands = map[string]bool{
 	"context init": true, "context update": true, "context use": true, "context list": true,
-	"context current": true, "context delete": true, "add-ons list": true,
+	"context current": true, "context delete": true, "add-ons list": true, "add-ons info": true,
 	"media add": true, "media list": true, "media delete": true,
 	"controller install": true, "controller rebind": true, "controller uninstall": true,
 	"version": true, "schema": true, "help": true,

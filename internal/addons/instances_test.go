@@ -10,7 +10,7 @@ import (
 )
 
 func fixture(name string) Package {
-	return Package{Name: name, Budget: time.Minute, Render: func(Instance) (Rendered, error) { return Rendered{}, nil }}
+	return Package{Name: name, Summary: "fixture package", Budget: time.Minute, Render: func(Instance) (Rendered, error) { return Rendered{}, nil }}
 }
 func packageBinding(name string, configs api.Value) api.Object {
 	return obj(api.ClusterAddonBinding, name, m("clusterRef", s("cluster"), "packages", configs))
@@ -74,6 +74,9 @@ func TestRegistryDuplicateLastAndCycleDiagnostics(t *testing.T) {
 	if !strings.Contains(issues[0].Issue.Message, "ClusterAddonBinding/one") || issues[0].Binding != "two" {
 		t.Fatal(issues)
 	}
+	if issues[0].Issue.Code != "api.duplicate" || issues[0].Issue.Remediation != "select package a for cluster in one ClusterAddonBinding only" {
+		t.Fatal(issues)
+	}
 	a = fixture("a")
 	b = fixture("b")
 	a.Last = true
@@ -112,6 +115,23 @@ func TestPackageAdmissionIndexedHookAndTimeout(t *testing.T) {
 	issues := ValidateWithRegistry(b, api.NewCatalog([]api.Object{b}), r, ClusterFacts{Name: "cluster"})
 	if len(issues) != 2 || issues[1].Field != "$.spec.packages.fixture.items[1]" {
 		t.Fatal(issues)
+	}
+}
+
+func TestRegistryRefusesAnInvalidSummary(t *testing.T) {
+	for name, summary := range map[string]string{"empty": "", "overlong": strings.Repeat("x", MaxSummaryBytes+1), "control character": "two\nlines", "escape": "bell\x07"} {
+		t.Run(name, func(t *testing.T) {
+			p := fixture("alpha")
+			p.Summary = summary
+			if _, err := NewRegistry([]Package{p}); err == nil {
+				t.Fatalf("summary %q admitted", summary)
+			}
+		})
+	}
+	p := fixture("alpha")
+	p.Summary = strings.Repeat("x", MaxSummaryBytes)
+	if _, err := NewRegistry([]Package{p}); err != nil {
+		t.Fatal(err)
 	}
 }
 

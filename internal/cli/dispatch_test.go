@@ -47,6 +47,7 @@ func TestDispatchEveryApplicationCommand(t *testing.T) {
 		{"context current", contexts.CurrentRequest{}},
 		{"context delete", contexts.DeleteRequest{Name: "demo", Purge: true, AllowOrphans: true, SkipConfirmation: true}},
 		{"add-ons list", addoncatalog.ListRequest{}},
+		{"add-ons info", addoncatalog.DescribeRequest{Name: "demo"}},
 		{"secret set", custody.SetRequest{ContextName: "example", Name: "demo", Input: secrets.Input{ValueFile: "secret.bin"}, SkipConfirmation: true}},
 		{"secret generate", custody.GenerateRequest{ContextName: "example", Name: "demo", Renew: true}},
 		{"secret check", custody.CheckRequest{ContextName: "example"}},

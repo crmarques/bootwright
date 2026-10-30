@@ -10,7 +10,7 @@ import (
 )
 
 func acm() addons.Package {
-	return addons.Package{Name: "acm", Budget: 45 * time.Minute, Normalize: normalizeACM, OLM: &addons.OLM{Namespace: "open-cluster-management", OperatorGroup: addons.OwnNamespace, GroupName: "open-cluster-management", Subscription: "acm-operator-subscription", Package: "advanced-cluster-management", DefaultSource: "redhat-operators", Approval: addons.Exact}, Admit: admitACM, Render: renderACM}
+	return addons.Package{Name: "acm", Summary: "Red Hat Advanced Cluster Management hub with its MultiClusterHub", Budget: 45 * time.Minute, Normalize: normalizeACM, OLM: &addons.OLM{Namespace: "open-cluster-management", OperatorGroup: addons.OwnNamespace, GroupName: "open-cluster-management", Subscription: "acm-operator-subscription", Package: "advanced-cluster-management", DefaultSource: "redhat-operators", Approval: addons.Exact}, Admit: admitACM, Render: renderACM}
 }
 
 func normalizeACM(v api.Value) api.Value {

@@ -41,6 +41,7 @@ names the case that runs its scenario, if any.
 | `openshift-clusters/` | [lab-physical](openshift-clusters/lab-physical/README.md) | Prepare five physical OpenShift targets with verified private media delivery. |
 | `add-ons/` | [lab-sno-nmstate](add-ons/lab-sno-nmstate/README.md) | Install the Kubernetes NMState Operator on single-node OpenShift. |
 | `add-ons/` | [lab-sno-metallb](add-ons/lab-sno-metallb/README.md) | Install MetalLB and an eight-address layer 2 pool on single-node OpenShift. |
+| `add-ons/` | [lab-sno-ordered](add-ons/lab-sno-ordered/README.md) | Install NMState, then MetalLB after it by `afterRefs`, from two bindings on single-node OpenShift. |
 | `add-ons/` | [lab-compact-hub](add-ons/lab-compact-hub/README.md) | Install pinned ACM and OpenShift GitOps with a bootstrap Application on a compact cluster. |
 | `add-ons/` | [lab-compact-df](add-ons/lab-compact-df/README.md) | Install Data Foundation on compact OpenShift over a managed three-node Ceph cluster with TLS object storage. |
 | `full-platforms/` | [multidc-platform](full-platforms/multidc-platform/README.md) | Authoring reference for a multi-datacenter platform; current admission refuses its unsupported features. |

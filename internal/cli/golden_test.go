@@ -576,6 +576,15 @@ func cliGoldens() []cliGolden {
 		{golden: "cli-add-ons-list-json", args: "add-ons list --output json", record: func(r *dispatchRecord) {
 			r.result.addOns, _ = addoncatalog.New(addonpackages.Builtin()).List(context.Background(), addoncatalog.ListRequest{})
 		}},
+		{golden: "cli-add-ons-info", args: "add-ons info --name metallb", record: func(r *dispatchRecord) {
+			r.result.addOnInfo, _ = addoncatalog.New(addonpackages.Builtin()).Describe(context.Background(), addoncatalog.DescribeRequest{Name: "metallb"})
+		}},
+		{golden: "cli-add-ons-info-json", args: "add-ons info --name gitops --output json", record: func(r *dispatchRecord) {
+			r.result.addOnInfo, _ = addoncatalog.New(addonpackages.Builtin()).Describe(context.Background(), addoncatalog.DescribeRequest{Name: "gitops"})
+		}},
+		{args: "add-ons info --name metalb", code: 1, stderr: "  error  access.target\n    no built-in add-on package is named \"metalb\"\n    Next: name a package that bootwright add-ons list shows\n", record: func(r *dispatchRecord) {
+			_, r.err = addoncatalog.New(addonpackages.Builtin()).Describe(context.Background(), addoncatalog.DescribeRequest{Name: "metalb"})
+		}},
 		{golden: "cli-container-preflight", args: "preflight container-cluster --context synthetic", record: func(r *dispatchRecord) { r.result.storagePreflight = containerPreflightReport(false) }},
 		{golden: "cli-container-preflight-json", args: "preflight container-cluster --context synthetic --output json", record: func(r *dispatchRecord) { r.result.storagePreflight = containerPreflightReport(false) }},
 		{golden: "cli-container-preflight-pending-json", args: "preflight container-cluster --context synthetic --dry-run --output json", code: 1, record: func(r *dispatchRecord) {
@@ -1315,7 +1324,7 @@ func TestEveryAvailableCommandHasAGolden(t *testing.T) {
 		}
 	}
 	jsonContracts := []string{
-		"add-ons list",
+		"add-ons list", "add-ons info",
 		"validate", "preflight storage-cluster", "preflight clusters", "preflight infra", "preflight all", "render", "render effective", "status", "diff",
 		"secret check", "secret list", "secret info", "secret encryption status", "machine trust", "controller install",
 		"machine list", "machine info", "machine start", "machine stop", "machine restart", "media list", "cluster list", "cluster info",

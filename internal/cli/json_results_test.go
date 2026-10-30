@@ -18,6 +18,7 @@ import (
 
 // cliResults is every type a command may encode as its JSON result.
 var cliResults = []reflect.Type{
+	reflect.TypeFor[addOnInfoDocument](),
 	reflect.TypeFor[addOnsPresentation](),
 	reflect.TypeFor[controllerPresentation](),
 	reflect.TypeFor[rebindPresentation](),

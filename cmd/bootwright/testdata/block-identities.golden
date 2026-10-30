@@ -266,6 +266,18 @@ lab-sno-nmstate:
   ntp-lab-ntp
   proxy-lab-proxy
   substrate-host-lab-libvirt
+lab-sno-ordered:
+  addon-metallb-sno
+  addon-nmstate-sno
+  artifact-server-lab-artifacts
+  cluster-install-sno
+  cluster-media-sno
+  controller-prerequisites
+  dns-lab-dns
+  machine-sno-01
+  ntp-lab-ntp
+  proxy-lab-proxy
+  substrate-host-lab-libvirt
 libvirt-2x4-nodes-ceph-multisite:
   artifact-server-lab-artifacts
   ceph-cluster-primary

@@ -247,6 +247,7 @@ Successful result objects have stable top-level fields:
 | `plan` | `context`, `verb`, `steps`, `stages`, optional `until`, `waves`, `widest`, `bound`, `startable`, `deferred`, `continuation`, `finalizes`, optional `anotherBuild`, `stops`, `stopsAfterOnline`, optional `checks`, `receipt` |
 | `apply`, `destroy` | `context`, `verb`, `steps`, `blocks`, `settled`, `recovered`, `next`, `receipt` |
 | `add-ons list` | `addOns` (each: `name`, `provides`, `requires`, `olmPackage`, `defaultSource`, `configuration`) |
+| `add-ons info` | `package` (`name`, `summary`, `provides`, `requires`, `requiresMeaning`, `olmPackage`, `defaultSource`, `secretNamespaces`, `lookup`, `configuration`, `binding`; each configuration entry: `path`, `type`, `required`, `requiredWithin`, `default`, `values`) |
 | `secret check`, `secret list`, `secret info` | `context`, `secrets` |
 | `secret encryption status` | `initialized`, `implementation`, `activeKey`, `keys`, `items` |
 | `media list` | `media` |

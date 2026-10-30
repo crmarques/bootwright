@@ -1,11 +1,12 @@
   bootwright / add-ons
-      Manage add-ons
+      Inspect built-in add-on packages
 
   Usage
     bootwright add-ons [flags]
 
   Commands
   COMMAND   PURPOSE
+  info      Describe one built-in add-on package
   list      List built-in add-on packages
 
   Common flags

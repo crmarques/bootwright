@@ -12,7 +12,7 @@ import (
 )
 
 func fdf() addons.Package {
-	return addons.Package{Name: "fdf", Provides: []string{"dataFoundation"}, Budget: time.Hour, Normalize: func(v api.Value) api.Value { return v.Default("defaultStorageClass", api.BoolValue(false)) }, OLM: &addons.OLM{Namespace: "openshift-storage", NamespaceLabels: map[string]string{"openshift.io/cluster-monitoring": "true"}, OperatorGroup: addons.OwnNamespace, GroupName: "openshift-storage", Subscription: "odf-operator", Package: "odf-operator", Approval: addons.OperatorManaged}, Admit: admitFDF, Render: renderFDF}
+	return addons.Package{Name: "fdf", Summary: "Fusion Data Foundation storage consuming an external Ceph cluster", Provides: []string{"dataFoundation"}, Budget: time.Hour, Normalize: func(v api.Value) api.Value { return v.Default("defaultStorageClass", api.BoolValue(false)) }, OLM: &addons.OLM{Namespace: "openshift-storage", NamespaceLabels: map[string]string{"openshift.io/cluster-monitoring": "true"}, OperatorGroup: addons.OwnNamespace, GroupName: "openshift-storage", Subscription: "odf-operator", Package: "odf-operator", Approval: addons.OperatorManaged}, Admit: admitFDF, Render: renderFDF}
 }
 
 func admitFDF(i addons.Instance, facts addons.ClusterFacts) []api.Issue {

@@ -10176,3 +10176,51 @@ item to be named by the page's Not yet met line. The three joined
 `test/architecture/testdata/docs-checks.txt`. The unreferenced goldens
 `help-add-ons-add.golden` and `help-add-ons-delete.golden` are deleted. The
 request and evidence schemas are unchanged.
+
+### X227 — Add-on discovery and operator journey
+
+**Items:** B981, B982 and B884 ([D210](backlog.md#d210),
+[D211](backlog.md#d211)).
+**Kind:** product. **Owners:** Add-ons, with CLI.
+**Code commit:** the integration commit that carries this record.
+
+`bootwright add-ons info --name <package>` describes one built-in package from
+the executable alone, under [the package listing](../add-ons.md#the-package-listing):
+a required `Summary` on each package descriptor, which the registry refuses to
+hold empty, over 120 bytes or with a control character, the capabilities with
+the meaning of "requires", the OLM package and default source, every leaf field
+of the package's `spec.packages` member with whether it is required and its
+default, derived from the schema, the namespaces it may place Secrets in, the
+PackageManifest lookup and a binding skeleton whose required leaves are
+`<field>` placeholders. An unknown name is the `access.target` refusal naming
+`add-ons list`. The group's help says it inspects packages. The
+[command](../cli/commands.md#command-and-flag-catalog) and
+[output](../cli/output.md#json-output) rows are held by
+`TestCommandCatalogMatchesSpec` and `TestDocsCommandLinesMatchTheCatalog`; the
+text, JSON, help and refusal goldens hold the bytes;
+`TestDescribeDerivesEveryLeafFromTheSchema`,
+`TestDescribeFactsAndSkeletonsPerPackage`,
+`TestDescribeRefusesAnUnknownNameWithARemedy` and
+`TestRegistryRefusesAnInvalidSummary` hold the derivation, and
+`TestEveryPackageSkeletonCompilesOnceItsPlaceholdersAreReplaced` compiles every
+package's skeleton with no diagnostic.
+
+The operator guide gained an [Add-ons](../../docs/operator-guide.md#add-ons)
+section that links the owning sections and restates no rule, and
+[lifecycle behavior](../cli.md#lifecycle-behavior) names the add-on journey's
+commands in order. Each example binding with an illustrative channel and CSV
+says so in one comment. The new example
+[lab-sno-ordered](../../examples/add-ons/lab-sno-ordered/README.md) holds an
+NMState and a MetalLB binding on one cluster ordered by `afterRefs`, and
+`TestBuiltinAddonExamplePlansGolden` plans it. A package bound twice now gets
+the remedy [the admission table](../api/addons.md#admission-diagnostics) gives,
+`select package <package> for <cluster> in one ClusterAddonBinding only`,
+while the add-on remedy is unchanged; `TestRegistryDuplicateLastAndCycleDiagnostics`
+holds both the code and the remedy.
+
+B884 repaired the `gitops` coverage row and example to `credentialsRef` and
+removed the stale Not yet met line of
+[bootstrap completion](../state-reconciliation.md#bootstrap-completion-and-gitops-readiness).
+No request, program or contract version moved. The `commands.md` catalog
+section kept its size ceiling by dropping a sentence that restated the three
+selector rules its test already holds.

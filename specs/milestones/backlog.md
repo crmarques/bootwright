@@ -5367,7 +5367,7 @@ HyperConverged carries no spec field: persistent vTPM backend storage stays
 with [B87](m1.md#b87)'s question 7 and the KubeVirt provider namespace with
 B732's question 3. (3) Its operator gate is the nested host of B732's run, so
 it adds no acceptance profile. (4) The review's other findings are recorded,
-not implemented: [B884](m4.md#b884), [B885](m3.md#b885), [B886](m4.md#b886),
+not implemented: [B884](delivered.md#x227--add-on-discovery-and-operator-journey), [B885](m3.md#b885), [B886](m4.md#b886),
 [B887](m2.md#b887) and [B888](m2.md#b888). (5) The existing items the review
 found blocking keep
 their definitions, and this request closes none of their questions:
@@ -6277,7 +6277,7 @@ words are taken by the session, pending the owner's review). After
 "prepare a plan to implement using best practices and sound architecture the
 gaps ... do not implement yet. when the plan is done i will use other lower
 cost model". Taken by the session, pending the owner's review:
-(1) The audit's work packages are M4 items [B981](m4.md#b981) to
+(1) The audit's work packages are M4 items [B981](delivered.md#x227--add-on-discovery-and-operator-journey) to
 [B987](m4.md#b987) and the parked [B988](#b988), with slices X227 to X231 in
 M4's Planned slices; none is active, nothing is implemented, and an
 implementer takes a slice only on the owner's explicit request, in the order
@@ -6291,7 +6291,7 @@ authored OLM definition compiled by the existing capability, after X229.
 (3) Routing follows the owner's model table: X229 and the definitions of
 B987 and B90 are complex; the other slices are routine, X230 with a
 complex-tier review of its registry rules.
-(4) [B770](#b770) and [B769](#b769) stay parked; [B884](m4.md#b884) and
+(4) [B770](#b770) and [B769](#b769) stay parked; [B884](delivered.md#x227--add-on-discovery-and-operator-journey) and
 [B886](m4.md#b886) keep their definitions, and B884 may land as X227's first
 commit.
 (5) The audit reports stay as written; each item names the audit finding it

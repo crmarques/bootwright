@@ -7,11 +7,14 @@ import (
 	"net/netip"
 	"slices"
 	"time"
+	"unicode"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/addons/clusterobjects"
 	"github.com/crmarques/bootwright/internal/reconciliation"
 )
+
+const MaxSummaryBytes = 120
 
 type GroupShape string
 
@@ -30,6 +33,7 @@ const (
 
 type Package struct {
 	Name                string
+	Summary             string
 	Provides, Requires  []string
 	RequiresFor         func(Instance) []string
 	Last                bool
@@ -171,6 +175,9 @@ func NewRegistryWithExamples(entries []Package, examples map[string][]api.Value)
 		if len(p.Name) == 0 || len(p.Name) > 9 || p.Render == nil || p.Budget <= 0 || p.Budget > 5*time.Hour+50*time.Minute {
 			return Registry{}, fmt.Errorf("invalid package %q", p.Name)
 		}
+		if !validSummary(p.Summary) {
+			return Registry{}, fmt.Errorf("package %q has an empty, overlong or control-character summary", p.Name)
+		}
 		for i, c := range p.Name {
 			if !(c >= 'a' && c <= 'z' || c >= '0' && c <= '9' || c == '-' && i > 0 && i < len(p.Name)-1) {
 				return Registry{}, fmt.Errorf("invalid package name %q", p.Name)
@@ -213,6 +220,17 @@ func NewRegistryWithExamples(entries []Package, examples map[string][]api.Value)
 		return 0
 	})
 	return r, nil
+}
+func validSummary(summary string) bool {
+	if summary == "" || len(summary) > MaxSummaryBytes {
+		return false
+	}
+	for _, c := range summary {
+		if unicode.IsControl(c) {
+			return false
+		}
+	}
+	return true
 }
 func clonePackage(p Package) Package {
 	p.PlacementNamespaces = slices.Clone(p.PlacementNamespaces)

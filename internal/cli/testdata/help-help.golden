@@ -25,7 +25,7 @@
   cluster   Manage cluster
   media     Manage media
   secret    Manage secret
-  add-ons   Manage add-ons
+  add-ons   Inspect built-in add-on packages
   render    Render external-tool artifacts
 
   Tools

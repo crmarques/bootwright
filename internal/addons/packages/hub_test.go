@@ -131,7 +131,7 @@ func TestACMSingleNodeAndDependentApproval(t *testing.T) {
 }
 
 func TestHubSelectionPlanGolden(t *testing.T) {
-	fixture := addons.Package{Name: "fixture", Budget: time.Minute, Render: func(addons.Instance) (addons.Rendered, error) { return addons.Rendered{}, nil }}
+	fixture := addons.Package{Name: "fixture", Summary: "fixture package", Budget: time.Minute, Render: func(addons.Instance) (addons.Rendered, error) { return addons.Rendered{}, nil }}
 	entries := Builtin().Packages()
 	entries = append(entries, fixture)
 	registry, err := addons.NewRegistry(entries)

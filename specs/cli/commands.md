@@ -5,13 +5,11 @@ The tables define the complete public command tree, operands, flags and defaults
 
 ## Global flags
 
-Every command accepts and parses the presentation flags below so the same flag
-spellings and resolved values can be reused across workflow commands. `--context`
+Every command accepts and parses the presentation flags below. `--context`
 and the `--ssh-*` flags are accepted only by the commands whose use case reads
 them; any other command refuses them as flags it does not accept. The
 context-free commands, which refuse `--context`, are `controller install`, `controller
-rebind`, `controller uninstall`, `context` (every subcommand), `media` (every subcommand), `add-ons
-list`, `help`, `completion`, `version` and `schema`; only `apply`, `destroy`,
+rebind`, `controller uninstall`, `context` (every subcommand), `media` (every subcommand), `add-ons` (every subcommand), `help`, `completion`, `version` and `schema`; only `apply`, `destroy`,
 `machine rsh`, `machine exec`, `cluster rsh`, `cluster exec` and every
 `preflight` check but `preflight controller` and `preflight infra` accept
 `--ssh-*`; `machine rsh`,
@@ -77,9 +75,7 @@ Selectors and flags that play one role share one spelling. `--name <list>`
 selects instances of the command's own noun, a plural `--<noun>s <list>` filters
 by a related noun, and `--short` is the one flag that prints names only.
 
-`TestCatalogFlagSpellingsFollowTheSelectorRules` holds the catalog to the three
-rules: no command has a plural flag of its own noun, no flag but `--short`
-prints names only, and a plural flag names a noun other than its command's.
+`TestCatalogFlagSpellingsFollowTheSelectorRules` holds the catalog to these rules.
 
 ### Setup commands
 
@@ -92,6 +88,7 @@ prints names only, and a plural flag names a noun other than its command's.
 | `bootwright context current` | `--short` false | current context details, or only its name with `--short` | read local state |
 | `bootwright context delete` | required `--name <name>` and `--purge`; `--allow-orphans` and `--yes` false | permanent local deletion summary, saying whether it abandoned objects, which its confirmation names by the inventory [permanent deletion](../contexts.md#permanent-deletion) defines or says cannot be listed, and the host reservation keys it released | guarded removal under [permanent deletion](../contexts.md#permanent-deletion); never resource mutation |
 | `bootwright add-ons list` | none | built-in packages, their capabilities, OLM package, default source and configuration members | read executable registry |
+| `bootwright add-ons info` | required `--name <package>`; an unknown name refuses | [one package described](../add-ons.md#the-package-listing) | read executable registry |
 | `bootwright secret set` | required `--name`; type-specific `--value-file`, `--value-stdin`, `--username`, `--password-file`, `--password-stdin`, `--certificate-file`, `--private-key-file`, `--public-key-file` under [Secrets](../secrets.md); `--yes` false | stored identity and parts, never values | local confidential write |
 | `bootwright secret generate` | optional `--name`; `--renew` false | changed and unchanged Secret names | atomic selected generated-material batch |
 | `bootwright secret check` | none | declared availability/type checks | bounded material reads; no values emitted |
@@ -131,7 +128,7 @@ The three `media` commands follow the host-wide
 | `bootwright render installer` | `--clusters <list>` default all OpenShiftClusters; `--sensitive` false | installer artifact manifest | local placeholder files and optional sensitive files |
 | `bootwright render storage` | `--clusters <list>` default all CephClusters | storage artifact manifest | local native files or scripts only; never execution |
 | `bootwright apply` | repeatable `--authorize <token>[=<digest>][,<token>...]`; `--stage <list>` default all stages; `--until <cluster>.<package>`; `--yes` false | completed full apply, a pause at the selected stage boundary or after the named add-on instance, exact continued state, or a settled result when the declared state is already realized | complete planned mutation, or none when it settles, beyond completing an operation's interrupted finalization (its record, releases and evidence) |
-| `bootwright destroy` | repeatable `--authorize <token>[=<digest>][,<token>...]`; repeatable `--unregistered <machine>[,<machine>...]`; `--yes` false | completed full destroy, exact continued state, or a settled result when the context owns nothing | complete planned removal, or none when it settles, beyond completing an operation's interrupted finalization (its record, releases and evidence) or releasing what an interrupted registration left, and the [housekeeping](../state-reconciliation.md#context-mutation-evidence) of the operation claims that hold nothing; over an apply that did not complete, it first proves the outcome of every effect it takes back |
+| `bootwright destroy` | repeatable `--authorize <token>[=<digest>][,<token>...]`; repeatable `--unregistered <machine>[,<machine>...]`; `--yes` false | completed full destroy, exact continued state, or a settled result when the context owns nothing | complete planned removal, or none when it settles, beyond the same interrupted finalization or releasing what an interrupted registration left, and the [housekeeping](../state-reconciliation.md#context-mutation-evidence) of the operation claims that hold nothing; over an apply that did not complete, it first proves the outcome of every effect it takes back |
 
 Not yet met: `preflight add-ons`, `render installer` and `render storage` run no use case
 and answer `cli.not-implemented`; their contracts are intent, tracked as

@@ -527,6 +527,29 @@ installation is proved in-tree only until [B73](../specs/milestones/m1.md#b73)'s
 rehearsal runs, using [B496](../specs/milestones/m1.md#b496)'s CA-issued emulator, and a
 physical cluster node refuses until [B67](../specs/milestones/m3.md#b67).
 
+## Add-ons
+
+A `ClusterAddonBinding` installs operators on a cluster after it is up. This
+section routes the journey; each linked section owns its rules.
+
+- Choose a package: `bootwright add-ons list` shows the built-in packages and
+  `bootwright add-ons info --name <package>` describes one and prints a binding
+  skeleton ([the package listing](../specs/add-ons.md#the-package-listing)).
+- Start from a worked binding in the `add-ons` category of the
+  [examples](../examples/README.md). Their channels and CSVs are illustrative:
+  read the pair your catalog serves with the lookup `add-ons info` prints.
+- Try one in the lab: the [lab-sno runbook](../e2e/lab-sno/runbook.md#inputs)
+  turns the NMState and MetalLB bindings on with its `--set addons.*` flags.
+- Run it: `validate`, `plan` and `apply` as for any journey. `apply --until
+  <cluster>.<package>` pauses after one instance
+  ([stopping after an add-on instance](../specs/state-reconciliation.md#stopping-after-an-add-on-instance)),
+  and an instance is done when its [readiness](../specs/add-ons.md#readiness)
+  holds.
+- Run it again: what a settled apply and a changed binding do is the
+  [lifecycle unit](../specs/state-reconciliation.md#lifecycle-unit)'s rule.
+- Remove it: `destroy` retires the instance with its cluster
+  ([retirement](../specs/add-ons.md#retirement)).
+
 ## Changing the build between runs
 
 The automation is embedded in the executable and is no part of any setup

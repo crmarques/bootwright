@@ -133,6 +133,7 @@ func TestOnlyContextFreeAcquisitionConsumesTheInvokingEnvironment(t *testing.T) 
 		{"context current", nil, ignoresRoute},
 		{"context delete", []string{"--name", "lab", "--purge"}, ignoresRoute},
 		{"add-ons list", nil, ignoresRoute},
+		{"add-ons info", []string{"--name", "metallb"}, ignoresRoute},
 		{"secret set", []string{"--name", "demo", "--value-file", "secret.bin"}, ignoresRoute},
 		{"secret generate", nil, ignoresRoute},
 		{"secret check", nil, ignoresRoute},
