@@ -37,6 +37,12 @@ recorded before D165 keep their cells as written. For the log digest, set
 find "$LOGS" -type f -print0 | sort -z | xargs -0 sha256sum | sha256sum
 ```
 
+An E2E case is successful only when its selected variant completes the runbook
+from the first step through verification, required drills and cleanup on one
+clean build. An unexpected failure or skipped step makes that attempt
+unsuccessful; a corrected build requires a new complete run. Deliberate
+negative tests count only when their documented expected outcomes are met.
+
 ## Shared qualification rules
 
 Every coverage page applies these two rules, links them and states only its

@@ -281,6 +281,7 @@ Alias cell.
 | [B967](#b967) | new, 2026-10-29 (X220) | enabling | Verification tooling | The selection logic of `scripts/quick-test` and `scripts/check-commits` moves behind `scripts/tools` launchers | Both scripts are named shell exceptions that work; no gate fails until the move |
 | [B968](#b968) | new, 2026-10-29 (X216) | enabling | CLI | CLI help and output name cluster and storage kinds from the family registry, and the family-neutral check covers `internal/cli` | About 24 help and output strings name kinds directly and the help goldens pin them; the check exempts `internal/cli` meanwhile |
 | [B969](#b969) | new, 2026-10-29 (X216) | enabling | Storage | The six storage requirements no example plans become reference-edge rows | `CephClient`, `CephNFSExport` and `CephSMBResource` `filesystemRef` and the three `CephObjectGateway` `spec.pools` references order blocks in code, but the catalog test needs a planned example per row, so they carry a reason meanwhile |
+| [B977](#b977) | new, 2026-10-30 (owner request) | safety | Controller privilege, with CLI | Direct sudo accepts and discards `COLORTERM` without admitting execution-affecting variables | Owner requested future work; narrowing the refusal needs a named safety slice and an owning contract update |
 
 ### B82
 
@@ -2299,6 +2300,13 @@ failure. A serial full-package run with `GOMAXPROCS=1` passed. This is evidence
 of recurrence, not a diagnosis or proof that serialization fixes the cause.
 The full integration gate after temporary-directory cleanup remains unrun.
 
+**2026-10-30 observation:** X225's integration gate reproduced the lease
+conflict at `setup/refused/007-after-setup-state-rename` while `make check`
+overlapped `make race`, with no workspace implementation changes. After the
+race suite finished, the whole checkpoint test passed with `-count=1` and its
+default parallelism. The integration commits record the complete gate rerun.
+This recurrence and isolated pass do not diagnose or close the flake.
+
 ### B674
 
 Releasing a Ceph host whose cluster block never started retains the owned
@@ -3114,6 +3122,28 @@ references that emit requirements a reason instead of a
 example plans them. **Outcome:** examples or fixtures plan each edge, the rows
 exist and the reasons are gone. **Exit evidence:** the edge-catalog test with
 the six rows.
+
+### B977
+
+**Owner:** Controller privilege, with CLI. **Kind:** safety.
+**Requires:** owner promotion into a named safety slice. **Definition:**
+Candidate. **Delivery:** not started. Parked at the owner's request on
+2026-10-30; recording this item changes no current privilege behavior.
+
+The [local context privilege](../security.md#local-context-privilege) guard
+currently refuses a sudo-started invocation that receives `COLORTERM`.
+**Outcome:** accept this terminal color hint and discard it before starting
+any subprocess, with no broader inherited-environment admission. Update the
+owning security contract and [sudo guidance](../../docs/operator-guide.md#the-sudo-rule)
+with the implementation; the remedy should not require changing system-wide
+sudo or PAM configuration for this hint.
+
+**Exit evidence:** host-independent regressions for direct and supervised
+sudo entry, including proof that `COLORTERM` never reaches subprocesses and
+that execution-affecting variables such as `GODEBUG` and `ANSIBLE_CONFIG`
+still refuse before effects. Require independent safety review and the
+[safety verification gates](../../.agents/skills/code-implementation/SKILL.md#safety-class)
+when implementing and integrating the change.
 
 ## Audit remediation (2026-10-26)
 
@@ -6168,6 +6198,54 @@ is the context's current operation a KubeVirt power command refuses
 `identity-mismatch`; [B951](m1.md#b951) records it. Exit evidence: the
 hosted power, reading, lend and pin tests and goldens; the operator gates are
 the lab-kubevirt and lab-kubevirt-nested runs.
+
+### D208
+
+**delegated** (2026-10-29, the owner's E2E fix instruction): the owner
+delegated fixes needed during their E2E testing to one temporary task branch,
+with only short, targeted checks during testing. Long suites and integration
+wait until testing finishes and the owner explicitly authorizes merging to
+main. Under this delegation, X225 implements [B973](delivered.md#x225--e2e-execution-and-runbook-corrections), the bounded
+controller forwarding-policy inspection correction. This authorizes the fix,
+not an acceptance claim or skipped integration gates: independent safety
+review and the full required gates remain necessary before delivery.
+
+The owner's follow-up asks that prerequisites be explicit in the runbook,
+or implemented where Bootwright owns them. X225 adds [B974](delivered.md#x225--e2e-execution-and-runbook-corrections) to
+restore preparation order, operator-owned firewall admission and the D178
+diagnostic package procedure after runbook migration. B509's historical
+delivery remains intact; the new item records the regression without moving
+runbook-only tools into Bootwright's controller prerequisites.
+
+The owner further requires simple runbooks executed from beginning to end,
+with no alternate resume flow. B974 applies that sequence to all E2E cases:
+shared preparation, installation, verification, required drills and cleanup.
+A selected variant succeeds only as a complete run; planned negative tests
+retain their explicit expected outcomes.
+
+The 2026-10-30 E2E follow-up adds [B978](m1.md#b978) to X225: shorten
+invocation scratch names so Ansible's local RPC socket fits, preserving
+private custody and cleanup of earlier names. This is a runner correction,
+with no change to a frozen request or host effect identity.
+
+The same delegation covers [B979](m1.md#b979): an encrypted install brings
+up its declared network before its pre-script fetches recovery material.
+The correction retains the supported install topologies, TPM proof and
+verified TLS; a frozen installation is removed and planned again rather than
+rewritten to adopt a changed Kickstart.
+
+The owner's progress follow-up adds [B980](delivered.md#x225--e2e-execution-and-runbook-corrections): installation output
+names the post-network work actually running, including subscription
+registration and package updates. This changes presentation on new plans;
+existing frozen plans and running invocations retain their definitions.
+
+On 2026-10-30, the owner explicitly authorizes integration into local main
+after the required gates, squashed into two commits: code fixes and
+documentation updates. The temporary task branch and worktree are removed
+after integration. This authorization changes no operator-acceptance status
+and authorizes no push; the
+[X225 record](delivered.md#x225--e2e-execution-and-runbook-corrections) separates
+in-tree delivery from the remaining operator gates.
 
 ### D209
 

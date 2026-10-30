@@ -22,7 +22,7 @@ It accepts [B74](../../specs/milestones/m1.md#b74) (bond, VLAN and
 VLAN-over-bond installation) and [B326](../../specs/milestones/m1.md#b326)
 (the final network, reboot and interrupted convergence).
 
-## Inputs
+## 1. Review the inputs
 
 | `--set` | Default | Effect |
 | --- | --- | --- |
@@ -33,15 +33,16 @@ VLAN-over-bond installation) and [B326](../../specs/milestones/m1.md#b326)
 [values.yaml](values.yaml) holds the rest: addresses, upstreams, media names,
 guest size, the VLAN ids and networks and the converged network.
 
-## Prepare
+## 2. Prepare the host and external bridge
 
-The [host preparation](../README.md#prepare-the-host) and the RHEL 9.8 boot
-and DVD ISOs added as media. Free the loopback ports 8000 to 8002. The
+Complete [host preparation](../README.md#prepare-the-host), including diagnostic
+tools and both RHEL ISOs, then return here. Free the loopback ports 8000 to 8002. The
 managed network 198.51.100.0/26 on `virbr-e2e` must not exist yet: the
 `substrates` stage creates it and destroy removes it, and Bootwright places it
 in firewalld's `trusted` zone
 ([provider host realization](../../specs/substrates.md#provider-host-realization)),
-so `nv-bond` needs no rule.
+for guest traffic. The listener firewall check still follows the controller
+stage below.
 
 Capacity, which the apply gate counts
 ([capacity admission](../../specs/substrates.md#capacity-admission)): the
@@ -52,84 +53,111 @@ filesystem backing `/var/lib/libvirt/images`, beside the media. Check with
 `nproc`, `grep MemAvailable /proc/meminfo` and
 `df -h /var/lib/libvirt/images`.
 
-The VLAN Machines attach to a bridge you make. Bootwright refuses a VLAN
-install interface on a managed network, because a managed libvirt network gives
-its host an untagged address on the bridge and the controller could not reach
-the VLAN install address, and it never creates or removes an external bridge.
-Make `br-nv` a Linux bridge with no address and no physical port, a VLAN 120
-leg `br-nv.120` holding 198.51.100.65/26 and a VLAN 130 leg `br-nv.130` holding
-198.51.100.129/26, and keep them persistent. These NetworkManager commands
-are unverified in this tree; confirm each on the host:
+The VLAN Machines use an operator-created bridge. Require `br-nv`,
+`br-nv.120` and `br-nv.130` to be absent before starting. Create these isolated
+connections without a physical port; their `trusted` zone admits the lab
+VLANs to host services. Do not attach this bridge to an external network.
+Bootwright neither creates nor removes these connections.
 
 ```sh
-sudo nmcli connection add type bridge ifname br-nv con-name br-nv bridge.stp no ipv4.method disabled ipv6.method disabled
-sudo nmcli connection add type vlan ifname br-nv.120 con-name br-nv.120 vlan.parent br-nv vlan.id 120 ipv4.method manual ipv4.addresses 198.51.100.65/26 ipv6.method disabled
-sudo nmcli connection add type vlan ifname br-nv.130 con-name br-nv.130 vlan.parent br-nv vlan.id 130 ipv4.method manual ipv4.addresses 198.51.100.129/26 ipv6.method disabled
+sudo nmcli connection add type bridge ifname br-nv con-name br-nv bridge.stp no ipv4.method disabled ipv6.method disabled connection.zone trusted
+sudo nmcli connection add type vlan ifname br-nv.120 con-name br-nv.120 vlan.parent br-nv vlan.id 120 ipv4.method manual ipv4.addresses 198.51.100.65/26 ipv6.method disabled connection.zone trusted
+sudo nmcli connection add type vlan ifname br-nv.130 con-name br-nv.130 vlan.parent br-nv vlan.id 130 ipv4.method manual ipv4.addresses 198.51.100.129/26 ipv6.method disabled connection.zone trusted
+sudo nmcli connection up br-nv
+sudo nmcli connection up br-nv.120
+sudo nmcli connection up br-nv.130
 ip -br address show
-```
-
-This bridge is yours, so its firewall is too
-([network exposure](../../docs/operator-guide.md#network-exposure)). The two
-VLAN networks must reach 53/udp+tcp, 123/udp, 3128/tcp, 8080/tcp and 8443/tcp
-on the host address `A`. Read the zone the legs landed in and its existing
-grants, then add source-scoped runtime rules in that zone (a reboot or a
-`firewall-cmd --reload` drops them; add them again then):
-
-```sh
-Z=$(sudo firewall-cmd --get-zone-of-interface=br-nv.120); echo "$Z"
+sudo firewall-cmd --get-zone-of-interface=br-nv.120
 sudo firewall-cmd --get-zone-of-interface=br-nv.130
-sudo firewall-cmd --zone="$Z" --list-all
-for src in 198.51.100.64/26 198.51.100.128/26; do
-  for pp in 53/udp 53/tcp 123/udp 3128/tcp 8080/tcp 8443/tcp; do
-    sudo firewall-cmd --zone="$Z" --add-rich-rule="rule family=\"ipv4\" source address=\"$src\" port port=\"${pp%/*}\" protocol=\"${pp#*/}\" accept"
-  done
-done
-sudo firewall-cmd --zone="$Z" --list-rich-rules
 ```
 
-Both legs report the same zone. When `--get-zone-of-interface` reports
-`no zone`, the legs fall in the default zone: set
-`Z=$(sudo firewall-cmd --get-default-zone)` before the loop. A source-scoped
-rule does not narrow a broader grant the zone already holds.
+Require both VLAN addresses above and `trusted` for both zone queries. These
+host commands need verification on the test host; no live result is claimed.
 
-## Run
+## 3. Render and initialize
 
 ```sh
+umask 077
+RUN_DIR=$(mktemp -d)
 e2e/render.sh lab-network-variants
-C="lab-network-variants"
-IN="$HOME/bootwright-e2e/lab-network-variants"
-A=$(ip -4 route get 192.0.2.1 | sed -n 's/.* src \([0-9.]*\).*/\1/p')
-./bin/bootwright validate -f "$IN"
-./bin/bootwright context init --name "$C" --input-dir "$IN"
-./bin/bootwright secret generate --context "$C"
-./bin/bootwright secret check --context "$C"
-./bin/bootwright plan --context "$C"
-./bin/bootwright apply --context "$C" --stage controller --yes
-./bin/bootwright preflight controller --context "$C"
-./bin/bootwright apply --context "$C" --stage infrastructure-services --yes
+CONTEXT="lab-network-variants"
+INPUT_DIR="$HOME/bootwright-e2e/lab-network-variants"
+CONTROLLER_ADDRESS=$(ip -4 route get 192.0.2.1 | sed -n 's/.* src \([0-9.]*\).*/\1/p')
+./bin/bootwright validate -f "$INPUT_DIR"
+./bin/bootwright context init --name "$CONTEXT" --input-dir "$INPUT_DIR"
+./bin/bootwright secret generate --context "$CONTEXT"
+./bin/bootwright secret check --context "$CONTEXT"
+./bin/bootwright plan --context "$CONTEXT"
+```
+
+## 4. Verify the unsupported bond mode is refused
+
+A libvirt Machine admits only `active-backup`; render the case with `bond.mode=802.3ad` into a
+second directory, which validates, and import it:
+
+```sh
+e2e/render.sh lab-network-variants --set bond.mode=802.3ad --out-dir ~/bootwright-e2e/lab-network-variants-mode
+./bin/bootwright context update --name "$CONTEXT" --input-dir ~/bootwright-e2e/lab-network-variants-mode --yes
+./bin/bootwright plan --context "$CONTEXT"
+```
+
+Require the plan to report "a libvirt bridge qualifies only active-backup
+bonding, and bond bond0 of Machine/nv-bond declares mode 802.3ad". This is the
+expected negative test. Restore the valid declaration before proceeding:
+
+```sh
+./bin/bootwright context update --name "$CONTEXT" --input-dir "$INPUT_DIR" --yes
+```
+
+## 5. Prepare the controller and services
+
+```sh
+./bin/bootwright apply --context "$CONTEXT" --stage controller --yes
+```
+
+Set the listener ports, then complete
+[Prepare listener firewall](../README.md#prepare-listener-firewall).
+
+```bash
+FIREWALL_PORTS=(53/tcp 53/udp 123/udp 3128/tcp 8080/tcp 8443/tcp)
+```
+
+Continue only when the following preflight reports `ready`:
+
+```sh
+./bin/bootwright preflight controller --context "$CONTEXT"
+./bin/bootwright apply --context "$CONTEXT" --stage infrastructure-services --yes
 ```
 
 The plan shows the group `converge-network` and, for each Machine, the impacts
 `configure-network` and `restart`, each followed by the Machine name. The services answer on
-the host address `A`:
+the host address `CONTROLLER_ADDRESS`:
 
 ```sh
-curl -sk "https://$A:8443/" -o /dev/null -w '%{http_code}\n'   # 404 on an empty root
-dig @"$A" +short controller.e2e.example.test
-chronyd -Q -t 10 "server $A iburst port 123"
+curl -sk "https://$CONTROLLER_ADDRESS:8443/" -o /dev/null -w '%{http_code}\n'   # 404 on an empty root
+dig @"$CONTROLLER_ADDRESS" +short controller.e2e.example.test
+chronyd -Q -t 10 "server $CONTROLLER_ADDRESS iburst port 123"
 ```
 
-Then install and converge all three. Run both interruption drills of
-[Acceptance drills](#acceptance-drills) in this first apply, because they need
-a context that has not installed yet:
+## 6. Install with the required interruption drills
+
+Run the apply below with these two deliberate interruptions (B74 and B326):
+
+- Interrupted install (B74): press Ctrl-C once during an installer wait, then
+  repeat `./bin/bootwright apply --context "$CONTEXT" --yes`. The install replays and completes.
+- Interrupted convergence (B326): press Ctrl-C once while progress shows
+  `converge-network` for a Machine, then run `./bin/bootwright status --context "$CONTEXT"` and repeat
+  `./bin/bootwright apply --context "$CONTEXT" --yes`. The
+  status shows the convergence unfinished, never realized, and the apply
+  converges it; continue to the verification steps below.
 
 ```sh
-./bin/bootwright apply --context "$C" --yes
-./bin/bootwright status --context "$C"
-./bin/bootwright machine list --context "$C" --power-status
+./bin/bootwright apply --context "$CONTEXT" --yes
+./bin/bootwright status --context "$CONTEXT"
+./bin/bootwright machine list --context "$CONTEXT" --power-status
 ```
 
-## Verify
+## 7. Verify installation and final network
 
 B74, the install shapes. The first command lists one active profile per
 declared interface and the second shows `active-backup` over `nic0` and `nic1`
@@ -138,10 +166,10 @@ on the two bonded Machines. The VLAN commands show `nic0.120` on `nv-vlan`,
 to its MAC address:
 
 ```sh
-./bin/bootwright machine exec --context "$C" --name nv-bond,nv-vlan,nv-vlan-bond -- nmcli -t -f NAME,DEVICE,TYPE,STATE connection show --active
-./bin/bootwright machine exec --context "$C" --name nv-bond,nv-vlan-bond -- cat /proc/net/bonding/bond0
-./bin/bootwright machine exec --context "$C" --name nv-vlan,nv-vlan-bond -- ip -d link show type vlan
-./bin/bootwright machine exec --context "$C" --name nv-bond,nv-vlan,nv-vlan-bond -- ip -br link show
+./bin/bootwright machine exec --context "$CONTEXT" --name nv-bond,nv-vlan,nv-vlan-bond -- nmcli -t -f NAME,DEVICE,TYPE,STATE connection show --active
+./bin/bootwright machine exec --context "$CONTEXT" --name nv-bond,nv-vlan-bond -- cat /proc/net/bonding/bond0
+./bin/bootwright machine exec --context "$CONTEXT" --name nv-vlan,nv-vlan-bond -- ip -d link show type vlan
+./bin/bootwright machine exec --context "$CONTEXT" --name nv-bond,nv-vlan,nv-vlan-bond -- ip -br link show
 virsh --connect qemu:///system domiflist bootwright-lab-network-variants-nv-bond
 ```
 
@@ -153,65 +181,38 @@ its guest-only VLAN, the default and 192.0.2.0/24 routes, the search
 `e2e.example.test`, and a marker naming the request:
 
 ```sh
-./bin/bootwright machine exec --context "$C" --name nv-bond,nv-vlan,nv-vlan-bond -- ip -br address show
-./bin/bootwright machine exec --context "$C" --name nv-bond,nv-vlan,nv-vlan-bond -- ip route show
-./bin/bootwright machine exec --context "$C" --name nv-bond,nv-vlan,nv-vlan-bond -- cat /etc/resolv.conf
-./bin/bootwright machine exec --context "$C" --name nv-bond -- ip -o link show bond0.140
-./bin/bootwright machine exec --context "$C" --name nv-bond,nv-vlan,nv-vlan-bond -- cat /etc/bootwright/network-marker.json
-./bin/bootwright diff --context "$C" --observe
+./bin/bootwright machine exec --context "$CONTEXT" --name nv-bond,nv-vlan,nv-vlan-bond -- ip -br address show
+./bin/bootwright machine exec --context "$CONTEXT" --name nv-bond,nv-vlan,nv-vlan-bond -- ip route show
+./bin/bootwright machine exec --context "$CONTEXT" --name nv-bond,nv-vlan,nv-vlan-bond -- cat /etc/resolv.conf
+./bin/bootwright machine exec --context "$CONTEXT" --name nv-bond -- ip -o link show bond0.140
+./bin/bootwright machine exec --context "$CONTEXT" --name nv-bond,nv-vlan,nv-vlan-bond -- cat /etc/bootwright/network-marker.json
+./bin/bootwright diff --context "$CONTEXT" --observe
 ```
 
 B326, the reboot. The convergence power-cycled each Machine after the marker
 was written, so the marker's `bootId` differs from the running one while the
-declared network is up; `./bin/bootwright diff --context "$C" --observe` then reads every Machine realized,
+declared network is up; `./bin/bootwright diff --context "$CONTEXT" --observe` then reads every Machine realized,
 and the Machine info command shows the lifecycle evidence `network` and `networkReboot`
 true:
 
 ```sh
-./bin/bootwright machine exec --context "$C" --name nv-bond,nv-vlan,nv-vlan-bond -- cat /proc/sys/kernel/random/boot_id
-./bin/bootwright machine info --context "$C" --name nv-bond,nv-vlan,nv-vlan-bond
+./bin/bootwright machine exec --context "$CONTEXT" --name nv-bond,nv-vlan,nv-vlan-bond -- cat /proc/sys/kernel/random/boot_id
+./bin/bootwright machine info --context "$CONTEXT" --name nv-bond,nv-vlan,nv-vlan-bond
 ```
 
-## Acceptance drills
+## 8. Check drift and reboot
 
-Interruptions, during the first apply of Run (B74 and B326):
-
-- Interrupted install (B74): press Ctrl-C once during an installer wait, then
-  repeat `./bin/bootwright apply --context "$C" --yes`. The install replays and completes.
-- Interrupted convergence (B326): press Ctrl-C once while progress shows
-  `converge-network` for a Machine, then run `./bin/bootwright status --context "$C"` and repeat
-  `./bin/bootwright apply --context "$C" --yes`. The
-  status shows the convergence unfinished, never realized, and the apply
-  converges it; repeat the final-network and reboot checks of Verify.
-
-Refusal (B74), before the first `apply`, between `plan` and the controller
-stage of Run. A libvirt Machine
-admits only `active-backup`; render the case with `bond.mode=802.3ad` into a
-second directory, which validates, and import it:
-
-```sh
-e2e/render.sh lab-network-variants --set bond.mode=802.3ad --out-dir ~/bootwright-e2e/lab-network-variants-mode
-./bin/bootwright context update --name "$C" --input-dir ~/bootwright-e2e/lab-network-variants-mode --yes
-./bin/bootwright plan --context "$C"
-./bin/bootwright context update --name "$C" --input-dir "$IN" --yes
-```
-
-The plan, or at the latest the first apply, refuses before any effect with "a
-libvirt bridge qualifies only active-backup bonding, and bond bond0 of nv-bond
-declares mode 802.3ad". The other modes are qualified on physical hosts
-([B78](../../specs/milestones/m1.md#b78)).
-
-Drift (B326). Lower the MTU of one guest-only VLAN. `./bin/bootwright diff --context "$C" --observe` reads
+Drift (B326). Lower the MTU of one guest-only VLAN. `./bin/bootwright diff --context "$CONTEXT" --observe` reads
 `Machine/nv-bond` partial and names the block, not the field, so read the
 running MTU from the guest; restoring 1400 reads realized. Observation
 repairs nothing:
 
 ```sh
-./bin/bootwright machine exec --context "$C" --name nv-bond -- sudo -n ip link set dev bond0.140 mtu 1300
-./bin/bootwright diff --context "$C" --observe
-./bin/bootwright machine exec --context "$C" --name nv-bond -- sudo -n nmstatectl show bond0.140
-./bin/bootwright machine exec --context "$C" --name nv-bond -- sudo -n ip link set dev bond0.140 mtu 1400
-./bin/bootwright diff --context "$C" --observe
+./bin/bootwright machine exec --context "$CONTEXT" --name nv-bond -- sudo -n ip link set dev bond0.140 mtu 1300
+./bin/bootwright diff --context "$CONTEXT" --observe
+./bin/bootwright machine exec --context "$CONTEXT" --name nv-bond -- sudo -n nmstatectl show bond0.140
+./bin/bootwright machine exec --context "$CONTEXT" --name nv-bond -- sudo -n ip link set dev bond0.140 mtu 1400
+./bin/bootwright diff --context "$CONTEXT" --observe
 ```
 
 Reboot (B326). Restart all three, then repeat `ip -br address show` until SSH
@@ -219,90 +220,88 @@ answers; the declared addresses return without any apply. Restart returns at
 power-on, before the OS boots:
 
 ```sh
-./bin/bootwright machine restart --context "$C" --name nv-bond,nv-vlan,nv-vlan-bond --yes
-./bin/bootwright machine exec --context "$C" --name nv-bond,nv-vlan,nv-vlan-bond -- ip -br address show
+./bin/bootwright machine restart --context "$CONTEXT" --name nv-bond,nv-vlan,nv-vlan-bond --yes
+./bin/bootwright machine exec --context "$CONTEXT" --name nv-bond,nv-vlan,nv-vlan-bond -- ip -br address show
 ```
 
-Optional bond failover, not part of the acceptance: take the first port's link
-down on the host and record whether `/proc/net/bonding/bond0` shows `nic1`
-active and the Machine still answers the exec command. Set the MAC from the first interface in the earlier `domiflist` output:
+## 9. Destroy the three-guest context
+
+The first destroy must refuse with `lifecycle.live` while the guests run.
+This is the expected stop checkpoint:
 
 ```sh
-# Copy nic0's MAC from domiflist; do not use another interface.
-NIC0_MAC=''
-: "${NIC0_MAC:?Set NIC0_MAC from domiflist}"
-virsh --connect qemu:///system domif-setlink bootwright-lab-network-variants-nv-bond "${NIC0_MAC:?Set NIC0_MAC from domiflist}" down
-./bin/bootwright machine exec --context "$C" --name nv-bond -- cat /proc/net/bonding/bond0
-virsh --connect qemu:///system domif-setlink bootwright-lab-network-variants-nv-bond "${NIC0_MAC:?Set NIC0_MAC from domiflist}" up
+./bin/bootwright destroy --context "$CONTEXT" --authorize data-loss
 ```
 
-Record each result as a row of the [acceptance ledger](../../docs/acceptance.md):
-the three install shapes, the final network, the reboot, the interrupted
-install, the interrupted convergence, the drift and the cut-off declaration.
+Stop the named guests, then require removal to complete:
 
-### A declaration that cuts the controller off
+```sh
+./bin/bootwright machine stop --context "$CONTEXT" --name nv-bond,nv-vlan,nv-vlan-bond --yes
+./bin/bootwright destroy --context "$CONTEXT" --authorize data-loss
+./bin/bootwright status --context "$CONTEXT"
+systemctl list-units --all 'bootwright-*'
+./bin/bootwright context delete --name "$CONTEXT" --purge --yes
+```
 
-The last drill of B326, run after the Destroy below because the two contexts
-share the managed bridge and the service ports; it needs no external bridge.
-It uses a context of one Machine, because destroy is context-wide. The case
+## 10. Verify a declaration that cuts the controller off
+
+The three-guest context is now removed, freeing the shared bridge and ports.
+This final B326 drill uses a separate one-guest context and the same listener
+firewall rules. The case
 renders only `nv-bond`, on the managed network, with a route that sends the
 controller's replies out the guest-only VLAN to a next hop nobody answers,
 under the context name `nv-cutoff`:
 
 ```sh
 e2e/render.sh lab-network-variants --set name=nv-cutoff --set single=true --set cutoff=true --out-dir ~/bootwright-e2e/lab-network-variants-cutoff
-R="nv-cutoff"
+CUTOFF_CONTEXT="nv-cutoff"
 ./bin/bootwright validate -f ~/bootwright-e2e/lab-network-variants-cutoff
-./bin/bootwright context init --name "$R" --input-dir ~/bootwright-e2e/lab-network-variants-cutoff
-./bin/bootwright secret generate --context "$R"
-./bin/bootwright secret check --context "$R"
-./bin/bootwright apply --context "$R" --stage controller --yes
-./bin/bootwright apply --context "$R" --stage infrastructure-services --yes
-./bin/bootwright apply --context "$R" --yes
+./bin/bootwright context init --name "$CUTOFF_CONTEXT" --input-dir ~/bootwright-e2e/lab-network-variants-cutoff
+./bin/bootwright secret generate --context "$CUTOFF_CONTEXT"
+./bin/bootwright secret check --context "$CUTOFF_CONTEXT"
+./bin/bootwright apply --context "$CUTOFF_CONTEXT" --stage controller --yes
+./bin/bootwright preflight controller --context "$CUTOFF_CONTEXT"
+./bin/bootwright apply --context "$CUTOFF_CONTEXT" --stage infrastructure-services --yes
+./bin/bootwright apply --context "$CUTOFF_CONTEXT" --yes
 ```
 
 The last apply fails after NetworkManager's rollback, with partial evidence
 and the remedy "the declared network of Machine/nv-bond cannot change under
 this apply: run bootwright destroy, which erases the Machines this context
-installed". Record the evidence, then repeat `./bin/bootwright apply --context "$R" --yes`: it fails the same way.
-Recovery is destroy only. Render the corrected declaration, show that it
-converges, and clean up:
+installed". The next apply must fail with the same refusal. This is an expected negative
+test. Then destroy the guest, render the corrected declaration, verify a
+successful install and remove it:
 
 ```sh
-./bin/bootwright apply --context "$R" --yes
-./bin/bootwright machine stop --context "$R" --name nv-bond --yes
-./bin/bootwright destroy --context "$R" --authorize data-loss
+./bin/bootwright apply --context "$CUTOFF_CONTEXT" --yes
+./bin/bootwright machine stop --context "$CUTOFF_CONTEXT" --name nv-bond --yes
+./bin/bootwright destroy --context "$CUTOFF_CONTEXT" --authorize data-loss
 e2e/render.sh lab-network-variants --set name=nv-cutoff --set single=true --out-dir ~/bootwright-e2e/lab-network-variants-cutoff
-./bin/bootwright context update --name "$R" --input-dir ~/bootwright-e2e/lab-network-variants-cutoff --yes
-./bin/bootwright apply --context "$R" --yes
-./bin/bootwright machine stop --context "$R" --name nv-bond --yes
-./bin/bootwright destroy --context "$R" --authorize data-loss
-./bin/bootwright context delete --name "$R" --purge --yes
+./bin/bootwright context update --name "$CUTOFF_CONTEXT" --input-dir ~/bootwright-e2e/lab-network-variants-cutoff --yes
+./bin/bootwright apply --context "$CUTOFF_CONTEXT" --yes
+./bin/bootwright machine stop --context "$CUTOFF_CONTEXT" --name nv-bond --yes
+./bin/bootwright destroy --context "$CUTOFF_CONTEXT" --authorize data-loss
+./bin/bootwright context delete --name "$CUTOFF_CONTEXT" --purge --yes
 ```
 
-## Destroy
+## 11. Clean up and record the result
+
+Complete [Restore listener firewall](../README.md#restore-listener-firewall),
+then remove the external connections created in step 2:
 
 ```sh
-./bin/bootwright destroy --context "$C" --authorize data-loss
-./bin/bootwright machine stop --context "$C" --name nv-bond,nv-vlan,nv-vlan-bond --yes
-./bin/bootwright destroy --context "$C" --authorize data-loss
-./bin/bootwright status --context "$C"
-systemctl list-units --all 'bootwright-*'
-./bin/bootwright context delete --name "$C" --purge --yes
-```
-
-Then remove the firewall rules and the external bridge you made, which
-Bootwright never removes:
-
-```sh
-for src in 198.51.100.64/26 198.51.100.128/26; do
-  for pp in 53/udp 53/tcp 123/udp 3128/tcp 8080/tcp 8443/tcp; do
-    sudo firewall-cmd --zone="$Z" --remove-rich-rule="rule family=\"ipv4\" source address=\"$src\" port port=\"${pp%/*}\" protocol=\"${pp#*/}\" accept"
-  done
-done
-sudo firewall-cmd --zone="$Z" --list-rich-rules
 sudo nmcli connection delete br-nv.120 br-nv.130 br-nv
 ```
 
-Media stays for the next case. Run the cut-off drill above next, if it is still
-owed; it needs none of the bridges removed here.
+Complete [Remove diagnostic tools](../README.md#remove-diagnostic-tools),
+then remove the private directory:
+
+```sh
+rm -r -- "$RUN_DIR"
+```
+
+The run succeeds only after every step and expected result above, including
+cleanup. Record the three install shapes, unsupported-mode refusal, final
+network, reboot, interrupted install, interrupted convergence, drift and
+cut-off declaration in the [acceptance ledger](../../docs/acceptance.md),
+keeping environment details and raw evidence private. Cached media remains.

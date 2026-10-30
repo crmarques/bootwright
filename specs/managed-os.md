@@ -982,127 +982,6 @@ its effect unknown, so the destroy still observes the Machine. An observation
 that proves the frozen marker without the FIPS proof reports a partial
 installation, never a complete one.
 
-### Root-disk encryption
-
-A profile selecting `spec.customizations.security.diskEncryption` installs the
-root disk encrypted with LUKS2 and bound to the machine's TPM 2.0, so it
-unlocks unattended at every boot, and keeps its recovery passphrase as the one
-way to unlock it by hand.
-
-**Layout.** The Kickstart's storage ends in `%include` of a file its `%pre`
-writes: `autopart --type=lvm --encrypted --luks-version=luks2
---passphrase=<recovery passphrase>`, with `--pbkdf=pbkdf2` when the profile
-also enables `fips`, because Argon2 is unusable in FIPS mode. Automatic
-partitioning encrypts every LVM physical volume it creates and leaves `/boot`
-to the installer's own layout. `%pre` runs in a first pass whose parser
-tolerates a missing include, so the file it writes is the one the full parse
-reads. Sources:
-[RHEL 9 Kickstart commands and options](https://docs.redhat.com/en/documentation/red_hat_enterprise_linux/9/html/automatically_installing_rhel/kickstart-commands-and-options-reference_rhel-installer),
-[Kickstart script file format](https://docs.redhat.com/en/documentation/red_hat_enterprise_linux/9/html/automatically_installing_rhel/kickstart-script-file-format-reference_rhel-installer)
-and anaconda's `preScriptPass`
-([pyanaconda/kickstart.py](https://github.com/rhinstaller/anaconda/blob/rhel-9/pyanaconda/kickstart.py)).
-
-**Unlock.** `%packages` adds `clevis-dracut`, `clevis-luks` and
-`clevis-systemd`, and a `%post` binds every `crypto_LUKS` device with
-`clevis luks bind -y -k - tpm2 <config>`, proves the new `tpm2` slot, fails
-when no device was bound, and regenerates the initramfs with dracut. Clevis
-stores in that slot a key it generates, never the recovery passphrase, so with
-no `pcrIds` the proof pipes the key `clevis luks pass` decrypts from the slot
-to `cryptsetup open --test-passphrase --key-slot <slot> --key-file -` on the
-device
-([clevis-luks-pass(1)](https://github.com/latchset/clevis/blob/master/src/luks/clevis-luks-pass.1.adoc));
-with `pcrIds` it proves that clevis lists the slot. The
-configuration spells `pcr_bank` and `pcr_ids` from `unlock.tpm2`; with no
-`pcrIds` it is `{}`, which binds the disk to the TPM with no PCR policy: that
-protects a disk copied without its TPM, not a tampered boot. Clevis seals the
-PCR values current when it runs, which are those measured while the installer
-runs, so a selected PCR that measures the boot loader, the kernel or its
-command line can differ on the installed boot and leave the disk waiting on the
-console. Sources:
-[RHEL 9 policy-based decryption](https://docs.redhat.com/en/documentation/red_hat_enterprise_linux/9/html/security_hardening/configuring-automated-unlocking-of-encrypted-volumes-using-policy-based-decryption_security-hardening),
-[clevis-encrypt-tpm2(1)](https://github.com/latchset/clevis/blob/master/src/pins/tpm2/clevis-encrypt-tpm2.1.adoc)
-and [clevis-luks-bind(1)](https://github.com/latchset/clevis/blob/master/src/luks/clevis-luks-bind.1.adoc).
-`%pre` proves `/dev/tpmrm0` before it fetches anything or touches any disk, and
-refuses an installation on a machine that presents no TPM 2.0.
-
-**Recovery passphrase.** The recovery passphrase is the value of the Secret
-`recoveryPassphraseRef` names: 8 to 256 printable ASCII characters other than
-space, `"`, `'`, `\` and `#`, which the storage directive carries unquoted. A
-generated `token` Secret encodes its bytes in base64url, so it generates at
-most 192 bytes. The class is checked at plan for a generated token's length,
-at apply before any effect for the bound value, naming the Secret and never a
-byte of it, with a remedy that takes the context back with destroy before
-replacing the Secret, since a continued apply reads the bound version, and
-again in `%pre`. The passphrase is fetched by `%pre` and
-`%post` into a shell variable, written only to the installer's storage file and
-given to clevis on standard input; it never reaches a request, evidence, a
-log, an argv or the installed disk.
-
-**Custody.** The Secret version bound to the installation is the disk's
-recovery secret: it is never renewed or replaced while the Machine exists. An
-apply never re-keys an installed disk and does not detect a changed value, and
-Bootwright offers no command that reveals a bound version, so the operator
-keeps the value the installation bound. The passphrase is effect material, so
-the [access-credential rebind](state-reconciliation.md#access-credential-rebind)
-refuses it, as it refuses the fleet key and a delivered host key; a bare-metal
-target's management controller credentials are the access credential an
-installation and its physical erase present, which that rebind may replace.
-
-**Publication.** `recovery` is published beneath the private subtree, beside
-the installer image, only by an apply that boots the installer: after the
-substrate's pre-boot proof and before the media is inserted, with its first
-byte fetched through the listener the installer uses, so a replay, or an apply
-that finds the frozen marker, never publishes it. The completion withdraws it
-with the subtree before its inspection, the inverse removes it, and the next
-apply clears it after a failure. A virtual Machine's emulated BMC
-fetches the private installer image without verifying the server and never
-proves a verified fetch, so its insert does not ask for the verified-fetch
-read-back a physical insert requires; that leg never leaves the provider host
-the artifact server is placed on, as the
-[security spec](security.md#network-remote-systems-and-privilege) bounds every
-emulated BMC and the [refusal table](#refusal-table) enforces before
-registration. In `%pre` no name service is configured yet, so the artifact
-server endpoint the installer image is published through must be an IP
-literal, and a profile selecting a hostname endpoint refuses before
-registration.
-
-**Physical Machines.** The explicit whole root disk and MAC proofs still run
-before storage effects. Before fetching the recovery value or binding any
-slot, `%post` resolves the declared disk, proves the installed root belongs
-only to that disk, enumerates only its LUKS descendants, and proves each has
-that disk as its sole physical parent. Missing, foreign or ambiguous ancestry
-refuses before the first bind; other disks are never scanned for binding.
-The TPM must already be available to the installer; Bootwright never clears
-a physical TPM. Only an apply that boots the installer writes
-[firmware](substrates.md#physical-firmware), before clevis seals, so no later
-apply moves a sealed disk's PCRs; reboot unlock and console recovery remain
-[B78](milestones/m1.md#b78) qualification.
-
-**Proof.** After the installed system's network converged, an apply reads,
-over the pinned fleet connection with root from the Kickstart's sudoers entry,
-the device chain of the root filesystem: it proves encryption only when that
-chain holds a `crypt` device and its `crypto_LUKS` backing device carries a
-clevis `tpm2` slot. The read writes nothing. An observation reads it the same
-way. The evidence records the answer as `rootEncryption`; an installation whose
-profile does not select `diskEncryption` reads nothing and records false.
-
-**Refusal.** An apply whose installed system does not prove it names
-`root-encryption-unproved` and fails with
-`Machine/<machine> was installed with an encrypted root disk, but its root filesystem is not on a LUKS device with a TPM2 binding`;
-the remedy takes the context back with `bootwright destroy` and applies it
-again, because the root disk is encrypted only at installation. An observation
-that proves the frozen marker without the proof reports a partial installation,
-never a complete one.
-
-**Boot.** Every boot of the installed disk, network convergence's restart
-included, unlocks unattended through the TPM. A disk that cannot unlock waits
-on the console, because `systemd-cryptsetup` waits without a timeout
-([crypttab(5)](https://man7.org/linux/man-pages/man5/crypttab.5.html)), until
-the identity budget fails the apply. Recovery is the console with the recovery
-passphrase. An update within the release reboots the disk after it may have
-replaced the boot loader and the kernel, so `pcrIds` holding 4, 8 or 9 refuses
-beside it ([Update within release](#update-within-release)).
-
 ### Registration
 
 A profile selecting `spec.subscription` with a `managed` `redhatRhel`
@@ -1465,6 +1344,138 @@ The [physical acceptance template](../docs/acceptance.md#physical-qualification-
 records each arm's result on a registered clean build. Host qualification and
 B70 erase evidence feed [B485](milestones/m2.md#b485)'s complete physical Ceph
 matrix; each retains its own operator exit.
+
+## Root-disk encryption
+
+A profile selecting `spec.customizations.security.diskEncryption` installs the
+root disk encrypted with LUKS2 and bound to the machine's TPM 2.0, so it
+unlocks unattended at every boot, and keeps its recovery passphrase as the one
+way to unlock it by hand.
+
+**Layout.** The Kickstart's storage ends in `%include` of a file its `%pre`
+writes: `autopart --type=lvm --encrypted --luks-version=luks2
+--passphrase=<recovery passphrase>`, with `--pbkdf=pbkdf2` when the profile
+also enables `fips`, because Argon2 is unusable in FIPS mode. Automatic
+partitioning encrypts every LVM physical volume it creates and leaves `/boot`
+to the installer's own layout. `%pre` runs in a first pass whose parser
+tolerates a missing include, so the file it writes is the one the full parse
+reads. Sources:
+[RHEL 9 Kickstart commands and options](https://docs.redhat.com/en/documentation/red_hat_enterprise_linux/9/html/automatically_installing_rhel/kickstart-commands-and-options-reference_rhel-installer),
+[Kickstart script file format](https://docs.redhat.com/en/documentation/red_hat_enterprise_linux/9/html/automatically_installing_rhel/kickstart-script-file-format-reference_rhel-installer)
+and anaconda's `preScriptPass`
+([pyanaconda/kickstart.py](https://github.com/rhinstaller/anaconda/blob/rhel-9/pyanaconda/kickstart.py)).
+
+**Unlock.** `%packages` adds `clevis-dracut`, `clevis-luks` and
+`clevis-systemd`, and a `%post` binds every `crypto_LUKS` device with
+`clevis luks bind -y -k - tpm2 <config>`, proves the new `tpm2` slot, fails
+when no device was bound, and regenerates the initramfs with dracut. Clevis
+stores in that slot a key it generates, never the recovery passphrase, so with
+no `pcrIds` the proof pipes the key `clevis luks pass` decrypts from the slot
+to `cryptsetup open --test-passphrase --key-slot <slot> --key-file -` on the
+device
+([clevis-luks-pass(1)](https://github.com/latchset/clevis/blob/master/src/luks/clevis-luks-pass.1.adoc));
+with `pcrIds` it proves that clevis lists the slot. The
+configuration spells `pcr_bank` and `pcr_ids` from `unlock.tpm2`; with no
+`pcrIds` it is `{}`, which binds the disk to the TPM with no PCR policy: that
+protects a disk copied without its TPM, not a tampered boot. Clevis seals the
+PCR values current when it runs, which are those measured while the installer
+runs, so a selected PCR that measures the boot loader, the kernel or its
+command line can differ on the installed boot and leave the disk waiting on the
+console. Sources:
+[RHEL 9 policy-based decryption](https://docs.redhat.com/en/documentation/red_hat_enterprise_linux/9/html/security_hardening/configuring-automated-unlocking-of-encrypted-volumes-using-policy-based-decryption_security-hardening),
+[clevis-encrypt-tpm2(1)](https://github.com/latchset/clevis/blob/master/src/pins/tpm2/clevis-encrypt-tpm2.1.adoc)
+and [clevis-luks-bind(1)](https://github.com/latchset/clevis/blob/master/src/luks/clevis-luks-bind.1.adoc).
+`%pre` proves `/dev/tpmrm0` before it fetches anything or touches any disk, and
+refuses an installation on a machine that presents no TPM 2.0.
+
+**Early network.** After that proof and before fetching recovery material,
+`%pre` activates the declared install network through private runtime
+NetworkManager profiles. It carries the same Ethernet, bond and VLAN topology,
+static address, optional route and DNS selections as the
+[derived installation](#derived-installation). All profiles are loaded before
+bounded activation; a VLAN's parent is activated first. Failure stops before
+the recovery fetch or storage include is written. Profile IDs equal their
+interface names so Anaconda reuses them when it applies the Kickstart network
+directive. They stay active through installation; no recovery secret enters
+them. [Anaconda network initialization](https://raw.githubusercontent.com/rhinstaller/anaconda/rhel-9/pyanaconda/modules/network/initialization.py)
+owns that reuse, and the later declared-network convergence is unchanged.
+
+**Recovery passphrase.** The recovery passphrase is the value of the Secret
+`recoveryPassphraseRef` names: 8 to 256 printable ASCII characters other than
+space, `"`, `'`, `\` and `#`, which the storage directive carries unquoted. A
+generated `token` Secret encodes its bytes in base64url, so it generates at
+most 192 bytes. The class is checked at plan for a generated token's length,
+at apply before any effect for the bound value, naming the Secret and never a
+byte of it, with a remedy that takes the context back with destroy before
+replacing the Secret, since a continued apply reads the bound version, and
+again in `%pre`. The passphrase is fetched by `%pre` and
+`%post` into a shell variable, written only to the installer's storage file and
+given to clevis on standard input; it never reaches a request, evidence, a
+log, an argv or the installed disk.
+
+**Custody.** The Secret version bound to the installation is the disk's
+recovery secret: it is never renewed or replaced while the Machine exists. An
+apply never re-keys an installed disk and does not detect a changed value, and
+Bootwright offers no command that reveals a bound version, so the operator
+keeps the value the installation bound. The passphrase is effect material, so
+the [access-credential rebind](state-reconciliation.md#access-credential-rebind)
+refuses it, as it refuses the fleet key and a delivered host key; a bare-metal
+target's management controller credentials are the access credential an
+installation and its physical erase present, which that rebind may replace.
+
+**Publication.** `recovery` is published beneath the private subtree, beside
+the installer image, only by an apply that boots the installer: after the
+substrate's pre-boot proof and before the media is inserted, with its first
+byte fetched through the listener the installer uses, so a replay, or an apply
+that finds the frozen marker, never publishes it. The completion withdraws it
+with the subtree before its inspection, the inverse removes it, and the next
+apply clears it after a failure. A virtual Machine's emulated BMC
+fetches the private installer image without verifying the server and never
+proves a verified fetch, so its insert does not ask for the verified-fetch
+read-back a physical insert requires; that leg never leaves the provider host
+the artifact server is placed on, as the
+[security spec](security.md#network-remote-systems-and-privilege) bounds every
+emulated BMC and the [refusal table](#refusal-table) enforces before
+registration. The recovery fetch retains the admitted IP-literal artifact
+server endpoint; a profile selecting a hostname endpoint still refuses before
+registration.
+
+**Physical Machines.** The explicit whole root disk and MAC proofs still run
+before storage effects. Before fetching the recovery value or binding any
+slot, `%post` resolves the declared disk, proves the installed root belongs
+only to that disk, enumerates only its LUKS descendants, and proves each has
+that disk as its sole physical parent. Missing, foreign or ambiguous ancestry
+refuses before the first bind; other disks are never scanned for binding.
+The TPM must already be available to the installer; Bootwright never clears
+a physical TPM. Only an apply that boots the installer writes
+[firmware](substrates.md#physical-firmware), before clevis seals, so no later
+apply moves a sealed disk's PCRs; reboot unlock and console recovery remain
+[B78](milestones/m1.md#b78) qualification.
+
+**Proof.** After the installed system's network converged, an apply reads,
+over the pinned fleet connection with root from the Kickstart's sudoers entry,
+the device chain of the root filesystem: it proves encryption only when that
+chain holds a `crypt` device and its `crypto_LUKS` backing device carries a
+clevis `tpm2` slot. The read writes nothing. An observation reads it the same
+way. The evidence records the answer as `rootEncryption`; an installation whose
+profile does not select `diskEncryption` reads nothing and records false.
+
+**Refusal.** An apply whose installed system does not prove it names
+`root-encryption-unproved` and fails with
+`Machine/<machine> was installed with an encrypted root disk, but its root filesystem is not on a LUKS device with a TPM2 binding`;
+the remedy takes the context back with `bootwright destroy` and applies it
+again, because the root disk is encrypted only at installation. An observation
+that proves the frozen marker without the proof reports a partial installation,
+never a complete one.
+
+**Boot.** Every boot of the installed disk, network convergence's restart
+included, unlocks unattended through the TPM. A disk that cannot unlock waits
+on the console, because `systemd-cryptsetup` waits without a timeout
+([crypttab(5)](https://man7.org/linux/man-pages/man5/crypttab.5.html)), until
+the identity budget fails the apply. Recovery is the console with the recovery
+passphrase. An update within the release reboots the disk after it may have
+replaced the boot loader and the kernel, so `pcrIds` holding 4, 8 or 9 refuses
+beside it ([Update within release](#update-within-release)).
 
 ## Update within release
 

@@ -36,130 +36,326 @@ available, so the last three cases need a larger host. Run one case at a time:
 they share the bridge `virbr-e2e`, the guest subnet `198.51.100.0/24` and the
 service ports.
 
-## Prepare the host
-
-Once per host, from the repository root:
-
-1. A Fedora or RHEL amd64 host with `/dev/kvm`, sudo, `helm` and network
-   egress ([controller requirements](../specs/controller.md#supported-hosts)).
-   Bootwright installs everything else it needs.
-2. `make build`, then `./bin/bootwright controller install --yes`.
-3. Free host ports: 53/tcp+udp, 123/udp, 3128, 8080 and 8443 on the host
-   address, and 8000 on loopback (a two-context case lists its extra ports).
-   A host `chronyd` or `dnsmasq` listening on all addresses conflicts:
-
-   ```sh
-   ss -lntup | grep -E ':(53|123|3128|808[0-9]|844[0-9]|800[0-9])\b'
-   ```
-
-4. Pin the host address. `host.address: auto` takes the default-route source
-   address at render time, and every managed service binds it; a DHCP lease
-   that moves breaks a running case, so prefer a reservation.
-5. Media, once per host, for the RHEL cases:
-
-   ```sh
-   BOOT_ISO='' # Absolute path to your RHEL 9.8 x86_64 boot ISO.
-   DVD_ISO=''  # Absolute path to your RHEL 9.8 x86_64 DVD ISO.
-   ./bin/bootwright media add --name rhel-9.8-x86_64-boot.iso --from-file "${BOOT_ISO:?Set BOOT_ISO to the boot ISO path}"
-   ./bin/bootwright media add --name rhel-9.8-x86_64-dvd.iso --from-file "${DVD_ISO:?Set DVD_ISO to the DVD ISO path}"
-   ./bin/bootwright media list --checksums
-   ```
-
-6. Secret files, for the cases that use them. Runbooks read every credential
-   from a file, never from standard input; change the variable when yours is
-   elsewhere. A value or password file must be yours with mode `0600` or
-   `0400` ([input files](../specs/secrets.md#acquisition-and-commands)):
-
-   | Default path | Variable | Content | Cases |
-   | --- | --- | --- | --- |
-   | `~/rhel-org.txt` | `RHSM_ORG_FILE` | RHSM organization ID with no final line feed: an `opaque` value is stored byte for byte | lab-rhel with registration, lab-3-nodes-ceph-host-variants |
-   | `~/rhel-activation-key.txt` | `RHSM_KEY_FILE` | RHSM activation key | lab-rhel with registration, lab-3-nodes-ceph-host-variants |
-   | `~/ibm-ceph-registry.txt` | `IBM_REGISTRY_FILE` | `cp:<entitlement key>` for `cp.icr.io`, or the key alone | the Ceph cases |
-   | `~/openshift-pull-secret` | `PULL_SECRET_FILE` | OpenShift pull-secret JSON | the OpenShift cases |
-
-   ```sh
-   chmod 600 ~/rhel-org.txt ~/rhel-activation-key.txt ~/ibm-ceph-registry.txt ~/openshift-pull-secret
-   ```
-
-7. Capacity. Close other workloads until `grep MemAvailable /proc/meminfo`
-   and `df -h /var/lib/libvirt` cover the case's row above. A Ceph case
-   reports the same checks with `preflight storage-cluster` and an OpenShift
-   case with `preflight container-cluster`; a RHEL-only case learns them
-   from `apply`, which refuses before any effect.
-8. Guest access to the host services needs no firewall rule: Bootwright puts
-   each managed bridge in firewalld's `trusted` zone
-   ([provider host](../specs/substrates.md#provider-host-realization)). A case
-   that uses a bridge you create gives its rule in Prepare
-   ([network exposure](../docs/operator-guide.md#network-exposure)).
-
-## Render a case
-
-```sh
-CASE=lab-rhel
-IN="$HOME/bootwright-e2e/$CASE"
-e2e/render.sh "$CASE" --out-dir "$IN"
-./bin/bootwright validate -f "$IN"
-```
-
-The case's `values.yaml` describes every input; its runbook gives the complete
-commands for each toggle. To use a local values file, set its path and render:
-
-```sh
-VALUES_FILE='' # Absolute path to your local values YAML file.
-e2e/render.sh "$CASE" --values "${VALUES_FILE:?Set VALUES_FILE to your values file}" --out-dir "$IN"
-./bin/bootwright validate -f "$IN"
-```
-
-`--set` and `--values` override defaults in order. The output defaults to
-`~/bootwright-e2e/` followed by the case name. A
-render replaces only an empty directory or an earlier render, and never writes
-inside the repository. A two-context case renders one input directory per
-context below the output; use its runbook's validation commands for those
-subdirectories.
-
-Context import freezes the rendered input. To change it, destroy, render
-again, then update the retained context using its name and rendered input:
-
-```sh
-C=lab-rhel
-./bin/bootwright context update --name "$C" --input-dir "$IN"
-```
-
 ## Conventions
 
-Run shell blocks in Bash from the repository root, in the runbook's order.
-Edit only the variable assignments marked for your run or observed values;
-an empty required variable refuses at the command that needs it. Keep the
-same shell so later blocks retain those variables, and run only the sections
-for the toggles you enabled. Credentials never enter a runbook shell variable
-or a command line: every `secret set` reads a
-[secret file](#prepare-the-host) or one the case wrote, and passes `--yes`, so
-rerunning the block replaces the value instead of asking. The IBM key is
-copied without its `cp:` prefix to a mode-0600 file in the run's private
-scratch directory `D`, which `secret set` reads and the next line deletes.
+Choose one case and its feature settings, then follow its runbook from the
+first step through cleanup in one Bash session, from the checkout being tested.
+The case tells you when to use the shared steps below and when to return.
+Do not execute this README as a second runbook.
 
-Runbooks use `./bin/bootwright` and set `C` to
-the context name, `IN` to the rendered directory and `A` to the host address.
-Every mutation shows its plan and asks for confirmation unless it is given
-`--yes`.
+Begin with the case's contexts and guest resources absent. Shared host tools
+and cached media may already exist. Never delete a context's local state while
+its resources still need removal.
 
-Interrupting an `apply` with Ctrl-C, or `kill -9` of the `bootwright`
-process, is part of several acceptances. Inspect with `status`, then repeat the
-same `apply` with the same input, Secrets, media and stage selection. A failed
-block is retried, and an unknown outcome is observed before any retry. A
-rebuilt binary continues the same operation
-([changing the build](../docs/operator-guide.md#changing-the-build-between-runs)).
-An interrupted destroy continues with `destroy`, never `apply`.
+A successful run completes every step and expected check for the selected
+settings, including deliberate failure drills and cleanup, on one clean build.
+An unexpected failure stops the run; retain its evidence and cleanup records.
+After correcting the problem and cleaning up that attempt, start a new complete
+run. A partial run or a run that skips steps is not successful. Test another
+feature combination or build in another complete run.
 
-Destroy lists the guests to stop first, and under `Stop after online cleanup`
-those it still needs running. When it refuses or pauses, stop the guests it
-names and repeat it. For a plan that requires data-loss authorization, an
-invocation with `--yes` or without a terminal needs the printed plan digest:
+Use these names consistently:
+
+| Variable | Meaning |
+| --- | --- |
+| `CONTEXT` | Bootwright context being tested |
+| `INPUT_DIR` | Rendered desired-state directory |
+| `CONTROLLER_ADDRESS` | Host address on which the services listen |
+| `RUN_DIR` | Private temporary directory for case files and firewall cleanup records |
+| `HOST_CHECKS` | Private record of diagnostic packages installed for this run |
+| `FIREWALL_PORTS` | Case's array of listener ports to admit |
+
+Keep the same shell and private directories through cleanup. Configure inputs
+where the runbook introduces them; prompts ask for values discovered on the
+host. Credentials come from private files, never literal values in commands.
+Record results using the [acceptance ledger](../docs/acceptance.md); only the
+human owner accepts a run, and confidential environment details stay in the
+private evidence archive.
+
+## Prepare the host
+
+Complete these steps once, when the case asks for host preparation.
+
+### 1. Check the host and build tools
+
+Use a [supported](../specs/controller.md#supported-hosts) Fedora or RHEL amd64
+host with `/dev/kvm`, network egress and the required
+[sudo policy](../docs/operator-guide.md#the-sudo-rule). Building needs `make`
+and the [Go toolchain](../docs/development.md#toolchain). Rendering needs Helm:
+install it from approved host packages (`sudo dnf install helm` on Fedora) or
+[verified upstream binaries](https://helm.sh/docs/intro/install/).
 
 ```sh
-DATA_LOSS_DIGEST='' # Copy the digest from the reviewed removal plan.
-./bin/bootwright destroy --context "$C" --authorize "data-loss=${DATA_LOSS_DIGEST:?Set DATA_LOSS_DIGEST from the removal plan}" --yes
+test -e /dev/kvm
+command -v make
+helm version --short
+sudo -v
 ```
 
-Verify removal before deleting the context, which deletes only local state
-and Secrets. Media stays reserved until no context uses it.
+### 2. Build and install controller prerequisites
+
+Enter the checkout containing the code being tested before these commands.
+Require the binary's `Commit` to match `HEAD` and its `Source` to be `clean`.
+Use this checkout's binary throughout the run.
+
+```sh
+git branch --show-current
+git rev-parse HEAD
+make build
+./bin/bootwright version
+./bin/bootwright controller install --yes
+```
+
+`controller install` installs Bootwright's runtime and baseline execution
+packages. The case's later `apply --stage controller` installs its selected
+libvirt, QEMU, TPM and installer tools and binds the context to this host. No
+manual installation of those packages is needed.
+
+### 3. Prepare diagnostic tools
+
+The runbooks use `curl`, `dig`, `chronyd` and `jq` for independent checks.
+Record pre-existing packages, then install only missing diagnostic packages.
+Keep the printed directory until the final cleanup step.
+
+```bash
+umask 077
+HOST_CHECKS=$(mktemp -d)
+printf 'Diagnostic package record: %s\n' "$HOST_CHECKS"
+(
+    set -e
+    rpm -qa --qf '%{NAME}\n' > "$HOST_CHECKS/before"
+    : > "$HOST_CHECKS/added"
+    for package in bind-utils chrony jq; do
+        if ! grep -Fxq "$package" "$HOST_CHECKS/before"; then
+            printf '%s\n' "$package" >> "$HOST_CHECKS/added"
+        fi
+    done
+    if ! command -v curl >/dev/null; then
+        if grep -Eq '^(curl|curl-minimal)$' "$HOST_CHECKS/before"; then
+            printf 'Restore the installed curl executable before starting the run.\n' >&2
+            exit 1
+        fi
+        printf 'curl\n' >> "$HOST_CHECKS/added"
+    fi
+    mapfile -t packages < "$HOST_CHECKS/added"
+    if ((${#packages[@]})); then
+        sudo dnf install --setopt=assumeyes=False --setopt=defaultyes=False \
+            --setopt=install_weak_deps=False -- "${packages[@]}"
+    fi
+    for tool in curl dig chronyd jq; do
+        command -v "$tool" >/dev/null
+    done
+)
+```
+
+Review the package transaction before confirming. Preserve any working
+`curl-minimal` installation. Additional case-specific tools are named in the
+case's preparation step.
+
+### 4. Prepare firewalld
+
+Use a lab host selected to use firewalld. An existing firewall managed by
+another service must be migrated by its administrator before this run.
+
+```sh
+if ! rpm -q firewalld; then
+    sudo dnf install firewalld
+fi
+sudo systemctl enable --now firewalld.service
+sudo systemctl is-enabled firewalld.service
+sudo firewall-cmd --state
+```
+
+Require `enabled` and `running`. Bootwright checks this prerequisite but does
+not enable the host firewall. Firewalld stays installed and enabled after the
+case. Listener rules are prepared later, after the context's controller stage.
+
+### 5. Check ports, address and capacity
+
+The case lists its ports and capacity. Inspect listeners after diagnostic
+installation, since those packages can affect host services:
+
+```sh
+sudo ss -lntup | grep -E ':(53|123|3128|808[0-9]|844[0-9]|800[0-9])\b'
+grep MemAvailable /proc/meminfo
+df -h /var/lib
+ip -br address
+```
+
+No output from the listener filter (exit 1) means no matching listener.
+Require the case's ports to be free on its bind addresses. Resolve conflicts
+through the service owner's configuration before starting, keeping any changes
+needed to restore it at cleanup. Require the table's available RAM and free
+disk on the filesystem that will hold `/var/lib/libvirt`; swap does not count.
+Keep the controller address stable for the entire run, for example with a DHCP
+reservation. The render's `host.address: auto` uses the default-route source.
+
+### 6. Add RHEL media
+
+For a RHEL case, including Ceph and baremetal rehearsal, provide both RHEL 9.8
+x86_64 ISOs. OpenShift cases skip this step. If media is already present,
+verify its name and checksum with `media list --checksums`.
+
+```bash
+read -r -p 'Absolute path to the RHEL boot ISO: ' BOOT_ISO
+read -r -p 'Absolute path to the RHEL DVD ISO: ' DVD_ISO
+./bin/bootwright media add --name rhel-9.8-x86_64-boot.iso --from-file "${BOOT_ISO:?Enter the boot ISO path}"
+./bin/bootwright media add --name rhel-9.8-x86_64-dvd.iso --from-file "${DVD_ISO:?Enter the DVD ISO path}"
+./bin/bootwright media list --checksums
+```
+
+### 7. Prepare credential files
+
+Supply the files required by the selected case and features, owned by you with
+mode `0600` or `0400`. Adjust the file paths in the case's input block.
+
+| Default path | Variable | Content | Cases |
+| --- | --- | --- | --- |
+| `~/rhel-org.txt` | `RHSM_ORG_FILE` | RHSM organization ID, without a final line feed | RHEL registration, Ceph host variants |
+| `~/rhel-activation-key.txt` | `RHSM_KEY_FILE` | RHSM activation key | RHEL registration, Ceph host variants |
+| `~/ibm-ceph-registry.txt` | `IBM_REGISTRY_FILE` | `cp:<entitlement key>` for `cp.icr.io`, or the key alone | Ceph |
+| `~/openshift-pull-secret` | `PULL_SECRET_FILE` | OpenShift pull-secret JSON | OpenShift |
+
+For each required file:
+
+```bash
+read -r -p 'Absolute path to a required credential file: ' SECRET_FILE
+chmod 600 -- "${SECRET_FILE:?Enter the credential file path}"
+```
+
+Host preparation is complete. Return to the next step of the case runbook.
+
+## Prepare listener firewall
+
+Run this step when the case asks, after `apply --stage controller` and before
+context preflight. The case has set `CONTEXT`, `CONTROLLER_ADDRESS`, `RUN_DIR`
+and `FIREWALL_PORTS`. For two contexts, the array contains both plans' listener
+ports; loopback BMC ports need no opening.
+
+Inspect the plan and find the interface carrying the printed listener address:
+
+```sh
+./bin/bootwright plan --context "${CONTEXT:?Set CONTEXT in the case runbook}"
+printf 'Listener address: %s\n' "${CONTROLLER_ADDRESS:?Set CONTROLLER_ADDRESS in the case runbook}"
+ip -br address
+sudo firewall-cmd --get-active-zones
+sudo firewall-cmd --get-default-zone
+```
+
+Enter the interface name, then its runtime zone. If the first query reports
+`no zone` (exit 2), enter the default zone shown above. Any other query failure
+stops the run.
+
+```bash
+read -r -p "Interface carrying $CONTROLLER_ADDRESS: " FIREWALL_INTERFACE
+sudo firewall-cmd --get-zone-of-interface="${FIREWALL_INTERFACE:?Enter the interface name}"
+read -r -p 'Runtime zone for that interface: ' FIREWALL_ZONE
+sudo firewall-cmd --zone="${FIREWALL_ZONE:?Enter the zone name}" --list-all
+```
+
+The following rules admit every client reaching this zone. Use a lab interface
+whose reachable clients are appropriate for these services, as described in
+[network exposure](../docs/operator-guide.md#network-exposure). The inspector
+requires an accepting zone or explicit port/range admission. Rich rules,
+source-selected zones and unsupported policies remain `unknown`; preserve them
+and prepare a suitable lab interface before starting the run. A managed bridge
+in `trusted` does not replace this check of the listener's host interface.
+
+Review `FIREWALL_PORTS` against the plan, including any port overrides. Save
+which ports were absent before adding rules, so cleanup preserves existing
+grants and ranges:
+
+```bash
+(
+    set -e
+    : "${RUN_DIR:?Set RUN_DIR in the case runbook}"
+    : "${FIREWALL_ZONE:?Enter the runtime zone}"
+    : "${FIREWALL_PORTS[0]:?Set FIREWALL_PORTS in the case runbook}"
+    test ! -e "$RUN_DIR/firewall-added-ports"
+    sudo firewall-cmd --zone="$FIREWALL_ZONE" --list-all > "$RUN_DIR/firewall-before"
+    : > "$RUN_DIR/firewall-added-ports.pending"
+    for socket in "${FIREWALL_PORTS[@]}"; do
+        if sudo firewall-cmd --zone="$FIREWALL_ZONE" --query-port="$socket"; then
+            continue
+        else
+            query_status=$?
+            [ "$query_status" -eq 1 ] || exit "$query_status"
+            printf '%s\n' "$socket" >> "$RUN_DIR/firewall-added-ports.pending"
+        fi
+    done
+    printf '%s\n' "$FIREWALL_ZONE" > "$RUN_DIR/firewall-zone"
+    mv "$RUN_DIR/firewall-added-ports.pending" "$RUN_DIR/firewall-added-ports"
+    while IFS= read -r socket; do
+        sudo firewall-cmd --zone="$FIREWALL_ZONE" --add-port="$socket"
+    done < "$RUN_DIR/firewall-added-ports"
+)
+```
+
+These are runtime rules; keep the host running without a firewall reload
+through the case. No permanent rule or zone assignment is changed. Return to
+the case's preflight step and require `ready` before starting services.
+
+## Restore listener firewall
+
+Run this after destroying every context in the case and before removing
+`RUN_DIR`. Review `firewall-before`, the recorded ports and the current zone.
+Remove only grants this run added; a grant another workload now needs must be
+retained and recorded as incomplete cleanup.
+
+```bash
+(
+    set -e
+    : "${RUN_DIR:?Keep RUN_DIR until cleanup completes}"
+    if [ -f "$RUN_DIR/firewall-added-ports" ]; then
+        FIREWALL_ZONE=$(cat "$RUN_DIR/firewall-zone")
+        sudo firewall-cmd --zone="$FIREWALL_ZONE" --list-all
+        while IFS= read -r socket; do
+            if sudo firewall-cmd --zone="$FIREWALL_ZONE" --query-port="$socket"; then
+                sudo firewall-cmd --zone="$FIREWALL_ZONE" --remove-port="$socket"
+            else
+                query_status=$?
+                [ "$query_status" -eq 1 ] || exit "$query_status"
+            fi
+        done < "$RUN_DIR/firewall-added-ports"
+    fi
+)
+```
+
+Keep the record until cleanup succeeds. Leave shared firewalld service state
+and permanent rules in place. Return to the case's next cleanup step.
+
+## Remove diagnostic tools
+
+After the case's verification and resource cleanup, remove only the diagnostic
+packages recorded as absent before this run:
+
+```bash
+(
+    set -e
+    mapfile -t packages < "${HOST_CHECKS:?Keep HOST_CHECKS until cleanup completes}/added"
+    if ((${#packages[@]})); then
+        sudo dnf remove --setopt=assumeyes=False --setopt=defaultyes=False \
+            --setopt=clean_requirements_on_remove=False -- "${packages[@]}"
+    fi
+)
+```
+
+Review the transaction. Confirm only if every removed package appears in the
+saved `added` list; cancel if it removes a pre-existing package or another
+workload's dependency. Dependencies installed alongside the diagnostics stay
+installed. Keep the record if removal fails or is declined. After successful
+removal:
+
+```sh
+rm -r -- "$HOST_CHECKS"
+```
+
+Return to the case's final cleanup and result step. The shared controller
+installation, build tools, firewalld and cached media remain available for
+later cases.
+
+[Removing Bootwright from the host](../docs/operator-guide.md#uninstalling-bootwright-from-this-host)
+uses `./bin/bootwright controller uninstall` after every environment is
+destroyed, every context deleted and all imported media removed. That command
+removes the shared controller state and install-owned packages; it belongs
+to host removal after testing, beyond an individual case's cleanup.

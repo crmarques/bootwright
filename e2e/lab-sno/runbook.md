@@ -18,11 +18,17 @@ item run. `security.fips` and `security.tpm2` only rehearse
 [B720](../../specs/milestones/m3.md#b720), which qualify on three nodes in
 [lab-3-nodes-ocp-features](../lab-3-nodes-ocp-features/runbook.md).
 
+Run every numbered step in order, in one Bash session from the checkout
+being tested. A successful run includes the selected feature checks, deliberate
+acceptance drills and cleanup. Stop on any unexpected failure; that attempt is
+not a successful run. Select features before rendering and keep them unchanged.
+Test another selection in a new complete run after cleanup.
+
 ## Inputs
 
 | `--set` | Default | Effect | Needs |
 | --- | --- | --- | --- |
-| `security.fips=true` | `false` | FIPS cluster; the fleet and cluster keys become ECDSA P-256 | a FIPS-mode controller (`cat /proc/sys/crypto/fips_enabled` prints `1`); otherwise `./bin/bootwright plan --context "$C"` and `./bin/bootwright preflight controller --context "$C"` refuse `controller.unsupported` |
+| `security.fips=true` | `false` | FIPS cluster; the fleet and cluster keys become ECDSA P-256 | a FIPS-mode controller (`cat /proc/sys/crypto/fips_enabled` prints `1`); otherwise `./bin/bootwright plan --context "$CONTEXT"` and `./bin/bootwright preflight controller --context "$CONTEXT"` refuse `controller.unsupported` |
 | `security.tpm2=true` | `false` | TPM2-bound LUKS on the node's installation disk | nothing; the profile already carries `tpm: {}` |
 | `addons.nmstate=true` | `false` | binding `lab-sno-nmstate`: Kubernetes NMState operator and instance | `addons.subscriptions.nmstate.channel` and `.startingCSV` |
 | `addons.metallb=true` | `false` | binding `lab-sno-metallb`: MetalLB operator, instance and layer 2 pool `services` | `addons.subscriptions.metallb.channel` and `.startingCSV` |
@@ -34,14 +40,14 @@ a single node has no virtual IPs and MetalLB never serves the API or ingress.
 [values.yaml](values.yaml) holds the rest: addresses, upstreams, the release
 (`openshift.version`) and the guest size.
 
-## Prepare
+## 1. Prepare
 
-- The [host preparation](../README.md#prepare-the-host) (ports 53, 123, 3128,
-  8080, 8443 and loopback 8000 free), a pull secret saved as
-  `~/openshift-pull-secret` with mode `0600`, `jq`, and an `oc` matching
-  `openshift.version` installed independently of Bootwright. There is no RHEL
-  media: the agent ISO is built from the release.
-- Capacity, which the apply gate and `./bin/bootwright preflight container-cluster --context "$C"` count
+- Complete [host preparation](../README.md#prepare-the-host). Prepare a pull
+  secret at `~/openshift-pull-secret` with mode `0600` and an `oc` matching
+  `openshift.version`, installed independently of Bootwright. Require
+  `oc version --client` to succeed. No RHEL media is needed: the agent ISO
+  is built from the release.
+- Capacity, which the apply gate and `./bin/bootwright preflight container-cluster --context "$CONTEXT"` count
   ([capacity admission](../../specs/substrates.md#capacity-admission)): the
   guest plus the provider's `capacityReserve` (1 CPU, 2 GiB, 10 GiB) need 9
   host CPUs not reserved by other libvirt domains, 18 GiB of `MemAvailable` in
@@ -50,59 +56,37 @@ a single node has no virtual IPs and MetalLB never serves the API or ingress.
   copies ([lab-sno profile](../../specs/openshift-coverage.md#acceptance-profiles)).
   Check with `nproc`, `grep MemAvailable /proc/meminfo` and
   `df -h /var/lib/libvirt/images`.
-- Firewall: the managed bridge `virbr-e2e` is in firewalld's `trusted` zone
-  ([provider host realization](../../specs/substrates.md#provider-host-realization)),
-  so the guest reaches the host services with no rule.
-- The build. B61's acceptance baseline is the build that contains X111 to
-  X115; B755 needs a build that ran X138's in-tree gates and B757 one that ran
-  X134's. Record `$B` and check that the commits naming those slices are in
-  its history and that `make check` passed on it:
+- Record the build commit and require `Source clean` in `bootwright version`.
+  B61 needs the build containing X111–X115, B755 needs X138, and B757 needs
+  X134, with their required integration gates passed before live acceptance.
+- B706 requires `nmstatectl` to be absent before the controller stage. Review
+  the removal transaction and confirm that it removes only `nmstate`; cancel
+  if it proposes removing any other package. The controller stage below must
+  install this execution dependency itself.
 
   ```sh
-  B="$(./bin/bootwright version -o json | jq -r .result.commit)"
-  ./bin/bootwright version
-  git log --oneline -E --grep='^Refs:.*X11[1-5]' "$B"
-  git log --oneline -E --grep='^Refs:.*X13[48]' "$B"
+  if command -v nmstatectl >/dev/null; then
+      sudo dnf remove --setopt=assumeyes=False --setopt=defaultyes=False \
+          --setopt=clean_requirements_on_remove=False nmstate
+  fi
+  if command -v nmstatectl >/dev/null; then
+      printf '%s\n' 'B706 requires nmstatectl to be absent before the controller stage.' >&2
+      exit 1
+  fi
   ```
-
-  `./bin/bootwright version` reads `Source clean`; the first listing's `Refs:` lines name each
-  of X111 to X115 (the full commit-message listing below shows them), and the second
-  X134 and X138:
-
-  ```sh
-  git log --format=%B -E --grep='^Refs:.*X11[1-5]' "$B"
-  ```
-- Earlier builds (B61): `./bin/bootwright context list` names every context
-  and the build that registered each unfinished operation. Before installing
-  this build, destroy every lab-sno context an earlier build applied, with the
-  executable that applied it, when the contract guard moved a request version
-  in between ([changing the build](../../docs/operator-guide.md#changing-the-build-between-runs));
-  when you cannot tell, destroy it with that executable anyway.
-- B706, an owner step. B706 is proved only by an image built on a controller
-  where nmstate was not installed by hand, so the controller must lack
-  `nmstatectl` before the controller stage. If this prints a path, remove the
-  package; confirm that the transaction removes `nmstate` alone, and cancel
-  it otherwise and record B706 as not reached:
-
-  ```sh
-  command -v nmstatectl
-  sudo dnf remove nmstate
-  command -v nmstatectl
-  ```
-
-  The second check prints nothing. The controller stage installs the package
-  again, so it is present after the run; if it is not after Destroy and the
-  host had it before, restore it with `sudo dnf install nmstate`.
 
 Add-on channels and CSVs come from a cluster of the same release, so run the
-default render first (it is the B61 run), read them before its destroy (step 2
-of [Verify](#verify)), and use them for the add-on runs.
+default selection first (the B61 run), read the choices in step 5, and finish
+that run through cleanup. Use those values when starting a new complete add-on run.
 
-## Run
+## 2. Render and initialize
 
 Choose the feature flags here. Leave both add-ons off for B61. For an enabled
-add-on, copy its channel and CSV from Verify step 2 for the same release.
-These are editable scalar values; keep boolean values `true` or `false`:
+add-on, copy its channel and CSV recorded by a completed default run of the same release.
+Test at most one add-on per complete acceptance run: the final cleanup test
+must interrupt that add-on's readiness. This runbook restriction gives each
+add-on its own evidence; Bootwright supports enabling both. Keep boolean
+values `true` or `false`:
 
 ```sh
 FIPS_ENABLED="false"
@@ -116,76 +100,178 @@ METALLB_CHANNEL=""
 METALLB_CSV=""
 ```
 
-Render the selected flags (also reuse this block after changing them):
+Render the selected flags once:
 
 ```sh
-if [ "$NMSTATE_ENABLED" = "true" ]; then
-    : "${NMSTATE_CHANNEL:?Set NMSTATE_CHANNEL from the same-release package manifest}" \
-      "${NMSTATE_CSV:?Set NMSTATE_CSV to currentCSV for the selected channel}"
-fi &&
-if [ "$METALLB_ENABLED" = "true" ]; then
-    : "${METALLB_CHANNEL:?Set METALLB_CHANNEL from the same-release package manifest}" \
-      "${METALLB_CSV:?Set METALLB_CSV to currentCSV for the selected channel}"
-fi &&
-e2e/render.sh lab-sno \
-  --set "security.fips=$FIPS_ENABLED" --set "security.tpm2=$TPM2_ENABLED" \
-  --set "addons.nmstate=$NMSTATE_ENABLED" --set "addons.metallb=$METALLB_ENABLED" \
-  --set "addons.subscriptions.nmstate.channel=$NMSTATE_CHANNEL" \
-  --set "addons.subscriptions.nmstate.startingCSV=$NMSTATE_CSV" \
-  --set "addons.subscriptions.metallb.channel=$METALLB_CHANNEL" \
-  --set "addons.subscriptions.metallb.startingCSV=$METALLB_CSV"
+(
+    set -e
+    if [ "$NMSTATE_ENABLED:$METALLB_ENABLED" = true:true ]; then
+        printf '%s\n' 'Select one add-on per complete acceptance run.' >&2
+        exit 1
+    fi
+    if [ "$NMSTATE_ENABLED" = "true" ]; then
+        : "${NMSTATE_CHANNEL:?Set NMSTATE_CHANNEL from the same-release package manifest}" \
+          "${NMSTATE_CSV:?Set NMSTATE_CSV to currentCSV for the selected channel}"
+    fi &&
+    if [ "$METALLB_ENABLED" = "true" ]; then
+        : "${METALLB_CHANNEL:?Set METALLB_CHANNEL from the same-release package manifest}" \
+          "${METALLB_CSV:?Set METALLB_CSV to currentCSV for the selected channel}"
+    fi &&
+    e2e/render.sh lab-sno \
+      --set "security.fips=$FIPS_ENABLED" --set "security.tpm2=$TPM2_ENABLED" \
+      --set "addons.nmstate=$NMSTATE_ENABLED" --set "addons.metallb=$METALLB_ENABLED" \
+      --set "addons.subscriptions.nmstate.channel=$NMSTATE_CHANNEL" \
+      --set "addons.subscriptions.nmstate.startingCSV=$NMSTATE_CSV" \
+      --set "addons.subscriptions.metallb.channel=$METALLB_CHANNEL" \
+      --set "addons.subscriptions.metallb.startingCSV=$METALLB_CSV"
+)
 ```
 
 Continue after rendering with context import and the staged apply:
 
 ```sh
-C="lab-sno"
-IN="$HOME/bootwright-e2e/lab-sno"
-A="$(ip -4 route get 192.0.2.1 | sed -n 's/.* src \([0-9.]*\).*/\1/p')"
-./bin/bootwright validate -f "$IN"
-./bin/bootwright controller install --yes
-./bin/bootwright context init --name "$C" --input-dir "$IN"
-./bin/bootwright secret set --context "$C" --name openshift-pull-secret --value-file "${PULL_SECRET_FILE:?Set PULL_SECRET_FILE to the private pull-secret JSON file}" --yes
-./bin/bootwright secret generate --context "$C"
-./bin/bootwright secret check --context "$C"
-./bin/bootwright plan --context "$C"
-./bin/bootwright apply --context "$C" --stage controller --yes
-./bin/bootwright preflight controller --context "$C"
+CONTEXT="lab-sno"
+INPUT_DIR="$HOME/bootwright-e2e/lab-sno"
+umask 077
+RUN_DIR=$(mktemp -d)
+printf 'Run records: %s\n' "$RUN_DIR"
+CONTROLLER_ADDRESS="$(ip -4 route get 192.0.2.1 | sed -n 's/.* src \([0-9.]*\).*/\1/p')"
+./bin/bootwright validate -f "$INPUT_DIR"
+./bin/bootwright context init --name "$CONTEXT" --input-dir "$INPUT_DIR"
+./bin/bootwright secret set --context "$CONTEXT" --name openshift-pull-secret --value-file "${PULL_SECRET_FILE:?Set PULL_SECRET_FILE to the private pull-secret JSON file}" --yes
+./bin/bootwright secret generate --context "$CONTEXT"
+./bin/bootwright secret check --context "$CONTEXT"
+./bin/bootwright plan --context "$CONTEXT"
+```
+
+## 3. Prepare the controller and services
+
+```sh
+./bin/bootwright apply --context "$CONTEXT" --stage controller --yes
+FIREWALL_PORTS=(53/tcp 53/udp 123/udp 3128/tcp 8080/tcp 8443/tcp)
+```
+
+Complete [Prepare listener firewall](../README.md#prepare-listener-firewall)
+in this shell, then require controller preflight to report `ready`:
+
+```sh
+./bin/bootwright preflight controller --context "$CONTEXT"
 command -v nmstatectl                      # B706: now installed by the controller stage
-./bin/bootwright apply --context "$C" --stage infrastructure-services --yes
+./bin/bootwright apply --context "$CONTEXT" --stage infrastructure-services --yes
 ```
 
-The services answer on `$A`:
+The services answer on `$CONTROLLER_ADDRESS`:
 
 ```sh
-curl -sk "https://$A:8443/" -o /dev/null -w '%{http_code}\n'   # 404 on an empty root
-dig @"$A" +short api.sno.e2e.example.test test.apps.sno.e2e.example.test   # both 198.51.100.31
-chronyd -Q -t 10 "server $A iburst port 123"
+curl -sk "https://$CONTROLLER_ADDRESS:8443/" -o /dev/null -w '%{http_code}\n'   # 404 on an empty root
+dig @"$CONTROLLER_ADDRESS" +short api.sno.e2e.example.test test.apps.sno.e2e.example.test   # both 198.51.100.31
+chronyd -Q -t 10 "server $CONTROLLER_ADDRESS iburst port 123"
 ```
 
-The controller must resolve the cluster zone through the managed DNS. Route it,
-and let preflight prove it (B705):
+Create this run's resolver drop-in and let preflight prove resolution (B705).
+The initial check must succeed so an existing file is never overwritten:
 
 ```sh
-sudo install -d -m 0755 /etc/systemd/resolved.conf.d
-printf '[Resolve]\nDNS=%s\nDomains=~e2e.example.test\n' "$A" | sudo tee /etc/systemd/resolved.conf.d/bootwright-e2e.conf
-sudo systemctl restart systemd-resolved
-./bin/bootwright preflight container-cluster --context "$C"
+(
+    set -e
+    test ! -e /etc/systemd/resolved.conf.d/bootwright-e2e.conf
+    test ! -L /etc/systemd/resolved.conf.d/bootwright-e2e.conf
+    sudo install -d -m 0755 /etc/systemd/resolved.conf.d
+    printf '[Resolve]\nDNS=%s\nDomains=~e2e.example.test\n' "$CONTROLLER_ADDRESS" | sudo tee /etc/systemd/resolved.conf.d/bootwright-e2e.conf
+    sudo systemctl restart systemd-resolved
+)
+./bin/bootwright preflight container-cluster --context "$CONTEXT"
 ```
 
-Every `resolution.*` and `capacity.*` check must be `passed`. A failed one names
-the record or the route to add; it must pass before the last apply. Then:
+Every `resolution.*` and `capacity.*` check must be `passed`.
+
+## 4. Install and perform the interruption drills
+
+Read this sequence before starting the apply. These are deliberate acceptance
+tests during this installation:
+
+| Phase | Action | Required result on the next apply |
+| --- | --- | --- |
+| Image build | Ctrl-C | The image rebuilds |
+| Bootstrap wait | Ctrl-C | Installation continues |
+| Installation wait | Ctrl-C | Installation continues |
+| Installation wait | Force-stop the apply process using the guarded commands below | Status shows `unknown`; apply resolves the outcome by observation |
+| NMState object creation, approval wait, readiness wait, when enabled | Ctrl-C at each phase | Already-created objects report `unchanged` |
+| MetalLB approval wait and the interval between the MetalLB resource and pools, when enabled | Ctrl-C at each phase | Already-created objects report `unchanged` |
+
+With NMState enabled, also run [Observe NMState approval](#observe-nmstate-approval)
+in the second terminal during the approval wait. Read that block before
+launching apply so the required condition observations are captured in time.
+
+Start the installation in the original terminal and perform the table's
+Ctrl-C drills and the selected observations as their phases arrive:
 
 ```sh
-./bin/bootwright plan --context "$C"
-./bin/bootwright apply --context "$C" --yes
+./bin/bootwright plan --context "$CONTEXT"
+./bin/bootwright apply --context "$CONTEXT" --yes
 ```
+
+After each deliberate interruption, wait for that process to exit, then use
+these commands in the original terminal:
+
+```sh
+./bin/bootwright status --context "$CONTEXT"
+./bin/bootwright apply --context "$CONTEXT" --yes
+```
+
+For the forced stop, use a second terminal in this checkout while the
+installation wait is running. Identify and verify this run's apply process:
+
+```bash
+ps -eo pid,args
+read -r -p "PID of this run's apply process: " BOOTWRIGHT_PID
+case "$BOOTWRIGHT_PID" in
+    ''|0*|1|*[!0-9]*) printf '%s\n' 'Refusing an invalid process PID' >&2; exit 1 ;;
+esac
+ps -p "$BOOTWRIGHT_PID" -o pid,args
+```
+
+Confirm the displayed command belongs to this run, then send the signal:
+
+```sh
+kill -9 "${BOOTWRIGHT_PID:?Identify the current apply process first}"
+```
+
+In the original terminal, observe `unknown`, then continue apply. Perform the
+remaining selected add-on drills and the approval observation while it runs:
+
+```sh
+./bin/bootwright status --context "$CONTEXT"
+./bin/bootwright apply --context "$CONTEXT" --yes
+```
+
+### Observe NMState approval
+
+With NMState enabled, while the approval wait is running, observe its
+Subscription from a second terminal. Use a private kubeconfig and remove that
+export after recording whether `ResolutionFailed=True` appeared and cleared:
+
+```sh
+umask 077
+WATCH_KUBECONFIG=$(mktemp)
+./bin/bootwright cluster kubeconfig --context lab-sno --name sno > "$WATCH_KUBECONFIG"
+KUBECONFIG="$WATCH_KUBECONFIG" oc get subscription -n openshift-nmstate -w -o yaml
+```
+
+Press Ctrl-C to end this observation, then remove its private export:
+
+```sh
+rm -- "$WATCH_KUBECONFIG"
+```
+
+Every selected phase must be observed. A missed phase leaves acceptance
+incomplete; finish cleanup and use a new complete run to test it.
 
 Allow over an hour: image build, boot, bootstrap wait, installation wait,
-release. Record each phase's duration as the progress lines print it (`./bin/bootwright status --detail full --context "$C"` repeats them) and the release installed. The apply names a
+release. Record each phase's duration as the progress lines print it (`./bin/bootwright status --detail full --context "$CONTEXT"` repeats them) and the release installed. The apply names a
 private operation-log directory before effects start; keep it as evidence.
 
-## Verify
+## 5. Verify
 
 These editable namespace values come from the rendered add-on bindings:
 
@@ -197,21 +283,21 @@ METALLB_NAMESPACE="metallb-system"
 1. State and access:
 
    ```sh
-   ./bin/bootwright status --context "$C"
-   ./bin/bootwright machine list --context "$C" --power-status
-   ./bin/bootwright cluster list --context "$C"
-   ./bin/bootwright cluster info --context "$C" --name sno
-   ./bin/bootwright diff --context "$C" --observe
-   ./bin/bootwright apply --context "$C" --yes      # settles: boots nothing, contacts no cluster
+   ./bin/bootwright status --context "$CONTEXT"
+   ./bin/bootwright machine list --context "$CONTEXT" --power-status
+   ./bin/bootwright cluster list --context "$CONTEXT"
+   ./bin/bootwright cluster info --context "$CONTEXT" --name sno
+   ./bin/bootwright diff --context "$CONTEXT" --observe
+   ./bin/bootwright apply --context "$CONTEXT" --yes      # settles: boots nothing, contacts no cluster
    umask 077
-   KUBECONFIG="$(mktemp)"
+   KUBECONFIG="$RUN_DIR/kubeconfig"
    export KUBECONFIG
-   ./bin/bootwright cluster kubeconfig --context "$C" --name sno > "$KUBECONFIG"
+   ./bin/bootwright cluster kubeconfig --context "$CONTEXT" --name sno > "$KUBECONFIG"
    oc version; oc get nodes; oc get clusterversion; oc get co
    ```
 
    `oc` is the independent client. B61 wants one Ready node, the release equal
-   to `openshift.version` and a clean `./bin/bootwright diff --observe --context "$C"`.
+   to `openshift.version` and a clean `./bin/bootwright diff --observe --context "$CONTEXT"`.
 
 2. First-run facts, recorded for B61 and B462: the `openshift-client-linux`
    archive Bootwright fetched carried the release stamp (the controller stage
@@ -236,13 +322,13 @@ METALLB_NAMESPACE="metallb-system"
    | nmstate | `oc get csv,installplan,subscription -n openshift-nmstate`: the CSV equals `startingCSV`, one InstallPlan approved; `oc get nmstate`; `oc get deploy -n openshift-nmstate` (the webhook Deployment's name); `oc get nns` |
    | metallb | `oc get csv,installplan -n metallb-system`; `oc get metallb,ipaddresspool,l2advertisement -n metallb-system`; the pool `services` holds eight addresses |
 
-   For B755 and B757 also record `./bin/bootwright diff --observe --context "$C"` reporting no drift, the
+   For B755 and B757 also record `./bin/bootwright diff --observe --context "$CONTEXT"` reporting no drift, the
    build commit, the release minor, the channel and `startingCSV`, and the
    phase durations. The checks below re-verify the facts each section lists;
    they are this runbook's reading of those facts, unverified on a cluster
    until the first run records them.
 
-   B755 (the rendered namespace is `openshift-nmstate`):
+   With `NMSTATE_ENABLED=true`, check B755 in `openshift-nmstate`:
 
    - `--ignore-not-found` classifies only NotFound:
      `oc get nmstate no-such-instance --ignore-not-found; echo $?` prints no
@@ -254,14 +340,12 @@ METALLB_NAMESPACE="metallb-system"
    - Creation with an explicit field manager records the manager:
      `oc get subscription -n "$NMSTATE_NAMESPACE" -o yaml --show-managed-fields` shows
      Bootwright's manager in `metadata.managedFields`.
-   - Whether `ResolutionFailed` can be transient on a Subscription of a ready
-     catalog: during the approval wait, repeat
-     `oc get subscription -n "$NMSTATE_NAMESPACE" -o jsonpath='{range .items[*].status.conditions[*]}{.type}={.status}{"\n"}{end}'`
-     and record whether `ResolutionFailed=True` ever appears and then clears.
+   - Keep the Subscription condition observations from step 4, including
+     whether `ResolutionFailed=True` appeared and cleared during approval.
    - The webhook Deployment's name: `oc get deploy -n "$NMSTATE_NAMESPACE"` lists
      `nmstate-webhook`, the name the readiness check uses.
 
-   B757 (the rendered namespace is `metallb-system`):
+   With `METALLB_ENABLED=true`, check B757 in `metallb-system`:
 
    - The InstallPlan lists only the MetalLB CSV:
      `oc get installplan -n "$METALLB_NAMESPACE" -o jsonpath='{.items[*].spec.clusterServiceVersionNames}'`.
@@ -278,10 +362,11 @@ METALLB_NAMESPACE="metallb-system"
      each object created once), and `oc get events -n "$METALLB_NAMESPACE"` shows no webhook
      denial.
    - `oc get ipaddresspool services -n "$METALLB_NAMESPACE" -o yaml` shows
-     `status.assignedIPv4` after the Service of step 4.
+     `status.assignedIPv4` after the Service test in this section's item 4.
    - `oc get servicel2status -n "$METALLB_NAMESPACE"` names the announcing node.
 
-4. MetalLB Service (B757), in a namespace Bootwright does not own:
+4. With `METALLB_ENABLED=true`, test the MetalLB Service (B757) in a namespace
+   Bootwright does not own:
 
    ```sh
    oc create namespace lb-canary
@@ -294,151 +379,114 @@ METALLB_NAMESPACE="metallb-system"
    The controller reaches the address over the bridge. Remove the namespace
    afterwards: `oc delete namespace lb-canary`.
 
-## Acceptance drills
+## 6. Destroy the verified installation
 
-For each forced-process interruption below, identify the apply process in a
-second terminal. Set the editable PID from that listing and verify its command
-line belongs to this run before sending the signal; never reuse an old PID:
+First verify the expected refusal while the guest runs:
 
 ```sh
-ps -eo pid,args
-BOOTWRIGHT_PID=""
-: "${BOOTWRIGHT_PID:?Set BOOTWRIGHT_PID to the observed apply process PID for this run}"
-case "${BOOTWRIGHT_PID:?Set BOOTWRIGHT_PID to the observed apply process PID for this run}" in
-    ''|0*|1|*[!0-9]*) printf '%s\n' 'Refusing an invalid process PID' >&2; exit 1 ;;
-esac
-ps -p "${BOOTWRIGHT_PID:?Set BOOTWRIGHT_PID to the observed apply process PID for this run}" -o pid,args
+./bin/bootwright destroy --context "$CONTEXT" --authorize data-loss
 ```
 
-Review that process line. Only at the drill phase, after confirming it is
-this run's apply process, send the signal in a separate paste:
+Require the refusal to name `sno-01`. Stop it and complete removal:
 
 ```sh
-kill -9 "${BOOTWRIGHT_PID:?Set BOOTWRIGHT_PID to the observed apply process PID for this run}"
+./bin/bootwright machine stop --context "$CONTEXT" --name sno-01 --yes
+./bin/bootwright destroy --context "$CONTEXT" --authorize data-loss
+./bin/bootwright status --context "$CONTEXT"
 ```
 
-Interrupt with Ctrl-C at the named phase, let the command exit, run `./bin/bootwright status --context "$C"`,
-then repeat `./bin/bootwright apply --context "$C" --yes`; a failed block is retried and an
-unknown outcome is observed before any retry. Keep the input, Secrets and build
-unchanged ([build changes](../../docs/operator-guide.md#changing-the-build-between-runs)).
-A drill that cannot reach its phase in one install needs a fresh destroy and run.
+Require the guest, disks, media, installer work area, managed services and
+network to be removed. This also proves that domain ownership metadata
+survived the emulator's boot selection and insert. Keep the context, secrets
+and run records for the final acceptance test below.
 
-**B61** (default render). With the first run on the acceptance baseline, add
-the `Container cluster row` template to the
-[acceptance ledger](../../docs/acceptance.md), as B61's acceptance-row
-template states, and link it from the Rows rule of the
-[coverage page](../../specs/openshift-coverage.md#acceptance-profiles):
+## 7. Prove cleanup of an interrupted installation
 
-1. Interrupt during the image build; the next apply rebuilds.
-2. Interrupt during the bootstrap wait; continue.
-3. Interrupt during the installation wait; continue.
-4. Stop the `bootwright` process with the guarded kill command above during the installation wait. The next
-   `./bin/bootwright status --context "$C"` shows the block `unknown`; the next `./bin/bootwright apply --context "$C" --yes` resolves it by
-   observation.
-5. A settled `./bin/bootwright apply --context "$C" --yes` boots nothing; the kubeconfig export and `oc` reads are
-   Verify step 1.
-6. Destroy while the guest runs and confirm the refusal naming the stop, then
-   stop and complete (see [Destroy](#destroy)). The completed destroy proves the
-   domain's ownership metadata survived the emulator's boot selection and insert.
+This is a planned second installation using the same input and secrets.
+Read the interruption point before starting:
 
-**B462** (a second short install after B61's destroy): start `./bin/bootwright apply --context "$C" --yes`, poll
-`sudo KUBECONFIG=/var/lib/bootwright-clusters/lab-sno/sno/auth/kubeconfig oc get clusterversion`
-and stop the `bootwright` process with the guarded kill command above once it reports `Available=True` and
-before the apply records the block done. Then `./bin/bootwright machine stop --context "$C" --name sno-01 --yes`, `./bin/bootwright destroy --context "$C" --authorize data-loss`, and
-interrupt it once `./bin/bootwright status --context "$C"` shows the media block removed; run
-`./bin/bootwright cluster kubeconfig --context "$C" --name sno > /dev/null` and expect one
-`access.unproved` warning on standard error. Repeat `./bin/bootwright destroy --context "$C" --authorize data-loss` to completion. If
-the race is missed, record B462 as not reached and repeat on the next install.
+- With both add-ons off, perform B462: in the second terminal watch the
+  installer's kubeconfig until the cluster reports `Available=True`. Before
+  apply records completion, use step 4's guarded PID lookup to force-stop it.
+- With NMState enabled, press Ctrl-C during NMState's readiness wait.
+- With only MetalLB enabled, press Ctrl-C during MetalLB's readiness wait.
 
-**B755** and **B757**. With their first run, add the `Add-on row` template to
-the [acceptance ledger](../../docs/acceptance.md), as B755's acceptance-row
-template states, and link it from the Rows rule of the
-[add-on coverage page](../../specs/add-on-coverage.md#acceptance-profiles).
-
-**B755** (`addons.nmstate`, after the default run is destroyed). Copy the
-channel and exact CSV from Verify step 2 for this release, then render and
-update the retained context:
+The add-on tests must prove retirement after the guest stops and its API
+becomes unreachable. Restore services and require passing preflight, then
+start the apply in the original terminal:
 
 ```sh
-NMSTATE_ENABLED="true"
-METALLB_ENABLED="false"
-NMSTATE_CHANNEL=""
-NMSTATE_CSV=""
-if [ "$NMSTATE_ENABLED" = "true" ]; then
-    : "${NMSTATE_CHANNEL:?Set NMSTATE_CHANNEL from the same-release package manifest}" \
-      "${NMSTATE_CSV:?Set NMSTATE_CSV to currentCSV for the selected channel}"
-fi &&
-if [ "$METALLB_ENABLED" = "true" ]; then
-    : "${METALLB_CHANNEL:?Set METALLB_CHANNEL from the same-release package manifest}" \
-      "${METALLB_CSV:?Set METALLB_CSV to currentCSV for the selected channel}"
-fi &&
-e2e/render.sh lab-sno \
-  --set "security.fips=$FIPS_ENABLED" --set "security.tpm2=$TPM2_ENABLED" \
-  --set "addons.nmstate=$NMSTATE_ENABLED" --set "addons.metallb=$METALLB_ENABLED" \
-  --set "addons.subscriptions.nmstate.channel=$NMSTATE_CHANNEL" \
-  --set "addons.subscriptions.nmstate.startingCSV=$NMSTATE_CSV" \
-  --set "addons.subscriptions.metallb.channel=$METALLB_CHANNEL" \
-  --set "addons.subscriptions.metallb.startingCSV=$METALLB_CSV"
-./bin/bootwright context update --name "$C" --input-dir "$IN" --yes
+./bin/bootwright apply --context "$CONTEXT" --stage controller --yes
+./bin/bootwright preflight controller --context "$CONTEXT"
+./bin/bootwright apply --context "$CONTEXT" --stage infrastructure-services --yes
+./bin/bootwright preflight container-cluster --context "$CONTEXT"
+./bin/bootwright apply --context "$CONTEXT" --yes
 ```
+
+For B462, while that apply runs, repeat this observation in the second terminal:
 
 ```sh
-./bin/bootwright apply --context "$C" --yes --until sno.nmstate
+sudo KUBECONFIG=/var/lib/bootwright-clusters/lab-sno/sno/auth/kubeconfig oc get clusterversion
 ```
 
-Interrupt during object creation, during the approval wait and during the
-readiness wait, continuing each time with `./bin/bootwright apply --context "$C" --yes`; the repeat reports every
-object `unchanged`. Then `./bin/bootwright diff --observe --context "$C"` reports no drift, a repeated `./bin/bootwright apply --context "$C" --yes`
-contacts no cluster, and on a final fresh run interrupted during readiness,
-`./bin/bootwright machine stop --name sno-01 --yes --context "$C"` (the cluster API is then unreachable) and
-`./bin/bootwright destroy --context "$C" --authorize data-loss` complete by retirement.
-
-**B757** (`addons.metallb`, same procedure). Copy the choices from Verify
-step 2, then render and update after destroying the preceding run:
+Perform the interruption selected above and wait for apply to exit. The
+B462 removal is also interrupted, once status shows the media block removed;
+add-on removal runs to completion. Start removal in the original terminal:
 
 ```sh
-NMSTATE_ENABLED="false"
-METALLB_ENABLED="true"
-METALLB_CHANNEL=""
-METALLB_CSV=""
-if [ "$NMSTATE_ENABLED" = "true" ]; then
-    : "${NMSTATE_CHANNEL:?Set NMSTATE_CHANNEL from the same-release package manifest}" \
-      "${NMSTATE_CSV:?Set NMSTATE_CSV to currentCSV for the selected channel}"
-fi &&
-if [ "$METALLB_ENABLED" = "true" ]; then
-    : "${METALLB_CHANNEL:?Set METALLB_CHANNEL from the same-release package manifest}" \
-      "${METALLB_CSV:?Set METALLB_CSV to currentCSV for the selected channel}"
-fi &&
-e2e/render.sh lab-sno \
-  --set "security.fips=$FIPS_ENABLED" --set "security.tpm2=$TPM2_ENABLED" \
-  --set "addons.nmstate=$NMSTATE_ENABLED" --set "addons.metallb=$METALLB_ENABLED" \
-  --set "addons.subscriptions.nmstate.channel=$NMSTATE_CHANNEL" \
-  --set "addons.subscriptions.nmstate.startingCSV=$NMSTATE_CSV" \
-  --set "addons.subscriptions.metallb.channel=$METALLB_CHANNEL" \
-  --set "addons.subscriptions.metallb.startingCSV=$METALLB_CSV"
-./bin/bootwright context update --name "$C" --input-dir "$IN" --yes
-./bin/bootwright apply --context "$C" --yes
+./bin/bootwright machine stop --context "$CONTEXT" --name sno-01 --yes
+./bin/bootwright destroy --context "$CONTEXT" --authorize data-loss
 ```
 
-Interrupt during the approval wait, and between the `MetalLB` resource and the pools, continuing each with
-`./bin/bootwright apply --context "$C" --yes` (every object `unchanged`); then Verify step 4, `./bin/bootwright diff --observe --context "$C"`, and a
-fresh `./bin/bootwright destroy --context "$C" --authorize data-loss` completing by retirement. With both toggles on, `./bin/bootwright apply --context "$C" --yes --until sno.nmstate` stops after NMState so its drills run before MetalLB starts, and
-the final destroy covers both rows.
-
-## Destroy
+For B462, press Ctrl-C after the media block is removed. Check that kubeconfig
+export still succeeds and prints one `access.unproved` warning to stderr,
+then finish removal:
 
 ```sh
-./bin/bootwright destroy --context "$C" --authorize data-loss
-./bin/bootwright machine stop --context "$C" --name sno-01 --yes
-./bin/bootwright destroy --context "$C" --authorize data-loss
-./bin/bootwright status --context "$C"
-./bin/bootwright context delete --name "$C" --purge --yes
+./bin/bootwright cluster kubeconfig --context "$CONTEXT" --name sno > /dev/null
+./bin/bootwright destroy --context "$CONTEXT" --authorize data-loss
 ```
 
-The first destroy refuses while the guest runs and names the stop. A complete
-destroy removes the guest, disks, media, the installer work area, the managed
-services and the network; the context releases its custodied kubeconfig only
-when it completes. Delete the context only after that, and keep it (skip the
-last command) when you re-render for an add-on run: render again, then
-`./bin/bootwright context update --name "$C" --input-dir "$IN" --yes` as above. Afterwards remove the resolver drop-in
-(`sudo rm /etc/systemd/resolved.conf.d/bootwright-e2e.conf` and `sudo systemctl restart systemd-resolved`), the exported kubeconfig and the rendered directory.
+For an enabled add-on, let the destroy finish and require its removal to
+complete by retirement. A missed B462 timing or add-on readiness phase leaves
+that acceptance incomplete. In all selections, inspect removal before deleting
+the context:
+
+```sh
+./bin/bootwright status --context "$CONTEXT"
+./bin/bootwright context delete --name "$CONTEXT" --purge --yes
+```
+
+## 8. Clean up the host
+
+Complete [Restore listener firewall](../README.md#restore-listener-firewall)
+with this run's `RUN_DIR`. Then remove the resolver drop-in created in step 3:
+
+```sh
+sudo rm -- /etc/systemd/resolved.conf.d/bootwright-e2e.conf
+sudo systemctl restart systemd-resolved
+```
+
+If `nmstate` was present in `$HOST_CHECKS/before`, require it to remain
+installed after the run; restore it only if missing:
+
+```sh
+if grep -Fxq nmstate "$HOST_CHECKS/before" && ! rpm -q nmstate; then
+    sudo dnf install nmstate
+fi
+```
+
+Complete [Remove diagnostic tools](../README.md#remove-diagnostic-tools).
+Only after both cleanup procedures succeed, remove this run's private files:
+
+```sh
+rm -rf -- "${RUN_DIR:?Keep RUN_DIR until cleanup succeeds}" "${INPUT_DIR:?Keep INPUT_DIR until destroy completes}"
+unset KUBECONFIG
+```
+
+## 9. Record the result
+
+Record the build commit, selected inputs, installed release, phase durations,
+verification results, deliberate drill outcomes and completed cleanup in the
+[acceptance ledger](../../docs/acceptance.md). A run is successful only when
+all steps for its selected features pass from preparation through cleanup.

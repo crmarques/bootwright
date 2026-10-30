@@ -1091,9 +1091,18 @@ Only an explicit runtime port/range or an accepting zone proves admission in
 the bounded interface-zone shape. An active policy with target `CONTINUE`,
 no transport rules, no redirect or masquerade, and only ICMPv6 accept rules
 is harmless to the inspected TCP/UDP sockets regardless of its name; this
-includes the [shipped host IPv6 policy](https://github.com/firewalld/firewalld/blob/main/config/policies/allow-host-ipv6.xml). Source-bound zones, other policies, direct or
-passthrough rules, rich rules, admission depending on unresolved service
-expansion, and unsupported or
+includes the [shipped host IPv6 policy](https://github.com/firewalld/firewalld/blob/main/config/policies/allow-host-ipv6.xml).
+A fully inspected forwarding policy is also harmless when neither its ingress
+nor its egress zones include `HOST`, its target is `ACCEPT`, and it has no
+services, transport rules, redirect, masquerade or rich rules. Each zone list
+is nonempty, has no duplicate entries and uses a symbolic zone only alone:
+`ANY` excludes `HOST`, as defined by
+[firewalld policies](https://firewalld.org/documentation/man-pages/firewalld.policies.html).
+This forwarding exception never proves host admission; the interface zone
+must still admit the socket. It does not exempt policies for host output or
+policies with `DROP` or `REJECT` targets.
+Source-bound zones, other policies, direct or passthrough rules, rich rules,
+admission depending on unresolved service expansion, and unsupported or
 ambiguous inspection report `unknown`. A stopped, missing or inaccessible
 firewalld also reports `unknown`; another firewall's presence or absence is
 never inferred safe. The operator must verify the declared port from every

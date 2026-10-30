@@ -20,7 +20,7 @@ It accepts [B66](../../specs/milestones/m3.md#b66) with
 [B710](../../specs/milestones/m3.md#b710) and
 [B260](../../specs/milestones/m3.md#b260). B66 requires
 [B61](../../specs/milestones/m3.md#b61)'s accepted row first, from
-[lab-sno](../lab-sno/runbook.md). The optional MetalLB row repeats
+[lab-sno](../lab-sno/runbook.md). The MetalLB selection repeats
 [B757](../../specs/milestones/m4.md#b757)'s profile on three masters once B66 is
 accepted. [B729](../../specs/milestones/m3.md#b729) needs five nodes and three
 networks and is not here.
@@ -31,6 +31,12 @@ This case is that profile at the e2e addresses: the same three schedulable
 masters with the same guest sizes and capacity reserve. Its row records
 `e2e/lab-3-nodes-ocp` (rendered with `addons.metallb=false`) as the lab-compact
 profile; accepting that substitution for B66 is the owner's decision.
+
+Run every numbered step in order, in one Bash session from the checkout
+being tested. A successful run includes the selected feature checks, deliberate
+acceptance drills and cleanup. Stop on any unexpected failure; that attempt is
+not a successful run. Select features before rendering and keep them unchanged.
+Test another selection in a new complete run after cleanup.
 
 ## Inputs
 
@@ -48,9 +54,9 @@ on a cluster of the same release, for example the lab-sno run before its
 destroy. B66 itself needs no add-on: render with `--set addons.metallb=false`
 for the pure B66 row.
 
-## Prepare
+## 1. Prepare
 
-The [host preparation](../README.md#prepare-the-host), a pull secret saved as
+Complete [host preparation](../README.md#prepare-the-host). Prepare a pull secret saved as
 `~/openshift-pull-secret` with mode `0600`, and an `oc` matching `openshift.version`
 installed independently of Bootwright. No RHEL media is needed.
 
@@ -58,23 +64,26 @@ Destroy every lab-sno or other context that still owns `virbr-e2e` first (B66
 requires a completed lab-sno apply to be destroyed before a fresh expanded
 apply), and free the ports of the host preparation.
 
-The apply gate and `./bin/bootwright preflight container-cluster --context "$C"` refuse `capacity.*` before
-registration when the host lacks the figures above. The masters keep
-OpenShift's 16 GiB control-plane minimum. Guests on the managed bridge reach the
-controller services through firewalld's `trusted` zone, so no firewall rule is
-needed ([host preparation](../README.md#prepare-the-host)).
+The masters keep OpenShift's 16 GiB control-plane minimum. The capacity
+figures above must be available before starting. Require `oc version --client`
+to succeed; the shared host preparation supplies the service diagnostic tools.
 
-## Run
+## 2. Render and initialize
 
 Choose the default B66 run with MetalLB off, or enable it and copy the
 same-release channel and CSV described in Inputs. Edit only these values:
 
 ```sh
 METALLB_ENABLED="false"
+AGED_IMAGE_DRILL="true" # Q6: include the one-time 25-hour image-age check.
 PULL_SECRET_FILE="$HOME/openshift-pull-secret"
 METALLB_CHANNEL=""
 METALLB_CSV=""
 ```
+
+`AGED_IMAGE_DRILL=true` includes Q6's one-time image-age check. Choose its
+value before the run; record that choice with the result. Setting it to
+`false` leaves Q6 untested.
 
 Render the selected values:
 
@@ -91,47 +100,163 @@ e2e/render.sh lab-3-nodes-ocp --set "addons.metallb=$METALLB_ENABLED" \
 Continue after rendering with context import and the staged apply:
 
 ```sh
-C="lab-3-nodes-ocp"
-IN="$HOME/bootwright-e2e/lab-3-nodes-ocp"
-A="$(ip -4 route get 192.0.2.1 | sed -n 's/.* src \([0-9.]*\).*/\1/p')"
-./bin/bootwright validate -f "$IN"
-./bin/bootwright controller install --yes
-./bin/bootwright context init --name "$C" --input-dir "$IN"
-./bin/bootwright secret set --context "$C" --name openshift-pull-secret --value-file "${PULL_SECRET_FILE:?Set PULL_SECRET_FILE to the private pull-secret JSON file}" --yes
-./bin/bootwright secret generate --context "$C"
-./bin/bootwright secret check --context "$C"
-./bin/bootwright plan --context "$C"
-./bin/bootwright apply --context "$C" --stage controller --yes
-./bin/bootwright preflight controller --context "$C"
+CONTEXT="lab-3-nodes-ocp"
+INPUT_DIR="$HOME/bootwright-e2e/lab-3-nodes-ocp"
+umask 077
+RUN_DIR=$(mktemp -d)
+printf 'Run records: %s\n' "$RUN_DIR"
+CONTROLLER_ADDRESS="$(ip -4 route get 192.0.2.1 | sed -n 's/.* src \([0-9.]*\).*/\1/p')"
+./bin/bootwright validate -f "$INPUT_DIR"
+./bin/bootwright context init --name "$CONTEXT" --input-dir "$INPUT_DIR"
+./bin/bootwright secret set --context "$CONTEXT" --name openshift-pull-secret --value-file "${PULL_SECRET_FILE:?Set PULL_SECRET_FILE to the private pull-secret JSON file}" --yes
+./bin/bootwright secret generate --context "$CONTEXT"
+./bin/bootwright secret check --context "$CONTEXT"
+./bin/bootwright plan --context "$CONTEXT"
+```
+
+## 3. Prepare the controller and services
+
+```sh
+./bin/bootwright apply --context "$CONTEXT" --stage controller --yes
+FIREWALL_PORTS=(53/tcp 53/udp 123/udp 3128/tcp 8080/tcp 8443/tcp)
+```
+
+Complete [Prepare listener firewall](../README.md#prepare-listener-firewall)
+in this shell, then require controller preflight to report `ready`:
+
+```sh
+./bin/bootwright preflight controller --context "$CONTEXT"
 command -v arping                         # B709: iputils, installed by the controller stage
-./bin/bootwright apply --context "$C" --stage infrastructure-services --yes
+./bin/bootwright apply --context "$CONTEXT" --stage infrastructure-services --yes
 ```
 
-The services answer on `$A`:
+The services answer on `$CONTROLLER_ADDRESS`:
 
 ```sh
-curl -sk "https://$A:8443/" -o /dev/null -w '%{http_code}\n'   # 404 on an empty root
-dig @"$A" +short api.compact.e2e.example.test api-int.compact.e2e.example.test   # 198.51.100.50
-dig @"$A" +short test.apps.compact.e2e.example.test                              # 198.51.100.51
-chronyd -Q -t 10 "server $A iburst port 123"
+curl -sk "https://$CONTROLLER_ADDRESS:8443/" -o /dev/null -w '%{http_code}\n'   # 404 on an empty root
+dig @"$CONTROLLER_ADDRESS" +short api.compact.e2e.example.test api-int.compact.e2e.example.test   # 198.51.100.50
+dig @"$CONTROLLER_ADDRESS" +short test.apps.compact.e2e.example.test                              # 198.51.100.51
+chronyd -Q -t 10 "server $CONTROLLER_ADDRESS iburst port 123"
 ```
 
-Route the cluster zone to the managed DNS, then prove it and the capacity:
+Create this run's resolver drop-in, then prove DNS and capacity. The initial
+check must succeed so an existing file is never overwritten:
 
 ```sh
-sudo install -d -m 0755 /etc/systemd/resolved.conf.d
-printf '[Resolve]\nDNS=%s\nDomains=~e2e.example.test\n' "$A" | sudo tee /etc/systemd/resolved.conf.d/bootwright-e2e.conf
-sudo systemctl restart systemd-resolved
-./bin/bootwright preflight container-cluster --context "$C"
+(
+    set -e
+    test ! -e /etc/systemd/resolved.conf.d/bootwright-e2e.conf
+    test ! -L /etc/systemd/resolved.conf.d/bootwright-e2e.conf
+    sudo install -d -m 0755 /etc/systemd/resolved.conf.d
+    printf '[Resolve]\nDNS=%s\nDomains=~e2e.example.test\n' "$CONTROLLER_ADDRESS" | sudo tee /etc/systemd/resolved.conf.d/bootwright-e2e.conf
+    sudo systemctl restart systemd-resolved
+)
+./bin/bootwright preflight container-cluster --context "$CONTEXT"
 ```
 
-Every `resolution.*` and `capacity.*` check must be `passed` before the apply.
-Then the fresh apply:
+Every `resolution.*` and `capacity.*` check must be `passed`.
+
+## 4. Install and perform the acceptance drills
+
+### Stalled-node check: B260
+
+This test deliberately stops `compact-03` after the three guests boot. Open
+a second terminal in this checkout before starting; it supplies the power
+read and stop below while the original terminal's apply runs. Expect the
+bootstrap wait to fail and identify `compact-03` (`master-2`).
+
+Start the first installation in the original terminal:
 
 ```sh
-./bin/bootwright plan --context "$C"
-./bin/bootwright apply --context "$C" --yes
+./bin/bootwright plan --context "$CONTEXT"
+./bin/bootwright apply --context "$CONTEXT" --yes
 ```
+
+While that apply is running, open a second terminal in this checkout. Wait
+until the three guests have booted, then stop the non-rendezvous guest:
+
+```sh
+CONTEXT=lab-3-nodes-ocp
+./bin/bootwright machine list --context "$CONTEXT" --power-status
+./bin/bootwright machine stop --context "$CONTEXT" --name compact-03 --yes
+```
+
+Let the first terminal's apply finish. This deliberate test expects failure;
+the bootstrap wait can take its full 90-minute budget. Require the diagnostic
+to lead with `compact-03` (`master-2`), its host status, status message and
+failing validations. Record the result for B260.
+
+In the original terminal, remove this test installation while retaining the
+context, input, secrets and run records:
+
+```sh
+./bin/bootwright machine stop --context "$CONTEXT" --name compact-01,compact-02,compact-03 --yes
+./bin/bootwright destroy --context "$CONTEXT" --authorize data-loss
+./bin/bootwright apply --context "$CONTEXT" --stage controller --yes
+./bin/bootwright preflight controller --context "$CONTEXT"
+./bin/bootwright apply --context "$CONTEXT" --stage infrastructure-services --yes
+./bin/bootwright preflight container-cluster --context "$CONTEXT"
+```
+
+Require controller readiness and passing resolution/capacity checks again.
+
+### Installation interruptions: B66
+
+Read the drill sequence before starting the fresh installation. Keep a second
+terminal open for the power reads and the guarded process stop below.
+
+1. With `AGED_IMAGE_DRILL=true`, press Ctrl-C after the media block completes
+   and before boot. Keep the input and build unchanged, wait at least 25 hours,
+   then observe status and run the same apply. Record the elapsed time and result.
+2. Press Ctrl-C after the first node boots. Observe status, then run the same
+   apply again; only nodes still needing boot receive media and power actions.
+3. Press Ctrl-C during the bootstrap wait; observe status and run apply again.
+4. Press Ctrl-C during the installation wait; observe status and run apply again.
+5. During the installation wait, force-stop this apply process from the second
+   terminal. Require status to show the block `unknown`; the next apply must
+   resolve it by observation and complete.
+
+Start the fresh installation in the original terminal now, performing the
+selected drills above as their phases arrive:
+
+```sh
+./bin/bootwright plan --context "$CONTEXT"
+./bin/bootwright apply --context "$CONTEXT" --yes
+```
+
+For each Ctrl-C, use these commands in the original terminal after it exits:
+
+```sh
+./bin/bootwright status --context "$CONTEXT"
+./bin/bootwright apply --context "$CONTEXT" --yes
+```
+
+For step 5, identify the current apply process in the second terminal:
+
+```bash
+ps -eo pid,args
+read -r -p "PID of this run's apply process: " BOOTWRIGHT_PID
+case "$BOOTWRIGHT_PID" in
+    ''|0*|1|*[!0-9]*) printf '%s\n' 'Refusing an invalid process PID' >&2; exit 1 ;;
+esac
+ps -p "$BOOTWRIGHT_PID" -o pid,args
+```
+
+Confirm that command line belongs to this run, then send the signal:
+
+```sh
+kill -9 "${BOOTWRIGHT_PID:?Identify the current apply process first}"
+```
+
+In the original terminal, observe the forced stop and let the next apply complete:
+
+```sh
+./bin/bootwright status --context "$CONTEXT"
+./bin/bootwright apply --context "$CONTEXT" --yes
+```
+
+All selected phases must be observed for B66. A missed phase leaves its
+acceptance incomplete; finish cleanup and use a new complete run to test it.
 
 Before a fresh boot Bootwright probes both VIPs for ARP replies from the bridge
 (B709: it refuses naming the address, slot and hardware address that answers),
@@ -139,18 +264,18 @@ boots the masters, then proves each answers on TCP 22 and the rendezvous host
 `compact-01` on 8090 (B710: a node that never answers is named). Record each
 phase's duration as the progress lines print it, and the release installed.
 
-## Verify
+## 5. Verify
 
 ```sh
-./bin/bootwright status --context "$C"
-./bin/bootwright machine list --context "$C" --power-status
-./bin/bootwright cluster info --context "$C" --name compact
-./bin/bootwright diff --context "$C" --observe
-./bin/bootwright apply --context "$C" --yes      # settles: boots nothing, contacts no cluster
+./bin/bootwright status --context "$CONTEXT"
+./bin/bootwright machine list --context "$CONTEXT" --power-status
+./bin/bootwright cluster info --context "$CONTEXT" --name compact
+./bin/bootwright diff --context "$CONTEXT" --observe
+./bin/bootwright apply --context "$CONTEXT" --yes      # settles: boots nothing, contacts no cluster
 umask 077
-KUBECONFIG="$(mktemp)"
+KUBECONFIG="$RUN_DIR/kubeconfig"
 export KUBECONFIG
-./bin/bootwright cluster kubeconfig --context "$C" --name compact > "$KUBECONFIG"
+./bin/bootwright cluster kubeconfig --context "$CONTEXT" --name compact > "$KUBECONFIG"
 oc get nodes                                   # three Ready masters, schedulable
 oc get clusterversion; oc get co
 curl -k https://198.51.100.50:6443/version     # the API on its VIP, from the controller
@@ -161,25 +286,7 @@ curl -kI https://198.51.100.51                 # the ingress router
 `openshift.version`. The VIPs belong to the masters, not the host: `ip -br addr
 show virbr-e2e` must not list either.
 
-For the optional B757 row, after destroying the default run, use the channel
-and exact CSV read from the same-release package manifest in Inputs. Render
-with these editable values, then continue at the context import block in
-Run, after its render block:
-
-```sh
-METALLB_ENABLED="true"
-METALLB_CHANNEL=""
-METALLB_CSV=""
-if [ "$METALLB_ENABLED" = "true" ]; then
-    : "${METALLB_CHANNEL:?Set METALLB_CHANNEL from the same-release package manifest}" \
-      "${METALLB_CSV:?Set METALLB_CSV to currentCSV for the selected channel}"
-fi &&
-e2e/render.sh lab-3-nodes-ocp --set "addons.metallb=$METALLB_ENABLED" \
-  --set "addons.subscriptions.metallb.channel=$METALLB_CHANNEL" \
-  --set "addons.subscriptions.metallb.startingCSV=$METALLB_CSV"
-```
-
-With MetalLB on, also:
+With `METALLB_ENABLED=true`, run these checks:
 
 ```sh
 oc get csv,installplan -n metallb-system        # one approved InstallPlan, the declared CSV
@@ -195,82 +302,46 @@ oc delete namespace lb-canary
 The Service address falls in the pool, never on `198.51.100.50` or `.51`, and
 the API and ingress still answer on their VIPs afterwards.
 
-## Acceptance drills
+## 6. Destroy
 
-For each forced-process interruption below, identify the apply process in a
-second terminal. Set the editable PID from that listing and verify its command
-line belongs to this run before sending the signal; never reuse an old PID:
+First verify the expected refusal while the masters are running:
 
 ```sh
-ps -eo pid,args
-BOOTWRIGHT_PID=""
-: "${BOOTWRIGHT_PID:?Set BOOTWRIGHT_PID to the observed apply process PID for this run}"
-case "${BOOTWRIGHT_PID:?Set BOOTWRIGHT_PID to the observed apply process PID for this run}" in
-    ''|0*|1|*[!0-9]*) printf '%s\n' 'Refusing an invalid process PID' >&2; exit 1 ;;
-esac
-ps -p "${BOOTWRIGHT_PID:?Set BOOTWRIGHT_PID to the observed apply process PID for this run}" -o pid,args
+./bin/bootwright destroy --context "$CONTEXT" --authorize data-loss
 ```
 
-Review that process line. Only at the drill phase, after confirming it is
-this run's apply process, send the signal in a separate paste:
+Require the refusal to name the guests to stop. Then stop them and complete
+removal; require status to show the guests, disks, media, installer work area,
+services and network removed before deleting the context:
 
 ```sh
-kill -9 "${BOOTWRIGHT_PID:?Set BOOTWRIGHT_PID to the observed apply process PID for this run}"
+./bin/bootwright machine stop --context "$CONTEXT" --name compact-01,compact-02,compact-03 --yes
+./bin/bootwright destroy --context "$CONTEXT" --authorize data-loss
+./bin/bootwright status --context "$CONTEXT"
+./bin/bootwright context delete --name "$CONTEXT" --purge --yes
 ```
 
-Interrupt with Ctrl-C at the named phase, let the command exit, run `./bin/bootwright status --context "$C"`,
-then repeat `./bin/bootwright apply --context "$C" --yes`; a failed block is retried and an
-unknown outcome is observed before any retry. Keep the input, Secrets and build
-unchanged ([build changes](../../docs/operator-guide.md#changing-the-build-between-runs)).
+## 7. Clean up the host
 
-B66, in this order, each on a build that contains X116 to X119:
-
-1. Staged fresh apply and `./bin/bootwright preflight container-cluster --context "$C"` passing (Run).
-2. Interrupt after the first node boots, as soon as `./bin/bootwright machine list --context "$C" --power-status` shows one guest on. Repeat `./bin/bootwright apply --context "$C" --yes`: only the nodes still
-   needing boot receive media and power actions, and the running node continues
-   installing. If every guest is already on, record that and use the next fresh
-   install.
-3. Interrupt during the bootstrap wait; continue. Interrupt during the
-   installation wait; continue. Then stop the `bootwright` process with the guarded kill command above during
-   the installation wait: `./bin/bootwright status --context "$C"` shows the block `unknown`, and the next
-   `./bin/bootwright apply --context "$C" --yes` resolves it by observation.
-4. A settled `./bin/bootwright apply --context "$C" --yes`, then Verify: three Ready masters through the exported
-   kubeconfig and the API answering on its VIP from the controller.
-5. Stalled node (B260), on a separate fresh apply: after the masters boot, stop
-   one that is not the rendezvous host and let the bootstrap wait fail:
-
-   ```sh
-   ./bin/bootwright machine stop --context "$C" --name compact-03 --yes
-   ./bin/bootwright apply --context "$C" --yes
-   ```
-
-   The bootstrap wait can spend its full 90-minute budget. The failure must
-   lead with the missing or unready master, `compact-03` (master-2), with its
-   host status, status message and failing validations; record the response
-   shape for B260's knowledge page. Then stop every guest, destroy, and run a
-   fresh successful apply. A stranded rendezvous host (the failure says so)
-   likewise needs a destroy and a fresh apply.
-6. Destroy while the guests run and confirm the refusal; then stop all three and
-   complete it ([Destroy](#destroy)), proving the owned disks and media absent.
-
-The aged-image drill of Q6 runs only when the owner keeps it: interrupt after the
-media block completes, wait at least 25 hours, then continue the same apply and
-record the result.
-
-## Destroy
+Complete [Restore listener firewall](../README.md#restore-listener-firewall)
+with this run's `RUN_DIR`. Then remove the resolver drop-in created in step 3:
 
 ```sh
-./bin/bootwright destroy --context "$C" --authorize data-loss
-./bin/bootwright machine stop --context "$C" --name compact-01,compact-02,compact-03 --yes
-./bin/bootwright destroy --context "$C" --authorize data-loss
-./bin/bootwright status --context "$C"
-./bin/bootwright context delete --name "$C" --purge --yes
+sudo rm -- /etc/systemd/resolved.conf.d/bootwright-e2e.conf
+sudo systemctl restart systemd-resolved
 ```
 
-The first destroy refuses while the masters run and names the stop; an
-installer that cannot shut down needs `./bin/bootwright machine stop --context "$C" --name compact-01,compact-02,compact-03 --force --yes`. A complete destroy
-removes the guests, disks, media, the installer work area, the services and the
-network. Repeat it to continue a partial removal; delete the context only after
-it completes. Then remove the resolver drop-in
-(`sudo rm /etc/systemd/resolved.conf.d/bootwright-e2e.conf` and `sudo systemctl restart systemd-resolved`), the exported kubeconfig and the rendered
-directory.
+Complete [Remove diagnostic tools](../README.md#remove-diagnostic-tools).
+Only after both cleanup procedures succeed, remove this run's private files:
+
+```sh
+rm -rf -- "${RUN_DIR:?Keep RUN_DIR until cleanup succeeds}" "${INPUT_DIR:?Keep INPUT_DIR until destroy completes}"
+unset KUBECONFIG
+```
+
+## 8. Record the result
+
+Record the build commit, selected inputs, installed release, phase durations,
+verification results, deliberate drill outcomes and completed cleanup in the
+[acceptance ledger](../../docs/acceptance.md). A run is successful only when
+all steps for its selected features pass from preparation through cleanup.

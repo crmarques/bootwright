@@ -396,31 +396,49 @@ that address and certificate.
 | Installer network | `8080/tcp`, or the declared public artifact port | Public package tree, when declared |
 | Controller on the provider host | Loopback `8000/tcp` | Emulated BMC; no remote access |
 
-With firewalld, inspect the active zone and its existing grants first. Adding a
-source-scoped rule does not narrow an existing broad port/service grant or a
-trusted zone. Use a zone whose existing grants fit the intended client set.
-For one IPv4 source and listener, substitute the zone, source CIDR and port:
+With firewalld, inspect the interface holding the declared bind address, its
+runtime zone and existing grants first. The controller's
+[bounded inspection](../specs/controller.md#results-and-qualification)
+requires an accepting zone or an explicit port/range grant for each socket.
+It reports `unknown` for source-selected zones, rich rules, unresolved service
+expansion and unqualified policies. Adding a source-scoped rich rule therefore
+does not make that configuration pass preflight. Preserve required source
+restrictions; select a suitable isolated controller interface for a lab whose
+policy the inspector can qualify.
+
+A port grant admits every client that reaches that zone, so its interfaces
+and reachable networks must fit the client sets above. For temporary E2E
+runs, use the [listener preparation and cleanup](../e2e/README.md#prepare-listener-firewall)
+procedure, which records only previously absent ports. A managed bridge's
+`trusted` membership does not prove admission on the existing interface that
+owns the controller's bind address.
+
+For a runtime port grant on an appropriate interface zone, inspect before
+adding, substituting the actual zone and port:
 
 ```sh
 sudo firewall-cmd --get-active-zones
 sudo firewall-cmd --zone=<zone> --list-all
-sudo firewall-cmd --zone=<zone> --add-rich-rule='rule family="ipv4" source address="<source-cidr>" port port="8443" protocol="tcp" accept'
+sudo firewall-cmd --zone=<zone> --query-port=8443/tcp
+sudo firewall-cmd --zone=<zone> --add-port=8443/tcp
 ```
 
-Repeat per permitted source, port and protocol, using `family="ipv6"` for an
-IPv6 source. Verify access from each actual client network before persisting
-the same rule:
+Repeat only for missing ports and protocols in the graph; an existing port
+range can already include a socket. Run context preflight and require every
+listener to be `open`. Verify access from each actual client network before
+persisting a grant that should survive this run:
 
 ```sh
-sudo firewall-cmd --permanent --zone=<zone> --add-rich-rule='rule family="ipv4" source address="<source-cidr>" port port="8443" protocol="tcp" accept'
-sudo firewall-cmd --permanent --zone=<zone> --list-rich-rules
+sudo firewall-cmd --permanent --zone=<zone> --add-port=8443/tcp
+sudo firewall-cmd --permanent --zone=<zone> --list-ports
 ```
 
 Runtime changes act immediately; permanent changes survive reboot and become
 runtime rules after a reload. The
 [firewall-cmd manual](https://firewalld.org/documentation/man-pages/firewall-cmd.html)
-owns those semantics. Remove the same rule with `--remove-rich-rule` from both
-configurations when its exposure is no longer needed.
+owns those semantics. Remove only grants this run added, using `--remove-port`
+from the runtime configuration and, if persisted, the permanent configuration
+when that exposure is no longer needed. Keep pre-existing grants intact.
 
 A local readiness answer proves that listener on the host, not its route or
 firewall from another network. Check the declared artifact endpoint from a
@@ -437,7 +455,7 @@ same sockets and the same guest bridge.
 | Journey | What it runs | Gate |
 | --- | --- | --- |
 | [lab-rhel](../e2e/lab-rhel/runbook.md#run) | One RHEL guest installed through an emulated Redfish BMC, machine list and power reads, exec/rsh sessions, drift observation, replay, restart and safe removal; extended acceptance checks are below | [B72](../specs/milestones/delivered.md#x38--the-real-host-run-of-2026-10-05) operator gate, accepted; M1's extended checks follow [D59](../specs/milestones/backlog.md#d59) |
-| [lab-sno](../e2e/lab-sno/runbook.md#run) | A single-node OpenShift cluster installed by the agent installer on one libvirt guest | [B61](../specs/milestones/m3.md#b61) operator gate |
+| [lab-sno](../e2e/lab-sno/runbook.md#2-render-and-initialize) | A single-node OpenShift cluster installed by the agent installer on one libvirt guest | [B61](../specs/milestones/m3.md#b61) operator gate |
 | [lab-baremetal](../examples/machines/lab-baremetal/README.md) | One physical Machine claimed, proved and installed through its own Redfish BMC, its installer image and host key published privately; the [`lab-baremetal-rehearsal`](../e2e/lab-baremetal-rehearsal/runbook.md) case rehearses it on a substrate with a generated CA-issued emulator leaf, [B496](../specs/milestones/m1.md#b496) | [B73](../specs/milestones/m1.md#b73) operator gate, not run |
 
 Run each block from the repository root, one line at a time, and keep the

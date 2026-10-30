@@ -29,7 +29,12 @@ It rehearses, at the emulated tier only:
 - [B488](../../specs/milestones/m2.md#b488): the emulated half of the fault
   drills, continuation and teardown. Its physical tier stays open.
 
-## Inputs
+Run every numbered step in order in one Bash session from the checkout under
+test. A successful run includes all checks for the selected inputs, the
+required drills and cleanup. An unexpected failure fails the run; retain its
+private records for cleanup. Run each other input variant from the beginning.
+
+## 1. Choose the inputs
 
 | `--set` | Default | Effect |
 | --- | --- | --- |
@@ -37,34 +42,12 @@ It rehearses, at the emulated tier only:
 | `ceph.services.object=true` | `false` | An RGW on `ceph-02` and `ceph-04` on port 8080, reached directly, with user `s3-canary` and its bucket |
 | `size.data.memoryMiB=6144` | `4096` | Needed with either service toggle |
 
-The render writes two inputs: `$IN/arbiter` for `CTX_ARB` and `$IN/ceph`
+The render writes two inputs: `$INPUT_DIR/arbiter` for `CTX_ARB` and `$INPUT_DIR/ceph`
 for `CTX_CEPH`. [values.yaml](values.yaml) holds addresses, ports, sites,
 sizes and the Ceph coordinates. `CTX_ARB` serves 53, 123, 3128, 8444, 8081 and
 BMC 8001; `CTX_CEPH` serves 8443, 8080 and BMC 8000.
 
-## Prepare
-
-The [host preparation](../README.md#prepare-the-host), the RHEL 9.8 boot and
-DVD ISOs added as media, the IBM entitlement key
-[secret file](../README.md#prepare-the-host) for `cp.icr.io` (the rendered
-Entitlement accepts the IBM license; that acceptance is your act), and
-`ssh-keyscan`, `dig` and `python3` on the host, plus the AWS CLI with the
-object toggle. The [capacity gate](../../specs/substrates.md#capacity-admission)
-counts each context's guests, the other context's running guest and one
-provider reserve (1 vCPU, 2 GiB, 10 GiB): 11 host CPUs, 20 GiB of available
-memory (28 GiB with a service toggle; swap never counts) and 190 GiB free on
-the filesystem that holds libvirt's guest disks (4 times 25 + 15 GiB, 20 GiB
-for the arbiter, 10 GiB reserve). OSDs and MONs peak during recovery, so keep
-the host's own swap enabled.
-
-## Run
-
-Render, import both contexts, generate their secrets. `A` is the host
-address; `D` is a private scratch directory for the handoff files, keys and
-readbacks of this run, never the repository:
-
-Set the service choices once for this run. Keep these values for repeat
-renders; do not reset them between stages. Either service requires at least
+Set the service choices once for this run. Either service requires at least
 6144 MiB per data guest, so the render block raises the default minimum.
 
 ```sh
@@ -73,6 +56,34 @@ CEPH_OBJECT="false"
 DATA_MEMORY_MIB="4096"
 IBM_REGISTRY_FILE="$HOME/ibm-ceph-registry.txt"
 ```
+
+## 2. Prepare the host
+
+Complete [host preparation](../README.md#prepare-the-host) now, including the RHEL 9.8 boot and
+DVD ISOs added as media, the IBM entitlement key
+[secret file](../README.md#prepare-the-host) for `cp.icr.io` (the rendered
+Entitlement accepts the IBM license; that acceptance is your act), and
+`ssh-keyscan` and `python3` on the host, plus the AWS CLI with the
+object toggle. Shared preparation supplies `dig`. Check these tools before
+continuing:
+
+```sh
+command -v ssh-keyscan
+command -v python3
+if [ "$CEPH_OBJECT" = true ]; then command -v aws; fi
+```
+
+The [capacity gate](../../specs/substrates.md#capacity-admission)
+counts each context's guests, the other context's running guest and one
+provider reserve (1 vCPU, 2 GiB, 10 GiB): 11 host CPUs, 20 GiB of available
+memory (28 GiB with a service toggle; swap never counts) and 190 GiB free on
+the filesystem that holds libvirt's guest disks (4 times 25 + 15 GiB, 20 GiB
+for the arbiter, 10 GiB reserve). OSDs and MONs peak during recovery, so keep
+the host's own swap enabled.
+
+<a id="run"></a>
+
+## 3. Create and apply the context
 
 Render and import with those choices:
 
@@ -83,19 +94,19 @@ fi
 e2e/render.sh lab-5-nodes-ceph-stretch --set "ceph.services.file=$CEPH_FILE" --set "ceph.services.object=$CEPH_OBJECT" --set "size.data.memoryMiB=$DATA_MEMORY_MIB"
 CTX_ARB="lab-5-nodes-ceph-stretch-arbiter"
 CTX_CEPH="lab-5-nodes-ceph-stretch"
-IN="$HOME/bootwright-e2e/lab-5-nodes-ceph-stretch"
-A=$(ip -4 route get 192.0.2.1 | sed -n 's/.* src \([0-9.]*\).*/\1/p')
-umask 077; D=$(mktemp -d)
-./bin/bootwright validate -f "$IN/arbiter"
-./bin/bootwright validate -f "$IN/ceph"
-./bin/bootwright context init --name "$CTX_ARB" --input-dir "$IN/arbiter"
-./bin/bootwright context init --name "$CTX_CEPH" --input-dir "$IN/ceph"
+INPUT_DIR="$HOME/bootwright-e2e/lab-5-nodes-ceph-stretch"
+CONTROLLER_ADDRESS=$(ip -4 route get 192.0.2.1 | sed -n 's/.* src \([0-9.]*\).*/\1/p')
+umask 077; RUN_DIR=$(mktemp -d)
+./bin/bootwright validate -f "$INPUT_DIR/arbiter"
+./bin/bootwright validate -f "$INPUT_DIR/ceph"
+./bin/bootwright context init --name "$CTX_ARB" --input-dir "$INPUT_DIR/arbiter"
+./bin/bootwright context init --name "$CTX_CEPH" --input-dir "$INPUT_DIR/ceph"
 ./bin/bootwright secret generate --context "$CTX_ARB"
 ./bin/bootwright secret generate --context "$CTX_CEPH"
-install -m 0600 /dev/null "$D/ibm-password"
-cut -d: -f2- "${IBM_REGISTRY_FILE:?Set IBM_REGISTRY_FILE to the IBM entitlement key file}" > "$D/ibm-password"
-./bin/bootwright secret set --context "$CTX_CEPH" --name ibm-registry --username cp --password-file "$D/ibm-password" --yes
-rm -f "$D/ibm-password"
+install -m 0600 /dev/null "$RUN_DIR/ibm-password"
+cut -d: -f2- "${IBM_REGISTRY_FILE:?Set IBM_REGISTRY_FILE to the IBM entitlement key file}" > "$RUN_DIR/ibm-password"
+./bin/bootwright secret set --context "$CTX_CEPH" --name ibm-registry --username cp --password-file "$RUN_DIR/ibm-password" --yes
+rm -f "$RUN_DIR/ibm-password"
 ```
 
 Build the arbiter context completely. `CTX_CEPH` depends on its network, its
@@ -106,9 +117,24 @@ operation consumes:
 ```sh
 ./bin/bootwright secret check --context "$CTX_ARB"
 ./bin/bootwright apply --context "$CTX_ARB" --stage controller --yes
+```
+
+Prepare the union of both contexts' listener ports now. Set the context used
+for the shared inspection, then complete
+[Prepare listener firewall](../README.md#prepare-listener-firewall):
+
+```bash
+CONTEXT="$CTX_ARB"
+FIREWALL_PORTS=(53/tcp 53/udp 123/udp 3128/tcp 8080/tcp 8081/tcp 8443/tcp 8444/tcp)
+./bin/bootwright plan --context "$CTX_CEPH"
+```
+
+Require controller preflight to report `ready`:
+
+```sh
 ./bin/bootwright preflight controller --context "$CTX_ARB"
 ./bin/bootwright apply --context "$CTX_ARB" --stage infrastructure-services --yes
-dig @"$A" +short arbiter-01.e2e.example.test
+dig @"$CONTROLLER_ADDRESS" +short arbiter-01.e2e.example.test
 ./bin/bootwright apply --context "$CTX_ARB" --yes
 ./bin/bootwright machine exec --context "$CTX_ARB" --name arbiter-01 -- hostname
 ```
@@ -121,10 +147,10 @@ cluster's cephadm expects. Then hand `arbiter-01` over to `CTX_CEPH`
    over `CTX_ARB`'s proved connection; they must match.
 
    ```sh
-   ssh-keyscan -t ed25519 198.51.100.65 > "$D/arbiter.known_hosts"
-   ssh-keygen -lf "$D/arbiter.known_hosts"
+   ssh-keyscan -t ed25519 198.51.100.65 > "$RUN_DIR/arbiter.known_hosts"
+   ssh-keygen -lf "$RUN_DIR/arbiter.known_hosts"
    ./bin/bootwright machine exec --context "$CTX_ARB" --name arbiter-01 -- ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub
-   ./bin/bootwright secret set --context "$CTX_CEPH" --name arbiter-known-hosts --value-file "$D/arbiter.known_hosts" --yes
+   ./bin/bootwright secret set --context "$CTX_CEPH" --name arbiter-known-hosts --value-file "$RUN_DIR/arbiter.known_hosts" --yes
    ```
 
 2. Authorize `CTX_CEPH`'s fleet key for the cluster SSH user `bootwright`,
@@ -132,10 +158,10 @@ cluster's cephadm expects. Then hand `arbiter-01` over to `CTX_CEPH`
    travels on standard input; the last command must print `1`:
 
    ```sh
-   ./bin/bootwright secret show --context "$CTX_CEPH" --name bootwright-machine-key --part public-key > "$D/fleet.pub"
-   ./bin/bootwright machine exec --context "$CTX_ARB" --name arbiter-01 -- sh -c 'cat >> ~/.ssh/authorized_keys' < "$D/fleet.pub"
-   cut -d' ' -f2 "$D/fleet.pub" > "$D/fleet.key"
-   ./bin/bootwright machine exec --context "$CTX_ARB" --name arbiter-01 -- grep -c -F -f /dev/stdin .ssh/authorized_keys < "$D/fleet.key"
+   ./bin/bootwright secret show --context "$CTX_CEPH" --name bootwright-machine-key --part public-key > "$RUN_DIR/fleet.pub"
+   ./bin/bootwright machine exec --context "$CTX_ARB" --name arbiter-01 -- sh -c 'cat >> ~/.ssh/authorized_keys' < "$RUN_DIR/fleet.pub"
+   cut -d' ' -f2 "$RUN_DIR/fleet.pub" > "$RUN_DIR/fleet.key"
+   ./bin/bootwright machine exec --context "$CTX_ARB" --name arbiter-01 -- grep -c -F -f /dev/stdin .ssh/authorized_keys < "$RUN_DIR/fleet.key"
    ```
 
 Build the ceph context by stage. The machines stage is also B488's
@@ -146,6 +172,7 @@ and repeat the same apply until it completes:
 ./bin/bootwright secret check --context "$CTX_CEPH"
 ./bin/bootwright plan --context "$CTX_CEPH"
 ./bin/bootwright apply --context "$CTX_CEPH" --stage controller --yes
+./bin/bootwright preflight controller --context "$CTX_CEPH"
 ./bin/bootwright apply --context "$CTX_CEPH" --stage infrastructure-services,substrates --yes
 ./bin/bootwright apply --context "$CTX_CEPH" --stage machines --yes      # Ctrl-C once during the installations
 ./bin/bootwright status --context "$CTX_CEPH"
@@ -156,19 +183,21 @@ and repeat the same apply until it completes:
 ```
 
 Do not interrupt the clusters stage: an interrupted stretch activation stage
-refuses `stretch-interrupted` with no exit short of retiring the cluster
-(B920). A `transport` refusal on `arbiter-01` names the fleet key, the user
-and the pinned host key: repeat the handoff step it names, then the apply.
+refuses `stretch-interrupted` and fails this run (B920). Require every stage
+to complete, and the deliberate machines-stage interruption to retain its
+operation ID and completed attempts.
 
-## Verify
+<a id="verify"></a>
+
+## 4. Verify the result
 
 ```sh
 ./bin/bootwright status --context "$CTX_CEPH"
 ./bin/bootwright diff --context "$CTX_CEPH" --observe
 ./bin/bootwright status --context "$CTX_ARB"
 ./bin/bootwright cluster info --context "$CTX_CEPH" --name ceph-stretch
-./bin/bootwright cluster info --context "$CTX_CEPH" --name ceph-stretch --output json > "$D/info.json"
-FSID=$(python3 -I - "$D/info.json" <<'PY'
+./bin/bootwright cluster info --context "$CTX_CEPH" --name ceph-stretch --output json > "$RUN_DIR/info.json"
+FSID=$(python3 -I - "$RUN_DIR/info.json" <<'PY'
 import json, sys
 def find(o):
     if isinstance(o, dict):
@@ -190,7 +219,7 @@ node `ceph-01`; these files exist only there
 ([cluster discovery](../../specs/cli/output.md#cluster-discovery)). On
 `ceph-03`, confirm cephadm's `_admin` copy under `/etc/ceph`
 ([special host labels](https://docs.ceph.com/en/tentacle/cephadm/host-management/#special-host-labels)).
-If the dc2 check fails, record the dc1 loss drill's cluster reads as unavailable.
+Require the dc2 check to succeed before proceeding.
 
 ```sh
 # Copy the --conf and --keyring paths from the cephCommand in cluster info.
@@ -211,7 +240,7 @@ The JSON keys below are the unverified shapes of the
 which this run reads from the selected build. Save the reader once:
 
 ```sh
-cat > "$D/readback.py" <<'PY'
+cat > "$RUN_DIR/readback.py" <<'PY'
 import json, sys
 d = sys.argv[1]
 mon = json.load(open(d + "/mon-dump.json"))
@@ -236,11 +265,11 @@ PY
 A readback, from either site's command, is then:
 
 ```sh
-./bin/bootwright cluster exec --context "$CTX_CEPH" --name ceph-stretch --node ceph-01 -- sudo -n ceph --conf "${CEPH_CONF_DC1:?Set CEPH_CONF_DC1 from the discovery step above}" --keyring "${CEPH_KEYRING_DC1:?Set CEPH_KEYRING_DC1 from the discovery step above}" mon dump -f json > "$D/mon-dump.json"
-./bin/bootwright cluster exec --context "$CTX_CEPH" --name ceph-stretch --node ceph-01 -- sudo -n ceph --conf "${CEPH_CONF_DC1:?Set CEPH_CONF_DC1 from the discovery step above}" --keyring "${CEPH_KEYRING_DC1:?Set CEPH_KEYRING_DC1 from the discovery step above}" osd dump -f json > "$D/osd-dump.json"
-./bin/bootwright cluster exec --context "$CTX_CEPH" --name ceph-stretch --node ceph-01 -- sudo -n ceph --conf "${CEPH_CONF_DC1:?Set CEPH_CONF_DC1 from the discovery step above}" --keyring "${CEPH_KEYRING_DC1:?Set CEPH_KEYRING_DC1 from the discovery step above}" osd crush tree -f json > "$D/crush-tree.json"
+./bin/bootwright cluster exec --context "$CTX_CEPH" --name ceph-stretch --node ceph-01 -- sudo -n ceph --conf "${CEPH_CONF_DC1:?Set CEPH_CONF_DC1 from the discovery step above}" --keyring "${CEPH_KEYRING_DC1:?Set CEPH_KEYRING_DC1 from the discovery step above}" mon dump -f json > "$RUN_DIR/mon-dump.json"
+./bin/bootwright cluster exec --context "$CTX_CEPH" --name ceph-stretch --node ceph-01 -- sudo -n ceph --conf "${CEPH_CONF_DC1:?Set CEPH_CONF_DC1 from the discovery step above}" --keyring "${CEPH_KEYRING_DC1:?Set CEPH_KEYRING_DC1 from the discovery step above}" osd dump -f json > "$RUN_DIR/osd-dump.json"
+./bin/bootwright cluster exec --context "$CTX_CEPH" --name ceph-stretch --node ceph-01 -- sudo -n ceph --conf "${CEPH_CONF_DC1:?Set CEPH_CONF_DC1 from the discovery step above}" --keyring "${CEPH_KEYRING_DC1:?Set CEPH_KEYRING_DC1 from the discovery step above}" osd crush tree -f json > "$RUN_DIR/crush-tree.json"
 ./bin/bootwright cluster exec --context "$CTX_CEPH" --name ceph-stretch --node ceph-01 -- sudo -n ceph --conf "${CEPH_CONF_DC1:?Set CEPH_CONF_DC1 from the discovery step above}" --keyring "${CEPH_KEYRING_DC1:?Set CEPH_KEYRING_DC1 from the discovery step above}" osd crush rule dump stretch-rule
-python3 -I "$D/readback.py" "$D"
+python3 -I "$RUN_DIR/readback.py" "$RUN_DIR"
 ```
 
 | Key | Expected |
@@ -286,7 +315,7 @@ existing image. Write one image per site, then read each from the other
 site's node; the sums must match:
 
 ```sh
-cat > "$D/rbd-io.sh" <<'IO'
+cat > "$RUN_DIR/rbd-io.sh" <<'IO'
 set -euo pipefail
 umask 077
 f=$(mktemp /var/tmp/stretch-io.XXXXXXXX)
@@ -301,17 +330,17 @@ case $4 in
     rbd --conf "$1" --keyring "$2" export "rbd-data/$3" - | sha256sum ;;
 esac
 IO
-./bin/bootwright cluster exec --context "$CTX_CEPH" --name ceph-stretch --node ceph-01 -- sudo -n bash -s -- "${CEPH_CONF_DC1:?Set CEPH_CONF_DC1 from the discovery step above}" "${CEPH_KEYRING_DC1:?Set CEPH_KEYRING_DC1 from the discovery step above}" site-dc1 write < "$D/rbd-io.sh"
-./bin/bootwright cluster exec --context "$CTX_CEPH" --name ceph-stretch --node ceph-03 -- sudo -n bash -s -- "$CEPH_CONF_DC2" "$CEPH_KEYRING_DC2" site-dc2 write < "$D/rbd-io.sh"
-./bin/bootwright cluster exec --context "$CTX_CEPH" --name ceph-stretch --node ceph-03 -- sudo -n bash -s -- "$CEPH_CONF_DC2" "$CEPH_KEYRING_DC2" site-dc1 read < "$D/rbd-io.sh"
-./bin/bootwright cluster exec --context "$CTX_CEPH" --name ceph-stretch --node ceph-01 -- sudo -n bash -s -- "${CEPH_CONF_DC1:?Set CEPH_CONF_DC1 from the discovery step above}" "${CEPH_KEYRING_DC1:?Set CEPH_KEYRING_DC1 from the discovery step above}" site-dc2 read < "$D/rbd-io.sh"
+./bin/bootwright cluster exec --context "$CTX_CEPH" --name ceph-stretch --node ceph-01 -- sudo -n bash -s -- "${CEPH_CONF_DC1:?Set CEPH_CONF_DC1 from the discovery step above}" "${CEPH_KEYRING_DC1:?Set CEPH_KEYRING_DC1 from the discovery step above}" site-dc1 write < "$RUN_DIR/rbd-io.sh"
+./bin/bootwright cluster exec --context "$CTX_CEPH" --name ceph-stretch --node ceph-03 -- sudo -n bash -s -- "$CEPH_CONF_DC2" "$CEPH_KEYRING_DC2" site-dc2 write < "$RUN_DIR/rbd-io.sh"
+./bin/bootwright cluster exec --context "$CTX_CEPH" --name ceph-stretch --node ceph-03 -- sudo -n bash -s -- "$CEPH_CONF_DC2" "$CEPH_KEYRING_DC2" site-dc1 read < "$RUN_DIR/rbd-io.sh"
+./bin/bootwright cluster exec --context "$CTX_CEPH" --name ceph-stretch --node ceph-01 -- sudo -n bash -s -- "${CEPH_CONF_DC1:?Set CEPH_CONF_DC1 from the discovery step above}" "${CEPH_KEYRING_DC1:?Set CEPH_KEYRING_DC1 from the discovery step above}" site-dc2 read < "$RUN_DIR/rbd-io.sh"
 ```
 
 CephFS (file toggle), the same pattern through a kernel mount of `files` as
 the administrator on each data site's node:
 
 ```sh
-cat > "$D/fs-io.sh" <<'FS'
+cat > "$RUN_DIR/fs-io.sh" <<'FS'
 set -euo pipefail
 umask 077
 d=$(mktemp -d /var/tmp/stretch-fs.XXXXXXXX)
@@ -330,18 +359,18 @@ case $4 in
     sha256sum < "$d/mnt/$3" ;;
 esac
 FS
-./bin/bootwright cluster exec --context "$CTX_CEPH" --name ceph-stretch --node ceph-01 -- sudo -n bash -s -- "${CEPH_CONF_DC1:?Set CEPH_CONF_DC1 from the discovery step above}" "${CEPH_KEYRING_DC1:?Set CEPH_KEYRING_DC1 from the discovery step above}" site-dc1 write < "$D/fs-io.sh"
-./bin/bootwright cluster exec --context "$CTX_CEPH" --name ceph-stretch --node ceph-03 -- sudo -n bash -s -- "$CEPH_CONF_DC2" "$CEPH_KEYRING_DC2" site-dc2 write < "$D/fs-io.sh"
-./bin/bootwright cluster exec --context "$CTX_CEPH" --name ceph-stretch --node ceph-03 -- sudo -n bash -s -- "$CEPH_CONF_DC2" "$CEPH_KEYRING_DC2" site-dc1 read < "$D/fs-io.sh"
-./bin/bootwright cluster exec --context "$CTX_CEPH" --name ceph-stretch --node ceph-01 -- sudo -n bash -s -- "${CEPH_CONF_DC1:?Set CEPH_CONF_DC1 from the discovery step above}" "${CEPH_KEYRING_DC1:?Set CEPH_KEYRING_DC1 from the discovery step above}" site-dc2 read < "$D/fs-io.sh"
+./bin/bootwright cluster exec --context "$CTX_CEPH" --name ceph-stretch --node ceph-01 -- sudo -n bash -s -- "${CEPH_CONF_DC1:?Set CEPH_CONF_DC1 from the discovery step above}" "${CEPH_KEYRING_DC1:?Set CEPH_KEYRING_DC1 from the discovery step above}" site-dc1 write < "$RUN_DIR/fs-io.sh"
+./bin/bootwright cluster exec --context "$CTX_CEPH" --name ceph-stretch --node ceph-03 -- sudo -n bash -s -- "$CEPH_CONF_DC2" "$CEPH_KEYRING_DC2" site-dc2 write < "$RUN_DIR/fs-io.sh"
+./bin/bootwright cluster exec --context "$CTX_CEPH" --name ceph-stretch --node ceph-03 -- sudo -n bash -s -- "$CEPH_CONF_DC2" "$CEPH_KEYRING_DC2" site-dc1 read < "$RUN_DIR/fs-io.sh"
+./bin/bootwright cluster exec --context "$CTX_CEPH" --name ceph-stretch --node ceph-01 -- sudo -n bash -s -- "${CEPH_CONF_DC1:?Set CEPH_CONF_DC1 from the discovery step above}" "${CEPH_KEYRING_DC1:?Set CEPH_KEYRING_DC1 from the discovery step above}" site-dc2 read < "$RUN_DIR/fs-io.sh"
 ```
 
 S3 (object toggle), each gateway at its own site's address. The keys stay in
-files under `$D`, never on the terminal or the command line:
+files under `$RUN_DIR`, never on the terminal or the command line:
 
 ```sh
-./bin/bootwright cluster info --context "$CTX_CEPH" --name ceph-stretch --object-user s3-canary --output json > "$D/access.json"
-python3 -I - "$D" <<'PY'
+./bin/bootwright cluster info --context "$CTX_CEPH" --name ceph-stretch --object-user s3-canary --output json > "$RUN_DIR/access.json"
+python3 -I - "$RUN_DIR" <<'PY'
 import json, sys
 d = sys.argv[1]
 def find(o):
@@ -356,21 +385,21 @@ def find(o):
 u = find(json.load(open(d + "/access.json")))[0]
 open(d + "/credentials", "w").write("[default]\naws_access_key_id = %s\naws_secret_access_key = %s\n" % (u["accessKey"], u["secretKey"]))
 PY
-export AWS_SHARED_CREDENTIALS_FILE="$D/credentials" AWS_DEFAULT_REGION=objects
+export AWS_SHARED_CREDENTIALS_FILE="$RUN_DIR/credentials" AWS_DEFAULT_REGION=objects
 DC1="http://198.51.100.62:8080"
 DC2="http://198.51.100.64:8080"
-head -c 1048576 /dev/urandom > "$D/s3-in"
-aws --endpoint-url "$DC1" s3api put-object --bucket s3-canary-bucket --key site-dc1 --body "$D/s3-in"
-aws --endpoint-url "$DC2" s3api get-object --bucket s3-canary-bucket --key site-dc1 "$D/s3-out" && cmp "$D/s3-in" "$D/s3-out"
-aws --endpoint-url "$DC2" s3api put-object --bucket s3-canary-bucket --key site-dc2 --body "$D/s3-in"
-aws --endpoint-url "$DC1" s3api get-object --bucket s3-canary-bucket --key site-dc2 "$D/s3-out" && cmp "$D/s3-in" "$D/s3-out"
+head -c 1048576 /dev/urandom > "$RUN_DIR/s3-in"
+aws --endpoint-url "$DC1" s3api put-object --bucket s3-canary-bucket --key site-dc1 --body "$RUN_DIR/s3-in"
+aws --endpoint-url "$DC2" s3api get-object --bucket s3-canary-bucket --key site-dc1 "$RUN_DIR/s3-out" && cmp "$RUN_DIR/s3-in" "$RUN_DIR/s3-out"
+aws --endpoint-url "$DC2" s3api put-object --bucket s3-canary-bucket --key site-dc2 --body "$RUN_DIR/s3-in"
+aws --endpoint-url "$DC1" s3api get-object --bucket s3-canary-bucket --key site-dc2 "$RUN_DIR/s3-out" && cmp "$RUN_DIR/s3-in" "$RUN_DIR/s3-out"
 ```
 
 The guest network has no DNS record for the data hosts or for
 `s3.e2e.example.test`: the DNS server belongs to `CTX_ARB`, which declares
 neither, so the gateways are addressed directly.
 
-## Acceptance drills
+## 5. Run the acceptance drills
 
 Run each drill from a healthy cluster (`HEALTH_OK`, every PG
 `active+clean`). Record cluster health, quorum status, the readback above and
@@ -392,24 +421,37 @@ and S3 writes below. The dc1 gateway read must fail while dc1 is stopped.
 ./bin/bootwright machine stop --context "$CTX_CEPH" --name ceph-01,ceph-02 --force --yes
 ./bin/bootwright cluster exec --context "$CTX_CEPH" --name ceph-stretch --node ceph-03 -- sudo -n ceph --conf "$CEPH_CONF_DC2" --keyring "$CEPH_KEYRING_DC2" -s
 ./bin/bootwright cluster exec --context "$CTX_CEPH" --name ceph-stretch --node ceph-03 -- sudo -n ceph --conf "$CEPH_CONF_DC2" --keyring "$CEPH_KEYRING_DC2" quorum_status
-./bin/bootwright cluster exec --context "$CTX_CEPH" --name ceph-stretch --node ceph-03 -- sudo -n ceph --conf "$CEPH_CONF_DC2" --keyring "$CEPH_KEYRING_DC2" osd dump -f json > "$D/osd-dump.json"
-./bin/bootwright cluster exec --context "$CTX_CEPH" --name ceph-stretch --node ceph-03 -- sudo -n ceph --conf "$CEPH_CONF_DC2" --keyring "$CEPH_KEYRING_DC2" mon dump -f json > "$D/mon-dump.json"
-./bin/bootwright cluster exec --context "$CTX_CEPH" --name ceph-stretch --node ceph-03 -- sudo -n ceph --conf "$CEPH_CONF_DC2" --keyring "$CEPH_KEYRING_DC2" osd crush tree -f json > "$D/crush-tree.json"
-python3 -I "$D/readback.py" "$D"
-./bin/bootwright cluster exec --context "$CTX_CEPH" --name ceph-stretch --node ceph-03 -- sudo -n bash -s -- "$CEPH_CONF_DC2" "$CEPH_KEYRING_DC2" loss-dc1 write < "$D/rbd-io.sh"
+./bin/bootwright cluster exec --context "$CTX_CEPH" --name ceph-stretch --node ceph-03 -- sudo -n ceph --conf "$CEPH_CONF_DC2" --keyring "$CEPH_KEYRING_DC2" osd dump -f json > "$RUN_DIR/osd-dump.json"
+./bin/bootwright cluster exec --context "$CTX_CEPH" --name ceph-stretch --node ceph-03 -- sudo -n ceph --conf "$CEPH_CONF_DC2" --keyring "$CEPH_KEYRING_DC2" mon dump -f json > "$RUN_DIR/mon-dump.json"
+./bin/bootwright cluster exec --context "$CTX_CEPH" --name ceph-stretch --node ceph-03 -- sudo -n ceph --conf "$CEPH_CONF_DC2" --keyring "$CEPH_KEYRING_DC2" osd crush tree -f json > "$RUN_DIR/crush-tree.json"
+python3 -I "$RUN_DIR/readback.py" "$RUN_DIR"
+./bin/bootwright cluster exec --context "$CTX_CEPH" --name ceph-stretch --node ceph-03 -- sudo -n bash -s -- "$CEPH_CONF_DC2" "$CEPH_KEYRING_DC2" loss-dc1 write < "$RUN_DIR/rbd-io.sh"
 # File toggle only.
 if [ "$CEPH_FILE" = "true" ]; then
-    ./bin/bootwright cluster exec --context "$CTX_CEPH" --name ceph-stretch --node ceph-03 -- sudo -n bash -s -- "$CEPH_CONF_DC2" "$CEPH_KEYRING_DC2" loss-dc1 write < "$D/fs-io.sh"
+    ./bin/bootwright cluster exec --context "$CTX_CEPH" --name ceph-stretch --node ceph-03 -- sudo -n bash -s -- "$CEPH_CONF_DC2" "$CEPH_KEYRING_DC2" loss-dc1 write < "$RUN_DIR/fs-io.sh"
 fi
 # Object toggle only. The final command must fail.
 if [ "$CEPH_OBJECT" = "true" ]; then
-    aws --endpoint-url "$DC2" s3api put-object --bucket s3-canary-bucket --key loss-dc1 --body "$D/s3-in"
-    aws --endpoint-url "$DC1" s3api get-object --bucket s3-canary-bucket --key loss-dc1 "$D/s3-out"
+    aws --endpoint-url "$DC2" s3api put-object --bucket s3-canary-bucket --key loss-dc1 --body "$RUN_DIR/s3-in"
+    aws --endpoint-url "$DC1" s3api get-object --bucket s3-canary-bucket --key loss-dc1 "$RUN_DIR/s3-out"
 fi
 ```
 
-Run the gateway failure drill below before restoring dc1 if the object toggle
-is enabled. Restore, wait for `HEALTH_OK`, require `min_size 2` and two
+With `CEPH_OBJECT=true`, stop ceph-04's RGW. S3 through dc2 must fail with its only
+gateway down, the expected safe unavailability. Start the daemon again:
+
+```sh
+./bin/bootwright cluster exec --context "$CTX_CEPH" --name ceph-stretch --node ceph-03 -- sudo -n ceph --conf "$CEPH_CONF_DC2" --keyring "$CEPH_KEYRING_DC2" orch ps --daemon_type rgw
+# Copy the daemon_name for the RGW on ceph-04 from that listing.
+RGW_DC2_DAEMON=''
+: "${RGW_DC2_DAEMON:?Set RGW_DC2_DAEMON from orch ps on ceph-04}"
+./bin/bootwright cluster exec --context "$CTX_CEPH" --name ceph-stretch --node ceph-03 -- sudo -n ceph --conf "$CEPH_CONF_DC2" --keyring "$CEPH_KEYRING_DC2" orch daemon stop "${RGW_DC2_DAEMON:?Set RGW_DC2_DAEMON from the discovery step above}"
+# Expected failure while the surviving site's gateway is stopped.
+aws --endpoint-url "$DC2" s3api get-object --bucket s3-canary-bucket --key loss-dc1 "$RUN_DIR/s3-out"
+./bin/bootwright cluster exec --context "$CTX_CEPH" --name ceph-stretch --node ceph-03 -- sudo -n ceph --conf "$CEPH_CONF_DC2" --keyring "$CEPH_KEYRING_DC2" orch daemon start "${RGW_DC2_DAEMON:?Set RGW_DC2_DAEMON from the discovery step above}"
+```
+
+Restore dc1, wait for `HEALTH_OK`, require `min_size 2` and two
 replicas per site, and compare the restored site's reads with the writes:
 
 ```sh
@@ -431,15 +473,15 @@ the restored-site reads until all these conditions hold:
 Once those gates pass, compare the restored-site reads with the loss writes:
 
 ```sh
-./bin/bootwright cluster exec --context "$CTX_CEPH" --name ceph-stretch --node ceph-01 -- sudo -n bash -s -- "${CEPH_CONF_DC1:?Set CEPH_CONF_DC1 from the discovery step above}" "${CEPH_KEYRING_DC1:?Set CEPH_KEYRING_DC1 from the discovery step above}" loss-dc1 read < "$D/rbd-io.sh"
+./bin/bootwright cluster exec --context "$CTX_CEPH" --name ceph-stretch --node ceph-01 -- sudo -n bash -s -- "${CEPH_CONF_DC1:?Set CEPH_CONF_DC1 from the discovery step above}" "${CEPH_KEYRING_DC1:?Set CEPH_KEYRING_DC1 from the discovery step above}" loss-dc1 read < "$RUN_DIR/rbd-io.sh"
 # File toggle only.
 if [ "$CEPH_FILE" = "true" ]; then
-    ./bin/bootwright cluster exec --context "$CTX_CEPH" --name ceph-stretch --node ceph-01 -- sudo -n bash -s -- "${CEPH_CONF_DC1:?Set CEPH_CONF_DC1 from the discovery step above}" "${CEPH_KEYRING_DC1:?Set CEPH_KEYRING_DC1 from the discovery step above}" loss-dc1 read < "$D/fs-io.sh"
+    ./bin/bootwright cluster exec --context "$CTX_CEPH" --name ceph-stretch --node ceph-01 -- sudo -n bash -s -- "${CEPH_CONF_DC1:?Set CEPH_CONF_DC1 from the discovery step above}" "${CEPH_KEYRING_DC1:?Set CEPH_KEYRING_DC1 from the discovery step above}" loss-dc1 read < "$RUN_DIR/fs-io.sh"
 fi
 # Object toggle only.
 if [ "$CEPH_OBJECT" = "true" ]; then
-    aws --endpoint-url "$DC1" s3api get-object --bucket s3-canary-bucket --key loss-dc1 "$D/s3-out"
-    cmp "$D/s3-in" "$D/s3-out"
+    aws --endpoint-url "$DC1" s3api get-object --bucket s3-canary-bucket --key loss-dc1 "$RUN_DIR/s3-out"
+    cmp "$RUN_DIR/s3-in" "$RUN_DIR/s3-out"
 fi
 ```
 
@@ -450,19 +492,19 @@ fail. Restore dc2 and check the same health, pool size and replica gates:
 ./bin/bootwright machine stop --context "$CTX_CEPH" --name ceph-03,ceph-04 --force --yes
 ./bin/bootwright cluster exec --context "$CTX_CEPH" --name ceph-stretch --node ceph-01 -- sudo -n ceph --conf "${CEPH_CONF_DC1:?Set CEPH_CONF_DC1 from the discovery step above}" --keyring "${CEPH_KEYRING_DC1:?Set CEPH_KEYRING_DC1 from the discovery step above}" -s
 ./bin/bootwright cluster exec --context "$CTX_CEPH" --name ceph-stretch --node ceph-01 -- sudo -n ceph --conf "${CEPH_CONF_DC1:?Set CEPH_CONF_DC1 from the discovery step above}" --keyring "${CEPH_KEYRING_DC1:?Set CEPH_KEYRING_DC1 from the discovery step above}" quorum_status
-./bin/bootwright cluster exec --context "$CTX_CEPH" --name ceph-stretch --node ceph-01 -- sudo -n ceph --conf "${CEPH_CONF_DC1:?Set CEPH_CONF_DC1 from the discovery step above}" --keyring "${CEPH_KEYRING_DC1:?Set CEPH_KEYRING_DC1 from the discovery step above}" osd dump -f json > "$D/osd-dump.json"
-./bin/bootwright cluster exec --context "$CTX_CEPH" --name ceph-stretch --node ceph-01 -- sudo -n ceph --conf "${CEPH_CONF_DC1:?Set CEPH_CONF_DC1 from the discovery step above}" --keyring "${CEPH_KEYRING_DC1:?Set CEPH_KEYRING_DC1 from the discovery step above}" mon dump -f json > "$D/mon-dump.json"
-./bin/bootwright cluster exec --context "$CTX_CEPH" --name ceph-stretch --node ceph-01 -- sudo -n ceph --conf "${CEPH_CONF_DC1:?Set CEPH_CONF_DC1 from the discovery step above}" --keyring "${CEPH_KEYRING_DC1:?Set CEPH_KEYRING_DC1 from the discovery step above}" osd crush tree -f json > "$D/crush-tree.json"
-python3 -I "$D/readback.py" "$D"
-./bin/bootwright cluster exec --context "$CTX_CEPH" --name ceph-stretch --node ceph-01 -- sudo -n bash -s -- "${CEPH_CONF_DC1:?Set CEPH_CONF_DC1 from the discovery step above}" "${CEPH_KEYRING_DC1:?Set CEPH_KEYRING_DC1 from the discovery step above}" loss-dc2 write < "$D/rbd-io.sh"
+./bin/bootwright cluster exec --context "$CTX_CEPH" --name ceph-stretch --node ceph-01 -- sudo -n ceph --conf "${CEPH_CONF_DC1:?Set CEPH_CONF_DC1 from the discovery step above}" --keyring "${CEPH_KEYRING_DC1:?Set CEPH_KEYRING_DC1 from the discovery step above}" osd dump -f json > "$RUN_DIR/osd-dump.json"
+./bin/bootwright cluster exec --context "$CTX_CEPH" --name ceph-stretch --node ceph-01 -- sudo -n ceph --conf "${CEPH_CONF_DC1:?Set CEPH_CONF_DC1 from the discovery step above}" --keyring "${CEPH_KEYRING_DC1:?Set CEPH_KEYRING_DC1 from the discovery step above}" mon dump -f json > "$RUN_DIR/mon-dump.json"
+./bin/bootwright cluster exec --context "$CTX_CEPH" --name ceph-stretch --node ceph-01 -- sudo -n ceph --conf "${CEPH_CONF_DC1:?Set CEPH_CONF_DC1 from the discovery step above}" --keyring "${CEPH_KEYRING_DC1:?Set CEPH_KEYRING_DC1 from the discovery step above}" osd crush tree -f json > "$RUN_DIR/crush-tree.json"
+python3 -I "$RUN_DIR/readback.py" "$RUN_DIR"
+./bin/bootwright cluster exec --context "$CTX_CEPH" --name ceph-stretch --node ceph-01 -- sudo -n bash -s -- "${CEPH_CONF_DC1:?Set CEPH_CONF_DC1 from the discovery step above}" "${CEPH_KEYRING_DC1:?Set CEPH_KEYRING_DC1 from the discovery step above}" loss-dc2 write < "$RUN_DIR/rbd-io.sh"
 # File toggle only.
 if [ "$CEPH_FILE" = "true" ]; then
-    ./bin/bootwright cluster exec --context "$CTX_CEPH" --name ceph-stretch --node ceph-01 -- sudo -n bash -s -- "${CEPH_CONF_DC1:?Set CEPH_CONF_DC1 from the discovery step above}" "${CEPH_KEYRING_DC1:?Set CEPH_KEYRING_DC1 from the discovery step above}" loss-dc2 write < "$D/fs-io.sh"
+    ./bin/bootwright cluster exec --context "$CTX_CEPH" --name ceph-stretch --node ceph-01 -- sudo -n bash -s -- "${CEPH_CONF_DC1:?Set CEPH_CONF_DC1 from the discovery step above}" "${CEPH_KEYRING_DC1:?Set CEPH_KEYRING_DC1 from the discovery step above}" loss-dc2 write < "$RUN_DIR/fs-io.sh"
 fi
 # Object toggle only. The final command must fail.
 if [ "$CEPH_OBJECT" = "true" ]; then
-    aws --endpoint-url "$DC1" s3api put-object --bucket s3-canary-bucket --key loss-dc2 --body "$D/s3-in"
-    aws --endpoint-url "$DC2" s3api get-object --bucket s3-canary-bucket --key loss-dc2 "$D/s3-out"
+    aws --endpoint-url "$DC1" s3api put-object --bucket s3-canary-bucket --key loss-dc2 --body "$RUN_DIR/s3-in"
+    aws --endpoint-url "$DC2" s3api get-object --bucket s3-canary-bucket --key loss-dc2 "$RUN_DIR/s3-out"
 fi
 ./bin/bootwright machine start --context "$CTX_CEPH" --name ceph-03,ceph-04
 ```
@@ -482,31 +524,100 @@ the restored-site reads until all these conditions hold:
 Once those gates pass, compare the restored-site reads with the loss writes:
 
 ```sh
-./bin/bootwright cluster exec --context "$CTX_CEPH" --name ceph-stretch --node ceph-03 -- sudo -n bash -s -- "$CEPH_CONF_DC2" "$CEPH_KEYRING_DC2" loss-dc2 read < "$D/rbd-io.sh"
+./bin/bootwright cluster exec --context "$CTX_CEPH" --name ceph-stretch --node ceph-03 -- sudo -n bash -s -- "$CEPH_CONF_DC2" "$CEPH_KEYRING_DC2" loss-dc2 read < "$RUN_DIR/rbd-io.sh"
 # File toggle only.
 if [ "$CEPH_FILE" = "true" ]; then
-    ./bin/bootwright cluster exec --context "$CTX_CEPH" --name ceph-stretch --node ceph-03 -- sudo -n bash -s -- "$CEPH_CONF_DC2" "$CEPH_KEYRING_DC2" loss-dc2 read < "$D/fs-io.sh"
+    ./bin/bootwright cluster exec --context "$CTX_CEPH" --name ceph-stretch --node ceph-03 -- sudo -n bash -s -- "$CEPH_CONF_DC2" "$CEPH_KEYRING_DC2" loss-dc2 read < "$RUN_DIR/fs-io.sh"
 fi
 # Object toggle only.
 if [ "$CEPH_OBJECT" = "true" ]; then
-    aws --endpoint-url "$DC2" s3api get-object --bucket s3-canary-bucket --key loss-dc2 "$D/s3-out"
-    cmp "$D/s3-in" "$D/s3-out"
+    aws --endpoint-url "$DC2" s3api get-object --bucket s3-canary-bucket --key loss-dc2 "$RUN_DIR/s3-out"
+    cmp "$RUN_DIR/s3-in" "$RUN_DIR/s3-out"
 fi
 ```
 
 ### Tiebreaker loss
 
-`CTX_ARB` owns its power. Require a quorum of 4 and no degraded stretch;
-repeat the read commands from Verify through both sites before restore.
+`CTX_ARB` owns its power. Stop the tiebreaker, then require a quorum of 4,
+no degraded stretch and readable data through both sites:
 
 ```sh
 ./bin/bootwright machine stop --context "$CTX_ARB" --name arbiter-01 --force --yes
-./bin/bootwright cluster exec --context "$CTX_CEPH" --name ceph-stretch --node ceph-01 -- sudo -n ceph --conf "${CEPH_CONF_DC1:?Set CEPH_CONF_DC1 from the discovery step above}" --keyring "${CEPH_KEYRING_DC1:?Set CEPH_KEYRING_DC1 from the discovery step above}" -s
-./bin/bootwright cluster exec --context "$CTX_CEPH" --name ceph-stretch --node ceph-01 -- sudo -n ceph --conf "${CEPH_CONF_DC1:?Set CEPH_CONF_DC1 from the discovery step above}" --keyring "${CEPH_KEYRING_DC1:?Set CEPH_KEYRING_DC1 from the discovery step above}" quorum_status
+./bin/bootwright cluster exec --context "$CTX_CEPH" --name ceph-stretch --node ceph-01 -- sudo -n ceph --conf "$CEPH_CONF_DC1" --keyring "$CEPH_KEYRING_DC1" -s
+./bin/bootwright cluster exec --context "$CTX_CEPH" --name ceph-stretch --node ceph-01 -- sudo -n ceph --conf "$CEPH_CONF_DC1" --keyring "$CEPH_KEYRING_DC1" quorum_status
+./bin/bootwright cluster exec --context "$CTX_CEPH" --name ceph-stretch --node ceph-01 -- sudo -n ceph --conf "$CEPH_CONF_DC1" --keyring "$CEPH_KEYRING_DC1" osd dump
+./bin/bootwright cluster exec --context "$CTX_CEPH" --name ceph-stretch --node ceph-01 -- sudo -n bash -s -- "$CEPH_CONF_DC1" "$CEPH_KEYRING_DC1" site-dc2 read < "$RUN_DIR/rbd-io.sh"
+./bin/bootwright cluster exec --context "$CTX_CEPH" --name ceph-stretch --node ceph-03 -- sudo -n bash -s -- "$CEPH_CONF_DC2" "$CEPH_KEYRING_DC2" site-dc1 read < "$RUN_DIR/rbd-io.sh"
+if [ "$CEPH_FILE" = true ]; then
+    ./bin/bootwright cluster exec --context "$CTX_CEPH" --name ceph-stretch --node ceph-01 -- sudo -n bash -s -- "$CEPH_CONF_DC1" "$CEPH_KEYRING_DC1" site-dc2 read < "$RUN_DIR/fs-io.sh"
+    ./bin/bootwright cluster exec --context "$CTX_CEPH" --name ceph-stretch --node ceph-03 -- sudo -n bash -s -- "$CEPH_CONF_DC2" "$CEPH_KEYRING_DC2" site-dc1 read < "$RUN_DIR/fs-io.sh"
+fi
+if [ "$CEPH_OBJECT" = true ]; then
+    aws --endpoint-url "$DC1" s3api get-object --bucket s3-canary-bucket --key site-dc2 "$RUN_DIR/s3-out"
+    cmp "$RUN_DIR/s3-in" "$RUN_DIR/s3-out"
+    aws --endpoint-url "$DC2" s3api get-object --bucket s3-canary-bucket --key site-dc1 "$RUN_DIR/s3-out"
+    cmp "$RUN_DIR/s3-in" "$RUN_DIR/s3-out"
+fi
+```
+
+Require the RBD and CephFS sums to match their original writes, and both S3
+comparisons to succeed when enabled. Only then restore the tiebreaker:
+
+```sh
 ./bin/bootwright machine start --context "$CTX_ARB" --name arbiter-01
 ```
 
+Observe until the guest answers, health is `HEALTH_OK`, quorum includes all
+five MONs and every PG is `active+clean`:
+
+```sh
+./bin/bootwright machine exec --context "$CTX_ARB" --name arbiter-01 -- uptime
+./bin/bootwright cluster exec --context "$CTX_CEPH" --name ceph-stretch --node ceph-01 -- sudo -n ceph --conf "$CEPH_CONF_DC1" --keyring "$CEPH_KEYRING_DC1" -s
+./bin/bootwright cluster exec --context "$CTX_CEPH" --name ceph-stretch --node ceph-01 -- sudo -n ceph --conf "$CEPH_CONF_DC1" --keyring "$CEPH_KEYRING_DC1" quorum_status
+./bin/bootwright cluster exec --context "$CTX_CEPH" --name ceph-stretch --node ceph-01 -- sudo -n ceph --conf "$CEPH_CONF_DC1" --keyring "$CEPH_KEYRING_DC1" pg stat
+```
+
 ### Inter-site and asymmetric partitions
+
+Define the check used by both partition drills. Each call asks for the
+observed surviving site's admin node, records quorum and stretch state, and
+writes and reads a fresh test object through that site:
+
+```bash
+check_partition_survivor() (
+    set -e
+    PARTITION_OBJECT=$1
+    read -r -p 'Surviving site admin node (ceph-01 or ceph-03): ' SURVIVING_NODE
+    case "$SURVIVING_NODE" in
+        ceph-01)
+            SURVIVING_CONF=$CEPH_CONF_DC1
+            SURVIVING_KEYRING=$CEPH_KEYRING_DC1
+            SURVIVING_ENDPOINT=${DC1:-}
+            ;;
+        ceph-03)
+            SURVIVING_CONF=$CEPH_CONF_DC2
+            SURVIVING_KEYRING=$CEPH_KEYRING_DC2
+            SURVIVING_ENDPOINT=${DC2:-}
+            ;;
+        *) printf 'Select the observed surviving site.\n' >&2; exit 1 ;;
+    esac
+    ./bin/bootwright cluster exec --context "$CTX_CEPH" --name ceph-stretch --node "$SURVIVING_NODE" -- sudo -n ceph --conf "$SURVIVING_CONF" --keyring "$SURVIVING_KEYRING" -s
+    ./bin/bootwright cluster exec --context "$CTX_CEPH" --name ceph-stretch --node "$SURVIVING_NODE" -- sudo -n ceph --conf "$SURVIVING_CONF" --keyring "$SURVIVING_KEYRING" quorum_status
+    ./bin/bootwright cluster exec --context "$CTX_CEPH" --name ceph-stretch --node "$SURVIVING_NODE" -- sudo -n ceph --conf "$SURVIVING_CONF" --keyring "$SURVIVING_KEYRING" mon dump -f json > "$RUN_DIR/mon-dump.json"
+    ./bin/bootwright cluster exec --context "$CTX_CEPH" --name ceph-stretch --node "$SURVIVING_NODE" -- sudo -n ceph --conf "$SURVIVING_CONF" --keyring "$SURVIVING_KEYRING" osd dump -f json > "$RUN_DIR/osd-dump.json"
+    ./bin/bootwright cluster exec --context "$CTX_CEPH" --name ceph-stretch --node "$SURVIVING_NODE" -- sudo -n ceph --conf "$SURVIVING_CONF" --keyring "$SURVIVING_KEYRING" osd crush tree -f json > "$RUN_DIR/crush-tree.json"
+    python3 -I "$RUN_DIR/readback.py" "$RUN_DIR"
+    ./bin/bootwright cluster exec --context "$CTX_CEPH" --name ceph-stretch --node "$SURVIVING_NODE" -- sudo -n bash -s -- "$SURVIVING_CONF" "$SURVIVING_KEYRING" "$PARTITION_OBJECT" write < "$RUN_DIR/rbd-io.sh"
+    if [ "$CEPH_FILE" = true ]; then
+        ./bin/bootwright cluster exec --context "$CTX_CEPH" --name ceph-stretch --node "$SURVIVING_NODE" -- sudo -n bash -s -- "$SURVIVING_CONF" "$SURVIVING_KEYRING" "$PARTITION_OBJECT" write < "$RUN_DIR/fs-io.sh"
+    fi
+    if [ "$CEPH_OBJECT" = true ]; then
+        aws --endpoint-url "$SURVIVING_ENDPOINT" s3api put-object --bucket s3-canary-bucket --key "$PARTITION_OBJECT" --body "$RUN_DIR/s3-in"
+        aws --endpoint-url "$SURVIVING_ENDPOINT" s3api get-object --bucket s3-canary-bucket --key "$PARTITION_OBJECT" "$RUN_DIR/s3-out"
+        cmp "$RUN_DIR/s3-in" "$RUN_DIR/s3-out"
+    fi
+)
+```
 
 Cut dc1 from dc2 inside dc1's guests while both reach the tiebreaker:
 
@@ -527,45 +638,26 @@ add rule inet e2e out ip daddr { 198.51.100.63, 198.51.100.64 } drop
 NFT
 ```
 
-The connectivity election keeps a quorum with the tiebreaker and one data
-site; the other site's OSDs go down and stretch degrades. Record which site
-survives. Select that node and its already confirmed administrator paths
-below, then record health, quorum, readback and client I/O through it:
+The connectivity election must keep a quorum with the tiebreaker and one data
+site; the other site's OSDs go down and stretch degrades. Identify the site
+that still answers, then run the check and remove the injected rules:
 
 ```sh
-# Set from the observed surviving site: ceph-01 or ceph-03, and its paths above.
-SURVIVING_NODE=''
-SURVIVING_CONF=''
-SURVIVING_KEYRING=''
-# Use a fresh image/file/object name for each partition drill.
-PARTITION_OBJECT="partition-symmetric"
-: "${SURVIVING_NODE:?Set SURVIVING_NODE from the surviving site}"
-: "${SURVIVING_CONF:?Set SURVIVING_CONF to the confirmed config path on the selected node}"
-: "${SURVIVING_KEYRING:?Set SURVIVING_KEYRING to the confirmed keyring path on the selected node}"
-./bin/bootwright cluster exec --context "$CTX_CEPH" --name ceph-stretch --node "${SURVIVING_NODE:?Set SURVIVING_NODE from the discovery step above}" -- sudo -n ceph --conf "${SURVIVING_CONF:?Set SURVIVING_CONF from the discovery step above}" --keyring "${SURVIVING_KEYRING:?Set SURVIVING_KEYRING from the discovery step above}" -s
-./bin/bootwright cluster exec --context "$CTX_CEPH" --name ceph-stretch --node "${SURVIVING_NODE:?Set SURVIVING_NODE from the discovery step above}" -- sudo -n ceph --conf "${SURVIVING_CONF:?Set SURVIVING_CONF from the discovery step above}" --keyring "${SURVIVING_KEYRING:?Set SURVIVING_KEYRING from the discovery step above}" quorum_status
-./bin/bootwright cluster exec --context "$CTX_CEPH" --name ceph-stretch --node "${SURVIVING_NODE:?Set SURVIVING_NODE from the discovery step above}" -- sudo -n ceph --conf "${SURVIVING_CONF:?Set SURVIVING_CONF from the discovery step above}" --keyring "${SURVIVING_KEYRING:?Set SURVIVING_KEYRING from the discovery step above}" mon dump -f json > "$D/mon-dump.json"
-./bin/bootwright cluster exec --context "$CTX_CEPH" --name ceph-stretch --node "${SURVIVING_NODE:?Set SURVIVING_NODE from the discovery step above}" -- sudo -n ceph --conf "${SURVIVING_CONF:?Set SURVIVING_CONF from the discovery step above}" --keyring "${SURVIVING_KEYRING:?Set SURVIVING_KEYRING from the discovery step above}" osd dump -f json > "$D/osd-dump.json"
-./bin/bootwright cluster exec --context "$CTX_CEPH" --name ceph-stretch --node "${SURVIVING_NODE:?Set SURVIVING_NODE from the discovery step above}" -- sudo -n ceph --conf "${SURVIVING_CONF:?Set SURVIVING_CONF from the discovery step above}" --keyring "${SURVIVING_KEYRING:?Set SURVIVING_KEYRING from the discovery step above}" osd crush tree -f json > "$D/crush-tree.json"
-python3 -I "$D/readback.py" "$D"
-./bin/bootwright cluster exec --context "$CTX_CEPH" --name ceph-stretch --node "${SURVIVING_NODE:?Set SURVIVING_NODE from the discovery step above}" -- sudo -n bash -s -- "${SURVIVING_CONF:?Set SURVIVING_CONF from the discovery step above}" "${SURVIVING_KEYRING:?Set SURVIVING_KEYRING from the discovery step above}" "${PARTITION_OBJECT:?Set a fresh PARTITION_OBJECT for this drill}" write < "$D/rbd-io.sh"
-# File toggle only.
-if [ "$CEPH_FILE" = "true" ]; then
-    ./bin/bootwright cluster exec --context "$CTX_CEPH" --name ceph-stretch --node "${SURVIVING_NODE:?Set SURVIVING_NODE from the discovery step above}" -- sudo -n bash -s -- "${SURVIVING_CONF:?Set SURVIVING_CONF from the discovery step above}" "${SURVIVING_KEYRING:?Set SURVIVING_KEYRING from the discovery step above}" "${PARTITION_OBJECT:?Set a fresh PARTITION_OBJECT for this drill}" write < "$D/fs-io.sh"
-fi
-# Object toggle only: set to the DC1 or DC2 endpoint for the surviving site.
-if [ "$CEPH_OBJECT" = "true" ]; then
-    SURVIVING_ENDPOINT=''
-    : "${SURVIVING_ENDPOINT:?Set SURVIVING_ENDPOINT to the surviving site endpoint}"
-    aws --endpoint-url "${SURVIVING_ENDPOINT:?Set SURVIVING_ENDPOINT from the discovery step above}" s3api put-object --bucket s3-canary-bucket --key "${PARTITION_OBJECT:?Set a fresh PARTITION_OBJECT for this drill}" --body "$D/s3-in"
-fi
+check_partition_survivor partition-symmetric
 ./bin/bootwright machine exec --context "$CTX_CEPH" --name ceph-01,ceph-02 -- sudo -n nft delete table inet e2e
 ```
 
-Wait for health to recover. Then create an asymmetric partition: dc1 drops
-what dc2 sends while dc1's packets still arrive. Record which site keeps
-quorum and whether I/O stays available, using the same survivor selection
-and checks above (set `PARTITION_OBJECT="partition-asymmetric"`), then heal with the table deletion command above:
+Observe until health is `HEALTH_OK`, every PG is `active+clean` and all pools
+have `min_size 2` before continuing:
+
+```sh
+./bin/bootwright cluster exec --context "$CTX_CEPH" --name ceph-stretch --node ceph-01 -- sudo -n ceph --conf "$CEPH_CONF_DC1" --keyring "$CEPH_KEYRING_DC1" -s
+./bin/bootwright cluster exec --context "$CTX_CEPH" --name ceph-stretch --node ceph-01 -- sudo -n ceph --conf "$CEPH_CONF_DC1" --keyring "$CEPH_KEYRING_DC1" pg stat
+./bin/bootwright cluster exec --context "$CTX_CEPH" --name ceph-stretch --node ceph-01 -- sudo -n ceph --conf "$CEPH_CONF_DC1" --keyring "$CEPH_KEYRING_DC1" osd dump
+```
+
+Create the asymmetric partition: dc1 drops what dc2 sends while dc1's packets
+still arrive:
 
 ```sh
 ./bin/bootwright machine exec --context "$CTX_CEPH" --name ceph-01 -- sudo -n nft -f - <<'NFT'
@@ -580,20 +672,21 @@ add rule inet e2e in ip saddr { 198.51.100.63, 198.51.100.64 } drop
 NFT
 ```
 
-### Surviving-site gateway failure (object toggle)
-
-During dc1's loss, stop ceph-04's RGW. S3 through dc2 must fail with its only
-gateway down, the expected safe unavailability. Start the daemon again:
+Identify the surviving site again. Record quorum and I/O with a separate
+object name, then remove this drill's injected rules:
 
 ```sh
-./bin/bootwright cluster exec --context "$CTX_CEPH" --name ceph-stretch --node ceph-03 -- sudo -n ceph --conf "$CEPH_CONF_DC2" --keyring "$CEPH_KEYRING_DC2" orch ps --daemon_type rgw
-# Copy the daemon_name for the RGW on ceph-04 from that listing.
-RGW_DC2_DAEMON=''
-: "${RGW_DC2_DAEMON:?Set RGW_DC2_DAEMON from orch ps on ceph-04}"
-./bin/bootwright cluster exec --context "$CTX_CEPH" --name ceph-stretch --node ceph-03 -- sudo -n ceph --conf "$CEPH_CONF_DC2" --keyring "$CEPH_KEYRING_DC2" orch daemon stop "${RGW_DC2_DAEMON:?Set RGW_DC2_DAEMON from the discovery step above}"
-# Expected failure while the surviving site's gateway is stopped.
-aws --endpoint-url "$DC2" s3api get-object --bucket s3-canary-bucket --key loss-dc1 "$D/s3-out"
-./bin/bootwright cluster exec --context "$CTX_CEPH" --name ceph-stretch --node ceph-03 -- sudo -n ceph --conf "$CEPH_CONF_DC2" --keyring "$CEPH_KEYRING_DC2" orch daemon start "${RGW_DC2_DAEMON:?Set RGW_DC2_DAEMON from the discovery step above}"
+check_partition_survivor partition-asymmetric
+./bin/bootwright machine exec --context "$CTX_CEPH" --name ceph-01,ceph-02 -- sudo -n nft delete table inet e2e
+```
+
+Observe until health is `HEALTH_OK`, every PG is `active+clean` and all pools
+have `min_size 2` before continuing:
+
+```sh
+./bin/bootwright cluster exec --context "$CTX_CEPH" --name ceph-stretch --node ceph-01 -- sudo -n ceph --conf "$CEPH_CONF_DC1" --keyring "$CEPH_KEYRING_DC1" -s
+./bin/bootwright cluster exec --context "$CTX_CEPH" --name ceph-stretch --node ceph-01 -- sudo -n ceph --conf "$CEPH_CONF_DC1" --keyring "$CEPH_KEYRING_DC1" pg stat
+./bin/bootwright cluster exec --context "$CTX_CEPH" --name ceph-stretch --node ceph-01 -- sudo -n ceph --conf "$CEPH_CONF_DC1" --keyring "$CEPH_KEYRING_DC1" osd dump
 ```
 
 ### Interrupted recovery
@@ -621,7 +714,9 @@ and the pool and stretch readbacks show recovery complete with `min_size 2`:
 ./bin/bootwright cluster exec --context "$CTX_CEPH" --name ceph-stretch --node ceph-03 -- sudo -n ceph --conf "$CEPH_CONF_DC2" --keyring "$CEPH_KEYRING_DC2" osd dump
 ```
 
-## Destroy
+<a id="destroy"></a>
+
+## 6. Destroy and clean up
 
 Destroy `CTX_CEPH` first. Its cluster block removes the tiebreaker's Ceph
 footprint over the fleet connection, and refuses `tiebreaker-unreachable`
@@ -656,10 +751,10 @@ ls -lA /var/lib/ceph /etc/ceph /etc/ssh/sshd_config.d "/var/lib/bootwright/ceph/
 ls -l /var/log/ceph/cephadm.log /etc/logrotate.d/cephadm
 systemctl list-units --all 'ceph*'
 ABSENCE
-./bin/bootwright secret show --context "$CTX_CEPH" --name ceph-cluster-key --part public-key > "$D/cluster.pub"
-cut -d' ' -f2 "$D/cluster.pub" > "$D/cluster.key"
-./bin/bootwright machine exec --context "$CTX_ARB" --name arbiter-01 -- sudo -n grep -c -F -f /dev/stdin /home/bootwright/.ssh/authorized_keys < "$D/cluster.key"
-./bin/bootwright machine exec --context "$CTX_ARB" --name arbiter-01 -- sudo -n grep -c -F -f /dev/stdin /home/bootwright/.ssh/authorized_keys < "$D/fleet.key"
+./bin/bootwright secret show --context "$CTX_CEPH" --name ceph-cluster-key --part public-key > "$RUN_DIR/cluster.pub"
+cut -d' ' -f2 "$RUN_DIR/cluster.pub" > "$RUN_DIR/cluster.key"
+./bin/bootwright machine exec --context "$CTX_ARB" --name arbiter-01 -- sudo -n grep -c -F -f /dev/stdin /home/bootwright/.ssh/authorized_keys < "$RUN_DIR/cluster.key"
+./bin/bootwright machine exec --context "$CTX_ARB" --name arbiter-01 -- sudo -n grep -c -F -f /dev/stdin /home/bootwright/.ssh/authorized_keys < "$RUN_DIR/fleet.key"
 ```
 
 Require every `absent` line, nothing of the FSID in `/var/lib/ceph`, `0` for
@@ -673,19 +768,31 @@ and the units systemd still lists. Then:
 ```sh
 ./bin/bootwright machine stop --context "$CTX_ARB" --name arbiter-01 --yes
 ./bin/bootwright destroy --context "$CTX_ARB" --authorize data-loss
+./bin/bootwright status --context "$CTX_ARB"
 virsh --connect qemu:///system list --all
-./bin/bootwright context delete --name "$CTX_CEPH" --purge --yes
-./bin/bootwright context delete --name "$CTX_ARB" --purge --yes
-rm -rf "$D"
+virsh --connect qemu:///system net-list --all
 ```
 
-If `CTX_CEPH`'s apply was refused before its claim reached `arbiter-01`, its
-destroy refuses `tiebreaker-foreign` on every retry, because the host holds
-no owner marker ([B942](../../specs/milestones/m2.md#b942)). Finish the apply
-first: repair what it names and repeat `./bin/bootwright apply --context "$CTX_CEPH"` until
-the clusters stage completes, then destroy. Only when the apply cannot
-finish, the last exit is `./bin/bootwright context delete --name "$CTX_CEPH" --purge
---allow-orphans`, which abandons what the context owns without removing it
-([permanent deletion](../../specs/contexts.md#permanent-deletion)): then
-remove its four guests and their disks by hand, and destroy `CTX_ARB`, which
-deletes `arbiter-01` with whatever it holds. Media stays for the next case.
+Require both contexts' guests, disks and network to be absent. Then delete the
+contexts:
+
+```sh
+./bin/bootwright context delete --name "$CTX_CEPH" --purge --yes
+./bin/bootwright context delete --name "$CTX_ARB" --purge --yes
+```
+
+Complete [Restore listener firewall](../README.md#restore-listener-firewall),
+then [Remove diagnostic tools](../README.md#remove-diagnostic-tools). Delete
+the private scratch and rendered input only after both cleanups succeed:
+
+```sh
+rm -rf -- "${RUN_DIR:?Set RUN_DIR from step 3}" "${INPUT_DIR:?Set INPUT_DIR from step 3}"
+```
+
+## 7. Record the result
+
+Record the selected service switches, build identity, each fault drill and
+completed removal in the [acceptance ledger](../../docs/acceptance.md).
+Success requires the whole run, including both contexts' cleanup. This case
+claims only the emulated coverage listed above. Keep host-specific evidence
+private. Shared media remains.

@@ -122,6 +122,12 @@ A continued operation seeds its durable states from the frozen preview. ASCII
 mode uses `#` and `-` for filled and empty squares. Full detail shows available
 dependency waits; active rows show the actual stage, target and sub-step.
 
+Managed OS installation reports its selected security checks, subscription
+registration and package updates after network convergence, followed by final
+evidence collection. The update step names its possible restart and result
+verification. A step starts before its work and settles only after its own
+failure checks; completion evidence remains the authority for block success.
+
 An authorized step that can exceed the heartbeat interval opens a running row
 before it starts. Effects appear under `Progress`, after the private `Logs`
 location when one exists. Read-only proofs appear under `Checks`; a machine

@@ -8497,7 +8497,7 @@ host-independent barrier has no separate operator-run gate.
 D178 permits runbook-only diagnostic dependencies to be installed and removed
 by that runbook. Bootwright's own package requirements remain limited to
 what its execution needs. The
-[lab-rhel procedure](../../examples/machines/lab-rhel/README.md) preserves its
+[lab-rhel procedure](../../e2e/lab-rhel/runbook.md) preserves its
 independent DNS-answer and NTP-offset checks and adds operator installation
 of only absent diagnostic roots. A private package record stays outside the
 frozen input and is retained across interruptions; cleanup selects only those
@@ -10023,6 +10023,49 @@ counts with `set --` and `$#`; both refuse exactly what they refused before.
 The request goldens now pass the plan guard, which
 `TestTheFrozenRequestsMatchTheirGoldens` and
 `TestPhysicalHostVariantsRequestGolden` hold.
+
+### X225 — E2E execution and runbook corrections
+
+**Items:** B973, B974 and B980.
+**Kind:** safety. **Owners:** Controller, Reconciliation, Managed OS and CLI.
+**Code commit:** `d0376aaa4`; the companion documentation commit
+records this delivery under [D208](backlog.md#d208).
+
+[B978](m1.md#b978) and [B979](m1.md#b979) are delivered in-tree and
+retain operator acceptance on M1.
+
+B973 qualifies empty forwarding policies without weakening the interface-zone
+proof of [host listener admission](../controller.md#results-and-qualification).
+`TestForwardingPolicyLeavesHostAdmissionToZone` and
+`TestPolicyZoneSetsMustBeUnambiguous` cover the admission and refusal shapes.
+B978 shortens [invocation scratch](../security.md#process-boundary) while
+retaining private custody, job pairing and cleanup of earlier names;
+`TestTheLongestScratchPathFitsTheAnsibleRPCSocket` holds the socket bound.
+B979 activates the declared network before an encrypted install fetches
+recovery material, using tools available in the installer. Its topology,
+publication and failure tests hold the
+[early-network contract](../managed-os.md#root-disk-encryption); the changed
+Kickstart moves the installation content pin without rewriting stored requests.
+
+B980 reports selected security checks, registration, package updates and final
+evidence collection under [long-running progress](../cli/output.md#long-running-progress).
+`TestPostNetworkProgressMatchesSelectedWork` and the role progress tests hold
+group selection, event ordering and refusal boundaries. These groups are
+frozen plan metadata for new plans; existing plans keep their definitions.
+B974 makes all E2E runbooks ordered procedures through required drills and
+cleanup. [Shared preparation](../../e2e/README.md#prepare-the-host) names
+controller installation, operator-owned firewall admission and diagnostic
+packages, while preserving existing grants and packages. The selected-feature
+checks use full device paths, readable update records, transaction comments
+and exact negative-test exit codes.
+
+The integration commits record the full verification commands, results and
+independent safety review, including the initial [B673](backlog.md#b673)
+checkpoint-harness recurrence and the subsequent isolated checks. The
+remaining gates for B978 and B979 require
+owner-accepted complete operator runs; no live acceptance is claimed here.
+[B977](backlog.md#b977) remains parked, and the established OS-feature and
+physical-host acceptance items retain their own gates.
 
 ### X226 — Controller install and uninstall
 

@@ -316,9 +316,12 @@ once the invocation's ends of the channels close.
 
 Each lifecycle adapter invocation owns a job directory `bootwright-run-<n>`
 beneath `/run`, which holds its lent material and never survives a reboot, and
-a scratch directory `bootwright-run-scratch-<n>-<m>` that carries its job's
+a scratch directory `bootwright-scratch-<n>-<m>` that carries its job's
 `<n>` beneath `/var/lib/bootwright-staging/runs`, where no other account can
-create a name. The runner on the controller and `lifecycle_scratch` on an SSH
+create a name. Its maximum path length leaves room for Ansible's local RPC
+Unix socket. Earlier `bootwright-run-scratch-<n>-<m>` names under that same
+parent retain the same job pairing and cleanup checks. The runner on the
+controller and `lifecycle_scratch` on an SSH
 execution host create that parent, and the staging parent above it, when
 absent. A parent that is a link, owned by another account, or open to another
 account's write, or a scratch parent other than mode 0700 or on a noexec
