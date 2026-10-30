@@ -50,8 +50,7 @@ func classify(requested reconciliation.Verb, held standing) transitionKind {
 		return transitionFinalize
 	}
 	switch {
-	case requested == reconciliation.Destroy && (held.verb == reconciliation.Apply && incomplete ||
-		held.verb == reconciliation.Destroy && held.state == reconciliation.OperationFailed):
+	case requested == reconciliation.Destroy && replaces(held.verb, held.state):
 		return transitionReplaceRemoval
 	case incomplete && held.verb != requested:
 		return transitionRefuse
@@ -65,6 +64,11 @@ func classify(requested reconciliation.Verb, held standing) transitionKind {
 		return transitionSettle
 	}
 	return transitionFresh
+}
+
+func replaces(verb reconciliation.Verb, state reconciliation.OperationState) bool {
+	return verb == reconciliation.Apply && state != reconciliation.OperationDone ||
+		verb == reconciliation.Destroy && state == reconciliation.OperationFailed
 }
 
 func chosenVerb(held standing) reconciliation.Verb {

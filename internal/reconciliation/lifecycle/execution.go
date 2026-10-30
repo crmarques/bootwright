@@ -476,6 +476,10 @@ func (s Service) decideFrom(ctx context.Context, view View, verb reconciliation.
 func (s Service) decideOver(ctx context.Context, view View, store OperationStore, verb reconciliation.Verb, selection reconciliation.Selection, operation operationstore.Operation, frozen reconciliation.Plan, states map[string]reconciliation.BlockState, attempts map[string]int) (transition, error) {
 	name := view.Identity().Name
 	switch classify(verb, standingOf(operation, frozen, states)) {
+	case transitionFinalize:
+		return transition{}, failure("lifecycle.state",
+			"the "+string(operation.Verb)+" "+operation.ID+" is due its finalization, which no decision over its record may skip",
+			"report this as a defect, and repeat the command, which finalizes that operation before it decides")
 	case transitionReplaceRemoval:
 		return s.supersede(ctx, view, store, operation, frozen, states, attempts)
 	case transitionRefuse:
@@ -851,7 +855,7 @@ func (s Service) freshApply(ctx context.Context, view View, selection reconcilia
 // Replacement is the road out of a repair that changes what a block freezes,
 // since a continuation keeps its frozen blocks.
 func supersedable(operation operationstore.Operation) bool {
-	return classify(reconciliation.Destroy, standing{held: true, verb: operation.Verb, state: operation.State, pending: true}) == transitionReplaceRemoval
+	return replaces(operation.Verb, operation.State)
 }
 
 // mayHaveStartedNothing reports whether an operation's own state admits that it

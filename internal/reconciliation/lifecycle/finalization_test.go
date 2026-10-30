@@ -906,3 +906,52 @@ func TestASettledVerbWithCompleteFinalizationOpensNoTransaction(t *testing.T) {
 		}
 	}
 }
+
+func TestADecisionOverAFinalizationDueRefusesWithoutEffect(t *testing.T) {
+	ctx := context.Background()
+	h := newPlannedHarness(t, chainedDefinitions())
+	completeApply(t, h)
+	if _, err := h.service.Destroy(ctx, DestroyRequest{ContextName: testContextName, SkipConfirmation: true}); err != nil {
+		t.Fatal(err)
+	}
+	rewriteState(t, h, path.Join(currentOperation(t, h), "operation.json"), string(reconciliation.OperationFailed))
+	before := untouchedOf(h)
+	err := h.workspace.ReadLifecycle(ctx, testContextName, func(view View) error {
+		store := h.service.store(view)
+		index, err := store.Index(ctx)
+		if err != nil {
+			return err
+		}
+		operation, err := store.ReadOperation(ctx, index.Current)
+		if err != nil {
+			return err
+		}
+		frozen, err := store.ReadPlan(ctx, operation.ID)
+		if err != nil {
+			return err
+		}
+		states, attempts, err := blockRecords(ctx, store, operation.ID, frozen)
+		if err != nil {
+			return err
+		}
+		if operation.Verb != reconciliation.Destroy || operation.State != reconciliation.OperationFailed || pendingRemains(frozen, states) {
+			t.Fatalf("the records read %s %s with a block pending %v", operation.Verb, operation.State, pendingRemains(frozen, states))
+		}
+		if got := classify(reconciliation.Destroy, standingOf(operation, frozen, states)); got != transitionFinalize {
+			t.Fatalf("the destroy classifies %q, want %q", got, transitionFinalize)
+		}
+		decided, err := h.service.decideOver(ctx, view, store, reconciliation.Destroy, reconciliation.Selection{}, operation, frozen, states, attempts)
+		reported := diagnostics.Of(err)
+		if len(reported) == 0 || reported[0].Code != "lifecycle.state" || !strings.Contains(reported[0].Message, "due its finalization") {
+			t.Fatalf("decideOver over a due finalization returned %v", err)
+		}
+		if decided.fresh || decided.noop || decided.finalize || decided.operation.ID != "" {
+			t.Fatalf("decideOver over a due finalization decided %+v", decided)
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	before.require(t, h)
+}

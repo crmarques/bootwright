@@ -54,7 +54,25 @@ type stateMachineCase struct {
 	apply, destroy string
 	previewed      reconciliation.Verb
 	next           string
+	reopens        bool
+	finalizes      bool
+	shown          previewShape
 }
+
+type previewShape struct {
+	refused, continuation, finalizes bool
+	next                             string
+}
+
+var refused = previewShape{refused: true}
+
+func continuing(next string) previewShape { return previewShape{continuation: true, next: next} }
+
+func finalizing(next string) previewShape {
+	return previewShape{continuation: true, finalizes: true, next: next}
+}
+
+func planning(next string) previewShape { return previewShape{next: next} }
 
 type stateMachineRow struct {
 	transition string
@@ -84,14 +102,14 @@ func stateMachineRows() map[string]stateMachineRow {
 		"no operation, or completed destroy": {
 			transition: "start a fresh apply; a `destroy` settles without effect, over no operation first releasing what an interrupted registration left",
 			cases: map[string]stateMachineCase{
-				"no operation": {arrange: func(*testing.T, *harness) {}, apply: "fresh apply", destroy: "settle", previewed: reconciliation.Apply, next: ""},
+				"no operation": {arrange: func(*testing.T, *harness) {}, apply: "fresh apply", destroy: "settle", previewed: reconciliation.Apply, next: "", shown: planning("apply")},
 				"no operation beside what an interrupted registration left": {
 					arrange: func(t *testing.T, h *harness) {
 						h.workspace.evidence = evidenceBytes(t, reconciliation.Apply, reconciliation.OperationRunning)
 					},
-					apply: "fresh apply", destroy: "release", previewed: reconciliation.Apply, next: "",
+					apply: "fresh apply", destroy: "release", previewed: reconciliation.Apply, next: "", shown: planning("apply"),
 				},
-				"a completed destroy": {arrange: destroyed, apply: "fresh apply", destroy: "settle", previewed: reconciliation.Apply, next: "none"},
+				"a completed destroy": {arrange: destroyed, apply: "fresh apply", destroy: "settle", previewed: reconciliation.Apply, next: "none", shown: planning("apply")},
 			},
 		},
 		"no operation beside evidence or records no index accounts for": {
@@ -99,15 +117,15 @@ func stateMachineRows() map[string]stateMachineRow {
 			cases: map[string]stateMachineCase{
 				"a lost index beside a completed apply": {
 					arrange: func(t *testing.T, h *harness) { completeApply(t, h); lose(h, "index.json") },
-					apply:   "refuse", destroy: "refuse", previewed: reconciliation.Apply, next: "",
+					apply:   "refuse", destroy: "refuse", previewed: reconciliation.Apply, next: "", shown: refused,
 				},
 				"a lost index beside a completed removal": {
 					arrange: func(t *testing.T, h *harness) { destroyed(t, h); lose(h, "index.json") },
-					apply:   "refuse", destroy: "refuse", previewed: reconciliation.Apply, next: "",
+					apply:   "refuse", destroy: "refuse", previewed: reconciliation.Apply, next: "", shown: refused,
 				},
 				"no operation beside evidence the guard cannot read": {
 					arrange: func(_ *testing.T, h *harness) { h.workspace.evidence = []byte("{") },
-					apply:   "refuse", destroy: "refuse", previewed: reconciliation.Apply, next: "",
+					apply:   "refuse", destroy: "refuse", previewed: reconciliation.Apply, next: "", shown: refused,
 				},
 			},
 		},
@@ -119,7 +137,7 @@ func stateMachineRows() map[string]stateMachineRow {
 						destroyed(t, h)
 						lose(h, path.Join(currentOperation(t, h), "blocks", "charlie")+"/")
 					},
-					apply: "refuse", destroy: "refuse", previewed: reconciliation.Apply, next: "none",
+					apply: "refuse", destroy: "refuse", previewed: reconciliation.Apply, next: "none", shown: refused,
 				},
 			},
 		},
@@ -131,14 +149,14 @@ func stateMachineRows() map[string]stateMachineRow {
 						failed("alpha", reconciliation.OutcomeFailed)(t, h)
 						leaveExecutorDead(t, h, "alpha")
 					},
-					apply: "continue", destroy: "fresh destroy", previewed: reconciliation.Apply, next: "continue-apply",
+					apply: "continue", destroy: "fresh destroy", previewed: reconciliation.Apply, next: "continue-apply", reopens: true, shown: continuing("continue-apply"),
 				},
 			},
 		},
 		"apply failed": {
 			transition: "continue that exact apply, or start a fresh destroy of the blocks it started",
 			cases: map[string]stateMachineCase{
-				"an apply whose last block failed": {arrange: failed("charlie", reconciliation.OutcomeFailed), apply: "continue", destroy: "fresh destroy", previewed: reconciliation.Apply, next: "continue-apply"},
+				"an apply whose last block failed": {arrange: failed("charlie", reconciliation.OutcomeFailed), apply: "continue", destroy: "fresh destroy", previewed: reconciliation.Apply, next: "continue-apply", reopens: true, shown: continuing("continue-apply")},
 			},
 		},
 		"apply failed, every block `done`": {
@@ -146,7 +164,7 @@ func stateMachineRows() map[string]stateMachineRow {
 			cases: map[string]stateMachineCase{
 				"an apply whose record lags its blocks": {
 					arrange: func(t *testing.T, h *harness) { completeApply(t, h); leaveFailedWithEveryBlockDone(t, h) },
-					apply:   "finalize", destroy: "fresh destroy", previewed: reconciliation.Apply, next: "continue-apply",
+					apply:   "finalize", destroy: "fresh destroy", previewed: reconciliation.Apply, next: "continue-apply", reopens: true, finalizes: true, shown: finalizing("continue-apply"),
 				},
 			},
 		},
@@ -157,20 +175,20 @@ func stateMachineRows() map[string]stateMachineRow {
 					arrange: func(t *testing.T, h *harness) {
 						applyChained(t, h, nil, string(reconciliation.StageInfrastructureServices))
 					},
-					apply: "continue", destroy: "fresh destroy", previewed: reconciliation.Apply, next: "continue-apply",
+					apply: "continue", destroy: "fresh destroy", previewed: reconciliation.Apply, next: "continue-apply", reopens: true, shown: continuing("continue-apply"),
 				},
 			},
 		},
 		"apply unknown": {
 			transition: "continue it, resolving every unproved block first and then retrying what resolution leaves `failed` (D146), or start a fresh destroy of the blocks it started, which resolves them first",
 			cases: map[string]stateMachineCase{
-				"an apply whose last block lost its outcome": {arrange: failed("charlie", reconciliation.OutcomeUnknown), apply: "continue", destroy: "fresh destroy", previewed: reconciliation.Apply, next: "resolve"},
+				"an apply whose last block lost its outcome": {arrange: failed("charlie", reconciliation.OutcomeUnknown), apply: "continue", destroy: "fresh destroy", previewed: reconciliation.Apply, next: "resolve", reopens: true, shown: continuing("resolve")},
 			},
 		},
 		"apply done": {
 			transition: "start a fresh destroy of its whole frozen plan, which first resolves every unproved block; an `apply` of the unchanged input settles without effect, and of a changed input refuses; that apply refuses while a block of the plan is not `done`, naming that destroy and `context delete --purge`",
 			cases: map[string]stateMachineCase{
-				"a completed apply": {arrange: func(t *testing.T, h *harness) { completeApply(t, h) }, apply: "settle", destroy: "fresh destroy", previewed: reconciliation.Destroy, next: "none"},
+				"a completed apply": {arrange: func(t *testing.T, h *harness) { completeApply(t, h) }, apply: "settle", destroy: "fresh destroy", previewed: reconciliation.Destroy, next: "none", reopens: true, shown: planning("destroy")},
 				"a completed apply under a changed input": {
 					arrange: func(t *testing.T, h *harness) {
 						completeApply(t, h)
@@ -178,40 +196,40 @@ func stateMachineRows() map[string]stateMachineRow {
 							desiredstate.NewSourceFile("/synthetic/environment.yaml", []byte("kind: Environment\n# edited\n")),
 						}}
 					},
-					apply: "refuse", destroy: "fresh destroy", previewed: reconciliation.Destroy, next: "none",
+					apply: "refuse", destroy: "fresh destroy", previewed: reconciliation.Destroy, next: "none", reopens: true, shown: planning("destroy"),
 				},
 				"a completed apply under an input that adds an object": {
 					arrange: changedOver(diffState(servers("v1", "alpha", "bravo", "charlie", "delta")...)),
-					apply:   "refuse", destroy: "fresh destroy", previewed: reconciliation.Destroy, next: "none",
+					apply:   "refuse", destroy: "fresh destroy", previewed: reconciliation.Destroy, next: "none", reopens: true, shown: planning("destroy"),
 				},
 				"a completed apply under an input that changes an object": {
 					arrange: changedOver(diffState(append(servers("v1", "alpha", "bravo"), serverObject("charlie", "v2"))...)),
-					apply:   "refuse", destroy: "fresh destroy", previewed: reconciliation.Destroy, next: "none",
+					apply:   "refuse", destroy: "fresh destroy", previewed: reconciliation.Destroy, next: "none", reopens: true, shown: planning("destroy"),
 				},
 				"a completed apply under an input that removes an object": {
 					arrange: changedOver(diffState(servers("v1", "alpha", "bravo")...)),
-					apply:   "refuse", destroy: "fresh destroy", previewed: reconciliation.Destroy, next: "none",
+					apply:   "refuse", destroy: "fresh destroy", previewed: reconciliation.Destroy, next: "none", reopens: true, shown: planning("destroy"),
 				},
 				"a completed apply under an input whose bytes changed but declare the same objects": {
 					arrange: changedOver(diffState(servers("v1", "alpha", "bravo", "charlie")...)),
-					apply:   "refuse", destroy: "fresh destroy", previewed: reconciliation.Destroy, next: "none",
+					apply:   "refuse", destroy: "fresh destroy", previewed: reconciliation.Destroy, next: "none", reopens: true, shown: planning("destroy"),
 				},
 				"a completed apply under an input that no longer compiles": {
 					arrange: changedOver(nil),
-					apply:   "refuse", destroy: "fresh destroy", previewed: reconciliation.Destroy, next: "none",
+					apply:   "refuse", destroy: "fresh destroy", previewed: reconciliation.Destroy, next: "none", reopens: true, shown: planning("destroy"),
 				},
 				"a completed apply under another build": {
 					arrange: func(t *testing.T, h *harness) {
 						changedOver(diffState(servers("v1", "alpha", "bravo")...))(t, h)
 						otherBuilds()[0].switchTo(h)
 					},
-					apply: "refuse", destroy: "fresh destroy", previewed: reconciliation.Destroy, next: "none",
+					apply: "refuse", destroy: "fresh destroy", previewed: reconciliation.Destroy, next: "none", reopens: true, shown: planning("destroy"),
 				},
 				"a completed apply that lost a block record": {
 					arrange: func(t *testing.T, h *harness) {
 						lose(h, path.Join(completeApply(t, h), "blocks", "charlie")+"/")
 					},
-					apply: "refuse", destroy: "fresh destroy", previewed: reconciliation.Destroy, next: "none",
+					apply: "refuse", destroy: "fresh destroy", previewed: reconciliation.Destroy, next: "none", reopens: true, shown: planning("destroy"),
 				},
 			},
 		},
@@ -223,14 +241,14 @@ func stateMachineRows() map[string]stateMachineRow {
 						failedChainedRemoval(t, h)
 						rewriteState(t, h, path.Join(currentOperation(t, h), "operation.json"), string(reconciliation.OperationRunning))
 					},
-					apply: "refuse", destroy: "continue", previewed: reconciliation.Destroy, next: "continue-destroy",
+					apply: "refuse", destroy: "continue", previewed: reconciliation.Destroy, next: "continue-destroy", reopens: true, shown: continuing("continue-destroy"),
 				},
 			},
 		},
 		"destroy failed": {
 			transition: "start a fresh destroy of what it has not removed",
 			cases: map[string]stateMachineCase{
-				"a removal whose block failed": {arrange: failedChainedRemoval, apply: "refuse", destroy: "fresh destroy", previewed: reconciliation.Destroy, next: "destroy"},
+				"a removal whose block failed": {arrange: failedChainedRemoval, apply: "refuse", destroy: "fresh destroy", previewed: reconciliation.Destroy, next: "destroy", reopens: true, shown: planning("destroy")},
 			},
 		},
 		"destroy unknown": {
@@ -245,7 +263,7 @@ func stateMachineRows() map[string]stateMachineRow {
 						}
 						h.capability.outcomes = nil
 					},
-					apply: "refuse", destroy: "continue", previewed: reconciliation.Destroy, next: "resolve",
+					apply: "refuse", destroy: "continue", previewed: reconciliation.Destroy, next: "resolve", reopens: true, shown: continuing("resolve"),
 				},
 			},
 		},
@@ -330,6 +348,10 @@ func checkStateMachine(t *testing.T, lines []string) {
 			if next := currentNextAction(t, h); next != test.next {
 				t.Errorf("row %q, %s: the next action is %q, want %q", row[0], name, next, test.next)
 			}
+			if reopened := currentFrozenReopen(t, h); (reopened.binding != "") != test.reopens || reopened.finalizes != test.finalizes {
+				t.Errorf("row %q, %s: the frozen reopen is %+v, want reopens %v and finalizes %v", row[0], name, reopened, test.reopens, test.finalizes)
+			}
+			requirePreviewShape(t, h, row[0]+", "+name, test)
 		}
 	}
 	for state := range rows {
@@ -359,22 +381,77 @@ func decidedAs(t *testing.T, h *harness, verb reconciliation.Verb) (string, reco
 		decided, chosen, err = h.service.decideAs(ctx, view, verb, reconciliation.Selection{})
 		return err
 	})
-	switch {
-	case err != nil:
+	if err != nil {
 		if code := firstCode(err); code != "lifecycle.state" {
 			t.Fatalf("the %s refuses %s: %v", verb, code, err)
 		}
 		return "refuse", chosen
-	case decided.finalize:
-		return "finalize", chosen
-	case decided.unclaimed:
-		return "release", chosen
-	case decided.noop:
-		return "settle", chosen
-	case decided.fresh:
-		return "fresh " + string(decided.verb), chosen
 	}
-	return "continue", chosen
+	return decisionNamed(decided), chosen
+}
+
+func decisionNamed(decided transition) string {
+	switch {
+	case decided.finalize:
+		return "finalize"
+	case decided.unclaimed:
+		return "release"
+	case decided.noop:
+		return "settle"
+	case decided.fresh:
+		return "fresh " + string(decided.verb)
+	}
+	return "continue"
+}
+
+func currentFrozenReopen(t *testing.T, h *harness) frozenReopen {
+	t.Helper()
+	ctx := context.Background()
+	var reopened frozenReopen
+	err := h.workspace.ReadLifecycle(ctx, testContextName, func(view View) error {
+		var err error
+		reopened, err = frozenReopenOf(ctx, h.service.store(view))
+		return err
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return reopened
+}
+
+func requirePreviewShape(t *testing.T, h *harness, where string, test stateMachineCase) {
+	t.Helper()
+	ctx := context.Background()
+	var result *PlanResult
+	var after transition
+	var chosen reconciliation.Verb
+	var refusal error
+	err := h.workspace.ReadLifecycle(ctx, testContextName, func(view View) error {
+		if _, chosen, refusal = h.service.decideAs(ctx, view, "", reconciliation.Selection{}); refusal != nil {
+			return nil
+		}
+		result, after, _, refusal = h.service.preview(ctx, view, reconciliation.Selection{})
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if refusal != nil {
+		if code := firstCode(refusal); !test.shown.refused || code != "lifecycle.state" {
+			t.Errorf("%s: the preview refuses %s (%v), want %+v", where, code, refusal, test.shown)
+		}
+		return
+	}
+	got := previewShape{continuation: result.Continuation, finalizes: result.Finalizes, next: result.Receipt.Next}
+	if test.shown.refused || got != test.shown {
+		t.Errorf("%s: the preview shows %+v, want %+v", where, got, test.shown)
+	}
+	if result.Verb != string(chosen) || chosen != test.previewed {
+		t.Errorf("%s: the preview is of the %s, which decided as the %s, want the %s", where, result.Verb, chosen, test.previewed)
+	}
+	if want := decisionOver(t, h, test.previewed); result.Finalizes && decisionNamed(after) != "settle" || !result.Finalizes && decisionNamed(after) != want {
+		t.Errorf("%s: the preview returns the decision %q after finalization, beside the %s's %q", where, decisionNamed(after), test.previewed, want)
+	}
 }
 
 // currentNextAction is what the current operation's records call for, or empty
