@@ -238,7 +238,7 @@ def display_name(value):
     """Text of at most 256 bytes without control characters, as admission admits, and not beginning with `-`, which radosgw-admin's
     argument parsing would take for an option."""
     return (isinstance(value, str) and 0 < len(value.encode("utf-8")) <= MAX_DISPLAY and not value.startswith("-")
-            and not any(unicodedata.category(c) == "Cc" or c in "  " for c in value))
+            and not any(unicodedata.category(c) == "Cc" or c in "\u2028\u2029" for c in value))
 
 
 def visible(key):

@@ -155,6 +155,18 @@ def host_runtime(request, tmp_path, podman, clock=None, **options):
     return runtime.HostRuntime(request, "node-1", podman, clock=clock.now, pause=clock.pause, markers=markers, **options), markers, clock
 
 
+def filesystem_host_runtime(request, tmp_path, podman):
+    parent = tmp_path / "journal"
+    parent.mkdir(mode=0o700)
+    markers = ceph_native.Markers(request, root=str(parent))
+    Path(markers.path).mkdir(mode=0o700)
+    markers.write("owner.json", ceph_native.marker_identity(request))
+    markers.write("scope.json", runtime.scope(request, "node-1"))
+    clock = Clock()
+    worker = runtime.HostRuntime(request, "node-1", podman, clock=clock.now, pause=clock.pause, markers=markers)
+    return worker, markers
+
+
 BUNDLE = "-----BEGIN CERTIFICATE-----\nREGISTRY-BUNDLE-SENTINEL\n-----END CERTIFICATE-----\n"
 
 
@@ -180,6 +192,143 @@ def test_a_pull_counts_only_once_inspection_proves_the_digest_and_platform(reque
     with worker.journal() as durable:
         assert worker.pull(durable, registry(request_value), 4285) is False
     assert pull_argv_count(podman) == 1
+
+
+def test_disk_backed_first_pull_replays_without_deleting_attempt_records(request_value, tmp_path):
+    podman = Podman(request_value, ["ok"])
+    worker, markers = filesystem_host_runtime(request_value, tmp_path, podman)
+    with worker.journal() as durable:
+        assert worker.pull(durable, registry(request_value), 4285) is True
+    before = {path.name: path.read_bytes() for path in Path(markers.path).iterdir()}
+    residue = Path(markers.path, "pull-killed")
+    residue.mkdir(mode=0o700)
+    (residue / "auth.json").write_bytes(b"private fixture residue")
+    with worker.journal() as durable:
+        assert worker.pull(durable, "unused synthetic input", 4285) is False
+    assert not residue.exists() and pull_argv_count(podman) == 1
+    assert before == {path.name: path.read_bytes() for path in Path(markers.path).iterdir()}
+
+
+@pytest.mark.parametrize("state", ["cached", "uncompleted", "exhausted"])
+def test_disk_backed_pull_continuation_preserves_validated_records_and_cleans_legacy_scratch(request_value, tmp_path, state):
+    podman = Podman(request_value, ["ok"] if state == "exhausted" else [], present=state != "exhausted")
+    worker, markers = filesystem_host_runtime(request_value, tmp_path, podman)
+    count = runtime.PULL_ATTEMPTS if state == "exhausted" else 1
+    for attempt in range(1, count + 1):
+        markers.write("pull-attempt-%d.json" % attempt, {"scope": worker.scope(), "attempt": attempt})
+    if state == "cached":
+        markers.write("pulled.json", {"scope": worker.scope(), "imageID": IMAGE_ID})
+    before = {path.name: path.read_bytes() for path in Path(markers.path).iterdir()}
+    residue = Path(markers.path, "pull-killed")
+    residue.mkdir(mode=0o700)
+    (residue / "auth.json").write_bytes(b"private fixture residue")
+    with worker.journal() as durable:
+        assert worker.pull(durable, registry(request_value) if state == "exhausted" else "unused synthetic input", 4285) is (state != "cached")
+    assert not residue.exists() and pull_argv_count(podman) == (1 if state == "exhausted" else 0)
+    assert all(Path(markers.path, name).read_bytes() == data for name, data in before.items())
+    assert markers.read("pulled.json") == {"scope": worker.scope(), "imageID": IMAGE_ID}
+
+
+@pytest.mark.parametrize("position", ["gapped", "out-of-range"])
+@pytest.mark.parametrize("kind", ["regular", "directory", "symlink"])
+def test_unvalidated_reserved_pull_entries_refuse_before_any_scratch_removal(request_value, tmp_path, position, kind):
+    calls = []
+    worker, markers = filesystem_host_runtime(request_value, tmp_path, lambda *args, **kwargs: calls.append(args))
+    if position == "out-of-range":
+        for attempt in range(1, runtime.PULL_ATTEMPTS + 1):
+            markers.write("pull-attempt-%d.json" % attempt, {"scope": worker.scope(), "attempt": attempt})
+    residue = Path(markers.path, "pull-killed")
+    residue.mkdir(mode=0o700)
+    (residue / "auth.json").write_bytes(b"retained fixture residue")
+    outside = tmp_path / "outside"
+    outside.write_bytes(b"outside fixture")
+    attempt = 2 if position == "gapped" else runtime.PULL_ATTEMPTS + 1
+    entry = Path(markers.path, "pull-attempt-%d.json" % attempt)
+    if kind == "regular":
+        markers.write(entry.name, {"scope": worker.scope(), "attempt": attempt})
+    elif kind == "directory":
+        entry.mkdir(mode=0o700)
+        (entry / "payload").write_bytes(b"directory fixture")
+    else:
+        entry.symlink_to(outside)
+    with pytest.raises(ceph_native.Refusal, match="^ownership$"):
+        with worker.journal() as durable:
+            worker.pull(durable, "unused synthetic input", 4285)
+    assert calls == [] and (residue / "auth.json").read_bytes() == b"retained fixture residue"
+    assert outside.read_bytes() == b"outside fixture"
+    if kind == "regular":
+        assert markers.read(entry.name) == {"scope": worker.scope(), "attempt": attempt}
+    elif kind == "directory":
+        assert (entry / "payload").read_bytes() == b"directory fixture"
+    else:
+        assert entry.is_symlink() and entry.readlink() == outside
+
+
+@pytest.mark.parametrize("kind", ["malformed", "foreign", "directory", "symlink"])
+def test_invalid_first_disk_backed_attempt_is_never_exempted_or_removed(request_value, tmp_path, kind):
+    calls = []
+    worker, markers = filesystem_host_runtime(request_value, tmp_path, lambda *args, **kwargs: calls.append(args))
+    residue = Path(markers.path, "pull-killed")
+    residue.mkdir(mode=0o700)
+    (residue / "auth.json").write_bytes(b"retained fixture residue")
+    entry = Path(markers.path, "pull-attempt-1.json")
+    outside = tmp_path / "outside"
+    outside.write_bytes(b"outside fixture")
+    if kind == "malformed":
+        ceph_native.private_write(str(entry), b"{invalid")
+    elif kind == "foreign":
+        markers.write(entry.name, {"scope": runtime.scope(dict(request_value, owner="apply-other"), "node-1"), "attempt": 1})
+    elif kind == "directory":
+        entry.mkdir(mode=0o700)
+        (entry / "payload").write_bytes(b"directory fixture")
+    else:
+        entry.symlink_to(outside)
+    before = entry.read_bytes() if kind in ("malformed", "foreign") else None
+    expected = "image-pull" if kind == "foreign" else "ownership"
+    with pytest.raises(ceph_native.Refusal, match="^" + expected + "$"):
+        with worker.journal() as durable:
+            worker.pull(durable, "unused synthetic input", 4285)
+    assert calls == [] and (residue / "auth.json").read_bytes() == b"retained fixture residue"
+    assert outside.read_bytes() == b"outside fixture"
+    if kind in ("malformed", "foreign"):
+        assert entry.read_bytes() == before
+    elif kind == "directory":
+        assert (entry / "payload").read_bytes() == b"directory fixture"
+    else:
+        assert entry.is_symlink() and entry.readlink() == outside
+
+
+@pytest.mark.parametrize("kind", ["regular", "symlink", "foreign-directory"])
+def test_unknown_scratch_candidates_still_refuse_without_removing_them(request_value, tmp_path, monkeypatch, kind):
+    calls = []
+    worker, markers = filesystem_host_runtime(request_value, tmp_path, lambda *args, **kwargs: calls.append(args))
+    outside = tmp_path / "outside"
+    outside.write_bytes(b"outside fixture")
+    entry = Path(markers.path, "pull-unexpected")
+    if kind == "regular":
+        entry.write_bytes(b"unexpected fixture")
+    elif kind == "symlink":
+        entry.symlink_to(outside)
+    else:
+        entry.mkdir(mode=0o700)
+        (entry / "payload").write_bytes(b"directory fixture")
+        original = os.stat
+
+        def foreign_owner(path, *args, **kwargs):
+            info = original(path, *args, **kwargs)
+            return SimpleNamespace(st_mode=info.st_mode, st_uid=os.geteuid() + 1) if path == entry.name and "dir_fd" in kwargs else info
+
+        monkeypatch.setattr(runtime.os, "stat", foreign_owner)
+    with pytest.raises(ceph_native.Refusal, match="^ownership$"):
+        with worker.journal() as durable:
+            worker.pull(durable, "unused synthetic input", 4285)
+    assert calls == [] and outside.read_bytes() == b"outside fixture"
+    if kind == "regular":
+        assert entry.read_bytes() == b"unexpected fixture"
+    elif kind == "foreign-directory":
+        assert (entry / "payload").read_bytes() == b"directory fixture"
+    else:
+        assert entry.is_symlink() and entry.readlink() == outside
 
 
 @pytest.mark.parametrize("outcome", ["ok", "fail"])
@@ -674,7 +823,18 @@ def test_facts_come_from_two_agreeing_probes_as_root_and_as_the_image_account(re
     assert hashlib.sha256(runtime.decode_payload(facts["cephadm"])).hexdigest() == authenticated
 
 
+def test_image_facts_keep_a_generated_policy_with_gssapi_key_exchange_disabled(request_value, tmp_path):
+    policy = ("Ciphers aes128-ctr\nMACs hmac-sha2-256\nGSSAPIKeyExchange no\nKexAlgorithms ecdh-sha2-nistp384\n"
+              "PubkeyAcceptedAlgorithms rsa-sha2-512\nCASignatureAlgorithms rsa-sha2-256\nRequiredRSASize 2048\n")
+    engine = Engine([probe_output(cryptoPolicy=policy), probe_output(cryptoPolicy=policy)])
+    worker, unused = contained_worker(request_value, tmp_path, engine)
+    facts = worker.facts(IMAGE_ID)
+    assert facts["cryptoPolicy"] == policy and runtime.crypto_policy(facts["cryptoPolicy"]) == policy
+    assert len(engine.started) == len(engine.removed) == 2
+
+
 @pytest.mark.parametrize("changes", [{"cephUID": 0}, {"cephGID": 168}, {"machine": "aarch64"}, {"cryptoPolicy": "Include /etc/foreign\n"},
+                                     {"cryptoPolicy": "GSSAPIKeyExchange yes\n"},
                                      {"cephadm": base64.b64encode(b"foreign cephadm").decode()}, {"version": "ceph-fixture-image-v1"}])
 def test_a_contradicting_probe_refuses(request_value, tmp_path, authenticated, changes):
     del authenticated

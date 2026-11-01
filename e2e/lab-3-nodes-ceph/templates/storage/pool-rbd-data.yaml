@@ -7,11 +7,9 @@ metadata:
 spec:
   clusterRef: ceph-e2e
   role: rbd
-
-  replicated:
-    size: 2
-    minSize: 2
+  placementPolicyRef: ssd-hosts
 
   autoscale:
     mode: 'on'
+    pgNumMax: 16
 {{- end }}

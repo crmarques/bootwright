@@ -388,11 +388,39 @@ def enrollment(native):
              "failure": ceph_native.NativeFailure("native-command", "synthetic image", b"synthetic license refusal")}
     native.license_accepted = lambda: state["accepted"]
     native.verify_transport_bundle = lambda: events.append("transport-proof")
+    store = state["store"] = {"persisted": "65536", "write": str(ceph_native.LICENSE_STORE_FLOOR), "lag": 0,
+                              "mons": [{"name": "node-1", "rank": 0}], "quorum": [0]}
+    option = ceph_native.LICENSE_STORE_OPTION
+
+    def text(*args):
+        assert args == ("config", "get", "mon", option)
+        events.append("read-limit")
+        return store["persisted"].encode() + b"\n"
+
+    def capacity(*args, **kwargs):
+        if args == ("config", "set", "mon", option, str(ceph_native.LICENSE_STORE_FLOOR)):
+            assert kwargs == {"json_result": False}
+            events.append("raise-limit")
+            store["persisted"] = store["write"]
+            return b""
+        if args == ("mon", "dump"):
+            return {"mons": copy.deepcopy(store["mons"]), "quorum": list(store["quorum"])}
+        if args[:1] == ("tell",):
+            assert args[2:] == ("config", "get", option) and kwargs == {}
+            events.append(args[1])
+            if store["lag"]:
+                store["lag"] -= 1
+                return {option: "65536"}
+            return {option: store["persisted"]}
+        return ceph(*args, **kwargs)
+
+    native.ceph, native.ceph_text = capacity, text
 
     def effect(*args, **kwargs):
         if args[:2] != ("orch", "accept-license"):
             return ceph(*args, **kwargs)
         assert args == ("orch", "accept-license", "--image", native.request["image"]) and kwargs == {"json_result": False}
+        assert ceph_native.store_bound(store["persisted"]) >= ceph_native.LICENSE_STORE_FLOOR
         assert "transport-proof" in events and "config" in events
         assert native.markers.read("bootstrap-enrollment.json") == staging.recovery_scope(native.request)
         assert len(inventory) == len(native.request["hosts"])
@@ -471,6 +499,108 @@ def test_a_manager_without_the_license_contract_enrolls_without_accepting_a_lice
     assert len(inventory) == 3 and "accept-license" not in events
     assert finish_enrollment(native) == {"changed": False} and "accept-license" not in events
     assert native.selection.applied == {"ceph-mgr-without-license-contract"}
+
+
+def test_the_mon_entry_bound_is_raised_and_proved_on_every_quorum_mon_before_acceptance(native):
+    state, unused, events = enrollment(native)
+    state["store"]["mons"] = [{"name": "node-1", "rank": 0}, {"name": "node-2", "rank": 1}, {"name": "node-3", "rank": 2}]
+    state["store"]["quorum"] = [0, 2]
+    assert finish_enrollment(native) == {"changed": True} and state["accepted"]
+    order = [event for event in events if event in ("read-limit", "raise-limit", "mon.node-1", "mon.node-2", "mon.node-3", "accept-license")]
+    assert order == ["read-limit", "raise-limit", "read-limit", "mon.node-1", "mon.node-3", "accept-license"]
+    assert state["store"]["persisted"] == str(1 << 20) == str(ceph_native.LICENSE_STORE_FLOOR)
+    assert finish_enrollment(native) == {"changed": False} and events.count("raise-limit") == 1 and events.count("accept-license") == 1
+
+
+def test_a_lost_acceptance_record_is_accepted_again_once_the_bound_holds(native):
+    state, unused, events = enrollment(native)
+    state["publish"] = False
+    with pytest.raises(ceph_native.Refusal, match="^not-ready$"):
+        finish_enrollment(native)
+    assert events.count("raise-limit") == 1 and events.count("accept-license") == 1
+    state["publish"] = True
+    assert finish_enrollment(native) == {"changed": True} and state["accepted"]
+    assert events.count("raise-limit") == 1 and events.count("accept-license") == 2
+
+
+@pytest.mark.parametrize("held", [str(ceph_native.LICENSE_STORE_FLOOR), str(4 << 20)], ids=["floor", "larger"])
+def test_a_bound_already_at_or_above_the_floor_is_never_written_or_lowered(native, held):
+    state, unused, events = enrollment(native)
+    state["store"]["persisted"] = held
+    assert finish_enrollment(native) == {"changed": True} and state["accepted"]
+    assert "raise-limit" not in events and state["store"]["persisted"] == held
+
+
+def test_a_running_mon_that_lags_the_persisted_bound_is_awaited(native):
+    state, unused, events = enrollment(native)
+    now = manager_clock(native)
+    state["store"]["lag"] = 2
+    assert finish_enrollment(native) == {"changed": True} and state["accepted"]
+    assert events.count("mon.node-1") == 3 and now[0] == 2 * ceph_native.MANAGER_INTERVAL
+
+
+def test_a_running_mon_that_never_holds_the_bound_refuses_before_acceptance(native):
+    state, unused, events = enrollment(native)
+    manager_clock(native)
+    state["store"]["lag"] = 10 ** 6
+    with pytest.raises(ceph_native.Refusal, match="^not-ready$"):
+        finish_enrollment(native)
+    assert "accept-license" not in events and not state["accepted"]
+
+
+@pytest.mark.parametrize("write,reason", [("65536", "not-ready"), ("1Mi", "native-output"), ("", "native-output")],
+                         ids=["unchanged", "unit-suffix", "empty"])
+def test_an_unproved_persisted_bound_refuses_before_acceptance(native, write, reason):
+    state, unused, events = enrollment(native)
+    state["store"]["write"] = write
+    with pytest.raises(ceph_native.Refusal, match="^" + reason + "$"):
+        finish_enrollment(native)
+    assert "accept-license" not in events and not state["accepted"]
+
+
+@pytest.mark.parametrize("dump", [{"mons": [], "quorum": []}, {"mons": [{"name": "node-1", "rank": 0}], "quorum": []},
+                                  {"mons": [{"name": "../x", "rank": 0}], "quorum": [0]}, {"mons": [{"name": "node-1", "rank": "0"}], "quorum": [0]},
+                                  {"mons": [{"name": "node-1", "rank": 0}]}],
+                         ids=["no-mons", "no-quorum", "unsafe-name", "string-rank", "no-quorum-list"])
+def test_a_malformed_or_quorumless_mon_map_refuses_before_acceptance(native, dump):
+    state, unused, events = enrollment(native)
+    capacity = native.ceph
+    native.ceph = lambda *args, **kwargs: copy.deepcopy(dump) if args == ("mon", "dump") else capacity(*args, **kwargs)
+    with pytest.raises(ceph_native.Refusal, match="^(native-output|not-ready)$"):
+        finish_enrollment(native)
+    assert "accept-license" not in events and not any(event.startswith("mon.") for event in events)
+
+
+@pytest.mark.parametrize("reply", [{"mon_max_pg_per_osd": "1048576"}, {ceph_native.LICENSE_STORE_OPTION: 1048576},
+                                   {ceph_native.LICENSE_STORE_OPTION: "1048576", "extra": "1"}, ["1048576"]],
+                         ids=["other-option", "number", "extra-key", "list"])
+def test_a_malformed_running_mon_reply_refuses_before_acceptance(native, reply):
+    state, unused, events = enrollment(native)
+    capacity = native.ceph
+    native.ceph = lambda *args, **kwargs: copy.deepcopy(reply) if args[:1] == ("tell",) else capacity(*args, **kwargs)
+    with pytest.raises(ceph_native.Refusal, match="^native-output$"):
+        finish_enrollment(native)
+    assert "accept-license" not in events and not state["accepted"]
+
+
+def test_the_running_mon_wait_ends_at_the_phase_horizon(native):
+    state, unused, events = enrollment(native)
+    now = manager_clock(native)
+    native.horizon = 3 * ceph_native.MANAGER_INTERVAL
+    state["store"]["lag"] = 10 ** 6
+    with pytest.raises(ceph_native.Refusal, match="^not-ready$"):
+        finish_enrollment(native)
+    assert now[0] <= native.horizon and "accept-license" not in events
+
+
+def test_an_accepted_license_or_a_manager_without_the_contract_never_touches_the_bound(native):
+    state, unused, events = enrollment(native)
+    state["accepted"] = True
+    assert finish_enrollment(native) == {"changed": True}
+    native.selection = fixtures.built(fixtures.OLD)
+    state["accepted"] = False
+    assert finish_enrollment(native) == {"changed": False}
+    assert not {"read-limit", "raise-limit"} & set(events) and not any(event.startswith("mon.") for event in events)
 
 
 @pytest.mark.parametrize("image", [fixtures.CURRENT, "unanchored"])

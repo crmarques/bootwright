@@ -88,7 +88,8 @@ class Monitor:
 
     def run(self, argv, data=b"", timeout=60):
         del timeout
-        command = tuple(argv[argv.index("--format") + 2:])
+        formatted = "--format" in argv
+        command = tuple(argv[argv.index("--format") + 2:]) if formatted else tuple(argv[argv.index("--keyring") + 2:])
         self.log.append(command)
         if command == ("fsid",):
             return 0, json.dumps({"fsid": FSID}).encode()
@@ -97,7 +98,8 @@ class Monitor:
         if command == ("nfs", "cluster", "ls"):
             return 0, json.dumps(self.clusters).encode()
         if command[:3] == ("fs", "subvolume", "getpath"):
-            return 0, self.getpath.encode()
+            # The CLI prints a blank line before a text answer under --format json, as a live 20.2.1 cluster showed.
+            return 0, (("\n" if formatted else "") + self.getpath).encode()
         if command[:3] == ("nfs", "export", "info"):
             assert command[3] == "shares"
             return 0, json.dumps(self.exports.get(command[4], {})).encode()

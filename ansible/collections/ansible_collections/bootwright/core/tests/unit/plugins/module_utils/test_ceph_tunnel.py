@@ -148,8 +148,28 @@ def test_unknown_proxy_selector_cannot_connect(material, selector):
 
 @pytest.mark.parametrize("policy", ["Include /tmp/config", "ProxyCommand id", "Match exec id", "Host *", "Ciphers aes256-gcm@openssh.com;id"])
 def test_crypto_policy_cannot_select_connection_or_process(policy):
-    with pytest.raises(ceph_tunnel.TunnelRefusal):
-        ceph_tunnel.outer_configuration(policy)
+    for prefix in ("", "GSSAPIKeyExchange no\n"):
+        with pytest.raises(ceph_tunnel.TunnelRefusal):
+            ceph_tunnel.outer_configuration(prefix + policy)
+
+
+@pytest.mark.parametrize("policy,normalized", [
+    ("GSSAPIKeyExchange no", "GSSAPIKeyExchange no\n"),
+    ("gssapikeyexchange NO\n", "gssapikeyexchange NO\n"),
+    ("GsSaPiKeYeXcHaNgE = No # generated\n", "GsSaPiKeYeXcHaNgE = No\n"),
+    ("  GSSAPIKeyExchange=no  \n", "GSSAPIKeyExchange=no\n"),
+    ("\tGSSAPIKeyExchange\tno\t\n", "GSSAPIKeyExchange\tno\n"),
+])
+def test_crypto_policy_preserves_only_the_gssapi_key_exchange_disabling_form(policy, normalized):
+    assert ceph_tunnel.crypto_policy(policy) == normalized
+    assert "gssapikeyexchange" not in ceph_tunnel.CRYPTO_DIRECTIVES
+
+
+@pytest.mark.parametrize("value", ["yes", "YES", "off", "0", "none", '"no"', "'no'", "", "no extra"])
+def test_crypto_policy_cannot_enable_or_extend_gssapi_key_exchange_even_after_no(value):
+    for prefix in ("", "GSSAPIKeyExchange no\n"):
+        with pytest.raises(ceph_tunnel.TunnelRefusal):
+            ceph_tunnel.crypto_policy(prefix + "GSSAPIKeyExchange " + value + "\n")
 
 
 def test_authorization_only_allows_loopback_forward_and_native_commands():
@@ -315,6 +335,23 @@ def test_open_ssh_evaluates_isolated_policy_without_connecting(tmp_path, materia
     assert values["hostkeyalgorithms"] == "ssh-ed25519"
     assert "proxycommand" not in values
     assert "proxyjump" not in values
+
+
+def test_generated_policy_round_trip_keeps_gssapi_key_exchange_disabled_in_both_clients(tmp_path, tunnel_request, material):
+    policy = ("Ciphers aes128-ctr\nMACs hmac-sha2-256\nGSSAPIKeyExchange no\nKexAlgorithms ecdh-sha2-nistp384\n"
+              "PubkeyAcceptedAlgorithms rsa-sha2-512\nCASignatureAlgorithms rsa-sha2-256\nRequiredRSASize 2048\n")
+    files = ceph_tunnel.bundle(tunnel_request, b"private fixture", material["known_hosts"], b"fixed fixture source\n", policy, public=key())
+    root = tmp_path / "transport"
+    publish(root, files)
+    assert ceph_tunnel.verify_bundle(str(root), expected=files) == manifest(files)
+    assert manifest(files)["cryptoPolicy"] == policy and files["outer_config"].endswith(policy.encode())
+    for name in ("outer_config", "native_config"):
+        result = subprocess.run(["/usr/bin/ssh", "-G", "-F", str(root / name), "192.0.2.1"],
+                                env={"PATH": "/usr/bin:/bin", "LC_ALL": "C"}, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
+                                timeout=10, check=False, text=True)
+        assert result.returncode == 0
+        values = dict(line.split(None, 1) for line in result.stdout.splitlines() if " " in line)
+        assert values["gssapikeyexchange"] == "no"
 
 
 @pytest.mark.parametrize("address,selector", [("192.0.2.1", "0"), ("2001:db8::2", "1"), ("192.0.2.3", "reject")])

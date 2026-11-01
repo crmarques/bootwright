@@ -7,11 +7,14 @@ from __future__ import annotations
 
 import hashlib
 import configparser
+import contextlib
 import bz2
 import gzip
+import http.client
 import os
 from pathlib import Path, PurePosixPath
 import re
+import socket
 import ssl
 import time
 import urllib.error
@@ -156,6 +159,41 @@ class NoRedirect(urllib.request.HTTPRedirectHandler):
         raise ceph_native.Refusal("packages")
 
 
+TRANSPORT_ATTEMPTS = 3
+TRANSPORT_PAUSE = 2
+# socket.timeout is not a TimeoutError on the managed-host floor interpreter.
+TRANSPORT_FAULTS = (ConnectionError, TimeoutError, socket.timeout, http.client.IncompleteRead, ssl.SSLEOFError)
+TRANSPORT_LOSS = TRANSPORT_FAULTS + (urllib.error.URLError,)
+
+
+def transport_loss(error):
+    """Only a connection lost or timed out in transport is retried; TLS verification, HTTP status and content refusals are not."""
+    if isinstance(error, urllib.error.HTTPError):
+        return False
+    if isinstance(error, urllib.error.URLError):
+        return isinstance(error.reason, TRANSPORT_FAULTS)
+    return isinstance(error, TRANSPORT_FAULTS)
+
+
+class AcquisitionLoss(Exception):
+    """A selected artifact whose connection was lost in transport after its bounded attempts; it names only the artifact and the cause."""
+
+    def __init__(self, artifact, cause):
+        super().__init__(artifact)
+        self.artifact, self.cause = artifact, cause
+
+
+@contextlib.contextmanager
+def artifact(coordinate):
+    """Name the selected artifact of a lost connection, keeping the original exception as its cause and its traceback as its site."""
+    try:
+        yield
+    except TRANSPORT_LOSS as error:
+        if not transport_loss(error):
+            raise
+        raise AcquisitionLoss(coordinate, str(error)).with_traceback(error.__traceback__) from error
+
+
 class RepositoryTrustFailure(Exception):
     """A package repository connection its TLS anchor did not verify; the message names only the repository and the anchor."""
 
@@ -201,14 +239,29 @@ class Acquisition:
         safe_url(url)
         prefix = self.source["url"].rstrip("/") + "/"
         ceph_native.require(url.startswith(prefix) or url.startswith(self.repository_base + "/") or url == self.repository_key, "packages")
-        remaining = self.deadline - time.monotonic()
-        ceph_native.require(remaining > 0, "package-timeout")
         if url == self.repository_key:
             opener, origin = self.repository_opener, ("the publisher key " + self.repository_key, self.anchor)
         elif url.startswith(prefix):
             opener, origin = self.local, None
         else:
             opener, origin = self.repository_opener, ("the package repository " + self.repository_base, self.anchor)
+        start, total, attempt = output.tell(), self.total, 1
+        while True:
+            try:
+                return self.attempt(url, opener, origin, output, limit, expected, size)
+            except TRANSPORT_LOSS as error:
+                pause = TRANSPORT_PAUSE * attempt
+                if attempt >= TRANSPORT_ATTEMPTS or not transport_loss(error) or self.deadline - time.monotonic() <= pause:
+                    raise
+            output.seek(start)
+            output.truncate()
+            self.total = total
+            time.sleep(pause)
+            attempt += 1
+
+    def attempt(self, url, opener, origin, output, limit, expected, size):
+        remaining = self.deadline - time.monotonic()
+        ceph_native.require(remaining > 0, "package-timeout")
         request = urllib.request.Request(url, headers={"Accept-Encoding": "identity"})
         hasher, count = hashlib.sha256(), 0
         with self.open(opener, request, min(60, remaining), origin) as response:
@@ -252,6 +305,10 @@ class Acquisition:
             return self.stream(url, output, limit, expected, size)
 
     def repository(self, scratch, identifier, base, signer):
+        with artifact("repository metadata " + identifier):
+            return self.metadata(scratch, identifier, base, signer)
+
+    def metadata(self, scratch, identifier, base, signer):
         data = self.bytes(child_url(base, "repodata/repomd.xml"), 1 << 20)
         ceph_native.require(b"<!DOCTYPE" not in data.upper() and b"<!ENTITY" not in data.upper(), "packages")
         MetadataEncoding().feed(data, final=True)
@@ -326,9 +383,10 @@ class Acquisition:
         self.expanded += count
 
     def repositories(self, scratch):
-        identity = self.bytes(child_url(self.source["url"], ".bootwright-tree-identity"), 65)
-        ceph_native.require(identity.decode("ascii").strip() == self.source["mediaSHA256"], "packages")
-        metadata = self.bytes(child_url(self.source["url"], ".treeinfo"), 1 << 20)
+        with artifact("installation tree metadata"):
+            identity = self.bytes(child_url(self.source["url"], ".bootwright-tree-identity"), 65)
+            ceph_native.require(identity.decode("ascii").strip() == self.source["mediaSHA256"], "packages")
+            metadata = self.bytes(child_url(self.source["url"], ".treeinfo"), 1 << 20)
         tree = configparser.ConfigParser(interpolation=None, strict=True)
         tree.read_string(metadata.decode("utf-8"))
         ceph_native.require(tree.get("general", "family") == "Red Hat Enterprise Linux" and bool(tree.get("general", "version"))
@@ -355,11 +413,14 @@ class Acquisition:
                 ceph_native.require(package["signer"] == native_signatures.IBM_CEPH_SIGNER, "packages")
             ceph_native.require(re.fullmatch(r"native-[0-9a-f]{32}", source["id"]) is not None, "packages")
             path = str(Path(scratch, source["id"] + ".rpm"))
-            self.file(source["url"], path, 256 << 20, source["sha256"], source["bytes"])
+            epoch = str(package["epoch"]) + ":" if package["epoch"] else ""
+            with artifact("RPM %s-%s%s-%s.%s" % (package["name"], epoch, package["version"], package["release"], package["architecture"])):
+                self.file(source["url"], path, 256 << 20, source["sha256"], source["bytes"])
             result[source["id"]] = path
         return result
 
     def publisher_key(self, scratch):
         path = str(Path(scratch, "ibm-ceph-publisher.asc"))
-        self.file(self.repository_key, path, 1 << 20)
+        with artifact("IBM Ceph publisher key"):
+            self.file(self.repository_key, path, 1 << 20)
         return {native_signatures.IBM_CEPH_SIGNER: path}

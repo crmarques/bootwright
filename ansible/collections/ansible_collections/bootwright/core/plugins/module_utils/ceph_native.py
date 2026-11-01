@@ -102,6 +102,13 @@ MANAGER_WAIT = 300
 MANAGER_INTERVAL = 5
 MANAGER_HORIZON = 480
 MANAGER_FAILURES = ("native-command", "native-timeout", "native-output")
+# The provider's serialized license record exceeds the MON's 64 KiB default config-key entry bound; the store refuses it
+# while acceptance still reports success.
+# util-linux draws lsblk's device tree in the NAME column: without it, JSON output is a flat list whose disks carry no
+# children, which hides every partition, logical volume and dm-crypt mapping beneath them.
+DEVICE_TREE = ("/usr/bin/lsblk", "--json", "--bytes", "--paths", "--output", "NAME,PATH,TYPE,SERIAL,SIZE,FSTYPE,MOUNTPOINTS")
+LICENSE_STORE_OPTION = "mon_config_key_max_entry_size"
+LICENSE_STORE_FLOOR = 1 << 20
 # Health checks that never block day-0 readiness: call-home egress is the operator's network, not the cluster's state.
 TOLERATED_HEALTH = frozenset(("CHA_ERROR_SENDING_REPORT",))
 HEALTH_CHECK = re.compile(r"[A-Z][A-Z0-9_]{0,63}\Z")
@@ -342,6 +349,17 @@ def registry_read(directory, name, expected, pending=False, links=(1,)):
         after = os.fstat(handle.fileno())
         require(len(content) == info.st_size and registry_metadata(info) == registry_metadata(after) and info.st_nlink == after.st_nlink, "registry-ownership")
         return info, content
+
+
+def store_bound(value):
+    """A MON size option as the native CLI reports it: a bounded decimal byte count, nothing else."""
+    if isinstance(value, bytes):
+        try:
+            value = value.decode("ascii")
+        except UnicodeError:
+            raise Refusal("native-output") from None
+    require(isinstance(value, str) and re.fullmatch(r"[0-9]{1,12}", value.strip()) is not None, "native-output")
+    return int(value.strip())
 
 
 def named(value):
@@ -1621,7 +1639,7 @@ class Worker:
             return
         require(self.markers.owned() and self.markers.read("osd-device-intent.json") == self.osd_device_scope(), "ownership")
         physical = self.physical_devices() if physical is None else physical
-        observed = self.command(["/usr/bin/lsblk", "--json", "--bytes", "--paths", "--output", "PATH,TYPE,SERIAL,SIZE,FSTYPE,MOUNTPOINTS"])
+        observed = self.command(list(DEVICE_TREE))
         output = self.command(["/usr/sbin/lvs", "--reportformat", "json", "--options", "lv_path,lv_uuid,lv_tags,devices"])
         require(isinstance(observed, dict) and isinstance(observed.get("blockdevices"), list), "native-output")
         require(isinstance(output, dict) and isinstance(output.get("report"), list) and len(output["report"]) == 1, "native-output")
@@ -2017,7 +2035,7 @@ class Worker:
         self.observed_device_ids = []
         if self.markers.owned() and self.markers.read("registry-file.json") is not None:
             self.prove_registry()
-        observed = self.command(["/usr/bin/lsblk", "--json", "--bytes", "--paths", "--output", "PATH,TYPE,SERIAL,SIZE,FSTYPE,MOUNTPOINTS"])
+        observed = self.command(list(DEVICE_TREE))
         require(isinstance(observed, dict) and isinstance(observed.get("blockdevices"), list), "device-unproved")
         flattened = []
 
@@ -3102,10 +3120,39 @@ class Worker:
             require(self.markers.read(prefix + "-complete.json") == intent, "not-ready")
         changed = False
         if not self.license_accepted() and self.selection.variant("ceph.mgr.license-contract") == "ibm":
+            self.license_store_capacity()
             self.manager_retry(self.tunnel_effect, "orch", "accept-license", "--image", self.request["image"], json_result=False)
             require(self.license_accepted(), "not-ready")
             changed = True
         return {"changed": changed}
+
+    def license_store_capacity(self):
+        """Raise, never lower, the MON config-key entry bound the provider's license record needs, then prove each quorum MON holds it.
+
+        The provider's store write reports success to its caller even when the MON refuses an oversize entry, so the bound is
+        proved before acceptance rather than inferred from it.
+        """
+        if store_bound(self.ceph_text("config", "get", "mon", LICENSE_STORE_OPTION)) < LICENSE_STORE_FLOOR:
+            self.ceph("config", "set", "mon", LICENSE_STORE_OPTION, str(LICENSE_STORE_FLOOR), json_result=False)
+            require(store_bound(self.ceph_text("config", "get", "mon", LICENSE_STORE_OPTION)) >= LICENSE_STORE_FLOOR, "not-ready")
+        monitors = self.ceph("mon", "dump")
+        require(isinstance(monitors, dict) and isinstance(monitors.get("mons"), list) and 0 < len(monitors["mons"]) <= 16
+                and isinstance(monitors.get("quorum"), list), "native-output")
+        names = []
+        for monitor in monitors["mons"]:
+            require(isinstance(monitor, dict) and named(monitor.get("name")) and type(monitor.get("rank")) is int, "native-output")
+            if monitor["rank"] in monitors["quorum"]:
+                names.append(monitor["name"])
+        require(names, "not-ready")
+        deadline = self.wait_deadline()
+        for name in names:
+            while True:
+                held = self.ceph("tell", "mon." + name, "config", "get", LICENSE_STORE_OPTION)
+                require(isinstance(held, dict) and set(held) == {LICENSE_STORE_OPTION}, "native-output")
+                if store_bound(held[LICENSE_STORE_OPTION]) >= LICENSE_STORE_FLOOR:
+                    break
+                require(self.clock() + MANAGER_INTERVAL < deadline, "not-ready")
+                self.pause(MANAGER_INTERVAL)
 
     def device_identities(self, publish=None):
         """The cluster's OSD device identities, as each host's preparation derived them."""

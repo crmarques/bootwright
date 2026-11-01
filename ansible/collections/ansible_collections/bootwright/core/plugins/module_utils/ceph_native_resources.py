@@ -689,10 +689,11 @@ class ResourceWorker(ceph_native.Worker):
         return {"owner": self.request["owner"], "fsid": self.request["fsid"], "host": self.host["name"], "client": dict(client), "filesystemID": entry["id"]}
 
     def client_subvolume_path(self):
-        """`fs subvolume getpath` (src/pybind/mgr/volumes/fs/volume.py:484-498) prints the path as text; never `--group_name _nogroup`."""
+        """`fs subvolume getpath` (src/pybind/mgr/volumes/fs/volume.py:484-498) prints the path as text, read without `--format json`, under
+        which the CLI prints a blank line before a text answer; never `--group_name _nogroup`."""
         client = self.request["client"]
         group = ("--group_name", client["group"]) if client["group"] else ()
-        output = self.manager_retry(self.ceph, "fs", "subvolume", "getpath", client["filesystem"], client["subvolume"], *group, json_result=False)
+        output = self.manager_retry(self.ceph_text, "fs", "subvolume", "getpath", client["filesystem"], client["subvolume"], *group)
         try:
             text = bytes(output).decode("utf-8")
         except UnicodeError:
@@ -1166,7 +1167,8 @@ class ResourceWorker(ceph_native.Worker):
         return dump, entry, ids
 
     def filesystem(self):
-        """Create one owned filesystem with its MDS settings in the one `fs new`, then attach its extra data pools; never forced."""
+        """Create one owned filesystem with its MDS counts in the one `fs new`, then attach its extra data pools and set standby replay
+        only while it differs; never forced."""
         filesystem = self.request["filesystem"]
         recorded = self.markers.read(self.filesystem_marks()[2]) is not None
         dump, entry, ids = self.filesystem_proved(write=True)
@@ -1184,14 +1186,19 @@ class ResourceWorker(ceph_native.Worker):
             if ids[pool] not in entry["mdsmap"]["data_pools"]:
                 self.ceph("fs", "add_data_pool", filesystem["name"], pool, json_result=False)
                 changed = True
+        if entry["mdsmap"]["flags_state"]["allow_standby_replay"] is not filesystem["standbyReplay"]:
+            self.ceph("fs", "set", filesystem["name"], "allow_standby_replay", "true" if filesystem["standbyReplay"] else "false", json_result=False)
+            changed = True
         return {"changed": changed}
 
     def fs_new_args(self):
         """`fs new` with its trailing `set` pairs applies them in the creating proposal (src/mon/MonCommands.h:356-367,
-        src/mon/FSCommands.cc:251-307); `fs set max_mds` would refuse under any filesystem health warning."""
+        src/mon/FSCommands.cc:251-307); `fs set max_mds` would refuse under any filesystem health warning. Only the pairs whose
+        `set_val` branch writes through the uncommitted filesystem are passed: 20.2.1's `allow_standby_replay` branch looks the
+        filesystem up in the FSMap before `fs new` commits it, and the MON leader aborts on `std::out_of_range`."""
         filesystem = self.request["filesystem"]
         return ("fs", "new", filesystem["name"], filesystem["metadataPool"], filesystem["defaultDataPool"], "set", "max_mds", str(filesystem["activeCount"]),
-                "allow_standby_replay", "true" if filesystem["standbyReplay"] else "false", "standby_count_wanted", str(filesystem["standbyCountWanted"]))
+                "standby_count_wanted", str(filesystem["standbyCountWanted"]))
 
     def ranks_active(self, entry):
         """Each rank below max_mds held by an up:active daemon of the bound service."""

@@ -206,7 +206,8 @@ def test_acquisition_never_falls_back_to_the_default_repository(served, tmp_path
         acquisition.repositories(str(scratch))
     assert "/mirror/ceph/repodata/repomd.xml" in served.seen and not [path for path in served.seen if path.startswith("/ibm/")]
     requested = len(served.seen)
-    package = {"name": "cephadm", "signer": native_signatures.IBM_CEPH_SIGNER,
+    package = {"name": "cephadm", "epoch": 0, "version": "20.2.1", "release": "405.el9cp", "architecture": "noarch",
+               "signer": native_signatures.IBM_CEPH_SIGNER,
                "source": {"id": "native-" + "a" * 32, "url": sources.IBM_BASE + "/cephadm.rpm", "sha256": "f" * 64, "bytes": 64}}
     with pytest.raises(ceph_native.Refusal, match="^packages$"):
         acquisition.payloads(str(scratch), {"packages": [package]})

@@ -114,6 +114,41 @@ def test_single_manifest_tag_authenticates_config_platform(media, authenticated)
     assert client.calls[-1][0].startswith("/v2/" + NAMESPACE + "/blobs/")
 
 
+@pytest.mark.parametrize("media", discovery.MANIFEST_TYPES)
+def test_direct_manifest_digest_accepts_case_distinct_config_metadata(media):
+    client = Client(indexed=False)
+    client.config["config"] = {"Labels": {"Vendor": "synthetic-upper", "vendor": "synthetic-lower"}}
+    client.manifest["mediaType"] = media
+    client.manifest["config"].update(digest=sha(raw(client.config)), size=len(raw(client.config)))
+    selected_digest = sha(raw(client.manifest))
+    request = dict(GOLDEN["request"], tag="", image=REPOSITORY + "@" + selected_digest)
+    client.rows[-1] = response(client.manifest, media)
+    client.rows.append(response(client.config, discovery.CONFIG_TYPES[0]))
+
+    assert discovery.resolve("Basic synthetic-secret", client, request) == selected_digest
+    assert client.rows == []
+    assert client.calls[0][0] == "/v2/" + NAMESPACE + "/manifests/" + selected_digest
+
+
+@pytest.mark.parametrize(
+    "value",
+    [
+        b'{"field":1,"field":2}',
+        b'{"nested":{"field":1,"field":2}}',
+        br'{"field":1,"\u0066ield":2}',
+        br'{"nested":{"field":1,"\u0066ield":2}}',
+        b'{"nested":{"field":',
+        b'{"field":1} {"field":2}',
+        b'{"field":NaN}',
+        b'{"field":Infinity}',
+        b'{"field":-Infinity}',
+    ],
+)
+def test_registry_json_refuses_duplicates_and_invalid_documents(value):
+    with pytest.raises(discovery.DiscoveryRefusal, match="^discovery$"):
+        discovery.decode(value, "discovery")
+
+
 def test_optional_body_media_type_uses_supported_http_type_and_raw_digest():
     client = Client(authenticated=False)
     client.manifest.pop("mediaType")

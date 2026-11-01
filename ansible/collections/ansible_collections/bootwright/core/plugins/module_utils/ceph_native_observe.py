@@ -143,6 +143,24 @@ def child_directory(parent, name, owners, own=False):
         os.close(descriptor)
 
 
+@contextlib.contextmanager
+def cluster_directory(root, fsid, owners):
+    """The FSID directory. cephadm's make_data_dir_base chowns it to each daemon it deploys (cephadmlib/file_utils.py makedirs,
+    v20.2.1), so it belongs to one of owners or to the user of one of its own auxiliary-image singleton daemon directories."""
+    # The wrapped context closes its descriptor on any exit; the proof after the yield is deliberately success-only.
+    # pylint: disable-next=contextmanager-generator-missing-cleanup
+    with child_directory(root, fsid, owners, own=True) as cluster:
+        holder = os.fstat(cluster).st_uid
+        if holder not in owners:
+            held = False
+            for name in entries(cluster):
+                if name.split(".", 1)[0] in SINGLETONS and NAME.fullmatch(name) is not None:
+                    info = current(name, cluster)
+                    held = held or stat.S_ISDIR(info.st_mode) and info.st_uid == holder
+            require(held)
+        yield cluster
+
+
 def entries(directory):
     # scandir stops on the bound rather than materializing an unlimited list.
     result = []
@@ -392,7 +410,7 @@ def snapshot(request, uid, command, *, owned, cache_uid=None, host=None):
             require(owned)
             require(type(uid) is int and uid > 0)
             owners = (ROOT_UID, uid)
-            with child_directory(root, request["fsid"], owners) as cluster, contextlib.ExitStack() as held:
+            with cluster_directory(root, request["fsid"], owners) as cluster, contextlib.ExitStack() as held:
                 names = entries(cluster)
                 caches = [name for name in names if CACHE.fullmatch(name) is not None]
                 selected = [name for name in names if "." in name and name not in caches]

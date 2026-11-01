@@ -17,11 +17,11 @@ import types
 PREFIX = "ansible_collections.bootwright.core.plugins.module_utils"
 MODULES = ("native_diagnostics", "canonical_json", "bounded_process", "ceph_native_worker",
            "ceph_tunnel", "ceph_tunnel_staging", "ceph_tunnel_custody", "ceph_native_observe", "ceph_native",
-           "native_resolution", "native_signatures", "native_apply", "ceph_package_sources", "ceph_crypto_policy", "ceph_packages")
+           "ceph_native_stretch", "native_resolution", "native_signatures", "native_apply", "ceph_package_sources", "ceph_crypto_policy", "ceph_packages")
 # The closed reasons a package failure names; any other refusal is packages.
 REASONS = ("fips-policy", "packages", "package-artifact", "package-drift", "package-host", "package-journal",
            "package-license", "package-limit", "package-platform",
-           "package-timeout", "package-resolution", "package-signature", "package-transaction")
+           "package-timeout", "package-acquisition", "package-resolution", "package-signature", "package-transaction")
 LIMIT = 2 << 20
 REMOTE_LIMIT = 1920
 RESULT_LIMIT = 8192
@@ -92,9 +92,13 @@ def failure(error):
         cause = None
     if cause is not None:
         output["cause"] = cause
-    diagnostics = sys.modules.get(PREFIX + ".native_diagnostics")
     native_error = getattr(error, "native_error", None)
-    if diagnostics is not None and diagnostics.valid(native_error):
+    validator = getattr(sys.modules.get(PREFIX + ".native_diagnostics"), "valid", None)
+    try:
+        admitted = native_error is not None and callable(validator) and validator(native_error) is True
+    except Exception:
+        admitted = False
+    if admitted:
         output["nativeError"] = native_error
     return output
 

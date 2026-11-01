@@ -426,10 +426,11 @@ class ExportWorker(ceph_native_resources.ResourceWorker):
             raise NativeFailure("nfs-export-apply", self.native_coordinate(), "nfs." + service + " is not listed by ceph nfs cluster ls")
 
     def subvolume_path(self):
-        """`fs subvolume getpath` (src/pybind/mgr/volumes/fs/volume.py:484-498) prints the path as text; never `--group_name _nogroup`."""
+        """`fs subvolume getpath` (src/pybind/mgr/volumes/fs/volume.py:484-498) prints the path as text, read without `--format json`, under
+        which the CLI prints a blank line before a text answer; never `--group_name _nogroup`."""
         nfs = self.export()
         group = ("--group_name", nfs["group"]) if nfs["group"] else ()
-        output = self.manager_retry(self.ceph, "fs", "subvolume", "getpath", nfs["filesystem"], nfs["subvolume"], *group, json_result=False)
+        output = self.manager_retry(self.ceph_text, "fs", "subvolume", "getpath", nfs["filesystem"], nfs["subvolume"], *group)
         try:
             text = bytes(output).decode("utf-8")
         except UnicodeError:

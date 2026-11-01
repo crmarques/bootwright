@@ -119,7 +119,7 @@ def cause(error):
             sited = "%s@%s" % (reason, caller)
             return sited if caller and SITED_REFUSAL_CAUSE.match(sited) else reason
     name = re.sub(r"[^A-Za-z0-9_]", "", type(error).__name__)[:40]
-    value = "%s@%s" % (name if name[:1].isupper() else "Exception", site or "unknown.frame:0")
+    value = "%s@%s" % (name if name[:1].isupper() else "Exception", caller or site or "unknown.frame:0")
     return value if EXCEPTION_CAUSE.match(value) else None
 
 
@@ -128,11 +128,19 @@ def failure(reason, error):
     named = cause(error)
     if named is not None:
         value["cause"] = named
-    diagnostics = sys.modules.get(PREFIX + ".native_diagnostics")
     native_error = getattr(error, "native_error", None)
-    if diagnostics is not None and diagnostics.valid(native_error):
+    if native_error is not None and validated(native_error):
         value["nativeError"] = native_error
     return value
+
+
+def validated(native_error):
+    """Native error metadata is admitted only by an initialized validator."""
+    validator = getattr(sys.modules.get(PREFIX + ".native_diagnostics"), "valid", None)
+    try:
+        return callable(validator) and validator(native_error) is True
+    except Exception:
+        return False
 
 
 def valid_cause(value):
@@ -258,7 +266,10 @@ def child_work(worker, incoming, outgoing, blocked):
         for sig in INTERRUPTS:
             signal.signal(sig, signal.SIG_DFL)
         signal.pthread_sigmask(signal.SIG_SETMASK, blocked)
-        data = result_bytes(worker())
+        try:
+            data = result_bytes(worker())
+        except Exception as error:
+            data = result_bytes(failure("native-unknown", error))
         while data:
             count = os.write(outgoing, data)
             require(count > 0)
@@ -364,8 +375,8 @@ def supervise(worker, budget=REMOTE_LIMIT, grace=1, started=None):
         return collect(child, incoming, remaining)
     except InterruptedError:
         return {"ok": False, "reason": "native-timeout"}
-    except Exception:
-        return dict(FAILURE)
+    except Exception as error:
+        return failure("native-unknown", error)
     finally:
         signal.pthread_sigmask(signal.SIG_BLOCK, INTERRUPTS)
         stop(child, grace)
@@ -413,8 +424,8 @@ def main():
         # An inherited command may ignore TERM and continue effects after its
         # leader returns. Native work has no detached background entitlement.
         output = supervise(lambda: work(started, budget), budget=budget, grace=0, started=started)
-    except Exception:
-        output = dict(FAILURE)
+    except Exception as error:
+        output = failure("native-unknown", error)
     try:
         publish_result(output)
     except (OSError, ValueError):

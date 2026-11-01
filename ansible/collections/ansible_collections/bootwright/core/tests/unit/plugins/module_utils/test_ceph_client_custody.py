@@ -143,7 +143,8 @@ def client(tmp_path, monkeypatch, request):
                 raise ceph_native.Refusal("native-command")
             return 0, (state.key + "\n").encode("ascii")
         assert argv[0] == "/usr/bin/ceph"
-        args = argv[argv.index("--format") + 2:]
+        formatted = "--format" in argv
+        args = argv[argv.index("--format") + 2:] if formatted else argv[argv.index("--keyring") + 2:]
         if args == ["fsid"]:
             value = {"fsid": state.fsid}
         elif args == ["osd", "pool", "ls", "detail"]:
@@ -153,8 +154,9 @@ def client(tmp_path, monkeypatch, request):
         elif args == getpath:
             # The volumes module answers the path as text (src/pybind/mgr/volumes/fs/volume.py:484-498), here with one trailing newline;
             # a subvolume of the default group is asked for without --group_name (an explicit _nogroup refuses EPERM).
+            # The CLI prints a blank line before a text answer under --format json, as a live 20.2.1 cluster showed.
             assert data == b""
-            return 0, state.getpath.encode()
+            return 0, (("\n" if formatted else "") + state.getpath).encode()
         elif args == ["auth", "ls"]:
             value = {"auth_dump": [] if state.auth is None else copy.deepcopy(state.auth)}
         elif args == ["auth", "get", "client.consumer"]:
@@ -584,7 +586,8 @@ def test_cephfs_client_binds_proved_path(client, path):
     client.native.client()
     added = [data for argv, data in client.state.calls if argv[-5:] == ["auth", "add", "client.consumer", "-i", "-"]]
     assert len(added) == 1 and ('caps mds = "allow rw fsname=files path=' + path + '"').encode() in added[0]
-    getpath = [argv[argv.index("--format") + 2:] for argv, data in client.state.calls if "getpath" in argv]
+    getpath = [argv[argv.index("--keyring") + 2:] for argv, data in client.state.calls if "getpath" in argv]
+    assert getpath and not any("--format" in argv for argv, data in client.state.calls if "getpath" in argv)
     assert getpath and all(("--group_name" in args) == (path == SUBVOLUME_PATH) for args in getpath)
 
 

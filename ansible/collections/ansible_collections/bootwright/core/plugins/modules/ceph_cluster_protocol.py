@@ -20,8 +20,8 @@ options:
     description: Fixed refusal the block's caller names, published only in place of completion.
     type: str
     choices: [unsupported-release, image-pull, image-platform, image-profile, route-probe, device-identity, runtime-profile, not-ready,
-      package-resolution, package-signature, package-transaction, request, artifact, ownership, evidence, material, packages, package-artifact,
-      package-drift, package-journal, package-license, package-limit,
+      package-acquisition, package-resolution, package-signature, package-transaction, request, artifact, ownership, evidence, material, packages,
+      package-artifact, package-drift, package-journal, package-license, package-limit,
       package-timeout, package-platform, package-host, foreign-cluster, native-command, native-timeout, native-output, unknown, transport,
       remote-refusal, adapter-exception, cache-unproved, enrollment-budget, dashboard-identity, dashboard-drift, dashboard-policy,
       dashboard-verify, pool-identity,

@@ -25,6 +25,9 @@ ROOT = "/var/lib/bootwright/ceph"
 ROOT_UID = 0
 MAX_MATERIAL = 4 * 1024 * 1024
 SOURCE_LINKS = 8
+# The private FSID area holds the attempt, identity and completion records of every owned resource of the cluster, several
+# per pool, filesystem group, subvolume, client, gateway and service, so its listing bound covers a complete cluster.
+MAX_AREA_ENTRIES = 8192
 SLOTS = {"transport-original": frozenset(("identity", "known_hosts", "outer_config", "native_config", "proxy.py", "manifest.json")),
          "initial-mgr-original": frozenset(("config", "keyring")),
          "bootstrap-original": frozenset(("config", "keyring"))}
@@ -371,7 +374,7 @@ def protected_identities(path):
     result.add((root.st_dev, root.st_ino))
     with directory(path) as parent:
         names = os.listdir(parent)
-        require(len(names) <= 256)
+        require(len(names) <= MAX_AREA_ENTRIES)
         for name in names:
             info = os.stat(name, dir_fd=parent, follow_symlinks=False)
             result.add((info.st_dev, info.st_ino))

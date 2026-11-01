@@ -80,6 +80,12 @@ def test_scope_is_shared_with_pool_and_client_without_private_package_inputs(clu
     subvolume.update(action="subvolume", subvolume={"filesystem": "files", "gid": 0, "group": "csi", "mode": "755", "name": "docs", "pool": "cephfs-data",
                                                     "sizeBytes": 1073741824, "uid": 0})
     assert staging.recovery_scope(subvolume) == wanted
+    settings = {key: value for key, value in cluster_request.items() if key not in ("client", "packages")}
+    settings.update(action="settings", settings={"modules": ["prometheus", "smb"]})
+    assert staging.recovery_scope(settings) == wanted
+    service = {key: value for key, value in settings.items() if key != "settings"}
+    service.update(action="service", service={"name": "crash", "spec": {"service_type": "crash", "placement": {"host_pattern": "*"}}})
+    assert staging.recovery_scope(service) == wanted
 
 
 @pytest.mark.parametrize("attempted", [False, True])

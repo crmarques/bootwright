@@ -1,8 +1,10 @@
 """Fixed SMB manager resource worker, shipped beside the core worker as source.
 
 One block applies or observes one SMB manager resource on the cluster's bootstrap host. `smb apply -i -` reads the one
-resource as JSON on stdin, the bound passwords spliced in memory only, with `--password-filter-out=hidden`, because the
-output filter defaults to the input one and the answer would otherwise echo them (src/pybind/mgr/smb/module.py:145-193).
+resource as JSON on stdin, the bound passwords spliced in memory only and base64-encoded under `--password-filter=base64`,
+with `--password-filter-out=hidden`, because the output filter defaults to the input one and the answer would otherwise echo
+them (src/pybind/mgr/smb/module.py:145-193). The input filter is never `none`: with it, 20.2.1's `_apply_res` stores the
+resource and then raises `UnboundLocalError` on `in_op` while hiding the answer's passwords.
 An invalid resource is answered with its raw input, password included (src/pybind/mgr/smb/results.py:68-88), so no apply
 answer reaches an error, a record or a log: an answer that is not one successful result for the resource refuses with its
 reason alone. Every resource is read back with `smb show <name> --password-filter=hidden`, which answers one matched
@@ -18,6 +20,7 @@ from __future__ import annotations
 # Exact type identity is the validation here: a bool is not an int and a capability object is never a subclass.
 # pylint: disable=unidiomatic-typecheck
 
+import base64
 import contextlib
 import copy
 import ipaddress
@@ -122,6 +125,12 @@ def validate(value):
     validate_bindings(value)
     validate_service(value, scope)
     return value
+
+
+def encoded(password):
+    """A bound password as the manager's base64 input filter reads it (src/pybind/mgr/smb/enums.py InputPasswordFilter)."""
+    require(isinstance(password, str))
+    return base64.b64encode(password.encode("utf-8")).decode("ascii")
 
 
 def material(request, private):
@@ -396,7 +405,7 @@ class SMBWorker(ceph_native_resources.ResourceWorker):
         if self.smb["resourceType"] == "ceph.smb.join.auth":
             auth = document.get("auth")
             require(isinstance(auth, dict) and "password" not in auth)
-            auth["password"] = private["smbSecret0"]
+            auth["password"] = encoded(private["smbSecret0"])
         elif self.smb["resourceType"] == "ceph.smb.usersgroups":
             values = document.get("values")
             users = values.get("users") if isinstance(values, dict) else None
@@ -404,7 +413,7 @@ class SMBWorker(ceph_native_resources.ResourceWorker):
             for index, binding in enumerate(self.smb["bindings"]):
                 position = int(binding["path"].split("/")[3])
                 require(position < len(users) and isinstance(users[position], dict) and "password" not in users[position])
-                users[position]["password"] = private["smbSecret" + str(index)]
+                users[position]["password"] = encoded(private["smbSecret" + str(index)])
         return canonical({"resources": [document]})
 
     def answered(self, output):
@@ -424,7 +433,7 @@ class SMBWorker(ceph_native_resources.ResourceWorker):
     def apply_resource(self, payload):
         """One apply of the resource on stdin, never retried; any answer but one successful result refuses without the manager's words."""
         seen = {}
-        output = self.tunnel_effect("smb", "apply", "-i", "-", "--password-filter=none", "--password-filter-out=hidden", data=payload, json_result=False,
+        output = self.tunnel_effect("smb", "apply", "-i", "-", "--password-filter=base64", "--password-filter-out=hidden", data=payload, json_result=False,
                                     recover=lambda code, unused: seen.setdefault("code", code) is not None)
         accepted = not seen and self.answered(output)
         del output

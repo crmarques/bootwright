@@ -57,8 +57,8 @@ UNIT_DAEMON = re.compile(r"[a-z][a-z0-9-]*\.[A-Za-z0-9][A-Za-z0-9_.-]{0,250}\Z")
 HOST_REASONS = (
     "fips-policy", "fips-not-enabled", "stretch-intent",
     "unsupported-release", "image-pull", "image-platform", "image-profile", "route-probe", "device-identity", "runtime-profile", "not-ready",
-    "package-resolution", "package-signature", "package-transaction", "request", "artifact", "ownership", "evidence", "material", "packages",
-    "package-artifact", "package-drift", "package-journal", "package-license",
+    "package-acquisition", "package-resolution", "package-signature", "package-transaction", "request", "artifact", "ownership", "evidence",
+    "material", "packages", "package-artifact", "package-drift", "package-journal", "package-license",
     "package-limit", "package-timeout", "package-platform", "package-host", "foreign-cluster", "native-command", "native-timeout", "native-output",
     "unknown", "transport", "remote-refusal", "adapter-exception", "ssh-policy-host-excluded", "ssh-policy-unavailable",
 )
@@ -335,6 +335,12 @@ def endpoint_evidence(value, request=None):
     ceph_native.require(type(endpoint["reachable"]) is bool, "evidence")
     if value.get("action") == "service" and request is not None and request.get("action") == "service" and request["service"]["type"] == "mgmt-gateway":
         ceph_native.require((endpoint["certificateSHA256"] != "") == endpoint["reachable"], "evidence")
+        return
+    # The result publisher holds no request: a management gateway unit is the service whose own daemon rows name mgmt-gateway.
+    if value.get("action") == "service" and request is None and endpoint != {"certificateSHA256": "", "reachable": False}:
+        rows = value.get("daemons")
+        ceph_native.require(isinstance(rows, list) and any(isinstance(row, dict) and row.get("service") == "mgmt-gateway" for row in rows)
+                            and (endpoint["certificateSHA256"] != "") == endpoint["reachable"], "evidence")
         return
     if value.get("action") != "gateway":
         ceph_native.require(endpoint == {"certificateSHA256": "", "reachable": False}, "evidence")
@@ -638,7 +644,7 @@ class Transport:
             private["packageRepositoryCA"] = self.trust_bundle(bundle)
         modules = (native_diagnostics, canonical_json, bounded_process, ceph_native_worker,
                    ceph_tunnel, ceph_tunnel_staging, ceph_tunnel_custody, ceph_native_observe, ceph_native,
-                   native_resolution, native_signatures, native_apply, ceph_package_sources, ceph_crypto_policy, ceph_packages)
+                   ceph_native_stretch, native_resolution, native_signatures, native_apply, ceph_package_sources, ceph_crypto_policy, ceph_packages)
         sources = {module.__name__.rsplit(".", 1)[-1]: inspect.getsource(module) for module in modules}
         result = self._call(host, inspect.getsource(ceph_package_worker),
                             {"sources": sources, "payload": {"request": self.request, "host": host["name"], "private": private}}, 1980,

@@ -101,7 +101,7 @@ def stage_intent(request):
 def recovery_scope(request):
     """Bind all cluster authoring, without consumer actions or private material."""
     bindings(request)
-    excluded = {"action", "pool", "client", "policy", "rbd", "filesystem", "subvolume", "packages"}
+    excluded = {"action", "pool", "client", "policy", "rbd", "filesystem", "subvolume", "packages", "settings", "service"}
     return {"version": "ceph-bootstrap-recovery-v1",
             "cluster": {name: value for name, value in request.items() if name not in excluded}}
 

@@ -82,10 +82,9 @@ def refusal(error):
 
 def decode(data, reason):
     def pairs(rows):
-        value, folded = {}, set()
+        value = {}
         for key, item in rows:
-            require(key.lower() not in folded, reason)
-            folded.add(key.lower())
+            require(key not in value, reason)
             value[key] = item
         return value
 

@@ -17,6 +17,7 @@ The controller half drives a recording transport or the real Transport over a fa
 from __future__ import annotations
 
 import builtins
+import base64
 import copy
 import json
 import os
@@ -137,6 +138,19 @@ def daemon(host="node-1", identifier=None, status=1, digests=(SAMBA,), service_n
             "status": status, "status_desc": NATIVE_SENTINEL, "container_image_digests": list(digests)}
 
 
+def decoded(resource):
+    """The manager's base64 input filter applied to one resource's passwords (src/pybind/mgr/smb/resources.py convert)."""
+    resource = copy.deepcopy(resource)
+    auth = resource.get("auth") if isinstance(resource.get("auth"), dict) else None
+    if auth is not None and "password" in auth:
+        auth["password"] = base64.b64decode(auth["password"], validate=True).decode("utf-8")
+    values = resource.get("values") if isinstance(resource.get("values"), dict) else None
+    for user in (values or {}).get("users", []):
+        if "password" in user:
+            user["password"] = base64.b64decode(user["password"], validate=True).decode("utf-8")
+    return resource
+
+
 class Monitor:
     """A scripted cluster: reads answer from its tables, `smb apply` stores the resource, every other command is a logged mutation."""
 
@@ -166,22 +180,28 @@ class Monitor:
             found = self.resources.get(command[2])
             return 0, json.dumps(masked(found) if found is not None else {"resources": []}).encode()
         if command[:2] == ("smb", "apply"):
-            return self.apply(data)
+            return self.apply(data, command)
         self.mutations.append(command)
         return 0, b""
 
-    def apply(self, data):
+    def apply(self, data, command=("smb", "apply", "-i", "-", "--password-filter=base64", "--password-filter-out=hidden")):
         if self.answer is not None:
             if self.stores_answered:
-                self.store(data)
+                self.store(data, command)
             code, stdout, stderr = self.answer
             return code, ceph_native.NativeOutput(stdout, stderr)
-        results = [{"resource": masked(stored), "success": True} for stored in self.store(data)]
+        stored = self.store(data, command)
+        if "--password-filter=none" in command and "--password-filter-out=hidden" in command:
+            # 20.2.1's _apply_res stores the resource, then logs the unset in_op while hiding the answer's passwords.
+            return 22, ceph_native.NativeOutput(b"", b"Error EINVAL: Traceback ... UnboundLocalError: local variable 'in_op' referenced before assignment")
+        results = [{"resource": masked(item), "success": True} for item in stored]
         return 0, json.dumps({"results": results, "success": True}).encode()
 
-    def store(self, data):
+    def store(self, data, command=("--password-filter=base64",)):
         stored = []
         for resource in json.loads(data)["resources"]:
+            if "--password-filter=base64" in command:
+                resource = decoded(resource)
             kind = resource["resource_type"]
             prefix = resource["cluster_id"] + "." if kind == "ceph.smb.share" else ""
             self.resources[kind + "." + prefix + resource[ceph_smb_native.TYPES[kind]]] = simplified(resource)
@@ -244,7 +264,7 @@ def test_smb_apply_puts_secrets_only_on_stdin():
         assert result == {"changed": True}
         sent = applies(monitor)
         assert len(sent) == 1
-        assert all(secret.encode() in sent[0][1] for secret in secrets)
+        assert all(base64.b64encode(secret.encode()) in sent[0][1] and secret.encode() not in sent[0][1] for secret in secrets)
         for secret in secrets:
             assert all(secret not in repr(command) for command, unused in monitor.log)
             assert all(data == b"" for command, data in monitor.log if command[:2] != ("smb", "apply"))
@@ -263,7 +283,7 @@ def test_every_smb_command_hides_passwords_in_output(kind):
     assert observed["ready"] is True
     for command in smb_commands(monitor):
         if command[:2] == ("smb", "apply"):
-            assert command == ("smb", "apply", "-i", "-", "--password-filter=none", "--password-filter-out=hidden")
+            assert command == ("smb", "apply", "-i", "-", "--password-filter=base64", "--password-filter-out=hidden")
         elif command[:2] == ("smb", "show"):
             assert command[3:] == ("--password-filter=hidden",)
         else:
@@ -415,8 +435,8 @@ def test_successful_apply_answer_without_the_resource_read_back_refuses_result(k
     monitor.answer, monitor.stores_answered = (0, json.dumps({"results": [good], "success": True}).encode(), b""), rewritten
     original = monitor.store
 
-    def store(data):
-        stored = original(data)
+    def store(data, command=("--password-filter=base64",)):
+        stored = original(data, command)
         monitor.resources[name_of(value)].update(copy.deepcopy(REWRITTEN[kind]))
         return stored
 
@@ -1165,3 +1185,31 @@ def test_smb_evidence_admits_the_closed_shapes(value):
 def test_smb_evidence_refuses_anything_else(value, digest):
     with pytest.raises(ceph_native.Refusal, match="^evidence$"):
         ceph_core.smb_evidence(value, digest, request("ceph.smb.share"))
+
+
+@pytest.mark.parametrize("kind", TYPES)
+def test_the_apply_never_uses_the_input_filter_20_2_1_crashes_on(kind):
+    """20.2.1 stores the resource under --password-filter=none with hidden output, then answers EINVAL from an unset in_op."""
+    value, monitor, markers = request(kind), Monitor(), Markers()
+    if kind == "ceph.smb.share":
+        monitor.resources["ceph.smb.cluster.files"] = cluster_resource()
+        monitor.daemons = [daemon("node-1"), daemon("node-2")]
+    assert worker(value, monitor, markers).smb_apply(private_of(value)) == {"changed": True}
+    (command, data), = applies(monitor)
+    assert "--password-filter=none" not in command and "--password-filter=base64" in command
+    for secret in private_of(value).values():
+        assert secret.encode() not in data
+        assert base64.b64encode(secret.encode()) in data or not secret
+    assert worker(value, monitor, markers).smb_observe()["ready"] is True
+
+
+def test_a_resource_the_crashing_answer_stored_is_completed_by_the_next_apply():
+    """A continuation after the 20.2.1 crash finds its own attempted resource stored and records it, applying nothing again."""
+    value, monitor, markers = request("ceph.smb.usersgroups"), Monitor(), Markers()
+    original = monitor.apply
+    monitor.apply = lambda data, command=None: original(data, ("smb", "apply", "-i", "-", "--password-filter=none", "--password-filter-out=hidden"))
+    with pytest.raises(ceph_native.Refusal, match="^smb-result$"):
+        worker(value, monitor, markers).smb_apply(private_of(value))
+    monitor.apply = original
+    assert worker(value, monitor, markers).smb_apply(private_of(value)) == {"changed": True}
+    assert len(applies(monitor)) == 1 and worker(value, monitor, markers).smb_observe()["ready"] is True

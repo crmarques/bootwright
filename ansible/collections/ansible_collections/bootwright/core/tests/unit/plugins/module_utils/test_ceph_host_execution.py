@@ -282,6 +282,41 @@ def test_the_package_worker_names_only_its_closed_tokens_and_their_site():
         assert PASSWORD.encode() not in result.stdout
 
 
+@pytest.mark.parametrize("undeclared_location", [False, True])
+def test_package_bundle_validates_scope_without_an_ambient_collection(host_request, tmp_path, undeclared_location):
+    envelopes = []
+    output = b'{"ok":true,"result":{"changed":false,"ready":true,"planDigest":"' + b"a" * 64 + b'"}}'
+    transport = package_transport(host_request, tmp_path, output)
+
+    def run(argv, data, timeout):
+        envelopes.append(json.loads(data))
+        return 0, output
+
+    transport.run = run
+    transport.packages(host_request["cluster"]["hosts"][1])
+    assert len(envelopes) == 1
+    envelope = envelopes[0]
+    if undeclared_location:
+        envelope["payload"]["request"]["hosts"][0]["location"] = {"datacenter": "site-a", "root": "default"}
+    probe = ("import json,sys\n"
+             "assert sys.flags.isolated and 'ansible_collections' not in sys.modules\n"
+             "fixed={'__name__':'fixed_package_probe'}\n"
+             "exec(compile(" + repr(inspect.getsource(ceph_package_worker)) + ",'<fixed-package-worker>','exec'),fixed)\n"
+             "envelope=json.load(sys.stdin)\n"
+             "worker=fixed['load'](envelope['sources'])\n"
+             "payload=envelope['payload']\n"
+             "try:\n"
+             " selected=worker.ceph_package_sources.source_for(payload['request'],payload['host'])\n"
+             "except worker.ceph_native.Refusal as error:\n"
+             " print(json.dumps({'refused':error.args[0]}))\n"
+             "else:\n"
+             " print(json.dumps({'host':selected['host']}))\n")
+    result = subprocess.run([sys.executable, "-I", "-c", probe], input=json.dumps(envelope).encode(),
+                            capture_output=True, check=False, timeout=10)
+    assert result.returncode == 0 and result.stderr == b"", result.stderr.decode()
+    assert json.loads(result.stdout) == ({"refused": "request"} if undeclared_location else {"host": host_request["host"]})
+
+
 @pytest.mark.parametrize("change", [
     {"action": "cluster"}, {"pool": copy.deepcopy(POOL)},
     {"client": {"name": "consumer", "pool": "volumes", "access": "readOnly"}},

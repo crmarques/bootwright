@@ -179,9 +179,15 @@ def test_gateway_without_binding_reports_cephadm_issuer(tmp_path, monkeypatch):
     assert probes.targets == [("192.0.2.11", PORT, "node-1", None), ("192.0.2.2", PORT, "node-2", None)]
     value = dict(evidence, request="d" * 64, ready=True, exists=True, hosts=["node-1"])
     assert ceph_core.evidence(copy.deepcopy(value), "d" * 64, request)["endpoint"] == endpoint
+    # The result publisher validates without the request and must admit a reachable management gateway (B1026).
+    assert ceph_core.evidence(copy.deepcopy(value), "d" * 64)["endpoint"] == endpoint
+    others = [dict(row, service="crash", name="crash." + row["host"]) for row in value["daemons"]]
     for bad, against in ((dict(value, endpoint={"certificateSHA256": "", "reachable": True}), request),
                          (dict(value, endpoint={"certificateSHA256": endpoint["certificateSHA256"], "reachable": False}), request),
-                         (value, None), (dict(value, daemons=[]), units.unit_request("direct"))):
+                         (dict(value, endpoint={"certificateSHA256": "", "reachable": True}), None),
+                         (dict(value, endpoint={"certificateSHA256": endpoint["certificateSHA256"], "reachable": False}), None),
+                         (dict(value, daemons=others), None), (dict(value, daemons=[]), None),
+                         (dict(value, daemons=[]), units.unit_request("direct"))):
         with pytest.raises(ceph_native.Refusal, match="^evidence$"):
             ceph_core.evidence(copy.deepcopy(bad), "d" * 64, against)
     probes.answers["192.0.2.2"] = (second, False)

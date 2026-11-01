@@ -11,10 +11,15 @@ import signal
 import subprocess
 import sys
 import time
+from types import ModuleType, SimpleNamespace
+import zipfile
+import zipimport
 
 import pytest
 
-from ansible_collections.bootwright.core.plugins.module_utils import ceph_core, ceph_host_worker, ceph_native_worker, native_diagnostics, native_specializations
+from ansible_collections.bootwright.core.plugins.module_utils import (
+    ceph_core, ceph_host_worker, ceph_native_object, ceph_native_worker, native_diagnostics, native_specializations,
+)
 
 
 def source_bundle():
@@ -363,6 +368,65 @@ def test_a_refusal_cause_names_the_shipped_frame_that_required_it_or_stays_bare(
     assert ceph_native_worker.valid_cause(causes[0]) and ceph_native_worker.refusal_cause(causes[0])
 
 
+@pytest.mark.parametrize("function,values", [
+    ("execution_budget", [["synthetic-secret", "extra"], ["x" * 33], ["0"]]),
+    ("result_bytes", [None, {"ok": True, "result": []},
+                      {"ok": True, "result": {}, "specializations": ["synthetic-secret", "synthetic-secret"]}]),
+])
+def test_generic_causes_distinguish_shared_validation_calling_checks(function, values):
+    causes = []
+    sources = {"ceph_native_worker": inspect.getsource(ceph_native_worker)}
+    for value in values:
+        with pytest.raises(ValueError) as raised:
+            getattr(ceph_native_worker, function)(value)
+        named = ceph_native_worker.cause(raised.value)
+        assert named.startswith("ValueError@ceph_native_worker." + function + ":")
+        assert ceph_native_worker.attested(named, sources) and "synthetic-secret" not in named
+        causes.append(named)
+    assert len(set(causes)) == len(values)
+
+
+def test_collection_causes_distinguish_child_status_from_an_empty_frame(monkeypatch):
+    class Selector:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            pass
+
+        def register(self, *args):
+            pass
+
+        def select(self, *args):
+            return []
+
+    status = [1]
+    monkeypatch.setattr(ceph_native_worker.selectors, "DefaultSelector", Selector)
+    monkeypatch.setattr(ceph_native_worker.os, "set_blocking", lambda *args: None)
+    monkeypatch.setattr(ceph_native_worker.os, "read", lambda *args: b"")
+    monkeypatch.setattr(ceph_native_worker, "child_status", lambda unused: SimpleNamespace(si_code=os.CLD_EXITED, si_status=status[0]))
+    causes = []
+    for exit_code in (1, 0):
+        status[0] = exit_code
+        with pytest.raises(ValueError) as raised:
+            ceph_native_worker.collect(100, 101, 1)
+        named = ceph_native_worker.cause(raised.value)
+        assert named.startswith("ValueError@ceph_native_worker.collect:")
+        assert ceph_native_worker.attested(named, {"ceph_native_worker": inspect.getsource(ceph_native_worker)})
+        causes.append(named)
+    assert len(set(causes)) == 2
+
+
+def test_generic_cause_keeps_direct_helper_and_innermost_nonhelper_sites():
+    for function, argument in (("require", False), ("execution_budget", ["synthetic-secret"])):
+        with pytest.raises(ValueError) as raised:
+            getattr(ceph_native_worker, function)(argument)
+        named = ceph_native_worker.cause(raised.value)
+        assert named.startswith("ValueError@ceph_native_worker." + function + ":")
+        assert ceph_native_worker.attested(named, {"ceph_native_worker": inspect.getsource(ceph_native_worker)})
+        assert "synthetic-secret" not in named
+
+
 def test_failure_cause_is_a_closed_reason_or_a_code_site_never_a_value():
     sources = source_bundle()
     sources["ceph_native"] = ("class Refusal(ValueError): pass\ndef dispatch(value):\n"
@@ -380,6 +444,40 @@ def test_failure_cause_is_a_closed_reason_or_a_code_site_never_a_value():
 
 
 LAUNCH_BUDGET = 120
+
+
+def test_zip_inspected_native_bundle_preserves_source_and_reaches_pure_dispatch_refusal(tmp_path):
+    sources = ceph_core.Transport.native_sources()
+    archive = tmp_path / "native.zip"
+    with zipfile.ZipFile(archive, "w") as bundle:
+        for name, source in sources.items():
+            bundle.writestr(name + ".py", source.encode())
+    loader = zipimport.zipimporter(str(archive))
+    inspected = {}
+    for name in sources:
+        module = ModuleType(name)
+        module.__file__ = loader.get_filename(name)
+        module.__loader__ = loader
+        inspected[name] = inspect.getsource(module)
+    supervisor = inspect.getsource(ceph_native_worker)
+    source = ceph_native_worker.launcher(supervisor) + "s['main']()"
+    # An empty dispatch refuses after loading the full bundle and before any native effect or marker read.
+    payload = {"sources": inspected, "payload": {}, "budget": LAUNCH_BUDGET}
+    result = subprocess.run([sys.executable, "-I", "-c", source, str(LAUNCH_BUDGET)], input=json.dumps(payload).encode(),
+                            capture_output=True, timeout=LAUNCH_BUDGET + 30, check=False)
+    assert result.returncode == 0 and result.stderr == b""
+    value = json.loads(result.stdout)
+    assert value["ok"] is False and value["reason"] == "native-refusal", value
+    assert value["cause"].startswith("request@ceph_native.dispatch:")
+    assert ceph_native_worker.attested(value["cause"], dict(inspected, ceph_native_worker=supervisor))
+    assert inspected == sources
+    for name, source in inspected.items():
+        compile(source, "<bootwright-fixed-" + name + ">", "exec")
+
+
+@pytest.mark.parametrize("value,valid", [("canary", True), ("canary\u2028name", False), ("canary\u2029name", False)])
+def test_object_display_name_keeps_unicode_separator_exclusions(value, valid):
+    assert ceph_native_object.display_name(value) is valid
 
 
 @pytest.mark.parametrize("phase", ["host_observe", "profile", "bootstrap"])
@@ -409,6 +507,94 @@ def test_clean_supervisor_preserves_redacted_native_failure_through_each_launche
     assert value["nativeError"] == {"coordinate": "registry.example.test/ceph:authored",
                                     "cause": "pull refused password=[redacted] [redacted]"}
     assert b"synthetic-secret" not in result.stdout and b"known-private" not in result.stdout
+
+
+@pytest.mark.parametrize("phase", ["host_observe", "profile", "bootstrap"])
+def test_clean_supervisor_preserves_child_encoding_failure_through_each_launcher(phase):
+    sources = ceph_core.Transport.native_sources()
+    sources["ceph_native"] += "\ndef dispatch(value):\n    return {'unserializable': {value['secret']}}\n"
+    supervisor = inspect.getsource(ceph_native_worker)
+    host = inspect.getsource(ceph_host_worker)
+    if phase == "profile":
+        source = ceph_host_worker.launcher(supervisor, host)
+    elif phase == "bootstrap":
+        source = ceph_core.bootstrap_launcher(supervisor, host)
+    else:
+        source = ceph_native_worker.launcher(supervisor) + "s['main']()"
+    payload = {"sources": sources, "payload": {"phase": phase, "secret": "synthetic-secret"}, "budget": LAUNCH_BUDGET}
+    result = subprocess.run([sys.executable, "-I", "-c", source, str(LAUNCH_BUDGET)], input=json.dumps(payload).encode(),
+                            capture_output=True, timeout=LAUNCH_BUDGET + 30, check=False)
+    assert result.returncode == 0 and result.stderr == b""
+    value = json.loads(result.stdout)
+    assert set(value) == {"ok", "reason", "cause"} and value["ok"] is False and value["reason"] == "native-unknown"
+    assert re.fullmatch(r"TypeError@ceph_native_worker\.result_bytes:[0-9]+", value["cause"])
+    assert ceph_native_worker.attested(value["cause"], dict(sources, ceph_native_worker=supervisor))
+    assert b"synthetic-secret" not in result.stdout
+
+
+@pytest.mark.parametrize("boundary", ["worker", "entrypoint"])
+def test_clean_supervisor_retains_a_bounded_cause_before_result_encoding(boundary):
+    supervisor = inspect.getsource(ceph_native_worker)
+    source = ceph_native_worker.launcher(supervisor)
+    if boundary == "worker":
+        source += "s['work'] = lambda *args: s['execution_budget'](['synthetic-secret']);"
+    source += "s['main']()"
+    arguments = ["3"] if boundary == "worker" else ["synthetic-secret"]
+    result = subprocess.run([sys.executable, "-I", "-c", source] + arguments,
+                            capture_output=True, timeout=10, check=False)
+    assert result.returncode == 0 and result.stderr == b""
+    value = json.loads(result.stdout)
+    assert unknown(value) and value["cause"].startswith("ValueError@ceph_native_worker.execution_budget:")
+    assert ceph_native_worker.attested(value["cause"], {"ceph_native_worker": supervisor})
+    assert b"synthetic-secret" not in result.stdout
+
+
+def test_child_failure_does_not_expand_exception_class_attestation():
+    supervisor = inspect.getsource(ceph_native_worker)
+    source = ceph_native_worker.launcher(supervisor)
+    source += ("s['work'] = lambda *args: (_ for _ in ()).throw(type('SyntheticError', (Exception,), {})('synthetic-secret'));"
+               "s['main']()")
+    result = subprocess.run([sys.executable, "-I", "-c", source, "3"], capture_output=True, timeout=10, check=False)
+    assert result.returncode == 0 and result.stderr == b""
+    value = json.loads(result.stdout)
+    assert set(value) == {"ok", "reason", "cause"} and value["ok"] is False and value["reason"] == "native-unknown"
+    assert ceph_native_worker.valid_cause(value["cause"])
+    assert not ceph_native_worker.attested(value["cause"], {"ceph_native_worker": supervisor})
+    assert b"synthetic-secret" not in result.stdout
+
+
+@pytest.mark.parametrize("written", [0, 5])
+def test_failed_or_partial_child_pipe_write_never_appends_a_fallback(monkeypatch, written):
+    frames, failures = [], []
+    value = {"ok": True, "result": {"ready": False}}
+    encoded = ceph_native_worker.result_bytes(value)
+    original_failure = ceph_native_worker.failure
+
+    def write(descriptor, data):
+        frames.append((descriptor, data))
+        if written and len(frames) == 1:
+            return written
+        raise BrokenPipeError("synthetic-secret")
+
+    def failure(*args):
+        failures.append(args)
+        return original_failure(*args)
+
+    def exited(status):
+        raise SystemExit(status)
+
+    monkeypatch.setattr(ceph_native_worker.os, "close", lambda unused: None)
+    monkeypatch.setattr(ceph_native_worker.os, "setsid", lambda: None)
+    monkeypatch.setattr(ceph_native_worker.os, "write", write)
+    monkeypatch.setattr(ceph_native_worker.os, "_exit", exited)
+    monkeypatch.setattr(ceph_native_worker.signal, "signal", lambda *args: None)
+    monkeypatch.setattr(ceph_native_worker.signal, "pthread_sigmask", lambda *args: None)
+    monkeypatch.setattr(ceph_native_worker, "failure", failure)
+    with pytest.raises(SystemExit) as raised:
+        ceph_native_worker.child_work(lambda: value, 100, 101, set())
+    assert raised.value.code == 0
+    assert frames == [(101, encoded)] + ([(101, encoded[written:])] if written else [])
+    assert failures == []
 
 
 @pytest.mark.parametrize("malformed", [
@@ -446,8 +632,77 @@ print(json.dumps({'result': result, 'received': received}))
     observed = json.loads(result.stdout)
     transmitted = {"ok": False, "reason": "native-refusal", "nativeError": malformed}
     assert observed["received"] == [transmitted]
-    expected = transmitted if native_diagnostics.valid(malformed) else {"ok": False, "reason": "native-unknown"}
-    assert observed["result"] == expected
+    if native_diagnostics.valid(malformed):
+        assert observed["result"] == transmitted
+    else:
+        assert unknown(observed["result"])
+        assert ceph_native_worker.attested(observed["result"]["cause"], {"ceph_native_worker": inspect.getsource(ceph_native_worker)})
+        assert "nativeError" not in observed["result"]
+
+
+HELPER_FAILURES = {
+    "malformed-diagnostics": ("native_diagnostics", "def valid(value:\n    synthetic-secret\n", "SyntaxError"),
+    "malformed-later-helper": ("ceph_tunnel", "def broken(:\n    synthetic-secret\n", "SyntaxError"),
+    "diagnostics-initialization": ("native_diagnostics",
+                                   "error = RuntimeError('synthetic-secret')\n"
+                                   "error.native_error = {'coordinate': 'synthetic-secret', 'cause': 'synthetic-secret'}\n"
+                                   "raise error\n", "RuntimeError"),
+    "later-initialization": ("ceph_tunnel", "raise RuntimeError('synthetic-secret')\n", "RuntimeError"),
+}
+
+
+@pytest.mark.parametrize("name", sorted(HELPER_FAILURES))
+def test_helper_load_failure_keeps_an_attested_cause_without_source_values_or_unvalidated_metadata(name):
+    helper, text, kind = HELPER_FAILURES[name]
+    sources = source_bundle()
+    sources[helper] = text
+    value = run_work({"sources": sources, "payload": {}, "budget": 1})
+    assert set(value) == {"ok", "reason", "cause"} and value["ok"] is False and value["reason"] == "native-unknown", value
+    assert re.fullmatch(kind + r"@[a-z_]+\.[A-Za-z_]+:[0-9]+", value["cause"]), value
+    assert ceph_native_worker.attested(value["cause"], dict(sources, ceph_native_worker=inspect.getsource(ceph_native_worker)))
+    assert "synthetic-secret" not in json.dumps(value) and "broken" not in json.dumps(value)
+    ceph_native_worker.result_bytes(value)
+
+
+@pytest.mark.parametrize("state", ["absent", "uninitialized", "failing-validator", "ordinary"])
+def test_failure_projection_omits_native_metadata_unless_the_validator_admits_it(monkeypatch, state):
+    error = RuntimeError("synthetic-secret")
+    error.native_error = {"coordinate": "selected", "cause": "native failure"}
+    name = ceph_native_worker.PREFIX + ".native_diagnostics"
+    if state == "absent":
+        monkeypatch.delitem(sys.modules, name, raising=False)
+    elif state == "ordinary":
+        monkeypatch.setitem(sys.modules, name, native_diagnostics)
+    else:
+        placeholder = ModuleType(name)
+        if state == "failing-validator":
+            placeholder.valid = lambda value: (item for item in ()).throw(NameError("synthetic-secret"))
+        monkeypatch.setitem(sys.modules, name, placeholder)
+    value = ceph_native_worker.failure("native-unknown", error)
+    assert value["reason"] == "native-unknown" and re.fullmatch(r"RuntimeError@unknown\.frame:0", value["cause"])
+    assert ("nativeError" in value) is (state == "ordinary")
+    assert "synthetic-secret" not in json.dumps(value)
+
+
+@pytest.mark.parametrize("state", ["absent", "uninitialized", "failing-validator", "ordinary"])
+def test_package_failure_projection_omits_native_metadata_unless_the_validator_admits_it(monkeypatch, state):
+    from ansible_collections.bootwright.core.plugins.module_utils import ceph_package_worker
+    error = ValueError("synthetic-secret")
+    error.native_error = {"coordinate": "selected", "cause": "native failure"}
+    name = ceph_package_worker.PREFIX + ".native_diagnostics"
+    if state == "absent":
+        monkeypatch.delitem(sys.modules, name, raising=False)
+    elif state == "ordinary":
+        monkeypatch.setitem(sys.modules, name, native_diagnostics)
+    else:
+        placeholder = ModuleType(name)
+        if state == "failing-validator":
+            placeholder.valid = lambda value: (item for item in ()).throw(NameError("synthetic-secret"))
+        monkeypatch.setitem(sys.modules, name, placeholder)
+    value = ceph_package_worker.failure(error)
+    assert value["ok"] is False and value["reason"] == "packages"
+    assert ("nativeError" in value) is (state == "ordinary")
+    assert "synthetic-secret" not in json.dumps(value)
 
 
 def test_work_supplies_the_same_deadline_to_native_batch_admission():

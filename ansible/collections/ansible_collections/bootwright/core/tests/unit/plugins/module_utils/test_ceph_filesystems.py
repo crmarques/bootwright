@@ -30,9 +30,9 @@ FSID = "4c0a4300-aa43-458c-86d7-ac2256d1fc00"
 OWNER = "apply-123"
 GIB = 1024 ** 3
 FORBIDDEN = ("volume", "volumes", "--force", "--allow-dangerous-metadata-overlay", "--fscid", "--recover", "--normalization", "--casesensitive")
-FORBIDDEN_PREFIXES = (("fs", "set"), ("fs", "flag"), ("fs", "rm"), ("fs", "fail"), ("fs", "subvolumegroup", "rm"), ("fs", "subvolumegroup", "resize"))
+FORBIDDEN_PREFIXES = (("fs", "flag"), ("fs", "rm"), ("fs", "fail"), ("fs", "subvolumegroup", "rm"), ("fs", "subvolumegroup", "resize"))
 POOL_IDS = {"cephfs-metadata": 3, "cephfs-data": 4, "cephfs-extra": 5}
-FS_NEW = ("fs", "new", "files", "cephfs-metadata", "cephfs-data", "set", "max_mds", "1", "allow_standby_replay", "false", "standby_count_wanted", "0")
+FS_NEW = ("fs", "new", "files", "cephfs-metadata", "cephfs-data", "set", "max_mds", "1", "standby_count_wanted", "0")
 
 
 def cluster(mds_count=None):
@@ -136,9 +136,15 @@ class World:
         if command[:2] == ("fs", "new"):
             self.mutations.append(command)
             name, metadata, data, pairs = command[2], command[3], command[4], dict(zip(command[6::2], command[7::2]))
-            assert command[5] == "set" and set(pairs) == {"max_mds", "allow_standby_replay", "standby_count_wanted"}, command
+            # 20.2.1's MON leader aborts on allow_standby_replay inside fs new (FSCommands.cc set_val looks up the uncommitted fs).
+            assert command[5] == "set" and set(pairs) == {"max_mds", "standby_count_wanted"}, command
             self.add_filesystem(name, metadata, data, fscid=7 + len(self.filesystems), max_mds=int(pairs["max_mds"]),
-                                replay=pairs["allow_standby_replay"] == "true", wanted=int(pairs["standby_count_wanted"]))
+                                replay=False, wanted=int(pairs["standby_count_wanted"]))
+            return 0, b""
+        if command[:2] == ("fs", "set"):
+            assert len(command) == 5 and command[3] == "allow_standby_replay" and command[4] in ("true", "false"), command
+            self.mutations.append(command)
+            self.entry(command[2])["mdsmap"]["flags_state"]["allow_standby_replay"] = command[4] == "true"
             return 0, b""
         if command[:2] == ("fs", "add_data_pool"):
             self.mutations.append(command)
@@ -228,13 +234,25 @@ def test_fs_new_argv_uses_set_and_never_force():
     assert native.filesystem() == {"changed": False} and effects(world) == [FS_NEW]
 
 
-@pytest.mark.parametrize("replay,wanted,argv", [(True, 1, ("true", "1")), (False, 2, ("false", "2"))])
-def test_fs_new_sets_the_frozen_mds_settings(replay, wanted, argv):
+@pytest.mark.parametrize("replay,wanted", [(True, 1), (False, 2)])
+def test_fs_new_sets_the_frozen_mds_counts_and_standby_replay_only_after_creation(replay, wanted):
     world = World()
     filesystem = fs_value(standbyReplay=replay, standbyCountWanted=wanted)
     native = worker(world, filesystem)[0]
+    assert native.filesystem() == {"changed": True}
+    created = FS_NEW[:9] + (str(wanted),)
+    assert effects(world) == [created] + ([("fs", "set", "files", "allow_standby_replay", "true")] if replay else [])
+    assert all("allow_standby_replay" not in command for command in effects(world) if command[:2] == ("fs", "new"))
+    assert native.filesystem() == {"changed": False} and len(effects(world)) == 1 + replay
+
+
+def test_standby_replay_drift_on_the_owned_filesystem_is_set_back():
+    world = World()
+    native = worker(world, fs_value(standbyReplay=True))[0]
     native.filesystem()
-    assert effects(world) == [FS_NEW[:9] + (argv[0], "standby_count_wanted", argv[1])]
+    world.entry("files")["mdsmap"]["flags_state"]["allow_standby_replay"] = False
+    assert native.filesystem() == {"changed": True}
+    assert effects(world)[-1] == ("fs", "set", "files", "allow_standby_replay", "true")
 
 
 @pytest.mark.parametrize("case,reason", [("no-marker", "foreign-filesystem"), ("no-attempt", "foreign-filesystem"),

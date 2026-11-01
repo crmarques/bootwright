@@ -47,7 +47,7 @@ func TestAHostRefusalReachesTheOperatorWithItsRemedy(t *testing.T) {
 }
 
 func TestAPackageRefusalReachesTheOperatorWithWhatToCheck(t *testing.T) {
-	for reason, want := range map[string]string{"package-license": "Entitlement.spec.license.accept", "package-signature": "publisher keys", "package-resolution": "IBM Ceph repository", "package-transaction": "dnf log"} {
+	for reason, want := range map[string]string{"package-license": "Entitlement.spec.license.accept", "package-signature": "publisher keys", "package-resolution": "IBM Ceph repository", "package-transaction": "dnf log", "package-acquisition": "network path"} {
 		t.Run(reason, func(t *testing.T) {
 			e, _, proofs := hostExecution(t, "node-1")
 			_, err := NewHost(&refusingRunner{reason: reason}).WithProofs(proofs).Apply(context.Background(), e)

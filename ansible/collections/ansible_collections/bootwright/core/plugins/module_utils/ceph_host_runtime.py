@@ -255,12 +255,14 @@ def owned_scratch(parent, prefix):
     shutil.rmtree(path)
 
 
-def discard_residue(parent, prefix):
-    """A killed pull may leave its private scratch, authfile included; remove it before the next."""
+def discard_residue(parent, prefix, *, retained=(), reserved=()):
+    """Keep proved records and remove killed-pull scratch, refusing unproved reserved names."""
     directory = os.open(parent, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | os.O_CLOEXEC)
     try:
-        for name in os.listdir(directory):
-            if name.startswith(prefix):
+        names = os.listdir(directory)
+        require(all(not name.startswith(reserved) or name in retained for name in names), "ownership")
+        for name in names:
+            if name.startswith(prefix) and name not in retained:
                 info = os.stat(name, dir_fd=directory, follow_symlinks=False)
                 require(stat.S_ISDIR(info.st_mode) and info.st_uid == os.geteuid(), "ownership")
                 shutil.rmtree(os.path.join(parent, name))
@@ -450,12 +452,13 @@ class HostRuntime:
     def pull(self, durable, private, deadline, *, trust=None):
         """Fill the content-addressed image cache with only the frozen digest."""
         image = self.request["image"]
-        discard_residue(durable.path, "pull-")
         attempts = 0
         while attempts < PULL_ATTEMPTS and durable.read("pull-attempt-%d.json" % (attempts + 1)) is not None:
             record = durable.read("pull-attempt-%d.json" % (attempts + 1))
             require(canonical(record) == canonical({"scope": self.scope(), "attempt": attempts + 1}), "image-pull")
             attempts += 1
+        discard_residue(durable.path, "pull-", reserved=("pull-attempt-",),
+                        retained=tuple("pull-attempt-%d.json" % number for number in range(1, attempts + 1)))
         completed = durable.read("pulled.json")
         if completed is not None:
             require(attempts > 0, "image-pull")
@@ -1205,7 +1208,7 @@ class Cache:
             self.markers.write("cache-directory-intent.json", expected)
             os.mkdir(name, 0o700, dir_fd=root)
             os.fsync(root)
-        with observe.child_directory(root, name, (observe.ROOT_UID, self.profile["uid"])) as directory:
+        with observe.cluster_directory(root, name, (observe.ROOT_UID, self.profile["uid"])) as directory:
             info = os.fstat(directory)
             self.markers.write("cache-directory.json", {"scope": expected, "identity": {"dev": info.st_dev, "inode": info.st_ino}})
 
@@ -1219,7 +1222,7 @@ class Cache:
                 self.prepare_directory(root)
             cache_require(observe.entries(root) == [self.request["fsid"]])
             # pylint: disable-next=contextmanager-generator-missing-cleanup
-            with observe.child_directory(root, self.request["fsid"], (observe.ROOT_UID, self.profile["uid"])) as cluster:
+            with observe.cluster_directory(root, self.request["fsid"], (observe.ROOT_UID, self.profile["uid"])) as cluster:
                 info = os.fstat(cluster)
                 record = self.markers.read("cache-directory.json")
                 cache_require(canonical(record) == canonical({"scope": self.directory_scope(), "identity": {"dev": info.st_dev, "inode": info.st_ino}}))

@@ -155,11 +155,13 @@ class Journal:
 
 @contextlib.contextmanager
 def phase(reason, coordinate="Ceph package transaction"):
-    """A native helper's failure is named by the package phase it failed in, at the site it failed."""
+    """A native helper's failure is named by the package phase it failed in, at the site it failed; a lost acquisition connection by its artifact."""
     try:
         yield
     except ceph_native.Refusal:
         raise
+    except ceph_package_sources.AcquisitionLoss as error:
+        raise ceph_native.NativeFailure("package-acquisition", error.artifact, error.cause).with_traceback(error.__traceback__) from None
     except Exception as error:
         raise ceph_native.NativeFailure(reason, coordinate, str(error)).with_traceback(error.__traceback__) from None
 

@@ -653,7 +653,7 @@ def test_device_proof_never_accepts_foreign_or_in_use_disk(core_request, mutatio
         disk["size"] += 512
     else:
         signatures = [{"type": "linux_raid_member"}]
-    answers = {("/usr/bin/lsblk", "--json", "--bytes", "--paths", "--output", "PATH,TYPE,SERIAL,SIZE,FSTYPE,MOUNTPOINTS"): {"blockdevices": [disk]},
+    answers = {ceph_native.DEVICE_TREE: {"blockdevices": [disk]},
                ("/usr/sbin/wipefs", "--no-act", "--json", "/dev/vdb"): {"signatures": signatures}}
     native, calls = worker(core_request, answers)
     if physical:

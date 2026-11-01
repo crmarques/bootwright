@@ -80,7 +80,8 @@ def crypto_policy(value):
         if not line:
             continue
         match = re.fullmatch(r"([A-Za-z]+)\s*(?:=\s*|\s+)([A-Za-z0-9@.,_+^*?!/ -]+)", line)
-        require(match is not None and match.group(1).lower() in CRYPTO_DIRECTIVES)
+        require(match is not None and (match.group(1).lower() in CRYPTO_DIRECTIVES
+                or (match.group(1).lower() == "gssapikeyexchange" and match.group(2).lower() == "no")))
         lines.append(line)
     return "\n".join(lines) + ("\n" if lines else "")
 

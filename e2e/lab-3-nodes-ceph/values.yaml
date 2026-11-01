@@ -79,52 +79,57 @@ ceph:
   managementVIP: 198.51.100.62
 
   # Auxiliary images, authored as digests of the build above (D171). Move them
-  # together with ceph.image.
+  # together with ceph.image. Each digest must identify the linux/amd64
+  # platform manifest. `skopeo inspect` reports the digest of the reference's
+  # top-level manifest, which for a multi-platform image is the image index; an
+  # index digest is refused as image-digest-mismatch. Read the index with
+  # `skopeo inspect --raw docker://BASE@DIGEST`, take the digest of its
+  # linux/amd64 entry, and confirm that manifest's sha256 over its raw bytes.
   images:
     haproxy:
       base: cp.icr.io/cp/ibm-ceph/haproxy-rhel10
-      version: sha256:59d020dd7a02ad25248ae3766914f5bc5a241de77c2257fcad7124c13eea82f1
+      version: sha256:90a29584b593eac133a844ec4f94c7f7d83d127936c91cab0b088e765ed5dad9
 
     keepalived:
       base: cp.icr.io/cp/ibm-ceph/keepalived-rhel10
-      version: sha256:4ade24fea1bf11cc0c2e88af631597f21bc586562da3001ea15b8d10e0860694
+      version: sha256:ed18865b7c22051db1166e3df3de38effe225244b0bab32dcee429bb7b43f5db
 
     samba:
       base: cp.icr.io/cp/ibm-ceph/samba-server-rhel10
-      version: sha256:3b8f9164c478d267427e51e0b387c9e32ae3566e3a2078471e16d44ac6807cf1
+      version: sha256:e91653798ca356348b4b60deac6a8683da885fed583753948cb5a7028527c407
 
     samba_metrics:
       base: cp.icr.io/cp/ibm-ceph/samba-metrics-rhel10
-      version: sha256:090f5d43981a51923b593da36b9010d43d67264691a625ff2b92005676574f29
+      version: sha256:57f54c5a21fe98dba6fd4904a4fe1fe6a78e1d6ddbd241050c9e6313ac2f3944
 
     prometheus:
       base: cp.icr.io/cp/ibm-ceph/prometheus
-      version: sha256:f4d613a79bebcb4deeb0b5f9b1f231ba8046572978207abe242bc7c9cf589789
+      version: sha256:6483d0ca844408e25a0477bf8f0b2ba46105202a080fcf550ee9933189741bf2
 
     alertmanager:
       base: cp.icr.io/cp/ibm-ceph/prometheus-alertmanager
-      version: sha256:7331dd1e3aabe689ae45470e560472dc39aeeea611c3c479e266bae9140243ed
+      version: sha256:f5e59e1d0b66178b76afddbd02b75aabe89e2571fd4f642444587fd1dfa6b1ed
 
     grafana:
       base: cp.icr.io/cp/ibm-ceph/grafana-rhel10
-      version: sha256:12006a7f211b2bf24893e39f7e5ea208b8d641d1dd9c9b562a0c502663484141
+      version: sha256:05b7009e0a5d794d035ab2d3fd06df767de62c2b57626f2f543885ee24664476
 
     node_exporter:
       base: cp.icr.io/cp/ibm-ceph/prometheus-node-exporter
-      version: sha256:4d4e3433d212042b07534c042d512bf1f8c65a43823b20e6f1b05da5cd88f0ba
+      version: sha256:7ff1de3e3c05df351d86f9b3f1ed143442999602a3668ad513dfcb5436ebb756
 
     nginx:
       base: cp.icr.io/cp/ibm-ceph/nginx-126-rhel10
-      version: sha256:c7ba454e04aab177e3d2e283e679412dc90477d77848715ebabd3db9af4b45af
+      version: sha256:36372e03d80249571aeaf0bcca29cc9ae0abc8ae1dd82511dee41b9faee39415
 
     loki:
       base: cp.icr.io/cp/ibm-ceph/logging-loki-rhel8
-      version: sha256:e7e4c7c372a02aa2fbab9a0f3af48475f0df860164551e8562565983576dc61c
+      version: sha256:3a7aa2e879bed7384485c16ac51d788fd3e60bf06e2c927e8cde4401be46e443
 
     alloy:
       base: cp.icr.io/cp/ibm-ceph/alloy-rhel10
-      version: sha256:4f645e6ee02545ceb29cd01fb42e2d9de03e1e48e509281898a325cc72d14b85
+      version: sha256:639f6c719715f4c2b2ddfa467adbe41518a32f155739bb4ba1b70fd8992e521a
 
     nvmeof:
       base: cp.icr.io/cp/ibm-ceph/nvmeof-rhel10
-      version: sha256:4727ed1dd465b8d0064d8da6064b32f39068fca558fea9a78c3d65f41923b226
+      version: sha256:fe193a06ca2e76140a991deb9236edd8c1c49e5b9df1539daeac9ba035c29052

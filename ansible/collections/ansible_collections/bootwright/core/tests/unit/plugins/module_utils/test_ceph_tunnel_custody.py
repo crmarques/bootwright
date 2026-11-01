@@ -6,6 +6,7 @@ import contextlib
 import copy
 import hashlib
 import os
+import pathlib
 import stat
 from types import SimpleNamespace
 
@@ -287,6 +288,20 @@ def test_actual_source_inode_proof_detects_an_unrelated_name_for_same_private_fi
     alias = os.path.join(os.path.dirname(markers.path), "unrelated-private-alias")
     os.link(os.path.join(markers.path, "initial-mgr-original.private"), alias)
     assert custody.source_identity(alias, os.geteuid()) in custody.protected_identities(markers.path)
+
+
+def test_a_complete_cluster_area_is_proved_and_only_an_unbounded_one_refuses(owned, monkeypatch):
+    markers, scope = owned
+    custody.retain(markers, "initial-mgr-original", scope, material("initial-mgr-original"))
+    for index in range(600):
+        pathlib.Path(markers.path, "pool-attempt-resource-%03d.json" % index).write_text("{}")
+    alias = os.path.join(os.path.dirname(markers.path), "unrelated-private-alias")
+    os.link(os.path.join(markers.path, "pool-attempt-resource-599.json"), alias)
+    assert len(os.listdir(markers.path)) > 256
+    assert custody.source_identity(alias, os.geteuid()) in custody.protected_identities(markers.path)
+    monkeypatch.setattr(custody, "MAX_AREA_ENTRIES", 600)
+    with pytest.raises(custody.CustodyRefusal, match="^native-tunnel-custody-unproved$"):
+        custody.protected_identities(markers.path)
 
 
 @pytest.mark.parametrize("directory_present", [False, True])

@@ -125,6 +125,64 @@ def delegated(fixture, name, service, listed, hosts=("node-1",), unit_files=True
     return run
 
 
+def remap_owner(monkeypatch, paths, uid):
+    """Report uid as the owner of the given entries, as cephadm's makedirs chown leaves them; the test runs unprivileged."""
+    inodes = {os.stat(path, follow_symlinks=False).st_ino for path in paths}
+    real_stat, real_fstat = os.stat, os.fstat
+
+    def remap(info):
+        if info.st_ino not in inodes:
+            return info
+        values = list(info[:10])
+        values[4] = uid
+        return os.stat_result(values, {name: getattr(info, name) for name in ("st_atime_ns", "st_mtime_ns", "st_ctime_ns", "st_blksize", "st_blocks")})
+
+    monkeypatch.setattr(observe.os, "stat", lambda *args, **options: remap(real_stat(*args, **options)))
+    monkeypatch.setattr(observe.os, "fstat", lambda descriptor: remap(real_fstat(descriptor)))
+
+
+@pytest.mark.parametrize("holder", ["alloy", "none", "haproxy"])
+def test_the_fsid_directory_may_belong_to_one_of_its_singleton_daemon_users(fixture, monkeypatch, holder):
+    """cephadm's make_data_dir_base chowns the FSID directory to each daemon it deploys (cephadmlib/file_utils.py makedirs, v20.2.1)."""
+    cluster = fixture[1].parent
+    run = delegated(fixture, "alloy.node-1", "alloy", ["alloy"])
+    proxy = delegated(fixture, "haproxy.rgw.objects.node-1.abcdef", "ingress.rgw.objects", ["alloy", "ingress.rgw.objects"])
+    held = [cluster] + {"alloy": [cluster / "alloy.node-1"], "none": [], "haproxy": [cluster / "haproxy.rgw.objects.node-1.abcdef"]}[holder]
+    remap_owner(monkeypatch, held, os.getuid() + 473)
+
+    def command(argv, **options):
+        return run(argv, **options) if "alloy" in " ".join(argv) else proxy(argv, **options)
+
+    if holder == "alloy":
+        result = observe.daemons(fixture[2], os.getuid(), command, owned=True, host="node-1")
+        assert [item["name"] for item in result][:1] == ["alloy.node-1"]
+    else:
+        with pytest.raises(observe.ObservationRefusal, match="^native-observation-unproved$"):
+            observe.snapshot(fixture[2], os.getuid(), command, owned=True, host="node-1")
+
+
+@pytest.mark.parametrize("holder,admitted", [("root", True), ("singleton", True), ("none", False), ("non-singleton", False)])
+def test_the_shared_cluster_directory_rule_serves_the_cephadm_cache_too(fixture, monkeypatch, holder, admitted):
+    """ceph_host_runtime opens the FSID directory through this helper for its cephadm cache, so the chown rule holds there."""
+    root, cluster = fixture[0], fixture[1].parent
+    (cluster / "grafana.node-1").mkdir(mode=0o700)
+    (cluster / "haproxy.rgw.objects.node-1.abcdef").mkdir(mode=0o700)
+    held = {"root": [], "singleton": [cluster, cluster / "grafana.node-1"], "none": [cluster],
+            "non-singleton": [cluster, cluster / "haproxy.rgw.objects.node-1.abcdef"]}[holder]
+    remap_owner(monkeypatch, held, os.getuid() + 472)
+    parent = os.open(root, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+    try:
+        if admitted:
+            with observe.cluster_directory(parent, fixture[2]["fsid"], (os.getuid(),)) as directory:
+                assert os.fstat(directory).st_ino == os.stat(cluster).st_ino
+        else:
+            with pytest.raises(observe.ObservationRefusal, match="^native-observation-unproved$"):
+                with observe.cluster_directory(parent, fixture[2]["fsid"], (os.getuid(),)):
+                    pass
+    finally:
+        os.close(parent)
+
+
 def test_listed_delegated_daemon_is_reported_without_the_ceph_image(fixture):
     run = delegated(fixture, "haproxy.rgw.objects.node-1.abcdef", "ingress.rgw.objects", ["ingress.rgw.objects"])
     result = observe.daemons(fixture[2], os.getuid(), run, owned=True, host="node-1")

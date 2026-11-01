@@ -67,7 +67,7 @@ def test_any_partial_auxiliary_refuses_without_recovery(core_request, monkeypatc
         item["children"] = [{"path": path + "1"}]
     elif state == "mounted":
         item["mountpoints"] = ["/data"]
-    answers = {("/usr/bin/lsblk", "--json", "--bytes", "--paths", "--output", "PATH,TYPE,SERIAL,SIZE,FSTYPE,MOUNTPOINTS"): {"blockdevices": devices}}
+    answers = {ceph_native.DEVICE_TREE: {"blockdevices": devices}}
     for device in devices:
         signatures = [{"type": "LVM2_member"}] if state == "signature" and device["path"] == path else []
         answers[("/usr/sbin/wipefs", "--no-act", "--json", device["path"])] = {"signatures": signatures}
@@ -134,6 +134,41 @@ def test_native_normalization_cannot_change_variant_effects(core_request, monkey
         assert native.markers.writes == []
 
 
+def util_linux(argv, tree):
+    """lsblk as util-linux answers it: the tree is drawn in the NAME column, so without NAME the JSON is a flat list."""
+    columns = argv[argv.index("--output") + 1].split(",")
+    assert argv[:5] == ["/usr/bin/lsblk", "--json", "--bytes", "--paths", "--output"] and "PATH" in columns
+
+    def project(node, nested):
+        value = {column.lower(): node.get(column.lower()) for column in columns if column != "NAME"}
+        if "NAME" in columns:
+            value["name"] = node.get("path")
+        if nested and node.get("children"):
+            value["children"] = [project(child, True) for child in node["children"]]
+        return value
+
+    if "NAME" in columns:
+        return {"blockdevices": [project(node, True) for node in tree]}
+    flat = []
+
+    def walk(nodes):
+        for node in nodes:
+            flat.append(project(node, False))
+            walk(node.get("children") or [])
+
+    walk(tree)
+    return {"blockdevices": flat}
+
+
+def test_the_device_tree_requests_the_column_util_linux_draws_its_tree_in():
+    columns = ceph_native.DEVICE_TREE[ceph_native.DEVICE_TREE.index("--output") + 1].split(",")
+    assert columns[0] == "NAME" and {"PATH", "TYPE", "SERIAL", "SIZE", "FSTYPE", "MOUNTPOINTS"} <= set(columns)
+    tree = [{"path": "/dev/sda", "type": "disk", "children": [{"path": "/dev/mapper/ceph--vg-osd--block--a", "type": "lvm"}]}]
+    assert util_linux(list(ceph_native.DEVICE_TREE), tree)["blockdevices"][0]["children"][0]["type"] == "lvm"
+    flat = util_linux(["/usr/bin/lsblk", "--json", "--bytes", "--paths", "--output", "PATH,TYPE"], tree)["blockdevices"]
+    assert [node["path"] for node in flat] == ["/dev/sda", "/dev/mapper/ceph--vg-osd--block--a"] and "children" not in flat[0]
+
+
 @pytest.mark.parametrize("damage", [None, "encryption", "tpm", "mapping", "token", "db-link", "foreign", "extra", "retained"])
 def test_completed_variant_proof_observes_native_crypto_and_auxiliary_identity(core_request, damage):
     variants(core_request)
@@ -170,7 +205,7 @@ def test_completed_variant_proof_observes_native_crypto_and_auxiliary_identity(c
     def command(argv, **kwargs):
         calls.append(argv)
         if argv[0] == "/usr/bin/lsblk":
-            return {"blockdevices": disks}
+            return util_linux(argv, disks)
         if argv[0] == "/usr/sbin/lvs":
             return {"report": [{"lv": rows}]}
         assert argv[:2] == ["/usr/sbin/cryptsetup", "luksDump"]
