@@ -6349,3 +6349,212 @@ the process that caused each historical intermittent failure.
 The change receives the independent review and race verification required
 for contextfs concurrency. No unrelated product feature, native effect or
 operator-acceptance waiver is authorized.
+
+### D215
+
+**owner** (2026-10-31): "if needed to fix or update docs, create a new temp
+branch and for the changes in this branch, just run basic tests"; full gates
+run when the commits are integrated into main, with the temporary history
+squashed into one code commit and one documentation commit.
+
+The session applies the [pre-existing-defect rule](../../AGENTS.md) to
+[B1006](m2.md#b1006), whose registry JSON decoder blocks the requested Ceph
+operator run. [X250](m2.md#planned-slices) is its bounded safety repair:
+case-sensitive JSON names, identical-name rejection and regression coverage,
+with the original digest, credential, transport and adapter-channel proofs.
+The temporary branch receives focused verification and independent safety
+review; full gates and safety race verification remain due at integration.
+The live continuation retains its operator gate, and native acceptance
+remains governed by the [acceptance ledger](../../docs/acceptance.md#row-format).
+
+The same request covers the subsequently exposed [B1007](m2.md#b1007) as
+[X251](m2.md#planned-slices): complete the isolated package helper's existing
+source closure, with a regression that executes the real bundle's pure scope
+validation. It remains a separate defect correction, with the same focused
+verification, independent review and deferred integration gates.
+
+The same request covers [B1008](m2.md#b1008) as
+[X252](m2.md#planned-slices): preserve the existing bounded exception-type and
+code-site diagnostics when a native supervisor cannot publish a valid result.
+This separately recorded repair supplies missing evidence for the blocked
+operator run; it changes no result admission, effect authority, frozen request
+or runtime lock, and makes no claim to repair an as-yet unlocated host failure.
+It receives the same focused checks and independent review before handoff,
+with full integration gates deferred.
+
+The same request covers [B1009](m2.md#b1009) as
+[X253](m2.md#planned-slices): escape the two Unicode separators whose literal
+source representation breaks ZIP-backed inspection, with a regression through
+that actual carrier and the production worker. The runtime validation and
+effect contract stay unchanged. The separately recorded [B1010](m2.md#b1010)
+diagnostic masking defect stayed outside this blocking source correction and is
+[X259](m2.md#planned-slices) under D219; no native acceptance or verification
+gate is waived.
+
+The same request covers the subsequently exposed [B1011](m2.md#b1011) as
+[X254](m2.md#planned-slices): retain the selected image's fixed
+`GSSAPIKeyExchange no` policy line, with all other values refused. This is a
+separate blocking parser correction; the algorithm allowlist, frozen image,
+FIPS mode, transport authority and effect contract stay unchanged. It receives
+the same focused checks and independent review, with full integration gates
+and native acceptance still due.
+
+The same request covers [B1012](m2.md#b1012) as
+[X255](m2.md#planned-slices): distinguish the core pull's validated retained
+attempt records from its temporary directories during continuation. Preserve
+the existing scratch namespace and ownership refusals, with a regression that
+uses real marker files. This separate blocking repair changes no journal
+format, frozen request or effect identity, and keeps the same focused checks,
+independent review and deferred full integration gates.
+
+The same request covers recording [B1013](m2.md#b1013), the subsequently
+demonstrated vendor license-helper failure under FIPS. This documentation
+records the bounded probe, remaining traceback uncertainty and artifact-choice
+blocker; it authorizes no vendor-code patch, image substitution, retirement,
+license bypass or new compatibility policy. Artifact selection follows D216
+before a separate deployment plan is prepared.
+
+### D216
+
+**owner** (2026-10-31): the next Ceph artifact must be compatible with IBM Data
+Foundation 4.22; "if newer builds are compatible, we can use them."
+
+This is the operator profile's external-storage requirement for
+[B1013](m2.md#b1013), not a product-wide version allowlist. The owner supplied
+the ODF 4.22.6 checker's external-mode row: RHCS 9.1z2 / 9.1.2 with RHEL 9
+package `20.2.1-405.el9cp`, and RHCS 8.1z8 / 8.1.8 with
+`19.2.1-405.el9cp`. That excerpt names no 20.2.2 artifact or future-version
+rule. Keep the current IBM 9.9.1.2 package line as the candidate while obtaining
+its FIPS correction and the applicable IBM product/build confirmation;
+matching package coordinates alone is not that confirmation. Verify any newer
+artifact against the exact matrix row and its conditions. A package-level
+FIPS correction qualifies neither that relationship nor a transition of the
+current frozen operation.
+Preparing a corrected deployment plan preserves that operation until its
+retirement or separate isolated replacement is authorized; this decision
+authorizes no live retirement, vendor-code patch or FIPS/license bypass.
+
+### D217
+
+**owner** (2026-10-31): continue looking for a solution; "if you can't, let's
+cleanup env and try again with the same case, but disabling fips, just to
+validate all other feature/option in this case".
+
+When the bounded search yields no corrected artifact that can be selected
+under D216, retire the current owned virtual lab through its normal plan-bound
+data-loss and online-cleanup procedure, retaining the context, Secrets, media
+and private FIPS evidence. Prepare a fresh non-FIPS run of the same case and
+artifact line; keep its other authored security, subscription and storage
+options, and restore the separate local-user SMB coverage the owner chose.
+Existing hardware and topology limits still apply. This run supplies evidence
+for those other options only; [B1013](m2.md#b1013) and FIPS acceptance remain
+open. It authorizes no in-place FIPS transition, provider-code patch, license
+bypass or unsupported replacement of the frozen partial operation.
+
+### D218
+
+**owner** (2026-11-01): choose the native-default non-FIPS comparison and
+"make test use default algorithm/protocol given what build requires. test
+must use what is recommended for the defined version according to provider
+documentation".
+
+The fresh [three-node case](../../e2e/lab-3-nodes-ceph/runbook.md#native-cryptography-and-client-protocols)
+uses the pinned IBM 9.9.1.2 artifact and its native cryptographic defaults;
+remove the private profile's optional legacy AES declaration. This changes
+D217's retained CephX test requirement, while preserving its other selected
+options, including TPM2, disk encryption, RHSM and SMB. Retire the current
+frozen operation normally before importing the changed input. Keep the
+context, Secrets, media and private evidence.
+
+Use versioned provider instructions and matching client artifacts; record
+native defaults and test actual client I/O without an automatic cipher
+downgrade or client fallback. This selects a comparison profile, not a new
+admitted value or a correction to the explicit-AES contract of
+[B628](m2.md#b628). Kernel and Data Foundation compatibility require their own
+evidence. FIPS and the unassisted license-persistence gate remain open under
+[B1013](m2.md#b1013) and [B1014](m2.md#b1014); no run is accepted by this choice.
+
+### D219
+
+**owner** (2026-11-01): "fix this new issue and implement the backlogs created
+in the codex session", after the native-default continuation refused at
+`not-ready@ceph_native.license` on a fresh cluster.
+
+This decides [B1014](m2.md#b1014)'s ownership, replay and retirement. The
+cluster block's license call owns the MON `mon_config_key_max_entry_size`
+bound under the IBM license contract only: before acceptance, and only while
+the persisted value is below `LICENSE_STORE_FLOOR`, it writes the floor at the
+`mon` section, then proves the persisted value and each quorum MON's running
+value within one bounded manager wait. It never lowers a larger value. Replay
+is that observation, which writes nothing once the bound holds, and an
+observation or an accepted license never touches it. Retirement is cluster
+removal: the value lives in that cluster's MON store. No public field, bootstrap
+configuration entry or pass-through is added, and acceptance readback stays
+mandatory. [X271](m2.md#planned-slices) implements it under D215's focused
+verification, with full integration gates and native acceptance still due.
+
+The same request covers [B1016](m2.md#b1016) as
+[X256](m2.md#planned-slices): fetch a package artifact again from its first
+byte after a bounded transport loss, the evidence B1015 left for a separate
+retry design. Verification, trust anchors, sources and the frozen decision
+stay unchanged.
+
+The same request covers the session's other open items. [B1015](m2.md#b1015)
+is [X272](m2.md#planned-slices): name the selected key, repository metadata or
+RPM of a package acquisition connection lost after its bounded attempts,
+under the closed reason `package-acquisition`, distinct from TLS, status,
+resolution, digest and signer refusals. [B1010](m2.md#b1010) is
+[X259](m2.md#planned-slices): keep the bounded exception-type and code-site
+cause when a helper fails before the diagnostic validator exists, omitting
+unvalidated native error metadata. [B1004](m2.md#b1004) is
+[X260](m2.md#planned-slices): state that an authored auxiliary digest
+identifies the linux/amd64 platform manifest and author the platform digests
+the owner's entitled index reads selected, with the resolver's refusal kept
+and no substitution added. [B1028](m2.md#b1028), found by the continuation, is
+[X261](m2.md#planned-slices): request lsblk's `NAME` column so OSD device
+proofs read its tree. [B1029](m2.md#b1029) is [X262](m2.md#planned-slices):
+exclude the settings and service members from the bootstrap recovery scope.
+[B1019](m2.md#b1019) is [X263](m2.md#planned-slices): keep standby replay out
+of `fs new`, whose 20.2.1 handler aborts the MON leader on it, and set it after
+creation. [B1020](m2.md#b1020), the seed-only admin configuration, is recorded
+for definition, not implemented. [B1021](m2.md#b1021) is
+[X264](m2.md#planned-slices): the runbook permits each ingress's VRRP and
+client port on its guests. [B1023](m2.md#b1023) is [X266](m2.md#planned-slices):
+the tunnel custody proof lists a complete cluster's FSID area.
+[B1024](m2.md#b1024) is [X267](m2.md#planned-slices): daemon observation
+admits the FSID directory cephadm chowns to a singleton daemon's user.
+[B1025](m2.md#b1025) is [X268](m2.md#planned-slices): SMB applies send
+passwords under the base64 input filter. [B1026](m2.md#b1026) is
+[X269](m2.md#planned-slices): the result publisher admits a reachable
+management gateway's endpoint evidence. [B1027](m2.md#b1027) is
+[X270](m2.md#planned-slices): subvolume path proofs read `getpath` as text.
+Every one of these is one general
+flow for all releases, not a version specialization. [B1013](m2.md#b1013)
+stays blocked on the vendor. Each
+receives focused checks and independent review, with full integration gates
+and native acceptance still due.
+
+### D220
+
+**owner** (2026-11-01): after the three-node run's ingress refused
+`ingress-firewall`, "all fix must be for all future runs too", then asked for
+"the best architectural decision, keeping responsibility well defined ... for
+remote machines using real switch/routers", and accepted the recommendation:
+"Proceed with recommendation".
+
+Host firewall policy belongs to the host's operating-system owner. A consumer
+capability publishes the host port requirements its services need through a
+neutral port; for a Machine whose OS Bootwright installs with the firewall
+enabled, the [managed OS](../managed-os.md#host-firewall-requirements) realizes
+each block's requirement as one owned, named firewalld service in the zone of
+the interface on the required network, rewrites only that service on change
+and removes only it on removal or destroy. Every other host keeps the
+consumer's read-only check, reported by plan and preflight before any apply,
+with its exact remedy. Storage publishes each ingress's VRRP and client port
+and never changes a firewall itself. Bootwright configures no switch, router
+or upstream firewall: the site provides layer-2 adjacency between the hosts of
+one virtual address, admits that address's MAC moving between ports on
+failover and routes clients to it. [B1022](m2.md#b1022) implements this after
+the owner's current three-node run; until then the
+[runbook step](../../e2e/lab-3-nodes-ceph/runbook.md) of
+[B1021](m2.md#b1021) stays.

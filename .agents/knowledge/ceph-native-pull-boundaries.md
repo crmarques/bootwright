@@ -57,6 +57,23 @@ observation. Never retain response headers, signed redirect locations, raw URLs
 or authentication challenges in that observation. Synthetic refusals exercise
 this path without changing redirect, authority or credential policy.
 
+## Registry configuration JSON names
+
+A generic `discovery` refusal can follow successful manifest and config-blob
+digest verification. The registry decoder previously folded every JSON name
+before detecting duplicates, rejecting a config whose nested metadata used
+distinct names differing only in case. The retained role output may show only
+the fixed refusal because the acquisition tasks carry `no_log`.
+
+The [direct-digest regression](../../ansible/collections/ansible_collections/bootwright/core/tests/unit/plugins/module_utils/test_ceph_registry_discovery.py)
+authenticates synthetic config bytes and exercises that metadata shape for
+both manifest media types. The tests also retain identical and escaped-equivalent
+duplicate rejection. The
+[image-resolution contract](../../specs/ceph-coverage.md#release-qualification)
+owns the JSON comparison rule. Diagnose the failed boundary before changing
+credentials or pins, and keep raw responses and credential-bearing locations
+private.
+
 ## Blob delivery delegation and bounded DNS
 
 The [registry API](https://distribution.github.io/distribution/spec/api/#fetch-blob)
@@ -142,6 +159,29 @@ follows the Ceph pull's per-run budget: each preparation run makes up to three
 bounded attempts, and a later apply whose auxiliary image is still absent pulls
 again within its own three.
 
+## Pull scratch and durable journal names overlap
+
+A resumed native host profile on 2026-10-31 refused at
+`ceph_host_runtime.discard_residue:265` before image inspection. Core pull
+scratch uses `pull-`, but its durable attempt files are also named
+`pull-attempt-<n>.json` in that directory. The prefix-only residue scan
+therefore selected an owned regular journal file and refused its type.
+A temporary reproduction using the production marker writer produced the
+same refusal without a native command or any changed journal bytes.
+
+The earlier recovery tests put records only in an in-memory mapping and
+scratch on disk. Exercise both through real filesystem entries when their
+names share a directory. Validate retained journals before cleanup and exempt
+only those proved names. Refuse unvalidated entries in the reserved journal
+namespace, including a directory after a gap or beyond the attempt bound;
+a directory/type check alone would mistake it for removable scratch. Keep
+the old scratch prefix recoverable rather than stranding its private material
+by renaming future directories. Unknown matching files, symlinks and foreign
+owners still refuse. [The host preparation contract](../../specs/ceph.md#bootstrap-identity-and-continuation)
+owns recovery; [B1012](../../specs/milestones/m2.md#b1012) tracks this repair
+and its remaining qualification. This is independent of the image-policy
+parser: the resumed pull can fail before that probe is reached again.
+
 ## Bootstrap container-engine initialization
 
 [X79](../../specs/milestones/delivered.md#x79--cephadm-bootstrap-reads-its-podman-version)
@@ -158,6 +198,31 @@ and ordered time-service conditions with read-only probes first, then let the
 selected native tool check its own prerequisites. Refuse before any bootstrap
 attempt record when those checks fail. Tests must cover this complete ordering,
 not substitute a successful native command for the proof.
+
+## Native helper source inspected through a ZIP loader
+
+Ansible imports its packaged module utilities from a ZIP. For such a module,
+`inspect.getsource` receives loader text through `linecache`, whose
+`splitlines` reconstruction treats literal Unicode line and paragraph
+separators as source line breaks. A quoted string containing those literal
+characters in `ceph_native_object` therefore becomes invalid Python when the
+native bundle is inspected, although direct filesystem inspection succeeds.
+
+The display-name check keeps the same forbidden runtime characters through
+ASCII source escapes. The
+[native worker tests](../../ansible/collections/ansible_collections/bootwright/core/tests/unit/plugins/module_utils/test_ceph_native_worker.py)
+must cross the genuine ZIP loader and inspection boundary before running the
+production launcher; compiling filesystem source or reading raw ZIP bytes
+alone does not exercise that transformation. The
+[execution-site contract](../../specs/architecture.md#language-responsibility)
+owns the shipped source closure and managed-host floor.
+
+This compilation fails before the precreated diagnostic module has executed.
+Calling its absent validator can mask the original error in both failure
+projections, leaving an empty result frame; that separate diagnostic gap is
+[B1010](../../specs/milestones/m2.md#b1010). The source escape removes the
+observed carrier trigger without changing source admission or adding a
+release-specific loader.
 
 ## Validation in the isolated supervisor parent
 
@@ -176,6 +241,22 @@ parent independently validates the child result. No private payload belongs in
 launcher arguments. Test production launchers under `python -I` without an
 ambient collection, native error redaction, and malformed bytes reaching the
 parent independently of child validation.
+
+A separate diagnostic loss occurs when child result encoding, parent
+collection or the ordinary entrypoint catches an exception and returns only
+`native-unknown`. Retain the shared bounded exception-type and code-site
+projection through those refusals. A generic `ValueError` raised by the
+shared `require` helper otherwise names that helper for every failed check.
+The projection already tracks the last code-owned frame outside `require`;
+selecting that caller preserves the failing check without exception values or
+an expanded source-attestation policy. A child may publish a replacement failure
+only before it writes any result bytes; a failed or partial pipe write must
+never append a second frame. The parent still validates the child result, and
+the controller still attests a cause against its shipped sources. Diagnostic
+repair changes no readiness decision or retry authority and does not identify
+the original host failure by itself. The
+[worker boundary tests](../../ansible/collections/ansible_collections/bootwright/core/tests/unit/plugins/module_utils/test_ceph_native_worker.py)
+own these encoding, refusal and disclosure regressions.
 
 [Storage](../../specs/ceph.md) owns these credential and diagnostic
 boundaries. [Continuation after a fix](continuation-after-a-fix.md) explains why

@@ -132,10 +132,42 @@ The lookup key's MD5 is called differently across the two public builds.
 `20.2.1` source RPM's `src/python-common/ceph/cephadm/license_utils.py`, line
 10). `20.2.2-349` passes the flag in both its RHEL 9 and RHEL 10 executables and
 its source. Bootwright's own reader (`license_accepted` in `ceph_native.py`)
-already passes the flag, so observation is unaffected. The effect of the
-unflagged call on a FIPS-mode host is unverified: no Red Hat RHEL 9 FIPS
-`hashlib` documentation has been cited here. Declared FIPS is already refused
-at planning, and no specialization or gate is added for this difference.
+already passes the flag, so observation is unaffected.
+
+An owner-run contained probe on 2026-10-31 qualifies the failure in the frozen
+9.9.1.2 image (platform manifest
+`sha256:8dae4b5b8f07c7fa95bd1d68b22d4c1dd4c2d323d533d807dc1ceae4e329cb7f`).
+The kernel reports FIPS enabled. Fixed synthetic inputs to default MD5 and
+`get_license_acceptance_key_value_entry_name(version, license_text)` both
+raise `ValueError` with the unsupported-envelope classification; SHA-256 and
+MD5 with `usedforsecurity=False` succeed in the same probe. The module source
+SHA-256 is `fb3bd90e38a55b47e96ce2b2643f48461705daafc5a02a16b1d88751271938dd`,
+matching the authenticated 20.2.1 package. Computed digests and helper keys
+were discarded; no actual license extraction or acceptance was attempted.
+[Python's hashlib documentation](https://docs.python.org/3.12/library/hashlib.html)
+describes the flag's non-security use; it is not a FIPS-certification claim.
+
+The native cluster also refused license acceptance with the broad OpenSSL
+error, but its available MGR journal contains only earlier `no hosts defined`
+tracebacks. Its later inner traceback is still missing. The probe proves the
+helper failure in its contained root/closed-environment context, not that it
+is the command's sole failure or that the full manager shares every runtime
+setting. A newer signed helper's correction alone qualifies neither an image
+nor an upgrade path. [B1013](../../specs/milestones/m2.md#b1013) owns the blocked
+artifact choice and remaining native licensing evidence. IBM directs operators
+to their representative for access to [9.9.1 FIPS builds](https://www.ibm.com/docs/pt-br/storage-ceph/9.9.1?topic=compatibility-matrix).
+Preserve the frozen partial operation while choosing a vendor correction;
+this finding adds no version allowlist, provider patch or compatibility gate.
+
+
+The Ceph declaration does not switch off the host's crypto policy.
+`ceph_native.prove_fips` only adds the declared proof; a false setting returns
+without changing the OS or the container environment. Red Hat documents that
+[Podman enables FIPS on supported containers when the RHEL host uses FIPS](https://docs.redhat.com/en/documentation/red_hat_enterprise_linux/9/html/security_hardening/switching-rhel-to-fips-mode_security-hardening).
+The contained helper reproduction needed no running licensing command, so
+turning off only the Ceph proof is not a demonstrated escape from this failure.
+A non-FIPS comparison therefore uses a fresh managed OS installation without
+FIPS as well as a false Ceph declaration, under the [installation contract](../../specs/managed-os.md#fips-mode).
 
 The native acceptance path is an effect: image-information lookup may invoke
 `cephadm pull`, and `command_display_license` unconditionally pulls before
@@ -160,6 +192,47 @@ truncated outer container argv or `Failed command` wrapper cannot establish
 which inner CLI command failed or why. The [pull and diagnostic owner](ceph-native-pull-boundaries.md)
 covers retained causes and isolated result validation; [live output retention](adapter-output-live-retention.md)
 covers when private logs become visible.
+
+### MON license-record capacity
+
+A non-FIPS 9.9.1.2 run on 2026-11-01 reached native acceptance success, then
+failed the worker's persisted-license postcondition. Bounded analysis of the
+native journal proved a 123098-byte serialized acceptance payload and the
+immediately following MON `-27` rejection against the observed 65536-byte
+`mon_config_key_max_entry_size`. A read-only count found no license records.
+License text, record keys, payloads and keyrings remain private.
+
+The authenticated 20.2.1 source's `src/mgr/ActivePyModules.cc` waits for the MON
+store response but logs a nonzero result without propagating it to the Python
+caller; the same behavior is visible in the
+[upstream store implementation](https://raw.githubusercontent.com/ceph/ceph/v20.2.1/src/mgr/ActivePyModules.cc). This explains how `accept_license` can return success after its store
+write failed. The worker's `license_accepted` reader correctly returns false;
+its existing
+[license tests](../../ansible/collections/ansible_collections/bootwright/core/tests/unit/plugins/module_utils/test_ceph_bootstrap_finalization.py)
+require readback after native success and refuse absent or mismatched
+acceptance. Retrying a read or accepting a cleared health warning cannot fix
+this confirmed capacity rejection.
+
+The owner increased the native MON limit to 1048576 bytes. Both the persisted
+value and direct running-MON readback proved that value, with no restart.
+Ordinary continuation must still persist and prove native acceptance without
+changing the frozen input, artifacts or acceptance proof.
+The selected native option metadata reports `can_update_at_runtime: true`
+despite an empty `flags` list; that list alone does not establish whether a
+restart is needed. A persisted value alone remains insufficient, and no restart
+is assumed. The limit correction alone qualifies neither license recovery nor
+complete cluster acceptance; native continuation remains pending.
+The existing
+[closed config map](../../specs/api/ceph.md#cephcluster) does not admit this MON
+option, and the later settings block cannot repair a prerequisite inside
+cluster licensing. [D219](../../specs/milestones/backlog.md#d219) makes the license call raise
+the bound to `LICENSE_STORE_FLOOR` before acceptance and prove the persisted
+and running values; it is a fixed provider prerequisite, not a release-label
+branch or config pass-through. [B1014](../../specs/milestones/m2.md#b1014)
+tracks its native acceptance; unassisted bootstrap is not yet observed. The separate
+FIPS artifact blocker remains [B1013](../../specs/milestones/m2.md#b1013).
+Required acceptance readback stays with the
+[readiness contract](../../specs/ceph.md#resources-readiness-and-access).
 
 ## 20.1.0-221 (IBM Storage Ceph 9.9.0.3)
 

@@ -42,20 +42,66 @@ untracked review notes of that branch.
   stored key, so a re-run never re-mints a bad key and never repairs one
   (R3:C23 and C55, confirmed).
 
-## What no public source confirmed
+## Historical client claim still requiring qualification
 
-R3:C54 could not confirm these three claims, which come from v1:
+R3:C54 could not confirm v1's claim that its Data Foundation 4.21 client
+rejected type 2 keys before authentication. That historical client/library
+claim remains unverified for the current consuming stack. The former
+unconfirmed claims about a vendor build minting type 2 keys and a MON map
+allowing only `aes256k` are now qualified for one selected artifact by the
+[current native evidence](#current-native-key-evidence), not for every build.
 
-- the Data Foundation client of the day rejects type 2 keys before
-  authentication;
-- some IBM Storage Ceph builds mint type 2 keys by default;
-- an IBM build reports only `aes256k` in `auth_allowed_ciphers`.
+Upstream Ceph from the releases above can create `aes256k` keys, and the Rook
+and ODF scripts expose `aes` and `aes256k` selection. The guard "refuse a key
+whose type is not 1" and `spec.security.cephx.keyType: aes` are Bootwright-side
+constructs, not an ODF contract.
 
-The evidence-based statement is narrower: upstream Ceph from the releases above
-can create `aes256k` keys, and the Rook and ODF scripts expose `aes` and
-`aes256k` selection. The guard "refuse a key whose type is not 1" and
-`spec.security.cephx.keyType: aes` are Bootwright-side constructs, not an
-ODF contract.
+## Current native key evidence
+
+An owner-run metadata-only probe on 2026-11-01 observed eight auth entries in
+the selected IBM Storage Ceph 9.9.1.2 image, based on `20.2.1-405.el9cp`: seven
+client entries and one manager entry. Every entry decoded to 44 bytes, type 2,
+a declared 32-byte secret and a consistent total length. No key, prefix,
+fingerprint, entity name or decoded secret was emitted. The MON map reported
+only `aes256k` (value 2) for its allowed, preferred and service ciphers. These
+facts qualify that partial cluster and exact artifact; they are not a release
+allowlist or evidence about every future key or consuming client.
+
+The authenticated changes archive from the
+[20.2.1-405 source RPM](https://public.dhe.ibm.com/ibmdl/export/pub/storage/ceph/9/rhel9/source/ceph-20.2.1-405.el9cp.src.rpm)
+corroborates the native defaults: `src/mon/MonMap.cc::for_mkfs` selects type 2
+for those three fields, and `src/mon/AuthMonitor.cc` creates the bootstrap
+identities at that type. `src/auth/Crypto.cc` and `Crypto.h` retain the encoded
+type, creation time, secret length and secret order; AES is type 1 with
+16-byte material and AES256KRB5 is type 2 with 32-byte material. The observed
+layout agrees with the existing decoder; no wire-offset defect was found.
+
+Bootwright's
+[security projection](../../internal/storage/ceph/requests.go) freezes the AES
+proof whenever the security declaration is present, even with FIPS false.
+The [native worker](../../ansible/collections/ansible_collections/bootwright/core/plugins/module_utils/ceph_native.py)
+checks every auth entry and does not change MON cipher policy. The
+[client worker](../../ansible/collections/ansible_collections/bootwright/core/plugins/module_utils/ceph_native_resources.py)
+currently invokes the pinned `ceph-authtool` generator without an explicit key
+type. Existing
+[policy tests](../../ansible/collections/ansible_collections/bootwright/core/tests/unit/plugins/module_utils/test_ceph_core.py)
+prove the type/length refusal without disclosing material. [B628](../../specs/milestones/m2.md#b628)
+owns the corrective-contract question; it remains undefined and not started.
+No recovery choice, key rotation, cipher rewrite or admitted-value change is
+selected by this evidence. Required behavior remains with the
+[security contract](../../specs/ceph.md#frozen-release-and-trust).
+
+IBM's
+[ODF administrative-key parsing advisory](https://www.ibm.com/support/pages/odf-upgrade-failure-42111-4220-or-4221-storagecluster-cr-reports-malformed-input-buffer3-error-clientadminkeyring)
+documents an upgrade failure from 4.21.11 or later to 4.22.0 or 4.22.1 because
+the latter lack the AES256K cipher, and identifies 4.22.4 as a corrective
+release. That scopes a Rook/Ceph CLI administrative-key parsing issue. It
+proves neither the consuming kernel's RBD/CephFS support nor a successful
+Data Foundation 4.22.6 external attachment. Those still require actual client
+and attach evidence. The earlier
+[MON license-capacity adjustment](ibm-ceph-version-constraints.md#mon-license-record-capacity)
+likewise does not establish license acceptance: CephX observation stops the
+current continuation before its license phase.
 
 ## Observed by v1 on one IBM build
 

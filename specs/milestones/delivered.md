@@ -10887,6 +10887,51 @@ passed. Existing in-tree and operator-acceptance records retain their scopes;
 this fixes the bounded gate blocker without accepting any additional native
 profile.
 
+### X248 — Three-node Ceph runbook checks and evidence
+
+**Item:** B1003 (new, 2026-10-31). **Kind:** defect. **Owners:** Storage and
+operator guidance. The owner requested preparation of the three-node Ceph
+functional rehearsal, with basic checks on the temporary branch and full
+gates deferred until integration.
+
+The [SMB check](../../e2e/lab-3-nodes-ceph/runbook.md#smb) previously masked
+failed client operations and comparisons with an unconditional successful
+exit. The corrected check propagates each failure, requires the expected
+authentication refusal and removes its private scratch. The runbook also
+requires the shared evidence archive before context purge, under the
+[acceptance evidence contract](../../docs/acceptance.md#row-format).
+
+The missing [B626](m2.md#b626) acceptance baseline is registered before its
+release runs. Its three-release operator gate remains open; this correction
+accepts no live run and changes no B484 profile requirement.
+
+**Verification:** the temporary-branch commit records the focused checks and
+results. Full integration gates and native operator checks remain unrun at
+this handoff.
+
+### X249 — Three-node Ceph pool sizing and placement
+
+**Item:** B1005 (new, 2026-10-31). **Kind:** defect. **Owners:** Storage and
+operator guidance. The owner requested the three-node functional rehearsal
+and basic checks on its temporary branch, with full gates at integration.
+
+The default block, file and object combination in
+[`lab-3-nodes-ceph`](../../e2e/lab-3-nodes-ceph/runbook.md) refused planning
+at 770 replica placements against the three-OSD bound of 750. Its RBD pool
+now caps PGs at 16 and references the declared SSD placement policy, which
+owns its 2/2 protection. The combined initial budget is 738 across the
+default and SSD rules under the
+[placement-group budget](../ceph-resources.md#placement-group-budget).
+The runbook verifies the bound and placement during functional checks.
+
+**Verification:** rendering and validation pass, and the production plan
+succeeds after importing the correction, with declared Secrets available.
+The earlier plan refusal provides the failing probe. The temporary-branch
+commits record the focused checks and independent review; full gates remain
+deferred until integration. This correction claims no native operator
+acceptance, and the optional NVMe-oF variant retains its own qualification.
+The separate default image-pin correction remains [B1004](m2.md#b1004).
+
 ### X257 — Progress outcomes in plan order
 
 **Items:** B1017 (new, 2026-11-01, owner request).

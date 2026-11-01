@@ -153,3 +153,29 @@ require the complete behavioral route proof for the operator's selection.
 The upstream Tentacle v20.2.1 connection
 ([ssh.py](https://github.com/ceph/ceph/blob/v20.2.1/src/pybind/mgr/cephadm/ssh.py#L161))
 carries the same disabled verification as the downstream archive.
+
+
+## Generated image policy can disable GSSAPI key exchange
+
+During the entitled 9.9.1.2 FIPS run on 2026-10-31, contained image profiling
+refused at `ceph_host_runtime.crypto_policy` after package preparation and
+image acquisition. A protected, read-only capture of that frozen image's
+OpenSSH backend isolated `GSSAPIKeyExchange no` as the sole line outside the
+algorithm parser's accepted directives. The simple synthetic policy fixture
+had hidden this generated-backend form.
+
+Keep this disabling line; do not drop policy lines or admit arbitrary SSH
+booleans. [The tunnel parser](../../ansible/collections/ansible_collections/bootwright/core/plugins/module_utils/ceph_tunnel.py)
+can accept the exact `no` value case-insensitively while leaving its algorithm
+allowlist unchanged. The native configuration already fixes key exchange to
+`no`, and retaining only `no` in the outer policy preserves that disabled
+state under OpenSSH's first-value rule. An enabling value must still refuse
+when an earlier line says `no`; parsing the entire policy prevents a later
+configuration change from exposing it. Connection directives and `Host` or
+`Match` contexts remain outside this policy language.
+
+This is a parser lesson, not a release-specific exception or FIPS
+certification. [The security spec](../../specs/security.md#network-remote-systems-and-privilege)
+owns the boundary; [B1011](../../specs/milestones/m2.md#b1011) owns the repair
+and its remaining acceptance. The controller's independent policy parser is
+not part of this image-policy failure.

@@ -82,6 +82,24 @@ version allowlist, automatic substitution or support certification. The
 [storage API](../../specs/api/ceph.md) owns the
 selection contract.
 
+## Isolated package helper imports
+
+An immediate `packages:ImportError@ceph_native.scope_checks` can precede
+repository acquisition. A package-only helper bundle omitted
+`ceph_native_stretch`, which scope validation imports even for an ordinary
+request to reject undeclared topology. The isolated loader has no ambient
+collection path, so validation failed before journal creation or a package
+transaction.
+
+The [package transport](../../ansible/collections/ansible_collections/bootwright/core/plugins/module_utils/ceph_core.py)
+and [closed loader](../../ansible/collections/ansible_collections/bootwright/core/plugins/module_utils/ceph_package_worker.py)
+must carry the same complete source closure. Test the production envelope
+under isolated Python and invoke its real pure scope validation; stub helper
+bodies and imports from the controller's collection can hide a missing
+dependency. The [execution-site contract](../../specs/architecture.md#language-responsibility)
+owns that isolation, and [continuation after a fix](continuation-after-a-fix.md)
+explains how an automation correction retains the operation.
+
 ## Comps document type at the first live call
 
 Symptom: the first live packages call refuses within seconds with

@@ -38,7 +38,9 @@ operator as a first-call refusal; the slice that records it is named.
 ## Tool output shapes
 
 - `ceph --format json config-key get <key>` prints a blank line before the
-  value: `\nabc\n`, where the plain form prints `abc\n` (X76).
+  value: `\nabc\n`, where the plain form prints `abc\n` (X76); so does
+  `fs subvolume getpath`, so read such text answers without `--format json`
+  (X270).
 - `ceph --format json osd metadata` lists an OSD the map holds before its
   first boot as `[{"id":0}]`, with no `device_ids`; ceph-volume runs
   `osd new` tens of seconds before the daemon first boots (X76).
@@ -59,6 +61,23 @@ operator as a first-call refusal; the slice that records it is named.
   line as `keyword value` (no short lines) with the policy keys spelled
   `allowtcpforwarding`, `permitlisten`, `permitopen`,
   `allowstreamlocalforwarding`, `permittunnel`.
+- `lsblk --json --paths --output PATH,…` without `NAME` prints a flat list:
+  util-linux draws the tree in the `NAME` column, so no disk carries
+  `children` and partitions, OSD LVs and their dm-crypt mappings appear as
+  top-level siblings. Synthetic fixtures that nest `children` hide this; the
+  worker's `DEVICE_TREE` requests `NAME` first (X261).
+- On 20.2.1-405, `fs new … set allow_standby_replay <bool>` aborts the MON
+  leader (`std::out_of_range` in `FileSystemCommandHandler::set_val`), and the
+  CLI resends it to every restarted MON until systemd stops restarting it;
+  `max_mds` and `standby_count_wanted` are safe there (X263).
+- Every cephadm deploy chowns `/var/lib/ceph/<fsid>` to that daemon's user
+  (`make_data_dir_base` → `makedirs`, which chowns an existing directory), so
+  after the monitoring stack it belongs to whichever singleton deployed last,
+  for example alloy (473) or grafana (472), mode still 0700 (X267).
+- 20.2.1's `smb apply` with `--password-filter=none` and
+  `--password-filter-out=hidden` stores the resource, then raises
+  `UnboundLocalError` on `in_op` and answers EINVAL; the base64 input filter
+  avoids it (X268).
 
 ## Timing and health
 
