@@ -10905,3 +10905,19 @@ cannot reorder it. Effects, outcomes and receipts are unchanged.
 screen and `TestAppendedProgressSettlesOutcomesInPositionOrder` the appended
 stream; both failed before the change. The delivering commit records the
 gates and their results.
+
+### X258 — Check tooling filelock advisories
+
+**Items:** B1018 (new, 2026-11-01, owner request from GitHub's Dependabot
+report). **Kind:** safety. **Owner:** Development tooling.
+
+The Ansible check lock `scripts/tools/ansible-requirements.txt` moves
+`filelock`, which ansible-lint requires, from 4.0.9 to 4.2.6. That clears the
+thirteen Dependabot advisories against 4.2.0 and earlier, first fixed in 4.2.1.
+The pin installs a hash-pinned PyPI wheel into the check environment, never a
+Fedora package or the controller runtime, whose
+`internal/controller/runtimelock/lock.json` does not contain filelock. OSV
+reported no advisory for any pin of either lock after the move. The pinned Go
+1.26.10 toolchain is the newest 1.26 patch on go.dev and in Fedora 44 updates,
+and needed no change. The delivering commit records the gates and their
+results.
