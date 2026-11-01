@@ -84,8 +84,8 @@ type progressPresenter struct {
 
 	mu      sync.Mutex
 	heading string
-	// steps are the steps now running, in the order they started. A step joins
-	// when it first reports and leaves when it settles.
+	// steps are the block's steps in position order; a settled step stays
+	// until no earlier step still runs.
 	steps []*progressStep
 	// drawn is how many lines of the terminal the running block occupies, so a
 	// redraw knows how far up its first line is.
@@ -111,7 +111,8 @@ type progressStep struct {
 	// has none, because the row is news; one repeated by the heartbeat says
 	// how long it has stood there, which is the one thing an unchanged row
 	// cannot tell a reader.
-	note string
+	note    string
+	settled string
 }
 
 func (p *progressPresenter) report(ctx context.Context, event progressEvent) {
@@ -125,7 +126,7 @@ func (p *progressPresenter) report(ctx context.Context, event progressEvent) {
 	step := p.find(event)
 	if step == nil {
 		step = &progressStep{label: event.Label, position: event.Position, total: event.Total, started: now, reported: now}
-		p.steps = append(p.steps, step)
+		p.insert(step)
 	}
 	step.ctx = ctx
 	step.identity = event.Identity
@@ -152,11 +153,45 @@ func (p *progressPresenter) report(ctx context.Context, event progressEvent) {
 // never share a line.
 func (p *progressPresenter) find(event progressEvent) *progressStep {
 	for _, step := range p.steps {
-		if step.label == event.Label && step.position == event.Position && step.total == event.Total {
+		if step.settled == "" && step.label == event.Label && step.position == event.Position && step.total == event.Total {
 			return step
 		}
 	}
 	return nil
+}
+
+func (p *progressPresenter) insert(step *progressStep) {
+	index := len(p.steps)
+	if step.position > 0 {
+		if later := slices.IndexFunc(p.steps, func(other *progressStep) bool { return other.position > step.position }); later >= 0 {
+			index = later
+		}
+	}
+	p.steps = slices.Insert(p.steps, index, step)
+}
+
+func (step *progressStep) active() bool {
+	return step.settled == "" && (step.ctx == nil || step.ctx.Err() == nil)
+}
+
+func (p *progressPresenter) release() []*progressStep {
+	var released []*progressStep
+	for _, step := range p.steps {
+		if step.settled != "" && !p.heldBack(step) {
+			released = append(released, step)
+		}
+	}
+	p.steps = slices.DeleteFunc(p.steps, func(step *progressStep) bool { return slices.Contains(released, step) })
+	return released
+}
+
+func (p *progressPresenter) heldBack(step *progressStep) bool {
+	if step.position <= 0 {
+		return false
+	}
+	return slices.ContainsFunc(p.steps, func(other *progressStep) bool {
+		return other.active() && other.position > 0 && other.position < step.position && other.total == step.total
+	})
 }
 
 // finish terminates the block a terminal is still rewriting and stops the
@@ -189,7 +224,7 @@ func (p *progressPresenter) arm(now time.Time) {
 		delay = progressHeartbeat
 	}
 	for _, step := range p.steps {
-		if step.ctx != nil && step.ctx.Err() != nil {
+		if !step.active() {
 			continue
 		}
 		waiting = true
@@ -221,7 +256,7 @@ func (p *progressPresenter) beat(generation int) {
 	if p.terminal() {
 		redrawn := false
 		for _, step := range p.steps {
-			if step.ctx != nil && step.ctx.Err() != nil {
+			if !step.active() {
 				continue
 			}
 			step.note = "still running, " + formatElapsed(now.Sub(step.started))
@@ -234,7 +269,7 @@ func (p *progressPresenter) beat(generation int) {
 		return
 	}
 	for _, step := range p.steps {
-		if step.ctx != nil && step.ctx.Err() != nil {
+		if !step.active() {
 			continue
 		}
 		if now.Sub(step.reported) >= progressHeartbeat {
@@ -279,6 +314,13 @@ func (p *progressPresenter) openHeading(heading string) {
 // on screen as text, whatever follows starts below them, and the steps they
 // named leave the block, because nothing may redraw a line it no longer owns.
 func (p *progressPresenter) closeLine() {
+	if !p.terminal() {
+		for _, step := range p.steps {
+			if step.settled != "" {
+				io.WriteString(p.out, p.row(step.settled, step, step.detail, step.note)+"\n")
+			}
+		}
+	}
 	if p.drawn != 0 {
 		io.WriteString(p.out, "\n")
 		p.drawn = 0
@@ -297,26 +339,27 @@ func (p *progressPresenter) running(step *progressStep, now time.Time) {
 	p.redraw(now)
 }
 
-// settle writes a step's outcome above the block and drops it, so the block
-// holds exactly the steps that are still running.
+// settle writes above the block, in position order, every outcome that no
+// earlier running step holds back.
 func (p *progressPresenter) settle(step *progressStep, status, detail string, now time.Time) {
-	elapsed := formatElapsed(now.Sub(step.started))
+	step.settled, step.detail, step.note = status, detail, formatElapsed(now.Sub(step.started))
+	released := p.release()
 	if !p.terminal() {
-		p.remove(step)
-		p.append(step, status, detail, elapsed, now)
+		for _, settled := range released {
+			p.append(settled, settled.settled, settled.detail, settled.note, now)
+		}
 		return
 	}
 	var out strings.Builder
 	p.erase(&out)
-	out.WriteString(p.row(status, step, detail, elapsed))
-	out.WriteString("\n")
-	io.WriteString(p.out, out.String())
-	p.remove(step)
+	for _, settled := range released {
+		out.WriteString(p.row(settled.settled, settled, settled.detail, settled.note))
+		out.WriteString("\n")
+	}
+	if out.Len() != 0 {
+		io.WriteString(p.out, out.String())
+	}
 	p.redraw(now)
-}
-
-func (p *progressPresenter) remove(step *progressStep) {
-	p.steps = slices.DeleteFunc(p.steps, func(candidate *progressStep) bool { return candidate == step })
 }
 
 // append writes one row into a stream that scrolls, and records that this step
@@ -336,7 +379,11 @@ func (p *progressPresenter) redraw(now time.Time) {
 		rows = append(rows, p.overview()...)
 	}
 	for _, step := range p.steps {
-		rows = append(rows, p.row("running", step, step.detail, step.note))
+		status := step.settled
+		if status == "" {
+			status = "running"
+		}
+		rows = append(rows, p.row(status, step, step.detail, step.note))
 		step.reported = now
 	}
 	for index, row := range rows {

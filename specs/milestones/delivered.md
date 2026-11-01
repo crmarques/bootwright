@@ -10886,3 +10886,22 @@ also passed three repetitions, and the additional contextfs race suite
 passed. Existing in-tree and operator-acceptance records retain their scopes;
 this fixes the bounded gate blocker without accepting any additional native
 profile.
+
+### X257 — Progress outcomes in plan order
+
+**Items:** B1017 (new, 2026-11-01, owner request).
+**Kind:** product. **Owner:** CLI.
+
+`apply` and `destroy` progress now settles rows in
+[position order](../cli/output.md#long-running-progress) when blocks run
+concurrently. A step that settles while an earlier-numbered step still runs
+keeps its outcome in the redrawn block, and an appended stream withholds it,
+until every earlier running step settles; closing the block writes any
+outcome still withheld. Running rows still appear when their steps start, and
+a block that starts after a later-numbered outcome has already scrolled away
+cannot reorder it. Effects, outcomes and receipts are unchanged.
+
+`TestTerminalProgressSettlesOutcomesInPositionOrder` replays the redrawn
+screen and `TestAppendedProgressSettlesOutcomesInPositionOrder` the appended
+stream; both failed before the change. The delivering commit records the
+gates and their results.

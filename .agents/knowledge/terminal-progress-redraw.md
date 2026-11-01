@@ -86,3 +86,16 @@ per running step instead of one row in total. What that costs to get right:
   iteration. Under the manual test clock this is an unbounded loop inside one
   `advance` call and the test process is killed. `arm` counts only steps that
   can still report.
+
+## Outcomes held for plan order (2026-11-01)
+
+Concurrent blocks finished out of order, so `[3/10]` could settle above
+`[2/10]`. The block is now kept in position order and a settled step stays in
+it, drawn with its outcome token, until no earlier step of the same total is
+still active; then every releasable outcome scrolls above in order. A held
+step is excluded from `find`, the heartbeat and `arm`: it can no longer
+report, and a block retried within one apply opens a fresh row. A cancelled
+step never settles, so it holds nothing back. The presenter does not know
+which positions have yet to start, so it only waits for steps already
+running; waiting for unstarted ones would withhold outcomes for as long as a
+dependency or resource wait lasts.

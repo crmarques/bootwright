@@ -157,7 +157,11 @@ JSON and YAML emit no progress. A redraw refreshes each second, remeasures
 available cells, keeps each active row on one physical line and may elide its
 subject to fit. Cursor movement is limited to carriage return, erase-line and
 moving up across rows the presenter owns. A heading change, result or log field
-closes the owned block before further output. A settled row scrolls above it.
+closes the owned block before further output. A settled row scrolls above it
+in position order: a step that settles while an earlier-numbered step of the
+same total still runs keeps its outcome in the block, and an appended stream
+withholds it, until every earlier running step settles. Closing the block
+writes any outcome still withheld, in position order.
 
 Progress failures never change an effect, outcome or receipt. Cancellation
 stops reporting rather than claiming an unobserved outcome. Timers and terminal

@@ -3,6 +3,8 @@ package cli
 import (
 	"bytes"
 	"context"
+	"slices"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -245,9 +247,9 @@ func TestTerminalProgressGivesEveryRunningStepItsOwnLine(t *testing.T) {
 	}
 }
 
-// Blocks running at the same time each keep one line, and a step that settles
-// writes its outcome above the block and gives its line back, so the block
-// always holds exactly the steps that are still running.
+// Blocks running at the same time each keep one line, and the first step that
+// settles writes its outcome above the block and gives its line back, so the
+// block holds the steps that are still running.
 func TestTerminalProgressSettlesOneStepOutOfABlockOfThem(t *testing.T) {
 	presenter, clock, out := newTestTerminalProgress(120)
 	ctx := context.Background()
@@ -258,10 +260,10 @@ func TestTerminalProgressSettlesOneStepOutOfABlockOfThem(t *testing.T) {
 		presenter.report(ctx, progressEvent{Heading: "Progress", Label: step.label, Status: "running", Position: step.position, Total: 3})
 	}
 	clock.advance(time.Second)
-	// The middle step settles; its outcome scrolls above the two that remain.
-	presenter.report(ctx, progressEvent{Heading: "Progress", Label: "Resolve names", Status: "done", Position: 2, Total: 3})
+	presenter.report(ctx, progressEvent{Heading: "Progress", Label: "Serve artifacts", Status: "done", Position: 1, Total: 3})
 	rendered := out.String()
-	if !strings.Contains(rendered, "[DONE]     [2/3] Resolve names  1s\n") {
+	outcome := "[DONE]     [1/3] Serve artifacts  1s\n"
+	if !strings.Contains(rendered, outcome) {
 		t.Fatalf("the settled step wrote no outcome row: %q", rendered)
 	}
 	// Three lines were drawn, so the redraw reaches the first of them.
@@ -269,12 +271,11 @@ func TestTerminalProgressSettlesOneStepOutOfABlockOfThem(t *testing.T) {
 		t.Fatalf("a block of three lines was never redrawn as one: %q", rendered)
 	}
 	// Everything after the outcome row is the block that remains.
-	outcome := "[DONE]     [2/3] Resolve names  1s\n"
 	tail := rendered[strings.LastIndex(rendered, outcome)+len(outcome):]
-	if strings.Contains(tail, "Resolve names") {
+	if strings.Contains(tail, "Serve artifacts") {
 		t.Fatalf("a settled step kept its line in the block: %q", tail)
 	}
-	for _, running := range []string{"[1/3] Serve artifacts", "[3/3] Realize rhel-01"} {
+	for _, running := range []string{"[2/3] Resolve names", "[3/3] Realize rhel-01"} {
 		if !strings.Contains(tail, running) {
 			t.Fatalf("the block lost a step that is still running: %q", tail)
 		}
@@ -283,6 +284,72 @@ func TestTerminalProgressSettlesOneStepOutOfABlockOfThem(t *testing.T) {
 	if !strings.HasSuffix(out.String(), "\n") {
 		t.Fatal("the block was left open")
 	}
+}
+
+// A step that settles while an earlier one still runs keeps its outcome in the
+// block, so outcomes scroll above it in plan order rather than in the order
+// concurrent steps happened to finish.
+func TestTerminalProgressSettlesOutcomesInPositionOrder(t *testing.T) {
+	presenter, clock, out := newTestTerminalProgress(120)
+	ctx := context.Background()
+	for _, step := range []struct {
+		label    string
+		position int
+	}{{"Serve artifacts", 1}, {"Resolve names", 2}, {"Realize rhel-01", 3}} {
+		presenter.report(ctx, progressEvent{Heading: "Progress", Label: step.label, Status: "running", Position: step.position, Total: 3})
+	}
+	clock.advance(time.Second)
+	presenter.report(ctx, progressEvent{Heading: "Progress", Label: "Realize rhel-01", Status: "done", Position: 3, Total: 3})
+	want := []string{"", "  Progress",
+		"  [RUNNING]  [1/3] Serve artifacts  still running, 1s",
+		"  [RUNNING]  [2/3] Resolve names  still running, 1s",
+		"  [DONE]     [3/3] Realize rhel-01  1s",
+	}
+	if screen := terminalScreen(out.String()); !slices.Equal(screen, want) {
+		t.Fatalf("screen = %q, want %q", screen, want)
+	}
+	clock.advance(time.Second)
+	presenter.report(ctx, progressEvent{Heading: "Progress", Label: "Resolve names", Status: "done", Position: 2, Total: 3})
+	clock.advance(time.Second)
+	presenter.report(ctx, progressEvent{Heading: "Progress", Label: "Serve artifacts", Status: "done", Position: 1, Total: 3})
+	presenter.finish()
+	want = []string{"", "  Progress",
+		"  [DONE]     [1/3] Serve artifacts  3s",
+		"  [DONE]     [2/3] Resolve names  2s",
+		"  [DONE]     [3/3] Realize rhel-01  1s",
+		"",
+	}
+	if screen := terminalScreen(out.String()); !slices.Equal(screen, want) {
+		t.Fatalf("screen = %q, want %q", screen, want)
+	}
+}
+
+// terminalScreen replays the cursor controls the presenter may use and answers
+// with the lines left on screen.
+func terminalScreen(stream string) []string {
+	lines, row := []string{""}, 0
+	for len(stream) != 0 {
+		switch {
+		case strings.HasPrefix(stream, "\x1b[2K"):
+			lines[row], stream = "", stream[len("\x1b[2K"):]
+		case strings.HasPrefix(stream, "\x1b["):
+			end := strings.IndexByte(stream, 'A')
+			count, _ := strconv.Atoi(stream[2:end])
+			row, stream = row-count, stream[end+1:]
+		case stream[0] == '\r':
+			stream = stream[1:]
+		case stream[0] == '\n':
+			row++
+			if row == len(lines) {
+				lines = append(lines, "")
+			}
+			stream = stream[1:]
+		default:
+			lines[row] += stream[:1]
+			stream = stream[1:]
+		}
+	}
+	return lines
 }
 
 // A row wider than the terminal wraps, and the erase sequence then clears only
@@ -356,6 +423,52 @@ func TestAppendedProgressInterleavesConcurrentStepsAndBeatsEachOne(t *testing.T)
 		"  [DONE]     [2/2] Resolve names  10s\n"
 	if out.String() != want {
 		t.Fatalf("progress = %q, want %q", out.String(), want)
+	}
+}
+
+// An appended stream holds an outcome back until every earlier step settled,
+// and never repeats a held step on the heartbeat. Closing the stream writes the
+// outcomes still held behind a step that never settled, in position order.
+func TestAppendedProgressSettlesOutcomesInPositionOrder(t *testing.T) {
+	presenter, clock, out := newTestProgress()
+	ctx := context.Background()
+	for _, step := range []struct {
+		label    string
+		position int
+	}{{"Serve artifacts", 1}, {"Resolve names", 2}, {"Realize rhel-01", 3}, {"Realize rhel-02", 4}} {
+		presenter.report(ctx, progressEvent{Heading: "Progress", Label: step.label, Status: "running", Position: step.position, Total: 4})
+	}
+	clock.advance(2 * time.Second)
+	presenter.report(ctx, progressEvent{Heading: "Progress", Label: "Realize rhel-01", Status: "done", Position: 3, Total: 4})
+	presenter.report(ctx, progressEvent{Heading: "Progress", Label: "Resolve names", Status: "failed", Detail: "no answer", Position: 2, Total: 4})
+	clock.advance(progressHeartbeat)
+	presenter.report(ctx, progressEvent{Heading: "Progress", Label: "Serve artifacts", Status: "done", Position: 1, Total: 4})
+	clock.advance(time.Second)
+	presenter.report(ctx, progressEvent{Heading: "Progress", Label: "Realize rhel-02", Status: "done", Position: 4, Total: 4})
+	want := "\n  Progress\n" +
+		"  [RUNNING]  [1/4] Serve artifacts\n" +
+		"  [RUNNING]  [2/4] Resolve names\n" +
+		"  [RUNNING]  [3/4] Realize rhel-01\n" +
+		"  [RUNNING]  [4/4] Realize rhel-02\n" +
+		"  [RUNNING]  [1/4] Serve artifacts  still running, 10s\n" +
+		"  [RUNNING]  [4/4] Realize rhel-02  still running, 10s\n" +
+		"  [DONE]     [1/4] Serve artifacts  12s\n" +
+		"  [FAIL]     [2/4] Resolve names: no answer  2s\n" +
+		"  [DONE]     [3/4] Realize rhel-01  2s\n" +
+		"  [DONE]     [4/4] Realize rhel-02  13s\n"
+	if out.String() != want {
+		t.Fatalf("progress = %q, want %q", out.String(), want)
+	}
+
+	presenter, _, out = newTestProgress()
+	presenter.report(ctx, progressEvent{Heading: "Progress", Label: "Serve artifacts", Status: "running", Position: 1, Total: 2})
+	presenter.report(ctx, progressEvent{Heading: "Progress", Label: "Resolve names", Status: "done", Position: 2, Total: 2})
+	if strings.Contains(out.String(), "[DONE]") {
+		t.Fatalf("an outcome was written ahead of a step still running before it: %q", out.String())
+	}
+	presenter.finish()
+	if !strings.HasSuffix(out.String(), "  [DONE]     [2/2] Resolve names\n") {
+		t.Fatalf("closing the stream dropped a held outcome: %q", out.String())
 	}
 }
 
