@@ -63,6 +63,13 @@ retain their cause and the requested coordinate through Bootwright's diagnostics
 The guest re-proves the pulled image's platform and repository digest. The
 operator supplies neither a Podman login nor a locally cached image.
 Credential delivery and the original acquisition binding remain Secrets-owned.
+Registry manifests and image configurations compare JSON member names as
+case-sensitive decoded strings, including nested vendor metadata. Identical
+decoded names at any depth, including escaped spellings of the same name,
+refuse; distinct names that differ only in case remain distinct
+([JSON string comparison](https://www.rfc-editor.org/rfc/rfc8259#section-8.3)).
+The [canonical adapter channel](architecture.md#ansible-collection-plugins-and-results)
+retains its own encoding requirements.
 Signed package acquisition and the pull belong to host preparation. RHEL
 installation media are a separate prerequisite.
 Guest pull credentials are confined by the invocation-local broker described
@@ -373,9 +380,16 @@ cephadm opens each deployed daemon's TCP endpoint ports with
 reloads, and it never opens VRRP for keepalived, which has no firewalld service
 form ([source anchors](../.agents/knowledge/ceph-dashboard-port-publication.md#native-firewall-opening)).
 Whether a managed guest runs firewalld depends on its install profile.
-Bootwright owns no host firewall: an ingress refuses `ingress-firewall` before
-effects when an ingress host's active firewalld would drop VRRP or the client
-port ([Resources, readiness and access](ceph.md#resources-readiness-and-access)).
+An ingress publishes VRRP and its client port as a
+[host requirement](managed-os.md#host-firewall-requirements) that the managed
+OS realizes on a Machine it installs with the firewall enabled; otherwise it
+refuses `ingress-firewall` before effects when an ingress host's active
+firewalld would drop either
+([Resources, readiness and access](ceph.md#resources-readiness-and-access)).
+cephadm's keepalived sends VRRP unicast between the ingress hosts' addresses
+unless `use_keepalived_multicast` is set
+([upstream](https://github.com/ceph/ceph/blob/v20.2.1/src/pybind/mgr/cephadm/templates/services/ingress/keepalived.conf.j2)),
+so the switches carry no VRRP multicast.
 Other families' listeners (NVMe-oF, SMB) are B484's live observation.
 
 [Erasure-code overwrites](https://www.ibm.com/docs/en/storage-ceph/9.9.1?topic=overview-erasure-coding-overwrites)

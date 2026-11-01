@@ -1731,6 +1731,31 @@ silently continue across these changes. A moved automation digest alone
 freezes no block differently, so an apply continues across it once `controller install` has
 run ([dependency safety](state-reconciliation.md#dependency-safety-during-recovery)).
 
+## Host firewall requirements
+
+A Machine whose operating system Bootwright installs with
+[`security.firewall.enabled`](api/machines.md) has its firewalld rules for
+other capabilities realized by the managed OS ([D220](milestones/backlog.md#d220)).
+A capability publishes a host port requirement through a neutral port that
+composition binds, so the managed OS names no consumer: the Machine, the
+network whose interface carries it, IP protocols, and TCP or UDP ports, never
+a zone, a rich rule or a source restriction. Each publishing block's
+requirement becomes one firewalld service named for its context and block,
+holding exactly those protocols and ports, added permanently to the runtime
+zone of the interface on that network, then reloaded. The service file and
+its zone membership are recorded as owned: a changed requirement rewrites only
+that service, and removal or destroy deletes only an owned service and its
+membership, never an operator rule. A same-named service the operation did not
+record refuses. A Machine Bootwright does not install, or whose firewall is not
+enabled, receives no change, and the consumer's read-only check reports what
+is missing. Bootwright configures no switch, router or upstream firewall: the
+site provides layer-2 adjacency between the hosts of one virtual address,
+admits that address's MAC moving between ports on failover, and routes clients
+to it.
+
+Not yet met: no capability publishes a requirement and no managed host
+receives one; tracked as [B1022](milestones/m2.md#b1022).
+
 ## Refusal table
 
 Each row is one refusal of the installation capability, and

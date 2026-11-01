@@ -597,9 +597,13 @@ the block refuses `ssh-policy-host-excluded`, naming that host and its key
 type, before any host is contacted; a policy that cannot be read or evaluated
 refuses `ssh-policy-unavailable`. The contained cephadm tunnel's client runs
 inside the selected Ceph image and keeps that image's back end: its
-configuration pins, for each host, the pinned key's algorithms that the back
-end's first `HostKeyAlgorithms` value admits under the list and pattern rules
-of ssh_config(5) (no value, or a `+` or `^` form, keeps them all; a `-` form
+policy parser admits its algorithm directives and the additional fixed
+`GSSAPIKeyExchange no` form only, case-insensitively; every other value for
+that directive refuses. It retains the disabling line and admits no connection
+directive or policy context. Its configuration pins, for each host, the pinned
+key's algorithms that the back end's first `HostKeyAlgorithms` value admits
+under the list and pattern rules of ssh_config(5) (no value, or a `+` or `^`
+form, keeps them all; a `-` form
 removes those it matches; any other value keeps those it matches). Before
 the cluster block claims or authorizes any host, each manager host it will
 authorize renders that configuration in a read-only round trip, and an empty

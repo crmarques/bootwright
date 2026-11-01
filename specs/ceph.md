@@ -201,10 +201,21 @@ An authored repository requires `packageRepositoryKey` at the same HTTPS
 origin (host and effective port); that key uses the repository's sole TLS
 anchor and the unchanged IBM publisher fingerprint. Omitted repository and
 key select the public source defaults together. Neither metadata, RPM payloads
-nor keys fall back to public sources. Continuation uses that decision and
+nor keys fall back to public sources. A connection lost in transport (closed
+before a response, reset, truncated, refused or timed out) is fetched again
+from its first byte from the same URL, at most three attempts within the
+acquisition budget, and each attempt is verified like the first; an HTTP
+status, a TLS verification or protocol failure, a name-resolution failure and
+a size, digest or signer refusal are never retried. Continuation uses that decision and
 refuses an unrelated inventory or changed installed payload. An explicitly
 accepted IBM license authorizes only the provider's required `ACCEPT_EULA=yes`
-transaction environment; missing acceptance refuses before package effects.
+transaction environment; missing acceptance refuses before package effects. The
+provider's license record exceeds the MON's default config-key entry bound
+while its store write reports success, so before acceptance the license call
+raises the cluster's `mon_config_key_max_entry_size` to `LICENSE_STORE_FLOOR`
+only while the persisted value is lower, never lowering it, and proves the
+persisted and each quorum MON's running value within one manager wait
+([D219](milestones/backlog.md#d219)); the value leaves with the cluster.
 Before provider host preparation, read-only checks prove it will neither
 install packages through ambient repositories outside that frozen decision nor
 enable or start a time service. Only then may the selected native host check
@@ -695,9 +706,13 @@ owned markers scoped by owner, FSID and host:
    digest, with a protected authfile, a signature policy limited to that
    repository and at most three bounded attempts per preparation run. A pull
    counts only after local inspection proves the digest and the linux/amd64
-   platform. The retained attempt records serve crash diagnosis and recovery;
-   they never refuse a later apply while the image is still absent, so that
-   apply makes its own three attempts. Bootstrap then skips cephadm's own pull
+   platform. Retained attempt records serve crash diagnosis and recovery.
+   Scratch cleanup preserves validated durable records and refuses unvalidated
+   names in their reserved namespace, unknown matching files, symlinks or
+   foreign-owned directories. Incomplete scratch under the original owned
+   temporary namespace remains recoverable. Those records do not consume a
+   later apply's retry budget while the image is still absent: that apply
+   makes its own three attempts. Bootstrap then skips cephadm's own pull
    (`--skip-pull`) and runs the image this phase proved, so no guest pull
    reaches the registry outside the broker.
 3. A runtime profile from a contained probe of the image: the ceph account,
@@ -712,8 +727,8 @@ and route requirements.
 The cluster block depends on every host block, re-proves the recorded profile
 against the inspected image, and refuses a missing or contradicting one. Between
 the tunnel mount and enrollment it publishes and proves the exact cephadm bytes
-in the cache. A host block removes nothing; packages and the image are retained
-shared host state. The owned per-FSID host runtime tree under
+in the cache. Host preparation retains packages and the image as shared host
+state. The owned per-FSID host runtime tree under
 `/var/lib/bootwright/ceph-host/<fsid>` (profile, route, payload, device
 identities, pull journals, and the ephemeral broker material a killed pull can
 leave) and the `ceph-packages/<fsid>` package journal are retained too; they
@@ -820,7 +835,13 @@ A host or cluster block that refuses publishes a
 completion. Its reason is only a closed token the block's caller gives a
 diagnostic and remedy; a native or package worker's refusal is named by the
 token its endpoint raised, and a package helper's own failure by the package
-phase it failed in: resolution, signature or transaction. Its detail names that
+phase it failed in: resolution, signature or transaction. A connection to a
+selected artifact lost in transport after its bounded attempts is instead
+`package-acquisition`, whose coordinate names only that artifact:
+`RPM <name>-[<epoch>:]<version>-<release>.<arch>`, `IBM Ceph publisher key`,
+`repository metadata <repository id>` or `installation tree metadata`, never a
+source URL; TLS verification, HTTP status, name-resolution, size, digest and
+signer failures keep their phase. Its detail names that
 token and the code site that refused, or an exception type and site, never a
 value; an SSH crypto-policy refusal's detail is instead the host name and the
 key type, both public. A token the block gives no remedy is published as `unknown`, or
@@ -831,6 +852,10 @@ worker whose token is outside that worker's closed set is published as
 and execution failures additionally carry the bounded redacted `nativeError`
 projection defined by the adapter protocol, so the diagnostic retains the
 requested coordinate and useful native cause without reflecting raw output.
+
+Not yet met: source compilation before diagnostic helper initialization can
+lose its bounded cause; tracked as [B1010](milestones/m2.md#b1010).
+
 The coordinate may end with the ids of the
 [version specializations](architecture.md#implementations-and-version-variation)
 applied in that run; within its bound, that suffix is truncated before the
@@ -1556,9 +1581,9 @@ or share that every SMB cluster `ceph smb cluster ls` lists and every `smb`
 service `ceph orch ls` lists is declared by a CephSMBResource of the cluster
 (`foreign-service`) and that the settings block holds both samba image settings
 at the frozen digests (`foreign-image`); it never writes them. It records its
-attempt, then runs `ceph smb apply -i - --password-filter=none
---password-filter-out=hidden` with the one resource as JSON on stdin and the
-bound passwords spliced in memory, and reads every resource with
+attempt, then runs `ceph smb apply -i - --password-filter=base64
+--password-filter-out=hidden` with the resource as JSON on stdin, its bound
+passwords base64-encoded in memory, and reads each one with
 `ceph smb show <name> --password-filter=hidden`; no password reaches an
 argument, a record, evidence or a diagnostic. An answer that is not one
 successful result for the resource refuses `smb-result` without quoting the
@@ -1672,9 +1697,9 @@ so a permit given only that way refuses. An inactive or failed
 `firewalld.service` passes, and an unsettled one refuses `ingress-firewall`
 naming its state; a host with no such interface passes, because cephadm reports
 that itself. cephadm opens a deployed daemon's TCP ports only in the default
-zone, after this check, and never opens VRRP, so the check reads the current
-state and assumes neither. It never changes a firewall, and it runs again on
-every apply because a firewall changed later drops VRRP just the same. Each
+zone, after this check, and never opens VRRP, so the check assumes neither.
+It changes no firewall ([D220](milestones/backlog.md#d220)) and runs on every
+apply, since a later firewall change drops VRRP the same. Each
 host's check is bounded by 120 s, all of them within a 600 s window that one
 native call of the block's deadline covers.
 

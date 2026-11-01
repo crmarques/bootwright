@@ -62,9 +62,46 @@ and the native tools judge installability.
 Also set `ceph.ansiblePackageVersion` to the full `cephadm-ansible` release the
 repository publishes (`5.0.3-1.el9cp` for 9.9.2.0) and `ceph.images.*` to the
 digests of the same build: the values carry those of `v9.9.2-26947`
-([D171](../../specs/milestones/backlog.md#d171)), resolved with `skopeo
-inspect`, and the other releases have none recorded. Confirm each repository
-and tag pair with authenticated registry metadata before the run.
+([D171](../../specs/milestones/backlog.md#d171)), and the other releases have
+none recorded. Each digest must identify the linux/amd64 platform manifest, not
+the image index: `skopeo inspect` prints the top-level manifest's digest,
+which is the index for a multi-platform image, and the resolver refuses an
+index digest as `image-digest-mismatch`. Read the index with `skopeo inspect
+--raw docker://BASE@DIGEST`, take the digest of its linux/amd64 entry, and
+confirm that manifest's sha256 over its raw bytes. Confirm each repository and
+tag pair with authenticated registry metadata before the run.
+
+### Native cryptography and client protocols
+
+Use the selected release's native cryptographic defaults and protocol
+negotiation. The base template omits `CephCluster.spec.security`; do not add
+`security.cephx.keyType: aes` to this comparison profile. That declaration
+requires legacy AES keys even when FIPS is false; it does not select the
+build's default. Keep the selected release, matching client packages and
+versioned provider documentation with the private run evidence. Preserve the
+case's authored disk encryption, TLS endpoints and service protocols.
+
+For IBM 9.9.1.2's `20.2.1-405.el9cp` artifact, the authenticated source and
+[native observations](../../.agents/knowledge/cephx-key-types.md#current-native-key-evidence)
+establish AES256K defaults. Use those defaults without rotating keys or
+changing the MON cipher policy to satisfy an older test expectation. IBM's
+[9.9.1 on-wire documentation](https://www.ibm.com/docs/en/storage-ceph/9.9.1?topic=components-ceph-wire-encryption)
+describes v2-first connections with v1 fallback and a default `crc` mode;
+the selected artifact retains separate mode preferences for MON and other
+connections. Leave those native preferences intact. CephX authentication,
+messenger encryption and disk encryption are separate checks; AES256K keys
+alone do not prove encrypted network traffic.
+
+The CephFS checks below use the RHEL kernel client, which IBM
+[documents for 9.9.1](https://www.ibm.com/docs/en/storage-ceph/9.9.1?topic=cephfs-mounting-ceph-file-system-as-kernel-client).
+Record the actual kernel and client package versions and require the mounts
+and data checks to pass with the native keys. IBM also documents a
+[FUSE client](https://www.ibm.com/docs/en/storage-ceph/9.9.1?topic=cephfs-mounting-ceph-file-system-as-fuse-client),
+but that is a separate client choice, requiring matching packages and both
+CephFS checks to be rerun. Do not silently fall back or change server cipher
+policy after a kernel-client failure. A user-space result cannot qualify the
+kernel client or a Data Foundation attachment. The owner's selected
+non-FIPS comparison is recorded in [D218](../../specs/milestones/backlog.md#d218).
 
 ```sh
 # Edit only these assignments; service defaults match values.yaml.
@@ -180,7 +217,28 @@ chronyd -Q -t 10 "server $CONTROLLER_ADDRESS iburst port 123"
 
 The IBM hosts must resolve on every guest, and each OSD disk is nonrotational
 (`ROTA=0`) at `/dev/sda`, with the root at `/dev/vda`: an unreachable
-forwarder fails this check. Then realize the cluster, one
+forwarder fails this check.
+
+The guests run firewalld, and an ingress refuses `ingress-firewall` before its
+first effect unless the zone of its VIP interface permits VRRP and the client
+port ([ingress firewall check](../../specs/ceph.md#resources-readiness-and-access));
+Bootwright and cephadm never open VRRP. Permit them on the object ingress
+hosts (rhel-02, rhel-03: `443/tcp`) and the management ingress hosts (rhel-01,
+rhel-02: `9443/tcp`); destroying the guests removes the change:
+
+```sh
+for entry in rhel-01:9443 rhel-02:443,9443 rhel-03:443; do
+    host=${entry%%:*} ports=${entry#*:}
+    zone=$(./bin/bootwright machine exec --context "$CONTEXT" --name "$host" -- sudo -n firewall-cmd --get-zone-of-interface=enp1s0 | sed 's/^[^:]*: *//')
+    args=()
+    for port in ${ports//,/ }; do args+=(--add-port="$port/tcp"); done
+    ./bin/bootwright machine exec --context "$CONTEXT" --name "$host" -- sudo -n firewall-cmd --permanent --zone="$zone" --add-protocol=vrrp
+    ./bin/bootwright machine exec --context "$CONTEXT" --name "$host" -- sudo -n firewall-cmd --permanent --zone="$zone" "${args[@]}"
+    ./bin/bootwright machine exec --context "$CONTEXT" --name "$host" -- sudo -n firewall-cmd --reload
+done
+```
+
+Then realize the cluster, one
 full image download per guest. The first clusters-stage apply is also the
 interruption drill (B492, B626): press Ctrl-C once while a pool or the
 filesystem block is running, then inspect and continue:
@@ -233,7 +291,15 @@ CEPH_KEYRING='' # Administrator keyring path printed by cluster info.
 ./bin/bootwright cluster exec --context "$CONTEXT" --name ceph-e2e --node rhel-01 -- sudo -n ceph --conf "${CEPH_CONF:?Set CEPH_CONF as described above}" --keyring "${CEPH_KEYRING:?Set CEPH_KEYRING as described above}" orch ps --refresh
 ./bin/bootwright cluster exec --context "$CONTEXT" --name ceph-e2e --node rhel-01 -- sudo -n ceph --conf "${CEPH_CONF:?Set CEPH_CONF as described above}" --keyring "${CEPH_KEYRING:?Set CEPH_KEYRING as described above}" mgr module ls
 ./bin/bootwright cluster exec --context "$CONTEXT" --name ceph-e2e --node rhel-01 -- sudo -n ceph --conf "${CEPH_CONF:?Set CEPH_CONF as described above}" --keyring "${CEPH_KEYRING:?Set CEPH_KEYRING as described above}" orch ps --daemon_type crash
+./bin/bootwright cluster exec --context "$CONTEXT" --name ceph-e2e --node rhel-01 -- sudo -n ceph --conf "${CEPH_CONF:?Set CEPH_CONF as described above}" --keyring "${CEPH_KEYRING:?Set CEPH_KEYRING as described above}" mon dump --format json
+./bin/bootwright cluster exec --context "$CONTEXT" --name ceph-e2e --node rhel-01 -- rpm -q ceph-common
+./bin/bootwright cluster exec --context "$CONTEXT" --name ceph-e2e --node rhel-01 -- uname -r
 ```
+
+Retain the MON map's native cipher fields and protocol addresses, then compare
+them with the selected artifact's defaults and provider documentation above.
+Package identity and an advertised protocol alone do not prove that a client
+can authenticate; the following data checks supply that evidence.
 
 | Check | Required result |
 | --- | --- |
@@ -250,8 +316,15 @@ CEPH_KEYRING='' # Administrator keyring path printed by cluster info.
 ```
 
 Require rule `ssd-hosts` over root `default`, class `ssd`, host failure
-domain; `rbd-data` replicated `size=2`, `min_size=2`, autoscale on, the `rbd`
-application. Read the image:
+domain; `rbd-data` on that rule, replicated `size=2`, `min_size=2`, autoscale
+on and the `rbd` application. The small RBD pool caps PGs at 16 so the
+default service combination fits three OSDs. Check its bound:
+
+```sh
+./bin/bootwright cluster exec --context "$CONTEXT" --name ceph-e2e --node rhel-01 -- sudo -n ceph --conf "${CEPH_CONF:?Set CEPH_CONF as described above}" --keyring "${CEPH_KEYRING:?Set CEPH_KEYRING as described above}" osd pool get rbd-data pg_num_max
+```
+
+Require `pg_num_max: 16`. Read the image:
 
 ```sh
 ./bin/bootwright cluster exec --context "$CONTEXT" --name ceph-e2e --node rhel-01 -- sudo -n rbd --conf "${CEPH_CONF:?Set CEPH_CONF as described above}" --keyring "${CEPH_KEYRING:?Set CEPH_KEYRING as described above}" info rbd-data/rbd-disk
@@ -441,10 +514,34 @@ share takes a put, get and delete as `smbuser` through each of the two hosts,
 and refuses a wrong user:
 
 ```sh
-umask 077; pw=$(mktemp)
-./bin/bootwright secret show --context "$CONTEXT" --name files-smb-user --part value > "$pw"
-./bin/bootwright cluster exec --context "$CONTEXT" --name ceph-e2e --node rhel-01 -- sudo -n bash -c 'read -r PASSWD; export PASSWD; cd "$(mktemp -d)"; head -c 1048576 /dev/urandom > f; for h in rhel-02 rhel-03; do smbclient "//$h.e2e.example.test/documents" -U smbuser -c "put f; get f g; del f" && cmp f g && rm -f g; done; PASSWD=wrong smbclient //rhel-02.e2e.example.test/documents -U nobody -c ls && exit 1; exit 0' < "$pw"
-rm -f "$pw"
+(
+    set -eu
+    umask 077
+    pw=$(mktemp)
+    trap 'rm -f -- "$pw"' EXIT
+    ./bin/bootwright secret show --context "$CONTEXT" --name files-smb-user --part value > "$pw"
+    ./bin/bootwright cluster exec --context "$CONTEXT" --name ceph-e2e --node rhel-01 -- sudo -n bash -eu -c '
+        IFS= read -r PASSWD || test -n "$PASSWD"
+        export PASSWD
+        scratch=$(mktemp -d)
+        trap "rm -rf -- \"$scratch\"" EXIT
+        cd -- "$scratch"
+        head -c 1048576 /dev/urandom > f
+        for h in rhel-02 rhel-03; do
+            smbclient "//$h.e2e.example.test/documents" -U smbuser -c "put f"
+            smbclient "//$h.e2e.example.test/documents" -U smbuser -c "get f g"
+            cmp f g
+            smbclient "//$h.e2e.example.test/documents" -U smbuser -c "del f"
+            rm -f -- g
+        done
+        if denial=$(PASSWD=wrong smbclient //rhel-02.e2e.example.test/documents -U nobody -c ls 2>&1); then
+            printf "%s\n" "Wrong-user SMB access unexpectedly succeeded" >&2
+            exit 1
+        fi
+        printf "%s\n" "$denial"
+        printf "%s\n" "$denial" | grep -Fq NT_STATUS_LOGON_FAILURE
+    ' < "$pw"
+)
 ```
 
 Require exit 0, with `NT_STATUS_LOGON_FAILURE` for the wrong user.
@@ -732,8 +829,16 @@ virsh --connect qemu:///system list --all
 virsh --connect qemu:///system net-list --all
 ```
 
-Require no domain, disk or network of the context to remain, then delete the
-context:
+Require no domain, disk or network of the context to remain. Preserve the
+operation logs and final status before deleting the context:
+
+```sh
+EVIDENCE_CONTEXT="$CONTEXT"
+```
+
+Complete [Preserve evidence before context purge](../README.md#preserve-evidence-before-context-purge).
+Require its archive integrity and operation-log digest checks to pass, then
+delete the context:
 
 ```sh
 ./bin/bootwright context delete --name "$CONTEXT" --purge --yes
