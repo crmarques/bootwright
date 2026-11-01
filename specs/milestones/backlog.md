@@ -1799,6 +1799,12 @@ operation records it. It touches the Ansible plugin and the capability Go code.
 client and agent blocks present or absent instead of unknown, with no material in
 the run directory.
 
+The owner's 2026-11-01 three-node run showed the cost: `diff --observe`
+reported the CephCluster, both CephClients and the CephObjectUser unknown, and
+its remedy, "restore what the reason names", names nothing an operator can
+restore; until the fix lands that row should say the observation needs an
+operation.
+
 ### B597
 
 `destroy paused` is reachable
@@ -6528,9 +6534,12 @@ passwords under the base64 input filter. [B1026](m2.md#b1026) is
 [X269](m2.md#planned-slices): the result publisher admits a reachable
 management gateway's endpoint evidence. [B1027](m2.md#b1027) is
 [X270](m2.md#planned-slices): subvolume path proofs read `getpath` as text.
-Every one of these is one general
-flow for all releases, not a version specialization. [B1013](m2.md#b1013)
-stays blocked on the vendor. Each
+[B1030](m2.md#b1030) is [X273](m2.md#planned-slices): the runbook's NFS, SMB
+and observability checks run and hide every password; [B1031](m2.md#b1031)
+(SMB share ownership) awaits definition and [B1032](m2.md#b1032) (the
+management gateway's internal port in the ingress check) is specified. Every
+one of these is one general flow for all releases, not a version
+specialization. [B1013](m2.md#b1013) stays blocked on the vendor. Each
 receives focused checks and independent review, with full integration gates
 and native acceptance still due.
 

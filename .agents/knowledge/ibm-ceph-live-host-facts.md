@@ -78,6 +78,17 @@ operator as a first-call refusal; the slice that records it is named.
   `--password-filter-out=hidden` stores the resource, then raises
   `UnboundLocalError` on `in_op` and answers EINVAL; the base64 input filter
   avoids it (X268).
+- `ceph smb show` prints each local user's password unless given
+  `--password-filter hidden`; Samba gives local users uid and gid from 1000 in
+  the SMB containers (B1031).
+- NFS-Ganesha hides an export from a client whose entry is `NONE`: its NFSv4
+  mount fails `No such file or directory`, not `access denied`.
+- With a management gateway, Prometheus is mutual-TLS and basic-auth only
+  (`ceph orch prometheus get-credentials`), its service discovery dials the
+  gateway's internal port 29443 on the management VIP, and on 9.9.1.2
+  discovery advertises HTTPS for the haproxy, NFS and SMB metrics endpoints,
+  which answer plain HTTP, and lists keepalive-only ingress hosts as haproxy
+  targets (B1030, B1032).
 
 ## Timing and health
 
