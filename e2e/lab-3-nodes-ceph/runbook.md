@@ -224,10 +224,12 @@ first effect unless the zone of its VIP interface permits VRRP and the client
 port ([ingress firewall check](../../specs/ceph.md#resources-readiness-and-access));
 Bootwright and cephadm never open VRRP. Permit them on the object ingress
 hosts (rhel-02, rhel-03: `443/tcp`) and the management ingress hosts (rhel-01,
-rhel-02: `9443/tcp`); destroying the guests removes the change:
+rhel-02: `9443/tcp`, and `29443/tcp`, the gateway's internal port Prometheus
+service discovery dials on the management VIP); destroying the guests removes
+the change:
 
 ```sh
-for entry in rhel-01:9443 rhel-02:443,9443 rhel-03:443; do
+for entry in rhel-01:9443,29443 rhel-02:443,9443,29443 rhel-03:443; do
     host=${entry%%:*} ports=${entry#*:}
     zone=$(./bin/bootwright machine exec --context "$CONTEXT" --name "$host" -- sudo -n firewall-cmd --get-zone-of-interface=enp1s0 | sed 's/^[^:]*: *//')
     args=()
@@ -491,7 +493,9 @@ setpriv --reuid=2000 --regid=2000 --clear-groups -- rm -- "$check_dir/mnt/nfs-ch
 CHECK
 ```
 
-The denied client `rhel-03` must fail with `access denied by server`:
+The denied client `rhel-03` must fail to mount. NFS-Ganesha hides an export from
+a client whose entry is `NONE`, so the mount reports `No such file or directory`
+rather than `access denied by server`:
 
 ```sh
 ./bin/bootwright cluster exec --context "$CONTEXT" --name ceph-e2e --node rhel-03 -- sudo -n bash -s -- "${NFS_HOST:?Set NFS_HOST as described above}" <<'CHECK'
@@ -506,12 +510,16 @@ This case declares no NFS ingress, so ingress failover is not exercised.
 ### SMB
 
 ```sh
-./bin/bootwright cluster exec --context "$CONTEXT" --name ceph-e2e --node rhel-01 -- sudo -n ceph --conf "${CEPH_CONF:?Set CEPH_CONF as described above}" --keyring "${CEPH_KEYRING:?Set CEPH_KEYRING as described above}" smb show
+./bin/bootwright cluster exec --context "$CONTEXT" --name ceph-e2e --node rhel-01 -- sudo -n ceph --conf "${CEPH_CONF:?Set CEPH_CONF as described above}" --keyring "${CEPH_KEYRING:?Set CEPH_KEYRING as described above}" smb show --password-filter hidden
 ```
 
-The password is read from the Secret you set, never from an argument. The
-share takes a put, get and delete as `smbuser` through each of the two hosts,
-and refuses a wrong user:
+Without `--password-filter hidden`, `smb show` prints each local user's
+password.
+
+The password is read from the Secret you set, never from an argument, and the
+guest script travels as one base64 argument because `cluster exec` refuses
+control characters. The share takes a put, get and delete as `smbuser` through
+each of the two hosts, and refuses a wrong user:
 
 ```sh
 (
@@ -520,31 +528,35 @@ and refuses a wrong user:
     pw=$(mktemp)
     trap 'rm -f -- "$pw"' EXIT
     ./bin/bootwright secret show --context "$CONTEXT" --name files-smb-user --part value > "$pw"
-    ./bin/bootwright cluster exec --context "$CONTEXT" --name ceph-e2e --node rhel-01 -- sudo -n bash -eu -c '
-        IFS= read -r PASSWD || test -n "$PASSWD"
-        export PASSWD
-        scratch=$(mktemp -d)
-        trap "rm -rf -- \"$scratch\"" EXIT
-        cd -- "$scratch"
-        head -c 1048576 /dev/urandom > f
-        for h in rhel-02 rhel-03; do
-            smbclient "//$h.e2e.example.test/documents" -U smbuser -c "put f"
-            smbclient "//$h.e2e.example.test/documents" -U smbuser -c "get f g"
-            cmp f g
-            smbclient "//$h.e2e.example.test/documents" -U smbuser -c "del f"
-            rm -f -- g
-        done
-        if denial=$(PASSWD=wrong smbclient //rhel-02.e2e.example.test/documents -U nobody -c ls 2>&1); then
-            printf "%s\n" "Wrong-user SMB access unexpectedly succeeded" >&2
-            exit 1
-        fi
-        printf "%s\n" "$denial"
-        printf "%s\n" "$denial" | grep -Fq NT_STATUS_LOGON_FAILURE
-    ' < "$pw"
+    script=$(base64 -w0 <<'GUEST'
+IFS= read -r PASSWD || test -n "$PASSWD"
+export PASSWD
+scratch=$(mktemp -d)
+trap 'rm -rf -- "$scratch"' EXIT
+cd -- "$scratch"
+head -c 1048576 /dev/urandom > f
+for h in rhel-02 rhel-03; do
+    smbclient "//$h.e2e.example.test/documents" -U smbuser -c "put f"
+    smbclient "//$h.e2e.example.test/documents" -U smbuser -c "get f g"
+    cmp f g
+    smbclient "//$h.e2e.example.test/documents" -U smbuser -c "del f"
+    rm -f -- g
+done
+if denial=$(PASSWD=wrong smbclient //rhel-02.e2e.example.test/documents -U nobody -c ls 2>&1); then
+    printf '%s\n' "Wrong-user SMB access unexpectedly succeeded" >&2
+    exit 1
+fi
+printf '%s\n' "$denial" | grep -F NT_STATUS_LOGON_FAILURE
+GUEST
+)
+    ./bin/bootwright cluster exec --context "$CONTEXT" --name ceph-e2e --node rhel-01 -- sudo -n bash -euc 'eval "$(printf %s "$1" | base64 -d)"' smb-check "$script" < "$pw"
 )
 ```
 
-Require exit 0, with `NT_STATUS_LOGON_FAILURE` for the wrong user.
+Require exit 0, with `NT_STATUS_LOGON_FAILURE` for the wrong user. Until
+[B1031](../../specs/milestones/m2.md#b1031) settles the share owner, the put
+is refused with `NT_STATUS_ACCESS_DENIED`: Samba maps `smbuser` to uid 1000,
+while `smb-documents` belongs to 2000:2000 with mode 750.
 
 ### Observability
 
@@ -559,14 +571,33 @@ mgmt-gateway, ingress `mgmt`, loki and alloy running. Inspect daemon addresses:
 ```sh
 ./bin/bootwright cluster exec --context "$CONTEXT" --name ceph-e2e --node rhel-01 -- sudo -n ceph --conf "${CEPH_CONF:?Set CEPH_CONF as described above}" --keyring "${CEPH_KEYRING:?Set CEPH_KEYRING as described above}" orch ps --refresh
 curl -k https://198.51.100.62:9443
-PROMETHEUS_ENDPOINT='' # Scheme and host from orch ps, including port 9095.
 LOKI_ENDPOINT='' # Scheme and host of the Loki daemon from orch ps, including port 3100.
-./bin/bootwright cluster exec --context "$CONTEXT" --name ceph-e2e --node rhel-03 -- curl --fail --silent --show-error "${PROMETHEUS_ENDPOINT:?Set PROMETHEUS_ENDPOINT from orch ps}/api/v1/targets"
 ./bin/bootwright cluster exec --context "$CONTEXT" --name ceph-e2e --node rhel-03 -- curl --fail --silent --show-error "${LOKI_ENDPOINT:?Set LOKI_ENDPOINT from orch ps}/loki/api/v1/labels"
 ```
 
-Require every Prometheus target `up`, and Loki labels from daemon logs.
-The Grafana password is the `grafana-admin` Secret.
+With the management gateway, cephadm serves Prometheus over mutual TLS behind
+basic authentication, so read its targets through the gateway with cephadm's
+Prometheus credentials, kept in a private netrc file and never printed:
+
+```sh
+(
+    set -eu
+    umask 077
+    netrc=$(mktemp)
+    trap 'rm -f -- "$netrc"' EXIT
+    ./bin/bootwright cluster exec --context "$CONTEXT" --name ceph-e2e --node rhel-01 -- sudo -n ceph --conf "${CEPH_CONF:?Set CEPH_CONF as described above}" --keyring "${CEPH_KEYRING:?Set CEPH_KEYRING as described above}" orch prometheus get-credentials \
+        | python3 -I -c 'import json, re, sys; t = re.sub(r"^rhel-0[0-9]: ?", "", sys.stdin.read(), flags=re.M); v = json.loads(t[t.find("{"):]); print("machine 198.51.100.62 login %s password %s" % (v["user"], v["password"]))' > "$netrc"
+    curl -k --fail --silent --show-error --netrc-file "$netrc" https://198.51.100.62:9443/prometheus/api/v1/targets \
+        | python3 -I -c 'import json, sys; t = json.load(sys.stdin)["data"]["activeTargets"]; [print(x["labels"]["job"], x["scrapeUrl"], x["health"], x.get("lastError", "")) for x in t]'
+)
+```
+
+Require the `ceph`, `ceph-exporter` and `node-exporter` targets `up`, and Loki
+labels from daemon logs. On 9.9.1.2 the gateway's service discovery advertises
+HTTPS for the haproxy, NFS and SMB metrics endpoints, which answer plain HTTP,
+and lists the keepalive-only management ingress hosts as haproxy targets; those
+`ingress`, `nfs` and `smb` targets stay down, a vendor limitation this run
+records. The Grafana password is the `grafana-admin` Secret.
 
 ### NVMe-oF
 
