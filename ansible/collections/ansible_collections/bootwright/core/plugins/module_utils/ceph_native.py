@@ -75,10 +75,10 @@ SUBVOLUME_UUID = re.compile(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0
 SUBVOLUME_PATH = re.compile(r"/volumes/(?:_nogroup|[A-Za-z0-9][A-Za-z0-9_.-]{0,127})/[a-z0-9](?:[-a-z0-9]{0,46}[a-z0-9])?/"
                             r"([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\Z")
 CORE_PHASES = frozenset(("prerequisites", "claim", "devices", "osd_prepare", "tunnel_preflight", "authorize", "bootstrap", "tunnel_configure", "tunnel_mount",
-                         "cache", "enroll", "license", "services", "stretch_locate", "stretch_enable", "dashboard", "dashboard_read", "observe",
-                         "bootstrap_state", "host_state", "destroy", "tiebreaker_observe", "tiebreaker_remove"))
+                         "cache", "enroll", "license", "services", "stretch_locate", "stretch_enable", "dashboard", "dashboard_read", "dashboard_present",
+                         "observe", "bootstrap_state", "host_state", "destroy", "tiebreaker_observe", "tiebreaker_remove"))
 CORE_READ_ONLY_PHASES = frozenset(("prerequisites", "devices", "tunnel_preflight", "observe", "bootstrap_state", "host_state", "dashboard_read",
-                                   "tiebreaker_observe"))
+                                   "dashboard_present", "tiebreaker_observe"))
 EVIDENCE_VERSION = "ceph-core-evidence-v13"
 # The specialization ids the last dispatched phase's worker applied; the remote wrapper reads it once per process.
 APPLIED = []
@@ -3685,18 +3685,27 @@ class Worker:
         # The password is an opaque protected output; it never enters public evidence.
         return {"changed": changed, "private": password}
 
-    def dashboard_read(self):
-        """Recapture the dashboard password read-only; an unfinished phase offers nothing."""
+    def dashboard_retained(self):
+        """The retained password once the phase completed, proved against Ceph's account read-only; None before completion."""
         self.verify_tool()
         scope = self.dashboard_scope()
         store = self.dashboard_store()
         if self.markers.read(store.name("applied")) is None:
-            return {}
+            return None
         store.prove_binding(store.binding(scope, "ceph-dashboard-user-v1"))
         password = store.material(scope)
         require(DASHBOARD_USER in self.dashboard_users(), "dashboard-identity")
         self.dashboard_verify(password)
-        return {"private": password}
+        return password
+
+    def dashboard_read(self):
+        """Recapture the dashboard password read-only; an unfinished phase offers nothing."""
+        password = self.dashboard_retained()
+        return {} if password is None else {"private": password}
+
+    def dashboard_present(self):
+        """The dashboard_read proof for an observation no operation records: the password is checked here and never returned."""
+        return {} if self.dashboard_retained() is None else {"present": True}
 
     def dashboard_observation(self):
         """The active MGR's dashboard URL and the stored certificate's fingerprint; reachability is the controller's proof."""

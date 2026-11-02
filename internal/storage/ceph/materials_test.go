@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
+	"github.com/crmarques/bootwright/internal/diagnostics"
 	"github.com/crmarques/bootwright/internal/managedos/installation"
 	"github.com/crmarques/bootwright/internal/reconciliation"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
@@ -112,6 +113,7 @@ func TestMaterialProjectionUsesProvedPublicKeysAndPrivateFiles(t *testing.T) {
 func TestObservationUsesOnlyFleetIdentityAndKnownHostsAndFrozenDigest(t *testing.T) {
 	r := coreRequest()
 	e := withMaterial(executionFor(t, r), r)
+	e.Attempt, e.Resolution = 1, 1
 	runtime := r
 	runtime.Owner = e.ApplyOperation
 	runtime.FSID = FSIDFor(e.ApplyOperation, r.Cluster)
@@ -304,4 +306,67 @@ func (dependencyProofs) FIPS([]lifecycle.BlockEvidence, string, string) error { 
 
 func (dependencyProofs) PhysicalMachine(reconciliation.Block, []byte) (PhysicalIdentity, bool, error) {
 	return PhysicalIdentity{}, false, failure("lifecycle.state", "physical proof unavailable", "")
+}
+
+func TestAnObservationNoOperationRecordsDeclaresAndTakesOverNoOutput(t *testing.T) {
+	cluster := coreRequest()
+	client := coreRequest()
+	client.Action, client.Client = "client", &Client{Name: "consumer", Pool: "volumes", Access: "readOnly"}
+	user := coreRequest()
+	user.Action, user.ObjectUser = "object-user", &ObjectUser{DisplayName: "app-writer", Gateway: "objects", Name: "app-writer", Realm: "objects", Zone: "objects", ZoneGroup: "objects"}
+	caps := map[string]string{"mon": "profile rbd", "mgr": "profile rbd-read-only pool=volumes", "osd": "profile rbd-read-only pool=volumes"}
+	for _, tt := range []struct {
+		name     string
+		kind     api.Kind
+		request  Request
+		output   string
+		block    func(*lifecycle.Execution)
+		evidence func(*Evidence)
+		produced func() []lifecycle.Produced
+	}{
+		{"cluster", api.CephCluster, cluster, DashboardOutput, func(*lifecycle.Execution) {}, func(*Evidence) {}, func() []lifecycle.Produced { return dashboardProduced(dashboardPassword) }},
+		{"client", api.CephClient, client, ClientOutput, func(e *lifecycle.Execution) {
+			e.Block.ID, e.Block.Kind, e.Block.Object = ClientBlockID("consumer"), string(api.CephClient), "consumer"
+		}, func(e *Evidence) { e.Client = "client.consumer" }, func() []lifecycle.Produced { return clientProduced(t, "client.consumer", caps) }},
+		{"object-user", api.CephObjectUser, user, ObjectUserOutput, func(e *lifecycle.Execution) {
+			e.Block.ID, e.Block.Kind, e.Block.Object = ObjectUserBlockID("app-writer"), string(api.CephObjectUser), "app-writer"
+		}, func(e *Evidence) { e.Resource = ResourceEvidence{ID: "app-writer"} }, func() []lifecycle.Produced { return userProduced(userMaterial) }},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			e := executionFor(t, tt.request)
+			tt.block(&e)
+			e = withMaterial(e, tt.request)
+			runtime := tt.request
+			runtime.Owner, runtime.FSID = e.ApplyOperation, FSIDFor(e.ApplyOperation, tt.request.Cluster)
+			evidence := readyEvidence(runtime)
+			evidence.Request = e.Block.RequestDigest
+			tt.evidence(&evidence)
+			runner := &recordingRunner{result: lifecycle.RunResult{Evidence: evidenceBytes(t, evidence)}}
+			observation, err := New(tt.kind, runner).Observe(context.Background(), e)
+			if err != nil || observation.Effect != reconciliation.EffectCompleted || len(observation.Produced) != 0 {
+				t.Fatalf("an unrecorded observation returned %+v (%v)", observation, diagnostics.Of(err))
+			}
+			if !runner.request.Unrecorded || len(runner.request.Outputs) != 0 {
+				t.Fatalf("an unrecorded observation ran unrecorded %t with outputs %+v", runner.request.Unrecorded, runner.request.Outputs)
+			}
+			runner.result.Produced = tt.produced()
+			if observation, err := New(tt.kind, runner).Observe(context.Background(), e); err == nil || observation.Effect != reconciliation.EffectUnknown || len(observation.Produced) != 0 {
+				t.Fatalf("an unrecorded observation took over undeclared material: %+v (%v)", observation, err)
+			}
+			e.Attempt, e.Resolution = 1, 1
+			runner.result.Produced = tt.produced()
+			observation, err = New(tt.kind, runner).Observe(context.Background(), e)
+			if err != nil || observation.Effect != reconciliation.EffectCompleted || len(observation.Produced) != 1 || observation.Produced[0].Name != tt.output {
+				t.Fatalf("a resolution's observation returned %+v (%v)", observation, diagnostics.Of(err))
+			}
+			lifecycle.ClearProduced(observation.Produced)
+			if want := []lifecycle.OutputFile{{Name: tt.output, Variable: tt.output}}; runner.request.Unrecorded || !reflect.DeepEqual(runner.request.Outputs, want) {
+				t.Fatalf("a resolution's observation ran unrecorded %t with outputs %+v", runner.request.Unrecorded, runner.request.Outputs)
+			}
+			runner.result.Produced = nil
+			if observation, err := New(tt.kind, runner).Observe(context.Background(), e); err == nil || observation.Effect != reconciliation.EffectUnknown {
+				t.Fatalf("a resolution's observation proved completion without its recapture: %+v (%v)", observation, err)
+			}
+		})
+	}
 }

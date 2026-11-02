@@ -271,6 +271,7 @@ func TestObjectUserObservationCapturesOnlyItsOutput(t *testing.T) {
 	frozen := coreRequest()
 	frozen.Action, frozen.ObjectUser = "object-user", &ObjectUser{DisplayName: "app-writer", Gateway: "objects", Name: "app-writer", Realm: "objects", Zone: "objects", ZoneGroup: "objects"}
 	e := userExecution(t, frozen)
+	e.Attempt, e.Resolution = 1, 1
 	runtime := frozen
 	runtime.Owner, runtime.FSID = e.ApplyOperation, FSIDFor(e.ApplyOperation, frozen.Cluster)
 	evidence := readyEvidence(runtime)

@@ -32,7 +32,7 @@ func checkReadOnly(request lifecycle.RunRequest) error {
 		return failure("lifecycle.state", "a read-only invocation may run only its capability's observation", "")
 	}
 	if request.Unrecorded && len(request.Outputs) != 0 && !lend {
-		return failure("lifecycle.state", "an invocation no operation records may take over no material, so this observation cannot run outside an operation", "")
+		return failure("lifecycle.state", lifecycle.UnrecordedMaterialRefusal, "")
 	}
 	return nil
 }

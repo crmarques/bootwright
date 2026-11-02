@@ -2046,10 +2046,19 @@ output, progress or continuation. A controller-stage block receives a stage
 whose every mutator refuses `lifecycle.state`
 `an observation may not authorize a host effect`. No run directory or run
 output is opened, and material an observation produces is cleared unread. An
-observation that hands over material, today the Ceph cluster and client blocks,
-is refused by the runner and reads unknown with that refusal as its reason;
-the agent install block's observation declares its administrator-access
-output only inside an operation, and the agent media block's declares none.
+observation declares an output it would take over only when an attempt or a
+resolution records it (`lifecycle.Recorded`, which `RunFor`'s unrecorded mark
+reads too), so here it declares none and reads present or absent: the agent
+install block omits its administrator access, and the Ceph cluster, client and
+object user blocks omit the dashboard credential, the client keyring and the
+S3 key pair. Their adapter proves the same postcondition without
+returning that material; the cluster's bootstrap host proves the dashboard
+account against its retained password and answers presence alone. A
+resolution's observation still declares and recaptures it. An observation
+that still declares an output is refused by the runner and reads unknown with
+`an invocation no operation records may take over no material, so this observation cannot run outside an operation`
+and the remedy
+`this observation needs an operation, so bootwright diff --context <name> reads this block from its records`.
 
 **Material.** The Secret material an observation reads is the binding the
 owning apply froze, reopened read-only before the lock is taken, binding
@@ -2090,7 +2099,9 @@ deadline.
 An unknown reading's reason is the capability's explanation of what it read
 when it gives one, with its remedy; otherwise the error's first message, or
 the general reason of an observation that proved nothing, with the remedy
-`restore what the reason names, then repeat bootwright diff --context <name> --observe`.
+`restore what the reason names, then repeat bootwright diff --context <name> --observe`,
+except the runner's refusal of an unrecorded output, whose remedy is named under
+**Boundary**.
 The header counts the blocks read (`observed`), the blocks left unknown, and
 the present or partial blocks no projection rendered (`not projected`).
 

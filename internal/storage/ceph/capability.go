@@ -527,7 +527,7 @@ func (c Capability) observe(ctx context.Context, e lifecycle.Execution, removal 
 	if effect != reconciliation.EffectCompleted || removal {
 		lifecycle.ClearProduced(result.Produced)
 		result.Produced = nil
-	} else if err := validateProduced(result.Produced, r, true); err != nil {
+	} else if err := validateProduced(result.Produced, r, lifecycle.Recorded(e)); err != nil {
 		lifecycle.ClearProduced(result.Produced)
 		return unknown, err
 	} else if err := identifyProduced(result.Produced, r, result.Evidence); err != nil {

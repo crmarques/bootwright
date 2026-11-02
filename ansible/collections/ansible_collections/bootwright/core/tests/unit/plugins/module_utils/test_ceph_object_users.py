@@ -397,6 +397,21 @@ def test_observe_recaptures_only_a_ready_user(core_request, tmp_path):
     assert [p for unused, p in transport.calls] == ["observe", "object_user_read"] and output.read_bytes() == material().encode()
 
 
+def test_an_observe_with_no_output_reads_a_ready_user_without_its_pair(core_request, tmp_path):
+    request = core_user_request(core_request)
+    transport = Transport(request)
+    result = ceph_core.execute(request, "observe", "d" * 64, transport, {})
+    assert result["evidence"]["ready"] and result["evidence"]["resource"] == {"id": "app-writer", "path": ""}
+    assert [p for unused, p in transport.calls] == ["observe"] and list(tmp_path.iterdir()) == []
+    assert ACCESS not in json.dumps(result) and SECRET not in json.dumps(result)
+
+
+def test_an_apply_still_requires_the_users_output(core_request, monkeypatch):
+    monkeypatch.setattr(ceph_native, "supported_transport", lambda value: True)
+    with pytest.raises(ceph_native.Refusal, match="^material$"):
+        ceph_core.execute(core_user_request(core_request), "apply", "d" * 64, Transport(core_user_request(core_request)), {})
+
+
 @pytest.mark.parametrize("private", [
     material().replace("app-writer", "other-user"), material(access="key with space"), material()[:-1] + ',"extra":"x"}',
     json.dumps({"accessKey": ACCESS, "secretKey": SECRET, "uid": "app-writer"}), material(secret=""), "é",

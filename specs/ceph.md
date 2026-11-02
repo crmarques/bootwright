@@ -1467,7 +1467,9 @@ no subuser, Swift key, capability, system, admin or account role, and holds
 exactly one active S3 key equal to the retained pair; anything else refuses
 `object-user-identity`. The phase answers the retained pair as the block's
 produced material `object-user`, and an observation that proves the user
-ready recaptures it read-only with `object_user_read`. Evidence carries the
+ready recaptures it read-only with `object_user_read` when an attempt or a
+resolution records it; an unrecorded observation, such as `diff --observe`,
+declares no output and reads readiness alone. Evidence carries the
 user ID only, never a key. The block never modifies, suspends or removes a
 user, and adds no key, subuser or capability; it retires with the cluster's
 hosts, and [B491](milestones/m2.md#b491) owns its online removal. S3 requests
@@ -1872,6 +1874,12 @@ Generated cluster access material is offered only with proved completion and
 enters [produced-material custody](state-reconciliation.md#produced-material-custody)
 before its block is done. Capture failure leaves an unknown outcome and safe
 recapture. Retries keep identity and material without incidental rotation.
+An observation that no attempt or resolution records, such as
+`bootwright diff --observe`, declares no output: the cluster, client and object
+user blocks prove their postcondition without returning the dashboard
+password, the client keyring or the S3 key pair, and the cluster's bootstrap
+host checks the dashboard account against its retained password with
+`dashboard_present`, which answers presence alone.
 Confidential material kept beside a native effect follows
 [native-side retention](secrets.md#native-side-retention). Partial removal
 preserves custody for recovery; final withdrawal follows the engine

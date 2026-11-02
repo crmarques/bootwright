@@ -305,7 +305,7 @@ func (c InstallCapability) observe(ctx context.Context, execution lifecycle.Exec
 	observes, outputs := "", kubeconfigOutputs()
 	if verb == reconciliation.Destroy {
 		observes, outputs = observesRemoval, nil
-	} else if execution.Attempt == 0 && execution.Resolution == 0 {
+	} else if !lifecycle.Recorded(execution) {
 		outputs = nil
 	}
 	result, err := c.runWithOutputs(ctx, execution, "observe", request, outputs, observes)

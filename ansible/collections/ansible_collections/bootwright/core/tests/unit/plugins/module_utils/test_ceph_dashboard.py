@@ -529,6 +529,26 @@ def test_dashboard_read_is_read_only_and_offers_nothing_before_completion(dashbo
     assert dashboard.markers.writes == writes and len(mutations(dashboard)) == effects
 
 
+def test_dashboard_present_proves_the_account_read_only_and_returns_no_password(dashboard):
+    assert dashboard.native.dashboard_present() == {}
+    assert mutations(dashboard) == [] and dashboard.markers.writes == []
+    password = dashboard.native.dashboard()["private"]
+    writes, effects = list(dashboard.markers.writes), len(mutations(dashboard))
+    present = dashboard.native.dashboard_present()
+    assert present == {"present": True} and password not in json.dumps(present)
+    assert dashboard.markers.writes == writes and len(mutations(dashboard)) == effects
+    dashboard.state.users["admin"]["password"] = hashed("Operator-Chosen_Password.Value-9")
+    with pytest.raises(ceph_native.Refusal, match="^dashboard-drift$"):
+        dashboard.native.dashboard_present()
+
+
+def test_the_dashboard_present_phase_is_read_only_and_skips_the_release_gate(dashboard, monkeypatch):
+    assert "dashboard_present" in ceph_native.CORE_READ_ONLY_PHASES
+    monkeypatch.setattr(ceph_native, "supported_transport", lambda request: False)
+    monkeypatch.setattr(ceph_native, "Worker", lambda request, host: dashboard.native)
+    assert ceph_native.dispatch({"request": dashboard.request, "host": "node-1", "phase": "dashboard_present", "private": {}}) == {}
+
+
 def test_the_dashboard_read_phase_skips_the_release_gate_and_the_dashboard_phase_does_not(dashboard, monkeypatch):
     monkeypatch.setattr(ceph_native, "supported_transport", lambda request: False)
     with pytest.raises(ceph_native.Refusal, match="^unsupported-release$"):
@@ -637,6 +657,8 @@ class PhaseTransport:
             return dict(cluster_evidence(self.request), request="")
         if phase == "host_state":
             return {"name": host["name"], "owned": True, "exists": True}
+        if phase == "dashboard_present":
+            return {"present": True} if self.read else {}
         assert phase == "dashboard_read"
         return copy.deepcopy(self.read)
 
@@ -675,10 +697,38 @@ def test_an_unfinished_dashboard_phase_observes_partial_work_and_writes_nothing(
     assert result["evidence"]["partial"] and not result["evidence"]["ready"] and not output.exists()
 
 
-@pytest.mark.parametrize("outputs", [{}, {"client": "/x"}, {"dashboard": "/x", "client": "/y"}])
-def test_the_cluster_action_names_exactly_its_dashboard_output(dashboard, outputs):
+@pytest.mark.parametrize("operation, outputs", [("apply", {}), ("apply", {"client": "/x"}), ("observe", {"client": "/x"}),
+                                                ("observe", {"dashboard": "/x", "client": "/y"})])
+def test_the_cluster_action_names_exactly_its_dashboard_output(dashboard, operation, outputs, monkeypatch):
+    monkeypatch.setattr(ceph_native, "supported_transport", lambda value: True)
     with pytest.raises(ceph_native.Refusal, match="^(material|request)$"):
-        ceph_core.execute(dashboard.request, "observe", "d" * 64, PhaseTransport(dashboard.request, {}), outputs)
+        ceph_core.execute(dashboard.request, operation, "d" * 64, PhaseTransport(dashboard.request, {}), outputs)
+
+
+def test_an_observe_with_no_output_proves_the_dashboard_present_and_never_moves_its_password(dashboard, monkeypatch):
+    monkeypatch.setattr(ceph_core, "dashboard_output", lambda path, value: pytest.fail("wrote " + path))
+    transport = PhaseTransport(dashboard.request, {"private": "Xq7-Lm2_Rv9.Tk4-Wz8_Hn3.Pb6-Jd5_"})
+    result = ceph_core.execute(dashboard.request, "observe", "d" * 64, transport, {}, connect=lambda address, port: CERTIFICATE_DER)
+    phases = [phase for unused, phase, unused in transport.calls]
+    assert result["evidence"]["ready"] and result["evidence"]["dashboard"]["reachable"] is True
+    assert phases.count("dashboard_present") == 1 and "dashboard_read" not in phases
+
+
+def test_an_observe_with_no_output_reads_an_unfinished_dashboard_partial(dashboard):
+    def never(address, port):
+        pytest.fail("probe " + address + ":" + str(port))
+
+    result = ceph_core.execute(dashboard.request, "observe", "d" * 64, PhaseTransport(dashboard.request, {}), {}, connect=never)
+    assert result["evidence"]["partial"] and not result["evidence"]["ready"]
+
+
+@pytest.mark.parametrize("answer", [{"present": False}, {"present": 1}, {"private": "Xq7-Lm2_Rv9.Tk4-Wz8_Hn3.Pb6-Jd5_"}, {"present": True, "private": "x"}, []])
+def test_a_presence_answer_carries_presence_alone(dashboard, answer):
+    transport = PhaseTransport(dashboard.request, {})
+    transport.call = lambda host, phase, private=None, *, timeout=None, devices=None: (
+        answer if phase == "dashboard_present" else PhaseTransport.call(transport, host, phase, private, timeout=timeout, devices=devices))
+    with pytest.raises(ceph_native.Refusal, match="^evidence$"):
+        ceph_core.execute(dashboard.request, "observe", "d" * 64, transport, {})
 
 
 @pytest.mark.parametrize("value", ["", "short", "Xq7-Lm2_Rv9.Tk4-Wz8_Hn3.Pb6-Jd5!", 7])

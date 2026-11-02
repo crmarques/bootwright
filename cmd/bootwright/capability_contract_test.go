@@ -343,7 +343,7 @@ var contractProperties = []string{
 	"observe-removal-request", "observe-removal-unproved", "observe-removal-evidence-proves-request",
 	"observe-removal-proves-absence", "observe-removal-reads-presence", "observe-removal-reads-partial",
 	"observe-removal-ignores-readiness", "produced-only-on-proved-completion", "role-admits-request",
-	"observe-unknown-explained", "observation-read-only", "probe-read-only",
+	"observe-unknown-explained", "observation-read-only", "probe-read-only", "diff-observation",
 	"apply-outcome-of-cancellation", "destroy-outcome-of-cancellation", "cancellation-reaches-runner",
 	"observe-cancellation-unproved", "apply-replay-identical", "destroy-replay-identical",
 }
@@ -677,6 +677,7 @@ func contractEffects(t *testing.T, row contractRow, example contractExample, cap
 		contractUnresolved(t, row, block, capability, execution, runner, findings)
 		contractProduced(t, row, execution, capability, runner, findings)
 		contractReadOnly(row, block, capability, execution, runner, findings)
+		contractDiffObservation(row, block, capability, execution, runner, findings)
 		contractCancellation(row, block, capability, execution, runner, findings)
 		contractReplay(row, block, capability, execution, runner, findings)
 	}
@@ -773,6 +774,22 @@ func contractReadOnly(row contractRow, block reconciliation.Block, capability li
 	for _, request := range sent {
 		if request.Operation != lifecycle.ObserveOperation || !request.ReadOnly || !request.Unrecorded || len(request.Outputs) != 0 {
 			findings.record(row, "probe-read-only", fmt.Sprintf("%s: a probe ran %s read-only %t unrecorded %t declaring %d outputs", block.ID, request.Operation, request.ReadOnly, request.Unrecorded, len(request.Outputs)))
+		}
+	}
+}
+
+// contractDiffObservation proves an observation that names no operation,
+// attempt or resolution, as diff --observe runs it, declares no output the
+// runner would refuse to take over (specs/state-reconciliation.md, Reading
+// the real side live).
+func contractDiffObservation(row contractRow, block reconciliation.Block, capability lifecycle.Capability, execution lifecycle.Execution, runner *contractRunner, findings *contractFindings) {
+	inspection := execution
+	inspection.Operation, inspection.Attempt, inspection.Resolution = "", 0, 0
+	runner.script(lifecycle.RunResult{Outcome: "unchanged", Evidence: json.RawMessage(`{}`)}, nil)
+	_, _, _ = contractCall(capability, "observe", inspection)
+	for _, request := range runner.sent() {
+		if request.Unrecorded && len(request.Outputs) != 0 {
+			findings.record(row, "diff-observation", fmt.Sprintf("%s: an unrecorded observation declared %d outputs the runner refuses", block.ID, len(request.Outputs)))
 		}
 	}
 }

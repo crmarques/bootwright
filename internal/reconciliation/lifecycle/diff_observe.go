@@ -268,6 +268,9 @@ func (s Service) reading(ctx context.Context, store recordReader, read *diffRead
 		if err != nil {
 			reading.reason = firstMessage(err)
 		}
+		if reading.reason == UnrecordedMaterialRefusal {
+			reading.remedy = "this observation needs an operation, so " + contextCommand(read.context.Name, "diff") + " reads this block from its records"
+		}
 	}
 	return reading
 }

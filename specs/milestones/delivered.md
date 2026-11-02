@@ -6037,7 +6037,7 @@ that stops a managed network other tenants' running domains use, and
 same-name context adopt abandoned objects. Under `diff --observe` the Ceph
 cluster and client blocks and the agent install and media blocks read unknown
 until their observation runs without outputs
-([B596](backlog.md#b596)). A read refuses `lifecycle.lease` while an apply
+([B596](m2.md#b596)). A read refuses `lifecycle.lease` while an apply
 runs, and an `--observe` holds the shared lock so an `apply` refuses meanwhile
 ([B18](delivered.md#b18)). A canceled `--observe` can leave a read-only Ceph worker
 running to its own deadline ([B573](backlog.md#b573)). Only the libvirt Machine

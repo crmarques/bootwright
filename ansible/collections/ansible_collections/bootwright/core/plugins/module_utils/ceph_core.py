@@ -991,8 +991,11 @@ def execute(request, operation, request_digest, transport, outputs=None, *, now=
     bootstrap = next(h for h in request["hosts"] if h["name"] == request["bootstrap"])
     outputs = outputs or {}
     ceph_native.require(set(outputs) <= set(OUTPUTS.values()))
-    if request["action"] in OUTPUTS and operation in ("apply", "observe"):
+    if request["action"] in OUTPUTS and operation == "apply":
         ceph_native.require(set(outputs) == {OUTPUTS[request["action"]]}, "material")
+    elif request["action"] in OUTPUTS and operation == "observe":
+        # An observation no operation records declares no output: it proves presence and takes over no material.
+        ceph_native.require(set(outputs) in ({OUTPUTS[request["action"]]}, set()), "material")
     elif operation in ("apply", "observe"):
         ceph_native.require(not outputs, "material")
     if request["action"] == "service":
@@ -1064,12 +1067,12 @@ def execute(request, operation, request_digest, transport, outputs=None, *, now=
         ceph_native.require(observation["ready"], "not-ready")
     elif operation == "destroy":
         ceph_native.require(observation["removed"], "not-removed")
-    if operation == "observe" and request["action"] == "client" and observation["ready"]:
+    if operation == "observe" and request["action"] == "client" and observation["ready"] and outputs:
         value = transport.call(bootstrap, "client_read").get("private")
         ceph_native.require(isinstance(value, str) and 0 < len(value.encode()) <= 65536, "material")
         ceph_native.private_write(outputs["client"], value.encode())
     if request["action"] == "cluster" and operation in ("apply", "observe") and observation["ready"]:
-        observation, effect = dashboard_phase(request, operation, request_digest, bootstrap, transport, observation, outputs["dashboard"],
+        observation, effect = dashboard_phase(request, operation, request_digest, bootstrap, transport, observation, outputs.get("dashboard"),
                                               now=now, pause=pause, connect=connect)
         changed = effect or changed
     return {"changed": changed, "evidence": recorded(observation, transport, request_digest, request)}
@@ -1336,8 +1339,8 @@ def execute_unit(request, operation, request_digest, transport, bootstrap, *, no
 
 def execute_user(request, operation, request_digest, transport, bootstrap, outputs, *, now, pause):
     """An object user runs on the bootstrap host only: its preparation proof and its one phase, whose key pair reaches the protected
-    output before its readiness wait; an observation that proves it ready recaptures the retained pair read-only. Removal is the core
-    refusal."""
+    output before its readiness wait; an observation that proves it ready recaptures the retained pair read-only when it declares the
+    output, and reads presence alone when no operation records it. Removal is the core refusal."""
     changed = False
     if operation == "apply":
         transport.call(bootstrap, "prerequisites")
@@ -1353,7 +1356,7 @@ def execute_user(request, operation, request_digest, transport, bootstrap, outpu
         ceph_native.require(observation["removed"], "not-removed")
     else:
         observation = observe_unit(request, request_digest, bootstrap, transport)
-        if observation["ready"]:
+        if observation["ready"] and outputs:
             produced = transport.call(bootstrap, "object_user_read")
             ceph_native.require(isinstance(produced, dict) and set(produced) == {"private"}, "evidence")
             user_output(outputs["object-user"], produced["private"], request)
@@ -1410,7 +1413,8 @@ def execute_gateway(request, operation, request_digest, transport, bootstrap, *,
 
 
 def dashboard_phase(request, operation, request_digest, bootstrap, transport, observation, output, *, now, pause, connect):
-    """After readiness: enable the dashboard, or recapture its credential read-only; then prove it from the controller."""
+    """After readiness: enable the dashboard, or recapture its credential read-only, or with no output prove it present; then prove it from
+    the controller."""
     changed = False
     if operation == "apply":
         produced = transport.call(bootstrap, "dashboard")
@@ -1420,6 +1424,14 @@ def dashboard_phase(request, operation, request_digest, bootstrap, transport, ob
         # The MGR redeploy restarted every manager; readiness is proved again after it.
         observation = wait_ready(request, request_digest, bootstrap, transport, now, pause)
         ceph_native.require(observation["ready"], "not-ready")
+    elif output is None:
+        # With no output declared the bootstrap host proves the account against its retained password and returns presence only.
+        produced = transport.call(bootstrap, "dashboard_present")
+        present = isinstance(produced, dict) and set(produced) == {"present"} and produced["present"] is True
+        ceph_native.require(produced == {} or present, "evidence")
+        if not produced:
+            observation = dict(observation, ready=False, partial=True)
+            return evidence(observation, request_digest, request), False
     else:
         produced = transport.call(bootstrap, "dashboard_read")
         ceph_native.require(isinstance(produced, dict) and set(produced) <= {"private"}, "evidence")

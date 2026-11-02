@@ -168,7 +168,6 @@ Alias cell.
 | [B593](#b593) | new, 2026-10-14 (X91 audit) | enabling | Desired state | `RenderEffective` can keep the authored catalog and origins for a consumer that needs them | Found by the X91 audit; no consumer: `diff` takes the compile port |
 | [B594](#b594) | new, 2026-10-14 (X91 audit) | enabling | Desired state | One envelope shape definition serves the decoder and the encoder | Found by the X91 audit; no milestone depends on it: drift risk only |
 | [B595](#b595) | new, 2026-10-14 (X91 audit) | enabling | Storage | A Ceph refusal table test and a docs-check entry | Found by the X91 audit; no consumer until the first Ceph delta scenario |
-| [B596](#b596) | new, 2026-10-14 (X91 audit); agent-install half delivered by X126 (D199) | enabling | Storage | Ceph observations run without outputs when no operation records them | Found by the X91 audit; no milestone depends on it: until then `diff --observe` reads these blocks as unknown |
 | [B598](#b598) | new, 2026-10-14 (X91 audit) | safety | State reconciliation and Workspace | Input restored byte for byte after an edit settles a completed apply | D155 accepts exact-byte restoration for a future named slice; current refusal stays |
 | [B599](#b599) | new, 2026-10-14 (X91 audit) | safety | Substrate and Managed OS | Every observe task writes only inside the runner's private directories | Found by the X91 audit; its extent is what the allowlist test finds, and the audit names two candidates |
 | [B600](#b600) | new, 2026-10-14 (X91 audit) | product | Storage | `diff --observe` proves a Ceph pool's size, minimum size and role | Candidate; found by the X91 audit; one projector, promoted when an operator asks for it |
@@ -1742,29 +1741,6 @@ the first scenario consumer. **Impact:** a refusal can change without the spec.
 **Smallest fix:** the table, a test over `Unsupported()`, and the package in the
 docs-check list. **Exit evidence:** that test and a docs-check entry.
 
-### B596
-
-The Ceph cluster and client observations, and the agent install and media
-observations, hand over material (dashboard, client keyring, admin kubeconfig)
-and require it
-(`ansible/collections/ansible_collections/bootwright/core/plugins/module_utils/ceph_core.py:508-511`,
-`internal/containercluster/agentinstall/install.go:292-296`). The runner refuses
-`Outputs` on an invocation no operation records, so under `diff --observe` these
-blocks read unknown. X126 ([D199](#d199)) delivered the agent install block's
-half: its observation declares no output outside an operation; the Ceph
-cluster and client blocks remain. **Impact:** safe, but it lowers the usefulness of `diff` for
-Ceph contexts. **Smallest fix:** their observation runs without outputs when no
-operation records it. It touches the Ansible plugin and the capability Go code.
-**Exit evidence:** a test that `diff --observe` reads the Ceph cluster, Ceph
-client and agent blocks present or absent instead of unknown, with no material in
-the run directory.
-
-The owner's 2026-11-01 three-node run showed the cost: `diff --observe`
-reported the CephCluster, both CephClients and the CephObjectUser unknown, and
-its remedy, "restore what the reason names", names nothing an operator can
-restore; until the fix lands that row should say the observation needs an
-operation.
-
 ### B598
 
 Input restored byte for byte after an edit gets a new revision, so a completed
@@ -1824,7 +1800,7 @@ projection golden and the observable-field table row.
 
 Candidate. A projector for the agent install: release version and declared
 nodes. It carries the evidence widening for that capability and needs
-[B596](#b596) to read the block at all. **Requires:** the projector port that
+[B596](m2.md#b596) to read the block at all. **Requires:** the projector port that
 B565 delivers. **Definition:** Candidate. **Exit evidence:** a projection golden
 and the observable-field table row.
 
@@ -1832,7 +1808,7 @@ and the observable-field table row.
 
 Candidate. A projector for the Ceph image, host and core: image, topology nodes
 and labels. It carries the evidence widening for those capabilities and needs
-[B596](#b596) for the core. **Requires:** the projector port that B565
+[B596](m2.md#b596) for the core. **Requires:** the projector port that B565
 delivers. **Definition:** Candidate. **Exit evidence:** a projection golden per
 capability and the observable-field table rows.
 
@@ -5581,7 +5557,7 @@ positive completion, and one that finds it missing on an otherwise complete
 cluster is a partial realization the next attempt converges. (7) The
 installation's observation outside an operation, as `diff --observe` runs it,
 declares no administrator-access output, so the runner admits it (the
-agent-install half of [B596](#b596)), and its
+agent-install half of [B596](m2.md#b596)), and its
 projection renders the observed `spec.nodes[].labels` and
 `spec.nodes[].taints`. (8) The install request moves to
 `cluster-install-agent-v10`, freezing each node's placement; a v9 record

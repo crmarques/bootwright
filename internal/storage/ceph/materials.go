@@ -189,7 +189,7 @@ func (c Capability) invoke(ctx context.Context, e lifecycle.Execution, operation
 	}
 	defer cleanup()
 	outputs := []lifecycle.OutputFile{}
-	produces := (operation == "apply" || operation == "observe") && values == nil
+	produces := (operation == "apply" || operation == "observe" && lifecycle.Recorded(e)) && values == nil
 	if produces && r.Action == "client" {
 		outputs = append(outputs, lifecycle.OutputFile{Name: "client", Variable: "client"})
 	}

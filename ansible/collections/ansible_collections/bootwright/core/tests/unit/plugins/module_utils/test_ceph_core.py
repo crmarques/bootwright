@@ -968,6 +968,40 @@ def test_owned_cluster_without_daemons_does_not_prove_cleanup(core_request):
     assert not result["evidence"]["removed"]
 
 
+class ClientTransport:
+    def __init__(self, request):
+        self.request, self.calls = request, []
+
+    def call(self, host, phase, private=None, *, timeout=None):
+        del private, timeout
+        self.calls.append(phase)
+        if phase == "observe":
+            return dict(observation(self.request, ready=True), client="client.consumer")
+        if phase == "host_state":
+            return {"name": host["name"], "owned": True, "exists": True}
+        assert phase == "client_read"
+        return {"private": json.dumps([{"entity": "client.consumer", "key": "QUJD", "caps": {}}])}
+
+
+@pytest.mark.parametrize("outputs, read", [({}, False), ({"client": "client"}, True)])
+def test_a_client_observe_reads_its_keyring_only_when_it_declares_the_output(core_request, tmp_path, outputs, read):
+    core_request.update(action="client", client={"name": "consumer", "pool": "volumes", "access": "readOnly", "dataPools": [],
+                                                 "filesystem": "", "group": "", "subvolume": ""})
+    outputs = {name: str(tmp_path / path) for name, path in outputs.items()}
+    transport = ClientTransport(core_request)
+    result = ceph_core.execute(core_request, "observe", "d" * 64, transport, outputs)
+    assert result["evidence"]["ready"] and result["evidence"]["client"] == "client.consumer" and "QUJD" not in json.dumps(result)
+    assert ("client_read" in transport.calls) is read and (tmp_path / "client").exists() is read
+
+
+def test_a_client_apply_still_requires_its_output(core_request, monkeypatch):
+    monkeypatch.setattr(ceph_native, "supported_transport", lambda value: True)
+    core_request.update(action="client", client={"name": "consumer", "pool": "volumes", "access": "readOnly", "dataPools": [],
+                                                 "filesystem": "", "group": "", "subvolume": ""})
+    with pytest.raises(ceph_native.Refusal, match="^material$"):
+        ceph_core.execute(core_request, "apply", "d" * 64, ClientTransport(core_request), {})
+
+
 @pytest.mark.parametrize("phase", ["observe", "host_state", "client_read"])
 def test_native_reads_require_unchanged_artifacts_before_observation(core_request, phase):
     if phase == "client_read":

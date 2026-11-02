@@ -209,7 +209,7 @@ func TestAControllerStageInspectionCannotAuthorizeAnEffect(t *testing.T) {
 }
 
 func TestAnUnreachableTargetRendersUnknownNeverAbsent(t *testing.T) {
-	refusal := diagnostics.NewFailure("lifecycle.state", "an invocation no operation records may take over no material, so this observation cannot run outside an operation", "")
+	refusal := diagnostics.NewFailure("lifecycle.state", UnrecordedMaterialRefusal, "")
 	for name, answer := range map[string]scriptedObservation{
 		"an observation error": {err: diagnostics.NewFailure("lifecycle.adapter", "the hypervisor did not answer for the domain", "")},
 		"an unknown effect":    {observation: Observation{Effect: reconciliation.EffectUnknown}},
@@ -225,6 +225,16 @@ func TestAnUnreachableTargetRendersUnknownNeverAbsent(t *testing.T) {
 				t.Fatalf("alpha reads %+v", alpha.Real)
 			}
 		})
+	}
+}
+
+func TestAnObservationNeedingAnOperationNamesThatInsteadOfARestore(t *testing.T) {
+	f, projecting, _ := observedFixture(t, "alpha")
+	projecting.answers["alpha"] = scriptedObservation{err: diagnostics.NewFailure("lifecycle.state", UnrecordedMaterialRefusal, "")}
+	alpha := objectOf(t, f.observe(t), api.ArtifactServer, "alpha")
+	if alpha.Real.State != "unknown" || alpha.Real.Reason != UnrecordedMaterialRefusal ||
+		alpha.Real.Remedy != "this observation needs an operation, so bootwright diff --context lab reads this block from its records" {
+		t.Fatalf("alpha reads %+v", alpha.Real)
 	}
 }
 

@@ -112,6 +112,10 @@ const ObserveOperation = "observe"
 
 const LendOperation = "lend"
 
+const UnrecordedMaterialRefusal = "an invocation no operation records may take over no material, so this observation cannot run outside an operation"
+
+func Recorded(e Execution) bool { return e.Attempt != 0 || e.Resolution != 0 }
+
 // MaxDeadline is the longest any adapter run may take, whatever deadline its
 // request states. A capability that states one derives it from the budgets its
 // request froze, and its own tests hold what it derives to this ceiling; a
@@ -203,7 +207,7 @@ func RunFor(execution Execution, invocation Invocation) RunRequest {
 		NativeErrors:      invocation.NativeErrors,
 		Deadline:          invocation.Deadline,
 		ReadOnly:          readOnly,
-		Unrecorded:        execution.Attempt == 0 && execution.Resolution == 0,
+		Unrecorded:        !Recorded(execution),
 		Prepare:           prepare,
 	}
 }
