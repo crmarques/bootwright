@@ -170,14 +170,13 @@ func (s Service) run(ctx context.Context, tx Transaction, decided operationPlan,
 		if err := s.proveRemovable(ctx, tx, store, located, decided, material); err != nil {
 			return nil, err
 		}
-		boundary := s.onlineRemoval(decided.plan)
-		skip := maps.Clone(boundary.machines)
-		maps.Copy(skip, boundary.preStopMachines)
+		skip := maps.Clone(decided.phases.machines)
+		maps.Copy(skip, decided.phases.preStopMachines)
 		held, err := sourceLineage(ctx, store, decided.source)
 		if err != nil {
 			return nil, err
 		}
-		if err := s.proveQuiescent(ctx, store, tx.Identity().Name, located, decided.plan, material, held, skip); err != nil {
+		if err := s.proveQuiescent(ctx, store, tx.Identity().Name, located, decided.plan, decided.phases, material, held, skip); err != nil {
 			return nil, err
 		}
 	}
@@ -214,7 +213,7 @@ func (s Service) run(ctx context.Context, tx Transaction, decided operationPlan,
 	if err != nil {
 		return result, err
 	}
-	boundary, warned, cause := s.converge(work, tx, store, located, logging, operation, plan, states, material, decided.selection)
+	boundary, warned, cause := s.converge(work, tx, store, located, logging, operation, plan, decided.phases, states, material, decided.selection)
 	result.Warnings = warned
 	logging.close(ctx, log)
 	final, terminal := s.finish(recordingContext(ctx), tx, store, operation, plan, states, boundary, logging.faulted(), result)

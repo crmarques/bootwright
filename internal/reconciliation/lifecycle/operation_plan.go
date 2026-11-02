@@ -34,14 +34,14 @@ type operationPlan struct {
 	rebound   rebinding
 	states    map[string]reconciliation.BlockState
 	selection reconciliation.Selection
-	// stops is what a fresh removal's quiescence gate observes on the host:
-	// the objects of its blocks whose capability probes quiescence, in plan
-	// order.
-	stops       []string
-	sameBlocks  sameBlocksProof
-	lineagePlan reconciliation.Plan
-	predecessor string
-	takes       []string
+	// phases are the removal phases of plan, decided once for every destroy;
+	// replacedPhases are those of the failed removal a fresh removal replaces,
+	// whose own plan its resolution observes.
+	phases, replacedPhases removalPhases
+	sameBlocks             sameBlocksProof
+	lineagePlan            reconciliation.Plan
+	predecessor            string
+	takes                  []string
 	// basis is the durable state this transition was planned from. For a fresh
 	// removal it is the incomplete operation the removal takes the place of,
 	// which is the context's current operation. It is not always source: a

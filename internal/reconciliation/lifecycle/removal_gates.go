@@ -122,8 +122,11 @@ func (s Service) resolveMember(ctx context.Context, tx Transaction, store Operat
 	// is resolved by this removal's own check (D119), which proves what it
 	// takes back is this context's own, or absent, rather than that the apply's
 	// frozen request was realized.
-	removal := replaced.Verb == reconciliation.Apply
-	cause := s.observe(work, tx, store, approved, logging, replaced, frozen, states, material, removal, decided.plan)
+	removal, phases := replaced.Verb == reconciliation.Apply, decided.replacedPhases
+	if removal {
+		phases = removalPhases{}
+	}
+	cause := s.observe(work, tx, store, approved, logging, replaced, frozen, phases, states, material, removal, decided.plan, decided.phases)
 	logging.close(ctx, log)
 	if err := s.recordFromBlocks(recordingContext(ctx), tx, store, replaced, frozen, states); err != nil {
 		return memberResolution{}, err
@@ -227,12 +230,11 @@ func (s Service) reportResolution(ctx context.Context, event ProgressEvent) {
 // discovering the next obstacle each time they repeat the command. A probe
 // that cannot read its target reports live, because an environment that cannot
 // prove it is idle is never assumed to be.
-func (s Service) proveQuiescent(ctx context.Context, store OperationStore, contextName string, approved approved, plan reconciliation.Plan, material map[string]secrets.Material, held lineage, skip map[string]bool) error {
+func (s Service) proveQuiescent(ctx context.Context, store OperationStore, contextName string, approved approved, plan reconciliation.Plan, phases removalPhases, material map[string]secrets.Material, held lineage, skip map[string]bool) error {
 	var live, stops, remedies []string
 	generic := false
 	blocks := slices.DeleteFunc(slices.Clone(plan.Blocks), func(block reconciliation.Block) bool { return skip[block.ID] })
-	boundary := s.onlineRemoval(plan)
-	if err := survivorRefusal(blocks, boundary.survivors); err != nil {
+	if err := survivorRefusal(blocks, phases.survivors); err != nil {
 		s.reportCheck(ctx, ProgressEvent{Status: "failed"})
 		return err
 	}
@@ -265,7 +267,7 @@ func (s Service) proveQuiescent(ctx context.Context, store OperationStore, conte
 			}
 			state, err := capability.Quiescent(ctx, Probe{
 				ApplyOperation: applyOperation, ApplyProved: applyProved, Context: contextName, Block: block, Launch: launch, Material: material,
-				RetiredWithHosts: boundary.retired[block.ID], LendProduced: lend,
+				RetiredWithHosts: phases.retired[block.ID], LendProduced: lend,
 			})
 			release()
 			if err != nil {

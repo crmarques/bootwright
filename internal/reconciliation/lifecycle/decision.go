@@ -43,7 +43,14 @@ func (s Service) decide(ctx context.Context, view View, verb reconciliation.Verb
 func (s Service) decideAs(ctx context.Context, view View, verb reconciliation.Verb, selection reconciliation.Selection) (operationPlan, reconciliation.Verb, error) {
 	decided, chosen, err := s.decideFrom(ctx, view, verb, selection)
 	decided.basis.context = view.Identity().Name
-	return decided, chosen, err
+	return s.withPhases(decided, err), chosen, err
+}
+
+func (s Service) withPhases(decided operationPlan, err error) operationPlan {
+	if err == nil && decided.verb == reconciliation.Destroy {
+		decided.phases = s.computePhases(decided.plan)
+	}
+	return decided
 }
 
 func (s Service) decideFrom(ctx context.Context, view View, verb reconciliation.Verb, selection reconciliation.Selection) (operationPlan, reconciliation.Verb, error) {
@@ -507,6 +514,7 @@ func (s Service) supersede(ctx context.Context, view View, store OperationStore,
 	if err != nil {
 		return operationPlan{}, err
 	}
+	decided.replacedPhases = s.computePhases(frozen)
 	return plannedFrom(decided, operation, states, attempts), nil
 }
 

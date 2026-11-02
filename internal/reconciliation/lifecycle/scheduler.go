@@ -69,13 +69,14 @@ type scheduler struct {
 	// supersedes: each unproved block is read by the check of the block of
 	// removalPlan that takes it back (D119), unless the apply's own observation
 	// proves it completed (D123).
-	removal       bool
-	removalPlan   reconciliation.Plan
-	online        onlineRemoval
-	onlineProved  bool
-	onlineBlocked bool
-	preStopProved bool
-	warned        []positionedWarning
+	removal           bool
+	removalPlan       reconciliation.Plan
+	phases            removalPhases
+	removalPlanPhases removalPhases
+	onlineProved      bool
+	onlineBlocked     bool
+	preStopProved     bool
+	warned            []positionedWarning
 }
 
 type positionedWarning struct {
@@ -86,8 +87,8 @@ type positionedWarning struct {
 // converge runs the operation's blocks until nothing more may start, and
 // reports whether it stopped at a stage or operator-stop boundary and what any
 // block that did not complete reported.
-func (s Service) converge(ctx context.Context, tx Transaction, store OperationStore, approved approved, logging *logBoundary, operation operationstore.Operation, plan reconciliation.Plan, states map[string]reconciliation.BlockState, material map[string]secrets.Material, selection reconciliation.Selection) (bool, []diagnostics.Diagnostic, error) {
-	run := s.newScheduler(tx, store, approved, logging, operation, plan, states, material, selection)
+func (s Service) converge(ctx context.Context, tx Transaction, store OperationStore, approved approved, logging *logBoundary, operation operationstore.Operation, plan reconciliation.Plan, phases removalPhases, states map[string]reconciliation.BlockState, material map[string]secrets.Material, selection reconciliation.Selection) (bool, []diagnostics.Diagnostic, error) {
+	run := s.newScheduler(tx, store, approved, logging, operation, plan, states, material, selection, phases, removalPhases{})
 	boundary, err := run.converge(ctx)
 	slices.SortStableFunc(run.warned, func(first, second positionedWarning) int { return first.position - second.position })
 	var warned []diagnostics.Diagnostic
@@ -101,8 +102,8 @@ func (s Service) converge(ctx context.Context, tx Transaction, store OperationSt
 // else, leaving the block states it was given holding what each one proved.
 // removal says a fresh removal resolves an apply's blocks, by the check of the
 // block of removalPlan that takes each one back.
-func (s Service) observe(ctx context.Context, tx Transaction, store OperationStore, approved approved, logging *logBoundary, operation operationstore.Operation, plan reconciliation.Plan, states map[string]reconciliation.BlockState, material map[string]secrets.Material, removal bool, removalPlan reconciliation.Plan) error {
-	run := s.newScheduler(tx, store, approved, logging, operation, plan, states, material, reconciliation.Selection{})
+func (s Service) observe(ctx context.Context, tx Transaction, store OperationStore, approved approved, logging *logBoundary, operation operationstore.Operation, plan reconciliation.Plan, phases removalPhases, states map[string]reconciliation.BlockState, material map[string]secrets.Material, removal bool, removalPlan reconciliation.Plan, removalPlanPhases removalPhases) error {
+	run := s.newScheduler(tx, store, approved, logging, operation, plan, states, material, reconciliation.Selection{}, phases, removalPlanPhases)
 	run.observeOnly = true
 	run.removal, run.removalPlan = removal, removalPlan
 	_, err := run.converge(ctx)
@@ -119,7 +120,7 @@ func (s Service) Concurrency() int {
 	return s.options.Concurrency
 }
 
-func (s Service) newScheduler(tx Transaction, store OperationStore, approved approved, logging *logBoundary, operation operationstore.Operation, plan reconciliation.Plan, states map[string]reconciliation.BlockState, material map[string]secrets.Material, selection reconciliation.Selection) *scheduler {
+func (s Service) newScheduler(tx Transaction, store OperationStore, approved approved, logging *logBoundary, operation operationstore.Operation, plan reconciliation.Plan, states map[string]reconciliation.BlockState, material map[string]secrets.Material, selection reconciliation.Selection, phases, removalPlanPhases removalPhases) *scheduler {
 	return &scheduler{
 		service: s, tx: tx, store: store, approved: approved, operation: operation,
 		plan: plan, material: material, selection: selection, bound: s.Concurrency(), logging: logging,
@@ -127,8 +128,15 @@ func (s Service) newScheduler(tx Transaction, store OperationStore, approved app
 		unstarted: map[string]bool{}, announced: map[string]int{},
 		held: map[string]string{}, causes: map[string]error{},
 		results: make(chan step, len(plan.Blocks)),
-		online:  s.onlineRemoval(plan),
+		phases:  phases, removalPlanPhases: removalPlanPhases,
 	}
+}
+
+func (c *scheduler) retired() map[string]bool {
+	if c.removal {
+		return c.removalPlanPhases.retired
+	}
+	return c.phases.retired
 }
 
 func (c *scheduler) converge(ctx context.Context) (bool, error) {
@@ -193,12 +201,12 @@ func (c *scheduler) next() (reconciliation.Block, int, bool) {
 		return reconciliation.Block{}, 0, false
 	case c.observeOnly:
 		return reconciliation.Block{}, 0, false
-	case !c.online.preStopDone(c.states):
+	case !c.phases.preStopDone(c.states):
 		return c.nextPreStop()
 	}
 	for _, index := range admitted {
 		block := c.plan.Blocks[index]
-		if c.online.machines[block.ID] && !c.online.complete(c.states) {
+		if c.phases.machines[block.ID] && !c.phases.complete(c.states) {
 			continue
 		}
 		if !c.running[block.ID] && !c.worked[block.ID] && c.free(block) {
@@ -211,7 +219,7 @@ func (c *scheduler) next() (reconciliation.Block, int, bool) {
 func (c *scheduler) nextPreStop() (reconciliation.Block, int, bool) {
 	for index, block := range c.plan.Blocks {
 		state := c.states[block.ID]
-		if c.online.preStop[block.ID] && (state == reconciliation.BlockPending || state == reconciliation.BlockFailed) && !c.running[block.ID] && !c.worked[block.ID] && c.free(block) {
+		if c.phases.preStop[block.ID] && (state == reconciliation.BlockPending || state == reconciliation.BlockFailed) && !c.running[block.ID] && !c.worked[block.ID] && c.free(block) {
 			return block, index, true
 		}
 	}
@@ -308,7 +316,7 @@ func (c *scheduler) start(ctx context.Context, block reconciliation.Block, posit
 			// The observation's durable transition is authoritative even when it
 			// reports a refusal, so the operation state matches the record; one
 			// that never started recorded nothing, and the block keeps its state.
-			state, err = c.service.resolveUnknown(ctx, c.tx, c.store, c.approved, c.logging, c.operation, c.plan, block, c.material, position+1, len(c.plan.Blocks), c.removal, c.removalPlan, command, retry)
+			state, err = c.service.resolveUnknown(ctx, c.tx, c.store, c.approved, c.logging, c.operation, c.plan, block, c.material, position+1, len(c.plan.Blocks), c.removal, c.removalPlan, c.retired(), command, retry)
 			if state == "" {
 				state = c.durable(ctx, block.ID, prior)
 			}
@@ -316,7 +324,7 @@ func (c *scheduler) start(ctx context.Context, block reconciliation.Block, posit
 		} else {
 			// An attempt that never started performed no effect; its block
 			// holds what its record reads, running when the start landed.
-			state, err = c.service.attempt(ctx, c.tx, c.store, c.approved, c.logging, c.operation, c.plan, block, c.material, position+1, len(c.plan.Blocks),
+			state, err = c.service.attempt(ctx, c.tx, c.store, c.approved, c.logging, c.operation, c.plan, block, c.material, c.phases.retired, position+1, len(c.plan.Blocks),
 				func(reported []operationstore.Warning) { warnings = reported })
 			if state == "" {
 				state, unstarted = c.durable(ctx, block.ID, prior), true

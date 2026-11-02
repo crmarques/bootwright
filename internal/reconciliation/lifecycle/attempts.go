@@ -36,7 +36,7 @@ func recordingContext(ctx context.Context) context.Context { return context.With
 // that cannot start returns no state and the block keeps the one it had: a
 // pending block stays pending and a failed one it would have retried stays
 // failed, exactly as their records still say.
-func (s Service) attempt(ctx context.Context, tx Transaction, store OperationStore, approved approved, boundary *logBoundary, operation operationstore.Operation, plan reconciliation.Plan, block reconciliation.Block, material map[string]secrets.Material, position, total int, warn func([]operationstore.Warning)) (reconciliation.BlockState, error) {
+func (s Service) attempt(ctx context.Context, tx Transaction, store OperationStore, approved approved, boundary *logBoundary, operation operationstore.Operation, plan reconciliation.Plan, block reconciliation.Block, material map[string]secrets.Material, retired map[string]bool, position, total int, warn func([]operationstore.Warning)) (reconciliation.BlockState, error) {
 	capability, ok := s.capabilities.Resolve(block.Kind, block.Implementation)
 	if !ok {
 		return "", failure("lifecycle.state",
@@ -91,7 +91,7 @@ func (s Service) attempt(ctx context.Context, tx Transaction, store OperationSto
 	warnings := &warningCollector{}
 	result, runErr := s.invoke(ctx, tx, store, approved, boundary, operation, plan, block, material, proved, applyProved, preparations, log, number, 0, position, total, func(inner context.Context, execution Execution) (Result, error) {
 		if operation.Verb == reconciliation.Destroy {
-			execution.RetiredWithHosts = s.onlineRemoval(plan).retired[block.ID]
+			execution.RetiredWithHosts = retired[block.ID]
 			if reread {
 				if result, settled, err := rereadBeforeRemoval(inner, capability, execution); settled {
 					return result, err
@@ -197,7 +197,7 @@ func (s Service) ranUnder(block reconciliation.Block) operationstore.Build {
 // (D119), and the resolution is still recorded against the apply's block, as
 // removalEffect maps it. A block it leaves unknown names command, the exact
 // command that observes it again.
-func (s Service) resolveUnknown(ctx context.Context, tx Transaction, store OperationStore, approved approved, boundary *logBoundary, operation operationstore.Operation, plan reconciliation.Plan, block reconciliation.Block, material map[string]secrets.Material, position, total int, removal bool, removalPlan reconciliation.Plan, command string, retry bool) (reconciliation.BlockState, error) {
+func (s Service) resolveUnknown(ctx context.Context, tx Transaction, store OperationStore, approved approved, boundary *logBoundary, operation operationstore.Operation, plan reconciliation.Plan, block reconciliation.Block, material map[string]secrets.Material, position, total int, removal bool, removalPlan reconciliation.Plan, retired map[string]bool, command string, retry bool) (reconciliation.BlockState, error) {
 	capability, ok := s.capabilities.Resolve(block.Kind, block.Implementation)
 	if !ok {
 		return "", failure("lifecycle.state",
@@ -234,7 +234,7 @@ func (s Service) resolveUnknown(ctx context.Context, tx Transaction, store Opera
 			observe := capability.Observe
 			if as == reconciliation.Destroy {
 				observe = capability.ObserveRemoval
-				execution.RetiredWithHosts = s.retiredIn(removal, plan, removalPlan)[target.ID]
+				execution.RetiredWithHosts = retired[target.ID]
 			}
 			value, err := observe(inner, execution)
 			observation = value
@@ -306,13 +306,6 @@ func logObservationFailures(ctx context.Context, boundary *logBoundary, log *ope
 	for _, reported := range diagnostics.Of(err) {
 		_ = boundary.append(ctx, log, operationstore.LogRecord{Event: "observation-failed", Block: block.ID, Detail: reported.Code + ": " + reported.Message})
 	}
-}
-
-func (s Service) retiredIn(removal bool, plan, removalPlan reconciliation.Plan) map[string]bool {
-	if removal {
-		return s.onlineRemoval(removalPlan).retired
-	}
-	return s.onlineRemoval(plan).retired
 }
 
 // resolutionReading is the observation a resolution resolves block by, and
@@ -411,11 +404,10 @@ func (s Service) released(ctx context.Context, block reconciliation.Block) bool 
 	return ok && opts && removal.RequiresPreStopRemoval(block)
 }
 
-func (s Service) acknowledgedReleases(contextName string, plan reconciliation.Plan, names []string) error {
+func acknowledgedReleases(contextName string, plan reconciliation.Plan, preStop map[string]bool, names []string) error {
 	if len(names) == 0 {
 		return nil
 	}
-	preStop := s.onlineRemoval(plan).preStop
 	objects := map[string]bool{}
 	for _, block := range plan.Blocks {
 		if preStop[block.ID] {

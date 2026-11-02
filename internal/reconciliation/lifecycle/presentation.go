@@ -35,10 +35,10 @@ func (s Service) presentation(decided operationPlan) PlanResult {
 	// Ordinary removal keeps its pre-registration gate. An online removal's
 	// later Machine boundary is re-proved on each continuation that needs it.
 	if decided.fresh && decided.verb == reconciliation.Destroy {
-		result.Stops = slices.Clone(decided.stops)
+		result.Stops = s.stopsFirst(decided.plan, decided.phases)
 	}
 	if decided.verb == reconciliation.Destroy {
-		result.StopsAfterOnline = s.stopsAfterOnline(decided.plan, decided.states)
+		result.StopsAfterOnline = stopsAfterOnline(decided.plan, decided.phases, decided.states)
 	}
 	if result.Continuation && !result.Finalizes && decided.operation.ID != "" && s.otherBuild(decided.operation) && decided.sameBlocks.proved {
 		result.AnotherBuild = anotherBuildOf(decided.operation, result.Steps)

@@ -34,17 +34,16 @@ func (s Service) freshDestroy(ctx context.Context, contextName string, frozenBy 
 	}
 	return operationPlan{
 		fresh: true, verb: reconciliation.Destroy, plan: plan,
-		source: source, reopen: scope.reopen, release: scope.release, stops: s.stops(plan), takes: scope.operations,
+		source: source, reopen: scope.reopen, release: scope.release, takes: scope.operations,
 	}, nil
 }
 
-// stops names the objects whose removal the quiescence gate refuses while
+// stopsFirst names the objects whose removal the quiescence gate refuses while
 // they run, so the plan says what to stop before the operator confirms it.
-func (s Service) stops(plan reconciliation.Plan) []string {
+func (s Service) stopsFirst(plan reconciliation.Plan, phases removalPhases) []string {
 	var named []string
-	boundary := s.onlineRemoval(plan)
 	for _, block := range plan.Blocks {
-		if boundary.machines[block.ID] || boundary.preStopMachines[block.ID] {
+		if phases.machines[block.ID] || phases.preStopMachines[block.ID] {
 			continue
 		}
 		capability, ok := s.capabilities.Resolve(block.Kind, block.Implementation)

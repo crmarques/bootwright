@@ -10,8 +10,8 @@ import (
 	"github.com/crmarques/bootwright/internal/reconciliation"
 )
 
-// onlineRemoval follows frozen dependencies and capability opt-in, never kind alone.
-type onlineRemoval struct {
+// removalPhases follows frozen dependencies and capability opt-in, never kind alone.
+type removalPhases struct {
 	effects         map[string]bool
 	machines        map[string]bool
 	retired         map[string]bool
@@ -20,9 +20,9 @@ type onlineRemoval struct {
 	survivors       map[string][]SurvivingConsumer
 }
 
-func (s Service) onlineRemoval(plan reconciliation.Plan) onlineRemoval {
+func (s Service) computePhases(plan reconciliation.Plan) removalPhases {
 	if plan.Verb != reconciliation.Destroy {
-		return onlineRemoval{effects: map[string]bool{}, machines: map[string]bool{}, retired: map[string]bool{}, preStop: map[string]bool{}, preStopMachines: map[string]bool{}, survivors: map[string][]SurvivingConsumer{}}
+		return removalPhases{effects: map[string]bool{}, machines: map[string]bool{}, retired: map[string]bool{}, preStop: map[string]bool{}, preStopMachines: map[string]bool{}, survivors: map[string][]SurvivingConsumer{}}
 	}
 	retired, consumerHosts, survivors := s.retiredWithHosts(plan)
 	for {
@@ -42,7 +42,7 @@ func (s Service) onlineRemoval(plan reconciliation.Plan) onlineRemoval {
 	}
 }
 
-func (s Service) preStopRemoval(plan reconciliation.Plan, boundary *onlineRemoval) {
+func (s Service) preStopRemoval(plan reconciliation.Plan, boundary *removalPhases) {
 	boundary.preStop, boundary.preStopMachines = map[string]bool{}, map[string]bool{}
 	for _, block := range plan.Blocks {
 		capability, ok := s.capabilities.Resolve(block.Kind, block.Implementation)
@@ -85,8 +85,8 @@ func machinesDeferred(hosts []string, plan reconciliation.Plan, deferred map[str
 	})
 }
 
-func (s Service) deferral(plan reconciliation.Plan, retired map[string]bool) onlineRemoval {
-	boundary := onlineRemoval{effects: map[string]bool{}, machines: map[string]bool{}}
+func (s Service) deferral(plan reconciliation.Plan, retired map[string]bool) removalPhases {
+	boundary := removalPhases{effects: map[string]bool{}, machines: map[string]bool{}}
 	for _, block := range plan.Blocks {
 		capability, ok := s.capabilities.Resolve(block.Kind, block.Implementation)
 		if !ok || retired[block.ID] {
@@ -312,11 +312,10 @@ func compareSurvivors(a, b SurvivingConsumer) int {
 	return cmp.Or(strings.Compare(a.Consumer.Kind, b.Consumer.Kind), strings.Compare(a.Consumer.Object, b.Consumer.Object), strings.Compare(a.Provider.Kind, b.Provider.Kind), strings.Compare(a.Provider.Object, b.Provider.Object))
 }
 
-func (s Service) stopsAfterOnline(plan reconciliation.Plan, states map[string]reconciliation.BlockState) []string {
-	boundary := s.onlineRemoval(plan)
+func stopsAfterOnline(plan reconciliation.Plan, phases removalPhases, states map[string]reconciliation.BlockState) []string {
 	var names []string
 	for _, block := range plan.Blocks {
-		if (boundary.machines[block.ID] || boundary.preStopMachines[block.ID]) && states[block.ID] != reconciliation.BlockDone && !slices.Contains(names, block.Object) {
+		if (phases.machines[block.ID] || phases.preStopMachines[block.ID]) && states[block.ID] != reconciliation.BlockDone && !slices.Contains(names, block.Object) {
 			names = append(names, block.Object)
 		}
 	}
