@@ -737,9 +737,10 @@ owned markers scoped by owner, FSID and host:
    inherited crypto-policy proof.
 2. A pull of the frozen image digest and of each frozen auxiliary digest
    [it may run](#plan-and-prerequisites), each through its own
-   invocation-local broker admitting only that repository and digest, with a protected authfile, a signature policy limited to that
-   repository and at most three bounded attempts per preparation run. A pull
-   counts only after local inspection proves the digest and the linux/amd64
+   invocation-local broker admitting only that repository and digest, with a
+   protected authfile, a signature policy limited to that repository and at
+   most three attempts per preparation run. A pull
+   counts once local inspection proves the digest and the linux/amd64
    platform. Retained attempt records serve crash diagnosis and recovery.
    Scratch cleanup preserves validated durable records and refuses unvalidated
    names in their reserved namespace, unknown matching files, symlinks or

@@ -11116,6 +11116,7 @@ with CLI; Verification tooling.
   X277 at 1054 s against 189 s, was declined.
 
 The delivering commits record the gates and their results.
+
 ### X283 — Every end-to-end case renders to valid input
 
 **Item:** B1048 (new, 2026-11-02, [M2](m2.md); pre-existing). **Kind:** defect.
