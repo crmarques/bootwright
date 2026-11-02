@@ -178,6 +178,23 @@ def test_an_unverified_repository_fails_its_package_phase_before_any_effect(pack
     assert boundary.journal.writes == written and "transaction" not in boundary.events
 
 
+@pytest.mark.parametrize("site", ["solve4", "inspect"])
+def test_a_non_rhel_os_release_refuses_package_platform_naming_its_id(package_request, boundary, monkeypatch, site):
+    def unsupported(grant, scratch):
+        return native_resolution.snapshot_database({"os": "fedora", "release": "43", "architecture": "amd64"}, scratch)
+
+    if site == "inspect":
+        prepare(package_request, boundary)
+        del boundary.journal.records["complete.json"]
+    transactions = boundary.events.count("transaction")
+    monkeypatch.setattr(native_resolution, site, unsupported)
+    with pytest.raises(ceph_native.NativeFailure) as failure:
+        prepare(package_request, boundary)
+    assert str(failure.value) == "package-platform"
+    assert "'fedora'" in failure.value.native_error["cause"]
+    assert boundary.events.count("transaction") == transactions
+
+
 def test_frozen_complete_closure_and_publisher_checks_precede_eula_transaction(package_request, boundary):
     first = prepare(package_request, boundary)
     assert first == {"changed": True, "ready": True, "planDigest": boundary.plan["digest"]}

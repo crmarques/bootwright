@@ -54,10 +54,18 @@ def inventory4(base):
     return sorted(result, key=canonical)
 
 
+class UnsupportedPlatform(ValueError):
+    """The host's os-release ID has no native package database layout."""
+
+    def __init__(self, os_id):
+        super().__init__("platform")
+        self.os_id = os_id
+
+
 def db_path(platform):
     if platform["os"] == "rhel":
         return "/var/lib/rpm"
-    raise ValueError("platform")
+    raise UnsupportedPlatform(platform["os"])
 
 
 def snapshot_database(platform, scratch):

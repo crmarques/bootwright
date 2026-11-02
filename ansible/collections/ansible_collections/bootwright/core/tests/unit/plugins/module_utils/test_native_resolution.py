@@ -124,8 +124,9 @@ class NativeResolution(unittest.TestCase):
     def test_only_the_ceph_policy_selects_roots_and_only_on_rhel(self):
         with self.assertRaises(ValueError):
             native.selected_roots({"requirements": {}, "versions": {}})
-        with self.assertRaises(ValueError):
+        with self.assertRaises(native.UnsupportedPlatform) as refused:
             native.db_path({"os": "fedora"})
+        self.assertEqual(refused.exception.os_id, "fedora")
         self.assertEqual(native.db_path({"os": "rhel"}), "/var/lib/rpm")
 
     def test_inspect_reports_readiness_by_presence_without_verifying_files(self):

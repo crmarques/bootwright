@@ -153,6 +153,11 @@ class Journal:
         self.markers.write(name, value)
 
 
+def platform_failure(error):
+    cause = "os-release ID " + repr(error.os_id) + " has no supported native package database"
+    return ceph_native.NativeFailure("package-platform", "Ceph package host", cause)
+
+
 @contextlib.contextmanager
 def phase(reason, coordinate="Ceph package transaction"):
     """A native helper's failure is named by the package phase it failed in, at the site it failed; a lost acquisition connection by its artifact."""
@@ -160,6 +165,8 @@ def phase(reason, coordinate="Ceph package transaction"):
         yield
     except ceph_native.Refusal:
         raise
+    except native_resolution.UnsupportedPlatform as error:
+        raise platform_failure(error) from None
     except ceph_package_sources.AcquisitionLoss as error:
         raise ceph_native.NativeFailure("package-acquisition", error.artifact, error.cause).with_traceback(error.__traceback__) from None
     except Exception as error:
@@ -260,7 +267,10 @@ def prepare(request, host, certificate, *, trust=None, acquisition=None, journal
         grant["plan"] = plan
         complete = durable.read("complete.json")
         completion = {"version": "ceph-package-complete-v1", "binding": binding, "planDigest": plan["digest"]}
-        before = native_resolution.inspect(grant, scratch)
+        try:
+            before = native_resolution.inspect(grant, scratch)
+        except native_resolution.UnsupportedPlatform as error:
+            raise platform_failure(error) from None
         verified = durable.read("verified.json")
         if complete is not None:
             ceph_native.require(verified is not None and verified.get("binding") == binding and verified.get("planDigest") == plan["digest"], "package-journal")
