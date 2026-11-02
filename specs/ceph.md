@@ -2079,7 +2079,8 @@ NFS exports, CephSMBResources, placement policies, pools (declared and a
 gateway's zone pools), clients, RBD images, filesystems, subvolumes, object
 users and object buckets. Every Ceph block of a cluster except its image and host blocks
 also names the [throttle](state-reconciliation.md#stages-and-the-pause-boundary)
-`ceph/<cluster>`, so at most four of them run at once whatever the bound,
+`ceph/<cluster>` (a CephReplication names its primary cluster's, the one key a
+block can hold), so at most four of them run at once whatever the bound,
 which keeps the bootstrap host's load and the manager's command queue
 bounded. An unclaimed block runs beside the others because admission gives
 each native name it creates one owning block in the cluster (a pool's native

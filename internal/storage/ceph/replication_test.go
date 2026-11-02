@@ -74,6 +74,9 @@ func TestReplicationPlansBothClustersAndNativeNames(t *testing.T) {
 			if !slices.Equal(block.Exclusive, []string{"ceph-mgr/example", "ceph-mgr/secondary", "ceph/example", "ceph/secondary"}) {
 				t.Fatalf("exclusive claims: %v", block.Exclusive)
 			}
+			if block.Throttle != ThrottleKey("example") {
+				t.Fatalf("throttle %q, want the primary cluster's %q", block.Throttle, ThrottleKey("example"))
+			}
 			for _, name := range []string{ClusterBlockID("example"), ClusterBlockID("secondary"), ImageBlockID("example"), ImageBlockID("secondary"), ServiceUnitBlockID("secondary", ServiceUnit{Type: "rbd-mirror"})} {
 				if !slices.Contains(block.Dependencies, name) {
 					t.Errorf("missing dependency %s", name)

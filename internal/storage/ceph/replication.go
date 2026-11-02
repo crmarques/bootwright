@@ -150,7 +150,7 @@ func (c ReplicationCapability) Plan(ctx context.Context, input lifecycle.PlanInp
 			return plan, err
 		}
 		removal := replicationRemoval(input.Verb, r)
-		plan.Definitions = append(plan.Definitions, reconciliation.BlockDefinition{ID: ReplicationBlockID(r.Object), Kind: string(api.CephReplication), Object: r.Object, Implementation: ReplicationImplementation, ContentDigest: ReplicationContentDigest(), Request: canonical, Stage: reconciliation.StageClusters, Requires: requirements, Dependencies: dependencies, Exclusive: exclusive, Description: removal.Description, Impacts: removal.Impacts, Consumes: removal.Consumes})
+		plan.Definitions = append(plan.Definitions, reconciliation.BlockDefinition{ID: ReplicationBlockID(r.Object), Kind: string(api.CephReplication), Object: r.Object, Implementation: ReplicationImplementation, ContentDigest: ReplicationContentDigest(), Request: canonical, Stage: reconciliation.StageClusters, Requires: requirements, Dependencies: dependencies, Exclusive: exclusive, Throttle: ThrottleKey(r.Primary.Cluster), Description: removal.Description, Impacts: removal.Impacts, Consumes: removal.Consumes})
 	}
 	slices.Sort(plan.Secrets)
 	plan.Secrets = slices.Compact(plan.Secrets)
