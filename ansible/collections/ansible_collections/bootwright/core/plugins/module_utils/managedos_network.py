@@ -263,7 +263,7 @@ def family_differences(name, family, desired, running):
     if "address" in desired and not dynamic:
         wanted = address_set(desired, False)
         have = address_set(running, family == "ipv6")
-        if wanted != have:
+        if not wanted <= have:
             found.append("interface %s: %s addresses are %s, declared %s" % (
                 name, family, address_text(have), address_text(wanted)))
     return found

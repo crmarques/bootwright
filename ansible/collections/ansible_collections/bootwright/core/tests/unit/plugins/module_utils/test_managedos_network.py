@@ -227,6 +227,32 @@ def test_compare_ignores_link_local_ipv6():
     ]
 
 
+def test_compare_matches_a_static_interface_that_only_adds_addresses():
+    desired, running = desired_document(), running_document()
+    addresses = running_named(running, "bond0.130")["ipv4"]["address"]
+    addresses.append({"ip": "198.51.100.62", "prefix-length": 32})
+    addresses.append({"ip": "198.51.100.60", "prefix-length": 24})
+    assert len(addresses) == 3
+    assert compare(desired, running) == []
+
+
+def test_compare_names_a_declared_address_missing_among_extras():
+    desired, running = desired_document(), running_document()
+    running_named(running, "bond0.130")["ipv4"]["address"] = [{"ip": "198.51.100.62", "prefix-length": 32}]
+    assert compare(desired, running) == [
+        "interface bond0.130: ipv4 addresses are [198.51.100.62/32], declared [198.51.100.11/24]",
+    ]
+
+
+def test_compare_names_a_declared_address_running_with_another_prefix():
+    desired, running = desired_document(), running_document()
+    running_named(running, "bond0.130")["ipv4"]["address"] = [
+        {"ip": "198.51.100.11", "prefix-length": 25}, {"ip": "198.51.100.62", "prefix-length": 32}]
+    assert compare(desired, running) == [
+        "interface bond0.130: ipv4 addresses are [198.51.100.11/25, 198.51.100.62/32], declared [198.51.100.11/24]",
+    ]
+
+
 def test_compare_refuses_an_absent_interface_that_is_present():
     desired = desired_document()
     desired["interfaces"].append({"name": "virbr0", "type": "linux-bridge", "state": "absent"})

@@ -890,19 +890,19 @@ did not restart end with `repeat bootwright apply`.
 | guest power loss with a checkpoint pending | no log (`/run` is volatile), no marker | apply | converges if the path still works, otherwise unknown |
 
 **Compared subset.** The comparison reads only what the document declares;
-nmstate verified the rest once, at apply. Each interface declared `up` or
+nmstate verified the rest at apply. Each interface declared `up` or
 without a state must be present with an equal `type`, state `up` and an equal
 `mtu` when declared; per address family an equal `enabled` and `dhcp`, and
 `autoconf` for IPv6, when declared; and, when neither DHCP nor autoconf is on,
-the declared static addresses equal to the running ones, IPv6 link-local
-addresses aside. A bond has an equal `link-aggregation` mode, port set and each
+each declared static address and prefix running, extra addresses and IPv6
+link-local ones aside. A bond has an equal `link-aggregation` mode, port set and each
 declared option as text, where a mode, an enumerated option or a boolean option
 that nmstate reads by a position or an alias (`lacp` or `4`, `lacp_rate: 1`,
 `xmit_hash_policy: 2`, `use_carrier: yes`) compares as the name nmstate shows
 for it (`802.3ad`, `fast`, `layer2+3`, `true`); a VLAN an equal `base-iface` and `id`, and `protocol`
 when declared. An interface declared `absent` is not present, except as an `ethernet`
 interface listed `down` or `ignore`: absent removes an interface's
-configuration, and a physical NIC stays listed without one, as nmstate's own
+configuration, and a physical NIC stays listed without one, as nmstate's
 verification accepts. The declared
 routes that are not `absent` equal, one to one, the running routes on declared
 interfaces, matched on destination, `next-hop-interface` when declared,
