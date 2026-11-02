@@ -26,7 +26,7 @@
    Installing:         1 package
    Upgrading:          1 package
   Operation aborted by the user.
-  Note: this install also updates core packages (glibc); dnf applies it as for any package install
+  Note: this install also adds or updates core packages (glibc); dnf applies it as for any package install
 
   Planned changes
     ○ Install host packages with dnf: podman

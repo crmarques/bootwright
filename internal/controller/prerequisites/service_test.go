@@ -162,7 +162,7 @@ func (p *hostPackages) Preview(_ context.Context, missing []string) (HostPackage
 			return HostPackagePreview{}, failure("controller.install", "no package in the host's repositories provides "+requirement, "Enable the repository that provides it in the host's dnf configuration, then run setup again.")
 		}
 	}
-	return HostPackagePreview{Text: p.preview, Notes: []string{"this install also updates core packages (glibc); dnf applies it as for any package install"}}, nil
+	return HostPackagePreview{Text: p.preview, Notes: []string{"this install also adds or updates core packages (glibc); dnf applies it as for any package install"}}, nil
 }
 
 func (p *hostPackages) Install(_ context.Context, missing []string, _ RunOutput) ([]HostPackageEvidence, error) {

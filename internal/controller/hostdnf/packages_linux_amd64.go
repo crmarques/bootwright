@@ -224,7 +224,7 @@ func (p *Packages) Preview(ctx context.Context, missing []string) (prerequisites
 	text := sanitize(stdout.String())
 	preview := prerequisites.HostPackagePreview{Text: text, Truncated: stdout.truncated}
 	if names := coreNames(text, missing); len(names) != 0 {
-		preview.Notes = []string{"this install also updates core packages (" + strings.Join(names, ", ") + "); dnf applies it as for any package install"}
+		preview.Notes = []string{"this install also adds or updates core packages (" + strings.Join(names, ", ") + "); dnf applies it as for any package install"}
 	}
 	return preview, nil
 }

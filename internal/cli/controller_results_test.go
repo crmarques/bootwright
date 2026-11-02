@@ -536,7 +536,7 @@ func TestControllerSetupShowsThePreviewAndNamesItsRunGolden(t *testing.T) {
 		Dependencies: []string{"podman"},
 		Preview: &prerequisites.HostPackagePreview{
 			Text:  "Updating and loading repositories:\nRepositories loaded.\nPackage            Arch    Version          Repository   Size\nInstalling:\n podman            x86_64  5:5.8.1-1.fc44   updates    54.2 MiB\nUpgrading:\n glibc             x86_64  2.43-3.fc44      updates     6.7 MiB\n\nTransaction Summary:\n Installing:         1 package\n Upgrading:          1 package\nOperation aborted by the user.\n",
-			Notes: []string{"this install also updates core packages (glibc); dnf applies it as for any package install"},
+			Notes: []string{"this install also adds or updates core packages (glibc); dnf applies it as for any package install"},
 		},
 	}
 	record := &dispatchRecord{afterCall: func() {

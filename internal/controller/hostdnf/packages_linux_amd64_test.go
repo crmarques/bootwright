@@ -320,7 +320,7 @@ func TestThePreviewNotesCorePackagesWithoutRefusing(t *testing.T) {
 	out := fixture(t, "dnf5-core-preview.stdout")
 	p, _ := packagesWith(t, func(command) reply { return reply{exit: 1, stdout: out, stderr: "Operation aborted by the user.\n"} })
 	preview, err := p.Preview(context.Background(), []string{"python3.13"})
-	want := "this install also updates core packages (glibc, glibc-common, libgcc, python3.13, python3.13-libs); dnf applies it as for any package install"
+	want := "this install also adds or updates core packages (glibc, glibc-common, libgcc, python3.13, python3.13-libs); dnf applies it as for any package install"
 	if err != nil || preview.Text != out || !slices.Equal(preview.Notes, []string{want}) {
 		t.Fatalf("%+v: %v", preview, err)
 	}
@@ -328,6 +328,16 @@ func TestThePreviewNotesCorePackagesWithoutRefusing(t *testing.T) {
 	p, _ = packagesWith(t, func(command) reply { return reply{exit: 1, stdout: plain, stderr: "Operation aborted by the user.\n"} })
 	if preview, err := p.Preview(context.Background(), []string{"python3.13"}); err != nil || len(preview.Notes) != 0 {
 		t.Fatalf("a preview without core packages carried notes: %+v: %v", preview, err)
+	}
+}
+
+func TestThePreviewNotesCorePackagesTheHostLacks(t *testing.T) {
+	out := "Package Arch Version Repository Size\nInstalling:\n python3.14 x86_64 0:3.14.1-1.el9 appstream 30.4 KiB\nInstalling dependencies:\n python3.14-libs x86_64 0:3.14.1-1.el9 appstream 9.0 MiB\n python3.14-pip-wheel noarch 0:25.0-1.el9 appstream 1.2 MiB\n\nTransaction Summary:\n Installing: 3 packages\n"
+	p, _ := packagesWith(t, func(command) reply { return reply{exit: 1, stdout: out, stderr: "Operation aborted by the user.\n"} })
+	preview, err := p.Preview(context.Background(), []string{"python3.14"})
+	want := "this install also adds or updates core packages (python3.14, python3.14-libs, python3.14-pip-wheel); dnf applies it as for any package install"
+	if err != nil || !slices.Equal(preview.Notes, []string{want}) {
+		t.Fatalf("%+v: %v", preview, err)
 	}
 }
 

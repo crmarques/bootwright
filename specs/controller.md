@@ -252,7 +252,7 @@ requirement and a dependency-resolution failure each refuse `controller.install`
 naming the requirement and dnf's last error line, with the remedy of fixing
 the host's dnf configuration. A line naming `glibc*`, `libgcc`, `kernel*`,
 `systemd*`, `openssl-libs` or the selected `python3.X` appends one
-informational note, "this install also updates core packages (glibc); dnf
+informational note, "this install also adds or updates core packages (glibc); dnf
 applies it as for any package install", and never refuses
 ([W3](security.md#the-controller-hosts-attacker-model)).
 

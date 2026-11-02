@@ -96,7 +96,7 @@ Before it asks for confirmation, `controller install` runs `dnf install --assume
 for the missing packages and shows dnf's output verbatim in its plan, beside
 how many wheels the runtime downloads and how many it already has. The preview
 changes no package, though dnf may refresh its metadata cache as
-`dnf-makecache` does. When the transaction also updates core packages, such as
+`dnf-makecache` does. When the transaction also adds or updates core packages, such as
 glibc, the kernel, systemd, openssl-libs or the selected Python, the plan
 carries one informational note and no refusal: dnf applies them as for any
 package install. Declining the prompt changes nothing. dnf may resolve
