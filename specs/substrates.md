@@ -1178,7 +1178,15 @@ run through a module that cannot drive the machine. A poll treats a failed read
 as not yet at the state it waits for, so one failure spends one attempt rather
 than ending the poll. A power request is not evidence; every operation polls the resource
 to its expected state within a bounded window and reports unknown when it does
-not arrive. A boot selection is read back like any other effect. A read that
+not arrive. A boot selection is read back like any other effect. A power
+request or boot selection lost in transport is sent again only from that
+poll, after a read that answered shows the state not yet reached, and at most
+three sends in all: a reset only when its request never reached the BMC (its
+connection failed before the request was handed over), because a reset that
+may have arrived must not be repeated, and a boot selection whatever the loss,
+because it sets the same values again. An answer, a certificate failure and a
+failure that is not transport loss send nothing more. The resends fall within
+the poll's own window, so they leave the bounds below unchanged. A read that
 cannot reach a resource the BMC reports, or that receives a body which
 is not a Redfish resource, fails rather than answering empty, and the target
 proof reports what it could not read as unobserved, which proves nothing; a

@@ -22,11 +22,13 @@ Each operation's worst case, from the bounds in redfish_control:
   eject settles once the device is proved empty: no pause, and at most
   CERTIFICATE_MEMBERS 8 + 5 requests, each under REQUEST_TIMEOUT, plus one
   retry of a PATCH answered 412. established makes none.
-- boot: at most 60 s, and 510 s with timeouts (the system read, two PATCHes and
-  12 read-backs).
+- boot: at most 60 s, and 570 s with timeouts (the system read, two PATCHes,
+  12 read-backs and the two PATCHes the read-back poll may send again after a
+  PATCH lost in transport, WRITE_ATTEMPTS 3 sends in all).
 - power-on, power-off and shutdown: at most attempts x 2 s, and attempts x 32 s
   with timeouts, plus three requests (the system read, an ActionInfo and the
-  reset).
+  reset) and the two resets the poll may send again after one that never
+  reached the controller.
 """
 
 from __future__ import annotations

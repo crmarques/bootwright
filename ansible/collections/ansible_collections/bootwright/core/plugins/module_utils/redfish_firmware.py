@@ -544,15 +544,22 @@ class Convergence:
 
     def reset(self, request, expected):
         """Send one resolved reset and poll the system, within the poll's share of
-        the bound and until the step is asked to stop, until it reports `expected`."""
+        the bound and until the step is asked to stop, until it reports `expected`.
+        A reset lost before it reached the controller is sent again from the
+        poll, as the client's `resender` says."""
         target, chosen = request
         status, body, _headers = self.client.fetch(target, "POST", {"ResetType": chosen}, doing="resetting")
         if status != 0 and not 200 <= status < 300:
             raise redfish_control.ControllerError(_refused_reset(status, body))
         if self.client._await(redfish_control.POLL_ATTEMPTS, redfish_control.POLL_DELAY,
                               lambda seen: seen.get("PowerState") == expected,
-                              redfish_control.POWER_ON_BUDGET, self.stopped) is not None:
+                              redfish_control.POWER_ON_BUDGET, self.stopped,
+                              self.resend(target, chosen) if status == 0 else None) is not None:
             raise redfish_control.ControllerError("resetting: the system does not report %s" % expected)
+
+    def resend(self, target, chosen):
+        return self.client.resender(lambda timeout: self.client.fetch(
+            target, "POST", {"ResetType": chosen}, timeout=timeout, doing="resetting"), False)
 
     def power_off(self, request):
         """Force off the machine this step asked to power on: "" once a fresh read proves it Off.
@@ -562,7 +569,8 @@ class Convergence:
         Off within the power-on poll's share of the bound, which a request to
         stop does not end. A ForceOff refused with 400 or 409 passes only when
         a fresh read then shows Off; any other answer is polled like an
-        accepted one. A refused certificate ends the poll at once.
+        accepted one, and one lost before it reached the controller is sent
+        again from the poll. A refused certificate ends the poll at once.
         """
         target, chosen = request
         try:
@@ -573,7 +581,8 @@ class Convergence:
             else:
                 stopped = self.client._await(redfish_control.POLL_ATTEMPTS, redfish_control.POLL_DELAY,
                                              lambda seen: seen.get("PowerState") == "Off",
-                                             redfish_control.POWER_ON_BUDGET) is None
+                                             redfish_control.POWER_ON_BUDGET,
+                                             again=self.resend(target, chosen) if status == 0 else None) is None
         except Exception as failure:
             return "the machine this step powered on was not proved off: %s" % _line(failure)
         if stopped:

@@ -37,7 +37,7 @@ import urllib.error
 import urllib.request
 from urllib.parse import urlsplit
 
-from ansible_collections.bootwright.core.plugins.module_utils import redfish_discovery, redfish_remote_ca
+from ansible_collections.bootwright.core.plugins.module_utils import redfish_discovery, redfish_remote_ca, transport_faults
 
 MAX_BODY = 1 << 20
 REQUEST_TIMEOUT = 30
@@ -46,6 +46,13 @@ REQUEST_TIMEOUT = 30
 MEDIA_TIMEOUT = 300
 INSERT_ATTEMPTS = 3
 INSERT_RETRY_DELAY = 10
+# A boot selection or a reset lost in transport is sent at most this many times
+# in all, again only from its read-back poll, after a read that answered shows
+# the state not reached: a request urllib could not hand to the controller,
+# because it never arrived, and a boot-selection PATCH whatever the loss,
+# because it sets the same values again. A reset that may have arrived is never
+# sent twice; its poll decides.
+WRITE_ATTEMPTS = 3
 TASK_POLLS = 60
 TASK_POLL_DELAY = 2
 MEDIA_PROBES = 24
@@ -221,6 +228,7 @@ class Client:
         self.sleep, self.clock = time.sleep, time.monotonic
         self.last_power, self.last_image = "", ""
         self.last_trust_slot = None
+        self.lost = self.unsent = False
         self._system = self._media = self._member = None
         self._managers = []
 
@@ -236,9 +244,13 @@ class Client:
         device has told us it is ejected. A write drops what was kept, because
         the controller has changed. A certificate the declared trust refuses is
         the one transport failure that is an answer, so it raises
-        UnverifiedCertificate rather than reading as status 0.
+        UnverifiedCertificate rather than reading as status 0. After status 0,
+        `lost` says the connection was lost in transport, and `unsent` that it
+        was lost before urllib handed the request over, which urllib reports
+        wrapped in URLError, so the controller never received it.
         """
         doing = doing or ("reading" if method == "GET" else "writing")
+        self.lost = self.unsent = False
         url = self._own(reference or self.endpoint, doing)
         if method != "GET":
             self._system = self._member = None
@@ -253,7 +265,27 @@ class Client:
                 raise UnverifiedCertificate("%s %s: the controller's certificate did not verify against %s" % (
                     doing, _shown(url), "its declared trust bundle" if self.ca_data else "the system trust store"
                 )) from None
+            self.lost = transport_faults.lost(failed)
+            self.unsent = self.lost and isinstance(failed, urllib.error.URLError)
             return 0, None, {}
+
+    def resender(self, send, repeatable):
+        """What a read-back poll calls after a read that answered without the
+        state, for a write the last fetch lost: `send` again with that poll's
+        request timeout while the write was lost before it reached the
+        controller, or `repeatable` says sending it again sets nothing new, at
+        most WRITE_ATTEMPTS sends in all. An answer, or a loss that may have
+        reached the controller of a write that is not repeatable, ends the
+        resends, and the poll alone decides."""
+        state = {"sends": 1, "again": self.unsent or repeatable and self.lost}
+
+        def again(timeout):
+            if not state["again"] or state["sends"] >= WRITE_ATTEMPTS or timeout <= 0:
+                return
+            state["sends"] += 1
+            status = send(timeout)[0]
+            state["again"] = status == 0 and (self.unsent or repeatable and self.lost)
+        return again
 
     def _request(self, url, method, payload, headers):
         data = None if payload is None else json.dumps(payload).encode("utf-8")
@@ -876,7 +908,9 @@ class Client:
 
         The precondition some firmware requires is the system's entity tag,
         from its ETag header or its body, and `*` is the one retry after a 412.
-        A budget and a stop end the read-back poll as they end `_await`'s.
+        A PATCH lost in transport is sent again from the read-back poll, with
+        the tag of the read that showed no selection, as `resender` says. A
+        budget and a stop end the read-back poll as they end `_await`'s.
         """
         doing = "selecting the boot device"
         tag = self._tag()
@@ -887,8 +921,14 @@ class Client:
             status, body, _headers = self.fetch(method="PATCH", payload=payload, headers={"If-Match": "*"}, doing=doing)
         if status != 0 and not 200 <= status < 300:
             raise _failure(doing, self.endpoint, status, body)
+
+        def send(timeout):
+            seen = self._tag()
+            return self.fetch(method="PATCH", payload=payload, headers={"If-Match": seen} if seen else {},
+                              timeout=timeout, doing=doing)
+
         status = self._await(BOOT_POLLS, BOOT_POLL_DELAY, lambda seen: redfish_discovery.boot_selected(seen, target),
-                             budget, stop)
+                             budget, stop, self.resender(send, True) if status == 0 else None)
         if status is not None:
             raise _failure(doing, self.endpoint, status, None, "the system does not report %s for the next boot" % target)
 
@@ -898,14 +938,20 @@ class Client:
         return tag if isinstance(tag, str) else ""
 
     def power(self, kind, expected, attempts=POLL_ATTEMPTS):
-        """Ask for one reset and poll to the state it reaches; True when one was sent."""
+        """Ask for one reset and poll to the state it reaches; True when one was sent.
+
+        A reset lost before it reached the controller is sent again from the
+        poll, as `resender` says; one that may have reached it never is.
+        """
         if self.power_state() == expected:
             return False
         target, chosen = self._reset_request(kind)
         status, body, _headers = self.fetch(target, "POST", {"ResetType": chosen}, doing="resetting")
         if status != 0 and not 200 <= status < 300:
             raise _failure("resetting", target, status, body)
-        status = self._await(attempts, POLL_DELAY, lambda seen: _power(seen) == expected)
+        again = self.resender(lambda timeout: self.fetch(target, "POST", {"ResetType": chosen}, timeout=timeout,
+                                                         doing="resetting"), False) if status == 0 else None
+        status = self._await(attempts, POLL_DELAY, lambda seen: _power(seen) == expected, again=again)
         if status is not None:
             raise _failure("resetting", self.endpoint, status, None, "the system does not report %s" % expected)
         return True
@@ -935,12 +981,14 @@ class Client:
                 _shown(target), wanted, ", ".join(allowed) or "nothing"))
         return target, chosen
 
-    def _await(self, polls, delay, reached, budget=None, stop=None):
+    def _await(self, polls, delay, reached, budget=None, stop=None, again=None):
         """Read the system fresh until `reached` holds: None once it does, else
         the last status. An answer that is not a readable resource is not yet
         the state, so only exhaustion fails. A budget in seconds also ends the
         poll once that much time has passed, and a `stop` that returns true
-        ends it at its next read or pause as a spent budget does."""
+        ends it at its next read or pause as a spent budget does. `again`, a
+        `resender`, is called with the request timeout the budget leaves after
+        each read that answered without the state."""
         status, deadline = 0, None if budget is None else self.clock() + budget
         for poll in range(polls):
             left = self._window(REQUEST_TIMEOUT, deadline, stop)
@@ -951,6 +999,8 @@ class Client:
                 self._keep(body, headers)
                 if reached(body):
                     return None
+                if again is not None:
+                    again(self._window(REQUEST_TIMEOUT, deadline, stop))
             if poll + 1 < polls:
                 pause = self._window(delay, deadline, stop)
                 if pause <= 0:

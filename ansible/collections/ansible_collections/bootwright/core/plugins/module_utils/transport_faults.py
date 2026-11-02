@@ -1,8 +1,8 @@
 """Which network failures are a connection lost in transport, the one cause a bounded retry may answer.
 
 One classification serves every client that makes a request again after a
-short drop of a link: the Ceph package acquisition and the Ceph registry
-client.
+short drop of a link: the Ceph package acquisition, the Ceph registry client
+and the Redfish client's writes.
 """
 
 from __future__ import annotations
