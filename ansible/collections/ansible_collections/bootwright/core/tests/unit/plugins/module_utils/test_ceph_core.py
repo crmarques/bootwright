@@ -2265,7 +2265,7 @@ def test_dispatch_routes_resource_actions_to_the_resource_worker(monkeypatch, co
     assert len(reached) == 8
 
 
-def test_host_profile_relays_the_bound_bundle(core_request, tmp_path):
+def test_host_images_relays_the_bound_bundle(core_request, tmp_path):
     scope = {key: value for key, value in core_request.items() if key != "action"}
     bound = dict(scope, registryTrustBundleRef="registry-ca")
     bundle_text = SYNTHETIC_CA.decode("utf-8")
@@ -2282,7 +2282,7 @@ def test_host_profile_relays_the_bound_bundle(core_request, tmp_path):
         calls.append((argv, data, timeout))
         return 0, b'{"ok":true,"result":{"changed":true}}'
 
-    assert ceph_core.Transport(bound, material, run=run, scope=True).host_profile(bound["hosts"][0]) == {"changed": True}
+    assert ceph_core.Transport(bound, material, run=run, scope=True).host_images(bound["hosts"][0]) == {"changed": True}
     argv, data, unused_timeout = calls[0]
     assert json.loads(data)["payload"]["private"] == {"registryJSON": paths["registryJSON"], "registryCA": projection}
     assert projection.isascii() and "#" not in projection and ceph_pull_broker.bundle_context(projection).cert_store_stats()["x509_ca"] == 1
@@ -2290,7 +2290,7 @@ def test_host_profile_relays_the_bound_bundle(core_request, tmp_path):
     unbound = {name: path for name, path in material.items() if name != "registryCA"}
     for request_value, private in ((scope, material), (bound, unbound)):
         with pytest.raises(ceph_native.Refusal, match="^material$"):
-            ceph_core.Transport(request_value, private, run=run, scope=True).host_profile(request_value["hosts"][0])
+            ceph_core.Transport(request_value, private, run=run, scope=True).host_images(request_value["hosts"][0])
     assert len(calls) == 1
 
 
@@ -2322,13 +2322,13 @@ def test_every_bundle_consumer_reaches_the_same_verdict(core_request, tmp_path, 
             with ceph_registry_discovery.bundle_proof(str(tmp_path / "registryCA")):
                 pytest.fail("discovery accepted the bundle")
         with pytest.raises(ceph_native.Refusal, match="^material$"):
-            transport.host_profile(scope["hosts"][0])
+            transport.host_images(scope["hosts"][0])
         assert calls == []
         return
     with ceph_registry_discovery.bundle_proof(str(tmp_path / "registryCA")) as (context, prove):
         prove()
         resolved = context.get_ca_certs()
-    assert transport.host_profile(scope["hosts"][0]) == {"changed": True}
+    assert transport.host_images(scope["hosts"][0]) == {"changed": True}
     assert ceph_pull_broker.bundle_context(calls[0]).get_ca_certs() == resolved
 
 
@@ -2340,7 +2340,7 @@ def test_scope_refuses_a_bundle_reference_that_is_not_a_name(core_request, value
         ceph_native.validate_scope(dict(scope, registryTrustBundleRef=value))
 
 
-def test_host_profile_refuses_an_oversized_bound_bundle_before_the_run(core_request, tmp_path):
+def test_host_images_refuses_an_oversized_bound_bundle_before_the_run(core_request, tmp_path):
     scope = dict({key: value for key, value in core_request.items() if key != "action"}, registryTrustBundleRef="registry-ca")
     paths = {"sshKey": "PRIVATE-KEY-SENTINEL", "knownHosts": "192.0.2.1 ssh-ed25519 PUBLIC",
              "registryJSON": json.dumps({"url": scope["registry"], "username": "registry-user", "password": PASSWORD}),
@@ -2350,7 +2350,7 @@ def test_host_profile_refuses_an_oversized_bound_bundle_before_the_run(core_requ
         (tmp_path / name).chmod(0o600)
     transport = ceph_core.Transport(scope, {name: str(tmp_path / name) for name in paths}, run=lambda *args: pytest.fail("run"), scope=True)
     with pytest.raises(ceph_native.Refusal, match="^material$"):
-        transport.host_profile(scope["hosts"][0])
+        transport.host_images(scope["hosts"][0])
 
 
 @pytest.mark.parametrize("fips", [False, True])

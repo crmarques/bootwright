@@ -1,10 +1,10 @@
 """Separate fixed launcher for the long host image call, over the native supervisor.
 
-Only the ``profile`` phase, which pulls the frozen digest within its bounded
-attempts and then proves the image's runtime in contained probes, runs under
-this larger remote ceiling. Every other host and cluster phase keeps the
-ordinary native launcher and its smaller ceiling; a payload never changes
-which launcher or source closure runs.
+Only the ``images`` phase, which pulls the frozen digest and then each frozen
+auxiliary digest within their bounded attempts, runs under this larger remote
+ceiling. Every other host and cluster phase, the runtime profile's contained
+probes included, keeps the ordinary native launcher and its smaller ceiling; a
+payload never changes which launcher or source closure runs.
 """
 
 from __future__ import annotations
@@ -14,7 +14,7 @@ import time
 import types
 
 REMOTE_LIMIT = 4285
-PHASE = "profile"
+PHASE = "images"
 
 
 def restricted(native):

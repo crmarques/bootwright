@@ -45,7 +45,8 @@ def failed(module, execute, error, monkeypatch):
     class FakeModule:
         def __init__(self, **options):
             captured["spec"] = options["argument_spec"]
-            self.params = {"request": {}, "operation": "apply", "digest": "d" * 64, "material": {}, "outputs": {}}
+            self.params = {"request": {}, "operation": "apply", "step": "images", "plan_digest": "", "applied": [], "digest": "d" * 64, "material": {},
+                           "outputs": {}}
 
         def fail_json(self, **options):
             captured["failure"] = options
@@ -99,9 +100,31 @@ def test_every_entry_point_names_a_refusal_in_place_of_completion(role, entry, c
         {"phase": "refused", "reason": "adapter-exception", "detail": "module-failure"}]
 
 
+def test_every_host_preparation_step_names_a_refusal_in_place_of_its_group_completion():
+    named = naming("storage_ceph_host", "step", "bootwright.core.ceph_host", "storage_ceph_host_step")
+    assert published(named, "storage_ceph_host_step", {"changed": True, "specializations": []}) == []
+    assert published(named, "storage_ceph_host_step", {"failed": True, "msg": "MODULE FAILURE"}) == [
+        {"phase": "refused", "reason": "adapter-exception", "detail": "module-failure"}]
+    tasks = LOADER.load_from_file(str(ROLES / "storage_ceph_host" / "tasks" / "step.yml"), trusted_as_template=True)
+    groups = [(task[PROTOCOL]["status"], tasks.index(task)) for task in tasks if task.get(PROTOCOL, {}).get("phase") == "group"]
+    index = next(i for i, task in enumerate(tasks) if "bootwright.core.ceph_host" in task)
+    assert [status for status, unused in groups] == ["running", "ok"] and groups[0][1] < index < index + 2 < groups[1][1]
+
+
+def test_the_prepare_entry_runs_the_steps_the_go_plan_declares_in_order():
+    tasks = LOADER.load_from_file(str(ROLES / "storage_ceph_host" / "tasks" / "prepare.yml"), trusted_as_template=True)
+    included = next(task for task in tasks if task.get("ansible.builtin.include_tasks") == "step.yml")
+    assert [(item["step"], item["group"]) for item in included["loop"]] == [
+        ("packages", "install-packages"), ("images", "pull-images"), ("profile", "prove-runtime"), ("route", "prove-route"),
+        ("devices", "identify-devices")]
+    assert [item["step"] for item in included["loop"]] + ["verify"] == list(ceph_core.HOST_STEPS)
+    verify = next(task for task in tasks if "bootwright.core.ceph_host" in task)
+    assert verify["bootwright.core.ceph_host"]["step"] == "verify" and tasks.index(verify) > tasks.index(included)
+
+
 def test_a_host_refusal_the_worker_raised_reaches_the_runner_by_its_name(monkeypatch):
     error = ceph_native.RemoteRefusal("native-refusal:image-pull@ceph_host_runtime.pull_image:410")
-    failure = failed(ceph_host, "execute_host", error, monkeypatch)
+    failure = failed(ceph_host, "host_step", error, monkeypatch)
     assert failure == {"msg": "Ceph host preparation refused", "reason": "image-pull", "detail": "native-refusal:image-pull@ceph_host_runtime.pull_image:410"}
     named = naming("storage_ceph_host", "prepare", "bootwright.core.ceph_host", "storage_ceph_host_result")
     assert published(named, "storage_ceph_host_result", registered_failure(failure)) == [
@@ -132,7 +155,7 @@ def test_a_token_the_block_does_not_name_reaches_the_runner_in_its_detail(monkey
 
 
 def test_an_exception_names_its_type_and_site_and_never_its_text(monkeypatch):
-    failure = failed(ceph_host, "execute_host", OSError(SECRET), monkeypatch)
+    failure = failed(ceph_host, "host_step", OSError(SECRET), monkeypatch)
     assert failure["reason"] == "adapter-exception" and failure["detail"].startswith("OSError@ceph_host.main:")
     assert SECRET not in repr(failure)
 
@@ -162,7 +185,7 @@ def test_a_worker_refusal_is_named_by_its_endpoints_token_only_when_the_block_na
 
 @pytest.mark.parametrize("module, execute, role, entry, call, registered", [
     (ceph_cluster, "execute", "storage_ceph_core", "apply", "bootwright.core.ceph_cluster", "storage_ceph_core_result"),
-    (ceph_host, "execute_host", "storage_ceph_host", "prepare", "bootwright.core.ceph_host", "storage_ceph_host_result"),
+    (ceph_host, "host_step", "storage_ceph_host", "step", "bootwright.core.ceph_host", "storage_ceph_host_step"),
 ])
 def test_an_ssh_policy_refusal_keeps_its_host_and_key_type_detail(monkeypatch, module, execute, role, entry, call, registered):
     error = ceph_ssh_policy.PolicyRefusal(ceph_ssh_policy.EXCLUDED, "node-2:ssh-ed25519")

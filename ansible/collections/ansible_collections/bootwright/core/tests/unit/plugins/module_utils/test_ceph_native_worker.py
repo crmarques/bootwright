@@ -480,7 +480,7 @@ def test_object_display_name_keeps_unicode_separator_exclusions(value, valid):
     assert ceph_native_object.display_name(value) is valid
 
 
-@pytest.mark.parametrize("phase", ["host_observe", "profile", "bootstrap"])
+@pytest.mark.parametrize("phase", ["host_observe", "images", "bootstrap"])
 def test_clean_supervisor_preserves_redacted_native_failure_through_each_launcher(phase):
     sources = ceph_core.Transport.native_sources()
     sources["ceph_native"] += (
@@ -490,7 +490,7 @@ def test_clean_supervisor_preserves_redacted_native_failure_through_each_launche
     )
     supervisor = inspect.getsource(ceph_native_worker)
     host = inspect.getsource(ceph_host_worker)
-    if phase == "profile":
+    if phase == "images":
         source = ceph_host_worker.launcher(supervisor, host)
     elif phase == "bootstrap":
         source = ceph_core.bootstrap_launcher(supervisor, host)
@@ -509,13 +509,13 @@ def test_clean_supervisor_preserves_redacted_native_failure_through_each_launche
     assert b"synthetic-secret" not in result.stdout and b"known-private" not in result.stdout
 
 
-@pytest.mark.parametrize("phase", ["host_observe", "profile", "bootstrap"])
+@pytest.mark.parametrize("phase", ["host_observe", "images", "bootstrap"])
 def test_clean_supervisor_preserves_child_encoding_failure_through_each_launcher(phase):
     sources = ceph_core.Transport.native_sources()
     sources["ceph_native"] += "\ndef dispatch(value):\n    return {'unserializable': {value['secret']}}\n"
     supervisor = inspect.getsource(ceph_native_worker)
     host = inspect.getsource(ceph_host_worker)
-    if phase == "profile":
+    if phase == "images":
         source = ceph_host_worker.launcher(supervisor, host)
     elif phase == "bootstrap":
         source = ceph_core.bootstrap_launcher(supervisor, host)

@@ -63,8 +63,8 @@ PULL_SECONDS = 1200
 PULL_MINIMUM = 60
 PULL_RESERVE = 120
 PULL_PAUSE = 15
-PROFILE_CALL_SECONDS = 4285
-PHASES = frozenset(("profile", "route", "device_identity", "host_devices", "host_observe", "fips_observe"))
+IMAGES_CALL_SECONDS = 4285
+PHASES = frozenset(("images", "profile", "route", "device_identity", "host_devices", "host_observe", "fips_observe"))
 ARTIFACTS = ("/usr/sbin/cephadm", "/usr/share/ceph/mgr/cephadm/ssh.py", "/usr/share/ceph/mgr/cephadm/module.py",
              "/usr/share/ceph/mgr/cephadm/serve.py", "/usr/bin/ceph", "/usr/bin/ceph-authtool")
 SOURCE_PATHS = ARTIFACTS[1:4]
@@ -698,23 +698,38 @@ class HostRuntime:
                 {key: value for key, value in probes[1].items() if key not in ("uid", "gid")})
         return probes[0]
 
-    def profile(self, private):
-        """Pull the frozen digest, then prove its runtime facts in contained probes."""
+    def images(self, private):
+        """The one long call: pull the frozen digest, then each frozen auxiliary digest."""
         ceph_native.prove_fips(self.request)
-        deadline = self.clock() + PROFILE_CALL_SECONDS
+        deadline = self.clock() + IMAGES_CALL_SECONDS
         expected = {"registryJSON"} | ({"registryCA"} if "registryTrustBundleRef" in self.request else set())
         require(isinstance(private, dict) and set(private) == expected, "material")
         trust = private.get("registryCA")
         with self.journal(create=True) as durable:
             changed = self.pull(durable, private["registryJSON"], deadline, trust=trust)
             changed = self.pull_auxiliary(durable, private["registryJSON"], deadline, trust=trust) or changed
-            original = inspect_image(self.request["image"], self.command)
-            require(canonical(durable.read("pulled.json")) == canonical({"scope": self.scope(), "imageID": original["id"]}), "image-platform")
+            return {"changed": changed}
+
+    def pulled(self, durable):
+        """Every frozen digest the images call recorded is the one the host holds; the Ceph image's inspection answers."""
+        original = inspect_image(self.request["image"], self.command)
+        require(canonical(durable.read("pulled.json")) == canonical({"scope": self.scope(), "imageID": original["id"]}), "image-platform")
+        for entry in self.request.get("auxiliary", []):
+            current = inspect_image(entry["image"], functools.partial(self.command, coordinate=entry["image"]))
+            expected = {"scope": self.scope(), "image": entry["image"], "imageID": current["id"]}
+            require(canonical(durable.read("auxiliary-" + entry["name"] + "-pulled.json")) == canonical(expected), "image-platform")
+        return original
+
+    def profile(self):
+        """Prove the pulled image's runtime facts in contained probes, once its images call recorded every digest."""
+        ceph_native.prove_fips(self.request)
+        with self.journal() as durable:
+            original = self.pulled(durable)
             existing = durable.read(PROFILE)
             if existing is not None:
                 self.current(durable)
                 cephadm_payload(durable)
-                return {"changed": changed}
+                return {"changed": False}
             probe_result = self.facts(original["id"])
             require(inspect_image(self.request["image"], self.command) == original, "image-platform")
             user = (probe_result["cephUID"], probe_result["cephGID"])
@@ -1342,10 +1357,10 @@ def dispatch(envelope):
     phase = envelope["phase"]
     require(phase in PHASES, "request")
     runtime = HostRuntime(envelope["request"], envelope["host"])
-    if phase != "profile":
+    if phase != "images":
         require(envelope["private"] == {}, "material")
-    if phase in ("profile", "route", "device_identity"):
+    if phase in ("images", "profile", "route", "device_identity"):
         require(ceph_native.supported_transport(runtime.request), "unsupported-release")
-    if phase == "profile":
-        return runtime.profile(envelope["private"])
+    if phase == "images":
+        return runtime.images(envelope["private"])
     return getattr(runtime, phase)()

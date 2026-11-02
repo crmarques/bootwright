@@ -13,10 +13,36 @@
     phase: loaded
   no_log: true
 
-- name: Execute the fixed Ceph host apply operation
+- name: Start from no reported step
+  ansible.builtin.set_fact:
+    storage_ceph_host_changed: false
+    storage_ceph_host_applied: []
+    storage_ceph_host_plan_digest: ''
+  no_log: true
+
+# Each step is one fixed module call that resumes from the host's own journals,
+# reported as the group the Go plan froze under the same ID (hostGroups in
+# internal/storage/ceph/host.go). A refused step fails the play, so no later
+# step runs.
+- name: Prepare the host one reported step at a time
+  ansible.builtin.include_tasks: step.yml
+  loop:
+    - {step: packages, group: install-packages}
+    - {step: images, group: pull-images}
+    - {step: profile, group: prove-runtime}
+    - {step: route, group: prove-route}
+    - {step: devices, group: identify-devices}
+  loop_control:
+    loop_var: storage_ceph_host_phase
+    label: '{{ storage_ceph_host_phase.group }}'
+
+- name: Prove the prepared host and collect its evidence
   bootwright.core.ceph_host:
     request: '{{ bootwright_ceph_host_request }}'
     operation: apply
+    step: verify
+    plan_digest: '{{ storage_ceph_host_plan_digest }}'
+    applied: '{{ storage_ceph_host_applied }}'
     digest: '{{ bootwright_ceph_host_digest }}'
     material: '{{ bootwright_ceph_host_material }}'
   register: storage_ceph_host_result
@@ -44,7 +70,7 @@
   bootwright.core.ceph_cluster_protocol:
     phase: completed
     digest: '{{ bootwright_ceph_host_digest }}'
-    outcome: '{{ "changed" if storage_ceph_host_result.changed else "unchanged" }}'
+    outcome: '{{ "changed" if storage_ceph_host_changed else "unchanged" }}'
     observed: false
     removed: false
     evidence: '{{ storage_ceph_host_result.evidence }}'

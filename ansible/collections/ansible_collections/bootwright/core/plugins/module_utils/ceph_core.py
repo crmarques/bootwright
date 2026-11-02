@@ -519,7 +519,7 @@ class Transport:
                      or nvmeof_unit(self.request) and phase == "nvmeof_unit_observe")
         ceiling = ceph_native_nvmeof.phase_budget(self.request, phase) if nvme_long else 640
         ceph_native.require(type(timeout) in (int, float) and 0 < timeout <= ceiling + 20 and ceiling <= 21600, "transport")
-        ceph_native.require(phase != "profile" and (devices is None or phase == "services"), "transport")
+        ceph_native.require(phase != "images" and (devices is None or phase == "services"), "transport")
         ceph_native.require(service is None or phase == "services" and type(service) is int and 0 <= service < len(self.request["services"]), "transport")
         budget = min(ceiling, timeout - 2) if timeout > 2 else timeout / 2
         payload = {"request": self.request, "host": host["name"], "phase": phase, "private": private or {}}
@@ -613,8 +613,8 @@ class Transport:
             raise ceph_native.Refusal("material") from None
         return projection
 
-    def host_profile(self, host):
-        """The one long call: pull the frozen digest, then prove its contained runtime."""
+    def host_images(self, host):
+        """The one long call: pull the frozen digest, then each frozen auxiliary digest."""
         names = ("registryJSON", "registryCA") if "registryTrustBundleRef" in self.request else ("registryJSON",)
         ceph_native.require(all(name in self.material for name in names), "material")
         try:
@@ -623,7 +623,7 @@ class Transport:
             raise ceph_native.Refusal("material") from None
         if "registryCA" in private:
             private["registryCA"] = self.trust_bundle(private["registryCA"])
-        payload = {"request": self.request, "host": host["name"], "phase": "profile", "private": private}
+        payload = {"request": self.request, "host": host["name"], "phase": "images", "private": private}
         source = ceph_host_worker.launcher(inspect.getsource(ceph_native_worker), inspect.getsource(ceph_host_worker))
         budget = ceph_host_worker.REMOTE_LIMIT
         return self._call(host, source, {"sources": self.native_sources(), "payload": payload, "budget": budget}, budget + 60,
@@ -1485,34 +1485,72 @@ def released(request, request_digest):
             "policySHA256": "", "cephadmSHA256": "", "planDigest": "", "route": False, "devices": []}
 
 
+HOST_STEPS = ("packages", "images", "profile", "route", "devices", "verify")
+HOST_STEP_PHASES = {"profile": "profile", "route": "route", "devices": "device_identity"}
+
+
+def applied_ids(transport):
+    """The specialization ids this transport's native phases applied, sorted."""
+    return sorted(getattr(transport, "applied", None) or ())
+
+
+def host_step(request, step, request_digest, transport, *, plan_digest="", applied=()):
+    """One phase of a host preparation apply, so its role reports each as a progress group.
+
+    Each step resumes from the host's own journals. Only ``verify`` publishes evidence: it proves the package decision the
+    ``packages`` step reported and names every specialization id the earlier steps applied.
+    """
+    host_request(request)
+    cluster = request["cluster"]
+    ceph_native.require(step in HOST_STEPS and ceph_native.digest(request_digest), "request")
+    host = next(item for item in cluster["hosts"] if item["name"] == request["host"])
+    if step == "packages" and ceph_host_runtime.observes_fips(cluster, host):
+        observed = transport.call(host, "fips_observe")
+        ceph_native.require(ceph_native.fips_proved(observed), "fips-not-enabled")
+    ceph_native.require(ceph_native.supported_transport(cluster), "unsupported-release")
+    if step == "packages":
+        packages = transport.packages(host)
+        return {"changed": packages["changed"], "planDigest": packages["planDigest"], "specializations": applied_ids(transport)}
+    if step != "verify":
+        result = transport.host_images(host) if step == "images" else transport.call(host, HOST_STEP_PHASES[step])
+        ceph_native.require(isinstance(result, dict) and set(result) == {"changed"} and type(result["changed"]) is bool, "evidence")
+        return {"changed": result["changed"], "specializations": applied_ids(transport)}
+    applied = list(applied)
+    ceph_native.require(ceph_native.digest(plan_digest) and (not applied or specialization_ids(sorted(set(applied)))), "request")
+    observed = transport.call(host, "host_observe")
+    ceph_native.require(isinstance(observed, dict), "evidence")
+    observation = host_evidence(dict(observed, request=request_digest), request_digest, request)
+    ceph_native.require(observation["ready"] and observation["planDigest"] == plan_digest, "not-ready")
+    named = sorted(set(applied) | set(applied_ids(transport)))
+    if named:
+        observation = evidence(dict(observation, specializations=named), request_digest, request)
+    return {"changed": False, "evidence": observation}
+
+
 def execute_host(request, operation, request_digest, transport):
-    """Packages, then the long pull and profile call, then route and device identities."""
+    """An observation or a release; an apply is its role's ordered host steps, composed here in the same order."""
     host_request(request)
     cluster = request["cluster"]
     ceph_native.require(operation in ("apply", "observe", "destroy"))
     ceph_native.require(ceph_native.digest(request_digest))
     if operation == "destroy":
         return {"changed": False, "evidence": host_evidence(released(request, request_digest), request_digest, request)}
+    if operation == "apply":
+        changed, plan_digest = False, ""
+        for step in HOST_STEPS[:-1]:
+            result = host_step(request, step, request_digest, transport)
+            changed = result["changed"] or changed
+            plan_digest = result.get("planDigest", plan_digest)
+        verified = host_step(request, "verify", request_digest, transport, plan_digest=plan_digest)
+        return {"changed": changed, "evidence": verified["evidence"]}
     host = next(item for item in cluster["hosts"] if item["name"] == request["host"])
-    changed = False
-    packages = None
     if ceph_host_runtime.observes_fips(cluster, host):
         observed = transport.call(host, "fips_observe")
         ceph_native.require(ceph_native.fips_proved(observed), "fips-not-enabled")
-    if operation == "apply":
-        ceph_native.require(ceph_native.supported_transport(cluster), "unsupported-release")
-        packages = transport.packages(host)
-        changed = packages["changed"]
-        for phase in ("profile", "route", "device_identity"):
-            result = transport.host_profile(host) if phase == "profile" else transport.call(host, phase)
-            ceph_native.require(isinstance(result, dict) and set(result) == {"changed"} and type(result["changed"]) is bool, "evidence")
-            changed = result["changed"] or changed
     observed = transport.call(host, "host_observe")
     ceph_native.require(isinstance(observed, dict), "evidence")
     observation = host_evidence(dict(observed, request=request_digest), request_digest, request)
-    if operation == "apply":
-        ceph_native.require(observation["ready"] and observation["planDigest"] == packages["planDigest"], "not-ready")
-    return {"changed": changed, "evidence": recorded(observation, transport, request_digest, request)}
+    return {"changed": False, "evidence": recorded(observation, transport, request_digest, request)}
 
 
 SMB_VERSION = ceph_smb_native.VERSION

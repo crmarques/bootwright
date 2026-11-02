@@ -467,6 +467,17 @@ service-unit request refuses with `api.invariant` when the
 not one declared service, and a filesystem request when the
 `mds.<filesystem>` name its `spec.mdsServiceRef` names is not.
 
+Each [host preparation](#bootstrap-identity-and-continuation) block freezes
+five [presentation groups](cli/output.md#multi-machine-presentation) of its
+Machine, one per step it runs in this order as its own native call resuming
+from the journals: `install-packages`, `pull-images`, `prove-runtime`,
+`prove-route` and `identify-devices`. Only the pull runs under the longer host
+launcher; the runtime profile runs under the ordinary native ceiling and
+refuses a frozen digest the pull did not record. A final read proves the
+package decision the first step reported and publishes the evidence, and a
+step a resumed attempt already proved settles as soon as its journal proves it
+again. A release freezes no group.
+
 ### Refusal table
 
 Each row is one refusal of the Ceph capability, and

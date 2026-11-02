@@ -298,7 +298,7 @@ func clusterBudgetFailure(cluster string, hosts int, stretch bool) error {
 func hostDeadline(operation string) time.Duration {
 	switch operation {
 	case "apply":
-		return time.Duration(1980+4345+3*660+60) * time.Second
+		return time.Duration(1980+4345+4*660+60) * time.Second
 	case "observe":
 		return time.Duration(660+60) * time.Second
 	}

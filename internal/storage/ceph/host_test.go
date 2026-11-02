@@ -119,6 +119,39 @@ func TestPlanGoldenCarriesHostBlocksTheirDependenciesAndExclusivity(t *testing.T
 	}
 }
 
+func TestHostPreparationReportsItsPlannedStepsAsGroupsOfItsMachine(t *testing.T) {
+	catalog := pinnedCatalog(t, nil)
+	plan, err := NewHost(nil).Plan(context.Background(), lifecycle.PlanInput{Verb: reconciliation.Apply, Context: lifecycle.ContextIdentity{Name: "synthetic"}, State: compilation.NewState(catalog, catalog, nil), Controller: "controller"})
+	if err != nil || len(plan.Definitions) != 3 {
+		t.Fatalf("host plan %d blocks %v", len(plan.Definitions), diagnostics.Of(err))
+	}
+	want := []string{"install-packages", "pull-images", "prove-runtime", "prove-route", "identify-devices"}
+	for _, definition := range plan.Definitions {
+		r, err := DecodeHostRequest(definition.Request)
+		if err != nil {
+			t.Fatal(diagnostics.Of(err))
+		}
+		host, _ := r.target()
+		ids := []string{}
+		for _, group := range definition.Groups {
+			if group.Description == "" || !slices.Equal(group.Machines, []string{host.Machine}) {
+				t.Fatalf("%s group %+v", definition.ID, group)
+			}
+			ids = append(ids, group.ID)
+		}
+		if !slices.Equal(ids, want) {
+			t.Fatalf("%s groups %v, want %v", definition.ID, ids, want)
+		}
+	}
+	if groups := hostGroups(reconciliation.Destroy, "node-1"); groups != nil {
+		t.Fatalf("a host release reports groups %+v", groups)
+	}
+	removal, err := NewHost(nil).Removal(context.Background(), reconciliation.Block{BlockDefinition: plan.Definitions[0]})
+	if err != nil || removal.Groups != nil {
+		t.Fatalf("host removal groups %+v %v", removal.Groups, diagnostics.Of(err))
+	}
+}
+
 func TestHostPlanSecretsAreItsOwnHostsOnly(t *testing.T) {
 	catalog := pinnedCatalog(t, nil)
 	plan, err := NewHost(nil).Plan(context.Background(), lifecycle.PlanInput{Verb: reconciliation.Apply, Context: lifecycle.ContextIdentity{Name: "synthetic"}, State: compilation.NewState(catalog, catalog, nil), Controller: "controller"})
@@ -137,7 +170,7 @@ func TestHostPlanSecretsAreItsOwnHostsOnly(t *testing.T) {
 }
 
 func TestDeadlinesFitTheRunCeilingForThreeAndTheLargestAdmittedCluster(t *testing.T) {
-	if hostDeadline("apply") != 8365*time.Second || hostDeadline("apply") > lifecycle.MaxDeadline {
+	if hostDeadline("apply") != 9025*time.Second || hostDeadline("apply") > lifecycle.MaxDeadline {
 		t.Fatalf("host block deadline %s", hostDeadline("apply"))
 	}
 	if hostDeadline("observe") > lifecycle.MaxDeadline || hostDeadline("destroy") > lifecycle.MaxDeadline {
@@ -275,7 +308,7 @@ func TestHostApplyLendsOnlyItsHostsMaterialAndTheRegistryAsAProtectedFile(t *tes
 	if !sent.NativeErrors {
 		t.Fatal("Ceph invocation did not opt in to typed native errors")
 	}
-	if sent.Implementation != HostImplementation || sent.Operation != "apply" || sent.Variable != "bootwright_ceph_host" || sent.Deadline != 8365*time.Second ||
+	if sent.Implementation != HostImplementation || sent.Operation != "apply" || sent.Variable != "bootwright_ceph_host" || sent.Deadline != 9025*time.Second ||
 		sent.Placement != (machine.Placement{Connection: machine.ConnectionLocal, Machine: "controller"}) {
 		t.Fatalf("host run %+v", sent)
 	}

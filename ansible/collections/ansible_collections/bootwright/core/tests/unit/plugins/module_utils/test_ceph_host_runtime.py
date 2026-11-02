@@ -853,6 +853,13 @@ def test_probes_that_disagree_refuse(request_value, tmp_path, authenticated):
         worker.facts(IMAGE_ID)
 
 
+def prepared_image(worker, private):
+    """The images call, then the runtime profile call, as the host block makes them."""
+    pulled = worker.images(private)
+    profiled = worker.profile()
+    return {"changed": pulled["changed"] or profiled["changed"]}
+
+
 def profiled_runtime(request_value, tmp_path, monkeypatch, outputs, *, label=runtime.SHARED_LABEL):
     podman = Podman(request_value, ["ok"])
     engine = Engine(outputs)
@@ -869,18 +876,18 @@ def profiled_runtime(request_value, tmp_path, monkeypatch, outputs, *, label=run
 
 def test_profile_records_the_image_runtime_and_the_authenticated_payload(request_value, tmp_path, monkeypatch, authenticated):
     worker, markers, podman, unused = profiled_runtime(request_value, tmp_path, monkeypatch, [probe_output(), probe_output()])
-    assert worker.profile({"registryJSON": registry(request_value)}) == {"changed": True}
+    assert prepared_image(worker, {"registryJSON": registry(request_value)}) == {"changed": True}
     record = markers.records[runtime.PROFILE]
     assert record["imageID"] == IMAGE_ID and record["uid"] == record["gid"] == 167 and record["label"] == runtime.SHARED_LABEL
     assert record["cephadmSHA256"] == authenticated and PASSWORD not in json.dumps(markers.records)
     assert runtime.cephadm_payload(markers) == PAYLOAD
-    assert worker.profile({"registryJSON": registry(request_value)}) == {"changed": False}
+    assert prepared_image(worker, {"registryJSON": registry(request_value)}) == {"changed": False}
     assert pull_argv_count(podman) == 1
 
 
 def test_profile_authenticates_image_bytes_independently_of_installed_package(request_value, tmp_path, monkeypatch, host_cephadm_sealed):
     worker, markers, unused, unused_engine = profiled_runtime(request_value, tmp_path, monkeypatch, [probe_output(), probe_output()])
-    assert worker.profile({"registryJSON": registry(request_value)}) == {"changed": True}
+    assert prepared_image(worker, {"registryJSON": registry(request_value)}) == {"changed": True}
     assert markers.records[runtime.PROFILE]["cephadmSHA256"] == hashlib.sha256(PAYLOAD).hexdigest()
     assert host_cephadm_sealed == []
 
@@ -892,7 +899,7 @@ def test_profile_accepts_only_the_registry_material(request_value, tmp_path, mon
         request_value["registryTrustBundleRef"] = "registry-ca"
     worker, markers, podman, unused = profiled_runtime(request_value, tmp_path, monkeypatch, [])
     with pytest.raises(ceph_native.Refusal, match="^material$"):
-        worker.profile(private)
+        worker.images(private)
     assert podman.calls == [] and markers.writes == []
 
 
@@ -1151,16 +1158,17 @@ def test_host_observation_reports_a_prepared_host(request_value, tmp_path):
         worker.host_observe()
 
 
-@pytest.mark.parametrize("phase", ["profile", "route", "device_identity"])
+@pytest.mark.parametrize("phase", ["images", "profile", "route", "device_identity"])
 def test_host_phases_refuse_an_unsupported_release_before_any_effect(request_value, phase):
     request_value["clusterSSHTransport"] = "native"
     with pytest.raises(ceph_native.Refusal, match="^unsupported-release$"):
-        runtime.dispatch({"request": request_value, "host": "node-1", "phase": phase, "private": {"registryJSON": "x"} if phase == "profile" else {}})
+        runtime.dispatch({"request": request_value, "host": "node-1", "phase": phase, "private": {"registryJSON": "x"} if phase == "images" else {}})
 
 
-def test_only_the_long_phase_receives_private_material(request_value):
+@pytest.mark.parametrize("phase", ["profile", "route"])
+def test_only_the_long_phase_receives_private_material(request_value, phase):
     with pytest.raises(ceph_native.Refusal, match="^material$"):
-        runtime.dispatch({"request": request_value, "host": "node-1", "phase": "route", "private": {"registryJSON": "x"}})
+        runtime.dispatch({"request": request_value, "host": "node-1", "phase": phase, "private": {"registryJSON": "x"}})
 
 
 class CacheWorker:
@@ -1283,7 +1291,7 @@ def test_final_pull_failure_retains_the_native_stderr(request_value, tmp_path):
 
     worker, unused, unused_clock = host_runtime(request_value, tmp_path, command)
     with pytest.raises(ceph_native.NativeFailure) as caught:
-        worker.profile({"registryJSON": registry(request_value)})
+        prepared_image(worker, {"registryJSON": registry(request_value)})
     assert "manifest unknown" in caught.value.native_error["cause"]
     assert "synthetic-secret" not in str(caught.value.native_error)
 
@@ -1474,7 +1482,7 @@ def test_host_prepull_pulls_each_frozen_auxiliary_digest(request_value, tmp_path
     del authenticated
     worker, markers, images = auxiliary_runtime(request_value, tmp_path, monkeypatch, {IMAGE: ["ok"], HAPROXY: ["ok"], KEEPALIVED: ["ok"]},
                                                 [probe_output(), probe_output()])
-    assert worker.profile({"registryJSON": registry(request_value)}) == {"changed": True}
+    assert prepared_image(worker, {"registryJSON": registry(request_value)}) == {"changed": True}
     pulls = [argv for argv in images.calls if argv[:2] == ["/usr/bin/podman", "pull"]]
     assert [argv[-1] for argv in pulls] == [IMAGE, HAPROXY, KEEPALIVED]
     assert [broker.image for broker in auxiliary_brokers] == [None, HAPROXY, KEEPALIVED]
@@ -1493,17 +1501,34 @@ def test_host_prepull_pulls_each_frozen_auxiliary_digest(request_value, tmp_path
         assert markers.records["auxiliary-" + name + "-attempt-1.json"] == {"scope": scope, "image": reference, "attempt": 1}
     assert not [name for name in os.listdir(markers.path) if name.startswith("auxiliary-scratch-")]
     images.calls.clear()
-    assert worker.profile({"registryJSON": registry(request_value)}) == {"changed": False}
+    assert prepared_image(worker, {"registryJSON": registry(request_value)}) == {"changed": False}
     assert not [argv for argv in images.calls if argv[:2] == ["/usr/bin/podman", "pull"]]
     inspected = [argv[3] for argv in images.calls if argv[:3] == ["/usr/bin/podman", "image", "inspect"]]
     assert HAPROXY in inspected and KEEPALIVED in inspected
+
+
+def test_the_runtime_profile_pulls_nothing_and_needs_every_digest_the_images_call_recorded(request_value, tmp_path, monkeypatch, authenticated,
+                                                                                           auxiliary_brokers):
+    del authenticated, auxiliary_brokers
+    worker, markers, images = auxiliary_runtime(request_value, tmp_path, monkeypatch, {IMAGE: ["ok"], HAPROXY: ["ok"], KEEPALIVED: ["ok"]},
+                                                [probe_output(), probe_output()])
+    assert worker.images({"registryJSON": registry(request_value)}) == {"changed": True}
+    assert runtime.PROFILE not in markers.records
+    pulled = markers.records.pop("auxiliary-keepalived-pulled.json")
+    images.calls.clear()
+    with pytest.raises(ceph_native.Refusal, match="^image-platform$"):
+        worker.profile()
+    assert runtime.PROFILE not in markers.records
+    markers.records["auxiliary-keepalived-pulled.json"] = pulled
+    assert worker.profile() == {"changed": True} and worker.profile() == {"changed": False}
+    assert not [argv for argv in images.calls if argv[:2] == ["/usr/bin/podman", "pull"]]
 
 
 def test_host_profile_without_an_auxiliary_set_pulls_only_the_ceph_image(request_value, tmp_path, monkeypatch, authenticated, auxiliary_brokers):
     del authenticated
     worker, markers, images = auxiliary_runtime(request_value, tmp_path, monkeypatch, {IMAGE: ["ok"]}, [probe_output(), probe_output()])
     worker.request.pop("auxiliary")
-    assert worker.profile({"registryJSON": registry(request_value)}) == {"changed": True}
+    assert prepared_image(worker, {"registryJSON": registry(request_value)}) == {"changed": True}
     assert [argv[-1] for argv in images.calls if argv[:2] == ["/usr/bin/podman", "pull"]] == [IMAGE]
     assert {argv[3] for argv in images.calls if argv[:3] == ["/usr/bin/podman", "image", "inspect"]} == {IMAGE}
     assert [broker.image for broker in auxiliary_brokers] == [None]
@@ -1513,7 +1538,7 @@ def test_host_profile_without_an_auxiliary_set_pulls_only_the_ceph_image(request
 def test_auxiliary_pull_carries_no_credential_in_argv_or_environment(request_value, tmp_path, monkeypatch, auxiliary_brokers):
     worker, markers, images = auxiliary_runtime(request_value, tmp_path, monkeypatch, {IMAGE: ["ok"], HAPROXY: ["fail"] * runtime.PULL_ATTEMPTS})
     with pytest.raises(ceph_native.NativeFailure, match="^image-pull$") as caught:
-        worker.profile({"registryJSON": registry(request_value)})
+        prepared_image(worker, {"registryJSON": registry(request_value)})
     pulls = [argv for argv in images.calls if argv[:2] == ["/usr/bin/podman", "pull"]]
     assert [argv[-1] for argv in pulls] == [IMAGE] + [HAPROXY] * runtime.PULL_ATTEMPTS
     assert [broker.image for broker in auxiliary_brokers] == [None, HAPROXY]
@@ -1565,7 +1590,7 @@ def test_profile_passes_the_bound_bundle_to_every_broker(request_value, tmp_path
     request_value["registryTrustBundleRef"] = "registry-ca"
     worker, unused_markers, images = auxiliary_runtime(request_value, tmp_path, monkeypatch, {IMAGE: ["ok"], HAPROXY: ["ok"], KEEPALIVED: ["ok"]},
                                                        [probe_output(), probe_output()])
-    assert worker.profile({"registryJSON": registry(request_value), "registryCA": BUNDLE}) == {"changed": True}
+    assert prepared_image(worker, {"registryJSON": registry(request_value), "registryCA": BUNDLE}) == {"changed": True}
     assert [argv[-1] for argv in images.calls if argv[:2] == ["/usr/bin/podman", "pull"]] == [IMAGE, HAPROXY, KEEPALIVED]
     assert [(broker.image, broker.trust) for broker in auxiliary_brokers] == [(None, BUNDLE), (HAPROXY, BUNDLE), (KEEPALIVED, BUNDLE)]
     assert all(BUNDLE not in str(argv) for argv in images.calls) and all(BUNDLE not in str(value) for value in images.environments)

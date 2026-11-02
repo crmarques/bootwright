@@ -66,8 +66,8 @@ class Transport:
         self.calls.append((host["name"], "packages"))
         return {"changed": True, "ready": True, "planDigest": "a" * 64}
 
-    def host_profile(self, host):
-        self.calls.append((host["name"], "profile"))
+    def host_images(self, host):
+        self.calls.append((host["name"], "images"))
         return {"changed": True}
 
     def call(self, host, phase, private=None, *, timeout=660):
@@ -81,9 +81,56 @@ class Transport:
 def test_apply_runs_packages_then_the_long_call_then_route_and_identities(host_request):
     transport = Transport(host_request)
     result = ceph_core.execute_host(host_request, "apply", DIGEST, transport)
-    assert transport.calls == [("node-2", "packages"), ("node-2", "profile"), ("node-2", "route"), ("node-2", "device_identity"),
+    assert transport.calls == [("node-2", "packages"), ("node-2", "images"), ("node-2", "profile"), ("node-2", "route"), ("node-2", "device_identity"),
                                ("node-2", "host_observe")]
     assert result["changed"] is True and result["evidence"]["ready"] is True and result["evidence"]["request"] == DIGEST
+
+
+class AppliedTransport(Transport):
+    """A fresh transport per step, as each step is its own module run; one step's native phases applied ``ids``."""
+
+    def __init__(self, request, ids=(), observed=None):
+        super().__init__(request, observed)
+        self.applied = set(ids)
+
+
+def test_each_step_is_one_native_call_and_only_verify_publishes_evidence(host_request):
+    ids = ["ceph-call-home-opt-in", "ceph-mgr-without-license-contract"]
+    reported, plan_digest, applied = [], "", []
+    for step, phase in (("packages", "packages"), ("images", "images"), ("profile", "profile"), ("route", "route"), ("devices", "device_identity")):
+        transport = AppliedTransport(host_request, ids[:1] if step == "images" else ())
+        result = ceph_core.host_step(host_request, step, DIGEST, transport)
+        assert transport.calls == [("node-2", phase)] and "evidence" not in result
+        assert result["specializations"] == (ids[:1] if step == "images" else [])
+        reported.append(result["changed"])
+        plan_digest = result.get("planDigest", plan_digest)
+        applied += result["specializations"]
+    assert reported == [True, True, False, False, False] and plan_digest == "a" * 64
+    transport = AppliedTransport(host_request, ids[1:])
+    verified = ceph_core.host_step(host_request, "verify", DIGEST, transport, plan_digest=plan_digest, applied=applied)
+    assert transport.calls == [("node-2", "host_observe")] and verified["changed"] is False
+    assert verified["evidence"]["specializations"] == ids and verified["evidence"]["ready"] is True
+
+
+@pytest.mark.parametrize("plan_digest, applied", [("", []), ("A" * 64, []), ("a" * 64, ["unknown-specialization"]), ("a" * 64, [5])])
+def test_verify_refuses_an_unreported_package_decision_or_specialization(host_request, plan_digest, applied):
+    transport = Transport(host_request)
+    with pytest.raises(ceph_native.Refusal, match="^request$"):
+        ceph_core.host_step(host_request, "verify", DIGEST, transport, plan_digest=plan_digest, applied=applied)
+    assert transport.calls == []
+
+
+def test_verify_refuses_a_package_decision_other_than_the_one_its_step_reported(host_request):
+    with pytest.raises(ceph_native.Refusal, match="^not-ready$"):
+        ceph_core.host_step(host_request, "verify", DIGEST, Transport(host_request), plan_digest="b" * 64)
+
+
+@pytest.mark.parametrize("step", ["", "observe", "pull"])
+def test_an_unknown_step_refuses_before_any_call(host_request, step):
+    transport = Transport(host_request)
+    with pytest.raises(ceph_native.Refusal, match="^request$"):
+        ceph_core.host_step(host_request, step, DIGEST, transport)
+    assert transport.calls == []
 
 
 def test_observation_makes_only_the_read_only_call(host_request):
@@ -156,15 +203,15 @@ def test_the_long_call_carries_the_credential_only_on_protected_stdin(host_reque
     material = {"sshKey": str(key), "knownHosts": str(known), "registryJSON": str(registry)}
     transport = ceph_core.Transport(host_request["cluster"], material, run=run, scope=True)
     host = host_request["cluster"]["hosts"][1]
-    assert transport.host_profile(host) == {"changed": True}
+    assert transport.host_images(host) == {"changed": True}
     argv, data, timeout = calls[0]
     assert PASSWORD not in " ".join(argv) and "PRIVATE-KEY-SENTINEL" not in " ".join(argv)
     assert timeout == ceph_host_worker.REMOTE_LIMIT + 60 and argv[-1].endswith(" " + str(ceph_host_worker.REMOTE_LIMIT))
     envelope = json.loads(data)
     assert envelope["budget"] == ceph_host_worker.REMOTE_LIMIT and set(envelope["sources"]) == set(ceph_native_worker.MODULES)
-    assert envelope["payload"]["phase"] == "profile" and set(envelope["payload"]["private"]) == {"registryJSON"}
+    assert envelope["payload"]["phase"] == "images" and set(envelope["payload"]["private"]) == {"registryJSON"}
     with pytest.raises(ceph_native.Refusal, match="^transport$"):
-        transport.call(host, "profile")
+        transport.call(host, "images")
     assert len(calls) == 1
 
 
@@ -182,7 +229,7 @@ def test_every_other_host_phase_keeps_the_ordinary_ceiling(host_request, tmp_pat
         return 0, b'{"ok":true,"result":{"changed":false}}'
 
     transport = ceph_core.Transport(host_request["cluster"], {"sshKey": str(key), "knownHosts": str(known)}, run=run, scope=True)
-    for phase in ("route", "device_identity", "host_observe", "host_devices"):
+    for phase in ("profile", "route", "device_identity", "host_observe", "host_devices"):
         transport.call(host_request["cluster"]["hosts"][1], phase)
     assert all(timeout == 660 and json.loads(data)["budget"] <= 640 for unused, data, timeout in calls)
 
@@ -199,14 +246,14 @@ class Native:
         return {"changed": True}
 
 
-@pytest.mark.parametrize("phase", ["route", "device_identity", "host_observe", "bootstrap", "enroll", None])
-def test_the_long_launcher_admits_only_the_profile_phase(phase):
+@pytest.mark.parametrize("phase", ["profile", "route", "device_identity", "host_observe", "bootstrap", "enroll", None])
+def test_the_long_launcher_admits_only_the_images_phase(phase):
     native = Native()
     restricted = ceph_host_worker.restricted(native)
     with pytest.raises(Native.Refusal):
         restricted.dispatch({"phase": phase})
     assert native.envelopes == []
-    assert restricted.dispatch({"phase": "profile"}) == {"changed": True} and restricted.Refusal is Native.Refusal
+    assert restricted.dispatch({"phase": "images"}) == {"changed": True} and restricted.Refusal is Native.Refusal
 
 
 def test_the_long_launcher_raises_only_its_own_ceiling():
@@ -214,14 +261,14 @@ def test_the_long_launcher_raises_only_its_own_ceiling():
     sources["native_diagnostics"] = inspect.getsource(native_diagnostics)
     sources["ceph_native"] = "class Refusal(ValueError): pass\ndef dispatch(value):\n    return {'phase': value['phase']}\n"
     source = ceph_host_worker.launcher(inspect.getsource(ceph_native_worker), inspect.getsource(ceph_host_worker))
-    for phase, expected in (("profile", {"ok": True, "result": {"phase": "profile"}}), ("route", {"ok": False, "reason": "native-refusal"})):
+    for phase, expected in (("images", {"ok": True, "result": {"phase": "images"}}), ("profile", {"ok": False, "reason": "native-refusal"})):
         payload = {"sources": sources, "payload": {"phase": phase}, "budget": 3}
         result = subprocess.run([sys.executable, "-I", "-c", source, "3"], input=json.dumps(payload).encode(), capture_output=True, timeout=10, check=False)
         assert result.returncode == 0 and result.stderr == b""
         value = json.loads(result.stdout)
         value.pop("cause", None)
         assert value == expected
-    payload = {"sources": sources, "payload": {"phase": "profile"}, "budget": 4286}
+    payload = {"sources": sources, "payload": {"phase": "images"}, "budget": 4286}
     result = subprocess.run([sys.executable, "-I", "-c", source, "4286"], input=json.dumps(payload).encode(), capture_output=True, timeout=10, check=False)
     assert json.loads(result.stdout) == {"ok": False, "reason": "native-unknown"}
 
@@ -332,10 +379,13 @@ def test_host_request_admits_only_the_cluster_scope(host_request, change):
 @pytest.mark.parametrize("operation", ["apply", "observe", "destroy"])
 def test_the_host_module_binds_its_transport_to_the_frozen_scope(host_request, monkeypatch, operation):
     reached = {}
+    step = "images" if operation == "apply" else None
 
     class Module:
         def __init__(self, **options):
-            self.params = {"request": copy.deepcopy(host_request), "operation": operation, "digest": DIGEST, "material": {}}
+            assert options["required_if"] == [("operation", "apply", ("step",))]
+            self.params = {"request": copy.deepcopy(host_request), "operation": operation, "step": step, "plan_digest": "", "applied": [],
+                           "digest": DIGEST, "material": {}}
 
         def fail_json(self, **failure):
             raise AssertionError(failure)
@@ -347,10 +397,35 @@ def test_the_host_module_binds_its_transport_to_the_frozen_scope(host_request, m
         reached["call"] = (request, operation_name, digest, transport.request)
         return {"changed": False}
 
+    def host_step(request, step_name, digest, transport, *, plan_digest, applied):
+        reached["call"] = (request, step_name, digest, transport.request)
+        return {"changed": False}
+
     monkeypatch.setattr(ceph_host, "AnsibleModule", Module)
     monkeypatch.setattr(ceph_core, "execute_host", execute_host)
+    monkeypatch.setattr(ceph_core, "host_step", host_step)
     ceph_host.main()
-    assert reached == {"result": {"changed": False}, "call": (host_request, operation, DIGEST, host_request["cluster"])}
+    assert reached == {"result": {"changed": False}, "call": (host_request, step or operation, DIGEST, host_request["cluster"])}
+
+
+@pytest.mark.parametrize("operation", ["observe", "destroy"])
+def test_a_read_or_release_names_no_step(host_request, monkeypatch, operation):
+    failures = []
+
+    class Module:
+        def __init__(self, **options):
+            self.params = {"request": copy.deepcopy(host_request), "operation": operation, "step": "packages", "plan_digest": "", "applied": [],
+                           "digest": DIGEST, "material": {}}
+
+        def fail_json(self, **failure):
+            failures.append(failure)
+            raise SystemExit(1)
+
+    monkeypatch.setattr(ceph_host, "AnsibleModule", Module)
+    monkeypatch.setattr(ceph_core, "execute_host", lambda *arguments: pytest.fail("a stepped read ran"))
+    with pytest.raises(SystemExit):
+        ceph_host.main()
+    assert len(failures) == 1 and failures[0]["reason"] == "request" and failures[0]["detail"].startswith("request@ceph_host.main:")
 
 
 def test_the_package_call_relays_the_bound_repository_bundle(host_request, tmp_path):

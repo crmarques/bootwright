@@ -248,6 +248,24 @@ func hostDescription(verb reconciliation.Verb, cluster, host string) (string, []
 	return "prepare Ceph host " + host + " of " + cluster, []string{"prepare-host " + host + " packages, image, runtime, route and devices"}
 }
 
+func hostGroups(verb reconciliation.Verb, machineName string) []reconciliation.Group {
+	if verb == reconciliation.Destroy {
+		return nil
+	}
+	steps := [][2]string{
+		{"install-packages", "install the frozen Ceph packages from the declared package sources"},
+		{"pull-images", "pull the frozen Ceph image and each auxiliary image by digest"},
+		{"prove-runtime", "prove the image's runtime profile in contained probes"},
+		{"prove-route", "prove the native SSH route inside the image"},
+		{"identify-devices", "bind each declared device to its native identity"},
+	}
+	groups := make([]reconciliation.Group, 0, len(steps))
+	for _, step := range steps {
+		groups = append(groups, reconciliation.Group{ID: step[0], Description: step[1], Machines: []string{machineName}})
+	}
+	return groups
+}
+
 func (c HostCapability) Plan(ctx context.Context, input lifecycle.PlanInput) (lifecycle.CapabilityPlan, error) {
 	plan := lifecycle.CapabilityPlan{Definitions: []reconciliation.BlockDefinition{}}
 	if err := ctx.Err(); err != nil {
@@ -295,7 +313,7 @@ func (c HostCapability) Plan(ctx context.Context, input lifecycle.PlanInput) (li
 			}
 			plan.Definitions = append(plan.Definitions, reconciliation.BlockDefinition{ID: HostBlockID(cluster.Cluster, host.Machine), Description: description, Stage: reconciliation.StageClusters,
 				Requires: requires, Dependencies: dependencies, Exclusive: []string{"ceph-host/" + host.Machine}, Impacts: impacts, Consumes: []string{},
-				Kind: string(api.CephCluster), Object: cluster.Cluster, Implementation: HostImplementation, ContentDigest: HostContentDigest(), Request: canonical})
+				Groups: hostGroups(input.Verb, host.Machine), Kind: string(api.CephCluster), Object: cluster.Cluster, Implementation: HostImplementation, ContentDigest: HostContentDigest(), Request: canonical})
 			if cluster.Security != nil && cluster.Security.FIPS {
 				plan.Secrets = append(plan.Secrets, cluster.ClusterKeyRef)
 			}

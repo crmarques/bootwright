@@ -1,0 +1,49 @@
+---
+- name: Report the host preparation step
+  bootwright.core.ceph_cluster_protocol:
+    phase: group
+    group: '{{ storage_ceph_host_phase.group }}'
+    status: running
+  no_log: true
+
+- name: Execute the fixed Ceph host preparation step
+  bootwright.core.ceph_host:
+    request: '{{ bootwright_ceph_host_request }}'
+    operation: apply
+    step: '{{ storage_ceph_host_phase.step }}'
+    digest: '{{ bootwright_ceph_host_digest }}'
+    material: '{{ bootwright_ceph_host_material }}'
+  register: storage_ceph_host_step
+  failed_when: false
+  no_log: true
+  diff: false
+
+- name: Publish the fixed Ceph host refusal
+  bootwright.core.ceph_cluster_protocol:
+    phase: refused
+    reason: '{{ storage_ceph_host_step.reason | default("adapter-exception") }}'
+    native_error: '{{ storage_ceph_host_step.nativeError | default(omit) }}'
+    detail: >-
+      {{ storage_ceph_host_step.detail
+        | default(omit if storage_ceph_host_step.reason is defined else "module-failure") }}
+  when: storage_ceph_host_step.specializations is not defined
+  no_log: true
+
+- name: Refuse an unproved Ceph host operation
+  ansible.builtin.fail:
+    msg: The Ceph host operation was refused; the run names its reason
+  when: storage_ceph_host_step.specializations is not defined
+
+- name: Report the host preparation step completion
+  bootwright.core.ceph_cluster_protocol:
+    phase: group
+    group: '{{ storage_ceph_host_phase.group }}'
+    status: ok
+  no_log: true
+
+- name: Keep what the step reported for the final proof
+  ansible.builtin.set_fact:
+    storage_ceph_host_changed: '{{ storage_ceph_host_changed or storage_ceph_host_step.changed }}'
+    storage_ceph_host_applied: '{{ storage_ceph_host_applied + storage_ceph_host_step.specializations }}'
+    storage_ceph_host_plan_digest: '{{ storage_ceph_host_step.planDigest | default(storage_ceph_host_plan_digest) }}'
+  no_log: true
