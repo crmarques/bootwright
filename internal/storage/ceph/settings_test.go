@@ -114,7 +114,7 @@ func TestSettingsBlockEmittedOnlyWhenNeeded(t *testing.T) {
 	}
 	settings := found[0]
 	if settings.ID != "ceph-settings-example" || settings.Kind != string(api.CephCluster) || settings.Object != "example" || settings.Implementation != Implementation ||
-		settings.Stage != reconciliation.StageClusters || !slices.Equal(settings.Exclusive, []string{"ceph/example"}) || len(settings.Requires) != 0 ||
+		settings.Stage != reconciliation.StageClusters || !slices.Equal(settings.Exclusive, []string{"ceph-mgr/example"}) || len(settings.Requires) != 0 ||
 		!slices.Equal(settings.Dependencies, []string{"ceph-cluster-example", "ceph-image-example"}) || settings.ContentDigest != ContentDigest() ||
 		!slices.Equal(settings.Impacts, []string{"realize Ceph settings example"}) {
 		t.Fatalf("the settings block is %+v", settings)

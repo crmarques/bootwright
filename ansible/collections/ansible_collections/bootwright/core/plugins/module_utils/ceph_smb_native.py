@@ -431,14 +431,22 @@ class SMBWorker(ceph_native_resources.ResourceWorker):
                 and resource.get(TYPES[resource_type]) == self.smb["id"])
 
     def apply_resource(self, payload):
-        """One apply of the resource on stdin, never retried; any answer but one successful result refuses without the manager's words."""
-        seen = {}
-        output = self.tunnel_effect("smb", "apply", "-i", "-", "--password-filter=base64", "--password-filter-out=hidden", data=payload, json_result=False,
-                                    recover=lambda code, unused: seen.setdefault("code", code) is not None)
-        accepted = not seen and self.answered(output)
-        del output
-        if not accepted:
-            raise Refusal("smb-result")
+        """The declarative apply of the resource on stdin, made again only while a restarting manager cannot answer it, bounded by the
+        manager wait; any other answer but one successful result refuses without the manager's words."""
+        def declare():
+            seen = {}
+            output = self.tunnel_effect("smb", "apply", "-i", "-", "--password-filter=base64", "--password-filter-out=hidden", data=payload,
+                                        json_result=False, recover=lambda code, unused: seen.setdefault("code", code) is not None)
+            accepted = not seen and self.answered(output)
+            del output
+            if seen:
+                restarting = ceph_native.ManagerRefusal("smb-result")
+                restarting.native_cause = Refusal("smb-result")
+                raise restarting
+            if not accepted:
+                raise Refusal("smb-result")
+
+        self.manager_declare(declare)
 
     def smb_apply(self, private):
         """Prove ownership, the module, the declared SMB clusters and the samba images before any effect; then apply or continue once."""

@@ -64,6 +64,8 @@ class Cluster(users.Cluster):
         if os.path.basename(argv[0]) != "ceph" or command[:1] not in (("nfs",), ("mgr",)):
             return super().run(argv, data=data, timeout=timeout)
         self.log.append(("ceph", command, data))
+        if command == ("mgr", "dump"):
+            return 0, json.dumps({"available": True, "active_gid": 4100}).encode()
         if command == ("mgr", "module", "ls"):
             return 0, json.dumps({"always_on_modules": ["cephadm"], "enabled_modules": ["nfs"]}).encode()
         if command == ("nfs", "cluster", "ls"):

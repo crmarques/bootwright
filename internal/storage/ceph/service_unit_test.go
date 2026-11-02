@@ -64,7 +64,7 @@ func TestServiceUnitBlocksFollowClusterBlock(t *testing.T) {
 	plan := cephPlan(t, settingsCatalog(t, []api.Value{nfsService("files")}))
 	unit := blockOf(t, plan, "ceph-service-example-nfs-files")
 	if unit.Kind != string(api.CephCluster) || unit.Object != "example" || unit.Implementation != Implementation || unit.Stage != reconciliation.StageClusters ||
-		!slices.Equal(unit.Exclusive, []string{"ceph/example"}) || len(unit.Requires) != 0 ||
+		len(unit.Exclusive) != 0 || len(unit.Requires) != 0 ||
 		!slices.Equal(unit.Dependencies, []string{"ceph-cluster-example", "ceph-image-example", "ceph-settings-example"}) ||
 		!slices.Equal(unit.Impacts, []string{"realize Ceph service nfs.files of example"}) {
 		t.Fatalf("the unit block is %+v", unit.BlockDefinition)
@@ -277,7 +277,7 @@ func rbdMirrorRequestService() api.Value {
 func TestRBDMirrorUnitTypeRegistered(t *testing.T) {
 	plan := cephPlan(t, settingsCatalog(t, []api.Value{rbdMirrorRequestService()}))
 	unit := blockOf(t, plan, "ceph-service-example-rbd-mirror")
-	if unit.Kind != string(api.CephCluster) || unit.Object != "example" || !slices.Equal(unit.Exclusive, []string{"ceph/example"}) || len(unit.Requires) != 0 ||
+	if unit.Kind != string(api.CephCluster) || unit.Object != "example" || !slices.Equal(unit.Exclusive, []string{"ceph-mgr/example", "ceph/example"}) || len(unit.Requires) != 0 ||
 		!slices.Equal(unit.Dependencies, []string{"ceph-cluster-example", "ceph-image-example"}) ||
 		!slices.Equal(unit.Impacts, []string{"realize Ceph service rbd-mirror of example"}) {
 		t.Fatalf("the rbd-mirror block is %+v", unit.BlockDefinition)
@@ -368,7 +368,7 @@ func TestEveryClusterPlansOneDerivedCrashUnit(t *testing.T) {
 		t.Fatalf("the plan holds crash blocks %v", crash)
 	}
 	unit := blockOf(t, plan, "ceph-service-example-crash")
-	if unit.Kind != string(api.CephCluster) || unit.Object != "example" || !slices.Equal(unit.Exclusive, []string{"ceph/example"}) || len(unit.Requires) != 0 ||
+	if unit.Kind != string(api.CephCluster) || unit.Object != "example" || len(unit.Exclusive) != 0 || len(unit.Requires) != 0 ||
 		!slices.Equal(unit.Dependencies, []string{"ceph-cluster-example", "ceph-image-example"}) || !slices.Equal(unit.Impacts, []string{"realize Ceph service crash of example"}) {
 		t.Fatalf("the crash block is %+v", unit.BlockDefinition)
 	}

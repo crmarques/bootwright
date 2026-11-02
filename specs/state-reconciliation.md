@@ -2243,7 +2243,7 @@ written before the create and only at exactly the frozen shape
 ([storage resources](ceph.md#resources-readiness-and-access)). That
 proof holds only because Bootwright is the one writer of such objects: one
 block per native name, under the cluster's
-[claims](ceph.md#removal-and-concurrency); a writer outside Bootwright on a managed
+[claims](ceph.md#claims-and-throttle); a writer outside Bootwright on a managed
 cluster is outside the guarantee, and adoption never authorizes a removal.
 
 ### Quiescence before removal

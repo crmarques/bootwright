@@ -74,7 +74,7 @@ func TestNFSExportBlockDependsOnUnitAndBacking(t *testing.T) {
 	} {
 		block := exportPlan(t, exportCatalog(3, withShares, tt.export))
 		if block.ID != "ceph-nfs-export-docs" || block.ID != NFSExportBlockID("docs") || block.Kind != string(api.CephNFSExport) || block.Object != "docs" || block.Stage != reconciliation.StageClusters ||
-			!slices.Equal(block.Exclusive, []string{"ceph/example"}) || block.Description != "realize Ceph NFS export docs" {
+			len(block.Exclusive) != 0 || block.Description != "realize Ceph NFS export docs" {
 			t.Fatalf("the export block is %+v", block)
 		}
 		if !slices.Equal(block.Dependencies, []string{"ceph-cluster-example", "ceph-image-example", "ceph-service-example-nfs-shares"}) || !slices.Equal(block.Requires, []reconciliation.ObjectRef{tt.backing}) {

@@ -354,7 +354,7 @@ func TestSMBBlocksDependOnSettingsBlockByID(t *testing.T) {
 				t.Errorf("%s requires CephCluster %s", id, ref.Object)
 			}
 		}
-		if d.Stage != reconciliation.StageClusters || !slices.Equal(d.Exclusive, []string{"ceph/example"}) || d.Kind != string(api.CephSMBResource) || d.Implementation != SMBImplementation || d.ContentDigest != SMBContentDigest() {
+		if d.Stage != reconciliation.StageClusters || len(d.Exclusive) != 0 || d.Kind != string(api.CephSMBResource) || d.Implementation != SMBImplementation || d.ContentDigest != SMBContentDigest() {
 			t.Errorf("%s is %+v", id, d)
 		}
 	}

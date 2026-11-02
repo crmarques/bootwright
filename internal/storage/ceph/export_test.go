@@ -62,7 +62,7 @@ func TestExportRequestGolden(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if block.ID != "ceph-consumer-consumer" || block.Implementation != ConsumerImplementation || !slices.Equal(block.Exclusive, []string{"ceph/example"}) {
+		if block.ID != "ceph-consumer-consumer" || block.Implementation != ConsumerImplementation || !slices.Equal(block.Exclusive, []string{"ceph-mgr/example", "ceph/example"}) {
 			t.Fatalf("wrong block: %+v", block)
 		}
 		for _, ref := range []reconciliation.ObjectRef{{Kind: string(api.CephCluster), Object: r.Cluster}, {Kind: string(api.CephPool), Object: "block"}, {Kind: string(api.CephFilesystem), Object: "files"}} {

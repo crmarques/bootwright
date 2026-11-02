@@ -166,6 +166,8 @@ class Monitor:
         self.log.append((command, data))
         if command == ("fsid",):
             return 0, json.dumps({"fsid": FSID}).encode()
+        if command == ("mgr", "dump"):
+            return 0, json.dumps({"available": True, "active_gid": 4100}).encode()
         if command == ("mgr", "module", "ls"):
             return 0, json.dumps({"always_on_modules": self.always_on, "enabled_modules": self.enabled, "disabled_modules": []}).encode()
         if command == ("config", "dump"):
@@ -228,7 +230,9 @@ class Markers:
 
 
 def worker(value, monitor, markers=None):
-    return ceph_smb_native.SMBWorker(value, "node-1", run=monitor.run, markers=markers or Markers())
+    native = ceph_smb_native.SMBWorker(value, "node-1", run=monitor.run, markers=markers or Markers())
+    native.pause = lambda seconds: None
+    return native
 
 
 def intent(value):
@@ -1213,3 +1217,29 @@ def test_a_resource_the_crashing_answer_stored_is_completed_by_the_next_apply():
     monitor.apply = original
     assert worker(value, monitor, markers).smb_apply(private_of(value)) == {"changed": True}
     assert len(applies(monitor)) == 1 and worker(value, monitor, markers).smb_observe()["ready"] is True
+
+
+@pytest.mark.parametrize("restarts", [False, True])
+def test_an_apply_a_restarting_manager_failed_is_made_again_only_across_the_restart(restarts):
+    value, monitor, markers = request("ceph.smb.join.auth"), Monitor(), Markers()
+    answer, state = monitor.run, {"gid": 4100, "applies": 0}
+
+    def run(argv, data=b"", timeout=60):
+        command = tuple(argv[argv.index("--format") + 2:])
+        if command == ("mgr", "dump"):
+            return 0, json.dumps({"available": True, "active_gid": state["gid"]}).encode()
+        if command[:2] == ("smb", "apply"):
+            state["applies"] += 1
+            if state["applies"] == 1:
+                state["gid"] += 1 if restarts else 0
+                return 22, ceph_native.NativeOutput(b"", b"Error ETIMEDOUT: " + NATIVE_SENTINEL.encode())
+        return answer(argv, data=data, timeout=timeout)
+
+    monitor.run = run
+    if restarts:
+        assert worker(value, monitor, markers).smb_apply(private_of(value)) == {"changed": True}
+        assert state["applies"] == 2
+    else:
+        with pytest.raises(ceph_native.Refusal, match="^smb-result$") as caught:
+            worker(value, monitor, markers).smb_apply(private_of(value))
+        assert caught.type is ceph_native.Refusal and state["applies"] == 1

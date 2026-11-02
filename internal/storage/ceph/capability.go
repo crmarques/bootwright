@@ -180,10 +180,22 @@ func (c Capability) definition(verb reconciliation.Verb, object api.Object, requ
 	return reconciliation.BlockDefinition{ID: id, Description: description, Stage: reconciliation.StageClusters, Requires: requires, Dependencies: dependencies, Exclusive: exclusiveFor(request.Action, request), Throttle: ThrottleKey(request.Cluster), Impacts: impacts, Consumes: consumes, Kind: string(c.kind), Object: object.Name(), Implementation: Implementation, ContentDigest: ContentDigest(), Request: canonical}, nil
 }
 
-var unclaimedFamilies = []string{"client", "filesystem", "object-bucket", "object-user", "policy", "pool", "rbd", "subvolume"}
+var serializedFamilies = []string{"cluster", "consumer", "nvmeof", "replication"}
+
+var serializedUnits = []string{"nvmeof", "rbd-mirror"}
+
+var restartingUnits = []string{"monitoring"}
 
 func OrchestratorKey(cluster string) string {
 	return "ceph/" + cluster
+}
+
+func ManagerRestartKey(cluster string) string {
+	return "ceph-mgr/" + cluster
+}
+
+func ObjectRootKey(cluster string) string {
+	return "ceph-rgw/" + cluster
 }
 
 func ThrottleKey(cluster string) string {
@@ -191,10 +203,18 @@ func ThrottleKey(cluster string) string {
 }
 
 func exclusiveFor(family string, request Request) []string {
-	if slices.Contains(unclaimedFamilies, family) {
-		return nil
+	serialized := []string{ManagerRestartKey(request.Cluster), OrchestratorKey(request.Cluster)}
+	switch {
+	case slices.Contains(serializedFamilies, family):
+		return serialized
+	case family == "service" && request.Service != nil && slices.Contains(serializedUnits, request.Service.Type):
+		return serialized
+	case family == "settings", family == "service" && request.Service != nil && slices.Contains(restartingUnits, request.Service.Type):
+		return []string{ManagerRestartKey(request.Cluster)}
+	case family == "gateway", family == "nfs-export" && request.NFSExport != nil && request.NFSExport.ObjectUser != nil:
+		return []string{ObjectRootKey(request.Cluster)}
 	}
-	return []string{OrchestratorKey(request.Cluster)}
+	return nil
 }
 
 func placement(object api.Object, request Request) ([]reconciliation.ObjectRef, []string, error) {

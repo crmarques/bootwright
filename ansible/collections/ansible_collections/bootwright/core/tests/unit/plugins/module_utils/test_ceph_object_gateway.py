@@ -115,7 +115,7 @@ class Monitor:
             if not any(pool["pool_name"] == ".rgw.root" for pool in self.pools):
                 self.pools.append({"pool_name": ".rgw.root", "pool_id": 1, "application_metadata": {"rgw": {}}})
             return self.radosgw(command)
-        answers = {("fsid",): {"fsid": FSID}, ("osd", "pool", "ls", "detail"): self.pools,
+        answers = {("fsid",): {"fsid": FSID}, ("mgr", "dump"): {"available": True, "active_gid": 4100}, ("osd", "pool", "ls", "detail"): self.pools,
                    ("orch", "ls", "--export"): [dict(value, service_name=name) for name, value in self.specs.items()], ("orch", "ps"): self.running,
                    ("config", "dump"): self.config}
         if command in answers:

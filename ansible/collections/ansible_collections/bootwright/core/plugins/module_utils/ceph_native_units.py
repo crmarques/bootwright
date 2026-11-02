@@ -629,7 +629,7 @@ class UnitWorker(ceph_native_resources.ResourceWorker):
         checked = hooks.check(self, unit)
         values = [group[0] for group in self.normalized_services(self.unit_groups(), record=self.unit_key() + "-inputs.json")]
         scope = self.recovery_scope()
-        observed = self.bound_specs(self.unit_specs())
+        observed = self.bound_specs(self.manager_retry(self.unit_specs))
         self.unit_records(values, observed, scope)
         hooks.claim(self, unit, checked)
         names = self.unit_names()
@@ -640,8 +640,8 @@ class UnitWorker(ceph_native_resources.ResourceWorker):
         changed = bool(missing)
         if missing:
             data = b"---\n".join(canonical(self.splice_bound(value)) + b"\n" for unused, value in missing)
-            self.tunnel_effect("orch", "apply", "-i", "-", data=data, json_result=False)
-            observed = self.bound_specs(self.unit_specs())
+            self.manager_declare(self.tunnel_effect, "orch", "apply", "-i", "-", data=data, json_result=False)
+            observed = self.bound_specs(self.manager_retry(self.unit_specs))
             require(all(observed.get(name) == value for name, value in zip(names, values)), "not-ready")
         for name, value in zip(names, values):
             if self.markers.read("service-" + name + "-complete.json") is None:
@@ -718,11 +718,11 @@ class UnitWorker(ceph_native_resources.ResourceWorker):
         require(all(self.markers.read("service-" + name + "-complete.json") is not None for name in self.unit_names()), "not-ready")
         if ceph_native_observability.sso_enabled(self):
             return {"changed": False, "pending": False}
-        rows = self.ceph("orch", "ps", "--daemon_type", "oauth2-proxy")
+        rows = self.manager_retry(self.ceph, "orch", "ps", "--daemon_type", "oauth2-proxy")
         require(isinstance(rows, list) and all(isinstance(row, dict) for row in rows), "native-output")
         if not any(row.get("daemon_type") == "oauth2-proxy" and type(row.get("status")) is int and row["status"] == 1 for row in rows):
             return {"changed": False, "pending": True}
-        self.tunnel_effect("dashboard", "sso", "enable", "oauth2", json_result=False)
+        self.manager_declare(self.tunnel_effect, "dashboard", "sso", "enable", "oauth2", json_result=False)
         require(ceph_native_observability.sso_enabled(self), "not-ready")
         return {"changed": True, "pending": False}
 

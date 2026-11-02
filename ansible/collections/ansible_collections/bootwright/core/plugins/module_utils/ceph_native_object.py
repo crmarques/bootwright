@@ -829,7 +829,7 @@ class ObjectWorker(ceph_native_units.UnitWorker):
         self.ingress_images()
         values = [group[0] for group in self.normalized_services(self.unit_groups(), record=self.unit_key() + "-inputs.json")]
         scope = self.recovery_scope()
-        observed = self.tls_specs(self.unit_specs())
+        observed = self.tls_specs(self.manager_retry(self.unit_specs))
         self.unit_records(values, observed, scope)
         names = self.unit_names()
         missing = [(name, value) for name, value in zip(names, values) if name not in observed]
@@ -837,8 +837,8 @@ class ObjectWorker(ceph_native_units.UnitWorker):
             self.markers.write("service-" + name + "-attempt.json", {"scope": scope, "service": value})
         if missing:
             data = b"---\n".join(canonical(self.splice(value)) + b"\n" for unused, value in missing)
-            self.tunnel_effect("orch", "apply", "-i", "-", data=data, json_result=False)
-            observed = self.tls_specs(self.unit_specs())
+            self.manager_declare(self.tunnel_effect, "orch", "apply", "-i", "-", data=data, json_result=False)
+            observed = self.tls_specs(self.manager_retry(self.unit_specs))
             require(all(observed.get(name) == value for name, value in zip(names, values)), "not-ready")
         for name, value in zip(names, values):
             self.markers.write("service-" + name + "-complete.json", {"scope": scope, "service": value})

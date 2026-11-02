@@ -93,6 +93,8 @@ class Monitor:
         self.log.append(command)
         if command == ("fsid",):
             return 0, json.dumps({"fsid": FSID}).encode()
+        if command == ("mgr", "dump"):
+            return 0, json.dumps({"available": True, "active_gid": 4100}).encode()
         if command == ("mgr", "module", "ls"):
             return 0, json.dumps({"always_on_modules": ["cephadm"], "enabled_modules": self.modules}).encode()
         if command == ("nfs", "cluster", "ls"):
@@ -559,3 +561,34 @@ def test_export_routes_through_the_unit_flow(monkeypatch):
     assert transport.calls == [("node-1", "prerequisites"), ("node-1", "nfs_export"), ("node-1", "observe"), ("node-1", "observe")]
     transport = Transport()
     assert ceph_core.execute(request, "observe", "d" * 64, transport)["changed"] is False and transport.calls == [("node-1", "observe")]
+
+
+def test_export_lost_across_a_manager_restart_is_read_back_and_never_declared_twice(tmp_path):
+    request = export_request()
+    markers = markers_for(tmp_path, request)
+    monitor = Monitor(request)
+    answer, state = monitor.run, {"gid": 4100, "fired": 0}
+
+    def restarting(argv, data=b"", timeout=60):
+        command = tuple(argv[argv.index("--format") + 2:]) if "--format" in argv else ()
+        if command == ("mgr", "dump"):
+            return 0, json.dumps({"available": True, "active_gid": state["gid"]}).encode()
+        if command[:3] == ("nfs", "export", "apply") and not state["fired"]:
+            state["fired"] += 1
+            answer(argv, data=data, timeout=timeout)
+            state["gid"] += 1
+            return 1, ceph_native.NativeOutput(b"", b"Error ETIMEDOUT: the manager connection was reset")
+        return answer(argv, data=data, timeout=timeout)
+
+    monitor.run = restarting
+    assert worker(monitor, markers).nfs_export() == {"changed": True}
+    assert state["fired"] == 1 and monitor.mutations == [APPLY]
+    assert markers.read(IDENTITY) == {"exportId": 1, "userId": PRINCIPAL}
+
+
+def test_export_refused_by_its_unchanged_manager_is_declared_once(tmp_path):
+    request = export_request()
+    markers = markers_for(tmp_path, request)
+    monitor = Monitor(request, failure=b"Error EINVAL: Failed to apply export: path /volumes/csi/docs does not exist")
+    refused(monitor, markers, "nfs-export-apply")
+    assert monitor.mutations == [APPLY]

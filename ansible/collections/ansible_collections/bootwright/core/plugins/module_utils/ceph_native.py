@@ -1347,6 +1347,33 @@ class Worker:
                     raise getattr(error, "native_cause", error) from None
                 self.pause(MANAGER_INTERVAL)
 
+    def manager_instance(self):
+        """The MON's available active manager, or None while none is available or the map cannot be read."""
+        try:
+            manager = self.ceph("mgr", "dump")
+        except Refusal:
+            return None
+        if not isinstance(manager, dict) or manager.get("available") is not True or type(manager.get("active_gid")) is not int:
+            return None
+        return manager["active_gid"]
+
+    def manager_declare(self, action, *args, **options):
+        """Repeat an idempotent manager-served declaration, bounded, only while the manager it was sent to restarts: a failure the same
+        available active manager still holds one interval later is the command's own answer and is raised at once."""
+        deadline = self.wait_deadline()
+        while True:
+            asked, cause = self.manager_instance(), None
+            try:
+                with self.manager_served():
+                    return action(*args, **options)
+            except ManagerRefusal as error:
+                cause = getattr(error, "native_cause", error)
+            if self.clock() + MANAGER_INTERVAL >= deadline:
+                raise cause
+            self.pause(MANAGER_INTERVAL)
+            if asked is not None and self.manager_instance() == asked:
+                raise cause
+
     def manager_wait(self, previous=None, name=None):
         """After an action that restarts the active manager: wait, bounded, until the MON maps an available active manager other
         than the restarted instance, the named one where the caller knows it, and its orchestrator answers with cephadm."""

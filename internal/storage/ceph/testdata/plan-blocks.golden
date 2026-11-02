@@ -21,6 +21,7 @@
       "machine-node-3"
     ],
     "exclusive": [
+      "ceph-mgr/example",
       "ceph/example"
     ],
     "id": "ceph-cluster-example",
@@ -99,9 +100,7 @@
       "ceph-cluster-example",
       "ceph-image-example"
     ],
-    "exclusive": [
-      "ceph/example"
-    ],
+    "exclusive": [],
     "id": "ceph-service-example-crash",
     "implementation": "storage-ceph-core-v3",
     "stage": "clusters"

@@ -438,17 +438,31 @@ class ExportWorker(ceph_native_resources.ResourceWorker):
         return text[:-1] if text.endswith("\n") else text
 
     def applied(self, intent, expected):
-        """One declarative apply of the frozen JSON on stdin; a failure, a warning or another state is the NFS manager's answer, never retried."""
+        """A declarative apply of the frozen JSON on stdin, made again only while a restarting manager cannot answer it; a repeat
+        after a lost reply first reads the export back, so an apply the manager already took is never declared twice. A failure, a
+        warning or another state is the NFS manager's answer."""
         nfs = self.export()
         payload, secrets = self.payload(intent, expected)
+        sent = []
+
+        def declare():
+            if sent:
+                info = self.info()
+                if info and self.matches(info, intent):
+                    return None
+            sent.append(True)
+            return self.tunnel_effect("nfs", "export", "apply", nfs["service"], "-i", "-", data=payload, secrets=secrets)
+
         try:
-            answer = self.tunnel_effect("nfs", "export", "apply", nfs["service"], "-i", "-", data=payload, secrets=secrets)
+            answer = self.manager_declare(declare)
         except NativeFailure as error:
             if str(error) != "native-command":
                 raise
             refused = Refusal("nfs-export-apply")
             refused.native_error = error.native_error
             raise refused from None
+        if answer is None:
+            return
         require(isinstance(answer, list) and len(answer) == 1 and isinstance(answer[0], dict) and answer[0].get("pseudo") == nfs["native"]["pseudo"],
                 "native-output")
         if answer[0].get("state") != expected:

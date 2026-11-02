@@ -195,7 +195,7 @@ Each derived zone pool is realized by its own block
 [`init_zone_pool_names`](https://github.com/ceph/ceph/blob/v20.2.1/src/rgw/rgw_zone.cc#L1277-L1312)
 names once its namespaces are stripped. The block has Kind
 CephObjectGateway, claims nothing beyond its cluster's Ceph
-[throttle](ceph.md#removal-and-concurrency) and depends on the cluster
+[throttle](ceph.md#claims-and-throttle) and depends on the cluster
 and image blocks by block identity. Its pool is a replicated `rgw` pool on
 `replicated_rule` with the initial 32 placement groups and autoscale `on`
 that an undeclared autoscale freezes, the default replica pair and

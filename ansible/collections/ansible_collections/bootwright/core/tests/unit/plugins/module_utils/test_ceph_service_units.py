@@ -102,6 +102,7 @@ class Monitor:
         self.log.append(command)
         answers = {
             ("fsid",): {"fsid": FSID},
+            ("mgr", "dump"): {"available": True, "active_gid": 4100},
             ("mgr", "module", "ls"): {"always_on_modules": ["cephadm"], "force_disabled_modules": [], "enabled_modules": self.modules},
             ("osd", "pool", "ls", "detail"): self.pools,
             ("config", "dump"): self.config,
@@ -798,3 +799,55 @@ def test_core_evidence_admits_only_unit_daemons_on_their_document_hosts():
             ceph_core.evidence(dict(value, daemons=[bad]), "d" * 64, request)
     with pytest.raises(ceph_native.Refusal, match="^evidence$"):
         ceph_core.evidence(dict(value, daemons=[row, row]), "d" * 64, request)
+
+
+def restarting_on(monitor, command, stores):
+    """The first `command` reaches a manager that respawns: its effect lands when `stores` says so and its reply is lost."""
+    answer, state = monitor.run, {"gid": 4100, "fired": 0}
+
+    def run(argv, data=b"", timeout=60):
+        found = tuple(argv[argv.index("--format") + 2:])
+        if found == ("mgr", "dump"):
+            return 0, json.dumps({"available": True, "active_gid": state["gid"]}).encode()
+        if found == command and not state["fired"]:
+            state["fired"] += 1
+            if stores:
+                answer(argv, data=data, timeout=timeout)
+            state["gid"] += 1
+            return 1, ceph_native.NativeOutput(b"", b"Error ETIMEDOUT: the manager connection was reset")
+        return answer(argv, data=data, timeout=timeout)
+
+    monitor.run = run
+    return state
+
+
+@pytest.mark.parametrize("stores", [False, True])
+def test_nfs_unit_declares_again_across_a_manager_restart(tmp_path, stores):
+    request = unit_request("haproxy")
+    markers = markers_for(tmp_path, request)
+    monitor = Monitor(request)
+    state = restarting_on(monitor, ("orch", "apply", "-i", "-"), stores)
+    assert worker(monitor, markers).unit() == {"changed": True}
+    assert state["fired"] == 1
+    assert monitor.mutations.count(("orch", "apply", "-i", "-")) == (2 if stores else 1)
+    assert monitor.batches == [request["service"]["documents"]] * len(monitor.batches)
+    assert all(markers.read("service-" + name_of(value) + "-complete.json") is not None for value in request["service"]["documents"])
+
+
+def test_nfs_unit_refuses_a_failed_declaration_its_unchanged_manager_answered(tmp_path):
+    request = unit_request("haproxy")
+    markers = markers_for(tmp_path, request)
+    monitor = Monitor(request)
+    answer, sent = monitor.run, []
+
+    def refusing(argv, data=b"", timeout=60):
+        if tuple(argv[argv.index("--format") + 2:]) == ("orch", "apply", "-i", "-"):
+            sent.append(argv)
+            return 22, ceph_native.NativeOutput(b"", b"Error EINVAL: ServiceSpec: invalid placement")
+        return answer(argv, data=data, timeout=timeout)
+
+    monitor.run = refusing
+    with pytest.raises(ceph_native.Refusal, match="^native-command$"):
+        worker(monitor, markers).unit()
+    assert len(sent) == 1
+    assert all(markers.read("service-" + name_of(value) + "-complete.json") is None for value in request["service"]["documents"])

@@ -159,7 +159,7 @@ func TestMonitoringUnitFollowsClusterAndImageBlocks(t *testing.T) {
 	plan := cephPlan(t, settingsCatalog(t, services))
 	unit := blockOf(t, plan, "ceph-service-example-monitoring")
 	if unit.Kind != string(api.CephCluster) || unit.Object != "example" || unit.Implementation != Implementation || unit.Stage != reconciliation.StageClusters ||
-		!slices.Equal(unit.Exclusive, []string{"ceph/example"}) || len(unit.Requires) != 0 ||
+		!slices.Equal(unit.Exclusive, []string{"ceph-mgr/example"}) || len(unit.Requires) != 0 ||
 		!slices.Equal(unit.Dependencies, []string{"ceph-cluster-example", "ceph-image-example"}) ||
 		unit.Description != "realize Ceph service monitoring of example" || !slices.Equal(unit.Impacts, monitoringFacts()) {
 		t.Fatalf("the monitoring block is %s %s %v %v %q", unit.Kind, unit.Object, unit.Exclusive, unit.Dependencies, unit.Impacts)

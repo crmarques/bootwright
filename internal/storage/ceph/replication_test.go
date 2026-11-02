@@ -71,7 +71,7 @@ func TestReplicationPlansBothClustersAndNativeNames(t *testing.T) {
 			if r.Mode != mode || r.Primary.Pool.Name != "volumes" || r.Secondary.Pool.Name != "volumes" || r.Primary.PoolObject != "primary-volumes" || r.Secondary.PoolObject != "secondary-volumes" {
 				t.Fatalf("wrong endpoints: %+v", r)
 			}
-			if !slices.Equal(block.Exclusive, []string{"ceph/example", "ceph/secondary"}) {
+			if !slices.Equal(block.Exclusive, []string{"ceph-mgr/example", "ceph-mgr/secondary", "ceph/example", "ceph/secondary"}) {
 				t.Fatalf("exclusive claims: %v", block.Exclusive)
 			}
 			for _, name := range []string{ClusterBlockID("example"), ClusterBlockID("secondary"), ImageBlockID("example"), ImageBlockID("secondary"), ServiceUnitBlockID("secondary", ServiceUnit{Type: "rbd-mirror"})} {

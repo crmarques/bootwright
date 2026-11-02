@@ -86,7 +86,7 @@ func TestGatewayBlockDependsOnDerivedPoolsAndCluster(t *testing.T) {
 	d := gatewayBlock(t, planCatalog(3, 3, withPairAndHTTPRGW, objectGateway("objects")))
 	want := []string{"ceph-cluster-example", "ceph-gateway-objects-pool-buckets-data", "ceph-gateway-objects-pool-buckets-index", "ceph-gateway-objects-pool-buckets-non-ec",
 		"ceph-gateway-objects-pool-control", "ceph-gateway-objects-pool-dedup", "ceph-gateway-objects-pool-log", "ceph-gateway-objects-pool-meta", "ceph-gateway-objects-pool-otp", "ceph-image-example"}
-	if d.Kind != string(api.CephObjectGateway) || d.Object != "objects" || d.Stage != reconciliation.StageClusters || !reflect.DeepEqual(d.Exclusive, []string{"ceph/example"}) ||
+	if d.Kind != string(api.CephObjectGateway) || d.Object != "objects" || d.Stage != reconciliation.StageClusters || !reflect.DeepEqual(d.Exclusive, []string{"ceph-rgw/example"}) ||
 		len(d.Requires) != 0 || !reflect.DeepEqual(d.Dependencies, want) || d.Description != "realize Ceph object gateway objects" || d.ID != GatewayBlockID("objects") {
 		t.Fatalf("the gateway block %+v", d)
 	}

@@ -103,6 +103,14 @@ operator as a first-call refusal; the slice that records it is named.
   `ceph orch …` fails or overruns the 60 s default command timeout; a
   manager-served command is now retried, bounded, after `mgr dump` reports a
   new active gid (X76).
+- Since X279 Ceph children run together, so the settings block's module
+  enable and the monitoring unit's derived `prometheus` module respawn the
+  manager under siblings' `orch apply`, `nfs export apply`, `smb apply` and
+  `dashboard sso enable`. A declaration is made again only when `mgr dump`
+  no longer shows the available active gid it was sent to
+  (`Worker.manager_declare`); a failure the unchanged manager still holds one
+  interval later is the module's own answer. Not yet observed on a live
+  cluster: the owner's next three-node run is the evidence.
 - IBM's bootstrap enables `call_home_agent`, which raises
   `CHA_ERROR_SENDING_REPORT` (HEALTH_ERR) when `esupport.ibm.com` is out of
   reach; readiness tolerates exactly that check (X76). The lab's NAT reached

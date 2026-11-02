@@ -173,7 +173,7 @@ func TestGatewayUnitDependsOnMonitoringUnit(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			unit := gatewayUnitBlock(t, gatewayCatalog(t, c.services, c.bindings))
 			if unit.Kind != string(api.CephCluster) || unit.Object != "example" || unit.Implementation != Implementation || unit.Stage != reconciliation.StageClusters ||
-				!slices.Equal(unit.Exclusive, []string{"ceph/example"}) || len(unit.Requires) != 0 || !slices.Equal(unit.Dependencies, c.dependencies) ||
+				len(unit.Exclusive) != 0 || len(unit.Requires) != 0 || !slices.Equal(unit.Dependencies, c.dependencies) ||
 				unit.Description != "realize Ceph service mgmt-gateway of example" || !slices.Equal(unit.Impacts, c.impacts) {
 				t.Fatalf("the gateway block is %s %s %v %v %q %q", unit.Kind, unit.Object, unit.Exclusive, unit.Dependencies, unit.Description, unit.Impacts)
 			}

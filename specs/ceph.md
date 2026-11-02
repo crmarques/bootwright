@@ -319,7 +319,7 @@ lists the requirements each storage family emits:
   service-unit blocks share; a client still follows its pool through the
   CephPool it names.
 - A service-unit block `ceph-service-<cluster>-<type>[-<id>]` (Kind
-  CephCluster, exclusive `ceph/<cluster>`) applies the native documents of
+  CephCluster, claims per [removal and concurrency](#claims-and-throttle)) applies the native documents of
   one unit type (for NFS, one `nfs` service with the ingress that fronts it)
   and depends on the cluster, image and settings blocks by ID plus any blocks
   its type names; its deadline is fixed per type and does not grow with the
@@ -385,7 +385,7 @@ lists the requirements each storage family emits:
   runs one crash daemon on the frozen Ceph image. It retires with its cluster;
   removing it alone is [B491](milestones/m2.md#b491)'s.
 - A gateway block `ceph-gateway-<gateway>` (Kind CephObjectGateway,
-  exclusive `ceph/<cluster>`) executes its gateway's realm, zone group, zone,
+  exclusive `ceph-rgw/<cluster>`) executes its gateway's realm, zone group, zone,
   zone placement and rgw service on the bootstrap host. It depends on the
   cluster and image blocks, on each of its derived zone pool blocks by ID and,
   when an ingress fronts its rgw service, on the settings block, and on each
@@ -393,19 +393,19 @@ lists the requirements each storage family emits:
   is fixed (apply 4260 s, observe 720 s, destroy 1380 s) and does not grow with
   the host count.
 - An object user block `ceph-object-user-<user>` (Kind CephObjectUser,
-  [unclaimed](#removal-and-concurrency)) realizes one CephObjectUser on the bootstrap
+  [unclaimed](#claims-and-throttle)) realizes one CephObjectUser on the bootstrap
   host. It depends on the cluster and image blocks by ID and on its
   CephObjectGateway through that object; its deadline is fixed (apply
   2280 s, observe 1380 s, destroy 1380 s) and does not grow with the host
   count.
 - An object bucket block `ceph-object-bucket-<bucket>` (Kind
-  CephObjectBucket, [unclaimed](#removal-and-concurrency)) realizes one
+  CephObjectBucket, [unclaimed](#claims-and-throttle)) realizes one
   CephObjectBucket on the bootstrap host. It depends on the cluster and
   image blocks by ID and on its owner CephObjectUser through that object;
   its deadline is fixed (apply 2280 s, observe 1380 s, destroy 1380 s) and
   does not grow with the host count.
 - An NFS export block `ceph-nfs-export-<export>` (Kind CephNFSExport,
-  exclusive `ceph/<cluster>`) realizes one CephNFSExport on the bootstrap
+  exclusive `ceph-rgw/<cluster>` when RGW-backed) realizes one CephNFSExport on the bootstrap
   host. It depends on the cluster and image blocks and on its NFS service-unit
   block `ceph-service-<cluster>-nfs-<serviceID>` by ID, and on its backing
   CephFilesystem, CephSubvolume or CephObjectUser through that
@@ -413,7 +413,7 @@ lists the requirements each storage family emits:
   fixed (apply 2280 s, observe 720 s, destroy 1380 s) and does not grow with
   the host count.
 - An SMB block `ceph-smb-<object>` (Kind CephSMBResource, implementation
-  `storage-ceph-smb-v1`, exclusive `ceph/<cluster>`) realizes one
+  `storage-ceph-smb-v1`, [unclaimed](#claims-and-throttle)) realizes one
   CephSMBResource. It depends on the cluster, image and settings blocks by
   ID; a cluster requires its `resourceRefs` members, a share its SMB cluster
   and its CephFilesystem or CephSubvolume, so auth resources precede
@@ -1233,7 +1233,7 @@ an effect: `foreign-rule` for a policy, `foreign-profile`, `foreign-rule` or
 `native-output` for an erasure-coded pool, and `pool-identity` for a pool. This adoption, like each adoption on an attempt
 record and a frozen shape below, trusts the one writer of that native name:
 the one block of the cluster that creates it, which planning proves and
-[claims](#removal-and-concurrency) serialize where several blocks write one
+[claims](#claims-and-throttle) serialize where several blocks write one
 cluster-wide state; a writer outside Bootwright on a managed
 cluster is outside that guarantee
 ([mutation safety](state-reconciliation.md#mutation-safety)). Neither phase
@@ -2057,19 +2057,27 @@ Not yet met: a tiebreaker the operator has decommissioned or reinstalled
 refuses this removal with no exit; tracked as
 [B938](milestones/m2.md#b938).
 
+### Claims and throttle
+
 The context lease admits one mutator. Within its DAG, blocks declare exclusive
 resources for cluster-wide orchestrator/configuration changes, host preparation,
 device allocation and any shared native/package state they touch. Independent
 blocks run concurrently only when those claims and dependency proofs permit it.
 
-`ceph/<cluster>` is the cluster's orchestrator and manager-configuration
-claim. The cluster block, the settings block, every service unit, gateways,
-NFS exports, NVMe-oF subsystems, CephSMBResources, CephConsumers and
-CephReplications (on both of their clusters) hold it, so no two of them run
-together. Placement policies, pools (declared and a gateway's zone pools),
-clients, RBD images, filesystems, subvolumes, object users and object buckets
-claim nothing (`exclusiveFor` in `internal/storage/ceph/capability.go` owns
-the table). Every Ceph block of a cluster except its image and host blocks
+Three claims serialize what several Ceph blocks write at once
+(`exclusiveFor` in `internal/storage/ceph/capability.go` owns the table).
+`ceph-mgr/<cluster>` is held by the two blocks that restart the active
+manager, the settings block (`mgr module enable`) and the monitoring unit
+(cephadm's derived `prometheus` module), and by every block that also holds
+`ceph/<cluster>`: the cluster block, NVMe-oF subsystems and their unit, the
+`rbd-mirror` unit, CephConsumers and CephReplications (on both of their
+clusters), whose manager use is not yet qualified beside a restart or
+another orchestrator writer. `ceph-rgw/<cluster>` is held by gateways and
+RGW-backed NFS exports, which write the cluster's `.rgw.root` and default
+realm. Every other block claims nothing: the other service units, CephFS-backed
+NFS exports, CephSMBResources, placement policies, pools (declared and a
+gateway's zone pools), clients, RBD images, filesystems, subvolumes, object
+users and object buckets. Every Ceph block of a cluster except its image and host blocks
 also names the [throttle](state-reconciliation.md#stages-and-the-pause-boundary)
 `ceph/<cluster>`, so at most four of them run at once whatever the bound,
 which keeps the bootstrap host's load and the manager's command queue
@@ -2077,11 +2085,15 @@ bounded. An unclaimed block runs beside the others because admission gives
 each native name it creates one owning block in the cluster (a pool's native
 name, including a name a gateway derives for a zone pool or `.rgw.root`, a
 policy's rule, an erasure-coded pool's derived rule and profile) and because
-every manager-served command it reaches repeats, bounded by the manager wait,
-while a restarting manager cannot answer, or reads as unfinished work in an
-observation. A concurrent manager restart, by the settings block's module
-enable or the monitoring unit's derived `prometheus` module, therefore never
-fails an unclaimed block. Readiness stays cluster-wide: a sibling's transient
+every manager-served command it reaches survives a restart: a read repeats,
+bounded by the manager wait, while a restarting manager cannot answer; an
+observation reads it as unfinished work; and a declaration (`orch apply`,
+`nfs export apply`, `smb apply`, `dashboard sso enable`) is made again only
+when the active manager it was sent to is no longer the available one, after
+reading back an NFS export a lost reply may have applied. A failure the same
+available manager still holds one interval later is the command's own answer
+and refuses as before. A concurrent manager restart therefore never fails an
+unclaimed block. Readiness stays cluster-wide: a sibling's transient
 health check delays, and never fails, a block before its readiness deadline.
 Per-invocation scratch is private. Reservations prevent conflicting local
 contexts from claiming the same target; a native name, process-local mutex or
@@ -2100,7 +2112,7 @@ like every block identity.
 Its daemon count and pinned auxiliary image, native host/group and completed
 gateway initialization are readiness requirements. A
 `ceph-nvmeof-<subsystem>` block (Kind CephNVMeoFSubsystem, exclusive
-`ceph/<cluster>`) waits on that unit and every declared RBD image provider.
+`ceph/<cluster>` and `ceph-mgr/<cluster>`) waits on that unit and every declared RBD image provider.
 The request freezes group, pool, mTLS mode, gateway/listener endpoints,
 authorized NQNs and each backing image's full identity and shape.
 

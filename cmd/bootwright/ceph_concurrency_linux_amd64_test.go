@@ -46,12 +46,27 @@ func cephChild(block reconciliation.Block, cluster string) bool {
 	return block.Throttle == ceph.ThrottleKey(cluster)
 }
 
-func cephOrchestratorFamily(block reconciliation.Block) bool {
-	request, err := ceph.DecodeRequest(block.Request)
-	if block.Kind == string(api.CephSMBResource) || block.Kind == string(api.CephConsumer) || block.Kind == string(api.CephReplication) {
-		return true
+func cephExpectedClaims(block reconciliation.Block, cluster string) []string {
+	serialized := []string{"ceph-mgr/" + cluster, "ceph/" + cluster}
+	if block.Kind == string(api.CephConsumer) || block.Kind == string(api.CephNVMeoFSubsystem) {
+		return serialized
 	}
-	return err == nil && slices.Contains([]string{"cluster", "settings", "service", "gateway", "nfs-export", "nvmeof"}, request.Action)
+	if block.Kind == string(api.CephSMBResource) {
+		return nil
+	}
+	request, err := ceph.DecodeRequest(block.Request)
+	if err != nil {
+		return []string{"undecodable"}
+	}
+	switch {
+	case request.Action == "settings", request.Service != nil && request.Service.Type == "monitoring":
+		return []string{"ceph-mgr/" + cluster}
+	case request.Service != nil && (request.Service.Type == "nvmeof" || request.Service.Type == "rbd-mirror"):
+		return serialized
+	case request.Action == "gateway", request.NFSExport != nil && request.NFSExport.ObjectUser != nil:
+		return []string{"ceph-rgw/" + cluster}
+	}
+	return nil
 }
 
 func admittedTogether(plan reconciliation.Plan, states map[string]reconciliation.BlockState, bound, throttle int) []reconciliation.Block {
@@ -80,23 +95,18 @@ func TestCephChildrenOfOneClusterStartTogetherUnderTheThrottle(t *testing.T) {
 			}
 			cluster := clusters[0].Name()
 			states := map[string]reconciliation.BlockState{}
-			orchestrator, released := []string{}, []string{}
+			released := []string{}
 			for _, block := range plan.Blocks {
 				states[block.ID] = reconciliation.BlockDone
 				if !cephChild(block, cluster) {
 					continue
 				}
 				states[block.ID] = reconciliation.BlockPending
-				if slices.Contains(block.Exclusive, ceph.OrchestratorKey(cluster)) {
-					orchestrator = append(orchestrator, block.ID)
-					if !cephOrchestratorFamily(block) {
-						t.Errorf("%s holds the orchestrator claim outside the orchestrator families", block.ID)
-					}
-				} else {
+				if want := cephExpectedClaims(block, cluster); !slices.Equal(block.Exclusive, want) {
+					t.Errorf("%s claims %v, want %v", block.ID, block.Exclusive, want)
+				}
+				if !slices.Contains(block.Exclusive, ceph.OrchestratorKey(cluster)) {
 					released = append(released, block.ID)
-					if cephOrchestratorFamily(block) || len(block.Exclusive) != 0 {
-						t.Errorf("%s of an orchestrator family claims %v", block.ID, block.Exclusive)
-					}
 				}
 			}
 			if len(released) == 0 {
@@ -106,8 +116,8 @@ func TestCephChildrenOfOneClusterStartTogetherUnderTheThrottle(t *testing.T) {
 			claims := map[string]string{}
 			for _, block := range startable {
 				for _, key := range block.Exclusive {
-					if other := claims[key]; other != "" && key != ceph.OrchestratorKey(cluster) {
-						t.Errorf("ready siblings %s and %s share %s outside the orchestrator claim", other, block.ID, key)
+					if other := claims[key]; other != "" && !strings.HasPrefix(key, "ceph") {
+						t.Errorf("ready siblings %s and %s share %s outside the Ceph claims", other, block.ID, key)
 					}
 					claims[key] = block.ID
 				}
