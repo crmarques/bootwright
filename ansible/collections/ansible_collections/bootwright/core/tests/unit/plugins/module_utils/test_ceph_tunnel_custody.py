@@ -327,6 +327,30 @@ def test_a_staging_name_a_concurrent_marker_write_unlinks_after_the_listing_is_s
     assert custody.source_identity(alias, os.geteuid()) in identities
 
 
+def test_a_record_published_after_the_listing_is_protected_when_its_staging_name_vanishes(owned, monkeypatch):
+    markers, scope = owned
+    custody.retain(markers, "initial-mgr-original", scope, material("initial-mgr-original"))
+    staging = pathlib.Path(markers.path, ".ownership-concurrent")
+    staging.write_text("{}")
+    published = pathlib.Path(markers.path, "pool-attempt-published.json")
+    listing = os.listdir
+    fired = []
+
+    def racing(target):
+        names = listing(target)
+        if isinstance(target, int) and ".ownership-concurrent" in names and not fired:
+            os.link(staging, published)
+            staging.unlink()
+            fired.append(target)
+        return names
+
+    monkeypatch.setattr(custody.os, "listdir", racing)
+    identities = custody.protected_identities(markers.path)
+    assert fired and not staging.exists() and published.exists()
+    info = os.stat(published, follow_symlinks=False)
+    assert (info.st_dev, info.st_ino) in identities
+
+
 @pytest.mark.parametrize("directory_present", [False, True])
 def test_readonly_manager_directory_missing_binding_never_creates_or_adopts(owned, monkeypatch, directory_present):
     markers, unused = owned

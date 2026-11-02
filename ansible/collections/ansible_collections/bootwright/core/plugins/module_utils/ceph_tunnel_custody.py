@@ -373,15 +373,23 @@ def protected_identities(path):
     root = os.stat("/", follow_symlinks=False)
     result.add((root.st_dev, root.st_ino))
     with directory(path) as parent:
-        names = os.listdir(parent)
-        require(len(names) <= MAX_AREA_ENTRIES)
-        for name in names:
-            # A concurrent marker write unlinks its staging name after linking the record it publishes.
-            try:
-                info = os.stat(name, dir_fd=parent, follow_symlinks=False)
-            except FileNotFoundError:
-                continue
-            result.add((info.st_dev, info.st_ino))
+        for relisted in (False, True):
+            names = os.listdir(parent)
+            require(len(names) <= MAX_AREA_ENTRIES)
+            found = set()
+            vanished = False
+            for name in names:
+                try:
+                    info = os.stat(name, dir_fd=parent, follow_symlinks=False)
+                except FileNotFoundError:
+                    vanished = True
+                    continue
+                found.add((info.st_dev, info.st_ino))
+            # A concurrent marker write unlinks its staging name after linking the record it publishes, and
+            # that record may have been linked after this listing, so one fresh listing lists it by its name.
+            if not vanished or relisted:
+                break
+        result |= found
         if exists(parent, "transport"):
             child = os.open("transport", os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | os.O_CLOEXEC, dir_fd=parent)
             try:
