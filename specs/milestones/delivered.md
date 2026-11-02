@@ -11116,3 +11116,29 @@ with CLI; Verification tooling.
   X277 at 1054 s against 189 s, was declined.
 
 The delivering commits record the gates and their results.
+### X283 — Every end-to-end case renders to valid input
+
+**Item:** B1048 (new, 2026-11-02, [M2](m2.md); pre-existing). **Kind:** defect.
+**Owners:** Storage and operator guidance. The owner asked for the fixes cited
+after the three-node run.
+
+No gate rendered the [end-to-end cases](../../e2e/README.md), so a template
+change that `bootwright validate` refuses reached main: the managed firewall
+shipped enabled for the three-node Ceph guests without the firewalld package
+and service, and `api.invariant` refused the rendered input until a later
+commit added both. `TestEveryE2ECaseRendersToValidInput`
+(`cmd/bootwright/e2e_cases_linux_amd64_test.go`) renders each case through
+[render.sh](../../e2e/render.sh) and validates every rendered input directory
+through the `validate` command's own entry point. It covers each case's default
+values, with the one switch a case's values leave without a default turned off
+for `lab-3-nodes-ocp` and `lab-3-nodes-ocp-features`; for `lab-3-nodes-ceph`
+each documented service switch off, NVMe-oF on and every group off; and for
+`lab-5-nodes-ceph-stretch` file and object off. It fails when a case has no
+entry, so a new case cannot go unrendered.
+
+The test needs `helm` on PATH and fails, never skips, when it is missing, as
+the completion test does for Bash; the CI runner image must provide it (the
+ubuntu-24.04 image lists Helm). With the two
+firewalld lines of the three-node Ceph guests removed, every `lab-3-nodes-ceph`
+render fails with the `api.invariant` refusal. The delivering commit records
+the gates and their results.
