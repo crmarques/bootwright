@@ -10982,3 +10982,48 @@ on the management ingress hosts. The same port reaches the
 OS realizes under [B1022](m2.md#b1022). Collection cases refuse a management
 ingress zone without the port and pass with it, or with a named service that
 grants it. The delivering commit records the gates and their results.
+
+### X275 — Lifecycle operation plan
+
+**Items:** B1033 (new, 2026-11-01, D221), which delivers the parked B328.
+**Kind:** enabling. **Owner:** State reconciliation. The owner requested the
+decoupling on 2026-11-01 so a later component can feed one plan to a
+procedure-documentation generator ([B1034](m7.md#b1034)); D221 waived M7's
+Requires for this slice alone.
+
+The lifecycle's decision is now the operation plan: the private
+`operationPlan` value in `operation_plan.go`, the only hand-off from planner to
+executor. It holds no transaction, store, port or secret material. The removal
+phases (online effects, deferred Machine stops, retired hosts, pre-stop
+inverses and survivors) are computed once per decision and passed to the
+scheduler, the attempts and the gates, which no longer recompute them; a
+removal that replaces a failed removal carries the replaced removal's phases.
+`execution.go` and `online_removal.go` were split by concern into planner files
+(decision, removal plan, authorization, presentation, removal phases, operation
+plan) and executor files (executor, removal gates, register run, settle, online
+gates) with the shared reproof and remedies, as parked B328 asked: a pure move
+that kept every declaration's bytes. `planFrom` lost its never-taken destroy
+branch and the starting-block predicate its duplicate. No plan, digest,
+operation record or command output changed and every golden is byte-identical.
+The [state reconciliation](../state-reconciliation.md#plan-and-execution)
+paragraph on the operation plan holds the contract.
+
+Deviations from D221's plan, recorded in its scope: the plan object stays
+unexported, and no `mode()` or `schedule()` accessor was added because nothing
+would call it yet; exporting the value waits for B1034.
+
+`TestLifecyclePlannerReachesNoEffect`, `TestLifecycleExecutorNeverReplans` and
+`TestLifecycleFilesAreClassified` (`test/architecture/lifecycle_partition_test.go`)
+hold the partition; `TestOperationPlanHoldsNoHandles` holds the plan's
+contents; `TestPhasesMatchRecomputation` and `TestPhasesAfterAFinalization`
+hold the decided phases equal to their recomputation over online, pre-stop,
+incomplete-apply, retirement, lineage, continuation and failed-removal
+fixtures; `TestReplacementObservesTheReplacedRemovalWithItsOwnPhases` holds
+that a replacement observes an unproved block of the failed removal it
+replaces with that removal's phases. The partition test allows two
+pre-existing decision-time calls by name and fails once either stops
+occurring: the additive custody proof reads and clears each produced input it
+would lend, and a continuation refusal may rebuild the controller runtime,
+which [B1035](backlog.md#b1035) records. Limitation: the test is syntactic, so
+a closure stored in a function-typed field and called elsewhere is not traced.
+The delivering commits record the gates and their results.

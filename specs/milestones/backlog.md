@@ -67,7 +67,6 @@ Alias cell.
 | [B324](#b324) | new, 2026-10-05 | enabling | State reconciliation and Workspace | An orphan-acknowledged delete lists the blocks it abandons | D88: M1 names `status --context` as the inventory |
 | [B325](#b325) | new, 2026-10-05 | safety | Workspace | A damaged context is isolated from the rest of the store | D63: M1 keeps store-wide verification and names the damaged entry |
 | [B327](#b327) | new, 2026-10-05 | product | Managed OS | DHCP installation | D80: M1 refuses DHCP-only installations |
-| [B328](#b328) | new, 2026-10-05 | enabling | State reconciliation | The lifecycle's execution file split by concern | An optional move no M1 lane needs; D56 leaves it out of M1. Adopted on 2026-11-01 by [B1033](m7.md#b1033) (D221): X275 delivers it |
 | [B329](#b329) | new, 2026-10-05 | enabling | Architecture | A declaration-spacing check across the tree | An optional check no M1 lane needs; D56 leaves it out of M1 |
 | [B331](#b331) | new, 2026-10-05 | product | Controller setup | A FIPS-qualified controller runtime | D108: M1 documents the runtime's own cryptography on a FIPS host |
 | [B332](#b332) | new, 2026-10-05 | product | Machine and Controller | `auth.operatorIdentity` runs under the invoking account | D112: M1 documents what the arm does today; this needs B282's helper |
@@ -240,6 +239,7 @@ Alias cell.
 | [B990](#b990) | new, 2026-10-30 (D211; B90 first slice) | product | Add-ons | An authored add-on creates a cluster-scoped custom resource once a program check proves the kind's scope | No consumer; the first slice admits only namespaced resources in the add-on's own namespace |
 | [B998](#b998) | new, 2026-10-30 (X234) | enabling | State reconciliation | A resolution of a predecessor's block reserves the room of the lineage's removal | Found in X234 review; the reserve rule reads one apply today and holds in the shipped cases |
 | [B999](#b999) | new, 2026-10-30 (X235 review; pre-existing) | defect | Add-ons | Selection reports two built-in packages that create one CatalogSource name or share one hosted namespace on a cluster | No profile selects two such packages today; the check belongs with the package-facts selection rules, not B90's authored slice |
+| [B1035](#b1035) | new, 2026-11-02 (X275 partition test; pre-existing) | defect | State reconciliation | A decision that refuses over a continuation locates the controller runtime without rebuilding it | Found by X275's partition test; a rebuild needs a missing runtime at the moment `plan` or an apply refuses, and the fix changes which refusal that case reports |
 | [B771](#b771) | new, 2026-10-20 (D173); folds B365 | defect | Add-ons, with Workspace | The `add-ons/_store` selection exception, its marker and its reader rules leave the input reader | Dead surface now that B89 is retired; removing input-reader rules is not needed by any M4 package |
 | [B772](#b772) | new, 2026-10-20 (D173) | product | Add-ons | A package installed through OLM v1 (`ClusterExtension`) | ODF/FDF, ACM, MCE and GitLab do not qualify; own-namespace installs are Technology Preview |
 | [B773](#b773) | new, 2026-10-20 (D173) | product | Add-ons | A registry credential merged into a cluster's global pull secret with an exact-entry receipt | Its inverse never runs under retirement; the install pull secret carries entitlements from first boot |
@@ -599,14 +599,6 @@ Store-wide verification refuses every command for every context when one context
 ### B327
 
 An Anaconda installation needs a static IPv4 install address, because completion dials and pins the frozen address, and [B289](delivered.md#x41--lifecycle-results-the-controller-stage-installation-shapes-and-bounded-runs) refuses a DHCP-only installation at admission. DHCP installation needs its own completion design (found by the 2026-10-05 audit). **Exit evidence:** that design, with completion and replay tests.
-
-### B328
-
-`internal/reconciliation/lifecycle/execution.go` holds the operation's decision, registration, removal gates and completion in about 1,600 lines, with registration and completion split across files (found by the 2026-10-05 audit). A pure move into one file per concern would make each easier to read. **Exit evidence:** the move with no behavior change, and `make check`.
-
-Adopted on 2026-11-01 by [B1033](m7.md#b1033) under [D221](#d221): slice
-X275 delivers this move as part of the planner and executor partition, and
-this item leaves the Parked table for the X275 record when it closes.
 
 ### B329
 
@@ -1171,7 +1163,7 @@ difference alone. **Exit evidence:** a test that `plan` refuses, naming the same
 block and remedy as `apply`, wherever `apply` refuses on recorded facts, and a
 spec sentence that says so.
 
-The operation plan of [B1033](m7.md#b1033) is the natural hand-off for this
+The operation plan ([X275](delivered.md#x275--lifecycle-operation-plan)) is the natural hand-off for this
 fix, which stays parked.
 
 ### B533
@@ -1622,7 +1614,7 @@ fix:** one `ownedBindings(store, op) (reopen, release)`, or pin `len(Bindings) <
 1` in `validateOperation`. **Exit evidence:** one function with the three callers
 and a test that the four release sets agree for an operation of each verb.
 
-The operation plan of [B1033](m7.md#b1033) is the natural hand-off for this
+The operation plan ([X275](delivered.md#x275--lifecycle-operation-plan)) is the natural hand-off for this
 fix, which stays parked.
 
 ### B581
@@ -3129,6 +3121,25 @@ outcome is one admission diagnostic per shared identity on the later instance,
 as the authored add-on's
 [shared identities](../api/addons.md#admission-diagnostics) are reported, with
 a test over a synthetic package pair.
+
+### B1035
+
+A decision can reach a runtime rebuild. When an apply meets an incomplete
+removal, `refuseOver` proves the continuation it would name through
+`verifyContinuation` → `closureRefusal`, which locates this build's runtime by
+`approvedRuntime`, the variant that rebuilds a published runtime the wheel
+cache can restore (`internal/reconciliation/lifecycle/runtime.go`). The
+decision runs under the shared lock and also serves `plan`, which writes
+nothing by contract, so in that case a preview can rebuild the controller
+runtime before it refuses. Found on 2026-11-02 when the
+[X275](delivered.md#x275--lifecycle-operation-plan) partition test was
+tightened; the test names the path as its one allowed rebuild so it cannot
+grow unnoticed. **Smallest fix:** locate the runtime without rebuilding
+(`locateRuntime(ctx, false)`, as the readers do) on the decision path and
+leave the rebuild to the continuation's own run. **Exit evidence:** a test
+that `plan` over an incomplete removal with an unpublished runtime refuses
+without calling the rebuilder, and the exemption removed from
+`test/architecture/lifecycle_partition_test.go`.
 
 ## Audit remediation (2026-10-26)
 
@@ -6601,10 +6612,10 @@ documentation chapters", including "the actual input files for the native cli
 inputs". After the plan was prepared: "when the other session finish and
 commit to main, you can proceed with plan implementation".
 
-[B1033](m7.md#b1033) is the enabling slice [X275](m7.md#planned-slices): the
+B1033 is the enabling slice [X275](delivered.md#x275--lifecycle-operation-plan): the
 lifecycle decides one in-memory operation plan that only its executor
 consumes, the removal phases are decided once, and a fitness test holds the
-planner and executor file partition. It adopts parked [B328](#b328) and
+planner and executor file partition. It adopts parked B328 (delivered by X275) and
 carries `Contract: unchanged`: no plan, digest, operation record or command
 output changes. The procedure-documentation feature is recorded as M7
 Candidate [B1034](m7.md#b1034), whose design is the
