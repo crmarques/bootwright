@@ -731,7 +731,7 @@ class UnitWorker(ceph_native_resources.ResourceWorker):
             sent.append(True)
             self.tunnel_effect("dashboard", "sso", "enable", "oauth2", json_result=False)
 
-        self.manager_declare(enable, module=("dashboard", "sso", "status"))
+        self.manager_declare(enable, module=("dashboard", "ac-user-show"))
         require(ceph_native_observability.sso_enabled(self), "not-ready")
         return {"changed": True, "pending": False}
 

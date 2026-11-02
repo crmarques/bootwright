@@ -97,9 +97,9 @@ class SSOMonitor(monitoring.Monitor):
         if command == ("config", "get", "mgr", observability.SSO_OPTION):
             self.log.append(list(argv))
             return 0, json.dumps(self.enabled).encode()
-        if command == ("dashboard", "sso", "status"):
+        if command == ("dashboard", "ac-user-show"):
             self.log.append(list(argv))
-            return 0, b'SSO is "enabled" with "OAuth2" protocol.' if self.enabled else b'SSO is "disabled".'
+            return 0, b'["bootwright-admin"]'
         if command == ("dashboard", "sso", "enable", "oauth2"):
             self.log.append(list(argv))
             self.mutations.append(command)
