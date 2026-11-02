@@ -11091,8 +11091,28 @@ stays parked.
   patterns and one `cmd/bootwright` walker remain on
   [B616](backlog.md#b616).
 
-Two requested items wait for the owner, as their sections record:
-[B508](backlog.md#b508), the remedy `secret check` names under a sudo policy
-that logs input, and [B798](backlog.md#b798), whether the Ansible unit gate's
-serial run is worth its measured cost. The delivering commits record the gates
-and their results.
+Two requested items waited for the owner: B508, the remedy `secret check`
+names under a sudo policy that logs input, and B798, whether the Ansible unit
+gate's serial run is worth its measured cost; [X278](#x278--the-owners-choices-for-b508-and-b798)
+settles both. The delivering commits record the gates and their results.
+
+### X278 — The owner's choices for B508 and B798
+
+**Items:** B508 and B798, parked, delivered on the owner's decision
+[D222](backlog.md#d222) of 2026-11-02. **Kind:** defect. **Owner:** Secrets,
+with CLI; Verification tooling.
+
+- B508: a missing or stale `usernamePassword` Secret's
+  [remedy](../secrets.md#results-and-failures) is `secret set --name <name> --username <username>
+  --password-file <path>` whatever the host's sudo policy, so `secret check`
+  never names the standard-input route a policy that logs input refuses; the
+  `secret set` wrong-flag-set refusal names the same file flags. No sudo
+  policy probe is added, and `--password-stdin` stays supported
+  (`TestMissingUsernamePasswordRemedyNamesThePasswordFile`).
+- B798: the full Ansible unit gate selects pytest-xdist `-n auto` explicitly
+  for both ansible-test unit runs through `units_arguments`, and the plain
+  pytest loop after them stays the in-process serial run; `UnitsWorkersTest`
+  reads the mode from `ansible-test units --explain`. One worker, measured in
+  X277 at 1054 s against 189 s, was declined.
+
+The delivering commits record the gates and their results.

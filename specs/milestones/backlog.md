@@ -130,7 +130,6 @@ Alias cell.
 | [B464](#b464) | new, 2026-10-08 (X46) | enabling | Each spec's and test's owner | Wording, tests and dead code X46 left | Found in X46; parked under D48 (D116) |
 | [B495](#b495) | new, 2026-10-12 (X48 review) | enabling | State reconciliation, with Managed OS, Substrate and Infrastructure services | The three-node lifecycle composition runs end to end with the real runner and controlled adapters | Found in X48's review; parked under D48 (D116): D125's operator gate already proves overlap on a host, and X48's tests qualify each part |
 | [B503](#b503) | new, 2026-10-12 (the 2026-10-11 M2 review) | defect | Substrate and Secrets | Applying a generated BMC serving certificate proves its expiry and that its key matches | Found in the M2 review; no milestone depends on it: admission now proves the names and a fresh apply binds the stored certificate |
-| [B508](#b508) | new, 2026-10-12 (the owner's M2b fixture run) | defect | Secrets, with CLI | After a refused standard-input `secret set`, `secret check` names a remedy that works | Found in the M2b run; no milestone depends on it: since b3e48bcb6 the standard-input route is refused only under a policy that logs input |
 | [B510](#b510) | new, 2026-10-12 (the owner's M2b fixture run) | defect | Workspace | Every on-demand directory creation is durable for each writer that proceeds | Found reviewing B506's fix; no milestone depends on it: each window is microseconds wide and the winner's failed sync fails its own operation |
 | [B521](#b521) | new, 2026-10-13 (the owner's M2b Ceph run) | product | CLI and Lifecycle | A stage-selection plan says how many blocks the invocation will run and how wide that selection is | Found in the M2b Ceph run; no milestone depends on it: the step markers are correct, only the closing summary misleads |
 | [B522](#b522) | new, 2026-10-13 (the owner's M2b Ceph run) | product | Machine inventory, with CLI | A provided Machine whose blocks are done does not read as untouched in `machine list` | Found in the M2b Ceph run; no milestone depends on it: the column follows the spec, which ties the position to a Machine block that a provided Machine never has |
@@ -259,7 +258,6 @@ Alias cell.
 | [B794](#b794) | new, 2026-10-20 (D173) | product | Add-ons | A program check arm that probes an HTTP endpoint, such as GitLab's readiness path through its Route | A new check arm moves the program version; no M4 package needs it to exit |
 | [B795](#b795) | new, 2026-10-20 (D173) | product | Add-ons, with Secrets | GitLab trusts a declared CA bundle toward its object storage, PostgreSQL and Redis | The chart's custom-CA and TLS keys are unverified; the profile reaches its services without a private CA |
 | [B797](#b797) | new, 2026-10-21 (X56) | product | Storage | A StorageObjectBucket's declared policy changes after completion | A completed bucket refuses `object-bucket-identity` on a changed policy; a day-2 update is a state-contract change no milestone needs |
-| [B798](#b798) | new, 2026-10-23 (M3 verification) | defect | Verification tooling | The full Ansible unit gate selects its intended worker mode explicitly | Pre-existing tooling behavior outside the requested product change |
 | [B857](#b857) | new, 2026-10-27 (lane I) | enabling | Desired state | The audit 5.7 operator tasks run on the reshaped API | B814's paper check was not run before X171 |
 | [B867](#b867) | new, 2026-10-27 (lane R review) | safety | Storage | The Ceph incarnation rule is confirmed on a live cluster | The monitor map's creation time was chosen without a live run |
 | [B881](#b881) | new, 2026-10-28 (X190 review) | safety | State reconciliation, with Substrate | A cancelled or deadline-ended firmware power cycle still forces its machine off | The adapter supervisor kills the worker with no grace; a grace changes every adapter's termination |
@@ -1090,23 +1088,6 @@ the match between its private key and public certificate are not proved before
 the emulator starts (found by the 2026-10-11 M2 review). **Exit evidence:**
 bind-time tests that an expired certificate and a mismatched key refuse before
 any effect, and that the remedy names the Secret.
-
-### B508
-
-After `secret set --password-stdin` refused with `secret.input` because sudo did
-not list its policy, `secret check` still named
-`bootwright secret set ... --password-stdin` as the remedy for the missing
-material: the route just refused. Since b3e48bcb6 the policy listing works on
-Fedora's sudo, so the refusal now happens only under a policy that logs input,
-and there the remedy should name the file flags. **Exit evidence:** a test that,
-under an input-logging policy, the missing-material remedy names
-`--password-file`/`--value-file` and not the standard-input flag. **Waits for
-the owner (2026-11-02, X277):** `secret check` makes no sudo policy call and
-runs as the elevated child, so the policy is known only to a new privileged
-probe or a new supervisor-to-child answer. Only `usernamePassword`'s remedy
-names standard input; the other kinds already name a file flag. The options
-are that remedy always naming `--password-file`, naming both routes, or the
-probe this outcome assumes.
 
 ### B510
 
@@ -2812,26 +2793,6 @@ today. Parked on 2026-10-21 (X56): a day-2 change to a completed resource is a
 state-contract change, and no milestone needs one. **Revive when** an operator
 asks to change a bucket policy or a user display name without retiring the
 context.
-
-### B798
-
-**Owner:** Verification tooling. **Kind:** defect. **Requires:** none.
-**Definition:** Specified. The full gate passes `--num-workers 0` to the
-locked ansible-test, whose implementation translates zero to pytest `-n auto`.
-Its unit run therefore starts workers despite the documented serial intent.
-Choose and test an explicit serial invocation without changing selected tests
-or their pass/fail behavior. **Exit evidence:** a harness regression over the
-actual generated pytest command and the full Ansible gate. **Why parked:**
-this pre-existing verification behavior is recorded separately from M3's
-product implementation; no failed test is reclassified as passed. **Waits for
-the owner (2026-11-02, X277):** the locked ansible-test cannot run pytest
-in-process, so its nearest serial run is `--num-workers 1`, one pytest-xdist
-worker. In that day's `make check` its five unit phases took 1054 s instead of
-189 s under `-n auto`, and the one worker still runs execnet's I/O thread that
-[pytest-xdist is no gate](../../.agents/knowledge/inner-loop-check-cost.md#pytest-xdist-is-no-gate)
-warns of; the plain pytest loop after it stays the in-process serial run. The
-options are that one worker at that cost, or `-n auto` named explicitly and
-documented as the gate's mode.
 
 ### B857
 
@@ -6560,3 +6521,21 @@ B1033 is on M7, which requires M4 (not done). The owner's explicit request
 above authorizes X275 out of sequence and waives M7's Requires for this one
 slice, as [D214](#d214) did for X247. It authorizes no other M7 item and no
 effect.
+
+### D222
+
+**owner** (2026-11-02): "proceed with recommendations for items waiting for me",
+answering the two items [X277](delivered.md#x277--parked-defects-fixed-on-request)
+left waiting, each with the option recommended to the owner:
+
+- B508: the missing-material remedy for a `usernamePassword` Secret always
+  names `--username <username> --password-file <path>` and never the
+  standard-input flag, whatever the host's sudo policy. No sudo policy probe
+  or other privileged call is added, and `secret set --password-stdin` stays
+  supported.
+- B798: the full Ansible unit gate keeps ansible-test's unit phase on
+  pytest-xdist `-n auto`, selected explicitly and documented as the gate's
+  mode, rather than one worker at about 14 more minutes per `make check`; the
+  plain pytest loop after it stays the in-process serial run.
+
+Both are slice [X278](delivered.md#x278--the-owners-choices-for-b508-and-b798).

@@ -46,7 +46,7 @@ therefore selects the mode explicitly (`units_arguments` and
 loop after it is the in-process serial run that settles every test with no
 worker thread. `UnitsWorkersTest` reads the `-n` value from the command
 `ansible-test units --explain` generates
-([B798](../../specs/milestones/backlog.md#b798)).
+([B798](../../specs/milestones/delivered.md#x278--the-owners-choices-for-b508-and-b798)).
 
 ## Selection traps
 
