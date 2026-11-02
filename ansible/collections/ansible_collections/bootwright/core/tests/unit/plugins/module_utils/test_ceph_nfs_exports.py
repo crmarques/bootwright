@@ -95,6 +95,8 @@ class Monitor:
             return 0, json.dumps({"fsid": FSID}).encode()
         if command == ("mgr", "dump"):
             return 0, json.dumps({"available": True, "active_gid": 4100}).encode()
+        if command == ("orch", "status"):
+            return 0, json.dumps({"available": True, "backend": "cephadm"}).encode()
         if command == ("mgr", "module", "ls"):
             return 0, json.dumps({"always_on_modules": ["cephadm"], "enabled_modules": self.modules}).encode()
         if command == ("nfs", "cluster", "ls"):
@@ -148,7 +150,9 @@ def records(markers):
 
 def worker(monitor, markers):
     native_worker = ceph_native_nfs.ExportWorker(monitor.request, "node-1", run=monitor.run, markers=markers)
-    native_worker.pause = lambda seconds: None
+    elapsed = [0.0]
+    native_worker.clock = lambda: elapsed[0]
+    native_worker.pause = lambda seconds: elapsed.__setitem__(0, elapsed[0] + seconds)
     return native_worker
 
 

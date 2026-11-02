@@ -2089,11 +2089,11 @@ policy's rule, an erasure-coded pool's derived rule and profile) and because
 every manager-served command it reaches survives a restart: a read repeats,
 bounded by the manager wait, while a restarting manager cannot answer; an
 observation reads it as unfinished work; and a declaration (`orch apply`,
-`nfs export apply`, `smb apply`, `dashboard sso enable`) is made again only
-when the active manager it was sent to is no longer the available one, after
-reading back an NFS export a lost reply may have applied. A failure the same
-available manager still holds one interval later is the command's own answer
-and refuses as before. A concurrent manager restart therefore never fails an
+`nfs export apply`, `smb apply`, `dashboard sso enable`) is made again,
+after reading back an NFS export a lost reply may have applied, until the
+manager wait ends. A failure is the command's own answer, and refuses as
+before, only when the available manager it was sent to still holds one
+interval later and its orchestrator answers with cephadm. A concurrent manager restart therefore never fails an
 unclaimed block. Readiness stays cluster-wide: a sibling's transient
 health check delays, and never fails, a block before its readiness deadline.
 Per-invocation scratch is private. Reservations prevent conflicting local

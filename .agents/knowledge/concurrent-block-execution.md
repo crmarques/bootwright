@@ -169,12 +169,13 @@ hidden the lack of each:
   shape as the `Mkdirat` race above.
 
 The orchestrator families were released the same way (B1043): their
-declarations go through `manager_declare`, which repeats only across a
-change of the active manager and reads an NFS export back before declaring
-it again, so a lost reply never doubles an effect. What still serializes is
-named after what it protects: `ceph-mgr/<cluster>` between the two manager
-restarters and every block not yet qualified beside one, `ceph-rgw/<cluster>`
-between writers of `.rgw.root` and the default realm.
+declarations go through `manager_declare`, which repeats until the manager
+it was sent to holds and its orchestrator answers, and reads an NFS export
+back before declaring it again, so a lost reply never doubles an effect.
+What still serializes is named after what it protects: `ceph-mgr/<cluster>`
+between the two manager restarters and every block not yet qualified beside
+one, `ceph-rgw/<cluster>` between writers of `.rgw.root` and the default
+realm.
 
 ## Production admission also needs live invocation ownership
 

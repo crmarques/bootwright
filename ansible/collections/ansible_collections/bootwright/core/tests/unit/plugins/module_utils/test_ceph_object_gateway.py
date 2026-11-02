@@ -116,6 +116,7 @@ class Monitor:
                 self.pools.append({"pool_name": ".rgw.root", "pool_id": 1, "application_metadata": {"rgw": {}}})
             return self.radosgw(command)
         answers = {("fsid",): {"fsid": FSID}, ("mgr", "dump"): {"available": True, "active_gid": 4100}, ("osd", "pool", "ls", "detail"): self.pools,
+                   ("orch", "status"): {"available": True, "backend": "cephadm"},
                    ("orch", "ls", "--export"): [dict(value, service_name=name) for name, value in self.specs.items()], ("orch", "ps"): self.running,
                    ("config", "dump"): self.config}
         if command in answers:
@@ -236,7 +237,9 @@ def records(markers):
 
 def worker(monitor, markers):
     native = ceph_native_object.ObjectWorker(monitor.request, "node-1", run=monitor.run, markers=markers)
-    native.pause = lambda seconds: None
+    elapsed = [0.0]
+    native.clock = lambda: elapsed[0]
+    native.pause = lambda seconds: elapsed.__setitem__(0, elapsed[0] + seconds)
     return native
 
 

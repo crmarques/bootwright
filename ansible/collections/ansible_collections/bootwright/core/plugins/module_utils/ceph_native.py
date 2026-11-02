@@ -1358,11 +1358,13 @@ class Worker:
         return manager["active_gid"]
 
     def manager_declare(self, action, *args, **options):
-        """Repeat an idempotent manager-served declaration, bounded, only while the manager it was sent to restarts: a failure the same
-        available active manager still holds one interval later is the command's own answer and is raised at once."""
+        """Repeat an idempotent manager-served declaration, bounded, only while the manager it was sent to restarts or loads: a failure
+        is the command's own answer, raised at once, only when the available active manager read before the attempt still holds one
+        interval later and its orchestrator answers; a manager first read after a failed attempt is the one the next attempt asks."""
         deadline = self.wait_deadline()
+        asked = self.manager_instance()
         while True:
-            asked, cause = self.manager_instance(), None
+            cause = None
             try:
                 with self.manager_served():
                     return action(*args, **options)
@@ -1371,8 +1373,20 @@ class Worker:
             if self.clock() + MANAGER_INTERVAL >= deadline:
                 raise cause
             self.pause(MANAGER_INTERVAL)
-            if asked is not None and self.manager_instance() == asked:
+            answers = self.orchestrator_answers()
+            settled = self.manager_instance()
+            if answers and settled is not None and settled == asked:
                 raise cause
+            asked = settled
+
+    def orchestrator_answers(self):
+        """The active manager's orchestrator answers with cephadm: a restarted manager has finished loading it."""
+        try:
+            with self.manager_served():
+                status = self.ceph("orch", "status")
+        except ManagerRefusal:
+            return False
+        return isinstance(status, dict) and status.get("available") is True and status.get("backend") == "cephadm"
 
     def manager_wait(self, previous=None, name=None):
         """After an action that restarts the active manager: wait, bounded, until the MON maps an available active manager other
@@ -1381,14 +1395,9 @@ class Worker:
         while True:
             manager = self.ceph("mgr", "dump")
             require(isinstance(manager, dict), "native-output")
-            if manager.get("available") is True and manager.get("active_gid") != previous and name in (None, manager.get("active_name")):
-                try:
-                    with self.manager_served():
-                        status = self.ceph("orch", "status")
-                except ManagerRefusal:
-                    status = None
-                if isinstance(status, dict) and status.get("available") is True and status.get("backend") == "cephadm":
-                    return manager
+            if (manager.get("available") is True and manager.get("active_gid") != previous and name in (None, manager.get("active_name"))
+                    and self.orchestrator_answers()):
+                return manager
             require(self.clock() + MANAGER_INTERVAL < deadline, "native-timeout")
             self.pause(MANAGER_INTERVAL)
 

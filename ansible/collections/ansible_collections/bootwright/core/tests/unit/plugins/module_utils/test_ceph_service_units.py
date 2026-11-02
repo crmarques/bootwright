@@ -103,6 +103,7 @@ class Monitor:
         answers = {
             ("fsid",): {"fsid": FSID},
             ("mgr", "dump"): {"available": True, "active_gid": 4100},
+            ("orch", "status"): {"available": True, "backend": "cephadm"},
             ("mgr", "module", "ls"): {"always_on_modules": ["cephadm"], "force_disabled_modules": [], "enabled_modules": self.modules},
             ("osd", "pool", "ls", "detail"): self.pools,
             ("config", "dump"): self.config,
@@ -853,4 +854,69 @@ def test_nfs_unit_refuses_a_failed_declaration_its_unchanged_manager_answered(tm
     with pytest.raises(ceph_native.Refusal, match="^native-command$"):
         worker(monitor, markers).unit()
     assert len(sent) == 1
+    assert all(markers.read("service-" + name_of(value) + "-complete.json") is None for value in request["service"]["documents"])
+
+
+NO_ORCHESTRATOR = b"Error ENOENT: No orchestrator configured (try `ceph orch set backend`)"
+
+
+def loading_orchestrator(monitor, loads, refusal=None, first_dump_fails=False):
+    """One available manager, its gid never changing, whose orchestrator loads for `loads` answers: `orch status` and `orch apply`
+    answer ENOENT meanwhile; `refusal` is `orch apply`'s own EINVAL answer every time; the first `mgr dump` may fail."""
+    answer, state = monitor.run, {"loads": loads, "applies": 0, "dumps": 0}
+
+    def run(argv, data=b"", timeout=60):
+        found = tuple(argv[argv.index("--format") + 2:])
+        if found == ("mgr", "dump"):
+            state["dumps"] += 1
+            if first_dump_fails and state["dumps"] == 1:
+                return 1, ceph_native.NativeOutput(b"", b"Error ETIMEDOUT: the monitor connection was reset")
+        if found == ("orch", "status") and state["loads"]:
+            state["loads"] -= 1
+            return 2, ceph_native.NativeOutput(b"", NO_ORCHESTRATOR)
+        if found == ("orch", "apply", "-i", "-"):
+            state["applies"] += 1
+            if refusal is not None:
+                return 22, ceph_native.NativeOutput(b"", refusal)
+            if state["loads"]:
+                return 2, ceph_native.NativeOutput(b"", NO_ORCHESTRATOR)
+        return answer(argv, data=data, timeout=timeout)
+
+    monitor.run = run
+    return state
+
+
+def test_nfs_unit_declares_again_while_its_unchanged_manager_loads_the_orchestrator(tmp_path):
+    request = unit_request("haproxy")
+    markers = markers_for(tmp_path, request)
+    monitor = Monitor(request)
+    state = loading_orchestrator(monitor, loads=1)
+    assert worker(monitor, markers).unit() == {"changed": True}
+    assert state["applies"] == 2 and state["loads"] == 0
+    assert monitor.mutations.count(("orch", "apply", "-i", "-")) == 1
+    assert all(markers.read("service-" + name_of(value) + "-complete.json") is not None for value in request["service"]["documents"])
+
+
+def test_nfs_unit_refuses_at_the_manager_wait_when_the_orchestrator_never_answers(tmp_path):
+    request = unit_request("haproxy")
+    markers = markers_for(tmp_path, request)
+    monitor = Monitor(request)
+    state = loading_orchestrator(monitor, loads=10 ** 6)
+    native = worker(monitor, markers)
+    with pytest.raises(ceph_native.Refusal, match="^native-command$") as caught:
+        native.unit()
+    assert not isinstance(caught.value, ceph_native.ManagerRefusal)
+    assert native.clock() >= ceph_native.MANAGER_WAIT - ceph_native.MANAGER_INTERVAL
+    assert state["applies"] == ceph_native.MANAGER_WAIT // ceph_native.MANAGER_INTERVAL and monitor.mutations == []
+
+
+def test_nfs_unit_refuses_a_declaration_once_a_first_unread_manager_settles(tmp_path):
+    request = unit_request("haproxy")
+    markers = markers_for(tmp_path, request)
+    monitor = Monitor(request)
+    state = loading_orchestrator(monitor, loads=0, refusal=b"Error EINVAL: ServiceSpec: invalid placement", first_dump_fails=True)
+    native = worker(monitor, markers)
+    with pytest.raises(ceph_native.Refusal, match="^native-command$"):
+        native.unit()
+    assert state["dumps"] >= 2 and state["applies"] == 2 and native.clock() == 2 * ceph_native.MANAGER_INTERVAL
     assert all(markers.read("service-" + name_of(value) + "-complete.json") is None for value in request["service"]["documents"])

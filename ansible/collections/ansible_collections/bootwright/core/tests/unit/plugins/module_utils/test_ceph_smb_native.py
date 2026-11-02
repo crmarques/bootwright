@@ -168,6 +168,8 @@ class Monitor:
             return 0, json.dumps({"fsid": FSID}).encode()
         if command == ("mgr", "dump"):
             return 0, json.dumps({"available": True, "active_gid": 4100}).encode()
+        if command == ("orch", "status"):
+            return 0, json.dumps({"available": True, "backend": "cephadm"}).encode()
         if command == ("mgr", "module", "ls"):
             return 0, json.dumps({"always_on_modules": self.always_on, "enabled_modules": self.enabled, "disabled_modules": []}).encode()
         if command == ("config", "dump"):
@@ -231,7 +233,9 @@ class Markers:
 
 def worker(value, monitor, markers=None):
     native = ceph_smb_native.SMBWorker(value, "node-1", run=monitor.run, markers=markers or Markers())
-    native.pause = lambda seconds: None
+    elapsed = [0.0]
+    native.clock = lambda: elapsed[0]
+    native.pause = lambda seconds: elapsed.__setitem__(0, elapsed[0] + seconds)
     return native
 
 

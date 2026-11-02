@@ -106,11 +106,15 @@ operator as a first-call refusal; the slice that records it is named.
 - Since X279 Ceph children run together, so the settings block's module
   enable and the monitoring unit's derived `prometheus` module respawn the
   manager under siblings' `orch apply`, `nfs export apply`, `smb apply` and
-  `dashboard sso enable`. A declaration is made again only when `mgr dump`
-  no longer shows the available active gid it was sent to
-  (`Worker.manager_declare`); a failure the unchanged manager still holds one
-  interval later is the module's own answer. Not yet observed on a live
-  cluster: the owner's next three-node run is the evidence.
+  `dashboard sso enable`. A respawned manager is mapped available, with a
+  new gid, before cephadm loads, and answers ENOENT "No orchestrator
+  configured" or ENOTSUP meanwhile; the MON can also keep listing the dead
+  gid for a while. So `Worker.manager_declare` treats a failure as the
+  module's own answer only when the gid it was sent to still holds one
+  interval later and `orch status` answers available with backend cephadm
+  (the `manager_wait` check); otherwise it repeats within the manager wait.
+  Not yet observed on a live cluster: the owner's next three-node run is the
+  evidence.
 - IBM's bootstrap enables `call_home_agent`, which raises
   `CHA_ERROR_SENDING_REPORT` (HEALTH_ERR) when `esupport.ibm.com` is out of
   reach; readiness tolerates exactly that check (X76). The lab's NAT reached

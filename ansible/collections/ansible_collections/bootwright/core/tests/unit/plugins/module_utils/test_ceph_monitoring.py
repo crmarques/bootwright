@@ -146,7 +146,8 @@ class Monitor:
             self.unavailable = max(self.unavailable - 1, -1)
             return 0, json.dumps({"active_gid": 4100, "active_name": "node-1.abcdef", "available": self.unavailable < 0, "standbys": []}).encode()
         answers = {("fsid",): {"fsid": FSID}, ("config", "dump"): self.config, ("orch", "ls", "--export"): self.exported(),
-                   ("orch", "ps"): self.running, ("mgr", "services"): self.manager_services}
+                   ("orch", "ps"): self.running, ("mgr", "services"): self.manager_services,
+                   ("orch", "status"): {"available": True, "backend": "cephadm"}}
         if command in answers:
             return 0, json.dumps(answers[command]).encode()
         self.mutations.append(command)
