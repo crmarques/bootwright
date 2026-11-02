@@ -514,15 +514,18 @@ class Transport:
         ceph_native.require(tuple(sources) == ceph_native_worker.MODULES, "transport")
         return sources
 
-    def call(self, host, phase, private=None, *, timeout=660, devices=None, service=None):
+    def call(self, host, phase, private=None, *, timeout=660, devices=None, service=None, names=None):
         nvme_long = (self.request.get("action") == "nvmeof" and phase in ("nvmeof", "nvmeof_observe")
                      or nvmeof_unit(self.request) and phase == "nvmeof_unit_observe")
         ceiling = ceph_native_nvmeof.phase_budget(self.request, phase) if nvme_long else 640
         ceph_native.require(type(timeout) in (int, float) and 0 < timeout <= ceiling + 20 and ceiling <= 21600, "transport")
         ceph_native.require(phase != "images" and (devices is None or phase == "services"), "transport")
         ceph_native.require(service is None or phase == "services" and type(service) is int and 0 <= service < len(self.request["services"]), "transport")
+        ceph_native.require((names is not None) == (phase == "profile") and (names is None or isinstance(names, list)), "transport")
         budget = min(ceiling, timeout - 2) if timeout > 2 else timeout / 2
         payload = {"request": self.request, "host": host["name"], "phase": phase, "private": private or {}}
+        if names is not None:
+            payload["names"] = names
         if devices is not None:
             payload["devices"] = devices
         if service is not None:
@@ -613,21 +616,21 @@ class Transport:
             raise ceph_native.Refusal("material") from None
         return projection
 
-    def host_images(self, host):
-        """The one long call: pull the frozen digest, then each frozen auxiliary digest."""
-        names = ("registryJSON", "registryCA") if "registryTrustBundleRef" in self.request else ("registryJSON",)
-        ceph_native.require(all(name in self.material for name in names), "material")
+    def host_images(self, host, names, seconds):
+        """One long pull call under the share ``seconds`` of the images budget: the Ceph digest, or a batch of auxiliary digests."""
+        ceph_native.require(isinstance(names, list) and type(seconds) is int and 0 < seconds <= ceph_host_worker.REMOTE_LIMIT, "transport")
+        materials = ("registryJSON", "registryCA") if "registryTrustBundleRef" in self.request else ("registryJSON",)
+        ceph_native.require(all(name in self.material for name in materials), "material")
         try:
-            private = {name: ceph_native.read_regular(self.material[name], private=True).decode("utf-8") for name in names}
+            private = {name: ceph_native.read_regular(self.material[name], private=True).decode("utf-8") for name in materials}
         except UnicodeError:
             raise ceph_native.Refusal("material") from None
         if "registryCA" in private:
             private["registryCA"] = self.trust_bundle(private["registryCA"])
-        payload = {"request": self.request, "host": host["name"], "phase": "images", "private": private}
+        payload = {"request": self.request, "host": host["name"], "phase": "images", "private": private, "pull": {"names": names, "seconds": seconds}}
         source = ceph_host_worker.launcher(inspect.getsource(ceph_native_worker), inspect.getsource(ceph_host_worker))
-        budget = ceph_host_worker.REMOTE_LIMIT
-        return self._call(host, source, {"sources": self.native_sources(), "payload": payload, "budget": budget}, budget + 60,
-                          worker_budget=budget, worker_ceiling=budget)
+        return self._call(host, source, {"sources": self.native_sources(), "payload": payload, "budget": seconds}, seconds + 60,
+                          worker_budget=seconds, worker_ceiling=ceph_host_worker.REMOTE_LIMIT)
 
     def packages(self, host):
         ceph_package_sources.source_for(self.request, host["name"])
@@ -1447,12 +1450,47 @@ def dashboard_phase(request, operation, request_digest, bootstrap, transport, ob
 
 def host_request(value):
     """A frozen host block request: its cluster's host scope and one of its hosts."""
-    ceph_native.require(isinstance(value, dict) and set(value) == {"cluster", "host", "version"} and value["version"] == "ceph-host-v10")
+    ceph_native.require(isinstance(value, dict) and set(value) == {"cluster", "host", "pulls", "version"} and value["version"] == "ceph-host-v11")
     cluster = ceph_native.validate_scope(value["cluster"])
     ceph_native.require("packages" in cluster)
     ceph_native.require(sum(host["name"] == value["host"] for host in cluster["hosts"]) == 1)
     ceph_native.require(sum(source["host"] == value["host"] for source in cluster["packages"]["sources"]) == 1)
+    pulls = value["pulls"]
+    ceph_native.require(isinstance(pulls, list) and all(isinstance(pull, dict) and set(pull) == {"group", "names"} for pull in pulls))
+    frozen = [entry["name"] for entry in cluster.get("auxiliary", [])]
+    named = []
+    for index, pull in enumerate(pulls):
+        names = pull["names"]
+        ceph_native.require(isinstance(names, list) and 0 < len(names) <= ceph_host_runtime.PULL_CONCURRENCY
+                            and (index == len(pulls) - 1 or len(names) == ceph_host_runtime.PULL_CONCURRENCY))
+        ceph_native.require(pull["group"] == pull_group(names))
+        named += names
+    ceph_native.require(len(set(named)) == len(named) and all(name in frozen for name in named))
+    ceph_native.require(sorted(named, key=frozen.index) == named)
     return value
+
+
+CEPH_IMAGE_GROUP = "pull-ceph-image"
+
+
+def pull_group(names):
+    """The progress group the plan froze for one pull batch: its closed cephadm image names."""
+    ceph_native.require(all(isinstance(name, str) for name in names))
+    return "pull-" + "-".join(names).replace("_", "-")
+
+
+def host_pull_names(request, pull):
+    """The auxiliary names one images step pulls: none for the Ceph image group, else one frozen batch of this host."""
+    if pull == CEPH_IMAGE_GROUP:
+        return []
+    batch = next((item["names"] for item in request["pulls"] if item["group"] == pull), None)
+    ceph_native.require(batch is not None, "request")
+    return list(batch)
+
+
+def host_auxiliary_names(request):
+    """Every auxiliary name this host pre-pulls, in name order."""
+    return [name for pull in request["pulls"] for name in pull["names"]]
 
 
 def host_evidence(value, request_digest, request=None):
@@ -1507,7 +1545,8 @@ def applied_ids(transport):
     return sorted(getattr(transport, "applied", None) or ())
 
 
-def host_step(request, step, request_digest, transport, *, plan_digest="", applied=()):
+def host_step(request, step, request_digest, transport, *, plan_digest="", applied=(), pull=None, seconds=ceph_host_worker.REMOTE_LIMIT,
+              clock=time.monotonic):
     """One phase of a host preparation apply, so its role reports each as a progress group.
 
     Each step resumes from the host's own journals. Only ``verify`` publishes evidence: it proves the package decision the
@@ -1516,6 +1555,8 @@ def host_step(request, step, request_digest, transport, *, plan_digest="", appli
     host_request(request)
     cluster = request["cluster"]
     ceph_native.require(step in HOST_STEPS and ceph_native.digest(request_digest), "request")
+    ceph_native.require((pull is not None) == (step == "images"), "request")
+    ceph_native.require(type(seconds) is int and 0 < seconds <= ceph_host_worker.REMOTE_LIMIT, "image-pull" if step == "images" else "request")
     host = next(item for item in cluster["hosts"] if item["name"] == request["host"])
     if step == "packages" and ceph_host_runtime.observes_fips(cluster, host):
         observed = transport.call(host, "fips_observe")
@@ -1524,8 +1565,16 @@ def host_step(request, step, request_digest, transport, *, plan_digest="", appli
     if step == "packages":
         packages = transport.packages(host)
         return {"changed": packages["changed"], "planDigest": packages["planDigest"], "specializations": applied_ids(transport)}
+    if step == "images":
+        names = host_pull_names(request, pull)
+        started = clock()
+        result = transport.host_images(host, names, seconds)
+        ceph_native.require(isinstance(result, dict) and set(result) == {"changed"} and type(result["changed"]) is bool, "evidence")
+        remaining = seconds - int(clock() - started + 1)
+        return {"changed": result["changed"], "specializations": applied_ids(transport), "seconds": max(remaining, 0)}
     if step != "verify":
-        result = transport.host_images(host) if step == "images" else transport.call(host, HOST_STEP_PHASES[step])
+        names = host_auxiliary_names(request) if step == "profile" else None
+        result = transport.call(host, HOST_STEP_PHASES[step], names=names) if names is not None else transport.call(host, HOST_STEP_PHASES[step])
         ceph_native.require(isinstance(result, dict) and set(result) == {"changed"} and type(result["changed"]) is bool, "evidence")
         return {"changed": result["changed"], "specializations": applied_ids(transport)}
     applied = list(applied)
@@ -1549,11 +1598,15 @@ def execute_host(request, operation, request_digest, transport):
     if operation == "destroy":
         return {"changed": False, "evidence": host_evidence(released(request, request_digest), request_digest, request)}
     if operation == "apply":
-        changed, plan_digest = False, ""
-        for step in HOST_STEPS[:-1]:
-            result = host_step(request, step, request_digest, transport)
+        changed, plan_digest, seconds = False, "", ceph_host_worker.REMOTE_LIMIT
+        pulls = [CEPH_IMAGE_GROUP] + [item["group"] for item in request["pulls"]]
+        steps = [(step, None) for step in HOST_STEPS[:1]] + [("images", group) for group in pulls] + [(step, None) for step in HOST_STEPS[2:-1]]
+        for step, group in steps:
+            options = {"pull": group, "seconds": seconds} if step == "images" else {}
+            result = host_step(request, step, request_digest, transport, **options)
             changed = result["changed"] or changed
             plan_digest = result.get("planDigest", plan_digest)
+            seconds = result.get("seconds", seconds)
         verified = host_step(request, "verify", request_digest, transport, plan_digest=plan_digest)
         return {"changed": changed, "evidence": verified["evidence"]}
     host = next(item for item in cluster["hosts"] if item["name"] == request["host"])

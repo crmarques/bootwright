@@ -125,7 +125,7 @@ func TestHostPreparationReportsItsPlannedStepsAsGroupsOfItsMachine(t *testing.T)
 	if err != nil || len(plan.Definitions) != 3 {
 		t.Fatalf("host plan %d blocks %v", len(plan.Definitions), diagnostics.Of(err))
 	}
-	want := []string{"install-packages", "pull-images", "prove-runtime", "prove-route", "identify-devices"}
+	want := []string{"install-packages", "pull-ceph-image", "prove-runtime", "prove-route", "identify-devices"}
 	for _, definition := range plan.Definitions {
 		r, err := DecodeHostRequest(definition.Request)
 		if err != nil {
@@ -143,7 +143,7 @@ func TestHostPreparationReportsItsPlannedStepsAsGroupsOfItsMachine(t *testing.T)
 			t.Fatalf("%s groups %v, want %v", definition.ID, ids, want)
 		}
 	}
-	if groups := hostGroups(reconciliation.Destroy, "node-1"); groups != nil {
+	if groups := hostGroups(reconciliation.Destroy, "node-1", nil); groups != nil {
 		t.Fatalf("a host release reports groups %+v", groups)
 	}
 	removal, err := NewHost(nil).Removal(context.Background(), reconciliation.Block{BlockDefinition: plan.Definitions[0]})
@@ -257,7 +257,7 @@ func hostExecution(t *testing.T, host string) (lifecycle.Execution, HostRequest,
 	for i := range cluster.Hosts {
 		cluster.Hosts[i].HostKeyRef = cluster.Hosts[i].Name + "-host-key"
 	}
-	r := HostRequest{Version: HostVersion, Cluster: scopeOf(cluster), Host: host}
+	r := HostRequest{Version: HostVersion, Cluster: scopeOf(cluster), Host: host, Pulls: []ImagePull{}}
 	canonical, err := r.canonical()
 	if err != nil {
 		t.Fatal(err)

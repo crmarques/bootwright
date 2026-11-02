@@ -10,7 +10,9 @@
   bootwright.core.ceph_host:
     request: '{{ bootwright_ceph_host_request }}'
     operation: apply
-    step: '{{ storage_ceph_host_phase.step }}'
+    step: '{{ storage_ceph_host_phase.step | default("images") }}'
+    pull: '{{ storage_ceph_host_phase.group if storage_ceph_host_phase.step | default("images") == "images" else omit }}'
+    seconds: '{{ storage_ceph_host_pull_seconds if storage_ceph_host_phase.step | default("images") == "images" else omit }}'
     digest: '{{ bootwright_ceph_host_digest }}'
     material: '{{ bootwright_ceph_host_material }}'
   register: storage_ceph_host_step
@@ -46,4 +48,5 @@
     storage_ceph_host_changed: '{{ storage_ceph_host_changed or storage_ceph_host_step.changed }}'
     storage_ceph_host_applied: '{{ storage_ceph_host_applied + storage_ceph_host_step.specializations }}'
     storage_ceph_host_plan_digest: '{{ storage_ceph_host_step.planDigest | default(storage_ceph_host_plan_digest) }}'
+    storage_ceph_host_pull_seconds: '{{ storage_ceph_host_step.seconds | default(storage_ceph_host_pull_seconds) }}'
   no_log: true

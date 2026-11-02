@@ -64,7 +64,7 @@ func physicalRetirementFixtureFrom(t *testing.T, catalogOf func() (api.Catalog, 
 		proofs[host.Machine] = erasure
 	}
 	for _, host := range cluster.Hosts {
-		hostRequest := HostRequest{Version: HostVersion, Cluster: scopeOf(cluster), Host: host.Name}
+		hostRequest := HostRequest{Version: HostVersion, Cluster: scopeOf(cluster), Host: host.Name, Pulls: []ImagePull{}}
 		data, _ := hostRequest.canonical()
 		hostBlock := retirementBlock(t, HostBlockID(cluster.Cluster, host.Machine), string(api.CephCluster), cluster.Cluster, HostImplementation, data)
 		hostExecution := execution

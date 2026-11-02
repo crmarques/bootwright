@@ -363,7 +363,7 @@ def host_block(core_request):
         {"host": host["name"], "profile": "rhel", "media": "rhel-dvd.iso", "mediaSHA256": "e" * 64, "mediaSize": 1024,
          "publicationPath": "/var/lib/bootwright-services/example/public/os/rhel/tree", "url": "https://192.0.2.10:8443/os/rhel/tree",
          "certificateRef": "serving-tls"} for host in cluster["hosts"]]}
-    request = {"version": "ceph-host-v10", "cluster": cluster, "host": "node-2"}
+    request = {"version": "ceph-host-v11", "cluster": cluster, "host": "node-2", "pulls": []}
     record = {"version": "ceph-host-evidence-v4", "host": "node-2", "owner": cluster["owner"], "fsid": cluster["fsid"], "image": cluster["image"],
               "ready": False, "removed": False, "imageID": "", "uid": 0, "gid": 0, "label": "", "policySHA256": "", "cephadmSHA256": "",
               "planDigest": "", "route": False, "devices": []}
@@ -2316,7 +2316,7 @@ def test_host_images_relays_the_bound_bundle(core_request, tmp_path):
         calls.append((argv, data, timeout))
         return 0, b'{"ok":true,"result":{"changed":true}}'
 
-    assert ceph_core.Transport(bound, material, run=run, scope=True).host_images(bound["hosts"][0]) == {"changed": True}
+    assert ceph_core.Transport(bound, material, run=run, scope=True).host_images(bound["hosts"][0], [], 4285) == {"changed": True}
     argv, data, unused_timeout = calls[0]
     assert json.loads(data)["payload"]["private"] == {"registryJSON": paths["registryJSON"], "registryCA": projection}
     assert projection.isascii() and "#" not in projection and ceph_pull_broker.bundle_context(projection).cert_store_stats()["x509_ca"] == 1
@@ -2324,7 +2324,7 @@ def test_host_images_relays_the_bound_bundle(core_request, tmp_path):
     unbound = {name: path for name, path in material.items() if name != "registryCA"}
     for request_value, private in ((scope, material), (bound, unbound)):
         with pytest.raises(ceph_native.Refusal, match="^material$"):
-            ceph_core.Transport(request_value, private, run=run, scope=True).host_images(request_value["hosts"][0])
+            ceph_core.Transport(request_value, private, run=run, scope=True).host_images(request_value["hosts"][0], [], 4285)
     assert len(calls) == 1
 
 
@@ -2356,13 +2356,13 @@ def test_every_bundle_consumer_reaches_the_same_verdict(core_request, tmp_path, 
             with ceph_registry_discovery.bundle_proof(str(tmp_path / "registryCA")):
                 pytest.fail("discovery accepted the bundle")
         with pytest.raises(ceph_native.Refusal, match="^material$"):
-            transport.host_images(scope["hosts"][0])
+            transport.host_images(scope["hosts"][0], [], 4285)
         assert calls == []
         return
     with ceph_registry_discovery.bundle_proof(str(tmp_path / "registryCA")) as (context, prove):
         prove()
         resolved = context.get_ca_certs()
-    assert transport.host_images(scope["hosts"][0]) == {"changed": True}
+    assert transport.host_images(scope["hosts"][0], [], 4285) == {"changed": True}
     assert ceph_pull_broker.bundle_context(calls[0]).get_ca_certs() == resolved
 
 
@@ -2384,7 +2384,7 @@ def test_host_images_refuses_an_oversized_bound_bundle_before_the_run(core_reque
         (tmp_path / name).chmod(0o600)
     transport = ceph_core.Transport(scope, {name: str(tmp_path / name) for name in paths}, run=lambda *args: pytest.fail("run"), scope=True)
     with pytest.raises(ceph_native.Refusal, match="^material$"):
-        transport.host_images(scope["hosts"][0])
+        transport.host_images(scope["hosts"][0], [], 4285)
 
 
 @pytest.mark.parametrize("fips", [False, True])

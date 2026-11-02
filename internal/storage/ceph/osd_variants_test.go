@@ -40,7 +40,7 @@ func TestOSDVariantsRequestGolden(t *testing.T) {
 	if _, err := DecodeRequest(data); err != nil {
 		t.Fatal(err)
 	}
-	host := HostRequest{Cluster: scopeOf(r), Host: r.Hosts[0].Name, Version: HostVersion}
+	host := HostRequest{Cluster: scopeOf(r), Host: r.Hosts[0].Name, Pulls: []ImagePull{}, Version: HostVersion}
 	hostData, err := host.canonical()
 	if err != nil {
 		t.Fatal(err)

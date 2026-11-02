@@ -191,7 +191,7 @@ func TestFIPSSecurityGolden(t *testing.T) {
 func TestFIPSHostSecurityGolden(t *testing.T) {
 	r := packageRequest(t)
 	r.Security = &Security{FIPS: true, CephXKeyType: "aes"}
-	host := HostRequest{Cluster: scopeOf(r), Host: r.Hosts[0].Name, Version: HostVersion}
+	host := HostRequest{Cluster: scopeOf(r), Host: r.Hosts[0].Name, Pulls: []ImagePull{}, Version: HostVersion}
 	data, err := host.canonical()
 	if err != nil {
 		t.Fatal(err)

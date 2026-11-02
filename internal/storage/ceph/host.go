@@ -17,7 +17,7 @@ import (
 )
 
 const HostImplementation = "storage-ceph-host-v1"
-const HostVersion = "ceph-host-v10"
+const HostVersion = "ceph-host-v11"
 const HostEvidenceVersion = "ceph-host-evidence-v4"
 const SharedLabel = "system_u:object_r:container_file_t:s0"
 const maxHostEvidence = 16384
@@ -58,6 +58,7 @@ type ClusterScope struct {
 type HostRequest struct {
 	Cluster ClusterScope `json:"cluster"`
 	Host    string       `json:"host"`
+	Pulls   []ImagePull  `json:"pulls"`
 	Version string       `json:"version"`
 }
 
@@ -87,6 +88,9 @@ func DecodeHostRequest(data []byte) (HostRequest, error) {
 	if _, ok := r.source(); !ok {
 		return HostRequest{}, failure("lifecycle.state", "the frozen Ceph host request has no package source for its host", "")
 	}
+	if !validPulls(r) {
+		return HostRequest{}, failure("lifecycle.state", "the frozen Ceph host request's image pulls are not its cluster's auxiliary images in bounded name-ordered batches", "")
+	}
 	return r, nil
 }
 
@@ -112,7 +116,7 @@ func (r HostRequest) source() (int, bool) {
 }
 
 func HostContentDigest() string {
-	d := sha256.Sum256([]byte(HostImplementation + "\x00" + HostVersion + "\x00" + HostEvidenceVersion + "\x00" + "selected-packages-pull-profile-route-devices-v3"))
+	d := sha256.Sum256([]byte(HostImplementation + "\x00" + HostVersion + "\x00" + HostEvidenceVersion + "\x00" + "selected-packages-placement-pulls-profile-route-devices-v4"))
 	return hex.EncodeToString(d[:])
 }
 
@@ -248,19 +252,17 @@ func hostDescription(verb reconciliation.Verb, cluster, host string) (string, []
 	return "prepare Ceph host " + host + " of " + cluster, []string{"prepare-host " + host + " packages, image, runtime, route and devices"}
 }
 
-func hostGroups(verb reconciliation.Verb, machineName string) []reconciliation.Group {
+func hostGroups(verb reconciliation.Verb, machineName string, pulls []ImagePull) []reconciliation.Group {
 	if verb == reconciliation.Destroy {
 		return nil
 	}
-	steps := [][2]string{
-		{"install-packages", "install the frozen Ceph packages from the declared package sources"},
-		{"pull-images", "pull the frozen Ceph image and each auxiliary image by digest"},
+	groups := []reconciliation.Group{{ID: "install-packages", Description: "install the frozen Ceph packages from the declared package sources", Machines: []string{machineName}}}
+	groups = append(groups, pullGroups(pulls, machineName)...)
+	for _, step := range [][2]string{
 		{"prove-runtime", "prove the image's runtime profile in contained probes"},
 		{"prove-route", "prove the native SSH route inside the image"},
 		{"identify-devices", "bind each declared device to its native identity"},
-	}
-	groups := make([]reconciliation.Group, 0, len(steps))
-	for _, step := range steps {
+	} {
 		groups = append(groups, reconciliation.Group{ID: step[0], Description: step[1], Machines: []string{machineName}})
 	}
 	return groups
@@ -285,8 +287,9 @@ func (c HostCapability) Plan(ctx context.Context, input lifecycle.PlanInput) (li
 		if err != nil {
 			return plan, err
 		}
+		candidates := pullCandidates(catalog, object, cluster.Auxiliary)
 		for _, host := range cluster.Hosts {
-			request := HostRequest{Version: HostVersion, Cluster: scopeOf(cluster), Host: host.Name}
+			request := HostRequest{Version: HostVersion, Cluster: scopeOf(cluster), Host: host.Name, Pulls: hostPulls(candidates, cluster.Auxiliary, host.Name)}
 			index, _ := request.source()
 			source := cluster.Packages.Sources[index]
 			canonical, err := request.canonical()
@@ -313,7 +316,7 @@ func (c HostCapability) Plan(ctx context.Context, input lifecycle.PlanInput) (li
 			}
 			plan.Definitions = append(plan.Definitions, reconciliation.BlockDefinition{ID: HostBlockID(cluster.Cluster, host.Machine), Description: description, Stage: reconciliation.StageClusters,
 				Requires: requires, Dependencies: dependencies, Exclusive: []string{"ceph-host/" + host.Machine}, Impacts: impacts, Consumes: []string{},
-				Groups: hostGroups(input.Verb, host.Machine), Kind: string(api.CephCluster), Object: cluster.Cluster, Implementation: HostImplementation, ContentDigest: HostContentDigest(), Request: canonical})
+				Groups: hostGroups(input.Verb, host.Machine, request.Pulls), Kind: string(api.CephCluster), Object: cluster.Cluster, Implementation: HostImplementation, ContentDigest: HostContentDigest(), Request: canonical})
 			if cluster.Security != nil && cluster.Security.FIPS {
 				plan.Secrets = append(plan.Secrets, cluster.ClusterKeyRef)
 			}

@@ -260,5 +260,6 @@
     "version": "ceph-core-v37"
   },
   "host": "tie",
-  "version": "ceph-host-v10"
+  "pulls": [],
+  "version": "ceph-host-v11"
 }

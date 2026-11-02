@@ -27,6 +27,15 @@ options:
       - Only C(verify) returns evidence; an observation or a release names no step.
     type: str
     choices: [packages, images, profile, route, devices, verify]
+  pull:
+    description:
+      - The progress group of one C(images) step, C(pull-ceph-image) or one of the frozen request's C(pulls) batches, naming what it pulls.
+      - Only an C(images) step names one.
+    type: str
+  seconds:
+    description: What remains of the images budget for an C(images) step, as the previous C(images) step returned it.
+    type: int
+    default: 4285
   plan_digest:
     description: The package decision digest the C(packages) step returned, which C(verify) proves the host holds.
     type: str
@@ -71,6 +80,10 @@ specializations:
   type: list
   elements: str
   returned: success of a step other than verify
+seconds:
+  description: What remains of the images budget after an C(images) step, for the next one.
+  type: int
+  returned: success of an images step
 nativeError:
   description: Bounded redacted native cause and selected public coordinate.
   type: dict
@@ -96,6 +109,8 @@ def main():
             "request": {"type": "dict", "required": True},
             "operation": {"type": "str", "required": True, "choices": ["apply", "observe", "destroy"]},
             "step": {"type": "str", "choices": list(ceph_core.HOST_STEPS)},
+            "pull": {"type": "str"},
+            "seconds": {"type": "int", "default": 4285},
             "plan_digest": {"type": "str", "default": ""},
             "applied": {"type": "list", "elements": "str", "default": []},
             "digest": {"type": "str", "required": True},
@@ -110,9 +125,9 @@ def main():
         transport = ceph_core.Transport(request["cluster"], params["material"], scope=True)
         if params["operation"] == "apply":
             result = ceph_core.host_step(request, params["step"], params["digest"], transport, plan_digest=params["plan_digest"],
-                                         applied=params["applied"])
+                                         applied=params["applied"], pull=params["pull"], seconds=params["seconds"])
         else:
-            if params["step"] is not None:
+            if params["step"] is not None or params["pull"] is not None:
                 raise ceph_native.Refusal("request")
             result = ceph_core.execute_host(request, params["operation"], params["digest"], transport)
     except Exception as error:

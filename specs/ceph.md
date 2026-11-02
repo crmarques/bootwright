@@ -470,15 +470,36 @@ not one declared service, and a filesystem request when the
 `mds.<filesystem>` name its `spec.mdsServiceRef` names is not.
 
 Each [host preparation](#bootstrap-identity-and-continuation) block freezes
-five [presentation groups](cli/output.md#multi-machine-presentation) of its
+[presentation groups](cli/output.md#multi-machine-presentation) of its
 Machine, one per step it runs in this order as its own native call resuming
-from the journals: `install-packages`, `pull-images`, `prove-runtime`,
-`prove-route` and `identify-devices`. Only the pull runs under the longer host
-launcher; the runtime profile runs under the ordinary native ceiling and
-refuses a frozen digest the pull did not record. A final read proves the
-package decision the first step reported and publishes the evidence, and a
-step a resumed attempt already proved settles as soon as its journal proves it
-again. A release freezes no group.
+from the journals: `install-packages`, `pull-ceph-image`, one group per pull
+batch of the host's auxiliary images, `prove-runtime`, `prove-route` and
+`identify-devices`. A host pre-pulls an auxiliary image when the placement
+of a declared service needing it (per the
+[auxiliary image table](#frozen-release-and-trust)) can schedule a daemon
+there: the topology nodes its `hosts`, `label` or `host_pattern` selects,
+whatever its `count`, so a daemon cephadm moves to another candidate after a
+host failure still finds its image already pulled through the broker. When a
+needing service's candidates cannot be derived exactly (its placement does not
+resolve to declared nodes) or the image serves a CephSMBResource (`samba`,
+`samba_metrics`), every host pre-pulls it. The host request freezes these
+images as batches; a batch's pulls run at once, each with its own broker,
+scratch and journal records, and its call returns once every pull has,
+raising the first refusal in name order. A batch holds up to three of the host's auxiliary images
+in name order, every batch but the last holds three, and its group is
+`pull-` followed by their closed cephadm names (`_` written `-`), such as
+`pull-alertmanager-grafana-node-exporter`, described as `pull
+container_image_alertmanager, container_image_grafana and
+container_image_node_exporter by digest together`, so the running row names
+every image then downloading; at most five batches keep a block within its 32
+groups. Only the pulls run under the longer host launcher, and together within
+its 4285 s: each pull call receives what the previous ones left of that budget
+and refuses `image-pull` once it is spent. The runtime profile runs under the
+ordinary native ceiling and refuses a digest of the host's pulls that they
+did not record. A final read proves the package decision the first step
+reported and publishes the evidence, and a step a resumed attempt already
+proved settles as soon as its journal proves it again. A release freezes no
+group.
 
 ### Refusal table
 
@@ -714,9 +735,9 @@ owned markers scoped by owner, FSID and host:
 
 1. Package installation from the frozen package decision, keeping the
    inherited crypto-policy proof.
-2. A pull of the frozen image digest and of each frozen auxiliary digest, each
-   through its own invocation-local broker admitting only that repository and
-   digest, with a protected authfile, a signature policy limited to that
+2. A pull of the frozen image digest and of each frozen auxiliary digest
+   [it may run](#plan-and-prerequisites), each through its own
+   invocation-local broker admitting only that repository and digest, with a protected authfile, a signature policy limited to that
    repository and at most three bounded attempts per preparation run. A pull
    counts only after local inspection proves the digest and the linux/amd64
    platform. Retained attempt records serve crash diagnosis and recovery.

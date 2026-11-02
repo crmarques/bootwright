@@ -3990,6 +3990,9 @@ def dispatch(envelope):
     if isinstance(envelope, dict) and envelope.get("phase") in ceph_replication_native.PHASES:
         return ceph_replication_native.dispatch(envelope)
     phase = envelope.get("phase") if isinstance(envelope, dict) else None
+    if phase in HOST_PHASES:
+        from ansible_collections.bootwright.core.plugins.module_utils import ceph_host_runtime
+        return ceph_host_runtime.dispatch(envelope)
     if phase == "services" and isinstance(envelope, dict) and "devices" in envelope:
         devices = envelope["devices"]
         envelope = {key: value for key, value in envelope.items() if key != "devices"}
@@ -4002,9 +4005,6 @@ def dispatch(envelope):
         service = None
     require(isinstance(envelope, dict) and set(envelope) == {"request", "host", "phase", "private"})
     require(isinstance(envelope["private"], dict))
-    if phase in HOST_PHASES:
-        from ansible_collections.bootwright.core.plugins.module_utils import ceph_host_runtime
-        return ceph_host_runtime.dispatch(envelope)
     from ansible_collections.bootwright.core.plugins.module_utils import ceph_export_native
     if phase in ceph_export_native.PHASES:
         return ceph_export_native.dispatch(envelope)

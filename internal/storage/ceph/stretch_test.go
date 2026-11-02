@@ -288,7 +288,7 @@ func TestAStretchHostRequestCarriesTheStretchScopeGolden(t *testing.T) {
 		t.Fatal(err)
 	}
 	r.Packages = packages
-	data, err := HostRequest{Version: HostVersion, Host: "tie", Cluster: scopeOf(r)}.canonical()
+	data, err := HostRequest{Version: HostVersion, Host: "tie", Cluster: scopeOf(r), Pulls: []ImagePull{}}.canonical()
 	if err != nil {
 		t.Fatal(err)
 	}

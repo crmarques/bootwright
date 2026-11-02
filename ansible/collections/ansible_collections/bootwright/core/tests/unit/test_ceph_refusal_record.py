@@ -13,8 +13,10 @@ live here.
 
 from __future__ import annotations
 
+import ast
 import pathlib
 
+import jinja2
 import pytest
 import yaml
 from ansible.parsing.dataloader import DataLoader
@@ -45,8 +47,8 @@ def failed(module, execute, error, monkeypatch):
     class FakeModule:
         def __init__(self, **options):
             captured["spec"] = options["argument_spec"]
-            self.params = {"request": {}, "operation": "apply", "step": "images", "plan_digest": "", "applied": [], "digest": "d" * 64, "material": {},
-                           "outputs": {}}
+            self.params = {"request": {}, "operation": "apply", "step": "images", "plan_digest": "", "applied": [], "pull": "pull-ceph-image",
+                           "seconds": 4285, "digest": "d" * 64, "material": {}, "outputs": {}}
 
         def fail_json(self, **options):
             captured["failure"] = options
@@ -114,10 +116,14 @@ def test_every_host_preparation_step_names_a_refusal_in_place_of_its_group_compl
 def test_the_prepare_entry_runs_the_steps_the_go_plan_declares_in_order():
     tasks = LOADER.load_from_file(str(ROLES / "storage_ceph_host" / "tasks" / "prepare.yml"), trusted_as_template=True)
     included = next(task for task in tasks if task.get("ansible.builtin.include_tasks") == "step.yml")
-    assert [(item["step"], item["group"]) for item in included["loop"]] == [
-        ("packages", "install-packages"), ("images", "pull-images"), ("profile", "prove-runtime"), ("route", "prove-route"),
-        ("devices", "identify-devices")]
-    assert [item["step"] for item in included["loop"]] + ["verify"] == list(ceph_core.HOST_STEPS)
+    pulls = [{"group": "pull-alertmanager-grafana-haproxy", "names": ["alertmanager", "grafana", "haproxy"]},
+             {"group": "pull-keepalived", "names": ["keepalived"]}]
+    items = ast.literal_eval(jinja2.Environment().from_string(included["loop"]).render(bootwright_ceph_host_request={"pulls": pulls}))
+    assert [(item.get("step", "images"), item["group"]) for item in items] == [
+        ("packages", "install-packages"), ("images", "pull-ceph-image"), ("images", "pull-alertmanager-grafana-haproxy"),
+        ("images", "pull-keepalived"), ("profile", "prove-runtime"), ("route", "prove-route"), ("devices", "identify-devices")]
+    steps = [item.get("step", "images") for item in items] + ["verify"]
+    assert [step for index, step in enumerate(steps) if index == 0 or steps[index - 1] != step] == list(ceph_core.HOST_STEPS)
     verify = next(task for task in tasks if "bootwright.core.ceph_host" in task)
     assert verify["bootwright.core.ceph_host"]["step"] == "verify" and tasks.index(verify) > tasks.index(included)
 

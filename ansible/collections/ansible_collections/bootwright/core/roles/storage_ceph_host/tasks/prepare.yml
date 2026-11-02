@@ -2,7 +2,7 @@
 - name: Validate the frozen Ceph host request
   ansible.builtin.assert:
     that:
-      - bootwright_ceph_host_request.version == 'ceph-host-v10'
+      - bootwright_ceph_host_request.version == 'ceph-host-v11'
       - bootwright_ceph_host_digest is match('^[0-9a-f]{64}$')
       - ansible_connection == 'local'
     quiet: true
@@ -18,20 +18,22 @@
     storage_ceph_host_changed: false
     storage_ceph_host_applied: []
     storage_ceph_host_plan_digest: ''
+    storage_ceph_host_pull_seconds: 4285
   no_log: true
 
 # Each step is one fixed module call that resumes from the host's own journals,
 # reported as the group the Go plan froze under the same ID (hostGroups in
-# internal/storage/ceph/host.go). A refused step fails the play, so no later
-# step runs.
+# internal/storage/ceph/host.go). The Ceph image, then each frozen batch of this
+# host's auxiliary images (pulled at once within its call), is its own images
+# step and group; the batches share what remains of the images budget. A
+# refused step fails the play, so no later step runs.
 - name: Prepare the host one reported step at a time
   ansible.builtin.include_tasks: step.yml
-  loop:
-    - {step: packages, group: install-packages}
-    - {step: images, group: pull-images}
-    - {step: profile, group: prove-runtime}
-    - {step: route, group: prove-route}
-    - {step: devices, group: identify-devices}
+  loop: >-
+    {{ [{'step': 'packages', 'group': 'install-packages'}, {'step': 'images', 'group': 'pull-ceph-image'}]
+       + bootwright_ceph_host_request.pulls
+       + [{'step': 'profile', 'group': 'prove-runtime'}, {'step': 'route', 'group': 'prove-route'},
+          {'step': 'devices', 'group': 'identify-devices'}] }}
   loop_control:
     loop_var: storage_ceph_host_phase
     label: '{{ storage_ceph_host_phase.group }}'

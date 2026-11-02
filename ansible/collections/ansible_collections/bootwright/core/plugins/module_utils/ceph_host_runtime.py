@@ -14,6 +14,7 @@ from __future__ import annotations
 # pylint: disable=unidiomatic-typecheck
 
 import base64
+import concurrent.futures
 import contextlib
 import functools
 import hashlib
@@ -35,7 +36,7 @@ from ansible_collections.bootwright.core.plugins.module_utils import (
 
 ROOT = "/var/lib/bootwright/ceph-host"
 PACKAGE_ROOT = "/var/lib/bootwright/ceph-packages"
-VERSION = "ceph-host-v10"
+VERSION = "ceph-host-v11"
 PROFILE_VERSION = "ceph-runtime-profile-v3"
 ROUTE_VERSION = "ceph-host-route-v3"
 DEVICES_VERSION = "ceph-device-identities-v2"
@@ -64,6 +65,7 @@ PULL_MINIMUM = 60
 PULL_RESERVE = 120
 PULL_PAUSE = 15
 IMAGES_CALL_SECONDS = 4285
+PULL_CONCURRENCY = 3
 PHASES = frozenset(("images", "profile", "route", "device_identity", "host_devices", "host_observe", "fips_observe"))
 ARTIFACTS = ("/usr/sbin/cephadm", "/usr/share/ceph/mgr/cephadm/ssh.py", "/usr/share/ceph/mgr/cephadm/module.py",
              "/usr/share/ceph/mgr/cephadm/serve.py", "/usr/bin/ceph", "/usr/bin/ceph-authtool")
@@ -506,12 +508,20 @@ class HostRuntime:
         durable.write("pulled.json", {"scope": self.scope(), "imageID": current["id"]})
         return True
 
-    def pull_auxiliary(self, durable, private, deadline, *, trust=None):
-        """Pre-pull each frozen auxiliary digest, so no native deploy pulls one."""
+    def pull_auxiliary(self, durable, private, deadline, names, *, trust=None):
+        """Pre-pull one batch of this host's frozen auxiliary digests at once, so no native deploy pulls one.
+
+        Each pull keeps its own broker, scratch and journal records; the first refusal in name order is raised once every
+        pull of the batch has returned, so no pull outlives the call.
+        """
+        references = auxiliary_names(self.request, names)
+        require(0 < len(references) <= PULL_CONCURRENCY, "request")
         discard_residue(durable.path, "auxiliary-scratch-")
+        with concurrent.futures.ThreadPoolExecutor(max_workers=PULL_CONCURRENCY) as pool:
+            futures = [pool.submit(self.pull_reference, durable, private, deadline, name, reference, trust=trust) for name, reference in references]
         changed = False
-        for entry in self.request.get("auxiliary", []):
-            changed = self.pull_reference(durable, private, deadline, entry["name"], entry["image"], trust=trust) or changed
+        for future in futures:
+            changed = future.result() or changed
         return changed
 
     def pull_reference(self, durable, private, deadline, name, reference, *, trust=None):
@@ -698,33 +708,39 @@ class HostRuntime:
                 {key: value for key, value in probes[1].items() if key not in ("uid", "gid")})
         return probes[0]
 
-    def images(self, private):
-        """The one long call: pull the frozen digest, then each frozen auxiliary digest."""
+    def images(self, private, pull):
+        """One long pull call: the frozen Ceph digest when ``pull`` names no image, else one batch of auxiliary digests at once.
+
+        The call's deadline is the share of the images step's budget the controller has left, never more than the launcher's.
+        """
         ceph_native.prove_fips(self.request)
-        deadline = self.clock() + IMAGES_CALL_SECONDS
+        require(isinstance(pull, dict) and set(pull) == {"names", "seconds"} and isinstance(pull["names"], list), "request")
+        seconds = pull["seconds"]
+        require(type(seconds) is int and 0 < seconds <= IMAGES_CALL_SECONDS, "request")
+        deadline = self.clock() + seconds
         expected = {"registryJSON"} | ({"registryCA"} if "registryTrustBundleRef" in self.request else set())
         require(isinstance(private, dict) and set(private) == expected, "material")
         trust = private.get("registryCA")
         with self.journal(create=True) as durable:
-            changed = self.pull(durable, private["registryJSON"], deadline, trust=trust)
-            changed = self.pull_auxiliary(durable, private["registryJSON"], deadline, trust=trust) or changed
-            return {"changed": changed}
+            if not pull["names"]:
+                return {"changed": self.pull(durable, private["registryJSON"], deadline, trust=trust)}
+            return {"changed": self.pull_auxiliary(durable, private["registryJSON"], deadline, pull["names"], trust=trust)}
 
-    def pulled(self, durable):
-        """Every frozen digest the images call recorded is the one the host holds; the Ceph image's inspection answers."""
+    def pulled(self, durable, names):
+        """Every digest this host's pull calls recorded is the one it holds; the Ceph image's inspection answers."""
         original = inspect_image(self.request["image"], self.command)
         require(canonical(durable.read("pulled.json")) == canonical({"scope": self.scope(), "imageID": original["id"]}), "image-platform")
-        for entry in self.request.get("auxiliary", []):
-            current = inspect_image(entry["image"], functools.partial(self.command, coordinate=entry["image"]))
-            expected = {"scope": self.scope(), "image": entry["image"], "imageID": current["id"]}
-            require(canonical(durable.read("auxiliary-" + entry["name"] + "-pulled.json")) == canonical(expected), "image-platform")
+        for name, reference in auxiliary_names(self.request, names):
+            current = inspect_image(reference, functools.partial(self.command, coordinate=reference))
+            expected = {"scope": self.scope(), "image": reference, "imageID": current["id"]}
+            require(canonical(durable.read("auxiliary-" + name + "-pulled.json")) == canonical(expected), "image-platform")
         return original
 
-    def profile(self):
-        """Prove the pulled image's runtime facts in contained probes, once its images call recorded every digest."""
+    def profile(self, names):
+        """Prove the pulled image's runtime facts in contained probes, once its pull calls recorded every digest of the host."""
         ceph_native.prove_fips(self.request)
         with self.journal() as durable:
-            original = self.pulled(durable)
+            original = self.pulled(durable, names)
             existing = durable.read(PROFILE)
             if existing is not None:
                 self.current(durable)
@@ -1352,15 +1368,30 @@ class Cache:
                 yield
 
 
+ENVELOPE_EXTRA = {"images": "pull", "profile": "names"}
+
+
+def auxiliary_names(request, names):
+    """This host's auxiliary names, each a distinct frozen auxiliary image of the request, with their references in name order."""
+    frozen = [(entry["name"], entry["image"]) for entry in request.get("auxiliary", [])]
+    require(isinstance(names, list) and all(isinstance(name, str) for name in names) and len(set(names)) == len(names), "request")
+    selected = [(name, reference) for name, reference in frozen if name in names]
+    require(len(selected) == len(names) and [name for name, unused in selected] == names, "request")
+    return selected
+
+
 def dispatch(envelope):
-    require(isinstance(envelope, dict) and set(envelope) == {"request", "host", "phase", "private"}, "request")
-    phase = envelope["phase"]
+    phase = envelope.get("phase") if isinstance(envelope, dict) else None
     require(phase in PHASES, "request")
+    extra = ENVELOPE_EXTRA.get(phase)
+    require(set(envelope) == {"request", "host", "phase", "private"} | ({extra} if extra else set()), "request")
     runtime = HostRuntime(envelope["request"], envelope["host"])
     if phase != "images":
         require(envelope["private"] == {}, "material")
     if phase in ("images", "profile", "route", "device_identity"):
         require(ceph_native.supported_transport(runtime.request), "unsupported-release")
     if phase == "images":
-        return runtime.images(envelope["private"])
+        return runtime.images(envelope["private"], envelope["pull"])
+    if phase == "profile":
+        return runtime.profile(envelope["names"])
     return getattr(runtime, phase)()

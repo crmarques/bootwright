@@ -39,7 +39,9 @@ def host_request(request_value):
          "publicationPath": "/var/lib/bootwright-services/example/public/os/rhel/tree", "url": "https://192.0.2.10:8443/os/rhel/tree",
          "certificateRef": "serving-tls"}
         for host in cluster["hosts"]]}
-    return {"version": "ceph-host-v10", "cluster": cluster, "host": "node-2"}
+    cluster["auxiliary"] = [{"name": "haproxy", "image": host_fixtures.HAPROXY}, {"name": "keepalived", "image": host_fixtures.KEEPALIVED}]
+    return {"version": "ceph-host-v11", "cluster": cluster, "host": "node-2",
+            "pulls": [{"group": "pull-haproxy-keepalived", "names": ["haproxy", "keepalived"]}]}
 
 
 request_value = host_fixtures.request_value
@@ -66,12 +68,14 @@ class Transport:
         self.calls.append((host["name"], "packages"))
         return {"changed": True, "ready": True, "planDigest": "a" * 64}
 
-    def host_images(self, host):
-        self.calls.append((host["name"], "images"))
+    def host_images(self, host, names, seconds):
+        assert 0 < seconds <= ceph_host_worker.REMOTE_LIMIT
+        self.calls.append((host["name"], " ".join(["images"] + names)))
         return {"changed": True}
 
-    def call(self, host, phase, private=None, *, timeout=660):
+    def call(self, host, phase, private=None, *, timeout=660, names=None):
         assert private is None and timeout == 660
+        assert (names is not None) == (phase == "profile") and names in (None, ceph_core.host_auxiliary_names(self.request))
         self.calls.append((host["name"], phase))
         if phase == "host_observe":
             return copy.deepcopy(self.observed)
@@ -81,8 +85,8 @@ class Transport:
 def test_apply_runs_packages_then_the_long_call_then_route_and_identities(host_request):
     transport = Transport(host_request)
     result = ceph_core.execute_host(host_request, "apply", DIGEST, transport)
-    assert transport.calls == [("node-2", "packages"), ("node-2", "images"), ("node-2", "profile"), ("node-2", "route"), ("node-2", "device_identity"),
-                               ("node-2", "host_observe")]
+    assert transport.calls == [("node-2", "packages"), ("node-2", "images"), ("node-2", "images haproxy keepalived"), ("node-2", "profile"),
+                               ("node-2", "route"), ("node-2", "device_identity"), ("node-2", "host_observe")]
     assert result["changed"] is True and result["evidence"]["ready"] is True and result["evidence"]["request"] == DIGEST
 
 
@@ -97,15 +101,17 @@ class AppliedTransport(Transport):
 def test_each_step_is_one_native_call_and_only_verify_publishes_evidence(host_request):
     ids = ["ceph-call-home-opt-in", "ceph-mgr-without-license-contract"]
     reported, plan_digest, applied = [], "", []
-    for step, phase in (("packages", "packages"), ("images", "images"), ("profile", "profile"), ("route", "route"), ("devices", "device_identity")):
+    for step, phase, pull in (("packages", "packages", None), ("images", "images", "pull-ceph-image"),
+                              ("images", "images haproxy keepalived", "pull-haproxy-keepalived"), ("profile", "profile", None), ("route", "route", None),
+                              ("devices", "device_identity", None)):
         transport = AppliedTransport(host_request, ids[:1] if step == "images" else ())
-        result = ceph_core.host_step(host_request, step, DIGEST, transport)
-        assert transport.calls == [("node-2", phase)] and "evidence" not in result
+        result = ceph_core.host_step(host_request, step, DIGEST, transport, **({"pull": pull} if pull else {}))
+        assert transport.calls == [("node-2", phase)] and "evidence" not in result and ("seconds" in result) is (step == "images")
         assert result["specializations"] == (ids[:1] if step == "images" else [])
         reported.append(result["changed"])
         plan_digest = result.get("planDigest", plan_digest)
         applied += result["specializations"]
-    assert reported == [True, True, False, False, False] and plan_digest == "a" * 64
+    assert reported == [True, True, True, False, False, False] and plan_digest == "a" * 64
     transport = AppliedTransport(host_request, ids[1:])
     verified = ceph_core.host_step(host_request, "verify", DIGEST, transport, plan_digest=plan_digest, applied=applied)
     assert transport.calls == [("node-2", "host_observe")] and verified["changed"] is False
@@ -203,15 +209,21 @@ def test_the_long_call_carries_the_credential_only_on_protected_stdin(host_reque
     material = {"sshKey": str(key), "knownHosts": str(known), "registryJSON": str(registry)}
     transport = ceph_core.Transport(host_request["cluster"], material, run=run, scope=True)
     host = host_request["cluster"]["hosts"][1]
-    assert transport.host_images(host) == {"changed": True}
+    assert transport.host_images(host, ["haproxy"], 1200) == {"changed": True}
     argv, data, timeout = calls[0]
     assert PASSWORD not in " ".join(argv) and "PRIVATE-KEY-SENTINEL" not in " ".join(argv)
-    assert timeout == ceph_host_worker.REMOTE_LIMIT + 60 and argv[-1].endswith(" " + str(ceph_host_worker.REMOTE_LIMIT))
+    assert timeout == 1200 + 60 and argv[-1].endswith(" 1200")
     envelope = json.loads(data)
-    assert envelope["budget"] == ceph_host_worker.REMOTE_LIMIT and set(envelope["sources"]) == set(ceph_native_worker.MODULES)
+    assert envelope["budget"] == 1200 and set(envelope["sources"]) == set(ceph_native_worker.MODULES)
     assert envelope["payload"]["phase"] == "images" and set(envelope["payload"]["private"]) == {"registryJSON"}
+    assert envelope["payload"]["pull"] == {"names": ["haproxy"], "seconds": 1200}
+    for names, seconds in (([], ceph_host_worker.REMOTE_LIMIT + 1), ([], 0), (None, 1200)):
+        with pytest.raises(ceph_native.Refusal, match="^transport$"):
+            transport.host_images(host, names, seconds)
     with pytest.raises(ceph_native.Refusal, match="^transport$"):
         transport.call(host, "images")
+    with pytest.raises(ceph_native.Refusal, match="^transport$"):
+        transport.call(host, "route", names=[])
     assert len(calls) == 1
 
 
@@ -230,7 +242,7 @@ def test_every_other_host_phase_keeps_the_ordinary_ceiling(host_request, tmp_pat
 
     transport = ceph_core.Transport(host_request["cluster"], {"sshKey": str(key), "knownHosts": str(known)}, run=run, scope=True)
     for phase in ("profile", "route", "device_identity", "host_observe", "host_devices"):
-        transport.call(host_request["cluster"]["hosts"][1], phase)
+        transport.call(host_request["cluster"]["hosts"][1], phase, **({"names": ["haproxy"]} if phase == "profile" else {}))
     assert all(timeout == 660 and json.loads(data)["budget"] <= 640 for unused, data, timeout in calls)
 
 
@@ -376,6 +388,43 @@ def test_host_request_admits_only_the_cluster_scope(host_request, change):
         ceph_core.host_request(dict(host_request, version="ceph-host-v3"))
 
 
+@pytest.mark.parametrize("pulls", [
+    None, [{"group": "pull-haproxy", "names": ["haproxy"]}, {"group": "pull-keepalived", "names": ["keepalived"]}],
+    [{"group": "pull-keepalived-haproxy", "names": ["keepalived", "haproxy"]}], [{"group": "pull-haproxy-haproxy", "names": ["haproxy", "haproxy"]}],
+    [{"group": "pull-images", "names": ["haproxy"]}], [{"group": "pull-grafana", "names": ["grafana"]}], [{"group": "pull-", "names": []}],
+    [{"group": "pull-haproxy", "names": ["haproxy"], "seconds": 1}],
+])
+def test_host_request_admits_only_bounded_ordered_batches_of_its_frozen_auxiliary_images(host_request, pulls):
+    for admitted in ([], [{"group": "pull-keepalived", "names": ["keepalived"]}], host_request["pulls"]):
+        ceph_core.host_request(dict(host_request, pulls=admitted))
+    with pytest.raises(ceph_native.Refusal, match="^request$"):
+        ceph_core.host_request(dict(host_request, pulls=pulls))
+
+
+class Clock:
+    def __init__(self, step):
+        self.value, self.step = 100.0, step
+
+    def __call__(self):
+        self.value += self.step
+        return self.value
+
+
+def test_images_steps_share_one_budget_and_refuse_once_it_is_spent(host_request):
+    transport = Transport(host_request)
+    result = ceph_core.host_step(host_request, "images", DIGEST, transport, pull="pull-ceph-image", seconds=1000, clock=Clock(300.0))
+    assert result["seconds"] == 1000 - 301 and transport.calls == [("node-2", "images")]
+    result = ceph_core.host_step(host_request, "images", DIGEST, transport, pull="pull-haproxy-keepalived", seconds=200, clock=Clock(400.0))
+    assert result["seconds"] == 0 and transport.calls[-1] == ("node-2", "images haproxy keepalived")
+    transport.calls.clear()
+    with pytest.raises(ceph_native.Refusal, match="^image-pull$"):
+        ceph_core.host_step(host_request, "images", DIGEST, transport, pull="pull-haproxy-keepalived", seconds=0)
+    for step, pull in (("images", "pull-grafana"), ("images", None), ("route", "pull-ceph-image")):
+        with pytest.raises(ceph_native.Refusal, match="^request$"):
+            ceph_core.host_step(host_request, step, DIGEST, transport, pull=pull)
+    assert transport.calls == []
+
+
 @pytest.mark.parametrize("operation", ["apply", "observe", "destroy"])
 def test_the_host_module_binds_its_transport_to_the_frozen_scope(host_request, monkeypatch, operation):
     reached = {}
@@ -385,7 +434,7 @@ def test_the_host_module_binds_its_transport_to_the_frozen_scope(host_request, m
         def __init__(self, **options):
             assert options["required_if"] == [("operation", "apply", ("step",))]
             self.params = {"request": copy.deepcopy(host_request), "operation": operation, "step": step, "plan_digest": "", "applied": [],
-                           "digest": DIGEST, "material": {}}
+                           "pull": "pull-ceph-image" if step else None, "seconds": 4285, "digest": DIGEST, "material": {}}
 
         def fail_json(self, **failure):
             raise AssertionError(failure)
@@ -397,7 +446,8 @@ def test_the_host_module_binds_its_transport_to_the_frozen_scope(host_request, m
         reached["call"] = (request, operation_name, digest, transport.request)
         return {"changed": False}
 
-    def host_step(request, step_name, digest, transport, *, plan_digest, applied):
+    def host_step(request, step_name, digest, transport, *, plan_digest, applied, pull, seconds):
+        assert (pull, seconds) == ("pull-ceph-image", 4285)
         reached["call"] = (request, step_name, digest, transport.request)
         return {"changed": False}
 
@@ -415,7 +465,7 @@ def test_a_read_or_release_names_no_step(host_request, monkeypatch, operation):
     class Module:
         def __init__(self, **options):
             self.params = {"request": copy.deepcopy(host_request), "operation": operation, "step": "packages", "plan_digest": "", "applied": [],
-                           "digest": DIGEST, "material": {}}
+                           "pull": None, "seconds": 4285, "digest": DIGEST, "material": {}}
 
         def fail_json(self, **failure):
             failures.append(failure)
@@ -479,11 +529,11 @@ def test_a_provided_fips_host_is_observed_before_preparation_and_records_its_fip
     fips = {"kernel": "1", "policy": "FIPS"}
 
     class Observed(Transport):
-        def call(self, host, phase, private=None, *, timeout=660):
+        def call(self, host, phase, private=None, *, timeout=660, names=None):
             if phase == "fips_observe":
                 self.calls.append((host["name"], phase))
                 return dict(fips)
-            return super().call(host, phase, private, timeout=timeout)
+            return super().call(host, phase, private, timeout=timeout, names=names)
     transport = Observed(tiebreaker_request, prepared_evidence(tiebreaker_request, devices=[], fips=fips))
     result = ceph_core.execute_host(tiebreaker_request, "apply", DIGEST, transport)
     assert transport.calls[:2] == [("tie", "fips_observe"), ("tie", "packages")] and result["evidence"]["fips"] == fips
