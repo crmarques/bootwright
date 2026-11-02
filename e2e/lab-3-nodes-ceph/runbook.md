@@ -852,7 +852,10 @@ then settle without work and show no difference:
 ## 6. Destroy and clean up
 
 Ceph retires with its three stopped hosts, and removal while a host survives is
-not supported. Destroy refuses while the guests run and names the stop:
+not supported. With the guests running, destroy first unregisters each guest
+from its subscription service, then pauses before any other removal and names
+the stop ([online cleanup](../../specs/state-reconciliation.md)); the repeated
+destroy continues the same operation:
 
 ```sh
 ./bin/bootwright plan --context "$CONTEXT"
