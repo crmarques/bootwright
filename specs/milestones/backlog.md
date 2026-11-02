@@ -231,6 +231,7 @@ Alias cell.
 | [B990](#b990) | new, 2026-10-30 (D211; B90 first slice) | product | Add-ons | An authored add-on creates a cluster-scoped custom resource once a program check proves the kind's scope | No consumer; the first slice admits only namespaced resources in the add-on's own namespace |
 | [B998](#b998) | new, 2026-10-30 (X234) | enabling | State reconciliation | A resolution of a predecessor's block reserves the room of the lineage's removal | Found in X234 review; the reserve rule reads one apply today and holds in the shipped cases |
 | [B999](#b999) | new, 2026-10-30 (X235 review; pre-existing) | defect | Add-ons | Selection reports two built-in packages that create one CatalogSource name or share one hosted namespace on a cluster | No profile selects two such packages today; the check belongs with the package-facts selection rules, not B90's authored slice |
+| [B1050](#b1050) | new, 2026-11-02 (`make check` during the Ceph E2E fixes) | defect | Managed OS | The physical target proof's partition case is deterministic under concurrent gate runs, or its cause is recorded | Failed once in a gate run beside a second one and passed on rerun and in 20 isolated runs; gates no milestone |
 | [B771](#b771) | new, 2026-10-20 (D173); folds B365 | defect | Add-ons, with Workspace | The `add-ons/_store` selection exception, its marker and its reader rules leave the input reader | Dead surface now that B89 is retired; removing input-reader rules is not needed by any M4 package |
 | [B772](#b772) | new, 2026-10-20 (D173) | product | Add-ons | A package installed through OLM v1 (`ClusterExtension`) | ODF/FDF, ACM, MCE and GitLab do not qualify; own-namespace installs are Technology Preview |
 | [B773](#b773) | new, 2026-10-20 (D173) | product | Add-ons | A registry credential merged into a cluster's global pull secret with an exact-entry receipt | Its inverse never runs under retirement; the install pull secret carries entitlements from first boot |
@@ -3009,6 +3010,27 @@ outcome is one admission diagnostic per shared identity on the later instance,
 as the authored add-on's
 [shared identities](../api/addons.md#admission-diagnostics) are reported, with
 a test over a synthetic package pair.
+
+### B1050
+
+`TestThePhysicalTargetProofStopsBeforeStorageUnlessTheRootIsAWholeDisk/a_partition`
+in `internal/managedos/installation` failed once during `make check` on
+2026-11-02, run beside a second gate run: the installer script's MAC-address
+check refused first instead of the expected "is not a whole disk" refusal. It
+passed on the rerun and in 20 isolated runs. The test runs the rendered `%pre` script under real `bash` with
+`set -euo pipefail` against a temporary sysfs, so only the MAC pipelines, never
+the partition check, can produce that refusal. Read-only, the suspected cause
+is timing under CPU contention in those pipelines, such as
+`printf ... | grep -Fqx` under `pipefail`: a nonzero status of either side
+reads as the address missing. It is unconfirmed and was not reproduced.
+
+**Outcome:** the case is deterministic under concurrent gate runs, or its
+cause is recorded. **Requires:** none. **Definition:** `Specified`. **Exit
+evidence:** repeated concurrent runs of the package's tests with no MAC refusal
+in the partition case. Parked because one failure is unreproduced, the tests
+passed on rerun, and the item gates no milestone. **Revive when** the case fails
+again, or a gate run records its output. The fix is in the test or in the
+rendered script's pipeline, never a retry.
 
 ## Audit remediation (2026-10-26)
 
