@@ -19,7 +19,7 @@ func TestOneExecutable(t *testing.T) {
 	allowed := []string{"amd64", "completion", "linux", "race"}
 	var mains []string
 	for _, directory := range []string{"cmd", "internal", "test"} {
-		err := filepath.WalkDir(filepath.Join(root, directory), func(path string, entry fs.DirEntry, err error) error {
+		err := walkSource(root, directory, func(path string, entry fs.DirEntry, err error) error {
 			if err != nil || entry.IsDir() || !strings.HasSuffix(path, ".go") {
 				return err
 			}

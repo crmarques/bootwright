@@ -1310,7 +1310,11 @@ owning spec, which names the check.
   that names a test or does not read the list. The docs checks that list
   production Go source, `TestDocsPackageTableNamesEveryTestOnlyPackage` and
   `TestDiagnosticCodesMatchOutputSpec`, walk the working tree's sources,
-  tracked or not, as a build reads them.
+  tracked or not, as a build reads them. So does every other architecture
+  check that reads Go source, but none reads a directory Git ignores: they walk
+  the tracked and the untracked unignored files through `sourceTree`, so an
+  unreadable cache or build output outside the source decides no verdict
+  (`TestSourceChecksSkipAnIgnoredUnreadableDirectory`).
   `TestDocsNameEveryCheckThatWalksTheWorkingTree` keeps that list exact: it
   follows each docs check through the functions, methods and package variables
   of its package directory, sources and tests alike, to any reference, through

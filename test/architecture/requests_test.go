@@ -9,7 +9,6 @@ import (
 	"io"
 	"io/fs"
 	"maps"
-	"os"
 	"path"
 	"path/filepath"
 	"reflect"
@@ -27,7 +26,11 @@ import (
 // json-tagged field of a request with a Canonical method is read by the
 // encoder that freezes the request; a json tag alone exempts nothing.
 func TestEveryRequestFieldIsRead(t *testing.T) {
-	for _, field := range unreadRequestFields(t, os.DirFS(filepath.Join("..", ".."))) {
+	tree, err := newSourceTree(filepath.Join("..", ".."))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, field := range unreadRequestFields(t, tree) {
 		t.Errorf("%s is never read by production code: read it where the request is served, or remove it and whatever sets it", field)
 	}
 }

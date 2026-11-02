@@ -79,7 +79,7 @@ func goOperatorStrings(root string) ([]operatorString, error) {
 	var found []operatorString
 	fileSet := token.NewFileSet()
 	for _, directory := range []string{"api", "internal", "ansible", filepath.Join("cmd", "bootwright")} {
-		err := filepath.WalkDir(filepath.Join(root, directory), func(path string, entry fs.DirEntry, err error) error {
+		err := walkSource(root, directory, func(path string, entry fs.DirEntry, err error) error {
 			if err != nil {
 				return err
 			}

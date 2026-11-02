@@ -63,17 +63,19 @@ type markdownFile struct {
 // trackedFiles lists, relative to root, the files Git tracks there, so no
 // untracked or ignored file of a checkout decides a docs verdict that CI
 // reaches without it. The caller's GIT_ variables never redirect the listing.
-func trackedFiles(root string) ([]string, error) {
-	command := exec.Command("git", "ls-files", "-z")
+func trackedFiles(root string) ([]string, error) { return gitListing(root, "ls-files", "-z") }
+
+func gitListing(root string, arguments ...string) ([]string, error) {
+	command := exec.Command("git", arguments...)
 	command.Dir = root
 	command.Env = slices.DeleteFunc(os.Environ(), func(variable string) bool { return strings.HasPrefix(variable, "GIT_") })
 	output, err := command.Output()
 	if err != nil {
 		var exit *exec.ExitError
 		if errors.As(err, &exit) {
-			return nil, fmt.Errorf("git ls-files: %w: %s", err, bytes.TrimSpace(exit.Stderr))
+			return nil, fmt.Errorf("git %s: %w: %s", arguments[0], err, bytes.TrimSpace(exit.Stderr))
 		}
-		return nil, fmt.Errorf("git ls-files: %w", err)
+		return nil, fmt.Errorf("git %s: %w", arguments[0], err)
 	}
 	var files []string
 	for name := range strings.SplitSeq(string(output), "\x00") {

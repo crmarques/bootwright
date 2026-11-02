@@ -18,7 +18,7 @@ import (
 func TestImportsAreGroupedOnce(t *testing.T) {
 	root := filepath.Join("..", "..")
 	for _, directory := range []string{"api", "internal", "ansible", "cmd", "test", "scripts"} {
-		err := filepath.WalkDir(filepath.Join(root, directory), func(path string, entry fs.DirEntry, err error) error {
+		err := walkSource(root, directory, func(path string, entry fs.DirEntry, err error) error {
 			if err != nil || entry.IsDir() || !strings.HasSuffix(path, ".go") {
 				return err
 			}

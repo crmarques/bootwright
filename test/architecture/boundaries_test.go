@@ -238,7 +238,7 @@ func productionSources(t *testing.T) []sourceFile {
 	var sources []sourceFile
 	root := filepath.Join("..", "..")
 	for _, directory := range []string{"api", "internal", "ansible", filepath.Join("cmd", "bootwright")} {
-		err := filepath.WalkDir(filepath.Join(root, directory), func(path string, entry fs.DirEntry, err error) error {
+		err := walkSource(root, directory, func(path string, entry fs.DirEntry, err error) error {
 			if err != nil {
 				return err
 			}
