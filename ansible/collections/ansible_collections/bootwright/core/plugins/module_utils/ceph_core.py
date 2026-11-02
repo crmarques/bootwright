@@ -35,6 +35,7 @@ READINESS_INTERVAL = 5
 # Each ingress host's read-only firewall check, all within one native call of the block's Go deadline.
 FIREWALL_CALL = 120
 FIREWALL_WINDOW = 600
+HOLDER_CALL = 60
 # The rendered-configuration proof of a management gateway's oauth2-proxy: one call per host per round, rounds within one native call
 # of the block's Go deadline.
 SSO_CALL = 120
@@ -1100,11 +1101,64 @@ def observe_unit(request, request_digest, bootstrap, transport, timeout=None, bl
     return evidence(observed, request_digest, request)
 
 
+def ingress_fronts(request):
+    """Each ingress that fronts a service unit or a gateway, one per data site on a stretch cluster, with its client port."""
+    if request.get("action") == "gateway":
+        return ceph_native_object.frontends(request)
+    if request.get("action") == "service":
+        return [found for found in (ceph_native_units.frontend(request),) if found is not None]
+    return []
+
+
+def ingress_name(document):
+    return document["service_type"] + "." + document["service_id"] if "service_id" in document else document["service_type"]
+
+
+def keepalived_hosts(observed, ingress):
+    """The hosts the observation lists running this ingress's keepalived, the only ones that can hold its virtual IP."""
+    name = ingress_name(ingress)
+    return sorted({daemon["host"] for daemon in observed.get("daemons", [])
+                   if daemon.get("service") == name and str(daemon.get("name", "")).startswith("keepalived.")})
+
+
+def vip_holders(request, observed, transport, deadline, now):
+    """Read-only, within the readiness window: each host running an ingress's keepalived says whether it holds the virtual IP now. Each
+    virtual address needs exactly one holder; the entries name an address that none holds, or that several hold, as dropped VRRP leaves it
+    split, and a keepalived host that does not answer. None when the window closes before every host answered."""
+    hosts = {host["name"]: host for host in request["hosts"]}
+    entries = []
+    for ingress, unused in ingress_fronts(request):
+        held, unanswered = 0, []
+        for name in keepalived_hosts(observed, ingress):
+            ceph_native.require(name in hosts, "evidence")
+            remaining = deadline - now()
+            if remaining <= 0:
+                return None
+            try:
+                result = transport.call(hosts[name], "vip_holder", timeout=min(HOLDER_CALL, remaining))
+            except ceph_native.RemoteRefusal:
+                raise
+            except ceph_native.Refusal as error:
+                if str(error) != "transport":
+                    raise
+                unanswered.append("unreachable@" + name)
+                continue
+            ceph_native.require(isinstance(result, dict) and set(result) == {"changed", "holds"} and result["changed"] is False
+                                and type(result["holds"]) is bool, "evidence")
+            held += result["holds"]
+        if unanswered:
+            entries.extend(unanswered)
+        elif held != 1:
+            entries.append(("noholder@" if held == 0 else "holders@") + ingress_name(ingress))
+    return entries
+
+
 def wait_unit(request, request_digest, bootstrap, transport, now, pause, *, private=None):
-    """Poll the unit's own observation until ready; a timeout names the daemons, endpoint or health checks still blocking."""
+    """Poll the unit's own observation until ready and, with an ingress, until each virtual IP has exactly one holder; a timeout names the
+    daemons, endpoint, holder or health checks still blocking."""
     call_timeout = unit_observation_timeout(request)
     deadline = now() + READINESS_TIMEOUT + (call_timeout if nvmeof_unit(request) else 0)
-    blocking = []
+    blocking, unheld = [], []
     while True:
         remaining = deadline - now()
         if remaining <= 0:
@@ -1117,8 +1171,14 @@ def wait_unit(request, request_digest, bootstrap, transport, now, pause, *, priv
             blocking[:] = (["unsettled@" + bootstrap["name"]] + [entry for entry in blocking if not entry.startswith("unsettled@")])[:16]
             observed = None
         if observed is not None and observed["ready"]:
-            return observed
-        ceph_native.require(observed is None or observed["owned"] and observed["exists"] and observed["partial"], "not-ready")
+            held = vip_holders(request, observed, transport, deadline, now)
+            if held == []:
+                return observed
+            if held is None:
+                raise ReadinessRefusal(unheld or blocking)
+            unheld = blocking[:] = held[:16]
+        else:
+            ceph_native.require(observed is None or observed["owned"] and observed["exists"] and observed["partial"], "not-ready")
         remaining = deadline - now()
         if remaining <= 0:
             raise ReadinessRefusal(blocking)
@@ -1248,7 +1308,7 @@ def execute_unit(request, operation, request_digest, transport, bootstrap, *, no
     if operation == "apply":
         transport.call(bootstrap, "prerequisites")
         if request["action"] == "service":
-            ingress_firewall(request, transport, [found for found in (ceph_native_units.frontend(request),) if found is not None], now)
+            ingress_firewall(request, transport, ingress_fronts(request), now)
         bound = transport.unit_material("unit") if bound_unit else {}
         for phase in phases:
             produced = transport.call(bootstrap, phase, bound) if bound and phase == "unit" else transport.call(bootstrap, phase)
@@ -1329,7 +1389,7 @@ def execute_gateway(request, operation, request_digest, transport, bootstrap, *,
     changed = False
     if operation == "apply":
         transport.call(bootstrap, "prerequisites")
-        ingress_firewall(request, transport, ceph_native_object.frontends(request), now)
+        ingress_firewall(request, transport, ingress_fronts(request), now)
         for phase in ceph_native_object.APPLY_PHASES:
             private = transport.gateway_material(True) if seen and phase == "gateway_service" else None
             produced = transport.call(bootstrap, phase, private) if private else transport.call(bootstrap, phase)

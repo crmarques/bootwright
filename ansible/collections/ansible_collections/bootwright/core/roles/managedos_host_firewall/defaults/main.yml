@@ -1,0 +1,14 @@
+---
+# Derived from the frozen request and its material only. Nothing here is
+# authored by desired state, and no value selects an executable, a role or a
+# task file.
+managedos_host_firewall_scratch: '{{ bootwright_run_scratch }}/managedos-firewall'
+# The service files Go rendered, one per request service in request order.
+managedos_host_firewall_services: '{{ bootwright_os_firewall_material.services | from_json }}'
+# The refusals the worker names, which the runner reports with the diagnostics
+# Go owns (internal/managedos/installation).
+managedos_host_firewall_refusals:
+  - host-firewall-foreign
+  - host-firewall-no-interface
+  - host-firewall-inactive
+  - host-firewall-failed

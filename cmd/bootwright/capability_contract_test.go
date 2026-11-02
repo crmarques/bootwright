@@ -210,6 +210,8 @@ func contractRows() []contractRow {
 			drift: map[string]any{"identity": strings.Repeat("a", 64)}},
 		{kind: installation.Kind, implementation: installation.Implementation, example: "lab-rhel", presence: contractInstallationPresence, retains: true,
 			noEffect: map[string]any{"power": "Off"}, drift: map[string]any{"reachable": false}},
+		{kind: installation.Kind, implementation: installation.FirewallImplementation, example: "lab-rhel+firewall",
+			completedFrom: "specs/managed-os.md, Host firewall requirements: each run pins the guest key its original apply's installation proved, and marks its services with that apply operation"},
 		{kind: installation.Kind, implementation: installation.EraseImplementation, example: "lab-baremetal+erase",
 			completedFrom: "specs/state-reconciliation.md, Opt-in physical logical overwrite: erase requires the original physical claim UUID before any adapter or receipt can be trusted"},
 		{kind: libvirt.HostKind, implementation: libvirt.HostImplementation, example: "lab-rhel", presence: contractHostPresence,
@@ -239,6 +241,7 @@ const cephSMBCompletedFrom = "specs/ceph.md, SMB resources: an SMB request takes
 // declares yet.
 var contractOverlays = map[string][2]string{
 	"lab-baremetal+erase":                {"lab-baremetal", filepath.Join("testdata", "capability-overlays", "physical-erase")},
+	"lab-rhel+firewall":                  {"lab-rhel", filepath.Join("testdata", "capability-overlays", "host-firewall")},
 	"libvirt-3-nodes-ceph+smb":           {"libvirt-3-nodes-ceph", filepath.Join("testdata", "capability-overlays", "ceph-smb")},
 	"libvirt-3-nodes-ceph-object+user":   {"libvirt-3-nodes-ceph-object", filepath.Join("testdata", "capability-overlays", "ceph-object-user")},
 	"libvirt-3-nodes-ceph-object+bucket": {"libvirt-3-nodes-ceph-object", filepath.Join("testdata", "capability-overlays", "ceph-object-bucket")},
@@ -493,7 +496,7 @@ func (f *contractFindings) record(row contractRow, property, message string) {
 // everything as completion. A failed or empty probe never reads as quiescent.
 func TestEveryCapabilityHonoursTheCapabilityContract(t *testing.T) {
 	runner := &contractRunner{}
-	resolver := buildCapabilitiesWith(systemClock{}, exampleControllerPorts(t), runner, exampleMediaRecords{})
+	resolver := withContractHostPorts(buildCapabilitiesWith(systemClock{}, exampleControllerPorts(t), runner, exampleMediaRecords{}), runner)
 	resolver = append(resolver, boundCapability{kind: string(api.Machine), implementation: contractDoubleImplementation, family: "contract-double", capability: contractDouble{adapter: runner.Run}})
 	examples := map[string]contractExample{}
 	findings := &contractFindings{failures: map[string][]string{}}
@@ -1681,4 +1684,24 @@ func contractTreePresence(t *testing.T, execution lifecycle.Execution) map[strin
 		t.Fatal(err)
 	}
 	return map[string]any{"postcondition": true, "content": true, "tree": true, "identity": request.Media.SHA256, "version": installation.TreeEvidenceVersion}
+}
+
+func contractHostPorts(catalog api.Catalog) ([]installation.HostPortRequirement, error) {
+	var found []installation.HostPortRequirement
+	for _, machine := range installation.InstalledMachines(catalog) {
+		if installation.RealizesHostPorts(catalog, machine.Name()) {
+			found = append(found, installation.HostPortRequirement{Machine: machine.Name(), Publisher: "contract-ingress", Networks: []string{"198.51.100.60/32"},
+				Protocols: []string{"vrrp"}, Ports: []installation.HostPort{{Number: 443, Transport: "tcp"}}})
+		}
+	}
+	return found, nil
+}
+
+func withContractHostPorts(resolver capabilityResolver, runner capabilityRunner) capabilityResolver {
+	for index, bound := range resolver {
+		if bound.implementation == installation.FirewallImplementation {
+			resolver[index].capability = installation.NewFirewall(runner).WithHostPorts(contractHostPorts)
+		}
+	}
+	return resolver
 }

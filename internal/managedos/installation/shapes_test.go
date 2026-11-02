@@ -88,7 +88,7 @@ func TestExternalNameAndTimeServicesAreUsedByTheirDeclaredAddress(t *testing.T) 
 	if len(needs.DNSServers) != 0 || len(needs.NTPServers) != 0 {
 		t.Fatalf("requirements = %+v", needs)
 	}
-	want := []reconciliation.ObjectRef{{Kind: "Machine", Object: "rhel-01"}, {Kind: "ArtifactServer", Object: "lab-artifacts"}, {Kind: TreeKind, Object: "rhel-9-8"}}
+	want := []reconciliation.ObjectRef{{Kind: "Machine", Object: "rhel-01", Family: substrate.MachineFamily}, {Kind: "ArtifactServer", Object: "lab-artifacts"}, {Kind: TreeKind, Object: "rhel-9-8"}}
 	if requires := planRequires(t, catalog); !slices.Equal(requires, want) {
 		t.Fatalf("requires = %v", requires)
 	}

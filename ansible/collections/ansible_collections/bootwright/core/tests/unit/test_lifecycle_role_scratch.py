@@ -30,6 +30,7 @@ def walk(tasks):
     ("substrate_libvirt_host", "libvirt-host"),
     ("substrate_libvirt_machine", "libvirt-machine"),
     ("managedos_install_anaconda", "managedos-install"),
+    ("managedos_host_firewall", "managedos-firewall"),
 ])
 def test_private_role_files_are_cleaned_even_after_a_task_fails(role, scope):
     tasks = load(role, "tasks/apply.yml")
@@ -41,7 +42,8 @@ def test_private_role_files_are_cleaned_even_after_a_task_fails(role, scope):
     assert prepare[SCRATCH] == {"root": "{{ bootwright_run_scratch }}", "scope": scope}
     request = {"substrate_libvirt_host": "bootwright_substrate_host_request",
                "substrate_libvirt_machine": "bootwright_substrate_machine_request",
-               "managedos_install_anaconda": "bootwright_os_install_request"}[role]
+               "managedos_install_anaconda": "bootwright_os_install_request",
+               "managedos_host_firewall": "bootwright_os_firewall_request"}[role]
     assert cleanup[SCRATCH] == dict(
         prepare[SCRATCH], state="absent", remove_root="{{ " + request + ".placement.connection == 'ssh' }}")
     assert cleanup["when"] == prepare["register"] + " is succeeded"

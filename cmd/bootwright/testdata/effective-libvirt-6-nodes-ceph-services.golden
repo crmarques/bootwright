@@ -372,6 +372,7 @@ spec:
         - lvm2
         - python3
         - nfs-utils
+        - firewalld
       excludeDocs: true
       installWeakDeps: false
     repositories:
@@ -387,9 +388,12 @@ spec:
         - chronyd
         - qemu-guest-agent
         - sshd
+        - firewalld
     security:
       selinux:
         mode: enforcing
+      firewall:
+        enabled: true
   proxy:
     direct: {}
   ntp:

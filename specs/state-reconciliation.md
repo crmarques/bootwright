@@ -985,12 +985,14 @@ one a row's field path names on its object while a block realizes the target.
 | Block | Requires | Named by |
 | --- | --- | --- |
 | `substrate-machine` `Machine` | `InfraProvider` | `spec.substrate.providerRef` |
-| `os-install` `Machine` | `Machine` | the Machine itself, realized by its substrate |
+| `os-install` `Machine` | `Machine` from `substrate-machine` | the Machine itself, realized by its substrate |
+| `os-install` `Machine` | `Machine` from `physical-erase` | the Machine itself, when it declares `spec.hardware.eraseOnRemoval` |
 | `os-install` `Machine` | `MachineInstallProfile` | `spec.os.installProfileRef`, realized when its package tree is hosted |
 | `os-install` `Machine` | `ArtifactServer` | the install profile's and the Machine's artifact endpoints |
 | `os-install` `Machine` | `DNSServer` | the `dns` selections of the Machine's network configuration |
 | `os-install` `Machine` | `NTPServer` | `spec.os.install.ntp[].serverRef` |
 | `os-install` `Machine` | `CephCluster` from `storage-physical-retirement` | a storage cluster whose retirement must release this physical Machine first |
+| `os-host-firewall` `Machine` | `Machine` from `os-install` | the Machine itself, whose installation the host port requirements of its services wait for |
 | `physical-erase` `Machine` | `Machine` from `substrate-machine` | the Machine itself |
 | `physical-erase` `Machine` | `ArtifactServer` | the erase image's artifact endpoint |
 | `physical-erase` `Machine` | `DNSServer` | the `dns` selections of the Machine's network configuration |

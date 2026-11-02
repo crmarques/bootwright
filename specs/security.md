@@ -622,8 +622,11 @@ in inventory, facts, caches, evidence, logs, or adapter results.
 
 ### Listener exposure
 
-The operator owns host firewall policy; Bootwright does not open ports or
-change zones. A listener serves only its declared consumers. A privileged
+The operator owns the firewall policy of the controller and of every host
+Bootwright does not install with its firewall enabled; Bootwright opens no port
+and changes no zone there. On a Machine it installs with the firewall enabled,
+the managed OS realizes other capabilities' requirements as owned firewalld
+services ([host firewall requirements](managed-os.md#host-firewall-requirements)). A listener serves only its declared consumers. A privileged
 listener or one carrying cleartext credentials binds loopback or a host-only
 address unless the operator explicitly places it on a trusted network. A
 wildcard bind exposes all matching host interfaces and requires source

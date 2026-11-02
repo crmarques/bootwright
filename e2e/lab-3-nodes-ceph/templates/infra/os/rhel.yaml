@@ -75,6 +75,8 @@ spec:
     security:
       selinux:
         mode: enforcing
+      firewall:
+        enabled: true
 
     repositories:
       configure:

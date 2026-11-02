@@ -99,6 +99,7 @@ func (c Capability) Plan(ctx context.Context, input lifecycle.PlanInput) (lifecy
 			Impacts:        impacts(input.Verb, request),
 			Groups:         groups(input.Verb, request),
 			Exclusive:      request.ExclusiveKeys(),
+			Family:         InstallFamily,
 			Kind:           Kind,
 			Object:         request.Identity.Object,
 			Implementation: Implementation,
@@ -145,6 +146,10 @@ func (c Capability) retirementRequires(catalog api.Catalog, request Request) ([]
 
 func installationRequires(needs Requirements, request Request) []reconciliation.ObjectRef {
 	references := requires(needs)
+	references[0].Family = substrate.MachineFamily
+	if request.EraseOnRemoval {
+		references = append(references, reconciliation.ObjectRef{Kind: "Machine", Object: needs.Machine, Family: EraseFamily})
+	}
 	if request.Tree != nil {
 		references = append(references, reconciliation.ObjectRef{Kind: TreeKind, Object: request.Identity.Profile})
 	}

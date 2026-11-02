@@ -50,6 +50,7 @@ MARKS = [line for text in (CERT, KEY) for line in text.splitlines() if "-----" n
 LEAF_SHA256 = hashlib.sha256(LEAF).hexdigest()
 VIP = "192.0.2.60"
 PORT = 9443
+INTERNAL_PORT = 29443
 TWO = ["node-1", "node-2"]
 
 
@@ -74,6 +75,8 @@ def bindings():
 def gateway_request(vip=VIP, bound=True, unit_documents=None):
     unit_documents = documents(vip) if unit_documents is None else unit_documents
     service = {"documents": unit_documents, "id": "", "type": "mgmt-gateway"}
+    if any(document["service_type"] == "ingress" for document in unit_documents):
+        service["ingressPorts"] = [INTERNAL_PORT]
     if bound:
         service["bindings"] = bindings()
     request = dict(units.cluster(), action="service", service=service)
@@ -345,7 +348,7 @@ def test_execute_unit_checks_the_bound_digest(monkeypatch):
     assert result["evidence"]["ready"] is True and result["evidence"]["endpoint"] == served
     cert, both = ["mgmtGatewayCertificate"], sorted(MATERIAL)
     assert transport.private == [("prerequisites", []), ("ingress_firewall", []), ("ingress_firewall", []), ("unit", both), ("observe", cert),
-                                 ("observe", cert)]
+                                 ("observe", cert), ("vip_holder", [])]
     removed = {"exists": False, "ready": False, "removed": True, "partial": False, "daemons": [], "endpoint": {"certificateSHA256": "", "reachable": False}}
     transport = MaterialTransport(request, served)
     transport.observed.update(removed)
@@ -387,10 +390,10 @@ def test_gateway_frontend_is_the_gateway_port_on_the_virtual_ip(tmp_path, monkey
     assert ceph_native_units.frontend(request) == (request["service"]["documents"][0], PORT)
     assert ceph_native_units.frontend(gateway_request(None)) is None
     checked = []
-    monkeypatch.setattr(ceph_native_units, "firewall_check", lambda worker, spec, port: checked.append((worker.host["name"], spec["virtual_ip"], port)))
+    monkeypatch.setattr(ceph_native_units, "firewall_check", lambda worker, spec, ports: checked.append((worker.host["name"], spec["virtual_ip"], ports)))
     monitor = monitoring.Monitor(request)
     assert units.worker(monitor, units.markers_for(tmp_path, request)).ingress_firewall() == {"changed": False}
-    assert checked == [("node-1", VIP, PORT)] and monitor.mutations == []
+    assert checked == [("node-1", VIP, [PORT, INTERNAL_PORT])] and monitor.mutations == []
     monkeypatch.setattr(ceph_native, "supported_transport", lambda value: True)
     transport = MaterialTransport(request, {"certificateSHA256": LEAF_SHA256, "reachable": True})
     ceph_core.execute(request, "apply", "d" * 64, transport, now=lambda: 0, pause=lambda seconds: None)

@@ -1,0 +1,103 @@
+---
+# One session of the host firewall worker, apply or remove, over a pinned fleet
+# connection to the installed machine: the host key the original apply's
+# installation proved, passed as material hostKey, is the only key accepted,
+# and the placement host's reduced policy configuration and the lent fleet
+# identity are the only other inputs.
+# Only the operation, the ownership mark and the services reach the machine,
+# on the fixed worker's standard input. A refusal is named to the runner with
+# its closed reason, the service it names or the closed cause, and the run
+# fails. The caller names the operation, apply or remove, and finds the
+# answer in managedos_host_firewall_answer, whose changed is the module's own:
+# no changed_when overrides it, because the completion's outcome is read from it.
+- name: Read the effective crypto policy on this connection's placement host
+  bootwright.core.ssh_key_policy:
+  register: managedos_host_firewall_ssh_policy
+
+- name: Publish the guest's own host key for this one connection
+  ansible.builtin.copy:
+    content: '{{ bootwright_os_firewall_request.address }} {{ bootwright_os_firewall_material.hostKey | trim }}'
+    dest: '{{ managedos_host_firewall_scratch }}/known_hosts'
+    owner: root
+    group: root
+    mode: '0600'
+  changed_when: false
+
+- name: Write the one-connection client configuration
+  ansible.builtin.copy:
+    content: '{{ managedos_host_firewall_ssh_policy.configuration }}'
+    dest: '{{ managedos_host_firewall_scratch }}/ssh_config'
+    owner: root
+    group: root
+    mode: '0600'
+  changed_when: false
+
+- name: Name the algorithms the guest's key is accepted under
+  ansible.builtin.set_fact:
+    managedos_host_firewall_host_key_algorithms: >-
+      {{ bootwright_os_firewall_material.hostKey
+         | bootwright.core.host_key_algorithms(managedos_host_firewall_ssh_policy.hostKeyAlgorithms) }}
+  changed_when: false
+
+- name: Run the host firewall worker on the installed machine on that exact key
+  bootwright.core.managedos_firewall:
+    operation: '{{ managedos_host_firewall_operation }}'
+    address: '{{ bootwright_os_firewall_request.address }}'
+    user: '{{ bootwright_os_firewall_request.user }}'
+    identity: '{{ bootwright_os_firewall_material.fleetIdentity }}'
+    ssh_config: '{{ managedos_host_firewall_scratch }}/ssh_config'
+    known_hosts: '{{ managedos_host_firewall_scratch }}/known_hosts'
+    host_key_algorithms: '{{ managedos_host_firewall_host_key_algorithms }}'
+    policy_host_key_algorithms: '{{ managedos_host_firewall_ssh_policy.hostKeyAlgorithms }}'
+    mark: '{{ bootwright_os_firewall_material.mark }}'
+    services: '{{ managedos_host_firewall_services }}'
+    timeout: 300
+  register: managedos_host_firewall_answer
+  failed_when: false
+  no_log: true
+
+- name: Remove the one-connection known-hosts file
+  ansible.builtin.file:
+    path: '{{ managedos_host_firewall_scratch }}/known_hosts'
+    state: absent
+  changed_when: false
+
+- name: Remove the one-connection client configuration
+  ansible.builtin.file:
+    path: '{{ managedos_host_firewall_scratch }}/ssh_config'
+    state: absent
+  changed_when: false
+
+- name: Name a host firewall the machine refused
+  bootwright.core.managedos_firewall_protocol:
+    phase: refused
+    reason: '{{ managedos_host_firewall_answer.reason }}'
+    detail: >-
+      {{ managedos_host_firewall_answer.detail | default('')
+         if managedos_host_firewall_answer.reason in ['host-firewall-foreign', 'host-firewall-no-interface']
+         else managedos_host_firewall_answer.cause | default('') }}
+  when:
+    - not (managedos_host_firewall_answer.ok | default(false) | bool)
+    - managedos_host_firewall_answer.reason | default('') in managedos_host_firewall_refusals
+  no_log: true
+
+# The message names the Machine and the worker's closed vocabulary only: the
+# worker's detail and any other module output never reach it.
+- name: Refuse a machine whose host firewall did not converge
+  ansible.builtin.fail:
+    msg: >-
+      The host firewall of Machine {{ bootwright_os_firewall_request.identity.object }}
+      was not {{ 'removed' if managedos_host_firewall_operation == 'remove' else 'realized' }}:
+      {{ managedos_host_firewall_reason }}{{ managedos_host_firewall_cause }}
+  vars:
+    managedos_host_firewall_reason: >-
+      {{ managedos_host_firewall_answer.reason | default('')
+         if managedos_host_firewall_answer.reason | default('') in
+         ['host-firewall-foreign', 'host-firewall-no-interface', 'host-firewall-inactive', 'host-firewall-failed', 'transport']
+         else 'unexpected answer' }}
+    managedos_host_firewall_cause: >-
+      {{ ' (' ~ managedos_host_firewall_answer.cause ~ ')'
+         if managedos_host_firewall_answer.cause | default('') in
+         ['tooling', 'reload', 'zone', 'write', 'address', 'timeout', 'session', 'host-key', 'exit', 'answer', 'unreachable']
+         else '' }}
+  when: not (managedos_host_firewall_answer.ok | default(false) | bool)

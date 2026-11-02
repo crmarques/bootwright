@@ -94,7 +94,7 @@ func (c EraseCapability) Plan(ctx context.Context, input lifecycle.PlanInput) (l
 			return plan, err
 		}
 		definition := reconciliation.BlockDefinition{ID: EraseBlockID(machine.Name()), Description: "retain the verified physical erase policy of " + machine.Name(), Stage: reconciliation.StageMachines,
-			Requires: append(needs, retirement...), Kind: Kind, Object: machine.Name(), Implementation: EraseImplementation, ContentDigest: EraseContentDigest(), Request: canonical, Exclusive: install.ExclusiveKeys()}
+			Requires: append(needs, retirement...), Family: EraseFamily, Kind: Kind, Object: machine.Name(), Implementation: EraseImplementation, ContentDigest: EraseContentDigest(), Request: canonical, Exclusive: install.ExclusiveKeys()}
 		if input.Verb == reconciliation.Destroy {
 			definition.Description = "overwrite and fully read back the declared physical disks of " + machine.Name()
 			definition.Consumes = []string{reconciliation.AuthorizationDataLoss}

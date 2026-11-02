@@ -55,6 +55,7 @@ func contractVersions() []contractVersion {
 		{kubevirt.MachineImplementation, kubevirt.MachineContentDigest(), reflect.TypeFor[kubevirt.MachineRequest](), reflect.TypeFor[kubevirt.MachineEvidence]()},
 		{installation.TreeImplementation, installation.TreeContentDigest(), reflect.TypeFor[installation.TreeRequest](), reflect.TypeFor[installation.TreeEvidence]()},
 		{installation.EraseImplementation, installation.EraseContentDigest(), reflect.TypeFor[installation.EraseRequest](), reflect.TypeFor[installation.EraseEvidence]()},
+		{installation.FirewallImplementation, installation.FirewallContentDigest(), reflect.TypeFor[installation.FirewallRequest](), reflect.TypeFor[installation.FirewallEvidence]()},
 		{installation.Implementation, installation.ContentDigest(), reflect.TypeFor[installation.Request](), reflect.TypeFor[installation.Evidence]()},
 		{agentinstall.MediaImplementation, agentinstall.MediaContentDigest(), reflect.TypeFor[agentinstall.MediaRequest](), reflect.TypeFor[agentinstall.MediaEvidence]()},
 		{agentinstall.InstallImplementation, agentinstall.InstallContentDigest(), reflect.TypeFor[agentinstall.InstallRequest](), reflect.TypeFor[agentinstall.InstallEvidence]()},
@@ -211,7 +212,7 @@ func automationFormats() map[string]automationFormat {
 
 		"ceph-host-v10":                {class: formatMirrored},
 		"ceph-host-evidence-v4":        {class: formatMirrored},
-		"ceph-core-v36":                {class: formatMirrored},
+		"ceph-core-v37":                {class: formatMirrored},
 		"ceph-core-evidence-v13":       {class: formatMirrored},
 		"ceph-tiebreaker-evidence-v1":  {class: formatMirrored},
 		"ceph-packages-v3":             {class: formatMirrored},
@@ -234,6 +235,8 @@ func automationFormats() map[string]automationFormat {
 		"os-package-tree-v1":                    {class: formatMirrored},
 		"os-install-anaconda-v21":               {class: formatMirrored},
 		"physical-erase-v6":                     {class: formatMirrored},
+		"os-host-firewall-v1":                   {class: formatMirrored},
+		"os-host-firewall-evidence-v1":          {class: formatMirrored},
 		"cluster-media-agent-v9":                {class: formatMirrored},
 		"cluster-install-agent-v12":             {class: formatMirrored},
 		"artifact-server-nginx-v2":              {class: formatMirrored},
@@ -411,7 +414,6 @@ func automationCapitalized() map[string]automationFormat {
 		"Bootwright libvirt provider host":                  prose,
 		"Bootwright managed artifact server":                prose,
 		"Bootwright managed network service":                prose,
-		"Bootwright never changes a":                        prose,
 		"Bootwright never pins that":                        prose,
 		"Bootwright process":                                prose,
 		"Bootwright process reads":                          prose,
@@ -712,7 +714,7 @@ func contractIdentitiesInSchema(t *testing.T, version contractVersion, identitie
 func contractOfferedImplementations(t *testing.T, versions []contractVersion) {
 	t.Helper()
 	runner := &contractRunner{}
-	resolver := buildCapabilitiesWith(systemClock{}, exampleControllerPorts(t), runner, exampleMediaRecords{})
+	resolver := withContractHostPorts(buildCapabilitiesWith(systemClock{}, exampleControllerPorts(t), runner, exampleMediaRecords{}), runner)
 	offered, listed := map[string]bool{}, map[string]string{}
 	for _, binding := range resolver.Bindings() {
 		offered[binding.Implementation] = true

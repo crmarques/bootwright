@@ -211,7 +211,7 @@ func TestPhysicalEraseOrdersAfterClaimAndBeforeInstallation(t *testing.T) {
 		}
 	}
 	definitions := append(erase.Definitions, target)
-	dependencies := realizing(target.Requires)
+	dependencies := realizing(slices.DeleteFunc(slices.Clone(target.Requires), func(reference reconciliation.ObjectRef) bool { return reference.Family == EraseFamily }))
 	for index := range dependencies {
 		if dependencies[index].Kind == "Machine" && dependencies[index].Object == machine.Name() {
 			dependencies[index].ID, dependencies[index].Family = baremetal.BlockID(machine.Name()), substrate.MachineFamily

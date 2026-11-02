@@ -26,6 +26,8 @@ plugins/modules/libvirt_domain_inspect.py validate-modules:missing-gplv3-license
 plugins/modules/libvirt_host_inspect.py validate-modules:missing-gplv3-license
 plugins/modules/lifecycle_scratch.py validate-modules:missing-gplv3-license
 plugins/modules/machine_power_protocol.py validate-modules:missing-gplv3-license
+plugins/modules/managedos_firewall.py validate-modules:missing-gplv3-license
+plugins/modules/managedos_firewall_protocol.py validate-modules:missing-gplv3-license
 plugins/modules/managedos_install_inspect.py validate-modules:missing-gplv3-license
 plugins/modules/managedos_install_protocol.py validate-modules:missing-gplv3-license
 plugins/modules/managedos_network_compare.py validate-modules:missing-gplv3-license

@@ -1753,8 +1753,78 @@ site provides layer-2 adjacency between the hosts of one virtual address,
 admits that address's MAC moving between ports on failover, and routes clients
 to it.
 
-Not yet met: no capability publishes a requirement and no managed host
-receives one; tracked as [B1022](milestones/m2.md#b1022).
+**Implementation.** `os-host-firewall-v1`, family `os-host-firewall`, plans one
+block per realizing Machine that holds at least one requirement, identified
+`os-firewall-<machine>` in the machines stage; a context whose capabilities
+publish no requirement plans exactly what it planned before. The block waits
+for the Machine's `os-install` block, and a consumer that waits for the
+Machine, such as a Ceph cluster on it, waits for this block too, so the
+services exist before the clusters stage and a removal takes them back after
+the consumer's own removal and before the installation's and the Machine's.
+Its frozen request carries, per requirement, the service name, networks,
+protocols and ports, and the guest address, fleet account, fleet key and
+placement of the installation, whose original apply proof supplies the pinned
+host key the session is opened on, as the
+[update within release](#update-within-release) worker's session is.
+
+**Service.** The service name is `bootwright-<context>-<publisher block>`, cut
+to 63 characters with a 16-digit hash suffix, like a block identity, when it
+is longer or holds a character other than a lowercase letter, a digit or `-`.
+The file `/etc/firewalld/services/<name>.xml` holds a `short` of the name, a
+`description` of the ownership mark `bootwright-host-firewall context=<context>
+block=<firewall block> apply=<apply operation>`, and exactly the requirement's
+`port` and `protocol` lines. From `ip -json address show` the guest selects
+the interfaces holding an address whose network contains the requirement's
+first network, the virtual address as a single-host prefix (`/32` or `/128`,
+which planning requires), or, when none
+does, those whose address network equals one of its later networks, which is the selection the
+consumer's read-only check makes. It reads each selected interface's runtime
+zone, or the default zone for an interface bound to none; firewalld reloads
+when a file was written or its permanent configuration does not list a
+service yet, the service is added to each such zone permanently, then
+firewalld reloads.
+
+**Replay and ownership.** A file bearing this block's mark with the frozen
+content is unchanged; one bearing the mark with other content is rewritten, and
+no other file; a missing membership is added. The mark makes a file written by
+an attempt that ended before its record provably this operation's own, so a
+retry completes it. A same-named file without the mark, or not a regular
+root-owned file, refuses `host-firewall-foreign` before any service of the block
+changes. Removal deletes each service's memberships from every zone that lists
+it and its file only when it bears the mark, then reloads; it also reloads
+while any zone still lists a service at runtime, so a removal that ended
+between its delete and its reload completes on retry. A Machine the same
+removal deletes or erases takes its services with its disks, so the block is
+retired with it without contacting the guest; on a retained Machine the removal
+runs while the guest answers, and an unreachable guest fails it and keeps the
+Machine's removal waiting, as an installation's unregistration does.
+
+**Evidence.** `os-host-firewall-evidence-v1` lists, per service in request
+order, its name, its state (`owned`, `absent` or `foreign`), the SHA-256 of the
+file's bytes, its `{interface, zone}` memberships, each a zone that lists it
+permanently or at runtime, and whether every selected interface's zone holds
+it in both; Go compares the digest with the content it renders. Every
+service owned with the frozen content and covered is completion; nothing
+present is no effect for an apply and completion for a removal; owned remnants
+are partial; a foreign file, or a membership without its file, is unknown.
+
+| Refusal | Message | Remedy |
+| --- | --- | --- |
+| `host-firewall-foreign` | `Machine/<machine> holds a firewalld service <service> this context did not write, so its firewall was left unchanged` | `remove /etc/firewalld/services/<service>.xml and its zone memberships from Machine/<machine> after confirming nothing else uses it, then run bootwright <verb> --context <context> again` |
+| `host-firewall-no-interface` | `Machine/<machine> has no interface whose network holds <networks>, which firewalld service <service> admits traffic on` | `give Machine/<machine> an address on the network of <address> in its network configuration, then run bootwright <verb> --context <context> again` |
+| `host-firewall-inactive` | `firewalld is not running on Machine/<machine>, whose install profile enables it` | `start firewalld on Machine/<machine> with systemctl enable --now firewalld, then run bootwright <verb> --context <context> again` |
+| `host-firewall-failed` | `firewalld refused a change on Machine/<machine>: <cause>` | `read the firewalld journal on Machine/<machine>, correct it, then run bootwright <verb> --context <context> again` |
+
+`<networks>` is the requirement's networks joined by ` or is `, `<address>` its
+first, `<verb>` is `destroy` for a removal and `apply` otherwise, and `<cause>` is `tooling`, `reload`, `zone`, `write` or `address`, else
+`unknown`. `plan` reports one `host-port` row per requirement and reads no
+host: on a realizing Machine, that the managed OS realizes it before the
+clusters stage; on any other host, the ports and protocols to permit in the
+zone of the interface on its networks, and on a Bootwright-installed Machine
+whose profile leaves its firewall off, `spec.customizations.security.firewall.enabled:
+true` as the alternative. SMB and CTDB public addresses are not virtual
+addresses of an ingress and publish no requirement.
+
 
 ## Refusal table
 

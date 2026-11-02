@@ -15,6 +15,7 @@ import pytest
 
 from ansible_collections.bootwright.core.plugins.module_utils import ceph_core, ceph_native, ceph_native_object
 from ansible_collections.bootwright.core.tests.unit.plugins.module_utils import test_ceph_object_gateway as gw
+from ansible_collections.bootwright.core.tests.unit.plugins.module_utils import test_ceph_service_units as units
 from ansible_collections.bootwright.core.tests.unit.plugins.module_utils import test_ceph_settings as settings
 from ansible_collections.bootwright.core.tests.unit.plugins.module_utils import test_ceph_stretch as stretch
 
@@ -203,3 +204,25 @@ def test_the_firewall_check_covers_every_per_site_ingress_host_in_one_window(mon
     for name, document in (("node-2", per_site()[0]), ("node-3", per_site()[1])):
         native = ceph_native_object.ObjectWorker(request, name, run=lambda argv, data=b"", timeout=60: (0, b"[]"), markers=None)
         assert native.ingress_frontend()[0]["service_id"] == document["service_id"] and hosts[name]
+
+
+@pytest.mark.parametrize(("holders", "blocking"), [
+    (("node-1", "node-3"), []),
+    (("node-1",), ["noholder@ingress.rgw.objects-b"]),
+    (("node-1", "node-2", "node-4"), ["holders@ingress.rgw.objects-a"]),
+    ((), ["noholder@ingress.rgw.objects-a", "noholder@ingress.rgw.objects-b"]),
+])
+def test_each_per_site_virtual_ip_needs_exactly_one_holder_at_its_own_site(holders, blocking):
+    request = stretch_gateway(per_site())
+    transport = gw.Transport(request)
+
+    def call(host, phase, private=None, *, timeout=None):
+        assert private is None and 0 < timeout <= ceph_core.HOLDER_CALL
+        transport.calls.append((host["name"], phase))
+        return {"changed": False, "holds": host["name"] in holders}
+
+    transport.call = call
+    observed = {"daemons": units.keepalived_rows(request)}
+    assert ceph_core.vip_holders(request, observed, transport, 900, lambda: 0) == blocking
+    assert transport.calls == [(host, "vip_holder") for host in SITE_A + SITE_B]
+    assert ceph_core.vip_holders(request, observed, transport, 0, lambda: 0) is None

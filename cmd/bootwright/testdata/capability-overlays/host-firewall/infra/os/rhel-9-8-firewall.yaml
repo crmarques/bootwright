@@ -1,0 +1,44 @@
+apiVersion: bootwright.io/v1alpha1
+kind: MachineInstallProfile
+metadata:
+  name: rhel-9-8-firewall
+spec:
+  os:
+    family: rhel
+    version: "9.8"
+    architecture: x86_64
+  updates:
+    policy: none
+  installer:
+    anaconda:
+      imageRef: rhel-9-8-boot
+      redfishVirtualMedia:
+        artifactServerEndpoint:
+          serverRef: lab-artifacts
+          endpointRef: ip-https
+      packageSource:
+        hostedTree:
+          fromMedia: local-media:rhel-9.8-x86_64-dvd.iso
+          artifactServerEndpoint:
+            serverRef: lab-artifacts
+            endpointRef: ip-http
+  ntp:
+    - serverRef: lab-ntp
+      endpointRef: ip
+  customizations:
+    packages:
+      install:
+        - chrony
+        - firewalld
+        - qemu-guest-agent
+    services:
+      enabled:
+        - chronyd
+        - firewalld
+        - qemu-guest-agent
+        - sshd
+    security:
+      selinux:
+        mode: enforcing
+      firewall:
+        enabled: true

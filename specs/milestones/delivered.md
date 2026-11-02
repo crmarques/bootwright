@@ -10966,3 +10966,19 @@ reported no advisory for any pin of either lock after the move. The pinned Go
 1.26.10 toolchain is the newest 1.26 patch on go.dev and in Fedora 44 updates,
 and needed no change. The delivering commit records the gates and their
 results.
+
+### X274 — Management gateway internal port in the ingress check
+
+**Items:** B1032 (new, 2026-11-01, owner's native-default E2E). **Kind:**
+defect. **Owner:** Storage. With a management gateway, Prometheus service
+discovery dials the gateway's internal port on the management VIP, and the
+[ingress firewall check](../ceph.md#ingress-host-firewall) covered only the
+client port, so monitoring had no targets on the owner's three-node run.
+
+The internal port now has one owner in `internal/storage/cephcluster`, the
+management gateway's unit carries it to the check, and the check requires it
+on the management ingress hosts. The same port reaches the
+[host requirements](../managed-os.md#host-firewall-requirements) the managed
+OS realizes under [B1022](m2.md#b1022). Collection cases refuse a management
+ingress zone without the port and pass with it, or with a named service that
+grants it. The delivering commit records the gates and their results.

@@ -225,6 +225,9 @@
       }
     ],
     "id": "",
+    "ingressPorts": [
+      29443
+    ],
     "type": "mgmt-gateway"
   },
   "services": [
@@ -268,5 +271,5 @@
       "service_type": "mgr"
     }
   ],
-  "version": "ceph-core-v36"
+  "version": "ceph-core-v37"
 }

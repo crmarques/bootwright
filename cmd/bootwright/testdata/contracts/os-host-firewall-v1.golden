@@ -1,0 +1,58 @@
+implementation: os-host-firewall-v1
+content-digest: ef74fbe8098b01389b0dcef264da682b89702c0bc590db7d5a40412626a3c9cd
+request-version: os-host-firewall-v1
+automation-formats: none
+mark-formats: none
+proof-ids: none
+fixed-places: none
+effect-pins:
+  /etc/firewalld/services
+  bootwright-host-firewall context=context block=os-firewall-machine apply=operation
+  bootwright-context-publisher
+  e04c153c9c84d6a73bfb3f05e09e0e7b4f4104332ee1d318cc4b3021570dc1a5
+request-identity:
+  identity.context
+  identity.object
+  identity.block
+  services[].name
+  address
+  placement.machine
+request-schema:
+  address string
+  fleetKeyRef string
+  identity struct installation.FirewallIdentity
+  identity.block string
+  identity.context string
+  identity.object string
+  placement struct machine.Placement
+  placement.address string omitempty
+  placement.connection string
+  placement.knownHostsRef string omitempty
+  placement.machine string
+  placement.port int omitempty
+  placement.privateKeyRef string omitempty
+  placement.user string omitempty
+  services []struct installation.FirewallService
+  services[].name string
+  services[].networks []string
+  services[].ports []struct installation.FirewallPort
+  services[].ports[].number int
+  services[].ports[].transport string
+  services[].protocols []string
+  services[].publisher string
+  user string
+  version string
+evidence-schema:
+  absent bool
+  postcondition bool
+  request string
+  retired bool omitempty
+  services []struct installation.FirewallServiceEvidence
+  services[].covered bool
+  services[].digest string
+  services[].memberships []struct installation.FirewallMembership
+  services[].memberships[].interface string
+  services[].memberships[].zone string
+  services[].name string
+  services[].state string
+  version string

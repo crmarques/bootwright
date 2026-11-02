@@ -1,0 +1,1213 @@
+{
+  "services": {
+    "ssh": [
+      "ssh",
+      "  ports: 22/tcp",
+      "  protocols: ",
+      "  source-ports: ",
+      "  modules: ",
+      "  destination: ",
+      "  includes: ",
+      "  helpers: "
+    ],
+    "dhcpv6-client": [
+      "dhcpv6-client",
+      "  ports: 546/udp",
+      "  protocols: ",
+      "  source-ports: ",
+      "  modules: ",
+      "  destination: ipv6:fe80::/64",
+      "  includes: ",
+      "  helpers: "
+    ],
+    "nfs": [
+      "nfs",
+      "  ports: 2049/tcp",
+      "  protocols: ",
+      "  source-ports: ",
+      "  modules: ",
+      "  destination: ",
+      "  includes: ",
+      "  helpers: "
+    ],
+    "nfs-bundle": [
+      "nfs-bundle",
+      "  ports: ",
+      "  protocols: ",
+      "  source-ports: ",
+      "  modules: ",
+      "  destination: ",
+      "  includes: nfs",
+      "  helpers: "
+    ],
+    "keepalived": [
+      "keepalived",
+      "  ports: ",
+      "  protocols: 112",
+      "  source-ports: ",
+      "  modules: ",
+      "  destination: ",
+      "  includes: ",
+      "  helpers: "
+    ],
+    "vrrp": [
+      "vrrp",
+      "  ports: ",
+      "  protocols: 112",
+      "  source-ports: ",
+      "  modules: ",
+      "  destination: ipv4:224.0.0.18 ipv6:FF02:0:0:0:0:0:0:12",
+      "  includes: ",
+      "  helpers: "
+    ],
+    "bootwright-example-os-firewall-node-1": [
+      "bootwright-example-os-firewall-node-1",
+      "  ports: 9443/tcp 29443/tcp",
+      "  protocols: vrrp",
+      "  source-ports: ",
+      "  modules: ",
+      "  destination: ",
+      "  includes: ",
+      "  helpers: "
+    ],
+    "loop-a": [
+      "loop-a",
+      "  ports: ",
+      "  protocols: ",
+      "  source-ports: ",
+      "  modules: ",
+      "  destination: ",
+      "  includes: loop-b",
+      "  helpers: "
+    ],
+    "loop-b": [
+      "loop-b",
+      "  ports: ",
+      "  protocols: ",
+      "  source-ports: ",
+      "  modules: ",
+      "  destination: ",
+      "  includes: loop-a",
+      "  helpers: "
+    ]
+  },
+  "cases": [
+    {
+      "case": "target ACCEPT permits everything",
+      "family": "ipv4",
+      "protocols": [
+        "vrrp"
+      ],
+      "ports": [
+        [
+          2049,
+          "tcp"
+        ]
+      ],
+      "zone": [
+        "public (default, active)",
+        "  target: ACCEPT",
+        "  ingress-priority: 0",
+        "  egress-priority: 0",
+        "  icmp-block-inversion: no",
+        "  interfaces: eth0",
+        "  sources: ",
+        "  services: dhcpv6-client ssh",
+        "  ports: ",
+        "  protocols: ",
+        "  forward: yes",
+        "  masquerade: no",
+        "  forward-ports: ",
+        "  source-ports: ",
+        "  icmp-blocks: ",
+        "  rich rules: "
+      ],
+      "missing": []
+    },
+    {
+      "case": "a listed protocol and port",
+      "family": "ipv4",
+      "protocols": [
+        "vrrp"
+      ],
+      "ports": [
+        [
+          2049,
+          "tcp"
+        ]
+      ],
+      "zone": [
+        "public (default, active)",
+        "  target: default",
+        "  ingress-priority: 0",
+        "  egress-priority: 0",
+        "  icmp-block-inversion: no",
+        "  interfaces: eth0",
+        "  sources: ",
+        "  services: dhcpv6-client ssh",
+        "  ports: 2049/tcp",
+        "  protocols: vrrp",
+        "  forward: yes",
+        "  masquerade: no",
+        "  forward-ports: ",
+        "  source-ports: ",
+        "  icmp-blocks: ",
+        "  rich rules: "
+      ],
+      "missing": []
+    },
+    {
+      "case": "protocol number 112",
+      "family": "ipv4",
+      "protocols": [
+        "vrrp"
+      ],
+      "ports": [
+        [
+          2049,
+          "tcp"
+        ]
+      ],
+      "zone": [
+        "public (default, active)",
+        "  target: default",
+        "  ingress-priority: 0",
+        "  egress-priority: 0",
+        "  icmp-block-inversion: no",
+        "  interfaces: eth0",
+        "  sources: ",
+        "  services: dhcpv6-client ssh",
+        "  ports: 2049/tcp",
+        "  protocols: 112",
+        "  forward: yes",
+        "  masquerade: no",
+        "  forward-ports: ",
+        "  source-ports: ",
+        "  icmp-blocks: ",
+        "  rich rules: "
+      ],
+      "missing": []
+    },
+    {
+      "case": "a service without destination grants VRRP",
+      "family": "ipv4",
+      "protocols": [
+        "vrrp"
+      ],
+      "ports": [
+        [
+          2049,
+          "tcp"
+        ]
+      ],
+      "zone": [
+        "public (default, active)",
+        "  target: default",
+        "  ingress-priority: 0",
+        "  egress-priority: 0",
+        "  icmp-block-inversion: no",
+        "  interfaces: eth0",
+        "  sources: ",
+        "  services: ssh keepalived",
+        "  ports: 2049/tcp",
+        "  protocols: ",
+        "  forward: yes",
+        "  masquerade: no",
+        "  forward-ports: ",
+        "  source-ports: ",
+        "  icmp-blocks: ",
+        "  rich rules: "
+      ],
+      "missing": []
+    },
+    {
+      "case": "a service grants the port",
+      "family": "ipv4",
+      "protocols": [
+        "vrrp"
+      ],
+      "ports": [
+        [
+          2049,
+          "tcp"
+        ]
+      ],
+      "zone": [
+        "public (default, active)",
+        "  target: default",
+        "  ingress-priority: 0",
+        "  egress-priority: 0",
+        "  icmp-block-inversion: no",
+        "  interfaces: eth0",
+        "  sources: ",
+        "  services: nfs",
+        "  ports: ",
+        "  protocols: vrrp",
+        "  forward: yes",
+        "  masquerade: no",
+        "  forward-ports: ",
+        "  source-ports: ",
+        "  icmp-blocks: ",
+        "  rich rules: "
+      ],
+      "missing": []
+    },
+    {
+      "case": "an unrestricted VRRP rich rule",
+      "family": "ipv4",
+      "protocols": [
+        "vrrp"
+      ],
+      "ports": [
+        [
+          2049,
+          "tcp"
+        ]
+      ],
+      "zone": [
+        "public (default, active)",
+        "  target: default",
+        "  ingress-priority: 0",
+        "  egress-priority: 0",
+        "  icmp-block-inversion: no",
+        "  interfaces: eth0",
+        "  sources: ",
+        "  services: dhcpv6-client ssh",
+        "  ports: 2049/tcp",
+        "  protocols: ",
+        "  forward: yes",
+        "  masquerade: no",
+        "  forward-ports: ",
+        "  source-ports: ",
+        "  icmp-blocks: ",
+        "  rich rules: ",
+        "\trule protocol value=\"vrrp\" accept"
+      ],
+      "missing": []
+    },
+    {
+      "case": "a family VRRP rich rule",
+      "family": "ipv4",
+      "protocols": [
+        "vrrp"
+      ],
+      "ports": [
+        [
+          2049,
+          "tcp"
+        ]
+      ],
+      "zone": [
+        "public (default, active)",
+        "  target: default",
+        "  ingress-priority: 0",
+        "  egress-priority: 0",
+        "  icmp-block-inversion: no",
+        "  interfaces: eth0",
+        "  sources: ",
+        "  services: dhcpv6-client ssh",
+        "  ports: 2049/tcp",
+        "  protocols: ",
+        "  forward: yes",
+        "  masquerade: no",
+        "  forward-ports: ",
+        "  source-ports: ",
+        "  icmp-blocks: ",
+        "  rich rules: ",
+        "\trule family=\"ipv4\" protocol value=\"vrrp\" accept"
+      ],
+      "missing": []
+    },
+    {
+      "case": "a port rich rule",
+      "family": "ipv4",
+      "protocols": [
+        "vrrp"
+      ],
+      "ports": [
+        [
+          2049,
+          "tcp"
+        ]
+      ],
+      "zone": [
+        "public (default, active)",
+        "  target: default",
+        "  ingress-priority: 0",
+        "  egress-priority: 0",
+        "  icmp-block-inversion: no",
+        "  interfaces: eth0",
+        "  sources: ",
+        "  services: dhcpv6-client ssh",
+        "  ports: ",
+        "  protocols: vrrp",
+        "  forward: yes",
+        "  masquerade: no",
+        "  forward-ports: ",
+        "  source-ports: ",
+        "  icmp-blocks: ",
+        "  rich rules: ",
+        "\trule port port=\"2049\" protocol=\"tcp\" accept"
+      ],
+      "missing": []
+    },
+    {
+      "case": "a port range rich rule",
+      "family": "ipv4",
+      "protocols": [
+        "vrrp"
+      ],
+      "ports": [
+        [
+          2049,
+          "tcp"
+        ]
+      ],
+      "zone": [
+        "public (default, active)",
+        "  target: default",
+        "  ingress-priority: 0",
+        "  egress-priority: 0",
+        "  icmp-block-inversion: no",
+        "  interfaces: eth0",
+        "  sources: ",
+        "  services: dhcpv6-client ssh",
+        "  ports: ",
+        "  protocols: vrrp",
+        "  forward: yes",
+        "  masquerade: no",
+        "  forward-ports: ",
+        "  source-ports: ",
+        "  icmp-blocks: ",
+        "  rich rules: ",
+        "\trule family=\"ipv4\" port port=\"2000-2100\" protocol=\"tcp\" accept"
+      ],
+      "missing": []
+    },
+    {
+      "case": "a service include grants",
+      "family": "ipv4",
+      "protocols": [
+        "vrrp"
+      ],
+      "ports": [
+        [
+          2049,
+          "tcp"
+        ]
+      ],
+      "zone": [
+        "public (default, active)",
+        "  target: default",
+        "  ingress-priority: 0",
+        "  egress-priority: 0",
+        "  icmp-block-inversion: no",
+        "  interfaces: eth0",
+        "  sources: ",
+        "  services: nfs-bundle",
+        "  ports: ",
+        "  protocols: vrrp",
+        "  forward: yes",
+        "  masquerade: no",
+        "  forward-ports: ",
+        "  source-ports: ",
+        "  icmp-blocks: ",
+        "  rich rules: "
+      ],
+      "missing": []
+    },
+    {
+      "case": "a port range token",
+      "family": "ipv4",
+      "protocols": [
+        "vrrp"
+      ],
+      "ports": [
+        [
+          2049,
+          "tcp"
+        ]
+      ],
+      "zone": [
+        "public (default, active)",
+        "  target: default",
+        "  ingress-priority: 0",
+        "  egress-priority: 0",
+        "  icmp-block-inversion: no",
+        "  interfaces: eth0",
+        "  sources: ",
+        "  services: dhcpv6-client ssh",
+        "  ports: 2000-2100/tcp",
+        "  protocols: vrrp",
+        "  forward: yes",
+        "  masquerade: no",
+        "  forward-ports: ",
+        "  source-ports: ",
+        "  icmp-blocks: ",
+        "  rich rules: "
+      ],
+      "missing": []
+    },
+    {
+      "case": "an IPv6 VRRP rule on IPv4",
+      "family": "ipv4",
+      "protocols": [
+        "vrrp"
+      ],
+      "ports": [
+        [
+          2049,
+          "tcp"
+        ]
+      ],
+      "zone": [
+        "public (default, active)",
+        "  target: default",
+        "  ingress-priority: 0",
+        "  egress-priority: 0",
+        "  icmp-block-inversion: no",
+        "  interfaces: eth0",
+        "  sources: ",
+        "  services: dhcpv6-client ssh",
+        "  ports: 2049/tcp",
+        "  protocols: ",
+        "  forward: yes",
+        "  masquerade: no",
+        "  forward-ports: ",
+        "  source-ports: ",
+        "  icmp-blocks: ",
+        "  rich rules: ",
+        "\trule family=\"ipv6\" protocol value=\"vrrp\" accept"
+      ],
+      "missing": [
+        "VRRP (IP protocol 112)"
+      ]
+    },
+    {
+      "case": "a source-bound VRRP rule",
+      "family": "ipv4",
+      "protocols": [
+        "vrrp"
+      ],
+      "ports": [
+        [
+          2049,
+          "tcp"
+        ]
+      ],
+      "zone": [
+        "public (default, active)",
+        "  target: default",
+        "  ingress-priority: 0",
+        "  egress-priority: 0",
+        "  icmp-block-inversion: no",
+        "  interfaces: eth0",
+        "  sources: ",
+        "  services: dhcpv6-client ssh",
+        "  ports: 2049/tcp",
+        "  protocols: ",
+        "  forward: yes",
+        "  masquerade: no",
+        "  forward-ports: ",
+        "  source-ports: ",
+        "  icmp-blocks: ",
+        "  rich rules: ",
+        "\trule family=\"ipv4\" source address=\"192.0.2.0/24\" protocol value=\"vrrp\" accept"
+      ],
+      "missing": [
+        "VRRP (IP protocol 112)"
+      ]
+    },
+    {
+      "case": "an IPv6 port rule on IPv4",
+      "family": "ipv4",
+      "protocols": [
+        "vrrp"
+      ],
+      "ports": [
+        [
+          2049,
+          "tcp"
+        ]
+      ],
+      "zone": [
+        "public (default, active)",
+        "  target: default",
+        "  ingress-priority: 0",
+        "  egress-priority: 0",
+        "  icmp-block-inversion: no",
+        "  interfaces: eth0",
+        "  sources: ",
+        "  services: dhcpv6-client ssh",
+        "  ports: ",
+        "  protocols: vrrp",
+        "  forward: yes",
+        "  masquerade: no",
+        "  forward-ports: ",
+        "  source-ports: ",
+        "  icmp-blocks: ",
+        "  rich rules: ",
+        "\trule family=\"ipv6\" port port=\"2049\" protocol=\"tcp\" accept"
+      ],
+      "missing": [
+        "2049/tcp"
+      ]
+    },
+    {
+      "case": "the shipped vrrp service has a destination",
+      "family": "ipv4",
+      "protocols": [
+        "vrrp"
+      ],
+      "ports": [
+        [
+          2049,
+          "tcp"
+        ]
+      ],
+      "zone": [
+        "public (default, active)",
+        "  target: default",
+        "  ingress-priority: 0",
+        "  egress-priority: 0",
+        "  icmp-block-inversion: no",
+        "  interfaces: eth0",
+        "  sources: ",
+        "  services: ssh vrrp",
+        "  ports: 2049/tcp",
+        "  protocols: ",
+        "  forward: yes",
+        "  masquerade: no",
+        "  forward-ports: ",
+        "  source-ports: ",
+        "  icmp-blocks: ",
+        "  rich rules: "
+      ],
+      "missing": [
+        "VRRP (IP protocol 112)"
+      ]
+    },
+    {
+      "case": "a UDP port",
+      "family": "ipv4",
+      "protocols": [
+        "vrrp"
+      ],
+      "ports": [
+        [
+          2049,
+          "tcp"
+        ]
+      ],
+      "zone": [
+        "public (default, active)",
+        "  target: default",
+        "  ingress-priority: 0",
+        "  egress-priority: 0",
+        "  icmp-block-inversion: no",
+        "  interfaces: eth0",
+        "  sources: ",
+        "  services: dhcpv6-client ssh",
+        "  ports: 2049/udp",
+        "  protocols: vrrp",
+        "  forward: yes",
+        "  masquerade: no",
+        "  forward-ports: ",
+        "  source-ports: ",
+        "  icmp-blocks: ",
+        "  rich rules: "
+      ],
+      "missing": [
+        "2049/tcp"
+      ]
+    },
+    {
+      "case": "a UDP rich rule",
+      "family": "ipv4",
+      "protocols": [
+        "vrrp"
+      ],
+      "ports": [
+        [
+          2049,
+          "tcp"
+        ]
+      ],
+      "zone": [
+        "public (default, active)",
+        "  target: default",
+        "  ingress-priority: 0",
+        "  egress-priority: 0",
+        "  icmp-block-inversion: no",
+        "  interfaces: eth0",
+        "  sources: ",
+        "  services: dhcpv6-client ssh",
+        "  ports: ",
+        "  protocols: vrrp",
+        "  forward: yes",
+        "  masquerade: no",
+        "  forward-ports: ",
+        "  source-ports: ",
+        "  icmp-blocks: ",
+        "  rich rules: ",
+        "\trule port port=\"2049\" protocol=\"udp\" accept"
+      ],
+      "missing": [
+        "2049/tcp"
+      ]
+    },
+    {
+      "case": "nothing permitted",
+      "family": "ipv4",
+      "protocols": [
+        "vrrp"
+      ],
+      "ports": [
+        [
+          2049,
+          "tcp"
+        ]
+      ],
+      "zone": [
+        "public (default, active)",
+        "  target: default",
+        "  ingress-priority: 0",
+        "  egress-priority: 0",
+        "  icmp-block-inversion: no",
+        "  interfaces: eth0",
+        "  sources: ",
+        "  services: dhcpv6-client ssh",
+        "  ports: ",
+        "  protocols: ",
+        "  forward: yes",
+        "  masquerade: no",
+        "  forward-ports: ",
+        "  source-ports: ",
+        "  icmp-blocks: ",
+        "  rich rules: "
+      ],
+      "missing": [
+        "VRRP (IP protocol 112)",
+        "2049/tcp"
+      ]
+    },
+    {
+      "case": "firewalld 1.x without priority lines",
+      "family": "ipv4",
+      "protocols": [
+        "vrrp"
+      ],
+      "ports": [
+        [
+          2049,
+          "tcp"
+        ]
+      ],
+      "zone": [
+        "public (default, active)",
+        "  target: default",
+        "  icmp-block-inversion: no",
+        "  interfaces: eth0",
+        "  sources: ",
+        "  services: dhcpv6-client ssh",
+        "  ports: 2049/tcp",
+        "  protocols: vrrp",
+        "  forward: yes",
+        "  masquerade: no",
+        "  forward-ports: ",
+        "  source-ports: ",
+        "  icmp-blocks: ",
+        "  rich rules: "
+      ],
+      "missing": []
+    },
+    {
+      "case": "an include loop grants nothing",
+      "family": "ipv4",
+      "protocols": [
+        "vrrp"
+      ],
+      "ports": [
+        [
+          2049,
+          "tcp"
+        ]
+      ],
+      "zone": [
+        "public (default, active)",
+        "  target: default",
+        "  ingress-priority: 0",
+        "  egress-priority: 0",
+        "  icmp-block-inversion: no",
+        "  interfaces: eth0",
+        "  sources: ",
+        "  services: loop-a",
+        "  ports: ",
+        "  protocols: ",
+        "  forward: yes",
+        "  masquerade: no",
+        "  forward-ports: ",
+        "  source-ports: ",
+        "  icmp-blocks: ",
+        "  rich rules: "
+      ],
+      "missing": [
+        "VRRP (IP protocol 112)",
+        "2049/tcp"
+      ]
+    },
+    {
+      "case": "a management ingress without the internal port",
+      "family": "ipv4",
+      "protocols": [
+        "vrrp"
+      ],
+      "ports": [
+        [
+          9443,
+          "tcp"
+        ],
+        [
+          29443,
+          "tcp"
+        ]
+      ],
+      "zone": [
+        "public (default, active)",
+        "  target: default",
+        "  ingress-priority: 0",
+        "  egress-priority: 0",
+        "  icmp-block-inversion: no",
+        "  interfaces: eth0",
+        "  sources: ",
+        "  services: dhcpv6-client ssh",
+        "  ports: 9443/tcp",
+        "  protocols: vrrp",
+        "  forward: yes",
+        "  masquerade: no",
+        "  forward-ports: ",
+        "  source-ports: ",
+        "  icmp-blocks: ",
+        "  rich rules: "
+      ],
+      "missing": [
+        "29443/tcp"
+      ]
+    },
+    {
+      "case": "a management ingress with both ports",
+      "family": "ipv4",
+      "protocols": [
+        "vrrp"
+      ],
+      "ports": [
+        [
+          9443,
+          "tcp"
+        ],
+        [
+          29443,
+          "tcp"
+        ]
+      ],
+      "zone": [
+        "public (default, active)",
+        "  target: default",
+        "  ingress-priority: 0",
+        "  egress-priority: 0",
+        "  icmp-block-inversion: no",
+        "  interfaces: eth0",
+        "  sources: ",
+        "  services: dhcpv6-client ssh",
+        "  ports: 9443/tcp 29443/tcp",
+        "  protocols: vrrp",
+        "  forward: yes",
+        "  masquerade: no",
+        "  forward-ports: ",
+        "  source-ports: ",
+        "  icmp-blocks: ",
+        "  rich rules: "
+      ],
+      "missing": []
+    },
+    {
+      "case": "a management ingress missing both ports",
+      "family": "ipv4",
+      "protocols": [
+        "vrrp"
+      ],
+      "ports": [
+        [
+          9443,
+          "tcp"
+        ],
+        [
+          29443,
+          "tcp"
+        ]
+      ],
+      "zone": [
+        "public (default, active)",
+        "  target: default",
+        "  ingress-priority: 0",
+        "  egress-priority: 0",
+        "  icmp-block-inversion: no",
+        "  interfaces: eth0",
+        "  sources: ",
+        "  services: dhcpv6-client ssh",
+        "  ports: ",
+        "  protocols: vrrp",
+        "  forward: yes",
+        "  masquerade: no",
+        "  forward-ports: ",
+        "  source-ports: ",
+        "  icmp-blocks: ",
+        "  rich rules: "
+      ],
+      "missing": [
+        "9443/tcp",
+        "29443/tcp"
+      ]
+    },
+    {
+      "case": "a named service grants a management ingress",
+      "family": "ipv4",
+      "protocols": [
+        "vrrp"
+      ],
+      "ports": [
+        [
+          9443,
+          "tcp"
+        ],
+        [
+          29443,
+          "tcp"
+        ]
+      ],
+      "zone": [
+        "public (default, active)",
+        "  target: default",
+        "  ingress-priority: 0",
+        "  egress-priority: 0",
+        "  icmp-block-inversion: no",
+        "  interfaces: eth0",
+        "  sources: ",
+        "  services: ssh bootwright-example-os-firewall-node-1",
+        "  ports: ",
+        "  protocols: ",
+        "  forward: yes",
+        "  masquerade: no",
+        "  forward-ports: ",
+        "  source-ports: ",
+        "  icmp-blocks: ",
+        "  rich rules: "
+      ],
+      "missing": []
+    },
+    {
+      "case": "a range covers both management ports",
+      "family": "ipv4",
+      "protocols": [
+        "vrrp"
+      ],
+      "ports": [
+        [
+          9443,
+          "tcp"
+        ],
+        [
+          29443,
+          "tcp"
+        ]
+      ],
+      "zone": [
+        "public (default, active)",
+        "  target: default",
+        "  ingress-priority: 0",
+        "  egress-priority: 0",
+        "  icmp-block-inversion: no",
+        "  interfaces: eth0",
+        "  sources: ",
+        "  services: dhcpv6-client ssh",
+        "  ports: 9000-30000/tcp",
+        "  protocols: 112",
+        "  forward: yes",
+        "  masquerade: no",
+        "  forward-ports: ",
+        "  source-ports: ",
+        "  icmp-blocks: ",
+        "  rich rules: "
+      ],
+      "missing": []
+    },
+    {
+      "case": "an IPv6 VRRP rule on IPv6",
+      "family": "ipv6",
+      "protocols": [
+        "vrrp"
+      ],
+      "ports": [
+        [
+          2049,
+          "tcp"
+        ]
+      ],
+      "zone": [
+        "public (default, active)",
+        "  target: default",
+        "  ingress-priority: 0",
+        "  egress-priority: 0",
+        "  icmp-block-inversion: no",
+        "  interfaces: eth0",
+        "  sources: ",
+        "  services: dhcpv6-client ssh",
+        "  ports: 2049/tcp",
+        "  protocols: ",
+        "  forward: yes",
+        "  masquerade: no",
+        "  forward-ports: ",
+        "  source-ports: ",
+        "  icmp-blocks: ",
+        "  rich rules: ",
+        "\trule family=\"ipv6\" protocol value=\"vrrp\" accept"
+      ],
+      "missing": []
+    }
+  ],
+  "selection": [
+    {
+      "case": "the interface whose network holds the virtual IP",
+      "addresses": [
+        [
+          "lo",
+          "127.0.0.1",
+          8
+        ],
+        [
+          "eth0",
+          "192.0.2.12",
+          24
+        ],
+        [
+          "eth1",
+          "198.51.100.12",
+          24
+        ]
+      ],
+      "networks": [
+        "192.0.2.50/32"
+      ],
+      "interfaces": [
+        "eth0"
+      ]
+    },
+    {
+      "case": "a /24 interface inside a /16 public CIDR",
+      "addresses": [
+        [
+          "lo",
+          "127.0.0.1",
+          8
+        ],
+        [
+          "eth0",
+          "10.0.1.12",
+          24
+        ]
+      ],
+      "networks": [
+        "10.0.1.60/32"
+      ],
+      "interfaces": [
+        "eth0"
+      ]
+    },
+    {
+      "case": "a wider interface network holds the address",
+      "addresses": [
+        [
+          "lo",
+          "127.0.0.1",
+          8
+        ],
+        [
+          "eth0",
+          "10.0.1.12",
+          16
+        ]
+      ],
+      "networks": [
+        "10.0.200.60/32"
+      ],
+      "interfaces": [
+        "eth0"
+      ]
+    },
+    {
+      "case": "a narrower interface network misses the address",
+      "addresses": [
+        [
+          "lo",
+          "127.0.0.1",
+          8
+        ],
+        [
+          "eth0",
+          "10.0.1.12",
+          24
+        ]
+      ],
+      "networks": [
+        "10.0.200.60/32"
+      ],
+      "interfaces": []
+    },
+    {
+      "case": "virtual interface networks when no network holds it",
+      "addresses": [
+        [
+          "lo",
+          "127.0.0.1",
+          8
+        ],
+        [
+          "eth0",
+          "192.0.2.12",
+          24
+        ],
+        [
+          "eth1",
+          "198.51.100.12",
+          24
+        ]
+      ],
+      "networks": [
+        "203.0.113.50/32",
+        "198.51.100.0/24"
+      ],
+      "interfaces": [
+        "eth1"
+      ]
+    },
+    {
+      "case": "virtual interface networks only as a fallback",
+      "addresses": [
+        [
+          "lo",
+          "127.0.0.1",
+          8
+        ],
+        [
+          "eth0",
+          "192.0.2.12",
+          24
+        ],
+        [
+          "eth1",
+          "198.51.100.12",
+          24
+        ]
+      ],
+      "networks": [
+        "192.0.2.50/32",
+        "198.51.100.0/24"
+      ],
+      "interfaces": [
+        "eth0"
+      ]
+    },
+    {
+      "case": "a virtual interface network must equal the interface network",
+      "addresses": [
+        [
+          "lo",
+          "127.0.0.1",
+          8
+        ],
+        [
+          "eth1",
+          "198.51.100.12",
+          24
+        ]
+      ],
+      "networks": [
+        "203.0.113.50/32",
+        "198.51.100.0/25"
+      ],
+      "interfaces": []
+    },
+    {
+      "case": "no interface carries it",
+      "addresses": [
+        [
+          "lo",
+          "127.0.0.1",
+          8
+        ],
+        [
+          "eth0",
+          "192.0.2.12",
+          24
+        ]
+      ],
+      "networks": [
+        "203.0.113.50/32"
+      ],
+      "interfaces": []
+    },
+    {
+      "case": "every interface on the network",
+      "addresses": [
+        [
+          "lo",
+          "127.0.0.1",
+          8
+        ],
+        [
+          "eth1",
+          "192.0.2.13",
+          24
+        ],
+        [
+          "eth0",
+          "192.0.2.12",
+          24
+        ]
+      ],
+      "networks": [
+        "192.0.2.50/32"
+      ],
+      "interfaces": [
+        "eth0",
+        "eth1"
+      ]
+    },
+    {
+      "case": "an IPv6 virtual IP",
+      "addresses": [
+        [
+          "lo",
+          "127.0.0.1",
+          8
+        ],
+        [
+          "eth0",
+          "192.0.2.12",
+          24
+        ],
+        [
+          "eth0",
+          "2001:db8::12",
+          64
+        ]
+      ],
+      "networks": [
+        "2001:db8::60/128"
+      ],
+      "interfaces": [
+        "eth0"
+      ]
+    }
+  ]
+}

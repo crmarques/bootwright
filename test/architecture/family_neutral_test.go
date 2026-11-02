@@ -33,6 +33,24 @@ func TestTheDNSServerImportsNoStorageOrClusterPackage(t *testing.T) {
 	}
 }
 
+// The managed OS realizes the host port requirements other capabilities
+// publish through a port composition binds, so it names no consumer
+// (specs/managed-os.md, Host firewall requirements).
+func TestTheManagedOSImportsNoStorageOrClusterPackage(t *testing.T) {
+	for _, source := range productionSources(t) {
+		if source.owner != "internal/managedos" && !strings.HasPrefix(source.owner, "internal/managedos/") {
+			continue
+		}
+		for _, imported := range source.imports {
+			for _, forbidden := range []string{"internal/storage", "internal/containercluster", "internal/addons"} {
+				if imported.path == module+forbidden || strings.HasPrefix(imported.path, module+forbidden+"/") {
+					t.Errorf("%s imports %s; take what it publishes through a port composition binds", source.path, imported.path)
+				}
+			}
+		}
+	}
+}
+
 // implementationLiterals lists each string literal in a general-flow package
 // that names an implementation: a substrate arm, an implementation identity,
 // the Ceph engine's name or its host layout. Field paths carry no family

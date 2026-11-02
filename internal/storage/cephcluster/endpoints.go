@@ -3,6 +3,7 @@ package cephcluster
 import (
 	"net/netip"
 	"slices"
+	"strconv"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
 )
@@ -23,6 +24,8 @@ func (a *admission) sharedServiceIdentities(cluster api.Object) {
 		a.routerIDConflicts(cluster)
 	}
 }
+
+const MgmtGatewayInternalPort = 29443
 
 type listener struct {
 	field   string
@@ -48,7 +51,7 @@ var reservedListeners = []reservedListener{
 	{label: "the MGR dashboard (8443)", ranges: [][2]int64{{8443, 8443}}, hosts: declaredHosts("mgr")},
 	{label: "cephadm service discovery (8765)", ranges: [][2]int64{{8765, 8765}}, hosts: declaredHosts("mgr")},
 	{label: "the prometheus manager module (9283)", ranges: [][2]int64{{9283, 9283}}, hosts: declaredHosts("mgr", "prometheus")},
-	{label: "the management gateway internal listener (29443)", ranges: [][2]int64{{29443, 29443}}, hosts: declaredHosts("mgmt-gateway")},
+	{label: "the management gateway internal listener (" + strconv.Itoa(MgmtGatewayInternalPort) + ")", ranges: [][2]int64{{MgmtGatewayInternalPort, MgmtGatewayInternalPort}}, hosts: declaredHosts("mgmt-gateway")},
 }
 
 var nativeListeners = map[string]listenerSource{

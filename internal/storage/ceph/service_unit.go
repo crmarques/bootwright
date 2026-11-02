@@ -22,11 +22,12 @@ type ServiceBinding struct {
 }
 
 type ServiceUnit struct {
-	Bindings  []ServiceBinding             `json:"bindings,omitempty"`
-	Config    map[string]map[string]string `json:"config,omitempty"`
-	Documents []json.RawMessage            `json:"documents"`
-	ID        string                       `json:"id"`
-	Type      string                       `json:"type"`
+	Bindings     []ServiceBinding             `json:"bindings,omitempty"`
+	Config       map[string]map[string]string `json:"config,omitempty"`
+	Documents    []json.RawMessage            `json:"documents"`
+	ID           string                       `json:"id"`
+	IngressPorts []int                        `json:"ingressPorts,omitempty"`
+	Type         string                       `json:"type"`
 }
 
 func (u ServiceUnit) name() string {
@@ -636,6 +637,9 @@ func gatewayUnits(cluster api.Object) ([]ServiceUnit, error) {
 		}
 		unit.Documents = append(unit.Documents, document)
 		names = append(names, cephcluster.NativeServiceName(svc))
+		if svc.Get("service_type").Text() == "ingress" {
+			unit.IngressPorts = []int{cephcluster.MgmtGatewayInternalPort}
+		}
 	}
 	for _, binding := range gatewayBindings(cluster, names...) {
 		svc, _ := cephcluster.NativeService(cluster, binding.ServiceRef)

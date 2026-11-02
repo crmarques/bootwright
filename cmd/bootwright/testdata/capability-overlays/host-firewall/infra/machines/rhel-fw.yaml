@@ -1,0 +1,22 @@
+apiVersion: bootwright.io/v1alpha1
+kind: Machine
+metadata:
+  name: rhel-fw
+spec:
+  substrate:
+    providerRef: lab-libvirt
+    libvirt:
+      profileRef: rhel
+  hardware:
+    rootDevice:
+      deviceName: /dev/vda
+  os:
+    provided: false
+    installProfileRef: rhel-9-8-firewall
+  network:
+    configRef: lab-guests
+    installAddressRef: ip
+    addresses:
+      - name: ip
+        address: 198.51.100.21/24
+        interface: enp1s0

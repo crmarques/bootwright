@@ -324,9 +324,12 @@ Storage preflight reports every check as `id`, `target`, `status`, `reason` and
 `next`. Status is `passed`, `failed`, `unknown` or `pending`; only `passed`
 proves readiness. Optional `capacity` carries `resource`, `unit`, `required`,
 `available`, `reserve`, `deficit` and `observed`. The summary counts each status.
-A plan's optional `checks` list contains read-only controller listener observations.
-Each row has `id`, `status`, `summary` and `remedy`; firewall status is `open`,
-`closed` or `unknown`, and `remedy` is empty for an open socket. These observations
+A plan's optional `checks` list contains read-only controller listener observations
+and host port requirements. Each row has `id`, `status`, `summary` and `remedy`;
+`listener-firewall` status is `open`, `closed` or `unknown`, and `remedy` is empty
+for an open socket; `host-port` status is `realized` or `manual`, and `remedy` is
+empty for a realized one ([host firewall requirements](../managed-os.md#host-firewall-requirements)).
+Text output lists each kind under its own heading. These observations
 never change the frozen plan or register an operation. A `plan` of an apply
 also reports one `lifecycle.surviving-consumer` warning for each consumer and
 effect a destroy of the context would refuse over

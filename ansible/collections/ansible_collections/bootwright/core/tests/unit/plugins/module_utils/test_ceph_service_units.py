@@ -719,11 +719,26 @@ class Transport:
         if phase == "observe":
             assert timeout is None or 0 < timeout <= 660
             ready = sum(call[1] == "observe" for call in self.calls) >= self.ready_after
-            daemons = [{"host": "node-1", "name": "nfs.files.0.0.node-1.abcdef", "service": "nfs.files"}] if ready else []
-            return dict(observation(self.request, ready, daemons), blocking=[] if ready else self.blocking, **self.observed)
+            daemons = [{"host": "node-1", "name": "nfs.files.0.0.node-1.abcdef", "service": "nfs.files"}] + keepalived_rows(self.request) if ready else []
+            result = dict(observation(self.request, ready, daemons), blocking=[] if ready else self.blocking, **self.observed)
+            self.daemons = result["daemons"]
+            return result
         if phase == "prerequisites":
             return {"name": host["name"], "owned": True, "exists": True}
+        if phase == "vip_holder":
+            return {"changed": False, "holds": first_holder(self.request, host, self.daemons)}
         return {"changed": phase == "unit"}
+
+
+def keepalived_rows(request):
+    """A keepalived daemon on every placement host of each ingress, as the observation lists them."""
+    return [{"host": name, "name": "keepalived." + ingress["service_id"] + "." + name + ".abcdef", "service": ceph_core.ingress_name(ingress)}
+            for ingress, unused in ceph_core.ingress_fronts(request) for name in ingress["placement"]["hosts"]]
+
+
+def first_holder(request, host, daemons):
+    """The scripted keepalived master: the first host the observation lists running the keepalived of an ingress."""
+    return any(ceph_core.keepalived_hosts({"daemons": daemons}, ingress)[:1] == [host["name"]] for ingress, unused in ceph_core.ingress_fronts(request))
 
 
 def test_core_execute_runs_the_unit_on_the_bootstrap_host_only(monkeypatch):

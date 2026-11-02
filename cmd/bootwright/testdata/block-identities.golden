@@ -677,6 +677,8 @@ libvirt-6-nodes-ceph-services:
   machine-rhel-05
   machine-rhel-06
   ntp-lab-ntp
+  os-firewall-rhel-04
+  os-firewall-rhel-05
   os-install-client
   os-install-rhel-01
   os-install-rhel-02

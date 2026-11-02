@@ -19,12 +19,15 @@ src/cephadm/cephadmlib/firewalld.py:84-119), and puts the virtual IP on the inte
 from __future__ import annotations
 
 import copy
+import ipaddress
 import json
 import os
+import pathlib
 
 import pytest
 
 from ansible_collections.bootwright.core.plugins.module_utils import ceph_core, ceph_native, ceph_native_object, ceph_native_units
+from ansible_collections.bootwright.core.tests.unit.plugins.module_utils import test_ceph_mgmt_gateway as mgmt
 from ansible_collections.bootwright.core.tests.unit.plugins.module_utils import test_ceph_nfs_exports as exports
 from ansible_collections.bootwright.core.tests.unit.plugins.module_utils import test_ceph_object_gateway as gateways
 from ansible_collections.bootwright.core.tests.unit.plugins.module_utils import test_ceph_service_units as units
@@ -239,13 +242,14 @@ def test_inactive_firewalld_plans_and_applies(monkeypatch, state):
     transport = Calls(units.Transport(request))
     execute(request, transport)
     assert transport.calls == [("node-1", "prerequisites"), ("node-1", "ingress_firewall"), ("node-2", "ingress_firewall"), ("node-1", "unit"),
-                               ("node-1", "observe")]
+                               ("node-1", "observe"), ("node-1", "vip_holder"), ("node-2", "vip_holder")]
     assert transport.timeouts == [120, 120]
     request = plain_ingress()
     transport = Calls(gateways.Transport(request))
     execute(request, transport)
     assert transport.calls == [("node-1", "prerequisites")] + [(name, "ingress_firewall") for name in gateways.HOSTS] + [
-        ("node-1", "gateway_zone"), ("node-1", "gateway_placement"), ("node-1", "gateway_service"), ("node-1", "observe")]
+        ("node-1", "gateway_zone"), ("node-1", "gateway_placement"), ("node-1", "gateway_service"), ("node-1", "observe")] + [
+        (name, "vip_holder") for name in gateways.HOSTS]
     assert transport.timeouts == [120, 120, 120]
 
 
@@ -322,7 +326,7 @@ def test_ingress_firewall_refuses_an_unsettled_firewalld():
 
 def test_dispatch_admits_the_firewall_phase_only_on_an_ingress_host(monkeypatch):
     reached = []
-    monkeypatch.setattr(ceph_native_units, "firewall_check", lambda worker, spec, port: reached.append((type(worker), port)))
+    monkeypatch.setattr(ceph_native_units, "firewall_check", lambda worker, spec, ports: reached.append((type(worker), ports)))
     monkeypatch.setattr(ceph_native, "supported_transport", lambda value: True)
 
     def dispatch(request, host, private=None):
@@ -330,7 +334,7 @@ def test_dispatch_admits_the_firewall_phase_only_on_an_ingress_host(monkeypatch)
 
     assert dispatch(nfs_request(), "node-2") == {"changed": False}
     assert dispatch(gateway_request(), "node-3") == {"changed": False}
-    assert reached == [(ceph_native_units.UnitWorker, 2049), (ceph_native_object.ObjectWorker, 443)]
+    assert reached == [(ceph_native_units.UnitWorker, [2049]), (ceph_native_object.ObjectWorker, [443])]
     export = exports.export_request()
     for request, host in ((nfs_request(), "node-3"), (nfs_request("direct"), "node-1"), (gateways.gateway_request(), "node-1")):
         with pytest.raises(ceph_native.Refusal, match="^request$"):
@@ -364,3 +368,205 @@ def test_core_skips_the_firewall_check_without_an_ingress(monkeypatch):
         with pytest.raises(ceph_native.Refusal, match="^not-ready$"):
             execute(request, transport, now=lambda: next(clock))
         assert transport.calls == [("node-1", "prerequisites"), ("node-1", "ingress_firewall")]
+
+
+GRANTS = json.loads((pathlib.Path(__file__).resolve().parents[2] / "goldens" / "ingress_firewall_grants.json").read_text(encoding="utf-8"))
+
+
+class ZoneReader:
+    """Answers only `--info-zone` and `--info-service` from the shared grant corpus, which the Go preflight evaluation also reads."""
+
+    host = {"name": "node-1"}
+
+    def __init__(self, zone):
+        self.zone, self.log = zone, []
+
+    def native_coordinate(self):
+        return {"host": "node-1"}
+
+    def command(self, argv, json_result=True, timeout=60):
+        assert json_result is False and 0 < timeout <= 20 and argv[0] == "/usr/bin/firewall-cmd" and len(argv) == 2
+        self.log.append(argv[1])
+        option, unused, value = argv[1].partition("=")
+        lines = self.zone if option == "--info-zone" else GRANTS["services"][value]
+        return NativeOutput(("\n".join(lines) + "\n").encode())
+
+
+@pytest.mark.parametrize("case", GRANTS["cases"], ids=[case["case"] for case in GRANTS["cases"]])
+def test_zone_grants_follow_the_shared_corpus(case):
+    assert case["protocols"] == ["vrrp"] and all(transport == "tcp" for unused, transport in case["ports"])
+    vip = ipaddress.ip_address("192.0.2.50" if case["family"] == "ipv4" else "2001:db8::50")
+    reader = ZoneReader(case["zone"])
+    missing = ceph_native_units.zone_missing(reader, "public", vip, [number for number, unused in case["ports"]], {})
+    assert missing == case["missing"]
+    assert reader.log[0] == "--info-zone=public" and all(entry.startswith("--info-service=") for entry in reader.log[1:])
+
+
+def management_request():
+    return mgmt.gateway_request()
+
+
+def test_a_management_ingress_zone_must_permit_the_internal_port():
+    request = management_request()
+    assert request["service"]["ingressPorts"] == [29443]
+    host = Host(infos={"public": zone_text(protocols="vrrp", ports="9443/tcp")})
+    error = refused(request, host, "node-2")
+    assert str(error) == "ingress-firewall"
+    assert error.native_error["cause"] == "host node-2: interface eth0 in firewalld zone public does not permit 29443/tcp"
+    host = Host(infos={"public": zone_text()})
+    assert refused(request, host, "node-2").native_error["cause"].endswith("does not permit " + VRRP + " and 9443/tcp and 29443/tcp")
+    host = Host(infos={"public": zone_text(protocols="vrrp", ports="9443/tcp 29443/tcp")})
+    assert native(request, host, "node-2").ingress_firewall() == {"changed": False}
+
+
+def test_a_named_service_in_the_zone_grants_the_ingress_requirements():
+    name = "bootwright-example-os-firewall-node-1"
+    SERVICES[name] = "\n".join(GRANTS["services"][name]) + "\n"
+    try:
+        host = Host(infos={"public": zone_text(services="ssh " + name)})
+        assert native(management_request(), host, "node-1").ingress_firewall() == {"changed": False}
+        assert ("/usr/bin/firewall-cmd", "--info-service=" + name) in host.log
+        error = refused(nfs_request(), Host(infos={"public": zone_text(services="ssh " + name)}), "node-1")
+        assert error.native_error["cause"].endswith("does not permit 2049/tcp")
+    finally:
+        del SERVICES[name]
+
+
+def test_ingress_ports_are_carried_only_by_a_management_gateway_with_its_ingress():
+    for change in (lambda unit: unit.update(ingressPorts=[]), lambda unit: unit.update(ingressPorts=[29443, 29443]),
+                   lambda unit: unit.update(ingressPorts=[0]), lambda unit: unit.update(ingressPorts=["29443"])):
+        request = management_request()
+        change(request["service"])
+        with pytest.raises(ceph_native.Refusal, match="^request$"):
+            ceph_native.validate(request)
+    direct = mgmt.gateway_request(None)
+    direct["service"]["ingressPorts"] = [29443]
+    nfs = nfs_request()
+    nfs["service"]["ingressPorts"] = [29443]
+    for request in (direct, nfs):
+        with pytest.raises(ceph_native.Refusal, match="^request$"):
+            ceph_native.validate(request)
+
+
+def vip_of(request):
+    return ceph_core.ingress_fronts(request)[0][0]["spec"]["virtual_ip"].partition("/")[0]
+
+
+def test_vip_holder_reads_whether_this_host_carries_the_virtual_ip():
+    request = nfs_request()
+    holding = Host(interfaces=INTERFACES + [("eth0", vip_of(request), 24)])
+    assert native(request, holding, "node-1").vip_holder() == {"changed": False, "holds": True}
+    standby = Host()
+    assert native(request, standby, "node-2").vip_holder() == {"changed": False, "holds": False}
+    assert holding.log == [tuple(ADDRESSES)] and standby.log == [tuple(ADDRESSES)]
+    gateway = Host(interfaces=INTERFACES + [("eth1", vip_of(gateway_request()), 32)])
+    assert native(gateway_request(), gateway, "node-2").vip_holder() == {"changed": False, "holds": True}
+    with pytest.raises(ceph_native.Refusal, match="^request$"):
+        native(nfs_request(), Host(), "node-3").vip_holder()
+
+
+class Holders(units.Transport):
+    """A scripted unit transport whose ingress hosts each say whether they hold the virtual IP."""
+
+    def __init__(self, request, holders):
+        super().__init__(request)
+        self.holders = holders
+
+    def call(self, host, phase, timeout=None):
+        if phase == "vip_holder":
+            self.calls.append((host["name"], phase))
+            assert 0 < timeout <= ceph_core.HOLDER_CALL
+            return {"changed": False, "holds": host["name"] in self.holders}
+        return super().call(host, phase, timeout=timeout)
+
+
+@pytest.mark.parametrize(("holders", "entry"), [((), "noholder@ingress.nfs.files"), (("node-1", "node-2"), "holders@ingress.nfs.files")])
+def test_readiness_needs_exactly_one_holder_per_virtual_ip(monkeypatch, holders, entry):
+    monkeypatch.setattr(ceph_native, "supported_transport", lambda value: True)
+    request = nfs_request()
+    assert ceph_native_units.PENDING.fullmatch(entry)
+    clock = iter(range(0, 100000, 100))
+    transport = Holders(request, holders)
+    with pytest.raises(ceph_core.ReadinessRefusal) as caught:
+        ceph_core.execute(request, "apply", "d" * 64, transport, now=lambda: next(clock), pause=lambda seconds: None)
+    assert caught.value.checks == [entry]
+    assert ("node-1", "vip_holder") in transport.calls and ("node-2", "vip_holder") in transport.calls
+    assert ceph_core.readiness_detail(caught.value.checks) == "not-ready:" + entry
+
+
+def test_readiness_passes_with_one_holder_and_keeps_the_endpoint_proof(monkeypatch):
+    monkeypatch.setattr(ceph_native, "supported_transport", lambda value: True)
+    request = nfs_request()
+    transport = Holders(request, ("node-2",))
+    result = execute(request, transport)
+    assert result["evidence"]["ready"] is True
+    assert transport.calls[-2:] == [("node-1", "vip_holder"), ("node-2", "vip_holder")]
+    transport = Holders(nfs_request("direct"), ())
+    assert execute(nfs_request("direct"), transport)["evidence"]["ready"] is True
+    assert "vip_holder" not in [phase for unused, phase in transport.calls]
+
+
+def test_the_holder_proof_asks_only_the_hosts_running_the_ingress_keepalived():
+    request = nfs_request()
+    ingress = ceph_core.ingress_fronts(request)[0][0]
+    running = [row for row in units.keepalived_rows(request) if row["host"] == "node-2"]
+    idle = [name for name in ingress["placement"]["hosts"] if name != "node-2"]
+    asked = []
+
+    class Down:
+        def call(self, host, phase, timeout=None):
+            asked.append(host["name"])
+            if host["name"] in idle:
+                raise ceph_native.Refusal("transport")
+            return {"changed": False, "holds": True}
+
+    assert idle and ceph_core.vip_holders(request, {"daemons": running}, Down(), 900, lambda: 0) == []
+    assert asked == ["node-2"]
+    assert ceph_core.vip_holders(request, {"daemons": []}, Down(), 900, lambda: 0) == ["noholder@" + ceph_core.ingress_name(ingress)]
+    every = units.keepalived_rows(request)
+    assert ceph_core.vip_holders(request, {"daemons": every}, Down(), 900, lambda: 0) == ["unreachable@" + name for name in idle]
+    with pytest.raises(ceph_native.Refusal, match="^evidence$"):
+        ceph_core.vip_holders(request, {"daemons": [dict(running[0], host="node-9")]}, Down(), 900, lambda: 0)
+
+
+def test_an_unreachable_keepalived_host_blocks_readiness_naming_it(monkeypatch):
+    monkeypatch.setattr(ceph_native, "supported_transport", lambda value: True)
+    request = nfs_request()
+
+    class Unreachable(units.Transport):
+        def call(self, host, phase, timeout=None):
+            if phase == "vip_holder" and host["name"] == "node-2":
+                self.calls.append((host["name"], phase))
+                raise ceph_native.Refusal("transport")
+            return super().call(host, phase, timeout=timeout)
+
+    clock = iter(range(0, 100000, 100))
+    with pytest.raises(ceph_core.ReadinessRefusal) as caught:
+        execute(request, Unreachable(request), now=lambda: next(clock))
+    assert caught.value.checks == ["unreachable@node-2"]
+    assert ceph_core.readiness_detail(caught.value.checks) == "not-ready:unreachable@node-2"
+
+
+class AddressReader:
+    """Answers only `ip -json address show` from one shared selection case."""
+
+    host = {"name": "node-1"}
+
+    def __init__(self, addresses):
+        self.rows = []
+        for name, local, prefix in addresses:
+            self.rows.append({"ifname": name, "addr_info": [{"family": "inet6" if ":" in local else "inet", "local": local, "prefixlen": prefix}]})
+
+    def command(self, argv, timeout=60):
+        assert argv == ADDRESSES and 0 < timeout <= 20
+        return copy.deepcopy(self.rows)
+
+
+@pytest.mark.parametrize("case", GRANTS["selection"], ids=[case["case"] for case in GRANTS["selection"]])
+def test_interface_selection_follows_the_shared_corpus(case):
+    vip, networks = case["networks"][0], case["networks"][1:]
+    assert vip.endswith("/32") or vip.endswith("/128")
+    spec = {"virtual_ip": vip.partition("/")[0]}
+    if networks:
+        spec["virtual_interface_networks"] = networks
+    assert ceph_native_units.vip_interfaces(AddressReader(case["addresses"]), spec)[1] == case["interfaces"]

@@ -219,26 +219,26 @@ The IBM hosts must resolve on every guest, and each OSD disk is nonrotational
 (`ROTA=0`) at `/dev/sda`, with the root at `/dev/vda`: an unreachable
 forwarder fails this check.
 
-The guests run firewalld, and an ingress refuses `ingress-firewall` before its
-first effect unless the zone of its VIP interface permits VRRP and the client
-port ([ingress firewall check](../../specs/ceph.md#resources-readiness-and-access));
-Bootwright and cephadm never open VRRP. Permit them on the object ingress
-hosts (rhel-02, rhel-03: `443/tcp`) and the management ingress hosts (rhel-01,
-rhel-02: `9443/tcp`, and `29443/tcp`, the gateway's internal port Prometheus
-service discovery dials on the management VIP); destroying the guests removes
-the change:
+The guests run firewalld with the profile's `security.firewall.enabled`, so
+the managed OS realizes each ingress's
+[host port requirements](../../specs/managed-os.md#host-firewall-requirements)
+as an owned firewalld service before the clusters stage: VRRP and `443/tcp` on
+the object ingress hosts, `9443/tcp` and the gateway's internal `29443/tcp` on
+the management ingress hosts. This run makes no manual firewall change. Require
+every `host-port` row of the plan to read `realized`, and after the machines
+stage list the owned services read-only:
 
 ```sh
-for entry in rhel-01:9443,29443 rhel-02:443,9443,29443 rhel-03:443; do
-    host=${entry%%:*} ports=${entry#*:}
-    zone=$(./bin/bootwright machine exec --context "$CONTEXT" --name "$host" -- sudo -n firewall-cmd --get-zone-of-interface=enp1s0 | sed 's/^[^:]*: *//')
-    args=()
-    for port in ${ports//,/ }; do args+=(--add-port="$port/tcp"); done
-    ./bin/bootwright machine exec --context "$CONTEXT" --name "$host" -- sudo -n firewall-cmd --permanent --zone="$zone" --add-protocol=vrrp
-    ./bin/bootwright machine exec --context "$CONTEXT" --name "$host" -- sudo -n firewall-cmd --permanent --zone="$zone" "${args[@]}"
-    ./bin/bootwright machine exec --context "$CONTEXT" --name "$host" -- sudo -n firewall-cmd --reload
+./bin/bootwright plan --context "$CONTEXT"
+for host in rhel-01 rhel-02 rhel-03; do
+    ./bin/bootwright machine exec --context "$CONTEXT" --name "$host" -- sudo -n firewall-cmd --list-services
 done
 ```
+
+An ingress still refuses `ingress-firewall` before its first effect when a
+zone does not permit what it publishes
+([ingress firewall check](../../specs/ceph.md#ingress-host-firewall)); record
+that as a B1022 failure rather than permitting the ports by hand.
 
 Then realize the cluster, one
 full image download per guest. The first clusters-stage apply is also the

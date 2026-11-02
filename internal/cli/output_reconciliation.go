@@ -138,11 +138,18 @@ func lifecycleHeadline(result lifecycle.PlanResult) string {
 }
 
 func writeLifecycleSteps(text *display, result lifecycle.PlanResult) {
-	if len(result.Checks) != 0 {
-		text.section("Controller listener firewall")
+	for _, section := range []struct{ id, title string }{{"listener-firewall", "Controller listener firewall"}, {"host-port", "Host firewall requirements"}} {
+		shown := false
 		for _, check := range result.Checks {
+			if check.ID != section.id {
+				continue
+			}
+			if !shown {
+				text.section(section.title)
+				shown = true
+			}
 			text.lines([]string{check.Summary})
-			if check.Status != "open" {
+			if check.Remedy != "" {
 				text.lines([]string{check.Remedy})
 			}
 		}

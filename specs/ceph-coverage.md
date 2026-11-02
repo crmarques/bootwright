@@ -380,12 +380,16 @@ cephadm opens each deployed daemon's TCP endpoint ports with
 reloads, and it never opens VRRP for keepalived, which has no firewalld service
 form ([source anchors](../.agents/knowledge/ceph-dashboard-port-publication.md#native-firewall-opening)).
 Whether a managed guest runs firewalld depends on its install profile.
-An ingress publishes VRRP and its client port as a
-[host requirement](managed-os.md#host-firewall-requirements) that the managed
-OS realizes on a Machine it installs with the firewall enabled; otherwise it
-refuses `ingress-firewall` before effects when an ingress host's active
-firewalld would drop either
-([Resources, readiness and access](ceph.md#resources-readiness-and-access)).
+An ingress publishes VRRP and its client port, and the management gateway's
+ingress also its internal port 29443 that Prometheus service discovery dials,
+as a [host requirement](managed-os.md#host-firewall-requirements) that the
+managed OS realizes on a Machine it installs with the firewall enabled;
+otherwise it refuses `ingress-firewall` before effects when an ingress host's
+active firewalld would drop any of them, and `preflight storage-cluster`
+reports the same verdict live
+([ingress host firewall](ceph.md#ingress-host-firewall)).
+Readiness then proves each virtual IP has exactly one holder, since dropped
+VRRP between the hosts leaves several.
 cephadm's keepalived sends VRRP unicast between the ingress hosts' addresses
 unless `use_keepalived_multicast` is set
 ([upstream](https://github.com/ceph/ceph/blob/v20.2.1/src/pybind/mgr/cephadm/templates/services/ingress/keepalived.conf.j2)),

@@ -19,7 +19,7 @@ type guestProbe struct {
 	requirement string
 }
 
-func (g GuestChecks) CheckGuest(ctx context.Context, contextName string, host api.Object, request PreflightRequest) ([]Check, error) {
+func (g GuestChecks) CheckGuest(ctx context.Context, contextName string, host api.Object, ports []HostPortRequirement, request PreflightRequest) ([]Check, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
@@ -43,9 +43,12 @@ func (g GuestChecks) CheckGuest(ctx context.Context, contextName string, host ap
 		{"host.dns", []string{"/usr/bin/getent", "ahosts", hostname}, nonempty, "the declared host identity must resolve through the host's resolver"},
 	}
 	ssh, _ := machine.SSH(host)
-	checks := make([]Check, 0, len(probes))
+	read := func(argv []string) ([]byte, error) {
+		return g.Commands.Read(ctx, CommandRequest{ContextName: contextName, Machine: host.Name(), Address: ssh.Address, Port: ssh.Port, ObserveUntrusted: request.TrustOnFirstUse, SSH: request.SSH, Argv: argv})
+	}
+	checks := make([]Check, 0, len(probes)+1)
 	for _, probe := range probes {
-		data, err := g.Commands.Read(ctx, CommandRequest{ContextName: contextName, Machine: host.Name(), Address: ssh.Address, Port: ssh.Port, ObserveUntrusted: request.TrustOnFirstUse, SSH: request.SSH, Argv: probe.argv})
+		data, err := read(probe.argv)
 		var untrusted UntrustedKey
 		if errors.As(err, &untrusted) {
 			clear(data)
@@ -73,6 +76,13 @@ func (g GuestChecks) CheckGuest(ctx context.Context, contextName string, host ap
 			}
 		}
 		clear(data)
+		checks = append(checks, check)
+	}
+	if len(ports) != 0 {
+		check := firewallCheck(ctx, read, host.Name(), ports)
+		if ctx.Err() != nil {
+			return nil, ctx.Err()
+		}
 		checks = append(checks, check)
 	}
 	return checks, nil

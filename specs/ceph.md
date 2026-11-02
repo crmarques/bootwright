@@ -1293,8 +1293,10 @@ every document completed, each daemon type's count running on its frozen image
 `keepalived`), `.nfs` with application `nfs` under its recorded ID, the unit's
 ID in `nfs cluster ls` and, with an ingress, a TCP connect from the bootstrap
 host to the virtual IP at the ingress `frontend_port`, or at the NFS `port`
-when keepalive-only; a readiness timeout names `<daemon type>@<service>` and
-`vip@ingress.nfs.<id>` beside the blocking health checks. Observation never
+when keepalive-only, and the virtual IP holder proof below; a
+readiness timeout names `<daemon type>@<service>`, `vip@ingress.nfs.<id>`,
+`noholder@ingress.nfs.<id>` and `holders@ingress.nfs.<id>` beside the blocking
+health checks. Observation never
 writes, and a stored specification, password or keyring never reaches
 evidence, which lists only each daemon's host, name and service. The block's
 deadline is fixed for its type (apply 2940 s, observe 720 s, destroy 1380 s).
@@ -1670,38 +1672,11 @@ specification omits them is accepted. With an ingress, the frozen
 before any record is written (`foreign-image`), haproxy and keepalived run on
 those images, and the endpoint is the virtual IP at `frontend_port`. Endpoint
 readiness opens TLS with SNI equal to the endpoint FQDN, requires the served
-leaf's SHA-256 to equal the bound certificate's and an HTTP status line; a
-timeout names `tls@`, `vip@`, `haproxy@` or `keepalived@` the service. An
-ingress plans once its auxiliary images are authored
-([refusal table](#refusal-table)).
-
-Before the first effect of every apply of an NFS service unit, of the
-management gateway unit with its ingress, or of a gateway whose request
-carries an ingress, a read-only check runs on each host of the ingress's
-placement. When `firewalld.service` is active there, the check finds
-the interfaces cephadm puts the virtual IP and VRRP on: those whose network
-contains the virtual IP, else those on a network listed in
-`virtual_interface_networks`. It reads each one's runtime firewalld zone, or the
-default zone for an interface bound to none, and refuses `ingress-firewall`,
-naming the host, the interface, the zone and what is missing, unless that zone
-permits both VRRP (IP protocol 112) and the client port: the ingress
-`frontend_port`, or the NFS `port` when the ingress is keepalive-only, or the
-management gateway's `port` for its keepalive-only ingress. A zone
-permits them through target `ACCEPT`, a listed protocol (`vrrp` or `112`) or
-TCP port or port range, a service without a destination that grants them
-(followed through its includes), or an unrestricted rich rule of the form
-`rule [family="ipv4"|"ipv6"] protocol value="vrrp" accept` or
-`rule [family=...] port port="<port>" protocol="tcp" accept`; rich rules of
-other forms, source-bound zones, policies and direct rules are not evaluated,
-so a permit given only that way refuses. An inactive or failed
-`firewalld.service` passes, and an unsettled one refuses `ingress-firewall`
-naming its state; a host with no such interface passes, because cephadm reports
-that itself. cephadm opens a deployed daemon's TCP ports only in the default
-zone, after this check, and never opens VRRP, so the check assumes neither.
-It changes no firewall ([D220](milestones/backlog.md#d220)) and runs on every
-apply, since a later firewall change drops VRRP the same. Each
-host's check is bounded by 120 s, all of them within a 600 s window that one
-native call of the block's deadline covers.
+leaf's SHA-256 to equal the bound certificate's and an HTTP status line, and
+each ingress passes the virtual IP holder proof below; a
+timeout names `tls@`, `vip@`, `noholder@`, `holders@`, `haproxy@` or
+`keepalived@` the service. An ingress plans once its auxiliary images are
+authored ([refusal table](#refusal-table)).
 
 Readiness reports bounded observations of FSID, quorum, orchestrator and host
 state, expected daemons, OSD membership, placement/capacity, pool protection,
@@ -1800,6 +1775,78 @@ ambiguous. Bootwright creates no test data, and read-only readiness,
 preflight, status, health and unknown-effect resolution never do. Passing
 native readiness does not claim the client-data acceptance gate passed; that
 gate is the owner-accepted run of [B476](milestones/delivered.md#x94--post-destroy-cluster-inspection).
+
+## Ingress host firewall
+
+Before the first effect of every apply of an NFS service unit, of the
+management gateway unit with its ingress, or of a gateway whose request
+carries an ingress, a read-only check runs on each host of the ingress's
+placement. When `firewalld.service` is active there, the check finds
+the interfaces cephadm puts the virtual IP and VRRP on: those with an address
+whose network (the address and its prefix length, masked) contains the virtual
+IP's address, else, when none does, those with an address whose network equals
+one listed in `virtual_interface_networks`. It reads each one's runtime
+firewalld zone, or the default zone for an interface bound to none, and refuses
+`ingress-firewall`,
+naming the host, the interface, the zone and what is missing, unless that zone
+permits VRRP (IP protocol 112) and each port the ingress serves: the client
+port, which is the ingress `frontend_port`, or the NFS `port` when the ingress
+is keepalive-only, or the management gateway's `port` for its keepalive-only
+ingress, and for the management gateway also its internal port 29443, which
+Prometheus service discovery dials on the virtual IP. The internal port is one
+constant of the cluster admission, the same on every release, that the
+management gateway unit's request carries as `ingressPorts`; the worker never
+names it itself. A zone
+permits them through target `ACCEPT`, a listed protocol (`vrrp` or `112`) or
+TCP port or port range, a service without a destination that grants them
+(followed through its includes), or an unrestricted rich rule of the form
+`rule [family="ipv4"|"ipv6"] protocol value="vrrp" accept` or
+`rule [family=...] port port="<port>" protocol="tcp" accept`; rich rules of
+other forms, source-bound zones, policies and direct rules are not evaluated,
+so a permit given only that way refuses. An inactive or failed
+`firewalld.service` passes, and an unsettled one refuses `ingress-firewall`
+naming its state; a host with no such interface passes, because cephadm reports
+that itself. cephadm opens a deployed daemon's TCP ports only in the default
+zone, after this check, and never opens VRRP, so the check assumes neither.
+It changes no firewall ([D220](milestones/backlog.md#d220)) and runs on every
+apply, since a later firewall change drops VRRP the same. Each
+host's check is bounded by 120 s, all of them within a 600 s window that one
+native call of the block's deadline covers.
+
+Storage publishes the same requirements as
+[host firewall requirements](managed-os.md#host-firewall-requirements),
+derived from the requests the plan freezes, so a published requirement equals
+what this check verifies: for each ingress host, named by its Machine, the
+publishing unit or gateway block, the networks (first the virtual IP itself as
+a single-host prefix, `/32` or `/128`, then the ingress's
+`virtual_interface_networks`), protocol `vrrp` and the TCP ports above. Every
+consumer selects interfaces by the rule above: those whose address network
+contains the first network's address, else those whose address network equals
+a later one. A stretched gateway publishes each data site's ingress on that
+site's hosts; a cluster without an ingress publishes none. SMB and CTDB public
+addresses are not VRRP ingresses and publish nothing.
+
+`preflight storage-cluster` probes every ingress host live and read-only, with
+the same interface selection and grant rules, which one shared fixture corpus
+holds the Go and the worker's tests to. It reads `systemctl show
+--property=ActiveState firewalld.service` (an inactive or failed firewalld
+passes), `ip -json address show`, `firewall-cmd --get-active-zones` (an
+interface it lists is in that zone, any other in `--get-default-zone`),
+`--info-zone` and `--info-service`, and reports a `host.firewall` row naming
+what each zone does not permit with both remedies. A read that fails or prints
+an unexpected form leaves the row unknown, never passed.
+
+The virtual IP holder proof: a service unit's or gateway's readiness wait
+proves, once its own observation is ready and within the same wait window, that
+each ingress's virtual IP has exactly one holder: each host the observation
+lists running that ingress's keepalived, one ingress per data site on a stretch
+cluster, reports read-only whether one of its interfaces carries the address
+(`ip -json address show`), each call bounded by 60 s; an idle placement host is
+not asked. No holder blocks readiness with `noholder@<ingress service>`;
+several holders, the split brain that dropped VRRP leaves, block it with
+`holders@<ingress service>`; a keepalived host that does not answer blocks it
+with `unreachable@<host>`. The wait polls again until the window closes, and
+the proof sits beside, never in place of, the endpoint's answer on its port.
 
 ## Secret custody
 

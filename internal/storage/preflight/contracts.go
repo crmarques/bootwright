@@ -13,7 +13,7 @@ type Ownership = capacity.Ownership
 type Projector = capacity.Projector
 
 type GuestObserver interface {
-	CheckGuest(context.Context, string, api.Object, PreflightRequest) ([]Check, error)
+	CheckGuest(context.Context, string, api.Object, []HostPortRequirement, PreflightRequest) ([]Check, error)
 }
 type Summary = capacity.Summary
 type Report = capacity.Report

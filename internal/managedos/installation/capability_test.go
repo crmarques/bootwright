@@ -133,7 +133,7 @@ func realizing(references []reconciliation.ObjectRef) []reconciliation.BlockDefi
 		definitions = append(definitions, reconciliation.BlockDefinition{
 			ID:          "realizes-" + strings.ToLower(reference.Kind) + "-" + reference.Object,
 			Description: "realize " + reference.Object, Stage: reconciliation.StageInfrastructureServices,
-			Kind: reference.Kind, Object: reference.Object, Implementation: "placeholder",
+			Kind: reference.Kind, Object: reference.Object, Implementation: "placeholder", Family: reference.Family,
 			ContentDigest: strings.Repeat("a", 64),
 			Request:       json.RawMessage(`{"index":` + string(rune('0'+index)) + `}`),
 		})
@@ -146,7 +146,7 @@ func realizing(references []reconciliation.ObjectRef) []reconciliation.BlockDefi
 func TestPlanRequiresTheMachineAndEveryServiceItUses(t *testing.T) {
 	plan, _ := New(nil).WithMedia(labMedia()).Plan(context.Background(), planInput(reconciliation.Apply))
 	want := []reconciliation.ObjectRef{
-		{Kind: "Machine", Object: "rhel-01"},
+		{Kind: "Machine", Object: "rhel-01", Family: substrate.MachineFamily},
 		{Kind: "ArtifactServer", Object: "lab-artifacts"},
 		{Kind: "DNSServer", Object: "lab-dns"},
 		{Kind: "NTPServer", Object: "lab-ntp"},

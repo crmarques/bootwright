@@ -1,0 +1,46 @@
+argument_specs:
+  apply:
+    short_description: Realize the host firewalld services of one installed machine.
+    options: &request
+      bootwright_os_firewall_request:
+        type: dict
+        required: true
+        options:
+          address:
+            type: str
+            required: true
+          fleetKeyRef:
+            type: str
+            required: true
+          identity:
+            type: dict
+            required: true
+          placement:
+            type: dict
+            required: true
+          services:
+            type: list
+            elements: dict
+            required: true
+          user:
+            type: str
+            required: true
+          version:
+            type: str
+            required: true
+            choices: [os-host-firewall-v1]
+      bootwright_os_firewall_digest:
+        type: str
+        required: true
+      bootwright_os_firewall_material:
+        type: dict
+        required: true
+      bootwright_run_scratch:
+        type: path
+        required: true
+  observe:
+    short_description: Observe the host firewalld services of one installed machine.
+    options: *request
+  destroy:
+    short_description: Take back the host firewalld services of one installed machine.
+    options: *request

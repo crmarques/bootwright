@@ -6536,7 +6536,7 @@ management gateway's endpoint evidence. [B1027](m2.md#b1027) is
 [X270](m2.md#planned-slices): subvolume path proofs read `getpath` as text.
 [B1030](m2.md#b1030) is [X273](m2.md#planned-slices): the runbook's NFS, SMB
 and observability checks run and hide every password; [B1031](m2.md#b1031)
-(SMB share ownership) awaits definition and [B1032](m2.md#b1032) (the
+(SMB share ownership) awaits definition and [B1032](delivered.md#x274--management-gateway-internal-port-in-the-ingress-check) (the
 management gateway's internal port in the ingress check) is specified. Every
 one of these is one general flow for all releases, not a version
 specialization. [B1013](m2.md#b1013) stays blocked on the vendor. Each

@@ -22,7 +22,7 @@ options:
     description: The role that owns the scratch files.
     type: str
     required: true
-    choices: [libvirt-host, libvirt-machine, managedos-install]
+    choices: [libvirt-host, libvirt-machine, managedos-firewall, managedos-install]
   remove_root:
     description: Remove the empty root on a remote execution host; the local runner owns its root.
     type: bool
@@ -56,7 +56,7 @@ import stat
 
 from ansible.module_utils.basic import AnsibleModule
 
-SCOPES = frozenset(("libvirt-host", "libvirt-machine", "managedos-install"))
+SCOPES = frozenset(("libvirt-host", "libvirt-machine", "managedos-firewall", "managedos-install"))
 PARENT = "/var/lib/bootwright-staging/runs"
 FLAGS = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | os.O_CLOEXEC
 

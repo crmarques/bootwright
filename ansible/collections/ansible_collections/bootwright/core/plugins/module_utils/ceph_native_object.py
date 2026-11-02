@@ -50,7 +50,7 @@ from ansible_collections.bootwright.core.plugins.module_utils.ceph_native import
 from ansible_collections.bootwright.core.plugins.module_utils.ceph_native_observability import MAX_KEY, MAX_LEAF, PRIVATE_KEY, answers, leaf, served
 
 APPLY_PHASES = ("gateway_zone", "gateway_placement", "gateway_service")
-PHASES = frozenset(APPLY_PHASES + ("ingress_firewall",))
+PHASES = frozenset(APPLY_PHASES + ("ingress_firewall", "vip_holder"))
 RADOSGW_ADMIN = "/usr/bin/radosgw-admin"
 RGW_ROOT = ".rgw.root"
 ROOT_CLAIM = "rgw-root.json"
@@ -504,6 +504,10 @@ class ObjectWorker(ceph_native_units.UnitWorker):
     def ingress_frontend(self):
         """The ingress whose placement holds this host; per-site ingresses hold disjoint hosts."""
         return next((found for found in frontends(self.request) if self.host["name"] in found[0]["placement"]["hosts"]), None)
+
+    def ingress_ports(self):
+        """A gateway's ingress serves only its client port."""
+        return []
 
     def bound_services(self):
         return sorted({binding["serviceRef"] for binding in self.gateway()["bindings"]})

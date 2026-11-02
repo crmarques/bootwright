@@ -18,6 +18,7 @@ type Service struct {
 	Project   Projector
 	Capacity  CapacityChecker
 	Guests    GuestObserver
+	HostPorts func(api.Catalog) ([]HostPortRequirement, error)
 	Selection func(context.Context) (string, error)
 }
 
@@ -117,8 +118,15 @@ func (s Service) Check(ctx context.Context, request PreflightRequest) (*Report, 
 		hostNames = append(hostNames, host)
 	}
 	slices.Sort(hostNames)
+	published := []HostPortRequirement{}
+	if s.HostPorts != nil && len(hostNames) > 0 {
+		if published, err = s.HostPorts(catalog); err != nil {
+			return nil, err
+		}
+	}
 	for _, name := range hostNames {
-		checks, err := s.guestChecks(ctx, selected, catalog, name, owned, request)
+		ports := slices.DeleteFunc(slices.Clone(published), func(requirement HostPortRequirement) bool { return requirement.Machine != name })
+		checks, err := s.guestChecks(ctx, selected, catalog, name, owned, ports, request)
 		if err != nil {
 			return nil, err
 		}
@@ -137,7 +145,7 @@ func (s Service) Check(ctx context.Context, request PreflightRequest) (*Report, 
 	return result, nil
 }
 
-func (s Service) guestChecks(ctx context.Context, selected string, catalog api.Catalog, name string, owned map[string]machine.OwnershipState, request PreflightRequest) ([]Check, error) {
+func (s Service) guestChecks(ctx context.Context, selected string, catalog api.Catalog, name string, owned map[string]machine.OwnershipState, ports []HostPortRequirement, request PreflightRequest) ([]Check, error) {
 	host, found := catalog.Find(api.Machine, name)
 	check := Check{ID: "host.prerequisites", Target: name, Status: capacity.Unknown, Next: "prove this Machine's installed OS and prerequisites before Ceph enrollment"}
 	state, recorded := owned["Machine/"+name]
@@ -157,7 +165,7 @@ func (s Service) guestChecks(ctx context.Context, selected string, catalog api.C
 		check.Reason = "live guest prerequisite observation is unavailable"
 	default:
 		probe, cancel := context.WithTimeout(ctx, capacity.ProbeTimeout)
-		checks, err := s.Guests.CheckGuest(probe, selected, host, request)
+		checks, err := s.Guests.CheckGuest(probe, selected, host, ports, request)
 		expired := probe.Err()
 		cancel()
 		if ctx.Err() != nil {

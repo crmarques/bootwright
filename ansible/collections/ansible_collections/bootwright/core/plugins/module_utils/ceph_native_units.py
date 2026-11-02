@@ -128,7 +128,7 @@ UNIT_TYPES = {
     "rbd-mirror": UnitType(mirror_validate, mirror_check, mirror_claim, mirror_settle, mirror_expected, mirror_readiness, MIRROR_TYPES, mirror_frontend,
                            {"rbd-mirror": None}, {}, frozenset(MIRROR_TYPES), None),
 }
-PHASES = frozenset(("unit", "ingress_firewall", "sso_config", "sso", "nvmeof_unit_observe"))
+PHASES = frozenset(("unit", "ingress_firewall", "vip_holder", "sso_config", "sso", "nvmeof_unit_observe"))
 READ_ONLY_PHASES = frozenset(("nvmeof_unit_observe",))
 # The ingress firewall check reads only these host tools, never with a write, reload or query form.
 SYSTEMCTL = "/usr/bin/systemctl"
@@ -140,6 +140,7 @@ MAX_INTERFACES = 256
 MAX_ADDRESSES = 64
 MAX_CANDIDATES = 8
 MAX_SERVICES = 64
+MAX_INGRESS_PORTS = 4
 VRRP = "VRRP (IP protocol 112)"
 VRRP_TOKENS = frozenset(("vrrp", "112"))
 UNIT_STATE = re.compile(r"[a-z-]{1,32}\Z")
@@ -153,7 +154,8 @@ DOCUMENT_MEMBERS = frozenset(("networks", "placement", "service_id", "service_ty
 PROXY_MEMBERS = DOCUMENT_MEMBERS | {"custom_configs"}
 INPUTS_VERSION = "ceph-service-inputs-v1"
 MAX_DAEMONS = 256
-PENDING = re.compile(r"(?:(?:" + "|".join(sorted({name for unit in UNIT_TYPES.values() for name in unit.daemon_types} | {"vip", "module", "sso"}))
+ENDPOINT_ENTRIES = frozenset(("vip", "noholder", "holders", "module", "sso"))
+PENDING = re.compile(r"(?:(?:" + "|".join(sorted({name for unit in UNIT_TYPES.values() for name in unit.daemon_types} | ENDPOINT_ENTRIES))
                      + r")@(?:(?:nfs|ingress)\.[A-Za-z0-9][A-Za-z0-9_.-]{0,127}|"
                      + "|".join(ceph_native_observability.MONITORING_TYPES + ceph_native_observability.GATEWAY_TYPES + MIRROR_TYPES + CRASH_TYPES)
                      + r")|(?:tls|http)@(?:" + "|".join(ceph_native_observability.GATEWAY_TYPES) + r"))\Z")
@@ -303,9 +305,10 @@ def leaf(value, path):
 def validate(request, hosts):
     """One unit of a known type: 1 to 8 placed documents, each listed in `delegated` with exactly its hosts."""
     unit = request.get("service")
-    require(isinstance(unit, dict) and {"documents", "id", "type"} <= set(unit) <= {"bindings", "config", "documents", "id", "type"})
+    require(isinstance(unit, dict) and {"documents", "id", "type"} <= set(unit) <= {"bindings", "config", "documents", "id", "ingressPorts", "type"})
     require(isinstance(unit["type"], str) and unit["type"] in UNIT_TYPES)
     require("config" not in unit or unit["type"] == "monitoring")
+    ingress_ports(unit)
     singletons = UNIT_TYPES[unit["type"]].singletons
     require(unit["id"] == "" or isinstance(unit["id"], str) and ceph_native.NAME.fullmatch(unit["id"]) is not None)
     documents = unit["documents"]
@@ -336,6 +339,19 @@ def frontend(request):
     return UNIT_TYPES[request["service"]["type"]].frontend(request["service"])
 
 
+def ingress_ports(unit):
+    """The TCP ports beside the client port that the unit's ingress hosts must also permit, as the request carries them: only a management
+    gateway with its ingress carries them, its internal port among them."""
+    ports = unit.get("ingressPorts")
+    if ports is None:
+        return []
+    documents = unit["documents"] if isinstance(unit["documents"], list) else []
+    require(unit["type"] == "mgmt-gateway" and any(isinstance(document, dict) and document.get("service_type") == "ingress" for document in documents))
+    require(isinstance(ports, list) and 1 <= len(ports) <= MAX_INGRESS_PORTS and all(ceph_native_nfs.port(port) for port in ports))
+    require(len(set(ports)) == len(ports))
+    return list(ports)
+
+
 def text(output):
     return bytes(output).decode("utf-8", "replace")
 
@@ -352,8 +368,8 @@ def firewall_active(worker):
     raise NativeFailure("ingress-firewall", worker.native_coordinate(), "host " + worker.host["name"] + ": " + FIREWALL_UNIT + " is " + shown)
 
 
-def address_networks(rows):
-    """Each interface name with the networks of its addresses, from `ip -json address show`."""
+def interface_addresses(rows):
+    """Each interface name with each of its addresses and prefix length, from `ip -json address show`."""
     require(isinstance(rows, list) and len(rows) <= MAX_INTERFACES, "native-output")
     found = []
     for row in rows:
@@ -364,10 +380,22 @@ def address_networks(rows):
             require(isinstance(entry, dict) and entry.get("family") in ("inet", "inet6") and isinstance(entry.get("local"), str)
                     and type(entry.get("prefixlen")) is int, "native-output")
             try:
-                found.append((row["ifname"], ipaddress.ip_interface(entry["local"] + "/" + str(entry["prefixlen"])).network))
+                found.append((row["ifname"], ipaddress.ip_interface(entry["local"] + "/" + str(entry["prefixlen"]))))
             except ValueError:
                 raise Refusal("native-output") from None
     return found
+
+
+def address_networks(rows):
+    """Each interface name with the networks of its addresses, from `ip -json address show`."""
+    return [(name, address.network) for name, address in interface_addresses(rows)]
+
+
+def vip_held(worker, spec):
+    """Whether this host holds the virtual IP now: one of its interfaces carries the address, as keepalived adds it to its master."""
+    vip = ipaddress.ip_interface(spec["virtual_ip"]).ip
+    rows = worker.command([IP, "-json", "address", "show"], timeout=FIREWALL_TIMEOUT)
+    return any(address.ip == vip for unused, address in interface_addresses(rows))
 
 
 def vip_interfaces(worker, spec):
@@ -433,7 +461,7 @@ def grants_port(fields, rules, family, port):
                for found in (RICH_PORT.fullmatch(rule) for rule in rules))
 
 
-def service_grants(worker, zone, names, port, read, needs):
+def service_grants(worker, zone, names, ports, read, needs):
     """Follow the zone's services and their includes while a need is unmet; only a service without a destination grants."""
     queue, seen = list(names), set()
     while queue and not all(needs):
@@ -450,25 +478,27 @@ def service_grants(worker, zone, names, port, read, needs):
             read[name] = zone_fields(text(worker.command(argv, json_result=False, timeout=FIREWALL_TIMEOUT)))[0]
         fields = read[name]
         if not fields.get("destination"):
-            needs = [needs[0] or bool(VRRP_TOKENS & set(fields.get("protocols", "").split())), needs[1] or grants_port(fields, [], None, port)]
+            needs = [needs[0] or bool(VRRP_TOKENS & set(fields.get("protocols", "").split()))] + [
+                met or grants_port(fields, [], None, port) for met, port in zip(needs[1:], ports)]
         queue.extend(fields.get("includes", "").split())
     return needs
 
 
-def zone_missing(worker, zone, vip, port, read):
-    """What the zone's runtime state does not permit of VRRP and the client port; target ACCEPT permits everything."""
+def zone_missing(worker, zone, vip, ports, read):
+    """What the zone's runtime state does not permit of VRRP and the ingress's ports; target ACCEPT permits everything."""
     fields, rules = zone_fields(text(worker.command([FIREWALL_CMD, "--info-zone=" + zone], json_result=False, timeout=FIREWALL_TIMEOUT)))
     require("target" in fields, "native-output")
     if fields["target"] == "ACCEPT":
         return []
     family = "ipv4" if vip.version == 4 else "ipv6"
-    needs = [grants_vrrp(fields, rules, family), grants_port(fields, rules, family, port)]
-    needs = service_grants(worker, zone, fields.get("services", "").split(), port, read, needs)
-    return ([] if needs[0] else [VRRP]) + ([] if needs[1] else [str(port) + "/tcp"])
+    needs = [grants_vrrp(fields, rules, family)] + [grants_port(fields, rules, family, port) for port in ports]
+    needs = service_grants(worker, zone, fields.get("services", "").split(), ports, read, needs)
+    return ([] if needs[0] else [VRRP]) + [str(port) + "/tcp" for met, port in zip(needs[1:], ports) if not met]
 
 
-def firewall_check(worker, spec, port):
-    """Read-only: where an active firewalld filters, each interface that carries the virtual IP permits VRRP and the client port."""
+def firewall_check(worker, spec, ports):
+    """Read-only: where an active firewalld filters, each interface that carries the virtual IP permits VRRP and each of the ingress's
+    ports: the client port, then any port the request adds."""
     if not firewall_active(worker):
         return
     vip, candidates = vip_interfaces(worker, spec)
@@ -477,7 +507,7 @@ def firewall_check(worker, spec, port):
     for name in candidates:
         zone = zones[name]
         if zone not in verdicts:
-            verdicts[zone] = zone_missing(worker, zone, vip, port, read)
+            verdicts[zone] = zone_missing(worker, zone, vip, ports, read)
         if verdicts[zone]:
             clauses.append("interface " + name + " in firewalld zone " + zone + " does not permit " + " and ".join(verdicts[zone]))
     if clauses:
@@ -622,13 +652,23 @@ class UnitWorker(ceph_native_resources.ResourceWorker):
     def ingress_frontend(self):
         return frontend(self.request)
 
+    def ingress_ports(self):
+        return ingress_ports(self.request["service"])
+
     def ingress_firewall(self):
-        """Read-only, before any effect of this apply: on this ingress host an active firewalld permits VRRP and the client port where the
-        virtual IP lands; Bootwright never changes a host's firewall."""
+        """Read-only, before any effect of this apply: on this ingress host an active firewalld permits VRRP, the client port and each port
+        the request adds where the virtual IP lands. This check never changes a firewall; the managed OS realizes the same requirements
+        on a Machine it installs with its firewall enabled."""
         found = self.ingress_frontend()
         require(found is not None and self.host["name"] in found[0]["placement"]["hosts"])
-        firewall_check(self, found[0]["spec"], found[1])
+        firewall_check(self, found[0]["spec"], [found[1]] + self.ingress_ports())
         return {"changed": False}
+
+    def vip_holder(self):
+        """Read-only, during readiness: whether this ingress host holds its ingress's virtual IP now; readiness needs exactly one holder."""
+        found = self.ingress_frontend()
+        require(found is not None and self.host["name"] in found[0]["placement"]["hosts"])
+        return {"changed": False, "holds": vip_held(self, found[0]["spec"])}
 
     def sso_proxy(self):
         """The unit's oauth2-proxy document: only a management gateway unit with single sign-on has one."""

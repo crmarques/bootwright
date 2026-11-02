@@ -1,0 +1,13 @@
+---
+- name: Execute one managed OS host firewall capability
+  hosts: bootwright_target
+  gather_facts: false
+  any_errors_fatal: true
+  serial: 1
+  strategy: ansible.builtin.linear
+
+  tasks:
+    - name: Execute the managed OS host firewall destroy
+      ansible.builtin.import_role:
+        name: bootwright.core.managedos_host_firewall
+        tasks_from: destroy

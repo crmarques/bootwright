@@ -29,6 +29,7 @@ import pytest
 from ansible_collections.bootwright.core.plugins.module_utils import (
     ceph_core, ceph_host_runtime, ceph_native, ceph_native_object, ceph_native_observability, ceph_tunnel_staging,
 )
+from ansible_collections.bootwright.core.tests.unit.plugins.module_utils import test_ceph_service_units as units
 from ansible_collections.bootwright.core.tests.unit.plugins.module_utils import test_ceph_settings as settings
 
 FSID = settings.FSID
@@ -692,11 +693,15 @@ class Transport:
         if phase == "observe":
             assert timeout is None or 0 < timeout <= 660
             ready = sum(call[1] == "observe" for call in self.calls) >= self.ready_after
-            daemons = [{"host": "node-1", "name": "rgw.objects.node-1.abcdef", "service": "rgw.objects"}] if ready else []
+            daemons = [{"host": "node-1", "name": "rgw.objects.node-1.abcdef", "service": "rgw.objects"}] + units.keepalived_rows(self.request) if ready else []
             resource = {"id": str(uuid.UUID(int=7)), "path": ""} if ready else None
-            return dict(observation(self.request, ready, daemons, resource), blocking=[] if ready else ["rgw@rgw.objects"], **self.observed)
+            result = dict(observation(self.request, ready, daemons, resource), blocking=[] if ready else ["rgw@rgw.objects"], **self.observed)
+            self.daemons = result["daemons"]
+            return result
         if phase == "prerequisites":
             return {"name": host["name"], "owned": True, "exists": True}
+        if phase == "vip_holder":
+            return {"changed": False, "holds": units.first_holder(self.request, host, self.daemons)}
         return {"changed": phase in ceph_native_object.APPLY_PHASES}
 
 

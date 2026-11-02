@@ -15,6 +15,7 @@ import (
 	"github.com/crmarques/bootwright/internal/managedos/installation"
 	"github.com/crmarques/bootwright/internal/reconciliation"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
+	"github.com/crmarques/bootwright/internal/substrate"
 )
 
 // installationPlan is the installation capability's own contribution to the
@@ -53,7 +54,7 @@ func TestLabBaremetalExamplePlansItsInstallation(t *testing.T) {
 		if verb != reconciliation.Apply {
 			continue
 		}
-		for _, required := range []reconciliation.ObjectRef{{Kind: "Machine", Object: "metal-01"}, {Kind: "ArtifactServer", Object: "lab-artifacts"}} {
+		for _, required := range []reconciliation.ObjectRef{{Kind: "Machine", Object: "metal-01", Family: substrate.MachineFamily}, {Kind: "ArtifactServer", Object: "lab-artifacts"}} {
 			if !slices.Contains(blocks[0].Requires, required) {
 				t.Fatalf("the installation requires %+v, not %+v", blocks[0].Requires, required)
 			}

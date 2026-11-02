@@ -296,11 +296,11 @@ func TestANFSExportRealmDefaultRefusalNamesItsNextStep(t *testing.T) {
 }
 
 func TestAnIngressFirewallRefusalNamesItsNextStep(t *testing.T) {
-	const message = "a host that runs the ingress of a Ceph NFS service or CephObjectGateway has an active firewalld that does not permit " +
-		"VRRP (IP protocol 112) or the ingress's client port on the interface that carries its virtual IP"
-	const remedy = "permit VRRP (IP protocol 112) and the port the native error names in the firewalld zone it names on the host it names, " +
+	const message = "a host that runs the ingress of a Ceph NFS service, management gateway or CephObjectGateway has an active firewalld that does not permit " +
+		"VRRP (IP protocol 112) or a port the ingress serves on the interface that carries its virtual IP"
+	const remedy = "either permit what the native error names in the firewalld zone it names on the host it names, " +
 		"for example with firewall-cmd --permanent --zone=<zone> --add-protocol=vrrp --add-port=<port>/tcp and firewall-cmd --reload, " +
-		"or install that host without an active firewall, then apply again; Bootwright never changes a host's firewall, and this apply changed nothing before the check"
+		"or let Bootwright realize them by installing that host's Machine with customizations.security.firewall.enabled: true, then apply again; this apply changed nothing before the check"
 	r := nfsUnitRequest()
 	observation, err := New(api.CephCluster, &refusingRunner{reason: "ingress-firewall"}).Observe(context.Background(), withMaterial(executionFor(t, r), r))
 	unit := diagnostics.Of(err)
