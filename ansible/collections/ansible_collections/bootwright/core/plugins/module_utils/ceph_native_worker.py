@@ -212,8 +212,11 @@ def result_bytes(value):
     return data
 
 
-def work(started=None, ceiling=REMOTE_LIMIT, loader=load):
-    """Only typed evidence, attested causes and bounded redacted native errors return."""
+def work(started=None, ceiling=REMOTE_LIMIT, loader=load, reserve=0):
+    """Only typed evidence, attested causes and bounded redacted native errors return.
+
+    The deadline signal comes ``reserve`` seconds before the budget ends, leaving the interrupted call that long to clean up
+    before the supervisor stops the worker at the budget."""
     started = time.monotonic() if started is None else started
     quiet = os.open(os.devnull, os.O_WRONLY | os.O_CLOEXEC)
     previous_alarm = None
@@ -229,7 +232,8 @@ def work(started=None, ceiling=REMOTE_LIMIT, loader=load):
         require(isinstance(payload, dict) and set(payload) == {"sources", "payload", "budget"})
         budget = payload["budget"]
         require(type(budget) in (int, float) and 0 < budget <= ceiling)
-        remaining = budget - (time.monotonic() - started)
+        require(type(reserve) in (int, float) and 0 <= reserve < budget)
+        remaining = budget - reserve - (time.monotonic() - started)
         if remaining <= 0:
             raise RemoteDeadline()
         previous_alarm = signal.signal(signal.SIGALRM, elapsed)

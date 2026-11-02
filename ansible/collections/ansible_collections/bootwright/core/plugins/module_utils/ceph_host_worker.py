@@ -15,6 +15,12 @@ import types
 
 REMOTE_LIMIT = 4285
 PHASE = "images"
+# The worker's deadline signal comes this long before the supervisor's own deadline, so an interrupted batch stops its
+# pulls and leaves their brokers (the runtime's PULL_CANCEL_SECONDS) and returns its timeout while the worker still runs.
+CANCEL_RESERVE = 40
+# A call starts no pull with less than the runtime's PULL_MINIMUM plus PULL_RESERVE left, so a smaller budget has no
+# broker to clean up and keeps its whole signal time.
+PULL_FLOOR = 180
 
 
 def restricted(native):
@@ -26,6 +32,15 @@ def restricted(native):
     return types.SimpleNamespace(Refusal=native.Refusal, dispatch=dispatch)
 
 
+def supervised(supervisor, started, budget, load):
+    """The supervisor stops the worker at the budget; the worker's own signal comes the cancel reserve earlier."""
+    reserve = CANCEL_RESERVE if budget >= PULL_FLOOR else 0
+
+    def work():
+        return supervisor["work"](started, budget, loader=load, reserve=reserve)
+    return supervisor["supervise"](work, budget=budget, grace=0, started=started)
+
+
 def main(supervisor):
     supervisor["REMOTE_LIMIT"] = REMOTE_LIMIT
     started = time.monotonic()
@@ -34,10 +49,7 @@ def main(supervisor):
 
         def load(sources):
             return restricted(supervisor["load"](sources))
-
-        def work():
-            return supervisor["work"](started, budget, loader=load)
-        output = supervisor["supervise"](work, budget=budget, grace=0, started=started)
+        output = supervised(supervisor, started, budget, load)
     except Exception:
         output = {"ok": False, "reason": "native-unknown"}
     try:

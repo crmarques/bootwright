@@ -67,9 +67,10 @@ PULL_RESERVE = 120
 PULL_PAUSE = 15
 IMAGES_CALL_SECONDS = 4285
 PULL_CONCURRENCY = 3
-# How long a batch interrupted in this thread waits for its pulls to stop: a pause between attempts, then a broker's exit
-# (1 s for its listener and 31 s for its connections), each process stopping within a second of the cancellation.
-PULL_CANCEL_SECONDS = PULL_PAUSE + 1 + 31 + 3
+# How long a batch interrupted in this thread waits for its pulls to stop: a broker's exit (1 s for its listener and 31 s
+# for its connections), each process and pause ending within a second of the cancellation. The images launcher's
+# signal comes CANCEL_RESERVE (ceph_host_worker) before its supervisor's deadline to leave this wait its time.
+PULL_CANCEL_SECONDS = 1 + 31 + 3
 PHASES = frozenset(("images", "profile", "route", "device_identity", "host_devices", "host_observe", "fips_observe"))
 ARTIFACTS = ("/usr/sbin/cephadm", "/usr/share/ceph/mgr/cephadm/ssh.py", "/usr/share/ceph/mgr/cephadm/module.py",
              "/usr/share/ceph/mgr/cephadm/serve.py", "/usr/bin/ceph", "/usr/bin/ceph-authtool")
@@ -451,6 +452,13 @@ class HostRuntime:
                                             getattr(output, "stderr", b"") or output, secrets=secrets)
         return output
 
+    def rest(self, seconds, cancel=None):
+        """Pause between attempts; a cancellation ends the default real pause at once."""
+        if cancel is not None and self.pause is time.sleep:
+            cancel.wait(seconds)
+        else:
+            self.pause(seconds)
+
     def journal(self, create=False):
         return journal(self.request, self.host["name"], create=create, markers=self.markers)
 
@@ -596,7 +604,7 @@ class HostRuntime:
                     except Refusal:
                         if tried >= PULL_ATTEMPTS or cancel is not None and cancel.is_set():
                             raise
-                        self.pause(PULL_PAUSE)
+                        self.rest(PULL_PAUSE, cancel)
         except ceph_native.NativeFailure as error:
             if broker is not None and broker.failure_cause:
                 error.native_error["cause"] = native_diagnostics.redact(broker.failure_cause + "; " + error.native_error["cause"])

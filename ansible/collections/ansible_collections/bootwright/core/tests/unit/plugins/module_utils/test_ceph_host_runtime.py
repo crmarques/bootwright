@@ -12,6 +12,7 @@ import copy
 import hashlib
 import io
 import json
+import sys
 import os
 import re
 import shutil
@@ -26,7 +27,7 @@ from pathlib import Path
 import pytest
 
 from ansible_collections.bootwright.core.plugins.module_utils import (
-    bounded_process, ceph_host_runtime as runtime, ceph_host_route_probe as probe, ceph_native,
+    bounded_process, ceph_host_runtime as runtime, ceph_host_route_probe as probe, ceph_host_worker, ceph_native, ceph_native_worker,
 )
 
 IMAGE = "cp.icr.io/cp/ibm-ceph/ceph-9-rhel9@sha256:" + "a" * 64
@@ -1728,6 +1729,98 @@ def test_a_deadline_while_a_batch_pulls_stops_every_pull_process_and_leaves_ever
     for name, reference in (("haproxy", HAPROXY), ("keepalived", KEEPALIVED)):
         assert markers.records["auxiliary-" + name + "-attempt-1.json"] == {"scope": scope, "image": reference, "attempt": 1}
         assert "auxiliary-" + name + "-attempt-2.json" not in markers.records and "auxiliary-" + name + "-pulled.json" not in markers.records
+
+
+def test_a_cancelled_pull_pause_ends_at_once_and_a_scripted_pause_still_counts(request_value, tmp_path):
+    cancel, clock = threading.Event(), Clock()
+    cancel.set()
+    real = runtime.HostRuntime(request_value, "node-1", lambda *args, **options: (0, b""), markers=Markers(tmp_path / "real"))
+    begun = time.monotonic()
+    real.rest(runtime.PULL_PAUSE, cancel)
+    assert time.monotonic() - begun < 1
+    scripted, unused_markers, clock = host_runtime(request_value, tmp_path, lambda *args, **options: (0, b""), clock)
+    scripted.rest(runtime.PULL_PAUSE, cancel)
+    assert clock.pauses == [runtime.PULL_PAUSE]
+
+
+def test_the_images_signal_leaves_a_batch_its_cancellation_before_the_supervisor_stops_the_worker():
+    assert ceph_host_worker.PULL_FLOOR == runtime.PULL_MINIMUM + runtime.PULL_RESERVE
+    assert runtime.PULL_CANCEL_SECONDS < ceph_host_worker.CANCEL_RESERVE < runtime.PULL_RESERVE
+
+
+def test_a_supervised_images_worker_cleans_up_an_interrupted_batch_before_its_supervisor_deadline(request_value, tmp_path, monkeypatch):
+    request_value["auxiliary"] = [{"name": "haproxy", "image": HAPROXY}, {"name": "keepalived", "image": KEEPALIVED}]
+    sleep, records = shutil.which("sleep"), tmp_path / "records"
+    assert sleep and os.path.isabs(sleep)
+    records.mkdir()
+
+    def record(name, value):
+        (records / name).write_text(value)
+
+    class Recorded(subprocess.Popen):
+        def __init__(self, *args, **options):
+            super().__init__(*args, **options)
+            record("group-" + str(self.pid), "")
+
+    class Broker:
+        failure_cause, environment = "", {}
+
+        def __init__(self, directory, request, private, deadline, command, *, image=None, trust=None):
+            del request, private, deadline, command, trust
+            self.image, self.cert_directory = image, os.path.join(directory, "native-certs")
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, kind, unused_value, unused_traceback):
+            record("broker-haproxy" if self.image == HAPROXY else "broker-keepalived", kind.__name__ if kind else "")
+            return False
+
+    def command(argv, timeout, limit, environment=None, cancel=None):
+        del environment
+        assert argv[:2] == ["/usr/bin/podman", "pull"] and cancel is not None
+        return ceph_native.bounded_command([sleep, "30"], timeout=timeout, limit=limit, cancel=cancel)
+
+    def dispatch(envelope):
+        del envelope
+        worker, unused_markers, unused_clock = host_runtime(request_value, tmp_path, command)
+        try:
+            with worker.journal(create=True) as durable:
+                return worker.pull_auxiliary(durable, registry(request_value), 4285, ["haproxy", "keepalived"])
+        except BaseException as error:
+            record("interrupted", type(error).__name__)
+            raise
+
+    def load(sources):
+        del sources
+        return SimpleNamespace(Refusal=ceph_native.Refusal, dispatch=dispatch)
+
+    budget = 6
+
+    def work(started, ceiling, *, loader, reserve):
+        sys.stdin = io.TextIOWrapper(io.BytesIO(json.dumps({"sources": {}, "payload": {}, "budget": budget}).encode()))
+        return ceph_native_worker.work(started, ceiling, loader=loader, reserve=reserve)
+
+    # The real launcher relationship at a test scale: the signal 3 s before the supervisor's 6 s deadline.
+    monkeypatch.setattr(ceph_host_worker, "CANCEL_RESERVE", 3)
+    monkeypatch.setattr(ceph_host_worker, "PULL_FLOOR", budget)
+    monkeypatch.setattr(runtime, "PULL_CANCEL_SECONDS", 2)
+    monkeypatch.setattr(bounded_process.subprocess, "Popen", Recorded)
+    monkeypatch.setattr(runtime.ceph_pull_broker, "Broker", Broker)
+    supervisor = {"work": work, "supervise": ceph_native_worker.supervise}
+    started = time.monotonic()
+    assert ceph_host_worker.supervised(supervisor, started, budget, load) == {"ok": False, "reason": "native-timeout"}
+    # The worker answered before the supervisor's deadline, so its own cleanup, not the group kill, ended the batch.
+    assert time.monotonic() - started < budget - 0.5
+    assert (records / "interrupted").read_text() == "RemoteDeadline"
+    assert {path.name: path.read_text() for path in records.iterdir() if path.name.startswith("broker-")} == {
+        "broker-haproxy": "Refusal", "broker-keepalived": "Refusal"}
+    groups = [int(path.name.split("-", 1)[1]) for path in records.iterdir() if path.name.startswith("group-")]
+    assert len(groups) == 2
+    for group in groups:
+        # The test's commands own their sessions, so only the batch's cancellation, not the worker's group kill, stops them.
+        with pytest.raises(ProcessLookupError):
+            os.killpg(group, 0)
 
 
 @pytest.mark.parametrize("pull", [
