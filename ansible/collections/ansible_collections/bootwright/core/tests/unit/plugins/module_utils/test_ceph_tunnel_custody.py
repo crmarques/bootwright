@@ -304,6 +304,29 @@ def test_a_complete_cluster_area_is_proved_and_only_an_unbounded_one_refuses(own
         custody.protected_identities(markers.path)
 
 
+def test_a_staging_name_a_concurrent_marker_write_unlinks_after_the_listing_is_skipped(owned, monkeypatch):
+    markers, scope = owned
+    custody.retain(markers, "initial-mgr-original", scope, material("initial-mgr-original"))
+    staging = pathlib.Path(markers.path, ".ownership-concurrent")
+    staging.write_text("{}")
+    alias = os.path.join(os.path.dirname(markers.path), "unrelated-private-alias")
+    os.link(os.path.join(markers.path, "initial-mgr-original.private"), alias)
+    listing = os.listdir
+    fired = []
+
+    def racing(target):
+        names = listing(target)
+        if isinstance(target, int) and ".ownership-concurrent" in names and not fired:
+            staging.unlink()
+            fired.append(target)
+        return names
+
+    monkeypatch.setattr(custody.os, "listdir", racing)
+    identities = custody.protected_identities(markers.path)
+    assert fired and not staging.exists()
+    assert custody.source_identity(alias, os.geteuid()) in identities
+
+
 @pytest.mark.parametrize("directory_present", [False, True])
 def test_readonly_manager_directory_missing_binding_never_creates_or_adopts(owned, monkeypatch, directory_present):
     markers, unused = owned

@@ -376,7 +376,11 @@ def protected_identities(path):
         names = os.listdir(parent)
         require(len(names) <= MAX_AREA_ENTRIES)
         for name in names:
-            info = os.stat(name, dir_fd=parent, follow_symlinks=False)
+            # A concurrent marker write unlinks its staging name after linking the record it publishes.
+            try:
+                info = os.stat(name, dir_fd=parent, follow_symlinks=False)
+            except FileNotFoundError:
+                continue
             result.add((info.st_dev, info.st_ino))
         if exists(parent, "transport"):
             child = os.open("transport", os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | os.O_CLOEXEC, dir_fd=parent)
