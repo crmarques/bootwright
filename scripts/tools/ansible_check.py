@@ -41,6 +41,20 @@ def check_area() -> tempfile.TemporaryDirectory:
     return tempfile.TemporaryDirectory(prefix=AREA_PREFIX)
 
 
+# ansible-test accepts no word for "auto"; zero is the only count it turns into
+# pytest -n auto, so the gate names the mode through this constant.
+UNITS_WORKERS_AUTO = "0"
+
+
+def units_arguments(*options: str) -> list[str]:
+    """Return the ansible-test arguments of a gate unit run on xdist workers.
+
+    The plain pytest loop after the gate's ansible-test runs is the in-process
+    serial run.
+    """
+    return ["units", "--num-workers", UNITS_WORKERS_AUTO, *options]
+
+
 # The suites a list of paths can narrow; integration targets are not paths.
 NARROWED = ("syntax", "lint", "sanity", "units")
 
@@ -396,7 +410,7 @@ def main() -> int:
         ansible_test = [str(executable), "-I", str(executable.parent / "ansible-test")]
         suites = [
             ["sanity", *targets],
-            ["units", "--num-workers", "0"],
+            units_arguments(),
             ["integration", "controller_tool"],
             ["integration", "controller_supervisor"],
         ]
@@ -459,17 +473,14 @@ def main() -> int:
             # no controller Python, so ansible-test runs no controller test.
             subprocess.run(
                 ansible_test
-                + [
-                    "units",
-                    "--num-workers",
-                    "0",
+                + units_arguments(
                     "--controller",
                     "origin:python=3.13",
                     "--target-python",
                     f"venv/{minor}@{interpreter}",
                     "--color",
                     "no",
-                ],
+                ),
                 cwd=test_collection,
                 env=floor_environment,
                 check=True,

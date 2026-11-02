@@ -7,6 +7,8 @@ import os
 from pathlib import Path
 import string
 import subprocess
+import sys
+import tempfile
 import unittest
 from unittest import mock
 import warnings
@@ -189,6 +191,60 @@ class NarrowedUnitsTest(unittest.TestCase):
         self.assertEqual(len(calls), 2)
         self.assertIn("--last-failed", calls[1])
         self.assertIn("FLAKY", self.output)
+
+
+class UnitsWorkersTest(unittest.TestCase):
+    """The gate's ansible-test unit runs name pytest-xdist auto explicitly."""
+
+    def pytest_workers(self, arguments: list[str]) -> str:
+        """Return the -n value of the pytest command ansible-test generates."""
+        executable = Path(sys.executable)
+        with tempfile.TemporaryDirectory() as temporary:
+            content = Path(temporary) / "ansible_collections/ns/col"
+            (content / "tests/unit").mkdir(parents=True)
+            (content / "tests/unit/test_a.py").write_text("def test_a(): pass\n")
+            completed = subprocess.run(
+                [
+                    str(executable),
+                    "-I",
+                    str(executable.parent / "ansible-test"),
+                    *arguments,
+                    "--explain",
+                    "--local",
+                    "--python",
+                    "3.13",
+                    "--color",
+                    "no",
+                ],
+                cwd=content,
+                env={**os.environ, "ANSIBLE_TEST_CONTENT_ROOT": str(content)},
+                capture_output=True,
+                text=True,
+                check=True,
+            )
+        commands = [
+            line.split()
+            for line in completed.stdout.splitlines()
+            if line.startswith("Stream command: pytest ")
+        ]
+        self.assertEqual(len(commands), 1, completed.stdout)
+        return commands[0][commands[0].index("-n") + 1]
+
+    def test_the_gate_units_arguments_make_pytest_auto(self):
+        arguments = ansible_check.units_arguments()
+        self.assertEqual(arguments[0], "units")
+        self.assertEqual(self.pytest_workers(arguments), "auto")
+
+    def test_the_arguments_keep_the_floor_options_after_the_mode(self):
+        arguments = ansible_check.units_arguments("--color", "no")
+        self.assertEqual(
+            arguments,
+            ["units", "--num-workers", ansible_check.UNITS_WORKERS_AUTO, "--color", "no"],
+        )
+
+    def test_one_worker_is_not_auto(self):
+        arguments = ["units", "--num-workers", "1"]
+        self.assertEqual(self.pytest_workers(arguments), "1")
 
 
 if __name__ == "__main__":

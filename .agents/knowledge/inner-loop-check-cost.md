@@ -36,10 +36,17 @@ takes 21 s across workers instead of 86 s serially. It is not equivalent:
   a blocked signal then stays pending on that thread alone.
 
 The narrowed units suite therefore runs one file serially and reruns every
-parallel failure serially. A 2026-10-23 full run showed the locked ansible-test
-translates `--num-workers 0` to `-n auto`, so its own unit phase still starts
-workers; the subsequent plain pytest loop is serial. The mismatch is recorded
-as [B798](../../specs/milestones/backlog.md#b798), with no failure waived.
+parallel failure serially. The full gate's ansible-test unit phases run on
+pytest-xdist workers by design: the locked ansible-test turns `--num-workers 0`
+into `-n auto` and has no in-process run, and its nearest serial run, one
+worker, took 1054 s instead of 189 s across the five unit phases of a
+2026-11-02 `make check` while still carrying execnet's I/O thread. The gate
+therefore selects the mode explicitly (`units_arguments` and
+`UNITS_WORKERS_AUTO` in `scripts/tools/ansible_check.py`), and the plain pytest
+loop after it is the in-process serial run that settles every test with no
+worker thread. `UnitsWorkersTest` reads the `-n` value from the command
+`ansible-test units --explain` generates
+([B798](../../specs/milestones/backlog.md#b798)).
 
 ## Selection traps
 
