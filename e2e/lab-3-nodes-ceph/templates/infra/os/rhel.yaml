@@ -55,6 +55,7 @@ spec:
         - podman
         - lvm2
         - python3
+        - firewalld
 {{- if $nfs }}
         - nfs-utils
 {{- end }}
@@ -71,6 +72,7 @@ spec:
         - chronyd
         - qemu-guest-agent
         - sshd
+        - firewalld
 
     security:
       selinux:
