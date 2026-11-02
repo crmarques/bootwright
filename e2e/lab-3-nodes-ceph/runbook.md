@@ -835,7 +835,12 @@ up and in. Recovery needs no apply.
 
 ### Replay
 
-On the finished context these settle without work and show no difference:
+After the one-host outage, cephadm keeps that host's daemons as `host is
+offline` in its daemon cache until its next refresh, up to about ten minutes,
+even with `HEALTH_OK`; Bootwright's readiness reads that cache, so `diff`
+reports every Ceph resource partially realized until then. Wait until
+`orch ps --refresh` lists every daemon running. On the finished context these
+then settle without work and show no difference:
 
 ```sh
 ./bin/bootwright apply --context "$CONTEXT" --yes

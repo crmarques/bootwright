@@ -89,6 +89,11 @@ operator as a first-call refusal; the slice that records it is named.
   discovery advertises HTTPS for the haproxy, NFS and SMB metrics endpoints,
   which answer plain HTTP, and lists keepalive-only ingress hosts as haproxy
   targets (B1030, B1032).
+- After a host returns from an outage, cephadm's daemon cache keeps its
+  daemons at status -1 `host is offline` until the next refresh (up to about
+  ten minutes) while `orch host ls` shows it online and health is `HEALTH_OK`;
+  Bootwright's readiness counts those rows, so every Ceph resource reads
+  partial until the cache refreshes.
 
 ## Timing and health
 
