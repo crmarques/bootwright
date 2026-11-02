@@ -17,7 +17,7 @@ import (
 // fresh apply raises its running evidence and claims its operation directory
 // before it binds, so nothing it binds, claims or reserves is ever held under
 // evidence that lets the context be updated or deleted.
-func (s Service) execute(ctx context.Context, name string, decided transition) (*OperationResult, error) {
+func (s Service) execute(ctx context.Context, name string, decided operationPlan) (*OperationResult, error) {
 	// A fresh transition reads the bindings the context holds before any of
 	// its transactions, so what it collects once it registers existed before
 	// it began: a binding issued since is never touched.
@@ -94,7 +94,7 @@ func (s Service) execute(ctx context.Context, name string, decided transition) (
 	return result, err
 }
 
-func (s Service) bind(ctx context.Context, name string, decided transition) (string, map[string]secrets.Material, error) {
+func (s Service) bind(ctx context.Context, name string, decided operationPlan) (string, map[string]secrets.Material, error) {
 	references := decided.binding.secrets
 	// A removal inherits its apply's binding, so it neither re-binds current
 	// declarations nor needs the plan to have named any.
@@ -139,7 +139,7 @@ func clearMaterial(material map[string]secrets.Material) {
 }
 
 // run joins every adapter before releasing its execution scope and transaction.
-func (s Service) run(ctx context.Context, tx Transaction, decided transition, binding string, material map[string]secrets.Material, record *registering) (*OperationResult, error) {
+func (s Service) run(ctx context.Context, tx Transaction, decided operationPlan, binding string, material map[string]secrets.Material, record *registering) (*OperationResult, error) {
 	if err := s.admitApplyView(ctx, tx, decided); err != nil {
 		return nil, err
 	}

@@ -91,7 +91,7 @@ func sourceBindings(ctx context.Context, store recordReader, source string) ([]s
 	return held.released(), nil
 }
 
-func withLineagePlan(ctx context.Context, store recordReader, decided transition, operation operationstore.Operation, frozen reconciliation.Plan, states map[string]reconciliation.BlockState) (transition, error) {
+func withLineagePlan(ctx context.Context, store recordReader, decided operationPlan, operation operationstore.Operation, frozen reconciliation.Plan, states map[string]reconciliation.BlockState) (operationPlan, error) {
 	if decided.fresh || decided.verb != reconciliation.Apply || operation.Verb != reconciliation.Apply || operation.Predecessor == "" {
 		return decided, nil
 	}
@@ -100,7 +100,7 @@ func withLineagePlan(ctx context.Context, store recordReader, decided transition
 	return decided, err
 }
 
-func (t transition) removed() reconciliation.Plan {
+func (t operationPlan) removed() reconciliation.Plan {
 	if len(t.lineagePlan.Blocks) != 0 {
 		return t.lineagePlan
 	}

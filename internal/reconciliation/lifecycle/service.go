@@ -117,7 +117,7 @@ func (s Service) Plan(ctx context.Context, request PlanRequest) (*PlanResult, er
 		return nil, err
 	}
 	var result *PlanResult
-	var decided transition
+	var decided operationPlan
 	var read basis
 	err = s.workspace.ReadLifecycle(ctx, name, func(view View) error {
 		previewed, from, durable, err := s.preview(ctx, view, selection)
@@ -130,7 +130,7 @@ func (s Service) Plan(ctx context.Context, request PlanRequest) (*PlanResult, er
 			if err != nil {
 				return err
 			}
-			result.Checks, err = s.options.PlanInspection(ctx, name, state.Effective(), decided.plan, startingBlocks(decided))
+			result.Checks, err = s.options.PlanInspection(ctx, name, state.Effective(), decided.plan, decided.starting())
 			return err
 		}
 		return nil
@@ -151,10 +151,10 @@ func (s Service) Plan(ctx context.Context, request PlanRequest) (*PlanResult, er
 // stops at the decision: it allocates no identity and writes nothing. It also
 // returns that decision and the durable state it was read from, before any
 // finalization it previews.
-func (s Service) preview(ctx context.Context, view View, selection reconciliation.Selection) (*PlanResult, transition, basis, error) {
+func (s Service) preview(ctx context.Context, view View, selection reconciliation.Selection) (*PlanResult, operationPlan, basis, error) {
 	decided, verb, err := s.decideAs(ctx, view, "", selection)
 	if err != nil {
-		return nil, transition{}, basis{}, err
+		return nil, operationPlan{}, basis{}, err
 	}
 	decideSelection := selection
 	if verb == reconciliation.Destroy {
@@ -163,7 +163,7 @@ func (s Service) preview(ctx context.Context, view View, selection reconciliatio
 	marked, finalizes := decided, decided.finalize
 	if finalizes {
 		if decided, err = s.afterFinalization(ctx, view, verb, decideSelection, decided); err != nil {
-			return nil, transition{}, basis{}, err
+			return nil, operationPlan{}, basis{}, err
 		}
 	}
 	if verb == reconciliation.Destroy && !selection.Empty() {
@@ -174,7 +174,7 @@ func (s Service) preview(ctx context.Context, view View, selection reconciliatio
 		if selection.Until != "" {
 			given = append(given, "--until")
 		}
-		return nil, transition{}, basis{}, failure("lifecycle.stage",
+		return nil, operationPlan{}, basis{}, failure("lifecycle.stage",
 			"the next operation is a destroy, which accepts no stage selection",
 			"repeat "+contextCommand(view.Identity().Name, "plan")+" without "+strings.Join(given, " and "))
 	}

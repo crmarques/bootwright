@@ -275,7 +275,7 @@ func TestARebindDuringALineageRemovalNamesOnlyWhatTheRootBindingHolds(t *testing
 		f.root.Bindings[0]: {"shared": "v1"},
 		f.head.Bindings[0]: {"shared": "v1", "head-only": "v1"},
 	}
-	var decided transition
+	var decided operationPlan
 	err := h.workspace.ReadLifecycle(ctx, testContextName, func(view View) (decideErr error) {
 		decided, decideErr = h.service.decide(ctx, view, reconciliation.Destroy, reconciliation.Selection{})
 		return decideErr
@@ -354,7 +354,7 @@ func TestAPlanOfAnAdditiveApplyWarnsOverTheRemovalOfItsWholeLineage(t *testing.T
 	ctx := context.Background()
 	h := newHarness(t, "producer-a")
 	f := newLineageFixture(t, h, consumerDefinition())
-	var decided transition
+	var decided operationPlan
 	err := h.workspace.ReadLifecycle(ctx, testContextName, func(view View) (decideErr error) {
 		decided, decideErr = h.service.decide(ctx, view, reconciliation.Apply, reconciliation.Selection{})
 		return decideErr

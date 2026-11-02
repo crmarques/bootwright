@@ -24,7 +24,7 @@ import (
 // already, and one whose material the keyring cannot read, which only its
 // reopen proves, is reported in place of the refusal here, as the reopen this
 // transition would make before it registers reports it.
-func (s Service) proveShared(ctx context.Context, name string, decided transition) error {
+func (s Service) proveShared(ctx context.Context, name string, decided operationPlan) error {
 	removal := decided.fresh && decided.verb == reconciliation.Destroy
 	if !removal && (decided.fresh || decided.operation.ID == "") {
 		return nil

@@ -17,7 +17,7 @@ import (
 // leaves that operation with neither. A fresh apply binds its own, and a
 // finalization, a settled verb and a destroy of a context holding no operation
 // reopen none.
-func frozenBinding(decided transition) string {
+func frozenBinding(decided operationPlan) string {
 	switch {
 	case decided.noop, decided.finalize, decided.unclaimed:
 		return ""
@@ -32,7 +32,7 @@ func frozenBinding(decided transition) string {
 // registers, reserves or releases anything. A listing that fails proves
 // nothing, so the reopen decides then. read is the durable state the decision
 // was read from.
-func (s Service) refuseLostBinding(ctx context.Context, name string, decided transition, read basis) error {
+func (s Service) refuseLostBinding(ctx context.Context, name string, decided operationPlan, read basis) error {
 	binding := frozenBinding(decided)
 	if binding == "" {
 		return nil
@@ -48,7 +48,7 @@ func (s Service) refuseLostBinding(ctx context.Context, name string, decided tra
 // is lost when the keyring cannot read its material or no longer lists it;
 // anything else, a keyring that cannot be listed included, is reported as it
 // failed.
-func (s Service) unreopenable(ctx context.Context, name string, decided transition, binding string, cause error) error {
+func (s Service) unreopenable(ctx context.Context, name string, decided operationPlan, binding string, cause error) error {
 	if ctx.Err() != nil {
 		return cause
 	}
@@ -79,7 +79,7 @@ func unreadableMaterial(err error) (string, bool) {
 // operation it was decided over, in the state it read. Only an invocation that
 // moved the context on releases a binding an operation names, so a binding
 // released since the decision reports that change instead.
-func (s Service) lostBinding(ctx context.Context, name string, decided transition, read basis, binding, why string) error {
+func (s Service) lostBinding(ctx context.Context, name string, decided operationPlan, read basis, binding, why string) error {
 	err := s.workspace.ReadLifecycle(ctx, name, func(view View) error {
 		store := s.store(view)
 		index, err := store.Index(ctx)

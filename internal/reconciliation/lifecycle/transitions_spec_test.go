@@ -403,7 +403,7 @@ func decisionOver(t *testing.T, h *harness, verb reconciliation.Verb) string {
 func decidedAs(t *testing.T, h *harness, verb reconciliation.Verb) (string, reconciliation.Verb) {
 	t.Helper()
 	ctx := context.Background()
-	var decided transition
+	var decided operationPlan
 	var chosen reconciliation.Verb
 	err := h.workspace.ReadLifecycle(ctx, testContextName, func(view View) error {
 		var err error
@@ -419,7 +419,7 @@ func decidedAs(t *testing.T, h *harness, verb reconciliation.Verb) (string, reco
 	return decisionNamed(decided), chosen
 }
 
-func decisionNamed(decided transition) string {
+func decisionNamed(decided operationPlan) string {
 	switch {
 	case decided.finalize:
 		return "finalize"
@@ -454,7 +454,7 @@ func requirePreviewShape(t *testing.T, h *harness, where string, test stateMachi
 	t.Helper()
 	ctx := context.Background()
 	var result *PlanResult
-	var after transition
+	var after operationPlan
 	var chosen reconciliation.Verb
 	var refusal error
 	err := h.workspace.ReadLifecycle(ctx, testContextName, func(view View) error {

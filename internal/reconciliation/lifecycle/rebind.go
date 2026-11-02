@@ -33,26 +33,26 @@ func splitRebinds(contextName string, verb reconciliation.Verb, authorizations [
 	return tokens, rebinds, nil
 }
 
-func (s Service) admitRebinds(ctx context.Context, name string, decided transition, rebinds []string) (transition, error) {
+func (s Service) admitRebinds(ctx context.Context, name string, decided operationPlan, rebinds []string) (operationPlan, error) {
 	if len(rebinds) == 0 {
 		return decided, nil
 	}
 	without := "repeat " + contextCommand(name, string(decided.verb)) + " without --authorize " + RebindAuthorization
 	binding := frozenBinding(decided)
 	if binding == "" {
-		return transition{}, failure("lifecycle.authorization",
+		return operationPlan{}, failure("lifecycle.authorization",
 			"this "+string(decided.verb)+" reopens no Secret binding, so no Secret is rebound", without+rebinds[0])
 	}
 	if _, ok := s.binder.(CredentialRebinder); !ok {
-		return transition{}, failure("lifecycle.state", "this context's secret store cannot rebind a Secret binding", without+rebinds[0])
+		return operationPlan{}, failure("lifecycle.state", "this context's secret store cannot rebind a Secret binding", without+rebinds[0])
 	}
 	bound, err := s.pinnedVersions(ctx, name, binding)
 	if err != nil {
-		return transition{}, err
+		return operationPlan{}, err
 	}
 	current, err := s.binder.ReadCurrent(ctx, custody.ReadCurrentRequest{ContextName: name, Names: rebinds})
 	if err != nil {
-		return transition{}, err
+		return operationPlan{}, err
 	}
 	currentVersions := map[string]string{}
 	for _, item := range current {
@@ -63,14 +63,14 @@ func (s Service) admitRebinds(ctx context.Context, name string, decided transiti
 		pinned, held := bound[secret]
 		switch {
 		case !held:
-			return transition{}, failure("lifecycle.authorization",
+			return operationPlan{}, failure("lifecycle.authorization",
 				"the Secret binding "+binding+" this "+string(decided.verb)+" reopens pins no version of Secret "+secret, without+secret)
 		case pinned == currentVersions[secret]:
-			return transition{}, failure("lifecycle.authorization",
+			return operationPlan{}, failure("lifecycle.authorization",
 				"Secret "+secret+" is already presented at its current version, so there is nothing to rebind", without+secret)
 		}
 		if err := s.presentedOnly(decided, secret, without+secret); err != nil {
-			return transition{}, err
+			return operationPlan{}, err
 		}
 	}
 	decided.rebinds = rebinds
@@ -92,7 +92,7 @@ func (s Service) pinnedVersions(ctx context.Context, name, binding string) (map[
 	return pinned, nil
 }
 
-func (s Service) presentedOnly(decided transition, secret, remedy string) error {
+func (s Service) presentedOnly(decided operationPlan, secret, remedy string) error {
 	var presented, refused []string
 	for index, block := range decided.plan.Blocks {
 		step := "step " + strconv.Itoa(index+1) + " (" + block.Description + ")"
@@ -138,18 +138,18 @@ func (s Service) referencing(block reconciliation.Block, step, secret, remedy st
 	return capability, slices.Contains(references, secret), err
 }
 
-func (s Service) rebind(ctx context.Context, name string, decided transition) (transition, error) {
+func (s Service) rebind(ctx context.Context, name string, decided operationPlan) (operationPlan, error) {
 	if len(decided.rebinds) == 0 {
 		return decided, nil
 	}
 	rebinder, ok := s.binder.(CredentialRebinder)
 	if !ok {
-		return transition{}, failure("lifecycle.state", "this context's secret store cannot rebind a Secret binding", "")
+		return operationPlan{}, failure("lifecycle.state", "this context's secret store cannot rebind a Secret binding", "")
 	}
 	replaced := frozenBinding(decided)
 	issued, err := rebinder.Rebind(ctx, custody.RebindRequest{ContextName: name, BindingID: replaced, Names: decided.rebinds})
 	if err != nil {
-		return transition{}, err
+		return operationPlan{}, err
 	}
 	decided.rebound = rebinding{replaced: replaced, binding: issued.ID, secrets: decided.rebinds}
 	if decided.fresh {

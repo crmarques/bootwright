@@ -22,17 +22,17 @@ import (
 // an empty set means the operation contradicts its own block records, and a
 // removal of nothing would release the material the effects still on the host
 // need, so it refuses.
-func (s Service) freshDestroy(ctx context.Context, contextName string, frozenBy operationstore.Executable, source string, scope removalScope, startedNothing bool) (transition, error) {
+func (s Service) freshDestroy(ctx context.Context, contextName string, frozenBy operationstore.Executable, source string, scope removalScope, startedNothing bool) (operationPlan, error) {
 	if scope.started == 0 && !startedNothing {
-		return transition{}, failure("lifecycle.state",
+		return operationPlan{}, failure("lifecycle.state",
 			"the operation this removal supersedes records no block it still owns",
 			reviewStatus(contextName))
 	}
 	plan, err := s.removalOf(ctx, scope.owned, frozenBy)
 	if err != nil {
-		return transition{}, err
+		return operationPlan{}, err
 	}
-	return transition{
+	return operationPlan{
 		fresh: true, verb: reconciliation.Destroy, plan: plan,
 		source: source, reopen: scope.reopen, release: scope.release, stops: s.stops(plan), takes: scope.operations,
 	}, nil

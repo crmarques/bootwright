@@ -57,7 +57,7 @@ func (s Service) replanned(ctx context.Context, view View, operation operationst
 	if err := s.refuseUnsupported(state); err != nil {
 		return reconciliation.Plan{}, err
 	}
-	plan, _, err := s.planFrom(ctx, view, state, reconciliation.Apply)
+	plan, _, err := s.planFrom(ctx, view, state)
 	return plan, err
 }
 

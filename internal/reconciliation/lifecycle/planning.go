@@ -77,7 +77,7 @@ func dependOnController(definitions []reconciliation.BlockDefinition) []reconcil
 
 // planFrom asks every resolvable capability for its blocks. Planning is pure:
 // it opens no payload, contacts nothing and materializes no Secret.
-func (s Service) planFrom(ctx context.Context, view View, state *compilation.State, verb reconciliation.Verb) (reconciliation.Plan, capabilityBinding, error) {
+func (s Service) planFrom(ctx context.Context, view View, state *compilation.State) (reconciliation.Plan, capabilityBinding, error) {
 	controller, err := controllerMachine(state)
 	if err != nil {
 		return reconciliation.Plan{}, capabilityBinding{}, err
@@ -86,7 +86,7 @@ func (s Service) planFrom(ctx context.Context, view View, state *compilation.Sta
 	if len(bindings) == 0 {
 		return reconciliation.Plan{}, capabilityBinding{}, failure("lifecycle.state", "no lifecycle capability is available for the selected state", "")
 	}
-	input := PlanInput{Verb: verb, Context: view.Identity(), State: state, Controller: controller}
+	input := PlanInput{Verb: reconciliation.Apply, Context: view.Identity(), State: state, Controller: controller}
 	var definitions []reconciliation.BlockDefinition
 	var placed []SSHReservation
 	binding := capabilityBinding{controller: controller}
@@ -151,11 +151,6 @@ func (s Service) planFrom(ctx context.Context, view View, state *compilation.Sta
 	plan, err := reconciliation.NewPlan(reconciliation.Apply, definitions)
 	if err != nil {
 		return reconciliation.Plan{}, capabilityBinding{}, err
-	}
-	if verb == reconciliation.Destroy {
-		if plan, err = plan.Inverse(); err != nil {
-			return reconciliation.Plan{}, capabilityBinding{}, err
-		}
 	}
 	return plan, binding, nil
 }

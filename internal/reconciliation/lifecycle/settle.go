@@ -6,7 +6,7 @@ import (
 	"github.com/crmarques/bootwright/internal/reconciliation"
 )
 
-func (s Service) finishSettled(ctx context.Context, name string, decided transition, identity ContextIdentity, finalized bool, stranded []string) (*OperationResult, error) {
+func (s Service) finishSettled(ctx context.Context, name string, decided operationPlan, identity ContextIdentity, finalized bool, stranded []string) (*OperationResult, error) {
 	// A settle registers nothing and performs no host effect, so it needs no
 	// authorization or confirmation. It restores a latched apply log fault
 	// before reporting success and names a finalization it completed first.
@@ -43,7 +43,7 @@ func (s Service) finishSettled(ctx context.Context, name string, decided transit
 // no record, so the operation it names keeps the state and identity it
 // finished with. recovered names what the invocation completed before it
 // settled, if anything.
-func settled(identity ContextIdentity, decided transition, recovered string) *OperationResult {
+func settled(identity ContextIdentity, decided operationPlan, recovered string) *OperationResult {
 	operation := decided.operation.ID
 	if operation == "" {
 		operation = "none"

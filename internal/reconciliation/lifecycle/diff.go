@@ -200,7 +200,7 @@ func (s Service) planSelected(ctx context.Context, view View, state *compilation
 	if err := s.refuseUnsupported(state); err != nil {
 		return reconciliation.Plan{}, err
 	}
-	plan, _, err := s.planFrom(ctx, view, state, reconciliation.Apply)
+	plan, _, err := s.planFrom(ctx, view, state)
 	return plan, err
 }
 

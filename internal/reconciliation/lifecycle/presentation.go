@@ -8,7 +8,7 @@ import (
 	"github.com/crmarques/bootwright/internal/reconciliation/operationstore"
 )
 
-func (s Service) present(ctx context.Context, name string, decided transition) error {
+func (s Service) present(ctx context.Context, name string, decided operationPlan) error {
 	if s.options.Presenter == nil {
 		return failure("lifecycle.state", "lifecycle plan presentation is not configured", "")
 	}
@@ -24,7 +24,7 @@ func (s Service) present(ctx context.Context, name string, decided transition) e
 
 // presentation is the plan a transition shows: what apply and destroy present
 // before they confirm, and what plan previews of the same transition.
-func (s Service) presentation(decided transition) PlanResult {
+func (s Service) presentation(decided operationPlan) PlanResult {
 	result := planPreview(decided.plan, decided.states, decided.selection)
 	result.Verb, result.Warnings = string(decided.verb), s.removalWarnings(decided.removed())
 	result.Continuation = !decided.fresh

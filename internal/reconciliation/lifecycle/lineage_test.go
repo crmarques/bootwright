@@ -513,7 +513,7 @@ func TestSettlingSeesEveryPlanOfTheLineage(t *testing.T) {
 	if own := unfinishedBlocks(f.headPlan, headStates); len(own) != 0 {
 		t.Fatalf("the head's own plan alone reads %v, which is what a lineage-blind settle saw", own)
 	}
-	var decided transition
+	var decided operationPlan
 	err = h.workspace.ReadLifecycle(ctx, testContextName, func(view View) (settleErr error) {
 		decided, settleErr = h.service.settleApply(ctx, view, f.head, f.headPlan, headStates, nil)
 		return settleErr

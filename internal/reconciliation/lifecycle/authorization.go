@@ -10,7 +10,7 @@ import (
 	"github.com/crmarques/bootwright/internal/reconciliation"
 )
 
-func (s Service) authorized(name string, decided transition, authorizations, unregistered []string, unattended bool) error {
+func (s Service) authorized(name string, decided operationPlan, authorizations, unregistered []string, unattended bool) error {
 	if err := authorize(name, decided.verb, decided.selection, decided.plan, authorizations, unregistered, unattended); err != nil {
 		return err
 	}

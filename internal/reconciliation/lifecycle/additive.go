@@ -87,7 +87,7 @@ func (s Service) additive(ctx context.Context, view View, store recordReader, op
 	if err := s.refuseUnsupported(after); err != nil {
 		return nil, err
 	}
-	fresh, planned, err := s.planFrom(ctx, view, after, reconciliation.Apply)
+	fresh, planned, err := s.planFrom(ctx, view, after)
 	if err != nil {
 		return nil, err
 	}
@@ -129,7 +129,7 @@ func (s Service) additive(ctx context.Context, view View, store recordReader, op
 }
 
 func (s Service) refuseNewReservations(ctx context.Context, view View, before *compilation.State, after capabilityBinding) error {
-	_, held, err := s.planFrom(ctx, view, before, reconciliation.Apply)
+	_, held, err := s.planFrom(ctx, view, before)
 	if err != nil {
 		return err
 	}
@@ -268,16 +268,16 @@ func changeRemedy(view View) string {
 	return "take back what it owns with " + contextCommand(name, string(reconciliation.Destroy)) + ", then run " + contextCommand(name, string(reconciliation.Apply))
 }
 
-func (s Service) additiveTransition(view View, operation operationstore.Operation, admission *additiveAdmission, selection reconciliation.Selection) (transition, error) {
+func (s Service) additiveTransition(view View, operation operationstore.Operation, admission *additiveAdmission, selection reconciliation.Selection) (operationPlan, error) {
 	name := view.Identity().Name
 	selection, err := bindSelection(name, admission.plan, selection)
 	if err != nil {
-		return transition{}, err
+		return operationPlan{}, err
 	}
 	if err := refuseStageBoundary(name, admission.plan, nil, selection); err != nil {
-		return transition{}, err
+		return operationPlan{}, err
 	}
-	return transition{
+	return operationPlan{
 		fresh: true, verb: reconciliation.Apply, plan: admission.plan, selection: selection,
 		predecessor: operation.ID, lineagePlan: admission.merged,
 		binding: capabilityBinding{controller: admission.controller, secrets: admission.secrets},

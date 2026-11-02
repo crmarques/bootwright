@@ -22,7 +22,7 @@ import (
 // and claimed its directory in a transaction of its own, so it re-proves both
 // here and registers into that directory. Nothing is projected after the
 // registration: the evidence already protects the operation it names.
-func (s Service) register(ctx context.Context, tx Transaction, store OperationStore, decided transition, binding string, material map[string]secrets.Material, record *registering, located approved) (operationstore.Operation, reconciliation.Plan, *operationstore.Log, error) {
+func (s Service) register(ctx context.Context, tx Transaction, store OperationStore, decided operationPlan, binding string, material map[string]secrets.Material, record *registering, located approved) (operationstore.Operation, reconciliation.Plan, *operationstore.Log, error) {
 	fail := func(err error) (operationstore.Operation, reconciliation.Plan, *operationstore.Log, error) {
 		return operationstore.Operation{}, reconciliation.Plan{}, nil, err
 	}
@@ -94,7 +94,7 @@ func (s Service) register(ctx context.Context, tx Transaction, store OperationSt
 // restoration that fails leaves the operation as it was and no block starts
 // under evidence that does not protect it. It returns the operation log it
 // reopened.
-func (s Service) resume(ctx context.Context, tx Transaction, store OperationStore, decided transition, record *registering, located approved) (operationstore.Operation, reconciliation.Plan, *operationstore.Log, error) {
+func (s Service) resume(ctx context.Context, tx Transaction, store OperationStore, decided operationPlan, record *registering, located approved) (operationstore.Operation, reconciliation.Plan, *operationstore.Log, error) {
 	fail := func(err error) (operationstore.Operation, reconciliation.Plan, *operationstore.Log, error) {
 		return operationstore.Operation{}, reconciliation.Plan{}, nil, err
 	}
@@ -137,7 +137,7 @@ func (s Service) resume(ctx context.Context, tx Transaction, store OperationStor
 // are proved too. A fresh apply is then where a context claims its controller
 // host. Binding precedes every reservation and effect, so an operation never
 // leaves work behind on a host the context is not recorded against.
-func (s Service) reprove(ctx context.Context, tx Transaction, store OperationStore, decided transition) error {
+func (s Service) reprove(ctx context.Context, tx Transaction, store OperationStore, decided operationPlan) error {
 	previous, err := s.verifyFreshApply(ctx, tx, store, decided)
 	if err != nil {
 		return err
@@ -177,7 +177,7 @@ func (s Service) proveHostBinding(ctx context.Context, tx Transaction, previous 
 // reserve claims the exclusive host resources the plan needs before any effect.
 // A destroy needs no new claim and releases at completion, so it refuses when
 // that release would strand another context's use of what it removes.
-func (s Service) reserve(ctx context.Context, tx Transaction, decided transition, material map[string]secrets.Material) error {
+func (s Service) reserve(ctx context.Context, tx Transaction, decided operationPlan, material map[string]secrets.Material) error {
 	if decided.verb == reconciliation.Destroy {
 		return reproveRelease(ctx, tx, "", "")
 	}

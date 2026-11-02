@@ -31,25 +31,25 @@ import (
 // one is finalized under either verb, since only its own bookkeeping is left.
 // Records that hold a block that is not done prove no completion, so they are
 // never finalized. Anything else returns no mark and keeps its decision.
-func finalization(ctx context.Context, view View, store OperationStore, verb reconciliation.Verb, operation operationstore.Operation, frozen reconciliation.Plan, states map[string]reconciliation.BlockState, attempts map[string]int) (transition, error) {
+func finalization(ctx context.Context, view View, store OperationStore, verb reconciliation.Verb, operation operationstore.Operation, frozen reconciliation.Plan, states map[string]reconciliation.BlockState, attempts map[string]int) (operationPlan, error) {
 	held := standingOf(operation, frozen, states)
 	switch {
 	case held.pending:
-		return transition{}, nil
+		return operationPlan{}, nil
 	case classify(verb, held) == transitionFinalize:
 	case operation.State == reconciliation.OperationDone:
 		finished, err := finalized(view, operation)
 		if err != nil || finished {
-			return transition{}, err
+			return operationPlan{}, err
 		}
 	default:
-		return transition{}, nil
+		return operationPlan{}, nil
 	}
-	decided := transition{finalize: true, verb: verb, operation: operation, plan: frozen, states: states}
+	decided := operationPlan{finalize: true, verb: verb, operation: operation, plan: frozen, states: states}
 	if operation.Verb == reconciliation.Destroy {
 		release, err := releaseSet(ctx, store, operation)
 		if err != nil {
-			return transition{}, err
+			return operationPlan{}, err
 		}
 		decided.release = release
 	}
@@ -61,10 +61,10 @@ func finalization(ctx context.Context, view View, store OperationStore, verb rec
 // rewrites only the operation record's state, to the one its block records
 // give; no decision after the mark reads the evidence, reservations or Secret
 // bindings it also completes.
-func (s Service) afterFinalization(ctx context.Context, view View, verb reconciliation.Verb, selection reconciliation.Selection, marked transition) (transition, error) {
+func (s Service) afterFinalization(ctx context.Context, view View, verb reconciliation.Verb, selection reconciliation.Selection, marked operationPlan) (operationPlan, error) {
 	next, err := finalState(marked.plan, marked.states)
 	if err != nil {
-		return transition{}, err
+		return operationPlan{}, err
 	}
 	operation := marked.operation
 	operation.State = next
@@ -126,16 +126,16 @@ func joinBindings(set []string, bindings ...string) []string {
 // again from what the context holds once it is done, so the invocation goes on
 // exactly as it would over an operation that had finalized on its own. A
 // finalization that leaves another behind refuses rather than repeating.
-func (s Service) finalizeFirst(ctx context.Context, name string, verb reconciliation.Verb, selection reconciliation.Selection, marked transition) (transition, ContextIdentity, error) {
+func (s Service) finalizeFirst(ctx context.Context, name string, verb reconciliation.Verb, selection reconciliation.Selection, marked operationPlan) (operationPlan, ContextIdentity, error) {
 	if err := s.finalize(ctx, name, marked); err != nil {
-		return transition{}, ContextIdentity{}, err
+		return operationPlan{}, ContextIdentity{}, err
 	}
 	decided, identity, err := s.decideShared(ctx, name, verb, selection)
 	if err != nil {
-		return transition{}, ContextIdentity{}, err
+		return operationPlan{}, ContextIdentity{}, err
 	}
 	if decided.finalize {
-		return transition{}, ContextIdentity{}, failure("lifecycle.state",
+		return operationPlan{}, ContextIdentity{}, failure("lifecycle.state",
 			"the operation's finalization did not complete",
 			"repeat "+contextCommand(name, string(verb)))
 	}
@@ -150,7 +150,7 @@ func (s Service) finalizeFirst(ctx context.Context, name string, verb reconcilia
 // publication lowers the evidence every fresh apply still in flight raised, so
 // once it lands the bindings the context held before the finalization began
 // that no operation names are released too.
-func (s Service) finalize(ctx context.Context, name string, decided transition) error {
+func (s Service) finalize(ctx context.Context, name string, decided operationPlan) error {
 	var held []string
 	if decided.operation.Verb == reconciliation.Destroy {
 		held = s.held(ctx, name)
@@ -281,7 +281,7 @@ func incompleteRemoval(contextName string, cause error) error {
 }
 
 // completedRemoval reports a removal whose run recorded it done.
-func completedRemoval(decided transition, result *OperationResult) bool {
+func completedRemoval(decided operationPlan, result *OperationResult) bool {
 	return decided.verb == reconciliation.Destroy && result != nil && result.Receipt.State == string(reconciliation.OperationDone)
 }
 

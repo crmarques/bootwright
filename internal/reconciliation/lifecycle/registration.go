@@ -119,7 +119,7 @@ func (s Service) settle(ctx context.Context, tx Transaction, verb reconciliation
 // older apply refuse, so the evidence is then this invocation's to give back
 // unless a listing proves the directory absent. The transition it returns
 // requires that evidence and that claim when it registers.
-func (s Service) protect(ctx context.Context, name string, decided transition, record *registering) (transition, error) {
+func (s Service) protect(ctx context.Context, name string, decided operationPlan, record *registering) (operationPlan, error) {
 	protected := decided
 	err := s.workspace.MutateLifecycle(ctx, name, func(tx Transaction) error {
 		store := s.store(tx)
@@ -160,7 +160,7 @@ func (s Service) protect(ctx context.Context, name string, decided transition, r
 // an operation registered over another input would carry a plan its recorded
 // revision and digest do not describe. It returns the completed operation the
 // apply follows, if any.
-func (s Service) verifyFreshApply(ctx context.Context, tx Transaction, store OperationStore, decided transition) (operationstore.Operation, error) {
+func (s Service) verifyFreshApply(ctx context.Context, tx Transaction, store OperationStore, decided operationPlan) (operationstore.Operation, error) {
 	changed := func(current basis) error { return contextChanged(decided.verb, decided.basis, current) }
 	previous, _, _, err := s.verifyBasis(ctx, store, decided.basis, changed)
 	if err != nil {
@@ -248,7 +248,7 @@ func retainedExit(ctx context.Context, view View, store OperationStore, verb rec
 // present the material for. A
 // release that fails leaves the binding for the next registration or destroy
 // to collect, so it never hides the failure being reported.
-func (s Service) unregistered(ctx context.Context, name string, decided transition, binding string, record *registering, cause error) error {
+func (s Service) unregistered(ctx context.Context, name string, decided operationPlan, binding string, record *registering, cause error) error {
 	recording := recordingContext(ctx)
 	if decided.fresh && binding != "" && (decided.reopen == "" || binding == decided.rebound.binding) {
 		_, _ = s.binder.Release(recording, custody.BindingRequest{ContextName: name, BindingID: binding})
@@ -364,19 +364,19 @@ func (s Service) collect(ctx context.Context, name string, held, keep []string) 
 // evidence, or a reservation beside pristine evidence, is what a registration
 // interrupted before the index named its operation leaves, so the destroy
 // releases it.
-func unclaimed(ctx context.Context, view View, store OperationStore) (transition, error) {
+func unclaimed(ctx context.Context, view View, store OperationStore) (operationPlan, error) {
 	if err := refuseUnindexed(ctx, view, store); err != nil {
-		return transition{}, err
+		return operationPlan{}, err
 	}
 	pristine, err := projection(reconciliation.Destroy, reconciliation.OperationDone)
 	if err != nil {
-		return transition{}, err
+		return operationPlan{}, err
 	}
 	evidence := view.Evidence()
 	if bytes.Equal(evidence, pristine) && !holdsReservation(view) {
-		return settledDestroy(ctx, store, transition{noop: true, verb: reconciliation.Destroy}), nil
+		return settledDestroy(ctx, store, operationPlan{noop: true, verb: reconciliation.Destroy}), nil
 	}
-	return transition{unclaimed: true, verb: reconciliation.Destroy, basis: basis{evidence: evidence}}, nil
+	return operationPlan{unclaimed: true, verb: reconciliation.Destroy, basis: basis{evidence: evidence}}, nil
 }
 
 // settledDestroy marks a destroy that settles beside a claim that holds
@@ -385,7 +385,7 @@ func unclaimed(ctx context.Context, view View, store OperationStore) (transition
 // without this only a later registration would reclaim it, and applies refused
 // at the retained-operation bound register nothing. A listing that fails marks
 // nothing, because reclaiming is housekeeping no verb is refused for.
-func settledDestroy(ctx context.Context, store OperationStore, decided transition) transition {
+func settledDestroy(ctx context.Context, store OperationStore, decided operationPlan) operationPlan {
 	idle, err := store.Idle(ctx)
 	decided.idle = err == nil && len(idle) != 0
 	return decided
@@ -477,7 +477,7 @@ func evidenceReading(data []byte) string {
 // fresh apply still in flight raised the evidence this lowers, or claims a
 // directory that raises it again, so it refuses before it can register a
 // binding released here.
-func (s Service) releaseUnclaimed(ctx context.Context, name string, decided transition) error {
+func (s Service) releaseUnclaimed(ctx context.Context, name string, decided operationPlan) error {
 	held := s.held(ctx, name)
 	err := s.workspace.MutateLifecycle(ctx, name, func(tx Transaction) error {
 		store := s.store(tx)

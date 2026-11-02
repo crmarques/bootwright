@@ -30,7 +30,7 @@ const (
 // as it found it. Resolving needs the replaced operation's logging boundary,
 // and a log fault recorded there blocks the removal until it is restored, so
 // either one restores that boundary first.
-func (s Service) proveRemovable(ctx context.Context, tx Transaction, store OperationStore, approved approved, decided transition, material map[string]secrets.Material) error {
+func (s Service) proveRemovable(ctx context.Context, tx Transaction, store OperationStore, approved approved, decided operationPlan, material map[string]secrets.Material) error {
 	if decided.basis.operation == "" {
 		return nil
 	}
@@ -90,7 +90,7 @@ type memberResolution struct {
 	fault, cause error
 }
 
-func (s Service) resolveMember(ctx context.Context, tx Transaction, store OperationStore, approved approved, decided transition, material map[string]secrets.Material, member lineageMember) (memberResolution, error) {
+func (s Service) resolveMember(ctx context.Context, tx Transaction, store OperationStore, approved approved, decided operationPlan, material map[string]secrets.Material, member lineageMember) (memberResolution, error) {
 	replaced, frozen, states := member.operation, member.plan, member.states
 	unproved := unprovedBlocks(frozen, states)
 	if len(unproved) == 0 && !replaced.LogFault {

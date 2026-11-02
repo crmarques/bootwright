@@ -8,7 +8,7 @@ import (
 // transition is the single legal next step the durable state permits. A noop
 // transition is the legal step that has nothing left to do: the context
 // already holds the state its verb would leave it in.
-type transition struct {
+type operationPlan struct {
 	fresh bool
 	noop  bool
 	// finalize marks an operation whose block records prove it complete while
@@ -102,11 +102,11 @@ func (b basis) describe() string {
 	return "operation " + b.operation + " (" + string(b.state) + ")"
 }
 
-func startingBlocks(decided transition) []reconciliation.Block {
+func (p operationPlan) starting() []reconciliation.Block {
 	var starting []reconciliation.Block
-	for _, block := range decided.plan.Blocks {
-		current := decided.states[block.ID]
-		if current != reconciliation.BlockDone && (unproved(current) || decided.selection.Admits(block)) {
+	for _, block := range p.plan.Blocks {
+		current := p.states[block.ID]
+		if current != reconciliation.BlockDone && (unproved(current) || p.selection.Admits(block)) {
 			starting = append(starting, block)
 		}
 	}

@@ -60,7 +60,7 @@ func (s Service) mutate(ctx context.Context, verb reconciliation.Verb, contextNa
 		if err := s.releaseUnclaimed(ctx, name, decided); err != nil {
 			return nil, err
 		}
-		return settled(identity, transition{verb: verb}, RecoveredRelease), nil
+		return settled(identity, operationPlan{verb: verb}, RecoveredRelease), nil
 	}
 	if decided.noop {
 		return s.finishSettled(ctx, name, decided, identity, finalized, stranded)
@@ -109,7 +109,7 @@ func (s Service) mutate(ctx context.Context, verb reconciliation.Verb, contextNa
 	return s.execute(releasing(ctx, unregistered), name, decided)
 }
 
-func (s Service) admitApply(ctx context.Context, name string, decided transition) error {
+func (s Service) admitApply(ctx context.Context, name string, decided operationPlan) error {
 	if decided.verb != reconciliation.Apply || (s.options.ApplyAdmission == nil && s.options.ListenerAdmission == nil) {
 		return nil
 	}
@@ -118,7 +118,7 @@ func (s Service) admitApply(ctx context.Context, name string, decided transition
 	})
 }
 
-func (s Service) admitApplyView(ctx context.Context, view View, decided transition) error {
+func (s Service) admitApplyView(ctx context.Context, view View, decided operationPlan) error {
 	if decided.verb != reconciliation.Apply || (s.options.ApplyAdmission == nil && s.options.ListenerAdmission == nil) {
 		return nil
 	}
@@ -127,16 +127,13 @@ func (s Service) admitApplyView(ctx context.Context, view View, decided transiti
 		return err
 	}
 	owned := map[string]ObjectOwnership{}
-	starting := []reconciliation.Block{}
 	for _, block := range decided.plan.Blocks {
 		current := decided.states[block.ID]
 		if current != "" && current != reconciliation.BlockPending {
 			recordOwnership(owned, block, reconciliation.Apply, current)
 		}
-		if current != reconciliation.BlockDone && (unproved(current) || decided.selection.Admits(block)) {
-			starting = append(starting, block)
-		}
 	}
+	starting := decided.starting()
 	if s.options.ListenerAdmission != nil {
 		if err := s.options.ListenerAdmission(ctx, view.Identity().Name, state.Effective(), decided.plan, starting); err != nil {
 			return err
