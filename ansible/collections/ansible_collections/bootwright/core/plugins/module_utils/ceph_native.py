@@ -55,7 +55,7 @@ MAX_REGISTRY = 65536
 # route rather than treating a version identifier as transport trust.
 DEVICE_IDENTITIES = "device-identities.json"
 DEVICE_IDENTITIES_VERSION = "ceph-cluster-device-identities-v2"
-HOST_PHASES = frozenset(("profile", "route", "device_identity", "host_devices", "host_observe", "fips_observe"))
+HOST_PHASES = frozenset(("images", "profile", "route", "device_identity", "host_devices", "host_observe", "fips_observe"))
 WORKER_DEADLINE = None
 
 SCOPE_MEMBERS = frozenset(("controller", "version", "cluster", "owner", "fsid", "image", "cephadm", "bootstrap", "hosts", "services", "clusterSSHUser",

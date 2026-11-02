@@ -1165,6 +1165,14 @@ def test_host_phases_refuse_an_unsupported_release_before_any_effect(request_val
         runtime.dispatch({"request": request_value, "host": "node-1", "phase": phase, "private": {"registryJSON": "x"} if phase == "images" else {}})
 
 
+@pytest.mark.parametrize("phase", sorted(runtime.PHASES))
+def test_the_native_dispatch_routes_every_host_phase_to_the_host_runtime(monkeypatch, phase):
+    reached = []
+    monkeypatch.setattr(runtime, "dispatch", lambda envelope: reached.append(envelope["phase"]) or {"changed": False})
+    envelope = {"request": {}, "host": "node-1", "phase": phase, "private": {}}
+    assert ceph_native.dispatch(envelope) == {"changed": False} and reached == [phase]
+
+
 @pytest.mark.parametrize("phase", ["profile", "route"])
 def test_only_the_long_phase_receives_private_material(request_value, phase):
     with pytest.raises(ceph_native.Refusal, match="^material$"):
