@@ -136,6 +136,38 @@ separates a short shared effect from long independent machine work.
 Watch for the same shape elsewhere: anything derived from something other than
 the block's own object is a candidate.
 
+## One Ceph claim serialized a whole cluster (X279)
+
+Until X279 every Ceph block of a cluster claimed `ceph/<cluster>`, so after
+the cluster block the owner's three-node run held about twenty startable
+children and ran them one at a time, in frozen order, for about sixteen
+minutes. `ScheduleOf` measured waves from dependencies alone, so `plan` read
+"widest 12 steps" for a wave that could run one block. The claim now names
+only the blocks that write cluster-wide orchestrator or manager state
+(`exclusiveFor` in `internal/storage/ceph/capability.go`), every Ceph child
+names the throttle `ceph/<cluster>` (four at once,
+`lifecycle.MaxThrottledBlocks`), and `ScheduleOf` counts only what claims and
+throttles admit together. `TestCephChildrenOfOneClusterStartTogetherUnderTheThrottle`
+holds the compiled examples' DAG to it and fails under the old claim set.
+
+Releasing a block from a claim needs three proofs, and serial execution had
+hidden the lack of each:
+
+- **One writer per native name.** A block adopts a same-name object only on
+  its own attempt record, which trusted the claim to admit one writer.
+  Admission now refuses a second owner of a native name, including a pool a
+  gateway derives (`<zone>.rgw.*`, `.rgw.root`).
+- **Manager restarts.** The settings block's `mgr module enable` and the
+  monitoring unit's derived `prometheus` module respawn the active manager
+  while siblings run. A manager-served command an unclaimed block reaches must
+  repeat under `manager_retry` or read as unfinished work in an observation;
+  an object bucket's `orch ps` did neither (B1041).
+- **Shared private areas.** Markers in `/var/lib/bootwright/ceph/<fsid>` were
+  already published without replacement, but the custody proof listed the
+  area and then stat'ed each name, so a concurrent writer's `.ownership-*`
+  staging name vanished in between (`FileNotFoundError`, B1040), the same
+  shape as the `Mkdirat` race above.
+
 ## Production admission also needs live invocation ownership
 
 The scheduler's bound was eight, but production bound one until X48. Raising

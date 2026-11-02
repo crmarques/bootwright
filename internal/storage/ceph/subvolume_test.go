@@ -113,7 +113,7 @@ func TestSubvolumeBlockIDAndRequires(t *testing.T) {
 		!slices.Equal(block.Requires, []reconciliation.ObjectRef{{Kind: string(api.CephFilesystem), Object: "files"}}) {
 		t.Fatalf("the subvolume block is %+v", block)
 	}
-	if !slices.Equal(block.Dependencies, []string{ClusterBlockID("example"), ImageBlockID("example")}) || !slices.Equal(block.Exclusive, []string{"ceph/example"}) {
+	if !slices.Equal(block.Dependencies, []string{ClusterBlockID("example"), ImageBlockID("example")}) || len(block.Exclusive) != 0 || block.Throttle != "ceph/example" {
 		t.Fatalf("the subvolume block depends on %v, exclusive %v", block.Dependencies, block.Exclusive)
 	}
 }

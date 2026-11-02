@@ -250,6 +250,14 @@ func (a *admission) pool(cluster api.Object) {
 			a.issue("api.invariant", "$.spec.nativeName", "CephPool "+other.Name()+" already owns native pool "+PoolName(a.object)+" in this cluster", "give each pool in a cluster a distinct native name")
 		}
 	}
+	for _, gateway := range a.catalog.OfKind(api.CephObjectGateway) {
+		if textOf(gateway.Spec(), "clusterRef") != cluster.Name() {
+			continue
+		}
+		if owned, derived := gatewayOwnsPool(gateway, PoolName(a.object)); derived {
+			a.issue("api.invariant", "$.spec.nativeName", "CephObjectGateway "+gateway.Name()+" already owns native pool "+owned+" in this cluster", "give the CephPool a native name no gateway of the cluster derives, or bind it to that gateway's spec.pools")
+		}
+	}
 
 	spec := a.object.Spec()
 	policy := api.Object{}
@@ -408,4 +416,28 @@ func (a *admission) export(cluster api.Object, managed bool) {
 func DefaultReplicas(cluster api.Object) (int64, int64) {
 	size, minimum := replicatedDefaults(cluster)
 	return size.Int64(), minimum.Int64()
+}
+
+var ZonePlacementSuffixes = map[string]string{"indexPoolRef": "buckets.index", "dataExtraPoolRef": "buckets.non-ec", "dataPoolRef": "buckets.data"}
+
+var ZonePoolSuffixes = []string{"meta", "control", "dedup", "log", "otp", "buckets.index", "buckets.non-ec", "buckets.data"}
+
+func gatewayOwnsPool(gateway api.Object, name string) (string, bool) {
+	if name == ".rgw.root" {
+		return name, true
+	}
+	zone := textOf(gateway.Spec(), "zone")
+	if zone == "" {
+		return "", false
+	}
+	for _, suffix := range ZonePoolSuffixes {
+		declared := false
+		for key, replaced := range ZonePlacementSuffixes {
+			declared = declared || replaced == suffix && textOf(gateway.Spec(), "pools", key) != ""
+		}
+		if !declared && name == zone+".rgw."+suffix {
+			return name, true
+		}
+	}
+	return "", false
 }

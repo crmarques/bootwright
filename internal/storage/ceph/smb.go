@@ -412,7 +412,7 @@ func smbDefinition(c api.Catalog, object api.Object, input lifecycle.PlanInput) 
 		}
 	}
 	return reconciliation.BlockDefinition{ID: SMBBlockID(object.Name()), Description: removal.Description, Stage: reconciliation.StageClusters, Requires: smbRequires(object.Spec(), r.ResourceType),
-		Dependencies: dependencies, Exclusive: []string{"ceph/" + r.Cluster}, Impacts: removal.Impacts, Consumes: removal.Consumes, Kind: string(api.CephSMBResource), Object: object.Name(),
+		Dependencies: dependencies, Exclusive: exclusiveFor("smb", Request{Cluster: r.Cluster}), Throttle: ThrottleKey(r.Cluster), Impacts: removal.Impacts, Consumes: removal.Consumes, Kind: string(api.CephSMBResource), Object: object.Name(),
 		Implementation: SMBImplementation, ContentDigest: SMBContentDigest(), Request: canonical}, secrets, nil
 }
 

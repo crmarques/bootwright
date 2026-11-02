@@ -17,6 +17,8 @@ import (
 // rather than of the plan and is never frozen with it.
 const MaxRunningBlocks = 8
 
+const MaxThrottledBlocks = 4
+
 // step is one block this invocation put in flight, and what it proved.
 type step struct {
 	block string
@@ -58,9 +60,11 @@ type scheduler struct {
 	// An unstarted attempt blocks further admission; its refusal may affect others.
 	unstarted map[string]bool
 	// held maps each exclusive resource in use to the block using it.
-	held    map[string]string
-	causes  map[string]error
-	results chan step
+	held      map[string]string
+	throttled map[string]int
+	throttle  int
+	causes    map[string]error
+	results   chan step
 	// observeOnly admits resolutions and nothing else. A removal uses it to
 	// prove the outcome of the effects it is about to take back, which is
 	// read-only and may start no attempt of the operation it observes.
@@ -120,13 +124,20 @@ func (s Service) Concurrency() int {
 	return s.options.Concurrency
 }
 
+func (s Service) Throttle() int {
+	if s.options.Throttle <= 0 {
+		return MaxThrottledBlocks
+	}
+	return s.options.Throttle
+}
+
 func (s Service) newScheduler(tx Transaction, store OperationStore, approved approved, logging *logBoundary, operation operationstore.Operation, plan reconciliation.Plan, states map[string]reconciliation.BlockState, material map[string]secrets.Material, selection reconciliation.Selection, phases, removalPlanPhases removalPhases) *scheduler {
 	return &scheduler{
 		service: s, tx: tx, store: store, approved: approved, operation: operation,
 		plan: plan, material: material, selection: selection, bound: s.Concurrency(), logging: logging,
 		states: states, running: map[string]bool{}, observed: map[string]bool{}, worked: map[string]bool{},
 		unstarted: map[string]bool{}, announced: map[string]int{},
-		held: map[string]string{}, causes: map[string]error{},
+		held: map[string]string{}, throttled: map[string]int{}, throttle: s.Throttle(), causes: map[string]error{},
 		results: make(chan step, len(plan.Blocks)),
 		phases:  phases, removalPlanPhases: removalPlanPhases,
 	}
@@ -282,6 +293,9 @@ func (c *scheduler) anyState(is func(reconciliation.BlockState) bool) bool {
 
 // free reports whether every exclusive resource this block claims is idle.
 func (c *scheduler) free(block reconciliation.Block) bool {
+	if block.Throttle != "" && c.throttled[block.Throttle] >= c.throttle {
+		return false
+	}
 	for _, key := range block.Exclusive {
 		if _, busy := c.held[key]; busy {
 			return false
@@ -304,6 +318,9 @@ func (c *scheduler) start(ctx context.Context, block reconciliation.Block, posit
 	}
 	for _, key := range block.Exclusive {
 		c.held[key] = block.ID
+	}
+	if block.Throttle != "" {
+		c.throttled[block.Throttle]++
 	}
 	command := c.observingCommand()
 	retry := observing && !c.observeOnly && c.selection.Admits(block)
@@ -365,6 +382,9 @@ func (c *scheduler) observingCommand() string {
 // settle records what one block proved and frees what it held.
 func (c *scheduler) settle(finished step) {
 	delete(c.running, finished.block)
+	if index := slices.IndexFunc(c.plan.Blocks, func(block reconciliation.Block) bool { return block.ID == finished.block }); index >= 0 && c.plan.Blocks[index].Throttle != "" {
+		c.throttled[c.plan.Blocks[index].Throttle]--
+	}
 	for key, holder := range c.held {
 		if holder == finished.block {
 			delete(c.held, key)

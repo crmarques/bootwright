@@ -25,7 +25,7 @@ func (s Service) present(ctx context.Context, name string, decided operationPlan
 // presentation is the plan a transition shows: what apply and destroy present
 // before they confirm, and what plan previews of the same transition.
 func (s Service) presentation(decided operationPlan) PlanResult {
-	result := planPreview(decided.plan, decided.states, decided.selection)
+	result := planPreview(decided.plan, decided.states, decided.selection, s.Throttle())
 	result.Verb, result.Warnings = string(decided.verb), s.removalWarnings(decided.removed())
 	result.Continuation = !decided.fresh
 	result.AddsTo = decided.predecessor

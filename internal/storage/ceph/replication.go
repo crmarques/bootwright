@@ -121,7 +121,7 @@ func (c ReplicationCapability) Plan(ctx context.Context, input lifecycle.PlanInp
 			}
 			requirements = append(requirements, reconciliation.ObjectRef{Kind: string(api.CephPool), Object: pool.Name()})
 			dependencies = append(dependencies, ClusterBlockID(base.Cluster), ImageBlockID(base.Cluster))
-			exclusive = append(exclusive, "ceph/"+base.Cluster)
+			exclusive = append(exclusive, exclusiveFor("replication", Request{Cluster: base.Cluster})...)
 			for _, host := range base.Hosts {
 				plan.Secrets = append(plan.Secrets, host.SSHKeyRef)
 				for _, ref := range []string{host.HostKeyRef, host.KnownHostsRef} {

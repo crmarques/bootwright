@@ -70,6 +70,7 @@ type BlockDefinition struct {
 	// graph would allow it, because the graph orders what one block needs from
 	// another and not what two of them would write to at once.
 	Exclusive      []string        `json:"exclusive,omitempty"`
+	Throttle       string          `json:"throttle,omitempty"`
 	Impacts        []string        `json:"impacts"`
 	Consumes       []string        `json:"consumes"`
 	Groups         []Group         `json:"groups"`
@@ -404,7 +405,7 @@ type Schedule struct {
 // ScheduleOf measures a frozen plan. A plan this executable produced is
 // already ordered by wave, so the answer restates its own shape rather than
 // deriving a different one.
-func ScheduleOf(plan Plan) Schedule {
+func ScheduleOf(plan Plan, throttle int) Schedule {
 	known := make(map[string]BlockDefinition, len(plan.Blocks))
 	for _, block := range plan.Blocks {
 		known[block.ID] = block.BlockDefinition
@@ -414,10 +415,26 @@ func ScheduleOf(plan Plan) Schedule {
 		return Schedule{Waves: map[string]int{}}
 	}
 	population := map[int]int{}
+	held := map[int]map[string]bool{}
+	throttled := map[int]map[string]int{}
 	schedule := Schedule{Waves: depth}
-	for _, wave := range depth {
-		population[wave]++
+	for _, block := range plan.Blocks {
+		wave := depth[block.ID]
 		schedule.Count = max(schedule.Count, wave+1)
+		if held[wave] == nil {
+			held[wave], throttled[wave] = map[string]bool{}, map[string]int{}
+		}
+		if slices.ContainsFunc(block.Exclusive, func(key string) bool { return held[wave][key] }) ||
+			block.Throttle != "" && throttle > 0 && throttled[wave][block.Throttle] >= throttle {
+			continue
+		}
+		for _, key := range block.Exclusive {
+			held[wave][key] = true
+		}
+		if block.Throttle != "" {
+			throttled[wave][block.Throttle]++
+		}
+		population[wave]++
 		schedule.Widest = max(schedule.Widest, population[wave])
 	}
 	return schedule
@@ -455,6 +472,9 @@ func validateDefinition(definition BlockDefinition) error {
 		if !safeDescription(key) {
 			return planError("lifecycle block exclusive resources must be safe single-line text")
 		}
+	}
+	if definition.Throttle != "" && !safeDescription(definition.Throttle) {
+		return planError("lifecycle block throttle must be safe single-line text")
 	}
 	if slices.Contains(definition.Dependencies, definition.ID) {
 		return planError("lifecycle block cannot depend on itself")

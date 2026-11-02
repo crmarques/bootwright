@@ -14,4 +14,7 @@ func TestLifecycleConcurrencyBound(t *testing.T) {
 	if bound := service.Concurrency(); bound != lifecycle.MaxRunningBlocks {
 		t.Fatalf("composition binds lifecycle concurrency %d, want %d", bound, lifecycle.MaxRunningBlocks)
 	}
+	if throttle := service.Throttle(); throttle != lifecycle.MaxThrottledBlocks || lifecycle.MaxThrottledBlocks != 4 {
+		t.Fatalf("composition binds a lifecycle throttle of %d, want %d", throttle, lifecycle.MaxThrottledBlocks)
+	}
 }

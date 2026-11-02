@@ -56,7 +56,7 @@ func userProduced(values ...string) []lifecycle.Produced {
 func TestObjectUserBlockRequiresItsGateway(t *testing.T) {
 	block := userPlan(t, userCatalog(objectUserObject("app-writer")))
 	if block.ID != "ceph-object-user-app-writer" || block.ID != ObjectUserBlockID("app-writer") || block.Kind != string(api.CephObjectUser) || block.Object != "app-writer" ||
-		block.Stage != reconciliation.StageClusters || !slices.Equal(block.Exclusive, []string{"ceph/example"}) || block.Description != "realize Ceph object user app-writer" {
+		block.Stage != reconciliation.StageClusters || len(block.Exclusive) != 0 || block.Throttle != "ceph/example" || block.Description != "realize Ceph object user app-writer" {
 		t.Fatalf("the object user block is %+v", block)
 	}
 	if !slices.Equal(block.Dependencies, []string{"ceph-cluster-example", "ceph-image-example"}) ||

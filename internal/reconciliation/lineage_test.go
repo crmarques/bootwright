@@ -68,7 +68,7 @@ func TestPrerequisitesAreHashedAndExcludedFromSchedulingAndDependencies(t *testi
 	if got := chained.Blocks[0].Dependencies; len(got) != 0 {
 		t.Fatalf("a prerequisite became a dependency: %v", got)
 	}
-	if got := ScheduleOf(chained); got.Count != 2 || got.Waves["alpha"] != 0 || got.Waves["bravo"] != 1 {
+	if got := ScheduleOf(chained, 0); got.Count != 2 || got.Waves["alpha"] != 0 || got.Waves["bravo"] != 1 {
 		t.Fatalf("prerequisites changed the schedule: %+v", got)
 	}
 	if got := ids(Ready(chained, map[string]BlockState{})); !slices.Equal(got, []string{"alpha"}) {

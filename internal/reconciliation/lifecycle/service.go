@@ -42,6 +42,7 @@ type Options struct {
 	// how much this host is asked to do at the same time, never what the plan
 	// permits, so it is not frozen with the plan. Zero takes the default.
 	Concurrency int
+	Throttle    int
 	Executable  Executable
 	Operations  OperationStoreFactory
 	// Setup and Lock locate the controller runtime every launch runs, and
@@ -184,7 +185,7 @@ func (s Service) preview(ctx context.Context, view View, selection reconciliatio
 		// Only a finalization leads here, because no verb a preview decides as
 		// settles over a record whose finalization is not due. What it calls
 		// for is read from the record it finalizes, not the one it leaves.
-		result = planPreview(decided.plan, decided.states, reconciliation.Selection{})
+		result = planPreview(decided.plan, decided.states, reconciliation.Selection{}, s.Throttle())
 		result.Verb, result.Continuation, result.Finalizes = string(verb), true, true
 		result.Receipt = Receipt{Operation: decided.operation.ID, Verb: "plan", State: "preview", Next: nextAction(marked.operation, marked.plan, marked.states)}
 	case decided.fresh:
@@ -199,7 +200,7 @@ func (s Service) preview(ctx context.Context, view View, selection reconciliatio
 }
 
 func steps(plan reconciliation.Plan, states map[string]reconciliation.BlockState) []PlanStep {
-	schedule := reconciliation.ScheduleOf(plan)
+	schedule := reconciliation.ScheduleOf(plan, 0)
 	position := make(map[string]int, len(plan.Blocks))
 	for index, block := range plan.Blocks {
 		position[block.ID] = index + 1
@@ -235,8 +236,8 @@ func steps(plan reconciliation.Plan, states map[string]reconciliation.BlockState
 // deferred behind the first of them, while the failed blocks it retries start
 // beside every ready block that does not wait on one of them. Without a
 // selection the steps carry no marker.
-func planPreview(plan reconciliation.Plan, states map[string]reconciliation.BlockState, selection reconciliation.Selection) PlanResult {
-	schedule := reconciliation.ScheduleOf(plan)
+func planPreview(plan reconciliation.Plan, states map[string]reconciliation.BlockState, selection reconciliation.Selection, throttle int) PlanResult {
+	schedule := reconciliation.ScheduleOf(plan, throttle)
 	result := PlanResult{
 		Steps: steps(plan, states), Stages: selection.Stages.Names(), Until: selection.Until,
 		Waves: schedule.Count, Widest: schedule.Widest,

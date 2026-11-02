@@ -78,7 +78,7 @@ func TestGatewayDerivedPoolsAreFrozenSuffixSet(t *testing.T) {
 	definitions := poolBlocks(blocks)
 	for i, d := range definitions {
 		if !reconciliation.ValidSegment(d.ID) || d.Kind != string(api.CephObjectGateway) || d.Object != "objects" || len(d.Requires) != 0 || d.Stage != reconciliation.StageClusters ||
-			!reflect.DeepEqual(d.Dependencies, []string{"ceph-cluster-example", "ceph-image-example"}) || !reflect.DeepEqual(d.Exclusive, []string{"ceph/example"}) {
+			!reflect.DeepEqual(d.Dependencies, []string{"ceph-cluster-example", "ceph-image-example"}) || len(d.Exclusive) != 0 || d.Throttle != "ceph/example" {
 			t.Fatalf("derived block %+v", d)
 		}
 		if d.Description != "realize Ceph zone pool objects.rgw."+native[i]+" of object gateway objects" {

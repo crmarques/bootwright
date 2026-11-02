@@ -1,6 +1,7 @@
 package ceph
 
 import (
+	"strings"
 	"testing"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
@@ -50,5 +51,29 @@ func TestPoolNativeNameCollisionRefusesBeforePlanning(t *testing.T) {
 	second := replicatedPool("second", "nativeName", "volumes")
 	if issues := cephcluster.Validate(first, planCatalog(3, 3, nil, first, second)); len(issues) == 0 {
 		t.Fatal("duplicate native identity admitted")
+	}
+}
+
+func TestPoolNativeNameOfAGatewayDerivedZonePoolRefusesBeforePlanning(t *testing.T) {
+	gateway := objectGateway("objects")
+	zone := gateway.Spec().Get("zone").Text()
+	for name, refused := range map[string]bool{zone + ".rgw.meta": true, zone + ".rgw.buckets.data": true, ".rgw.root": true, zone + ".rgw.unrelated": false, "volumes": false} {
+		pool := replicatedPool("declared", "nativeName", name)
+		issues := cephcluster.Validate(pool, planCatalog(3, 3, withPairAndRGW, pool, gateway))
+		found := false
+		for _, issue := range issues {
+			found = found || strings.Contains(issue.Message, "CephObjectGateway objects already owns native pool "+name)
+		}
+		if found != refused {
+			t.Fatalf("native pool %q collision refused=%v, want %v: %+v", name, found, refused, issues)
+		}
+	}
+	bound := rgwPool("object-data")
+	bound = bound.WithSpec(bound.Spec().With("nativeName", api.StringValue(zone+".rgw.buckets.data")))
+	declared := objectGateway("objects", "pools", requestMap("dataPoolRef", bound.Name()))
+	for _, issue := range cephcluster.Validate(bound, planCatalog(3, 3, withPairAndRGW, bound, declared)) {
+		if strings.Contains(issue.Message, "already owns native pool") {
+			t.Fatalf("a pool the gateway binds is refused as derived: %+v", issue)
+		}
 	}
 }

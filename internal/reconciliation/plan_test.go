@@ -268,7 +268,7 @@ func TestPlanOrderGroupsBlocksByTheWaveTheyCanStartIn(t *testing.T) {
 	if !slices.Equal(got, want) {
 		t.Fatalf("plan order = %v, want %v", got, want)
 	}
-	schedule := ScheduleOf(plan)
+	schedule := ScheduleOf(plan, 0)
 	if schedule.Count != 3 || schedule.Widest != 2 {
 		t.Fatalf("schedule = %d waves, widest %d", schedule.Count, schedule.Widest)
 	}
@@ -284,7 +284,7 @@ func TestPlanOrderGroupsBlocksByTheWaveTheyCanStartIn(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if schedule := ScheduleOf(wide); schedule.Count != 2 || schedule.Widest != 3 {
+	if schedule := ScheduleOf(wide, 0); schedule.Count != 2 || schedule.Widest != 3 {
 		t.Fatalf("schedule = %d waves, widest %d, want 2 and 3", schedule.Count, schedule.Widest)
 	}
 	// A block sits one wave past the deepest block it waits for, never past
@@ -297,8 +297,46 @@ func TestPlanOrderGroupsBlocksByTheWaveTheyCanStartIn(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if wave := ScheduleOf(deep).Waves["charlie"]; wave != 2 {
+	if wave := ScheduleOf(deep, 0).Waves["charlie"]; wave != 2 {
 		t.Fatalf("deepest dependency wave = %d, want 2", wave)
+	}
+}
+
+func TestScheduleWidthCountsOnlyWhatClaimsAndThrottlesAdmitTogether(t *testing.T) {
+	var shared, throttled, mixed []BlockDefinition
+	for _, name := range []string{"alpha", "bravo", "charlie", "delta", "echo", "foxtrot", "golf", "hotel", "india", "juliet", "kilo", "lima"} {
+		one := definition(name)
+		one.Exclusive = []string{"ceph/example"}
+		shared = append(shared, one)
+		two := definition(name)
+		two.Throttle = "ceph/example"
+		throttled = append(throttled, two)
+		three := definition(name)
+		three.Throttle = "ceph/example"
+		if name < "d" {
+			three.Exclusive = []string{"ceph/example"}
+		}
+		mixed = append(mixed, three)
+	}
+	for _, test := range []struct {
+		name        string
+		definitions []BlockDefinition
+		throttle    int
+		widest      int
+	}{
+		{"one shared claim", shared, 4, 1},
+		{"one throttle", throttled, 4, 4},
+		{"an unbounded throttle", throttled, 0, 12},
+		{"claims inside a throttle", mixed, 8, 8},
+		{"claims inside a narrow throttle", mixed, 2, 2},
+	} {
+		plan, err := NewPlan(Apply, test.definitions)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if schedule := ScheduleOf(plan, test.throttle); schedule.Count != 1 || schedule.Widest != test.widest {
+			t.Errorf("%s: %d waves, widest %d, want 1 and %d", test.name, schedule.Count, schedule.Widest, test.widest)
+		}
 	}
 }
 

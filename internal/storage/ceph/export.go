@@ -210,7 +210,7 @@ func (c ConsumerCapability) Plan(ctx context.Context, input lifecycle.PlanInput)
 			impacts = []string{"retire Ceph consumer " + obj.Name() + " with its owned hosts"}
 			consumes = []string{reconciliation.AuthorizationDataLoss}
 		}
-		plan.Definitions = append(plan.Definitions, reconciliation.BlockDefinition{ID: ConsumerBlockID(obj.Name()), Description: impacts[0], Stage: reconciliation.StageClusters, Kind: string(api.CephConsumer), Object: obj.Name(), Implementation: ConsumerImplementation, ContentDigest: ConsumerContentDigest(), Request: canonical, Requires: requires, Dependencies: dependencies, Exclusive: []string{"ceph/" + r.Cluster}, Impacts: impacts, Consumes: consumes})
+		plan.Definitions = append(plan.Definitions, reconciliation.BlockDefinition{ID: ConsumerBlockID(obj.Name()), Description: impacts[0], Stage: reconciliation.StageClusters, Kind: string(api.CephConsumer), Object: obj.Name(), Implementation: ConsumerImplementation, ContentDigest: ConsumerContentDigest(), Request: canonical, Requires: requires, Dependencies: dependencies, Exclusive: exclusiveFor("consumer", Request{Cluster: r.Cluster}), Throttle: ThrottleKey(r.Cluster), Impacts: impacts, Consumes: consumes})
 		for _, host := range base.Hosts {
 			plan.Secrets = append(plan.Secrets, host.SSHKeyRef)
 			for _, ref := range []string{host.HostKeyRef, host.KnownHostsRef} {

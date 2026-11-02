@@ -393,13 +393,13 @@ lists the requirements each storage family emits:
   is fixed (apply 4260 s, observe 720 s, destroy 1380 s) and does not grow with
   the host count.
 - An object user block `ceph-object-user-<user>` (Kind CephObjectUser,
-  exclusive `ceph/<cluster>`) realizes one CephObjectUser on the bootstrap
+  [unclaimed](#removal-and-concurrency)) realizes one CephObjectUser on the bootstrap
   host. It depends on the cluster and image blocks by ID and on its
   CephObjectGateway through that object; its deadline is fixed (apply
   2280 s, observe 1380 s, destroy 1380 s) and does not grow with the host
   count.
 - An object bucket block `ceph-object-bucket-<bucket>` (Kind
-  CephObjectBucket, exclusive `ceph/<cluster>`) realizes one
+  CephObjectBucket, [unclaimed](#removal-and-concurrency)) realizes one
   CephObjectBucket on the bootstrap host. It depends on the cluster and
   image blocks by ID and on its owner CephObjectUser through that object;
   its deadline is fixed (apply 2280 s, observe 1380 s, destroy 1380 s) and
@@ -1231,8 +1231,10 @@ the stored profile as exactly the passed keys plus the plugin's frozen
 defaults, and the pool's type, rule and PG count. Anything else refuses before
 an effect: `foreign-rule` for a policy, `foreign-profile`, `foreign-rule` or
 `native-output` for an erasure-coded pool, and `pool-identity` for a pool. This adoption, like each adoption on an attempt
-record and a frozen shape below, trusts the one writer that the exclusive
-`ceph/<cluster>` reservation admits; a writer outside Bootwright on a managed
+record and a frozen shape below, trusts the one writer of that native name:
+the one block of the cluster that creates it, which planning proves and
+[claims](#removal-and-concurrency) serialize where several blocks write one
+cluster-wide state; a writer outside Bootwright on a managed
 cluster is outside that guarantee
 ([mutation safety](state-reconciliation.md#mutation-safety)). Neither phase
 ever removes a pool, profile or rule. A monitor's PG refusal of the create (`ERANGE`) refuses `pg-budget`. When fewer
@@ -2059,6 +2061,28 @@ The context lease admits one mutator. Within its DAG, blocks declare exclusive
 resources for cluster-wide orchestrator/configuration changes, host preparation,
 device allocation and any shared native/package state they touch. Independent
 blocks run concurrently only when those claims and dependency proofs permit it.
+
+`ceph/<cluster>` is the cluster's orchestrator and manager-configuration
+claim. The cluster block, the settings block, every service unit, gateways,
+NFS exports, NVMe-oF subsystems, CephSMBResources, CephConsumers and
+CephReplications (on both of their clusters) hold it, so no two of them run
+together. Placement policies, pools (declared and a gateway's zone pools),
+clients, RBD images, filesystems, subvolumes, object users and object buckets
+claim nothing (`exclusiveFor` in `internal/storage/ceph/capability.go` owns
+the table). Every Ceph block of a cluster except its image and host blocks
+also names the [throttle](state-reconciliation.md#stages-and-the-pause-boundary)
+`ceph/<cluster>`, so at most four of them run at once whatever the bound,
+which keeps the bootstrap host's load and the manager's command queue
+bounded. An unclaimed block runs beside the others because admission gives
+each native name it creates one owning block in the cluster (a pool's native
+name, including a name a gateway derives for a zone pool or `.rgw.root`, a
+policy's rule, an erasure-coded pool's derived rule and profile) and because
+every manager-served command it reaches repeats, bounded by the manager wait,
+while a restarting manager cannot answer, or reads as unfinished work in an
+observation. A concurrent manager restart, by the settings block's module
+enable or the monitoring unit's derived `prometheus` module, therefore never
+fails an unclaimed block. Readiness stays cluster-wide: a sibling's transient
+health check delays, and never fails, a block before its readiness deadline.
 Per-invocation scratch is private. Reservations prevent conflicting local
 contexts from claiming the same target; a native name, process-local mutex or
 context lease alone cannot coordinate another controller. B79 qualifies the

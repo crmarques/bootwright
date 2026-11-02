@@ -177,7 +177,24 @@ func (c Capability) definition(verb reconciliation.Verb, object api.Object, requ
 		suffix, _ := zonePoolSuffix(request.Pool.Name)
 		id = GatewayPoolBlockID(object.Name(), suffix)
 	}
-	return reconciliation.BlockDefinition{ID: id, Description: description, Stage: reconciliation.StageClusters, Requires: requires, Dependencies: dependencies, Exclusive: []string{"ceph/" + request.Cluster}, Impacts: impacts, Consumes: consumes, Kind: string(c.kind), Object: object.Name(), Implementation: Implementation, ContentDigest: ContentDigest(), Request: canonical}, nil
+	return reconciliation.BlockDefinition{ID: id, Description: description, Stage: reconciliation.StageClusters, Requires: requires, Dependencies: dependencies, Exclusive: exclusiveFor(request.Action, request), Throttle: ThrottleKey(request.Cluster), Impacts: impacts, Consumes: consumes, Kind: string(c.kind), Object: object.Name(), Implementation: Implementation, ContentDigest: ContentDigest(), Request: canonical}, nil
+}
+
+var unclaimedFamilies = []string{"client", "filesystem", "object-bucket", "object-user", "policy", "pool", "rbd", "subvolume"}
+
+func OrchestratorKey(cluster string) string {
+	return "ceph/" + cluster
+}
+
+func ThrottleKey(cluster string) string {
+	return "ceph/" + cluster
+}
+
+func exclusiveFor(family string, request Request) []string {
+	if slices.Contains(unclaimedFamilies, family) {
+		return nil
+	}
+	return []string{OrchestratorKey(request.Cluster)}
 }
 
 func placement(object api.Object, request Request) ([]reconciliation.ObjectRef, []string, error) {

@@ -62,7 +62,7 @@ func withTLSRGW(service string) func(api.Value) api.Value {
 func TestObjectBucketBlockRequiresItsOwner(t *testing.T) {
 	block, _ := plannedBucketBlock(t, bucketCatalog(withPairAndHTTPRGW, objectGateway("objects"), objectBucketObject("app-data")))
 	if block.ID != "ceph-object-bucket-app-data" || block.ID != ObjectBucketBlockID("app-data") || block.Kind != string(api.CephObjectBucket) || block.Object != "app-data" ||
-		block.Stage != reconciliation.StageClusters || !slices.Equal(block.Exclusive, []string{"ceph/example"}) || block.Description != "realize Ceph object bucket app-data" {
+		block.Stage != reconciliation.StageClusters || len(block.Exclusive) != 0 || block.Throttle != "ceph/example" || block.Description != "realize Ceph object bucket app-data" {
 		t.Fatalf("the object bucket block is %+v", block)
 	}
 	if !slices.Equal(block.Dependencies, []string{"ceph-cluster-example", "ceph-image-example"}) ||

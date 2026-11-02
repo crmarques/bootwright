@@ -5,9 +5,7 @@
       "ceph-image-example",
       "ceph-pool-volumes"
     ],
-    "exclusive": [
-      "ceph/example"
-    ],
+    "exclusive": [],
     "id": "ceph-client-consumer",
     "implementation": "storage-ceph-core-v3",
     "stage": "clusters"
@@ -80,9 +78,7 @@
       "ceph-cluster-example",
       "ceph-image-example"
     ],
-    "exclusive": [
-      "ceph/example"
-    ],
+    "exclusive": [],
     "id": "ceph-pool-volumes",
     "implementation": "storage-ceph-core-v3",
     "stage": "clusters"
@@ -93,9 +89,7 @@
       "ceph-image-example",
       "ceph-pool-volumes"
     ],
-    "exclusive": [
-      "ceph/example"
-    ],
+    "exclusive": [],
     "id": "ceph-rbd-disk",
     "implementation": "storage-ceph-core-v3",
     "stage": "clusters"

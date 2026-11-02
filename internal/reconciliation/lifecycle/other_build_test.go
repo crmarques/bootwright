@@ -115,6 +115,12 @@ func TestAnotherBuildRefusesToContinueABlockItWouldFreezeDifferently(t *testing.
 		{"unknown apply under a moved request", reconciliation.Apply, applyLeftUnknown, func(h *harness) {
 			h.capability.definitions[0].Request = json.RawMessage(`{"name":"artifact-server-lab","tuned":true}`)
 		}, differently, take},
+		{"added exclusive claim", reconciliation.Apply, failedApply, func(h *harness) {
+			h.capability.definitions[0].Exclusive = []string{"ceph/example"}
+		}, differently, take},
+		{"added throttle", reconciliation.Apply, failedApply, func(h *harness) {
+			h.capability.definitions[0].Throttle = "ceph/example"
+		}, differently, take},
 		{"added block", reconciliation.Apply, failedApply, func(h *harness) {
 			h.capability.definitions = append(h.capability.definitions, definition("extra"))
 		}, "this executable would freeze the block extra differently from the plan this operation froze", take},
@@ -205,6 +211,7 @@ func TestDifferingBlockIgnoresOnlyPresentationWords(t *testing.T) {
 		{"an object", func(d *reconciliation.BlockDefinition) { d.Object = "other" }, "a"},
 		{"a stage", func(d *reconciliation.BlockDefinition) { d.Stage = reconciliation.StageClusters }, "a"},
 		{"an exclusive claim", func(d *reconciliation.BlockDefinition) { d.Exclusive = []string{"port:80"} }, "a"},
+		{"a throttle", func(d *reconciliation.BlockDefinition) { d.Throttle = "ceph/example" }, "a"},
 		{"a consumed authorization", func(d *reconciliation.BlockDefinition) { d.Consumes = []string{reconciliation.AuthorizationDataLoss} }, "a"},
 		{"a group id", func(d *reconciliation.BlockDefinition) { d.Groups[0].ID = "other-group" }, "a"},
 		{"a group machine", func(d *reconciliation.BlockDefinition) { d.Groups[0].Machines = []string{"elsewhere"} }, "a"},
@@ -502,5 +509,21 @@ func TestTheTakeBackMirrorsTheSubsetDestroyWouldPlan(t *testing.T) {
 				t.Fatalf("canTakeBack = %t, want %t", got, tc.want)
 			}
 		})
+	}
+}
+
+func TestAnotherBuildDestroysAnApplyFrozenWithOtherClaims(t *testing.T) {
+	h := newHarness(t, "artifact-server-lab")
+	h.capability.definitions[0].Exclusive = []string{"ceph/example"}
+	failedApply(t, h)
+	h.service.automation = testAutomation{digest: strings.Repeat("9", 64)}
+	h.capability.definitions[0].Exclusive = nil
+	h.capability.definitions[0].Throttle = "ceph/example"
+	h.capability.outcomes = nil
+	if _, err := h.service.Destroy(context.Background(), DestroyRequest{ContextName: "lab", SkipConfirmation: true}); err != nil {
+		t.Fatalf("a destroy under a build that releases the claim refused: %+v", diagnostics.Of(err))
+	}
+	if !slices.Equal(h.capability.destroys, []string{"artifact-server-lab"}) {
+		t.Fatalf("destroyed %v", h.capability.destroys)
 	}
 }

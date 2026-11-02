@@ -1096,7 +1096,8 @@ selection admits every stage. A block is *ready* when it is `pending` and every
 dependency is `done`, and *startable* when it is ready and its stage is
 selected. Execution starts every startable block, in frozen plan order, up to a
 bound, and re-evaluates as each one settles. A block is admitted only while no
-block already running holds a resource it will not share.
+block already running holds a resource it will not share and fewer running
+blocks than its throttle's capacity name its throttle.
 
 The bound is how much one host is asked to do at the same time, not what the
 plan permits, so it belongs to the executable and is never frozen with the
@@ -1104,6 +1105,10 @@ plan, never named by desired state, and never a public flag: what may run
 together is the graph's answer and does not change between invocations. A
 continuation of an operation frozen by another build therefore runs under this
 build's bound, which changes no effect, no order and no evidence.
+
+A throttle is a frozen key for a resource that admits several writers, not the
+bound; its capacity of four (`lifecycle.MaxThrottledBlocks`) is the bound's
+kind of executable property.
 
 Production uses the engine's bound of eight running blocks. Independent
 services and machines are admitted together; a fast dependency chain advances
@@ -2236,8 +2241,9 @@ an object: a Ceph placement rule, profile, pool, image, filesystem, subvolume
 or export whose create lost its reply is adopted only beside the attempt record
 written before the create and only at exactly the frozen shape
 ([storage resources](ceph.md#resources-readiness-and-access)). That
-proof holds only because Bootwright is the one writer of such objects under the
-cluster's exclusive reservation; a writer outside Bootwright on a managed
+proof holds only because Bootwright is the one writer of such objects: one
+block per native name, under the cluster's
+[claims](ceph.md#removal-and-concurrency); a writer outside Bootwright on a managed
 cluster is outside the guarantee, and adoption never authorizes a removal.
 
 ### Quiescence before removal

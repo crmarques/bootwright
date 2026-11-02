@@ -147,9 +147,9 @@ type PlanResult struct {
 	Stages  []string
 	Until   string
 	// Waves is how many rounds the plan's own shape needs, and Widest is how
-	// many of its steps share the fullest one. Together they say how much of
-	// the work the graph lets run at once, which is what an operator reads to
-	// know whether a long plan is a long queue or a wide one.
+	// many steps of the fullest one its claims and throttles start together:
+	// how much of the work the plan lets run at once, which an operator reads
+	// to know whether a long plan is a long queue or a wide one.
 	Waves  int
 	Widest int
 	// Bound is how many blocks this executable starts at once, whatever the
