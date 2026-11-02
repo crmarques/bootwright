@@ -111,8 +111,13 @@ operator as a first-call refusal; the slice that records it is named.
   configured" or ENOTSUP meanwhile; the MON can also keep listing the dead
   gid for a while. So `Worker.manager_declare` treats a failure as the
   module's own answer only when the gid it was sent to still holds one
-  interval later and `orch status` answers available with backend cephadm
-  (the `manager_wait` check); otherwise it repeats within the manager wait.
+  interval later, `orch status` answers available with backend cephadm
+  (the `manager_wait` check), and the declaring module answers its own
+  read-only command (`nfs cluster ls`, `smb cluster ls`, `dashboard sso
+  status`): the manager loads its modules one by one, so the orchestrator
+  answering does not prove `smb` or `nfs` loaded. Otherwise it repeats
+  within the manager wait, every command bounded by its deadline; a
+  repeated `dashboard sso enable` first reads `sso_oauth2` back.
   Not yet observed on a live cluster: the owner's next three-node run is the
   evidence.
 - IBM's bootstrap enables `call_home_agent`, which raises

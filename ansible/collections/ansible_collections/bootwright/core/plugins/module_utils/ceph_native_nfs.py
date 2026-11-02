@@ -454,7 +454,7 @@ class ExportWorker(ceph_native_resources.ResourceWorker):
             return self.tunnel_effect("nfs", "export", "apply", nfs["service"], "-i", "-", data=payload, secrets=secrets)
 
         try:
-            answer = self.manager_declare(declare)
+            answer = self.manager_declare(declare, module=("nfs", "cluster", "ls"))
         except NativeFailure as error:
             if str(error) != "native-command":
                 raise

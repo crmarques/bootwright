@@ -446,7 +446,7 @@ class SMBWorker(ceph_native_resources.ResourceWorker):
             if not accepted:
                 raise Refusal("smb-result")
 
-        self.manager_declare(declare)
+        self.manager_declare(declare, module=("smb", "cluster", "ls"))
 
     def smb_apply(self, private):
         """Prove ownership, the module, the declared SMB clusters and the samba images before any effect; then apply or continue once."""

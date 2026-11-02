@@ -97,6 +97,9 @@ class SSOMonitor(monitoring.Monitor):
         if command == ("config", "get", "mgr", observability.SSO_OPTION):
             self.log.append(list(argv))
             return 0, json.dumps(self.enabled).encode()
+        if command == ("dashboard", "sso", "status"):
+            self.log.append(list(argv))
+            return 0, b'SSO is "enabled" with "OAuth2" protocol.' if self.enabled else b'SSO is "disabled".'
         if command == ("dashboard", "sso", "enable", "oauth2"):
             self.log.append(list(argv))
             self.mutations.append(command)
@@ -339,6 +342,32 @@ def test_sso_enable_waits_within_the_window_for_the_orchestrator_to_list_a_runni
     for bad in ({"changed": True, "pending": True}, {"changed": False}, {"changed": False, "pending": 1}):
         with pytest.raises(ceph_native.Refusal, match="^evidence$"):
             ceph_core.execute(request, "apply", "d" * 64, SSOTransport(request, [one, one], [bad]), now=lambda: 0, pause=lambda seconds: None)
+
+
+def test_sso_enable_whose_reply_a_restart_lost_is_read_back_and_never_sent_again(tmp_path):
+    request = sso_request()
+    markers = units.markers_for(tmp_path, request)
+    monitor = SSOMonitor(request)
+    native = gateway.applying(monitor, markers, SSO_MATERIAL)
+    native.unit()
+    native.bound = ceph_native_units.material(request, "sso", {})
+    answer, state = native.run, {"gid": 4100, "fired": 0}
+
+    def restarting(argv, data=b"", timeout=60):
+        command = tuple(argv[argv.index("--format") + 2:]) if "--format" in argv else ()
+        if command == ("mgr", "dump"):
+            return 0, json.dumps({"available": True, "active_gid": state["gid"]}).encode()
+        if command == ("dashboard", "sso", "enable", "oauth2") and not state["fired"]:
+            state["fired"] += 1
+            answer(argv, data, timeout)
+            state["gid"] += 1
+            return 1, ceph_native.NativeOutput(b"", b"Error ETIMEDOUT: the manager connection was reset")
+        return answer(argv, data, timeout)
+
+    native.run = restarting
+    assert native.sso() == {"changed": True, "pending": False}
+    assert state["fired"] == 1 and monitor.enabled is True
+    assert monitor.mutations.count(("dashboard", "sso", "enable", "oauth2")) == 1
 
 
 def upstream_oauth2_proxy(spec):

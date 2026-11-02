@@ -711,7 +711,8 @@ class UnitWorker(ceph_native_resources.ResourceWorker):
     def sso(self):
         """The unit's one dashboard write, on the bootstrap host after every proxy host proved its rendered configuration: enable the
         dashboard's OAuth2 single sign-on unless it already is, then read it back. The dashboard refuses the enable until the
-        orchestrator's daemon list shows a running oauth2-proxy, so until then nothing is written and the answer is pending."""
+        orchestrator's daemon list shows a running oauth2-proxy, so until then nothing is written and the answer is pending. A repeat
+        across a manager restart first reads the option back, so an enable the lost reply hid is never sent again."""
         require(self.markers.owned(), "ownership")
         require(self.ceph("fsid") == {"fsid": self.request["fsid"]}, "ownership")
         self.sso_proxy()
@@ -722,7 +723,15 @@ class UnitWorker(ceph_native_resources.ResourceWorker):
         require(isinstance(rows, list) and all(isinstance(row, dict) for row in rows), "native-output")
         if not any(row.get("daemon_type") == "oauth2-proxy" and type(row.get("status")) is int and row["status"] == 1 for row in rows):
             return {"changed": False, "pending": True}
-        self.manager_declare(self.tunnel_effect, "dashboard", "sso", "enable", "oauth2", json_result=False)
+        sent = []
+
+        def enable():
+            if sent and ceph_native_observability.sso_enabled(self):
+                return
+            sent.append(True)
+            self.tunnel_effect("dashboard", "sso", "enable", "oauth2", json_result=False)
+
+        self.manager_declare(enable, module=("dashboard", "sso", "status"))
         require(ceph_native_observability.sso_enabled(self), "not-ready")
         return {"changed": True, "pending": False}
 

@@ -1234,6 +1234,7 @@ class Worker:
         self.pause = time.sleep
         self.horizon = None
         self.execution_deadline = None
+        self.command_deadline = None
         self.blocking = []
         self.base_ready = False
         from ansible_collections.bootwright.core.plugins.module_utils import native_specializations
@@ -1257,6 +1258,8 @@ class Worker:
         return base + "; specializations " + kept if kept else base
 
     def command(self, argv, data=b"", timeout=60, json_result=True, recover=None, secrets=()):
+        if self.command_deadline is not None:
+            timeout = max(1, min(timeout, self.command_deadline - self.clock()))
         code, output = self.run(argv, data=data, timeout=timeout)
         if code != 0 and (recover is None or not recover(code, output)):
             raise NativeFailure("native-command", self.native_coordinate(), getattr(output, "stderr", b"") or output, secrets=(data,) + tuple(secrets))
@@ -1357,27 +1360,48 @@ class Worker:
             return None
         return manager["active_gid"]
 
-    def manager_declare(self, action, *args, **options):
-        """Repeat an idempotent manager-served declaration, bounded, only while the manager it was sent to restarts or loads: a failure
-        is the command's own answer, raised at once, only when the available active manager read before the attempt still holds one
-        interval later and its orchestrator answers; a manager first read after a failed attempt is the one the next attempt asks."""
+    def manager_declare(self, action, *args, module=None, **options):
+        """Repeat an idempotent manager-served declaration, bounded, only while the manager it was sent to restarts or loads what serves
+        it: a failure is the command's own answer, raised at once, only when the available active manager read before the attempt still
+        holds one interval later and its orchestrator and, where named, the declaring module's read-only `module` command answer. A
+        manager first read after a failed attempt is the one the next attempt asks; every command in the wait ends by its deadline."""
         deadline = self.wait_deadline()
-        asked = self.manager_instance()
-        while True:
-            cause = None
-            try:
-                with self.manager_served():
-                    return action(*args, **options)
-            except ManagerRefusal as error:
-                cause = getattr(error, "native_cause", error)
-            if self.clock() + MANAGER_INTERVAL >= deadline:
-                raise cause
-            self.pause(MANAGER_INTERVAL)
-            answers = self.orchestrator_answers()
-            settled = self.manager_instance()
-            if answers and settled is not None and settled == asked:
-                raise cause
-            asked = settled
+        with self.commands_by(deadline):
+            asked = self.manager_instance()
+            while True:
+                cause = None
+                try:
+                    with self.manager_served():
+                        return action(*args, **options)
+                except ManagerRefusal as error:
+                    cause = getattr(error, "native_cause", error)
+                if self.clock() + MANAGER_INTERVAL >= deadline:
+                    raise cause
+                self.pause(MANAGER_INTERVAL)
+                answers = self.orchestrator_answers() and (module is None or self.module_answers(module))
+                settled = self.manager_instance()
+                if (answers and settled is not None and settled == asked) or self.clock() + MANAGER_INTERVAL >= deadline:
+                    raise cause
+                asked = settled
+
+    @contextlib.contextmanager
+    def commands_by(self, deadline):
+        """Each native command started within ends by `deadline`, or an enclosing one's earlier deadline."""
+        previous = self.command_deadline
+        self.command_deadline = deadline if previous is None else min(previous, deadline)
+        try:
+            yield
+        finally:
+            self.command_deadline = previous
+
+    def module_answers(self, command):
+        """A manager module's read-only command answers: the restarted manager has loaded that module."""
+        try:
+            with self.manager_served():
+                self.ceph(*command, json_result=False)
+        except ManagerRefusal:
+            return False
+        return True
 
     def orchestrator_answers(self):
         """The active manager's orchestrator answers with cephadm: a restarted manager has finished loading it."""

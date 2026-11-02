@@ -2096,11 +2096,13 @@ every manager-served command it reaches survives a restart: a read repeats,
 bounded by the manager wait, while a restarting manager cannot answer; an
 observation reads it as unfinished work; and a declaration (`orch apply`,
 `nfs export apply`, `smb apply`, `dashboard sso enable`) is made again,
-after reading back an NFS export a lost reply may have applied, until the
-manager wait ends. A failure is the command's own answer, and refuses as
-before, only when the available manager it was sent to still holds one
-interval later and its orchestrator answers with cephadm. A concurrent manager restart therefore never fails an
-unclaimed block. Readiness stays cluster-wide: a sibling's transient
+after reading back an NFS export or the dashboard's SSO option a lost reply
+may have applied, until the manager wait ends; each of its commands ends by
+that deadline. A failure is the command's own answer, and refuses as before,
+only when the available manager it was sent to still holds one interval
+later, its orchestrator answers with cephadm, and the declaring `nfs`, `smb`
+or `dashboard` module answers a read-only command. A concurrent manager
+restart therefore never fails an unclaimed block. Readiness stays cluster-wide: a sibling's transient
 health check delays, and never fails, a block before its readiness deadline.
 Per-invocation scratch is private. Reservations prevent conflicting local
 contexts from claiming the same target; a native name, process-local mutex or

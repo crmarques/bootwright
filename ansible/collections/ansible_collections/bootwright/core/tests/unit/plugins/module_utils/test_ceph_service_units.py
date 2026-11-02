@@ -907,7 +907,7 @@ def test_nfs_unit_refuses_at_the_manager_wait_when_the_orchestrator_never_answer
         native.unit()
     assert not isinstance(caught.value, ceph_native.ManagerRefusal)
     assert native.clock() >= ceph_native.MANAGER_WAIT - ceph_native.MANAGER_INTERVAL
-    assert state["applies"] == ceph_native.MANAGER_WAIT // ceph_native.MANAGER_INTERVAL and monitor.mutations == []
+    assert state["applies"] == ceph_native.MANAGER_WAIT // ceph_native.MANAGER_INTERVAL - 1 and monitor.mutations == []
 
 
 def test_nfs_unit_refuses_a_declaration_once_a_first_unread_manager_settles(tmp_path):
@@ -920,3 +920,27 @@ def test_nfs_unit_refuses_a_declaration_once_a_first_unread_manager_settles(tmp_
         native.unit()
     assert state["dumps"] >= 2 and state["applies"] == 2 and native.clock() == 2 * ceph_native.MANAGER_INTERVAL
     assert all(markers.read("service-" + name_of(value) + "-complete.json") is None for value in request["service"]["documents"])
+
+
+def test_nfs_unit_declaration_wait_ends_every_command_by_its_deadline(tmp_path):
+    request = unit_request("haproxy")
+    markers = markers_for(tmp_path, request)
+    monitor = Monitor(request)
+    answer, held, started = monitor.run, [], []
+
+    def hanging(argv, data=b"", timeout=60):
+        found = tuple(argv[argv.index("--format") + 2:])
+        if found in (("orch", "apply", "-i", "-"), ("orch", "status")):
+            started.append((held[0].clock(), timeout))
+            held[0].pause(timeout)
+            raise ceph_native.Refusal("native-timeout")
+        return answer(argv, data=data, timeout=timeout)
+
+    monitor.run = hanging
+    native = worker(monitor, markers)
+    held.append(native)
+    with pytest.raises(ceph_native.Refusal, match="^native-timeout$"):
+        native.unit()
+    deadline = started[0][0] + ceph_native.MANAGER_WAIT
+    assert len(started) > 2 and all(begin + timeout <= deadline for begin, timeout in started)
+    assert native.clock() <= deadline and native.command_deadline is None

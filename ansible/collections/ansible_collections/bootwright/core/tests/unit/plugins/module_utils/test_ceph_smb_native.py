@@ -1247,3 +1247,27 @@ def test_an_apply_a_restarting_manager_failed_is_made_again_only_across_the_rest
         with pytest.raises(ceph_native.Refusal, match="^smb-result$") as caught:
             worker(value, monitor, markers).smb_apply(private_of(value))
         assert caught.type is ceph_native.Refusal and state["applies"] == 1
+
+
+def test_an_apply_resent_before_the_smb_module_loads_is_made_again_until_the_module_answers():
+    value, monitor, markers = request("ceph.smb.join.auth"), Monitor(), Markers()
+    answer, state = monitor.run, {"gid": 4100, "applies": 0, "loading": 0, "probes": 0}
+    unloaded = b"Error ENOTSUP: Module 'smb' is not enabled/loaded (required by command 'smb apply'): use `ceph mgr module enable smb`"
+
+    def run(argv, data=b"", timeout=60):
+        command = tuple(argv[argv.index("--format") + 2:])
+        if command == ("mgr", "dump"):
+            return 0, json.dumps({"available": True, "active_gid": state["gid"]}).encode()
+        state["applies"] += command[:2] == ("smb", "apply")
+        if command[:1] == ("smb",) and state["loading"]:
+            state["loading"] -= 1
+            state["probes"] += command == ("smb", "cluster", "ls")
+            return 95, ceph_native.NativeOutput(b"", unloaded)
+        if command[:2] == ("smb", "apply") and state["applies"] == 1:
+            state["gid"], state["loading"] = state["gid"] + 1, 3
+            return 110, ceph_native.NativeOutput(b"", b"Error ETIMEDOUT: " + NATIVE_SENTINEL.encode())
+        return answer(argv, data=data, timeout=timeout)
+
+    monitor.run = run
+    assert worker(value, monitor, markers).smb_apply(private_of(value)) == {"changed": True}
+    assert state["applies"] == 3 and state["probes"] == 2 and state["loading"] == 0
