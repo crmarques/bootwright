@@ -48,6 +48,24 @@ worker thread. `UnitsWorkersTest` reads the `-n` value from the command
 `ansible-test units --explain` generates
 ([B798](../../specs/milestones/delivered.md#x278--the-owners-choices-for-b508-and-b798)).
 
+## A no-op pause over the real clock
+
+On 2026-11-02 one unit-test worker grew to 26 GB and the kernel OOM killer
+froze the laptop, twice. `Worker.manager_declare` repeats a declaration
+until `MANAGER_WAIT` passes on `worker.clock`. A test fake had replaced
+`pause` with a no-op but left the real monotonic clock. A lost reply that never
+cleared then spun for 300 real seconds, and every pass appended the spec to
+the fake monitor's logs. The same fake's `mgr dump` lacked the `active_gid`
+real Ceph reports, so the same-manager exit never fired.
+
+A fake that replaces `pause` must advance the clock it bounds, as `worker` in
+`tests/unit/plugins/module_utils/test_ceph_service_units.py` now does: a
+retry that never settles then fails in milliseconds at its bound. A fake
+monitor answers each field the code under test branches on. Reproduce a
+suspected runaway under a cap, such as
+`systemd-run --user --scope -p MemoryMax=2G -p MemorySwapMax=0`, one file at
+a time.
+
 ## Selection traps
 
 - quick-test once took its base from `origin/main` first. With local `main`

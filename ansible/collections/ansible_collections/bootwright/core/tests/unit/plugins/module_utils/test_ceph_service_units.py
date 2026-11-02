@@ -151,8 +151,11 @@ def records(markers):
 
 
 def worker(monitor, markers):
+    """A pause advances the worker's clock: a wait that never settles ends at its bound at once, never busy-waits real time."""
     native = ceph_native_units.UnitWorker(monitor.request, "node-1", run=monitor.run, markers=markers)
-    native.pause = lambda seconds: None
+    elapsed = [0.0]
+    native.clock = lambda: elapsed[0]
+    native.pause = lambda seconds: elapsed.__setitem__(0, elapsed[0] + seconds)
     return native
 
 
