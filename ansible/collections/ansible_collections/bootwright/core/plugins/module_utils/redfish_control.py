@@ -266,6 +266,9 @@ class Client:
                     doing, _shown(url), "its declared trust bundle" if self.ca_data else "the system trust store"
                 )) from None
             self.lost = transport_faults.lost(failed)
+            # urllib wraps any OSError from h.request in URLError, a send cut off part way included. That
+            # still counts as unsent because http.client joins the headers and a bytes body into one send(),
+            # and a Redfish POST or PATCH is small enough that the controller cannot receive it complete.
             self.unsent = self.lost and isinstance(failed, urllib.error.URLError)
             return 0, None, {}
 
