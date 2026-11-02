@@ -255,6 +255,28 @@ func stateMachineRows() map[string]stateMachineRow {
 				},
 			},
 		},
+		"destroy paused": {
+			transition: "continue that exact destroy",
+			cases: map[string]stateMachineCase{
+				"a removal paused at the online boundary": {
+					arrange: func(t *testing.T, h *harness) {
+						h.capability.definitions = []reconciliation.BlockDefinition{
+							stagedDefinition("host", reconciliation.StageSubstrates),
+							stagedDefinition("machine", reconciliation.StageMachines, "host"),
+							stagedDefinition("installation", reconciliation.StageClusters, "machine"),
+							stagedDefinition("storage", reconciliation.StageClusters, "installation"),
+						}
+						h.service.capabilities = testResolver{capability: &onlineTestCapability{testCapability: h.capability, online: map[string]bool{"storage": true}}}
+						completeApply(t, h)
+						h.capability.quiescence = map[string]Quiescence{"machine": {State: Live, Reason: "its domain is running"}}
+						if result, err := destroy(h); firstCode(err) != "lifecycle.live" || result == nil || result.Receipt.State != string(reconciliation.OperationPaused) {
+							t.Fatalf("online boundary = %+v (%v)", result, err)
+						}
+					},
+					apply: "refuse", destroy: "continue", previewed: reconciliation.Destroy, next: "continue-destroy", reopens: true, shown: continuing("continue-destroy"),
+				},
+			},
+		},
 		"destroy failed": {
 			transition: "start a fresh destroy of what it has not removed",
 			cases: map[string]stateMachineCase{

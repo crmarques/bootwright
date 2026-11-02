@@ -574,6 +574,7 @@ complete, synchronized bytes.
 | apply unknown | continue it, resolving every unproved block first and then retrying what resolution leaves `failed` (D146), or start a fresh destroy of the blocks it started, which resolves them first |
 | apply done | start a fresh destroy of its whole frozen plan and its predecessors', which first resolves every unproved block; an `apply` of the unchanged input settles without effect, of an input that only adds add-on instances starts an [additive apply](#additive-apply), and of any other changed input refuses; that apply refuses while a block of these plans is not `done`, naming that destroy and `context delete --purge` |
 | destroy running | continue that exact destroy |
+| destroy paused | continue that exact destroy |
 | destroy failed | start a fresh destroy of what it has not removed |
 | destroy unknown | continue it, resolving every unproved block first and then retrying what resolution leaves `failed` (D146) |
 
