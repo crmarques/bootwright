@@ -477,6 +477,22 @@ def test_no_running_daemon_leaves_the_bucket_unready_and_names_its_backend(ready
     rgw.__init__(cluster)
 
 
+def test_a_manager_restart_during_the_daemon_read_is_waited_out(ready):
+    cluster, markers, rgw = ready
+    answer, refused = cluster.run, []
+
+    def restarting(argv, data=b"", timeout=60):
+        if tuple(argv[argv.index("--format") + 2:]) == ("orch", "ps") and not refused:
+            refused.append(argv)
+            return 2, ceph_native.NativeOutput(b"", b"Error ENOENT: No orchestrator configured")
+        return answer(argv, data, timeout)
+
+    cluster.run = restarting
+    assert bucket_worker(cluster, markers).object_bucket() == {"changed": True}
+    assert refused and len(creates(rgw)) == 1
+    assert markers.read("object-bucket-complete.app-data.json") == intent()
+
+
 def test_a_daemon_answering_a_server_error_refuses_and_the_request_goes_to_no_second_daemon(ready):
     cluster, markers, rgw = ready
     failing = Gateway(cluster, ("127.0.0.2", rgw.port))

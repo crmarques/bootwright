@@ -1222,8 +1222,7 @@ class BucketWorker(UserWorker):
     def targets(self):
         """Each running rgw daemon of the backend service, in daemon name order, by the address it serves the frozen port on."""
         bucket = self.bucket()
-        with self.manager_served():
-            rows = self.ceph("orch", "ps")
+        rows = self.manager_retry(self.ceph, "orch", "ps")
         require(isinstance(rows, list) and all(isinstance(row, dict) for row in rows), "native-output")
         found = []
         for row in rows:
