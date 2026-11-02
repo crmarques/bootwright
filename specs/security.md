@@ -586,7 +586,11 @@ backend and nothing else. It takes no system or personal configuration, no
 known hosts but the one entry the request binds, no proxy, control socket,
 agent, forwarding or ambient identity, and carries `ServerAliveInterval=15` and
 `ServerAliveCountMax=3`, so a peer that stops answering ends the connection
-rather than the run's deadline.
+rather than the run's deadline. The runner sets no SSH reconnection retry: a
+task whose connection ends is reported unreachable and never sent again,
+because ansible-core's retry repeats the whole command, effects included, and
+not only the connection that carries it
+([B1045](milestones/m2.md#b1045)).
 
 The Ceph host, cluster and SMB blocks' controller sessions take the
 controller's crypto-policy back end, reduced to its crypto directives, and the

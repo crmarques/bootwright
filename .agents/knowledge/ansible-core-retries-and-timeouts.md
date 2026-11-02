@@ -55,3 +55,26 @@ separate step outside `no_log`, as the
 of a management controller's refusal; the collection's
 [structural rules](../../ansible/collections/ansible_collections/bootwright/core/tests/unit/test_role_boundaries.py)
 hold every role to it.
+
+The ssh connection plugin's `reconnection_retries` (`[connection]` or
+`[ssh_connection]` `retries`, `ANSIBLE_SSH_RETRIES`, `ansible_ssh_retries`;
+default 0) is documented as "Number of attempts to connect", but it retries
+the whole command, not the connection alone. Read in the qualified
+ansible-core 2.21.4, `lib/ansible/plugins/connection/ssh.py`: the
+`_ssh_retry` decorator wraps `_run`, which `exec_command` calls with the
+module's command line, and it runs the call again, after `2 ** attempt - 1`
+seconds capped at 30, whenever ssh exits 255 or the call raises. ssh exits 255
+both when it cannot connect and when an established session is lost while
+the remote command runs, and with pipelining the module source is the `ssh`
+process's stdin, so `_bare_run` turns that 255 into `AnsibleConnectionFailure`
+(`Data could not be sent to remote host`) and the decorator sends the module
+again. A remote command that itself exits 255 is retried the same way. Nothing
+in the plugin tells a refused or timed-out connect from a session that dropped
+after the command started, so enabling it can run a non-idempotent effect
+twice, possibly while the first run still continues on the host. Bootwright's
+runner therefore leaves it at 0 (`ansible/ansible.cfg`, and the SSH arm of
+`inventory()` in `internal/reconciliation/ansiblerunner/runner.go`); a
+connection-only retry needs a mechanism that re-establishes the connection
+without resending an effect, which
+[B1045](../../specs/milestones/m2.md#b1045) records. The rule it informs is
+the [runner's SSH arm](../../specs/security.md#network-remote-systems-and-privilege).
