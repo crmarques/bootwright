@@ -28,7 +28,7 @@ func TestSecretSetFlagMistakesExitTwoNamingTheType(t *testing.T) {
 		{"opaque", "opaque", values, "--value-file <path>", [][]string{{}, {"--certificate-file", file}, {"--username", "operator", "--value-file", file}, {"--value-file", file, "--password-stdin=false"}}},
 		{"token", "token", values, "--value-file <path>", [][]string{{"--password-stdin"}, {"--private-key-file", file}}},
 		{"docker", "dockerConfigJson", values, "--value-file <path>", [][]string{{"--public-key-file", file}}},
-		{"password", "usernamePassword", "--username <username> with --password-file <path> or --password-stdin", "--username <username> --password-stdin", [][]string{{"--username", "operator"}, {"--password-file", file}, {"--value-file", file}}},
+		{"password", "usernamePassword", "--username <username> with --password-file <path> or --password-stdin", "--username <username> --password-file <path>", [][]string{{"--username", "operator"}, {"--password-file", file}, {"--value-file", file}}},
 		{"ca", "caBundle", "--certificate-file <path>", "--certificate-file <path>", [][]string{{"--certificate-file", file, "--private-key-file", file}, {"--value-stdin"}}},
 		{"tls", "tlsCertificate", "--certificate-file <path> --private-key-file <path>", "--certificate-file <path> --private-key-file <path>", [][]string{{"--certificate-file", file}, {"--private-key-file", file}}},
 		{"ssh", "sshKeyPair", "--private-key-file <path> [--public-key-file <path>]", "--private-key-file <path> [--public-key-file <path>]", [][]string{{"--public-key-file", file}, {"--certificate-file", file, "--private-key-file", file}}},

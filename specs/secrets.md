@@ -73,8 +73,8 @@ type can use a [generated source](api/secrets.md#generated-source):
 
 A flag set that does not fit the declared type, including an inapplicable flag
 supplied explicitly empty or false, refuses with `secret.input` naming the
-Secret, its type and the flags it takes, before any material is read or the
-store is opened, and exits `2` as a usage failure with concise help. The former
+Secret, its type and the flags it takes, and a remedy with the file flags of
+its type, before any material is read or the store is opened, and exits `2` as a usage failure with concise help. The former
 source flags have no aliases. Only the alternatives no type takes together,
 `--value-file` with `--value-stdin`, `--password-file` with `--password-stdin`
 and `--value-stdin` with `--password-stdin`, refuse before the context is read,
@@ -655,8 +655,9 @@ confirm, refuses with `secret.store.conflict`, writes nothing, and names
 `secret check` and then the same command with `--yes`. A missing
 or stale Secret's remedy is by its source: `secret generate --name <name>` for
 a generated Secret, which re-mints missing or stale material, and
-`secret set --name <name>` with the flags of its type for a contextStore
-Secret; current material its validation refuses adds `--renew` for a generated
+`secret set --name <name>` with the file flags of its type for a contextStore
+Secret, which for `usernamePassword` is `--username <username> --password-file <path>`
+and never `--password-stdin`, whatever the host's sudo policy; current material its validation refuses adds `--renew` for a generated
 Secret. A name the context does not declare refuses with `secret.declaration`
 and points at `secret check`. Bind classifies every requested Secret before it
 reads any material, and one refusal names every missing or stale Secret at

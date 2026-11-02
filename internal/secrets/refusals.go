@@ -9,29 +9,27 @@ import (
 )
 
 // inputShape is what secret set takes for one Secret type: the flags it
-// admits, the shape a refusal names, the flags a remedy shows and the flags
-// the retired file source's remedy names.
+// admits, the shape a refusal names and the file flags every remedy shows.
 type inputShape struct {
 	fields InputFields
 	takes  string
-	remedy string
-	file   string
+	flags  string
 }
 
 func shapeOf(kind string) (inputShape, bool) {
 	switch kind {
 	case "opaque", "token", "dockerConfigJson":
-		return inputShape{ValueFileInput | ValueStdinInput, "--value-file <path> or --value-stdin", "--value-file <path>", "--value-file <path>"}, true
+		return inputShape{ValueFileInput | ValueStdinInput, "--value-file <path> or --value-stdin", "--value-file <path>"}, true
 	case "usernamePassword":
-		return inputShape{UsernameInput | PasswordFileInput | PasswordStdinInput, "--username <username> with --password-file <path> or --password-stdin", "--username <username> --password-stdin", "--username <username> --password-file <path>"}, true
+		return inputShape{UsernameInput | PasswordFileInput | PasswordStdinInput, "--username <username> with --password-file <path> or --password-stdin", "--username <username> --password-file <path>"}, true
 	case "caBundle":
-		return inputShape{CertificateFileInput, "--certificate-file <path>", "--certificate-file <path>", "--certificate-file <path>"}, true
+		return inputShape{CertificateFileInput, "--certificate-file <path>", "--certificate-file <path>"}, true
 	case "tlsCertificate":
 		flags := "--certificate-file <path> --private-key-file <path>"
-		return inputShape{CertificateFileInput | PrivateKeyFileInput, flags, flags, flags}, true
+		return inputShape{CertificateFileInput | PrivateKeyFileInput, flags, flags}, true
 	case "sshKeyPair":
 		flags := "--private-key-file <path> [--public-key-file <path>]"
-		return inputShape{PrivateKeyFileInput | PublicKeyFileInput, flags, flags, flags}, true
+		return inputShape{PrivateKeyFileInput | PublicKeyFileInput, flags, flags}, true
 	}
 	return inputShape{}, false
 }
@@ -90,7 +88,7 @@ func Command(contextName, verb string) string {
 
 // Remedy is the command that gives a declared Secret its material: generate
 // for a generated Secret, which re-mints missing or stale material and, with
-// renew, replaces material that is current but invalid; set with the flags of
+// renew, replaces material that is current but invalid; set with the file flags of
 // its type otherwise.
 func Remedy(contextName string, d Declaration, renew bool) string {
 	if d.Source == "generated" {
@@ -108,7 +106,7 @@ func Remedy(contextName string, d Declaration, renew bool) string {
 }
 
 func setRemedy(contextName, name string, shape inputShape) string {
-	return Command(contextName, "set") + " --name " + name + " " + shape.remedy
+	return Command(contextName, "set") + " --name " + name + " " + shape.flags
 }
 
 // Refusal is one secret.<code> error about the Secret it names. A refusal

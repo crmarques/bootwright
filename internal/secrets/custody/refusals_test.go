@@ -5,6 +5,7 @@ import (
 	"errors"
 	"reflect"
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/crmarques/bootwright/internal/diagnostics"
@@ -68,6 +69,27 @@ func TestBindNamesEveryMissingAndStaleSecret(t *testing.T) {
 	want = []diagnostics.Diagnostic{{Severity: "error", Code: "secret.part", Message: "synthetic validation refusal", Object: secretIdentity("alpha"), Remediation: "bootwright secret generate --context fixture --name alpha --renew"}}
 	if found := diagnostics.Of(err); !reflect.DeepEqual(found, want) || session.writes != writes {
 		t.Fatalf("an invalid stored version gave %+v and %d writes, want %+v and none", found, session.writes-writes, want)
+	}
+}
+
+// A usernamePassword Secret with no stored material is remedied by the file
+// flag whatever the host's sudo policy, never by the standard-input flag: the
+// secret check row, the check diagnostic and the show refusal all name it.
+func TestMissingUsernamePasswordRemedyNamesThePasswordFile(t *testing.T) {
+	const remedy = "bootwright secret set --context fixture --name login --username <username> --password-file <path>"
+	service, _, _, _ := serviceFixture(t, typedDeclarationYAML("login", "usernamePassword"))
+	ctx := context.Background()
+	rows, err := service.Readiness(ctx, ReadinessRequest{})
+	if err != nil || !reflect.DeepEqual(rows, []ReadinessRow{{Name: "login", Status: "missing", Remedy: remedy}}) {
+		t.Fatalf("readiness rows = %+v (%v), want one missing row remedied by %q", rows, err, remedy)
+	}
+	_, checkErr := service.Check(ctx, CheckRequest{})
+	_, showErr := service.Show(ctx, ShowRequest{Name: "login", Part: secrets.PasswordPart})
+	for name, err := range map[string]error{"check": checkErr, "show": showErr} {
+		found := diagnostics.Of(err)
+		if len(found) != 1 || found[0].Code != "secret.input" || found[0].Remediation != remedy || strings.Contains(found[0].Remediation, "--password-stdin") {
+			t.Fatalf("%s diagnostics = %+v, want the missing-material refusal remedied by %q", name, found, remedy)
+		}
 	}
 }
 
@@ -191,7 +213,7 @@ func TestSetShapeMistakesAreUsageRefusalsNamingTheType(t *testing.T) {
 		{"token", "token", values, "--value-file <path>", secrets.Input{ValueStdin: true}, value},
 		{"docker", "dockerConfigJson", values, "--value-file <path>", secrets.Input{ValueFile: "v"}, value},
 		{
-			"password", "usernamePassword", "--username <username> with --password-file <path> or --password-stdin", "--username <username> --password-stdin",
+			"password", "usernamePassword", "--username <username> with --password-file <path> or --password-stdin", "--username <username> --password-file <path>",
 			secrets.Input{Username: "operator", PasswordStdin: true},
 			[]secrets.Input{{}, {ValueFile: "v"}, {Username: "operator"}, {PasswordStdin: true}, {Username: "operator", PasswordFile: "p", PasswordStdin: true}, {Provided: secrets.ValueFileInput, Username: "operator", PasswordStdin: true}},
 		},
@@ -237,7 +259,7 @@ func TestSetShapeMistakesAreUsageRefusalsNamingTheType(t *testing.T) {
 	for _, username := range usernames {
 		refused(t, "password", secrets.Input{Username: username, PasswordStdin: true},
 			"Secret password takes a --username that is one nonempty UTF-8 line of at most 1 MiB with no whitespace or colon",
-			"bootwright secret set --context fixture --name password --username <username> --password-stdin")
+			"bootwright secret set --context fixture --name password --username <username> --password-file <path>")
 	}
 	for _, declared := range types {
 		if _, err := service.Set(context.Background(), SetRequest{Name: declared.name, Input: declared.valid}); err != nil {

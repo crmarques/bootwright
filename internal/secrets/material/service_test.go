@@ -201,7 +201,7 @@ func TestAcquireRejectsInvalidInputShapesBeforeReading(t *testing.T) {
 			found := diagnostics.Of(err)[0]
 			remedy := "bootwright secret set --context lab --name fixture "
 			if test.declaration.Type == "usernamePassword" {
-				remedy += "--username <username> --password-stdin"
+				remedy += "--username <username> --password-file <path>"
 			} else if test.declaration.Type == "caBundle" {
 				remedy += "--certificate-file <path>"
 			} else {

@@ -257,5 +257,5 @@ func fileSourceRemedy(name, kind string, kindDefault bool) string {
 
 func setFileFlags(kind string) string {
 	shape, _ := shapeOf(kind)
-	return shape.file
+	return shape.flags
 }
