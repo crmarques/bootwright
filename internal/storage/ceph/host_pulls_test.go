@@ -5,6 +5,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/diagnostics"
@@ -122,5 +123,22 @@ func TestEveryAuxiliaryImageFitsTheGroupBoundInBatchesOfThree(t *testing.T) {
 		if validPulls(changed) {
 			t.Fatalf("%s pulls admitted", name)
 		}
+	}
+}
+
+func TestHostApplyMarginCoversEveryRoleStepOfTheLargestPullPlan(t *testing.T) {
+	auxiliary, candidates := []AuxiliaryReference{}, map[string][]string{}
+	for _, name := range AuxiliaryNames {
+		auxiliary = append(auxiliary, AuxiliaryReference{Name: name})
+		candidates[name] = []string{"node-1"}
+	}
+	pulls := hostPulls(candidates, auxiliary, "node-1")
+	steps := len(hostGroups(reconciliation.Apply, "machine-1", pulls)) + 1
+	if len(pulls) != 5 || steps != 11 || maxHostRoleSteps() != steps || hostRoleMargin() < steps*hostRoleStepOverhead {
+		t.Fatalf("%d batches, %d role steps, margin %d s for %d steps", len(pulls), steps, hostRoleMargin(), maxHostRoleSteps())
+	}
+	calls := hostPackagesCall + hostImagesBudget + hostCallSlack + hostLaterCalls*nativeCall
+	if hostDeadline("apply") != time.Duration(calls+steps*hostRoleStepOverhead)*time.Second {
+		t.Fatalf("host apply deadline %s", hostDeadline("apply"))
 	}
 }

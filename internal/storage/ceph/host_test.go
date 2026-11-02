@@ -170,7 +170,7 @@ func TestHostPlanSecretsAreItsOwnHostsOnly(t *testing.T) {
 }
 
 func TestDeadlinesFitTheRunCeilingForThreeAndTheLargestAdmittedCluster(t *testing.T) {
-	if hostDeadline("apply") != 9025*time.Second || hostDeadline("apply") > lifecycle.MaxDeadline {
+	if hostDeadline("apply") != 9075*time.Second || hostDeadline("apply") > lifecycle.MaxDeadline {
 		t.Fatalf("host block deadline %s", hostDeadline("apply"))
 	}
 	if hostDeadline("observe") > lifecycle.MaxDeadline || hostDeadline("destroy") > lifecycle.MaxDeadline {
@@ -308,7 +308,7 @@ func TestHostApplyLendsOnlyItsHostsMaterialAndTheRegistryAsAProtectedFile(t *tes
 	if !sent.NativeErrors {
 		t.Fatal("Ceph invocation did not opt in to typed native errors")
 	}
-	if sent.Implementation != HostImplementation || sent.Operation != "apply" || sent.Variable != "bootwright_ceph_host" || sent.Deadline != 9025*time.Second ||
+	if sent.Implementation != HostImplementation || sent.Operation != "apply" || sent.Variable != "bootwright_ceph_host" || sent.Deadline != 9075*time.Second ||
 		sent.Placement != (machine.Placement{Connection: machine.ConnectionLocal, Machine: "controller"}) {
 		t.Fatalf("host run %+v", sent)
 	}

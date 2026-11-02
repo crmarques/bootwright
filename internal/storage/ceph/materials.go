@@ -295,10 +295,26 @@ func clusterBudgetFailure(cluster string, hosts int, stretch bool) error {
 	return failure("lifecycle.unsupported", reason, remedy)
 }
 
+const (
+	hostPackagesCall     = 1980
+	hostImagesBudget     = 4285
+	hostCallSlack        = 60
+	hostLaterCalls       = 4
+	hostRoleStepOverhead = 10
+)
+
+func maxHostRoleSteps() int {
+	return 2 + (len(AuxiliaryNames)+PullConcurrency-1)/PullConcurrency + hostLaterCalls
+}
+
+func hostRoleMargin() int {
+	return maxHostRoleSteps() * hostRoleStepOverhead
+}
+
 func hostDeadline(operation string) time.Duration {
 	switch operation {
 	case "apply":
-		return time.Duration(1980+4345+4*660+60) * time.Second
+		return time.Duration(hostPackagesCall+hostImagesBudget+hostCallSlack+hostLaterCalls*nativeCall+hostRoleMargin()) * time.Second
 	case "observe":
 		return time.Duration(660+60) * time.Second
 	}

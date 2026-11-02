@@ -496,7 +496,11 @@ container_image_node_exporter by digest together`, so the running row names
 every image then downloading; at most five batches keep a block within its 32
 groups. Only the pulls run under the longer host launcher, and together within
 its 4285 s: each pull call receives what the previous ones left of that budget
-and refuses `image-pull` once it is spent. The runtime profile runs under the
+and refuses `image-pull` once it is spent. The host block's apply deadline is
+the packages call's 1980 s, that budget with the last pull call's 60 s
+transport slack, the four later 660 s calls, and 10 s for each role step's own
+start-up and reports, counted for the largest pull plan (eleven steps with
+five batches), 9075 s in all. The runtime profile runs under the
 ordinary native ceiling and refuses a digest of the host's pulls that they
 did not record. A final read proves the package decision the first step
 reported and publishes the evidence, and a step a resumed attempt already
