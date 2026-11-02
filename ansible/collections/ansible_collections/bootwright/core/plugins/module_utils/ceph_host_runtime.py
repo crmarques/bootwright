@@ -1205,6 +1205,15 @@ def cache_require(condition):
     ceph_native.require(condition, "cache-unproved")
 
 
+@contextlib.contextmanager
+def directory_proof():
+    """A cluster directory proof that fails is the cache's own refusal, never an unclassified exception after an effect."""
+    try:
+        yield
+    except observe.ObservationRefusal:
+        raise ceph_native.Refusal("cache-unproved") from None
+
+
 def cache_metadata(info, ready=False):
     result = {"dev": info.st_dev, "inode": info.st_ino, "uid": info.st_uid, "gid": info.st_gid,
               "mode": stat.S_IMODE(info.st_mode), "size": info.st_size, "mtimeNS": info.st_mtime_ns}
@@ -1276,20 +1285,23 @@ class Cache:
 
     @contextlib.contextmanager
     def directory(self, create=False):
-        # The wrapped contexts close their descriptors on any exit; the proof after the yield is deliberately success-only.
-        # pylint: disable-next=contextmanager-generator-missing-cleanup
-        with observe.root_directory(self.profile["uid"]) as root:
-            cache_require(root is not None)
-            if create:
-                self.prepare_directory(root)
-            cache_require(observe.entries(root) == [self.request["fsid"]])
-            # pylint: disable-next=contextmanager-generator-missing-cleanup
-            with observe.cluster_directory(root, self.request["fsid"], (observe.ROOT_UID, self.profile["uid"])) as cluster:
+        # A failed body unwinds the stack with its own exception, which closes every descriptor without a re-proof; only a
+        # successful body runs the post-use proofs, under the cache's refusal.
+        with contextlib.ExitStack() as stack:
+            with directory_proof():
+                root = stack.enter_context(observe.root_directory(self.profile["uid"]))
+                cache_require(root is not None)
+                if create:
+                    self.prepare_directory(root)
+                cache_require(observe.entries(root) == [self.request["fsid"]])
+                cluster = stack.enter_context(observe.cluster_directory(root, self.request["fsid"], (observe.ROOT_UID, self.profile["uid"])))
                 info = os.fstat(cluster)
                 record = self.markers.read("cache-directory.json")
                 cache_require(canonical(record) == canonical({"scope": self.directory_scope(), "identity": {"dev": info.st_dev, "inode": info.st_ino}}))
                 cache_require(stat.S_IMODE(info.st_mode) == 0o700)
-                yield cluster
+            yield cluster
+            with directory_proof():
+                stack.close()
 
     @contextlib.contextmanager
     def held(self, directory, name, record, *, ready=False, links=(1,), retire=False):

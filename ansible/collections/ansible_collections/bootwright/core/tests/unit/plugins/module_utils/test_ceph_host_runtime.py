@@ -27,7 +27,8 @@ from pathlib import Path
 import pytest
 
 from ansible_collections.bootwright.core.plugins.module_utils import (
-    bounded_process, ceph_host_runtime as runtime, ceph_host_route_probe as probe, ceph_host_worker, ceph_native, ceph_native_worker,
+    bounded_process, ceph_host_runtime as runtime, ceph_host_route_probe as probe, ceph_host_worker, ceph_native, ceph_native_observe as observe,
+    ceph_native_worker,
 )
 
 IMAGE = "cp.icr.io/cp/ibm-ceph/ceph-9-rhel9@sha256:" + "a" * 64
@@ -1292,6 +1293,118 @@ def test_a_cache_payload_that_is_not_the_authenticated_one_refuses(cache_worker)
         handle.write(b"foreign bytes")
     with pytest.raises(ceph_native.Refusal, match="^runtime-profile$"):
         runtime.Cache(worker)
+
+
+REAL_CACHE_DIRECTORY = runtime.Cache.__dict__["directory"]
+
+
+@pytest.fixture
+def held_cache(cache_worker, tmp_path, monkeypatch):
+    """The real FSID directory proof over a synthetic data root, with the cephadm cache published in it."""
+    worker, unused = cache_worker
+    root = tmp_path / "ceph"
+    root.mkdir(mode=0o700)
+    monkeypatch.setattr(runtime.Cache, "directory", REAL_CACHE_DIRECTORY)
+    monkeypatch.setattr(observe, "ROOT_UID", os.getuid())
+
+    @contextlib.contextmanager
+    def root_directory(uid=None):
+        descriptor = os.open(root, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+        try:
+            observe.safe_directory(os.fstat(descriptor), (os.getuid(),))
+            yield descriptor
+        finally:
+            os.close(descriptor)
+
+    monkeypatch.setattr(observe, "root_directory", root_directory)
+    assert runtime.Cache(worker).prepare() is True
+    cluster = root / worker.request["fsid"]
+    assert (cluster / ("cephadm." + hashlib.sha256(PAYLOAD).hexdigest())).read_bytes() == PAYLOAD
+    return worker, cluster
+
+
+class Chown:
+    """cephadm's make_data_dir_base chowning the FSID directory as root; the test runs unprivileged, so stat reports the moved owner."""
+
+    def __init__(self, monkeypatch, path):
+        self.inode = os.stat(path).st_ino
+        self.uid = None
+        self.reported = 0
+        real_stat, real_fstat = os.stat, os.fstat
+        monkeypatch.setattr(observe.os, "stat", lambda *args, **options: self.remap(real_stat(*args, **options)))
+        monkeypatch.setattr(observe.os, "fstat", lambda descriptor: self.remap(real_fstat(descriptor)))
+
+    def remap(self, info):
+        if self.uid is None or info.st_ino != self.inode:
+            return info
+        self.reported += 1
+        values = list(info[:10])
+        values[4] = self.uid
+        return os.stat_result(values, {name: getattr(info, name) for name in ("st_atime_ns", "st_mtime_ns", "st_ctime_ns", "st_blksize", "st_blocks")})
+
+
+@pytest.mark.parametrize("uid,singleton", [(167, None), (472, "grafana.node-1"), (65534, None)])
+def test_an_execution_proof_survives_cephadm_moving_the_fsid_directory_owner(held_cache, monkeypatch, uid, singleton):
+    """A sibling block's deploy chowns the FSID directory to its daemon's user while an effect holds it, even before that daemon's own
+    directory exists; the held cache inode and the directory's device, inode and mode still prove the executed bytes."""
+    worker, cluster = held_cache
+    chown = Chown(monkeypatch, cluster)
+    executed = []
+    with runtime.Cache(worker).execution_proof():
+        chown.uid = uid
+        if singleton is not None:
+            (cluster / singleton).mkdir(mode=0o700)
+        assert os.stat(cluster).st_uid == uid
+        before = chown.reported
+        executed.append(True)
+    assert executed == [True] and chown.reported > before
+
+
+def test_an_execution_proof_still_refuses_an_unproved_entry_owner(held_cache, monkeypatch):
+    worker, cluster = held_cache
+    chown = Chown(monkeypatch, cluster)
+    chown.uid = os.getuid() + 472
+    executed = []
+    with pytest.raises(ceph_native.Refusal) as caught:
+        with runtime.Cache(worker).execution_proof():
+            executed.append(True)
+    assert str(caught.value) == "cache-unproved" and not isinstance(caught.value, observe.ObservationRefusal)
+    assert executed == [] and chown.reported > 0
+
+
+def replace_directory(cluster):
+    cluster.rename(cluster.with_name("moved"))
+    cluster.mkdir(mode=0o700)
+
+
+def widen_mode(cluster):
+    os.chmod(cluster, 0o720)
+
+
+def touch_cache(cluster):
+    name = cluster / ("cephadm." + hashlib.sha256(PAYLOAD).hexdigest())
+    info = os.stat(name)
+    os.utime(name, ns=(info.st_atime_ns, info.st_mtime_ns + 1_000_000_000))
+
+
+@pytest.mark.parametrize("change", [replace_directory, widen_mode, touch_cache])
+def test_an_execution_proof_refuses_a_directory_or_cache_moved_during_the_effect(held_cache, change):
+    """Each refusal is the cache's own typed one, never an observation error a worker would report as native-unknown."""
+    worker, cluster = held_cache
+    before = os.stat(cluster)
+    with pytest.raises(ceph_native.Refusal) as caught:
+        with runtime.Cache(worker).execution_proof():
+            change(cluster)
+            after = os.stat(cluster)
+            assert (after.st_ino, after.st_mode) != (before.st_ino, before.st_mode) or change is touch_cache
+    assert str(caught.value) == "cache-unproved" and not isinstance(caught.value, observe.ObservationRefusal)
+
+
+def test_an_effect_failure_inside_the_execution_proof_keeps_its_own_exception(held_cache):
+    worker, unused = held_cache
+    with pytest.raises(observe.ObservationRefusal, match="^native-observation-unproved$"):
+        with runtime.Cache(worker).execution_proof():
+            raise observe.ObservationRefusal("native-observation-unproved")
 
 
 def test_the_shipped_sources_carry_no_fixture_session_or_qualification_authority():

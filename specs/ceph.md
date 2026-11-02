@@ -2100,7 +2100,12 @@ observation reads it as unfinished work; and a declaration (`orch apply`,
 `nfs export apply`, `smb apply`, `dashboard sso enable`) is made again,
 after reading back an NFS export or the dashboard's SSO option a lost reply
 may have applied, until the manager wait ends; each of its commands ends by
-that deadline. A failure is the command's own answer, and refuses as before,
+that deadline. Each native SSH effect holds the published cephadm cache
+file's exact inode and metadata and the FSID directory's device, inode and
+mode, refusing `cache-unproved` when any of them moved; the directory's owner
+is proved only when the hold starts, because cephadm, as root, reassigns it
+to each daemon it deploys, a sibling block's included. A failure is the
+command's own answer, and refuses as before,
 only when the available manager it was sent to still holds one interval
 later, its orchestrator answers with cephadm, and the declaring `nfs`, `smb`
 or `dashboard` module answers a read-only command. A concurrent manager

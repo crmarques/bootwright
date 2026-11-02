@@ -75,6 +75,11 @@ def identity(info):
     return (info.st_dev, info.st_ino, info.st_uid, info.st_gid, stat.S_IMODE(info.st_mode))
 
 
+def placed_identity(info):
+    """A directory of whichever user it belongs to: cephadm, as root, reassigns its owner, so the owner is no part of what it is."""
+    return (info.st_dev, info.st_ino, stat.S_IMODE(info.st_mode))
+
+
 def file_identity(info):
     return identity(info) + (info.st_nlink, info.st_size, info.st_mtime_ns, info.st_ctime_ns)
 
@@ -127,18 +132,22 @@ def root_directory(uid=None):
 
 @contextlib.contextmanager
 def child_directory(parent, name, owners, own=False):
-    """A non-link directory of the given owners, or with `own` of whichever user it belongs to, re-proved unchanged after use."""
+    """A non-link directory of the given owners, or with `own` of whichever user it belongs to, re-proved unchanged after use.
+
+    With `own` the owner proof is the entry's alone: only root moves an owner, and cephadm does so with every daemon it deploys,
+    so the re-proof holds the device, inode and mode; a replaced directory or a widened mode still refuses."""
     require(isinstance(name, str) and NAME.fullmatch(name) is not None)
     before = current(name, parent)
     safe_directory(before, tuple(owners) + ((before.st_uid,) if own else ()))
+    held = placed_identity if own else identity
     try:
         descriptor = os.open(name, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | os.O_CLOEXEC, dir_fd=parent)
     except FileNotFoundError:
         raise ObservationChangedRefusal("native-observation-changed") from None
     try:
-        require(identity(os.fstat(descriptor)) == identity(before), changed=True)
+        require(held(os.fstat(descriptor)) == held(before), changed=True)
         yield descriptor
-        require(identity(os.fstat(descriptor)) == identity(before) and identity(current(name, parent)) == identity(before), changed=True)
+        require(held(os.fstat(descriptor)) == held(before) and held(current(name, parent)) == held(before), changed=True)
     finally:
         os.close(descriptor)
 

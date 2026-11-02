@@ -73,7 +73,11 @@ operator as a first-call refusal; the slice that records it is named.
 - Every cephadm deploy chowns `/var/lib/ceph/<fsid>` to that daemon's user
   (`make_data_dir_base` → `makedirs`, which chowns an existing directory), so
   after the monitoring stack it belongs to whichever singleton deployed last,
-  for example alloy (473) or grafana (472), mode still 0700 (X267).
+  for example alloy (473) or grafana (472), mode still 0700 (X267). It moves
+  while a cephadm cache hold is open too, before the new daemon's own
+  directory exists, so a hold re-proves the directory's device, inode and
+  mode, never its owner (`native-observation-changed@ceph_native_observe.child_directory`,
+  B1052).
 - 20.2.1's `smb apply` with `--password-filter=none` and
   `--password-filter-out=hidden` stores the resource, then raises
   `UnboundLocalError` on `in_op` and answers EINVAL; the base64 input filter
