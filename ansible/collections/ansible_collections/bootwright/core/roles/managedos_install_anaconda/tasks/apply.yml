@@ -313,6 +313,11 @@
         status_code: [200, 206]
         timeout: 30
       register: managedos_install_anaconda_image_fetch
+      until: >-
+        (managedos_install_anaconda_image_fetch.status | default(-1) | int) != -1
+        or (managedos_install_anaconda_image_fetch.msg | default('') | string) is search('CERTIFICATE_VERIFY_FAILED|certificate verify failed')
+      retries: '{{ managedos_install_anaconda_listener_retries | int }}'
+      delay: '{{ managedos_install_anaconda_listener_pause | int }}'
       when: not (managedos_install_anaconda_delivers_private | bool)
       failed_when: false
       changed_when: false
@@ -351,6 +356,11 @@
         timeout: 30
       loop: '{{ managedos_install_anaconda_private_files }}'
       register: managedos_install_anaconda_private_fetch
+      until: >-
+        (managedos_install_anaconda_private_fetch.status | default(-1) | int) != -1
+        or (managedos_install_anaconda_private_fetch.msg | default('') | string) is search('CERTIFICATE_VERIFY_FAILED|certificate verify failed')
+      retries: '{{ managedos_install_anaconda_listener_retries | int }}'
+      delay: '{{ managedos_install_anaconda_listener_pause | int }}'
       when: managedos_install_anaconda_delivers_private | bool
       failed_when: false
       changed_when: false
@@ -403,6 +413,11 @@
         status_code: [200, 206]
         timeout: 30
       register: managedos_install_anaconda_tree_fetch
+      until: >-
+        (managedos_install_anaconda_tree_fetch.status | default(-1) | int) != -1
+        or (managedos_install_anaconda_tree_fetch.msg | default('') | string) is search('CERTIFICATE_VERIFY_FAILED|certificate verify failed')
+      retries: '{{ managedos_install_anaconda_listener_retries | int }}'
+      delay: '{{ managedos_install_anaconda_listener_pause | int }}'
       when: bootwright_os_install_request.tree is defined
       failed_when: false
       changed_when: false

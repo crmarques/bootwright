@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import base64
 import contextlib
+import errno
 import hashlib
 import http.client
 import json
@@ -25,7 +26,9 @@ import time
 import types
 import urllib.parse
 
-from ansible_collections.bootwright.core.plugins.module_utils import ceph_native_worker, ceph_pull_broker, native_diagnostics
+from ansible_collections.bootwright.core.plugins.module_utils import (
+    ceph_native_worker, ceph_package_sources, ceph_pull_broker, native_diagnostics,
+)
 
 PLATFORM = "linux/amd64"
 VERSION = "ceph-image-v4"
@@ -62,6 +65,9 @@ LAYER_TYPES = (
 )
 ACCEPT = ", ".join(INDEX_TYPES + MANIFEST_TYPES)
 META = ("st_dev", "st_ino", "st_uid", "st_gid", "st_mode", "st_nlink", "st_size", "st_mtime_ns", "st_ctime_ns")
+TRANSPORT_PAUSE = 5
+# A network or host without a route while a link is down; a name that does not exist is not one.
+TRANSPORT_ERRNOS = (errno.ENETDOWN, errno.ENETUNREACH, errno.EHOSTUNREACH)
 
 
 class DiscoveryRefusal(ValueError):
@@ -71,6 +77,21 @@ class DiscoveryRefusal(ValueError):
 def require(value, reason="request"):
     if not value:
         raise DiscoveryRefusal(reason)
+
+
+def transport_lost(error):
+    """A connection lost, refused, timed out or truncated, or a name not yet resolvable, is lost in transport; TLS and all else are not."""
+    if isinstance(error, socket.gaierror):
+        return error.errno == socket.EAI_AGAIN
+    if isinstance(error, ssl.SSLError):
+        return isinstance(error, ssl.SSLEOFError)
+    return isinstance(error, ceph_package_sources.TRANSPORT_FAULTS) or isinstance(error, OSError) and error.errno in TRANSPORT_ERRNOS
+
+
+def lost(cause):
+    error = DiscoveryRefusal("discovery")
+    error.transport = transport_lost(cause)
+    return error
 
 
 def refusal(error):
@@ -425,9 +446,6 @@ class Registry:
         )
         require(authorization is None or authorization.startswith("Basic " if path == token_path else "Bearer "), "material")
         require(type(maximum) is int and 0 < maximum <= MAX_BODY, "discovery")
-        remaining = self.deadline - self.now()
-        require(remaining > 0, "timeout")
-        connection = http.client.HTTPSConnection(self.registry, timeout=min(remaining, 30), context=self.context)
         headers = {
             "Accept": ACCEPT if path.startswith(manifest) else "application/json",
             "Accept-Encoding": "identity",
@@ -435,30 +453,66 @@ class Registry:
         }
         if authorization is not None:
             headers["Authorization"] = authorization
-        try:
-            return self.exchange(connection, path, headers, maximum)
-        except DiscoveryRefusal as error:
-            self.untrusted(error, "TLS verification of the registry " + self.registry)
-            raise
+
+        def attempt():
+            remaining = self.deadline - self.now()
+            require(remaining > 0, "timeout")
+            connection = http.client.HTTPSConnection(self.registry, timeout=min(remaining, 30), context=self.context)
+            try:
+                return self.exchange(connection, path, headers, maximum)
+            except DiscoveryRefusal as error:
+                self.untrusted(error, "TLS verification of the registry " + self.registry)
+                raise
+
+        return self.retried(attempt)
 
     def deliver(self, values):
         """Follow one validated Location to public addresses only; its value never enters a refusal."""
-        remaining = self.deadline - self.now()
-        require(remaining > 0, "timeout")
+        require(self.deadline - self.now() > 0, "timeout")
         try:
             host, path = ceph_pull_broker.delivery_location(types.SimpleNamespace(getheaders=lambda: list(values.items())))
-            addresses = ceph_pull_broker.delivery_addresses(self.resolver(host))
         except (ValueError, TypeError, OSError):
             raise DiscoveryRefusal("discovery") from None
-        connection = self.delivery(host, addresses=addresses, deadline=time.monotonic() + remaining, port=443,
-                                   context=self.context, timeout=min(remaining, 30))
         headers = {"Accept-Encoding": "identity", "User-Agent": "bootwright-ceph-metadata-v1"}
-        try:
-            status, unused_values, raw = self.exchange(connection, path, headers, MAX_BODY)
-        except DiscoveryRefusal as error:
-            self.untrusted(error, "TLS verification of the registry's configuration blob delivery endpoint")
-            raise
-        return status, raw
+
+        def attempt():
+            remaining = self.deadline - self.now()
+            require(remaining > 0, "timeout")
+            try:
+                addresses = ceph_pull_broker.delivery_addresses(self.resolver(host))
+            except (ValueError, TypeError, OSError) as cause:
+                raise lost(cause) from None
+            connection = self.delivery(host, addresses=addresses, deadline=time.monotonic() + remaining, port=443,
+                                       context=self.context, timeout=min(remaining, 30))
+            try:
+                status, unused_values, raw = self.exchange(connection, path, headers, MAX_BODY)
+            except DiscoveryRefusal as error:
+                self.untrusted(error, "TLS verification of the registry's configuration blob delivery endpoint")
+                raise
+            return status, raw
+
+        return self.retried(attempt)
+
+    def budget(self):
+        left = self.deadline - self.now()
+        alarm = signal.getitimer(signal.ITIMER_REAL)[0]
+        return min(left, alarm) if alarm > 0 else left
+
+    def retried(self, attempt):
+        """One request restarted on a new connection to the same host after a transport loss.
+
+        At most TRANSPORT_ATTEMPTS attempts, each pause within the budget; the last refusal is raised unchanged.
+        """
+        number = 1
+        while True:
+            try:
+                return attempt()
+            except DiscoveryRefusal as error:
+                pause = TRANSPORT_PAUSE * number
+                if number >= ceph_package_sources.TRANSPORT_ATTEMPTS or not getattr(error, "transport", False) or self.budget() <= pause:
+                    raise
+            time.sleep(pause)
+            number += 1
 
     def exchange(self, connection, path, headers, maximum):
         try:
@@ -475,15 +529,18 @@ class Registry:
             length = values.get("content-length")
             require(length is None or re.fullmatch(r"0|[1-9][0-9]{0,9}", length) is not None and int(length) <= maximum, "discovery")
             raw = response.read(maximum + 1)
-            require(len(raw) <= maximum and (length is None or len(raw) == int(length)), "discovery")
+            require(len(raw) <= maximum, "discovery")
+            if length is not None and len(raw) < int(length):
+                raise http.client.IncompleteRead(raw, int(length) - len(raw))
+            require(length is None or len(raw) == int(length), "discovery")
             require(self.now() < self.deadline, "timeout")
             return response.status, values, raw
         except ssl.SSLCertVerificationError:
             error = DiscoveryRefusal("discovery")
             error.untrusted = True
             raise error from None
-        except (OSError, http.client.HTTPException):
-            raise DiscoveryRefusal("discovery") from None
+        except (OSError, http.client.HTTPException) as cause:
+            raise lost(cause) from None
         finally:
             connection.close()
 

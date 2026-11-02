@@ -39,6 +39,11 @@
     status_code: [200, 206]
     timeout: 30
   register: managedos_install_anaconda_recovery_fetch
+  until: >-
+    (managedos_install_anaconda_recovery_fetch.status | default(-1) | int) != -1
+    or (managedos_install_anaconda_recovery_fetch.msg | default('') | string) is search('CERTIFICATE_VERIFY_FAILED|certificate verify failed')
+  retries: '{{ managedos_install_anaconda_listener_retries | int }}'
+  delay: '{{ managedos_install_anaconda_listener_pause | int }}'
   failed_when: false
   changed_when: false
   no_log: true

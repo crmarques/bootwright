@@ -458,7 +458,15 @@ bound to the operation. A fetch answered with neither 200 nor 206 refuses,
 naming the URL and the status, and no machine is given media. A delivered-key
 Machine's image, `identity` and `identity.pub` are fetched the same way at
 their tokenized URLs, hidden, and a refusal names the file and its cause with
-the token replaced by `<token>`, never the URL. The proof runs at that moment rather than at planning time, because a plan
+the token replaced by `<token>`, never the URL. A fetch, these and the
+[recovery passphrase's](#root-disk-encryption) alike, that fails before
+any status line for a cause other than a certificate that did not verify (a
+timeout, or a refused, reset or unreachable connection) is made again at most
+twice more, five seconds apart, so a short network drop on the controller does
+not refuse the media; a status or a certificate failure refuses at once, and
+the last attempt's cause is the one the refusal names. The hour the
+[deadline](#budgets) allows for the rest of the media work holds those
+attempts. The proof runs at that moment rather than at planning time, because a plan
 proves intent and only an observation taken before the effect proves the
 target. It fails closed, and no authorization relaxes it: `data-loss`
 acknowledges that an installation destroys data and never selects what to

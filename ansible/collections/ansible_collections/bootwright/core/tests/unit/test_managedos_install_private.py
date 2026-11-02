@@ -379,3 +379,39 @@ def test_the_inspection_reports_a_private_installer_image(tmp_path):
     public.parent.mkdir()
     public.write_bytes(b"\0")
     assert observe({"image": {"path": str(public)}}, "", "")["image"] is True
+
+
+LISTENER_FETCHES = [
+    ("apply.yml", "Fetch the first byte of the installer image through its listener"),
+    ("apply.yml", "Fetch the first byte of each private file through its listener"),
+    ("apply.yml", "Fetch the first byte of the package tree marker through its listener"),
+    ("private_recovery.yml", "Fetch the first byte of the recovery passphrase through its listener"),
+]
+# What ansible.builtin.uri registers for one attempt, and whether that attempt
+# ends the fetch: a transport failure spends an attempt, a status or a
+# certificate failure is the answer the refusal judges at once.
+ATTEMPTS = [
+    ({"status": 206}, True),
+    ({"status": 200}, True),
+    ({"status": 404, "msg": "Status code was 404 and not [200, 206]: HTTP Error 404: Not Found"}, True),
+    ({"status": 403, "msg": "Status code was 403 and not [200, 206]: HTTP Error 403: Forbidden"}, True),
+    ({"status": 500, "msg": "Status code was 500 and not [200, 206]: HTTP Error 500: Internal Server Error"}, True),
+    ({"status": -1, "msg": "Request failed: <urlopen error [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed>"},
+     True),
+    ({"status": -1, "msg": "Request failed: <urlopen error timed out>"}, False),
+    ({"status": -1, "msg": "Request failed: <urlopen error [Errno 111] Connection refused>"}, False),
+    ({"status": -1, "msg": "Request failed: <urlopen error [Errno 104] Connection reset by peer>"}, False),
+    ({"status": -1, "msg": "Request failed: <urlopen error [Errno 113] No route to host>"}, False),
+    ({"msg": "the module recorded no status"}, False),
+    ({}, False),
+]
+
+
+@pytest.mark.parametrize("name, title", LISTENER_FETCHES, ids=[title for _name, title in LISTENER_FETCHES])
+def test_a_listener_fetch_lost_before_its_status_line_is_tried_again_a_bounded_number_of_times(name, title):
+    task = flattened(name)[index_of(flattened(name), named(title), title)]
+    register = task["register"]
+    assert task["failed_when"] is False
+    assert int(render(task["retries"])) == 2 and int(render(task["delay"])) == 5
+    for result, ends in ATTEMPTS:
+        assert holds(task["until"], **{register: result}) is ends, result

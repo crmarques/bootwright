@@ -54,7 +54,16 @@ from the declared registry origin. Its TLS verifies that origin against the
 Entitlement's `registry.trustBundleRef` alone when it is set, and against the
 host trust store otherwise, for the Ceph image and each auxiliary image; an
 origin the anchor does not verify refuses resolution before any effect, and
-the native error names the registry and the anchor. A direct digest selects that artifact
+the native error names the registry and the anchor. A registry or delivery
+request whose connection is lost in transport (closed before a response,
+reset, refused, timed out, ended by TLS EOF or truncated, or without a route or
+a name answer yet because the network is down) is made again on a new
+connection to the same host, at most three attempts within the resolution's
+180-second budget and only while the pause fits it; the token exchange is
+repeated only against the registry origin, and a delivery hop never carries a
+credential. An HTTP status, a TLS verification or protocol failure, a name
+that does not exist and every refusal fail at once, and exhausted attempts
+refuse as one attempt would. A direct digest selects that artifact
 without resolving or comparing it to a build-pinned tag. Resolution evidence
 identifies the authored reference, selected digest and platform, and the cluster,
 pool and client blocks depend on it. The result is frozen: continuation never
