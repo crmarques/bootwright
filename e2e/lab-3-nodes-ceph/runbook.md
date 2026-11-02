@@ -224,12 +224,24 @@ the managed OS realizes each ingress's
 [host port requirements](../../specs/managed-os.md#host-firewall-requirements)
 as an owned firewalld service before the clusters stage: VRRP and `443/tcp` on
 the object ingress hosts, `9443/tcp` and the gateway's internal `29443/tcp` on
-the management ingress hosts. This run makes no manual firewall change. Require
-every `host-port` row of the plan to read `realized`, and after the machines
-stage list the owned services read-only:
+the management ingress hosts. This run makes no manual firewall change.
+
+Before the apply, read the plan's host firewall requirement rows
+([`host-port` rows](../../specs/managed-os.md#host-firewall-requirements)). A
+completed apply leaves only the destroy preview in the plan, so these rows
+exist only before it:
 
 ```sh
 ./bin/bootwright plan --context "$CONTEXT"
+```
+
+After the apply, require each guest's `firewall-cmd --list-services` to list
+the Bootwright services for the requirements of that guest's ingress. The
+owner's run listed, for `rhel-01`, `bootwright-lab-3-nodes-ceph-ceph-service-ceph-e2e-mgmt-gateway`;
+for `rhel-02`, both `...-ceph-gateway-objects` and `...-mgmt-gateway`; and for
+`rhel-03`, `...-ceph-gateway-objects`:
+
+```sh
 for host in rhel-01 rhel-02 rhel-03; do
     ./bin/bootwright machine exec --context "$CONTEXT" --name "$host" -- sudo -n firewall-cmd --list-services
 done
