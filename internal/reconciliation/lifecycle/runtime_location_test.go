@@ -230,16 +230,43 @@ func TestAContinuationRebuildsAMissingRuntime(t *testing.T) {
 	}
 }
 
-// An apply over an incomplete removal whose runtime the cache can rebuild
-// names that removal's continuation, not setup.
+// An apply over an incomplete removal with a missing runtime names that
+// removal's continuation, not setup, and rebuilds nothing, nor does the
+// preview of that continuation: the continuation rebuilds it, or refuses with
+// setup when the cache lacks a wheel.
 func TestAnApplyOverARemovalWithAMissingRuntimeNamesItsContinuation(t *testing.T) {
-	h := newHarness(t, "artifact-server-lab")
-	unknownRemoval(t, h)
-	withRebuilder(h, nil)
-	_, err := apply(h)
-	reported := diagnostics.Of(err)
-	if len(reported) != 1 || reported[0].Remediation != "continue it with bootwright destroy --context lab" {
-		t.Fatalf("the apply over the removal reported %+v (%v)", reported, err)
+	for _, test := range []struct {
+		name    string
+		refusal error
+	}{{"cached wheels", nil}, {"a missing wheel", prerequisites.ErrRuntimeWheelMissing}} {
+		refusal := test.refusal
+		t.Run(test.name, func(t *testing.T) {
+			h := newHarness(t, "artifact-server-lab")
+			unknownRemoval(t, h)
+			rebuilder := withRebuilder(h, refusal)
+			_, err := apply(h)
+			reported := diagnostics.Of(err)
+			if len(reported) != 1 || reported[0].Remediation != "continue it with bootwright destroy --context lab" {
+				t.Fatalf("the apply over the removal reported %+v (%v)", reported, err)
+			}
+			preview, err := h.service.Plan(context.Background(), PlanRequest{ContextName: testContextName})
+			if err != nil || preview.Verb != string(reconciliation.Destroy) {
+				t.Fatalf("the preview over the removal = %+v (%v)", preview, err)
+			}
+			if len(rebuilder.rebuilds) != 0 {
+				t.Fatalf("the refused apply and the preview rebuilt the runtime %d times", len(rebuilder.rebuilds))
+			}
+			h.capability.observations = []Observation{{Effect: reconciliation.EffectCompleted}}
+			_, err = continued(h, reconciliation.Destroy)
+			if len(rebuilder.rebuilds) != 1 {
+				t.Fatalf("the continuation rebuilt its runtime %d times", len(rebuilder.rebuilds))
+			}
+			if refusal != nil {
+				requireSetupRefusal(t, err, "the controller runtime for this build (lock 444444444444, Python 3.14) is not prepared")
+			} else if err != nil {
+				t.Fatalf("the continuation over the rebuilt runtime refused: %v", err)
+			}
+		})
 	}
 }
 
@@ -251,6 +278,20 @@ func TestAContinuationMissingAWheelRefusesWithRunSetup(t *testing.T) {
 	withRebuilder(h, prerequisites.ErrRuntimeWheelMissing)
 	_, err := continued(h, reconciliation.Apply)
 	requireSetupRefusal(t, err, "the controller runtime for this build (lock 444444444444, Python 3.14) is not prepared")
+}
+
+// A continuation under another closure refuses with that closure's exit
+// without rebuilding this build's missing runtime, which it could not use.
+func TestAContinuationUnderAnotherClosureRebuildsNothing(t *testing.T) {
+	h := newHarness(t, "artifact-server-lab")
+	failedApply(t, h)
+	h.service.options.Lock = movedLock
+	rebuilder := withRebuilder(h, nil)
+	_, err := continued(h, reconciliation.Apply)
+	reported := diagnostics.Of(err)
+	if len(reported) != 1 || !strings.HasPrefix(reported[0].Message, "this build's controller runtime carries another Python and Ansible closure") || len(rebuilder.rebuilds) != 0 {
+		t.Fatalf("the continuation under another closure reported %+v (%v) after %d rebuilds", reported, err, len(rebuilder.rebuilds))
+	}
 }
 
 // diff --observe launches the runtime like any verb that reads a host, so a

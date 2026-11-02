@@ -239,7 +239,6 @@ Alias cell.
 | [B990](#b990) | new, 2026-10-30 (D211; B90 first slice) | product | Add-ons | An authored add-on creates a cluster-scoped custom resource once a program check proves the kind's scope | No consumer; the first slice admits only namespaced resources in the add-on's own namespace |
 | [B998](#b998) | new, 2026-10-30 (X234) | enabling | State reconciliation | A resolution of a predecessor's block reserves the room of the lineage's removal | Found in X234 review; the reserve rule reads one apply today and holds in the shipped cases |
 | [B999](#b999) | new, 2026-10-30 (X235 review; pre-existing) | defect | Add-ons | Selection reports two built-in packages that create one CatalogSource name or share one hosted namespace on a cluster | No profile selects two such packages today; the check belongs with the package-facts selection rules, not B90's authored slice |
-| [B1035](#b1035) | new, 2026-11-02 (X275 partition test; pre-existing) | defect | State reconciliation | A decision that refuses over a continuation locates the controller runtime without rebuilding it | Found by X275's partition test; a rebuild needs a missing runtime at the moment `plan` or an apply refuses, and the fix changes which refusal that case reports |
 | [B771](#b771) | new, 2026-10-20 (D173); folds B365 | defect | Add-ons, with Workspace | The `add-ons/_store` selection exception, its marker and its reader rules leave the input reader | Dead surface now that B89 is retired; removing input-reader rules is not needed by any M4 package |
 | [B772](#b772) | new, 2026-10-20 (D173) | product | Add-ons | A package installed through OLM v1 (`ClusterExtension`) | ODF/FDF, ACM, MCE and GitLab do not qualify; own-namespace installs are Technology Preview |
 | [B773](#b773) | new, 2026-10-20 (D173) | product | Add-ons | A registry credential merged into a cluster's global pull secret with an exact-entry receipt | Its inverse never runs under retirement; the install pull secret carries entitlements from first boot |
@@ -3121,25 +3120,6 @@ outcome is one admission diagnostic per shared identity on the later instance,
 as the authored add-on's
 [shared identities](../api/addons.md#admission-diagnostics) are reported, with
 a test over a synthetic package pair.
-
-### B1035
-
-A decision can reach a runtime rebuild. When an apply meets an incomplete
-removal, `refuseOver` proves the continuation it would name through
-`verifyContinuation` → `closureRefusal`, which locates this build's runtime by
-`approvedRuntime`, the variant that rebuilds a published runtime the wheel
-cache can restore (`internal/reconciliation/lifecycle/runtime.go`). The
-decision runs under the shared lock and also serves `plan`, which writes
-nothing by contract, so in that case a preview can rebuild the controller
-runtime before it refuses. Found on 2026-11-02 when the
-[X275](delivered.md#x275--lifecycle-operation-plan) partition test was
-tightened; the test names the path as its one allowed rebuild so it cannot
-grow unnoticed. **Smallest fix:** locate the runtime without rebuilding
-(`locateRuntime(ctx, false)`, as the readers do) on the decision path and
-leave the rebuild to the continuation's own run. **Exit evidence:** a test
-that `plan` over an incomplete removal with an unpublished runtime refuses
-without calling the rebuilder, and the exemption removed from
-`test/architecture/lifecycle_partition_test.go`.
 
 ## Audit remediation (2026-10-26)
 

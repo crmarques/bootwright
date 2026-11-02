@@ -17,13 +17,13 @@ import (
 // proveShared re-proves, under the shared lock and before the plan is
 // presented, authorized or confirmed, what the transition's exclusive
 // transaction proves again before it registers: a continuation or resolution
-// its input, other-build blocks, closure, setup, host binding; a fresh removal
-// its host. No plan is then presented for a transition that would refuse. A
-// lost frozen binding names the only exit those records leave whatever else
-// they hold, so it wins: a binding the keyring no longer lists has refused
-// already, and one whose material the keyring cannot read, which only its
-// reopen proves, is reported in place of the refusal here, as the reopen this
-// transition would make before it registers reports it.
+// its input, other-build blocks, closure, setup, host binding and runtime,
+// rebuilt if missing; a fresh removal its host. No plan is then presented for
+// a transition that would refuse. A lost frozen binding names the only exit
+// those records leave whatever else they hold, so it wins: a binding the
+// keyring no longer lists has refused already, and one whose material the
+// keyring cannot read, which only its reopen proves, is reported in place of
+// the refusal here, as the reopen this transition would make reports it.
 func (s Service) proveShared(ctx context.Context, name string, decided operationPlan) error {
 	removal := decided.fresh && decided.verb == reconciliation.Destroy
 	if !removal && (decided.fresh || decided.operation.ID == "") {
@@ -33,7 +33,11 @@ func (s Service) proveShared(ctx context.Context, name string, decided operation
 		if removal {
 			return s.verifyRemovalHost(ctx, view)
 		}
-		return s.verifyContinuation(ctx, view, decided.operation, decided.sameBlocks, nil)
+		if err := s.verifyContinuation(ctx, view, decided.operation, decided.sameBlocks, nil); err != nil {
+			return err
+		}
+		_, err := s.approvedRuntime(ctx)
+		return err
 	})
 	binding := frozenBinding(decided)
 	if err == nil || binding == "" {
@@ -197,11 +201,11 @@ func (s Service) recordedRefusal(view View, operation operationstore.Operation, 
 }
 
 // closureRefusal refuses a continuation whose frozen closure, the runtime lock
-// and interpreter ABI, differs from this build's; nil located is located here
-// as the continuation's run locates it, rebuilding a missing runtime.
+// and interpreter ABI, differs from this build's; nil located is read from the
+// setup receipt alone, so a decision never rebuilds a missing runtime.
 func (s Service) closureRefusal(ctx context.Context, view View, operation operationstore.Operation, located *approved) error {
 	if located == nil {
-		current, err := s.approvedRuntime(ctx)
+		current, err := s.receiptRuntime(ctx)
 		if err != nil {
 			return err
 		}

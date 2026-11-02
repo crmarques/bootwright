@@ -86,7 +86,7 @@ func lifecyclePlannerEdgeExemptions() []string {
 }
 
 func lifecyclePlannerCallExemptions() []string {
-	return []string{"Service.producedInContext:ReadProduced", "Service.rebuild:Rebuild"}
+	return []string{"Service.producedInContext:ReadProduced"}
 }
 
 type lifecycleFunc struct {

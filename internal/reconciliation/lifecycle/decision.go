@@ -198,9 +198,9 @@ func (s Service) decideBy(ctx context.Context, view View, store OperationStore, 
 // which only an apply over an incomplete removal reaches. It names that
 // removal's continuation, or the fresh removal that replaces a failed one,
 // only where the proof that command would make admits it: the continuation's
-// re-proof, or the replacement's host proof. Otherwise it names the exit that
-// proof's refusal names, followed by that refusal, so the remedy is never a
-// command that refuses. A finalization runs no block and is held to neither.
+// re-proof, which rebuilds no runtime, or the replacement's host proof.
+// Otherwise it names the exit that proof's refusal names, followed by that
+// refusal. A finalization runs no block and is held to neither.
 func (s Service) refuseOver(ctx context.Context, view View, operation operationstore.Operation, frozen reconciliation.Plan, states map[string]reconciliation.BlockState) error {
 	const message = "must be continued before another operation"
 	name := view.Identity().Name

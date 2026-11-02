@@ -224,6 +224,23 @@ func (s Service) approvedRuntime(ctx context.Context) (approved, error) {
 // locateRuntime without rebuild is for readers, such as status, that change
 // nothing.
 func (s Service) locateRuntime(ctx context.Context, rebuild bool) (approved, error) {
+	located, err := s.receiptRuntime(ctx)
+	if err != nil {
+		return approved{}, err
+	}
+	if presence, reports := s.guard.(RuntimePresence); reports {
+		published, err := presence.Published(ctx, located.runtime)
+		if err != nil {
+			return approved{}, err
+		}
+		if !published {
+			return located, s.rebuild(ctx, located, rebuild)
+		}
+	}
+	return located, nil
+}
+
+func (s Service) receiptRuntime(ctx context.Context) (approved, error) {
 	lock := s.options.Lock
 	if s.options.Setup == nil || len(lock.Digest) != 64 {
 		return approved{}, runtimeUnprepared(lock, "")
@@ -246,15 +263,6 @@ func (s Service) locateRuntime(ctx context.Context, rebuild bool) (approved, err
 			Interpreter: prerequisites.PythonInterpreter{Path: receipt.Runtime.Interpreter, ABI: abi}, AnsibleCore: lock.AnsibleCore,
 		},
 		closure: operationstore.Closure{Digest: prerequisites.RuntimeClosureDigest(lock.Digest, abi), Python: abi, Ansible: lock.AnsibleCore},
-	}
-	if presence, reports := s.guard.(RuntimePresence); reports {
-		published, err := presence.Published(ctx, located.runtime)
-		if err != nil {
-			return approved{}, err
-		}
-		if !published {
-			return located, s.rebuild(ctx, located, rebuild)
-		}
 	}
 	return located, nil
 }

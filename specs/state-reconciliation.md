@@ -1408,10 +1408,13 @@ proves its host the same way. An `apply` refused over an incomplete removal
 names that removal's continuation, or the fresh removal that replaces a failed
 one, only when its re-proof, or that replacement's host proof, admits it;
 otherwise its remedy is the exit that proof's refusal names, and that refusal
-follows it. A host whose setup has not completed, or whose runtime for the
-running build is not prepared, refuses every verb that runs a block or
-registers, naming `run bootwright controller install`, and `status` offers it
-in their place.
+follows it. That apply reads the running build's runtime from the setup
+receipt and never rebuilds it; the continuation it names rebuilds a missing
+runtime or refuses as the
+[cache-only rebuild](controller.md#the-controller-runtime) says. A host whose
+setup has not completed, or whose runtime for the running build is not
+prepared, refuses every verb that runs a block or registers, naming
+`run bootwright controller install`, and `status` offers it in their place.
 
 ### Attempts and unknown outcomes
 

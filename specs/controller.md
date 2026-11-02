@@ -186,7 +186,9 @@ rebuilds it before it refuses: apply, destroy, the controller stage, a bounded
 run and diff, once per operation, before anything registers or runs. A
 continuation of either verb rebuilds it before it presents its plan, and an
 apply refused over an incomplete removal names that removal's continuation,
-which rebuilds it, rather than setup. When the
+which rebuilds it, rather than setup. No decision rebuilds it: that refusal
+compares the closure from the setup receipt alone, so a cache that lacks a
+wheel is reported by the continuation it names. When the
 receipt is complete, its interpreter still qualifies at the same path and the
 wheel cache holds every locked wheel of its ABI and the installer, the launch
 waits for `setup/lock` (it never refuses a held lock as busy), repeats those

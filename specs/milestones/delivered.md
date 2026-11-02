@@ -11024,6 +11024,36 @@ replaces with that removal's phases. The partition test allows two
 pre-existing decision-time calls by name and fails once either stops
 occurring: the additive custody proof reads and clears each produced input it
 would lend, and a continuation refusal may rebuild the controller runtime,
-which [B1035](backlog.md#b1035) records. Limitation: the test is syntactic, so
-a closure stored in a function-typed field and called elsewhere is not traced.
-The delivering commits record the gates and their results.
+which [X276](#x276--a-decision-never-rebuilds-the-controller-runtime) ended.
+Limitation: the test is syntactic, so a closure stored in a function-typed
+field and called elsewhere is not traced. The delivering commits record the
+gates and their results.
+
+### X276 — A decision never rebuilds the controller runtime
+
+**Items:** B1035 (new, 2026-11-02, X275 partition test; pre-existing),
+delivered on the owner's request of 2026-11-02. **Kind:** defect. **Owner:**
+State reconciliation.
+
+An apply refused over an incomplete removal proved the continuation it names
+by locating this build's runtime through the locator that rebuilds a missing
+one, so it rebuilt the runtime from the wheel cache before it refused, inside
+the decision that `plan` shares. A preview never reached that refusal at run
+time, because it decides as the held operation's own verb; B1035's note that a
+preview could rebuild described the static path only. The closure that refusal
+compares is now read from the setup receipt alone, which needs no published
+runtime, so no decision rebuilds, as the
+[cache-only rebuild](../controller.md#the-controller-runtime) states. A
+continuation still rebuilds before it presents its plan, now after its re-proof
+passes, so one under another closure refuses with that closure's exit without
+rebuilding a runtime it could not use. Where the cache lacks a wheel, the
+refused apply now names the removal's continuation, which refuses naming setup,
+rather than naming setup itself.
+
+`TestAnApplyOverARemovalWithAMissingRuntimeNamesItsContinuation` holds the
+refused apply and the preview to no rebuild, with cached wheels and with a
+missing one, and the continuation to the one rebuild or the setup refusal;
+`TestAContinuationUnderAnotherClosureRebuildsNothing` holds the closure
+refusal first. The partition test no longer allows the rebuild, so
+`TestLifecyclePlannerReachesNoEffect` fails on any planner path to it. The
+delivering commit records the gates and their results.
