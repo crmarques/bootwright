@@ -448,8 +448,8 @@ emulated BMC leaves the disk as the only bootable device until the
 machine block redefines the domain. A same-name domain whose ownership
 metadata does not name this context and Machine, or whose UUID is not the
 frozen one, is foreign and refuses on apply and on destroy before any effect;
-an owned domain whose root disk size differs from the profile refuses rather
-than resizing.
+an owned domain with an owned disk, root or data, whose size differs from the
+profile refuses rather than resizing.
 
 Not yet met: the domain's name, UUID and ownership metadata derive from the
 context and Machine names alone, so a domain an abandoned context of the same
@@ -514,8 +514,8 @@ running BMC that started before its configuration, password file or unit
 was last published, or whose start cannot be read, which is restarted, because
 the BMC reads only what it started with. An apply stopped between
 publishing a file and restarting the BMC is therefore completed by the
-next one. An owned domain whose root disk size differs refuses rather than
-resizing.
+next one. An owned domain with an owned disk, root or data, whose size differs
+refuses rather than resizing.
 A live diff observes the provider placement, the root and data disk sizes, each
 data disk's media, the domain state and the BMC's power; vCPU, memory,
 interfaces and TPM are not observed. Disk sizes and media are rendered when the

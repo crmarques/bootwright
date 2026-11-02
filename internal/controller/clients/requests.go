@@ -126,8 +126,8 @@ func DecodeRequest(data []byte) (Request, error) {
 	return request, nil
 }
 
-// ContentDigest binds the plan to the exact behavior this build implements, so
-// a changed request shape or automation contract invalidates a frozen plan.
+// ContentDigest hashes only the stage label, Implementation and Version; the
+// contract golden test makes a request or evidence shape change move Version.
 func ContentDigest() string {
 	digest := sha256.Sum256([]byte(strings.Join([]string{
 		"bootwright.controller.client-stage-v1", Implementation, Version,
