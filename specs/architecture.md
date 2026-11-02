@@ -1342,6 +1342,13 @@ owning spec, which names the check.
   exempts and the ones it leaves. A production function, in Go or in the
   collection's plugins, stays within 100 lines; the lists of functions
   awaiting their split are empty and only shrink.
+- Hold the lifecycle's planner and executor apart, the operation plan being the
+  only hand-off from one to the other: `TestLifecyclePlannerReachesNoEffect`,
+  `TestLifecycleExecutorNeverReplans` and `TestLifecycleFilesAreClassified` in
+  `test/architecture/lifecycle_partition_test.go` walk the package's call graph,
+  and `TestOperationPlanHoldsNoHandles` in
+  `internal/reconciliation/lifecycle/operation_plan_test.go` keeps the plan free
+  of ports, functions, channels and secret material.
 - `make quick` tests, besides the architecture suite, each package with a
   changed Go file and each package whose directory encloses, at any depth, a
   changed file that is not Go source, as a `go:embed` pattern or a read of
