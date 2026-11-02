@@ -1699,7 +1699,12 @@ Incomplete staging or a tree without a complete marker is this owner's
 partial effect and is cleared before extraction. A different nonempty source
 identity is drift and stays unknown during apply resolution. Consumers read
 the completed tree without mutating it, proving only that its source identity
-is the frozen DVD's.
+is the frozen DVD's. Before it reports, the apply fetches the first byte of the
+published `.treeinfo` through its listener, verified against the bound serving
+certificate and through no proxy; a fetch that fails before any status line
+for a cause other than a certificate that did not verify is made again at most
+twice more, five seconds apart, and any status but 200 or 206, a certificate
+failure or the last attempt's failure fails the block with its cause.
 
 An apply refuses, before it extracts or changes anything, through a named
 refusal for its `MachineInstallProfile`: `media-changed-tree` when the DVD is

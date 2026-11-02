@@ -148,6 +148,11 @@
     status_code: [200, 206]
     timeout: 30
   register: containercluster_media_agent_probe
+  until: >-
+    (containercluster_media_agent_probe.status | default(-1) | int) != -1
+    or (containercluster_media_agent_probe.msg | default('') | string) is search('CERTIFICATE_VERIFY_FAILED|certificate verify failed')
+  retries: '{{ containercluster_media_agent_listener_retries | int }}'
+  delay: '{{ containercluster_media_agent_listener_pause | int }}'
   failed_when: false
   changed_when: false
   no_log: true

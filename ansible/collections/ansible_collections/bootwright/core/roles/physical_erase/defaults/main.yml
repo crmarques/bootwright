@@ -1,0 +1,8 @@
+---
+# A listener self-fetch of the private erase image that failed before any status
+# line, a timeout, a refused, reset or unreachable connection, is tried again
+# this many times this many seconds apart, so one short network drop on the
+# controller does not refuse it. A status, or a certificate that did not verify,
+# refuses at once.
+physical_erase_listener_retries: 2
+physical_erase_listener_pause: 5

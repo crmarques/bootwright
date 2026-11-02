@@ -158,6 +158,12 @@
     follow_redirects: none
     status_code: [200, 206]
     timeout: 30
+  register: managedos_package_tree_listener_fetch
+  until: >-
+    (managedos_package_tree_listener_fetch.status | default(-1) | int) != -1
+    or (managedos_package_tree_listener_fetch.msg | default('') | string) is search('CERTIFICATE_VERIFY_FAILED|certificate verify failed')
+  retries: '{{ managedos_package_tree_listener_retries | int }}'
+  delay: '{{ managedos_package_tree_listener_pause | int }}'
   changed_when: false
 
 - name: Read the published tree proof

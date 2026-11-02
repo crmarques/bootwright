@@ -538,8 +538,13 @@ part alone. The copy the server installed beneath its content root is never the
 authority, because it proves only itself and not the certificate a verifying
 fetcher is given. Any answer but `200` or `206` fails the block with its cause:
 the status, the connection failure, or the verification failure naming that
-Secret. The request names the token, so neither it nor the response reaches
-output; only that cause does, with the token redacted. The proof precedes
+Secret. A fetch that fails before any status line for a cause other than a
+certificate that did not verify (a timeout, or a refused, reset or unreachable
+connection) is made again at most twice more, five seconds apart, so a short
+network drop on the placement Machine does not fail the block; a status or a
+certificate failure fails it at once, with the last attempt's cause. The
+request names the token, so neither it nor the response reaches output; only
+that cause does, with the token redacted. The proof precedes
 anything that lets a later attempt treat the publication as complete.
 
 The physical installation proves its `install.iso`, `identity` and

@@ -56,6 +56,12 @@
     ca_path: '{{ bootwright_physical_erase_material.artifactCertificate }}'
     return_content: false
     timeout: 30
+  register: physical_erase_listener_fetch
+  until: >-
+    (physical_erase_listener_fetch.status | default(-1) | int) != -1
+    or (physical_erase_listener_fetch.msg | default('') | string) is search('CERTIFICATE_VERIFY_FAILED|certificate verify failed')
+  retries: '{{ physical_erase_listener_retries | int }}'
+  delay: '{{ physical_erase_listener_pause | int }}'
   no_log: true
 
 - name: Reprove the stopped target and boot only its private erase worker

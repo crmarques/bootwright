@@ -13,3 +13,11 @@ managedos_package_tree_media_unchanged: >-
 # frozen source image.
 managedos_package_tree_source_matches: >-
   {{ managedos_package_tree_observed.observation.identity in ['', bootwright_os_tree_request.media.sha256] }}
+
+# A listener self-fetch of the published tree that failed before any status
+# line, a timeout, a refused, reset or unreachable connection, is tried again
+# this many times this many seconds apart, so one short network drop on the
+# controller does not refuse it. A status, or a certificate that did not verify,
+# refuses at once.
+managedos_package_tree_listener_retries: 2
+managedos_package_tree_listener_pause: 5
