@@ -232,6 +232,7 @@ Alias cell.
 | [B998](#b998) | new, 2026-10-30 (X234) | enabling | State reconciliation | A resolution of a predecessor's block reserves the room of the lineage's removal | Found in X234 review; the reserve rule reads one apply today and holds in the shipped cases |
 | [B999](#b999) | new, 2026-10-30 (X235 review; pre-existing) | defect | Add-ons | Selection reports two built-in packages that create one CatalogSource name or share one hosted namespace on a cluster | No profile selects two such packages today; the check belongs with the package-facts selection rules, not B90's authored slice |
 | [B1050](#b1050) | new, 2026-11-02 (`make check` during the Ceph E2E fixes) | defect | Managed OS | The physical target proof's partition case is deterministic under concurrent gate runs, or its cause is recorded | Failed once in a gate run beside a second one and passed on rerun and in 20 isolated runs; gates no milestone |
+| [B1053](#b1053) | new, 2026-11-02 (owner's request: `make test` too slow) | enabling | Architecture and developer tooling | The Go suite's slowest packages run their independent tests concurrently | Partly delivered by X286; the rest needs a shared-state audit of each package; gates no milestone |
 | [B771](#b771) | new, 2026-10-20 (D173); folds B365 | defect | Add-ons, with Workspace | The `add-ons/_store` selection exception, its marker and its reader rules leave the input reader | Dead surface now that B89 is retired; removing input-reader rules is not needed by any M4 package |
 | [B772](#b772) | new, 2026-10-20 (D173) | product | Add-ons | A package installed through OLM v1 (`ClusterExtension`) | ODF/FDF, ACM, MCE and GitLab do not qualify; own-namespace installs are Technology Preview |
 | [B773](#b773) | new, 2026-10-20 (D173) | product | Add-ons | A registry credential merged into a cluster's global pull secret with an exact-entry receipt | Its inverse never runs under retirement; the install pull secret carries entitlements from first boot |
@@ -3031,6 +3032,31 @@ in the partition case. Parked because one failure is unreproduced, the tests
 passed on rerun, and the item gates no milestone. **Revive when** the case fails
 again, or a gate run records its output. The fix is in the test or in the
 rendered script's pipeline, never a retry.
+
+### B1053
+
+`make test` took 112 s uncached on 2026-11-02 (16 cores), up from about 43 s
+on 2026-10-18. Every slow package runs its tests one after another: the wall
+time of `cmd/bootwright`, `internal/workspace/contextfs`,
+`internal/reconciliation/lifecycle` and `test/architecture` equals the sum of
+their tests, and the suite waits for the longest package. Measurements and
+causes are in [the check-cost lessons](../../.agents/knowledge/inner-loop-check-cost.md#where-the-gates-time-goes).
+**Partly delivered** by
+[X286](delivered.md#x286--go-suite-cost-without-weaker-tests): the area
+double's prefix and the memoized automation digest bring the suite to 90 s
+with no test changed. **Remains:** concurrency inside those four packages.
+Go starts a top-level parallel test only after every serial test of its
+package finishes, so marking a few heavy tests parallel gains nothing; the
+package's tests must mostly run in parallel. **Outcome:** each of those
+packages runs its independent tests concurrently, with every test whose
+fixture shares mutable state (environment, working directory, package
+variables, a shared temporary root) left serial and named. **Requires:** none.
+**Definition:** `Specified`. **Exit evidence:** an audit of each package's
+shared state, `make race` over the converted packages, and repeated
+`-count` runs with no new failure, before and after wall times. Parked because
+it gates no milestone and a missed shared fixture would trade time for
+flakiness. **Revive when** the owner asks, or the suite's wall time grows
+again.
 
 ## Audit remediation (2026-10-26)
 

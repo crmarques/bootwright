@@ -7,10 +7,22 @@ inner loop is shaped as it is, and the traps found while measuring it on
 
 ## Where the gate's time goes
 
-- Go is not the cost. The whole Go suite takes about 43 s uncached, vet on both
-  platforms 14 s, and docs-check 3 s. The slowest packages are
-  `internal/workspace/contextfs` (32 s, half of it one crash-injection test),
-  `cmd/bootwright` (24 s) and `internal/reconciliation/lifecycle` (15 s).
+- The whole Go suite took about 43 s uncached on 2026-10-18 and 112 s on
+  2026-11-02, then 90 s after X286; vet on both platforms 14 s, docs-check
+  3 s. The suite waits for its longest package, and the slowest ones run their
+  tests one after another: on 2026-11-02 the wall time of `cmd/bootwright`
+  (76 s), `internal/workspace/contextfs` (71 s),
+  `internal/reconciliation/lifecycle` (78 s) and `test/architecture` (40 s)
+  each equalled the sum of their tests (B1053).
+- Profile a slow test before shortening it:
+  `./scripts/go test -count=1 -run '^TestName$' -cpuprofile cpu.prof -o pkg.test ./<package>`,
+  then `./scripts/go tool pprof -top -cum pkg.test cpu.prof`. In memory doubles
+  over a flat path map, a scan per call is quadratic once a test fills the area
+  to its bound; that cost, not the code under test, made the lifecycle reserve
+  test take 52 s. contextfs time is real: its `directory.verify` walk opens
+  each entry, and the crash harness repeats it hundreds of times.
+- `t.Parallel` on one heavy test gains nothing: Go starts a top-level parallel
+  test only after every serial test of its package has finished.
 - Ansible is about 4.7 of the gate's 6 minutes: syntax 15 s, lint 22 s,
   sanity 54 s and units 185 s. Units runs the 3818 collection tests twice
   serially, under ansible-test and as the plain loop, then the module tests

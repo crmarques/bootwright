@@ -11143,3 +11143,26 @@ ubuntu-24.04 image lists Helm). With the two
 firewalld lines of the three-node Ceph guests removed, every `lab-3-nodes-ceph`
 render fails with the `api.invariant` refusal. The delivering commit records
 the gates and their results.
+
+### X286 — Go suite cost without weaker tests
+
+**Item:** B1053, in part (new, 2026-11-02, parked). **Kind:** enabling.
+**Owner:** Architecture and developer tooling. The owner asked to shorten
+`make test` without losing confidence or safety; no test, fixture or assertion
+changed.
+
+- `areadouble.IsDirectory` built `target + "/"` once per record it compared,
+  which made a double filled to the operation area's entry bound allocate a
+  string per record per call.
+  `TestTheRemovalOfAnApplyLargerThanTheReserveRegistersAtTheLine` fell from
+  52 s to 27 s, and its package from 78 s to 46 s run alone.
+- `ansible.Digest` hashed the whole embedded automation on each call, and
+  every command run builds its version information from it. It is computed
+  once per process: the embedded files cannot change while it runs.
+  `digestOf`, which the digest tests apply to changed maps, still computes
+  every time.
+
+The uncached suite fell from 112 s to 90 s on a 16-core host. Concurrency
+inside the slowest packages stays parked on
+[B1053](backlog.md#b1053). The delivering commit records the gates and their
+results.

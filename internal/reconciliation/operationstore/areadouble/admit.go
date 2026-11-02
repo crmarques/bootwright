@@ -88,8 +88,9 @@ func IsDirectory(files map[string][]byte, directories map[string]bool, target st
 	if directories[target] {
 		return true
 	}
+	prefix := target + "/"
 	for name := range files {
-		if strings.HasPrefix(name, target+"/") {
+		if strings.HasPrefix(name, prefix) {
 			return true
 		}
 	}

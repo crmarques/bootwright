@@ -7,6 +7,7 @@ import (
 	"io/fs"
 	"slices"
 	"strings"
+	"sync"
 )
 
 //go:embed ansible.cfg collections
@@ -64,7 +65,9 @@ func split(files map[string][]byte) (automation, documentation map[string][]byte
 // equals one that does not. Each check of the staged automation compares
 // exactly these files byte for byte, so a documentation-only build keeps the
 // digest. specs/controller.md owns the rule.
-func Digest() string { return digestOf(Automation()) }
+func Digest() string { return embeddedDigest() }
+
+var embeddedDigest = sync.OnceValue(func() string { return digestOf(Automation()) })
 
 func digestOf(files map[string][]byte) string {
 	names := make([]string, 0, len(files))
