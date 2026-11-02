@@ -286,8 +286,8 @@ refuses `lifecycle.lease` while an apply holds the root lock
   selection refuses `lifecycle.stage`.
 - [B583](../../specs/milestones/backlog.md#b583),
   [B584](../../specs/milestones/backlog.md#b584),
-  [B585](../../specs/milestones/backlog.md#b585),
-  [B586](../../specs/milestones/backlog.md#b586): bare record-version
+  [B585](../../specs/milestones/delivered.md#x277--parked-defects-fixed-on-request),
+  [B586](../../specs/milestones/delivered.md#x277--parked-defects-fixed-on-request): bare record-version
   literals; no golden for a resolution with an observation failure; the spec
   says root disk where the role refuses any owned disk; an over-claiming
   controller-clients digest comment.

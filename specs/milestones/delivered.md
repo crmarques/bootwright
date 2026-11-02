@@ -6331,7 +6331,7 @@ its accepted passing clauses with the subsequent restart journey.
 **Constraints left behind:** the remaining B608/B466 gate and M1 completed
 under [X98](#x98--m1-owner-acceptance). The run also found
 [B609](backlog.md#b609), [B610](backlog.md#b610), [B611](backlog.md#b611) and
-[B612](backlog.md#b612), parked under D48. Preview-capture evidence for
+[B612](#x277--parked-defects-fixed-on-request), parked under D48. Preview-capture evidence for
 [B560](backlog.md#b560) and the original command history, outcomes and digests
 are retained locally. The public ledger records the accepted qualifications.
 
@@ -6916,7 +6916,7 @@ authenticated registry. Follow-ups: [B627](#x57--applied-specializations-in-ceph
 [B628](m2.md#b628) the CephX key type, [B629](m2.md#b629) the provider bootstrap
 tail on a continued seed, [B630](backlog.md#b630) narrowing `partial-cluster`
 for a proved-absent rejection, [B631](backlog.md#b631) an earlier Call Home
-refusal, [B632](backlog.md#b632) the unused `installed_cephadm`,
+refusal, [B632](#x277--parked-defects-fixed-on-request) the unused `installed_cephadm`,
 [B633](backlog.md#b633) a flaky parallel test, [B634](backlog.md#b634) the
 runbook per release and [B635](backlog.md#b635) the review's untested edges. The
 multidc example still cannot plan because of `cephadm.workarounds`;
@@ -7081,7 +7081,7 @@ diagnostic is parked). Owner questions B650 to B656, answered by
 [D165](backlog.md#d165) and closed in
 [X104](#x104--owner-answers-of-2026-10-19). Parked: [B657](backlog.md#b657) to [B664](backlog.md#b664),
 [B674](backlog.md#b674), [B675](backlog.md#b675), [B677](backlog.md#b677),
-[B678](backlog.md#b678) and [B679](backlog.md#b679). The audit also noted that
+[B678](#x277--parked-defects-fixed-on-request) and [B679](backlog.md#b679). The audit also noted that
 the numbering of the peer branch `m2c` against the ids on main
 (milestones-docs-1) is the peer's to reconcile above D164, B681 and X103; this
 slice edits nothing of it.
@@ -11057,3 +11057,42 @@ missing one, and the continuation to the one rebuild or the setup refusal;
 refusal first. The partition test no longer allows the rebuild, so
 `TestLifecyclePlannerReachesNoEffect` fails on any planner path to it. The
 delivering commit records the gates and their results.
+
+### X277 — Parked defects fixed on request
+
+**Items:** B585, B586, B597, B612, B632 and B678, all parked, delivered on the
+owner's request of 2026-11-02. **Kind:** defect, with B586 and B632 enabling.
+**Owner:** each item's owner. Part of B616 is delivered too, and the rest
+stays parked.
+
+- B585: [machine realization](../substrates.md#machine-realization) says an
+  owned libvirt domain refuses a size change of any owned disk, root or data,
+  as the role does; the code was already on the safe side.
+- B586: the controller-clients `ContentDigest` comment says what it hashes,
+  the stage label, Implementation and Version.
+- B597: the [state table](../state-reconciliation.md#state-machine) gains the
+  `destroy paused` row, which continues that destroy;
+  `TestTransitionTablesMatchSpec` holds it over a destroy paused at its online
+  boundary.
+- B612: the [host packages](../controller.md#host-packages) preview note says
+  the install adds or updates core packages, true whether dnf installs them or
+  updates them, since dnf's output stays display text that no decision parses
+  (`TestThePreviewNotesCorePackagesTheHostLacks`).
+- B632: already met; 7480fe329 (2026-10-19) removed `installed_cephadm` and the
+  tests that patched it.
+- B678: a Ceph package host whose os-release ID is not `rhel` refuses
+  `package-platform` naming that ID before any transaction, not the generic
+  `package-resolution`; no OS or version gate is added (D163). The edit moves
+  the automation bundle, so a host needs `make build` and
+  `bootwright controller install` before its next apply.
+- B616, in part: the architecture tests' source walkers and
+  `TestEveryRequestFieldIsRead` read only what Git tracks or does not ignore
+  (`TestSourceChecksSkipAnIgnoredUnreadableDirectory`); the go command's `./...`
+  patterns and one `cmd/bootwright` walker remain on
+  [B616](backlog.md#b616).
+
+Two requested items wait for the owner, as their sections record:
+[B508](backlog.md#b508), the remedy `secret check` names under a sudo policy
+that logs input, and [B798](backlog.md#b798), whether the Ansible unit gate's
+serial run is worth its measured cost. The delivering commits record the gates
+and their results.

@@ -161,8 +161,6 @@ Alias cell.
 | [B582](#b582) | new, 2026-10-14 (X91 audit) | enabling | State reconciliation | `StartResolution` proves the attempt and parses entry names as `LastResolution` does | Found by the X91 audit; no milestone depends on it: the two parsers agree on every name the store writes |
 | [B583](#b583) | new, 2026-10-14 (X91 audit) | enabling | State reconciliation | Record version literals come from one declaration per record | Found by the X91 audit; no milestone depends on it: a missed site fails closed |
 | [B584](#b584) | new, 2026-10-14 (X91 audit) | enabling | State reconciliation | Goldens pin a resolution with an observation failure, an adopted attempt and `replaces` | Found by the X91 audit; no milestone depends on it: test depth |
-| [B585](#b585) | new, 2026-10-14 (X91 audit) | defect | Substrate | The spec and the role agree on which libvirt disk sizes refuse | Found by the X91 audit; no milestone depends on it: the role is the safe side |
-| [B586](#b586) | new, 2026-10-14 (X91 audit) | enabling | Controller setup | The controller-clients content digest comment says only what it hashes | Found by the X91 audit; no milestone depends on it: a comment |
 | [B587](#b587) | new, 2026-10-14 (X91 audit) | defect | Storage | Detected Ceph pool `size` and `min_size` drift refuses without writing until a named delta admits it | D155 selects refusal without writes; X99's pool setters refuse drift of a completed `size` or `min_size` without writing; a drift test remains, and M2c's B81 extends the same records to every pool setter |
 | [B588](#b588) | new, 2026-10-14 (X91 audit) | enabling | Storage and Managed OS | Image and tree observations surface decode errors as unknown with a reason | Found by the X91 audit; no milestone depends on it: the effect is the same, only the diagnostic is weaker |
 | [B589](#b589) | new, 2026-10-14 (X91 audit) | enabling | Storage | Ceph core and host blocks gain an unresolved reason | Found by the X91 audit; no milestone depends on it: diagnostics only |
@@ -172,7 +170,6 @@ Alias cell.
 | [B594](#b594) | new, 2026-10-14 (X91 audit) | enabling | Desired state | One envelope shape definition serves the decoder and the encoder | Found by the X91 audit; no milestone depends on it: drift risk only |
 | [B595](#b595) | new, 2026-10-14 (X91 audit) | enabling | Storage | A Ceph refusal table test and a docs-check entry | Found by the X91 audit; no consumer until the first Ceph delta scenario |
 | [B596](#b596) | new, 2026-10-14 (X91 audit); agent-install half delivered by X126 (D199) | enabling | Storage | Ceph observations run without outputs when no operation records them | Found by the X91 audit; no milestone depends on it: until then `diff --observe` reads these blocks as unknown |
-| [B597](#b597) | new, 2026-10-14 (X91 audit) | defect | State reconciliation | The state table names the paused destroy row | Found by the X91 audit; no milestone depends on it: the decision (continue) does not change |
 | [B598](#b598) | new, 2026-10-14 (X91 audit) | safety | State reconciliation and Workspace | Input restored byte for byte after an edit settles a completed apply | D155 accepts exact-byte restoration for a future named slice; current refusal stays |
 | [B599](#b599) | new, 2026-10-14 (X91 audit) | safety | Substrate and Managed OS | Every observe task writes only inside the runner's private directories | Found by the X91 audit; its extent is what the allowlist test finds, and the audit names two candidates |
 | [B600](#b600) | new, 2026-10-14 (X91 audit) | product | Storage | `diff --observe` proves a Ceph pool's size, minimum size and role | Candidate; found by the X91 audit; one projector, promoted when an operator asks for it |
@@ -185,13 +182,11 @@ Alias cell.
 | [B609](#b609) | new, 2026-10-15 (X93) | safety | CLI | A confirmation is never asked before the plan it confirms has been written | Found in the owner run; `--yes` avoids it; parked under D48 |
 | [B610](#b610) | new, 2026-10-15 (X93) | product | Substrate | `diff --observe` shows a managed libvirt network that is not active | Found in the owner run; a projector for the provider host, promoted with B576 |
 | [B611](#b611) | new, 2026-10-15 (X93) | enabling | CLI | A check list written to a non-terminal names each row once | Found in the owner run; display only |
-| [B612](#b612) | new, 2026-10-15 (X93) | defect | Controller setup | The core-package note says install, not update, for a package the host lacks | Found in the owner run; wording only |
-| [B616](#b616) | new, 2026-10-16 | defect | Architecture and developer tooling | Source checks exclude unreadable ignored non-source directories | Found during integration verification; test tooling, no milestone gate |
+| [B616](#b616) | new, 2026-10-16 | defect | Architecture and developer tooling | Source checks exclude unreadable ignored non-source directories | Found during integration verification; test tooling, no milestone gate; partly delivered by X277 |
 | [B617](#b617) | new, 2026-10-17 | defect | Storage | Registry socket publication serialized with close | Pre-existing connector race; separate cancellation follow-up, no new milestone gate |
 | [B624](#b624) | new, 2026-10-18 (D159; found by the X55 checkpoint) | enabling | CLI and Managed OS | `diff --observe` shows a Machine's bounded network differences | Display only; the runbook reads the drifted value from the guest, and a projector is promoted with B576 |
 | [B630](#b630) | new, 2026-10-19 (X101) | safety | Storage | A proved-absent native rejection leaves a bootstrap or `set-user` attempt recoverable instead of `partial-cluster` | Found in X101; narrowing a safety refusal needs its own named slice and decision; X101's argv check before the attempt record already covers the bootstrap options |
 | [B631](#b631) | new, 2026-10-19 (X101) | enabling | Storage | A wrong `spec.distribution.ibm.callHome` for the selected build is refused before any host block runs | Found in X101; Go has no planning-visible Call Home model fact, and D157 forbids gating on the release |
-| [B632](#b632) | new, 2026-10-19 (X101) | enabling | Storage | The unused `installed_cephadm` and the tests that patch it are removed | Found in X101; dead code with no effect |
 | [B633](#b633) | new, 2026-10-19 (X101); widened 2026-10-19 (X102) | defect | Architecture and developer tooling | Two unit tests stop failing under load: the native-timeout test's xdist worker and the libvirt firewall readiness replay case | Found in X101 and X102; each file passes alone and the whole tree passed on rerun |
 | [B634](#b634) | new, 2026-10-19 (X101) | enabling | Storage | The libvirt three-node Ceph runbook validates the operator's selected coordinates, not only the tracked ones | Found in X101; documentation for the owner's runs, no gate |
 | [B635](#b635) | new, 2026-10-19 (X101) | enabling | Storage, with Container clusters | The edges X101's reviews left untested or unreconciled are tested or recorded | Found in X101; each is hardening of a path no signed build reaches today |
@@ -213,7 +208,6 @@ Alias cell.
 | [B675](#b675) | new, 2026-10-19 (X102) | product | Storage, Ceph Call Home | `spec.distribution.ibm.callHome: disabled` passes the opt-out flag when the selected build declares it | Keyed on artifact facts, not a version label; a feature gap outside a defect slice |
 | [B676](#b676) | new, 2026-10-19 (X103) | product | Controller | `spec.dependencyVersions.libvirt` honours a NEVRA pin through host `dnf`, or the field leaves the grammar | Implementation scope, not a compatibility rule |
 | [B677](#b677) | new, 2026-10-19 (X102) | enabling | Storage | The misnamed `unsupported-release` Ceph refusal token is renamed `unsupported-coordinates` | Cosmetic, and it collides with the closed reason lists the m2c lanes edit |
-| [B678](#b678) | new, 2026-10-19 (X102) | defect | Storage package resolution | A non-rhel host refuses `package-platform` naming the os-release ID, not a generic `package-resolution` | Fails closed before any effect; low value |
 | [B679](#b679) | new, 2026-10-19 (X102) | enabling | Storage and State reconciliation | The edges X102's lanes and reviews left untested, unmeasured or unreconciled are tested or recorded | Found in X102; each is hardening of a path no known input reaches |
 | [B681](#b681) | new, 2026-10-19 (X103) | enabling | CLI, Substrate and Docs | The edges X103's lanes and reviews left untested, unmeasured or unreconciled are tested or recorded | Found in X103; each is hardening of output or removal paths no known input breaks |
 | [B682](#b682) | new, 2026-10-20 (X57; parked by D160, OD7, kept by D161) | product | Storage and Secrets | A StorageCluster binds the direct MGR dashboard's certificate | The management gateway fronts the dashboard with a bound certificate; X70's self-signed dashboard certificate stays |
@@ -1106,7 +1100,13 @@ material: the route just refused. Since b3e48bcb6 the policy listing works on
 Fedora's sudo, so the refusal now happens only under a policy that logs input,
 and there the remedy should name the file flags. **Exit evidence:** a test that,
 under an input-logging policy, the missing-material remedy names
-`--password-file`/`--value-file` and not the standard-input flag.
+`--password-file`/`--value-file` and not the standard-input flag. **Waits for
+the owner (2026-11-02, X277):** `secret check` makes no sudo policy call and
+runs as the elevated child, so the policy is known only to a new privileged
+probe or a new supervisor-to-child answer. Only `usernamePassword`'s remedy
+names standard input; the other kinds already name a file flag. The options
+are that remedy always naming `--password-file`, naming both routes, or the
+probe this outcome assumes.
 
 ### B510
 
@@ -1666,28 +1666,6 @@ attempt has the same shape as `attempt-running`
 `resolution-unknown-failure.golden` and goldens for an adopted attempt and for
 `replaces`. **Exit evidence:** the three goldens.
 
-### B585
-
-`specs/substrates.md:292-293` and `:347-348` say the root disk size refuses; the
-role refuses a size mismatch on any present disk
-(`ansible/collections/ansible_collections/bootwright/core/roles/substrate_libvirt_machine/tasks/apply.yml:46-54`,
-`internal/substrate/libvirt/requests.go:140`). The role is the safe side.
-**Impact:** the spec understates the refusal. **Smallest fix:** both sentences
-say "an owned disk, root or data". **Exit evidence:** the two sentences and `make
-docs-check`.
-
-### B586
-
-The comment on the controller-clients `ContentDigest` says shape and automation
-changes invalidate a plan, but the function hashes only the label,
-Implementation and Version
-(`internal/controller/clients/requests.go:115-122`). The contract guard test is
-the real protection, and only for Go schemas (D145,
-`cmd/bootwright/contract_versions_test.go:43`). **Impact:** the comment
-over-claims. **Smallest fix:** reword it to what the function hashes, or drop it
-under the comment rule. **Exit evidence:** the reworded comment under `make
-quick`.
-
 ### B587
 
 When the X91 audit ran, the Ceph pool phase ran `osd pool set size` and
@@ -1805,16 +1783,6 @@ reported the CephCluster, both CephClients and the CephObjectUser unknown, and
 its remedy, "restore what the reason names", names nothing an operator can
 restore; until the fix lands that row should say the observation needs an
 operation.
-
-### B597
-
-`destroy paused` is reachable
-(`internal/reconciliation/lifecycle/online_gates.go` sets the online
-boundary; `internal/reconciliation/lifecycle/scheduler.go:142`) but has no row in
-`specs/state-reconciliation.md:449-466`. **Impact:** the state table is
-incomplete; the decision (continue) is unchanged. **Smallest fix:** a row and a
-`stateMachineRows` case. **Exit evidence:** `TestTransitionTablesMatchSpec` over
-the new row.
 
 ### B598
 
@@ -1938,17 +1906,6 @@ thirteen times, without naming the block. **Outcome:** a non-terminal check
 list writes one row per block, naming it, or one summary row. **Exit
 evidence:** a golden of the piped check output.
 
-### B612
-
-On the RHEL 9.8 guest of the owner run, setup's preview note read "this install
-also updates core packages (python3.14, python3.14-libs,
-python3.14-pip-wheel)" for packages the host did not hold
-(`internal/controller/hostdnf/packages_linux_amd64.go`). D152's clause 6 makes
-the selected `python3.X` a core package, so the note is right to appear.
-**Outcome:** the note says the install adds or updates core packages as dnf's
-transaction does. **Exit evidence:** a hostdnf preview test with a fresh
-install.
-
 ### B616
 
 Repository-wide Go package patterns and `TestEveryRequestFieldIsRead` can walk
@@ -1957,7 +1914,13 @@ tracked source. The same committed source passes in a clean worktree. Make the
 source boundary explicit without changing permissions or deleting ignored data,
 and retain complete tracked-package coverage. **Exit evidence:** an ignored,
 unreadable directory regression plus the complete source checks. Parked as
-developer tooling; this adds no product or M2b acceptance gate.
+developer tooling; this adds no product or M2b acceptance gate. **Partly
+delivered** by [X277](delivered.md#x277--parked-defects-fixed-on-request): the
+architecture tests' source walkers and `TestEveryRequestFieldIsRead` read only
+what Git tracks or does not ignore. **Remains:** the go command's `./...`
+patterns in the Makefile and `scripts/quick-test`, and the `invokedPairs`
+walker in `cmd/bootwright/invoked_playbooks_linux_amd64_test.go`, which still
+walk an ignored directory whose name starts with neither `.` nor `_`.
 
 ### B617
 
@@ -2015,15 +1978,6 @@ block, the wrong value is refused before any host effect. **Requires:** a
 planning-visible Call Home model fact. **Definition:** `Needs definition`.
 **Exit evidence:** a refusal test with no host block run, and the existing claim
 refusal kept as the backstop.
-
-### B632
-
-`installed_cephadm` in the Ceph host runtime compares the host and image
-cephadm and has no caller. Three tests in the host runtime unit file patch it.
-**Outcome:** the function and its patches are deleted, or a caller is added
-with a stated reason. **Requires:** none. **Definition:** `Specified`.
-**Exit evidence:** the collection unit and sanity suites
-pass without it.
 
 ### B633
 
@@ -2315,16 +2269,6 @@ parked:** cosmetic, and it collides with the closed reason lists that the m2c
 lanes edit; do it after m2c lands. **Requires:** m2c landed. **Definition:**
 `Specified`. **Exit evidence:** the refusal tests under the new token and a
 contract guard update if a content digest moves.
-
-### B678
-
-On a host whose os-release ID is not `rhel`, `native_resolution.db_path`
-raises a bare `ValueError` that surfaces as `package-resolution`. Found by the
-audit (`gap1-test-weakening-2-1`, residual); the OS gate itself is declined
-under D163. **Outcome:** it refuses `package-platform` and names the
-os-release ID. **Why parked:** it fails closed before any effect, and the value
-is low. **Requires:** none. **Definition:** `Specified`. **Exit evidence:** a
-resolution test on a non-rhel os-release that expects the named refusal.
 
 ### B679
 
@@ -2879,7 +2823,15 @@ Choose and test an explicit serial invocation without changing selected tests
 or their pass/fail behavior. **Exit evidence:** a harness regression over the
 actual generated pytest command and the full Ansible gate. **Why parked:**
 this pre-existing verification behavior is recorded separately from M3's
-product implementation; no failed test is reclassified as passed.
+product implementation; no failed test is reclassified as passed. **Waits for
+the owner (2026-11-02, X277):** the locked ansible-test cannot run pytest
+in-process, so its nearest serial run is `--num-workers 1`, one pytest-xdist
+worker. In that day's `make check` its five unit phases took 1054 s instead of
+189 s under `-n auto`, and the one worker still runs execnet's I/O thread that
+[pytest-xdist is no gate](../../.agents/knowledge/inner-loop-check-cost.md#pytest-xdist-is-no-gate)
+warns of; the plain pytest loop after it stays the in-process serial run. The
+options are that one worker at that cost, or `-n auto` named explicitly and
+documented as the gate's mode.
 
 ### B857
 
