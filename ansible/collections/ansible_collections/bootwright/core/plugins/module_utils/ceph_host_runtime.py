@@ -26,6 +26,7 @@ import re
 import shutil
 import stat
 import tempfile
+import threading
 import time
 import uuid
 
@@ -66,6 +67,9 @@ PULL_RESERVE = 120
 PULL_PAUSE = 15
 IMAGES_CALL_SECONDS = 4285
 PULL_CONCURRENCY = 3
+# How long a batch interrupted in this thread waits for its pulls to stop: a pause between attempts, then a broker's exit
+# (1 s for its listener and 31 s for its connections), each process stopping within a second of the cancellation.
+PULL_CANCEL_SECONDS = PULL_PAUSE + 1 + 31 + 3
 PHASES = frozenset(("images", "profile", "route", "device_identity", "host_devices", "host_observe", "fips_observe"))
 ARTIFACTS = ("/usr/sbin/cephadm", "/usr/share/ceph/mgr/cephadm/ssh.py", "/usr/share/ceph/mgr/cephadm/module.py",
              "/usr/share/ceph/mgr/cephadm/serve.py", "/usr/bin/ceph", "/usr/bin/ceph-authtool")
@@ -437,8 +441,10 @@ class HostRuntime:
         self.markers = markers
         self.packages = packages or ceph_native.Markers(self.request, root=PACKAGE_ROOT)
 
-    def command(self, argv, timeout, limit, reason="native-command", *, environment=None, secrets=(), coordinate=None):
+    def command(self, argv, timeout, limit, reason="native-command", *, environment=None, secrets=(), coordinate=None, cancel=None):
         options = {"environment": environment} if environment else {}
+        if cancel is not None:
+            options["cancel"] = cancel
         code, output = self.run(argv, timeout=timeout, limit=limit, **options)
         if code != 0:
             raise ceph_native.NativeFailure(reason, self.request["image"] if coordinate is None else coordinate,
@@ -512,22 +518,39 @@ class HostRuntime:
         """Pre-pull one batch of this host's frozen auxiliary digests at once, so no native deploy pulls one.
 
         Each pull keeps its own broker, scratch and journal records; the first refusal in name order is raised once every
-        pull of the batch has returned, so no pull outlives the call.
+        pull of the batch has returned, so no pull outlives the call. The worker's deadline signal reaches only this
+        thread, so an exception while it waits cancels every pull: each stops its process and leaves its broker before
+        the exception goes on.
         """
         references = auxiliary_names(self.request, names)
         require(0 < len(references) <= PULL_CONCURRENCY, "request")
         discard_residue(durable.path, "auxiliary-scratch-")
-        with concurrent.futures.ThreadPoolExecutor(max_workers=PULL_CONCURRENCY) as pool:
-            futures = [pool.submit(self.pull_reference, durable, private, deadline, name, reference, trust=trust) for name, reference in references]
+        cancel = threading.Event()
+        pool = concurrent.futures.ThreadPoolExecutor(max_workers=PULL_CONCURRENCY)
+        futures = []
+        try:
+            for name, reference in references:
+                futures.append(pool.submit(self.pull_reference, durable, private, deadline, name, reference, trust=trust, cancel=cancel))
+            concurrent.futures.wait(futures)
+        except BaseException:
+            cancel.set()
+            concurrent.futures.wait(futures, timeout=PULL_CANCEL_SECONDS)
+            raise
+        finally:
+            pool.shutdown(wait=False)
         changed = False
         for future in futures:
             changed = future.result() or changed
         return changed
 
-    def pull_reference(self, durable, private, deadline, name, reference, *, trust=None):
-        """The frozen-image pull of one auxiliary reference, journaled under its own name with its own broker."""
+    def pull_reference(self, durable, private, deadline, name, reference, *, trust=None, cancel=None):
+        """The frozen-image pull of one auxiliary reference, journaled under its own name with its own broker.
+
+        A set ``cancel`` stops its running command and refuses any further one, so the broker's exit follows at once.
+        """
         attempt_name, pulled_name = "auxiliary-" + name + "-attempt-%d.json", "auxiliary-" + name + "-pulled.json"
-        inspect = functools.partial(self.command, coordinate=reference)
+        command = functools.partial(self.command, cancel=cancel)
+        inspect = functools.partial(command, coordinate=reference)
         attempts = 0
         while attempts < PULL_ATTEMPTS and durable.read(attempt_name % (attempts + 1)) is not None:
             record = durable.read(attempt_name % (attempts + 1))
@@ -554,7 +577,7 @@ class HostRuntime:
         broker = None
         try:
             with owned_scratch(durable.path, "auxiliary-scratch-") as scratch, authfile(scratch) as auth, \
-                    ceph_pull_broker.Broker(scratch, self.request, private, deadline, self.command, image=reference,
+                    ceph_pull_broker.Broker(scratch, self.request, private, deadline, command, image=reference,
                                             trust=trust) as broker:
                 policy = os.path.join(scratch, "policy.json")
                 ceph_native.private_write(policy, signature_policy(reference))
@@ -564,14 +587,14 @@ class HostRuntime:
                 tried = 0
                 while True:
                     seconds = min(PULL_SECONDS, deadline - self.clock() - PULL_RESERVE)
-                    require(seconds >= PULL_MINIMUM, "image-pull")
+                    require(seconds >= PULL_MINIMUM and (cancel is None or not cancel.is_set()), "image-pull")
                     tried += 1
                     durable.write(attempt_name % tried, {"scope": self.scope(), "image": reference, "attempt": tried})
                     try:
-                        self.command(argv, seconds, 256 << 10, "image-pull", environment=broker.environment, secrets=secrets, coordinate=reference)
+                        command(argv, seconds, 256 << 10, "image-pull", environment=broker.environment, secrets=secrets, coordinate=reference)
                         break
                     except Refusal:
-                        if tried >= PULL_ATTEMPTS:
+                        if tried >= PULL_ATTEMPTS or cancel is not None and cancel.is_set():
                             raise
                         self.pause(PULL_PAUSE)
         except ceph_native.NativeFailure as error:

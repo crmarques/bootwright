@@ -14,15 +14,20 @@ import io
 import json
 import os
 import re
+import shutil
+import signal
 import ssl
 import subprocess
 import threading
+import time
 from types import SimpleNamespace
 from pathlib import Path
 
 import pytest
 
-from ansible_collections.bootwright.core.plugins.module_utils import ceph_host_runtime as runtime, ceph_host_route_probe as probe, ceph_native
+from ansible_collections.bootwright.core.plugins.module_utils import (
+    bounded_process, ceph_host_runtime as runtime, ceph_host_route_probe as probe, ceph_native,
+)
 
 IMAGE = "cp.icr.io/cp/ibm-ceph/ceph-9-rhel9@sha256:" + "a" * 64
 IMAGE_ID = "c" * 64
@@ -1438,9 +1443,9 @@ class ImageSet:
     def identifier(reference):
         return hashlib.sha256(reference.encode()).hexdigest()
 
-    def __call__(self, argv, timeout, limit, environment=None):
+    def __call__(self, argv, timeout, limit, environment=None, cancel=None):
         self.calls.append(list(argv))
-        assert 0 < timeout and 0 < limit
+        assert 0 < timeout and 0 < limit and (cancel is None or not cancel.is_set())
         if argv[:3] == ["/usr/bin/podman", "image", "inspect"]:
             reference = argv[3]
             if reference not in self.present:
@@ -1490,9 +1495,9 @@ def auxiliary_runtime(request_value, tmp_path, monkeypatch, outcomes, outputs=()
     images = ImageSet(outcomes)
     engine = Engine(list(outputs))
 
-    def command(argv, timeout, limit, environment=None):
+    def command(argv, timeout, limit, environment=None, cancel=None):
         if argv[:2] in (["/usr/bin/podman", "image"], ["/usr/bin/podman", "pull"]):
-            return images(argv, timeout, limit, environment)
+            return images(argv, timeout, limit, environment, cancel)
         return engine(argv, timeout, limit)
 
     worker, markers, unused_clock = host_runtime(request_value, tmp_path, command)
@@ -1633,11 +1638,11 @@ def test_a_batch_pulls_its_images_at_once_each_with_its_own_broker_and_journal(r
     worker.request["auxiliary"].append({"name": "prometheus", "image": PROMETHEUS})
     together, timeouts, original = threading.Barrier(runtime.PULL_CONCURRENCY, timeout=10), [], ImageSet.__call__
 
-    def gated(self, argv, timeout, limit, environment=None):
+    def gated(self, argv, timeout, limit, environment=None, cancel=None):
         if argv[:2] == ["/usr/bin/podman", "pull"]:
             together.wait()
             timeouts.append(timeout)
-        return original(self, argv, timeout, limit, environment)
+        return original(self, argv, timeout, limit, environment, cancel)
 
     monkeypatch.setattr(ImageSet, "__call__", gated)
     names = ["haproxy", "keepalived", "prometheus"]
@@ -1648,6 +1653,81 @@ def test_a_batch_pulls_its_images_at_once_each_with_its_own_broker_and_journal(r
     for name, reference in zip(names, (HAPROXY, KEEPALIVED, PROMETHEUS)):
         assert markers.records["auxiliary-" + name + "-pulled.json"] == {"scope": scope, "image": reference, "imageID": images.identifier(reference)}
     assert IMAGE not in [argv[-1] for argv in images.calls]
+
+
+class Deadline(Exception):
+    """The worker's deadline, raised by its SIGALRM handler in the main thread."""
+
+
+@pytest.mark.skipif(threading.current_thread() is not threading.main_thread(), reason="signals reach only the main thread")
+def test_a_deadline_while_a_batch_pulls_stops_every_pull_process_and_leaves_every_broker(request_value, tmp_path, monkeypatch):
+    request_value["auxiliary"] = [{"name": "haproxy", "image": HAPROXY}, {"name": "keepalived", "image": KEEPALIVED}]
+    sleep, lock, started, fired = shutil.which("sleep"), threading.Lock(), threading.Event(), []
+    groups, left = [], []
+    assert sleep and os.path.isabs(sleep)
+
+    class Recorded(subprocess.Popen):
+        def __init__(self, *args, **options):
+            super().__init__(*args, **options)
+            with lock:
+                groups.append(self.pid)
+                if len(groups) == 2:
+                    started.set()
+
+    class Broker:
+        failure_cause, environment = "", {}
+
+        def __init__(self, directory, request, private, deadline, command, *, image=None, trust=None):
+            del request, private, deadline, command, trust
+            self.image, self.cert_directory = image, os.path.join(directory, "native-certs")
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, kind, unused_value, unused_traceback):
+            with lock:
+                left.append((self.image, kind))
+            return False
+
+    def command(argv, timeout, limit, environment=None, cancel=None):
+        del environment
+        assert argv[:2] == ["/usr/bin/podman", "pull"] and cancel is not None
+        # Each pull is a real process group that only the cancellation can end before its 30 s.
+        return ceph_native.bounded_command([sleep, "30"], timeout=timeout, limit=limit, cancel=cancel)
+
+    def inject():
+        if started.wait(timeout=10):
+            signal.pthread_kill(threading.main_thread().ident, signal.SIGALRM)
+
+    def elapsed(signum, frame):
+        del signum, frame
+        fired.append(True)
+        raise Deadline()
+
+    monkeypatch.setattr(bounded_process.subprocess, "Popen", Recorded)
+    monkeypatch.setattr(runtime.ceph_pull_broker, "Broker", Broker)
+    worker, markers, unused_clock = host_runtime(request_value, tmp_path, command)
+    injector = threading.Thread(target=inject)
+    previous = signal.signal(signal.SIGALRM, elapsed)
+    begun = time.monotonic()
+    try:
+        injector.start()
+        with worker.journal(create=True) as durable, pytest.raises(Deadline):
+            worker.pull_auxiliary(durable, registry(request_value), 4285, ["haproxy", "keepalived"])
+    finally:
+        injector.join(timeout=10)
+        signal.signal(signal.SIGALRM, previous)
+    # Well before either sleep's 30 s, so the cancellation, not completion, ended both groups.
+    assert time.monotonic() - begun < 15
+    assert fired == [True] and len(groups) == 2
+    for group in groups:
+        with pytest.raises(ProcessLookupError):
+            os.killpg(group, 0)
+    assert sorted(left) == sorted([(HAPROXY, ceph_native.Refusal), (KEEPALIVED, ceph_native.Refusal)])
+    scope = runtime.scope(request_value, "node-1")
+    for name, reference in (("haproxy", HAPROXY), ("keepalived", KEEPALIVED)):
+        assert markers.records["auxiliary-" + name + "-attempt-1.json"] == {"scope": scope, "image": reference, "attempt": 1}
+        assert "auxiliary-" + name + "-attempt-2.json" not in markers.records and "auxiliary-" + name + "-pulled.json" not in markers.records
 
 
 @pytest.mark.parametrize("pull", [

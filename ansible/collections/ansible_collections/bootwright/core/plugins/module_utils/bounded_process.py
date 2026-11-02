@@ -38,17 +38,20 @@ def require(condition, kind):
         raise Failure(kind)
 
 
-def run(argv, data=b"", timeout=60, limit=MAX_OUTPUT, *, environment, cwd=None, session=True, capture_stderr=True):
+def run(argv, data=b"", timeout=60, limit=MAX_OUTPUT, *, environment, cwd=None, session=True, capture_stderr=True, cancel=None):
     """Run argv once with exactly the environment mapping given, which a caller states and never inherits.
     A session owns its process group, which is killed before the leader is reaped; without one, only
     the direct child is killed. Stdout and stderr together stay within limit bytes.
-    A bad argument is a command failure before any process starts."""
+    A bad argument is a command failure before any process starts. A set cancel event, which another
+    thread may set, ends the run as a timeout within a second, so the same cleanup stops the process."""
     data = b"" if data is None else data
     require(argv and os.path.isabs(argv[0]) and all(isinstance(value, str) and "\x00" not in value for value in argv), "command")
     require(isinstance(data, bytes), "command")
     require(isinstance(timeout, (int, float)) and not isinstance(timeout, bool) and 0 < timeout < float("inf"), "command")
     require(isinstance(limit, int) and not isinstance(limit, bool) and limit >= 0, "command")
     require(isinstance(environment, dict) and all(isinstance(key, str) and isinstance(value, str) for key, value in environment.items()), "command")
+    require(cancel is None or callable(getattr(cancel, "is_set", None)), "command")
+    require(cancel is None or not cancel.is_set(), "timeout")
     try:
         # The bounded fixed-argv runner every caller shares; run_command offers neither group kill nor a byte bound.
         # pylint: disable-next=ansible-bad-function
@@ -76,7 +79,7 @@ def run(argv, data=b"", timeout=60, limit=MAX_OUTPUT, *, environment, cwd=None, 
                 process.stdin.close()
             while selector.get_map():
                 remaining = deadline - time.monotonic()
-                require(remaining > 0, "timeout")
+                require(remaining > 0 and (cancel is None or not cancel.is_set()), "timeout")
                 for key, unused in selector.select(min(remaining, 1)):
                     if key.fileobj is process.stdin:
                         try:
@@ -103,7 +106,7 @@ def run(argv, data=b"", timeout=60, limit=MAX_OUTPUT, *, environment, cwd=None, 
         # group identifier until cleanup stops every inherited descendant.
         while True:
             remaining = deadline - time.monotonic()
-            require(remaining > 0, "timeout")
+            require(remaining > 0 and (cancel is None or not cancel.is_set()), "timeout")
             status = os.waitid(os.P_PID, process.pid, os.WEXITED | os.WNOHANG | os.WNOWAIT)
             if status is not None:
                 require(status.si_pid == process.pid, "command")

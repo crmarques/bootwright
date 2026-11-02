@@ -485,7 +485,9 @@ resolve to declared nodes) or the image serves a CephSMBResource (`samba`,
 `samba_metrics`), every host pre-pulls it. The host request freezes these
 images as batches; a batch's pulls run at once, each with its own broker,
 scratch and journal records, and its call returns once every pull has,
-raising the first refusal in name order. A batch holds up to three of the host's auxiliary images
+raising the first refusal in name order. When the worker's deadline interrupts a
+batch, every pull of it stops its process and leaves its broker before the
+call ends. A batch holds up to three of the host's auxiliary images
 in name order, every batch but the last holds three, and its group is
 `pull-` followed by their closed cephadm names (`_` written `-`), such as
 `pull-alertmanager-grafana-node-exporter`, described as `pull

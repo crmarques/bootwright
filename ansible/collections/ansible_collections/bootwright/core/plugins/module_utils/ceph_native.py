@@ -390,13 +390,13 @@ def command_environment(environment):
     return native_environment
 
 
-def bounded_command(argv, data=b"", timeout=60, limit=MAX_OUTPUT, environment=None):
-    """Drain both pipes within a hard byte/time budget; never invoke a shell."""
+def bounded_command(argv, data=b"", timeout=60, limit=MAX_OUTPUT, environment=None, cancel=None):
+    """Drain both pipes within a hard byte/time budget; never invoke a shell. A set cancel event stops the command as a timeout."""
     require(argv and os.path.isabs(argv[0]), "executable")
     require(all(isinstance(v, str) and "\x00" not in v for v in argv), "executable")
     native_environment = command_environment(environment)
     try:
-        code, output, stderr = bounded_process.run(argv, data, timeout, limit, environment=native_environment, session=COMMAND_SESSION)
+        code, output, stderr = bounded_process.run(argv, data, timeout, limit, environment=native_environment, session=COMMAND_SESSION, cancel=cancel)
     except bounded_process.Failure as failure:
         raise Refusal("native-" + failure.kind) from None
     return code, NativeOutput(output, stderr)

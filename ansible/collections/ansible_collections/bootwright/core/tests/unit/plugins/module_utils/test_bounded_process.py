@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 import signal
 import sys
+import threading
 import time
 
 import pytest
@@ -69,6 +70,46 @@ def test_a_process_past_its_time_is_killed_with_its_descendants(tmp_path):
     pytest.fail("the descendant outlived its group")
 
 
+def test_a_cancel_from_another_thread_stops_the_group_as_a_timeout(tmp_path):
+    marker, cancel = tmp_path / "pid", threading.Event()
+    source = ("import os, sys, time\n"
+              "child = os.fork()\n"
+              "if child == 0:\n"
+              "    time.sleep(30)\n"
+              "else:\n"
+              "    open(sys.argv[1], 'w').write(str(child))\n"
+              "    time.sleep(30)\n")
+    timer = threading.Timer(0.5, cancel.set)
+    started = time.monotonic()
+    timer.start()
+    try:
+        with pytest.raises(bounded_process.Failure) as refused:
+            run(source, marker, timeout=60, cancel=cancel)
+    finally:
+        timer.cancel()
+        timer.join(timeout=5)
+    assert cancel.is_set() and refused.value.kind == "timeout" and time.monotonic() - started < 8
+    descendant = int(marker.read_text())
+    deadline = time.monotonic() + 3
+    while time.monotonic() < deadline:
+        try:
+            os.kill(descendant, 0)
+        except ProcessLookupError:
+            return
+        time.sleep(0.05)
+    os.kill(descendant, signal.SIGKILL)
+    pytest.fail("the descendant outlived its cancelled group")
+
+
+def test_a_cancelled_run_starts_no_process(monkeypatch):
+    cancel = threading.Event()
+    cancel.set()
+    monkeypatch.setattr(bounded_process.subprocess, "Popen", lambda *args, **kwargs: pytest.fail("a cancelled run started a process"))
+    with pytest.raises(bounded_process.Failure) as refused:
+        run("pass", cancel=cancel)
+    assert refused.value.kind == "timeout"
+
+
 def test_a_command_that_cannot_start_or_is_not_absolute_is_refused(tmp_path):
     for argv in ([str(tmp_path / "missing")], ["relative"], [], [sys.executable, "a\x00b"], [sys.executable, b"bytes"]):
         with pytest.raises(bounded_process.Failure) as refused:
@@ -95,7 +136,7 @@ class Started(Exception):
 @pytest.mark.parametrize("options", [
     {"data": "text"}, {"data": bytearray(b"x")}, {"timeout": 0}, {"timeout": -1}, {"timeout": "5"}, {"timeout": True},
     {"timeout": float("nan")}, {"timeout": float("inf")}, {"limit": -1}, {"limit": 1.5}, {"environment": {"A": 1}},
-    {"environment": [("A", "b")]},
+    {"environment": [("A", "b")]}, {"cancel": object()},
 ])
 def test_an_invalid_argument_is_refused_before_any_process_starts(monkeypatch, options):
     def forbidden(*args, **kwargs):
