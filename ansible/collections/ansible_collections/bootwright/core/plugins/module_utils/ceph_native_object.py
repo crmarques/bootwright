@@ -862,10 +862,11 @@ class ObjectWorker(ceph_native_units.UnitWorker):
         names = self.listed() if present else {kind: set() for kind in KINDS}
         ids = self.foreign_check(names)
         services = self.unit_names()
-        stored = self.tls_specs(self.unit_specs())
-        specs = {name: stored[name] for name in services if name in stored}
         with self.manager_served():
+            exported = self.unit_specs()
             rows = self.ceph("orch", "ps")
+        stored = self.tls_specs(exported)
+        specs = {name: stored[name] for name in services if name in stored}
         require(isinstance(rows, list) and all(isinstance(row, dict) for row in rows), "native-output")
         running = [row for row in rows if row.get("service_name") in services]
         for row in running:

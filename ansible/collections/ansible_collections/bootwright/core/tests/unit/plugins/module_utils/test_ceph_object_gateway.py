@@ -599,6 +599,29 @@ def test_gateway_observe_reads_only(tmp_path):
     assert evidence["owned"] and evidence["exists"]
 
 
+def test_gateway_observation_across_a_manager_restart_is_unfinished_work(tmp_path, monkeypatch):
+    markers, monitor = ready_gateway(tmp_path)
+    answer, fired = monitor.run, []
+
+    def restarting(argv, data=b"", timeout=60):
+        if "--format" in argv and tuple(argv[argv.index("--format") + 2:]) == ("orch", "ls", "--export") and not fired:
+            fired.append(argv)
+            return 1, ceph_native.NativeOutput(b"", b"Error ETIMEDOUT: the manager connection was reset")
+        return answer(argv, data=data, timeout=timeout)
+
+    monitor.run = restarting
+    native = worker(monitor, markers)
+    with pytest.raises(ceph_native.ManagerRefusal, match="^native-command$"):
+        native.observe_resource(native.empty_evidence(), True)
+    assert len(fired) == 1
+    fired.clear()
+    monkeypatch.setattr(native, "daemons", lambda: [{"name": "mon.node-1"}])
+    monkeypatch.setattr(native, "observe_cluster", lambda evidence, daemons: native.observe_resource(evidence, True))
+    evidence = native.observe()
+    assert len(fired) == 1 and evidence["ready"] is False and evidence["owned"] and evidence["partial"]
+    assert observe(monitor, markers)[0] is True
+
+
 def test_gateway_observation_never_creates_the_rgw_root(tmp_path):
     request = gateway_request()
     markers = markers_for(tmp_path, request)
