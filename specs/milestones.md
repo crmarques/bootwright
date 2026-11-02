@@ -18,7 +18,7 @@ listed commands return the [unavailable result](cli.md#recognized-but-unavailabl
 | [M4](milestones/m4.md) | Cluster add-ons | M2; M3c; B64, B719, B726 where a package uses them | in progress | M4b–e in-tree; live gates |
 | [M5](milestones/m5.md) | Retired: moved to M3e (D172) | none | not started | nothing |
 | [M6](milestones/m6.md) | Retired: moved to M4 (D173) | none | not started | nothing |
-| [M7](milestones/m7.md) | Standalone native files and commands | M4 | not started | after M4: B51 |
+| [M7](milestones/m7.md) | Standalone native files and commands | M4 | in progress | X275 (B1033); after M4: B51 |
 
 - **Next:** agents take an [active slice](#active-slices)'s open work or an
   explicit request; the operator takes operator gates and open session clauses.
@@ -34,6 +34,7 @@ Slices with an item `in progress`.
 | X123 | M3d | D174, D181 | in progress |
 | X143 | M4c | D180 | in progress |
 | X194 | M1 | D192 | in progress |
+| X275 | M7 | D221 | in progress |
 
 ## Scope rules
 

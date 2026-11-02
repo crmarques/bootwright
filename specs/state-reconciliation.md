@@ -901,6 +901,14 @@ external content, binds each consumed secret to confidential immutable material
 or an immutable external version, and durably publishes the immutable plan and
 pending registry before its first platform side effect.
 
+Every apply or destroy decision, and every plan preview, yields one in-memory
+operation plan: the frozen block DAG with the bound selection, the decided
+mode, the durable basis the executor re-proves, the capability bindings and the
+removal phases. The executor acts only on that plan and the ports, after
+re-proving its basis, and never plans again. Facts derived from the frozen plan,
+the removal phases included, are recomputed by each invocation from the running
+build and are never persisted.
+
 A plan is a dependency DAG of stable blocks. Each block has an ID, description,
 stage, dependencies, the host resources it will not share, impacts, and
 execution kind. Operations are `running`, `paused`, `failed`, `unknown`, or

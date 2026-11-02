@@ -67,7 +67,7 @@ Alias cell.
 | [B324](#b324) | new, 2026-10-05 | enabling | State reconciliation and Workspace | An orphan-acknowledged delete lists the blocks it abandons | D88: M1 names `status --context` as the inventory |
 | [B325](#b325) | new, 2026-10-05 | safety | Workspace | A damaged context is isolated from the rest of the store | D63: M1 keeps store-wide verification and names the damaged entry |
 | [B327](#b327) | new, 2026-10-05 | product | Managed OS | DHCP installation | D80: M1 refuses DHCP-only installations |
-| [B328](#b328) | new, 2026-10-05 | enabling | State reconciliation | The lifecycle's execution file split by concern | An optional move no M1 lane needs; D56 leaves it out of M1 |
+| [B328](#b328) | new, 2026-10-05 | enabling | State reconciliation | The lifecycle's execution file split by concern | An optional move no M1 lane needs; D56 leaves it out of M1. Adopted on 2026-11-01 by [B1033](m7.md#b1033) (D221): X275 delivers it |
 | [B329](#b329) | new, 2026-10-05 | enabling | Architecture | A declaration-spacing check across the tree | An optional check no M1 lane needs; D56 leaves it out of M1 |
 | [B331](#b331) | new, 2026-10-05 | product | Controller setup | A FIPS-qualified controller runtime | D108: M1 documents the runtime's own cryptography on a FIPS host |
 | [B332](#b332) | new, 2026-10-05 | product | Machine and Controller | `auth.operatorIdentity` runs under the invoking account | D112: M1 documents what the arm does today; this needs B282's helper |
@@ -603,6 +603,10 @@ An Anaconda installation needs a static IPv4 install address, because completion
 ### B328
 
 `internal/reconciliation/lifecycle/execution.go` holds the operation's decision, registration, removal gates and completion in about 1,600 lines, with registration and completion split across files (found by the 2026-10-05 audit). A pure move into one file per concern would make each easier to read. **Exit evidence:** the move with no behavior change, and `make check`.
+
+Adopted on 2026-11-01 by [B1033](m7.md#b1033) under [D221](#d221): slice
+X275 delivers this move as part of the planner and executor partition, and
+this item leaves the Parked table for the X275 record when it closes.
 
 ### B329
 
@@ -1167,6 +1171,9 @@ difference alone. **Exit evidence:** a test that `plan` refuses, naming the same
 block and remedy as `apply`, wherever `apply` refuses on recorded facts, and a
 spec sentence that says so.
 
+The operation plan of [B1033](m7.md#b1033) is the natural hand-off for this
+fix, which stays parked.
+
 ### B533
 
 The independent review of
@@ -1614,6 +1621,9 @@ accepts up to 64. **Impact:** drift risk when a second binding exists. **Smalles
 fix:** one `ownedBindings(store, op) (reopen, release)`, or pin `len(Bindings) <=
 1` in `validateOperation`. **Exit evidence:** one function with the three callers
 and a test that the four release sets agree for an operation of each verb.
+
+The operation plan of [B1033](m7.md#b1033) is the natural hand-off for this
+fix, which stays parked.
 
 ### B581
 
@@ -6567,3 +6577,43 @@ failover and routes clients to it. [B1022](m2.md#b1022) implements this after
 the owner's current three-node run; until then the
 [runbook step](../../e2e/lab-3-nodes-ceph/runbook.md) of
 [B1021](m2.md#b1021) stays.
+
+### D221
+
+**owner** (2026-11-01): "audit how bootwright creates and implement plans for
+apply and destroy / i want to refactor this logic with new decoupling and to
+reuse this logic for new feature in the future / when user asks bootwright to
+perform some action, for instance apply or destroy, providing or not flags as
+--stage, it should create an object representing the plan, that include a
+detailed set of info of what should be done, including DAG, with parallelism /
+once the plan is ready, this object will be delivered to the \"plan
+implementer/controller\", which will execute this plan that will reconciliate
+the real state into the desired state / the ideia of this decoupling is to use
+this plan object in the future also for other new feature / do not implement
+this new feature yet, but i will describe it for justifiy the change and for
+you to prepare the code for it." The described feature: "this same plan that
+should be used by the plan implementer could be used by a new component that
+would create (instead of changing target environment state) a full and
+detailed documentation so a human could execute the plan himself" with "all
+the same steps that bootwright performed using just native clis", written to
+"a user-defined dir with a main page written in markdown as well as the
+documentation chapters", including "the actual input files for the native cli
+inputs". After the plan was prepared: "when the other session finish and
+commit to main, you can proceed with plan implementation".
+
+[B1033](m7.md#b1033) is the enabling slice [X275](m7.md#planned-slices): the
+lifecycle decides one in-memory operation plan that only its executor
+consumes, the removal phases are decided once, and a fitness test holds the
+planner and executor file partition. It adopts parked [B328](#b328) and
+carries `Contract: unchanged`: no plan, digest, operation record or command
+output changes. The procedure-documentation feature is recorded as M7
+Candidate [B1034](m7.md#b1034), whose design is the
+[deferred page](../deferred/native-procedure.md); it is not authorized. Out of
+scope: exporting the plan object, the procedure port and generator, native
+input migrations, [B526](#b526), [B569](#b569), [B580](#b580) and
+[B581](#b581), and any `plan.json` or command-output change.
+
+B1033 is on M7, which requires M4 (not done). The owner's explicit request
+above authorizes X275 out of sequence and waives M7's Requires for this one
+slice, as [D214](#d214) did for X247. It authorizes no other M7 item and no
+effect.
