@@ -202,11 +202,13 @@ origin (host and effective port); that key uses the repository's sole TLS
 anchor and the unchanged IBM publisher fingerprint. Omitted repository and
 key select the public source defaults together. Neither metadata, RPM payloads
 nor keys fall back to public sources. A connection lost in transport (closed
-before a response, reset, truncated, refused or timed out) is fetched again
-from its first byte from the same URL, at most three attempts within the
+before a response, reset, truncated, refused, timed out, ended by TLS EOF, or
+without a route or a name answer yet because the network is down) is fetched
+again from its first byte from the same URL, at most three attempts within the
 acquisition budget, and each attempt is verified like the first; an HTTP
-status, a TLS verification or protocol failure, a name-resolution failure and
-a size, digest or signer refusal are never retried. Continuation uses that decision and
+status, a TLS verification or protocol failure, a name that does not exist and
+a size, digest or signer refusal are never retried. This is the same
+classification as [image resolution's](ceph-coverage.md#release-qualification). Continuation uses that decision and
 refuses an unrelated inventory or changed installed payload. An explicitly
 accepted IBM license authorizes only the provider's required `ACCEPT_EULA=yes`
 transaction environment; missing acceptance refuses before package effects. The
@@ -851,8 +853,8 @@ selected artifact lost in transport after its bounded attempts is instead
 `package-acquisition`, whose coordinate names only that artifact:
 `RPM <name>-[<epoch>:]<version>-<release>.<arch>`, `IBM Ceph publisher key`,
 `repository metadata <repository id>` or `installation tree metadata`, never a
-source URL; TLS verification, HTTP status, name-resolution, size, digest and
-signer failures keep their phase. Its detail names that
+source URL; TLS verification, HTTP status, a name that does not exist, size,
+digest and signer failures keep their phase. Its detail names that
 token and the code site that refused, or an exception type and site, never a
 value; an SSH crypto-policy refusal's detail is instead the host name and the
 key type, both public. A token the block gives no remedy is published as `unknown`, or

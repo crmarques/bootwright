@@ -6,6 +6,7 @@ retried artifact is accounted and verified exactly as a first fetch.
 
 from __future__ import annotations
 
+import errno
 import hashlib
 import http.client
 import io
@@ -93,7 +94,13 @@ def fetch(tmp_path, value, expected=DIGEST, size=len(PAYLOAD)):
     ssl.SSLEOFError(8, "EOF occurred in violation of protocol"),
     urllib.error.URLError(ConnectionRefusedError(111, "Connection refused")),
     urllib.error.URLError(socket.timeout("timed out")),
-], ids=["closed-without-response", "reset", "socket-timeout", "tls-eof", "refused", "connect-timeout"])
+    urllib.error.URLError(socket.gaierror(socket.EAI_AGAIN, "Temporary failure in name resolution")),
+    urllib.error.URLError(OSError(errno.ENETUNREACH, "Network is unreachable")),
+    urllib.error.URLError(OSError(errno.EHOSTUNREACH, "No route to host")),
+    urllib.error.URLError(OSError(errno.ENETDOWN, "Network is down")),
+    OSError(errno.ENETUNREACH, "Network is unreachable"),
+], ids=["closed-without-response", "reset", "socket-timeout", "tls-eof", "refused", "connect-timeout",
+        "name-not-yet-resolvable", "network-unreachable", "host-unreachable", "network-down", "raw-network-unreachable"])
 def test_a_connection_lost_before_the_response_is_fetched_again(tmp_path, pauses, fault):
     opener = Opener(fault)
     value = acquisition(opener)
@@ -141,7 +148,10 @@ def test_no_retry_starts_when_the_acquisition_budget_cannot_cover_its_pause(tmp_
     (ssl.SSLCertVerificationError(1, "certificate verify failed"), sources.RepositoryTrustFailure),
     (ssl.SSLError(1, "wrong version number"), ssl.SSLError),
     (urllib.error.URLError(socket.gaierror(-2, "Name or service not known")), urllib.error.URLError),
-], ids=["not-found", "unavailable", "wrapped-verification", "verification", "tls-protocol", "name-resolution"])
+    (urllib.error.URLError(OSError(errno.EACCES, "Permission denied")), urllib.error.URLError),
+    (PermissionError(errno.EACCES, "Permission denied"), PermissionError),
+], ids=["not-found", "unavailable", "wrapped-verification", "verification", "tls-protocol", "name-resolution",
+        "wrapped-permission", "permission"])
 def test_status_trust_and_resolution_failures_are_never_retried(tmp_path, pauses, fault, raised):
     opener = Opener(fault)
     with pytest.raises(raised):

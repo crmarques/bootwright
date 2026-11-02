@@ -8,6 +8,7 @@ refusals, which keep their own projection.
 from __future__ import annotations
 
 import copy
+import errno
 import hashlib
 import http.client
 import io
@@ -95,6 +96,8 @@ LOSSES = {
     "read-timeout": lambda: socket.timeout("timed out"),
     "connect-timeout": lambda: urllib.error.URLError(socket.timeout("timed out")),
     "tls-eof": lambda: ssl.SSLEOFError(8, "EOF occurred in violation of protocol"),
+    "name-not-yet-resolvable": lambda: urllib.error.URLError(socket.gaierror(socket.EAI_AGAIN, "Temporary failure in name resolution")),
+    "no-route": lambda: urllib.error.URLError(OSError(errno.EHOSTUNREACH, "No route to host")),
 }
 
 

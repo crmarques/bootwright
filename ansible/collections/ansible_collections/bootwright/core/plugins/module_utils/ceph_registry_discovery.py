@@ -12,7 +12,6 @@ from __future__ import annotations
 
 import base64
 import contextlib
-import errno
 import hashlib
 import http.client
 import json
@@ -27,7 +26,7 @@ import types
 import urllib.parse
 
 from ansible_collections.bootwright.core.plugins.module_utils import (
-    ceph_native_worker, ceph_package_sources, ceph_pull_broker, native_diagnostics,
+    ceph_native_worker, ceph_package_sources, ceph_pull_broker, native_diagnostics, transport_faults,
 )
 
 PLATFORM = "linux/amd64"
@@ -66,8 +65,6 @@ LAYER_TYPES = (
 ACCEPT = ", ".join(INDEX_TYPES + MANIFEST_TYPES)
 META = ("st_dev", "st_ino", "st_uid", "st_gid", "st_mode", "st_nlink", "st_size", "st_mtime_ns", "st_ctime_ns")
 TRANSPORT_PAUSE = 5
-# A network or host without a route while a link is down; a name that does not exist is not one.
-TRANSPORT_ERRNOS = (errno.ENETDOWN, errno.ENETUNREACH, errno.EHOSTUNREACH)
 
 
 class DiscoveryRefusal(ValueError):
@@ -81,11 +78,7 @@ def require(value, reason="request"):
 
 def transport_lost(error):
     """A connection lost, refused, timed out or truncated, or a name not yet resolvable, is lost in transport; TLS and all else are not."""
-    if isinstance(error, socket.gaierror):
-        return error.errno == socket.EAI_AGAIN
-    if isinstance(error, ssl.SSLError):
-        return isinstance(error, ssl.SSLEOFError)
-    return isinstance(error, ceph_package_sources.TRANSPORT_FAULTS) or isinstance(error, OSError) and error.errno in TRANSPORT_ERRNOS
+    return transport_faults.lost(error)
 
 
 def lost(cause):

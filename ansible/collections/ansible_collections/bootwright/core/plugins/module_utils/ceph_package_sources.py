@@ -10,11 +10,9 @@ import configparser
 import contextlib
 import bz2
 import gzip
-import http.client
 import os
 from pathlib import Path, PurePosixPath
 import re
-import socket
 import ssl
 import time
 import urllib.error
@@ -22,7 +20,7 @@ import urllib.parse
 import urllib.request
 import xml.etree.ElementTree as ET
 
-from ansible_collections.bootwright.core.plugins.module_utils import ceph_native, native_signatures
+from ansible_collections.bootwright.core.plugins.module_utils import ceph_native, native_signatures, transport_faults
 
 IBM_BASE = "https://public.dhe.ibm.com/ibmdl/export/pub/storage/ceph/9/rhel9/x86_64"
 IBM_KEY = "https://public.dhe.ibm.com/ibmdl/export/pub/storage/ceph/RPM-GPG-KEY-IBM-CEPH"
@@ -161,18 +159,13 @@ class NoRedirect(urllib.request.HTTPRedirectHandler):
 
 TRANSPORT_ATTEMPTS = 3
 TRANSPORT_PAUSE = 2
-# socket.timeout is not a TimeoutError on the managed-host floor interpreter.
-TRANSPORT_FAULTS = (ConnectionError, TimeoutError, socket.timeout, http.client.IncompleteRead, ssl.SSLEOFError)
-TRANSPORT_LOSS = TRANSPORT_FAULTS + (urllib.error.URLError,)
+TRANSPORT_FAULTS = transport_faults.FAULTS
+TRANSPORT_LOSS = TRANSPORT_FAULTS + (urllib.error.URLError, OSError)
 
 
 def transport_loss(error):
-    """Only a connection lost or timed out in transport is retried; TLS verification, HTTP status and content refusals are not."""
-    if isinstance(error, urllib.error.HTTPError):
-        return False
-    if isinstance(error, urllib.error.URLError):
-        return isinstance(error.reason, TRANSPORT_FAULTS)
-    return isinstance(error, TRANSPORT_FAULTS)
+    """Only a connection lost in transport is retried, as transport_faults classifies it; TLS verification, HTTP status and content refusals are not."""
+    return transport_faults.lost(error)
 
 
 class AcquisitionLoss(Exception):

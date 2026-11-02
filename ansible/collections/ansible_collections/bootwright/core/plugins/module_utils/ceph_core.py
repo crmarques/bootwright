@@ -25,7 +25,7 @@ from ansible_collections.bootwright.core.plugins.module_utils import (
     ceph_native_resources, ceph_native_observe, ceph_native_units, ceph_native_object, ceph_native_worker, ceph_package_sources, ceph_package_worker,
     ceph_packages, ceph_registry_discovery, ceph_smb_native, ceph_replication_native, ceph_ssh_policy, ceph_tunnel,
     ceph_tunnel_staging, ceph_tunnel_custody, native_apply, native_diagnostics, native_specializations, native_resolution, native_signatures, ceph_pull_broker,
-    physical_machine_identity, ceph_export_native, ceph_export_dns, remote_command,
+    physical_machine_identity, ceph_export_native, ceph_export_dns, remote_command, transport_faults,
 )
 
 # Every id the shipped specialization registry declares; a worker answer or a record naming any other id is refused.
@@ -645,7 +645,8 @@ class Transport:
             private["packageRepositoryCA"] = self.trust_bundle(bundle)
         modules = (native_diagnostics, canonical_json, bounded_process, ceph_native_worker,
                    ceph_tunnel, ceph_tunnel_staging, ceph_tunnel_custody, ceph_native_observe, ceph_native,
-                   ceph_native_stretch, native_resolution, native_signatures, native_apply, ceph_package_sources, ceph_crypto_policy, ceph_packages)
+                   ceph_native_stretch, native_resolution, native_signatures, native_apply, transport_faults, ceph_package_sources,
+                   ceph_crypto_policy, ceph_packages)
         sources = {module.__name__.rsplit(".", 1)[-1]: inspect.getsource(module) for module in modules}
         result = self._call(host, inspect.getsource(ceph_package_worker),
                             {"sources": sources, "payload": {"request": self.request, "host": host["name"], "private": private}}, 1980,
