@@ -1808,7 +1808,7 @@ operation.
 ### B597
 
 `destroy paused` is reachable
-(`internal/reconciliation/lifecycle/online_removal.go:165-168` sets the online
+(`internal/reconciliation/lifecycle/online_gates.go` sets the online
 boundary; `internal/reconciliation/lifecycle/scheduler.go:142`) but has no row in
 `specs/state-reconciliation.md:449-466`. **Impact:** the state table is
 incomplete; the decision (continue) is unchanged. **Smallest fix:** a row and a
