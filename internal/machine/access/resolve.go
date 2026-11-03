@@ -61,6 +61,35 @@ func resolveIdentity(ctx context.Context, selected target, options machine.SSHOp
 	return identityFor(selected, options, offered)
 }
 
+func (s Service) identity(ctx context.Context, catalog api.Catalog, selected target,
+	options machine.SSHOptions) (machine.Identity, string, error) {
+	if fleet, ok := s.fleet(catalog, selected); ok {
+		return fleetIdentity(selected, fleet)
+	}
+	return resolveIdentity(ctx, selected, options, s.options.Launcher)
+}
+
+func (s Service) fleet(catalog api.Catalog, selected target) (FleetIdentity, bool) {
+	if s.options.FleetIdentity == nil {
+		return FleetIdentity{}, false
+	}
+	return s.options.FleetIdentity(catalog, selected.object)
+}
+
+func fleetIdentity(selected target, fleet FleetIdentity) (machine.Identity, string, error) {
+	if selected.ssh.KnownHostsRef == "" {
+		return machine.Identity{}, "", failure("access.unavailable",
+			selected.object.Identity()+" pins no SSH host key, and the fleet key is never offered to an unpinned host",
+			"author access.ssh.knownHostsRef on "+selected.object.Identity()+" pinning its host key")
+	}
+	if fleet.User == "" || fleet.KeyRef == "" {
+		return machine.Identity{}, "", failure("access.unavailable",
+			"no fleet identity is declared for "+selected.object.Identity(),
+			"set Environment spec.remoteMachinesAccessKey.keyRef to an sshKeyPair Secret")
+	}
+	return machine.Identity{User: fleet.User, Kind: machine.IdentityKey}, fleet.KeyRef, nil
+}
+
 func identityFor(selected target, options machine.SSHOptions, offered string) (machine.Identity, string, error) {
 	identity := machine.Identity{User: selected.ssh.User, IdentityFile: offered}
 	borrowed := options.User != "" && options.User != selected.ssh.User

@@ -445,6 +445,14 @@ Remote provider facts remain unknown until that observer is qualified.
 Storage preflight reports future Machines whose managed OS installation has
 not started as pending without remote guest probes. Installed or provided OS
 guests require actual prerequisite observations before readiness is proved.
+A provided stretch tiebreaker is read as Ceph reaches it: as the cluster SSH
+user with the fleet key against its pinned host key, never with its operator
+`auth` arm or the operator's SSH options, and never when it pins no host key
+([stretch topology](#stretch-topology)). A fleet connection that is not
+established reports one `host.access` row naming the fleet key Secret to
+authorize, its user and the pinned host key Secret. On any host whose key a
+`knownHostsRef` pins, a `host.trust` refusal names that Secret rather than
+`machine trust`.
 A package that host preparation installs, the container runtime included,
 is not a prerequisite, so preflight neither probes nor reports it.
 
@@ -568,10 +576,12 @@ topology; this section owns what the plan derives and realizes (D196).
   cluster SSH user and a `knownHostsRef` pinning the one host key every Ceph
   connection verifies; its `auth` arm serves operator sessions only. The
   operator authorizes the fleet key's public half (`bootwright secret show
-  --part public-key`) for that user on the host, and the host block's first
-  fleet call proves it: a `transport` failure there names the Machine, the
-  fleet key Secret, the user and the pinned host key beside the retained
-  evidence to inspect. A tiebreaker without that user or pin, or with no fleet
+  --part public-key`) for that user on the host. Storage preflight reads its
+  prerequisites over the same fleet connection
+  ([plan and prerequisites](#plan-and-prerequisites)), and the host block's
+  first fleet call proves it again: a `transport` failure there names the
+  Machine, the fleet key Secret, the user and the pinned host key beside the
+  retained evidence to inspect. A tiebreaker without that user or pin, or with no fleet
   key declared, refuses at plan. It holds no device and no erase claim, needs
   no Machine block, and takes its OS dependency packages from the hosted DVD of the bootstrap
   host's install profile; a host whose release that tree cannot serve fails

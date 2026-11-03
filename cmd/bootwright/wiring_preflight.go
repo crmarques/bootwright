@@ -17,6 +17,7 @@ import (
 	"github.com/crmarques/bootwright/internal/storage/preflightlocal"
 	"github.com/crmarques/bootwright/internal/substrate/capacity"
 	"github.com/crmarques/bootwright/internal/substrate/libvirt"
+	"github.com/crmarques/bootwright/internal/trust"
 )
 
 func wireStoragePreflight(state inventory.EffectiveState, reconciler lifecycle.Service, deps serviceDependencies) preflight.Service {
@@ -33,24 +34,39 @@ func libvirtCapacityAdmission(checker capacity.CapacityChecker) lifecycle.ApplyA
 }
 
 func preflightCommands(state inventory.EffectiveState, reconciler lifecycle.Service, deps serviceDependencies) preflight.Commands {
+	base := machineaccess.Options{Lender: reconciler, Ownership: machineOwnership{reconciler: reconciler}, Evidence: machineHostKeys{reconciler: reconciler}, Trust: deps.Trust}
+	return preflightReads(state, currentSelection(deps.Selection), base, func() preflightClient {
+		return sshlocal.New(deps.Home, deps.Owner, sessionFiles(deps.Files))
+	})
+}
+
+type preflightClient interface {
+	machineaccess.Launcher
+	Observe(ctx context.Context, address string, port int) (trust.HostKey, error)
+}
+
+func preflightReads(state machineaccess.EffectiveState, selection machineaccess.CurrentSelection, base machineaccess.Options, client func() preflightClient) preflight.Commands {
 	return preflight.CommandFunc(func(ctx context.Context, request preflight.CommandRequest) ([]byte, error) {
 		capture := &preflightlocal.Capture{}
-		client := sshlocal.New(deps.Home, deps.Owner, sessionFiles(deps.Files))
-		sessions := machineaccess.New(state, currentSelection(deps.Selection), machineaccess.Options{
-			Lender: reconciler, Ownership: machineOwnership{reconciler: reconciler}, Evidence: machineHostKeys{reconciler: reconciler}, Trust: deps.Trust, Launcher: client,
-			Streams: machineaccess.Streams{Out: capture, Err: io.Discard},
-		})
+		launcher := client()
+		options := base
+		options.Launcher, options.Streams, options.FleetIdentity = launcher, machineaccess.Streams{Out: capture, Err: io.Discard}, requestFleetIdentity(request)
+		sessions := machineaccess.New(state, selection, options)
 		result, err := sessions.Exec(ctx, machineaccess.ExecRequest{ContextName: request.ContextName, Names: []string{request.Machine}, SSH: request.SSH, Command: request.Argv})
 		if preflight.UntrustedIdentity(err) {
 			clear(capture.Data)
 			if !request.ObserveUntrusted {
 				return nil, preflight.UntrustedKey{}
 			}
-			key, observeErr := client.Observe(ctx, request.Address, request.Port)
+			key, observeErr := launcher.Observe(ctx, request.Address, request.Port)
 			if observeErr != nil {
 				return nil, preflight.UntrustedKey{}
 			}
 			return nil, preflight.UntrustedKey{Fingerprint: key.Fingerprint()}
+		}
+		if err == nil && result != nil && result.ExitCode == sshTransportExit {
+			clear(capture.Data)
+			return nil, preflight.ErrUnreached
 		}
 		if err != nil || result == nil || result.ExitCode != 0 || capture.Overflow {
 			clear(capture.Data)
@@ -58,6 +74,17 @@ func preflightCommands(state inventory.EffectiveState, reconciler lifecycle.Serv
 		}
 		return capture.Data, nil
 	})
+}
+
+const sshTransportExit = 255
+
+func requestFleetIdentity(request preflight.CommandRequest) func(api.Catalog, api.Object) (machineaccess.FleetIdentity, bool) {
+	return func(_ api.Catalog, object api.Object) (machineaccess.FleetIdentity, bool) {
+		if request.Fleet == nil || request.Fleet.KeyRef == "" || object.Name() != request.Machine {
+			return machineaccess.FleetIdentity{}, false
+		}
+		return machineaccess.FleetIdentity{User: request.Fleet.User, KeyRef: request.Fleet.KeyRef}, true
+	}
 }
 
 func wireContainerPreflight(state inventory.EffectiveState, reconciler lifecycle.Service, deps serviceDependencies) containerpreflight.Service {

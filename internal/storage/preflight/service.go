@@ -9,6 +9,7 @@ import (
 	"github.com/crmarques/bootwright/internal/availability"
 	"github.com/crmarques/bootwright/internal/diagnostics"
 	"github.com/crmarques/bootwright/internal/machine"
+	"github.com/crmarques/bootwright/internal/storage/cephcluster"
 	"github.com/crmarques/bootwright/internal/substrate/capacity"
 )
 
@@ -86,6 +87,7 @@ func (s Service) Check(ctx context.Context, request PreflightRequest) (*Report, 
 		}
 	}
 	hosts := map[string]bool{}
+	fleet := map[string]*FleetAccess{}
 	result := &Report{Context: selected, Target: "storage-cluster", Checks: []Check{}}
 	for _, cluster := range clusters {
 		if len(names) > 0 && !slices.Contains(names, cluster.Name()) {
@@ -96,7 +98,15 @@ func (s Service) Check(ctx context.Context, request PreflightRequest) (*Report, 
 			continue
 		}
 		for _, node := range cluster.Spec().Get("topology", "nodes").Items() {
-			hosts[node.Get("machineRef").Text()] = true
+			ref := node.Get("machineRef").Text()
+			hosts[ref] = true
+			if user, provided := cephcluster.ProvidedTiebreakerUser(catalog, cluster, ref); provided {
+				access := &FleetAccess{User: user}
+				if key, declared := machine.FleetKey(catalog); declared {
+					access.KeyRef = key
+				}
+				fleet[ref] = access
+			}
 		}
 	}
 	if len(hosts) > 0 {
@@ -126,7 +136,7 @@ func (s Service) Check(ctx context.Context, request PreflightRequest) (*Report, 
 	}
 	for _, name := range hostNames {
 		ports := slices.DeleteFunc(slices.Clone(published), func(requirement HostPortRequirement) bool { return requirement.Machine != name })
-		checks, err := s.guestChecks(ctx, selected, catalog, name, owned, ports, request)
+		checks, err := s.guestChecks(ctx, selected, catalog, name, owned, HostRequirements{Ports: ports, Fleet: fleet[name]}, request)
 		if err != nil {
 			return nil, err
 		}
@@ -145,7 +155,7 @@ func (s Service) Check(ctx context.Context, request PreflightRequest) (*Report, 
 	return result, nil
 }
 
-func (s Service) guestChecks(ctx context.Context, selected string, catalog api.Catalog, name string, owned map[string]machine.OwnershipState, ports []HostPortRequirement, request PreflightRequest) ([]Check, error) {
+func (s Service) guestChecks(ctx context.Context, selected string, catalog api.Catalog, name string, owned map[string]machine.OwnershipState, requirements HostRequirements, request PreflightRequest) ([]Check, error) {
 	host, found := catalog.Find(api.Machine, name)
 	check := Check{ID: "host.prerequisites", Target: name, Status: capacity.Unknown, Next: "prove this Machine's installed OS and prerequisites before Ceph enrollment"}
 	state, recorded := owned["Machine/"+name]
@@ -165,7 +175,7 @@ func (s Service) guestChecks(ctx context.Context, selected string, catalog api.C
 		check.Reason = "live guest prerequisite observation is unavailable"
 	default:
 		probe, cancel := context.WithTimeout(ctx, capacity.ProbeTimeout)
-		checks, err := s.Guests.CheckGuest(probe, selected, host, ports, request)
+		checks, err := s.Guests.CheckGuest(probe, selected, host, requirements, request)
 		expired := probe.Err()
 		cancel()
 		if ctx.Err() != nil {

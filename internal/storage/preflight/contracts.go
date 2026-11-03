@@ -2,6 +2,7 @@ package preflight
 
 import (
 	"context"
+	"errors"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/machine"
@@ -13,8 +14,18 @@ type Ownership = capacity.Ownership
 type Projector = capacity.Projector
 
 type GuestObserver interface {
-	CheckGuest(context.Context, string, api.Object, []HostPortRequirement, PreflightRequest) ([]Check, error)
+	CheckGuest(context.Context, string, api.Object, HostRequirements, PreflightRequest) ([]Check, error)
 }
+
+type HostRequirements struct {
+	Ports []HostPortRequirement
+	Fleet *FleetAccess
+}
+
+type FleetAccess struct{ User, KeyRef string }
+
+var ErrUnreached = errors.New("the SSH session to the host was not established")
+
 type Summary = capacity.Summary
 type Report = capacity.Report
 
@@ -41,6 +52,7 @@ type CommandRequest struct {
 	ObserveUntrusted     bool
 	SSH                  machine.SSHOptions
 	Argv                 []string
+	Fleet                *FleetAccess
 }
 type Commands interface {
 	Read(context.Context, CommandRequest) ([]byte, error)

@@ -37,7 +37,7 @@ func TestGuestPrerequisitesUseFixedReadsAndNeverReturnRawOutput(t *testing.T) {
 		}
 		return []byte(output), nil
 	})}
-	rows, err := checker.CheckGuest(context.Background(), "synthetic", host, nil, PreflightRequest{})
+	rows, err := checker.CheckGuest(context.Background(), "synthetic", host, HostRequirements{}, PreflightRequest{})
 	if err != nil || calls != 6 {
 		t.Fatalf("%d %v", calls, err)
 	}
@@ -47,7 +47,7 @@ func TestGuestPrerequisitesUseFixedReadsAndNeverReturnRawOutput(t *testing.T) {
 		}
 	}
 	checker.Commands = CommandFunc(func(context.Context, CommandRequest) ([]byte, error) { return nil, errors.New("secret source error") })
-	rows, err = checker.CheckGuest(context.Background(), "synthetic", host, nil, PreflightRequest{})
+	rows, err = checker.CheckGuest(context.Background(), "synthetic", host, HostRequirements{}, PreflightRequest{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -68,7 +68,7 @@ func TestHostWithoutTheContainerRuntimeIsReadyForTheHostPreparationThatInstallsI
 		}
 		return []byte(answer), nil
 	})}
-	rows, err := checker.CheckGuest(context.Background(), "synthetic", host, nil, PreflightRequest{})
+	rows, err := checker.CheckGuest(context.Background(), "synthetic", host, HostRequirements{}, PreflightRequest{})
 	if err != nil || len(rows) != len(answers) {
 		t.Fatalf("%+v %v", rows, err)
 	}
@@ -90,7 +90,7 @@ func TestUnknownHostKeyObservationNeverContinuesWithCredentials(t *testing.T) {
 			}
 			return nil, UntrustedKey{Fingerprint: "SHA256:synthetic"}
 		})}
-		rows, err := checker.CheckGuest(context.Background(), "synthetic", host, nil, PreflightRequest{TrustOnFirstUse: observe})
+		rows, err := checker.CheckGuest(context.Background(), "synthetic", host, HostRequirements{}, PreflightRequest{TrustOnFirstUse: observe})
 		if err != nil || calls != 1 || len(rows) != 1 || rows[0].Status != capacity.Unknown || rows[0].ID != "host.trust" || !strings.Contains(rows[0].Next, "--name guest") {
 			t.Fatalf("%+v %d %v", rows, calls, err)
 		}

@@ -21,7 +21,7 @@ type guestProbe struct {
 	requirement string
 }
 
-func (g GuestChecks) CheckGuest(ctx context.Context, contextName string, host api.Object, ports []HostPortRequirement, request PreflightRequest) ([]Check, error) {
+func (g GuestChecks) CheckGuest(ctx context.Context, contextName string, host api.Object, requirements HostRequirements, request PreflightRequest) ([]Check, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
@@ -44,8 +44,13 @@ func (g GuestChecks) CheckGuest(ctx context.Context, contextName string, host ap
 		{"host.dns", []string{"/usr/bin/getent", "ahosts", hostname}, nonempty, "the declared host identity must resolve through the host's resolver"},
 	}
 	ssh, _ := machine.SSH(host)
+	if requirements.Fleet != nil {
+		if check, refused := fleetPrerequisite(host, ssh, *requirements.Fleet); refused {
+			return []Check{check}, nil
+		}
+	}
 	read := func(argv []string) ([]byte, error) {
-		return g.Commands.Read(ctx, CommandRequest{ContextName: contextName, Machine: host.Name(), Address: ssh.Address, Port: ssh.Port, ObserveUntrusted: request.TrustOnFirstUse, SSH: request.SSH, Argv: argv})
+		return g.Commands.Read(ctx, CommandRequest{ContextName: contextName, Machine: host.Name(), Address: ssh.Address, Port: ssh.Port, ObserveUntrusted: request.TrustOnFirstUse, SSH: request.SSH, Argv: argv, Fleet: requirements.Fleet})
 	}
 	checks := make([]Check, 0, len(probes)+1)
 	elevate := false
@@ -54,11 +59,19 @@ func (g GuestChecks) CheckGuest(ctx context.Context, contextName string, host ap
 		var untrusted UntrustedKey
 		if errors.As(err, &untrusted) {
 			clear(data)
-			reason := "the SSH host key is not enrolled"
+			reason, next := "the SSH host key is not enrolled", "run bootwright machine trust --context "+contextName+" --name "+host.Name()
+			if ssh.KnownHostsRef != "" {
+				reason = "the SSH host key Secret " + ssh.KnownHostsRef + " does not pin one host key for " + machine.SSHHost(ssh.Address, ssh.Port)
+				next = "author Secret " + ssh.KnownHostsRef + " as the one known-hosts entry Machine/" + host.Name() + " offers at " + machine.SSHHost(ssh.Address, ssh.Port)
+			}
 			if untrusted.Fingerprint != "" {
 				reason += "; observed " + untrusted.Fingerprint
 			}
-			return []Check{{ID: "host.trust", Target: host.Name(), Status: capacity.Unknown, Reason: reason, Next: "run bootwright machine trust --context " + contextName + " --name " + host.Name()}}, nil
+			return []Check{{ID: "host.trust", Target: host.Name(), Status: capacity.Unknown, Reason: reason, Next: next}}, nil
+		}
+		if requirements.Fleet != nil && errors.Is(err, ErrUnreached) {
+			clear(data)
+			return []Check{fleetUnreached(host, ssh, *requirements.Fleet)}, nil
 		}
 		if probe.id == "host.privilege" && err == nil && strings.TrimSpace(string(data)) != "0" {
 			clear(data)
@@ -81,7 +94,7 @@ func (g GuestChecks) CheckGuest(ctx context.Context, contextName string, host ap
 		clear(data)
 		checks = append(checks, check)
 	}
-	if len(ports) != 0 {
+	if ports := requirements.Ports; len(ports) != 0 {
 		firewallRead := read
 		if elevate {
 			firewallRead = func(argv []string) ([]byte, error) {
@@ -98,6 +111,28 @@ func (g GuestChecks) CheckGuest(ctx context.Context, contextName string, host ap
 		checks = append(checks, check)
 	}
 	return checks, nil
+}
+
+func fleetPrerequisite(host api.Object, ssh machine.SSHTarget, fleet FleetAccess) (Check, bool) {
+	check := Check{ID: "host.access", Target: host.Name(), Status: capacity.Unknown}
+	switch {
+	case ssh.KnownHostsRef == "":
+		check.Reason = "the provided tiebreaker Machine/" + host.Name() + " pins no SSH host key, and the fleet key is never offered to an unpinned host"
+		check.Next = "author access.ssh.knownHostsRef on Machine/" + host.Name() + " pinning its host key"
+	case fleet.KeyRef == "":
+		check.Reason = "the provided tiebreaker Machine/" + host.Name() + " is dialed with the fleet SSH key, and the Environment declares none"
+		check.Next = "set Environment spec.remoteMachinesAccessKey.keyRef to an sshKeyPair Secret and authorize its public half for user " + fleet.User + " on Machine/" + host.Name()
+	default:
+		return Check{}, false
+	}
+	return check, true
+}
+
+func fleetUnreached(host api.Object, ssh machine.SSHTarget, fleet FleetAccess) Check {
+	return Check{ID: "host.access", Target: host.Name(), Status: capacity.Unknown,
+		Reason: "the fleet connection to the provided tiebreaker Machine/" + host.Name() + " at " + machine.SSHHost(ssh.Address, ssh.Port) + " was not established",
+		Next: "authorize the public half of Secret " + fleet.KeyRef + " (bootwright secret show --name " + fleet.KeyRef + " --part public-key) for user " + fleet.User + " on Machine/" + host.Name() +
+			", and check that it offers the host key Secret " + ssh.KnownHostsRef + " pins"}
 }
 
 func UntrustedIdentity(err error) bool {

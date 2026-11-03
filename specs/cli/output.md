@@ -339,7 +339,10 @@ in `diagnostics` and on standard error before the plan.
 JSON retains the complete report when checks fail. Uninstalled guests remain
 pending without remote probes; dry-run performs no live capacity or guest
 probe. Installed guest probes use established verified Machine access and a
-bounded read-only command set. Anonymous key observation under
+bounded read-only command set; a provided stretch tiebreaker is read over the
+fleet connection Ceph uses, and one that connection does not reach reports a
+single `host.access` check `unknown` naming the key to authorize
+([plan and prerequisites](../ceph.md#plan-and-prerequisites)). Anonymous key observation under
 `--trust-on-first-use` neither enrolls nor accepts a key: a host whose key the
 context does not trust reports its `host.trust` check `unknown` with the
 observed fingerprint and the `machine trust` request that enrolls it, and

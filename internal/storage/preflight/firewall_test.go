@@ -294,11 +294,11 @@ func TestGuestChecksAddTheFirewallProbeForAnIngressHost(t *testing.T) {
 		}
 		return []byte("guest\n"), nil
 	})}
-	rows, err := checker.CheckGuest(context.Background(), "synthetic", machine, []HostPortRequirement{managementRequirement()}, PreflightRequest{})
+	rows, err := checker.CheckGuest(context.Background(), "synthetic", machine, HostRequirements{Ports: []HostPortRequirement{managementRequirement()}}, PreflightRequest{})
 	if err != nil || len(rows) != 7 || rows[6].ID != "host.firewall" || rows[6].Status != capacity.Passed {
 		t.Fatalf("%+v %v", rows, err)
 	}
-	rows, err = checker.CheckGuest(context.Background(), "synthetic", machine, nil, PreflightRequest{})
+	rows, err = checker.CheckGuest(context.Background(), "synthetic", machine, HostRequirements{}, PreflightRequest{})
 	if err != nil || len(rows) != 6 {
 		t.Fatalf("a host without requirements probed %+v %v", rows, err)
 	}
@@ -354,7 +354,7 @@ func TestGuestFirewallReadsRunAsRootBecauseFirewalldRefusesZoneReadsToAUser(t *t
 				}
 				return []byte("guest\n"), nil
 			})}
-			rows, err := checker.CheckGuest(context.Background(), "synthetic", api.NewObject(api.Machine, "guest", api.Value{}, api.MapValue()), []HostPortRequirement{managementRequirement()}, PreflightRequest{})
+			rows, err := checker.CheckGuest(context.Background(), "synthetic", api.NewObject(api.Machine, "guest", api.Value{}, api.MapValue()), HostRequirements{Ports: []HostPortRequirement{managementRequirement()}}, PreflightRequest{})
 			if err != nil || len(rows) != 7 || rows[4].ID != "host.privilege" || rows[4].Status != c.privilege || rows[6].ID != "host.firewall" || rows[6].Status != c.firewall {
 				t.Fatalf("%+v %v", rows, err)
 			}
@@ -392,7 +392,7 @@ func TestServicePassesEachHostOnlyItsOwnRequirements(t *testing.T) {
 
 type guestRequirements func([]HostPortRequirement)
 
-func (f guestRequirements) CheckGuest(_ context.Context, _ string, host api.Object, ports []HostPortRequirement, _ PreflightRequest) ([]Check, error) {
-	f(ports)
+func (f guestRequirements) CheckGuest(_ context.Context, _ string, host api.Object, requirements HostRequirements, _ PreflightRequest) ([]Check, error) {
+	f(requirements.Ports)
 	return []Check{{ID: "host.identity", Target: host.Name(), Status: capacity.Passed}}, nil
 }

@@ -6639,6 +6639,22 @@ which assumes a sustained 160 MB/s per disk within the worker's four hours;
 the field names `method: metadataClear` and `spec.hardware.clearOnInstall`;
 and that a clear never claims sanitization.
 
+### D226
+
+**delegated** (2026-11-03, the owner's request to fix [B1078](m2.md#b1078)
+and [B1086](m2.md#b1086) with their recommended alternatives). It amends
+[D204](#d204) (4): storage preflight reads a provided stretch tiebreaker over
+the fleet connection, as the cluster SSH user with the fleet key against the
+Machine's pinned host key, and a fleet connection it does not establish
+reports one `host.access` row naming the fleet key Secret, how to show its
+public half, the user and the pinned host key Secret. That probe replaces
+D204 (4)'s "no separate preflight probe is added"; the host block's first
+fleet call still proves the key at apply. The fleet identity is a
+machine-access option that only the storage preflight wiring sets: operator
+sessions never present the fleet key, operator SSH options never redirect it,
+and a Machine that pins no host key is never offered it. D204 is otherwise
+unchanged.
+
 ### D227
 
 **owner** (2026-11-03): asked for an e2e case in which a FIPS-mode RHEL

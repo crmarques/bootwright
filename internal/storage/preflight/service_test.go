@@ -21,7 +21,7 @@ func (o ownedStub) Ownership(context.Context, string) (map[string]machine.Owners
 
 type guestFunc func(context.Context, string, api.Object, PreflightRequest) ([]Check, error)
 
-func (f guestFunc) CheckGuest(ctx context.Context, name string, object api.Object, _ []HostPortRequirement, request PreflightRequest) ([]Check, error) {
+func (f guestFunc) CheckGuest(ctx context.Context, name string, object api.Object, _ HostRequirements, request PreflightRequest) ([]Check, error) {
 	return f(ctx, name, object, request)
 }
 func testService() Service {

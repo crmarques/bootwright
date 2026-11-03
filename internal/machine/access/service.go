@@ -4,6 +4,7 @@ import (
 	"context"
 	"time"
 
+	api "github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/availability"
 	"github.com/crmarques/bootwright/internal/desiredstate/compilation"
 	"github.com/crmarques/bootwright/internal/diagnostics"
@@ -26,9 +27,12 @@ type Options struct {
 	Streams   Streams
 	// Terminal reports whether the operator can answer a host-key
 	// confirmation. Without one there is no first use.
-	Terminal func() (bool, error)
-	Clock    func() time.Time
+	Terminal      func() (bool, error)
+	Clock         func() time.Time
+	FleetIdentity func(api.Catalog, api.Object) (FleetIdentity, bool)
 }
+
+type FleetIdentity struct{ User, KeyRef string }
 
 type Service struct {
 	state     EffectiveState
@@ -85,7 +89,7 @@ func (s Service) open(ctx context.Context, contextName, name string, options mac
 	if err != nil {
 		return nil, err
 	}
-	identity, privateKeyRef, err := resolveIdentity(ctx, resolved, options, s.options.Launcher)
+	identity, privateKeyRef, err := s.identity(ctx, effective.Effective, resolved, options)
 	if err != nil {
 		return nil, err
 	}

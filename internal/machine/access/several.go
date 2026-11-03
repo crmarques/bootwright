@@ -121,6 +121,14 @@ func (s Service) members(ctx context.Context, catalog api.Catalog, contextName s
 		if err != nil {
 			return nil, err
 		}
+		if fleet, ok := s.fleet(catalog, resolved); ok {
+			identity, privateKeyRef, err := fleetIdentity(resolved, fleet)
+			if err != nil {
+				return nil, err
+			}
+			members = append(members, member{target: resolved, identity: identity, privateKeyRef: privateKeyRef})
+			continue
+		}
 		if !proved {
 			if offered, err = s.options.Launcher.IdentityFile(ctx, options.IdentityFile); err != nil {
 				return nil, err
