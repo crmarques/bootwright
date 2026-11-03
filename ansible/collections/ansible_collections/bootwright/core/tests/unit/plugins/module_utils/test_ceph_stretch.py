@@ -647,3 +647,28 @@ def test_a_crush_change_while_the_rule_compiles_refuses_before_the_attempt(monke
     assert not [command for command in world.effects if command[:2] == ("osd", "setcrushmap")]
     monkeypatch.setattr(stretch.Activation, "compile", lambda self, current, text: current + b"::" + text.encode())
     assert native.stretch_locate()["stage"] == "rule-present"
+
+
+# `ceph mon dump -f json` on IBM Storage Ceph 9.9.1.2 (20.2.1-405.el9cp), read in the owner's VLAN stretch run on 2026-11-03.
+OBSERVED_LOCATIONS = [{"key": "datacenter", "val": "dc1"}]
+
+
+def test_a_crush_location_reads_the_key_value_list_the_selected_build_writes():
+    assert stretch.crush_location(OBSERVED_LOCATIONS) == {"datacenter": "dc1"}
+    assert stretch.crush_location([]) == {}
+    assert stretch.crush_location("{datacenter=dc1}") == {"datacenter": "dc1"}
+    for bad in ([{"key": "datacenter"}], [{"key": "datacenter", "val": "dc1", "x": 1}], [{"key": "datacenter", "val": "dc1"}] * 2,
+                [{"key": "a b", "val": "dc1"}], [["datacenter", "dc1"]], {"datacenter": "dc1"}, None):
+        with pytest.raises(ceph_native.Refusal, match="^native-output$"):
+            stretch.crush_location(bad)
+
+
+def test_activation_reads_monitors_whose_locations_are_key_value_lists(monkeypatch):
+    world = FqdnWorld(unlocated=())
+    for mon in world.mons:
+        site = mon["crush_location"][len("{datacenter="):-1]
+        mon["crush_location"] = [{"key": "datacenter", "val": site}]
+    native, unused = worker(world, value=fqdn_request(), monkeypatch=monkeypatch)
+    assert native.stretch_locate() == {"changed": True, "stage": "rule-present"}
+    assert not [command for command in world.effects if command[:2] == ("mon", "set_location")]
+    assert native.stretch_enable() == {"changed": True, "stage": "verified"}

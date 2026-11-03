@@ -93,7 +93,14 @@ sources (`src/mon/MonMap.cc:438-461`, `src/osd/OSDMap.cc:3988-4258`,
 rule and 4/2 when it names no rule or size, refuses another size
 (`src/mon/OSDMonitor.cc:7773-7906`), and accepts `osd pool set <pool> size 4`
 in stretch mode (`:8517-8559`). Reading the sources is not reading the build:
-B488's rehearsal still reads them from the selected build.
+B488's rehearsal still reads them from the selected build. The owner's VLAN
+stretch run did, on IBM 9.9.1.2 (20.2.1-405.el9cp) on 2026-11-03: `mon dump`
+writes each `crush_location` as a list of `{"key": ..., "val": ...}` objects,
+not the source's `{key=value}` string (B1070); `osd dump`, `osd crush tree`,
+`osd crush dump` (integer bucket `weight`, `~ssd` shadow buckets beside the
+sites) and `osd crush rule dump` read as above, and every OSD sat in its
+short-name host bucket under `default` beside cephadm's empty full-name
+buckets under the sites (B1061).
 
 IBM's CRUSH page
 ([CRUSH map for stretch mode](https://www.ibm.com/docs/en/SSEG27_9.9.1/administration/config-crush-map-stretch-mode.html))

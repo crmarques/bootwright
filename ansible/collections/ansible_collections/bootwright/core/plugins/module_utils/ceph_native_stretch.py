@@ -437,7 +437,16 @@ def crush_host(name):
 
 
 def crush_location(value):
-    """A MON's crush_location as `ceph mon dump` renders it, `{key=value,...}`; empty when unset."""
+    """A MON's crush_location as `ceph mon dump` renders it: IBM 9.9.1.2 writes a list of `{"key": k, "val": v}`, the upstream
+    MonMap::dump source the string `{key=value,...}`; empty when unset."""
+    if isinstance(value, list):
+        require(len(value) <= 64, "native-output")
+        result = {}
+        for entry in value:
+            require(isinstance(entry, dict) and set(entry) == {"key", "val"} and named(entry["key"]) and named(entry["val"])
+                    and entry["key"] not in result, "native-output")
+            result[entry["key"]] = entry["val"]
+        return result
     require(isinstance(value, str) and len(value) <= 1024, "native-output")
     match = LOCATION.fullmatch(value)
     require(match is not None, "native-output")
