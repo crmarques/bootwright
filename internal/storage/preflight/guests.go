@@ -11,6 +11,8 @@ import (
 	"github.com/crmarques/bootwright/internal/substrate/capacity"
 )
 
+const sudoCmd = "/usr/bin/sudo"
+
 type GuestChecks struct{ Commands Commands }
 type guestProbe struct {
 	id          string
@@ -47,6 +49,7 @@ func (g GuestChecks) CheckGuest(ctx context.Context, contextName string, host ap
 		return g.Commands.Read(ctx, CommandRequest{ContextName: contextName, Machine: host.Name(), Address: ssh.Address, Port: ssh.Port, ObserveUntrusted: request.TrustOnFirstUse, SSH: request.SSH, Argv: argv})
 	}
 	checks := make([]Check, 0, len(probes)+1)
+	elevate := false
 	for _, probe := range probes {
 		data, err := read(probe.argv)
 		var untrusted UntrustedKey
@@ -60,7 +63,8 @@ func (g GuestChecks) CheckGuest(ctx context.Context, contextName string, host ap
 		}
 		if probe.id == "host.privilege" && err == nil && strings.TrimSpace(string(data)) != "0" {
 			clear(data)
-			data, err = g.Commands.Read(ctx, CommandRequest{ContextName: contextName, Machine: host.Name(), SSH: request.SSH, Argv: []string{"/usr/bin/sudo", "-n", "/usr/bin/id", "-u"}})
+			data, err = read(append([]string{sudoCmd, "-n"}, probe.argv...))
+			elevate = err == nil && probe.accepts(string(data))
 		}
 		if ctx.Err() != nil {
 			return nil, ctx.Err()
@@ -79,7 +83,16 @@ func (g GuestChecks) CheckGuest(ctx context.Context, contextName string, host ap
 		checks = append(checks, check)
 	}
 	if len(ports) != 0 {
-		check := firewallCheck(ctx, read, host.Name(), ports)
+		firewallRead := read
+		if elevate {
+			firewallRead = func(argv []string) ([]byte, error) {
+				if len(argv) != 0 && argv[0] == firewallCmd {
+					argv = append([]string{sudoCmd, "-n"}, argv...)
+				}
+				return read(argv)
+			}
+		}
+		check := firewallCheck(ctx, firewallRead, host.Name(), ports)
 		if ctx.Err() != nil {
 			return nil, ctx.Err()
 		}

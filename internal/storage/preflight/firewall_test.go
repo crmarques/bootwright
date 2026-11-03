@@ -304,6 +304,70 @@ func TestGuestChecksAddTheFirewallProbeForAnIngressHost(t *testing.T) {
 	}
 }
 
+func TestGuestFirewallReadsRunAsRootBecauseFirewalldRefusesZoneReadsToAUser(t *testing.T) {
+	table := readGrants(t)
+	for _, c := range []struct {
+		name       string
+		root, sudo bool
+		privilege  string
+		firewall   string
+	}{
+		{"a root access user reads bare", true, false, capacity.Passed, capacity.Passed},
+		{"a user access user reads through sudo -n", false, true, capacity.Passed, capacity.Passed},
+		{"a user without sudo leaves the row unknown", false, false, capacity.Unknown, capacity.Unknown},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			host := &scriptedHost{state: "active", addresses: scriptedAddresses, zones: map[string]string{"eth0": "public"},
+				infos: map[string]string{"public": zoneInfo(table, "a management ingress with both ports")}, services: servicesOf(table)}
+			refusesUser := func(argv []string) ([]byte, error) {
+				if argv[0] == firewallCmd {
+					return nil, errors.New("NotAuthorizedException: Not Authorized(uid): org.fedoraproject.FirewallD1.info")
+				}
+				return host.read(argv)
+			}
+			if check := firewallCheck(context.Background(), refusesUser, "guest", []HostPortRequirement{managementRequirement()}); check.Status != capacity.Unknown {
+				t.Fatalf("a refused zone read reported %+v", check)
+			}
+			bare := [][]string{}
+			checker := GuestChecks{Commands: CommandFunc(func(_ context.Context, request CommandRequest) ([]byte, error) {
+				argv, elevated := request.Argv, false
+				if len(argv) > 2 && argv[0] == sudoCmd && argv[1] == "-n" {
+					if !c.sudo {
+						return nil, errors.New("sudo: a password is required")
+					}
+					argv, elevated = argv[2:], true
+				}
+				switch {
+				case argv[0] == "/usr/bin/id":
+					if c.root || elevated {
+						return []byte("0\n"), nil
+					}
+					return []byte("1000\n"), nil
+				case argv[0] == firewallCmd && !c.root && !elevated:
+					bare = append(bare, argv)
+					return refusesUser(argv)
+				case argv[0] == firewallCmd || argv[0] == "/usr/bin/systemctl" || argv[0] == "/usr/sbin/ip":
+					if !elevated {
+						bare = append(bare, argv)
+					}
+					return host.read(argv)
+				}
+				return []byte("guest\n"), nil
+			})}
+			rows, err := checker.CheckGuest(context.Background(), "synthetic", api.NewObject(api.Machine, "guest", api.Value{}, api.MapValue()), []HostPortRequirement{managementRequirement()}, PreflightRequest{})
+			if err != nil || len(rows) != 8 || rows[5].ID != "host.privilege" || rows[5].Status != c.privilege || rows[7].ID != "host.firewall" || rows[7].Status != c.firewall {
+				t.Fatalf("%+v %v", rows, err)
+			}
+			if c.sudo && slices.ContainsFunc(bare, func(argv []string) bool { return argv[0] == firewallCmd }) {
+				t.Fatalf("a user access user ran a bare firewall read: %v", bare)
+			}
+			if c.root && !slices.ContainsFunc(bare, func(argv []string) bool { return strings.HasPrefix(argv[len(argv)-1], "--info-zone=") }) {
+				t.Fatalf("a root access user did not read its zone bare: %v", bare)
+			}
+		})
+	}
+}
+
 func TestServicePassesEachHostOnlyItsOwnRequirements(t *testing.T) {
 	service := testService()
 	service.Ownership = ownedStub{"Machine/guest": {Verb: "apply", State: "done"}}

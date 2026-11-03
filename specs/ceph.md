@@ -1902,8 +1902,11 @@ holds the Go and the worker's tests to. It reads `systemctl show
 passes), `ip -json address show`, `firewall-cmd --get-active-zones` (an
 interface it lists is in that zone, any other in `--get-default-zone`),
 `--info-zone` and `--info-service`, and reports a `host.firewall` row naming
-what each zone does not permit with both remedies. A read that fails or prints
-an unexpected form leaves the row unknown, never passed.
+what each zone does not permit with both remedies. Every `firewall-cmd` read
+runs as root, through `sudo -n` when the access user is not root and the
+`host.privilege` probe proved `sudo -n` yields root, because firewalld on a
+managed guest admits its reads only to an administrator. A read that fails or
+prints an unexpected form leaves the row unknown, never passed.
 
 The virtual IP holder proof: a service unit's or gateway's readiness wait
 proves, once its own observation is ready and within the same wait window, that
