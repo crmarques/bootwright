@@ -233,6 +233,7 @@ Alias cell.
 | [B999](#b999) | new, 2026-10-30 (X235 review; pre-existing) | defect | Add-ons | Selection reports two built-in packages that create one CatalogSource name or share one hosted namespace on a cluster | No profile selects two such packages today; the check belongs with the package-facts selection rules, not B90's authored slice |
 | [B1050](#b1050) | new, 2026-11-02 (`make check` during the Ceph E2E fixes) | defect | Managed OS | The physical target proof's partition case is deterministic under concurrent gate runs, or its cause is recorded | Failed once in a gate run beside a second one and passed on rerun and in 20 isolated runs; gates no milestone |
 | [B1053](#b1053) | new, 2026-11-02 (owner's request: `make test` too slow) | enabling | Architecture and developer tooling | The Go suite's slowest packages run their independent tests concurrently | Partly delivered by X286; the rest needs a shared-state audit of each package; gates no milestone |
+| [B1062](#b1062) | new, 2026-11-03 (B1059's E2E planning test) | defect | Managed OS | The bare-metal rehearsal case plans: its install context names a root device a physical installation admits | Found by planning every E2E render; M1 takes no new findings; the rehearsal is an owner-run case |
 | [B771](#b771) | new, 2026-10-20 (D173); folds B365 | defect | Add-ons, with Workspace | The `add-ons/_store` selection exception, its marker and its reader rules leave the input reader | Dead surface now that B89 is retired; removing input-reader rules is not needed by any M4 package |
 | [B772](#b772) | new, 2026-10-20 (D173) | product | Add-ons | A package installed through OLM v1 (`ClusterExtension`) | ODF/FDF, ACM, MCE and GitLab do not qualify; own-namespace installs are Technology Preview |
 | [B773](#b773) | new, 2026-10-20 (D173) | product | Add-ons | A registry credential merged into a cluster's global pull secret with an exact-entry receipt | Its inverse never runs under retirement; the install pull secret carries entitlements from first boot |
@@ -3067,6 +3068,21 @@ recommendation is parked above as [B800](delivered.md#x161--audit-lane-a-harness
 roadmap step or batch, and the Not yet met lines in the specs point to them.
 Like every parked item, these authorize nothing: a lane, an item or a set of
 lanes runs on an explicit request, which attaches its items to a slice.
+
+### B1062
+
+`e2e/lab-baremetal-rehearsal` validates, but its install directory refuses at
+plan: a physical installation erases only a root disk named by its
+`/dev/disk/by-id/wwn-0x` path, and `metal-01` names `/dev/vda`. The case's
+runbook applies that directory, so its `apply` would refuse the same way.
+`TestEveryE2ECaseRenderPlansWithoutRefusal` marks the render with that
+refusal text and fails once it no longer refuses.
+
+**Outcome:** to be decided: give the rehearsal's install a root device the
+[physical installation](../managed-os.md) admits, or state why the
+rehearsal's emulated host keeps a virtual disk name and plan it accordingly.
+**Requires:** none. **Definition:** `Needs definition`. **Exit evidence:**
+the render plans and its `refuses` mark is removed. Delivery is not started.
 
 ### Audit remediation lanes
 
