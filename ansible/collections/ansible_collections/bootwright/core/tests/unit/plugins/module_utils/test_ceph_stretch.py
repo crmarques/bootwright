@@ -630,3 +630,20 @@ def test_a_readback_that_never_settles_refuses_as_interrupted_after_its_bounded_
         native.stretch_enable()
     assert native.pauses == [stretch.SETTLE_INTERVAL] * (stretch.SETTLE_READS - 1)
     assert "stretch-stretch-enabled-attempt.json" in marks.records
+
+
+def test_a_crush_change_while_the_rule_compiles_refuses_before_the_attempt(monkeypatch):
+    world = World()
+    native, marks = worker(world, monkeypatch=monkeypatch)
+
+    def compiled(self, current, text):
+        world.crush_version += 1
+        return current + b"::" + text.encode()
+
+    monkeypatch.setattr(stretch.Activation, "compile", compiled)
+    with pytest.raises(ceph_native.Refusal, match="^not-ready$"):
+        native.stretch_locate()
+    assert "stretch-rule-present-attempt.json" not in marks.records
+    assert not [command for command in world.effects if command[:2] == ("osd", "setcrushmap")]
+    monkeypatch.setattr(stretch.Activation, "compile", lambda self, current, text: current + b"::" + text.encode())
+    assert native.stretch_locate()["stage"] == "rule-present"

@@ -614,8 +614,9 @@ topology; this section owns what the plan derives and realizes (D196).
   - `rule-present`: IBM's procedure (`osd getcrushmap`, `crushtool -d`, the
     rule appended with the next free rule ID, `crushtool -c`) compiled offline
     in the frozen image, then `osd setcrushmap -i - <crush_version>` guarded
-    by the CRUSH version `osd dump` reported before the map was read, read
-    back from `osd crush rule dump`
+    by the CRUSH version `osd dump` reported before the map was read and
+    reports again after the compile (else `not-ready` before the attempt),
+    read back from `osd crush rule dump`
     ([IBM CRUSH map for stretch mode](https://www.ibm.com/docs/en/SSEG27_9.9.1/administration/config-crush-map-stretch-mode.html)).
     A rule of that name without this operation's attempt refuses
     `stretch-rule`.

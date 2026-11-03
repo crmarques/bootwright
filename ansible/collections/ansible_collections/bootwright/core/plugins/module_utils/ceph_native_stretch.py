@@ -308,6 +308,10 @@ class Activation:
         # The map travels as one base64 argument, which Linux bounds at 128 KiB.
         require(isinstance(current, bytes) and 0 < len(current) <= MAX_MAP, "native-output")
         compiled = self.compile(current, self.rule_text(identifier))
+        # A CRUSH change while the map was read or compiled would refuse setcrushmap after the attempt record; read the version again
+        # before that record, so the change refuses not-ready and the next apply compiles again.
+        again = self.read("osd", "dump")
+        require(isinstance(again, dict) and again.get("crush_version") == osdmap["crush_version"], "not-ready")
         return [{"args": ("osd", "setcrushmap", "-i", "-", str(osdmap["crush_version"])), "data": compiled}]
 
     def compile(self, current, text):
