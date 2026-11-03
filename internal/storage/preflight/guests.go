@@ -82,6 +82,11 @@ func (g GuestChecks) CheckGuest(ctx context.Context, contextName string, host ap
 			return nil, ctx.Err()
 		}
 		check := Check{ID: probe.id, Target: host.Name(), Status: capacity.Unknown, Reason: "the bounded prerequisite read did not complete", Next: probe.requirement}
+		var exit ExitStatus
+		if errors.As(err, &exit) {
+			check.Status = capacity.Failed
+			check.Reason = probe.requirement
+		}
 		if err == nil {
 			check.Status = capacity.Failed
 			check.Reason = probe.requirement
@@ -92,6 +97,13 @@ func (g GuestChecks) CheckGuest(ctx context.Context, contextName string, host ap
 			}
 		}
 		clear(data)
+		checks = append(checks, check)
+	}
+	if requirements.Peers != nil {
+		check := peerNamesCheck(read, host.Name(), *requirements.Peers)
+		if ctx.Err() != nil {
+			return nil, ctx.Err()
+		}
 		checks = append(checks, check)
 	}
 	if ports := requirements.Ports; len(ports) != 0 {
@@ -111,6 +123,51 @@ func (g GuestChecks) CheckGuest(ctx context.Context, contextName string, host ap
 		checks = append(checks, check)
 	}
 	return checks, nil
+}
+
+func peerNamesCheck(read func([]string) ([]byte, error), name string, peers PeerNames) Check {
+	check := Check{ID: "host.peer-names", Target: name, Status: capacity.Unknown, Reason: "the bounded peer name read did not complete",
+		Next: "make " + name + "'s resolver answer every Ceph node name"}
+	if len(peers.Names) == 0 {
+		check.Status, check.Reason, check.Next = capacity.Passed, "the host proved this prerequisite", ""
+		return check
+	}
+	resolves := func(names []string) (bool, bool) {
+		data, err := read(append([]string{"/usr/bin/getent", "ahosts"}, names...))
+		defer clear(data)
+		var exit ExitStatus
+		switch {
+		case err == nil:
+			return strings.TrimSpace(string(data)) != "", true
+		case errors.As(err, &exit):
+			return false, true
+		}
+		return false, false
+	}
+	all, known := resolves(peers.Names)
+	switch {
+	case !known:
+		return check
+	case all:
+		check.Status, check.Reason, check.Next = capacity.Passed, "the host proved this prerequisite", ""
+		return check
+	}
+	unresolved := []string{}
+	for _, peer := range peers.Names {
+		found, known := resolves([]string{peer})
+		if !known {
+			return check
+		}
+		if !found {
+			unresolved = append(unresolved, peer)
+		}
+	}
+	if len(unresolved) == 0 {
+		return check
+	}
+	check.Status = capacity.Failed
+	check.Reason = "Machine/" + name + " runs " + strings.Join(peers.Services, ", ") + " and does not resolve " + strings.Join(unresolved, ", ") + ", which cephadm writes into its configuration by name"
+	return check
 }
 
 func fleetPrerequisite(host api.Object, ssh machine.SSHTarget, fleet FleetAccess) (Check, bool) {

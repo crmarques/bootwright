@@ -453,6 +453,17 @@ established reports one `host.access` row naming the fleet key Secret to
 authorize, its user and the pinned host key Secret. On any host whose key a
 `knownHostsRef` pins, a `host.trust` refusal names that Secret rather than
 `machine trust`.
+A host identity, kernel, OS, time, privilege or DNS probe whose command runs
+and exits nonzero fails its check; only a read that does not complete, the
+SSH session included, leaves it unknown. So
+`host.dns` fails when the host's resolver does not know its declared name.
+cephadm writes some peers into a daemon's configuration by host name
+([peers addressed by name](../.agents/knowledge/ibm-ceph-monitoring.md#peers-addressed-by-host-name)),
+so on each host whose resolved placement runs `mgmt-gateway`,
+`alertmanager`, `grafana`, `prometheus`, `loki`, `alloy` or `promtail`, and
+on each MGR placement host of a cluster that declares one of them, a
+`host.peer-names` check proves that every node's native hostname resolves
+there; it fails naming the host, its services and each unresolved name.
 A package that host preparation installs, the container runtime included,
 is not a prerequisite, so preflight neither probes nor reports it.
 

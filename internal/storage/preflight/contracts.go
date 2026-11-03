@@ -3,6 +3,7 @@ package preflight
 import (
 	"context"
 	"errors"
+	"strconv"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/machine"
@@ -20,7 +21,14 @@ type GuestObserver interface {
 type HostRequirements struct {
 	Ports []HostPortRequirement
 	Fleet *FleetAccess
+	Peers *PeerNames
 }
+
+type PeerNames struct{ Services, Names []string }
+
+type ExitStatus struct{ Code int }
+
+func (e ExitStatus) Error() string { return "the prerequisite command exited " + strconv.Itoa(e.Code) }
 
 type FleetAccess struct{ User, KeyRef string }
 

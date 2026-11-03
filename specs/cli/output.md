@@ -342,7 +342,10 @@ probe. Installed guest probes use established verified Machine access and a
 bounded read-only command set; a provided stretch tiebreaker is read over the
 fleet connection Ceph uses, and one that connection does not reach reports a
 single `host.access` check `unknown` naming the key to authorize
-([plan and prerequisites](../ceph.md#plan-and-prerequisites)). Anonymous key observation under
+([plan and prerequisites](../ceph.md#plan-and-prerequisites)). A host
+prerequisite probe whose command exits nonzero reports its check `failed`,
+and a read that does not complete `unknown`; a `host.peer-names` check lists the Ceph node names a
+host's resolver does not answer. Anonymous key observation under
 `--trust-on-first-use` neither enrolls nor accepts a key: a host whose key the
 context does not trust reports its `host.trust` check `unknown` with the
 observed fingerprint and the `machine trust` request that enrolls it, and

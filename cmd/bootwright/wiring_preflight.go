@@ -68,6 +68,10 @@ func preflightReads(state machineaccess.EffectiveState, selection machineaccess.
 			clear(capture.Data)
 			return nil, preflight.ErrUnreached
 		}
+		if err == nil && result != nil && result.ExitCode != 0 && !capture.Overflow {
+			clear(capture.Data)
+			return nil, preflight.ExitStatus{Code: result.ExitCode}
+		}
 		if err != nil || result == nil || result.ExitCode != 0 || capture.Overflow {
 			clear(capture.Data)
 			return nil, errors.New("verified bounded prerequisite command did not complete")

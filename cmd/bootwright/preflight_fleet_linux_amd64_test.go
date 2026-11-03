@@ -124,3 +124,33 @@ func TestOperatorSessionsOfferAProvidedTiebreakerItsOwnIdentity(t *testing.T) {
 		t.Fatalf("the selected tiebreaker read offered %+v", identity)
 	}
 }
+
+type unresolvingHost struct{ fleetOnlyHost }
+
+func (h *unresolvingHost) Run(ctx context.Context, session machine.Session, in io.Reader, out, errOut io.Writer) (int, error) {
+	if session.Command[0] == "/usr/bin/getent" {
+		return 2, nil
+	}
+	return h.fleetOnlyHost.Run(ctx, session, in, out, errOut)
+}
+
+func TestAPrerequisiteCommandsExitStatusIsAFailedCheck(t *testing.T) {
+	state, _ := compileAcceptance(t, tiebreakerSources(t, witnessAccess))
+	catalog := state.Effective()
+	lender := &labSessionLender{held: map[string]secrets.Material{
+		"bootwright-machine-key": secrets.NewMaterial(map[secrets.Part][]byte{secrets.PrivateKeyPart: []byte("FLEET KEY")}),
+		"witness-known-hosts":    secrets.NewMaterial(map[secrets.Part][]byte{secrets.ValuePart: []byte("198.51.100.20 " + witnessHostKey + "\n")}),
+	}}
+	host := &unresolvingHost{fleetOnlyHost{admitted: "FLEET KEY"}}
+	reads := preflightReads(labSessionState{effective: catalog}, nil, machineaccess.Options{Lender: lender}, func() preflightClient { return host })
+	rows, err := preflight.GuestChecks{Commands: reads}.CheckGuest(t.Context(), "lab", requireObject(t, catalog, api.Machine, "witness"),
+		preflight.HostRequirements{Fleet: &preflight.FleetAccess{User: "bootwright", KeyRef: "bootwright-machine-key"}}, preflight.PreflightRequest{ContextName: "lab"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, row := range rows {
+		if row.ID == "host.dns" && row.Status != capacity.Failed || row.ID != "host.dns" && row.Status != capacity.Passed {
+			t.Fatalf("%+v", rows)
+		}
+	}
+}

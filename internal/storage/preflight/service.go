@@ -2,6 +2,7 @@ package preflight
 
 import (
 	"context"
+	"maps"
 	"slices"
 	"strings"
 
@@ -88,6 +89,7 @@ func (s Service) Check(ctx context.Context, request PreflightRequest) (*Report, 
 	}
 	hosts := map[string]bool{}
 	fleet := map[string]*FleetAccess{}
+	peers := map[string]*PeerNames{}
 	result := &Report{Context: selected, Target: "storage-cluster", Checks: []Check{}}
 	for _, cluster := range clusters {
 		if len(names) > 0 && !slices.Contains(names, cluster.Name()) {
@@ -108,6 +110,7 @@ func (s Service) Check(ctx context.Context, request PreflightRequest) (*Report, 
 				fleet[ref] = access
 			}
 		}
+		addPeerNames(peers, cluster)
 	}
 	if len(hosts) > 0 {
 		capacity, err := s.CheckCapacity(ctx, catalog, selected, request.DryRun)
@@ -136,7 +139,7 @@ func (s Service) Check(ctx context.Context, request PreflightRequest) (*Report, 
 	}
 	for _, name := range hostNames {
 		ports := slices.DeleteFunc(slices.Clone(published), func(requirement HostPortRequirement) bool { return requirement.Machine != name })
-		checks, err := s.guestChecks(ctx, selected, catalog, name, owned, HostRequirements{Ports: ports, Fleet: fleet[name]}, request)
+		checks, err := s.guestChecks(ctx, selected, catalog, name, owned, HostRequirements{Ports: ports, Fleet: fleet[name], Peers: peers[name]}, request)
 		if err != nil {
 			return nil, err
 		}
@@ -153,6 +156,61 @@ func (s Service) Check(ctx context.Context, request PreflightRequest) (*Report, 
 		return result, diagnostics.NewFailureWithRemediation(code, "storage readiness is not proved; inspect the failed, unknown and pending checks", "", "resolve the reported prerequisites and repeat preflight storage-cluster")
 	}
 	return result, nil
+}
+
+var nameAddressingServices = []string{"alertmanager", "alloy", "grafana", "loki", "mgmt-gateway", "prometheus", "promtail"}
+
+func addPeerNames(peers map[string]*PeerNames, cluster api.Object) {
+	machines, names := map[string]string{}, []string{}
+	for _, node := range cluster.Spec().Get("topology", "nodes").Items() {
+		machines[node.Get("name").Text()] = node.Get("machineRef").Text()
+		names = append(names, cephcluster.NativeHostname(node))
+	}
+	placed := map[string][]string{}
+	addressing := false
+	place := func(service api.Value, label string) {
+		nodes, issues := cephcluster.ResolveServicePlacement(cluster, service)
+		if len(issues) != 0 || len(nodes) == 0 {
+			nodes = slices.Collect(maps.Keys(machines))
+		}
+		for _, node := range nodes {
+			if machine, found := machines[node]; found {
+				placed[machine] = append(placed[machine], label)
+			}
+		}
+	}
+	for _, service := range cluster.Spec().Get("services").Items() {
+		if typeName := service.Get("service_type").Text(); slices.Contains(nameAddressingServices, typeName) {
+			addressing = true
+			place(service, typeName)
+		}
+	}
+	if !addressing {
+		return
+	}
+	managers := false
+	for _, service := range cluster.Spec().Get("services").Items() {
+		if service.Get("service_type").Text() == "mgr" {
+			managers = true
+			place(service, "mgr")
+		}
+	}
+	if !managers {
+		place(api.Value{}, "mgr")
+	}
+	for machine, services := range placed {
+		entry := peers[machine]
+		if entry == nil {
+			entry = &PeerNames{}
+			peers[machine] = entry
+		}
+		entry.Services = append(entry.Services, services...)
+		entry.Names = append(entry.Names, names...)
+		slices.Sort(entry.Services)
+		entry.Services = slices.Compact(entry.Services)
+		slices.Sort(entry.Names)
+		entry.Names = slices.Compact(entry.Names)
+	}
 }
 
 func (s Service) guestChecks(ctx context.Context, selected string, catalog api.Catalog, name string, owned map[string]machine.OwnershipState, requirements HostRequirements, request PreflightRequest) ([]Check, error) {

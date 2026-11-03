@@ -70,6 +70,45 @@ recommends cephadm-signed dashboard certificates with the gateway. A live run
 settles it, and the direct dashboard certificate is parked
 ([B682](../../specs/milestones/backlog.md#b682)).
 
+## Peers addressed by host name
+
+cephadm writes some peers into a daemon's configuration as
+`mgr.get_fqdn(host)`, the FQDN the host reported at its last fact gathering,
+or the inventory address before any gathering. A host whose resolver cannot
+answer that name starts the daemon with an upstream it cannot resolve. In the
+owner's two-context stretch run of 2026-11-03 both management gateway
+daemons exited with nginx `host not found in upstream
+"ceph-03.e2e.example.test:8443"` and cephadm raised `CEPHADM_FAILED_DAEMON`
+([B1086](../../specs/milestones/m2.md#b1086)).
+
+Read from the cephadm manager modules of the IBM builds
+`ceph-mgr-cephadm-20.2.1-405.el9cp` and `20.2.2-349.el10cp` (container image
+layers on the controller, `usr/share/ceph/mgr/cephadm/services/`):
+
+- Always by name: the management gateway's dashboard upstreams, one per MGR
+  daemon (`get_dashboard_endpoints` in `cephadmservice.py`); Alertmanager's
+  cluster peers, one per Alertmanager daemon, and its dashboard URLs of the
+  standby MGRs when no gateway is deployed (`monitoring.py`); the active
+  MGR's scrape target that service discovery hands Prometheus
+  (`prometheus_sd_config` in `service_discovery.py`).
+- By name when the daemon was placed with no address: Prometheus targets
+  that Grafana, Alertmanager and the dashboard read, Grafana's and
+  Alertmanager's URLs that the dashboard sets, the Loki host that Promtail
+  and Alloy push to, and SNMP gateway targets.
+- By inventory address, never by name: the gateway's Prometheus,
+  Alertmanager, Grafana and oauth2-proxy upstreams
+  (`get_service_endpoints` in `mgmt_gateway.py`).
+
+So storage preflight's `host.peer-names` check
+([plan and prerequisites](../../specs/ceph.md#plan-and-prerequisites)) runs
+on each host that places `mgmt-gateway`, `alertmanager`, `grafana`,
+`prometheus`, `loki`, `alloy` or `promtail`, and on each MGR host of a
+cluster that declares one of them, and asks for every node name. It reads
+`/usr/bin/getent ahosts` with every name at once, which exits 2 when any is
+not found, and reads each name alone only then to name the unresolved ones.
+Code: [guests.go](../../internal/storage/preflight/guests.go) and
+[service.go](../../internal/storage/preflight/service.go).
+
 ## Prometheus manager module
 
 [`PrometheusService.config`](https://github.com/ceph/ceph/blob/v20.2.1/src/pybind/mgr/cephadm/services/monitoring.py#L480-L489)
