@@ -109,6 +109,22 @@ operator as a first-call refusal; the slice that records it is named.
   ten minutes) while `orch host ls` shows it online and health is `HEALTH_OK`;
   Bootwright's readiness counts those rows, so every Ceph resource reads
   partial until the cache refreshes.
+- cephadm deploys keepalived and NFS daemons with their systemd units
+  disabled on purpose (`DISABLED_SERVICES`, upstream `src/cephadm/cephadm.py`
+  and `src/pybind/mgr/cephadm/serve.py`): after a reboot only the active
+  manager's serve loop starts them, and keepalived only once the same host's
+  haproxy runs (`IngressService.keepalived_should_auto_start`). A host whose
+  SSH failed stays in cephadm's offline set, and every daemon action on it is
+  skipped, until a later connection succeeds, which the serve loop tries every
+  `mgr/cephadm/host_check_interval` (600 s). On the owner's VLAN stretch run
+  of 2026-11-03 on 9.9.1.2
+  ([X290](../../specs/milestones/delivered.md#x290--owner-acceptance-of-the-vlan-stretch-run-of-2026-11-03))
+  a power-cycled site's RGW virtual IP came back about 16 minutes after its
+  hosts did, with `HEALTH_OK` and `orch host ls` showing them `Offline`
+  meanwhile; with the interval at 60 s it came back about 70 s after power-on.
+  `ceph cephadm check-host <host>` clears the offline mark at once, and the
+  manager then starts the unit itself. So Bootwright never enables or starts
+  these units: recovery is cephadm's, and only its interval bounds it.
 
 ## Timing and health
 

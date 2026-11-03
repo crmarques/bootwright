@@ -11335,3 +11335,99 @@ unchanged. [B1031](m2.md#b1031)'s SMB share ownership.
 [B484](m2.md#b484), which this one case does not accept. The runbook
 correction of [B1066](m2.md#b1066). The earlier same-day attempts are the
 ledger's own rows and accept nothing here.
+
+### X290 — Owner acceptance of the VLAN stretch run of 2026-11-03
+
+**Items:** B1058, B1061, B1064, B1067, B1068 and B1070 to B1074, completed.
+**Kind:** defect. **Owners:** Storage and Infrastructure services.
+
+The owner accepts, in conversation on 2026-11-03, the single-build run of the
+owner's VLAN variant of
+[`e2e/lab-5-nodes-ceph-stretch`](../../e2e/lab-5-nodes-ceph-stretch/runbook.md)
+recorded in the [acceptance ledger](../../docs/acceptance.md#ledger), and
+names the items it completes. The input `lab-5-nodes-ceph-stretch-vlans` is
+untracked and generated for the controller host: four data hosts on tagged
+public and cluster VLANs across two sites, a MON-only tiebreaker on a routed
+third segment, one RGW virtual IP per site and a shared management virtual
+IP. The build is commit `6143169544a33f716ab21828c0e94ca62c70b051` with source
+`clean`, which descends from every item's acceptance baseline:
+`d29e1796bd0f4c5616f173c41a4b3c1aba07a3e4` (B1058, B1061),
+`8972a5a7a5c612589181182106e0dbbf173042cd` (B1067, B1068) and
+`a5cfb9d0e233edd7db132edc62ed4d8094b6e40e` (B1064, B1070 to B1074). The
+release is IBM Storage Ceph 9.9.1.2 (20.2.1-405.el9cp) on RHEL 9.8 guests
+under libvirt. The earlier attempts on builds `e25204cdc` to `98c431008`
+found B1067, B1068 and B1070 to B1074 and spanned builds, so they accept
+nothing.
+
+**What delivered which item.** The in-tree work and its gates are the
+delivering commits' own: B1058 `474e560d3`, B1061 `fbbd9fa2b`, B1064
+`a252604e7`, B1067 `2758ff569`, B1068 `8972a5a7a`, B1070 `ca12fa63c`, B1071
+`adac6f0ea`, B1072 `e0af73054`, B1073 `98c431008` and B1074 `a5cfb9d0e`.
+
+**The apply** (`op-5661deb4fda4dacb24e8e9f3a3ccf2d1`) ran the controller,
+infrastructure-services and substrates, machines and clusters stages to 45/45
+with no refusal and the handoff ready. `preflight storage-cluster` read 37
+passed and none unknown, with no `host.runtime` row, and `diff --observe`
+read 45 blocks, none unknown, with no differences. Its log digest is
+`112e619e95327ab59177c09d1886f29cf353819209ba2ee59199ff5ec6c21cde`.
+
+**The checks**, each against its item's exit evidence:
+
+- B1067: the managed resolver answered both addresses of `ceph-01` and
+  `arbiter-01`, and `getent` on the guests both addresses of `ceph-03`.
+- B1068: podman was absent before the clusters stage on an install profile
+  that lists none and installed (5.8.2) after host preparation.
+- B1070, B1071, B1064: stretch mode enabled with election strategy 3, the
+  tiebreaker `arbiter-01`, MON locations dc1, dc2 and dc3, and the rule
+  `stretch-rule` (ID 1) compiled and set.
+- B1061: every OSD under its site in its short-name host bucket, both sites
+  at weight 0.04375, and 321 placement groups `active+clean`.
+- B1072, B1073: all eleven pools, `.rgw.root` among them, at size 4 and
+  `min_size` 2 on rule 1, and the gateway completed.
+- B1058, B1074: `_admin` on ceph-01 and ceph-03, the `client.admin` rule on
+  `label:_admin`, `ceph.conf` and the admin keyring under `/etc/ceph` on
+  ceph-03, and `ceph -s` answering from there.
+- Both RGW virtual IPs and the management virtual IP answered 200, the RGW
+  certificate naming both site names and addresses.
+
+**The drills.** A dc1 host's power cut moved the dc1 RGW virtual IP to its
+peer within 15 s and the active manager to ceph-03, and the management
+virtual IP answered once the manager moved; the cluster returned to
+`HEALTH_OK`. Losing dc1 kept quorum on ceph-03, ceph-04 and the tiebreaker,
+entered degraded stretch mode with every placement group active at
+`min_size` 1, administered from ceph-03 through `/etc/ceph` and served dc2's
+and the management virtual IPs; after restart, stretch mode left degraded
+mode, `min_size` returned to 2 and every placement group was `active+clean`.
+Cutting dc3 at the router dropped only the tiebreaker from quorum, with every
+placement group `active+clean` and both RGW virtual IPs serving, and quorum
+returned within 30 s of restoring it.
+
+**The destroy** (`op-6ea4a51b130317e769929e873423ab44`) refused
+`lifecycle.live` while the guests ran, then completed 45/45 after `machine
+stop`, with no domain or unit left, the evidence archive verified, the
+context purged and the lab network and listener firewall restored. Its log
+digest is `fe24293cb0031c5dda857f777c5617d14be7c578ea65a64062310612a956bdb5`.
+
+**Recorded with the acceptance**, each seen by the owner during the run and
+written into the ledger row:
+
+1. The first VIP-failover and dc1-loss drills read their results too soon to
+   prove anything and passed on repeats that waited; the first dc3 cut never
+   applied, because `fwd` is a reserved word in nftables, and passed
+   corrected.
+2. After the dc1-loss drill the dc1 RGW virtual IP stayed down about 16
+   minutes with `HEALTH_OK` while `cluster info` reported the endpoint ready:
+   cephadm leaves keepalived units disabled and starts them from its manager
+   only once its next host check clears the host's offline mark
+   ([live facts](../../.agents/knowledge/ibm-ceph-live-host-facts.md#tool-output-shapes)).
+   The owner's experiments with `ceph cephadm check-host` and a 60 s
+   `mgr/cephadm/host_check_interval`, restored afterwards, ran outside
+   Bootwright.
+3. cephadm's empty full-name host buckets under each site inflate Ceph's
+   "hosts down" count during an outage.
+4. One OSD went down and up on its own once before the second dc1-loss drill.
+
+**What stays open.** [B1069](m2.md#b1069)'s newer-podman hosts.
+[B486](m2.md#b486), [B487](m2.md#b487), [B1059](m2.md#b1059) and
+[B1060](m2.md#b1060) await the owner's acceptance, which this record does not
+give.
