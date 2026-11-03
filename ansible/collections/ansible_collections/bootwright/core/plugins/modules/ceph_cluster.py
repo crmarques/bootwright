@@ -74,6 +74,10 @@ from ansible.module_utils.basic import AnsibleModule
 from ansible_collections.bootwright.core.plugins.module_utils import native_diagnostics
 from ansible_collections.bootwright.core.plugins.module_utils import ceph_core
 
+# The closed, non-secret values material may carry beside its paths. AnsibleModule masks every leaf of a no_log option as a
+# substring of each result string, so a selector left masked would censor the refusal names and evidence versions that contain it.
+SELECTORS = frozenset(("tiebreaker",))
+
 
 def main():
     module = AnsibleModule(
@@ -91,6 +95,8 @@ def main():
         # The retirement selector is a value beside the material paths, never a path the transport reads.
         material = dict(params["material"])
         retirement = material.pop("retirement", None)
+        if retirement in SELECTORS:
+            module.no_log_values.discard(retirement)
         transport = ceph_core.Transport(params["request"], material)
         result = ceph_core.execute(params["request"], params["operation"], params["digest"], transport, params["outputs"], retirement=retirement)
     except Exception as error:

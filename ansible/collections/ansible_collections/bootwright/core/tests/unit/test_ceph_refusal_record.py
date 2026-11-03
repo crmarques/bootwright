@@ -14,6 +14,7 @@ live here.
 from __future__ import annotations
 
 import ast
+import json
 import pathlib
 
 import jinja2
@@ -243,3 +244,54 @@ def test_the_protocol_publishes_a_tiebreaker_removal_only_when_it_proves_absence
     assert protocol.completion({"evidence": partial, "digest": digest, "observed": False, "removed": True})[1] is not None
     with pytest.raises(ceph_native.Refusal, match="^evidence$"):
         protocol.completion({"evidence": dict(evidence, extra=1), "digest": digest, "observed": True, "removed": False})
+
+
+def masked(monkeypatch, capsys, operation, execute):
+    """What the real module entry point returns through AnsibleModule's own no_log masking, with a tiebreaker retirement's material."""
+    from ansible.module_utils import basic
+    arguments = {"request": {"cluster": "ceph-stretch"}, "operation": operation, "digest": "d" * 64,
+                 "material": {"retirement": "tiebreaker", "knownHosts": "/run/bootwright/known-hosts"}, "outputs": {}}
+    monkeypatch.setattr(basic, "_ANSIBLE_ARGS", json.dumps({"ANSIBLE_MODULE_ARGS": arguments}).encode())
+    monkeypatch.setattr(basic, "_ANSIBLE_PROFILE", "legacy")
+    monkeypatch.setattr(ceph_core, "Transport", lambda *arguments, **keywords: None)
+    monkeypatch.setattr(ceph_core, "execute", execute)
+    with pytest.raises(SystemExit):
+        ceph_cluster.main()
+    return json.loads(capsys.readouterr().out.strip().splitlines()[-1])
+
+
+def refusing(reason):
+    def execute(*arguments, **keywords):
+        assert keywords["retirement"] == "tiebreaker"
+        raise ceph_native.Refusal(reason)
+    return execute
+
+
+@pytest.mark.parametrize("reason", ["tiebreaker-foreign", "tiebreaker-unreachable"])
+def test_the_tiebreaker_selector_never_masks_a_tiebreaker_refusal(monkeypatch, capsys, reason):
+    result = masked(monkeypatch, capsys, "destroy", refusing(reason))
+    assert result["failed"] is True and result["reason"] == reason and "*" not in result["detail"]
+
+
+def test_the_tiebreaker_selector_never_masks_the_tiebreaker_evidence_version(monkeypatch, capsys):
+    digest = "d" * 64
+    evidence = {"version": ceph_core.TIEBREAKER_EVIDENCE, "request": digest, "owner": "apply-123", "fsid": "4c0a4300-aa43-458c-86d7-ac2256d1fc00",
+                "host": "node-5", "removed": True, "attempted": True}
+    result = masked(monkeypatch, capsys, "destroy", lambda *arguments, **keywords: {"changed": True, "evidence": dict(evidence)})
+    assert result["evidence"] == evidence
+    assert protocol.completion({"evidence": result["evidence"], "digest": digest, "observed": False, "removed": True}) == (evidence, None)
+
+
+def test_the_material_paths_stay_masked_beside_the_selector(monkeypatch, capsys):
+    seen = {"path": "/run/bootwright/known-hosts", "within": "at /run/bootwright/known-hosts"}
+    result = masked(monkeypatch, capsys, "observe", lambda *arguments, **keywords: {"changed": False, "evidence": seen})
+    assert result["evidence"] == {"path": "VALUE_SPECIFIED_IN_NO_LOG_PARAMETER", "within": "at ********"}
+
+
+@pytest.mark.parametrize("reason", protocol.REFUSALS)
+def test_every_refusal_is_published_after_the_modules_masking(monkeypatch, capsys, reason):
+    monkeypatch.setattr(ceph_core, "CLUSTER_REASONS", protocol.REFUSALS)
+    result = masked(monkeypatch, capsys, "destroy", refusing(reason))
+    named = naming("storage_ceph_core", "destroy", "bootwright.core.ceph_cluster", "storage_ceph_core_result")
+    records = published(named, "storage_ceph_core_result", dict(result, failed=False))
+    assert records == [{"phase": "refused", "reason": reason, "detail": result["detail"]}] and "*" not in result["detail"]

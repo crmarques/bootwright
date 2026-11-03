@@ -1,4 +1,4 @@
-# What a failed task under `no_log` prints
+# What a failed task under `no_log` prints, and what a `no_log` option masks
 
 Observed 2026-09-30 with the pinned ansible-core 2.21.4, reproducing what X31
 found. [The security rule](../../specs/security.md#logs-output-and-diagnostics)
@@ -41,3 +41,25 @@ run and drops a later identical one. A playbook written as JSON gives its
 errors an origin with no line, so two tasks raising the same text print it
 once. A test that compares what each task printed gives each task a value of
 its own, as the collection's `test_censored_output.py` does.
+
+## A `no_log` option masks each of its values inside every result string
+
+Observed 2026-11-03 with the pinned ansible-core 2.21.5 (B1079). An
+`AnsibleModule` collects every leaf value of an option declared `no_log` into
+its `no_log_values` set, and `exit_json` and `fail_json` pass the whole result
+through `remove_values` (ansible/module_utils/common/parameters.py,
+`_remove_values_conditions`). A result string equal to such a value becomes
+`VALUE_SPECIFIED_IN_NO_LOG_PARAMETER`; a string merely containing it has each
+occurrence replaced by `********`. Only `None` and Boolean members are kept.
+So a short non-secret value carried inside a hidden option censors every
+closed word that contains it: the `ceph_cluster` module's `material` carried
+the retirement selector `tiebreaker`, and its refusals came back as
+`********-foreign` and its evidence version as `ceph-********-evidence-v1`,
+which the protocol plugin then refused to publish, so the playbook failed
+with no named reason.
+
+A module that carries a closed, non-secret selector inside a `no_log` option
+discards that value from `module.no_log_values` once it has proved it one of
+its closed set, as `ceph_cluster.SELECTORS` does; every other leaf stays
+masked. `test_ceph_refusal_record.py` runs the real module entry point
+through this masking.
