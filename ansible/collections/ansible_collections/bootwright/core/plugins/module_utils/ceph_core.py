@@ -80,7 +80,7 @@ CLUSTER_REASONS = (
     "nvmeof-native", "nvmeof-identity", "nvmeof-foreign", "nvmeof-budget",
     "ingress-firewall", "service-credential-foreign", "ssh-policy-host-excluded", "ssh-policy-unavailable", "tunnel-host-key-excluded",
     "sso-unverified", "stretch-intent", "stretch-interrupted", "stretch-location", "stretch-weight", "stretch-rule", "stretch-foreign", "stretch-pools",
-    "stretch-drift", "tiebreaker-foreign", "tiebreaker-unreachable",
+    "stretch-drift", "tiebreaker-foreign", "tiebreaker-unreachable", "device-not-empty", "foreign-osd",
 )
 SMB_REASONS = (
     "request", "artifact", "ownership", "evidence", "material", "transport", "remote-refusal", "adapter-exception", "native-command",

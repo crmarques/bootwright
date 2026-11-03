@@ -926,14 +926,14 @@ ownership, readiness or identity decision reads it, and it enters no intent or
 digest.
 
 A named refusal ends the attempt with its entry's code. An entry coded
-`lifecycle.unknown` leaves the block's attempt outcome unknown rather than
-failed, so the next apply observes that block first and resolves it from the
-observed evidence, a host block through its preparation evidence. Only the
-entries coded `lifecycle.unsupported` (`unsupported-release`,
+`lifecycle.unknown` leaves the block's attempt outcome unknown, so the next
+apply observes that block first and resolves it from the observed evidence, a
+host block through its preparation evidence. Only the entries coded `lifecycle.unsupported` (`unsupported-release`,
 `package-license`, `package-platform`, `dashboard-verify`,
 `client-quiescence-unqualified`, `call-home-unqualified`,
 `native-option-undeclared`, `ssh-policy-host-excluded`,
-`ssh-policy-unavailable` and `tunnel-host-key-excluded`) leave it failed. A censored failure that names
+`ssh-policy-unavailable`, `tunnel-host-key-excluded`, `device-not-empty` and
+`foreign-osd`) leave it failed. A censored failure that names
 no refusal stays the generic adapter failure, which fails the attempt.
 
 ### Cluster execution budget
@@ -1207,7 +1207,19 @@ without claiming that any disk was erased. Unknown or missing history refuses.
 
 Live checks exclude the OS root device and its backing devices, boot media,
 mounted filesystems, swap, foreign signatures, foreign OSDs and devices owned by
-another operation. Path spelling and native “available” status alone are
+another operation. A declared OSD disk that holds a partition table, filesystem,
+LVM or other signature this operation did not write refuses with the named
+token `device-not-empty`, and one that holds a Ceph OSD of another cluster or
+one this operation did not create, on the disk or in the cluster map, refuses
+`foreign-osd`; both are coded `lifecycle.unsupported`, because no retry clears
+them. Their remedy names `wipefs --no-act <disk>` to see what the disk holds
+and, for a disk of a Ceph cluster the operator destroyed or abandoned, either
+declaring it in its Machine's `spec.hardware.clearOnInstall`
+([physical installation](managed-os.md#physical-installation)) and installing the
+Machine again, or clearing it on the host after confirming the disk. The
+refusal's detail names the token and the code site that refused, never the
+disk: a native worker's cause carries no value, so the host and device are
+not reported. Path spelling and native “available” status alone are
 insufficient. Aliases, multipath views, partitions, overlapping selections and
 replacement devices must resolve without ambiguity; unsupported layouts or
 unreadable inventory refuse before mutation. Native drivegroups cannot

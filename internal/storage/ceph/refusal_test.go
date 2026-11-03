@@ -144,6 +144,29 @@ func TestANativeOptionUndeclaredRefusalNamesTheDestroyItsInputChangeNeeds(t *tes
 	}
 }
 
+func TestADirtyOSDDiskRefusesByItsOwnNameAndLeavesTheAttemptFailed(t *testing.T) {
+	r := coreRequest()
+	e := withMaterial(executionFor(t, r), r)
+	generic := diagnostics.Of(adapterRefusals()["remote-refusal"])[0]
+	messages := map[string]string{
+		"device-not-empty": "an OSD disk on a Ceph host holds a partition table, filesystem, LVM or other signature that this operation did not write",
+		"foreign-osd":      "an OSD disk on a Ceph host, or the Ceph cluster itself, holds a Ceph OSD of another cluster or one this operation did not create",
+	}
+	for reason, message := range messages {
+		_, err := New(api.CephCluster, &refusingRunner{reason: reason}).Observe(context.Background(), e)
+		d := diagnostics.Of(err)
+		if len(d) != 1 || d[0].Code != "lifecycle.unsupported" || d[0].Message != message || d[0].Message == generic.Message ||
+			!strings.HasPrefix(d[0].Remediation, osdDiskRemedy) || lifecycle.AttemptOutcome(err) != reconciliation.OutcomeFailed {
+			t.Fatalf("a %s refusal reached the operator as %+v", reason, d)
+		}
+		for _, step := range []string{"wipefs --no-act <disk>", "spec.hardware.clearOnInstall", "clear it yourself on the host after confirming it is that disk", "Bootwright never clears a disk it cannot prove its own"} {
+			if !strings.Contains(d[0].Remediation, step) {
+				t.Fatalf("the %s remedy omits %q: %q", reason, step, d[0].Remediation)
+			}
+		}
+	}
+}
+
 func TestAForeignImageRefusalNamesTheSettingAndNeverOverwrites(t *testing.T) {
 	r := coreRequest()
 	r.Action, r.Settings = "settings", &Settings{Modules: []string{"nfs"}}

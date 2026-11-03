@@ -328,6 +328,17 @@ func sshPolicyRefusals() map[string]error {
 	}
 }
 
+const osdDiskRemedy = "the adapter detail names the code site that refused, not the disk; run wipefs --no-act <disk> on each declared OSD disk of the Ceph hosts to see what it holds; " +
+	"if it is a disk of a Ceph cluster you destroyed or abandoned, declare it in its Machine's spec.hardware.clearOnInstall and install that Machine again, " +
+	"or clear it yourself on the host after confirming it is that disk, then apply again; Bootwright never clears a disk it cannot prove its own"
+
+func osdDeviceRefusals() map[string]error {
+	return map[string]error{
+		"device-not-empty": failure("lifecycle.unsupported", "an OSD disk on a Ceph host holds a partition table, filesystem, LVM or other signature that this operation did not write", osdDiskRemedy),
+		"foreign-osd":      failure("lifecycle.unsupported", "an OSD disk on a Ceph host, or the Ceph cluster itself, holds a Ceph OSD of another cluster or one this operation did not create", osdDiskRemedy+"; for an OSD the cluster runs, find it with ceph osd metadata and remove it outside Bootwright"),
+	}
+}
+
 func foreignClientRefusal(name string) error {
 	return failure("lifecycle.unknown", "Ceph client client."+name+" exists that this operation did not create",
 		"inspect the foreign client's consumers and authorization outside Bootwright; if it can be removed safely, remove it outside Bootwright, then apply again with the same input; "+
@@ -375,6 +386,7 @@ func adapterRefusals() map[string]error {
 	out["ingress-firewall"] = failure("lifecycle.unknown", "a host that runs the ingress of a Ceph NFS service, management gateway or CephObjectGateway has an active firewalld that does not permit VRRP (IP protocol 112) or a port the ingress serves on the interface that carries its virtual IP", "either permit what the native error names in the firewalld zone it names on the host it names, for example with firewall-cmd --permanent --zone=<zone> --add-protocol=vrrp --add-port=<port>/tcp and firewall-cmd --reload, or let Bootwright realize them by installing that host's Machine with customizations.security.firewall.enabled: true, then apply again; this apply changed nothing before the check")
 	out["pg-budget"] = failure("lifecycle.unknown", "the monitor refused the pool: placement groups per OSD on its CRUSH rule would exceed mon_max_pg_per_osd", "add OSDs, lower pgNumMin or targetSizeRatio, or declare fewer pools on that CRUSH rule, then apply again")
 	maps.Copy(out, sshPolicyRefusals())
+	maps.Copy(out, osdDeviceRefusals())
 	maps.Copy(out, stretchRefusals())
 	out["tunnel-host-key-excluded"] = failure("lifecycle.unsupported", "the SSH crypto policy inside the selected Ceph image admits none of the algorithms of a Ceph host's pinned host key, so cephadm's tunnel could not reach that host; the cluster block refused before this apply claimed or authorized any Ceph host", "the native error names the host and its key type; the apply froze this input, so take back what it owns with bootwright destroy --context <context>, then with bootwright context update select a Ceph image whose SSH crypto policy admits that type, or change spec.customizations.security.fips on that host's MachineInstallProfile so its fresh installation generates a host key of an admitted type (ssh-ed25519 with fips off, ecdsa-sha2-nistp256 with fips on), then apply")
 	out["pool-drift"] = failure("lifecycle.unknown", "a setting this operation completed on the Ceph pool (size, min_size, a quota, a compression option, erasure-coded overwrites or its application) no longer has the value its CephPool or CephObjectGateway froze", "compare ceph osd pool ls detail with the CephPool and set that setting back to its frozen value outside Bootwright, then apply again; or take back what this context owns with bootwright destroy --context <context>, then apply; Bootwright never rewrites a completed pool setting")

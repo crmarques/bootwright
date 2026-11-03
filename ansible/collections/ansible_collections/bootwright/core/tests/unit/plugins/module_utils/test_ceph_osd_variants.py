@@ -4,7 +4,7 @@ import copy
 
 import pytest
 
-from ansible_collections.bootwright.core.plugins.module_utils import ceph_native
+from ansible_collections.bootwright.core.plugins.module_utils import ceph_core, ceph_native
 from ansible_collections.bootwright.core.tests.unit.plugins.module_utils import test_ceph_core as fixtures
 
 core_request = fixtures.core_request
@@ -79,6 +79,12 @@ def test_any_partial_auxiliary_refuses_without_recovery(core_request, monkeypatc
         native.osd_prepare()
     assert native.markers.writes == []
     assert all(argv[0] == "/usr/bin/lsblk" or argv[:2] == ["/usr/sbin/wipefs", "--no-act"] for argv in calls)
+
+
+@pytest.mark.parametrize("token", ["device-not-empty", "foreign-osd"])
+def test_a_dirty_osd_disk_reaches_the_cluster_block_by_its_own_name(token):
+    error = ceph_native.RemoteRefusal("native-refusal:" + token + "@ceph_native.devices:2144")
+    assert ceph_core.refusal(error, ceph_core.CLUSTER_REASONS) == (token, error.detail)
 
 
 @pytest.mark.parametrize("damage", [None, "missing-db", "foreign-wal", "duplicate-data", "foreign-host"])
