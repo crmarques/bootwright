@@ -25,10 +25,6 @@ lab-baremetal:
   ntp-lab-ntp
   os-install-metal-01
   os-package-tree-rhel-9-8
-lab-baremetal-substrate:
-  controller-prerequisites
-  machine-rehearsal-01
-  substrate-host-lab-libvirt
 lab-compact:
   artifact-server-lab-artifacts
   cluster-install-compact

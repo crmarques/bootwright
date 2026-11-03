@@ -13,7 +13,6 @@ names the case that runs its scenario, if any.
 | `machines/` | [lab-rhel](machines/lab-rhel/README.md) | Install RHEL on one libvirt guest through an emulated Redfish BMC. |
 | `machines/` | [lab-rhel-external-services](machines/lab-rhel-external-services/README.md) | Install RHEL on one libvirt guest against an external proxy, DNS resolver and time source chosen through Environment kind defaults. |
 | `machines/` | [lab-rhel-3-nodes](machines/lab-rhel-3-nodes/README.md) | Install three RHEL guests concurrently using a shared package tree. |
-| `machines/` | [lab-baremetal-substrate](machines/lab-baremetal-substrate/README.md) | Create an installer-provisioned guest with a CA-issued emulated BMC for a separately owned physical-install rehearsal. |
 | `machines/` | [lab-baremetal](machines/lab-baremetal/README.md) | Install RHEL on one physical server through its Redfish BMC. |
 | `machines/` | [libvirt-network-variants](machines/libvirt-network-variants/README.md) | Install three libvirt guests over bond, VLAN and VLAN-over-bond install interfaces and converge each to its declared network. |
 | `infrastructure-services/` | [lab-services](infrastructure-services/lab-services/README.md) | Run managed proxy, DNS, NTP and artifact services on the controller. |

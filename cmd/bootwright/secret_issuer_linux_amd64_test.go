@@ -5,10 +5,13 @@ import (
 	"context"
 	"crypto/x509"
 	"encoding/pem"
+	"path/filepath"
 	"strings"
 	"testing"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
+	"github.com/crmarques/bootwright/internal/desiredstate/inputfs"
+	"github.com/crmarques/bootwright/internal/diagnostics"
 	"github.com/crmarques/bootwright/internal/managedos/installation"
 	"github.com/crmarques/bootwright/internal/secrets"
 	"github.com/crmarques/bootwright/internal/secrets/custody"
@@ -88,11 +91,16 @@ func TestGeneratedIssuerThroughProductionCustodyAndFrozenBinding(t *testing.T) {
 	}
 }
 
-func TestCAIssuedRehearsalKeepsSubstrateAndInstallationOwnersSeparate(t *testing.T) {
-	catalog := compiledEffective(t, "lab-baremetal-substrate")
+func TestCAIssuedLeafKeepsSubstrateAndInstallationOwnersSeparate(t *testing.T) {
+	sources, err := (inputfs.Reader{}).Read(context.Background(), []string{filepath.Join("testdata", "issuer-substrate")})
+	if err != nil {
+		t.Fatal(diagnostics.Of(err))
+	}
+	state, _ := compileAcceptance(t, sources)
+	catalog := state.Effective()
 	leaf, found := catalog.Find(api.Secret, "lab-bmc-tls")
 	if !found || leaf.Spec().Get("source", "generated", "issuerRef").Text() != "lab-bmc-ca" {
-		t.Fatal("rehearsal lacks signed leaf")
+		t.Fatal("substrate lacks signed leaf")
 	}
 	if _, found := catalog.Find(api.Secret, "lab-bmc-ca"); !found {
 		t.Fatal("issuer pruned from effective closure")

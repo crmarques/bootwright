@@ -9,9 +9,7 @@ and installs `metal-01`.
 Installation erases the selected disk and requires `apply --authorize
 data-loss`. Destroy withdraws installer material, removes managed services and
 releases the claim; it retains the physical server, its installed OS and data,
-so this example's destroy needs no data-loss authorization or power-off. The
-same input is rehearsed without hardware against the
-[rehearsal substrate](../lab-baremetal-substrate/README.md).
+so this example's destroy needs no data-loss authorization or power-off.
 
 ## Worth noting
 
@@ -27,16 +25,13 @@ same input is rehearsed without hardware against the
 - `metal-01` declares a [firmware](../../../specs/api/machines.md#firmware-block)
   block with `mode: prove` (Secure Boot on, UEFI): a mismatch refuses with
   `firmware-setting-mismatch`. `mode: enforce` is offline-tested only.
-- Two forms: physical host, and an emulated rehearsal on a guest. The physical
-  path is tested in-tree, which qualifies no real BMC firmware (see the
-  [acceptance ledger](../../../docs/acceptance.md)); the rehearsal's install,
-  reboot and continuation acceptance remain unrun
-  ([B496](../../../specs/milestones/m1.md#b496)).
+- The physical path is tested in-tree, which qualifies no real BMC firmware
+  (see the [acceptance ledger](../../../docs/acceptance.md)); its install,
+  reboot and continuation acceptance await the real-hardware operator gate
+  ([B73](../../../specs/milestones/m1.md#b73)).
   FIPS, RHSM and TPM2-bound LUKS variants have offline tests only.
 - Out of scope: physical erase on destroy, bonded or VLAN install interfaces,
   encrypted disks and Satellite package sources.
 - Operator inputs: RHEL 9.8 x86_64 boot and DVD ISOs, the Redfish system URL,
   NIC name and MAC, root-device hint, BMC account (`lab-bmc-credentials`) and
   issuing CA (`lab-bmc-ca`), and a server whose selected disk may be erased.
-
-Rehearse it without hardware with the e2e [`lab-baremetal-rehearsal`](../../../e2e/lab-baremetal-rehearsal/runbook.md) case.

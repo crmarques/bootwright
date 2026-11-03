@@ -246,6 +246,6 @@ ahead of it, and the guest that install produced booted and served SSH. One part
 of that surface is still unproved against this image: the
 `EthernetInterfaces` collection the
 [physical target proof](../specs/substrates.md#physical-machine-realization)
-reads, which only the
-[`lab-baremetal-rehearsal`](../e2e/lab-baremetal-rehearsal/runbook.md) e2e case
-exercises.
+reads, which no emulated e2e case exercises; the
+[B73](../specs/milestones/m1.md#b73) real-hardware operator gate is its first
+run.

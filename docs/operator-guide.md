@@ -462,7 +462,7 @@ same sockets and the same guest bridge.
 | --- | --- | --- |
 | [lab-rhel](../e2e/lab-rhel/runbook.md#run) | One RHEL guest installed through an emulated Redfish BMC, machine list and power reads, exec/rsh sessions, drift observation, replay, restart and safe removal; extended acceptance checks are below | [B72](../specs/milestones/delivered.md#x38--the-real-host-run-of-2026-10-05) operator gate, accepted; M1's extended checks follow [D59](../specs/milestones/backlog.md#d59) |
 | [lab-sno](../e2e/lab-sno/runbook.md#2-render-and-initialize) | A single-node OpenShift cluster installed by the agent installer on one libvirt guest | [B61](../specs/milestones/m3.md#b61) operator gate |
-| [lab-baremetal](../examples/machines/lab-baremetal/README.md) | One physical Machine claimed, proved and installed through its own Redfish BMC, its installer image and host key published privately; the [`lab-baremetal-rehearsal`](../e2e/lab-baremetal-rehearsal/runbook.md) case rehearses it on a substrate with a generated CA-issued emulator leaf, [B496](../specs/milestones/m1.md#b496) | [B73](../specs/milestones/m1.md#b73) operator gate, not run |
+| [lab-baremetal](../examples/machines/lab-baremetal/README.md) | One physical Machine claimed, proved and installed through its own Redfish BMC, its installer image and host key published privately | [B73](../specs/milestones/m1.md#b73) real-hardware operator gate, not run |
 
 Run each block from the repository root, one line at a time, and keep the
 sequence exactly as run: the ledger records it. After each operation, `status`
@@ -524,7 +524,7 @@ No real-hardware row has been accepted yet: [B67](../specs/milestones/m3.md#b67)
 and [B78](../specs/milestones/m1.md#b78) name one as exit evidence, and M2 and
 M3 each need one besides their emulated rehearsal (decision D17). Today a physical
 installation is proved in-tree only until [B73](../specs/milestones/m1.md#b73)'s
-rehearsal runs, using [B496](../specs/milestones/m1.md#b496)'s CA-issued emulator, and a
+real-hardware operator gate runs, and a
 physical cluster node refuses until [B67](../specs/milestones/m3.md#b67).
 
 ## Add-ons

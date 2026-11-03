@@ -1,7 +1,7 @@
 apiVersion: bootwright.io/v1alpha1
 kind: Environment
 metadata:
-  name: lab-baremetal-substrate
+  name: issuer-substrate
 spec:
   domains:
     base: lab.example.test

@@ -33,7 +33,6 @@ type e2eRender struct {
 var e2eRenders = map[string][]e2eRender{
 	"lab-rhel":                       {{name: "default"}},
 	"lab-sno":                        {{name: "default"}},
-	"lab-baremetal-rehearsal":        {{name: "default", refuses: "a physical installation erases only a root disk named by its /dev/disk/by-id/wwn-0x path"}},
 	"lab-network-variants":           {{name: "default"}},
 	"lab-3-nodes-ceph-host-variants": {{name: "default"}},
 	"lab-3-nodes-ocp":                {{name: "metallb off", sets: []string{"addons.metallb=false"}}},
