@@ -47,10 +47,13 @@ implementations the contract goldens pin.
 - **Local fast-forward (default).** Under
   [D168](../../../../specs/milestones/backlog.md#d168) a slice that passed
   its checkpoint and is feature complete integrates into local main as soon as
-  it is done, without asking. Rebase the task branch onto the destination tip,
-  rerun `make check` and any safety additions, run
-  `scripts/check-commits <destination> HEAD`, and advance the destination by
-  fast-forward only. If the destination has
+  it is done, without asking. Rebase the task branch onto the destination tip
+  first, then run `make check` and any safety additions once, on the rebased
+  commit ([D223](../../../../specs/milestones/backlog.md#d223)); a gate run
+  before the rebase proves a commit that is not integrated. Run
+  `scripts/check-commits <destination> HEAD` and advance the destination by
+  fast-forward only. When the destination moves again before the
+  fast-forward, rebase and run the gate again. If the destination has
   unrelated uncommitted changes or cannot move safely, keep the tested task
   branch and report the blocker; never bypass it with a merge. This applies
   with or without a remote; pushing still waits for the owner.

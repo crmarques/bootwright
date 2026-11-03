@@ -10,7 +10,7 @@ the commands and links here.
 | Probe | the one check that shows the change, below | after every edit | seconds |
 | Focus | `make focus` | before each intermediate commit or handoff | 3 to 40 s |
 | Quick | `make quick` | a Go change many packages import, before the gate | 40 to 110 s |
-| Gate | `make check`, plus `make race` and a review for a [safety change](../SKILL.md#safety-class) | once, before integrating into main | about 14 min |
+| Gate | `make check`, plus `make race` and a review for a [safety change](../SKILL.md#safety-class) | once, on the task branch rebased onto main's tip, before integrating | about 14 min |
 
 Costs were measured on a 16-core host with warm caches: focus took 4.8 s for a
 leaf Go package against 40 s for quick, 15 s for `api/v1alpha1` against 110 s,
