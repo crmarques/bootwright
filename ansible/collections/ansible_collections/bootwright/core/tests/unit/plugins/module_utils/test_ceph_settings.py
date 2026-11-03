@@ -14,6 +14,7 @@ The scripted monitor answers the upstream v20.2.1 shapes the worker reads:
 
 from __future__ import annotations
 
+import copy
 import json
 
 import pytest
@@ -306,3 +307,52 @@ def test_a_host_label_is_a_name_or_the_one_qualified_special_label(label, admitt
         return
     with pytest.raises(ceph_native.Refusal, match="^request$"):
         ceph_native.validate(request)
+
+
+class AdminKeyringManager:
+    """`orch client-keyring ls` and `set` as cephadm answers them: a list of {entity, placement, ...}, the label placement as a mapping."""
+
+    def __init__(self, rules=(), lost=False):
+        self.rules, self.sets, self.lost = list(rules), [], lost
+
+    def ceph(self, *args, **kwargs):
+        assert args == ("orch", "client-keyring", "ls") and not kwargs
+        return copy.deepcopy(self.rules)
+
+    def effect(self, *args, **kwargs):
+        assert args == ("orch", "client-keyring", "set", "client.admin", "label:_admin") and kwargs == {"json_result": False}
+        self.sets.append(args)
+        if not self.lost:
+            self.rules.append({"entity": "client.admin", "placement": {"label": "_admin"}, "mode": 384, "uid": 0, "gid": 0})
+
+
+def admin_worker(manager, labels=("_admin",)):
+    request = cluster()
+    request["hosts"][0]["labels"] = list(labels)
+    native = ceph_native.Worker(request, "node-1", run=None, markers=None)
+    native.ceph, native.tunnel_effect = manager.ceph, manager.effect
+    native.manager_retry = lambda action, *args, **options: action(*args, **options)
+    return native
+
+
+def test_a_node_declaring_admin_gets_the_admin_keyring_rule_once():
+    manager = AdminKeyringManager()
+    native = admin_worker(manager)
+    assert native.admin_keyring() is True and len(manager.sets) == 1
+    assert native.admin_keyring() is False and len(manager.sets) == 1
+
+
+def test_without_an_admin_node_the_keyring_rule_is_never_read_or_set():
+    manager = AdminKeyringManager()
+    manager.ceph = None
+    assert admin_worker(manager, labels=("ceph-mon",)).admin_keyring() is False and manager.sets == []
+
+
+def test_an_admin_keyring_rule_placed_elsewhere_refuses_and_a_lost_set_is_not_ready():
+    manager = AdminKeyringManager(rules=[{"entity": "client.admin", "placement": {"label": "other"}}])
+    with pytest.raises(ceph_native.Refusal, match="^ownership$"):
+        admin_worker(manager).admin_keyring()
+    assert manager.sets == []
+    lost = AdminKeyringManager(lost=True)
+    with pytest.raises(ceph_native.Refusal, match="^not-ready$"):
+        admin_worker(lost).admin_keyring()

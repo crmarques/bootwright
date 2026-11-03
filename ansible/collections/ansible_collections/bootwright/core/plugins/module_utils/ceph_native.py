@@ -46,6 +46,7 @@ ROOT_UID = 0
 SOURCE_LINKS = 8
 NAME = re.compile(r"[a-zA-Z0-9][a-zA-Z0-9_.-]{0,127}\Z")
 # A host label: a name, or `_admin`, the one special cephadm label qualified (specs/ceph-native-api.md, hosts and placement).
+ADMIN_LABEL, ADMIN_ENTITY = "_admin", "client.admin"
 HOST_LABEL = re.compile(r"(?:_admin|[a-zA-Z0-9][a-zA-Z0-9_.-]{0,127})\Z")
 HEX = re.compile(r"[0-9a-f]{64}\Z")
 DEVICE = re.compile(r"/dev/(?:disk/by-id/)?[a-zA-Z0-9_.:+-]{1,200}\Z")
@@ -3187,7 +3188,28 @@ class Worker:
             self.manager_retry(self.tunnel_effect, "orch", "accept-license", "--image", self.request["image"], json_result=False)
             require(self.license_accepted(), "not-ready")
             changed = True
+        changed = self.admin_keyring() or changed
         return {"changed": changed}
+
+    def admin_keyring(self):
+        """A node declaring `_admin` receives the cluster configuration and admin keyring under /etc/ceph through cephadm's client-keyring
+        rule, which bootstrap's --skip-admin-label leaves unset (B1074); a client.admin rule placed otherwise is not this cluster's."""
+        if not any(ADMIN_LABEL in (host["labels"] or []) for host in self.request["hosts"]):
+            return False
+        if self.admin_keyring_held():
+            return False
+        self.manager_retry(self.tunnel_effect, "orch", "client-keyring", "set", ADMIN_ENTITY, "label:" + ADMIN_LABEL, json_result=False)
+        require(self.admin_keyring_held(), "not-ready")
+        return True
+
+    def admin_keyring_held(self):
+        rules = self.manager_retry(self.ceph, "orch", "client-keyring", "ls")
+        require(isinstance(rules, list) and len(rules) <= 256 and all(isinstance(rule, dict) for rule in rules), "native-output")
+        for rule in rules:
+            if rule.get("entity") == ADMIN_ENTITY:
+                require(rule.get("placement") in ({"label": ADMIN_LABEL}, "label:" + ADMIN_LABEL), "ownership")
+                return True
+        return False
 
     def license_store_capacity(self):
         """Raise, never lower, the MON config-key entry bound the provider's license record needs, then prove each quorum MON holds it.

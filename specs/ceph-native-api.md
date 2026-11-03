@@ -719,7 +719,11 @@ and `-`, starting with a letter or digit) or `_admin`, the one qualified
 [special host label](https://docs.ceph.com/en/tentacle/cephadm/host-management/#special-host-labels):
 declaring it is the explicit request that cephadm keep the cluster's
 configuration and admin keyring under `/etc/ceph` on that host, so the
-cluster can be administered there while the bootstrap host is down. Any other
+cluster can be administered there while the bootstrap host is down. Bootstrap's
+`--skip-admin-label` leaves cephadm's distribution rule unset, so the
+cluster block sets `orch client-keyring set client.admin label:_admin` once
+any node declares the label, and refuses `ownership` for a `client.admin`
+rule placed otherwise. Any other
 label beginning with `_` refuses at admission.
 
 Placement preserves the provider's qualified native grammar, including
