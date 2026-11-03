@@ -11338,7 +11338,8 @@ ledger's own rows and accept nothing here.
 
 ### X290 — Owner acceptance of the VLAN stretch run of 2026-11-03
 
-**Items:** B1058, B1061, B1064, B1067, B1068 and B1070 to B1074, completed.
+**Items:** B1058, B1059, B1061, B1064, B1067, B1068 and B1070 to B1074,
+completed.
 **Kind:** defect. **Owners:** Storage and Infrastructure services.
 
 The owner accepts, in conversation on 2026-11-03, the single-build run of the
@@ -11359,10 +11360,27 @@ under libvirt. The earlier attempts on builds `e25204cdc` to `98c431008`
 found B1067, B1068 and B1070 to B1074 and spanned builds, so they accept
 nothing.
 
+The owner then accepted, in the same conversation, "all items that we ran in
+this session and it worked". Of the items awaiting acceptance that are not
+named above, only B1059 ran here and met its exit evidence, and it had no
+registered acceptance baseline, so this record designates its delivering
+commit `37cb25fe40211860fffb292d14342895f3f4eb51` retrospectively, the
+owner's explicit exception as for B615 under X99; the build descends from it.
+
+Main moved by one docs commit (`5914decc3`) before integration, so the run's
+branch was rebased onto it: the build `614316954` integrates as
+`bb450bcdda7cb33928e93151676b12a8f18e1bbd`, the baseline `8972a5a7a` as
+`4fd5ef52eeae9e4f941faa90b46f680a73b7ed63` and `a5cfb9d0e` as
+`0b3b2d3fdde03ed5c68512aca5f201ad4cc07d8b`, each patch-identical
+(`git range-diff`), with the fixes below likewise. The row and baselines keep
+the commits the owner built.
+
 **What delivered which item.** The in-tree work and its gates are the
-delivering commits' own: B1058 `474e560d3`, B1061 `fbbd9fa2b`, B1064
-`a252604e7`, B1067 `2758ff569`, B1068 `8972a5a7a`, B1070 `ca12fa63c`, B1071
-`adac6f0ea`, B1072 `e0af73054`, B1073 `98c431008` and B1074 `a5cfb9d0e`.
+delivering commits' own: B1058 `474e560d3`, B1059 `37cb25fe4`, B1061 `fbbd9fa2b`, B1064
+`a252604e7`, B1067 `aade39d4a` (built as `2758ff569`), B1068 `4fd5ef52e`
+(`8972a5a7a`), B1070 `93a1d53b9` (`ca12fa63c`), B1071 `59c1d1608`
+(`adac6f0ea`), B1072 `fe54e5750` (`e0af73054`), B1073 `3955da85f`
+(`98c431008`) and B1074 `0b3b2d3fd` (`a5cfb9d0e`).
 
 **The apply** (`op-5661deb4fda4dacb24e8e9f3a3ccf2d1`) ran the controller,
 infrastructure-services and substrates, machines and clusters stages to 45/45
@@ -11387,6 +11405,8 @@ read 45 blocks, none unknown, with no differences. Its log digest is
 - B1058, B1074: `_admin` on ceph-01 and ceph-03, the `client.admin` rule on
   `label:_admin`, `ceph.conf` and the admin keyring under `/etc/ceph` on
   ceph-03, and `ceph -s` answering from there.
+- B1059: the object switch on, the gateway hosts' second OSD device planned
+  and realized, and every pool within the placement-group budget.
 - Both RGW virtual IPs and the management virtual IP answered 200, the RGW
   certificate naming both site names and addresses.
 
@@ -11430,6 +11450,8 @@ written into the ledger row:
 **What stays open.** [B1075](m2.md#b1075)'s report of the not-ready
 virtual IP in `diff --observe` and `cluster info`, which the second entry
 above found. [B1069](m2.md#b1069)'s newer-podman hosts.
-[B486](m2.md#b486), [B487](m2.md#b487), [B1059](m2.md#b1059) and
-[B1060](m2.md#b1060) await the owner's acceptance, which this record does not
-give.
+[B486](m2.md#b486) (its interruption and continuation, and B488's rehearsal
+of the reference profile), [B487](m2.md#b487) (CephFS and RBD client I/O
+through each site and the Data Foundation connect) and [B1060](m2.md#b1060)
+(this tiebreaker had a replication address, so its exemption was not
+exercised) did not run here and stay awaiting acceptance.
