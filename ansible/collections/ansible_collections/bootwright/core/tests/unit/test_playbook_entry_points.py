@@ -206,7 +206,11 @@ def guarded(playbook):
 
 
 @pytest.fixture(scope="module")
-def printed(tmp_path_factory):
+def printed(tmp_path_factory, once_per_run):
+    return once_per_run("playbook-entry-points", lambda: played(tmp_path_factory))
+
+
+def played(tmp_path_factory):
     """What each play printed, by playbook, run as a runner runs one: the frozen
     request as extra variables and one target in the play's host group."""
     work = tmp_path_factory.mktemp("entry-points")

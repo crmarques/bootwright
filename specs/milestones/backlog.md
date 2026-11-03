@@ -233,6 +233,7 @@ Alias cell.
 | [B999](#b999) | new, 2026-10-30 (X235 review; pre-existing) | defect | Add-ons | Selection reports two built-in packages that create one CatalogSource name or share one hosted namespace on a cluster | No profile selects two such packages today; the check belongs with the package-facts selection rules, not B90's authored slice |
 | [B1050](#b1050) | new, 2026-11-02 (`make check` during the Ceph E2E fixes) | defect | Managed OS | The physical target proof's partition case is deterministic under concurrent gate runs, or its cause is recorded | Failed once in a gate run beside a second one and passed on rerun and in 20 isolated runs; gates no milestone |
 | [B1053](#b1053) | new, 2026-11-02 (owner's request: `make test` too slow) | enabling | Architecture and developer tooling | The Go suite's slowest packages run their independent tests concurrently | Partly delivered by X286; the rest needs a shared-state audit of each package; gates no milestone |
+| [B1054](#b1054) | new, 2026-11-02 (owner's request: faster checks before main, still safe) | enabling | Architecture and developer tooling | `make check` runs its independent checks concurrently and integration pays for it once | Partly delivered by X287; the rest changes the gate's shape and waits for the owner's choice; gates no milestone |
 | [B771](#b771) | new, 2026-10-20 (D173); folds B365 | defect | Add-ons, with Workspace | The `add-ons/_store` selection exception, its marker and its reader rules leave the input reader | Dead surface now that B89 is retired; removing input-reader rules is not needed by any M4 package |
 | [B772](#b772) | new, 2026-10-20 (D173) | product | Add-ons | A package installed through OLM v1 (`ClusterExtension`) | ODF/FDF, ACM, MCE and GitLab do not qualify; own-namespace installs are Technology Preview |
 | [B773](#b773) | new, 2026-10-20 (D173) | product | Add-ons | A registry credential merged into a cluster's global pull secret with an exact-entry receipt | Its inverse never runs under retirement; the install pull secret carries entitlements from first boot |
@@ -3057,6 +3058,30 @@ shared state, `make race` over the converted packages, and repeated
 it gates no milestone and a missed shared fixture would trade time for
 flakiness. **Revive when** the owner asks, or the suite's wall time grows
 again.
+
+### B1054
+
+`make check` took 973 s on 2026-11-02 (16 cores), against the 6 minutes the
+[verification tiers](../../.agents/skills/code-implementation/references/verification.md)
+state, and the fast-forward procedure reruns it after a rebase onto a moved
+main. Its targets and the Ansible check's phases run one after another, and
+most use one core; the phase costs are in
+[the check-cost lessons](../../.agents/knowledge/inner-loop-check-cost.md#where-the-gates-time-goes).
+**Partly delivered** by
+[X287](delivered.md#x287--module-fixtures-computed-once-across-unit-workers):
+818 s. **Remains**, each a change to the gate's shape that waits for the
+owner's choice: the Go targets beside the Ansible check; the Ansible check's
+independent phases beside one another, the plain serial loop of
+[D222](#d222) still in-process and serial in its own copy of the collection;
+the syntax phase's playbooks checked concurrently; one `make check` per
+integration, after the final rebase; and a pass record of the Ansible check
+keyed by every input it reads, which CI never reads. **Outcome:** the gate
+proves what it proves today in less wall time. **Requires:** none.
+**Definition:** `Specified`. **Exit evidence:** before and after wall times,
+repeated concurrent gate runs with no new failure, and for a pass record a
+test that each input it covers moves the key. Parked because each option
+trades a risk the owner weighs: contention for the timing-bounded tests, or a
+key that misses an input. **Revive when** the owner chooses.
 
 ## Audit remediation (2026-10-26)
 

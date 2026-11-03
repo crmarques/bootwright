@@ -3,7 +3,7 @@
 The [verification tiers](../skills/code-implementation/references/verification.md)
 own which check runs when. This page records why the gate is slow, why the
 inner loop is shaped as it is, and the traps found while measuring it on
-2026-10-18 (16 cores, warm caches).
+2026-10-18 and 2026-11-02 (16 cores, warm caches).
 
 ## Where the gate's time goes
 
@@ -23,11 +23,21 @@ inner loop is shaped as it is, and the traps found while measuring it on
   each entry, and the crash harness repeats it hundreds of times.
 - `t.Parallel` on one heavy test gains nothing: Go starts a top-level parallel
   test only after every serial test of its package has finished.
-- Ansible is about 4.7 of the gate's 6 minutes: syntax 15 s, lint 22 s,
-  sanity 54 s and units 185 s. Units runs the 3818 collection tests twice
-  serially, under ansible-test and as the plain loop, then the module tests
-  again under the 3.9 floor. Sanity's cost is mostly building its tool
-  environments; over two target files all 25 tests take 17 s.
+- On 2026-11-02 `make check` took 973 s, then 818 s after X287: Go 157 s and
+  the Ansible check 658 s, every target and phase one after another (B1054).
+  The Ansible phases: syntax 62 s (69 playbooks, one process each), lint 92 s,
+  sanity 84 s, the ansible-test units on xdist 94 s, the integration targets
+  9 s, the plain serial loop over all 8279 collection tests 238 s, and the
+  floor's module units and import sanity 71 s. Only the xdist phases use more
+  than one core. Sanity's cost is mostly building its tool environments; over
+  two target files all 25 tests take 17 s.
+- Under xdist a module-scoped fixture is torn down whenever a worker's next
+  test comes from another module, so it runs about once per test. Before X287
+  the two fixtures that run `ansible-playbook` made the controller unit phase
+  180 s instead of 56 s. A fixture whose result is data computes it through
+  the unit `conftest.py`'s `once_per_run`; find such a cost in the JUnit XML
+  ansible-test writes under the check area's `tests/output/junit/`, where the
+  rerun shows as `setup` time on many tests of one module.
 - Narrowing is where the savings are: lint over one role takes 2 s, syntax over
   one playbook directory 3 s, and units over one test file 1.5 s.
 

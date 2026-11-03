@@ -71,7 +71,11 @@ def shown(shape):
 
 
 @pytest.fixture(scope="module")
-def printed(tmp_path_factory):
+def printed(tmp_path_factory, once_per_run):
+    return once_per_run("censored-output", lambda: played(tmp_path_factory))
+
+
+def played(tmp_path_factory):
     """What each task printed under each callback, by callback and task name."""
     work = tmp_path_factory.mktemp("censored")
     (work / "library").mkdir()

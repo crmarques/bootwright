@@ -12,6 +12,9 @@ any test imports the collection.
 
 from __future__ import annotations
 
+import fcntl
+import json
+import os
 import pathlib
 
 import pytest
@@ -24,6 +27,39 @@ COLLECTIONS = pathlib.Path(__file__).resolve().parents[5]
 def pytest_configure():
     if AnsibleCollectionConfig.collection_finder is None:
         _AnsibleCollectionFinder(paths=[str(COLLECTIONS)])._install()
+
+
+@pytest.fixture(scope="session")
+def once_per_run(tmp_path_factory):
+    """once_per_run(name, compute) is compute()'s JSON result, once per run."""
+    return lambda name, compute: computed_once(tmp_path_factory, name, compute)
+
+
+def computed_once(tmp_path_factory, name, compute):
+    """compute()'s JSON result, computed once per test run.
+
+    pytest-xdist hands a module's tests to several workers and tears a
+    module-scoped fixture down between them, so a fixture that runs a playbook
+    would run once per test. Under xdist the first worker computes the result
+    under a lock in the run's shared temporary directory and the others read
+    it; a computation that fails writes nothing, so every worker fails alike.
+    Outside xdist, compute() runs as a module-scoped fixture runs.
+    """
+    run = os.environ.get("PYTEST_XDIST_TESTRUNUID")
+    if not run:
+        return compute()
+    shared = tmp_path_factory.getbasetemp().parent / ("once-" + run)
+    shared.mkdir(exist_ok=True)
+    result = shared / (name + ".json")
+    with open(shared / (name + ".lock"), "w") as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        if result.exists():
+            return json.loads(result.read_text())
+        value = compute()
+        partial = shared / (name + ".partial")
+        partial.write_text(json.dumps(value))
+        os.replace(partial, result)
+        return value
 
 
 # The controller's SSH crypto policy, which a Ceph transport reads and

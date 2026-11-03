@@ -11166,3 +11166,23 @@ The uncached suite fell from 112 s to 90 s on a 16-core host. Concurrency
 inside the slowest packages stays parked on
 [B1053](backlog.md#b1053). The delivering commit records the gates and their
 results.
+
+### X287 — Module fixtures computed once across unit workers
+
+**Item:** B1054, in part (new, 2026-11-02, parked). **Kind:** enabling.
+**Owner:** Architecture and developer tooling. The owner asked for faster
+checks before main without losing safety; no assertion changed.
+
+pytest-xdist hands a module's tests to several workers and tears a
+module-scoped fixture down whenever a worker's next test comes from another
+module. The fixtures of `test_playbook_entry_points.py` and
+`test_censored_output.py` each run `ansible-playbook` for 10 to 15 s, so
+under the gate's `-n auto` they ran for almost every one of their 75 tests:
+the controller unit phase took 180 s. The collection's unit `conftest.py`
+gains `once_per_run`: under xdist the first worker computes a fixture's JSON
+result under a lock in the run's shared temporary directory and the others
+read it, and a failed computation writes nothing, so every worker fails
+alike; outside xdist, as in the plain serial loop, it computes as before.
+The phase now takes 56 s and `make check` 818 s instead of 973 s. With the
+entry-point fixture made to fail, all 69 of its cases errored on 8 workers
+and serially. The delivering commit records the gates and their results.
