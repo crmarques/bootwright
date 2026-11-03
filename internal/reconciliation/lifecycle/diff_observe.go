@@ -25,13 +25,14 @@ const (
 )
 
 type blockReading struct {
-	state       string
-	evidence    json.RawMessage
-	reason      string
-	remedy      string
-	projections []Projection
-	notes       []string
-	projected   bool
+	state          string
+	implementation string
+	evidence       json.RawMessage
+	reason         string
+	remedy         string
+	projections    []Projection
+	notes          []string
+	projected      bool
 }
 
 type observedSide struct {
@@ -133,6 +134,7 @@ func (s Service) inspectAll(ctx context.Context, view RunView, store recordReade
 	settle := func(block reconciliation.Block, reading blockReading) {
 		mutex.Lock()
 		defer mutex.Unlock()
+		reading.implementation = block.Implementation
 		readings[block.ID] = reading
 		s.reportObservation(ctx, ProgressEvent{Status: "running", Completed: len(readings), Declared: len(blocks)})
 	}
@@ -225,6 +227,9 @@ func (s Service) inspect(ctx context.Context, view RunView, store recordReader, 
 	if !ok {
 		return blockReading{state: sideUnknown, reason: "this executable does not offer the implementation block " + block.ID + " froze", remedy: installFroze(read)}
 	}
+	if recorded, ok := capability.(NothingLive); ok {
+		return recordedReading(ctx, store, read, block, recorded)
+	}
 	var observation Observation
 	err := s.withPython(ctx, approved, func(launch prerequisites.PythonLaunch) error {
 		execution, err := s.inspection(ctx, view, store, approved, launch, read, block, material)
@@ -250,11 +255,30 @@ func (s Service) inspect(ctx context.Context, view RunView, store recordReader, 
 	return s.reading(ctx, store, read, block, observation, err)
 }
 
+func recordedReading(ctx context.Context, store recordReader, read *diffRead, block reconciliation.Block, recorded NothingLive) blockReading {
+	owner, err := routedIn(ctx, store, read.owning, block.ID)
+	var record BlockEvidence
+	if err == nil {
+		record, err = blockEvidence(ctx, store, owner.ID, block, reconciliation.Apply)
+	}
+	if err != nil {
+		return blockReading{state: sideUnknown, reason: firstMessage(err), remedy: "restore what the reason names, then " + repeatObserved(read.context.Name)}
+	}
+	nothing := block.Implementation + " holds nothing live"
+	switch {
+	case record.State != reconciliation.BlockDone:
+		return blockReading{state: sideUnknown, reason: "apply " + owner.ID + " records block " + block.ID + " " + string(record.State) + ", and " + nothing, remedy: reviewStatus(read.context.Name)}
+	case !recorded.RecordProves(block, record.Evidence):
+		return blockReading{state: sideUnknown, reason: "the record apply " + owner.ID + " holds of block " + block.ID + " does not prove its effect, and " + nothing, remedy: reviewStatus(read.context.Name)}
+	}
+	return blockReading{state: sidePresent, evidence: slices.Clone(record.Evidence), notes: []string{block.ID + ": " + nothing + ", so it reads apply " + owner.ID + "'s record"}}
+}
+
 func (s Service) reading(ctx context.Context, store recordReader, read *diffRead, block reconciliation.Block, observation Observation, err error) blockReading {
 	if err == nil {
 		switch observation.Effect {
 		case reconciliation.EffectNoEffect:
-			return blockReading{state: sideAbsent}
+			return blockReading{state: sideAbsent, notes: []string{block.ID + ": its observation proves none of this effect exists"}}
 		case reconciliation.EffectPartial:
 			return blockReading{state: sidePartial, evidence: observation.Evidence, notes: []string{block.ID + ": part of this effect is realized as its frozen request states"}}
 		case reconciliation.EffectCompleted:
@@ -398,11 +422,26 @@ func (r diffRead) observedSide(identity string, ids []string, readings map[strin
 		if applied, found := r.applied.Find(api.Kind(kind), name); found {
 			side.Object = canonicalObject(applied)
 		}
-		block, _ := r.owningPlan.Block(ids[0])
-		side.Notes = append(side.Notes, "observed "+side.State+"; "+block.Implementation+" renders no field, so the fields shown are what apply "+r.owning.ID+" applied")
+		side.Notes = append(side.Notes, "observed "+side.State+"; "+unrendered(ids, readings)+" no field, so the fields shown are what apply "+r.owning.ID+" applied")
 		return observedSide{real: side}
 	}
 	return r.projectedSide(api.Kind(kind), name, side, fragments)
+}
+
+func unrendered(ids []string, readings map[string]blockReading) string {
+	var implementations []string
+	for _, id := range ids {
+		reading := readings[id]
+		if reading.state != sidePresent && reading.state != sidePartial || slices.Contains(implementations, reading.implementation) {
+			continue
+		}
+		implementations = append(implementations, reading.implementation)
+	}
+	slices.Sort(implementations)
+	if len(implementations) == 1 {
+		return implementations[0] + " renders"
+	}
+	return strings.Join(implementations, ", ") + " render"
 }
 
 func (r diffRead) projectedSide(kind api.Kind, name string, side RealSide, fragments []fragment) observedSide {

@@ -289,7 +289,8 @@ func TestMixedBlocksFoldUnknownBeforePartialBeforePresent(t *testing.T) {
 	projecting := &projectingCapability{testCapability: h.capability, paths: []ProjectedPath{{Kind: api.ArtifactServer, Path: "spec.image"}},
 		answers: map[string]scriptedObservation{"alpha-config": {observation: Observation{Effect: reconciliation.EffectNoEffect}}}}
 	h.service.capabilities = testResolver{capability: projecting}
-	if alpha := objectOf(t, f.observe(t), api.ArtifactServer, "alpha"); alpha.Real.State != "partial" || alpha.Real.Source != "observed" {
+	alpha := objectOf(t, f.observe(t), api.ArtifactServer, "alpha")
+	if alpha.Real.State != "partial" || alpha.Real.Source != "observed" || !slices.Contains(alpha.Real.Notes, "alpha-config: its observation proves none of this effect exists") {
 		t.Fatalf("a present block beside an absent one read alpha %+v", alpha.Real)
 	}
 }
@@ -681,5 +682,134 @@ func TestAnObservedDiffObservesACompletedApplysBlockWhoseRecordIsLost(t *testing
 	}
 	if side := objectOf(t, result, api.ArtifactServer, "bravo").Real; side.Source != sideObserved || side.State != sidePresent {
 		t.Fatalf("bravo reads %+v, want observed present", side)
+	}
+}
+
+const recordedImplementation = "artifact-image-v1"
+
+type recordOnly struct {
+	*testCapability
+	proves bool
+	read   []string
+}
+
+func (r *recordOnly) Plan(context.Context, PlanInput) (CapabilityPlan, error) {
+	return CapabilityPlan{Definitions: []reconciliation.BlockDefinition{}}, nil
+}
+
+func (r *recordOnly) Claimed(api.Catalog) []string { return nil }
+
+func (r *recordOnly) RecordProves(block reconciliation.Block, _ json.RawMessage) bool {
+	r.read = append(r.read, block.ID)
+	return r.proves
+}
+
+type recordedResolver struct {
+	observed Capability
+	recorded *recordOnly
+}
+
+func (r recordedResolver) Bindings() []CapabilityBinding {
+	return []CapabilityBinding{
+		{Kind: "ArtifactServer", Implementation: "artifact-server-nginx-v1"},
+		{Kind: "ArtifactServer", Implementation: recordedImplementation, Family: "artifact-image"},
+	}
+}
+
+func (r recordedResolver) Resolve(kind, implementation string) (Capability, bool) {
+	switch {
+	case kind != "ArtifactServer":
+		return nil, false
+	case implementation == recordedImplementation:
+		return r.recorded, true
+	case implementation == "artifact-server-nginx-v1":
+		return r.observed, true
+	}
+	return nil, false
+}
+
+func recordedFixture(t *testing.T, plain bool, prepare func(*harness)) (diffFixture, *recordOnly, string) {
+	t.Helper()
+	image := definition("alpha-image")
+	image.Object, image.Implementation = "alpha", recordedImplementation
+	h := newPlannedHarness(t, []reconciliation.BlockDefinition{definition("alpha"), image})
+	f := diffFixture{harness: h, compiler: sourcesCompiler{states: map[string]*compilation.State{digestOf(h.workspace.inputs): diffState(servers("v1", "alpha")...)}}}
+	h.service.compiler = f.compiler
+	projecting := &projectingCapability{testCapability: h.capability, answers: map[string]scriptedObservation{}, paths: []ProjectedPath{{Kind: api.ArtifactServer, Path: "spec.image"}}}
+	var observed Capability = projecting
+	if plain {
+		observed = plainObserver{projecting}
+	}
+	recorded := &recordOnly{testCapability: h.capability, proves: true}
+	h.service.capabilities = recordedResolver{observed: observed, recorded: recorded}
+	if prepare != nil {
+		prepare(h)
+	}
+	result, _ := h.service.Apply(context.Background(), ApplyRequest{ContextName: "lab", SkipConfirmation: true})
+	if result == nil {
+		t.Fatal("the apply registered nothing")
+	}
+	return f, recorded, result.Receipt.Operation
+}
+
+func TestANothingLiveBlockReadsItsApplysRecordInsteadOfObserving(t *testing.T) {
+	f, recorded, operation := recordedFixture(t, false, nil)
+	observes := len(f.capability.observes)
+	result := f.observe(t)
+	if got := f.capability.observes[observes:]; !slices.Equal(got, []string{"alpha"}) || !slices.Equal(recorded.read, []string{"alpha-image"}) {
+		t.Fatalf("observed %v, read records of %v", got, recorded.read)
+	}
+	alpha := objectOf(t, result, api.ArtifactServer, "alpha")
+	note := "alpha-image: artifact-image-v1 holds nothing live, so it reads apply " + operation + "'s record"
+	if alpha.Real.State != "present" || alpha.Real.Source != "observed" || !slices.Contains(alpha.Real.Notes, note) {
+		t.Fatalf("alpha reads %+v", alpha.Real)
+	}
+	if result.Blocks != (DiffBlocks{Observed: 2, Unprojected: 1}) {
+		t.Fatalf("blocks %+v", result.Blocks)
+	}
+}
+
+func TestANothingLiveBlockWhoseRecordProvesNothingReadsUnknown(t *testing.T) {
+	for name, tt := range map[string]struct {
+		prepare func(*harness)
+		after   func(diffFixture, *recordOnly, string)
+		reason  string
+	}{
+		"evidence its capability refuses": {
+			after:  func(_ diffFixture, recorded *recordOnly, _ string) { recorded.proves = false },
+			reason: "the record apply %s holds of block alpha-image does not prove its effect, and artifact-image-v1 holds nothing live",
+		},
+		"a failed attempt": {
+			prepare: func(h *harness) {
+				h.capability.outcomeFor = map[string]Result{"alpha-image": {Outcome: reconciliation.OutcomeFailed}}
+			},
+			reason: "apply %s records block alpha-image failed, and artifact-image-v1 holds nothing live",
+		},
+		"a lost record": {
+			after: func(f diffFixture, _ *recordOnly, operation string) {
+				lose(f.harness, path.Join(operation, "blocks", "alpha-image")+"/")
+			},
+			reason: "apply %s records block alpha-image pending, and artifact-image-v1 holds nothing live",
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			f, recorded, operation := recordedFixture(t, false, tt.prepare)
+			if tt.after != nil {
+				tt.after(f, recorded, operation)
+			}
+			alpha := objectOf(t, f.observe(t), api.ArtifactServer, "alpha")
+			if alpha.Real.State != "unknown" || alpha.Real.Reason != fmt.Sprintf(tt.reason, operation) || alpha.Real.Remedy != reviewStatus("lab") {
+				t.Fatalf("alpha reads %+v", alpha.Real)
+			}
+		})
+	}
+}
+
+func TestAnUnrenderedObjectNamesEveryImplementationItRead(t *testing.T) {
+	f, _, operation := recordedFixture(t, true, nil)
+	alpha := objectOf(t, f.observe(t), api.ArtifactServer, "alpha")
+	note := "observed present; artifact-image-v1, artifact-server-nginx-v1 render no field, so the fields shown are what apply " + operation + " applied"
+	if alpha.Real.State != "present" || alpha.Real.Source != "applied" || !slices.Contains(alpha.Real.Notes, note) {
+		t.Fatalf("alpha reads %+v", alpha.Real)
 	}
 }

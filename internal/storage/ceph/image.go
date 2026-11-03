@@ -177,6 +177,8 @@ type ImageCapability struct{ runner Runner }
 
 func NewImage(runner Runner) ImageCapability { return ImageCapability{runner: runner} }
 
+var _ lifecycle.NothingLive = ImageCapability{}
+
 func imageDescription(verb reconciliation.Verb, cluster, image string) (string, []string) {
 	if verb == reconciliation.Destroy {
 		return "release the resolved Ceph image of " + cluster, []string{"release-image " + image}
@@ -349,6 +351,15 @@ func (ImageCapability) ObserveRemoval(ctx context.Context, e lifecycle.Execution
 		return unknown, failure("lifecycle.state", "the Ceph image removal evidence cannot be encoded", "")
 	}
 	return lifecycle.Observation{Effect: reconciliation.EffectCompleted, Evidence: evidence}, nil
+}
+
+func (ImageCapability) RecordProves(block reconciliation.Block, data json.RawMessage) bool {
+	r, err := DecodeImageRequest(block.Request)
+	if err != nil {
+		return false
+	}
+	evidence, err := decodeImageEvidence(data, block.RequestDigest)
+	return err == nil && evidence.Postcondition && imageEffect(evidence, r, false) == reconciliation.EffectCompleted
 }
 
 func (ImageCapability) Quiescent(ctx context.Context, _ lifecycle.Probe) (lifecycle.Quiescence, error) {

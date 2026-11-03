@@ -277,6 +277,29 @@ func TestImageApplyRefusesUnprovedResolution(t *testing.T) {
 	}
 }
 
+func TestTheImageRecordProvesOnlyAResolutionApplyWouldAccept(t *testing.T) {
+	block := imageBlock(t, "example", PinnedRepository+":"+PinnedTag)
+	if !NewImage(nil).RecordProves(block, resolvedEvidence(t, block.RequestDigest, resolvedDigest)) {
+		t.Fatal("a recorded resolution does not prove its block")
+	}
+	unproved := bytes.Replace(resolvedEvidence(t, block.RequestDigest, resolvedDigest), []byte(`"postcondition":true`), []byte(`"postcondition":false`), 1)
+	for name, evidence := range map[string]json.RawMessage{
+		"none":           nil,
+		"empty":          json.RawMessage(`{}`),
+		"another digest": resolvedEvidence(t, strings.Repeat("d", 64), resolvedDigest),
+		"absent":         json.RawMessage(`{"absent":true,"postcondition":true,"request":"` + block.RequestDigest + `"}`),
+		"arm64":          bytes.Replace(resolvedEvidence(t, block.RequestDigest, resolvedDigest), []byte(PinnedPlatform), []byte("linux/arm64"), 1),
+		"another tag":    bytes.Replace(resolvedEvidence(t, block.RequestDigest, resolvedDigest), []byte(PinnedTag), []byte("latest"), 1),
+		"unproved":       unproved,
+	} {
+		t.Run(name, func(t *testing.T) {
+			if NewImage(nil).RecordProves(block, evidence) {
+				t.Fatal("an unproved record proves its block")
+			}
+		})
+	}
+}
+
 func TestImageRequestGoldenIsTheAdapterCall(t *testing.T) {
 	block := imageBlock(t, "example", PinnedRepository+":"+PinnedTag)
 	data, err := json.Marshal(struct {

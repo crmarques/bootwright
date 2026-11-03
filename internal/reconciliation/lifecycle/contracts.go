@@ -393,6 +393,10 @@ type Projector interface {
 	Project(applied api.Catalog, block reconciliation.Block, evidence json.RawMessage) ([]Projection, error)
 }
 
+type NothingLive interface {
+	RecordProves(block reconciliation.Block, evidence json.RawMessage) bool
+}
+
 // UnresolvedReporter lets a capability say why an observation of one of its
 // frozen blocks proved nothing, from the evidence that observation recorded,
 // which is empty when it read none, for the verb the operation froze: an

@@ -2064,6 +2064,10 @@ that still declares an output is refused by the runner and reads unknown with
 `an invocation no operation records may take over no material, so this observation cannot run outside an operation`
 and the remedy
 `this observation needs an operation, so bootwright diff --context <name> reads this block from its records`.
+A capability that implements `NothingLive` holds nothing on any host, as the
+Ceph image resolution, whose effect is the reference its record holds; its
+block is not observed and reads its owning apply's record
+([readings](#readings-and-their-fold)).
 
 **Material.** The Secret material an observation reads is the binding the
 owning apply froze, reopened read-only before the lock is taken, binding
@@ -2091,13 +2095,15 @@ yet observed reads unknown with `the observation was canceled`; a read-only
 Ceph remote worker an observation already started may run on until its own
 deadline.
 
-**Readings.** One block reads:
+### Readings and their fold
+
+**Readings.** One block of a [live reading](#reading-the-real-side-live) reads:
 
 | Observation | Reading |
 | --- | --- |
 | an error, a runner refusal or a cancellation | unknown |
 | `unknown`, or an effect outside the four | unknown |
-| `no-effect` | absent |
+| `no-effect` | absent, with the note `<block>: its observation proves none of this effect exists` |
 | `partial` | partial, with the note `<block>: part of this effect is realized as its frozen request states` |
 | `completed` | present |
 
@@ -2107,6 +2113,16 @@ the general reason of an observation that proved nothing, with the remedy
 `restore what the reason names, then repeat bootwright diff --context <name> --observe`,
 except the runner's refusal of an unrecorded output, whose remedy is named under
 **Boundary**.
+A `NothingLive` block reads present, with the note
+`<block>: <implementation> holds nothing live, so it reads apply <op>'s record`,
+when the apply owning it records it done and its `RecordProves` accepts the
+recorded evidence, the proof its apply requires. Otherwise it reads unknown,
+never absent, as a record not done, a lost one reading pending, or refused
+evidence proves no absence:
+`apply <op> records block <id> <state>, and <implementation> holds nothing live`
+or
+`the record apply <op> holds of block <id> does not prove its effect, and <implementation> holds nothing live`,
+with the remedy of reviewing `bootwright status`.
 The header counts the blocks read (`observed`), the blocks left unknown, and
 the present or partial blocks no projection rendered (`not projected`).
 
@@ -2115,7 +2131,8 @@ otherwise all absent read absent; otherwise any partial, or present beside
 absent, reads partial; otherwise present. An object whose only observed
 readings are other blocks' projections onto it folds those blocks. Unknown is
 never absent: an observation that proved nothing never reads as an object
-taken back. An absent object reads `its observation proves none of it exists`.
+taken back. An absent object reads `its observation proves none of it exists`;
+a partial one carries each absent block's note.
 
 **Projection.** A capability that implements `Projector` turns the evidence
 of a present or partial reading, with the catalog of the revision the apply
@@ -2141,7 +2158,9 @@ While a block whose implementation's `ProjectedPaths` name the object's kind
 reads unknown, an item with no observed counterpart is instead dropped and
 listed as not compared, because that block may hold it. A
 present or partial object no fragment renders keeps the applied side, with
-the note `observed <state>; <implementation> renders no field, so the fields shown are what apply <op> applied`.
+the note `observed <state>; <implementation> renders no field, so the fields shown are what apply <op> applied`,
+naming each distinct implementation of its present or partial blocks, sorted
+and joined by `, ` before `render` when several.
 
 An object an abandoned context of the same name left on a host reads as this
 context's, because no native identity yet distinguishes the two, the known
