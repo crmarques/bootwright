@@ -43,6 +43,22 @@ Build labels name where a fact was read; no version rule is recorded (D163).
   The page names no `--location` flag on `ceph orch host add`. The bootstrap
   host joins before any host spec, so X199 proves its location by the
   `osd crush tree` readback rather than assume the spec applied.
+- That bucket is named after the registered hostname, but an OSD joins the
+  bucket of its host's *short* name directly under `default`: its CRUSH
+  location is `host=<short hostname> root=default`
+  (`src/crush/CrushLocation.cc:110-124` at v20.2.1), sent on start because
+  `osd_crush_update_on_start` defaults to true (`src/osd/OSD.cc:4861-4892`);
+  cephadm's `add-bucket` uses the spec's hostname
+  (`src/pybind/mgr/cephadm/module.py:1845-1851`). With fully qualified
+  hostnames, which a node's `fqdn` gives, the spec's bucket stays empty and
+  every OSD sits outside both sites; a stretch rule over them maps nothing
+  while `enable_stretch_mode` still passes its equal-weight check at 0 = 0
+  (`src/mon/OSDMonitor.cc:15513-15524`). The `located` stage therefore reads
+  and moves the short-name bucket of every data host, and `stretch-enabled`
+  requires equal, positive site weights before its attempt (B1061). A bucket
+  moved under its site stays there when its OSDs restart: their
+  `create-or-move` finds them already in the bucket of that name
+  (`src/crush/CrushWrapper.cc:728-767`).
 - IBM's bootstrap example
   ([CRUSH location during bootstrap](https://www.ibm.com/docs/en/SSEG27_9.9.1/administration/proc_setting-the-crush-location-during-bootstrap.html))
   gives the first host of each site `location: {root: default, datacenter:
@@ -68,6 +84,16 @@ Build labels name where a fact was read; no version rule is recorded (D163).
   `internal/storage/cephcluster/stretch_test.go`).
 
 ## Activation readbacks (X199): unverified shapes
+
+On 2026-11-03 every key, type and command form below was read in the v20.2.1
+sources (`src/mon/MonMap.cc:438-461`, `src/osd/OSDMap.cc:3988-4258`,
+`src/crush/CrushTreeDumper.h:196-264`, `src/crush/CrushWrapper.cc:3733-3782`,
+`src/mon/MonCommands.h`) and matches; the CRUSH host bucket name did not
+(above). Upstream also creates a pool made after activation at the stretch
+rule and 4/2 when it names no rule or size, refuses another size
+(`src/mon/OSDMonitor.cc:7773-7906`), and accepts `osd pool set <pool> size 4`
+in stretch mode (`:8517-8559`). Reading the sources is not reading the build:
+B488's rehearsal still reads them from the selected build.
 
 IBM's CRUSH page
 ([CRUSH map for stretch mode](https://www.ibm.com/docs/en/SSEG27_9.9.1/administration/config-crush-map-stretch-mode.html))

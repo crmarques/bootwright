@@ -598,12 +598,16 @@ topology; this section owns what the plan derives and realizes (D196).
   - `located`: `osd crush tree` shows each data host's bucket under its
     site's failure-domain bucket under `default`, no bucket for the
     tiebreaker or its site, and `mon dump` shows the MON count, the
-    tiebreaker's MON, a MON at each data site and each MON's location. The
-    bootstrap host's bucket, when absent or directly under `default`, is
-    created or moved with `osd crush add-bucket <host> host root=default
-    <failureDomain>=<site>` or `osd crush move <host> root=default
-    <failureDomain>=<site>`, and a MON without a location takes `mon
-    set_location <mon> <failureDomain>=<site>`, because cephadm sets no
+    tiebreaker's MON, a MON at each data site and each MON's location. A
+    host's bucket is the one its OSDs join, named after its short hostname,
+    because an OSD's CRUSH location names the short name and starts directly
+    under `default`, while the enrollment spec's `location` places only a
+    bucket of the registered hostname, which holds no OSD when that name is
+    fully qualified. A data host's bucket, when absent or directly under
+    `default`, is created or moved with `osd crush add-bucket <short name>
+    host root=default <failureDomain>=<site>` or `osd crush move <short name>
+    root=default <failureDomain>=<site>`, and a MON without a location takes
+    `mon set_location <mon> <failureDomain>=<site>`, because cephadm sets no
     location on a MON it already deployed
     ([MON service](https://docs.ceph.com/en/tentacle/cephadm/services/mon/));
     any other misplacement refuses `stretch-location`.
@@ -623,11 +627,15 @@ topology; this section owns what the plan derives and realizes (D196).
     and `osd dump`; stretch mode already enabled without this operation's
     attempt refuses `stretch-foreign`. Before its attempt record the stage
     proves what the command needs: exactly the two data-site buckets of the
-    failure domain (else `stretch-location`) and every pool replicated at the
-    default protection (else `stretch-pools`).
+    failure domain (else `stretch-location`), equal and positive CRUSH
+    weights of those buckets as `osd crush dump` holds them (else
+    `stretch-weight`; Bootwright never reweights an OSD) and every pool
+    replicated at the default protection (else `stretch-pools`).
   - `verified`: every pool `osd dump` lists is on the rule at size 4 and
     min_size 2, otherwise `stretch-pools`.
 
+  A stage's readback after its commands polls at most five times, 2 s
+  apart, since a command can return before every map it changes commits.
   A stage whose attempt record exists without its completion record is read
   back: its postcondition completes it, and its absence refuses
   `stretch-interrupted` without repeating the command; a completed stage

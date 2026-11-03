@@ -79,7 +79,7 @@ CLUSTER_REASONS = (
     "object-bucket-identity", "object-bucket-s3", "nfs-export-foreign", "nfs-export-apply", "nfs-export-path-escape", "nfs-export-realm-default",
     "nvmeof-native", "nvmeof-identity", "nvmeof-foreign", "nvmeof-budget",
     "ingress-firewall", "service-credential-foreign", "ssh-policy-host-excluded", "ssh-policy-unavailable", "tunnel-host-key-excluded",
-    "sso-unverified", "stretch-intent", "stretch-interrupted", "stretch-location", "stretch-rule", "stretch-foreign", "stretch-pools",
+    "sso-unverified", "stretch-intent", "stretch-interrupted", "stretch-location", "stretch-weight", "stretch-rule", "stretch-foreign", "stretch-pools",
     "stretch-drift", "tiebreaker-foreign", "tiebreaker-unreachable",
 )
 SMB_REASONS = (

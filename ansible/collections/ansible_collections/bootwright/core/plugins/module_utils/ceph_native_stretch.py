@@ -44,6 +44,8 @@ MAX_MAP = 64 * 1024
 # The native default size and min_size a pool holds before stretch mode moves it to 4/2, unless the request's pool defaults set them.
 DEFAULT_PROTECTION = (3, 2)
 LOCATION = re.compile(r"\{([^{}]*)\}\Z")
+# A stage's readback polls this many times, this many seconds apart, because a command may return before every map it changes commits.
+SETTLE_READS, SETTLE_INTERVAL = 5, 2
 COMPILE = (
     "import base64,json,subprocess,sys\n"
     "open('/tmp/in','wb').write(base64.b64decode(sys.argv[1],validate=True))\n"
@@ -172,9 +174,17 @@ class Activation:
         self.worker.markers.write("stretch-" + stage + "-attempt.json", record)
         for argv in steps:
             self.worker.ceph(*argv["args"], data=argv.get("data", b""), json_result=False)
-        require(holds(), "stretch-interrupted")
+        require(self.settled(holds) if steps else holds(), "stretch-interrupted")
         self.worker.markers.write("stretch-" + stage + "-complete.json", record)
         return bool(steps)
+
+    def settled(self, holds):
+        for attempt in range(SETTLE_READS):
+            if holds():
+                return True
+            if attempt + 1 < SETTLE_READS:
+                self.worker.pause(SETTLE_INTERVAL)
+        return False
 
     def crush_tree(self):
         tree = self.read("osd", "crush", "tree")
@@ -197,7 +207,8 @@ class Activation:
     def placed(self, tree, host, site):
         nodes, parent = tree
         domain = self.stretch["failureDomain"]
-        node, bucket = nodes.get(host), nodes.get(parent.get(host, ""))
+        name = crush_host(host)
+        node, bucket = nodes.get(name), nodes.get(parent.get(name, ""))
         root = nodes.get(parent.get(bucket["name"], "")) if bucket is not None else None
         return (node is not None and node["type"] == "host" and bucket is not None and bucket["name"] == site and bucket["type"] == domain
                 and root is not None and root["name"] == ROOT and root["type"] == "root")
@@ -224,14 +235,17 @@ class Activation:
         tree, (unused, mons) = self.crush_tree(), self.mon_dump()
         data = [host for host in self.request["hosts"] if host["name"] != self.stretch["tiebreaker"]]
         return (all(self.placed(tree, host["name"], host["location"][self.stretch["failureDomain"]]) for host in data)
-                and self.stretch["tiebreakerSite"] not in tree[0] and self.stretch["tiebreaker"] not in tree[0]
+                and self.stretch["tiebreakerSite"] not in tree[0] and not self.tiebreaker_bucket(tree[0])
                 and self.monitors_placed(mons) and all(location == self.mon_wanted(host) for host, (unused, location) in mons.items()))
 
+    def tiebreaker_bucket(self, nodes):
+        return self.stretch["tiebreaker"] in nodes or crush_host(self.stretch["tiebreaker"]) in nodes
+
     def located_effects(self):
-        """Only the bootstrap host's bucket and an unset MON location are corrected; anything else is foreign."""
+        """Only a data host's bucket, absent or directly under the root, and an unset MON location are corrected; anything else is foreign."""
         nodes, parent = self.crush_tree()
         unused, mons = self.mon_dump()
-        require(self.monitors_placed(mons) and self.stretch["tiebreakerSite"] not in nodes and self.stretch["tiebreaker"] not in nodes,
+        require(self.monitors_placed(mons) and self.stretch["tiebreakerSite"] not in nodes and not self.tiebreaker_bucket(nodes),
                 "stretch-location")
         domain, steps = self.stretch["failureDomain"], []
         for host in self.request["hosts"]:
@@ -241,12 +255,12 @@ class Activation:
             where = ["root=" + ROOT, domain + "=" + site]
             if self.placed((nodes, parent), host["name"], site):
                 continue
-            require(host["name"] == self.request["bootstrap"], "stretch-location")
-            if host["name"] not in nodes:
-                steps.append({"args": ("osd", "crush", "add-bucket", host["name"], "host", *where)})
+            name = crush_host(host["name"])
+            if name not in nodes:
+                steps.append({"args": ("osd", "crush", "add-bucket", name, "host", *where)})
             else:
-                require(nodes[host["name"]]["type"] == "host" and parent.get(host["name"]) == ROOT, "stretch-location")
-                steps.append({"args": ("osd", "crush", "move", host["name"], *where)})
+                require(nodes[name]["type"] == "host" and parent.get(name) == ROOT, "stretch-location")
+                steps.append({"args": ("osd", "crush", "move", name, *where)})
         for host, (name, location) in sorted(mons.items()):
             if location != self.mon_wanted(host):
                 require(not location, "stretch-location")
@@ -340,10 +354,25 @@ class Activation:
         nodes, unused = self.crush_tree()
         domain = self.stretch["failureDomain"]
         require(sorted(node["name"] for node in nodes.values() if node["type"] == domain) == self.stretch["dataSites"], "stretch-location")
+        weights = self.site_weights()
+        require(weights[0] > 0 and len(set(weights)) == 1, "stretch-weight")
         osdmap = self.read("osd", "dump")
         require(isinstance(osdmap, dict) and isinstance(osdmap.get("pools"), list), "native-output")
         require(all(isinstance(pool, dict) and pool.get("type", 1) == 1 and (pool.get("size"), pool.get("min_size")) == self.default_protection()
                     for pool in osdmap["pools"]), "stretch-pools")
+
+    def site_weights(self):
+        """Each data site's CRUSH weight as `osd crush dump` holds it, which enable_stretch_mode requires positive and equal."""
+        dump = self.read("osd", "crush", "dump")
+        require(isinstance(dump, dict) and isinstance(dump.get("buckets"), list) and len(dump["buckets"]) <= 8192, "native-output")
+        weights = {}
+        for item in dump["buckets"]:
+            require(isinstance(item, dict) and isinstance(item.get("name"), str) and isinstance(item.get("type_name"), str), "native-output")
+            if item["type_name"] == self.stretch["failureDomain"] and item["name"] in self.stretch["dataSites"]:
+                require(type(item.get("weight")) is int and item["weight"] >= 0 and item["name"] not in weights, "native-output")
+                weights[item["name"]] = item["weight"]
+        require(sorted(weights) == self.stretch["dataSites"], "stretch-location")
+        return [weights[site] for site in self.stretch["dataSites"]]
 
     def default_protection(self):
         options = self.request.get("config", {}).get("global", {})
@@ -396,6 +425,11 @@ class Activation:
         held = (stage == "verified" and enabled and self.located_holds() and self.rule_holds() and self.election_holds()
                 and self.pools_hold())
         return {"stage": stage, "enabled": enabled}, held
+
+
+def crush_host(name):
+    """The CRUSH host bucket a host's OSDs join: an OSD's crush location names its host's short name (src/crush/CrushLocation.cc)."""
+    return name.split(".", 1)[0]
 
 
 def crush_location(value):

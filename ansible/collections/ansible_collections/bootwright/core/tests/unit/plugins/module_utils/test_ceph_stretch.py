@@ -1,10 +1,12 @@
 """Stretch activation: request shape, journaled stages, readbacks, interruption, drift and the frozen intent.
 
-The scripted monitor answers the shapes the stages read. `osd crush rule dump` steps and `osd tree` nodes with children follow
-the upstream sources test_ceph_pools.py cites; the `mon dump` keys election_strategy, stretch_mode, tiebreaker_mon and a MON's
-`{key=value}` crush_location, `osd dump`'s crush_version, stretch_mode member and pool keys, and `osd crush tree` sharing
-`osd tree`'s node form are not fixed by a cited page: .agents/knowledge/ceph-stretch-native-facts.md records them as
-unverified until B488's rehearsal reads them from the selected build.
+The scripted monitor answers the shapes the stages read, as upstream v20.2.1 writes them: `mon dump`'s election_strategy
+integer, stretch_mode Boolean, tiebreaker_mon and `{key=value}` crush_location (src/mon/MonMap.cc:438-461), `osd dump`'s
+crush_version, stretch_mode member and pool keys (src/osd/OSDMap.cc:3988-4258), `osd crush tree`'s nodes with children IDs
+(src/crush/CrushTreeDumper.h:196-264), `osd crush dump`'s bucket type_name and integer weight, and `osd crush rule dump` steps
+(src/crush/CrushWrapper.cc:3733-3782). An OSD joins the CRUSH host bucket of its host's short name
+(src/crush/CrushLocation.cc:110-124) directly under the root, while cephadm's host-spec location creates an empty bucket of the
+registered, possibly fully qualified, hostname (src/pybind/mgr/cephadm/module.py:1845-1851): FqdnWorld scripts that layout.
 """
 
 from __future__ import annotations
@@ -55,8 +57,8 @@ def bucket(identifier, name, kind, children=()):
 class World:
     """A scripted monitor: reads answer from its maps; every other command is a logged effect it applies or refuses as the MON would."""
 
-    def __init__(self, misplaced=False, unlocated=("node-1",), lose=None):
-        self.log, self.effects, self.lose = [], [], lose
+    def __init__(self, misplaced=False, unlocated=("node-1",), lose=None, lag=0):
+        self.log, self.effects, self.lose, self.lag, self.lagging = [], [], lose, lag, 0
         self.nodes = {"default": bucket(-1, "default", "root", (-2, -3)), "site-a": bucket(-2, "site-a", "datacenter", (-4, -5)),
                       "site-b": bucket(-3, "site-b", "datacenter", (-6, -7))}
         for index, name in enumerate(("node-1", "node-2", "node-3", "node-4")):
@@ -77,9 +79,22 @@ class World:
                 "mons": copy.deepcopy(self.mons)}
 
     def osd_dump(self):
+        mode = self.mode and not self.lagging
         return {"epoch": 30, "fsid": FSID, "crush_version": self.crush_version, "pools": copy.deepcopy(self.pools),
-                "stretch_mode": {"stretch_mode_enabled": self.mode, "stretch_bucket_count": 2 if self.mode else 0, "degraded_stretch_mode": 0,
-                                 "recovering_stretch_mode": 0, "stretch_mode_bucket": 8 if self.mode else 0}}
+                "stretch_mode": {"stretch_mode_enabled": mode, "stretch_bucket_count": 2 if mode else 0, "degraded_stretch_mode": 0,
+                                 "recovering_stretch_mode": 0, "stretch_mode_bucket": 8 if mode else 0}}
+
+    def weight(self, node):
+        if node["type"] == "osd":
+            return 0x10000
+        children = {item["id"]: item for item in self.nodes.values()}
+        return sum(self.weight(children[child]) for child in node.get("children", []))
+
+    def crush_dump(self):
+        buckets = [{"id": node["id"], "name": node["name"], "type_id": node["type_id"], "type_name": node["type"], "weight": self.weight(node),
+                    "alg": "straw2", "hash": "rjenkins1", "items": [{"id": child, "pos": pos} for pos, child in enumerate(node["children"])]}
+                   for node in self.nodes.values() if node["type"] != "osd"]
+        return {"devices": [], "types": [], "buckets": buckets, "rules": copy.deepcopy(self.rules), "tunables": {}, "choose_args": {}}
 
     def run(self, argv, data=b"", timeout=60):
         del timeout
@@ -91,6 +106,10 @@ class World:
         reads = {("fsid",): {"fsid": FSID}, ("orch", "host", "ls"): [], ("mon", "dump"): self.mon_dump(), ("osd", "dump"): self.osd_dump(),
                  ("osd", "crush", "tree"): {"nodes": copy.deepcopy(list(self.nodes.values())), "stray": []},
                  ("osd", "crush", "rule", "dump"): copy.deepcopy(self.rules)}
+        if command == ("osd", "dump"):
+            self.lagging = max(0, self.lagging - 1)
+        if command == ("osd", "crush", "dump"):
+            return 0, json.dumps(self.crush_dump()).encode()
         if command in reads:
             return 0, json.dumps(reads[command]).encode()
         if command == ("osd", "getcrushmap"):
@@ -141,7 +160,7 @@ class World:
             rule = next(rule for rule in self.rules if rule["rule_name"] == command[3])
             assert self.election == 3 and all(mon["crush_location"] != "{}" for mon in self.mons) and command[4] == "datacenter"
             assert all((pool["size"], pool["min_size"]) == (3, 2) for pool in self.pools)
-            self.mode, self.tiebreaker = True, command[2]
+            self.mode, self.tiebreaker, self.lagging = True, command[2], self.lag
             for pool in self.pools:
                 pool.update(crush_rule=rule["rule_id"], size=4, min_size=2)
         else:
@@ -169,8 +188,10 @@ class Markers:
 def worker(world, marks=None, value=None, monkeypatch=None):
     value = value or request()
     marks = marks or Markers({"bootstrap-scope.json": staging.recovery_scope(value)})
-    native = ceph_native.Worker(value, "node-1", run=world.run, markers=marks)
+    native = ceph_native.Worker(value, value["bootstrap"], run=world.run, markers=marks)
     native.bootstrap_hold = contextlib.nullcontext
+    native.pauses = []
+    native.pause = native.pauses.append
     if monkeypatch is not None:
         monkeypatch.setattr(stretch.Activation, "compile", lambda self, current, text: current + b"::" + text.encode())
     return native, marks
@@ -222,7 +243,7 @@ def test_enrollment_places_each_data_host_by_its_location_spec(monkeypatch):
     assert "location" not in pending["node-5"]
 
 
-def test_activation_journals_each_stage_reads_it_back_and_corrects_only_the_bootstrap_host(monkeypatch):
+def test_activation_journals_each_stage_reads_it_back_and_corrects_a_bucket_under_the_root(monkeypatch):
     world = World(misplaced=True)
     native, marks = worker(world, monkeypatch=monkeypatch)
     assert native.stretch_locate() == {"changed": True, "stage": "rule-present"}
@@ -528,3 +549,84 @@ def test_activation_is_not_pending_while_a_host_has_not_joined():
     assert pending == [False] and not observed["ready"]
     ceph_core.observe_state(value, "d" * 64, bootstrap, ActivationTransport(value, clock, "complete"), clock.now() + 900, clock.now, [], pending)
     assert pending == [True]
+
+
+DOMAIN = ".lab.example.test"
+
+
+def fqdn_request():
+    """The request with every host registered by its fully qualified hostname, as a topology node's fqdn gives it."""
+    value = json.loads(json.dumps(request()).replace("node-1", "node-1" + DOMAIN).replace("node-2", "node-2" + DOMAIN)
+                       .replace("node-3", "node-3" + DOMAIN).replace("node-4", "node-4" + DOMAIN).replace("node-5", "node-5" + DOMAIN))
+    assert value["bootstrap"] == "node-1" + DOMAIN and value["stretch"]["tiebreaker"] == "node-5" + DOMAIN
+    return value
+
+
+class FqdnWorld(World):
+    """Each OSD under its host's short-name bucket directly under the root; cephadm's empty full-name bucket under each site."""
+
+    def __init__(self, **options):
+        super().__init__(**options)
+        self.nodes["default"]["children"] = [-2, -3, -4, -5, -6, -7]
+        self.nodes["site-a"]["children"], self.nodes["site-b"]["children"] = [-11, -12], [-13, -14]
+        for index in range(1, 5):
+            name = "node-" + str(index) + DOMAIN
+            self.nodes[name] = bucket(-10 - index, name, "host")
+
+
+def test_activation_moves_each_osd_hosts_short_name_bucket_under_its_site(monkeypatch):
+    value = fqdn_request()
+    ceph_native.validate(value)
+    world = FqdnWorld()
+    native, unused = worker(world, value=value, monkeypatch=monkeypatch)
+    assert native.stretch_locate() == {"changed": True, "stage": "rule-present"}
+    names = ["node-" + str(index) for index in range(1, 5)]
+    assert [command for command in world.effects if command[:3] == ("osd", "crush", "move")] == [
+        ("osd", "crush", "move", name, "root=default", "datacenter=" + SITES[name]) for name in names]
+    assert all(world.parent(name) == SITES[name] for name in names)
+    assert native.stretch_enable() == {"changed": True, "stage": "verified"}
+    assert stretch.Activation(native).observe() == ({"stage": "verified", "enabled": True}, True)
+
+
+def test_a_short_name_bucket_under_another_site_still_refuses(monkeypatch):
+    world = FqdnWorld()
+    world.nodes["default"]["children"].remove(-6)
+    world.nodes["site-a"]["children"].append(-6)
+    native, unused = worker(world, value=fqdn_request(), monkeypatch=monkeypatch)
+    with pytest.raises(ceph_native.Refusal, match="^stretch-location$"):
+        native.stretch_locate()
+    assert not [command for command in world.effects if command[:2] == ("osd", "crush")]
+
+
+@pytest.mark.parametrize("change", [
+    lambda world: world.nodes["node-4"]["children"].clear(),
+    lambda world: [world.nodes["node-" + str(index)]["children"].clear() for index in range(1, 5)],
+])
+def test_unequal_or_empty_site_weights_refuse_before_the_enable_attempt(monkeypatch, change):
+    world = World()
+    native, marks = worker(world, monkeypatch=monkeypatch)
+    native.stretch_locate()
+    change(world)
+    with pytest.raises(ceph_native.Refusal, match="^stretch-weight$"):
+        native.stretch_enable()
+    assert ("osd", "crush", "dump") in world.log
+    assert "stretch-stretch-enabled-attempt.json" not in marks.records
+    assert not [command for command in world.effects if command[:2] == ("mon", "enable_stretch_mode")]
+
+
+def test_a_readback_that_trails_its_command_settles_without_an_interruption(monkeypatch):
+    world = World(lag=2)
+    native, unused = worker(world, monkeypatch=monkeypatch)
+    native.stretch_locate()
+    assert native.stretch_enable() == {"changed": True, "stage": "verified"}
+    assert native.pauses == [stretch.SETTLE_INTERVAL] * 2
+
+
+def test_a_readback_that_never_settles_refuses_as_interrupted_after_its_bounded_reads(monkeypatch):
+    world = World(lag=99)
+    native, marks = worker(world, monkeypatch=monkeypatch)
+    native.stretch_locate()
+    with pytest.raises(ceph_native.Refusal, match="^stretch-interrupted$"):
+        native.stretch_enable()
+    assert native.pauses == [stretch.SETTLE_INTERVAL] * (stretch.SETTLE_READS - 1)
+    assert "stretch-stretch-enabled-attempt.json" in marks.records
