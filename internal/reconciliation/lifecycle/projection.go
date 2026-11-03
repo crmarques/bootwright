@@ -152,18 +152,25 @@ func refuseLentMaterial(projections []Projection, material map[string]secrets.Ma
 			texts = append(texts, []byte(note))
 		}
 	}
+	if carriesLent(texts, material) {
+		return failure("lifecycle.state", "a projection of block "+block+" carries Secret material, so diff shows nothing",
+			unobservedDiff(contextName)+", and report this defect")
+	}
+	return nil
+}
+
+func carriesLent(texts [][]byte, material map[string]secrets.Material) bool {
 	for _, name := range mapKeys(material) {
 		for _, part := range material[name].Parts() {
 			lent, _ := material[name].Part(part)
 			carried := len(lent) >= minLentPart && slices.ContainsFunc(texts, func(text []byte) bool { return bytes.Contains(text, lent) })
 			clear(lent)
 			if carried {
-				return failure("lifecycle.state", "a projection of block "+block+" carries Secret material, so diff shows nothing",
-					unobservedDiff(contextName)+", and report this defect")
+				return true
 			}
 		}
 	}
-	return nil
+	return false
 }
 
 func valueTexts(value api.Value) [][]byte {

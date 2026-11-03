@@ -116,6 +116,13 @@ def blocking_entry(value):
                                        or ceph_native_units.PENDING.fullmatch(value) is not None or ceph_native_object.PENDING.fullmatch(value) is not None)
 
 
+def observed(result, operation, blocking):
+    """An observation's result, with the checks that kept it from ready beside the closed evidence, for the read's notes only."""
+    if operation == "observe" and blocking:
+        result["pending"] = list(blocking)
+    return result
+
+
 def readiness_detail(checks):
     """The blocking check codes, whole ones only, within the published detail's bound."""
     detail = "not-ready"
@@ -1063,8 +1070,9 @@ def execute(request, operation, request_digest, transport, outputs=None, *, now=
             ceph_native.private_write(outputs["client"], value.encode())
     elif operation == "destroy":
         changed = transport.call(bootstrap, "destroy")["changed"]
+    pending = []
     observation = (wait_ready(request, request_digest, bootstrap, transport, now, pause) if operation == "apply"
-                   else observe_state(request, request_digest, bootstrap, transport))
+                   else observe_state(request, request_digest, bootstrap, transport, blocking=pending))
     # Read-only observations may return partial evidence. Mutation completion
     # is not claimed until the actual desired postcondition is observed.
     if operation == "apply":
@@ -1079,7 +1087,7 @@ def execute(request, operation, request_digest, transport, outputs=None, *, now=
         observation, effect = dashboard_phase(request, operation, request_digest, bootstrap, transport, observation, outputs.get("dashboard"),
                                               now=now, pause=pause, connect=connect)
         changed = effect or changed
-    return {"changed": changed, "evidence": recorded(observation, transport, request_digest, request)}
+    return observed({"changed": changed, "evidence": recorded(observation, transport, request_digest, request)}, operation, pending)
 
 
 def nvmeof_unit(request):
@@ -1301,7 +1309,7 @@ def execute_nvmeof(request, operation, request_digest, transport, bootstrap, *, 
         pause(min(READINESS_INTERVAL, remaining))
     if operation == "destroy":
         ceph_native.require(observation["removed"], "client-quiescence-unqualified")
-    return {"changed": changed, "evidence": recorded(observation, transport, request_digest, request)}
+    return observed({"changed": changed, "evidence": recorded(observation, transport, request_digest, request)}, operation, blocking)
 
 
 def execute_unit(request, operation, request_digest, transport, bootstrap, *, now, pause, phases=("unit",)):
@@ -1309,7 +1317,7 @@ def execute_unit(request, operation, request_digest, transport, bootstrap, *, no
     ingress host, its apply phases in order, with an oauth2-proxy the rendered-configuration proof on each proxy host and then the one
     single sign-on write, then its own readiness wait. Its apply phase holds every bound leaf; each observation and
     removal holds the observed ones, and a management gateway's served leaf must be the bound certificate's."""
-    changed = False
+    changed, pending = False, []
     bound_unit = request["action"] == "service" and bool(request["service"].get("bindings"))
     seen = transport.unit_material("observe") if bound_unit else {}
     if operation == "apply":
@@ -1334,18 +1342,18 @@ def execute_unit(request, operation, request_digest, transport, bootstrap, *, no
         observation = observe_unit(request, request_digest, bootstrap, transport, private=seen)
         ceph_native.require(observation["removed"], "not-removed")
     else:
-        observation = observe_unit(request, request_digest, bootstrap, transport, private=seen)
+        observation = observe_unit(request, request_digest, bootstrap, transport, blocking=pending, private=seen)
     if "mgmtGatewayCertificate" in seen:
         bound = hashlib.sha256(ceph_native_observability.leaf(seen["mgmtGatewayCertificate"])).hexdigest()
         ceph_native.require(observation["endpoint"]["certificateSHA256"] in ("", bound), "evidence")
-    return {"changed": changed, "evidence": recorded(observation, transport, request_digest, request)}
+    return observed({"changed": changed, "evidence": recorded(observation, transport, request_digest, request)}, operation, pending)
 
 
 def execute_user(request, operation, request_digest, transport, bootstrap, outputs, *, now, pause):
     """An object user runs on the bootstrap host only: its preparation proof and its one phase, whose key pair reaches the protected
     output before its readiness wait; an observation that proves it ready recaptures the retained pair read-only when it declares the
     output, and reads presence alone when no operation records it. Removal is the core refusal."""
-    changed = False
+    changed, pending = False, []
     if operation == "apply":
         transport.call(bootstrap, "prerequisites")
         produced = transport.call(bootstrap, "object_user")
@@ -1359,19 +1367,19 @@ def execute_user(request, operation, request_digest, transport, bootstrap, outpu
         observation = observe_unit(request, request_digest, bootstrap, transport)
         ceph_native.require(observation["removed"], "not-removed")
     else:
-        observation = observe_unit(request, request_digest, bootstrap, transport)
+        observation = observe_unit(request, request_digest, bootstrap, transport, blocking=pending)
         if observation["ready"] and outputs:
             produced = transport.call(bootstrap, "object_user_read")
             ceph_native.require(isinstance(produced, dict) and set(produced) == {"private"}, "evidence")
             user_output(outputs["object-user"], produced["private"], request)
-    return {"changed": changed, "evidence": recorded(observation, transport, request_digest, request)}
+    return observed({"changed": changed, "evidence": recorded(observation, transport, request_digest, request)}, operation, pending)
 
 
 def execute_bucket(request, operation, request_digest, transport, bootstrap, *, now, pause):
     """An object bucket runs on the bootstrap host only: its preparation proof and its one phase, then its readiness wait. With TLS at the
     backend the bound certificate, never a key, reaches every phase, which pins the daemon's leaf to it. Removal is the core refusal."""
     seen = transport.gateway_material(False) if request["objectBucket"]["certificateRef"] else None
-    changed = False
+    changed, pending = False, []
     if operation == "apply":
         transport.call(bootstrap, "prerequisites")
         produced = transport.call(bootstrap, "object_bucket", seen) if seen else transport.call(bootstrap, "object_bucket")
@@ -1384,8 +1392,8 @@ def execute_bucket(request, operation, request_digest, transport, bootstrap, *, 
         observation = observe_unit(request, request_digest, bootstrap, transport, private=seen)
         ceph_native.require(observation["removed"], "not-removed")
     else:
-        observation = observe_unit(request, request_digest, bootstrap, transport, private=seen)
-    return {"changed": changed, "evidence": recorded(observation, transport, request_digest, request)}
+        observation = observe_unit(request, request_digest, bootstrap, transport, blocking=pending, private=seen)
+    return observed({"changed": changed, "evidence": recorded(observation, transport, request_digest, request)}, operation, pending)
 
 
 def execute_gateway(request, operation, request_digest, transport, bootstrap, *, now, pause):
@@ -1393,7 +1401,7 @@ def execute_gateway(request, operation, request_digest, transport, bootstrap, *,
     host first, then zone, placement and its services. With TLS the certificate reaches every observation and removal, and the private key only
     the service apply."""
     seen = transport.gateway_material(False) if request["gateway"]["bindings"] else None
-    changed = False
+    changed, pending = False, []
     if operation == "apply":
         transport.call(bootstrap, "prerequisites")
         ingress_firewall(request, transport, ingress_fronts(request), now)
@@ -1409,11 +1417,11 @@ def execute_gateway(request, operation, request_digest, transport, bootstrap, *,
         observation = observe_unit(request, request_digest, bootstrap, transport, private=seen)
         ceph_native.require(observation["removed"], "not-removed")
     else:
-        observation = observe_unit(request, request_digest, bootstrap, transport, private=seen)
+        observation = observe_unit(request, request_digest, bootstrap, transport, blocking=pending, private=seen)
     if seen:
         bound = hashlib.sha256(ceph_native_observability.leaf(seen["gatewayCertificate"])).hexdigest()
         ceph_native.require(observation["endpoint"]["certificateSHA256"] in ("", bound), "evidence")
-    return {"changed": changed, "evidence": recorded(observation, transport, request_digest, request)}
+    return observed({"changed": changed, "evidence": recorded(observation, transport, request_digest, request)}, operation, pending)
 
 
 def dashboard_phase(request, operation, request_digest, bootstrap, transport, observation, output, *, now, pause, connect):

@@ -27,10 +27,18 @@ def completion(arguments):
     return result, "the Ceph operation has not proved its postcondition"
 
 
+def pending(arguments):
+    """Each check that kept a read-only observation from ready, as a warning; a mutation reaches ready or refuses, so it reports none."""
+    entries = arguments.get("pending")
+    if arguments.get("observed") is not True or arguments.get("removed") or not isinstance(entries, list):
+        return []
+    return [{"code": "storage.not-ready", "message": "not ready: " + entry} for entry in entries if ceph_core.blocking_entry(entry)]
+
+
 REFUSALS = tuple(dict.fromkeys(ceph_core.HOST_REASONS + ceph_core.CLUSTER_REASONS))
 CAPABILITY = adapter_protocol.Capability(
     "Ceph core", "the Ceph capability result could not be published", completion,
-    phases=adapter_protocol.REFUSING_PHASES, refusals=REFUSALS, detail=True, native_error=True,
+    phases=adapter_protocol.REFUSING_PHASES, refusals=REFUSALS, detail=True, native_error=True, warnings=pending,
 )
 
 

@@ -852,6 +852,8 @@ func adapterWarning(plan reconciliation.Plan, block reconciliation.Block, warnin
 	reported := diagnostics.Diagnostic{Severity: "warning", Message: warning.Message,
 		Object: &diagnostics.ObjectIdentity{APIVersion: api.APIVersion, Kind: block.Kind, Name: block.Object}}
 	switch warning.Code {
+	case "storage.not-ready":
+		reported.Code = "storage.not-ready"
 	case "substrate.shadowed-route":
 		reported.Code = "substrate.shadowed-route"
 	default:

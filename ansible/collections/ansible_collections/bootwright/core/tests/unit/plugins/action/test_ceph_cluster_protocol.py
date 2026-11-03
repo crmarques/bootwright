@@ -43,3 +43,30 @@ def test_the_publisher_admits_a_reachable_management_gateway():
 def test_the_publisher_refuses_endpoint_facts_no_management_gateway_explains(changes):
     with pytest.raises(ceph_native.Refusal, match="^evidence$"):
         publish(gateway_evidence(**changes))
+
+
+def test_an_observation_reports_each_check_that_kept_it_from_ready_as_a_warning():
+    reported = ceph_cluster_protocol.pending({"observed": True, "removed": False,
+                                              "pending": ["keepalived@ingress.rgw.objects.dc1", "MON_DOWN", "not a check", 7]})
+    assert reported == [{"code": "storage.not-ready", "message": "not ready: keepalived@ingress.rgw.objects.dc1"},
+                        {"code": "storage.not-ready", "message": "not ready: MON_DOWN"}]
+
+
+@pytest.mark.parametrize("arguments", [
+    {"observed": False, "removed": False, "pending": ["MON_DOWN"]},
+    {"observed": True, "removed": True, "pending": ["MON_DOWN"]},
+    {"observed": True, "removed": False, "pending": "MON_DOWN"},
+    {"observed": True, "removed": False},
+], ids=["mutation", "removal", "not-a-list", "absent"])
+def test_only_a_read_only_observation_reports_not_ready_checks(arguments):
+    assert ceph_cluster_protocol.pending(arguments) == []
+
+
+def test_a_published_observation_carries_its_not_ready_checks():
+    records = []
+    arguments = {"phase": "completed", "outcome": "unchanged", "digest": "d" * 64, "observed": True, "removed": False,
+                 "evidence": gateway_evidence(ready=False, partial=True, endpoint={"certificateSHA256": "", "reachable": False}),
+                 "pending": ["vip@ingress.rgw.objects.dc1"]}
+    result = ceph_cluster_protocol.adapter_protocol.publish(arguments, ceph_cluster_protocol.CAPABILITY, lambda record, **_: records.append(record))
+    assert result == {"changed": False}
+    assert records[0]["warnings"] == [{"code": "storage.not-ready", "message": "not ready: vip@ingress.rgw.objects.dc1"}]

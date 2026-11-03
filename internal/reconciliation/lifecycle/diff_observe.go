@@ -12,6 +12,7 @@ import (
 	"github.com/crmarques/bootwright/internal/controller"
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
 	"github.com/crmarques/bootwright/internal/reconciliation"
+	"github.com/crmarques/bootwright/internal/reconciliation/operationstore"
 	"github.com/crmarques/bootwright/internal/secrets"
 	"github.com/crmarques/bootwright/internal/secrets/custody"
 )
@@ -231,11 +232,13 @@ func (s Service) inspect(ctx context.Context, view RunView, store recordReader, 
 		return recordedReading(ctx, store, read, block, recorded)
 	}
 	var observation Observation
+	warned := &warningCollector{}
 	err := s.withPython(ctx, approved, func(launch prerequisites.PythonLaunch) error {
 		execution, err := s.inspection(ctx, view, store, approved, launch, read, block, material)
 		if err != nil {
 			return err
 		}
+		execution.Warn = warned.collect
 		lend, release, lendErr := s.producedLender(block, planDefinitions(read.owningPlan), false, s.producedInContext(read.context.Name))
 		if lendErr != nil {
 			return lendErr
@@ -252,7 +255,19 @@ func (s Service) inspect(ctx context.Context, view RunView, store recordReader, 
 		observation = observed
 		return err
 	})
-	return s.reading(ctx, store, read, block, observation, err)
+	return withWarnings(s.reading(ctx, store, read, block, observation, err), block, warned.reported(), material)
+}
+
+func withWarnings(reading blockReading, block reconciliation.Block, warned []operationstore.Warning, material map[string]secrets.Material) blockReading {
+	if reading.state == sideUnknown {
+		return reading
+	}
+	for _, warning := range warned {
+		if !carriesLent([][]byte{[]byte(warning.Message)}, material) {
+			reading.notes = append(reading.notes, block.ID+": "+warning.Message)
+		}
+	}
+	return reading
 }
 
 func recordedReading(ctx context.Context, store recordReader, read *diffRead, block reconciliation.Block, recorded NothingLive) blockReading {

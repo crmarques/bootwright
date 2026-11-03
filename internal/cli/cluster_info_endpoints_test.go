@@ -26,7 +26,9 @@ func hasFields(lines []string, want ...string) bool {
 
 func TestClusterInfoEndpointsCompactAndFull(t *testing.T) {
 	compact := renderedClusterInfo(t, "compact")
-	if !hasFields(compact, "Endpoint", "mgmt-gateway", "ready") || !hasFields(compact, "Endpoint", "nfs.files", "ready") ||
+	proved := strings.Fields("ready (as the apply proved it; diff --observe reads it live)")
+	if !hasFields(compact, append([]string{"Endpoint", "mgmt-gateway"}, proved...)...) ||
+		!hasFields(compact, append([]string{"Endpoint", "nfs.files"}, proved...)...) ||
 		!hasFields(compact, "Endpoint", "rgw.objects", "unproved:", "the", "apply", "did", "not", "prove", "this", "endpoint", "reachable") {
 		t.Fatalf("compact endpoints missing:\n%s", strings.Join(compact, "\n"))
 	}
@@ -38,7 +40,7 @@ func TestClusterInfoEndpointsCompactAndFull(t *testing.T) {
 	full := renderedClusterInfo(t, "full")
 	fingerprint := "CD" + strings.Repeat(":0E", 31)
 	for _, want := range [][]string{
-		{"Endpoint", "mgmt-gateway", "ready"}, {"https://192.0.2.50:9443/"}, {fingerprint, "(cephadm-signed;", "compare", "before", "accepting", "the", "browser", "warning)"},
+		append([]string{"Endpoint", "mgmt-gateway"}, proved...), {"https://192.0.2.50:9443/"}, {fingerprint, "(cephadm-signed;", "compare", "before", "accepting", "the", "browser", "warning)"},
 		{"nfs://192.0.2.60:2049/"}, {"https://objects.lab.test:8443/"},
 	} {
 		if !hasFields(full, want...) {

@@ -49,4 +49,5 @@
     observed: true
     removed: false
     evidence: '{{ storage_ceph_core_result.evidence }}'
+    pending: '{{ storage_ceph_core_result.pending | default([]) }}'
   no_log: true

@@ -518,6 +518,18 @@ bootwright cluster exec --context lab-rhel --name ceph-a,ceph-b hostname
 bootwright cluster exec --context lab-rhel --name ceph-lab --node rhel-01,rhel-02 uptime
 ```
 
+A Ceph ingress virtual IP returns after its host reboots only once cephadm's
+manager starts that host's keepalived again: cephadm leaves keepalived units
+disabled at boot and starts them after its next check of a host it marked
+offline, every `mgr/cephadm/host_check_interval` (600 s by default). Until
+then `ceph -s` can read `HEALTH_OK` while the virtual IP answers nothing, and
+`diff --observe` notes the block `not ready: keepalived@<ingress>`
+([readiness](../specs/ceph.md#resources-readiness-and-access)). Run
+`ceph cephadm check-host <host>` through `cluster exec` to make the manager
+reconnect at once, or bound the wait with
+`ceph config set mgr mgr/cephadm/host_check_interval <seconds>`, which costs
+one SSH check of each host per interval.
+
 SSH placement of a managed service on a second OS-ready host, with that host's
 authored access and bound host key, is operator-run too and has no example.
 No real-hardware row has been accepted yet: [B67](../specs/milestones/m3.md#b67)

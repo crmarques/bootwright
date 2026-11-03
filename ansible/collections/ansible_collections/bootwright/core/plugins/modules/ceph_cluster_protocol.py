@@ -67,6 +67,11 @@ options:
     description: Whether this completion must prove removal.
     type: bool
     default: false
+  pending:
+    description: The checks that kept a read-only observation from ready, reported as warnings only.
+    type: list
+    elements: str
+    default: []
 author:
   - Bootwright contributors (@crmarques)
 """

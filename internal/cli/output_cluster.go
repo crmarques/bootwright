@@ -566,6 +566,8 @@ func endpointAccessFields(endpoints []inspection.Endpoint, full bool) []field {
 		value := e.Service + "  " + e.Status
 		if e.Reason != "" {
 			value += ": " + e.Reason
+		} else {
+			value += "  (as the apply proved it; diff --observe reads it live)"
 		}
 		fields = append(fields, field{Label: "Endpoint", Value: value})
 		if !full {

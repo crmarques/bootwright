@@ -11427,7 +11427,9 @@ written into the ledger row:
    "hosts down" count during an outage.
 4. One OSD went down and up on its own once before the second dc1-loss drill.
 
-**What stays open.** [B1069](m2.md#b1069)'s newer-podman hosts.
+**What stays open.** [B1075](m2.md#b1075)'s report of the not-ready
+virtual IP in `diff --observe` and `cluster info`, which the second entry
+above found. [B1069](m2.md#b1069)'s newer-podman hosts.
 [B486](m2.md#b486), [B487](m2.md#b487), [B1059](m2.md#b1059) and
 [B1060](m2.md#b1060) await the owner's acceptance, which this record does not
 give.

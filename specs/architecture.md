@@ -957,7 +957,7 @@ unchanged; raw vendor output and exception text never become evidence.
 
 A lifecycle `completed` record may carry `warnings`, a nonempty array of at
 most 16 advisories, each exactly `code`, one of the registered adapter warning
-codes (today `substrate.shadowed-route`), `message`, nonempty printable ASCII
+codes, `message`, nonempty printable ASCII
 of at most 1024 bytes, and optionally `object`, exactly a `kind` (an API kind
 name of at most 63 bytes) and a `name` (lowercase letters, digits, `-` and
 `.`, at most 253 bytes, starting and ending alphanumeric). The decoder refuses
@@ -972,7 +972,8 @@ line bound with it. The trade-off: a record that still carries an invalid
 warning breaks the protocol, so its attempt reads `unknown` until a
 resolution observes it. Warnings are presentation: the lifecycle runner hands
 those of a run that completed, and only those, to an attempt's own apply or
-removal run, never to an observation or a removal's read; the attempt keeps
+removal run and to `diff --observe`'s observations, never to any other read;
+the attempt keeps
 those of all its runs up to the bound, records them with its outcome, and
 reports each once as a `warning` diagnostic of the run, about the object it
 names when the plan holds a block of that kind and object, or else the

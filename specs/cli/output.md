@@ -744,7 +744,9 @@ reference and digest, monitors, administrator command and dashboard URLs, user
 and status. Full detail of a ready managed Ceph entry also shows a
 `Specializations` line naming those ids, `none` when the evidence names none.
 Access lists each endpoint after the dashboard with its service and
-status, and its reason when unproved; full detail adds its URLs and, for a ready
+status, and its reason when unproved; a ready endpoint is marked as the apply
+proved it, so a reader knows `diff --observe` reads it live; full detail adds
+its URLs and, for a ready
 TLS endpoint, its certificate SHA-256 and issuer. Unavailable and unimplemented
 templates are visibly labeled;
 inapplicable entries explain the restriction and offer no invocation template.
@@ -1035,6 +1037,7 @@ it to a variable.
 | `lifecycle.lease` | The context root lock or mutation lease cannot be safely acquired or recovered. |
 | `lifecycle.unknown` | A frozen block has an unresolved unknown effect outcome. |
 | `lifecycle.live` | A removal would take back state that is still in use, and refuses before registering. |
+| `storage.not-ready` | A warning a Ceph adapter reported with a read-only observation's completed result: one check, daemon count or endpoint that kept the block from ready, as `not ready: <entry>` in the grammar of the [readiness entries](../ceph.md#resources-readiness-and-access). `diff --observe` shows it as a note of the block's reading; no run reports it as a diagnostic, because an apply or removal completes ready or refuses. |
 | `substrate.shadowed-route` | A warning an adapter reported with its completed result: a libvirt host apply admitted a main-table route through a gateway that is broader than a managed network's prefix, whose hosts inside that prefix the network's connected route now takes over; it names the route, gateway, device, prefix and attachment, about the provider's InfraProvider. Never a refusal, and it changes no block's state. |
 | `lifecycle.surviving-consumer` | Informational: a `plan` of an apply names a consumer whose cluster would outlive a destroy of the context while consuming an effect that destroy retires, so that destroy refuses with `lifecycle.live`. Never a refusal. |
 | `lifecycle.adapter-running` | An adapter of the same context, or one whose record names no context, still holds its job lock, so no adapter of that context starts until it ends. |

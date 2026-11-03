@@ -1751,7 +1751,10 @@ blanket warning acceptance cannot claim readiness. The core profile requires
 `HEALTH_OK`, or a health whose every check is in a closed tolerated set. That
 set holds only `CHA_ERROR_SENDING_REPORT`: IBM Call Home's egress is the
 operator's network, not the cluster's state. A readiness timeout names the
-checks still blocking in its refusal detail. A manager daemon whose container
+checks still blocking in its refusal detail. A read-only observation that is
+not ready reports the same entries, at most 16, as `storage.not-ready`
+warnings `not ready: <entry>` beside its evidence, which `diff --observe`
+shows as notes; an apply or removal reports none. A manager daemon whose container
 cephadm is restarting is not ready and is named beside those checks; an
 observation never refuses it, while an action that needs the manager's mounted
 bundle still does. A host's daemon layout that cephadm moves while it is

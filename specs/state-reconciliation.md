@@ -2107,6 +2107,12 @@ deadline.
 | `partial` | partial, with the note `<block>: part of this effect is realized as its frozen request states` |
 | `completed` | present |
 
+A present or partial reading also carries, as the note `<block>: <message>`,
+each [warning](architecture.md#the-adapter-result-protocol) its
+observation's completed result reported, such as the checks a Ceph
+observation names as `not ready: <entry>`; a warning holding a part of 8
+bytes or more of the material lent to the read is left out. An unknown
+reading carries none.
 An unknown reading's reason is the capability's explanation of what it read
 when it gives one, with its remedy; otherwise the error's first message, or
 the general reason of an observation that proved nothing, with the remedy

@@ -1033,6 +1033,15 @@ def test_stored_certificate_other_than_bound_refuses(tmp_path, stored):
         assert caught.value.native_error["cause"] == "rgw.objects"
 
 
+def test_a_partial_gateway_observation_names_what_kept_it_from_ready():
+    request = gateway_request()
+    partial = ceph_core.execute(request, "observe", "d" * 64, Transport(request, ready_after=2))
+    assert partial["evidence"]["ready"] is False and partial["pending"] == ["rgw@rgw.objects"]
+    assert "pending" not in ceph_core.execute(request, "observe", "d" * 64, Transport(request))
+    removed = {"exists": False, "ready": False, "removed": True, "partial": False, "daemons": [], "resource": {"id": "", "path": ""}}
+    assert "pending" not in ceph_core.execute(request, "destroy", "d" * 64, Transport(request, observed=removed))
+
+
 @pytest.mark.parametrize("ingress", [False, True])
 def test_endpoint_fingerprint_must_equal_bound_certificate(tmp_path, monkeypatch, ingress):
     request = tls_request(ingress)

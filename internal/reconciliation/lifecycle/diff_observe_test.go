@@ -16,6 +16,7 @@ import (
 	"github.com/crmarques/bootwright/internal/desiredstate/compilation"
 	"github.com/crmarques/bootwright/internal/diagnostics"
 	"github.com/crmarques/bootwright/internal/reconciliation"
+	"github.com/crmarques/bootwright/internal/reconciliation/operationstore"
 	"github.com/crmarques/bootwright/internal/secrets"
 	"github.com/crmarques/bootwright/internal/secrets/secretstore"
 )
@@ -23,6 +24,7 @@ import (
 type scriptedObservation struct {
 	observation Observation
 	err         error
+	warnings    []operationstore.Warning
 }
 
 type projectingCapability struct {
@@ -40,6 +42,9 @@ func (p *projectingCapability) Observe(ctx context.Context, execution Execution)
 		return Observation{}, err
 	}
 	if scripted, found := p.answers[execution.Block.ID]; found {
+		if len(scripted.warnings) != 0 && execution.Warn != nil {
+			execution.Warn(ctx, scripted.warnings)
+		}
 		return scripted.observation, scripted.err
 	}
 	return Observation{Effect: reconciliation.EffectCompleted, Evidence: json.RawMessage(`{"image":"v1"}`)}, nil
@@ -472,6 +477,28 @@ func TestALentSecretInAProjectionRefusesBeforeOutput(t *testing.T) {
 	}
 	refusedWith(t, err, "lifecycle.state", "a projection of block alpha carries Secret material, so diff shows nothing",
 		"run bootwright diff --context lab without --observe, and report this defect")
+}
+
+func TestAnObservationsWarningsReadAsItsBlocksNotes(t *testing.T) {
+	f, projecting, _ := observedFixture(t, "alpha", "bravo")
+	f.binder.material = map[string]secrets.Material{"artifact-server-tls": secrets.NewMaterial(map[secrets.Part][]byte{secrets.ValuePart: []byte("lent-private-key-bytes")})}
+	partial := imageObservation("v1", reconciliation.EffectPartial)
+	partial.warnings = []operationstore.Warning{{Code: "storage.not-ready", Message: "not ready: keepalived@ingress.rgw.objects.dc1"},
+		{Code: "storage.not-ready", Message: "not ready: lent-private-key-bytes"}}
+	projecting.answers["alpha"] = partial
+	unknown := scriptedObservation{observation: Observation{Effect: reconciliation.EffectUnknown}, warnings: partial.warnings}
+	projecting.answers["bravo"] = unknown
+	result := f.observe(t)
+	alpha, bravo := objectOf(t, result, api.ArtifactServer, "alpha"), objectOf(t, result, api.ArtifactServer, "bravo")
+	if alpha.Real.State != "partial" || !slices.Contains(alpha.Real.Notes, "alpha: not ready: keepalived@ingress.rgw.objects.dc1") {
+		t.Fatalf("a partial observation's warning is not its note: %+v", alpha.Real)
+	}
+	if rendered := fmt.Sprintf("%#v", result); strings.Contains(rendered, "lent-private-key-bytes") {
+		t.Fatal("a warning carrying lent material reached the result")
+	}
+	if bravo.Real.State != "unknown" || slices.ContainsFunc(bravo.Real.Notes, func(note string) bool { return strings.Contains(note, "not ready") }) {
+		t.Fatalf("an unknown reading carries its warnings: %+v", bravo.Real)
+	}
 }
 
 func TestObservationsStayWithinTheConcurrencyBound(t *testing.T) {
