@@ -500,7 +500,11 @@ func replicationNetworkGap(c api.Catalog, cluster api.Object) (string, string, b
 		return "", "", false
 	}
 	listed := strings.Join(cidrs, ", ")
+	tiebreaker := cluster.Spec().Get("topology", "stretch", "tiebreaker", "node").Text()
 	for _, node := range cluster.Spec().Get("topology", "nodes").Items() {
+		if tiebreaker != "" && node.Get("name").Text() == tiebreaker {
+			continue
+		}
 		m, found := c.Find(api.Machine, node.Get("machineRef").Text())
 		if !found || insideAnyNetwork(machine.IPAddresses(m), cidrs) {
 			continue

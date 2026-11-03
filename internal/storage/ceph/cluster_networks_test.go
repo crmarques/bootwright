@@ -219,3 +219,19 @@ func TestAnIPv6HostAddressMatchesOnlyAnIPv6ClusterNetwork(t *testing.T) {
 		})
 	}
 }
+
+func TestAStretchTiebreakerNeedsNoReplicationAddress(t *testing.T) {
+	data := withReplicationAddresses(pinnedCatalog(t, withClusterCIDRs("198.51.100.0/24")), replicationAddresses("198.51.100.%d/24"))
+	catalog := withStretchTiebreaker(data, false)
+	if message, _, gap := replicationNetworkGap(catalog, clusterOf(t, catalog)); gap {
+		t.Fatalf("a MON-only tiebreaker without a replication address refused: %s", message)
+	}
+	if got := clusterNetworkRefusals(catalog)[api.CephCluster]; len(got) != 0 {
+		t.Fatalf("Unsupported reported %+v", got)
+	}
+	gapped := withStretchTiebreaker(withReplicationAddresses(pinnedCatalog(t, withClusterCIDRs("198.51.100.0/24")), map[int]string{1: "198.51.100.1/24", 2: "198.51.100.2/24"}), false)
+	const want = "Ceph host node-3 (Machine node-3) has no address inside the replication networks 198.51.100.0/24"
+	if message, _, gap := replicationNetworkGap(gapped, clusterOf(t, gapped)); !gap || message != want {
+		t.Fatalf("a data host without a replication address read %q, %v", message, gap)
+	}
+}
