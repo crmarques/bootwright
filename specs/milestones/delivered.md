@@ -11455,3 +11455,55 @@ of the reference profile), [B487](m2.md#b487) (CephFS and RBD client I/O
 through each site and the Data Foundation connect) and [B1060](m2.md#b1060)
 (this tiebreaker had a replication address, so its exemption was not
 exercised) did not run here and stay awaiting acceptance.
+
+### X292 — Physical disks a Ceph host can reuse
+
+Delivers B1080, B1081 and B1082 in-tree; they await operator acceptance on
+[their M1 rows](m1.md#b1080) ([D225](backlog.md#d225)). **Kind:** safety.
+**Owners:** Managed OS and Substrate, with Machine.
+
+`7d436925b` adds the per-target `metadataClear` erase method and the
+device-mapper holder release
+([erase methods and coverage](../state-reconciliation.md#erase-methods-and-coverage)),
+and makes a `logicalOverwrite` able to finish: targets run concurrently, each
+chunk re-proves only its disk's identity, the usage and hardware proofs run on
+a once-a-second cadence, and a target is at most
+`machine.MaxLogicalOverwriteBytes`. `6ee313338` adds
+`Machine.spec.hardware.clearOnInstall`, cleared inside the physical `%pre`
+after every proof
+([physical data-disk clear](../managed-os.md#physical-data-disk-clear)).
+Contracts: physical-erase-v6 to v8 (the install request it embeds changed
+too), os-install-anaconda-v21 to v22 and kickstart-anaconda-v17 to v18.
+Independent reviews found the per-chunk usage scan (blocking: an overwrite at
+the old 1 TiB bound could not finish), removal of mappings by name, one usage
+pass per target, and LVM re-activation after release; all are fixed, and the
+bound fell to 896 GiB. **Unverified on hardware:** that the RHEL 9 and 10
+installer images run `dmsetup` by device number, the dd byte-offset flags,
+`udevadm settle` and `blockdev`; that LVM auto-activation does not return
+after release; real overwrite throughput at the bound; and that a former OSD
+disk reads as empty to ceph-volume after either clear. NVMe disks without a
+`wwn-0x` alias cannot be declared, as for the root disk.
+
+### X293 — Dirty and half-created OSD disks
+
+**Items:** B1083, completed ([D225](backlog.md#d225)). **Kind:** safety.
+**Owners:** Storage. B662's in-tree delivery awaits operator acceptance on
+[its M2 row](m2.md#b662).
+
+`74b8655d9` gives `device-not-empty` and `foreign-osd` their own diagnostics
+and remedies. `782fd76c2` lets OSD preparation clear this operation's own
+half-created OSD data disk once, and the bootstrap host purge the never-booted
+OSD ID it left
+([devices and destructive ownership](../ceph.md#devices-and-destructive-ownership));
+ceph-core-v37 to v38 with the record format `ceph-osd-device-clear-v1`.
+Independent reviews found the orphan OSD ID, a DB/WAL data disk being
+admitted, records keyed by kernel name, a window before the zap, the
+observation refusing before the purge, and a lost completion record; all are
+fixed. **Left open:** partial DB/WAL allocations ([B1084](m2.md#b1084)); a
+compromised Ceph host can name another host's created but never-booted OSD
+to the purge, accepted because every Ceph host already holds the cluster's
+trust; the clear's and purge's native calls are not counted in their call's
+budget ([B900](m2.md#b900)). **Unverified live:** the frozen image's
+`ceph-volume lvm zap --destroy` and `ceph osd purge-new`, the RHEL devices
+file and `lvmdevices --delpvid`, and whether cephadm's periodic inventory
+makes the running-ceph-volume check refuse transiently.

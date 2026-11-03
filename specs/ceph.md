@@ -844,7 +844,7 @@ defines partial-completion evidence and safe retry, except two states that
 refuse until their recovery is defined: a cluster that is not ready after a
 non-bootstrap host carries a daemon refuses `partial-cluster`
 ([B659](milestones/m2.md#b659)), and a nonempty or partial DB/WAL device
-refuses before submission ([B662](milestones/m2.md#b662)). The
+refuses before submission ([B1084](milestones/m2.md#b1084)). The
 [interruption table](#cluster-execution-budget) states their exits. Complete
 owned state is unchanged; other owned differences converge only through
 qualified transitions.
@@ -1114,7 +1114,7 @@ OSD per data device. All selected paths are distinct within a drive group and
 across services on a host; dynamic selectors, slots and sizes remain
 unsupported. TPM2 requires encryption and a declared TPM profile. Omitted
 options retain native BlueStore defaults. Any nonempty or partial DB/WAL
-device refuses before submission; [B662](milestones/m2.md#b662) owns
+device refuses before submission; [B1084](milestones/m2.md#b1084) owns
 recovery. Read-only host readiness separately proves completed data/DB/WAL
 allocations by OSD identity and LV UUID relationships. Encryption requires
 matching native `ceph.encrypted` and `ceph.with_tpm` tags and an active LUKS

@@ -274,6 +274,7 @@ Alias cell.
 | [B967](#b967) | new, 2026-10-29 (X220) | enabling | Verification tooling | The selection logic of `scripts/quick-test` and `scripts/check-commits` moves behind `scripts/tools` launchers | Both scripts are named shell exceptions that work; no gate fails until the move |
 | [B968](#b968) | new, 2026-10-29 (X216) | enabling | CLI | CLI help and output name cluster and storage kinds from the family registry, and the family-neutral check covers `internal/cli` | About 24 help and output strings name kinds directly and the help goldens pin them; the check exempts `internal/cli` meanwhile |
 | [B969](#b969) | new, 2026-10-29 (X216) | enabling | Storage | The six storage requirements no example plans become reference-edge rows | `CephClient`, `CephNFSExport` and `CephSMBResource` `filesystemRef` and the three `CephObjectGateway` `spec.pools` references order blocks in code, but the catalog test needs a planned example per row, so they carry a reason meanwhile |
+| [B1085](#b1085) | new, 2026-11-03 (the D225 lanes' checks) | defect | Storage and Verification tooling | A Ceph tunnel-custody unit test passes whatever filesystem holds `TMPDIR` | Fails only with `TMPDIR` on btrfs; the gate runs on tmpfs `/tmp`; gates no milestone |
 
 ### B82
 
@@ -3057,6 +3058,18 @@ shared state, `make race` over the converted packages, and repeated
 it gates no milestone and a missed shared fixture would trade time for
 flakiness. **Revive when** the owner asks, or the suite's wall time grows
 again.
+
+### B1085
+
+`test_ceph_tunnel_custody.py::test_a_record_published_after_the_listing_is_protected_when_its_staging_name_vanishes`
+fails when `TMPDIR` is on this controller host's btrfs home filesystem and
+passes on the default tmpfs `/tmp`, on main as of 2026-11-03: a directory
+descriptor opened before the test publishes its records lists none of them on
+btrfs. Found while running the D225 lanes' checks with `TMPDIR` moved off the
+small tmpfs. **Outcome:** the test, or the listing it exercises, no longer
+depends on the filesystem's directory-descriptor behavior, or the dependency is
+recorded as a requirement of the host the check runs on. Parked because it
+gates no milestone and the gate runs on `/tmp`.
 
 ## Audit remediation (2026-10-26)
 
@@ -6598,3 +6611,26 @@ B73's and B67's acceptance is the owner's run on real hardware. Virtual
 Machines behind an emulated BMC stay what they are, the libvirt+sushy
 substrate, never a physical stand-in. The physical-path refusals and tests
 stay, so the real run starts from a qualified build.
+
+### D225
+
+**owner** (2026-11-03): asked how real bare-metal Ceph hosts can reuse disks
+that keep a filesystem or Ceph structure after a destroy, especially an
+incomplete one, recalled that the reference implementation needed a
+`--zap-disk`-like flag, asked for safe alternatives and a recommendation, and
+then said "proceed with plan implementation". The approved plan: a disk not
+proved empty or this operation's own keeps refusing; no CLI zap or force flag
+is added, because the contract has no force path and `data-loss` never selects
+a target ([confirmation and authorization](../state-reconciliation.md#confirmation-and-authorization));
+a fast per-target `metadataClear` erase method beside `logicalOverwrite`
+([B1080](m1.md#b1080)); a `logicalOverwrite` that can finish ([B1081](m1.md#b1081));
+an opt-in clear of a Machine's declared data disks inside its physical
+installation ([B1082](m1.md#b1082)); a named refusal with a remedy for a dirty
+OSD disk ([B1083](delivered.md#x293--dirty-and-half-created-osd-disks)); and B662's bounded clear of this operation's
+own half-created OSD ([B662](m2.md#b662)), which settles B662's open decision
+on the destructive path. Session clauses, pending the owner's review: the
+metadata-clear regions (128 MiB windows at the head, the tail and the 1, 10,
+100 and 1000 GiB offsets); the 896 GiB bound on a `logicalOverwrite` target,
+which assumes a sustained 160 MB/s per disk within the worker's four hours;
+the field names `method: metadataClear` and `spec.hardware.clearOnInstall`;
+and that a clear never claims sanitization.
