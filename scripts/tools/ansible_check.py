@@ -365,15 +365,16 @@ def run_lanes(lanes: list[tuple[str, Lane]], logs: Path) -> int:
 SYNTAX_WORKERS = 4
 
 
-def syntax_lane(
-    playbooks: list[Path], command: list[str], root: Path, environment: dict
-) -> Lane:
+def syntax_lane(playbooks: list[Path], command: list[str], run_: "Run") -> Lane:
     """Return the lane that syntax checks every playbook, each in its own process."""
+
+    home = run_.area / "syntax"
+    environment = lane_environment(run_.environment, home)
 
     def check(playbook: Path) -> subprocess.CompletedProcess:
         return subprocess.run(
             command + [str(playbook)],
-            cwd=root,
+            cwd=run_.root,
             env=environment,
             stdin=subprocess.DEVNULL,
             stdout=subprocess.PIPE,
@@ -383,6 +384,7 @@ def syntax_lane(
         )
 
     def lane(output: Optional[TextIO]) -> int:
+        home.mkdir(exist_ok=True)
         with concurrent.futures.ThreadPoolExecutor(max_workers=SYNTAX_WORKERS) as pool:
             results = list(pool.map(check, playbooks))
         for result in results:
@@ -398,7 +400,7 @@ def lint_lane(command: list[str], run_: "Run") -> Lane:
 
     def lane(output: Optional[TextIO]) -> None:
         home = run_.area / "lint"
-        home.mkdir()
+        home.mkdir(exist_ok=True)
         run(
             command, output, cwd=run_.root, env=lane_environment(run_.environment, home)
         )
@@ -459,7 +461,7 @@ def floor_environment(environment: dict, executable: Path, interpreter: Path) ->
     )
 
 
-def sanity_lane(run_: Run, wheelhouse: Path, floor: tuple[str, Path]) -> Lane:
+def sanity_lane(run_: Run, wheelhouse: Path) -> Lane:
     """Return the lane of the sanity tests and the floor's import test.
 
     The first imports every module on the controller's Python; the second
@@ -472,11 +474,13 @@ def sanity_lane(run_: Run, wheelhouse: Path, floor: tuple[str, Path]) -> Lane:
         "-I",
         str(run_.executable.parent / "ansible-test"),
     ]
-    minor, interpreter = floor
 
     def lane(output: Optional[TextIO]) -> None:
         test_collection, environment = collection_lane(
             run_.area, "sanity", run_.collection, wheelhouse, run_.environment
+        )
+        minor, interpreter = floor_interpreter(
+            run_.root, run_.fixtures, run_.area / "sanity"
         )
         run(
             ansible_test
@@ -508,7 +512,7 @@ def sanity_lane(run_: Run, wheelhouse: Path, floor: tuple[str, Path]) -> Lane:
     return lane
 
 
-def units_lane(run_: Run, wheelhouse: Path, floor: tuple[str, Path]) -> Lane:
+def units_lane(run_: Run, wheelhouse: Path) -> Lane:
     """Return the lane of ansible-test's unit runs, on the controller then the floor.
 
     The first runs every test on the controller's Python; the second runs the
@@ -523,11 +527,13 @@ def units_lane(run_: Run, wheelhouse: Path, floor: tuple[str, Path]) -> Lane:
         "-I",
         str(run_.executable.parent / "ansible-test"),
     ]
-    minor, interpreter = floor
 
     def lane(output: Optional[TextIO]) -> None:
         test_collection, environment = collection_lane(
             run_.area, "units", run_.collection, wheelhouse, run_.environment
+        )
+        minor, interpreter = floor_interpreter(
+            run_.root, run_.fixtures, run_.area / "units"
         )
         run(
             ansible_test
@@ -636,9 +642,7 @@ def check_lanes(
             "-i",
             str(inventory),
         ]
-        lanes.append(
-            ("syntax", syntax_lane(playbooks, command, run_.root, run_.environment))
-        )
+        lanes.append(("syntax", syntax_lane(playbooks, command, run_)))
     if "lint" in run_.selected:
         command = [
             str(run_.executable),
@@ -656,14 +660,10 @@ def check_lanes(
     if not run_.selected & {"sanity", "units", "integration"}:
         return lanes
     wheelhouse = prepared_wheelhouse(run_)
-    whole_units = "units" in run_.selected and not run_.targets
-    floor = None
-    if "sanity" in run_.selected or whole_units:
-        floor = floor_interpreter(run_.root, run_.fixtures, run_.area)
     if "sanity" in run_.selected:
-        lanes.append(("sanity", sanity_lane(run_, wheelhouse, floor)))
-    if whole_units:
-        lanes.append(("units", units_lane(run_, wheelhouse, floor)))
+        lanes.append(("sanity", sanity_lane(run_, wheelhouse)))
+    if "units" in run_.selected and not run_.targets:
+        lanes.append(("units", units_lane(run_, wheelhouse)))
     if "integration" in run_.selected:
         lanes.append(("integration", integration_lane(run_, wheelhouse)))
     if "units" in run_.selected:
@@ -689,6 +689,21 @@ KEPT_PASSES = 50
 # tests and locks.
 TOOL_FILES = ("scripts/ansible-check", "scripts/cache-dir")
 TOOL_PREFIX = "scripts/tools/ansible"
+
+# What Ansible Lint reads from the repository root, where it runs: its own and
+# yamllint's configuration, and the ignore rules of the git listing it takes.
+# An absent one is part of the key too, so adding one moves it.
+ROOT_FILES = (
+    ".gitignore",
+    ".ansible-lint",
+    ".ansible-lint.yml",
+    ".ansible-lint.yaml",
+    ".config/ansible-lint.yml",
+    ".config/ansible-lint.yaml",
+    ".yamllint",
+    ".yamllint.yml",
+    ".yamllint.yaml",
+)
 
 # Byte-code and pytest's own cache, which no check reads as an input.
 UNREAD_DIRECTORIES = ("__pycache__", ".pytest_cache")
@@ -750,7 +765,39 @@ def tool_entries(root: Path) -> list[str]:
     for path in names:
         digest = hashlib.sha256(path.read_bytes()).hexdigest()
         lines.append(f"tool {path.relative_to(root)} {path.stat().st_mode:o} {digest}")
+    for name in ROOT_FILES:
+        path = root / name
+        if path.is_file():
+            digest = hashlib.sha256(path.read_bytes()).hexdigest()
+            lines.append(f"root {name} {path.stat().st_mode:o} {digest}")
+        else:
+            lines.append(f"root {name} absent")
     return lines
+
+
+def written_since(root: Path, start: float) -> bool:
+    """Report whether any input under the repository changed status since start.
+
+    A write, a rename or a mode change sets an entry's change time to the
+    present and nothing sets it back, so an edit undone during the run still
+    shows; a second of margin covers coarse file system clocks.
+    """
+    paths = [root / name for name in TOOL_FILES + ROOT_FILES]
+    paths += list((root / "scripts/tools").iterdir())
+    for current, directories, files in os.walk(root / "ansible"):
+        directories[:] = [
+            name for name in directories if name not in UNREAD_DIRECTORIES
+        ]
+        here = Path(current)
+        paths.append(here)
+        paths += [here / name for name in files]
+    for path in paths:
+        try:
+            if path.lstat().st_ctime >= start - 1:
+                return True
+        except FileNotFoundError:
+            continue
+    return False
 
 
 def installed_distributions() -> list[str]:
@@ -807,53 +854,73 @@ def recording(environ: dict) -> bool:
     return not environ.get("CI") and environ.get(FULL_VARIABLE) != "1"
 
 
+def uses_record(arguments: list[str], environ: dict) -> bool:
+    """Report whether a run is a complete one that may reuse or record a pass."""
+    optional = any(environ.get(name) == "1" for name in OPTIONAL_TARGETS)
+    return not arguments and not optional and recording(environ)
+
+
 def recorded_gate(
     records: Path,
     key: Callable[[], str],
-    environ: dict,
+    quiet: Callable[[float], bool],
     check: Callable[[], int],
     clock: Callable[[], float],
 ) -> int:
     """Reuse a fresh recorded pass for the inputs, or run the check and record it.
 
-    The key is taken again after a passing run, and the pass is recorded only
-    when no input moved while the check ran.
+    A pass is recorded only when the key taken after the run equals the one
+    taken before and quiet reports that no input was written since the start,
+    so an edit made and undone while the check ran records nothing. A record
+    that cannot be written leaves the run's status as it is.
     """
+    started = clock()
     before = key()
     record = records / before
-    if recording(environ) and record.is_file():
-        try:
-            passed = json.loads(record.read_text(encoding="utf-8"))["passed"]
-        except (OSError, ValueError, KeyError, TypeError):
-            passed = None
-        if type(passed) in (int, float) and 0 <= clock() - passed < PASS_LIFETIME:
-            when = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(passed))
-            print(
-                f"ansible-check: every input matches the complete run that passed at "
-                f"{when} (key {before[:16]}); it is reused, not rerun. "
-                f"{FULL_VARIABLE}=1 runs it.",
-                flush=True,
-            )
-            return 0
+    try:
+        passed = json.loads(record.read_text(encoding="utf-8"))["passed"]
+    except (OSError, ValueError, KeyError, TypeError):
+        passed = None
+    if type(passed) in (int, float) and 0 <= started - passed < PASS_LIFETIME:
+        when = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(passed))
+        print(
+            f"ansible-check: every input matches the complete run that passed at "
+            f"{when} (key {before[:16]}); it is reused, not rerun. "
+            f"{FULL_VARIABLE}=1 runs it.",
+            flush=True,
+        )
+        return 0
     status = check()
-    if status != 0 or not recording(environ):
+    if status != 0:
         return status
-    if key() != before:
+    if key() != before or not quiet(started):
         print(
             "ansible-check: an input changed while the check ran; no pass is recorded."
         )
         return status
-    records.mkdir(parents=True, exist_ok=True)
-    partial = records / (before + ".partial")
-    partial.write_text(json.dumps({"passed": clock()}), encoding="utf-8")
-    os.replace(partial, record)
-    kept = sorted(
-        (path for path in records.iterdir() if not path.name.endswith(".partial")),
-        key=lambda path: path.stat().st_mtime,
-        reverse=True,
-    )
-    for stale in kept[KEPT_PASSES:]:
-        stale.unlink(missing_ok=True)
+    try:
+        records.mkdir(parents=True, exist_ok=True)
+        descriptor, partial = tempfile.mkstemp(
+            dir=records, prefix=before + ".", suffix=".partial"
+        )
+        with os.fdopen(descriptor, "w", encoding="utf-8") as stream:
+            stream.write(json.dumps({"passed": clock()}))
+        os.replace(partial, record)
+    except OSError as failure:
+        print(f"ansible-check: the pass could not be recorded: {failure}")
+        return status
+    kept = []
+    for path in records.iterdir():
+        try:
+            if not path.name.endswith(".partial"):
+                kept.append((path.stat().st_mtime, path))
+        except OSError:
+            continue
+    for _, stale in sorted(kept, reverse=True)[KEPT_PASSES:]:
+        try:
+            stale.unlink()
+        except OSError:
+            continue
     return status
 
 
@@ -975,13 +1042,12 @@ def main() -> int:
             )
             return run_lanes(check_lanes(run_, playbooks, inventory), area / "logs")
 
-    optional = any(os.environ.get(name) == "1" for name in OPTIONAL_TARGETS)
-    if sys.argv[1:] or optional:
+    if not uses_record(sys.argv[1:], os.environ):
         return check()
     return recorded_gate(
         cache_root(root) / "ansible-check/passes",
         lambda: pass_key(root, host_state(), installed_distributions(), sys.version),
-        os.environ,
+        lambda started: not written_since(root, started),
         check,
         time.time,
     )

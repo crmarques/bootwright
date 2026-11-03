@@ -23,14 +23,16 @@ inner loop is shaped as it is, and the traps found while measuring it on
   each entry, and the crash harness repeats it hundreds of times.
 - `t.Parallel` on one heavy test gains nothing: Go starts a top-level parallel
   test only after every serial test of its package has finished.
-- On 2026-11-02 `make check` took 973 s, then 818 s after X287: Go 157 s and
-  the Ansible check 658 s, every target and phase one after another (B1054).
-  The Ansible phases: syntax 62 s (69 playbooks, one process each), lint 92 s,
-  sanity 84 s, the ansible-test units on xdist 94 s, the integration targets
-  9 s, the plain serial loop over all 8279 collection tests 238 s, and the
-  floor's module units and import sanity 71 s. Only the xdist phases use more
-  than one core. Sanity's cost is mostly building its tool environments; over
-  two target files all 25 tests take 17 s.
+- On 2026-11-02 `make check` took 973 s, then 818 s after X287 with every
+  target and phase one after another: Go 157 s and the Ansible check 658 s.
+  Its Ansible phases then: syntax 62 s (69 playbooks, one process each), lint
+  92 s, sanity 84 s, the ansible-test units on xdist 94 s, the integration
+  targets 9 s, the plain serial loop over all 8279 collection tests 238 s, and
+  the floor's module units and import sanity 71 s. Since X288 the phases run in
+  lanes beside one another and the Go targets beside them: three runs took 354,
+  301 and 300 s, the plain lane, near 300 s under the others' load, being the
+  longest. Sanity's cost is mostly building its tool environments; over two
+  target files all 25 tests take 17 s.
 - Under xdist a module-scoped fixture is torn down whenever a worker's next
   test comes from another module, so it runs about once per test. Before X287
   the two fixtures that run `ansible-playbook` made the controller unit phase

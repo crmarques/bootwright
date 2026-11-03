@@ -320,6 +320,21 @@ class LanesTest(unittest.TestCase):
             self.output,
         )
 
+    def test_every_kind_of_failure_fails_its_lane(self):
+        def code(output):
+            raise SystemExit(4)
+
+        def killed(output):
+            raise subprocess.CalledProcessError(-9, ["check"])
+
+        def broken(output):
+            raise RuntimeError("unexpected")
+
+        self.assertEqual(self.lanes(("a", code), ("b", lambda output: None)), 4)
+        self.assertEqual(self.lanes(("a", killed), ("b", lambda output: None)), -9)
+        self.assertEqual(self.lanes(("a", broken), ("b", lambda output: None)), 1)
+        self.assertIn("RuntimeError: unexpected", self.output)
+
     def test_collection_lanes_write_apart(self):
         with ansible_check.check_area() as temporary:
             area = Path(temporary)
@@ -391,6 +406,112 @@ class LanesTest(unittest.TestCase):
         self.assertEqual(self.names(["--suite", "units", "a"], ["a"]), ["plain"])
         self.assertEqual(self.names(["--suite", "sanity", "a"], ["a"]), ["sanity"])
         self.assertEqual(self.names(["--suite", "lint"], []), ["lint"])
+
+    def commands(self, lane_of):
+        """Run one lane with every effect replaced and return what it ran."""
+        ran = []
+        copy = Path("/area/lane/collections/ansible_collections/bootwright/core")
+
+        def run(command, output, **options):
+            ran.append((command[3:], options["cwd"], options["env"]["PATH"]))
+
+        run_ = ansible_check.Run(
+            Path("/root"),
+            Path("/venv/bin/python"),
+            Path("/root/ansible"),
+            Path("/root/ansible/collection"),
+            Path("/fixtures"),
+            Path("/area"),
+            {"PATH": "base"},
+            set(ansible_check.SUITES),
+            [],
+        )
+        with (
+            mock.patch.object(ansible_check, "run", run),
+            mock.patch.object(
+                ansible_check,
+                "collection_lane",
+                lambda *_: (copy, {"PATH": "lane"}),
+            ),
+            mock.patch.object(
+                ansible_check,
+                "floor_interpreter",
+                lambda *_: ("3.9", Path("/f/python")),
+            ),
+            mock.patch.object(
+                ansible_check,
+                "require_imported",
+                lambda collection, minor: ran.append(("imported", collection, minor)),
+            ),
+            mock.patch.object(
+                ansible_check,
+                "require_unit_tested",
+                lambda collection, minor: ran.append(
+                    ("unit tested", collection, minor)
+                ),
+            ),
+        ):
+            lane_of(run_, Path("/w"))(None)
+        return ran, copy
+
+    def test_each_lane_runs_what_the_serial_gate_ran(self):
+        floor_path = os.pathsep.join(["/venv/bin", "/f", "/usr/bin", "/bin"])
+        local = ["--local", "--python", "3.13", "--color", "no"]
+        ran, copy = self.commands(ansible_check.sanity_lane)
+        self.assertEqual(
+            ran,
+            [
+                (["sanity"] + local, copy, "lane"),
+                (
+                    [
+                        "sanity",
+                        "--test",
+                        "import",
+                        "--junit",
+                        "--controller",
+                        "origin:python=3.13",
+                        "--target-python",
+                        "3.9@/f/python",
+                        "--color",
+                        "no",
+                    ],
+                    copy,
+                    floor_path,
+                ),
+                ("imported", copy, "3.9"),
+            ],
+        )
+        ran, copy = self.commands(ansible_check.units_lane)
+        self.assertEqual(
+            ran,
+            [
+                (["units", "--num-workers", "0"] + local, copy, "lane"),
+                (
+                    [
+                        "units",
+                        "--num-workers",
+                        "0",
+                        "--controller",
+                        "origin:python=3.13",
+                        "--target-python",
+                        "venv/3.9@/f/python",
+                        "--color",
+                        "no",
+                    ],
+                    copy,
+                    floor_path,
+                ),
+                ("unit tested", copy, "3.9"),
+            ],
+        )
+        ran, copy = self.commands(ansible_check.integration_lane)
+        self.assertEqual(
+            ran,
+            [
+                (["integration", "controller_tool"] + local, copy, "lane"),
+                (["integration", "controller_supervisor"] + local, copy, "lane"),
+            ],
+        )
 
     def test_the_plain_lane_runs_one_serial_pytest_in_process(self):
         commands = []
@@ -464,6 +585,11 @@ class PassKeyTest(unittest.TestCase):
             "the launcher": lambda: (self.root / "scripts/ansible-check").write_text(
                 "x"
             ),
+            "the cache directory script": lambda: (
+                self.root / "scripts/cache-dir"
+            ).write_text("x"),
+            "a root lint file": lambda: (self.root / ".ansible-lint").write_text(""),
+            "the root ignore rules": lambda: (self.root / ".gitignore").write_text("x"),
             "a lock": lambda: (
                 self.root / "scripts/tools/ansible-requirements.txt"
             ).write_text("a==2\n"),
@@ -518,7 +644,7 @@ class RecordedGateTest(unittest.TestCase):
         self.runs = 0
         self.now = 1_000_000.0
 
-    def gate(self, status=0, environ=None, key=lambda: "k" * 64):
+    def gate(self, status=0, key=lambda: "k" * 64, quiet=lambda started: True):
         def check():
             self.runs += 1
             return status
@@ -526,7 +652,7 @@ class RecordedGateTest(unittest.TestCase):
         output = io.StringIO()
         with contextlib.redirect_stdout(output):
             result = ansible_check.recorded_gate(
-                self.records, key, environ or {}, check, lambda: self.now
+                self.records, key, quiet, check, lambda: self.now
             )
         self.output = output.getvalue()
         return result
@@ -548,28 +674,38 @@ class RecordedGateTest(unittest.TestCase):
         self.assertEqual((self.gate(status=1), self.runs), (1, 2))
         self.assertFalse(self.records.exists())
 
-    def test_ci_and_the_full_variable_neither_read_nor_write(self):
-        for environ in ({"CI": "true"}, {ansible_check.FULL_VARIABLE: "1"}):
-            with self.subTest(environ=environ):
-                self.gate(environ=environ)
-                self.assertFalse(self.records.exists())
-        self.gate()
-        runs = self.runs
-        for environ in ({"CI": "true"}, {ansible_check.FULL_VARIABLE: "1"}):
-            with self.subTest(environ=environ):
-                self.gate(environ=environ)
-        self.assertEqual(self.runs, runs + 2)
-
-    def test_an_input_that_moves_during_the_run_records_nothing(self):
+    def test_a_key_that_moves_during_the_run_records_nothing(self):
         keys = iter(["a" * 64, "b" * 64])
         self.assertEqual(self.gate(key=lambda: next(keys)), 0)
-        self.assertFalse((self.records / ("a" * 64)).exists())
+        self.assertFalse(self.records.exists())
         self.assertIn("no pass is recorded", self.output)
+
+    def test_a_write_since_the_start_records_nothing(self):
+        started = []
+
+        def quiet(start):
+            started.append(start)
+            return False
+
+        self.assertEqual(self.gate(quiet=quiet), 0)
+        self.assertEqual(started, [self.now])
+        self.assertFalse(self.records.exists())
 
     def test_a_damaged_record_runs_the_check(self):
         self.records.mkdir()
         (self.records / ("k" * 64)).write_text("{", encoding="utf-8")
         self.assertEqual((self.gate(), self.runs), (0, 1))
+
+    def test_a_record_that_cannot_be_written_keeps_the_pass(self):
+        self.records.write_text("", encoding="utf-8")
+        self.assertEqual(self.gate(), 0)
+        self.assertIn("could not be recorded", self.output)
+
+    def test_another_run_writing_the_same_key_does_not_collide(self):
+        self.records.mkdir()
+        (self.records / ("k" * 64 + ".partial")).write_text("", encoding="utf-8")
+        self.assertEqual(self.gate(), 0)
+        self.assertTrue((self.records / ("k" * 64)).is_file())
 
     def test_only_the_newest_passes_are_kept(self):
         self.records.mkdir()
@@ -580,8 +716,49 @@ class RecordedGateTest(unittest.TestCase):
         with mock.patch.object(ansible_check, "KEPT_PASSES", 2):
             self.gate()
         self.assertEqual(
-            sorted(path.name for path in self.records.iterdir()), ["2" * 64, "k" * 64]
+            sorted(
+                path.name
+                for path in self.records.iterdir()
+                if not path.name.endswith(".partial")
+            ),
+            ["2" * 64, "k" * 64],
         )
+
+
+class UsesRecordTest(unittest.TestCase):
+    """Only a complete run outside CI and without FULL reads or writes a record."""
+
+    def test_only_the_complete_local_run_uses_the_record(self):
+        self.assertTrue(ansible_check.uses_record([], {}))
+        for arguments, environ in (
+            ([], {"CI": "true"}),
+            ([], {ansible_check.FULL_VARIABLE: "1"}),
+            (["--suite", "units"], {}),
+            (["--suite", "units", "a"], {}),
+            ([], {"BOOTWRIGHT_ANSIBLE_NATIVE_TARGET": "1"}),
+            ([], {"BOOTWRIGHT_ANSIBLE_CONTROLLER_TARGET": "1"}),
+        ):
+            with self.subTest(arguments=arguments, environ=environ):
+                self.assertFalse(ansible_check.uses_record(arguments, environ))
+
+
+class WrittenSinceTest(unittest.TestCase):
+    """A write to any input after the start shows, even when undone."""
+
+    def test_an_edit_undone_still_shows(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            for name in ("ansible/a.yml", "scripts/ansible-check", "scripts/tools/x"):
+                (root / name).parent.mkdir(parents=True, exist_ok=True)
+                (root / name).write_text("a", encoding="utf-8")
+            later = time.time() + 5
+            self.assertFalse(ansible_check.written_since(root, later))
+            path = root / "ansible/a.yml"
+            status = path.stat()
+            path.write_text("b", encoding="utf-8")
+            path.write_text("a", encoding="utf-8")
+            os.utime(path, ns=(status.st_atime_ns, status.st_mtime_ns))
+            self.assertTrue(ansible_check.written_since(root, time.time()))
 
 
 if __name__ == "__main__":

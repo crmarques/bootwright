@@ -11186,3 +11186,36 @@ alike; outside xdist, as in the plain serial loop, it computes as before.
 The phase now takes 56 s and `make check` 818 s instead of 973 s. With the
 entry-point fixture made to fail, all 69 of its cases errored on 8 workers
 and serially. The delivering commit records the gates and their results.
+
+### X288 — The gate's checks beside one another, and once per input
+
+**Item:** B1054, completed (new, 2026-11-02, parked; X287 delivered its
+first part). **Kind:** enabling. **Owner:** Architecture and developer
+tooling. The owner chose all four changes offered in
+[D223](backlog.md#d223); every test that ran before still runs.
+
+- The Ansible check runs its phases in lanes beside one another
+  ([the Ansible check](../../scripts/tools/ansible-check.md)): syntax, lint,
+  sanity then the floor import, the ansible-test units then the floor units,
+  the integration targets and the plain loop, each lane with its own HOME and
+  temporary directory and, where it runs ansible-test or pytest, its own copy
+  of the collection. The plain loop stays the in-process serial run of
+  [D222](backlog.md#d222). The check fell from 658 s to 298 s.
+- `make check` runs the Go targets, now `check-go`, beside the Ansible check.
+- The gate runs once per integration, on the task branch rebased onto main's
+  tip ([git integration](../../.agents/skills/code-implementation/references/git-integration.md)).
+- A passing complete Ansible check is recorded under a key over every input it
+  reads and reused for 24 hours while the key matches; CI runs it in full.
+  A recorded pass made the next run take 0.2 s instead of 272 s. A pass is
+  recorded only when no input's change time is later than the run's start,
+  and a record that cannot be written leaves the pass as it is.
+
+An independent review found nothing blocking; its fixes are in the last
+commit: per-lane floor interpreters and a HOME for the syntax lane, `make -k`
+so a failure leaves every other check running, the repository root's lint and
+ignore files in the key, the change-time guard, and tests that pin each lane's
+commands to those the serial gate ran.
+
+Three consecutive `make check` runs with an uncached Go suite passed in 354,
+301 and 300 s, against 973 s before X287, with every lane passing each time.
+The delivering commits record the gates and their results.

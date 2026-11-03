@@ -77,11 +77,13 @@ race:
 check-offline: fmt-check test vet completion-test
 	@echo 'check-offline: vulncheck, ansible-check and modules-check were not run; they are unrun, not passed.'
 
-# The gate. The Ansible check takes most of its time, so the Go targets run
-# beside it, one after another in the second job slot; ansible-check comes
-# first so it starts at once. Either failing fails the gate.
+# The gate. The Ansible check takes most of its time, so it starts first and
+# holds one of two job slots while the Go targets take the other, and the Go
+# targets use both once it ends. -k runs every target after a failure, so one
+# run reports every failing check; any failure still fails the gate. Each
+# target's output prints whole when it ends.
 check:
-	$(MAKE) --no-print-directory -j2 ansible-check check-go
+	$(MAKE) -k --no-print-directory --output-sync=target -j2 ansible-check check-go
 	git diff --check
 
 check-go: fmt-check modules-check tidy-check test vet completion-test vulncheck

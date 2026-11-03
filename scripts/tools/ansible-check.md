@@ -35,21 +35,30 @@ targets, and the plain loop. A lane runs its own checks in order and reads
 nothing another lane writes: each has its own `HOME` and temporary directory
 in the check area, and each lane that runs ansible-test or pytest tests its own
 copy of the collection. The two ansible-test unit runs share a lane, so their
-pytest-xdist worker pools never overlap. Each lane's output is printed whole
-when it ends, then a line per lane with its verdict and time; the first lane
-that failed gives the exit status, and every lane runs to its end. A run that
-selects one lane, as a narrowed suite does, runs it alone on the terminal.
+pytest-xdist worker pools never overlap, and each of the two extracts its own
+floor interpreter. Each lane's output is printed whole when it ends, then a
+line per lane with its verdict and time; every lane runs to its end, and the
+first failed lane in that listed order gives the exit status, a status of 75
+becoming 1, since only a narrowed unit run reports FLAKY. A run that selects
+one lane, as a narrowed suite does, runs it alone on the terminal.
 
 A complete run, the argument-free form with no operator-run target selected,
 records its pass under a key over every input it reads: each file, directory
 and link under `ansible/` by path, mode and content (byte code and pytest's
 cache aside), the launcher, `scripts/cache-dir` and every
-`scripts/tools/ansible*` file, the interpreter's version, every distribution
-installed beside it, and the names, sizes and times of the entries of the
-host's tool and package directories, so a package change moves it. The next
-complete run whose key matches a pass of the last 24 hours prints that it
-reuses that pass and runs nothing; the key is taken again after a passing run,
-and an input that moved meanwhile records nothing. Records live in
+`scripts/tools/ansible*` file, the repository root's `.gitignore` and Ansible
+Lint and yamllint configuration files (an absent one included), the
+interpreter's version, every distribution installed beside it, and the names,
+sizes and times of the entries of the host's tool and package directories, so
+a package change moves it. The next complete run whose key matches a pass of
+the last 24 hours prints that it reuses that pass and runs nothing. A pass is
+recorded only when the key taken after the run equals the one before and no
+input's change time is later than the run's start, so an edit made and undone
+during the run records nothing; a record that cannot be written leaves the
+pass as it is. The key leaves out host state outside those directories, such
+as `/etc` and `/usr/libexec`, and what a test reads from the network or the
+clock beyond the record's day; a change there is what
+`BOOTWRIGHT_ANSIBLE_CHECK_FULL=1` is for. Records live in
 `ansible-check/passes` under the directory `scripts/cache-dir` prints, so
 every worktree of the clone shares them. Under CI, or with
 `BOOTWRIGHT_ANSIBLE_CHECK_FULL=1`, the check runs in full and neither reads nor
