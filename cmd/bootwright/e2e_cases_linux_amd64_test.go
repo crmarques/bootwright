@@ -54,7 +54,16 @@ var e2eRenders = map[string][]e2eRender{
 		{name: "nfs off", sets: []string{"ceph.services.nfs=false"}},
 		{name: "smb off", sets: []string{"ceph.services.smb=false"}},
 		{name: "observability off", sets: []string{"ceph.services.observability=false"}},
-		{name: "nvmeof on", sets: []string{"ceph.services.nvmeof=true"}, refuses: "pool placement groups for CRUSH rule replicated_rule exceed the per-OSD bound (834 > 250 × 3)"},
+		{name: "nvmeof on", sets: []string{"ceph.services.nvmeof=true"}},
+		{name: "nvmeof on block off", sets: []string{"ceph.services.nvmeof=true", "ceph.services.block=false"}},
+		{name: "nvmeof on file off", sets: []string{"ceph.services.nvmeof=true", "ceph.services.file=false"}},
+		{name: "nvmeof on object off", sets: []string{"ceph.services.nvmeof=true", "ceph.services.object=false"}},
+		{name: "nvmeof on observability off", sets: []string{"ceph.services.nvmeof=true", "ceph.services.observability=false"}},
+		{name: "nvmeof only", sets: []string{
+			"ceph.services.nvmeof=true",
+			"ceph.services.block=false", "ceph.services.file=false", "ceph.services.object=false",
+			"ceph.services.nfs=false", "ceph.services.smb=false", "ceph.services.observability=false",
+		}},
 		{name: "every group off", sets: []string{
 			"ceph.services.block=false", "ceph.services.file=false", "ceph.services.object=false",
 			"ceph.services.nfs=false", "ceph.services.smb=false", "ceph.services.observability=false",

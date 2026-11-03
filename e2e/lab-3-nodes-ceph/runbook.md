@@ -331,8 +331,9 @@ can authenticate; the following data checks supply that evidence.
 
 Require rule `ssd-hosts` over root `default`, class `ssd`, host failure
 domain; `rbd-data` on that rule, replicated `size=2`, `min_size=2`, autoscale
-on and the `rbd` application. The small RBD pool caps PGs at 16 so the
-default service combination fits three OSDs. Check its bound:
+on and the `rbd` application. The small RBD pool caps PGs at 16, and with
+NVMe-oF the `nvme-config` and `nvme-data` pools cap theirs at 8, so every
+service combination fits three OSDs. Check the RBD pool's bound:
 
 ```sh
 ./bin/bootwright cluster exec --context "$CONTEXT" --name ceph-e2e --node rhel-01 -- sudo -n ceph --conf "${CEPH_CONF:?Set CEPH_CONF as described above}" --keyring "${CEPH_KEYRING:?Set CEPH_KEYRING as described above}" osd pool get rbd-data pg_num_max
