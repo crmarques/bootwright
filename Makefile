@@ -1,4 +1,4 @@
-.PHONY: build test vet fmt-check modules-check tidy-check completion-test vulncheck ansible-check docs-check focus quick race check-offline check
+.PHONY: build test vet fmt-check modules-check tidy-check completion-test vulncheck ansible-check docs-check focus quick race check-offline check check-go
 
 GO := ./scripts/go
 VULNDB ?= https://vuln.go.dev
@@ -77,5 +77,11 @@ race:
 check-offline: fmt-check test vet completion-test
 	@echo 'check-offline: vulncheck, ansible-check and modules-check were not run; they are unrun, not passed.'
 
-check: fmt-check modules-check tidy-check test vet completion-test vulncheck ansible-check
+# The gate. The Ansible check takes most of its time, so the Go targets run
+# beside it, one after another in the second job slot; ansible-check comes
+# first so it starts at once. Either failing fails the gate.
+check:
+	$(MAKE) --no-print-directory -j2 ansible-check check-go
 	git diff --check
+
+check-go: fmt-check modules-check tidy-check test vet completion-test vulncheck
