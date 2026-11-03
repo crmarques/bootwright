@@ -59,15 +59,7 @@ func (g GuestChecks) CheckGuest(ctx context.Context, contextName string, host ap
 		var untrusted UntrustedKey
 		if errors.As(err, &untrusted) {
 			clear(data)
-			reason, next := "the SSH host key is not enrolled", "run bootwright machine trust --context "+contextName+" --name "+host.Name()
-			if ssh.KnownHostsRef != "" {
-				reason = "the SSH host key Secret " + ssh.KnownHostsRef + " does not pin one host key for " + machine.SSHHost(ssh.Address, ssh.Port)
-				next = "author Secret " + ssh.KnownHostsRef + " as the one known-hosts entry Machine/" + host.Name() + " offers at " + machine.SSHHost(ssh.Address, ssh.Port)
-			}
-			if untrusted.Fingerprint != "" {
-				reason += "; observed " + untrusted.Fingerprint
-			}
-			return []Check{{ID: "host.trust", Target: host.Name(), Status: capacity.Unknown, Reason: reason, Next: next}}, nil
+			return []Check{untrustedCheck(contextName, host, ssh, untrusted)}, nil
 		}
 		if requirements.Fleet != nil && errors.Is(err, ErrUnreached) {
 			clear(data)
@@ -81,23 +73,8 @@ func (g GuestChecks) CheckGuest(ctx context.Context, contextName string, host ap
 		if ctx.Err() != nil {
 			return nil, ctx.Err()
 		}
-		check := Check{ID: probe.id, Target: host.Name(), Status: capacity.Unknown, Reason: "the bounded prerequisite read did not complete", Next: probe.requirement}
-		var exit ExitStatus
-		if errors.As(err, &exit) {
-			check.Status = capacity.Failed
-			check.Reason = probe.requirement
-		}
-		if err == nil {
-			check.Status = capacity.Failed
-			check.Reason = probe.requirement
-			if probe.accepts(string(data)) {
-				check.Status = capacity.Passed
-				check.Reason = "the host proved this prerequisite"
-				check.Next = ""
-			}
-		}
+		checks = append(checks, probeCheck(probe, host.Name(), data, err))
 		clear(data)
-		checks = append(checks, check)
 	}
 	if requirements.Peers != nil {
 		check := peerNamesCheck(read, host.Name(), *requirements.Peers)
@@ -123,6 +100,32 @@ func (g GuestChecks) CheckGuest(ctx context.Context, contextName string, host ap
 		checks = append(checks, check)
 	}
 	return checks, nil
+}
+
+func untrustedCheck(contextName string, host api.Object, ssh machine.SSHTarget, untrusted UntrustedKey) Check {
+	reason, next := "the SSH host key is not enrolled", "run bootwright machine trust --context "+contextName+" --name "+host.Name()
+	if ssh.KnownHostsRef != "" {
+		reason = "the SSH host key Secret " + ssh.KnownHostsRef + " does not pin one host key for " + machine.SSHHost(ssh.Address, ssh.Port)
+		next = "author Secret " + ssh.KnownHostsRef + " as the one known-hosts entry Machine/" + host.Name() + " offers at " + machine.SSHHost(ssh.Address, ssh.Port)
+	}
+	if untrusted.Fingerprint != "" {
+		reason += "; observed " + untrusted.Fingerprint
+	}
+	return Check{ID: "host.trust", Target: host.Name(), Status: capacity.Unknown, Reason: reason, Next: next}
+}
+
+func probeCheck(probe guestProbe, name string, data []byte, err error) Check {
+	check := Check{ID: probe.id, Target: name, Status: capacity.Unknown, Reason: "the bounded prerequisite read did not complete", Next: probe.requirement}
+	var exit ExitStatus
+	switch {
+	case errors.As(err, &exit):
+		check.Status, check.Reason = capacity.Failed, probe.requirement
+	case err == nil && probe.accepts(string(data)):
+		check.Status, check.Reason, check.Next = capacity.Passed, "the host proved this prerequisite", ""
+	case err == nil:
+		check.Status, check.Reason = capacity.Failed, probe.requirement
+	}
+	return check
 }
 
 func peerNamesCheck(read func([]string) ([]byte, error), name string, peers PeerNames) Check {

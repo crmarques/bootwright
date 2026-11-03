@@ -212,11 +212,6 @@ func (i installProofs) Installed(ctx context.Context, contextName, cluster strin
 	return false, nil
 }
 
-// hostKeyProofs answers, for one Machine, whether a session would prove its
-// host key without first use, from the same sources and in the same order as
-// a session: the declared knownHostsRef pin, the installation's evidence, then
-// the context trust store. A pin is declared desired state and opens no
-// Secret; an observation alone never counts.
 type hostKeyProofs struct {
 	keys    hostKeyReader
 	records trustRecords
@@ -240,8 +235,6 @@ func (h hostKeyProofs) HostKeyProved(ctx context.Context, contextName, name stri
 	}
 	store, err := trust.Decode(data)
 	if err != nil {
-		// A damaged store proves nothing; the repair belongs to machine trust,
-		// and a listing of what is ready must not fail for it.
 		return false, nil
 	}
 	record, found := store.Find(name)
