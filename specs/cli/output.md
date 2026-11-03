@@ -719,7 +719,15 @@ Within an available `cluster info` result, evaluate each entry as follows:
 
 SSH entries describe the default node selected under
 [cluster sessions](../cli.md#cluster-sessions); readiness for that node makes no
-claim about other nodes. The `cluster keyring` entry of a managed Ceph cluster
+claim about other nodes. Its Machine's host key counts as established when the
+[session would prove it without first use](../cli.md#machine-ssh-sessions): a
+declared `access.ssh.knownHostsRef` pin (opening no Secret), the installation
+evidence of a Machine Bootwright installs, or a record of the context trust
+store for the endpoint the session dials; an observation alone never counts.
+Otherwise the entry is `unavailable`, and its reason names
+`bootwright machine trust --context <context> --name <machine>` or declaring
+`knownHostsRef` for a provided Machine, and
+`bootwright apply --context <context> --stage machines` for an installed one. The `cluster keyring` entry of a managed Ceph cluster
 derives from its CephClient resource rows and reads no custody: no
 CephClient row is `unavailable`, saying the cluster declares no
 CephClient; client rows none of which is `done` are `unavailable` with the

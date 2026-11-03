@@ -144,3 +144,23 @@ func TestClusterSessionRefusalsOpenNothing(t *testing.T) {
 		})
 	}
 }
+
+// A stretch cluster's provided tiebreaker sorts first, so it is the default
+// node; a data node named by --node still opens its own Machine.
+func TestClusterExecReachesADataNodeOfAStretchClusterWithAProvidedTiebreaker(t *testing.T) {
+	nodes := []api.Value{
+		node("ceph-02", "ceph-02.lab.test", "ceph-02"),
+		node("arbiter-01", "arbiter-01.lab.test", "arbiter-01"),
+		node("ceph-01", "ceph-01.lab.test", "ceph-01"),
+	}
+	for name, want := range map[string]string{"ceph-01": "ceph-01", "ceph-02.lab.test": "ceph-02", "": "arbiter-01"} {
+		graph, sessions := &fixedGraph{catalog: sessionCatalog(nodes...)}, &recordingSessions{}
+		service := New(graph, sessions, func(context.Context) (string, error) { return "lab", nil }).WithMembers(storageMembers)
+		if _, err := service.ClusterExec(context.Background(), ClusterExecRequest{Names: []string{"ceph"}, Nodes: []string{name}, Command: []string{"ceph", "status"}}); err != nil {
+			t.Fatalf("node %q: %v", name, err)
+		}
+		if len(sessions.opened) != 1 || !slices.Equal(sessions.opened[0].machines, []string{want}) {
+			t.Fatalf("node %q opened %+v, want %s", name, sessions.opened, want)
+		}
+	}
+}

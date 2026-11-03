@@ -172,13 +172,14 @@ func TestInspectionWiringMapsEvidenceReadersToProofs(t *testing.T) {
 		t.Fatalf("storage resources failure = %v", err)
 	}
 	inspectedResourceRows(t)
-	if found, err := (hostKeyProofs{keys: keyFake{found: true}}).HostKeyProved(ctx, "lab", "m1"); err != nil || !found {
+	installedMachine := sshMachine("m1", "192.0.2.11", "", true)
+	if found, err := (hostKeyProofs{keys: keyFake{found: true}}).HostKeyProved(ctx, "lab", "m1", installedMachine); err != nil || !found {
 		t.Fatalf("proved host key = %t (%v)", found, err)
 	}
-	if found, err := (hostKeyProofs{keys: keyFake{}}).HostKeyProved(ctx, "lab", "m1"); err != nil || found {
+	if found, err := (hostKeyProofs{keys: keyFake{}}).HostKeyProved(ctx, "lab", "m1", installedMachine); err != nil || found {
 		t.Fatalf("unproved host key = %t (%v)", found, err)
 	}
-	if _, err := (hostKeyProofs{keys: keyFake{failed: failure}}).HostKeyProved(ctx, "lab", "m1"); !errors.Is(err, failure) {
+	if _, err := (hostKeyProofs{keys: keyFake{failed: failure}}).HostKeyProved(ctx, "lab", "m1", installedMachine); !errors.Is(err, failure) {
 		t.Fatalf("host key failure = %v", err)
 	}
 }

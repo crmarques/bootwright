@@ -27,7 +27,7 @@ func (f *objectHandoffFixture) Effective(context.Context, string) (api.Catalog, 
 func (*objectHandoffFixture) Installed(context.Context, string, string) (bool, error) {
 	return false, nil
 }
-func (*objectHandoffFixture) HostKeyProved(context.Context, string, string) (bool, error) {
+func (*objectHandoffFixture) HostKeyProved(context.Context, string, string, api.Object) (bool, error) {
 	return false, nil
 }
 func (*objectHandoffFixture) DashboardPassword(context.Context, string, string) (inspection.Custodied, bool, error) {

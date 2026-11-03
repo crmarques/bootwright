@@ -139,7 +139,7 @@ func (f *fixture) Installed(_ context.Context, _, cluster string) (bool, error) 
 	return f.installed[cluster], nil
 }
 
-func (f *fixture) HostKeyProved(_ context.Context, _, machine string) (bool, error) {
+func (f *fixture) HostKeyProved(_ context.Context, _, machine string, _ api.Object) (bool, error) {
 	f.keyReads++
 	return f.proved[machine], nil
 }
@@ -331,6 +331,30 @@ func TestMissingEvidenceReportsUnavailableWithTheApplyRemedy(t *testing.T) {
 	}
 	if status := commandStatuses(result.Clusters[0].AccessCommands)[CommandKubeconfig]; status != StatusUnavailable {
 		t.Fatalf("edge kubeconfig = %s", status)
+	}
+}
+
+func TestUnprovedSessionRemedyFollowsWhetherBootwrightInstallsTheMachine(t *testing.T) {
+	provided := api.NewObject(api.Machine, "machine-a", api.Value{}, api.MapValue(field("os", api.MapValue(field("provided", api.BoolValue(true))))))
+	installed := api.NewObject(api.Machine, "machine-a", api.Value{}, api.MapValue(field("os", api.MapValue(field("provided", api.BoolValue(false)), field("installProfileRef", text("profile"))))))
+	for name, machine := range map[string]api.Object{"provided": provided, "installed": installed} {
+		f := newFixture(t)
+		delete(f.proved, "machine-a")
+		f.catalog = api.NewCatalog([]api.Object{storageCluster("storage", "managed", "rhel-01", node("rhel-01", "a", "machine-a")), machine})
+		result, err := f.service("lab").ClusterInfo(context.Background(), ClusterInfoRequest{Names: []string{"storage"}})
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, command := range result.Storage[0].AccessCommands {
+			if command.Command != CommandExec && command.Command != CommandRsh {
+				continue
+			}
+			trusts := strings.Contains(command.Reason, "bootwright machine trust --context lab --name machine-a") && strings.Contains(command.Reason, "access.ssh.knownHostsRef")
+			applies := strings.Contains(command.Reason, "bootwright apply --context lab --stage machines")
+			if command.Status != StatusUnavailable || trusts != (name == "provided") || applies != (name == "installed") {
+				t.Fatalf("%s Machine: %s = %+v", name, command.Command, command)
+			}
+		}
 	}
 }
 

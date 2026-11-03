@@ -24,7 +24,7 @@ func TestClusterInfoAfterDestroyReadsRemovalEvidenceAsUnavailable(t *testing.T) 
 	services, repository, input, root := contextFixture(t)
 	contextRun(t, services, 0, "context", "init", "--name", "alpha", "--input-dir", input)
 	state, _ := compileAcceptance(t, exampleDirectory(t, "libvirt-3-nodes-ceph"))
-	services.EnvironmentInspection = wireInspection(labSessionState{effective: state.Effective()}, services.Lifecycle.(lifecycle.Service), services.Secrets.(*custody.Service), nil)
+	services.EnvironmentInspection = wireInspection(labSessionState{effective: state.Effective()}, services.Lifecycle.(lifecycle.Service), services.Secrets.(*custody.Service), nil, nil)
 	plan, err := reconciliation.NewPlan(reconciliation.Apply, []reconciliation.BlockDefinition{{
 		ID: "install-rhel-01", Description: "install the guest", Stage: reconciliation.StageInfrastructureServices,
 		Kind: installation.Kind, Object: "rhel-01", Implementation: installation.Implementation,

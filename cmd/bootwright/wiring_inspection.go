@@ -15,6 +15,7 @@ import (
 	"github.com/crmarques/bootwright/internal/secrets"
 	"github.com/crmarques/bootwright/internal/secrets/custody"
 	"github.com/crmarques/bootwright/internal/storage/ceph"
+	"github.com/crmarques/bootwright/internal/trust"
 	"github.com/crmarques/bootwright/internal/workspace/contexts"
 )
 
@@ -31,9 +32,13 @@ type hostKeyReader interface {
 	HostKey(ctx context.Context, contextName, name string) (machine.HostKeyEvidence, bool, error)
 }
 
-func wireInspection(state inventory.EffectiveState, reconciler lifecycle.Service, binder *custody.Service, selection contexts.SelectionStore) inspection.Service {
+type trustRecords interface {
+	ReadHostKeys(ctx context.Context, contextName string) ([]byte, error)
+}
+
+func wireInspection(state inventory.EffectiveState, reconciler lifecycle.Service, binder *custody.Service, selection contexts.SelectionStore, records trustRecords) inspection.Service {
 	return inspection.New(effectiveGraph{state: state}, cephInspection{reconciler: reconciler}, installProofs{reconciler: reconciler},
-		hostKeyProofs{keys: machineHostKeys{reconciler: reconciler}}, currentSelection(selection), inspectionCustody{reader: producedReader{binder: binder}}).WithMembers(clusterMembers())
+		hostKeyProofs{keys: machineHostKeys{reconciler: reconciler}, records: records}, currentSelection(selection), inspectionCustody{reader: producedReader{binder: binder}}).WithMembers(clusterMembers())
 }
 
 type producedEntries interface {
@@ -207,9 +212,38 @@ func (i installProofs) Installed(ctx context.Context, contextName, cluster strin
 	return false, nil
 }
 
-type hostKeyProofs struct{ keys hostKeyReader }
+// hostKeyProofs answers, for one Machine, whether a session would prove its
+// host key without first use, from the same sources and in the same order as
+// a session: the declared knownHostsRef pin, the installation's evidence, then
+// the context trust store. A pin is declared desired state and opens no
+// Secret; an observation alone never counts.
+type hostKeyProofs struct {
+	keys    hostKeyReader
+	records trustRecords
+}
 
-func (h hostKeyProofs) HostKeyProved(ctx context.Context, contextName, name string) (bool, error) {
-	_, found, err := h.keys.HostKey(ctx, contextName, name)
-	return found, err
+func (h hostKeyProofs) HostKeyProved(ctx context.Context, contextName, name string, object api.Object) (bool, error) {
+	target, reachable := machine.SSH(object)
+	if reachable && target.KnownHostsRef != "" {
+		return true, nil
+	}
+	if machine.Installed(object) {
+		_, found, err := h.keys.HostKey(ctx, contextName, name)
+		return found, err
+	}
+	if !reachable || h.records == nil {
+		return false, nil
+	}
+	data, err := h.records.ReadHostKeys(ctx, contextName)
+	if err != nil {
+		return false, err
+	}
+	store, err := trust.Decode(data)
+	if err != nil {
+		// A damaged store proves nothing; the repair belongs to machine trust,
+		// and a listing of what is ready must not fail for it.
+		return false, nil
+	}
+	record, found := store.Find(name)
+	return found && record.Address == target.Address && record.Port == target.Port, nil
 }

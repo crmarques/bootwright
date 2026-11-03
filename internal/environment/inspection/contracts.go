@@ -56,6 +56,9 @@ type InstallEvidence interface {
 	Installed(ctx context.Context, contextName, cluster string) (bool, error)
 }
 
+// HostKeys reports whether a session would prove one Machine's host key
+// without first use. The Machine object is the zero Object when the catalog
+// declares no Machine of that name.
 type HostKeys interface {
-	HostKeyProved(ctx context.Context, contextName, machine string) (bool, error)
+	HostKeyProved(ctx context.Context, contextName, name string, object api.Object) (bool, error)
 }

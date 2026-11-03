@@ -279,7 +279,7 @@ func (s Service) storageEntry(ctx context.Context, selected string, catalog api.
 			{Command: CommandRsh, Status: StatusNotApplicable, Reason: roster},
 		}}, nil
 	}
-	session, err := s.sessionAccess(ctx, selected, cluster)
+	session, err := s.sessionAccess(ctx, selected, catalog, cluster)
 	if err != nil {
 		return StorageEntry{}, err
 	}
@@ -318,7 +318,7 @@ func keyringAccess(selected string, cluster api.Object, resources []Resource) Ac
 	return access
 }
 
-func (s Service) sessionAccess(ctx context.Context, selected string, cluster api.Object) (AccessCommand, error) {
+func (s Service) sessionAccess(ctx context.Context, selected string, catalog api.Catalog, cluster api.Object) (AccessCommand, error) {
 	var nodes []environment.Member
 	if s.members != nil {
 		membership, _ := s.members(cluster)
@@ -329,13 +329,18 @@ func (s Service) sessionAccess(ctx context.Context, selected string, cluster api
 	}
 	slices.SortStableFunc(nodes, func(a, b environment.Member) int { return strings.Compare(a.Name, b.Name) })
 	node, host := nodes[0].Name, nodes[0].Machine
-	proved, err := s.keys.HostKeyProved(ctx, selected, host)
+	object, declared := catalog.Find(api.Machine, host)
+	proved, err := s.keys.HostKeyProved(ctx, selected, host, object)
 	if err != nil {
 		return AccessCommand{}, err
 	}
 	if !proved {
+		remedy := "bootwright apply --context " + selected + " --stage machines records it"
+		if declared && !machine.Installed(object) {
+			remedy = "bootwright machine trust --context " + selected + " --name " + host + " records it, or declare access.ssh.knownHostsRef on it"
+		}
 		return AccessCommand{Status: StatusUnavailable, Node: node, Reason: "the Machine " + host + ", which runs node " + node +
-			", has no proved host key; bootwright apply --context " + selected + " --stage machines records it"}, nil
+			", has no proved host key; " + remedy}, nil
 	}
 	return AccessCommand{Status: StatusReady, Node: node}, nil
 }
