@@ -403,11 +403,13 @@ Before any effect, a plan refuses a pool whose CRUSH rule would exceed the
 monitor's per-OSD placement-group bound: the sum of `pgNum × width` over the
 cluster's pools on the rule (width is the replica size, or `k+m`; a
 `cephfsMetadata` pool counts at least 16), plus one `.mgr` placement group
-times the effective default size (2 with the global 2/2 pair, else 3) and 32
-placement groups times the effective default size for each zone pool a
-CephObjectGateway of the cluster derives on `replicated_rule`, plus 32
+times the effective default size (2 with the global 2/2 pair, else 3) and,
+on the cluster's pool rule, 32 placement groups times the zone pool size for
+each zone pool a CephObjectGateway of the cluster derives, plus 32
 placement groups times that size once for the shared `.rgw.root` when the
-cluster has a CephObjectGateway, must not
+cluster has a CephObjectGateway. The zone pool size is the effective default
+size on `replicated_rule`, and 4 on the rule of a
+[stretch cluster](ceph.md#stretch-topology). The sum must not
 exceed 250 times the selected OSD count, at least
 3, or 3 for a rule restricted to a device class.
 
