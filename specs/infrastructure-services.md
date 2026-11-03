@@ -626,7 +626,7 @@ graph, never from authored daemon syntax:
 | Kind | Derived from the graph | Authored |
 | --- | --- | --- |
 | `Proxy` | The client set below, as the only addresses it serves. Before it admits a client it refuses every request whose destination is a loopback or unspecified address (`127.0.0.0/8`, `0.0.0.0/32`, `::1/128`, `::/128`) or a link-local one (`169.254.0.0/16`, `fe80::/10`), and every request for its cache manager; `CONNECT` is not restricted further (`test_the_proxy_refuses_local_link_local_and_manager_destinations_before_it_admits_a_client`). Caching and authentication are disabled. | `bindAddress`, `port` |
-| `DNSServer` | One address record per retained Machine, from its effective `fqdn` contact and its declared IP addresses, and the records each selected container cluster answers at. | `bindAddress`, `port`, `forwarders[]` |
+| `DNSServer` | One name per retained Machine, from its effective `fqdn` contact, answering every declared IPv4 and IPv6 address of that Machine as its own record, with the reverse record on the first address only, and the records each selected container cluster answers at. | `bindAddress`, `port`, `forwarders[]` |
 | `NTPServer` | The client set below, as the only addresses it answers. | `bindAddress`, `port`, `upstreamSources[]` |
 
 The client set is loopback, every selected `NetworkConfig.spec.machineNetwork`
@@ -669,8 +669,8 @@ when the bind address is a wildcard. A frozen request naming no such address,
 such as one an earlier build froze for a wildcard bind without an endpoint that
 admission now refuses, never proves presence, so everything present reads as a
 partial realization (`TestPresenceRequiresEveryDeclaredAnswer`). A proxy
-answers a bounded HTTP request with a well-formed status line; a resolver answers one of its own records over
-both UDP and TCP; a time service returns a server-mode reply, whose stratum may
+answers a bounded HTTP request with a well-formed status line; a resolver answers every declared address of every one of its records over
+UDP, and over TCP as well; a time service returns a server-mode reply, whose stratum may
 show it unsynchronized without being a failure. Readiness therefore proves that
 the service answers, not that it is synchronized to an upstream source, and a
 consumer of a time service accepts a responding source of either kind. An address that never answers

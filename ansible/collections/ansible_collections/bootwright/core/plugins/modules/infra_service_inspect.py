@@ -106,10 +106,7 @@ def answer_for(request, address):
     if kind == "Proxy":
         return probe_http(address, port)
     if kind == "DNSServer":
-        records = request.get("records") or []
-        if not records:
-            raise ValueError("records")
-        return probe_dns(address, port, records[0]["name"])
+        return probe_dns(address, port, request.get("records") or [])
     if kind == "NTPServer":
         return probe_ntp(address, port)
     raise ValueError("kind")

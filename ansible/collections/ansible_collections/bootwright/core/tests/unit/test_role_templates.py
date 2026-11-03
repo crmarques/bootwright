@@ -19,6 +19,7 @@ checks live here.
 from __future__ import annotations
 
 import copy
+import ipaddress
 import os
 import pathlib
 import re
@@ -125,6 +126,8 @@ SCOPES = {
     ("infra_managed_service", "dnsmasq.conf.j2"): {"bootwright_managed_service_request": service(
         "DNSServer", "dns-server-dnsmasq", "dns", 53, forwarders=["198.51.100.53"], records=[
             {"addresses": ["192.0.2.11"], "name": "rhel-01.lab.example.test"},
+            {"addresses": ["198.51.100.11", "203.0.113.11"], "name": "ceph-01.lab.example.test"},
+            {"addresses": ["192.0.2.12", "2001:db8::12"], "name": "dual-01.lab.example.test"},
             {"addresses": ["192.0.2.21", "192.0.2.22"], "name": "apps.sno.lab.example.test", "subtree": True}])},
     ("infra_managed_service", "dnsmasq.container.j2"): {"bootwright_managed_service_request": service(
         "DNSServer", "dns-server-dnsmasq", "dns", 53)},
@@ -266,3 +269,35 @@ def test_a_managed_service_implementation_selects_the_templates_its_daemon_write
     volumes = [line[len("Volume="):].split(":", 1)[0] for line in unit.splitlines() if line.startswith("Volume=")]
     assert volumes == [configuration], "the %s unit mounts %s, not the published %s" % (
         variables["bootwright_managed_service_request"]["kind"], volumes, configuration)
+
+
+def dnsmasq_answers(configuration):
+    """What dnsmasq answers for each name, read by dnsmasq-man(8) semantics.
+
+    A host-record line takes at most one IPv4 and one IPv6 address, and a name
+    repeated across lines is assigned every address (--host-record in
+    https://thekelleys.org.uk/dnsmasq/docs/dnsmasq-man.html); an address=
+    line answers one address of its domain, repeated for more.
+    """
+    answers = {}
+    for line in configuration.splitlines():
+        if line.startswith("host-record="):
+            name, *addresses = line[len("host-record="):].split(",")
+            families = [ipaddress.ip_address(value).version for value in addresses]
+            assert len(families) == len(set(families)), "%r gives one family two addresses; dnsmasq keeps one" % line
+        elif line.startswith("address=/"):
+            name, address = line.split("/")[1:]
+            addresses = [address]
+        else:
+            continue
+        answers.setdefault(name, set()).update(ipaddress.ip_address(value).compressed for value in addresses)
+    return answers
+
+
+def test_the_dns_configuration_answers_every_declared_address_of_a_name():
+    variables = scope(MANAGED_SERVICE, SCOPES[MANAGED_SERVICE, "dnsmasq.conf.j2"])
+    answers = dnsmasq_answers(render(MANAGED_SERVICE, "dnsmasq.conf.j2", variables))
+    assert answers["ceph-01.lab.example.test"] == {"198.51.100.11", "203.0.113.11"}
+    assert answers["dual-01.lab.example.test"] == {"192.0.2.12", "2001:db8::12"}
+    assert answers["rhel-01.lab.example.test"] == {"192.0.2.11"}
+    assert answers["apps.sno.lab.example.test"] == {"192.0.2.21", "192.0.2.22"}

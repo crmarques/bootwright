@@ -48,6 +48,13 @@ in each capability's `catalog.go` under
   configuration and hosts file, so it answers only what the request froze.
 - Readiness queries both UDP and TCP, because a resolver that answers only one
   transport is not usable by a cluster installer.
+- A `host-record` line takes at most one IPv4 and one IPv6 address, so a name
+  with two IPv4 addresses answered only one when its addresses shared a line
+  (B1067). The template writes one `host-record` line per address: dnsmasq-man
+  says a name may appear in more than one `--host-record` and be assigned more
+  than one address, and only its first address creates the PTR record, so
+  reverse lookups never conflict. Readiness therefore queries A and AAAA for
+  every record and requires every declared address in the answer.
 
 ## chrony (`docker.io/dockurr/chrony`, chrony 4.9)
 

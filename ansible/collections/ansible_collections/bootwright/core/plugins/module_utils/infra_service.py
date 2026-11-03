@@ -6,6 +6,7 @@ probe differs, because only the answer a daemon gives is kind-specific.
 
 from __future__ import annotations
 
+import ipaddress
 import os
 import socket
 import struct
@@ -20,6 +21,7 @@ MAX_OUTPUT = 4096
 MAX_STATUS = 128
 PROBE_REASON = 120
 PROBE_TIMEOUT = 5
+DNS_A, DNS_AAAA = 1, 28
 UNIT_STATES = ("active", "activating", "deactivating", "inactive", "failed")
 ENVIRONMENT = {"PATH": "/usr/bin:/usr/sbin", "LC_ALL": "C.UTF-8"}
 TRANSPORTS = {"DNSServer": ("tcp", "udp"), "NTPServer": ("udp",), "Proxy": ("tcp",)}
@@ -164,10 +166,10 @@ def probe_http(address, port):
     return line
 
 
-def dns_query(name):
+def dns_query(name, record_type=1):
     header = struct.pack(">HHHHHH", 0x4257, 0x0100, 1, 0, 0, 0)
     labels = b"".join(bytes([len(part)]) + part.encode("idna") for part in name.split("."))
-    return header + labels + b"\x00" + struct.pack(">HH", 1, 1)
+    return header + labels + b"\x00" + struct.pack(">HH", record_type, 1)
 
 
 def dns_answers(payload, response):
@@ -177,24 +179,85 @@ def dns_answers(payload, response):
     return struct.unpack(">H", response[6:8])[0]
 
 
-def probe_dns(address, port, name):
-    """Prove a resolver answers its own record over both transports."""
-    payload = dns_query(name)
+def skip_name(response, offset):
+    """The offset after one name, whose labels may end in a compression pointer."""
+    while True:
+        if offset >= len(response):
+            raise ValueError("response")
+        length = response[offset]
+        if length & 0xC0 == 0xC0:
+            return offset + 2
+        offset += 1 + length
+        if length == 0:
+            return offset
+
+
+def dns_addresses(payload, response, record_type):
+    """The addresses of the given type a reply carries, normalized."""
+    dns_answers(payload, response)
+    questions, answers = struct.unpack(">HH", response[4:8])
+    offset = 12
+    for index in range(questions):
+        offset = skip_name(response, offset) + 4
+    found = []
+    for index in range(answers):
+        offset = skip_name(response, offset)
+        if offset + 10 > len(response):
+            raise ValueError("response")
+        kind, _klass, _ttl, length = struct.unpack(">HHIH", response[offset:offset + 10])
+        data = response[offset + 10:offset + 10 + length]
+        offset += 10 + length
+        if len(data) != length:
+            raise ValueError("response")
+        if kind == record_type:
+            family = socket.AF_INET6 if record_type == DNS_AAAA else socket.AF_INET
+            found.append(ipaddress.ip_address(socket.inet_ntop(family, data)).compressed)
+    return found
+
+
+def dns_expected(records):
+    """Every address each name must answer, by record type, merged across the records that name it."""
+    expected = {}
+    for record in records:
+        for address in record["addresses"]:
+            value = ipaddress.ip_address(address)
+            kind = DNS_AAAA if value.version == 6 else DNS_A
+            expected.setdefault((record["name"], kind), set()).add(value.compressed)
+    return expected
+
+
+def dns_exchange(address, port, payload):
     datagram = socket.socket(socket.AF_INET6 if ":" in address else socket.AF_INET, socket.SOCK_DGRAM)
     datagram.settimeout(PROBE_TIMEOUT)
     try:
         datagram.sendto(payload, (address, port))
-        answers = dns_answers(payload, datagram.recv(512))
+        return datagram.recv(512)
     finally:
         datagram.close()
+
+
+def probe_dns(address, port, records):
+    """Prove a resolver answers every declared address of every record, and answers over both transports."""
+    if not records:
+        raise ValueError("records")
+    missing = []
+    verified = 0
+    for (name, kind), declared in sorted(dns_expected(records).items()):
+        payload = dns_query(name, kind)
+        answered = set(dns_addresses(payload, dns_exchange(address, port, payload), kind))
+        verified += len(declared & answered)
+        missing.extend("%s %s" % (name, value) for value in sorted(declared - answered))
+    if missing:
+        raise ValueError("unanswered " + ", ".join(missing))
+    payload = dns_query(records[0]["name"])
     with socket.create_connection((address, port), timeout=PROBE_TIMEOUT) as stream:
         stream.settimeout(PROBE_TIMEOUT)
         stream.sendall(struct.pack(">H", len(payload)) + payload)
         length = struct.unpack(">H", stream.recv(2))[0]
         streamed = dns_answers(payload, stream.recv(min(length, 512)))
-    if answers < 1 or streamed < 1:
+    if streamed < 1:
         raise ValueError("answers")
-    return "answers=%d" % answers
+    return "answers=%d" % verified
 
 
 def probe_ntp(address, port):

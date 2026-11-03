@@ -7,6 +7,7 @@ and over real files whose modification times the tests set.
 from __future__ import annotations
 
 import os
+import socket
 import struct
 
 import pytest
@@ -15,9 +16,12 @@ from ansible_collections.bootwright.core.plugins.module_utils import infra_servi
 from ansible_collections.bootwright.core.plugins.module_utils.infra_service import (
     PODMAN,
     SYSTEMCTL,
+    dns_addresses,
     dns_answers,
+    dns_expected,
     dns_query,
     observe,
+    probe_dns,
     probe_targets,
 )
 
@@ -153,3 +157,105 @@ def test_probe_targets_follow_the_bind_address_then_the_endpoints():
     }
     assert probe_targets(wildcard) == ["192.0.2.1", "192.0.2.9"]
     assert probe_targets({"bindAddress": "::", "endpoints": []}) == []
+
+
+def reply(payload, record_type, addresses):
+    """A reply to payload carrying the addresses, the way a resolver compresses the answer name."""
+    family = socket.AF_INET6 if record_type == 28 else socket.AF_INET
+    body = b"".join(
+        b"\xc0\x0c" + struct.pack(">HHIH", record_type, 1, 0, 16 if record_type == 28 else 4) + socket.inet_pton(family, value)
+        for value in addresses)
+    return payload[:2] + struct.pack(">HHHHH", 0x8180, 1, len(addresses), 0, 0) + payload[12:] + body
+
+
+def test_dns_addresses_reads_every_address_of_the_asked_type():
+    payload = dns_query("ceph-01.lab.example.test")
+    assert dns_addresses(payload, reply(payload, 1, ["198.51.100.11", "203.0.113.11"]), 1) == [
+        "198.51.100.11", "203.0.113.11"]
+    payload = dns_query("dual-01.lab.example.test", 28)
+    assert dns_addresses(payload, reply(payload, 28, ["2001:0db8::12"]), 28) == ["2001:db8::12"]
+    assert dns_addresses(payload, reply(payload, 1, ["192.0.2.12"]), 28) == []
+    with pytest.raises(ValueError):
+        dns_addresses(payload, reply(payload, 28, ["2001:db8::12"])[:-4], 28)
+
+
+def test_dns_expected_merges_a_name_across_records_by_address_family():
+    records = [
+        {"addresses": ["203.0.113.11", "198.51.100.11", "2001:DB8::11"], "name": "ceph-01.lab.example.test"},
+        {"addresses": ["192.0.2.50"], "name": "ceph-01.lab.example.test", "subtree": True},
+    ]
+    assert dns_expected(records) == {
+        ("ceph-01.lab.example.test", 1): {"198.51.100.11", "203.0.113.11", "192.0.2.50"},
+        ("ceph-01.lab.example.test", 28): {"2001:db8::11"},
+    }
+
+
+class Stream:
+    def __init__(self, payload):
+        self.payload = payload
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *_):
+        return False
+
+    def settimeout(self, seconds):
+        pass
+
+    def sendall(self, data):
+        self.sent = data
+
+    def recv(self, count):
+        if count == 2:
+            return struct.pack(">H", len(self.payload))
+        return self.payload
+
+
+def resolver(monkeypatch, served):
+    """A resolver answering the addresses served for each (name, type), over both transports."""
+    def exchange(_address, _port, payload):
+        name = ".".join(part.decode() for part in dns_labels(payload))
+        kind = struct.unpack(">H", payload[-4:-2])[0]
+        return reply(payload, kind, served.get((name, kind), []))
+
+    def connect(_endpoint, timeout):
+        assert timeout == infra_service.PROBE_TIMEOUT
+        payload = dns_query("ceph-01.lab.example.test")
+        return Stream(reply(payload, 1, ["198.51.100.11"]))
+
+    monkeypatch.setattr(infra_service, "dns_exchange", exchange)
+    monkeypatch.setattr(infra_service.socket, "create_connection", connect)
+
+
+def dns_labels(payload):
+    offset, labels = 12, []
+    while payload[offset]:
+        labels.append(payload[offset + 1:offset + 1 + payload[offset]])
+        offset += 1 + payload[offset]
+    return labels
+
+
+RECORDS = [
+    {"addresses": ["198.51.100.11", "203.0.113.11"], "name": "ceph-01.lab.example.test"},
+    {"addresses": ["192.0.2.12", "2001:db8::12"], "name": "dual-01.lab.example.test"},
+]
+
+
+def test_a_resolver_answering_every_declared_address_is_proved(monkeypatch):
+    resolver(monkeypatch, {
+        ("ceph-01.lab.example.test", 1): ["198.51.100.11", "203.0.113.11"],
+        ("dual-01.lab.example.test", 1): ["192.0.2.12"],
+        ("dual-01.lab.example.test", 28): ["2001:db8::12"],
+    })
+    assert probe_dns("192.0.2.1", 53, RECORDS) == "answers=4"
+
+
+def test_a_resolver_answering_only_one_of_two_addresses_is_not_proved(monkeypatch):
+    resolver(monkeypatch, {
+        ("ceph-01.lab.example.test", 1): ["203.0.113.11"],
+        ("dual-01.lab.example.test", 1): ["192.0.2.12"],
+        ("dual-01.lab.example.test", 28): ["2001:db8::12"],
+    })
+    with pytest.raises(ValueError, match="unanswered ceph-01.lab.example.test 198.51.100.11"):
+        probe_dns("192.0.2.1", 53, RECORDS)

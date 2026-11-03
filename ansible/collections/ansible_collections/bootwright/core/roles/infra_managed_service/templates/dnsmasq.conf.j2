@@ -4,6 +4,9 @@
   those records rather than silently reaching an ambient upstream. A subtree
   record answers for every name beneath it as well, which is what a cluster's
   applications name means; every other record answers its exact name alone.
+  Every address is its own record line: a host-record line takes at most one
+  IPv4 and one IPv6 address, while a name repeated across lines answers every
+  address, and only the name's first address gets the reverse (PTR) record.
 #}
 listen-address={{ bootwright_managed_service_request.bindAddress }}
 port={{ bootwright_managed_service_request.port }}
@@ -19,7 +22,9 @@ bogus-priv
 address=/{{ record.name }}/{{ address }}
 {% endfor %}
 {% else %}
-host-record={{ record.name }},{{ record.addresses | join(',') }}
+{% for address in record.addresses %}
+host-record={{ record.name }},{{ address }}
+{% endfor %}
 {% endif %}
 {% endfor %}
 {% for forwarder in bootwright_managed_service_request.forwarders | default([]) %}
