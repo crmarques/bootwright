@@ -3078,11 +3078,23 @@ runbook applies that directory, so its `apply` would refuse the same way.
 `TestEveryE2ECaseRenderPlansWithoutRefusal` marks the render with that
 refusal text and fails once it no longer refuses.
 
-**Outcome:** to be decided: give the rehearsal's install a root device the
-[physical installation](../managed-os.md) admits, or state why the
-rehearsal's emulated host keeps a virtual disk name and plan it accordingly.
+The case alone cannot fix it: a libvirt Machine's disks carry no WWN by
+contract (B111, [D44](#d44); [substrates](../substrates.md)), virtio-blk cannot
+present one, and a made-up by-id path would pass the plan and stop the
+installer's `%pre` check instead. The refusal is B802's safety rule and
+stays.
+
+**Outcome:** to be decided by the owner, since (a) reverses part of D44:
+(a) an opt-in libvirt root disk on the virtio-SCSI controller with a WWN
+derived like a data-disk serial, which the rehearsal profile selects and
+`metal-01` names by its `wwn-0x` path, so the rehearsal exercises the real
+by-id path and `%pre` proof (recommended; a public profile field, a moved
+libvirt request version and automation digest, inspection evidence of the
+root's WWN); or (b) the rehearsal and its operator gate stop at plan for
+the install, and installation is proved only on real hardware.
 **Requires:** none. **Definition:** `Needs definition`. **Exit evidence:**
-the render plans and its `refuses` mark is removed. Delivery is not started.
+the render plans and its `refuses` mark is removed, or the gate and runbook
+state the narrowed rehearsal. Delivery is not started.
 
 ### Audit remediation lanes
 
