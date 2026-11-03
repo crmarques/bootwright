@@ -65,7 +65,7 @@ worker, took 1054 s instead of 189 s across the five unit phases of a
 2026-11-02 `make check` while still carrying execnet's I/O thread. The gate
 therefore selects the mode explicitly (`units_arguments` and
 `UNITS_WORKERS_AUTO` in `scripts/tools/ansible_check.py`), and the plain pytest
-loop after it is the in-process serial run that settles every test with no
+loop, in a lane beside it, is the in-process serial run that settles every test with no
 worker thread. `UnitsWorkersTest` reads the `-n` value from the command
 `ansible-test units --explain` generates
 ([B798](../../specs/milestones/delivered.md#x278--the-owners-choices-for-b508-and-b798)).

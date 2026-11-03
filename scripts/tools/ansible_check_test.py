@@ -9,6 +9,8 @@ import string
 import subprocess
 import sys
 import tempfile
+import threading
+import time
 import unittest
 from unittest import mock
 import warnings
@@ -180,7 +182,9 @@ class NarrowedUnitsTest(unittest.TestCase):
         return status, calls
 
     def test_a_parallel_pass_or_a_confirmed_failure_exits_as_the_run_did(self):
-        self.assertEqual(self.narrowed(0), (0, [["pytest", "-n", "auto", "a/b/c/one", "a/b/c/two"]]))
+        self.assertEqual(
+            self.narrowed(0), (0, [["pytest", "-n", "auto", "a/b/c/one", "a/b/c/two"]])
+        )
         status, calls = self.narrowed(1, 1)
         self.assertEqual((status, len(calls)), (1, 2))
         self.assertNotIn("FLAKY", self.output)
@@ -239,12 +243,187 @@ class UnitsWorkersTest(unittest.TestCase):
         arguments = ansible_check.units_arguments("--color", "no")
         self.assertEqual(
             arguments,
-            ["units", "--num-workers", ansible_check.UNITS_WORKERS_AUTO, "--color", "no"],
+            [
+                "units",
+                "--num-workers",
+                ansible_check.UNITS_WORKERS_AUTO,
+                "--color",
+                "no",
+            ],
         )
 
     def test_one_worker_is_not_auto(self):
         arguments = ["units", "--num-workers", "1"]
         self.assertEqual(self.pytest_workers(arguments), "1")
+
+
+class LanesTest(unittest.TestCase):
+    """Lanes run beside one another, and the first that failed decides."""
+
+    def lanes(self, *lanes) -> int:
+        """Run the named lanes and keep what the run printed."""
+        output = io.StringIO()
+        with ansible_check.check_area() as temporary, contextlib.redirect_stdout(
+            output
+        ):
+            status = ansible_check.run_lanes(list(lanes), Path(temporary) / "logs")
+        self.output = output.getvalue()
+        return status
+
+    def test_lanes_run_beside_one_another(self):
+        barrier = threading.Barrier(2, timeout=10)
+
+        def meet(output):
+            barrier.wait()
+
+        self.assertEqual(self.lanes(("a", meet), ("b", meet)), 0, self.output)
+
+    def test_the_first_failed_lane_decides_and_the_others_still_finish(self):
+        finished = threading.Event()
+
+        def fail(output):
+            raise subprocess.CalledProcessError(3, ["check"])
+
+        def finish(output):
+            time.sleep(0.2)
+            finished.set()
+
+        self.assertEqual(self.lanes(("a", fail), ("b", finish)), 3)
+        self.assertTrue(finished.is_set())
+        self.assertIn("lane a: FAILED with status 3", self.output)
+        self.assertIn("lane b: passed", self.output)
+
+    def test_several_lanes_never_report_flaky(self):
+        def flaky(output):
+            return ansible_check.FLAKY_STATUS
+
+        self.assertEqual(self.lanes(("a", flaky), ("b", lambda output: None)), 1)
+
+    def test_one_lane_owns_the_terminal_and_its_status(self):
+        given = []
+
+        def flaky(output):
+            given.append(output)
+            return ansible_check.FLAKY_STATUS
+
+        self.assertEqual(self.lanes(("a", flaky)), ansible_check.FLAKY_STATUS)
+        self.assertEqual(given, [None])
+
+    def test_each_lane_output_is_printed_whole_with_its_refusal(self):
+        def write(output):
+            output.write("one\ntwo\n")
+            raise SystemExit("the reason")
+
+        self.assertEqual(self.lanes(("a", write), ("b", lambda output: None)), 1)
+        self.assertIn(
+            "===== lane a =====\none\ntwo\nthe reason\n===== end of lane a =====",
+            self.output,
+        )
+
+    def test_collection_lanes_write_apart(self):
+        with ansible_check.check_area() as temporary:
+            area = Path(temporary)
+            collection = area / "source"
+            for name in ("tests/unit/__pycache__", "tests/output", "roles"):
+                (collection / name).mkdir(parents=True)
+            (collection / "roles/main.yml").write_text("[]\n", encoding="utf-8")
+            wheelhouse = area / "wheels"
+            wheelhouse.mkdir()
+            (wheelhouse / "get_pip_25_2.py").write_text("", encoding="utf-8")
+            homes = set()
+            for name in ("one", "two"):
+                copy, environment = ansible_check.collection_lane(
+                    area, name, collection, wheelhouse, {"HOME": str(area)}
+                )
+                lane = area / name
+                self.assertTrue((copy / "roles/main.yml").is_file())
+                self.assertFalse((copy / "tests/unit/__pycache__").exists())
+                self.assertFalse((copy / "tests/output").exists())
+                for variable in (
+                    "HOME",
+                    "TMPDIR",
+                    "XDG_CACHE_HOME",
+                    "ANSIBLE_LOCAL_TEMP",
+                    "ANSIBLE_REMOTE_TEMP",
+                    "ANSIBLE_COLLECTIONS_PATH",
+                    "ANSIBLE_TEST_CONTENT_ROOT",
+                ):
+                    with self.subTest(lane=name, variable=variable):
+                        self.assertTrue(
+                            Path(environment[variable]).is_relative_to(lane)
+                        )
+                homes.add(environment["HOME"])
+            self.assertEqual(len(homes), 2)
+
+    def names(self, arguments: list[str], targets: list[str]) -> list[str]:
+        """Return the lanes check_lanes builds for a command line."""
+        selected, _ = ansible_check.selected_suites(arguments)
+        run = ansible_check.Run(
+            Path("/root"),
+            Path("/venv/bin/python"),
+            Path("/root/ansible"),
+            Path("/root/ansible/collection"),
+            Path("/fixtures"),
+            Path("/area"),
+            {},
+            selected,
+            targets,
+        )
+        with (
+            mock.patch.object(
+                ansible_check, "prepared_wheelhouse", lambda run_: Path("/w")
+            ),
+            mock.patch.object(
+                ansible_check,
+                "floor_interpreter",
+                lambda *_: ("3.9", Path("/f/python")),
+            ),
+        ):
+            lanes = ansible_check.check_lanes(run, [], Path("/area/inventory.json"))
+        return [name for name, _ in lanes]
+
+    def test_the_gate_runs_every_lane_and_a_narrowed_run_one(self):
+        self.assertEqual(
+            self.names([], []),
+            ["syntax", "lint", "sanity", "units", "integration", "plain"],
+        )
+        self.assertEqual(self.names(["--suite", "units"], []), ["units", "plain"])
+        self.assertEqual(self.names(["--suite", "units", "a"], ["a"]), ["plain"])
+        self.assertEqual(self.names(["--suite", "sanity", "a"], ["a"]), ["sanity"])
+        self.assertEqual(self.names(["--suite", "lint"], []), ["lint"])
+
+    def test_the_plain_lane_runs_one_serial_pytest_in_process(self):
+        commands = []
+
+        def run(command, **_):
+            commands.append(command)
+            return subprocess.CompletedProcess(command, 0)
+
+        with ansible_check.check_area() as temporary:
+            area = Path(temporary)
+            collection = area / "source"
+            (collection / "tests/unit").mkdir(parents=True)
+            wheelhouse = area / "wheels"
+            wheelhouse.mkdir()
+            (wheelhouse / "get_pip_25_2.py").write_text("", encoding="utf-8")
+            run_ = ansible_check.Run(
+                area,
+                Path("/venv/bin/python"),
+                area,
+                collection,
+                area,
+                area,
+                {},
+                {"units"},
+                [],
+            )
+            with mock.patch.object(ansible_check.subprocess, "run", run):
+                lane = ansible_check.plain_lane(run_, wheelhouse)
+                self.assertIsNone(lane(None))
+        self.assertEqual(len(commands), 1)
+        self.assertEqual(commands[0][1:5], ["-P", "-s", "-m", "pytest"])
+        self.assertNotIn("-n", commands[0])
+        self.assertTrue(commands[0][-1].endswith("tests/unit"))
 
 
 if __name__ == "__main__":

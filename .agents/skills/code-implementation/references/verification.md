@@ -53,7 +53,7 @@ targets. A collection test that reads a role or a plugin as data without
 importing or naming it is reached only through the whole-tree run a non-Python
 change triggers. Its parallel unit runs settle each failure by a serial rerun;
 the gate's ansible-test unit phases run on pytest-xdist workers
-(`-n auto`, selected explicitly), and the plain pytest loop after them runs
+(`-n auto`, selected explicitly), and the plain pytest loop in its own lane beside them runs
 every test serially in-process. A failure that passes only on the serial
 rerun is flaky, not a pass, and is recorded as flaky: the units step exits 75,
 and focus prints its output and FLAKY and exits 75, not 0 or 1; any other

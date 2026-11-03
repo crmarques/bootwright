@@ -22,20 +22,31 @@ Set `BOOTWRIGHT_ANSIBLE_BOOTSTRAP_PYTHON` to choose it, or
 `BOOTWRIGHT_ANSIBLE_CHECK_PYTHON` to supply a prepared interpreter and skip the
 bootstrap entirely. Keep the environment outside tracked content. The gate checks all locked tool
 versions, supplies isolated inventory/configuration/cache paths, runs every
-shipped playbook through syntax checking, and runs Ansible Lint offline. It then
-copies the collection into a temporary area and runs all applicable Ansible
-sanity checks, the sanity import test again under the managed-host floor
-interpreter, collection unit tests, the module and module utility unit tests
-again under that floor, and the synthetic controller tool and supervisor
-integration targets.
+shipped playbook through syntax checking, and runs Ansible Lint offline. It
+runs all applicable Ansible sanity checks, the sanity import test again under
+the managed-host floor interpreter, collection unit tests, the module and
+module utility unit tests again under that floor, and the synthetic controller
+tool and supervisor integration targets.
+
+Those checks run in lanes beside one another
+([D223](../../specs/milestones/backlog.md#d223)): syntax, lint, sanity then the
+floor import, the ansible-test units then the floor units, the integration
+targets, and the plain loop. A lane runs its own checks in order and reads
+nothing another lane writes: each has its own `HOME` and temporary directory
+in the check area, and each lane that runs ansible-test or pytest tests its own
+copy of the collection. The two ansible-test unit runs share a lane, so their
+pytest-xdist worker pools never overlap. Each lane's output is printed whole
+when it ends, then a line per lane with its verdict and time; the first lane
+that failed gives the exit status, and every lane runs to its end. A run that
+selects one lane, as a narrowed suite does, runs it alone on the terminal.
 
 The `units` suite first runs the harness's own tests,
 `scripts/tools/ansible_check_test.py`, and names its temporary area to them in
 `BOOTWRIGHT_ANSIBLE_CHECK_AREA`. They parse that area's path, and other area
 paths, as every ansible-core process does, since that area is each process's
 `HOME`; run by hand, without the variable, they skip the gate's area. The suite
-then runs the unit tests twice: under `ansible-test units`, then as the plain
-loop the
+then runs the unit tests twice, in lanes of their own: under `ansible-test
+units`, and as the plain loop the
 [collection structure](../../specs/architecture.md#ansible-collection-structure)
 supports, pytest alone from the copy's collections directory with that
 directory on `PYTHONPATH`; a failure of either fails the suite. By hand, the

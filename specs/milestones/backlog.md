@@ -6588,3 +6588,24 @@ left waiting, each with the option recommended to the owner:
   plain pytest loop after it stays the in-process serial run.
 
 Both are slice [X278](delivered.md#x278--the-owners-choices-for-b508-and-b798).
+
+### D223
+
+**owner** (2026-11-02): "could you review all tests that are executed before
+merging to main? the idea is to make development faster, but safe", then,
+offered four changes to [B1054](#b1054), each keeping every test that runs
+today, chose all four:
+
+- The Ansible check's independent phases run beside one another: syntax,
+  lint, sanity, the ansible-test units, the integration targets and the plain
+  serial loop. The plain loop stays the in-process serial run of
+  [D222](#d222), in its own copy of the collection.
+- The Go targets of `make check` run beside the Ansible check.
+- One `make check` per integration: the task branch is rebased onto the
+  destination first and the gate runs once on the rebased commit.
+- A passing Ansible check is recorded under a key over every input it reads,
+  and a full run whose key matches a recorded pass reuses it and says so;
+  CI never reads the record and always runs the check in full.
+
+The concurrent forms land only after repeated full gate runs with no new
+failure.
