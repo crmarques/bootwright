@@ -233,7 +233,6 @@ Alias cell.
 | [B999](#b999) | new, 2026-10-30 (X235 review; pre-existing) | defect | Add-ons | Selection reports two built-in packages that create one CatalogSource name or share one hosted namespace on a cluster | No profile selects two such packages today; the check belongs with the package-facts selection rules, not B90's authored slice |
 | [B1050](#b1050) | new, 2026-11-02 (`make check` during the Ceph E2E fixes) | defect | Managed OS | The physical target proof's partition case is deterministic under concurrent gate runs, or its cause is recorded | Failed once in a gate run beside a second one and passed on rerun and in 20 isolated runs; gates no milestone |
 | [B1053](#b1053) | new, 2026-11-02 (owner's request: `make test` too slow) | enabling | Architecture and developer tooling | The Go suite's slowest packages run their independent tests concurrently | Partly delivered by X286; the rest needs a shared-state audit of each package; gates no milestone |
-| [B1062](#b1062) | new, 2026-11-03 (B1059's E2E planning test) | defect | Managed OS | The bare-metal rehearsal case plans: its install context names a root device a physical installation admits | Found by planning every E2E render; M1 takes no new findings; the rehearsal is an owner-run case |
 | [B771](#b771) | new, 2026-10-20 (D173); folds B365 | defect | Add-ons, with Workspace | The `add-ons/_store` selection exception, its marker and its reader rules leave the input reader | Dead surface now that B89 is retired; removing input-reader rules is not needed by any M4 package |
 | [B772](#b772) | new, 2026-10-20 (D173) | product | Add-ons | A package installed through OLM v1 (`ClusterExtension`) | ODF/FDF, ACM, MCE and GitLab do not qualify; own-namespace installs are Technology Preview |
 | [B773](#b773) | new, 2026-10-20 (D173) | product | Add-ons | A registry credential merged into a cluster's global pull secret with an exact-entry receipt | Its inverse never runs under retirement; the install pull secret carries entitlements from first boot |
@@ -3069,33 +3068,6 @@ roadmap step or batch, and the Not yet met lines in the specs point to them.
 Like every parked item, these authorize nothing: a lane, an item or a set of
 lanes runs on an explicit request, which attaches its items to a slice.
 
-### B1062
-
-`e2e/lab-baremetal-rehearsal` validates, but its install directory refuses at
-plan: a physical installation erases only a root disk named by its
-`/dev/disk/by-id/wwn-0x` path, and `metal-01` names `/dev/vda`. The case's
-runbook applies that directory, so its `apply` would refuse the same way.
-`TestEveryE2ECaseRenderPlansWithoutRefusal` marks the render with that
-refusal text and fails once it no longer refuses.
-
-The case alone cannot fix it: a libvirt Machine's disks carry no WWN by
-contract (B111, [D44](#d44); [substrates](../substrates.md)), virtio-blk cannot
-present one, and a made-up by-id path would pass the plan and stop the
-installer's `%pre` check instead. The refusal is B802's safety rule and
-stays.
-
-**Outcome:** to be decided by the owner, since (a) reverses part of D44:
-(a) an opt-in libvirt root disk on the virtio-SCSI controller with a WWN
-derived like a data-disk serial, which the rehearsal profile selects and
-`metal-01` names by its `wwn-0x` path, so the rehearsal exercises the real
-by-id path and `%pre` proof (recommended; a public profile field, a moved
-libvirt request version and automation digest, inspection evidence of the
-root's WWN); or (b) the rehearsal and its operator gate stop at plan for
-the install, and installation is proved only on real hardware.
-**Requires:** none. **Definition:** `Needs definition`. **Exit evidence:**
-the render plans and its `refuses` mark is removed, or the gate and runbook
-state the narrowed rehearsal. Delivery is not started.
-
 ### Audit remediation lanes
 
 A lane is an ordered sequence of items that touch the same code; lanes marked
@@ -3311,6 +3283,8 @@ item, whose Alias cell names the old ID too. Searching an old ID over
 | B397 | 2026-10-20 | Folded under [D172](#d172) into [B308](delivered.md#b308), whose refusal-table rows include the off-controller boot-image server. |
 | B89 | 2026-10-20 | Alias C10. Moved from M6 and folded under [D173](#d173) into [B752](delivered.md#b752) (built-in packages need no acquisition; authored packages are input-tree data frozen with the context) and [B754](delivered.md#b754) (the registration commands are removed); its `add-ons/_store` exception is parked as [B771](#b771). |
 | B365 | 2026-10-20 | Folded under [D173](#d173) into [B771](#b771), which removes the `add-ons/_store` exception and its marker, so the hard-linked-marker disagreement leaves with them. |
+| B496 | 2026-11-03 | [D224](#d224): its remaining gate was the emulated bare-metal rehearsal; its in-tree delivery, the generated `issuerRef` CA-signed leaf of D175, stays on main. |
+| B1062 | 2026-11-03 | [D224](#d224): the emulated bare-metal rehearsal it would have planned was removed. |
 
 ## Decisions
 
@@ -6612,3 +6586,15 @@ today, chose all four:
 
 The concurrent forms land only after repeated full gate runs with no new
 failure.
+
+### D224
+
+**owner** (2026-11-03): "no need to simulate bare metal in tests. when the
+time to test real bare metal comes, we will perform it and bootwright must be
+ready for it on real scenario." No case, example or gate emulates a physical
+host to stand in for the physical path: the `lab-baremetal-rehearsal` case
+and its rehearsal substrate are removed, B496 and B1062 are retired, and
+B73's and B67's acceptance is the owner's run on real hardware. Virtual
+Machines behind an emulated BMC stay what they are, the libvirt+sushy
+substrate, never a physical stand-in. The physical-path refusals and tests
+stay, so the real run starts from a qualified build.
