@@ -228,8 +228,8 @@ option, and the later settings block cannot repair a prerequisite inside
 cluster licensing. [D219](../../specs/milestones/backlog.md#d219) makes the license call raise
 the bound to `LICENSE_STORE_FLOOR` before acceptance and prove the persisted
 and running values; it is a fixed provider prerequisite, not a release-label
-branch or config pass-through. [B1014](../../specs/milestones/m2.md#b1014)
-tracks its native acceptance; unassisted bootstrap is not yet observed. The separate
+branch or config pass-through. [B1014](../../specs/milestones/delivered.md#x289--owner-acceptance-of-the-three-node-ceph-run-of-2026-11-03)
+records its native acceptance by the owner's three-node run of 2026-11-03. The separate
 FIPS artifact blocker remains [B1013](../../specs/milestones/m2.md#b1013).
 Required acceptance readback stays with the
 [readiness contract](../../specs/ceph.md#resources-readiness-and-access).

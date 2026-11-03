@@ -6037,7 +6037,7 @@ that stops a managed network other tenants' running domains use, and
 same-name context adopt abandoned objects. Under `diff --observe` the Ceph
 cluster and client blocks and the agent install and media blocks read unknown
 until their observation runs without outputs
-([B596](m2.md#b596)). A read refuses `lifecycle.lease` while an apply
+([B596](#x289--owner-acceptance-of-the-three-node-ceph-run-of-2026-11-03)). A read refuses `lifecycle.lease` while an apply
 runs, and an `--observe` holds the shared lock so an `apply` refuses meanwhile
 ([B18](delivered.md#b18)). A canceled `--observe` can leave a read-only Ceph worker
 running to its own deadline ([B573](backlog.md#b573)). Only the libvirt Machine
@@ -10979,7 +10979,7 @@ The internal port now has one owner in `internal/storage/cephcluster`, the
 management gateway's unit carries it to the check, and the check requires it
 on the management ingress hosts. The same port reaches the
 [host requirements](../managed-os.md#host-firewall-requirements) the managed
-OS realizes under [B1022](m2.md#b1022). Collection cases refuse a management
+OS realizes under [B1022](#x289--owner-acceptance-of-the-three-node-ceph-run-of-2026-11-03). Collection cases refuse a management
 ingress zone without the port and pass with it, or with a named service that
 grants it. The delivering commit records the gates and their results.
 
@@ -11219,3 +11219,119 @@ commands to those the serial gate ran.
 Three consecutive `make check` runs with an uncached Go suite passed in 354,
 301 and 300 s, against 973 s before X287, with every lane passing each time.
 The delivering commits record the gates and their results.
+
+### X289 — Owner acceptance of the three-node Ceph run of 2026-11-03
+
+**Items:** B1006 to B1012, B1014, B1019, B1022 to B1030, B1038 to B1043,
+B1049, B1052, B1055 to B1057, B1065 and B596, completed.
+**Kind:** defect, with the safety, product and enabling items named below.
+**Owners:** Storage, Managed OS, State reconciliation and Operator guidance.
+The same acceptance covers one release row of an open item and one arm of
+another; both items stay open (see "What stays open").
+
+The owner accepts the successful run of the
+[three-node Ceph case](../../e2e/lab-3-nodes-ceph/runbook.md) in the
+[acceptance ledger](../../docs/acceptance.md#ledger), with the deviations
+below written into its row. The build is commit
+`d29e1796bd0f4c5616f173c41a4b3c1aba07a3e4`, which the operation status records
+as "Registered by devel (d29e1796b…)". Its source is clean by the owner's
+attestation: the run's binary was removed with its worktree before its
+`version` output was captured. The build descends from the baseline
+`d21d183d003da788c056596f3589f3f62a873cf8` registered for every item above
+except B1065, and from B1065's baseline
+`61797f5cc597db51337a1abeb462349c2f65c528`.
+
+The case is IBM Storage Ceph 9.9.1.2 (20.2.1-405.el9cp, image
+`ceph-9-rhel9@sha256:8dae4b5b8f07c7fa95bd1d68b22d4c1dd4c2d323d533d807dc1ceae4e329cb7f`)
+on RHEL guests under libvirt, with every service group except NVMe-oF and the
+native-default CephX key type (the MON map reads `aes256k`).
+
+**What delivered which item.** The in-tree work and its gates are the
+delivering commits' own. Native helper and host preparation: B1006 (X250),
+B1007 (X251), B1008 (X252), B1009 (X253), B1010 (X259), B1011 (X254), B1012
+(X255), B1038 (X285), B1039 (X281) and B1049 (X285). Licensing: B1014 (X271).
+Cluster blocks: B1019 (X263), B1028 (X261), B1029 (X262), B1023 (X266), B1024
+(X267), B1025 (X268), B1026 (X269) and B1027 (X270). Concurrency: B1040 to
+B1043 and B1052 (X279). The host firewall: B1022 (X265) and B1065. The
+runbook's checks: B1030 (X273). Observation: B596 (X282), B1055, B1056 and
+B1057. B1038, B1039, B1042 and B1043 are product items; B1022 is a safety
+item; B596 is enabling; the rest are defects.
+
+**The apply** (`op-3ef8a3d77a8c5d532caf9440d6c8ad3a`) ran the staged controller,
+infrastructure-services and substrates, machines and clusters stages. The
+clusters stage was interrupted once with Ctrl-C and continued on the same
+operation to 52/52 with the handoff ready. The settle apply had nothing to do,
+and `diff --observe` read 52 blocks, none unknown and no differences, twice:
+after verification and after the drills. Its log digest is
+`ace37be29a07bbcef362e8979ffea46052fb7edd766466deb8a6c80163345ccb`.
+
+**The destroy** (`op-d6a20f8d8715a184610f735496a6c860`) refused
+`lifecycle.live` while the guests ran, then completed 52/52 after `machine
+stop`. No domain or network was left; the evidence archive verified; the
+context was purged; the listener firewall was restored; the diagnostic tools
+record was empty; and the run files and worktree were removed. Its log digest
+is `04f98c5a40a94003d063147e3a672a6b141f0829a0ebb81a87f60216c677de26`.
+
+**The checks** passed in every group the runbook names:
+
+- Core: `HEALTH_OK`, three MONs, an active and a standby manager, three OSDs,
+  340 placement groups `active+clean`, every daemon on 20.2.1-405 release
+  9.9.1.2 and on the frozen digest, Call Home on, the crash service on three
+  hosts, MON v2 and v1, and `aes256k`.
+- Block: the rule `ssd-hosts`, `rbd-data` at 2/2 with `pg_num_max` 16, image
+  features, scoped client capabilities, a 1 MiB write and compare, a 16 MiB
+  resize, the out-of-scope refusal and the keyring handoff byte count.
+- File: `max_mds` 1 with one standby, two pools of the `cephfs` filesystem,
+  group and subvolume mode 750, a 1 GiB quota, a scoped mount's write and
+  compare, and the refusal on another subvolume.
+- Object: two RGW daemons, HTTP/2 200 through the endpoint name, the wrong name
+  refused by TLS, and put, list, get and delete.
+- NFS: the export as declared, the allowed client's write and read as uid
+  2000, and the denied client's `No such file or directory`.
+- Observability: every service running, including the management ingress,
+  Loki and Alloy; the gateway answering; the Loki labels; and the `ceph`,
+  `ceph-exporter` and `node-exporter` targets up, with the ingress, NFS and
+  SMB targets down as the runbook records for 9.9.1.2
+  ([vendor limitation](../../.agents/knowledge/ibm-ceph-live-host-facts.md)).
+- The guests' firewall services were realized with no manual step.
+
+**The drills.** The MDS failover moved rank 0 in 4 s with the data readable
+and writable. The one-host outage of `rhel-03` left quorum 2/3 with an OSD down,
+then `HEALTH_OK` with three MONs and every OSD up and in, and no apply. Replay
+settled and `diff` read clean. The object and ingress failovers passed on a
+repeat with waits: the RGW daemon was confirmed down before the S3 put and get
+succeeded through the virtual IP, and with keepalived stopped the VIP
+`198.51.100.60` moved to `rhel-03` and an S3 get succeeded.
+
+**Deviations the owner accepted**, each written into the ledger row:
+
+1. The interruption's Ctrl-C landed on the monitoring and `nfs.shares`
+   services, the `rbd-canary` client and the `s3-canary` user, not on a pool or
+   filesystem block as the runbook asks. Their resolutions read completed
+   (monitoring, `nfs.shares`, `s3-canary`) and no-effect followed by one second
+   attempt (`rbd-canary`), so nothing was done twice.
+2. The first object and ingress failover attempts proved nothing, because the
+   runbook's commands do not wait for `ceph orch daemon stop`. That RGW stop
+   exceeded podman's 10 s stop timeout (the radosgw deduplication shutdown),
+   was killed and left the daemon in `error` until `orch daemon start`
+   recovered it. Both drills passed on a repeat with waits;
+   [B1066](m2.md#b1066) records the runbook correction.
+3. SMB writes were refused with `NT_STATUS_ACCESS_DENIED`
+   ([B1031](m2.md#b1031), open, as the runbook records).
+4. B626's same-apply license-call continuation is shown only indirectly: the
+   cluster block completed in one attempt with no refusal, and neither the
+   block log nor `cluster info` names the call.
+5. The `version` and `preflight storage-cluster` outputs were not retained.
+   B1065's acceptance rests on the owner's earlier live test of the fix, which
+   read `host.firewall` passed on all three guests, and on the owner's
+   attestation of this run.
+
+**What stays open.** [B626](m2.md#b626)'s 9.9.0.3 and 9.9.2.0 release rows.
+[B492](m2.md#b492)'s mount and client data, erasure-coded data pool and
+removal-order arms; its MDS failover is accepted here and its interrupted
+creation by the 2026-11-03 row of build `974f6595e`, which this record leaves
+unchanged. [B1031](m2.md#b1031)'s SMB share ownership.
+[B1013](m2.md#b1013)'s FIPS artifact. The matrix profiles of
+[B484](m2.md#b484), which this one case does not accept. The runbook
+correction of [B1066](m2.md#b1066). The earlier same-day attempts are the
+ledger's own rows and accept nothing here.

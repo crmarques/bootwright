@@ -176,6 +176,6 @@ configuration change from exposing it. Connection directives and `Host` or
 
 This is a parser lesson, not a release-specific exception or FIPS
 certification. [The security spec](../../specs/security.md#network-remote-systems-and-privilege)
-owns the boundary; [B1011](../../specs/milestones/m2.md#b1011) owns the repair
-and its remaining acceptance. The controller's independent policy parser is
+owns the boundary; [B1011](../../specs/milestones/delivered.md#x289--owner-acceptance-of-the-three-node-ceph-run-of-2026-11-03) records the repair
+and its acceptance. The controller's independent policy parser is
 not part of this image-policy failure.

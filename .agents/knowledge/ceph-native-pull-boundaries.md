@@ -178,8 +178,8 @@ a directory/type check alone would mistake it for removable scratch. Keep
 the old scratch prefix recoverable rather than stranding its private material
 by renaming future directories. Unknown matching files, symlinks and foreign
 owners still refuse. [The host preparation contract](../../specs/ceph.md#bootstrap-identity-and-continuation)
-owns recovery; [B1012](../../specs/milestones/m2.md#b1012) tracks this repair
-and its remaining qualification. This is independent of the image-policy
+owns recovery; [B1012](../../specs/milestones/delivered.md#x289--owner-acceptance-of-the-three-node-ceph-run-of-2026-11-03) records this repair
+and its acceptance. This is independent of the image-policy
 parser: the resumed pull can fail before that probe is reached again.
 
 ## Bootstrap container-engine initialization
@@ -219,8 +219,8 @@ owns the shipped source closure and managed-host floor.
 
 This compilation fails before the precreated diagnostic module has executed.
 Calling its absent validator can mask the original error in both failure
-projections, leaving an empty result frame; that separate diagnostic gap is
-[B1010](../../specs/milestones/m2.md#b1010). The source escape removes the
+projections, leaving an empty result frame; that separate diagnostic gap was repaired as
+[B1010](../../specs/milestones/delivered.md#x289--owner-acceptance-of-the-three-node-ceph-run-of-2026-11-03). The source escape removes the
 observed carrier trigger without changing source admission or adding a
 release-specific loader.
 

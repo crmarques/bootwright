@@ -1802,7 +1802,7 @@ projection golden and the observable-field table row.
 
 Candidate. A projector for the agent install: release version and declared
 nodes. It carries the evidence widening for that capability and needs
-[B596](m2.md#b596) to read the block at all. **Requires:** the projector port that
+[B596](delivered.md#x289--owner-acceptance-of-the-three-node-ceph-run-of-2026-11-03) to read the block at all. **Requires:** the projector port that
 B565 delivers. **Definition:** Candidate. **Exit evidence:** a projection golden
 and the observable-field table row.
 
@@ -1810,7 +1810,7 @@ and the observable-field table row.
 
 Candidate. A projector for the Ceph image, host and core: image, topology nodes
 and labels. It carries the evidence widening for those capabilities and needs
-[B596](m2.md#b596) for the core. **Requires:** the projector port that B565
+[B596](delivered.md#x289--owner-acceptance-of-the-three-node-ceph-run-of-2026-11-03) for the core. **Requires:** the projector port that B565
 delivers. **Definition:** Candidate. **Exit evidence:** a projection golden per
 capability and the observable-field table rows.
 
@@ -5607,7 +5607,7 @@ positive completion, and one that finds it missing on an otherwise complete
 cluster is a partial realization the next attempt converges. (7) The
 installation's observation outside an operation, as `diff --observe` runs it,
 declares no administrator-access output, so the runner admits it (the
-agent-install half of [B596](m2.md#b596)), and its
+agent-install half of [B596](delivered.md#x289--owner-acceptance-of-the-three-node-ceph-run-of-2026-11-03)), and its
 projection renders the observed `spec.nodes[].labels` and
 `spec.nodes[].taints`. (8) The install request moves to
 `cluster-install-agent-v10`, freezing each node's placement; a v9 record
@@ -6304,8 +6304,8 @@ run when the commits are integrated into main, with the temporary history
 squashed into one code commit and one documentation commit.
 
 The session applies the [pre-existing-defect rule](../../AGENTS.md) to
-[B1006](m2.md#b1006), whose registry JSON decoder blocks the requested Ceph
-operator run. [X250](m2.md#planned-slices) is its bounded safety repair:
+[B1006](delivered.md#x289--owner-acceptance-of-the-three-node-ceph-run-of-2026-11-03), whose registry JSON decoder blocks the requested Ceph
+operator run. [X250](delivered.md#x289--owner-acceptance-of-the-three-node-ceph-run-of-2026-11-03) is its bounded safety repair:
 case-sensitive JSON names, identical-name rejection and regression coverage,
 with the original digest, credential, transport and adapter-channel proofs.
 The temporary branch receives focused verification and independent safety
@@ -6313,14 +6313,14 @@ review; full gates and safety race verification remain due at integration.
 The live continuation retains its operator gate, and native acceptance
 remains governed by the [acceptance ledger](../../docs/acceptance.md#row-format).
 
-The same request covers the subsequently exposed [B1007](m2.md#b1007) as
-[X251](m2.md#planned-slices): complete the isolated package helper's existing
+The same request covers the subsequently exposed [B1007](delivered.md#x289--owner-acceptance-of-the-three-node-ceph-run-of-2026-11-03) as
+[X251](delivered.md#x289--owner-acceptance-of-the-three-node-ceph-run-of-2026-11-03): complete the isolated package helper's existing
 source closure, with a regression that executes the real bundle's pure scope
 validation. It remains a separate defect correction, with the same focused
 verification, independent review and deferred integration gates.
 
-The same request covers [B1008](m2.md#b1008) as
-[X252](m2.md#planned-slices): preserve the existing bounded exception-type and
+The same request covers [B1008](delivered.md#x289--owner-acceptance-of-the-three-node-ceph-run-of-2026-11-03) as
+[X252](delivered.md#x289--owner-acceptance-of-the-three-node-ceph-run-of-2026-11-03): preserve the existing bounded exception-type and
 code-site diagnostics when a native supervisor cannot publish a valid result.
 This separately recorded repair supplies missing evidence for the blocked
 operator run; it changes no result admission, effect authority, frozen request
@@ -6328,25 +6328,25 @@ or runtime lock, and makes no claim to repair an as-yet unlocated host failure.
 It receives the same focused checks and independent review before handoff,
 with full integration gates deferred.
 
-The same request covers [B1009](m2.md#b1009) as
-[X253](m2.md#planned-slices): escape the two Unicode separators whose literal
+The same request covers [B1009](delivered.md#x289--owner-acceptance-of-the-three-node-ceph-run-of-2026-11-03) as
+[X253](delivered.md#x289--owner-acceptance-of-the-three-node-ceph-run-of-2026-11-03): escape the two Unicode separators whose literal
 source representation breaks ZIP-backed inspection, with a regression through
 that actual carrier and the production worker. The runtime validation and
-effect contract stay unchanged. The separately recorded [B1010](m2.md#b1010)
+effect contract stay unchanged. The separately recorded [B1010](delivered.md#x289--owner-acceptance-of-the-three-node-ceph-run-of-2026-11-03)
 diagnostic masking defect stayed outside this blocking source correction and is
-[X259](m2.md#planned-slices) under D219; no native acceptance or verification
+[X259](delivered.md#x289--owner-acceptance-of-the-three-node-ceph-run-of-2026-11-03) under D219; no native acceptance or verification
 gate is waived.
 
-The same request covers the subsequently exposed [B1011](m2.md#b1011) as
-[X254](m2.md#planned-slices): retain the selected image's fixed
+The same request covers the subsequently exposed [B1011](delivered.md#x289--owner-acceptance-of-the-three-node-ceph-run-of-2026-11-03) as
+[X254](delivered.md#x289--owner-acceptance-of-the-three-node-ceph-run-of-2026-11-03): retain the selected image's fixed
 `GSSAPIKeyExchange no` policy line, with all other values refused. This is a
 separate blocking parser correction; the algorithm allowlist, frozen image,
 FIPS mode, transport authority and effect contract stay unchanged. It receives
 the same focused checks and independent review, with full integration gates
 and native acceptance still due.
 
-The same request covers [B1012](m2.md#b1012) as
-[X255](m2.md#planned-slices): distinguish the core pull's validated retained
+The same request covers [B1012](delivered.md#x289--owner-acceptance-of-the-three-node-ceph-run-of-2026-11-03) as
+[X255](delivered.md#x289--owner-acceptance-of-the-three-node-ceph-run-of-2026-11-03): distinguish the core pull's validated retained
 attempt records from its temporary directories during continuation. Preserve
 the existing scratch namespace and ownership refusals, with a regression that
 uses real marker files. This separate blocking repair changes no journal
@@ -6418,7 +6418,7 @@ downgrade or client fallback. This selects a comparison profile, not a new
 admitted value or a correction to the explicit-AES contract of
 [B628](m2.md#b628). Kernel and Data Foundation compatibility require their own
 evidence. FIPS and the unassisted license-persistence gate remain open under
-[B1013](m2.md#b1013) and [B1014](m2.md#b1014); no run is accepted by this choice.
+[B1013](m2.md#b1013) and [B1014](delivered.md#x289--owner-acceptance-of-the-three-node-ceph-run-of-2026-11-03); no run is accepted by this choice.
 
 ### D219
 
@@ -6426,7 +6426,7 @@ evidence. FIPS and the unassisted license-persistence gate remain open under
 in the codex session", after the native-default continuation refused at
 `not-ready@ceph_native.license` on a fresh cluster.
 
-This decides [B1014](m2.md#b1014)'s ownership, replay and retirement. The
+This decides [B1014](delivered.md#x289--owner-acceptance-of-the-three-node-ceph-run-of-2026-11-03)'s ownership, replay and retirement. The
 cluster block's license call owns the MON `mon_config_key_max_entry_size`
 bound under the IBM license contract only: before acceptance, and only while
 the persisted value is below `LICENSE_STORE_FLOOR`, it writes the floor at the
@@ -6436,7 +6436,7 @@ is that observation, which writes nothing once the bound holds, and an
 observation or an accepted license never touches it. Retirement is cluster
 removal: the value lives in that cluster's MON store. No public field, bootstrap
 configuration entry or pass-through is added, and acceptance readback stays
-mandatory. [X271](m2.md#planned-slices) implements it under D215's focused
+mandatory. [X271](delivered.md#x289--owner-acceptance-of-the-three-node-ceph-run-of-2026-11-03) implements it under D215's focused
 verification, with full integration gates and native acceptance still due.
 
 The same request covers [B1016](m2.md#b1016) as
@@ -6449,32 +6449,32 @@ The same request covers the session's other open items. [B1015](m2.md#b1015)
 is [X272](m2.md#planned-slices): name the selected key, repository metadata or
 RPM of a package acquisition connection lost after its bounded attempts,
 under the closed reason `package-acquisition`, distinct from TLS, status,
-resolution, digest and signer refusals. [B1010](m2.md#b1010) is
-[X259](m2.md#planned-slices): keep the bounded exception-type and code-site
+resolution, digest and signer refusals. [B1010](delivered.md#x289--owner-acceptance-of-the-three-node-ceph-run-of-2026-11-03) is
+[X259](delivered.md#x289--owner-acceptance-of-the-three-node-ceph-run-of-2026-11-03): keep the bounded exception-type and code-site
 cause when a helper fails before the diagnostic validator exists, omitting
 unvalidated native error metadata. [B1004](m2.md#b1004) is
 [X260](m2.md#planned-slices): state that an authored auxiliary digest
 identifies the linux/amd64 platform manifest and author the platform digests
 the owner's entitled index reads selected, with the resolver's refusal kept
-and no substitution added. [B1028](m2.md#b1028), found by the continuation, is
-[X261](m2.md#planned-slices): request lsblk's `NAME` column so OSD device
-proofs read its tree. [B1029](m2.md#b1029) is [X262](m2.md#planned-slices):
+and no substitution added. [B1028](delivered.md#x289--owner-acceptance-of-the-three-node-ceph-run-of-2026-11-03), found by the continuation, is
+[X261](delivered.md#x289--owner-acceptance-of-the-three-node-ceph-run-of-2026-11-03): request lsblk's `NAME` column so OSD device
+proofs read its tree. [B1029](delivered.md#x289--owner-acceptance-of-the-three-node-ceph-run-of-2026-11-03) is [X262](delivered.md#x289--owner-acceptance-of-the-three-node-ceph-run-of-2026-11-03):
 exclude the settings and service members from the bootstrap recovery scope.
-[B1019](m2.md#b1019) is [X263](m2.md#planned-slices): keep standby replay out
+[B1019](delivered.md#x289--owner-acceptance-of-the-three-node-ceph-run-of-2026-11-03) is [X263](delivered.md#x289--owner-acceptance-of-the-three-node-ceph-run-of-2026-11-03): keep standby replay out
 of `fs new`, whose 20.2.1 handler aborts the MON leader on it, and set it after
 creation. [B1020](m2.md#b1020), the seed-only admin configuration, is recorded
 for definition, not implemented. [B1021](m2.md#b1021) is
 [X264](m2.md#planned-slices): the runbook permits each ingress's VRRP and
-client port on its guests. [B1023](m2.md#b1023) is [X266](m2.md#planned-slices):
+client port on its guests. [B1023](delivered.md#x289--owner-acceptance-of-the-three-node-ceph-run-of-2026-11-03) is [X266](delivered.md#x289--owner-acceptance-of-the-three-node-ceph-run-of-2026-11-03):
 the tunnel custody proof lists a complete cluster's FSID area.
-[B1024](m2.md#b1024) is [X267](m2.md#planned-slices): daemon observation
+[B1024](delivered.md#x289--owner-acceptance-of-the-three-node-ceph-run-of-2026-11-03) is [X267](delivered.md#x289--owner-acceptance-of-the-three-node-ceph-run-of-2026-11-03): daemon observation
 admits the FSID directory cephadm chowns to a singleton daemon's user.
-[B1025](m2.md#b1025) is [X268](m2.md#planned-slices): SMB applies send
-passwords under the base64 input filter. [B1026](m2.md#b1026) is
-[X269](m2.md#planned-slices): the result publisher admits a reachable
-management gateway's endpoint evidence. [B1027](m2.md#b1027) is
-[X270](m2.md#planned-slices): subvolume path proofs read `getpath` as text.
-[B1030](m2.md#b1030) is [X273](m2.md#planned-slices): the runbook's NFS, SMB
+[B1025](delivered.md#x289--owner-acceptance-of-the-three-node-ceph-run-of-2026-11-03) is [X268](delivered.md#x289--owner-acceptance-of-the-three-node-ceph-run-of-2026-11-03): SMB applies send
+passwords under the base64 input filter. [B1026](delivered.md#x289--owner-acceptance-of-the-three-node-ceph-run-of-2026-11-03) is
+[X269](delivered.md#x289--owner-acceptance-of-the-three-node-ceph-run-of-2026-11-03): the result publisher admits a reachable
+management gateway's endpoint evidence. [B1027](delivered.md#x289--owner-acceptance-of-the-three-node-ceph-run-of-2026-11-03) is
+[X270](delivered.md#x289--owner-acceptance-of-the-three-node-ceph-run-of-2026-11-03): subvolume path proofs read `getpath` as text.
+[B1030](delivered.md#x289--owner-acceptance-of-the-three-node-ceph-run-of-2026-11-03) is [X273](delivered.md#x289--owner-acceptance-of-the-three-node-ceph-run-of-2026-11-03): the runbook's NFS, SMB
 and observability checks run and hide every password; [B1031](m2.md#b1031)
 (SMB share ownership) awaits definition and [B1032](delivered.md#x274--management-gateway-internal-port-in-the-ingress-check) (the
 management gateway's internal port in the ingress check) is specified. Every
@@ -6503,7 +6503,7 @@ with its exact remedy. Storage publishes each ingress's VRRP and client port
 and never changes a firewall itself. Bootwright configures no switch, router
 or upstream firewall: the site provides layer-2 adjacency between the hosts of
 one virtual address, admits that address's MAC moving between ports on
-failover and routes clients to it. [B1022](m2.md#b1022) implements this after
+failover and routes clients to it. [B1022](delivered.md#x289--owner-acceptance-of-the-three-node-ceph-run-of-2026-11-03) implements this after
 the owner's current three-node run; until then the
 [runbook step](../../e2e/lab-3-nodes-ceph/runbook.md) of
 [B1021](m2.md#b1021) stays.

@@ -23,4 +23,4 @@ host without sudo.
 Code: [guests.go](../../internal/storage/preflight/guests.go);
 test `TestGuestFirewallReadsRunAsRootBecauseFirewalldRefusesZoneReadsToAUser`
 in [firewall_test.go](../../internal/storage/preflight/firewall_test.go);
-item [B1065](../../specs/milestones/m2.md#b1065).
+item [B1065](../../specs/milestones/delivered.md#x289--owner-acceptance-of-the-three-node-ceph-run-of-2026-11-03).

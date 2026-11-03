@@ -904,9 +904,8 @@ worker whose token is outside that worker's closed set is published as
 and execution failures additionally carry the bounded redacted `nativeError`
 projection defined by the adapter protocol, so the diagnostic retains the
 requested coordinate and useful native cause without reflecting raw output.
-
-Not yet met: source compilation before diagnostic helper initialization can
-lose its bounded cause; tracked as [B1010](milestones/m2.md#b1010).
+A helper failing before its diagnostic validator initializes keeps its
+type and code site and omits native error metadata.
 
 The coordinate may end with the ids of the
 [version specializations](architecture.md#implementations-and-version-variation)
