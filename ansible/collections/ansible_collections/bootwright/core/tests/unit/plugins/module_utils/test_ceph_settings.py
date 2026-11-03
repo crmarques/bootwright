@@ -294,3 +294,15 @@ def test_core_execute_dispatches_the_settings_phase(monkeypatch):
     assert ceph_core.evidence(evidence_of(request, True), "d" * 64, request)["action"] == "settings"
     with pytest.raises(ceph_native.Refusal, match="^evidence$"):
         ceph_core.evidence(evidence_of(request, True, {"id": "7", "path": ""}), "d" * 64, request)
+
+
+@pytest.mark.parametrize("label, admitted", [("_admin", True), ("ceph-mon", True), ("rgw.objects", True), ("_no_schedule", False),
+                                             ("_no_conf_keyring", False), ("_admins", False), ("-mon", False), ("a b", False)])
+def test_a_host_label_is_a_name_or_the_one_qualified_special_label(label, admitted):
+    request = cluster()
+    request["hosts"][0]["labels"] = [label]
+    if admitted:
+        assert ceph_native.validate(request) is request
+        return
+    with pytest.raises(ceph_native.Refusal, match="^request$"):
+        ceph_native.validate(request)

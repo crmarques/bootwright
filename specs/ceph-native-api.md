@@ -714,6 +714,13 @@ daemon membership. Node labels retain their native meaning; a label named
 after a daemon is not a second role declaration.
 Reserved labels with orchestration effects require explicit qualification;
 a label cannot silently disable owned scheduling or export administrative keys.
+A node label is a name of at most 128 characters (letters, digits, `_`, `.`
+and `-`, starting with a letter or digit) or `_admin`, the one qualified
+[special host label](https://docs.ceph.com/en/tentacle/cephadm/host-management/#special-host-labels):
+declaring it is the explicit request that cephadm keep the cluster's
+configuration and admin keyring under `/etc/ceph` on that host, so the
+cluster can be administered there while the bootstrap host is down. Any other
+label beginning with `_` refuses at admission.
 
 Placement preserves the provider's qualified native grammar, including
 `hosts`, `label`, `host_pattern`, `count` and `count_per_host`. Explicit host

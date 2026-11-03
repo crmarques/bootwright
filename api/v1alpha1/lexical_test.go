@@ -205,6 +205,14 @@ func TestABridgeNameRefusesFirewalldsWildcard(t *testing.T) {
 		[]string{"virbr+", "+", "a+b", strings.Repeat("b", 16), ".", "..", "eth0/1", "eth 0"})
 }
 
+// cephadm reserves the leading underscore for special host labels; only
+// _admin, which keeps the admin keyring under /etc/ceph, is qualified.
+func TestACephHostLabelAdmitsOnlyTheQualifiedSpecialLabel(t *testing.T) {
+	lexicalRows(t, "ceph-host-label",
+		[]string{"_admin", "ceph-mon", "storage", "rgw.objects", "a_b", strings.Repeat("l", 128)},
+		[]string{"_no_schedule", "_no_conf_keyring", "_no_autotune_memory", "_admins", "_", "-mon", ".mon", "a b", "a:b", strings.Repeat("l", 129), ""})
+}
+
 const lexicalDigest = "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
 
 // A repository path component follows the OCI distribution grammar, so

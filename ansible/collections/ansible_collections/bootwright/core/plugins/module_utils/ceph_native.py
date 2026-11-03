@@ -45,6 +45,8 @@ ROOT_UID = 0
 # Symbolic links one public root-only source may pass through: the crypto-policy back-ends sshd includes are one.
 SOURCE_LINKS = 8
 NAME = re.compile(r"[a-zA-Z0-9][a-zA-Z0-9_.-]{0,127}\Z")
+# A host label: a name, or `_admin`, the one special cephadm label qualified (specs/ceph-native-api.md, hosts and placement).
+HOST_LABEL = re.compile(r"(?:_admin|[a-zA-Z0-9][a-zA-Z0-9_.-]{0,127})\Z")
 HEX = re.compile(r"[0-9a-f]{64}\Z")
 DEVICE = re.compile(r"/dev/(?:disk/by-id/)?[a-zA-Z0-9_.:+-]{1,200}\Z")
 REGISTRY_DIRECTORY = "/etc/ceph"
@@ -708,7 +710,7 @@ def validate_hosts(request):
         require(provided or "knownHostsRef" not in host)
         require(all(named(host[k]) for k in ("name", "machine", "user")))
         require(named(host["sshKeyRef"]))
-        require(host["labels"] is None or isinstance(host["labels"], list) and all(named(v) for v in host["labels"]))
+        require(host["labels"] is None or isinstance(host["labels"], list) and all(isinstance(v, str) and HOST_LABEL.fullmatch(v) for v in host["labels"]))
         require(isinstance(host["location"], dict) and all(named(k) and named(v) for k, v in host["location"].items()))
         require(not host.get("hostKeyRef") or named(host["hostKeyRef"]))
         require(not host.get("knownHosts") or isinstance(host["knownHosts"], str) and len(host["knownHosts"]) <= 65536)

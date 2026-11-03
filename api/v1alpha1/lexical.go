@@ -44,6 +44,7 @@ var systemdUnitPattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9:_.@-]{0,254}
 var packageSpecPattern = regexp.MustCompile(`^[A-Za-z0-9_@*][A-Za-z0-9_.+*?@:~^/\[\]-]*$`)
 var interfacePattern = regexp.MustCompile(`^[A-Za-z0-9_.+-]{1,15}$`)
 var bridgePattern = regexp.MustCompile(`^[A-Za-z0-9_.-]{1,15}$`)
+var cephHostLabelPattern = regexp.MustCompile(`^(?:_admin|[A-Za-z0-9][A-Za-z0-9_.-]{0,127})$`)
 
 // uriExcluded are the printable ASCII characters RFC 3986 admits nowhere in a
 // URI. kickstartSeparators are those a Kickstart line reads as a quote, an
@@ -107,6 +108,8 @@ func ValidLexical(rule, value string) bool {
 		return !strings.HasPrefix(value, "%") && printableExcept(value, kickstartSeparators)
 	case "ifname":
 		return interfacePattern.MatchString(value) && value != "." && value != ".."
+	case "ceph-host-label":
+		return cephHostLabelPattern.MatchString(value)
 	case "bridge":
 		return bridgePattern.MatchString(value) && value != "." && value != ".."
 	case "registry", "registry-base":
