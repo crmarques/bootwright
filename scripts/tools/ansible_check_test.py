@@ -426,5 +426,163 @@ class LanesTest(unittest.TestCase):
         self.assertTrue(commands[0][-1].endswith("tests/unit"))
 
 
+class PassKeyTest(unittest.TestCase):
+    """Every input a complete run reads moves its key."""
+
+    def setUp(self):
+        self.temporary = tempfile.TemporaryDirectory()
+        self.root = Path(self.temporary.name)
+        for name, text in {
+            "ansible/ansible.cfg": "[defaults]\n",
+            "ansible/collections/roles/main.yml": "[]\n",
+            "scripts/ansible-check": "#!/bin/sh\n",
+            "scripts/cache-dir": "#!/bin/sh\n",
+            "scripts/tools/ansible_check.py": "",
+            "scripts/tools/ansible-requirements.txt": "a==1\n",
+            "scripts/tools/focus.py": "",
+        }.items():
+            (self.root / name).parent.mkdir(parents=True, exist_ok=True)
+            (self.root / name).write_text(text, encoding="utf-8")
+        self.addCleanup(self.temporary.cleanup)
+
+    def key(
+        self, host=("host /usr/bin/a 1 1",), installed=("a==1",), interpreter="3.13.16"
+    ):
+        return ansible_check.pass_key(
+            self.root, list(host), list(installed), interpreter
+        )
+
+    def test_the_key_moves_with_every_input(self):
+        changes = {
+            "a file's bytes": lambda: (self.root / "ansible/ansible.cfg").write_text(
+                "x"
+            ),
+            "a file's mode": lambda: (self.root / "ansible/ansible.cfg").chmod(0o755),
+            "a new file": lambda: (self.root / "ansible/new.yml").write_text(""),
+            "an empty directory": lambda: (self.root / "ansible/empty").mkdir(),
+            "a link": lambda: (self.root / "ansible/link").symlink_to("ansible.cfg"),
+            "the launcher": lambda: (self.root / "scripts/ansible-check").write_text(
+                "x"
+            ),
+            "a lock": lambda: (
+                self.root / "scripts/tools/ansible-requirements.txt"
+            ).write_text("a==2\n"),
+            "a new harness file": lambda: (
+                self.root / "scripts/tools/ansible_new.py"
+            ).write_text(""),
+        }
+        for name, change in changes.items():
+            with self.subTest(change=name):
+                self.setUp()
+                before = self.key()
+                change()
+                self.assertNotEqual(self.key(), before)
+        before = self.key()
+        self.assertNotEqual(self.key(host=["host /usr/bin/a 1 2"]), before)
+        self.assertNotEqual(self.key(installed=["a==1", "b==1"]), before)
+        self.assertNotEqual(self.key(interpreter="3.13.17"), before)
+
+    def test_a_link_moves_the_key_with_its_target(self):
+        (self.root / "ansible/link").symlink_to("ansible.cfg")
+        before = self.key()
+        (self.root / "ansible/link").unlink()
+        (self.root / "ansible/link").symlink_to("collections")
+        self.assertNotEqual(self.key(), before)
+
+    def test_byte_code_pytest_caches_and_other_tools_leave_the_key(self):
+        before = self.key()
+        for name in (
+            "ansible/__pycache__/a.pyc",
+            "ansible/collections/.pytest_cache/v",
+        ):
+            (self.root / name).parent.mkdir(parents=True)
+            (self.root / name).write_text("x", encoding="utf-8")
+        (self.root / "scripts/tools/focus.py").write_text("x", encoding="utf-8")
+        self.assertEqual(self.key(), before)
+
+    def test_the_host_state_names_package_directories(self):
+        self.assertIn("/usr/bin", ansible_check.HOST_DIRECTORIES)
+        self.assertIn("/var/lib/rpm", ansible_check.HOST_DIRECTORIES)
+        lines = ansible_check.host_state()
+        self.assertTrue(lines)
+        self.assertTrue(all(line.startswith("host ") for line in lines))
+
+
+class RecordedGateTest(unittest.TestCase):
+    """A passing complete run is reused only while every input is unchanged."""
+
+    def setUp(self):
+        self.temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temporary.cleanup)
+        self.records = Path(self.temporary.name) / "passes"
+        self.runs = 0
+        self.now = 1_000_000.0
+
+    def gate(self, status=0, environ=None, key=lambda: "k" * 64):
+        def check():
+            self.runs += 1
+            return status
+
+        output = io.StringIO()
+        with contextlib.redirect_stdout(output):
+            result = ansible_check.recorded_gate(
+                self.records, key, environ or {}, check, lambda: self.now
+            )
+        self.output = output.getvalue()
+        return result
+
+    def test_a_pass_is_reused_while_fresh_and_says_so(self):
+        self.assertEqual((self.gate(), self.runs), (0, 1))
+        self.now += ansible_check.PASS_LIFETIME - 1
+        self.assertEqual((self.gate(), self.runs), (0, 1))
+        self.assertIn("reused, not rerun", self.output)
+
+    def test_an_expired_pass_runs_again(self):
+        self.gate()
+        self.now += ansible_check.PASS_LIFETIME
+        self.assertEqual((self.gate(), self.runs), (0, 2))
+        self.assertNotIn("reused", self.output)
+
+    def test_a_failure_is_never_recorded(self):
+        self.assertEqual(self.gate(status=1), 1)
+        self.assertEqual((self.gate(status=1), self.runs), (1, 2))
+        self.assertFalse(self.records.exists())
+
+    def test_ci_and_the_full_variable_neither_read_nor_write(self):
+        for environ in ({"CI": "true"}, {ansible_check.FULL_VARIABLE: "1"}):
+            with self.subTest(environ=environ):
+                self.gate(environ=environ)
+                self.assertFalse(self.records.exists())
+        self.gate()
+        runs = self.runs
+        for environ in ({"CI": "true"}, {ansible_check.FULL_VARIABLE: "1"}):
+            with self.subTest(environ=environ):
+                self.gate(environ=environ)
+        self.assertEqual(self.runs, runs + 2)
+
+    def test_an_input_that_moves_during_the_run_records_nothing(self):
+        keys = iter(["a" * 64, "b" * 64])
+        self.assertEqual(self.gate(key=lambda: next(keys)), 0)
+        self.assertFalse((self.records / ("a" * 64)).exists())
+        self.assertIn("no pass is recorded", self.output)
+
+    def test_a_damaged_record_runs_the_check(self):
+        self.records.mkdir()
+        (self.records / ("k" * 64)).write_text("{", encoding="utf-8")
+        self.assertEqual((self.gate(), self.runs), (0, 1))
+
+    def test_only_the_newest_passes_are_kept(self):
+        self.records.mkdir()
+        for index in range(3):
+            old = self.records / (str(index) * 64)
+            old.write_text('{"passed": 0}', encoding="utf-8")
+            os.utime(old, (index + 1, index + 1))
+        with mock.patch.object(ansible_check, "KEPT_PASSES", 2):
+            self.gate()
+        self.assertEqual(
+            sorted(path.name for path in self.records.iterdir()), ["2" * 64, "k" * 64]
+        )
+
+
 if __name__ == "__main__":
     unittest.main()

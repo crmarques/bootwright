@@ -24,6 +24,10 @@ jobs:
           path: .cache
           key: check-${{ runner.os }}-${{ hashFiles('scripts/tools/ansible-requirements.txt', 'scripts/tools/ansible-check-interpreter.json', 'scripts/tools/ansible-check-floor-interpreter.json', 'scripts/tools/ansible-test-artifacts.json', 'scripts/tools/go.sum') }}
       - run: make check
+        env:
+          # CI runs the Ansible check in full and never reads or writes its
+          # pass record (D223); ansible_check.py also refuses it under CI.
+          BOOTWRIGHT_ANSIBLE_CHECK_FULL: "1"
 
   race:
     runs-on: ubuntu-24.04

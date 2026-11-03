@@ -40,6 +40,21 @@ when it ends, then a line per lane with its verdict and time; the first lane
 that failed gives the exit status, and every lane runs to its end. A run that
 selects one lane, as a narrowed suite does, runs it alone on the terminal.
 
+A complete run, the argument-free form with no operator-run target selected,
+records its pass under a key over every input it reads: each file, directory
+and link under `ansible/` by path, mode and content (byte code and pytest's
+cache aside), the launcher, `scripts/cache-dir` and every
+`scripts/tools/ansible*` file, the interpreter's version, every distribution
+installed beside it, and the names, sizes and times of the entries of the
+host's tool and package directories, so a package change moves it. The next
+complete run whose key matches a pass of the last 24 hours prints that it
+reuses that pass and runs nothing; the key is taken again after a passing run,
+and an input that moved meanwhile records nothing. Records live in
+`ansible-check/passes` under the directory `scripts/cache-dir` prints, so
+every worktree of the clone shares them. Under CI, or with
+`BOOTWRIGHT_ANSIBLE_CHECK_FULL=1`, the check runs in full and neither reads nor
+writes a record.
+
 The `units` suite first runs the harness's own tests,
 `scripts/tools/ansible_check_test.py`, and names its temporary area to them in
 `BOOTWRIGHT_ANSIBLE_CHECK_AREA`. They parse that area's path, and other area

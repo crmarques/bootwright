@@ -107,3 +107,9 @@ A commit body names the tier commands that ran and their results. An
 intermediate commit on a task branch may rest on `make focus`; the commit that
 integrates into main rests on `make check`, plus the safety class's additions
 when it applies.
+When `make check` reused a recorded pass of the Ansible check, which it prints
+([the Ansible check](../../../../scripts/tools/ansible-check.md)), the body says
+the Ansible check was reused for unchanged inputs, not that it ran. A change
+whose verdict the record's inputs may not capture, such as one to a tool the
+host provides outside its package directories, runs the gate with
+`BOOTWRIGHT_ANSIBLE_CHECK_FULL=1`.

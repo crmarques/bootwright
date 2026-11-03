@@ -2,7 +2,7 @@
 
 import concurrent.futures
 from dataclasses import dataclass
-from importlib.metadata import PackageNotFoundError, version
+from importlib.metadata import PackageNotFoundError, distributions, version
 import hashlib
 import io
 import json
@@ -671,6 +671,192 @@ def check_lanes(
     return lanes
 
 
+# A complete run that passes is recorded under a key over every input it reads
+# (D223), and a complete run whose key matches a recorded pass reuses it and
+# says so instead of running. CI never reads or writes the record, and
+# FULL_VARIABLE=1 runs the check whatever is recorded.
+FULL_VARIABLE = "BOOTWRIGHT_ANSIBLE_CHECK_FULL"
+
+# A recorded pass is reused for this long at most, so a test whose verdict
+# moves with the date, such as one over a certificate that expires, runs again
+# within a day.
+PASS_LIFETIME = 24 * 60 * 60
+
+# The records kept; older ones are removed when a pass is recorded.
+KEPT_PASSES = 50
+
+# What the check reads besides the automation: its own launcher, harness,
+# tests and locks.
+TOOL_FILES = ("scripts/ansible-check", "scripts/cache-dir")
+TOOL_PREFIX = "scripts/tools/ansible"
+
+# Byte-code and pytest's own cache, which no check reads as an input.
+UNREAD_DIRECTORIES = ("__pycache__", ".pytest_cache")
+
+# The operator-run integration targets a variable selects; a run with one is
+# no complete gate run, so it neither reads nor writes the record.
+OPTIONAL_TARGETS = (
+    "BOOTWRIGHT_ANSIBLE_NATIVE_TARGET",
+    "BOOTWRIGHT_ANSIBLE_CONTROLLER_TARGET",
+)
+
+# Where the host's tools and their packages live: a check reaches tools such
+# as shellcheck or ssh through PATH, so a package change moves the key.
+HOST_DIRECTORIES = (
+    "/usr/bin",
+    "/usr/lib64",
+    "/usr/lib",
+    "/var/lib/rpm",
+    "/var/lib/dpkg",
+)
+
+
+def tree_entries(root: Path, directory: Path) -> list[str]:
+    """Return a line per entry under the directory: its path, type and content.
+
+    A file contributes its mode and the SHA-256 of its bytes, a link its
+    target, and a directory its mode, so an empty directory or a changed mode
+    moves the key as a changed byte does.
+    """
+    lines = []
+    for current, directories, files in os.walk(directory):
+        directories[:] = sorted(
+            name for name in directories if name not in UNREAD_DIRECTORIES
+        )
+        here = Path(current)
+        for name in directories + sorted(files):
+            path = here / name
+            relative = path.relative_to(root)
+            status = path.lstat()
+            if path.is_symlink():
+                lines.append(f"link {relative} {os.readlink(path)}")
+            elif path.is_dir():
+                lines.append(f"directory {relative} {status.st_mode:o}")
+            else:
+                digest = hashlib.sha256(path.read_bytes()).hexdigest()
+                lines.append(f"file {relative} {status.st_mode:o} {digest}")
+    return lines
+
+
+def tool_entries(root: Path) -> list[str]:
+    """Return a line per tool file the check reads besides the automation."""
+    names = [root / name for name in TOOL_FILES]
+    names += sorted(
+        path
+        for path in (root / "scripts/tools").iterdir()
+        if str(path.relative_to(root)).startswith(TOOL_PREFIX)
+    )
+    lines = []
+    for path in names:
+        digest = hashlib.sha256(path.read_bytes()).hexdigest()
+        lines.append(f"tool {path.relative_to(root)} {path.stat().st_mode:o} {digest}")
+    return lines
+
+
+def installed_distributions() -> list[str]:
+    """Return every distribution installed beside this interpreter, by version."""
+    found = {
+        (entry.metadata["Name"] or "").lower() + "==" + entry.version
+        for entry in distributions()
+    }
+    return sorted(found)
+
+
+def host_state() -> list[str]:
+    """Return what the host's tool and package directories hold.
+
+    Each entry's name, size and modification time stands for its content, so
+    an installed, removed or updated package moves the key without reading
+    every binary.
+    """
+    lines = []
+    for directory in HOST_DIRECTORIES:
+        try:
+            entries = sorted(os.scandir(directory), key=lambda entry: entry.name)
+        except OSError:
+            lines.append(f"host {directory} absent")
+            continue
+        for entry in entries:
+            if entry.name.endswith("-shm"):
+                continue
+            try:
+                status = entry.stat(follow_symlinks=False)
+            except OSError:
+                continue
+            lines.append(f"host {entry.path} {status.st_size} {status.st_mtime_ns}")
+    return lines
+
+
+def pass_key(
+    root: Path, host: list[str], installed: list[str], interpreter: str
+) -> str:
+    """Return the key of a complete run over the repository at root."""
+    digest = hashlib.sha256()
+    lines = [f"interpreter {interpreter}"]
+    lines += [f"installed {name}" for name in installed]
+    lines += tool_entries(root)
+    lines += tree_entries(root, root / "ansible")
+    lines += host
+    for line in lines:
+        digest.update(line.encode("utf-8", "surrogateescape") + b"\n")
+    return digest.hexdigest()
+
+
+def recording(environ: dict) -> bool:
+    """Report whether a complete run may read and write the pass record."""
+    return not environ.get("CI") and environ.get(FULL_VARIABLE) != "1"
+
+
+def recorded_gate(
+    records: Path,
+    key: Callable[[], str],
+    environ: dict,
+    check: Callable[[], int],
+    clock: Callable[[], float],
+) -> int:
+    """Reuse a fresh recorded pass for the inputs, or run the check and record it.
+
+    The key is taken again after a passing run, and the pass is recorded only
+    when no input moved while the check ran.
+    """
+    before = key()
+    record = records / before
+    if recording(environ) and record.is_file():
+        try:
+            passed = json.loads(record.read_text(encoding="utf-8"))["passed"]
+        except (OSError, ValueError, KeyError, TypeError):
+            passed = None
+        if type(passed) in (int, float) and 0 <= clock() - passed < PASS_LIFETIME:
+            when = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(passed))
+            print(
+                f"ansible-check: every input matches the complete run that passed at "
+                f"{when} (key {before[:16]}); it is reused, not rerun. "
+                f"{FULL_VARIABLE}=1 runs it.",
+                flush=True,
+            )
+            return 0
+    status = check()
+    if status != 0 or not recording(environ):
+        return status
+    if key() != before:
+        print(
+            "ansible-check: an input changed while the check ran; no pass is recorded."
+        )
+        return status
+    records.mkdir(parents=True, exist_ok=True)
+    partial = records / (before + ".partial")
+    partial.write_text(json.dumps({"passed": clock()}), encoding="utf-8")
+    os.replace(partial, record)
+    kept = sorted(
+        (path for path in records.iterdir() if not path.name.endswith(".partial")),
+        key=lambda path: path.stat().st_mtime,
+        reverse=True,
+    )
+    for stale in kept[KEPT_PASSES:]:
+        stale.unlink(missing_ok=True)
+    return status
+
+
 def main() -> int:
     if sys.version_info[:3] != (3, 13, 16):
         raise SystemExit(
@@ -707,85 +893,98 @@ def main() -> int:
             str(cache_root(root) / "ansible-test-artifacts"),
         )
     )
-    with check_area() as temporary:
-        area = Path(temporary)
-        inventory = area / "inventory.json"
-        inventory.write_text(
-            json.dumps(
-                {
-                    "all": {
-                        "hosts": {
-                            "bootwright_controller": {
-                                "ansible_connection": "local",
-                                "ansible_python_interpreter": str(executable),
+
+    def check() -> int:
+        with check_area() as temporary:
+            area = Path(temporary)
+            inventory = area / "inventory.json"
+            inventory.write_text(
+                json.dumps(
+                    {
+                        "all": {
+                            "hosts": {
+                                "bootwright_controller": {
+                                    "ansible_connection": "local",
+                                    "ansible_python_interpreter": str(executable),
+                                }
                             }
                         }
                     }
-                }
-            ),
-            encoding="utf-8",
-        )
-        environment = {
-            "PATH": os.pathsep.join([str(executable.parent), "/usr/bin", "/bin"]),
-            "HOME": str(area),
-            "XDG_CACHE_HOME": str(area / "cache"),
-            "TMPDIR": str(area),
-            "LC_ALL": "C.UTF-8",
-            "LANG": "C.UTF-8",
-            "ANSIBLE_CONFIG": str(automation / "ansible.cfg"),
-            "ANSIBLE_COLLECTIONS_PATH": str(automation / "collections"),
-            "ANSIBLE_ROLES_PATH": str(collection / "roles"),
-            "ANSIBLE_INVENTORY": str(inventory),
-            "ANSIBLE_LOCAL_TEMP": str(area / "ansible-local"),
-            "ANSIBLE_REMOTE_TEMP": str(area / "ansible-remote"),
-            "ANSIBLE_NOCOLOR": "1",
-        }
-        playbooks = sorted((collection / "playbooks").rglob("*.yml"))
-        if not playbooks:
-            raise SystemExit(
-                "No shipped Ansible playbooks were found for syntax checking."
+                ),
+                encoding="utf-8",
             )
-        if targets and "syntax" in selected:
-            # Narrowed, syntax checks the shipped playbooks at or under a target.
-            playbooks = [
-                playbook
-                for playbook in playbooks
-                if any(
-                    playbook.relative_to(collection).is_relative_to(target)
-                    for target in targets
-                )
-            ]
+            environment = {
+                "PATH": os.pathsep.join([str(executable.parent), "/usr/bin", "/bin"]),
+                "HOME": str(area),
+                "XDG_CACHE_HOME": str(area / "cache"),
+                "TMPDIR": str(area),
+                "LC_ALL": "C.UTF-8",
+                "LANG": "C.UTF-8",
+                "ANSIBLE_CONFIG": str(automation / "ansible.cfg"),
+                "ANSIBLE_COLLECTIONS_PATH": str(automation / "collections"),
+                "ANSIBLE_ROLES_PATH": str(collection / "roles"),
+                "ANSIBLE_INVENTORY": str(inventory),
+                "ANSIBLE_LOCAL_TEMP": str(area / "ansible-local"),
+                "ANSIBLE_REMOTE_TEMP": str(area / "ansible-remote"),
+                "ANSIBLE_NOCOLOR": "1",
+            }
+            playbooks = sorted((collection / "playbooks").rglob("*.yml"))
             if not playbooks:
                 raise SystemExit(
-                    "No shipped playbook is at or under " + " ".join(paths)
+                    "No shipped Ansible playbooks were found for syntax checking."
                 )
-        if "units" in selected and not targets:
-            # The harness's own tests; -B keeps bytecode out of the checkout.
-            # AREA_VARIABLE names this run's area, so they parse the area that
-            # every process here takes as its HOME.
-            subprocess.run(
-                [
-                    str(executable),
-                    "-I",
-                    "-B",
-                    str(root / "scripts/tools/ansible_check_test.py"),
-                ],
-                cwd=root,
-                env={**environment, AREA_VARIABLE: str(area)},
-                check=True,
+            if targets and "syntax" in selected:
+                # Narrowed, syntax checks the shipped playbooks at or under a target.
+                playbooks = [
+                    playbook
+                    for playbook in playbooks
+                    if any(
+                        playbook.relative_to(collection).is_relative_to(target)
+                        for target in targets
+                    )
+                ]
+                if not playbooks:
+                    raise SystemExit(
+                        "No shipped playbook is at or under " + " ".join(paths)
+                    )
+            if "units" in selected and not targets:
+                # The harness's own tests; -B keeps bytecode out of the checkout.
+                # AREA_VARIABLE names this run's area, so they parse the area that
+                # every process here takes as its HOME.
+                subprocess.run(
+                    [
+                        str(executable),
+                        "-I",
+                        "-B",
+                        str(root / "scripts/tools/ansible_check_test.py"),
+                    ],
+                    cwd=root,
+                    env={**environment, AREA_VARIABLE: str(area)},
+                    check=True,
+                )
+            run_ = Run(
+                root,
+                executable,
+                automation,
+                collection,
+                fixtures,
+                area,
+                environment,
+                selected,
+                targets,
             )
-        run_ = Run(
-            root,
-            executable,
-            automation,
-            collection,
-            fixtures,
-            area,
-            environment,
-            selected,
-            targets,
-        )
-        return run_lanes(check_lanes(run_, playbooks, inventory), area / "logs")
+            return run_lanes(check_lanes(run_, playbooks, inventory), area / "logs")
+
+    optional = any(os.environ.get(name) == "1" for name in OPTIONAL_TARGETS)
+    if sys.argv[1:] or optional:
+        return check()
+    return recorded_gate(
+        cache_root(root) / "ansible-check/passes",
+        lambda: pass_key(root, host_state(), installed_distributions(), sys.version),
+        os.environ,
+        check,
+        time.time,
+    )
 
 
 if __name__ == "__main__":
