@@ -999,7 +999,8 @@ def execute_tiebreaker(request, operation, request_digest, transport, outputs):
         raise
     members = {"changed", "removed", "attempted"} if operation == "destroy" else {"removed", "attempted"}
     ceph_native.require(isinstance(result, dict) and set(result) == members and all(type(result[key]) is bool for key in members), "evidence")
-    ceph_native.require(operation == "observe" or result["removed"] and result["attempted"], "not-removed")
+    # A removal proves absence; only one that changed nothing may have run no attempt, on a host the cluster never claimed.
+    ceph_native.require(operation == "observe" or result["removed"] and (result["attempted"] or not result["changed"]), "not-removed")
     value = {"version": TIEBREAKER_EVIDENCE, "request": request_digest, "owner": request["owner"], "fsid": request["fsid"], "host": host["name"],
              "removed": result["removed"], "attempted": result["attempted"]}
     return {"changed": result.get("changed", False), "evidence": tiebreaker_evidence(value, request_digest, request)}

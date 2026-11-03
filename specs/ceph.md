@@ -2129,7 +2129,27 @@ and needs neither the bootstrap host nor MON quorum.
   this FSID's directory; the cluster SSH user's `authorized_keys` names the
   recorded key in no line but the recorded one; and each registry
   credential name is absent or carries the descriptor metadata its record
-  holds. Anything else refuses `tiebreaker-foreign` with no effect. The
+  holds. A host the cluster's claim never reached, as when its apply
+  refused at the host prerequisites, holds no owner marker: with no record
+  in that marker directory but a marker write's `.ownership-` stage name (a
+  claim writes the marker first), no `authorized_keys` line of the cluster
+  SSH user tagged `bootwright:<owner>`, no sshd drop-in of this cluster, and
+  none of the FSID's own layout, which is
+  `/var/lib/ceph/<fsid>` (where cephadm keeps each of the FSID's daemons),
+  `/var/log/ceph/<fsid>`, the FSID's logrotate file, a `ceph-<fsid>` unit
+  file in `/etc/systemd/system` or its `ceph.target.wants`, and an
+  `/etc/ceph/ceph.conf` naming the FSID, read without following links, its
+  observation proves the footprint removed with no attempt, and its removal
+  changes nothing, writes no record and proves the same; another FSID's
+  layout there is no part of this cluster's footprint and stays. This
+  cluster's registry credential anchor counts as a trace and refuses as
+  below; a registry credential without its record or anchor is not
+  attributed and stays. A
+  claimed host whose marker was lost with every such trace is
+  indistinguishable from an unclaimed one and is proved the same way, with
+  no confirmation. Anything
+  else, an FSID-scoped part on an unclaimed host among it, refuses
+  `tiebreaker-foreign` with no effect. The
   inventory is the bounded read of cephadm's own layout every Ceph phase
   uses in place of `cephadm ls`, whose logging start writes host files
   ([cleanup facts](../.agents/knowledge/ibm-ceph-cleanup.md)).
@@ -2179,10 +2199,7 @@ goes with the FSID's data under `rm-cluster`, and their custody is on the
 bootstrap host, which is never the tiebreaker; no rbd-mirror daemon runs
 there, since the tiebreaker [runs a MON alone](#stretch-topology). Not yet met: the sshd drop-in
 the `authorize` phase writes stays on the tiebreaker after its removal;
-tracked as [B940](milestones/m2.md#b940). Not yet met: a tiebreaker the cluster's
-apply never claimed holds no owner marker, so its removal refuses
-`tiebreaker-foreign` even with no footprint; tracked as
-[B942](milestones/m2.md#b942).
+tracked as [B940](milestones/m2.md#b940).
 
 Not yet met: a tiebreaker the operator has decommissioned or reinstalled
 refuses this removal with no exit; tracked as

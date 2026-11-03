@@ -238,3 +238,35 @@ func TestARetirementRecordOfAnotherVersionRefusesByName(t *testing.T) {
 		t.Fatalf("an uncleaned tiebreaker was accepted: %s %v", effect, err)
 	}
 }
+
+// A tiebreaker an apply refused at the prerequisites never claimed proves removed with no attempt: the removal check reads
+// completed, which TestARemovalResolvesAnUnknownApplyBlockByTheRemovalsCheck resolves to no effect, and the destroy retires the block.
+func TestDestroyRetiresAClusterBlockWhoseApplyRefusedAtPrerequisites(t *testing.T) {
+	r := providedStretchRequest(t)
+	untouched, _ := json.Marshal(removedTiebreaker(r, true, false))
+	runner := &tiebreakerRunner{answer: func(request lifecycle.RunRequest) (lifecycle.RunResult, error) {
+		outcome := "unchanged"
+		if request.Operation == "observe" {
+			outcome = ""
+		}
+		return lifecycle.RunResult{Outcome: outcome, Evidence: untouched}, nil
+	}}
+	capability := New(api.CephCluster, runner).WithProofs(dependencyProofs{})
+	observed, err := capability.ObserveRemoval(context.Background(), tiebreakerExecution(t, r))
+	if err != nil || observed.Effect != reconciliation.EffectCompleted {
+		t.Fatalf("the removal check of a tiebreaker the apply never claimed %+v %+v", observed, diagnostics.Of(err))
+	}
+	result, err := capability.Destroy(context.Background(), tiebreakerExecution(t, r))
+	if err != nil || result.Outcome != reconciliation.OutcomeChanged || len(runner.runs) != 2 || runner.runs[1].Operation != "destroy" {
+		t.Fatalf("destroy %+v %+v after %d runs", result, diagnostics.Of(err), len(runner.runs))
+	}
+	if effect, err := EvaluateRetirement(result.Evidence, r, true); err != nil || effect != reconciliation.EffectCompleted {
+		t.Fatalf("retirement %s %s %v", result.Evidence, effect, err)
+	}
+	runner = &tiebreakerRunner{answer: func(lifecycle.RunRequest) (lifecycle.RunResult, error) {
+		return lifecycle.RunResult{Outcome: "changed", Evidence: untouched}, nil
+	}}
+	if result, err := New(api.CephCluster, runner).WithProofs(dependencyProofs{}).Destroy(context.Background(), tiebreakerExecution(t, r)); err == nil || result.Evidence != nil {
+		t.Fatalf("a changed removal that ran no attempt retired: %+v", result)
+	}
+}

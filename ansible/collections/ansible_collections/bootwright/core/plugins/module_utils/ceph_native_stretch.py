@@ -22,6 +22,7 @@ from __future__ import annotations
 import base64
 import contextlib
 import copy
+import hashlib
 import os
 import pwd
 import re
@@ -487,6 +488,8 @@ MAX_LISTING = 4096
 MAX_KEYS = 1024 * 1024
 MAX_CONF = 1024 * 1024
 NATIVE = ("daemons", "data", "log", "logrotate", "units", "conf")
+# The private name a marker write stages under before it links the record (ceph_native.Markers.write); never a record itself.
+MARKER_STAGE = ".ownership-"
 
 
 @contextlib.contextmanager
@@ -558,13 +561,18 @@ class TiebreakerRemoval:
         require(attempt in (None, self.record) and complete in (None, self.record) and (complete is None or attempt is not None), "ownership")
         return attempt, complete
 
-    def owned(self):
-        """The owner marker this cluster's claim wrote, naming exactly this cluster; anything else is another's host."""
+    def claimed(self):
+        """Whether this cluster's claim reached the host: its owner marker names exactly this cluster, and another's refuses.
+        A claim writes the owner marker before any other record, so with no marker the marker directory holds no record either."""
         try:
             record = self.markers.read()
+            if record is None:
+                require(all(name.startswith(MARKER_STAGE) for name in listing(self.markers.path)), "tiebreaker-foreign")
+                return False
         except Refusal:
             raise Refusal("tiebreaker-foreign") from None
-        require(record is not None and record == marker_identity(self.request), "tiebreaker-foreign")
+        require(record == marker_identity(self.request), "tiebreaker-foreign")
+        return True
 
     def daemons(self):
         """This FSID's daemons, each a cephadm:v1 MON or crash collector of this host; no other FSID or layout under the data root."""
@@ -731,20 +739,59 @@ class TiebreakerRemoval:
                 require(stat.S_ISREG(info.st_mode) and info.st_size <= MAX_CONF, "tiebreaker-foreign")
                 return self.fsid.encode("ascii") in handle.read(MAX_CONF + 1)
 
+    def scoped(self):
+        """This FSID's own native layout, read without following a link; cephadm keeps every daemon of the FSID under its data directory."""
+        return {"data": present(DATA_ROOT + "/" + self.fsid), "log": present(LOG_ROOT + "/" + self.fsid),
+                "logrotate": present(LOGROTATE_ROOT + "/ceph-" + self.fsid), "units": self.units(), "conf": self.conf_names()}
+
+    def traced(self):
+        """Whether a trace this cluster's authorize phase leaves outside the FSID's layout remains with no marker to name it: a key
+        line tagged with this cluster's owner in the cluster SSH user's authorized_keys, this cluster's sshd drop-in, or its registry
+        credential anchor."""
+        token = hashlib.sha256((self.fsid + "\x00" + self.request["owner"]).encode()).hexdigest()
+        if present("/etc/ssh/sshd_config.d/" + "05-bootwright-ceph-" + token + ".conf"):
+            return True
+        anchor = ".bootwright-registry-" + hashlib.sha256((self.request["owner"] + "\x00" + self.fsid).encode()).hexdigest()
+        try:
+            with registry_directory() as directory:
+                if registry_exists(directory, anchor):
+                    return True
+        except FileNotFoundError:
+            pass
+        try:
+            account = pwd.getpwnam(self.request["clusterSSHUser"])
+        except KeyError:
+            return False
+        tag = "bootwright:" + self.request["owner"]
+        try:
+            with self.keys({"uid": account.pw_uid, "home": account.pw_dir}) as (unused, info, content):
+                if info is None:
+                    return False
+                lines = content.decode("utf-8").splitlines()
+        except FileNotFoundError:
+            return False
+        except UnicodeError:
+            raise Refusal("tiebreaker-foreign") from None
+        return any(tag in line.split() for line in lines)
+
     def footprint(self, authorization):
-        return {"daemons": self.daemons(), "data": present(DATA_ROOT + "/" + self.fsid), "log": present(LOG_ROOT + "/" + self.fsid),
-                "logrotate": present(LOGROTATE_ROOT + "/ceph-" + self.fsid), "units": self.units(), "conf": self.conf_names(),
-                "key": self.key_present(authorization), "credential": self.credential_present()}
+        return dict(self.scoped(), daemons=self.daemons(), key=self.key_present(authorization), credential=self.credential_present())
 
     def prove(self):
-        """Read only: this cluster's owner marker, its records, and a footprint that is only its own."""
-        self.owned()
+        """Read only: this cluster's owner marker, its records, and a footprint that is only its own; None for a host the cluster's
+        claim never reached, which holds nothing of the FSID (any part of it there is another's)."""
+        if not self.claimed():
+            require(not any(self.scoped().values()) and not self.traced(), "tiebreaker-foreign")
+            return None
         attempt, complete = self.journal()
         authorization = self.authorization()
         return attempt, complete, authorization, self.footprint(authorization)
 
     def observe(self):
-        attempt, unused, unused_authorization, footprint = self.prove()
+        proved = self.prove()
+        if proved is None:
+            return {"removed": True, "attempted": False}
+        attempt, unused, unused_authorization, footprint = proved
         return {"removed": not any(footprint.values()), "attempted": attempt is not None}
 
     def rm_cluster(self):
@@ -757,8 +804,12 @@ class TiebreakerRemoval:
         return argv
 
     def remove(self):
-        """Every proof before the attempt record; each removal only while its part remains; completion only once all is absent."""
-        attempt, complete, authorization, footprint = self.prove()
+        """Every proof before the attempt record; each removal only while its part remains; completion only once all is absent.
+        An unclaimed host proved to hold nothing of the FSID is removed with no effect and no record."""
+        proved = self.prove()
+        if proved is None:
+            return {"changed": False, "removed": True, "attempted": False}
+        attempt, complete, authorization, footprint = proved
         if not any(footprint.values()):
             if complete is None:
                 self.markers.write(REMOVAL_ATTEMPT, self.record)

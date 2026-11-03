@@ -8,6 +8,7 @@ selected build (.agents/knowledge/ceph-stretch-native-facts.md).
 from __future__ import annotations
 
 import copy
+import hashlib
 import os
 import shutil
 from types import SimpleNamespace
@@ -38,6 +39,7 @@ class Markers:
     def __init__(self, records):
         self.records = copy.deepcopy(records)
         self.lose_after = None
+        self.path = ceph_native.ROOT + "/" + FSID
 
     def owned(self):
         return self.records.get("owner.json") is not None
@@ -270,6 +272,84 @@ def test_anything_but_this_clusters_own_footprint_refuses_tiebreaker_foreign_wit
         with pytest.raises(ceph_native.Refusal, match="^tiebreaker-foreign$"):
             call()
         assert tree(root) == before and tiebreaker.markers.records == kept and not tiebreaker.commands
+
+
+def markers(host):
+    return os.path.join(host.root, host.markers.path.lstrip("/"))
+
+
+def unclaimed(host):
+    """The tiebreaker an apply refused before its claim reached: no marker records, no key line, no FSID layout."""
+    root = host.root
+    host.markers.records.clear()
+    for relative in ("var/lib/ceph/" + FSID, "var/log/ceph/" + FSID):
+        shutil.rmtree(os.path.join(root, relative))
+    for relative in ("etc/logrotate.d/ceph-" + FSID, "etc/systemd/system/ceph-" + FSID + "@.service", "etc/systemd/system/ceph-" + FSID + ".target",
+                     "etc/systemd/system/ceph.target.wants/ceph-" + FSID + ".target", "etc/ceph/ceph.conf"):
+        os.unlink(os.path.join(root, relative))
+    write(os.path.join(root, "home/operator/.ssh/authorized_keys"), (OPERATOR_LINE + "\n").encode(), 0o600)
+    host.verify_tool = host.registry_intent = None
+
+
+@pytest.mark.parametrize("left", [None, "", ".ownership-k2v9x1"])
+def test_a_tiebreaker_the_apply_never_claimed_is_proved_untouched_with_nothing_written(tiebreaker, left):
+    unclaimed(tiebreaker)
+    write(os.path.join(tiebreaker.root, "etc/ceph/ceph.conf"), ("[global]\nfsid = " + OTHER_FSID + "\n").encode())
+    os.makedirs(os.path.join(tiebreaker.root, "var/lib/ceph", OTHER_FSID, "mon.node-5"))
+    if left is not None:
+        os.makedirs(markers(tiebreaker))
+        if left:
+            write(os.path.join(markers(tiebreaker), left), b"", 0o600)
+    before = tree(tiebreaker.root)
+    assert removal(tiebreaker).observe() == {"removed": True, "attempted": False}
+    assert removal(tiebreaker).remove() == {"changed": False, "removed": True, "attempted": False}
+    assert tree(tiebreaker.root) == before and tiebreaker.markers.records == {} and not tiebreaker.commands and not tiebreaker.declared
+
+
+@pytest.mark.parametrize("part", ["data", "log", "logrotate", "unit", "wants", "conf", "daemon", stretch.REMOVAL_ATTEMPT, "ssh-authorization.json",
+                                  "sshd-policy.json", "registry-pending.json", "linked-markers", "key-line", "sshd-drop-in", "registry-anchor"])
+def test_any_part_of_the_fsid_on_an_unclaimed_tiebreaker_refuses_tiebreaker_foreign_with_nothing_changed(tiebreaker, part):
+    unclaimed(tiebreaker)
+    root = tiebreaker.root
+    if part in ("data", "daemon"):
+        os.makedirs(os.path.join(root, "var/lib/ceph", FSID, "mon.node-5" if part == "daemon" else ""))
+    elif part == "log":
+        os.makedirs(os.path.join(root, "var/log/ceph", FSID))
+    elif part == "logrotate":
+        write(os.path.join(root, "etc/logrotate.d/ceph-" + FSID), b"rotate\n")
+    elif part == "unit":
+        write(os.path.join(root, "etc/systemd/system/ceph-" + FSID + "@.service"), b"[Unit]\n")
+    elif part == "wants":
+        write(os.path.join(root, "etc/systemd/system/ceph.target.wants/ceph-" + FSID + ".target"), b"[Unit]\n")
+    elif part == "conf":
+        write(os.path.join(root, "etc/ceph/ceph.conf"), ("[global]\nfsid = " + FSID + "\n").encode())
+    elif part == "key-line":
+        line = ceph_tunnel.authorization_line(PUBLIC, tiebreaker.request["owner"])
+        write(os.path.join(root, "home/operator/.ssh/authorized_keys"), (OPERATOR_LINE + "\n" + line + "\n").encode(), 0o600)
+    elif part == "sshd-drop-in":
+        token = hashlib.sha256((FSID + "\x00" + tiebreaker.request["owner"]).encode()).hexdigest()
+        write(os.path.join(root, "etc/ssh/sshd_config.d/05-bootwright-ceph-" + token + ".conf"), b"Match User operator\n")
+    elif part == "registry-anchor":
+        token = hashlib.sha256((tiebreaker.request["owner"] + "\x00" + FSID).encode()).hexdigest()
+        write(os.path.join(root, "etc/ceph/.bootwright-registry-" + token), b"{}", 0o600)
+    elif part == "linked-markers":
+        os.makedirs(os.path.join(root, "var/lib/bootwright/ceph"))
+        os.symlink("/etc", markers(tiebreaker))
+    else:
+        write(os.path.join(markers(tiebreaker), part), b"{}", 0o600)
+    before, kept = tree(root), copy.deepcopy(tiebreaker.markers.records)
+    for call in (lambda: removal(tiebreaker).observe(), lambda: removal(tiebreaker).remove()):
+        with pytest.raises(ceph_native.Refusal, match="^tiebreaker-foreign$"):
+            call()
+        assert tree(root) == before and tiebreaker.markers.records == kept and not tiebreaker.commands
+
+
+def test_the_controller_accepts_an_unchanged_removal_with_no_attempt_and_refuses_a_changed_one():
+    value = request()
+    result = ceph_core.execute(value, "destroy", DIGEST, Transport({"changed": False, "removed": True, "attempted": False}), retirement="tiebreaker")
+    assert result["changed"] is False and result["evidence"]["removed"] is True and result["evidence"]["attempted"] is False
+    with pytest.raises(ceph_native.Refusal, match="^not-removed$"):
+        ceph_core.execute(value, "destroy", DIGEST, Transport({"changed": True, "removed": True, "attempted": False}), retirement="tiebreaker")
 
 
 def test_a_cephadm_parser_without_the_removal_options_refuses_before_the_attempt(tiebreaker):
