@@ -6,23 +6,34 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
+
+	"github.com/crmarques/bootwright/internal/desiredstate/inputfs"
+	"github.com/crmarques/bootwright/internal/diagnostics"
+	"github.com/crmarques/bootwright/internal/reconciliation"
+	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
 )
 
 type e2eRender struct {
 	name string
 	sets []string
+	// refuses marks a render whose input a plan refuses today: the text every
+	// refusing directory must carry. The planning test fails when a
+	// directory refuses otherwise or when none refuses, so the mark leaves
+	// with the defect it names.
+	refuses string
 }
 
 var e2eRenders = map[string][]e2eRender{
 	"lab-rhel":                       {{name: "default"}},
 	"lab-sno":                        {{name: "default"}},
-	"lab-baremetal-rehearsal":        {{name: "default"}},
+	"lab-baremetal-rehearsal":        {{name: "default", refuses: "a physical installation erases only a root disk named by its /dev/disk/by-id/wwn-0x path"}},
 	"lab-network-variants":           {{name: "default"}},
 	"lab-3-nodes-ceph-host-variants": {{name: "default"}},
 	"lab-3-nodes-ocp":                {{name: "metallb off", sets: []string{"addons.metallb=false"}}},
@@ -31,6 +42,9 @@ var e2eRenders = map[string][]e2eRender{
 		{name: "default"},
 		{name: "file off", sets: []string{"ceph.services.file=false"}},
 		{name: "object off", sets: []string{"ceph.services.object=false"}},
+		{name: "file on", sets: []string{"ceph.services.file=true"}},
+		{name: "object on", sets: []string{"ceph.services.object=true"}},
+		{name: "file and object on", sets: []string{"ceph.services.file=true", "ceph.services.object=true"}},
 	},
 	"lab-3-nodes-ceph": {
 		{name: "default"},
@@ -40,7 +54,7 @@ var e2eRenders = map[string][]e2eRender{
 		{name: "nfs off", sets: []string{"ceph.services.nfs=false"}},
 		{name: "smb off", sets: []string{"ceph.services.smb=false"}},
 		{name: "observability off", sets: []string{"ceph.services.observability=false"}},
-		{name: "nvmeof on", sets: []string{"ceph.services.nvmeof=true"}},
+		{name: "nvmeof on", sets: []string{"ceph.services.nvmeof=true"}, refuses: "pool placement groups for CRUSH rule replicated_rule exceed the per-OSD bound (834 > 250 × 3)"},
 		{name: "every group off", sets: []string{
 			"ceph.services.block=false", "ceph.services.file=false", "ceph.services.object=false",
 			"ceph.services.nfs=false", "ceph.services.smb=false", "ceph.services.observability=false",
@@ -90,10 +104,33 @@ func e2eInputDirectories(t *testing.T, root string) []string {
 	return directories
 }
 
-func TestEveryE2ECaseRendersToValidInput(t *testing.T) {
+func renderE2ECase(t *testing.T, script, name string, render e2eRender) []string {
+	t.Helper()
+	output := filepath.Join(t.TempDir(), "input")
+	arguments := []string{name, "--out-dir", output}
+	for _, set := range render.sets {
+		arguments = append(arguments, "--set", set)
+	}
+	if combined, err := exec.Command(script, arguments...).CombinedOutput(); err != nil {
+		t.Fatalf("render.sh %s: %v\n%s", strings.Join(arguments, " "), err, combined)
+	}
+	return e2eInputDirectories(t, output)
+}
+
+func e2eRenderScript(t *testing.T) string {
+	t.Helper()
 	if _, err := exec.LookPath("helm"); err != nil {
 		t.Fatalf("rendering the e2e cases needs helm on PATH: %v", err)
 	}
+	script, err := filepath.Abs(filepath.Join("..", "..", "e2e", "render.sh"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	return script
+}
+
+func TestEveryE2ECaseRendersToValidInput(t *testing.T) {
+	script := e2eRenderScript(t)
 	names := e2eCaseNames(t)
 	for name := range e2eRenders {
 		if !slices.Contains(names, name) {
@@ -105,22 +142,10 @@ func TestEveryE2ECaseRendersToValidInput(t *testing.T) {
 			t.Fatalf("e2e/%s has no entry in e2eRenders; add the renders its runbook selects", name)
 		}
 	}
-	script, err := filepath.Abs(filepath.Join("..", "..", "e2e", "render.sh"))
-	if err != nil {
-		t.Fatal(err)
-	}
 	for _, name := range names {
 		for _, render := range e2eRenders[name] {
 			t.Run(name+"/"+render.name, func(t *testing.T) {
-				output := filepath.Join(t.TempDir(), "input")
-				arguments := []string{name, "--out-dir", output}
-				for _, set := range render.sets {
-					arguments = append(arguments, "--set", set)
-				}
-				if combined, err := exec.Command(script, arguments...).CombinedOutput(); err != nil {
-					t.Fatalf("render.sh %s: %v\n%s", strings.Join(arguments, " "), err, combined)
-				}
-				for _, directory := range e2eInputDirectories(t, output) {
+				for _, directory := range renderE2ECase(t, script, name, render) {
 					var out, errOut bytes.Buffer
 					code := run(context.Background(), []string{"validate", "-f", directory, "--output", "json"}, &out, &errOut)
 					if code != 0 {
@@ -143,4 +168,61 @@ func TestEveryE2ECaseRendersToValidInput(t *testing.T) {
 			})
 		}
 	}
+}
+
+// Validation proves an input is well formed; only planning proves the
+// production capabilities admit it, so each render is planned the way its
+// runbook applies it: every rendered directory is one context, planned alone.
+func TestEveryE2ECaseRenderPlansWithoutRefusal(t *testing.T) {
+	script := e2eRenderScript(t)
+	for _, name := range e2eCaseNames(t) {
+		for _, render := range e2eRenders[name] {
+			t.Run(name+"/"+render.name, func(t *testing.T) {
+				refusing := 0
+				for _, directory := range renderE2ECase(t, script, name, render) {
+					refusal := planE2EInput(t, directory)
+					switch {
+					case refusal == "":
+					case render.refuses != "" && strings.Contains(refusal, render.refuses):
+						refusing++
+					default:
+						t.Errorf("%s: the plan refuses: %s", filepath.Base(directory), refusal)
+					}
+				}
+				if render.refuses != "" && refusing == 0 {
+					t.Errorf("no directory refuses with %q; drop the refuses mark", render.refuses)
+				}
+			})
+		}
+	}
+}
+
+func planE2EInput(t *testing.T, directory string) string {
+	t.Helper()
+	sources, err := (inputfs.Reader{}).Read(context.Background(), []string{directory})
+	if err != nil {
+		t.Fatal(diagnostics.Of(err))
+	}
+	state, _ := compileAcceptance(t, sources)
+	if refused := productionUnsupported(t, state); len(refused) != 0 {
+		return fmt.Sprintf("the capabilities refuse %+v", refused)
+	}
+	resolver := buildCapabilities(systemClock{}, exampleControllerPorts(t), exampleMediaRecords{})
+	input := lifecycle.PlanInput{Verb: reconciliation.Apply, State: state, Controller: "controller", Context: lifecycle.ContextIdentity{Name: filepath.Base(directory)}}
+	var definitions []reconciliation.BlockDefinition
+	for _, binding := range resolver.Bindings() {
+		capability, ok := resolver.Resolve(binding.Kind, binding.Implementation)
+		if !ok {
+			t.Fatal("unresolved production capability", binding)
+		}
+		contribution, err := capability.Plan(context.Background(), input)
+		if err != nil {
+			return fmt.Sprintf("%v: %+v", binding, diagnostics.Of(err))
+		}
+		definitions = append(definitions, contribution.Definitions...)
+	}
+	if _, err := reconciliation.NewPlan(reconciliation.Apply, definitions); err != nil {
+		return err.Error()
+	}
+	return ""
 }

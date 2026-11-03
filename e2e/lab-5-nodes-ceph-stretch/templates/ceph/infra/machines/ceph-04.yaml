@@ -1,1 +1,1 @@
-{{ include "dataMachine" (dict "root" $ "name" "ceph-04") }}
+{{ include "dataMachine" (dict "root" $ "name" "ceph-04" "gateway" true) }}

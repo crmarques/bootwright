@@ -11,4 +11,11 @@ spec:
   replicated:
     size: 4
     minSize: 2
+{{- if .Values.ceph.services.object }}
+
+  # With RGW's zone pools the rule holds 1540 placement groups against the
+  # 1500 six OSDs admit; 16 placement groups here bring it to 1476.
+  autoscale:
+    pgNumMax: 16
+{{- end }}
 {{- end }}

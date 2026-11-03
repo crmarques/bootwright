@@ -54,7 +54,8 @@ addresses:
   arbiter-01: 198.51.100.65
 
 # Guest sizes. A data host runs a MON, an OSD (and on ceph-01/ceph-03 a MGR);
-# the arbiter runs a MON alone.
+# with ceph.services.object the gateway hosts ceph-02 and ceph-04 run a second
+# OSD on a second disk of osdDiskGiB. The arbiter runs a MON alone.
 size:
   data:
     cpu: 2
@@ -84,7 +85,9 @@ ceph:
   # The stretch services beyond RBD. file adds an MDS and a CephFS on
   # ceph-02 and ceph-04; object adds an RGW gateway there, reached directly.
   # Either needs data hosts of 6 GiB (size.data.memoryMiB=6144): 28 GiB of
-  # available memory across both contexts instead of 20.
+  # available memory across both contexts instead of 20. object also adds a
+  # second OSD disk to ceph-02 and ceph-04, 30 GiB more disk, so that the six
+  # OSDs admit the RGW zone pools' placement groups at the stretch size of 4.
   services:
     file: false
     object: false

@@ -10,7 +10,8 @@ owns the network, the DNS, NTP and proxy services and installs RHEL 9.8 on
 hosts and builds the cluster, taking `arbiter-01` as a provided Machine:
 Bootwright receives a host whose RHEL is already installed. Guests: 4 data
 hosts of 2 vCPU, 4 GiB and a 15 GiB OSD disk, 1 arbiter of 2 vCPU and 2 GiB
-(18 GiB in all).
+(18 GiB in all). With the object toggle `ceph-02` and `ceph-04` carry a
+second 15 GiB OSD disk, six OSDs in all, three per site.
 
 It rehearses, at the emulated tier only:
 
@@ -38,8 +39,8 @@ private records for cleanup. Run each other input variant from the beginning.
 
 | `--set` | Default | Effect |
 | --- | --- | --- |
-| `ceph.services.file=true` | `false` | An MDS on `ceph-02` and `ceph-04`, CephFS `files` on two 4/2 pools |
-| `ceph.services.object=true` | `false` | An RGW on `ceph-02` and `ceph-04` on port 8080, reached directly, with user `s3-canary` and its bucket |
+| `ceph.services.file=true` | `false` | An MDS on `ceph-02` and `ceph-04`, CephFS `files` on two 4/2 pools; with the object toggle too, `cephfs-data` starts at 16 placement groups so the rule stays within the six OSDs' budget |
+| `ceph.services.object=true` | `false` | An RGW on `ceph-02` and `ceph-04` on port 8080, reached directly, with user `s3-canary` and its bucket, and a second OSD disk and OSD on each of them: the zone pools at size 4 need six OSDs ([placement-group budget](../../specs/ceph-resources.md#placement-group-budget)) |
 | `size.data.memoryMiB=6144` | `4096` | Needed with either service toggle |
 
 The render writes two inputs: `$INPUT_DIR/arbiter` for `CTX_ARB` and `$INPUT_DIR/ceph`
@@ -78,8 +79,9 @@ counts each context's guests, the other context's running guest and one
 provider reserve (1 vCPU, 2 GiB, 10 GiB): 11 host CPUs, 20 GiB of available
 memory (28 GiB with a service toggle; swap never counts) and 190 GiB free on
 the filesystem that holds libvirt's guest disks (4 times 25 + 15 GiB, 20 GiB
-for the arbiter, 10 GiB reserve). OSDs and MONs peak during recovery, so keep
-the host's own swap enabled.
+for the arbiter, 10 GiB reserve; 220 GiB with the object toggle, whose two
+gateway hosts carry a second 15 GiB disk). OSDs and MONs peak during
+recovery, so keep the host's own swap enabled.
 
 <a id="run"></a>
 

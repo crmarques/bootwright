@@ -78,6 +78,25 @@ spec:
         data_devices:
           paths:
             - /dev/sda
+{{- if $s.object }}
+
+    # The second OSD of each gateway host, on the profile's second data disk.
+    - service_type: osd
+      service_id: data-extra
+
+      placement:
+        hosts:
+{{- range $i, $name := $data }}
+{{- if eq (mod $i 2) 1 }}
+          - {{ $name }}.{{ $dom }}
+{{- end }}
+{{- end }}
+
+      spec:
+        data_devices:
+          paths:
+            - /dev/sdb
+{{- end }}
 {{- if $s.file }}
 
     # One MDS per data site.

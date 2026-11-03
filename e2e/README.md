@@ -14,8 +14,10 @@ e2e/<case>/
 exists because a milestone item awaits its run: the runbook names the items it
 accepts and the evidence each needs. Record each accepted run as a row of the
 [acceptance ledger](../docs/acceptance.md).
-`TestEveryE2ECaseRendersToValidInput` in `cmd/bootwright` renders every case
-and validates the result, so a new case needs its renders listed there.
+`TestEveryE2ECaseRendersToValidInput` and
+`TestEveryE2ECaseRenderPlansWithoutRefusal` in `cmd/bootwright` render every
+case, validate the result and plan each rendered input, so a new case needs
+its renders, each service switch its runbook offers included, listed there.
 
 | Case | Guests | CPUs | Memory (GiB) | Disk (GiB) | Accepts |
 | --- | --- | --- | --- | --- | --- |

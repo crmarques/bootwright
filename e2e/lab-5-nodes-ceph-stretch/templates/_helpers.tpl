@@ -12,7 +12,7 @@
 {{- if has .name $s.dc1 -}}dc1{{- else if has .name $s.dc2 -}}dc2{{- else -}}{{ $s.tiebreaker }}{{- end -}}
 {{- end -}}
 
-{{/* dataMachine: one Ceph data host of the ceph context (dict root, name). */}}
+{{/* dataMachine: one Ceph data host of the ceph context (dict root, name, and gateway true on a host that runs the optional MDS and RGW). */}}
 {{- define "dataMachine" -}}
 {{- $v := .root.Values -}}
 apiVersion: bootwright.io/v1alpha1
@@ -27,7 +27,7 @@ spec:
   substrate:
     providerRef: lab-libvirt
     libvirt:
-      profileRef: data
+      profileRef: {{ if and .gateway $v.ceph.services.object }}gateway{{ else }}data{{ end }}
 
   hardware:
     rootDevice:

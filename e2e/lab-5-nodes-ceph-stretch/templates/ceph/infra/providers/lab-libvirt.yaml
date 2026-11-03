@@ -33,6 +33,26 @@ spec:
           - name: ceph-data
             sizeGiB: {{ .Values.size.data.osdDiskGiB }}
             media: ssd
+{{- if .Values.ceph.services.object }}
+
+      # The gateway hosts carry a second OSD disk. RGW's zone pools at the
+      # stretch size of 4 put 1284 placement groups on the rule, more than the
+      # 1000 that four OSDs admit; six OSDs, three per site, admit 1500.
+      - name: gateway
+        cpu: {{ .Values.size.data.cpu }}
+        memoryMiB: {{ .Values.size.data.memoryMiB }}
+        diskGiB: {{ .Values.size.data.diskGiB }}
+        tpm: {}
+
+        dataDisks:
+          - name: ceph-data
+            sizeGiB: {{ .Values.size.data.osdDiskGiB }}
+            media: ssd
+
+          - name: ceph-data-extra
+            sizeGiB: {{ .Values.size.data.osdDiskGiB }}
+            media: ssd
+{{- end }}
 
   networkAttachments:
     - name: lab-guests
