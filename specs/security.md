@@ -514,12 +514,12 @@ never inherited, never a provider default and never an Environment kind
 default, and a Machine whose installation delivers private material refuses it
 before registration. The one bounded exception is the emulated BMC of a
 virtual Machine, whose BMC uses verified HTTPS but fetches media
-without verifying the artifact server. Every consumer booting through one has
-its artifact server placed on that BMC's provider host, so the
-unverified fetch never leaves that host: the
-[container-cluster boot media](openshift-clusters.md#boot-media) and the
-[managed-OS installation](managed-os.md#refusal-table) each refuse before
-registration otherwise. A
+without verifying the artifact server only while that server is placed on the
+BMC's own provider host, so the unverified fetch never leaves that host. A
+[container-cluster node](openshift-clusters.md#boot-media) booted through an
+emulated BMC on another Machine imports the server's certificate and verifies
+the fetch; the [managed-OS installation](managed-os.md#refusal-table) refuses
+before registration there. A
 BMC's own transport verifies against its declared CA bundle alone, or
 against the system trust store when it declares none
 ([Machine BMC trust](api/machines.md#bmc-and-root-device-shape)).

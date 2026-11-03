@@ -1,0 +1,27 @@
+# The host that runs both contexts' guests, reached from the FIPS controller
+# over SSH as root at its address on the guest network. The operator
+# authorizes the public half of libvirt-host-key for root there and pins the
+# host's ECDSA key in libvirt-host-known-hosts (runbook.md, step 4).
+apiVersion: bootwright.io/v1alpha1
+kind: Machine
+metadata:
+  name: libvirt-host
+
+spec:
+  os:
+    provided: true
+
+  network:
+    addresses:
+      - name: ip
+        address: {{ .Values.host.gateway }}
+
+  access:
+    ssh:
+      addressRef: ip
+      port: 22
+      user: root
+      knownHostsRef: libvirt-host-known-hosts
+
+      auth:
+        privateKeyRef: libvirt-host-key

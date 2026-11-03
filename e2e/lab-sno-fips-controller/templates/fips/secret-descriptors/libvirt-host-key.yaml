@@ -1,0 +1,14 @@
+# The FIPS controller's root login on libvirt-host. The operator authorizes
+# its public half for root there, restricted to the controller's address.
+apiVersion: bootwright.io/v1alpha1
+kind: Secret
+metadata:
+  name: libvirt-host-key
+
+spec:
+  type: sshKeyPair
+
+  source:
+    generated:
+      keyType: ecdsaP256
+      comment: lab-sno-fips-controller-libvirt-host

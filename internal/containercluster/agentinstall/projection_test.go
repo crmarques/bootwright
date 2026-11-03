@@ -509,24 +509,18 @@ func onRemote(machine api.Object) api.Object {
 	return machine.WithSpec(machine.Spec().WithPath(api.StringValue("far-libvirt"), "substrate", "providerRef"))
 }
 
-// An emulated BMC fetches the private boot image without verifying the
-// server, so the image is safe only while that fetch never leaves the provider
-// host the controller runs on. A node on a provider hosted anywhere but the
-// artifact server's placement Machine refuses before registration, naming the
-// node, its provider host, the server and the Machine it is placed on.
-func TestANodeOffTheArtifactServersHostRefusesBeforeRegistration(t *testing.T) {
+func TestAnEmulatedNodeOffTheServersHostImportsTheServerCertificate(t *testing.T) {
+	verified := VirtualMedia{Trust: substrate.TrustImportCertificate, RemoveCertificate: true}
+	colocated := VirtualMedia{Trust: substrate.TrustEstablished}
 	for name, test := range map[string]struct {
-		objects     []api.Object
-		cluster     string
-		remediation string
+		objects []api.Object
+		want    map[string]VirtualMedia
 	}{
 		"single node": {
 			[]api.Object{onRemote(guest("sno-01", "198.51.100.21/24")), cluster("sno",
 				installSelection(endpoints("198.51.100.21", "198.51.100.21", "198.51.100.21", "node")),
 				node("master-0", "controlPlane", "sno-01", "master-0.sno.lab.example.test"))},
-			"OpenShiftCluster/sno",
-			"Machine/sno-01 is booted through a BMC on Machine/hv-01 and ArtifactServer/lab-artifacts is placed on Machine/controller; " +
-				"place InfraProvider/far-libvirt and ArtifactServer/lab-artifacts on the same Machine",
+			map[string]VirtualMedia{"sno-01": verified},
 		},
 		"one node of three": {
 			[]api.Object{
@@ -540,33 +534,24 @@ func TestANodeOffTheArtifactServersHostRefusesBeforeRegistration(t *testing.T) {
 					node("master-1", "controlPlane", "ocp-02", "master-1.ocp.lab.example.test"),
 					node("master-2", "controlPlane", "ocp-03", "master-2.ocp.lab.example.test")),
 			},
-			"OpenShiftCluster/ocp",
-			"Machine/ocp-03 is booted through a BMC on Machine/hv-01 and ArtifactServer/lab-artifacts is placed on Machine/controller; " +
-				"place InfraProvider/far-libvirt and ArtifactServer/lab-artifacts on the same Machine",
-		},
-		"server off the provider host": {
-			[]api.Object{guest("sno-01", "198.51.100.21/24"), servedBy("far-artifacts", cluster("sno",
-				installSelection(endpoints("198.51.100.21", "198.51.100.21", "198.51.100.21", "node")),
-				node("master-0", "controlPlane", "sno-01", "master-0.sno.lab.example.test")))},
-			"OpenShiftCluster/sno",
-			"Machine/sno-01 is booted through a BMC on Machine/controller and ArtifactServer/far-artifacts is placed on Machine/hv-01; " +
-				"place InfraProvider/lab-libvirt and ArtifactServer/far-artifacts on the same Machine",
+			map[string]VirtualMedia{"ocp-01": colocated, "ocp-02": colocated, "ocp-03": verified},
 		},
 	} {
 		t.Run(name, func(t *testing.T) {
 			catalog := api.NewCatalog(append(append(base(), hypervisor()...), test.objects...))
-			if unsupported := lifecycle.Identities(Refusals(catalog)); len(unsupported) != 1 || unsupported[0] != test.cluster {
+			if unsupported := lifecycle.Identities(Refusals(catalog)); len(unsupported) != 0 {
 				t.Fatalf("unsupported = %v", unsupported)
 			}
-			_, _, _, err := Requests(catalog, "controller", testContext)
-			reported := diagnostics.Of(err)
-			const reason = "an emulated BMC fetches the boot image without verifying its server, " +
-				"so the server is placed on the provider host that BMC runs on"
-			if len(reported) != 1 || reported[0].Code != "lifecycle.unsupported" || reported[0].Message != reason {
-				t.Fatalf("refusal = %#v", reported)
+			_, installs, _, err := Requests(catalog, "controller", testContext)
+			if err != nil {
+				t.Fatal(diagnostics.Of(err))
 			}
-			if reported[0].Remediation != test.remediation {
-				t.Fatalf("remediation = %q", reported[0].Remediation)
+			got := map[string]VirtualMedia{}
+			for _, node := range installs[0].Nodes {
+				got[node.Machine] = node.Controller.VirtualMedia
+			}
+			if !reflect.DeepEqual(got, test.want) {
+				t.Fatalf("virtual media trust = %+v, want %+v", got, test.want)
 			}
 		})
 	}

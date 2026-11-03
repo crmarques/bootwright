@@ -43,8 +43,9 @@ day-2 worker flow ([B739](milestones/backlog.md#b739)).
 | VMware vSphere | VMs Bootwright creates through vCenter | pushed to a staging datastore | `vsphere` with installer VIPs; `none` behind an operator load balancer; `none` for one node | M3f |
 
 A cluster's nodes are all on one path; a mixed cluster is parked
-([B747](milestones/backlog.md#b747)), and so is one virtual cluster across
-several libvirt hosts ([B743](milestones/backlog.md#b743)). On every path a
+([B747](milestones/backlog.md#b747)). Admission lets a libvirt cluster's
+nodes sit on several libvirt hosts, and a node whose host is not its artifact
+server's fetches its image verified ([boot media](openshift-clusters.md#boot-media)). On every path a
 VIP-bearing platform takes installer-owned endpoints only, because the agent
 installer forwards no user-managed load balancer to the service that installs
 the cluster; modelling an external load balancer only as `none` is
@@ -202,8 +203,7 @@ that would revive it: a Bootwright-owned controller resolver route
 ([B739](milestones/backlog.md#b739)), install-time bridges and a custom
 `br-ex` ([B740](milestones/backlog.md#b740)), bridge NADs and overlay UDNs
 ([B741](milestones/backlog.md#b741)), Tang encryption
-([B742](milestones/backlog.md#b742)), one virtual cluster across libvirt hosts
-([B743](milestones/backlog.md#b743)), MetalLB BGP
+([B742](milestones/backlog.md#b742)), MetalLB BGP
 ([B744](milestones/backlog.md#b744)), a Redfish facade over KubeVirt
 ([B745](milestones/backlog.md#b745)), one staged image per cluster
 ([B746](milestones/backlog.md#b746)), mixed-arm clusters

@@ -531,8 +531,11 @@ class Client:
         presenting other media is then released and proved empty, so the first
         attach is never refused as occupied; and the device is made to trust
         the server once, before the first attempt and never again inside the
-        retry. A failed attempt is retried only from a device proved empty, and
-        a fetch the controller reports failed names the causes on its side.
+        retry. A failed attempt is retried only from a device proved empty and,
+        under an imported certificate the device flag decides, only once reads
+        prove that verification is still on, since a controller that restarted
+        between attempts may have lost the trust it was given. A fetch the
+        controller reports failed names the causes on its side.
         """
         member = self.media_member()
         if not member:
@@ -555,6 +558,8 @@ class Client:
         for attempt in range(INSERT_ATTEMPTS):
             if attempt:
                 self.sleep(INSERT_RETRY_DELAY)
+                if trust == TRUST_IMPORT and not manager_verified:
+                    self._verified_fetch(member)
             reason, fetch_failed = self._attach(member, image)
             if not reason:
                 return True

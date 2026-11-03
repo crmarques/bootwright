@@ -52,8 +52,12 @@ on 2026-09-28:
   `Verify`, defaulting to `SUSHY_EMULATOR_VMEDIA_VERIFY_SSL`, and uses the
   imported certificate as that trust when verification is on
   ([resources/vmedia.py](https://github.com/openstack/sushy-tools/blob/3b57e7a/sushy_tools/emulator/resources/vmedia.py)
-  49, 128-165, 231-275). Bootwright's emulated controllers are `established`
-  and never import, so this surface is used only by the client's tests.
+  49, 128-165, 231-275). An emulated controller on the artifact server's own
+  host stays `established` and never imports. A container-cluster node whose
+  emulated controller is on another host imports through this surface and
+  removes the certificate after the boot
+  ([B743](../../specs/milestones/m3.md#b743)). Until that case's first run,
+  nothing has driven it against the image.
 
 ## The stock command must not be used
 

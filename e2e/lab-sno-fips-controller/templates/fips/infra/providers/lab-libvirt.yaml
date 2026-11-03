@@ -1,0 +1,38 @@
+# libvirt and the emulated BMC run on libvirt-host, not on the controller.
+# The guest network belongs to lab-sno-fips-controller-bootstrap; this context
+# attaches to it.
+apiVersion: bootwright.io/v1alpha1
+kind: InfraProvider
+metadata:
+  name: lab-libvirt
+
+spec:
+  libvirt:
+    capacityReserve:
+      cpu: 1
+      memoryMiB: 2048
+      diskGiB: 10
+
+    machineRef: libvirt-host
+
+    bmcEmulation:
+      bindAddress: {{ .Values.host.gateway }}
+      port: {{ .Values.ports.fipsBMC }}
+      certificateRef: lab-bmc-tls
+
+      auth:
+        credentialsRef: lab-bmc-credentials
+
+    machineProfiles:
+      - name: sno
+        cpu: {{ .Values.guest.cpu }}
+        memoryMiB: {{ .Values.guest.memoryMiB }}
+        diskGiB: {{ .Values.guest.diskGiB }}
+        tpm: {}
+
+  networkAttachments:
+    - name: lab-guests
+
+      libvirt:
+        bridge: {{ .Values.host.bridge }}
+        management: external

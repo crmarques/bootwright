@@ -744,7 +744,9 @@ registration (F13).
 `TestAnAdapterStillRunningRefusesTheNextRun`,
 `TestAStaleRunDirectoryIsRemovedWithItsSecretFiles`,
 `TestTheSweepNeverFollowsALinkOrTouchesWhatIsNotItsOwn`,
-`TestANodeOffTheArtifactServersHostRefusesBeforeRegistration`,
+the off-host node refusal test (X294 replaced it with
+`TestAnEmulatedNodeOffTheServersHostImportsTheServerCertificate` when it
+lifted that refusal),
 `TestAMultiNodeClusterOnAnotherPlatformRefusesBeforeRegistration`, and the
 collection tests
 `test_every_file_beneath_a_served_root_is_readable_by_the_worker_and_nothing_broader`,

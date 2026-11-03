@@ -1,0 +1,19 @@
+# The cluster's resolver on the FIPS controller. Other names go to the
+# resolver lab-sno-fips-controller-bootstrap manages on this host.
+apiVersion: bootwright.io/v1alpha1
+kind: DNSServer
+metadata:
+  name: lab-dns
+
+spec:
+  management: managed
+  machineRef: controller
+  implementation: dnsmasq
+  port: 53
+
+  endpoints:
+    - name: ip
+      addressRef: ip
+
+  forwarders:
+    - {{ include "address" . }}

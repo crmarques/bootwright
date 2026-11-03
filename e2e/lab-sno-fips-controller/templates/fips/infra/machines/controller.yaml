@@ -1,0 +1,24 @@
+# The FIPS-mode guest lab-sno-fips-controller-bootstrap installed; this
+# context runs on it.
+apiVersion: bootwright.io/v1alpha1
+kind: Machine
+metadata:
+  name: controller
+
+spec:
+  os:
+    provided: true
+
+  proxy:
+    direct: {}
+
+  network:
+    addresses:
+      - name: fqdn
+        address: {{ .Values.controller.name }}.{{ .Values.host.domain }}
+
+      - name: ip
+        address: {{ .Values.controller.address }}
+
+  access:
+    local: true

@@ -33,6 +33,7 @@ type e2eRender struct {
 var e2eRenders = map[string][]e2eRender{
 	"lab-rhel":                       {{name: "default"}},
 	"lab-sno":                        {{name: "default"}},
+	"lab-sno-fips-controller":        {{name: "default"}, {name: "tpm2 on", sets: []string{"security.tpm2=true"}}},
 	"lab-network-variants":           {{name: "default"}},
 	"lab-3-nodes-ceph-host-variants": {{name: "default"}},
 	"lab-3-nodes-ocp":                {{name: "metallb off", sets: []string{"addons.metallb=false"}}},

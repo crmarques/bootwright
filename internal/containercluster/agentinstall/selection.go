@@ -176,16 +176,6 @@ func unsupportedReason(catalog api.Catalog, cluster api.Object) (reason, remedia
 		if _, reason, remediation := installerRootDeviceHints(bound, target.RootDeviceHints); reason != "" {
 			return reason, remediation
 		}
-		// A virtual node's controller is emulated on its provider host and
-		// fetches the private image without verifying the server, so the token
-		// is the image's only protection unless that fetch never leaves the
-		// host. The server is therefore placed on that same host.
-		if !target.Physical && served && target.PlacementMachine.Name() != serverHost.Name() {
-			return "an emulated BMC fetches the boot image without verifying its server, so the server is placed on the provider host that BMC runs on",
-				bound.Identity() + " is booted through a BMC on " + target.PlacementMachine.Identity() + " and " +
-					server.Identity() + " is placed on " + serverHost.Identity() + "; place " +
-					string(api.InfraProvider) + "/" + target.Provider + " and " + server.Identity() + " on the same Machine"
-		}
 	}
 	if served && serverHost.Name() != controllerMachine {
 		return "a cluster's boot image is built on the controller, so the server it is published through is placed there", "set spec.machineRef on " + server.Identity() + " to the controller Machine"
@@ -476,6 +466,7 @@ func nodeProjections(catalog api.Catalog, cluster api.Object, contextName, contr
 	slices.SortFunc(declared, func(x, y api.Value) int {
 		return strings.Compare(x.Get("name").Text(), y.Get("name").Text())
 	})
+	_, serverHost, served := mediaServer(catalog, cluster)
 	projections := make([]nodeProjection, 0, len(declared))
 	for _, node := range declared {
 		reference := node.Get("machineRef").Text()
@@ -488,6 +479,7 @@ func nodeProjections(catalog api.Catalog, cluster api.Object, contextName, contr
 		if err != nil {
 			return nil, err
 		}
+		target = emulatedFetchTrust(target, serverHost, served)
 		hints, reason, remediation := installerRootDeviceHints(bound, target.RootDeviceHints)
 		if reason != "" {
 			return nil, refusal("lifecycle.unsupported", reason, remediation)
@@ -520,6 +512,17 @@ func nodeProjections(catalog api.Catalog, cluster api.Object, contextName, contr
 		return nil, refusalAt("api.required", "$.spec.nodes", "the cluster declares no node", "declare spec.nodes on "+cluster.Identity())
 	}
 	return projections, nil
+}
+
+// emulatedFetchTrust keeps an emulated controller's established fetch only
+// while that fetch never leaves the server's own host. A controller emulated
+// on another Machine imports the server's certificate, verifies the fetch and
+// removes the certificate after the boot.
+func emulatedFetchTrust(target substrate.Target, serverHost api.Object, served bool) substrate.Target {
+	if !target.Physical && target.Delivery == substrate.DeliveryFetch && served && target.PlacementMachine.Name() != serverHost.Name() {
+		target.Controller.VirtualMedia = substrate.VirtualMedia{Trust: substrate.TrustImportCertificate, RemoveCertificate: true}
+	}
+	return target
 }
 
 // frozenNodes is what the install block freezes about each node: the machine

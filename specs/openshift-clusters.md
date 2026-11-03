@@ -42,8 +42,8 @@ management controller under the trust its Machine declares, with the
 [private delivery](#boot-media) rules below.
 
 A virtual node whose provider host is not the Machine the selected artifact
-server is placed on refuses because its emulated BMC fetches the private
-[boot image](#boot-media) without verifying the server. The placement, install-profile and physical-node refusals
+server is placed on boots under a verified fetch of the private
+[boot image](#boot-media) instead of its emulated BMC's unverified one. The placement, install-profile and physical-node refusals
 and the two root-device refusals name the bound Machine in the remediation the
 refusal carries, because it is what the operator changes. A node whose
 [realized target](substrates.md#selection-and-refusal) does not derive, other
@@ -119,7 +119,6 @@ their diagnostic carries the refused field's path.
 | A physical node with unverified media TLS | a physical node selects disableVerification | `a physical node's private boot image requires virtual-media TLS verification` | `set spec.substrate.baremetal.bmc.virtualMedia.tls.trust on <machine> to importCertificate or established` |
 | A root device the installer cannot name | a node's `spec.hardware.rootDevice.deviceName` other than `/dev/<name>` or `/dev/disk/by-path/<name>` | `the agent installer names a root device only as /dev/<name> or /dev/disk/by-path/<name>` | `set spec.hardware.rootDevice.deviceName on <machine> to such a path` |
 | A root device size the frozen input cannot carry | a node whose `minSizeGigabytes` exceeds 9007199254740991, the largest integer the frozen input carries exactly, at `spec.hardware.rootDevice` or `spec.substrate.baremetal.rootDevice` on its Machine | `a node's minSizeGigabytes is larger than the frozen installer input carries exactly` | `declare spec.hardware.rootDevice.minSizeGigabytes on <machine> as at most 9007199254740991` |
-| A node off the artifact server's host | a virtual node whose provider's `spec.libvirt.machineRef` is not the selected server's `spec.machineRef` | `an emulated BMC fetches the boot image without verifying its server, so the server is placed on the provider host that BMC runs on` | `<machine> is booted through a BMC on <provider host> and <server> is placed on <server host>; place <provider> and <server> on the same Machine` |
 
 A row lifts with the code of the item that delivers what it refuses, and the
 table and its test change in that commit:
@@ -128,8 +127,7 @@ table and its test change in that commit:
 - [B69](milestones/m3.md#b69) lifts the disconnected-cluster row.
 - [B733](milestones/m3.md#b733) lifts the unrealized-substrate row for a node
   on a vSphere provider and the multi-node `vsphere` platform row.
-- [B743](milestones/backlog.md#b743) lifts the row for a node off the artifact
-  server's host, and [B748](milestones/backlog.md#b748) the OKD row.
+- [B748](milestones/backlog.md#b748) lifts the OKD row.
 
 Each other row stays until an item names it.
 
@@ -143,6 +141,14 @@ is private, a physical node whose BMC leg is `http` or does not verify,
 or whose virtual-media trust is `disableVerification`, refuses before
 registration, and an insert under `established` refuses where the manager's
 deciding setting reads false.
+
+A virtual node's emulated BMC on the Machine its artifact server is placed on
+keeps `established`: its unverified fetch never leaves that host. One on
+another Machine freezes `importCertificate` with certificate removal after the
+boot, so its insert imports the server's certificate, turns the device's
+verification on and fetches verified, and its eject deletes the certificate,
+through the same client a physical BMC uses
+([BMC trust](substrates.md#identity-and-power-operations)).
 
 ### Cluster size
 
@@ -483,15 +489,16 @@ URL or a token
 That contract requires the fetching controller to verify the serving
 certificate. A physical management controller does so under the trust its
 Machine declares. An [emulated BMC](substrates.md#machine-realization)
-does not: it fetches over HTTPS without verifying the server's certificate, so
-on that substrate confidentiality rests on the token and on the fetch never
-leaving the provider host. Selection enforces the second: a virtual node whose
-provider host is not the Machine the artifact server is placed on refuses before
-registration. This is the one exception, and it is recorded here rather than
-implied. The [managed-OS installation](managed-os.md#refusal-table) of a
-virtual Machine shares it, bounded the same way: a virtual Machine whose
+on the artifact server's own placement Machine does not: it fetches over HTTPS
+without verifying the server's certificate, so there confidentiality rests on
+the token and on the fetch never leaving that host. An emulated BMC on any
+other Machine imports the server's certificate and verifies its fetch, as
+[selection](#refusal-table) freezes. This is the one exception, and it is
+recorded here rather than implied. The [managed-OS installation](managed-os.md#refusal-table) of a
+virtual Machine shares it, bounded more narrowly: a virtual Machine whose
 provider host is not its image server's placement Machine refuses before
-registration. It extends to no other consumer.
+registration ([B1088](milestones/backlog.md#b1088)). It extends to no other
+consumer.
 
 **Pushed delivery.** A cluster whose every node takes pushed delivery needs no
 artifact server: the block builds its image in the work area

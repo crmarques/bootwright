@@ -219,7 +219,6 @@ Alias cell.
 | [B740](#b740) | new, 2026-10-20 (D172) | product | Container cluster | Install-time OVS or Linux bridges and a customized `br-ex` on cluster nodes | Unproven in agent `networkConfig`; needs a live test |
 | [B741](#b741) | new, 2026-10-20 (D172) | product | Container cluster | Linux-bridge NADs and overlay UDNs as secondary networks | M3d's external networks are localnet; neither is needed by its profiles, pending the owner's [Q24](m3.md#m3a-open-decisions) |
 | [B742](#b742) | new, 2026-10-20 (D172) | product | Container cluster | Tang disk encryption | The API admits TPM2 only; Tang needs reachable servers and thumbprints |
-| [B743](#b743) | new, 2026-10-20 (D172) | product | Container cluster and Substrate | One virtual cluster across several libvirt hosts | An emulated controller fetches the private image without verifying its server |
 | [B744](#b744) | new, 2026-10-20 (D172) | product | Add-ons | MetalLB BGP advertisements | M3d's pools are L2; BGP needs a router and one ASN per cluster |
 | [B745](#b745) | new, 2026-10-20 (D172) | product | Substrate | A Redfish facade realizes KubeVirt Machines | The 2026-06-28 owner decision keeps `virtctl image-upload`; vSphere needs the port anyway; the facade needs host-wide feature gates |
 | [B746](#b746) | new, 2026-10-20 (D172) | enabling | Substrate | One staged image per cluster on push arms | Per-node pushes keep ownership per Machine; it needs evidence from M3e or M3f runs that per-node pushes are the bottleneck |
@@ -275,6 +274,7 @@ Alias cell.
 | [B968](#b968) | new, 2026-10-29 (X216) | enabling | CLI | CLI help and output name cluster and storage kinds from the family registry, and the family-neutral check covers `internal/cli` | About 24 help and output strings name kinds directly and the help goldens pin them; the check exempts `internal/cli` meanwhile |
 | [B969](#b969) | new, 2026-10-29 (X216) | enabling | Storage | The six storage requirements no example plans become reference-edge rows | `CephClient`, `CephNFSExport` and `CephSMBResource` `filesystemRef` and the three `CephObjectGateway` `spec.pools` references order blocks in code, but the catalog test needs a planned example per row, so they carry a reason meanwhile |
 | [B1085](#b1085) | new, 2026-11-03 (the D225 lanes' checks) | defect | Storage and Verification tooling | A Ceph tunnel-custody unit test passes whatever filesystem holds `TMPDIR` | Fails only with `TMPDIR` on btrfs; the gate runs on tmpfs `/tmp`; gates no milestone |
+| [B1088](#b1088) | new, 2026-11-03 (D227) | product | Managed OS, with Substrate | A virtual Machine whose emulated BMC is off its image server's host installs through a verified fetch | No consumer installs RHEL on a libvirt host other than the controller's; B743's mechanism serves it once one does |
 
 ### B82
 
@@ -2418,14 +2418,6 @@ Tang disk encryption: `mode: tang` with `tangServers` as a JSON string of
 `{url, thumbprint}`, every server reachable from the nodes before the install.
 Parked on 2026-10-20 (D172): the API admits TPM2 alone.
 
-### B743
-
-One virtual cluster whose nodes sit on several libvirt hosts. The emulated
-controller fetches the private image without verifying its server, so every
-provider host must be the artifact server's (the container-cluster refusal "A
-node off the artifact server's host"). Parked on 2026-10-20 (D172).
-**Definition needs:** a verified emulator fetch or a per-host publication.
-
 ### B744
 
 MetalLB BGP: `BGPPeer` (`metallb.io/v1beta2`) and `BGPAdvertisement`, one ASN
@@ -3070,6 +3062,18 @@ small tmpfs. **Outcome:** the test, or the listing it exercises, no longer
 depends on the filesystem's directory-descriptor behavior, or the dependency is
 recorded as a requirement of the host the check runs on. Parked because it
 gates no milestone and the gate runs on `/tmp`.
+
+### B1088
+
+The managed-OS installation still refuses a virtual Machine whose provider
+host is not its image server's placement Machine
+([refusal table](../managed-os.md#refusal-table)), because its emulated BMC
+fetches unverified. **Outcome:** that Machine freezes `importCertificate`
+with certificate removal, as [B743](m3.md#b743) does for a container-cluster
+node, and the refusal row lifts. Parked because no case installs RHEL on a
+libvirt host other than the controller's.
+**Exit evidence:** a selection test freezing the verified trust and the
+refusal-table test without the row.
 
 ## Audit remediation (2026-10-26)
 
@@ -6634,3 +6638,27 @@ metadata-clear regions (128 MiB windows at the head, the tail and the 1, 10,
 which assumes a sustained 160 MB/s per disk within the worker's four hours;
 the field names `method: metadataClear` and `spec.hardware.clearOnInstall`;
 and that a clear never claims sanitization.
+
+### D227
+
+**owner** (2026-11-03): asked for an e2e case in which a FIPS-mode RHEL
+controller Machine, installed by a bootstrap context, runs one FIPS context
+that uses this host as its libvirt+sushy substrate over SSH and installs a
+single-node OpenShift guest there. The container-cluster refusal "A node off
+the artifact server's host" blocked it. The owner first proposed placing the
+artifact server on the remote host and copying the image there, asked for its
+impact, and then said "proceed with recommendations". The recommendation:
+keep the server on the controller and verify the emulated BMC's fetch instead.
+A node whose emulated BMC runs on a Machine other than the artifact server's
+freezes `importCertificate` with certificate removal, the trust a physical
+BMC defaults to, so the emulator imports the server's certificate and
+verifies its fetch, and the refusal row lifts. This revives
+[B743](m3.md#b743) from parked into M3d as slice X294, together with the
+[lab-sno-fips-controller](../../e2e/lab-sno-fips-controller/runbook.md) case
+that runs it. The managed-OS twin of the refusal stays, parked as
+[B1088](#b1088). Remote publication is not taken: it would put a
+secret-bearing image on a second host and split the media and install blocks
+across hosts. Session clauses, pending the owner's review: the derived trust
+needs no API field; colocated emulated nodes keep `established`; and the
+certificate is removed after every boot, because the emulator's device holds
+one certificate.

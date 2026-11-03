@@ -1,0 +1,21 @@
+# The emulated BMC on libvirt-host fetches the agent image from this server on
+# the controller, verifying this certificate it imports before the insert.
+apiVersion: bootwright.io/v1alpha1
+kind: Secret
+metadata:
+  name: artifact-server-tls
+
+spec:
+  type: tlsCertificate
+
+  source:
+    generated:
+      commonName: {{ .Values.controller.name }}.{{ .Values.host.domain }}
+
+      dnsNames:
+        - {{ .Values.controller.name }}.{{ .Values.host.domain }}
+
+      ipAddresses:
+        - {{ .Values.controller.address }}
+
+      validityDays: 3650

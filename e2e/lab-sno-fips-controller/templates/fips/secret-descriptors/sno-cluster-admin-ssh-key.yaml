@@ -1,0 +1,13 @@
+# A FIPS installation refuses an ssh-ed25519 node key.
+apiVersion: bootwright.io/v1alpha1
+kind: Secret
+metadata:
+  name: sno-cluster-admin-ssh-key
+
+spec:
+  type: sshKeyPair
+
+  source:
+    generated:
+      keyType: ecdsaP256
+      comment: sno-cluster-admin

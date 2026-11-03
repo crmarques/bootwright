@@ -1797,6 +1797,24 @@ def test_trust_is_set_once_outside_the_insert_retry(monkeypatch):
     assert gets(firmware).count(firmware.system + CERTIFICATES) == 1
 
 
+# A controller that restarts between attempts may come back with its default
+# unverified fetch. Under an imported certificate the retry first reads the
+# device's verification and refuses before a second attach when it is off.
+def test_an_import_retry_refuses_once_the_device_stopped_verifying(monkeypatch):
+    firmware = emulator()
+    attach = firmware.system + INSERT
+
+    def restarted(firmware):
+        firmware.verify_certificate, firmware.certificates = False, {}
+        return 500, None, {}
+
+    firmware.script("POST", attach, restarted)
+    with pytest.raises(ControllerError, match="VerifyCertificate reads false") as failure:
+        run(monkeypatch, firmware, "insert", image=IMAGE, **IMPORT)
+    assert str(failure.value).endswith("; " + redfish_control.NO_VERIFIED_FETCH)
+    assert [path for _method, path, _payload in writes(firmware)].count(attach) == 1
+
+
 # A collection is read in full before anything is added to it, so one listing
 # more members than the bound refuses rather than being read in part.
 def test_a_certificate_collection_beyond_its_bound_refuses(monkeypatch):

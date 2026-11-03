@@ -1,0 +1,9 @@
+# The NTP server lab-sno-fips-controller-bootstrap manages on this host.
+apiVersion: bootwright.io/v1alpha1
+kind: NTPServer
+metadata:
+  name: lab-ntp
+
+spec:
+  management: external
+  address: {{ include "address" . }}

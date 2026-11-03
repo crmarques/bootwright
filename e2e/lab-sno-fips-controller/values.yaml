@@ -1,0 +1,61 @@
+# Default input of the lab-sno-fips-controller case. Override keys with
+# e2e/render.sh --set or a --values file. The case renders two inputs:
+# <out>/bootstrap for context lab-sno-fips-controller-bootstrap, applied on
+# this host, and <out>/fips for context lab-sno-fips-controller, applied on
+# the FIPS-mode guest the bootstrap context installs.
+
+host:
+  # This host's address the bootstrap services bind and the guests reach;
+  # "auto" takes this host's default-route source address at render time.
+  address: auto
+  domain: e2e.example.test
+
+  upstreamDNS:
+    - 1.1.1.1
+
+  upstreamNTP:
+    - 162.159.200.1
+
+  # The NAT network the bootstrap context creates; the fips context attaches.
+  # The fips context reaches this host over SSH at the gateway address, which
+  # its emulated BMC binds.
+  bridge: virbr-e2e
+  cidr: 198.51.100.0/24
+  gateway: 198.51.100.1
+  prefix: 24
+
+# Media names as added with `bootwright media add --name`.
+rhel:
+  version: "9.8"
+  bootMedia: rhel-9.8-x86_64-boot.iso
+  dvdMedia: rhel-9.8-x86_64-dvd.iso
+
+# The FIPS-mode RHEL guest that becomes the fips context's controller. It
+# builds the agent image and serves it and the cluster's DNS; libvirt and the
+# emulated BMC stay on this host, whose BMC verifies the image's server.
+controller:
+  name: fips-controller
+  address: 198.51.100.10
+  cpu: 4
+  memoryMiB: 6144
+  diskGiB: 60
+
+# Each context's emulated BMC on this host: the bootstrap one on loopback, the
+# fips one on the gateway address the FIPS controller dials.
+ports:
+  bootstrapBMC: 8000
+  fipsBMC: 8010
+
+openshift:
+  version: 4.21.15
+
+guest:
+  address: 198.51.100.31
+  cpu: 8
+  memoryMiB: 16384
+  diskGiB: 120
+
+# The cluster is always FIPS; tpm2 also encrypts the node's installation
+# disk, unlocked by the guest TPM2.
+security:
+  tpm2: false

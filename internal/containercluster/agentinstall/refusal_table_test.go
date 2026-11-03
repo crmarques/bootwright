@@ -136,16 +136,6 @@ func TestOpenShiftClusterRefusalTableMatchesUnsupported(t *testing.T) {
 		"A root device size the frozen input cannot carry": {
 			singleNodeWith(text("deviceName", "/dev/vda"), number("minSizeGigabytes", "9007199254740992")), "OpenShiftCluster/sno", onNode,
 		},
-		"A node off the artifact server's host": {
-			api.NewCatalog(append(append(base(), hypervisor()...), onRemote(guest("sno-01", "198.51.100.21/24")), cluster("sno",
-				installSelection(endpoints("198.51.100.21", "198.51.100.21", "198.51.100.21", "node")),
-				node("master-0", "controlPlane", "sno-01", "master-0.sno.lab.example.test")))),
-			"OpenShiftCluster/sno",
-			map[string]string{
-				"<cluster>": "OpenShiftCluster/sno", "<machine>": "Machine/sno-01", "<provider host>": "Machine/hv-01",
-				"<server>": "ArtifactServer/lab-artifacts", "<server host>": "Machine/controller", "<provider>": "InfraProvider/far-libvirt",
-			},
-		},
 	}
 	for _, row := range refusalTable(t) {
 		test, found := cases[row.name]

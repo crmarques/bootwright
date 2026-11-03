@@ -1,0 +1,32 @@
+# Installed here in FIPS mode and handed, with its RHEL, to
+# lab-sno-fips-controller as that context's controller Machine.
+apiVersion: bootwright.io/v1alpha1
+kind: Machine
+metadata:
+  name: {{ .Values.controller.name }}
+
+spec:
+  substrate:
+    providerRef: lab-libvirt
+    libvirt:
+      profileRef: controller
+
+  hardware:
+    rootDevice:
+      deviceName: /dev/vda
+
+  os:
+    provided: false
+    installProfileRef: rhel
+
+  network:
+    configRef: lab-guests
+    installAddressRef: ip
+
+    addresses:
+      - name: fqdn
+        address: {{ .Values.controller.name }}.{{ .Values.host.domain }}
+
+      - name: ip
+        address: {{ .Values.controller.address }}/{{ .Values.host.prefix }}
+        interface: enp1s0
