@@ -234,7 +234,7 @@ func automationFormats() map[string]automationFormat {
 		"substrate-access-kubevirt-evidence-v1": {class: formatMirrored},
 		"os-package-tree-v1":                    {class: formatMirrored},
 		"os-install-anaconda-v21":               {class: formatMirrored},
-		"physical-erase-v6":                     {class: formatMirrored},
+		"physical-erase-v7":                     {class: formatMirrored},
 		"os-host-firewall-v1":                   {class: formatMirrored},
 		"os-host-firewall-evidence-v1":          {class: formatMirrored},
 		"cluster-media-agent-v9":                {class: formatMirrored},

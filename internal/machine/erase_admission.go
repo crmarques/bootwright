@@ -11,6 +11,8 @@ import (
 
 const MaxEraseTargets = 16
 
+const MaxLogicalOverwriteBytes int64 = 896 << 30
+
 func validateErase(o api.Object, variant string) []api.Issue {
 	policy := o.Spec().Get("hardware", "eraseOnRemoval")
 	if !policy.Present() {
@@ -28,7 +30,7 @@ func validateErase(o api.Object, variant string) []api.Issue {
 	issues := []api.Issue{}
 	targets := policy.Get("targets").Items()
 	if len(targets) < 1 || len(targets) > MaxEraseTargets {
-		issues = append(issues, invariant(path+".targets", "logical overwrite requires 1 to 16 explicit whole disks", "list each disk once, including the root device"))
+		issues = append(issues, invariant(path+".targets", "physical erase requires 1 to 16 explicit whole disks", "list each disk once, including the root device"))
 	}
 	root, included := substrate.RootDevicePath(o), false
 	seen := [3]map[string]bool{{}, {}, {}}
@@ -48,6 +50,8 @@ func validateErase(o api.Object, variant string) []api.Issue {
 		size, err := strconv.ParseInt(target.Get("sizeBytes").Text(), 10, 64)
 		if err != nil || size < 4096 || size > 64*1024*1024*1024*1024 || size%4096 != 0 {
 			issues = append(issues, invariant(field+".sizeBytes", "erase size must be the exact capacity, aligned to 4096 bytes and at most 64 TiB", "set sizeBytes to the target's exact logical capacity"))
+		} else if method := target.Get("method").Text(); size > MaxLogicalOverwriteBytes && (method == "logicalOverwrite" || method == "" && policy.Get("method").Text() == "logicalOverwrite") {
+			issues = append(issues, invariant(field+".sizeBytes", "a logicalOverwrite target is at most 896 GiB, so its write and readback fit the four-hour erase deadline", "declare method metadataClear for this target, or a disk of at most 896 GiB"))
 		}
 		included = included || root != "" && target.Get("deviceName").Text() == root
 	}

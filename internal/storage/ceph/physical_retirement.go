@@ -129,7 +129,7 @@ func physicalRetirementRequest(catalog api.Catalog, cluster Request) PhysicalRet
 		machine, _ := catalog.Find(api.Machine, host.Machine)
 		entry := PhysicalRetirementHost{Name: host.Name, Machine: host.Machine, Devices: slices.Clone(host.Devices), EraseWWNs: []string{}}
 		policy := machine.Spec().Get("hardware", "eraseOnRemoval")
-		if policy.Get("method").Text() == "logicalOverwrite" {
+		if method := policy.Get("method").Text(); method == "logicalOverwrite" || method == "metadataClear" {
 			for _, target := range policy.Get("targets").Items() {
 				entry.EraseWWNs = append(entry.EraseWWNs, target.Get("wwn").Text())
 			}

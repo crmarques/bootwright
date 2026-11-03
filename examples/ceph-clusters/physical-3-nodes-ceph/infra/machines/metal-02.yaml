@@ -42,6 +42,7 @@ spec:
           wwn: '0x5000000000000002'
           serialNumber: SYNTHETIC-CEPH-02
           sizeBytes: 107374182400
+          method: metadataClear
 
     nics:
       - name: eno1

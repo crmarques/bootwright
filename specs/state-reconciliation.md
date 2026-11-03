@@ -2390,28 +2390,32 @@ system. Offline erase follows its separate safety contract below
 
 ### Opt-in physical logical overwrite
 
-`Machine.spec.hardware.eraseOnRemoval` is an explicit removal policy. Its only
-method is `logicalOverwrite`; omission retains disks. Each target supplies
-`deviceName`, `wwn`, `serialNumber` and exact `sizeBytes`. The approved
+`Machine.spec.hardware.eraseOnRemoval` is an explicit removal policy whose
+`method` is `logicalOverwrite` or `metadataClear`; omission retains disks. Each
+target supplies `deviceName`, `wwn`, `serialNumber` and exact `sizeBytes`, and
+may name its own `method`, which overrides the policy's for that disk; the
+frozen request records each target's resolved method. The approved
 `hardware.rootDevice.deviceName` must be listed; data disks are individually listed.
 The initial execution bound is 16 whole disks, each at most 64 TiB with a
 4096-byte aligned logical size. These are implementation bounds, not hardware
-sanitize capabilities. All addressable bytes are overwritten with zero and
-independently read back after flush through direct I/O; hidden, remapped and
-overprovisioned storage is outside this claim.
+sanitize capabilities. Each target's method is in
+[erase methods and coverage](#erase-methods-and-coverage).
 
 The erase block depends on the physical claim and publication services; the
 installation depends on it. Reverse order unregisters and removes installation
 content before erase, and releases the hardware claim only after erase. Removal
-consumes `data-loss`. It never chooses disks from authorization or discovery.
+consumes `data-loss`, and its plan names a `boot-offline-erase <machine>`
+impact and one `logical-overwrite <deviceName>` or `metadata-clear <deviceName>`
+impact per target. It never chooses disks from authorization or discovery.
 An original installation block proved never started is retained without booting
 or writing disks; the policy's removal records retention, never an erase receipt.
 Missing original records refuse rather than imply that no installation started.
 The original system UUID, exact complete physical MAC set, WWN, serial and size
 must agree immediately before media insertion and in the RAM worker. Missing
-identity is unknown. All targets are opened exclusively before the first write;
-held descriptors, Linux disk sequence and live sysfs identity are rechecked
-throughout write and readback. A path replacement is not a new target.
+identity is unknown. The worker then
+[releases holders](#device-mapper-holder-release) over the targets. All targets
+are opened exclusively before the first write; held descriptors, Linux disk
+sequence and live sysfs identity are rechecked throughout write and readback. A path replacement is not a new target.
 Linux SCSI `naa.<hex>` and a declared canonical `0x<hex>` WWN compare by the
 same complete 8- or 16-byte NAA identifier; other native forms remain exact.
 This follows the
@@ -2455,7 +2459,19 @@ removes the private key and boot files and fsyncs their directory before the
 completion record is published. Interrupted cleanup resumes without recreating
 keys, booting or acknowledging another worker.
 
-The worker has four hours for full overwrite and readback. Erase-owned native
+The worker has four hours to write and read back every target's regions. Once
+the whole set is opened and proved, each target runs on its own thread; the
+first refusal stops every other thread at its next 4 MiB chunk and no receipt
+is written. Each chunk checks the deadline and the held disk's sequence, size
+and sysfs identity. The system identity proof and the usage scan (holders,
+mounts in every namespace, swap) run at most once a second across threads,
+plus before the first write and after the last readback: the exclusive holds
+already refuse a new mount or device-mapper or md claim of a target. A
+`logicalOverwrite` target is at most `machine.MaxLogicalOverwriteBytes`
+(896 GiB), which assumes a sustained 160 MB/s per disk and leaves about 14% of
+the deadline to the per-chunk checks; admission, the frozen request and the worker each refuse a larger
+one, and a disk that cannot sustain that rate cannot finish and should use
+`metadataClear`. Erase-owned native
 controller phases cap their entire discovery/retry/poll sequence; together with
 the 900-second build and 900-second RAM startup allowance they fit within the
 two-hour controller margin, keeping the invocation within six hours. Exhaustion
@@ -2464,15 +2480,54 @@ leaves a partial or unknown result and retains the claim.
 Cancellation never means erase finished. An authenticated partial status resumes
 only while the independent RAM worker service is active. A stopped or failed
 worker refuses promptly; the operator powers off the Machine before continuing
-the same destroy, whose fresh boot repeats the entire frozen overwrite and
+the same destroy, whose fresh boot repeats every target's frozen method and
 readback after rechecking every identity. A completed durable receipt is replayed.
 Without a receipt, another boot must
-reprove all identities and repeat the whole overwrite/readback. A powered-off
+reprove all identities and repeat every target's whole write and readback. A powered-off
 machine, missing OS or zero prefix never proves completion. Identity drift,
 short writes, failed readback and unavailable probes refuse without selecting
 another disk. B70 remains subject to failure-injection and real-hardware
 qualification; firmware identity, hotplug and cache semantics are not inferred
 from passing unit tests.
+
+#### Erase methods and coverage
+
+Each method writes zero over its regions and independently reads them back
+after flush through direct I/O:
+
+- `logicalOverwrite` covers every addressable byte of the disk; hidden,
+  remapped and overprovisioned storage is outside this claim.
+- `metadataClear` covers, on a disk of S bytes with W = 128 MiB, the head
+  [0, min(W, S)), the tail [max(S - W, 0), S) and [p, min(p + W, S)) for each
+  p of 1, 10, 100 and 1000 GiB below S, sorted and merged, every bound a
+  multiple of 4096 (`installation.MetadataClearRegions`). BlueStore keeps its
+  replica labels at those offsets of an OSD's LV, and the window covers the
+  few MiB a ceph-volume LV starts into the disk. It makes the disk read as
+  empty to native probes: wipefs signatures, LVM, LUKS, GPT and the BlueStore
+  labels at those offsets. It is not sanitization: every other byte stays
+  readable. When the OSDs were encrypted, the cleared LUKS header leaves their
+  data unreadable only if the key held in the cluster's monitor store, on the
+  root disks, is also destroyed, for example by the root target's
+  `logicalOverwrite`.
+
+A complete receipt records, per target, its method and written and verified
+byte counts equal to that method's coverage: the size for `logicalOverwrite`,
+the merged region total for `metadataClear`. Go and the worker compute the
+same regions and refuse any other count.
+
+#### Device-mapper holder release
+
+Before the exclusive opens, the worker proves every target's identity
+through a read-only descriptor and then releases a device-mapper stack over
+the targets, such as an auto-activated ceph-volume LV
+or LUKS mapping: only when every holder, recursively, is a device-mapper node
+each of whose slaves is a declared target, a partition of one or another such
+node, none is mounted in any mount namespace, no swap is active and each
+node's open count is 0, it removes them deepest first with
+`/usr/sbin/dmsetup remove` under a bounded timeout, then re-reads the holders.
+Any remaining holder, any other holder (md, bcache, a device-mapper node with
+an undeclared slave) or a failed command refuses `disk-in-use`, so nothing
+spanning an undeclared disk is removed.
 
 ### Controller-host protection
 

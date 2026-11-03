@@ -14,11 +14,17 @@ import (
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
 )
 
-const EraseImplementation = "physical-erase-v6"
+const EraseImplementation = "physical-erase-v7"
 const eraseVariable = "bootwright_physical_erase"
+
+const (
+	EraseLogicalOverwrite = "logicalOverwrite"
+	EraseMetadataClear    = "metadataClear"
+)
 
 type EraseTarget struct {
 	DeviceName   string `json:"deviceName"`
+	Method       string `json:"method"`
 	SerialNumber string `json:"serialNumber"`
 	SizeBytes    int64  `json:"sizeBytes"`
 	WWN          string `json:"wwn"`
@@ -38,7 +44,7 @@ func EraseBlockID(machine string) string {
 }
 
 func EraseContentDigest() string {
-	digest := sha256.Sum256([]byte(EraseImplementation + ":descriptor-diskseq-full-readback-receipt-v1"))
+	digest := sha256.Sum256([]byte(EraseImplementation + ":descriptor-diskseq-method-regions-readback-dm-release-by-number-parallel-paced-union-scan-receipt-v2"))
 	return hex.EncodeToString(digest[:])
 }
 
@@ -61,8 +67,8 @@ func eraseRequest(machine api.Object, install Request) (EraseRequest, error) {
 	if err != nil {
 		return request, err
 	}
-	if !install.Target.Physical || install.Private == nil || machine.Spec().Get("os", "provided").Bool() || policy.Get("method").Text() != "logicalOverwrite" {
-		return request, refusal("api.invariant", "physical erase requires a managed physical Anaconda Machine and logicalOverwrite", "omit spec.hardware.eraseOnRemoval to retain its disks")
+	if !install.Target.Physical || install.Private == nil || machine.Spec().Get("os", "provided").Bool() || !eraseMethod(policy.Get("method").Text()) {
+		return request, refusal("api.invariant", "physical erase requires a managed physical Anaconda Machine and the logicalOverwrite or metadataClear method", "omit spec.hardware.eraseOnRemoval to retain its disks")
 	}
 	if err := refusedContinuation(install.Identity.Context, install); err != nil {
 		return request, err
@@ -83,9 +89,18 @@ func eraseRequest(machine api.Object, install Request) (EraseRequest, error) {
 		if err != nil {
 			return request, refusal("api.value", "physical erase target size must be an exact integer", "set sizeBytes to the disk's exact logical capacity")
 		}
-		target := EraseTarget{DeviceName: value.Get("deviceName").Text(), WWN: value.Get("wwn").Text(), SerialNumber: value.Get("serialNumber").Text(), SizeBytes: size}
+		target := EraseTarget{DeviceName: value.Get("deviceName").Text(), Method: policy.Get("method").Text(), WWN: value.Get("wwn").Text(), SerialNumber: value.Get("serialNumber").Text(), SizeBytes: size}
+		if value.Has("method") {
+			target.Method = value.Get("method").Text()
+		}
+		if !eraseMethod(target.Method) {
+			return request, refusal("api.value", "physical erase target method must be logicalOverwrite or metadataClear", "correct spec.hardware.eraseOnRemoval.targets")
+		}
 		if !api.ValidLexical("device-path", target.DeviceName) || size < 4096 || size > 64*1024*1024*1024*1024 || size%4096 != 0 {
 			return request, refusal("api.value", "physical erase target needs a whole device path and a 4096-byte aligned exact capacity up to 64 TiB", "correct spec.hardware.eraseOnRemoval.targets")
+		}
+		if target.Method == EraseLogicalOverwrite && size > machineref.MaxLogicalOverwriteBytes {
+			return request, refusal("api.value", "physical erase logicalOverwrite target "+target.DeviceName+" is larger than 896 GiB, so its write and readback cannot fit the four-hour erase deadline", "declare method metadataClear for this target, or a disk of at most 896 GiB")
 		}
 		for index, identity := range []string{target.DeviceName, target.WWN, target.SerialNumber} {
 			if identity == "" || len(identity) > 256 || strings.TrimSpace(identity) != identity || strings.ContainsAny(identity, "\r\n\x00") || seen[index][identity] {
@@ -107,6 +122,10 @@ func eraseRequest(machine api.Object, install Request) (EraseRequest, error) {
 	slices.SortFunc(request.Targets, func(a, b EraseTarget) int { return strings.Compare(a.DeviceName, b.DeviceName) })
 	request.Install.Private = &Publication{Path: install.Private.Path + "-erase", URL: install.Private.URL + "-erase", CertificateRef: install.Private.CertificateRef}
 	return request, nil
+}
+
+func eraseMethod(method string) bool {
+	return method == EraseLogicalOverwrite || method == EraseMetadataClear
 }
 
 func eraseWWN(declared string) string {
@@ -144,7 +163,7 @@ type EraseEvidence struct {
 
 func validateEraseReceipt(receipt *EraseReceipt, request EraseRequest, digest string) error {
 	if receipt == nil || receipt.Version != EraseImplementation || receipt.State != "complete" || receipt.Request != digest || receipt.OriginalAttempt == "" || receipt.UUID == "" || len(receipt.Targets) != len(request.Targets) {
-		return refusal("lifecycle.state", "physical erase has no complete original-attempt receipt", "continue the same removal to reprove the target and read every logical byte")
+		return refusal("lifecycle.state", "physical erase has no complete original-attempt receipt", "continue the same removal to reprove the target and read back every erased byte")
 	}
 	var macs []string
 	for _, nic := range request.Install.Target.Hardware.Interfaces {
@@ -156,8 +175,9 @@ func validateEraseReceipt(receipt *EraseReceipt, request EraseRequest, digest st
 	}
 	for index, target := range request.Targets {
 		result := receipt.Targets[index]
-		if result.EraseTarget != target || result.Written != target.SizeBytes || result.Verified != target.SizeBytes {
-			return refusal("lifecycle.state", "physical erase receipt does not prove every target byte", "continue the same removal")
+		covered := EraseCoverageBytes(target)
+		if result.EraseTarget != target || covered == 0 || result.Written != covered || result.Verified != covered {
+			return refusal("lifecycle.state", "physical erase receipt does not prove every byte its method erases", "continue the same removal")
 		}
 	}
 	return nil

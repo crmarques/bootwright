@@ -25,10 +25,12 @@ addresses, disk names, WWNs, media and credentials.
   hosts are admitted. The OSD memory target is 4 GiB.
 - Foreign signatures, mounted filesystems and nonempty DB/WAL disks refuse;
   no zap or replacement is authorized, and retrying cannot accept a substitute.
-- The Machine files opt in to `eraseOnRemoval` (`logicalOverwrite`) over the
-  root and OSD disks; choose it before the first apply, because that apply
-  freezes the policy. Omitting it makes realized physical Ceph retirement
-  refuse. This is a logical overwrite, not hardware sanitization, and a
+- The Machine files opt in to `eraseOnRemoval` over the root and OSD disks:
+  `logicalOverwrite` zeroes and reads back the whole root disk, and the OSD
+  disk's `method: metadataClear` zeroes and reads back only the regions that
+  make it read as empty to native probes. Choose the policy before the first
+  apply, because that apply freezes it. Omitting it makes realized physical
+  Ceph retirement refuse. Neither method is hardware sanitization, and a
   four-hour erase deadline applies. Add DB/WAL disks to the targets when
   extending.
 - Required inputs: BMC credentials (`lab-bmc-credentials`) and CA

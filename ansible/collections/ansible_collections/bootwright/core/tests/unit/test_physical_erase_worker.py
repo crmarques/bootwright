@@ -17,6 +17,16 @@ class MemoryDisk:
         if self.identity != expected:
             raise worker.Refusal("disk-identity")
 
+    def identify(self, expected):
+        self.events.append("identify")
+        if self.identity != expected:
+            raise worker.Refusal("disk-identity")
+
+    def idle(self):
+        self.events.append("idle")
+        if getattr(self, "busy", None) is not None and self.busy():
+            raise worker.Refusal("disk-mounted")
+
     def write(self, offset, data):
         self.events.append("write")
         self.content[offset : offset + len(data)] = data
@@ -32,7 +42,7 @@ class MemoryDisk:
 
 class EraseWorkerTests(unittest.TestCase):
     def setUp(self):
-        self.target = {"deviceName": "/dev/example", "wwn": "wwn-example", "serialNumber": "serial-example", "sizeBytes": 8192}
+        self.target = {"deviceName": "/dev/example", "method": "logicalOverwrite", "wwn": "wwn-example", "serialNumber": "serial-example", "sizeBytes": 8192}
 
     def test_identity_mismatch_precedes_every_write(self):
         disk = MemoryDisk(dict(self.target, serialNumber="foreign"), b"x" * 8192)
@@ -84,7 +94,9 @@ class EraseBoundaryTests(unittest.TestCase):
             "uuid": "uuid-example",
             "macs": ["02:00:00:00:00:01"],
             "deadlineSeconds": 60,
-            "targets": [{"deviceName": "/dev/example", "wwn": "wwn-example", "serialNumber": "serial-example", "sizeBytes": 8192}],
+            "targets": [
+                {"deviceName": "/dev/example", "method": "logicalOverwrite", "wwn": "wwn-example", "serialNumber": "serial-example", "sizeBytes": 8192},
+            ],
         }
 
     def test_every_target_is_proved_before_first_write(self):
@@ -102,7 +114,7 @@ class EraseBoundaryTests(unittest.TestCase):
             return disk
 
         with patch.object(worker, "atomic"), self.assertRaises(worker.Refusal):
-            worker.execute(request, "/unused", opener=open_disk, prove_hardware=lambda _: None)
+            worker.execute(request, "/unused", opener=open_disk, prove_hardware=lambda _: None, release=lambda _: None)
         self.assertNotIn("write", disk.events)
         self.assertIn("close", disk.events)
 
@@ -121,7 +133,7 @@ class EraseBoundaryTests(unittest.TestCase):
             return disk
 
         with patch.object(worker, "atomic"), self.assertRaises(worker.Refusal):
-            worker.execute(request, "/unused", opener=open_disk, prove_hardware=lambda _: None)
+            worker.execute(request, "/unused", opener=open_disk, prove_hardware=lambda _: None, release=lambda _: None)
         self.assertTrue(all("write" not in disk.events for disk in disks))
 
     def test_short_write_never_reaches_flush_or_receipt(self):
@@ -216,14 +228,17 @@ class WorkerSourceAuthorityTests(unittest.TestCase):
 
         frozen = types.ModuleType("physical_machine_identity")
         exec(compile(inspect.getsource(physical_machine_identity), "frozen-identity", "exec"), frozen.__dict__)
+        runner = types.ModuleType("physical_erase_process")
+        exec(compile(inspect.getsource(process), "frozen-process", "exec"), runner.__dict__)
         ambient = types.ModuleType("ambient_identity")
         ambient.prove = Mock(side_effect=AssertionError("ambient source must not identify erase targets"))
         prefix = "ansible_collections.bootwright.core.plugins.module_utils"
-        modules = {"physical_machine_identity": frozen, prefix + ".physical_machine_identity": ambient}
+        modules = {"physical_machine_identity": frozen, "physical_erase_process": runner, prefix + ".physical_machine_identity": ambient}
         namespace = {"__name__": "physical_erase_worker", "__package__": ""}
         with patch.dict(sys.modules, modules), patch.object(module_utils, "physical_machine_identity", ambient):
             exec(compile(inspect.getsource(worker), "frozen-worker", "exec"), namespace)
         self.assertIs(namespace["physical_machine_identity"], frozen)
+        self.assertIs(namespace["physical_erase_process"], runner)
         ambient.prove.assert_not_called()
 
     def test_packaged_worker_keeps_the_collection_loader_as_its_source_authority(self):
@@ -238,3 +253,391 @@ class WorkerSourceAuthorityTests(unittest.TestCase):
             exec(compile(inspect.getsource(worker), "packaged-worker", "exec"), namespace)
         self.assertIs(namespace["physical_machine_identity"], worker.physical_machine_identity)
         self.assertIsNot(namespace["physical_machine_identity"], ambient)
+
+
+class SparseDisk:
+    """A large disk whose untouched bytes read as nonzero."""
+
+    def __init__(self, identity):
+        self.identity = identity
+        self.writes = []
+        self.reads = []
+        self.events = []
+
+    def prove(self, expected):
+        if self.identity != expected:
+            raise worker.Refusal("disk-identity")
+
+    identify = prove
+
+    def write(self, offset, data):
+        self.events.append("write")
+        self.writes.append((offset, len(data)))
+        return len(data)
+
+    def flush(self):
+        self.events.append("flush")
+
+    def read(self, offset, size):
+        self.events.append("read")
+        self.reads.append((offset, size))
+        return bytes(size) if (offset, size) in self.writes else b"\xff" * size
+
+
+def spans(chunks):
+    merged = []
+    for offset, size in sorted(chunks):
+        if merged and offset == merged[-1][1]:
+            merged[-1] = (merged[-1][0], offset + size)
+        else:
+            merged.append((offset, offset + size))
+    return merged
+
+
+class EraseMethodTests(unittest.TestCase):
+    WINDOW = 134217728
+    VECTORS = (
+        (4096, [(0, 4096)], 4096),
+        (WINDOW, [(0, WINDOW)], WINDOW),
+        (2 * WINDOW + 4096, [(0, WINDOW), (134221824, 2 * WINDOW + 4096)], 268435456),
+        (1073741824, [(0, WINDOW), (939524096, 1073741824)], 268435456),
+        (1073741824 + WINDOW // 2, [(0, WINDOW), (1006632960, 1140850688)], 268435456),
+        (
+            2000398934016,
+            [(0, WINDOW), (1073741824, 1073741824 + WINDOW), (10737418240, 10737418240 + WINDOW), (107374182400, 107374182400 + WINDOW),
+             (1073741824000, 1073741824000 + WINDOW), (2000264716288, 2000398934016)],
+            805306368,
+        ),
+        (
+            16000900661248,
+            [(0, WINDOW), (1073741824, 1073741824 + WINDOW), (10737418240, 10737418240 + WINDOW), (107374182400, 107374182400 + WINDOW),
+             (1073741824000, 1073741824000 + WINDOW), (16000766443520, 16000900661248)],
+            805306368,
+        ),
+    )
+
+    def target(self, size, method="metadataClear"):
+        return {"deviceName": "/dev/example", "method": method, "wwn": "wwn-example", "serialNumber": "serial-example", "sizeBytes": size}
+
+    def test_metadata_regions_match_the_shared_vectors(self):
+        for size, regions, covered in self.VECTORS:
+            with self.subTest(size=size):
+                self.assertEqual(worker.metadata_regions(size), regions)
+                self.assertEqual(worker.covered(self.target(size)), covered)
+                self.assertTrue(all(start % 4096 == 0 and end % 4096 == 0 and start < end <= size for start, end in regions))
+                self.assertEqual(worker.covered(self.target(size, "logicalOverwrite")), size)
+
+    def test_metadata_clear_zeroes_and_reads_back_exactly_its_regions(self):
+        size = 2000398934016
+        target = self.target(size)
+        disk = SparseDisk(target)
+        self.assertEqual(worker.overwrite(disk, target, lambda: None), {"written": 805306368, "verified": 805306368})
+        self.assertEqual(spans(disk.writes), worker.metadata_regions(size))
+        self.assertEqual(disk.reads, disk.writes)
+        self.assertEqual(disk.events.count("flush"), 1)
+        self.assertLess(disk.events.index("flush"), disk.events.index("read"))
+        self.assertGreater(disk.events.index("flush"), len(disk.writes) - 1)
+
+    def test_metadata_clear_refuses_an_unread_region(self):
+        target = self.target(2 * self.WINDOW + 4096)
+        disk = SparseDisk(target)
+        disk.read = lambda offset, size: b"\xff" * size if offset >= self.WINDOW else bytes(size)
+        with self.assertRaises(worker.Refusal):
+            worker.overwrite(disk, target, lambda: None)
+
+    def test_receipt_records_each_method_and_its_exact_coverage(self):
+        targets = [self.target(8192, "logicalOverwrite"), dict(self.target(2000398934016), deviceName="/dev/data", wwn="data", serialNumber="data")]
+        request = {"originalAttempt": "attempt-1", "request": "a" * 64, "uuid": "uuid-example", "macs": ["02:00:00:00:00:01"], "targets": targets}
+        receipt = worker.receipt_for(request, [{"written": 8192, "verified": 8192}, {"written": 805306368, "verified": 805306368}])
+        self.assertEqual([target["method"] for target in receipt["targets"]], ["logicalOverwrite", "metadataClear"])
+        worker.validate_receipt(request, receipt)
+        for coverage in ({"written": 2000398934016, "verified": 2000398934016}, {"written": 805306368, "verified": 805306367}):
+            with self.subTest(coverage=coverage), self.assertRaises(worker.Refusal):
+                worker.receipt_for(request, [{"written": 8192, "verified": 8192}, coverage])
+
+    def test_request_admits_only_a_resolved_closed_method(self):
+        request = EraseBoundaryTests().request()
+        worker.validate_request(request)
+        request["targets"][0]["method"] = "metadataClear"
+        worker.validate_request(request)
+        for method in ("secureErase", "", None, 1):
+            with self.subTest(method=method), self.assertRaises(worker.Refusal):
+                worker.validate_request(dict(request, targets=[dict(request["targets"][0], method=method)]))
+        missing = dict(request["targets"][0])
+        del missing["method"]
+        with self.assertRaises(worker.Refusal):
+            worker.validate_request(dict(request, targets=[missing]))
+
+    def test_release_precedes_the_exclusive_opens_and_refusal_stops_before_them(self):
+        from unittest.mock import patch
+
+        request = EraseBoundaryTests().request()
+        events = []
+
+        def open_disk(expected):
+            events.append("open")
+            disk = MemoryDisk(expected, b"x" * 8192)
+            disk.dev = 1
+            disk.close = lambda: None
+            return disk
+
+        def release(targets):
+            events.append("release")
+            self.assertEqual(targets, request["targets"])
+
+        with patch.object(worker, "atomic"):
+            worker.execute(request, "/unused", opener=open_disk, prove_hardware=lambda _: None, release=release, scan=lambda _: None)
+        self.assertEqual(events, ["release", "open"])
+
+        def refuse(targets):
+            raise worker.Refusal("disk-in-use")
+
+        events.clear()
+        with patch.object(worker, "atomic") as atomic, self.assertRaises(worker.Refusal):
+            worker.execute(request, "/unused", opener=open_disk, prove_hardware=lambda _: None, release=refuse)
+        self.assertEqual(events, [])
+        atomic.assert_not_called()
+
+
+def small_chunks(case):
+    from unittest.mock import patch
+
+    patcher = patch.object(worker, "CHUNK", 64 * 1024)
+    patcher.start()
+    case.addCleanup(patcher.stop)
+
+
+class ConcurrentEraseTests(unittest.TestCase):
+    def setUp(self):
+        small_chunks(self)
+
+    def request(self, sizes=None):
+        sizes = sizes or (4 * worker.CHUNK, 4 * worker.CHUNK)
+        targets = [
+            {"deviceName": "/dev/d%d" % index, "method": "logicalOverwrite", "wwn": "w%d" % index, "serialNumber": "s%d" % index, "sizeBytes": size}
+            for index, size in enumerate(sizes)
+        ]
+        return dict(EraseBoundaryTests().request(), targets=targets)
+
+    def run_erase(self, request, disks, prove=lambda _: None, clock=None, scan=None):
+        from unittest.mock import patch
+        import time
+
+        def open_disk(expected):
+            disk = disks[expected["deviceName"]]
+            disk.dev = expected["deviceName"]
+            disk.close = lambda: disk.events.append("close")
+            return disk
+
+        with patch.object(worker, "atomic") as atomic:
+            try:
+                erase = worker.execute(
+                    request, "/unused", opener=open_disk, prove_hardware=prove, release=lambda _: None, clock=clock or time.monotonic,
+                    scan=scan or (lambda opened: [disk.idle() for disk in opened]),
+                )
+                return erase, atomic
+            except worker.Refusal as refusal:
+                return refusal, atomic
+
+    def disks(self, request):
+        return {target["deviceName"]: MemoryDisk(target, b"x" * target["sizeBytes"]) for target in request["targets"]}
+
+    def test_every_disk_completes_before_one_receipt(self):
+        request = self.request()
+        disks = self.disks(request)
+        result, atomic = self.run_erase(request, disks)
+        self.assertEqual(result, worker.receipt_for(request, [{"written": 4 * worker.CHUNK, "verified": 4 * worker.CHUNK}] * 2))
+        self.assertEqual([call.args[1]["state"] for call in atomic.call_args_list], ["partial", "complete"])
+        self.assertTrue(all(disk.content == bytes(len(disk.content)) and disk.events[-1] == "close" for disk in disks.values()))
+
+    def test_one_refusal_stops_every_other_disk_and_writes_no_receipt(self):
+        import threading
+
+        request = self.request((2 * worker.CHUNK, 64 * worker.CHUNK))
+        disks = self.disks(request)
+        failed = threading.Event()
+        short, slow = disks["/dev/d0"], disks["/dev/d1"]
+        write = slow.write
+
+        def refuse(offset, data):
+            failed.set()
+            return len(data) - 1
+
+        def wait(offset, data):
+            failed.wait(5)
+            return write(offset, data)
+
+        short.write, slow.write = refuse, wait
+        result, atomic = self.run_erase(request, disks)
+        self.assertIsInstance(result, worker.Refusal)
+        self.assertEqual(str(result), "short-write")
+        self.assertLess(slow.events.count("write"), 64)
+        self.assertNotIn("flush", slow.events)
+        self.assertEqual([call.args[1]["state"] for call in atomic.call_args_list], ["partial"])
+        self.assertTrue(all(disk.events[-1] == "close" for disk in disks.values()))
+
+    def test_the_deadline_stops_every_disk_between_chunks(self):
+        request = dict(self.request(), deadlineSeconds=60)
+        disks = self.disks(request)
+        import itertools
+
+        ticks = itertools.count(0, 5)
+        result, atomic = self.run_erase(request, disks, clock=lambda: next(ticks))
+        self.assertIsInstance(result, worker.Refusal)
+        self.assertEqual(str(result), "deadline")
+        self.assertTrue(all("flush" not in disk.events for disk in disks.values()))
+        self.assertEqual(len(atomic.call_args_list), 1)
+
+    def test_the_system_proof_runs_at_most_once_per_second_across_disks(self):
+        import threading
+
+        request = self.request((16 * worker.CHUNK, 16 * worker.CHUNK))
+        disks = self.disks(request)
+        proofs = []
+        result, unused = self.run_erase(request, disks, prove=proofs.append, clock=lambda: 0.0)
+        self.assertNotIsInstance(result, worker.Refusal)
+        # Start, after holder release, before the first write and after the last readback.
+        self.assertEqual(len(proofs), 4)
+        now, lock = [0.0], threading.Lock()
+
+        def clock():
+            with lock:
+                now[0] += 0.25
+                return now[0]
+
+        proofs.clear()
+        result, unused = self.run_erase(request, self.disks(request), prove=proofs.append, clock=clock)
+        self.assertNotIsInstance(result, worker.Refusal)
+        self.assertLessEqual(len(proofs), now[0] + 4)
+        self.assertGreater(len(proofs), 4)
+
+    def test_pace_proves_on_its_interval_and_always_when_due(self):
+        now, proofs = [0.0], []
+        pace = worker.Pace(EraseBoundaryTests().request(), proofs.append, clock=lambda: now[0])
+        for moment in (0.0, 0.5, 0.99, 1.0, 1.5, 2.1):
+            now[0] = moment
+            pace.checkpoint()
+        self.assertEqual(len(proofs), 3)
+        pace.prove()
+        self.assertEqual(len(proofs), 4)
+        pace.stop.set()
+        with self.assertRaisesRegex(worker.Refusal, "stopped"):
+            pace.checkpoint()
+
+    def test_a_logical_overwrite_target_is_at_most_896_gib(self):
+        request = EraseBoundaryTests().request()
+        bound = 896 * 1024**3
+        cases = (("logicalOverwrite", bound, False), ("logicalOverwrite", bound + 4096, True), ("metadataClear", bound + 4096, False))
+        for method, size, refused in cases:
+            changed = dict(request, targets=[dict(request["targets"][0], method=method, sizeBytes=size)])
+            with self.subTest(method=method, size=size):
+                if refused:
+                    with self.assertRaisesRegex(worker.Refusal, "target-size"):
+                        worker.validate_request(changed)
+                else:
+                    worker.validate_request(changed)
+
+
+class PacedUsageScanTests(unittest.TestCase):
+    def setUp(self):
+        small_chunks(self)
+        self.erase = ConcurrentEraseTests()
+
+    def test_the_usage_scan_runs_on_the_pace_and_around_the_writes(self):
+        import threading
+
+        request = self.erase.request((16 * worker.CHUNK, 16 * worker.CHUNK))
+        disks = self.erase.disks(request)
+        result, unused = self.erase.run_erase(request, disks, clock=lambda: 0.0)
+        self.assertNotIsInstance(result, worker.Refusal)
+        for disk in disks.values():
+            self.assertEqual(disk.events.count("idle"), 2)
+            self.assertLess(disk.events.index("idle"), disk.events.index("write"))
+            self.assertGreater(len(disk.events) - 1 - disk.events[::-1].index("idle"), len(disk.events) - 1 - disk.events[::-1].index("read"))
+            self.assertGreater(disk.events.count("identify"), 2 * 16 - 1)
+        now, lock = [0.0], threading.Lock()
+
+        def clock():
+            with lock:
+                now[0] += 0.01
+                return now[0]
+
+        disks = self.erase.disks(request)
+        result, unused = self.erase.run_erase(request, disks, clock=clock)
+        self.assertNotIsInstance(result, worker.Refusal)
+        for disk in disks.values():
+            self.assertLessEqual(disk.events.count("idle"), now[0] + 2)
+            self.assertLess(disk.events.count("idle"), disk.events.count("identify"))
+
+    def test_a_paced_usage_refusal_stops_every_disk_with_no_receipt(self):
+        import threading
+
+        request = self.erase.request((32 * worker.CHUNK, 32 * worker.CHUNK))
+        disks = self.erase.disks(request)
+        mounted = disks["/dev/d0"]
+        mounted.busy = lambda: mounted.events.count("write") >= 4
+        now, lock = [0.0], threading.Lock()
+
+        def clock():
+            with lock:
+                now[0] += 0.5
+                return now[0]
+
+        result, atomic = self.erase.run_erase(dict(request, deadlineSeconds=14400), disks, clock=clock)
+        self.assertIsInstance(result, worker.Refusal)
+        self.assertEqual(str(result), "disk-mounted")
+        self.assertTrue(all("flush" not in disk.events and disk.events[-1] == "close" for disk in disks.values()))
+        self.assertEqual([call.args[1]["state"] for call in atomic.call_args_list], ["partial"])
+
+
+class BlockDiskBufferTests(unittest.TestCase):
+    def test_chunks_reuse_one_aligned_buffer_and_close_releases_it(self):
+        import os
+        import tempfile
+
+        with tempfile.TemporaryFile() as stream:
+            stream.write(b"x" * (2 * worker.CHUNK))
+            stream.flush()
+            disk = worker.BlockDisk.__new__(worker.BlockDisk)
+            disk.fd, disk.buffer = os.dup(stream.fileno()), None
+            self.assertEqual(disk.write(worker.CHUNK, bytes(worker.CHUNK)), worker.CHUNK)
+            first = disk.buffer
+            self.assertEqual(disk.read(worker.CHUNK, 4096), bytes(4096))
+            self.assertEqual(disk.read(0, 4096), b"x" * 4096)
+            self.assertIs(disk.buffer, first)
+            with self.assertRaisesRegex(worker.Refusal, "chunk"):
+                disk.read(0, worker.CHUNK + 4096)
+            disk.close()
+            self.assertTrue(first.closed)
+
+
+class UsagePassTests(unittest.TestCase):
+    def setUp(self):
+        small_chunks(self)
+        self.erase = ConcurrentEraseTests()
+
+    def test_each_paced_scan_is_one_usage_pass_over_every_target(self):
+        for count in (1, 2, 5):
+            with self.subTest(targets=count):
+                request = self.erase.request(tuple([8 * worker.CHUNK] * count))
+                disks = self.erase.disks(request)
+                passes = []
+                result, unused = self.erase.run_erase(request, disks, clock=lambda: 0.0, scan=lambda opened: passes.append(list(opened)))
+                self.assertNotIsInstance(result, worker.Refusal)
+                # Before the first write and after the last readback, each one pass over all targets.
+                self.assertEqual(len(passes), 2)
+                self.assertTrue(all(len(opened) == count for opened in passes))
+
+    def test_usage_unions_every_targets_nodes_into_one_unused_call(self):
+        from unittest.mock import patch
+
+        class Nodes:
+            def __init__(self, *nodes):
+                self.listed = list(nodes)
+
+            def nodes(self):
+                return self.listed
+
+        with patch.object(worker, "unused") as unused:
+            worker.usage([Nodes("a", "a1"), Nodes("b")])
+        unused.assert_called_once_with(["a", "a1", "b"])

@@ -142,10 +142,11 @@
   "targets": [
     {
       "deviceName": "/dev/disk/by-id/wwn-0x5000c500a1b2c3d4",
+      "method": "logicalOverwrite",
       "serialNumber": "serial-example",
       "sizeBytes": 8192,
       "wwn": "wwn-example"
     }
   ],
-  "version": "physical-erase-v6"
+  "version": "physical-erase-v7"
 }

@@ -1170,8 +1170,11 @@ or replace the bound disk set. See the
 [physical example](../examples/ceph-clusters/physical-3-nodes-ceph/README.md).
 This code path has synthetic coverage; live physical acceptance remains unrun.
 
-Physical retirement requires the original opt-in logical-overwrite policy to
-cover the root disk and every selected data, DB and WAL WWN. Ceph contributes
+Physical retirement requires the original opt-in
+[erase policy](state-reconciliation.md#opt-in-physical-logical-overwrite), with
+either method on each disk as its Machine's owner chose, to cover the root disk
+and every selected data, DB and WAL WWN. A `metadataClear` OSD disk reads as
+empty to native probes afterwards but is not sanitized. Ceph contributes
 the retirement policy Managed OS installation and erasure honor through
 [their retirement port](managed-os.md#physical-removal): each physical node's
 Machine waits for its cluster's retirement verification, named as the

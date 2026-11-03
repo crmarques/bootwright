@@ -836,7 +836,7 @@ declared network of an installed Machine: a network declaration error is
 recovered only by `bootwright destroy`, which is context-wide, and a fresh
 apply. A `libvirt` Machine's destroy erases its disks. A `baremetal` Machine's
 destroy retains the system unless its frozen `eraseOnRemoval` policy selects
-[verified logical overwrite](state-reconciliation.md#opt-in-physical-logical-overwrite).
+[verified physical erase](state-reconciliation.md#opt-in-physical-logical-overwrite).
 A powered-on guest that answers with another
 marker refuses, so its recovery also powers it off from its management
 controller: only a powered-off Machine with no readable marker installs. In
@@ -1179,9 +1179,9 @@ The physical claim and ordinary installation cleanup retain the installed
 system. Opt-in `spec.hardware.eraseOnRemoval` plans a separate Managed OS erase
 capability before the installation so removal runs cleanup first, offline erase
 second and claim release last. Its
-[logical-overwrite contract](state-reconciliation.md#opt-in-physical-logical-overwrite)
-owns exact identities, private RAM boot, direct I/O, receipt acknowledgement and
-failure recovery. Omission retains disks. An original installation proved never
+[physical erase contract](state-reconciliation.md#opt-in-physical-logical-overwrite)
+owns the `logicalOverwrite` and `metadataClear` methods, exact identities,
+private RAM boot, direct I/O, receipt acknowledgement and failure recovery. Omission retains disks. An original installation proved never
 started removes its unused policy without booting or writing a disk. When the
 installation froze a root `wwn` or `serialNumber`, the erase target with the
 same `deviceName` must name the same ones, the WWN without regard to case or a
@@ -1346,7 +1346,7 @@ archive. A changed coordinate needs the applicable rows repeated.
 | Registration | Managed RHSM registration, interruption and continuation, package access, replay and owned unregistration. |
 | Root encryption | The declared root disk alone receives TPM2 enrollment; normal reboot unlock, private recovery unlock and cleanup, plus refusal when another disk or ambiguous ancestry is present. |
 | Failure and recovery | Wrong UUID or NIC set, untrusted media/BMC, blocked or unknown required controller listener, interrupted publication/install/network convergence and exact continuation. No refusal counts as a completed install. |
-| Removal | Retention when erase is omitted; separately authorized B70 logical overwrite of every explicit target, complete readback and durable receipt, interrupted write/readback/receipt acknowledgement, media cleanup and claim release ordering. |
+| Removal | Retention when erase is omitted; separately authorized B70 erase of every explicit target by its frozen method, complete readback and durable receipt, interrupted write/readback/receipt acknowledgement, media cleanup and claim release ordering. |
 
 The [physical acceptance template](../docs/acceptance.md#physical-qualification-row)
 records each arm's result on a registered clean build. Host qualification and

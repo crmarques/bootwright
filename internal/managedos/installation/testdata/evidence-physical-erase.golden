@@ -1,10 +1,10 @@
 {
-  "version": "physical-erase-v6",
+  "version": "physical-erase-v7",
   "request": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
   "prepared": true,
   "removed": true,
   "receipt": {
-    "version": "physical-erase-v6",
+    "version": "physical-erase-v7",
     "state": "complete",
     "originalAttempt": "remove-1/physical-erase-metal-01/1",
     "request": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
@@ -15,6 +15,7 @@
     "targets": [
       {
         "deviceName": "/dev/disk/by-id/wwn-0x5000c500a1b2c3d4",
+        "method": "logicalOverwrite",
         "serialNumber": "serial-example",
         "sizeBytes": 8192,
         "wwn": "wwn-example",

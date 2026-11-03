@@ -381,3 +381,28 @@ func TestPhysicalPolicyCleanupGoldenRequiresPositiveCoreAndInstallationNoEffectP
 		})
 	}
 }
+
+func TestPhysicalRetirementPolicyCountsEitherEraseMethodAndNothingElse(t *testing.T) {
+	for method, counted := range map[string]bool{"logicalOverwrite": true, "metadataClear": true, "secureErase": false} {
+		t.Run(method, func(t *testing.T) {
+			catalog, object := physicalCatalog()
+			objects := catalog.Objects()
+			for i, machine := range objects {
+				if machine.Kind() == api.Machine {
+					target := requestMap("deviceName", "/dev/disk/by-id/wwn-0x7000000000000001", "wwn", "0x7000000000000001")
+					objects[i] = machine.WithSpec(machine.Spec().WithPath(requestMap("method", method, "targets", api.ListValue(target)), "hardware", "eraseOnRemoval"))
+				}
+			}
+			catalog = api.NewCatalog(objects)
+			cluster, err := baseRequest(catalog, object, "synthetic")
+			if err != nil {
+				t.Fatal(err)
+			}
+			for _, host := range physicalRetirementRequest(catalog, cluster).Hosts {
+				if got := slices.Equal(host.EraseWWNs, []string{"0x7000000000000001"}); got != counted {
+					t.Fatalf("%s policy on %s recorded erase WWNs %v", method, host.Machine, host.EraseWWNs)
+				}
+			}
+		})
+	}
+}

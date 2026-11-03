@@ -10,7 +10,7 @@ argument_specs:
           version:
             type: str
             required: true
-            choices: [physical-erase-v6]
+            choices: [physical-erase-v7]
           deadlineSeconds:
             type: int
             required: true
@@ -23,8 +23,8 @@ argument_specs:
           network:
             type: str
             required: true
-          # Go freezes only the logicalOverwrite method, so the request carries
-          # no method to choose from. Go also bounds the targets: one to
+          # Go resolves each target's method, its own or the policy's, so
+          # every frozen target names one. Go also bounds the targets: one to
           # sixteen, unique nonempty identities of at most 256, and a
           # sizeBytes of 4096 to 64 TiB in multiples of 4096. An argument
           # specification states no such bound; the worker's request
@@ -37,6 +37,10 @@ argument_specs:
               deviceName:
                 type: str
                 required: true
+              method:
+                type: str
+                required: true
+                choices: [logicalOverwrite, metadataClear]
               serialNumber:
                 type: str
                 required: true

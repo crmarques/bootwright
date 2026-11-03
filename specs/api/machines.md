@@ -218,7 +218,7 @@ own refusal.
 | `spec.os.provided` | boolean | yes | — | Selects the OS lifecycle with `installProfileRef`. |
 | `spec.os.installProfileRef` | string | conditional | — | Global `MachineInstallProfile`; valid only when `provided: false`. |
 | `spec.os.install.ntp` | array of selections | no | install-profile selections | NTPServer selections for a Bootwright-installed Machine; `[]` clears profile selections. |
-| `spec.hardware.eraseOnRemoval` | object | no | retain | Opt-in `method: logicalOverwrite` with explicit `targets`, each requiring `deviceName`, `wwn`, `serialNumber`, and exact `sizeBytes`; see [physical erase](../state-reconciliation.md#opt-in-physical-logical-overwrite). |
+| `spec.hardware.eraseOnRemoval` | object | no | retain | The bare-metal [physical erase policy](#physical-erase-policy). |
 | `spec.os.install.hostKeyRef` | string | conditional | — | `sshKeyPair` `Secret` whose pair the installation delivers as this machine's SSH host key; required for a bare-metal Bootwright-installed Machine and forbidden on every other Machine. Unique across Machines and no other credential. Effect material. |
 | `spec.proxy` | choice object | no | profile choice or direct access | Lifecycle-dependent atomic Machine-owned selection below; emits immediately after `os`. |
 | `spec.network` | object | no | contacts normalized below | Network selection, named contacts/static assignments, attachments, and bindings below. |
@@ -685,6 +685,20 @@ letter case refuses `api.invariant`: a firmware password is secret material,
 never desired state. Each attribute refusal names
 `$.spec.substrate.baremetal.firmware.biosAttributes` and the entry's position,
 because a map key is no path segment.
+
+### Physical erase policy
+
+`hardware.eraseOnRemoval` opts a Bootwright-installed bare-metal Machine into
+[physical erase](../state-reconciliation.md#opt-in-physical-logical-overwrite)
+on removal; omission retains its disks.
+
+| Field | Type | Required | Default | Rule |
+| --- | --- | --- | --- | --- |
+| `method` | string | yes | — | `logicalOverwrite` zeroes and reads back every byte; `metadataClear` only the regions that make a disk read as empty to native probes, which is not sanitization. |
+| `targets` | array | yes | — | 1 to 16 whole disks keyed by `deviceName`, including `hardware.rootDevice.deviceName`. |
+| `targets[].deviceName`, `wwn`, `serialNumber` | string | yes | — | The disk's exact path and live sysfs identity, distinct across targets. |
+| `targets[].sizeBytes` | integer | yes | — | Exact logical capacity, a multiple of 4096 up to 64 TiB, and at most 896 GiB for a `logicalOverwrite` target. |
+| `targets[].method` | string | no | the policy's `method` | The same choice, for this disk only. |
 
 ## MachineImage
 

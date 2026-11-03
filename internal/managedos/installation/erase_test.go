@@ -312,3 +312,94 @@ func TestPhysicalEraseReceiptRequiresAllReadbackAndOriginalIdentity(t *testing.T
 		t.Fatal("removed flag replaced a receipt")
 	}
 }
+
+func TestPhysicalEraseResolvesEachTargetMethodAndProvesItsExactCoverage(t *testing.T) {
+	const root, data = "/dev/disk/by-id/wwn-0x5000c500a1b2c3d4", "/dev/disk/by-id/wwn-0x5000c500a1b2c3d9"
+	const size = 2000398934016
+	for _, test := range []struct {
+		name, policy, override string
+		root, data             string
+	}{
+		{"a target override", EraseLogicalOverwrite, EraseMetadataClear, EraseLogicalOverwrite, EraseMetadataClear},
+		{"the policy default", EraseMetadataClear, "", EraseMetadataClear, EraseMetadataClear},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			machine := server(api.MapValue(text("deviceName", root)))
+			second := api.MapValue(text("deviceName", data), text("wwn", "0x5000c500a1b2c3d9"), text("serialNumber", "DATA"), number("sizeBytes", "2000398934016"))
+			if test.override != "" {
+				second = second.With("method", api.StringValue(test.override))
+			}
+			hardware := machine.Spec().Get("hardware").With("eraseOnRemoval", api.MapValue(text("method", test.policy), field("targets", api.ListValue(
+				api.MapValue(text("deviceName", root), text("wwn", "wwn-example"), text("serialNumber", "serial-example"), number("sizeBytes", "8192")), second))))
+			machine = api.NewObject(api.Machine, machine.Name(), api.Value{}, machine.Spec().With("hardware", hardware))
+			install := requestOf(t, labCatalog(metalProvider(), machine, sshKeySecret(api.MapValue(field("generated", api.MapValue())))), machine.Name())
+			request, err := eraseRequest(machine, install)
+			if err != nil {
+				t.Fatal(diagnostics.Of(err))
+			}
+			if request.Targets[0].DeviceName != root || request.Targets[0].Method != test.root || request.Targets[1].Method != test.data {
+				t.Fatalf("resolved methods %+v", request.Targets)
+			}
+			canonical, _ := request.Canonical()
+			removal, err := NewErase(nil).Removal(context.Background(), reconciliation.Block{BlockDefinition: reconciliation.BlockDefinition{Request: canonical}})
+			verbs := map[string]string{EraseLogicalOverwrite: "logical-overwrite ", EraseMetadataClear: "metadata-clear "}
+			if err != nil || !slices.Equal(removal.Impacts, []string{"boot-offline-erase " + machine.Name(), verbs[test.root] + root, verbs[test.data] + data}) {
+				t.Fatalf("removal impacts %v, %v", removal.Impacts, err)
+			}
+			digest := strings.Repeat("a", 64)
+			receipt := EraseReceipt{Version: EraseImplementation, State: "complete", OriginalAttempt: "original/1", Request: digest, UUID: "example-uuid", MACs: []string{"52:54:00:9a:1b:01"}}
+			for _, target := range request.Targets {
+				covered := EraseCoverageBytes(target)
+				receipt.Targets = append(receipt.Targets, EraseCoverage{EraseTarget: target, Written: covered, Verified: covered})
+			}
+			if receipt.Targets[1].Written != 805306368 {
+				t.Fatalf("metadataClear coverage of a %d-byte disk is %d", size, receipt.Targets[1].Written)
+			}
+			if err := validateEraseReceipt(&receipt, request, digest); err != nil {
+				t.Fatal(diagnostics.Of(err))
+			}
+			for name, mutate := range map[string]func(*EraseCoverage){
+				"whole-disk coverage for a metadata clear": func(c *EraseCoverage) { c.Written, c.Verified = size, size },
+				"a short readback":                         func(c *EraseCoverage) { c.Verified-- },
+				"another method":                           func(c *EraseCoverage) { c.Method = EraseLogicalOverwrite },
+			} {
+				changed := receipt
+				changed.Targets = slices.Clone(receipt.Targets)
+				mutate(&changed.Targets[1])
+				if validateEraseReceipt(&changed, request, digest) == nil {
+					t.Fatalf("%s proved completion", name)
+				}
+			}
+		})
+	}
+}
+
+func TestPhysicalEraseRequestBoundsALogicalOverwriteTargetTo896GiB(t *testing.T) {
+	const root, data = "/dev/disk/by-id/wwn-0x5000c500a1b2c3d4", "/dev/disk/by-id/wwn-0x5000c500a1b2c3d9"
+	for _, test := range []struct {
+		method, size string
+		refused      bool
+	}{
+		{EraseLogicalOverwrite, "962072674304", false},
+		{EraseLogicalOverwrite, "962072678400", true},
+		{EraseMetadataClear, "962072678400", false},
+	} {
+		machine := server(api.MapValue(text("deviceName", root)))
+		hardware := machine.Spec().Get("hardware").With("eraseOnRemoval", api.MapValue(text("method", EraseLogicalOverwrite), field("targets", api.ListValue(
+			api.MapValue(text("deviceName", root), text("wwn", "wwn-example"), text("serialNumber", "serial-example"), number("sizeBytes", "8192")),
+			api.MapValue(text("deviceName", data), text("wwn", "0x5000c500a1b2c3d9"), text("serialNumber", "DATA"), number("sizeBytes", test.size), text("method", test.method))))))
+		machine = api.NewObject(api.Machine, machine.Name(), api.Value{}, machine.Spec().With("hardware", hardware))
+		install := requestOf(t, labCatalog(metalProvider(), machine, sshKeySecret(api.MapValue(field("generated", api.MapValue())))), machine.Name())
+		_, err := eraseRequest(machine, install)
+		if !test.refused {
+			if err != nil {
+				t.Fatal(diagnostics.Of(err))
+			}
+			continue
+		}
+		expectRefusal(t, err, "api.value")
+		if !strings.Contains(diagnostics.Of(err)[0].Remediation, "metadataClear") {
+			t.Fatalf("refusal = %v", diagnostics.Of(err))
+		}
+	}
+}

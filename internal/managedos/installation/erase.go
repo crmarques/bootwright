@@ -96,12 +96,9 @@ func (c EraseCapability) Plan(ctx context.Context, input lifecycle.PlanInput) (l
 		definition := reconciliation.BlockDefinition{ID: EraseBlockID(machine.Name()), Description: "retain the verified physical erase policy of " + machine.Name(), Stage: reconciliation.StageMachines,
 			Requires: append(needs, retirement...), Family: EraseFamily, Kind: Kind, Object: machine.Name(), Implementation: EraseImplementation, ContentDigest: EraseContentDigest(), Request: canonical, Exclusive: install.ExclusiveKeys()}
 		if input.Verb == reconciliation.Destroy {
-			definition.Description = "overwrite and fully read back the declared physical disks of " + machine.Name()
+			definition.Description = eraseDescription + machine.Name()
 			definition.Consumes = []string{reconciliation.AuthorizationDataLoss}
-			definition.Impacts = []string{"boot-offline-erase " + machine.Name()}
-			for _, target := range request.Targets {
-				definition.Impacts = append(definition.Impacts, "logical-overwrite "+target.DeviceName)
-			}
+			definition.Impacts = eraseImpacts(request)
 		}
 		plan.Definitions = append(plan.Definitions, definition)
 		plan.Secrets = append(plan.Secrets, install.SecretReferences()...)
@@ -119,11 +116,21 @@ func (c EraseCapability) Removal(ctx context.Context, block reconciliation.Block
 	if err != nil {
 		return lifecycle.Removal{}, err
 	}
+	return lifecycle.Removal{Description: eraseDescription + request.Install.Identity.Object, Impacts: eraseImpacts(request), Consumes: []string{reconciliation.AuthorizationDataLoss}}, nil
+}
+
+const eraseDescription = "overwrite and read back the declared physical disks of "
+
+func eraseImpacts(request EraseRequest) []string {
 	impacts := []string{"boot-offline-erase " + request.Install.Identity.Object}
 	for _, target := range request.Targets {
-		impacts = append(impacts, "logical-overwrite "+target.DeviceName)
+		verb := "logical-overwrite "
+		if target.Method == EraseMetadataClear {
+			verb = "metadata-clear "
+		}
+		impacts = append(impacts, verb+target.DeviceName)
 	}
-	return lifecycle.Removal{Description: "overwrite and fully read back the declared physical disks of " + request.Install.Identity.Object, Impacts: impacts, Consumes: []string{reconciliation.AuthorizationDataLoss}}, nil
+	return impacts
 }
 
 func (c EraseCapability) Apply(ctx context.Context, execution lifecycle.Execution) (lifecycle.Result, error) {

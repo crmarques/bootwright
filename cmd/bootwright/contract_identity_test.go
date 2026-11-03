@@ -125,7 +125,7 @@ func contractRecipes() map[string]digestRecipe {
 		baremetal.Implementation: digestOf(partDomain("bootwright.substrate.baremetal.machine-v1"), partImplementation(baremetal.Implementation), partRequest("machine-baremetal-v2"),
 			partPin("identity+exact-addresses+power+system-claim")),
 		installation.TreeImplementation:  digestOf(partImplementation(installation.TreeImplementation), partVersion(installation.TreeEvidenceVersion)),
-		installation.EraseImplementation: {separator: ":", parts: []digestPart{partImplementation(installation.EraseImplementation), partPin("descriptor-diskseq-full-readback-receipt-v1")}},
+		installation.EraseImplementation: {separator: ":", parts: []digestPart{partImplementation(installation.EraseImplementation), partPin("descriptor-diskseq-method-regions-readback-dm-release-by-number-parallel-paced-union-scan-receipt-v2")}},
 		installation.FirewallImplementation: digestOf(partDomain("bootwright.managedos.host-firewall-v1"), partImplementation(installation.FirewallImplementation),
 			partVersion(installation.FirewallEvidenceVersion), partPin(installation.FirewallServiceRoot),
 			partPin("bootwright-host-firewall context=context block=os-firewall-machine apply=operation"), partPin("bootwright-context-publisher"),

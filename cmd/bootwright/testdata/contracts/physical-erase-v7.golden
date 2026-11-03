@@ -1,12 +1,12 @@
-implementation: physical-erase-v6
-content-digest: dddbb3b77096aa77f929b1632632ff45ec00836219b4b03d0f9db921c046d7b8
-request-version: physical-erase-v6
+implementation: physical-erase-v7
+content-digest: 35f66c1a5b4a99794774c117139b32e443c6674254070aaf67fc77ed70c6cfa2
+request-version: physical-erase-v7
 automation-formats: none
 mark-formats: none
 proof-ids: bootwright.erase=1
 fixed-places: /var/lib/bootwright-erase
 effect-pins:
-  descriptor-diskseq-full-readback-receipt-v1
+  descriptor-diskseq-method-regions-readback-dm-release-by-number-parallel-paced-union-scan-receipt-v2
 request-identity:
   install.identity.context
   install.identity.object
@@ -139,6 +139,7 @@ request-schema:
   network string
   targets []struct installation.EraseTarget
   targets[].deviceName string
+  targets[].method string
   targets[].serialNumber string
   targets[].sizeBytes int64
   targets[].wwn string
@@ -157,6 +158,7 @@ evidence-schema:
   receipt.macs []string
   receipt.targets []struct installation.EraseCoverage
   receipt.targets[].deviceName string
+  receipt.targets[].method string
   receipt.targets[].serialNumber string
   receipt.targets[].sizeBytes int64
   receipt.targets[].wwn string
