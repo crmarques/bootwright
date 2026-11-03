@@ -3,8 +3,8 @@
 Only the existing public daemon fields are projected. This candidate does not
 qualify an image, repair native state, adopt metadata or publish ownership.
 The caller verifies the native executables and lends the qualified image UID.
-A snapshot that cephadm moved before its re-proof is taken again, bounded; a
-contradiction refuses at once.
+A snapshot that cephadm moved before its re-proof, or caught mid-deploy, is
+taken again, bounded, and never admitted; a contradiction refuses at once.
 """
 
 from __future__ import annotations
@@ -48,6 +48,9 @@ PROPERTIES = ("Id", "LoadState", "ActiveState", "SubState", "UnitFileState", "Fr
 SETTLE_ATTEMPTS = 10
 SETTLE_PAUSE = 3
 SETTLE_HORIZON = 60
+# The native runner's reasons for a command that exited non-zero, could not start or ran out of time; its output and limit
+# reasons are a format contradiction.
+CONVERGING = (("native-command",), ("native-timeout",))
 
 
 class ObservationRefusal(ValueError):
@@ -153,21 +156,38 @@ def child_directory(parent, name, owners, own=False):
 
 
 @contextlib.contextmanager
-def cluster_directory(root, fsid, owners):
+def cluster_directory(root, fsid, owners, deploying=()):
     """The FSID directory. cephadm's make_data_dir_base chowns it to each daemon it deploys (cephadmlib/file_utils.py makedirs,
-    v20.2.1), so it belongs to one of owners or to the user of one of its own auxiliary-image singleton daemon directories."""
+    v20.2.1), so it belongs to one of owners or to the user of one of its own auxiliary-image singleton daemon directories.
+    cephadm chowns it before it creates, as root, and then chowns that singleton's directory, before it writes into it:
+    while a singleton type listed in deploying has neither a directory of a non-root user nor a non-empty one, any other
+    holder is observed again, bounded, never admitted; otherwise it refuses at once."""
     # The wrapped context closes its descriptor on any exit; the proof after the yield is deliberately success-only.
     # pylint: disable-next=contextmanager-generator-missing-cleanup
     with child_directory(root, fsid, owners, own=True) as cluster:
         holder = os.fstat(cluster).st_uid
         if holder not in owners:
-            held = False
+            held, placed = False, set()
             for name in entries(cluster):
                 if name.split(".", 1)[0] in SINGLETONS and NAME.fullmatch(name) is not None:
                     info = current(name, cluster)
                     held = held or stat.S_ISDIR(info.st_mode) and info.st_uid == holder
-            require(held)
+                    if stat.S_ISDIR(info.st_mode) and (info.st_uid != ROOT_UID or occupied(cluster, name)):
+                        placed.add(name.split(".", 1)[0])
+            require(held, changed=any(kind in SINGLETONS and kind not in placed for kind in deploying))
         yield cluster
+
+
+def occupied(parent, name):
+    """Whether a directory holds any entry: cephadm writes into a daemon directory only after it chowned it."""
+    try:
+        descriptor = os.open(name, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | os.O_CLOEXEC, dir_fd=parent)
+    except FileNotFoundError:
+        raise ObservationChangedRefusal("native-observation-changed") from None
+    try:
+        return bool(entries(descriptor))
+    finally:
+        os.close(descriptor)
 
 
 def entries(directory):
@@ -323,9 +343,23 @@ def delegated_service(name, service, listed):
     return service
 
 
+def native_read(command, argv, **options):
+    """A snapshot's native read. One that fails or times out while cephadm deploys is the moved snapshot's, taken again,
+    bounded, never admitted, and named at this read; unparsable or oversized output and an observation refusal keep their own
+    meaning and site."""
+    try:
+        return command(argv, **options)
+    except ObservationRefusal:
+        raise
+    except ValueError as error:
+        if error.args not in CONVERGING:
+            raise
+    raise ObservationChangedRefusal("native-observation-changed")
+
+
 def present(command, container):
     """Whether the named container exists: cephadm runs every daemon with --rm, so a stopped one has none."""
-    value = command(["/usr/bin/podman", "ps", "--all", "--format", "json", "--filter", "name=^" + container + "$"])
+    value = native_read(command, ["/usr/bin/podman", "ps", "--all", "--format", "json", "--filter", "name=^" + container + "$"])
     require(isinstance(value, list) and len(value) <= 1)
     require(all(isinstance(item, dict) and item.get("Names") == [container] for item in value))
     return bool(value)
@@ -347,31 +381,43 @@ def daemon(directory, request, name, owners, command, listed=()):
     loaded, running = None, False
     argv = ["/usr/bin/systemctl", "show", "--no-pager"] + ["--property=" + field for field in PROPERTIES] + [unit]
     if bindings is not None:
-        loaded = unit_state(command(argv, json_result=False), unit)
+        loaded = unit_state(native_read(command, argv, json_result=False), unit)
     if loaded is not None:
         result["enabled"], result["state"], running = loaded
     container = ("ceph-" + request["fsid"] + "-" + kind + "-" + identifier).replace(".", "-")
     value = None
     if present(command, container):
-        # Without proved unit files and a loaded unit nothing binds a container to the request.
-        require(loaded is not None)
+        if loaded is None:
+            # Without proved unit files and a loaded unit nothing binds a container to the request. cephadm writes the files
+            # and installs the unit before it starts the container, so one that appeared since their read finds them now;
+            # read again still absent, they contradict the container.
+            if bindings is None:
+                moved = unit_files(directory, kind, owners, image)[0] is not None
+            else:
+                moved = unit_state(native_read(command, argv, json_result=False), unit) is not None
+            require(not moved, changed=True)
+            require(False)
         try:
             value = command(["/usr/bin/podman", "container", "inspect", container])
         except ValueError:
-            # Podman exits 125 for a container removed since the listing; only a fresh listing proves that.
-            require(not present(command, container))
+            # Podman exits 125 for a container removed since the listing; only a fresh listing proves that, and one still
+            # listed, as cephadm's --rm cleanup finishes, is observed again.
+            require(not present(command, container), changed=True)
     if value is None:
         if result["state"] == "running":
             result["state"] = "unknown"
     else:
         container_id, image_id, actual = container_state(value, container, image)
         # An unknown state admits either: a forking cephadm unit is activating while its container already runs, and
-        # deactivating while it still runs. Otherwise the unit and its container, read at different moments, agree, or
-        # the unit moved since its read; a unit read again unchanged contradicts its container.
-        if result["state"] != "unknown" and actual != running:
-            require(unit_state(command(argv, json_result=False), unit) == loaded, changed=True)
+        # deactivating while it still runs. Otherwise the unit and its container, read at different moments, agree. A
+        # running unit's exited container is mid-transition (conmon still runs the --rm cleanup before systemd sees the
+        # unit stop) and is observed again, never admitted. A running container of a unit that is not running moved
+        # since the unit's read, or nothing binds it to the request: a unit read again unchanged contradicts it.
+        if result["state"] != "unknown" and actual and not running:
+            require(unit_state(native_read(command, argv, json_result=False), unit) == loaded, changed=True)
             require(False)
-        digests = image_digests(command(["/usr/bin/podman", "image", "inspect", image_id]), image_id, image)
+        require(result["state"] == "unknown" or actual == running, changed=True)
+        digests = image_digests(native_read(command, ["/usr/bin/podman", "image", "inspect", image_id]), image_id, image)
         result.update(container_id=container_id, container_image_id=image_id, container_image_digests=digests)
     require(bindings is None or all(file_identity(current(name, directory)) == binding for name, binding in bindings.items()), changed=True)
     return result
@@ -419,7 +465,7 @@ def snapshot(request, uid, command, *, owned, cache_uid=None, host=None):
             require(owned)
             require(type(uid) is int and uid > 0)
             owners = (ROOT_UID, uid)
-            with cluster_directory(root, request["fsid"], owners) as cluster, contextlib.ExitStack() as held:
+            with cluster_directory(root, request["fsid"], owners, listed) as cluster, contextlib.ExitStack() as held:
                 names = entries(cluster)
                 caches = [name for name in names if CACHE.fullmatch(name) is not None]
                 selected = [name for name in names if "." in name and name not in caches]
@@ -448,5 +494,6 @@ def snapshot(request, uid, command, *, owned, cache_uid=None, host=None):
                 return result
     except ObservationRefusal:
         raise
-    except (OSError, ValueError, TypeError, AttributeError):
-        raise ObservationRefusal("native-observation-unproved") from None
+    except (OSError, ValueError, TypeError, AttributeError) as error:
+        # The refusal keeps the failure's traceback, so the worker's cause names the site that refused, never its values.
+        raise ObservationRefusal("native-observation-unproved").with_traceback(error.__traceback__) from None

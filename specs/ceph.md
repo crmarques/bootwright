@@ -1740,13 +1740,26 @@ cephadm is restarting is not ready and is named beside those checks; an
 observation never refuses it, while an action that needs the manager's mounted
 bundle still does. A host's daemon layout that cephadm moves while it is
 observed (a listing, directory or unit file whose identity changed between its
-first read and its re-proof, an entry gone after it was listed, or a unit that
-moved between its read and its container's) is observed again, at most ten
-times 3 s apart within 60 s. One that never settles is not ready, never a
+first read and its re-proof, an entry gone after it was listed, a running
+unit whose container has exited, a container that runs while its unit does not
+and whose unit reads otherwise when read again, a container that appeared after
+its unit files' or unit's read and whose files or unit are there when read
+again, a container whose inspection failed and that a second listing still
+shows, a `podman` or `systemctl` read that exited non-zero, could not start or
+timed out, or an FSID directory held by another user while a singleton listed
+for the host has only an empty root-owned directory or none) is observed again
+and never admitted. A new attempt starts at most ten times, 3 s apart, and none
+starts 60 s after the first, though the attempt then running may still wait out
+its command timeouts. One that never settles is not ready, never a
 contradiction: the readiness wait polls again and its timeout names
 `unsettled@<host>`, while an action refuses `not-ready` and the next apply
-observes again. An owner, mode, link, name, FSID, content, image or unit
-contradiction still refuses at once.
+observes again; a foreign FSID holder beside such a singleton is therefore
+refused late as not ready, never admitted. An owner, mode, link, name, FSID,
+content, image or unit format contradiction, native output that does not parse
+or exceeds its bound, a container that runs while its unit, read again
+unchanged, does not, and a container whose unit files or unit are still absent
+when read again still refuse at once. Either refusal's cause names the
+observation site that refused.
 
 The core profile proves a complete placement-group count and `active+clean`
 states before claiming readiness. Zero placement groups are allowed only for

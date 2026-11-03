@@ -78,6 +78,17 @@ operator as a first-call refusal; the slice that records it is named.
   directory exists, so a hold re-proves the directory's device, inode and
   mode, never its owner (`native-observation-changed@ceph_native_observe.child_directory`,
   B1052).
+- On 9.9.1.2 a readiness wait once ended `native-observation-unproved@ceph_native.daemons:1654`
+  while the manager deployed daemons, and the next apply read the cluster
+  ready. That site was the worker's re-raise, not the refusal, and a deploy
+  step a snapshot catches (an exited container whose `--rm` cleanup still
+  runs while its unit reads active, a container listed before its unit loads,
+  a `podman` or `systemctl` read that failed or timed out, the FSID directory
+  chowned while the singleton's own is still empty and root-owned) had refused
+  as a contradiction. Such a step is observed again, never admitted, and every
+  observation refusal names the site that refused; unparsable output and a
+  running container under an unchanged stopped unit still refuse at once
+  (B1057).
 - 20.2.1's `smb apply` with `--password-filter=none` and
   `--password-filter-out=hidden` stores the resource, then raises
   `UnboundLocalError` on `in_op` and answers EINVAL; the base64 input filter

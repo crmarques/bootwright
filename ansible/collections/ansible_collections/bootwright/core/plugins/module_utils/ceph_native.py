@@ -1647,11 +1647,12 @@ class Worker:
         try:
             daemons = ceph_native_observe.daemons(self.request, self.observed_manager_uid(), self.command, owned=self.markers.owned(),
                                                   cache_uid=self.observer_cache_uid(), clock=self.clock, pause=self.pause, host=self.host["name"])
-        except ceph_native_observe.ObservationChangedRefusal:
-            # cephadm kept moving this host's layout through every bounded snapshot: unfinished, never foreign.
-            raise Refusal("not-ready") from None
-        except ceph_native_observe.ObservationRefusal:
-            raise Refusal("native-observation-unproved") from None
+        except ceph_native_observe.ObservationChangedRefusal as error:
+            # cephadm kept moving this host's layout through every bounded snapshot: unfinished, never foreign. Each refusal
+            # keeps the observation's traceback, so its cause names the site that refused, never its values.
+            raise Refusal("not-ready").with_traceback(error.__traceback__) from None
+        except ceph_native_observe.ObservationRefusal as error:
+            raise Refusal("native-observation-unproved").with_traceback(error.__traceback__) from None
         require(isinstance(daemons, list) and len(daemons) <= 1024, "native-output")
         for daemon in daemons:
             require(isinstance(daemon, dict) and daemon.get("fsid") == self.request["fsid"], "foreign-cluster")

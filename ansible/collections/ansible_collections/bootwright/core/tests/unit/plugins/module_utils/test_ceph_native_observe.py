@@ -127,28 +127,40 @@ def delegated(fixture, name, service, listed, hosts=("node-1",), unit_files=True
 
 def remap_owner(monkeypatch, paths, uid):
     """Report uid as the owner of the given entries, as cephadm's makedirs chown leaves them; the test runs unprivileged."""
-    inodes = {os.stat(path, follow_symlinks=False).st_ino for path in paths}
+    return remap_owners(monkeypatch, {os.stat(path, follow_symlinks=False).st_ino: uid for path in paths})
+
+
+def remap_owners(monkeypatch, owners, seen=None):
+    """Report each mapped inode's uid as it is at every stat, so a test can chown between snapshots as cephadm does; seen,
+    when given, is called with each remapped inode."""
     real_stat, real_fstat = os.stat, os.fstat
 
     def remap(info):
-        if info.st_ino not in inodes:
+        if info.st_ino not in owners:
             return info
+        if seen is not None:
+            seen(info.st_ino)
         values = list(info[:10])
-        values[4] = uid
+        values[4] = owners[info.st_ino]
         return os.stat_result(values, {name: getattr(info, name) for name in ("st_atime_ns", "st_mtime_ns", "st_ctime_ns", "st_blksize", "st_blocks")})
 
     monkeypatch.setattr(observe.os, "stat", lambda *args, **options: remap(real_stat(*args, **options)))
     monkeypatch.setattr(observe.os, "fstat", lambda descriptor: remap(real_fstat(descriptor)))
 
 
-@pytest.mark.parametrize("holder", ["alloy", "none", "haproxy"])
+@pytest.mark.parametrize("holder", ["alloy", "none", "haproxy", "deploying", "occupied"])
 def test_the_fsid_directory_may_belong_to_one_of_its_singleton_daemon_users(fixture, monkeypatch, holder):
     """cephadm's make_data_dir_base chowns the FSID directory to each daemon it deploys (cephadmlib/file_utils.py makedirs, v20.2.1)."""
     cluster = fixture[1].parent
-    run = delegated(fixture, "alloy.node-1", "alloy", ["alloy"])
+    # cephadm writes into a singleton's directory only after it chowned it: a root-owned one still being deployed is empty.
+    run = delegated(fixture, "alloy.node-1", "alloy", ["alloy"], unit_files=holder != "deploying")
     proxy = delegated(fixture, "haproxy.rgw.objects.node-1.abcdef", "ingress.rgw.objects", ["alloy", "ingress.rgw.objects"])
-    held = [cluster] + {"alloy": [cluster / "alloy.node-1"], "none": [], "haproxy": [cluster / "haproxy.rgw.objects.node-1.abcdef"]}[holder]
+    held = [cluster] + {"alloy": [cluster / "alloy.node-1"], "none": [], "haproxy": [cluster / "haproxy.rgw.objects.node-1.abcdef"],
+                        "deploying": [], "occupied": []}[holder]
     remap_owner(monkeypatch, held, os.getuid() + 473)
+    if holder in ("none", "haproxy"):
+        # The listed singleton's own directory is placed, under another user: nothing is still deploying.
+        remap_owner(monkeypatch, [cluster / "alloy.node-1"], os.getuid() + 474)
 
     def command(argv, **options):
         return run(argv, **options) if "alloy" in " ".join(argv) else proxy(argv, **options)
@@ -156,9 +168,15 @@ def test_the_fsid_directory_may_belong_to_one_of_its_singleton_daemon_users(fixt
     if holder == "alloy":
         result = observe.daemons(fixture[2], os.getuid(), command, owned=True, host="node-1")
         assert [item["name"] for item in result][:1] == ["alloy.node-1"]
-    else:
-        with pytest.raises(observe.ObservationRefusal, match="^native-observation-unproved$"):
+    elif holder == "deploying":
+        # cephadm chowned the FSID directory and has made, as root, but not yet chowned the listed alloy directory. A
+        # root-owned alloy directory cephadm already wrote into (occupied) is past that step and refuses at once.
+        with pytest.raises(observe.ObservationChangedRefusal, match="^native-observation-changed$"):
             observe.snapshot(fixture[2], os.getuid(), command, owned=True, host="node-1")
+    else:
+        with pytest.raises(observe.ObservationRefusal, match="^native-observation-unproved$") as refused:
+            observe.snapshot(fixture[2], os.getuid(), command, owned=True, host="node-1")
+        assert not isinstance(refused.value, observe.ObservationChangedRefusal)
 
 
 @pytest.mark.parametrize("holder,admitted", [("root", True), ("singleton", True), ("none", False), ("non-singleton", False)])
@@ -622,8 +640,10 @@ def test_daemon_directory_before_its_unit_files_is_not_running(fixture, missing)
 
 def test_daemon_without_unit_files_but_with_a_container_refuses(fixture):
     (fixture[1] / "unit.image").unlink()
-    with pytest.raises(observe.ObservationRefusal):
-        snapshot(fixture)
+    pauses = []
+    with pytest.raises(observe.ObservationRefusal, match="^native-observation-unproved$"):
+        snapshot(fixture, pause=pauses.append)
+    assert pauses == []
 
 
 @pytest.mark.parametrize("unit,state", [({}, "unknown"), ({"ActiveState": "activating", "SubState": "start", "MainPID": "0"}, "unknown"),
@@ -658,8 +678,11 @@ def test_failed_inspection_of_a_listed_container_refuses(fixture):
             raise ceph_native.Refusal("native-command")
         return original(argv, **options)
 
-    with pytest.raises(observe.ObservationRefusal):
-        observe.daemons(fixture[2], os.getuid(), command, owned=True)
+    pauses = []
+    with pytest.raises(observe.ObservationChangedRefusal):
+        observe.daemons(fixture[2], os.getuid(), command, owned=True, pause=pauses.append)
+    # A container still listed after its inspection failed is observed again, bounded, and never admitted.
+    assert len(pauses) == observe.SETTLE_ATTEMPTS - 1
 
 
 def test_instance_before_its_template_unit_is_installed_is_not_running(fixture):
@@ -833,12 +856,21 @@ def foreign_container_image(fixture, unused):
     fixture[4][0]["ImageName"] = "registry.example/ceph@sha256:" + "f" * 64
 
 
-def unit_contradicting_its_container(fixture, unused):
-    fixture[4][0]["State"]["Running"] = False
+def container_running_under_a_stopped_unit(fixture, unused):
+    fixture[3].update(ActiveState="inactive", SubState="dead", MainPID="0")
+
+
+def container_without_its_unit(fixture, unused):
+    fixture[3].update(LoadState="not-found", ActiveState="inactive", SubState="dead", UnitFileState="", FragmentPath="", MainPID="0")
+
+
+def container_without_its_unit_files(fixture, unused):
+    (fixture[1] / "unit.meta").unlink()
 
 
 @pytest.mark.parametrize("contradiction", [foreign_owner, writable, foreign_name, foreign_unit_image, foreign_container_image,
-                                           unit_contradicting_its_container])
+                                           container_running_under_a_stopped_unit, container_without_its_unit,
+                                           container_without_its_unit_files])
 def test_a_contradiction_refuses_at_once_without_another_snapshot(fixture, monkeypatch, contradiction):
     options = contradiction(fixture, monkeypatch) or {}
     settling = Settling(fixture, lambda unused: None, times=0)
@@ -864,3 +896,212 @@ def test_worker_maps_an_unsettled_snapshot_to_not_ready_and_a_contradiction_to_u
         cause = ceph_native_worker.cause(refused.value)
         assert cause.startswith(reason + "@ceph_native.daemons:") and ceph_native_worker.attested(cause, {"ceph_native": inspect.getsource(ceph_native)})
         assert ceph_core.unsettled(ceph_native.RemoteRefusal("native-refusal:" + cause)) is (reason == "not-ready")
+
+
+NOT_LOADED = dict(LoadState="not-found", ActiveState="inactive", SubState="dead", UnitFileState="", FragmentPath="", MainPID="0")
+
+
+class Transient:
+    """One cephadm deploy step caught in the first `times` snapshots: counts each snapshot that observed it, pauses without sleeping."""
+
+    def __init__(self, fixture, monkeypatch, condition, times, native=None):
+        self.fixture, self.times, self.condition, self.monkeypatch, self.native = fixture, times, condition, monkeypatch, native
+        self.base, self.host, self.seen, self.pauses, self.now, self.reads = fixture[-1], None, set(), [], 0, 0
+        self.begin = getattr(condition, "setup", lambda state, monkeypatch: None)(self, monkeypatch) or (lambda: None)
+        self.begin()
+
+    def active(self):
+        return len(self.pauses) < self.times
+
+    def fire(self):
+        self.seen.add(len(self.pauses))
+
+    def command(self, argv, **options):
+        return self.condition(self, argv, options) if self.active() else self.base(argv, **options)
+
+    def clock(self):
+        return self.now
+
+    def pause(self, seconds):
+        self.pauses.append(seconds)
+        self.now += seconds
+        self.reads = 0
+        self.begin()
+
+    def daemons(self):
+        return observe.daemons(self.fixture[2], os.getuid(), self.command, owned=True, clock=self.clock, pause=self.pause, host=self.host)
+
+
+def exited_container(state, argv, options):
+    """The container exited and conmon still runs the --rm cleanup; systemd has not yet seen its unit stop."""
+    value = state.base(argv, **options)
+    if argv[:3] == ["/usr/bin/podman", "container", "inspect"]:
+        state.fire()
+        value[0]["State"]["Running"] = False
+    return value
+
+
+def unit_read_before_its_load(state, argv, options):
+    """The unit was read before cephadm installed and started it; its container ran by the listing."""
+    if argv[0] == "/usr/bin/systemctl":
+        state.reads += 1
+        if state.reads == 1:
+            state.fire()
+            return "".join(name + "=" + value + "\n" for name, value in dict(state.fixture[3], **NOT_LOADED).items()).encode()
+    return state.base(argv, **options)
+
+
+def unit_files_written_after_their_read(state, argv, options):
+    """cephadm wrote the unit files and started the daemon between the unit files' read and the container listing."""
+    if argv[:2] == ["/usr/bin/podman", "ps"] and not (state.fixture[1] / "unit.image").exists():
+        state.fire()
+        (state.fixture[1] / "unit.image").write_text(state.fixture[2]["image"] + "\n")
+    return state.base(argv, **options)
+
+
+def remove_unit_image(state, unused):
+    def begin():
+        if state.active():
+            (state.fixture[1] / "unit.image").unlink()
+    return begin
+
+
+unit_files_written_after_their_read.setup = remove_unit_image
+
+
+def inspection_failed_while_listed(state, argv, options):
+    """Podman failed the inspection of a container its --rm cleanup is removing, and still lists it."""
+    if argv[:3] == ["/usr/bin/podman", "container", "inspect"]:
+        state.fire()
+        raise ceph_native.Refusal("native-command")
+    return state.base(argv, **options)
+
+
+def failing_run(kind, monkeypatch):
+    """The production runner of a real worker: a non-zero exit, unparsable output, or a bounded process failure."""
+    if kind == "exit":
+        return lambda argv, data=b"", timeout=60: (1, ceph_native.NativeOutput(b"", b"private native stderr"))
+    if kind == "unparsable":
+        return lambda argv, data=b"", timeout=60: (0, ceph_native.NativeOutput(b"private not json"))
+
+    def run(*unused, **options):
+        raise ceph_native.bounded_process.Failure(kind)
+
+    monkeypatch.setattr(ceph_native.bounded_process, "run", run)
+    return ceph_native.bounded_command
+
+
+def native_failure(prefix, kind):
+    """A native read whose failure the real worker raises, so its cause walks the same shipped frames as in production."""
+    def condition(state, argv, options):
+        if argv[:len(prefix)] == prefix:
+            state.fire()
+            state.native.run = failing_run(kind, state.monkeypatch)
+            return state.native.command(argv, **options)
+        return state.base(argv, **options)
+    condition.__name__ = "native_" + kind + "_" + prefix[-1].rsplit("/", 1)[-1]
+    return condition
+
+
+def fsid_directory_chowned_first(state, argv, options):
+    return state.base(argv, **options)
+
+
+def chown_fsid_directory_first(state, monkeypatch):
+    """cephadm chowned the FSID directory to alloy's user and has made, as root, but not yet chowned alloy's own directory."""
+    cluster = state.fixture[1].parent
+    state.base = delegated(state.fixture, "alloy.node-1", "alloy", ["alloy"], unit_files=False)
+    state.host = "node-1"
+    fsid, alloy = os.stat(cluster).st_ino, os.stat(cluster / "alloy.node-1").st_ino
+    owners = {fsid: os.getuid() + 473}
+
+    def seen(inode):
+        if inode == fsid and alloy not in owners:
+            state.fire()
+
+    remap_owners(monkeypatch, owners, seen)
+
+    def begin():
+        if not state.active():
+            owners[alloy] = os.getuid() + 473
+    return begin
+
+
+fsid_directory_chowned_first.setup = chown_fsid_directory_first
+
+TRANSIENT = [(exited_container, "daemon"), (unit_read_before_its_load, "daemon"), (unit_files_written_after_their_read, "daemon"),
+             (inspection_failed_while_listed, "daemon"),
+             (native_failure(["/usr/bin/systemctl"], "timeout"), "native_read"),
+             (native_failure(["/usr/bin/podman", "ps"], "exit"), "native_read"),
+             (native_failure(["/usr/bin/podman", "ps"], "command"), "native_read"),
+             (native_failure(["/usr/bin/podman", "image", "inspect"], "timeout"), "native_read"),
+             (fsid_directory_chowned_first, "cluster_directory")]
+
+
+@pytest.mark.parametrize("condition,site", TRANSIENT, ids=[condition.__name__ for condition, unused in TRANSIENT])
+def test_a_deploy_step_caught_once_settles_on_the_next_snapshot(core_request, fixture, monkeypatch, condition, site):
+    state = Transient(fixture, monkeypatch, condition, times=1, native=production(core_request))
+    observed = state.daemons()
+    assert state.seen == {0} and state.pauses == [observe.SETTLE_PAUSE]
+    assert observed[0]["name"] in ("mgr.host.abcdef", "alloy.node-1") and observed[-1]["state"] == "running"
+
+
+def production(core_request):
+    return ceph_native.Worker(core_request, core_request["bootstrap"], markers=phase_fixtures.Markers())
+
+
+def worker(core_request, monkeypatch, fixture, command, **observation):
+    """A worker whose observation reads the synthetic host through the real settle loop."""
+    native = ceph_native.Worker(core_request, core_request["bootstrap"], markers=phase_fixtures.Markers())
+    native.verify_tool = lambda: None
+    native.observed_manager_uid = os.getuid
+    native.observer_cache_uid = lambda: None
+    real = observe.daemons
+    monkeypatch.setattr(observe, "daemons", lambda request, uid, unused, **options: real(fixture[2], uid, command, **dict(options, **observation)))
+    return native
+
+
+def shipped():
+    return {"ceph_native": inspect.getsource(ceph_native), "ceph_native_observe": inspect.getsource(observe)}
+
+
+@pytest.mark.parametrize("condition,site", TRANSIENT, ids=[condition.__name__ for condition, unused in TRANSIENT])
+def test_a_deploy_step_that_never_settles_is_not_ready_at_its_own_site(core_request, fixture, monkeypatch, condition, site):
+    state = Transient(fixture, monkeypatch, condition, times=1000, native=production(core_request))
+    native = worker(core_request, monkeypatch, fixture, state.command, clock=state.clock, pause=state.pause, **({"host": state.host} if state.host else {}))
+    with pytest.raises(ceph_native.Refusal, match="^not-ready$") as refused:
+        native.daemons()
+    assert state.seen == set(range(observe.SETTLE_ATTEMPTS)) and state.pauses == [observe.SETTLE_PAUSE] * (observe.SETTLE_ATTEMPTS - 1)
+    cause = ceph_native_worker.cause(refused.value)
+    assert cause.startswith("not-ready@ceph_native_observe." + site + ":") and ceph_native_worker.attested(cause, shipped())
+    assert ceph_core.unsettled(ceph_native.RemoteRefusal("native-refusal:" + cause))
+
+
+def unreadable_unit_meta(fixture, unused):
+    (fixture[1] / "unit.meta").chmod(0)
+
+
+@pytest.mark.parametrize("contradiction,site", [(foreign_unit_image, "unit_files"), (container_without_its_unit, "daemon"),
+                                                (unreadable_unit_meta, "public_file")])
+def test_an_unproved_snapshot_names_the_site_that_refused(core_request, fixture, monkeypatch, contradiction, site):
+    contradiction(fixture, monkeypatch)
+    pauses = []
+    native = worker(core_request, monkeypatch, fixture, fixture[-1], pause=pauses.append)
+    with pytest.raises(ceph_native.Refusal, match="^native-observation-unproved$") as refused:
+        native.daemons()
+    cause = ceph_native_worker.cause(refused.value)
+    assert pauses == [] and cause.startswith("native-observation-unproved@ceph_native_observe." + site + ":")
+    assert ceph_native_worker.attested(cause, shipped()) and "never projected" not in cause
+
+
+@pytest.mark.parametrize("prefix", [["/usr/bin/systemctl"], ["/usr/bin/podman", "ps"], ["/usr/bin/podman", "image", "inspect"]],
+                         ids=["systemctl", "ps", "inspect"])
+@pytest.mark.parametrize("kind", ["unparsable", "output"])
+def test_unparsable_or_oversized_native_output_refuses_at_once(core_request, fixture, monkeypatch, prefix, kind):
+    """Only a native command that failed or timed out converges; output it cannot prove is a format contradiction."""
+    state = Transient(fixture, monkeypatch, native_failure(prefix, kind), times=1000, native=production(core_request))
+    native = worker(core_request, monkeypatch, fixture, state.command, clock=state.clock, pause=state.pause)
+    with pytest.raises(ceph_native.Refusal, match="^native-observation-unproved$") as refused:
+        native.daemons()
+    cause = ceph_native_worker.cause(refused.value)
+    assert state.seen == {0} and state.pauses == [] and ceph_native_worker.attested(cause, shipped()) and "private" not in cause
