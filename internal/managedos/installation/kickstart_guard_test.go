@@ -11,9 +11,11 @@ import (
 )
 
 // guardedInstallation is the physical installation with one enabled
-// repository, so every string an Installation carries has a value to replace.
+// repository and one clear target, so every string an Installation carries
+// has a value to replace.
 func guardedInstallation() Installation {
 	input := physicalInstallation()
+	input.ClearTargets = []ClearTarget{clearTarget("5000000000000001", "SYNTHETIC-CEPH-01", 107374182400)}
 	input.Repositories = []Repository{{
 		BaseURL: "https://mirror.example.test/extras", Enabled: true, GPGCheck: true,
 		GPGKeyURL: "https://mirror.example.test/RPM-GPG-KEY", ID: "extras", Name: "Extra packages",
@@ -58,6 +60,19 @@ func kickstartStrings(t *testing.T) []kickstartString {
 				case reflect.Bool:
 				default:
 					t.Fatalf("Repository.%s is a %s the Kickstart guard does not know", repository.Field(inner).Name, repository.Field(inner).Type)
+				}
+			}
+		case field.Type == reflect.TypeFor[[]ClearTarget]():
+			target := reflect.TypeFor[ClearTarget]()
+			for inner := range target.NumField() {
+				switch target.Field(inner).Type {
+				case reflect.TypeFor[string]():
+					found = append(found, kickstartString{field.Name + "." + target.Field(inner).Name, func(input *Installation, value string) {
+						reflect.ValueOf(&input.ClearTargets[0]).Elem().Field(inner).SetString(value)
+					}})
+				case reflect.TypeFor[int64](), reflect.TypeFor[[]EraseRegion]():
+				default:
+					t.Fatalf("ClearTarget.%s is a %s the Kickstart guard does not know", target.Field(inner).Name, target.Field(inner).Type)
 				}
 			}
 		case field.Type == reflect.TypeFor[*KickstartEncryption]():
@@ -108,7 +123,7 @@ func TestEveryKickstartValueRefusesALineBreak(t *testing.T) {
 	for _, field := range fields {
 		names = append(names, field.name)
 	}
-	for _, required := range []string{"Address", "Channel", "Formats", "Gateway", "PackageSource", "EnabledServices", "Packages", "Repositories.BaseURL", "Repositories.GPGKeyURL", "Repositories.ID", "Repositories.Name", "Repositories.Proxy"} {
+	for _, required := range []string{"Address", "Channel", "Formats", "Gateway", "PackageSource", "EnabledServices", "Packages", "Repositories.BaseURL", "Repositories.GPGKeyURL", "Repositories.ID", "Repositories.Name", "Repositories.Proxy", "ClearTargets.DeviceName", "ClearTargets.SerialNumber", "ClearTargets.WWN"} {
 		if !slices.Contains(names, required) {
 			t.Fatalf("the walk did not visit %s: %v", required, names)
 		}

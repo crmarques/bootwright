@@ -92,6 +92,40 @@
       }
     },
     "hardware": {
+      "clearOnInstall": [
+        {
+          "deviceName": "/dev/disk/by-id/wwn-0x5000000000000001",
+          "intervals": [
+            {
+              "length": 134217728,
+              "offset": 0
+            },
+            {
+              "length": 134217728,
+              "offset": 1073741824
+            },
+            {
+              "length": 134217728,
+              "offset": 10737418240
+            },
+            {
+              "length": 134217728,
+              "offset": 107374182400
+            },
+            {
+              "length": 134217728,
+              "offset": 1073741824000
+            },
+            {
+              "length": 134217728,
+              "offset": 2000264716288
+            }
+          ],
+          "serialNumber": "SYNTHETIC-CEPH-01",
+          "sizeBytes": 2000398934016,
+          "wwn": "0x5000000000000001"
+        }
+      ],
       "interfaces": [
         {
           "macAddress": "52:54:00:9a:1b:01",
@@ -107,5 +141,5 @@
   },
   "tlsCertificateRef": "lab-artifacts-tls",
   "user": "bootwright",
-  "version": "os-install-anaconda-v21"
+  "version": "os-install-anaconda-v22"
 }

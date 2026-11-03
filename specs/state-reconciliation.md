@@ -2371,7 +2371,11 @@ immediately before it boots and again inside the installer itself. A declared
 [firmware write](substrates.md#physical-firmware) is such a change: it runs
 only after those proofs, inside the installation apply that consumes
 `data-loss`, shows as that block's `configure-firmware <machine>` impact, and
-is set-only: no removal reverts it.
+is set-only: no removal reverts it. A declared
+[install-time clear](managed-os.md#physical-data-disk-clear) of a Machine's data
+disks is another: it runs only inside the installation apply that consumes
+`data-loss`, after the in-installer proofs of every disk it names, shows as one
+`clear-disk <machine> <wwn>` impact per disk, and no removal reverts it.
 
 The interval between the controller's last proof and the installer's first
 write is a residual race, not an ownership proof. No MAC set, root-device hint,

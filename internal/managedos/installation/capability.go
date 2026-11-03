@@ -225,6 +225,11 @@ func impacts(verb reconciliation.Verb, request Request) []string {
 		if request.Target.Firmware.enforced() {
 			impacts = append(impacts, "configure-firmware "+request.Identity.Object)
 		}
+		if request.Target.Hardware != nil {
+			for _, target := range request.Target.Hardware.ClearOnInstall {
+				impacts = append(impacts, "clear-disk "+request.Identity.Object+" "+target.WWN)
+			}
+		}
 	}
 	if request.Registration != nil {
 		action := "register-subscription "

@@ -282,6 +282,7 @@ func Validate(o api.Object, c api.Catalog) []api.Issue {
 	}
 	issues = appendIssues(issues, validateHardware(o, c, variant)...)
 	issues = appendIssues(issues, validateErase(o, variant)...)
+	issues = appendIssues(issues, validateClear(o, variant == substrate.ArmBaremetal)...)
 	network := s.Get("network")
 	configured := network.Has("configRef") || network.Has("inline")
 	issues = appendIssues(issues, validateNetworkContacts(o, c, configured)...)

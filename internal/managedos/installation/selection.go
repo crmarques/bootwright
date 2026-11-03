@@ -559,7 +559,7 @@ func targetFor(catalog api.Catalog, machine api.Object, contextName, controllerM
 	// fixed, so its derived interfaces are deliberately left out of what the
 	// installation freezes.
 	if derived.Physical {
-		hardware := Hardware{RootDevice: derived.RootDeviceHints.DeviceName, SerialNumber: derived.RootDeviceHints.SerialNumber}
+		hardware := Hardware{ClearOnInstall: clearTargetsFor(machine), RootDevice: derived.RootDeviceHints.DeviceName, SerialNumber: derived.RootDeviceHints.SerialNumber}
 		if derived.RootDeviceHints.WWN != "" {
 			hardware.WWN = "0x" + canonicalWWN(derived.RootDeviceHints.WWN)
 		}

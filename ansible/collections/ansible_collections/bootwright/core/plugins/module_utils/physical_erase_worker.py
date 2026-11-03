@@ -28,7 +28,7 @@ CHUNK = 4 * 1024 * 1024
 BLKGETSIZE64 = 0x80081272
 BLKGETDISKSEQ = 0x80081280
 BLKFLSBUF = 0x1261
-VERSION = "physical-erase-v7"
+VERSION = "physical-erase-v8"
 METHODS = ("logicalOverwrite", "metadataClear")
 # BlueStore keeps its replica bdev labels at these offsets of the OSD's LV;
 # the window also covers the few MiB a ceph-volume LV starts into the disk.

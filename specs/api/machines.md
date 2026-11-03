@@ -573,7 +573,8 @@ proved.
 
 ## Bare-metal Machine fields
 
-The nested blocks of the bare-metal [substrate arm](#substrate-arm).
+The nested blocks of the bare-metal [substrate arm](#substrate-arm), and the
+erase policy and data-disk clear only a bare-metal Machine admits.
 
 ### BMC and root-device shape
 
@@ -699,6 +700,27 @@ on removal; omission retains its disks.
 | `targets[].deviceName`, `wwn`, `serialNumber` | string | yes | — | The disk's exact path and live sysfs identity, distinct across targets. |
 | `targets[].sizeBytes` | integer | yes | — | Exact logical capacity, a multiple of 4096 up to 64 TiB, and at most 896 GiB for a `logicalOverwrite` target. |
 | `targets[].method` | string | no | the policy's `method` | The same choice, for this disk only. |
+
+### Install-time data-disk clear
+
+`spec.hardware.clearOnInstall` is optional and absent by default, which leaves
+every data disk untouched. Only a Bootwright-installed bare-metal Machine
+admits it; [physical data-disk clear](../managed-os.md#physical-data-disk-clear)
+owns what the installation does with it.
+
+| Field | Type | Required | Default | Rule |
+| --- | --- | --- | --- | --- |
+| `targets` | array | yes | — | 1 to 15 whole data disks, an atomic sequence keyed by `deviceName`. |
+| `targets[].deviceName` | string | yes | — | `/dev/disk/by-id/wwn-0x` followed by 16 or 32 lowercase hexadecimal digits. |
+| `targets[].wwn` | string | yes | — | The WWN `deviceName` names, compared without regard to case or a `0x` prefix. |
+| `targets[].serialNumber` | string | yes | — | 1 to 256 ASCII letters, digits and `._:+/=-`. |
+| `targets[].sizeBytes` | integer | yes | — | Exact capacity, a multiple of 4096 of at most 64 TiB. |
+
+Each refusal is `api.invariant` at the field's path. Every identity is
+distinct across the targets, and a target whose `deviceName`, `wwn` or
+`serialNumber` is the root device's, from `hardware.rootDevice.deviceName` and
+`substrate.baremetal.rootDevice`, refuses at its `targets[<i>]` path: the
+installation already clears the root disk.
 
 ## MachineImage
 

@@ -20,6 +20,11 @@ type installerHost struct {
 	root string
 	// disk is the sysfs node of the resolved root disk, by path beneath it.
 	disk map[string][]byte
+	// prepare populates the block and proc trees beside the root disk, and
+	// mocks are shell functions defined after the defaults, which they replace.
+	prepare func(t *testing.T, blocks, proc string)
+	mocks   string
+	env     []string
 }
 
 // runTargetProof runs the rendered target-proof %pre against a synthetic
@@ -79,14 +84,18 @@ func runTargetProof(t *testing.T, input Installation, host installerHost) (strin
 			t.Fatal(err)
 		}
 	}
-	script := strings.NewReplacer("/sys/class/net", sysfs, "/sys/class/block", blocks).Replace(strings.Join(lines[start+1:end], "\n"))
+	proc := filepath.Join(sysfs, "..", "proc")
+	if host.prepare != nil {
+		host.prepare(t, blocks, proc)
+	}
+	script := strings.NewReplacer("/sys/class/net", sysfs, "/sys/class/block", blocks, "/sys/fs/btrfs", filepath.Join(sysfs, "..", "btrfs"), "/proc/", proc+"/").Replace(strings.Join(lines[start+1:end], "\n"))
 	mocks := `
 readlink() { case "${@: -1}" in /dev/*) ;; *) command readlink "$@"; return;; esac; if builtin [ -z "$resolved" ]; then return 1; fi; printf '%s\n' "$resolved"; }
 [() { if builtin [ "$1 $2" = "! -b" ]; then case "$3" in /dev/sda|/dev/sda1) return 1;; *) return 0;; esac; fi; builtin [ "$@"; }
 lsblk() { case "${@: -1}" in /dev/sda) echo disk;; /dev/sda1) echo part;; esac; }
 `
-	command := exec.Command("/bin/bash", "-c", mocks+script+"\necho 'reached storage'\n")
-	command.Env = append(os.Environ(), "resolved="+host.root)
+	command := exec.Command("/bin/bash", "-c", mocks+host.mocks+script+"\necho 'reached storage'\n")
+	command.Env = append(append(os.Environ(), "resolved="+host.root, "blocks="+blocks), host.env...)
 	output, err := command.CombinedOutput()
 	if err == nil && !strings.Contains(string(output), "reached storage") {
 		t.Fatalf("the target proof exited cleanly without reaching storage:\n%s", output)

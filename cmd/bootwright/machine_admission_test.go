@@ -88,7 +88,7 @@ func TestABaremetalMachineCarriesNoBootNICOrAttachment(t *testing.T) {
 	const metal = "infra/machines/metal-01.yaml"
 	refusal := requireRefusal(t, editedExample(t, "lab-baremetal", exampleEdit{metal, "\n    nics:\n", "\n    boot:\n      nicRef: eno1\n\n    nics:\n"}),
 		"api.field", "Machine/metal-01", "$.spec.hardware.boot")
-	if !strings.Contains(refusal.Message, "eraseOnRemoval, nics, rootDevice") {
+	if !strings.Contains(refusal.Message, "clearOnInstall, eraseOnRemoval, nics, rootDevice") {
 		t.Fatalf("the boot refusal says %q", refusal.Message)
 	}
 	compileAcceptance(t, editedExample(t, "lab-baremetal",

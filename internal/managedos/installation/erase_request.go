@@ -14,7 +14,7 @@ import (
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
 )
 
-const EraseImplementation = "physical-erase-v7"
+const EraseImplementation = "physical-erase-v8"
 const eraseVariable = "bootwright_physical_erase"
 
 const (

@@ -1,6 +1,6 @@
 implementation: os-install-anaconda-v1
-content-digest: 32630c472ec14dc2a32d274a6e45d89722cb5c532d20eb7a492b3b850d11827a
-request-version: os-install-anaconda-v21
+content-digest: 9c21171de070bafa8f28acbef95ca1aff1db735725d8e991645f90278b74beaf
+request-version: os-install-anaconda-v22
 automation-formats: none
 mark-formats: none
 proof-ids: .bootwright-tree-identity, /etc/bootwright/registration.json, /etc/bootwright/update.json
@@ -127,6 +127,14 @@ request-schema:
   target.firmware.mode string
   target.firmware.secureBoot *bool omitempty
   target.hardware *struct installation.Hardware omitempty
+  target.hardware.clearOnInstall []struct installation.ClearTarget omitempty
+  target.hardware.clearOnInstall[].deviceName string
+  target.hardware.clearOnInstall[].intervals []struct installation.EraseRegion
+  target.hardware.clearOnInstall[].intervals[].length int64
+  target.hardware.clearOnInstall[].intervals[].offset int64
+  target.hardware.clearOnInstall[].serialNumber string
+  target.hardware.clearOnInstall[].sizeBytes int64
+  target.hardware.clearOnInstall[].wwn string
   target.hardware.interfaces []struct installation.Interface
   target.hardware.interfaces[].macAddress string
   target.hardware.interfaces[].name string

@@ -1144,6 +1144,10 @@ and remedy
 `select at most 15 distinct WWN disks for host <host> across the data_devices, db_devices and wal_devices paths of the OSD services of CephCluster <cluster>`.
 Shared WWNs across hosts, partitions and multipath targets refuse at any count.
 The request records WWN intent without inventing a serial or capacity.
+A fresh installation of a managed physical host can clear declared OSD disks
+that a destroyed or abandoned cluster left, through its Machine's
+[`hardware.clearOnInstall`](managed-os.md#physical-data-disk-clear); nothing
+here clears a disk.
 
 Not yet met: a host's device-identity, device-proof, OSD-preparation and
 device-readback calls, and the cluster observation's per-OSD configuration

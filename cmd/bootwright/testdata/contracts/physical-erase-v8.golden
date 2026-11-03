@@ -1,6 +1,6 @@
-implementation: physical-erase-v7
-content-digest: 35f66c1a5b4a99794774c117139b32e443c6674254070aaf67fc77ed70c6cfa2
-request-version: physical-erase-v7
+implementation: physical-erase-v8
+content-digest: 0297c2fb0b232b2ff0621a4d88570c9de698e69cc82707b67baac6e9d9da262e
+request-version: physical-erase-v8
 automation-formats: none
 mark-formats: none
 proof-ids: bootwright.erase=1
@@ -110,6 +110,14 @@ request-schema:
   install.target.firmware.mode string
   install.target.firmware.secureBoot *bool omitempty
   install.target.hardware *struct installation.Hardware omitempty
+  install.target.hardware.clearOnInstall []struct installation.ClearTarget omitempty
+  install.target.hardware.clearOnInstall[].deviceName string
+  install.target.hardware.clearOnInstall[].intervals []struct installation.EraseRegion
+  install.target.hardware.clearOnInstall[].intervals[].length int64
+  install.target.hardware.clearOnInstall[].intervals[].offset int64
+  install.target.hardware.clearOnInstall[].serialNumber string
+  install.target.hardware.clearOnInstall[].sizeBytes int64
+  install.target.hardware.clearOnInstall[].wwn string
   install.target.hardware.interfaces []struct installation.Interface
   install.target.hardware.interfaces[].macAddress string
   install.target.hardware.interfaces[].name string

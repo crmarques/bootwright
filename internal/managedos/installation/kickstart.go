@@ -12,7 +12,7 @@ import (
 	"github.com/crmarques/bootwright/internal/substrate"
 )
 
-const kickstartVersion = "kickstart-anaconda-v17"
+const kickstartVersion = "kickstart-anaconda-v18"
 
 // guestHostKeys are the keys a guest-agent installation generates here rather
 // than at first boot, so the republished copy is the key sshd presents. Each
@@ -76,7 +76,8 @@ type Installation struct {
 	AdditionalLocale []string
 	// Channel is the identity channel this machine will answer on, which
 	// decides what the %post has to establish for it to answer at all.
-	Channel string
+	Channel      string
+	ClearTargets []ClearTarget
 	// ExpectedMACs and Physical belong to operator-owned hardware: the
 	// installer proves it is running on the machine the declaration names
 	// before it erases anything.
@@ -141,6 +142,9 @@ func RenderKickstart(input Installation) (string, error) {
 		input.RootSerial != "" && !rootSerial.MatchString(input.RootSerial) {
 		return "", refusal("lifecycle.state", "the root disk WWN or serial number this installation freezes is not one its %pre can compare with the disk its deviceName names",
 			"plan the installation again with this release")
+	}
+	if reason := refusedClearTargets(input); reason != "" {
+		return "", refusal("lifecycle.state", reason, "plan the installation again with this release")
 	}
 	if _, known := deliveredHostKeys[input.HostKeyType]; input.Channel == substrate.ChannelDeliveredKey && !known {
 		return "", refusal("lifecycle.state", "the delivered SSH host key type "+input.HostKeyType+" has no installed path",
@@ -212,6 +216,9 @@ var kickstartFields = []struct {
 	{"the install address", "spec.network.addresses of the Machine", kickstartToken, func(i Installation) []string { return []string{i.Address} }},
 	{"an additional locale", "spec.customizations.localization.additionalLocales of the install profile", kickstartListElement, func(i Installation) []string { return i.AdditionalLocale }},
 	{"the identity channel", "the Machine's substrate", kickstartToken, func(i Installation) []string { return []string{i.Channel} }},
+	{"a clear target device name", "spec.hardware.clearOnInstall.targets[].deviceName of the Machine", kickstartToken, clearValues(func(c ClearTarget) string { return c.DeviceName })},
+	{"a clear target serial number", "spec.hardware.clearOnInstall.targets[].serialNumber of the Machine", kickstartToken, clearValues(func(c ClearTarget) string { return c.SerialNumber })},
+	{"a clear target WWN", "spec.hardware.clearOnInstall.targets[].wwn of the Machine", kickstartToken, clearValues(func(c ClearTarget) string { return c.WWN })},
 	{"a declared hardware address", "spec.substrate.baremetal.nics of the Machine", kickstartToken, func(i Installation) []string { return i.ExpectedMACs }},
 	{"the install interface type", "the type of the install interface in the Machine's NMState network configuration", kickstartToken, func(i Installation) []string { return []string{i.InterfaceType} }},
 	{"the VLAN base interface", "vlan.base-iface of the install interface in the Machine's NMState network configuration", kickstartToken, func(i Installation) []string { return []string{i.VLANBase} }},
@@ -338,6 +345,16 @@ func oneKickstartToken(value string, listed bool) bool {
 		separators += ","
 	}
 	return !strings.HasPrefix(value, "%") && !strings.ContainsAny(value, separators) && strings.IndexFunc(value, unicode.IsSpace) < 0
+}
+
+func clearValues(read func(ClearTarget) string) func(Installation) []string {
+	return func(input Installation) []string {
+		values := make([]string, 0, len(input.ClearTargets))
+		for _, target := range input.ClearTargets {
+			values = append(values, read(target))
+		}
+		return values
+	}
 }
 
 func repositoryValues(input Installation, read func(Repository) string) []string {
@@ -719,6 +736,10 @@ func targetProofLines(input Installation) []string {
 		"exit 1",
 		"fi")
 	lines = append(lines, rootIdentityLines(input)...)
+	if len(input.ClearTargets) != 0 && input.RootWWN == "" && input.RootSerial == "" {
+		lines = append(lines, identityFunctionLines()...)
+	}
+	lines = append(lines, clearLines(input)...)
 	return append(lines, "%end", "")
 }
 
@@ -730,7 +751,30 @@ func rootIdentityLines(input Installation) []string {
 	refuse := func(what string) []string {
 		return []string{`echo 'Bootwright: the declared root device ` + input.RootDevice + ` ` + what + `; refusing before any disk is touched.' >&2`, "exit 1", "fi"}
 	}
-	lines := []string{
+	lines := append(identityFunctionLines(), `bootwright_disk="/sys/class/block/$(basename -- "${bootwright_root}")"`)
+	if input.RootWWN != "" {
+		lines = append(lines,
+			`bootwright_wwid="${bootwright_disk}/device/wwid"`,
+			`if [ -e "${bootwright_disk}/wwid" ]; then bootwright_wwid="${bootwright_disk}/wwid"; fi`,
+			`if ! bootwright_wwid=$(bootwright_identity "${bootwright_wwid}" text); then`)
+		lines = append(lines, refuse("reports no readable WWN")...)
+		lines = append(lines, `if [ "${bootwright_wwid}" != 'naa.`+strings.TrimPrefix(input.RootWWN, "0x")+`' ]; then`)
+		lines = append(lines, refuse("reports a WWN other than "+input.RootWWN)...)
+	}
+	if input.RootSerial != "" {
+		lines = append(lines,
+			`bootwright_serial="${bootwright_disk}/device/vpd_pg80" bootwright_form=vpd`,
+			`if [ -e "${bootwright_disk}/device/serial" ]; then bootwright_serial="${bootwright_disk}/device/serial" bootwright_form=text; fi`,
+			`if ! bootwright_serial=$(bootwright_identity "${bootwright_serial}" "${bootwright_form}"); then`)
+		lines = append(lines, refuse("reports no readable serial number")...)
+		lines = append(lines, `if [ "${bootwright_serial}" != '`+input.RootSerial+`' ]; then`)
+		lines = append(lines, refuse("reports a serial number other than "+input.RootSerial)...)
+	}
+	return lines
+}
+
+func identityFunctionLines() []string {
+	return []string{
 		`bootwright_identity() {`,
 		`local raw value='' byte start=0 end limit=259 form="$2"`,
 		`local -a bytes`,
@@ -756,27 +800,7 @@ func rootIdentityLines(input Installation) []string {
 		`done`,
 		`printf '%s\n' "${value}"`,
 		`}`,
-		`bootwright_disk="/sys/class/block/$(basename -- "${bootwright_root}")"`,
 	}
-	if input.RootWWN != "" {
-		lines = append(lines,
-			`bootwright_wwid="${bootwright_disk}/device/wwid"`,
-			`if [ -e "${bootwright_disk}/wwid" ]; then bootwright_wwid="${bootwright_disk}/wwid"; fi`,
-			`if ! bootwright_wwid=$(bootwright_identity "${bootwright_wwid}" text); then`)
-		lines = append(lines, refuse("reports no readable WWN")...)
-		lines = append(lines, `if [ "${bootwright_wwid}" != 'naa.`+strings.TrimPrefix(input.RootWWN, "0x")+`' ]; then`)
-		lines = append(lines, refuse("reports a WWN other than "+input.RootWWN)...)
-	}
-	if input.RootSerial != "" {
-		lines = append(lines,
-			`bootwright_serial="${bootwright_disk}/device/vpd_pg80" bootwright_form=vpd`,
-			`if [ -e "${bootwright_disk}/device/serial" ]; then bootwright_serial="${bootwright_disk}/device/serial" bootwright_form=text; fi`,
-			`if ! bootwright_serial=$(bootwright_identity "${bootwright_serial}" "${bootwright_form}"); then`)
-		lines = append(lines, refuse("reports no readable serial number")...)
-		lines = append(lines, `if [ "${bootwright_serial}" != '`+input.RootSerial+`' ]; then`)
-		lines = append(lines, refuse("reports a serial number other than "+input.RootSerial)...)
-	}
-	return lines
 }
 
 // agentFilterLines permit exactly the identity operation's reads and prove the

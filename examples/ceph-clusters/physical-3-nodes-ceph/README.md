@@ -25,6 +25,12 @@ addresses, disk names, WWNs, media and credentials.
   hosts are admitted. The OSD memory target is 4 GiB.
 - Foreign signatures, mounted filesystems and nonempty DB/WAL disks refuse;
   no zap or replacement is authorized, and retrying cannot accept a substitute.
+  Instead each Machine declares its OSD disk in `clearOnInstall`: the
+  installation that consumes `data-loss` proves the disk's path, WWN, serial
+  and size inside the installer and zeroes its
+  [metadata regions](../../../specs/managed-os.md#physical-data-disk-clear), so a
+  disk a destroyed or abandoned cluster left reads as empty. Add DB/WAL disks
+  there too when extending.
 - The Machine files opt in to `eraseOnRemoval` over the root and OSD disks:
   `logicalOverwrite` zeroes and reads back the whole root disk, and the OSD
   disk's `method: metadataClear` zeroes and reads back only the regions that

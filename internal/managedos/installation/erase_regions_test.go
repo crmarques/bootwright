@@ -12,13 +12,13 @@ func TestMetadataClearRegionsMatchTheSharedVectors(t *testing.T) {
 		regions []EraseRegion
 		covered int64
 	}{
-		{4096, []EraseRegion{{0, 4096}}, 4096},
-		{window, []EraseRegion{{0, window}}, window},
-		{2*window + 4096, []EraseRegion{{0, window}, {134221824, window}}, 268435456},
-		{1073741824, []EraseRegion{{0, window}, {939524096, window}}, 268435456},
-		{1073741824 + window/2, []EraseRegion{{0, window}, {1006632960, window}}, 268435456},
-		{2000398934016, []EraseRegion{{0, window}, {1073741824, window}, {10737418240, window}, {107374182400, window}, {1073741824000, window}, {2000264716288, window}}, 805306368},
-		{16000900661248, []EraseRegion{{0, window}, {1073741824, window}, {10737418240, window}, {107374182400, window}, {1073741824000, window}, {16000766443520, window}}, 805306368},
+		{4096, []EraseRegion{{Offset: 0, Length: 4096}}, 4096},
+		{window, []EraseRegion{{Offset: 0, Length: window}}, window},
+		{2*window + 4096, []EraseRegion{{Offset: 0, Length: window}, {Offset: 134221824, Length: window}}, 268435456},
+		{1073741824, []EraseRegion{{Offset: 0, Length: window}, {Offset: 939524096, Length: window}}, 268435456},
+		{1073741824 + window/2, []EraseRegion{{Offset: 0, Length: window}, {Offset: 1006632960, Length: window}}, 268435456},
+		{2000398934016, []EraseRegion{{Offset: 0, Length: window}, {Offset: 1073741824, Length: window}, {Offset: 10737418240, Length: window}, {Offset: 107374182400, Length: window}, {Offset: 1073741824000, Length: window}, {Offset: 2000264716288, Length: window}}, 805306368},
+		{16000900661248, []EraseRegion{{Offset: 0, Length: window}, {Offset: 1073741824, Length: window}, {Offset: 10737418240, Length: window}, {Offset: 107374182400, Length: window}, {Offset: 1073741824000, Length: window}, {Offset: 16000766443520, Length: window}}, 805306368},
 	} {
 		got := MetadataClearRegions(test.size)
 		if !slices.Equal(got, test.regions) {

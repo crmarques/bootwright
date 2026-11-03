@@ -71,10 +71,11 @@ type Interface struct {
 // Hardware is what a physical machine proves about itself before anything it
 // holds is erased. A machine its substrate created carries none.
 type Hardware struct {
-	Interfaces   []Interface `json:"interfaces"`
-	RootDevice   string      `json:"rootDevice,omitempty"`
-	SerialNumber string      `json:"serialNumber,omitempty"`
-	WWN          string      `json:"wwn,omitempty"`
+	ClearOnInstall []ClearTarget `json:"clearOnInstall,omitempty"`
+	Interfaces     []Interface   `json:"interfaces"`
+	RootDevice     string        `json:"rootDevice,omitempty"`
+	SerialNumber   string        `json:"serialNumber,omitempty"`
+	WWN            string        `json:"wwn,omitempty"`
 }
 
 type Firmware struct {

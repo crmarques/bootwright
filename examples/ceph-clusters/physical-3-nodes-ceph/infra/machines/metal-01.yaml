@@ -44,6 +44,15 @@ spec:
           sizeBytes: 107374182400
           method: metadataClear
 
+    # Each installation proves the OSD disk and then clears its metadata
+    # regions, so a disk a destroyed or abandoned cluster left reads as empty.
+    clearOnInstall:
+      targets:
+        - deviceName: /dev/disk/by-id/wwn-0x5000000000000001
+          wwn: '0x5000000000000001'
+          serialNumber: SYNTHETIC-CEPH-01
+          sizeBytes: 107374182400
+
     nics:
       - name: eno1
 

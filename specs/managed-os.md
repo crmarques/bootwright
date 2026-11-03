@@ -1284,6 +1284,11 @@ narrows, but does not close, the interval between the controller's last proof
 and the installer's first write; what remains is recorded as a residual race
 rather than described as eliminated.
 
+**Declared data disks are cleared only after every proof.** A Machine that
+declares `hardware.clearOnInstall` has its data disks proved and cleared in
+this same `%pre`, after the proofs above, as
+[physical data-disk clear](#physical-data-disk-clear) states.
+
 **The identity it will answer with is delivered, not discovered.** A physical
 Machine names an `sshKeyPair` Secret as the host key its installed system will
 present. The pair is bound with the plan, delivered to the installer through
@@ -1326,6 +1331,66 @@ and its pinned identity and completion proofs. Managed registration uses the
 [pinned registration session](#registration), keeping its credentials out of
 publications. Their real-hardware qualification remains
 [B78](milestones/m1.md#b78); in-tree delivery does not qualify a physical host.
+
+### Physical data-disk clear
+
+A physical Machine may name, in `hardware.clearOnInstall.targets`, 1 to 15
+data disks the installation clears, each by its `/dev/disk/by-id/wwn-0x` path,
+the `wwn` that path names, a `serialNumber` under the root disk's grammar and
+its exact `sizeBytes`, 4096-aligned and at most 64 TiB
+([field rules](api/machines.md#install-time-data-disk-clear)); a target that is
+the root disk by path, WWN or serial number refuses at admission. Like the
+rest of this arm it is proved in-tree only. The request freezes
+the targets in `deviceName` order, each with its metadata-clear intervals,
+and the plan shows one `clear-disk <machine> <wwn>` impact per target on the
+installation block, whose apply consumes `data-loss`. For a disk of `S`
+bytes and a 128 MiB window `W` the intervals are the head `[0, min(W, S))`,
+the tail `[max(S - W, 0), S)` and, for each of 1, 10, 100 and 1000 GiB below
+`S`, `[p, min(p + W, S))`, sorted and merged where they overlap or touch,
+because current Ceph keeps BlueStore's replica labels at those offsets of an
+OSD's LV and a ceph-volume LV starts a few MiB into its disk. The `%pre`
+proves each target after the MAC and root-disk proofs and before any effect:
+its path resolves to a whole disk that is not the root disk's node, its WWN
+and serial number match under the root disk's sysfs rules of
+[physical installation](#physical-installation), and
+`blockdev --getsize64` reports exactly its size. Only when every target is
+proved does it wait for `udevadm settle` and release what is stacked on them:
+every holder of a target or
+of a partition of one, walked recursively, must be a device-mapper device
+whose every slave is a target, such a partition or a holder already walked,
+none mounted in any process's mount namespace, by device number or by its
+mount source resolved through its links, none a device of a mounted btrfs
+filesystem, nor active swap. Each is recorded by its device number and
+device-mapper name and then, deepest first, read again, refusing on any
+change, and addressed by that number alone: `dmsetup info -j <major> -m
+<minor>` must report open count 0 before `dmsetup remove -j <major> -m
+<minor>`. After the removals the `%pre` waits for `udevadm settle` again and,
+immediately before its first write, refuses a target or partition that is
+held again, as LVM autoactivation can recreate a mapping, or that is now
+mounted, a btrfs device or swap. Any other holder refuses too, such as an md array or a mapping spanning an undeclared
+disk, an unreadable mount or swap table and a failed command. A slave must
+already be walked when its holder is reached, so a ceph-volume LV, with or
+without its LUKS mapping, is released, while a thin pool, an LVM RAID or a
+mapping over two sibling LVs refuses. The removals are not atomic: a refusal
+can follow an earlier removal, which writes no disk. The `%pre`
+then writes zeros over each literal interval with direct, synchronized `dd`
+writes, reads each interval back twice, requiring exactly its length and no
+nonzero byte, rereads each target's partition table and waits for `udevadm
+settle`. Any failure ends the installation before the installer reads
+storage; `ignoredisk` and `clearpart` still name the root disk alone, so the
+installer never uses a cleared disk. The `%pre` runs on each attempt of the
+apply that consumes `data-loss`, and no removal reverts a clear.
+
+A clear makes the disk read as empty to native probes (`wipefs`, LVM, LUKS,
+GPT, BlueStore labels at the listed offsets); it is not sanitization, and
+every other byte stays readable. A cleared LUKS header leaves an encrypted
+OSD's data unreadable only if the key in its cluster's monitor store, on the
+root disks, is destroyed too, as a root disk's
+[logical overwrite](state-reconciliation.md#opt-in-physical-logical-overwrite)
+does. An NVMe disk reports an `eui.` or `nvme.` WWID and cannot be declared,
+so it is never cleared. The installer image ships no `cmp` or `timeout`, so the readback
+counts bytes with `wc` and `tr`, and a `dmsetup` that waits on udev is bounded
+only by the installer budget.
 
 ### Physical host qualification
 

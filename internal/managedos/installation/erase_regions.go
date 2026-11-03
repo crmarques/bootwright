@@ -10,8 +10,8 @@ const MetadataClearWindow int64 = 128 << 20
 var metadataClearReplicas = [...]int64{1 << 30, 10 << 30, 100 << 30, 1000 << 30}
 
 type EraseRegion struct {
-	Offset int64
-	Length int64
+	Length int64 `json:"length"`
+	Offset int64 `json:"offset"`
 }
 
 func MetadataClearRegions(size int64) []EraseRegion {
