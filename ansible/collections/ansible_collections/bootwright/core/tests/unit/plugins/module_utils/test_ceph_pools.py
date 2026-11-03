@@ -905,3 +905,12 @@ def test_profile_readback_still_proves_isa_and_jerasure_defaults(plugin, extra, 
     native, unused = resource(world, "pool", erasure_pool(3, 2, plugin), count=5)
     world.profiles["volumes"] = dict(normalized(native.profile_passed(native.request["pool"])), **extra)
     assert native.profile_matches(native.request["pool"]) is accepted
+
+
+def test_a_stretch_pool_may_hold_as_many_replicas_as_osd_hosts():
+    pool = dict(pool_value(), size=4, minSize=2)
+    ceph_native_resources.validate_pool(copy.deepcopy(pool), 4, stretch=True)
+    with pytest.raises(ceph_native.Refusal, match="^request$"):
+        ceph_native_resources.validate_pool(copy.deepcopy(pool), 4)
+    with pytest.raises(ceph_native.Refusal, match="^request$"):
+        ceph_native_resources.validate_pool(dict(pool, size=5), 4, stretch=True)

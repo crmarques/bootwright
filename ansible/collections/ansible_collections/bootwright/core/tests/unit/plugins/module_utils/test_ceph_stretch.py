@@ -678,3 +678,9 @@ def test_activation_reads_monitors_whose_locations_are_key_value_lists(monkeypat
 def test_the_offline_compile_script_reports_crushtool_failures_by_their_own_stderr(tmp_path):
     compile(stretch.COMPILE, "<crush-compile>", "exec")
     assert "check=True" not in stretch.COMPILE and "done.stderr" in stretch.COMPILE
+
+
+def test_a_stretch_cluster_pool_request_at_four_replicas_on_four_osd_hosts_validates():
+    from ansible_collections.bootwright.core.tests.unit.plugins.module_utils import test_ceph_pools as pools
+    value = dict(request(), action="pool", pool=dict(pools.pool_value(), size=4, minSize=2, crushRule="stretch-rule"))
+    assert ceph_native.validate(value) is value

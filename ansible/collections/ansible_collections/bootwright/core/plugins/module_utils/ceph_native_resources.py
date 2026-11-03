@@ -91,7 +91,7 @@ def validate(request, hosts):
     require(request["action"] == "settings" or "settings" not in request)
     if request["action"] == "pool":
         require("client" not in request and "policy" not in request)
-        validate_pool(request.get("pool"), osd_hosts)
+        validate_pool(request.get("pool"), osd_hosts, stretch="stretch" in request)
     elif request["action"] == "policy":
         require("pool" not in request and "client" not in request)
         validate_policy(request.get("policy"), osd_hosts)
@@ -224,7 +224,8 @@ def validate_policy(policy, osd_hosts):
     require(type(policy["size"]) is int and 2 <= policy["size"] <= osd_hosts)
 
 
-def validate_pool(pool, osd_hosts):
+def validate_pool(pool, osd_hosts, stretch=False):
+    """A replicated pool needs more OSD hosts than replicas, except on a stretch cluster, whose rule places two per site."""
     require(isinstance(pool, dict) and pool.get("type") in ("replicated", "erasure"))
     erasure = pool["type"] == "erasure"
     require(set(pool) == POOL_MEMBERS | ({"erasure"} if erasure else set()) | ({"object"} if "object" in pool else set()))
@@ -236,7 +237,8 @@ def validate_pool(pool, osd_hosts):
     if erasure:
         validate_erasure(pool, osd_hosts)
     else:
-        require(2 <= pool["minSize"] <= pool["size"] < osd_hosts and pool["overwrites"] is False)
+        require(2 <= pool["minSize"] <= pool["size"] and (pool["size"] <= osd_hosts if stretch else pool["size"] < osd_hosts)
+                and pool["overwrites"] is False)
     validate_autoscale(pool)
     compression = pool["compression"]
     require(isinstance(compression, dict) and set(compression) == {"algorithm", "maxBlob", "minBlob", "mode", "requiredRatio"})
