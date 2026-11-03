@@ -14,6 +14,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/crmarques/bootwright/internal/controller/prerequisites"
 	"github.com/crmarques/bootwright/internal/desiredstate/inputfs"
 	"github.com/crmarques/bootwright/internal/diagnostics"
 	"github.com/crmarques/bootwright/internal/reconciliation"
@@ -182,6 +183,8 @@ func TestEveryE2ECaseRendersToValidInput(t *testing.T) {
 // Validation proves an input is well formed; only planning proves the
 // production capabilities admit it, so each render is planned the way its
 // runbook applies it: every rendered directory is one context, planned alone.
+// A claim another context holds is invisible to that plan, so
+// TestEveryE2ECaseContextsClaimDisjointHostReservations compares the contexts.
 func TestEveryE2ECaseRenderPlansWithoutRefusal(t *testing.T) {
 	script := e2eRenderScript(t)
 	for _, name := range e2eCaseNames(t) {
@@ -189,7 +192,7 @@ func TestEveryE2ECaseRenderPlansWithoutRefusal(t *testing.T) {
 			t.Run(name+"/"+render.name, func(t *testing.T) {
 				refusing := 0
 				for _, directory := range renderE2ECase(t, script, name, render) {
-					refusal := planE2EInput(t, directory)
+					refusal, _ := planE2EInput(t, directory)
 					switch {
 					case refusal == "":
 					case render.refuses != "" && strings.Contains(refusal, render.refuses):
@@ -206,7 +209,40 @@ func TestEveryE2ECaseRenderPlansWithoutRefusal(t *testing.T) {
 	}
 }
 
-func planE2EInput(t *testing.T, directory string) string {
+// Every directory of one render is a context of one controller host, so the
+// host reservations their plans claim must not conflict, which the controller
+// applies when it publishes the second context's claims.
+func TestEveryE2ECaseContextsClaimDisjointHostReservations(t *testing.T) {
+	script := e2eRenderScript(t)
+	for _, name := range e2eCaseNames(t) {
+		for _, render := range e2eRenders[name] {
+			t.Run(name+"/"+render.name, func(t *testing.T) {
+				var contexts [][]prerequisites.HostReservation
+				var names []string
+				for _, directory := range renderE2ECase(t, script, name, render) {
+					refusal, reservations := planE2EInput(t, directory)
+					if refusal != "" {
+						t.Skipf("%s: the plan refuses (%s); the planning test owns that", filepath.Base(directory), refusal)
+					}
+					contexts = append(contexts, reservations)
+					names = append(names, filepath.Base(directory))
+				}
+				for i := range contexts {
+					for j := range contexts {
+						if i == j {
+							continue
+						}
+						for _, conflict := range prerequisites.Conflicts(contexts[i], contexts[j]) {
+							t.Errorf("%s then %s: %s", names[i], names[j], prerequisites.ConflictDiagnostic(conflict).Message)
+						}
+					}
+				}
+			})
+		}
+	}
+}
+
+func planE2EInput(t *testing.T, directory string) (string, []prerequisites.HostReservation) {
 	t.Helper()
 	sources, err := (inputfs.Reader{}).Read(context.Background(), []string{directory})
 	if err != nil {
@@ -214,11 +250,12 @@ func planE2EInput(t *testing.T, directory string) string {
 	}
 	state, _ := compileAcceptance(t, sources)
 	if refused := productionUnsupported(t, state); len(refused) != 0 {
-		return fmt.Sprintf("the capabilities refuse %+v", refused)
+		return fmt.Sprintf("the capabilities refuse %+v", refused), nil
 	}
 	resolver := buildCapabilities(systemClock{}, exampleControllerPorts(t), exampleMediaRecords{})
 	input := lifecycle.PlanInput{Verb: reconciliation.Apply, State: state, Controller: "controller", Context: lifecycle.ContextIdentity{Name: filepath.Base(directory)}}
 	var definitions []reconciliation.BlockDefinition
+	var reservations []prerequisites.HostReservation
 	for _, binding := range resolver.Bindings() {
 		capability, ok := resolver.Resolve(binding.Kind, binding.Implementation)
 		if !ok {
@@ -226,12 +263,13 @@ func planE2EInput(t *testing.T, directory string) string {
 		}
 		contribution, err := capability.Plan(context.Background(), input)
 		if err != nil {
-			return fmt.Sprintf("%v: %+v", binding, diagnostics.Of(err))
+			return fmt.Sprintf("%v: %+v", binding, diagnostics.Of(err)), nil
 		}
 		definitions = append(definitions, contribution.Definitions...)
+		reservations = append(reservations, contribution.Reservations...)
 	}
 	if _, err := reconciliation.NewPlan(reconciliation.Apply, definitions); err != nil {
-		return err.Error()
+		return err.Error(), nil
 	}
-	return ""
+	return "", reservations
 }

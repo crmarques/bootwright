@@ -46,7 +46,8 @@ private records for cleanup. Run each other input variant from the beginning.
 The render writes two inputs: `$INPUT_DIR/arbiter` for `CTX_ARB` and `$INPUT_DIR/ceph`
 for `CTX_CEPH`. [values.yaml](values.yaml) holds addresses, ports, sites,
 sizes and the Ceph coordinates. `CTX_ARB` serves 53, 123, 3128, 8444, 8081 and
-BMC 8001; `CTX_CEPH` serves 8443, 8080 and BMC 8000.
+BMC 8010; `CTX_CEPH` serves 8443, 8080 and BMC 8000 to 8003, one per data host.
+The BMC ports are on loopback and need no firewall entry.
 
 Set the service choices once for this run. Either service requires at least
 6144 MiB per data guest, so the render block raises the default minimum.

@@ -28,7 +28,10 @@ rhel:
   dvdMedia: rhel-9.8-x86_64-dvd.iso
 
 # Each context's artifact server and emulated BMC on this host. The arbiter
-# context also serves DNS, NTP and the proxy for both.
+# context also serves DNS, NTP and the proxy for both. Each `bmc` is the base of
+# one port per realized Machine of that context: ceph takes 8000 to 8003 for its
+# four data hosts and arbiter 8010 for its one, and the two ranges must stay
+# disjoint (no toggle adds data hosts).
 ports:
   ceph:
     https: 8443
@@ -38,7 +41,7 @@ ports:
   arbiter:
     https: 8444
     http: 8081
-    bmc: 8001
+    bmc: 8010
 
 # Three simulated sites: dc1 and dc2 hold the data hosts, dc3 the tiebreaker.
 sites:
