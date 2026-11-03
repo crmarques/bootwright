@@ -295,11 +295,11 @@ func TestGuestChecksAddTheFirewallProbeForAnIngressHost(t *testing.T) {
 		return []byte("guest\n"), nil
 	})}
 	rows, err := checker.CheckGuest(context.Background(), "synthetic", machine, []HostPortRequirement{managementRequirement()}, PreflightRequest{})
-	if err != nil || len(rows) != 8 || rows[7].ID != "host.firewall" || rows[7].Status != capacity.Passed {
+	if err != nil || len(rows) != 7 || rows[6].ID != "host.firewall" || rows[6].Status != capacity.Passed {
 		t.Fatalf("%+v %v", rows, err)
 	}
 	rows, err = checker.CheckGuest(context.Background(), "synthetic", machine, nil, PreflightRequest{})
-	if err != nil || len(rows) != 7 {
+	if err != nil || len(rows) != 6 {
 		t.Fatalf("a host without requirements probed %+v %v", rows, err)
 	}
 }
@@ -355,7 +355,7 @@ func TestGuestFirewallReadsRunAsRootBecauseFirewalldRefusesZoneReadsToAUser(t *t
 				return []byte("guest\n"), nil
 			})}
 			rows, err := checker.CheckGuest(context.Background(), "synthetic", api.NewObject(api.Machine, "guest", api.Value{}, api.MapValue()), []HostPortRequirement{managementRequirement()}, PreflightRequest{})
-			if err != nil || len(rows) != 8 || rows[5].ID != "host.privilege" || rows[5].Status != c.privilege || rows[7].ID != "host.firewall" || rows[7].Status != c.firewall {
+			if err != nil || len(rows) != 7 || rows[4].ID != "host.privilege" || rows[4].Status != c.privilege || rows[6].ID != "host.firewall" || rows[6].Status != c.firewall {
 				t.Fatalf("%+v %v", rows, err)
 			}
 			if c.sudo && slices.ContainsFunc(bare, func(argv []string) bool { return argv[0] == firewallCmd }) {

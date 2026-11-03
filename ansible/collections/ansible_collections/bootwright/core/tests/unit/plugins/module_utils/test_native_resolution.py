@@ -1,6 +1,7 @@
 """Test bounded native resolution policy without host metadata or package effects."""
 
 import copy
+import tempfile
 from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
@@ -225,3 +226,88 @@ class AuthoredNativeSelections(unittest.TestCase):
         self.assertIn(("ceph", "cephadm", "synthetic-ceph"), roots)
         self.assertIn(("ansible", "cephadm-ansible", "synthetic-ansible"), roots)
         self.assertIn(("nfsGanesha", "nfs-ganesha", "synthetic-nfs"), roots)
+
+
+def rpm_package(name, repoid, version="2", release="1", requires=(), recommends=()):
+    value = package(name, version, release, "noarch")
+    value.repoid, value.location = repoid, "Packages/" + name + ".rpm"
+    value.chksum, value.downloadsize = (8, bytes(range(32))), 64
+    value.requires, value.recommends = set(requires), set(recommends)
+    return value
+
+
+class WeakDependencySolve(unittest.TestCase):
+    """The production solve and DNF setup over a sack that honours the configured weak-dependency switch."""
+
+    def test_the_runtime_cephadm_only_recommends_is_installed_from_the_os_repositories(self):
+        import sys
+        import types
+
+        ibm, appstream, baseos = "ibm-storage-ceph", "rhel-appstream", "rhel-baseos"
+        podman = rpm_package("podman", appstream, "5.6.0", "1.el9_8", requires=("conmon",))
+        available = [
+            rpm_package("cephadm", ibm, "20.2.1", "405.el9cp", requires=("ibm-storage-ceph-license", "lvm2", "python3"), recommends=("podman",)),
+            rpm_package("ceph-common", ibm, "20.2.1", "405.el9cp"),
+            rpm_package("cephadm-ansible", ibm, "5.0.3", "1.el9cp"),
+            rpm_package("ibm-storage-ceph-license", ibm, "9.1", "1.el9cp"),
+            rpm_package("openssl", baseos), rpm_package("lvm2", baseos), rpm_package("python3", baseos),
+            podman, rpm_package("conmon", appstream),
+        ]
+
+        class Conf(SimpleNamespace):
+            def __init__(self):
+                super().__init__(substitutions={})
+
+        class Base:
+            def __init__(self, conf):
+                self.conf, self.marked, self.transaction = conf, [], None
+                self.repos = SimpleNamespace(add=lambda repo: None)
+                self.sack = SimpleNamespace(query=lambda: SimpleNamespace(installed=lambda: []))
+
+            def fill_sack(self, **kwargs):
+                pass
+
+            def install(self, subject, strict):
+                pass
+
+            def package_install(self, chosen, strict):
+                self.marked.append(chosen)
+
+            def resolve(self, allow_erasing):
+                closure, pending = {}, list(self.marked)
+                while pending:
+                    chosen = pending.pop()
+                    if chosen.name in closure:
+                        continue
+                    closure[chosen.name] = chosen
+                    wanted = chosen.requires | (chosen.recommends if self.conf.install_weak_deps else set())
+                    pending.extend(candidate for candidate in available if candidate.name in wanted)
+                self.transaction = SimpleNamespace(install_set=list(closure.values()), remove_set=[])
+
+        def subject(value):
+            matches = [candidate for candidate in available if value in (candidate.name, candidate.name + "-" + candidate.version + "-" + candidate.release)]
+            query = SimpleNamespace(available=lambda: matches)
+            return SimpleNamespace(get_best_query=lambda sack, with_provides: query)
+
+        dnf = types.ModuleType("dnf")
+        dnf.__version__ = "4.14.0"
+        dnf.conf = SimpleNamespace(Conf=Conf)
+        dnf.Base = Base
+        dnf.repo = SimpleNamespace(Repo=lambda identifier, conf: SimpleNamespace(enable=lambda: None))
+        dnf.subject = SimpleNamespace(Subject=subject)
+        modules = {"dnf": dnf, "dnf.conf": dnf.conf, "dnf.subject": dnf.subject,
+                   "rpm": SimpleNamespace(labelCompare=compare),
+                   "hawkey": SimpleNamespace(chksum_name=lambda algorithm: "SHA256")}
+        request = {"policy": "ceph-packages-v2", "requirements": {"cephPackages": True}, "snapshot": "/snapshot",
+                   "platform": dict(os="rhel", release="9.8", architecture="amd64"),
+                   "versions": {"ceph": "20.2.1-405.el9cp", "ansible": "5.0.3-1.el9cp", "license": "latest"},
+                   "repositories": [dict(id=name, localPath="/repositories/" + name, baseURL="https://tree.example.test/" + name,
+                                         metadataSHA256="a" * 64, signer="b" * 40) for name in (baseos, appstream, ibm)]}
+        with tempfile.TemporaryDirectory() as scratch, patch.dict(sys.modules, modules):
+            plan = native.solve4(request, scratch)
+        installed = {action["after"]["name"]: action["reason"] for action in plan["actions"] if action["kind"] == "install"}
+        self.assertEqual(installed.get("podman"), "root")
+        self.assertEqual(installed.get("conmon"), "dependency")
+        self.assertIn({"key": "runtime", "requested": "latest", "package": native.identity(podman)}, plan["roots"])
+        record = next(value for value in plan["packages"] if value["name"] == "podman")
+        self.assertEqual(record["source"]["url"], "https://tree.example.test/rhel-appstream/Packages/podman.rpm")

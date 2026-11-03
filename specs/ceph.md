@@ -187,6 +187,12 @@ The minimal DVD installation lends Storage its proved original-apply media
 identity and publication, together with the artifact server's public TLS
 certificate. Storage uses the shared package resolver for its Ceph-owned roots;
 it does not acquire RHSM registration or install another domain's prerequisites.
+The resolver installs no weak dependency, so a tool the host phases run that
+the provider packages only recommend is a root of its own: the container
+runtime `podman`, which cephadm only recommends, is resolved at its latest
+version from the hosted DVD's BaseOS and AppStream repositories, as `openssl`
+for the pull broker is, on every Ceph host, provided ones included, and
+cluster removal retains it like the other roots.
 Freeze repository metadata, the complete signed RPM closure, authenticated
 package headers and the before/after RPM inventory in a separate durable
 package decision before installation. Acquisition reads the authored
@@ -439,6 +445,8 @@ Remote provider facts remain unknown until that observer is qualified.
 Storage preflight reports future Machines whose managed OS installation has
 not started as pending without remote guest probes. Installed or provided OS
 guests require actual prerequisite observations before readiness is proved.
+A package that host preparation installs, the container runtime included,
+is not a prerequisite, so preflight neither probes nor reports it.
 
 Storage accepts any selected time source that answers
 ([time service readiness](infrastructure-services.md#managed-network-services))

@@ -39,7 +39,6 @@ func (g GuestChecks) CheckGuest(ctx context.Context, contextName string, host ap
 		{"host.identity", []string{"/usr/bin/hostname"}, func(text string) bool { return strings.TrimSpace(text) == hostname }, "the installed hostname must equal the declared Machine hostname"},
 		{"host.kernel", []string{"/usr/bin/uname", "-r"}, nonempty, "the installed kernel must answer its release query"},
 		{"host.os", []string{"/usr/bin/cat", "/etc/os-release"}, func(text string) bool { return strings.Contains(text, "ID=") }, "the installed OS must expose its identity"},
-		{"host.runtime", []string{"/usr/bin/podman", "--version"}, nonempty, "the native container runtime must answer its version query"},
 		{"host.time", []string{"/usr/bin/timedatectl", "show", "--property=NTPSynchronized", "--value"}, func(text string) bool { return strings.TrimSpace(text) == "yes" }, "host time synchronization must be active"},
 		{"host.privilege", []string{"/usr/bin/id", "-u"}, func(text string) bool { return strings.TrimSpace(text) == "0" }, "noninteractive root privilege must be available"},
 		{"host.dns", []string{"/usr/bin/getent", "ahosts", hostname}, nonempty, "the declared host identity must resolve through the host's resolver"},

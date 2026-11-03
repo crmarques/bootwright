@@ -116,7 +116,7 @@ func (r HostRequest) source() (int, bool) {
 }
 
 func HostContentDigest() string {
-	d := sha256.Sum256([]byte(HostImplementation + "\x00" + HostVersion + "\x00" + HostEvidenceVersion + "\x00" + "selected-packages-placement-pulls-profile-route-devices-v4"))
+	d := sha256.Sum256([]byte(HostImplementation + "\x00" + HostVersion + "\x00" + HostEvidenceVersion + "\x00" + "selected-packages-runtime-placement-pulls-profile-route-devices-v5"))
 	return hex.EncodeToString(d[:])
 }
 

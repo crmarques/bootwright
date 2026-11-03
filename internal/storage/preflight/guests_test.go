@@ -26,8 +26,6 @@ func TestGuestPrerequisitesUseFixedReadsAndNeverReturnRawOutput(t *testing.T) {
 			output = "synthetic-kernel\n"
 		case "/usr/bin/cat":
 			output = "ID=synthetic\n"
-		case "/usr/bin/podman":
-			output = "synthetic-runtime\n"
 		case "/usr/bin/timedatectl":
 			output = "yes\n"
 		case "/usr/bin/id":
@@ -40,7 +38,7 @@ func TestGuestPrerequisitesUseFixedReadsAndNeverReturnRawOutput(t *testing.T) {
 		return []byte(output), nil
 	})}
 	rows, err := checker.CheckGuest(context.Background(), "synthetic", host, nil, PreflightRequest{})
-	if err != nil || calls != 7 {
+	if err != nil || calls != 6 {
 		t.Fatalf("%d %v", calls, err)
 	}
 	for _, row := range rows {
@@ -55,6 +53,27 @@ func TestGuestPrerequisitesUseFixedReadsAndNeverReturnRawOutput(t *testing.T) {
 	}
 	for _, row := range rows {
 		if row.Status != capacity.Unknown || strings.Contains(row.Reason, "secret") {
+			t.Fatalf("%+v", row)
+		}
+	}
+}
+
+func TestHostWithoutTheContainerRuntimeIsReadyForTheHostPreparationThatInstallsIt(t *testing.T) {
+	host := api.NewObject(api.Machine, "guest", api.Value{}, api.MapValue())
+	answers := map[string]string{"/usr/bin/hostname": "guest\n", "/usr/bin/uname": "kernel\n", "/usr/bin/cat": "ID=rhel\n", "/usr/bin/timedatectl": "yes\n", "/usr/bin/id": "0\n", "/usr/bin/getent": "192.0.2.1 STREAM guest\n"}
+	checker := GuestChecks{Commands: CommandFunc(func(_ context.Context, request CommandRequest) ([]byte, error) {
+		answer, found := answers[request.Argv[0]]
+		if !found {
+			return nil, errors.New("verified bounded prerequisite command did not complete")
+		}
+		return []byte(answer), nil
+	})}
+	rows, err := checker.CheckGuest(context.Background(), "synthetic", host, nil, PreflightRequest{})
+	if err != nil || len(rows) != len(answers) {
+		t.Fatalf("%+v %v", rows, err)
+	}
+	for _, row := range rows {
+		if row.Status != capacity.Passed || row.ID == "host.runtime" {
 			t.Fatalf("%+v", row)
 		}
 	}

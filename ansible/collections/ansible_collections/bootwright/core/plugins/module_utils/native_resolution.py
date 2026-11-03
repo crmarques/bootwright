@@ -138,6 +138,8 @@ def selected_roots(request):
     roots = [("ceph", "cephadm", versions["ceph"]), ("ceph", "ceph-common", versions["ceph"]),
              ("ansible", "cephadm-ansible", versions["ansible"]), ("license", "ibm-storage-ceph-license", versions["license"])]
     roots.append(("broker", "openssl", "latest"))
+    # cephadm only recommends its container runtime, and this solve installs no weak dependency.
+    roots.append(("runtime", "podman", "latest"))
     if "nfsGanesha" in versions:
         roots.append(("nfsGanesha", "nfs-ganesha", versions["nfsGanesha"]))
     if "inheritedPolicy" in versions:
@@ -427,7 +429,7 @@ def solve4(request, scratch, local_sources=None, return_transaction=False):
         if local is None:
             # Let DNF interpret the exact authored subject, including malformed
             # versions. A fixed package name prevents option/command injection.
-            candidates = authored_candidates(base, name, requested, unversioned=key in ("license", "inherited-policy", "broker"))
+            candidates = authored_candidates(base, name, requested, unversioned=key in ("license", "inherited-policy", "broker", "runtime"))
         else:
             candidates = [pkg for pkg in local if pkg.name == name]
         package, peers = choose(candidates, "latest", compare)

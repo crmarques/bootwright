@@ -144,7 +144,7 @@ func contractRecipes() map[string]digestRecipe {
 			partVersion(ceph.RetirementVersion), partVersion(ceph.TiebreakerEvidenceVersion), partPin("selected-tunnel-image-v3")),
 		ceph.ImageImplementation: digestOf(partImplementation(ceph.ImageImplementation), partRequest(ceph.ImageVersion), partPin("selected-artifact-manifest-v2")),
 		ceph.HostImplementation: digestOf(partImplementation(ceph.HostImplementation), partRequest(ceph.HostVersion), partVersion(ceph.HostEvidenceVersion),
-			partPin("selected-packages-placement-pulls-profile-route-devices-v4")),
+			partPin("selected-packages-runtime-placement-pulls-profile-route-devices-v5")),
 		ceph.PhysicalRetirementImplementation: {separator: ":", parts: []digestPart{partImplementation(ceph.PhysicalRetirementImplementation), partPin("original-host-and-completed-erase-proof-v1")}},
 		ceph.SMBImplementation: digestOf(partImplementation(ceph.SMBImplementation), partRequest(ceph.SMBVersion), partVersion(ceph.SMBEvidenceVersion),
 			partPin(ceph.PhysicalRetirementImplementation)),

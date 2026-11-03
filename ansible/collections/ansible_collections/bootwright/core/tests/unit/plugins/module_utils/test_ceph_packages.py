@@ -300,7 +300,7 @@ def test_shared_resolver_ceph_policy_has_only_exact_provider_roots():
     grant = packages.transaction_request({"cephadm": {"packageVersion": "20.2.1-405.el9cp"}, "ansiblePackageVersion": "5.0.3-1"})
     assert native_resolution.selected_roots(grant) == [("ceph", "cephadm", "20.2.1-405.el9cp"), ("ceph", "ceph-common", "20.2.1-405.el9cp"),
                                                        ("ansible", "cephadm-ansible", "5.0.3-1"), ("license", "ibm-storage-ceph-license", "latest"),
-                                                       ("broker", "openssl", "latest"),
+                                                       ("broker", "openssl", "latest"), ("runtime", "podman", "latest"),
                                                        ("inherited-policy", "crypto-policies", "latest"),
                                                        ("inherited-policy", "crypto-policies-scripts", "latest")]
     for change in (dict(policy="unknown"), dict(versions={"ceph": "latest", "license": "latest"}),
