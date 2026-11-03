@@ -335,7 +335,19 @@ const osdDiskRemedy = "the adapter detail names the code site that refused, not 
 func osdDeviceRefusals() map[string]error {
 	return map[string]error{
 		"device-not-empty": failure("lifecycle.unsupported", "an OSD disk on a Ceph host holds a partition table, filesystem, LVM or other signature that this operation did not write", osdDiskRemedy),
-		"foreign-osd":      failure("lifecycle.unsupported", "an OSD disk on a Ceph host, or the Ceph cluster itself, holds a Ceph OSD of another cluster or one this operation did not create", osdDiskRemedy+"; for an OSD the cluster runs, find it with ceph osd metadata and remove it outside Bootwright"),
+		"foreign-osd": failure("lifecycle.unsupported", "an OSD disk on a Ceph host, or the Ceph cluster itself, holds a Ceph OSD of another cluster or one this operation did not create", osdDiskRemedy+"; for an OSD the cluster runs, find it with ceph osd metadata and remove it outside Bootwright; "+
+			"a never-booted OSD that an interrupted OSD creation left is purged by the next apply when this operation cleared its disk, "+
+			"otherwise purge it with ceph osd purge-new osd.<id> --yes-i-really-mean-it after ceph osd dump shows it never booted (down, up_from 0, state exists and new)"),
+		"osd-partial": failure("lifecycle.unknown", "an OSD disk on a Ceph host that this operation prepared holds LVM metadata without a complete OSD, and an interrupted OSD creation cannot be told apart from a foreign write: it is not exactly this operation's own unfinished ceph-volume volume, its OSD service declares DB or WAL devices, ceph-volume is still running on that host, or this operation already cleared that disk once",
+			"apply again once no ceph-volume runs on the host, which clears the disk only when it holds exactly one ceph-volume volume group with one untagged block volume of this cluster and nothing else, for an OSD service without DB or WAL devices; otherwise run wipefs --no-act <disk>, pvs and lvs -o +lv_tags on the host to see what it holds, and clear it yourself after confirming it is that disk, then apply again; Bootwright never clears a disk it cannot prove its own"),
+		"osd-clear-failed": failure("lifecycle.unknown", "ceph-volume lvm zap --destroy failed on an OSD disk that held only this operation's own unfinished OSD volume, so the disk may be partly cleared",
+			"read the native error, correct what it names on the host, then apply again: the clear's intent record admits the partly cleared disk, and the clear runs again; Bootwright never clears any other disk"),
+		"osd-orphan-booted": failure("lifecycle.unknown", "the Ceph OSD map holds an OSD of the OSD fsid that a cleared, unfinished ceph-volume volume named, and that OSD has booted, so Bootwright did not purge it",
+			"find it with ceph osd dump on the bootstrap host; an OSD that booted is not the orphan of an interrupted creation, so inspect it and remove it outside Bootwright, then apply again; Bootwright purges only an OSD that never booted"),
+		"osd-orphan-unproved": failure("lifecycle.unknown", "the never-booted OSD that a cleared, unfinished ceph-volume volume named is still in the Ceph OSD map after ceph osd purge-new, or the map holds more than one OSD of its fsid",
+			"read the native error and check the OSD map with ceph osd dump on the bootstrap host, then apply again; the purge settles from the map, so an OSD already gone is not purged again"),
+		"osd-clear-unproved": failure("lifecycle.unknown", "after ceph-volume cleared an OSD disk that held only this operation's own unfinished OSD volume, the disk did not read as empty, or the host's LVM devices file kept that volume's entry",
+			"run wipefs --no-act <disk> and lvmdevices on the host to see what remains, then apply again; the clear's intent record admits a partly cleared disk and its replay finishes the clear"),
 	}
 }
 

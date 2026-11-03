@@ -81,6 +81,7 @@ CLUSTER_REASONS = (
     "ingress-firewall", "service-credential-foreign", "ssh-policy-host-excluded", "ssh-policy-unavailable", "tunnel-host-key-excluded",
     "sso-unverified", "stretch-intent", "stretch-interrupted", "stretch-location", "stretch-weight", "stretch-rule", "stretch-foreign", "stretch-pools",
     "stretch-drift", "tiebreaker-foreign", "tiebreaker-unreachable", "device-not-empty", "foreign-osd",
+    "osd-partial", "osd-clear-failed", "osd-clear-unproved", "osd-orphan-booted", "osd-orphan-unproved",
 )
 SMB_REASONS = (
     "request", "artifact", "ownership", "evidence", "material", "transport", "remote-refusal", "adapter-exception", "native-command",
@@ -111,8 +112,10 @@ def unsettled(error):
 
 
 def blocking_entry(value):
-    """A blocking health check code, a daemon a host has not yet running, or a service unit's or gateway's unmet daemon count or endpoint."""
+    """A blocking health check code, a daemon a host has not yet running, a never-booted OSD naming no device, or a service unit's or
+    gateway's unmet daemon count or endpoint."""
     return isinstance(value, str) and (ceph_native.HEALTH_CHECK.fullmatch(value) is not None or ceph_native.PENDING_DAEMON.fullmatch(value) is not None
+                                       or ceph_native.PENDING_OSD.fullmatch(value) is not None
                                        or ceph_native_units.PENDING.fullmatch(value) is not None or ceph_native_object.PENDING.fullmatch(value) is not None)
 
 
@@ -521,13 +524,14 @@ class Transport:
         ceph_native.require(tuple(sources) == ceph_native_worker.MODULES, "transport")
         return sources
 
-    def call(self, host, phase, private=None, *, timeout=660, devices=None, service=None, names=None):
+    def call(self, host, phase, private=None, *, timeout=660, devices=None, service=None, names=None, orphans=None):
         nvme_long = (self.request.get("action") == "nvmeof" and phase in ("nvmeof", "nvmeof_observe")
                      or nvmeof_unit(self.request) and phase == "nvmeof_unit_observe")
         ceiling = ceph_native_nvmeof.phase_budget(self.request, phase) if nvme_long else 640
         ceph_native.require(type(timeout) in (int, float) and 0 < timeout <= ceiling + 20 and ceiling <= 21600, "transport")
         ceph_native.require(phase != "images" and (devices is None or phase == "services"), "transport")
         ceph_native.require(service is None or phase == "services" and type(service) is int and 0 <= service < len(self.request["services"]), "transport")
+        ceph_native.require(orphans is None or phase == "services" and isinstance(orphans, list) and orphans, "transport")
         ceph_native.require((names is not None) == (phase == "profile") and (names is None or isinstance(names, list)), "transport")
         budget = min(ceiling, timeout - 2) if timeout > 2 else timeout / 2
         payload = {"request": self.request, "host": host["name"], "phase": phase, "private": private or {}}
@@ -537,6 +541,8 @@ class Transport:
             payload["devices"] = devices
         if service is not None:
             payload["service"] = service
+        if orphans is not None:
+            payload["orphans"] = orphans
         if phase == "bootstrap":
             # The cluster's one long call: cephadm restarts its manager several times before bootstrap returns.
             source = bootstrap_launcher(inspect.getsource(ceph_native_worker), inspect.getsource(ceph_host_worker))
@@ -894,8 +900,19 @@ def apply_tunnel_cluster(request, bootstrap, transport, state, preparations):
     changed = any(value["changed"] for value in prepared) or changed
     # Every pending service document shares one owned apply and readback. The
     # native worker journals each child independently before sending stdin.
-    changed = transport.call(bootstrap, "services", devices=devices)["changed"] or changed
+    orphans = prepared_orphans(prepared)
+    extra = {"orphans": orphans} if orphans else {}
+    changed = transport.call(bootstrap, "services", devices=devices, **extra)["changed"] or changed
     return changed
+
+
+def prepared_orphans(prepared):
+    """The OSD fsids each host's owned partial clears zapped volumes named, which the bootstrap host's services call purges."""
+    for value in prepared:
+        ceph_native.require(isinstance(value, dict) and set(value) in ({"changed"}, {"changed", "orphans"}) and type(value["changed"]) is bool
+                            and isinstance(value.get("orphans", []), list)
+                            and all(isinstance(osd, str) and ceph_native.OSD_UUID.fullmatch(osd) for osd in value.get("orphans", [])), "evidence")
+    return sorted({osd for value in prepared for osd in value.get("orphans", [])})
 
 
 def device_identities(request, transport, *, concurrent=False):

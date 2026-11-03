@@ -35,7 +35,8 @@ options:
       ssh-policy-host-excluded, ssh-policy-unavailable, tunnel-host-key-excluded, fips-policy, fips-not-enabled, cephx-policy,
       nvmeof-native, nvmeof-identity, nvmeof-foreign, nvmeof-budget, sso-unverified, stretch-intent, stretch-interrupted,
       stretch-location, stretch-weight, stretch-rule, stretch-foreign, stretch-pools, stretch-drift, tiebreaker-foreign,
-      tiebreaker-unreachable, device-not-empty, foreign-osd]
+      tiebreaker-unreachable, device-not-empty, foreign-osd, osd-partial, osd-clear-failed, osd-clear-unproved,
+      osd-orphan-booted, osd-orphan-unproved]
   detail:
     description: Non-secret refusal cause, a refusal name or an exception type and code site.
     type: str

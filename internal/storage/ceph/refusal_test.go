@@ -165,6 +165,35 @@ func TestADirtyOSDDiskRefusesByItsOwnNameAndLeavesTheAttemptFailed(t *testing.T)
 			}
 		}
 	}
+	orphan := diagnostics.Of(adapterRefusals()["foreign-osd"])[0].Remediation
+	for _, step := range []string{"purged by the next apply when this operation cleared its disk", "ceph osd purge-new osd.<id> --yes-i-really-mean-it after ceph osd dump shows it never booted"} {
+		if !strings.Contains(orphan, step) {
+			t.Fatalf("the foreign-osd remedy omits %q: %q", step, orphan)
+		}
+	}
+}
+
+func TestAPartialOSDDiskRefusesUnknownAndNamesOnlyTheOwnedClear(t *testing.T) {
+	r := coreRequest()
+	e := withMaterial(executionFor(t, r), r)
+	for reason, step := range map[string]string{
+		"osd-partial":         "clears the disk only when it holds exactly one ceph-volume volume group with one untagged block volume of this cluster",
+		"osd-clear-failed":    "the clear's intent record admits the partly cleared disk",
+		"osd-clear-unproved":  "its replay finishes the clear",
+		"osd-orphan-booted":   "Bootwright purges only an OSD that never booted",
+		"osd-orphan-unproved": "an OSD already gone is not purged again",
+	} {
+		_, err := New(api.CephCluster, &refusingRunner{reason: reason}).Observe(context.Background(), e)
+		d := diagnostics.Of(err)
+		if len(d) != 1 || d[0].Code != "lifecycle.unknown" || strings.Contains(d[0].Message, "could not prove its") ||
+			!strings.Contains(d[0].Remediation, step) || lifecycle.AttemptOutcome(err) != reconciliation.OutcomeUnknown {
+			t.Fatalf("a %s refusal reached the operator as %+v", reason, d)
+		}
+	}
+	if d := diagnostics.Of(adapterRefusals()["osd-partial"]); !strings.Contains(d[0].Message, "an interrupted OSD creation cannot be told apart from a foreign write") ||
+		!strings.Contains(d[0].Remediation, "Bootwright never clears a disk it cannot prove its own") {
+		t.Fatalf("an osd-partial refusal reached the operator as %+v", d)
+	}
 }
 
 func TestAForeignImageRefusalNamesTheSettingAndNeverOverwrites(t *testing.T) {

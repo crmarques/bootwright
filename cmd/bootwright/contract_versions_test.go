@@ -189,6 +189,7 @@ func automationFormats() map[string]automationFormat {
 		"ceph-dashboard-user-v1":            core,
 		"ceph-cluster-device-identities-v2": core,
 		"ceph-osd-device-intent-v1":         core,
+		"ceph-osd-device-clear-v1":          core,
 		"ceph-service-inputs-v1":            core,
 		// The core block's cache phase publishes cephadm on each host under it.
 		"ceph-host-cache-v1": core,
@@ -212,7 +213,7 @@ func automationFormats() map[string]automationFormat {
 
 		"ceph-host-v11":                {class: formatMirrored},
 		"ceph-host-evidence-v4":        {class: formatMirrored},
-		"ceph-core-v37":                {class: formatMirrored},
+		"ceph-core-v38":                {class: formatMirrored},
 		"ceph-core-evidence-v13":       {class: formatMirrored},
 		"ceph-tiebreaker-evidence-v1":  {class: formatMirrored},
 		"ceph-packages-v3":             {class: formatMirrored},

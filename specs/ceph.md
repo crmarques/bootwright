@@ -1149,8 +1149,8 @@ that a destroyed or abandoned cluster left, through its Machine's
 [`hardware.clearOnInstall`](managed-os.md#physical-data-disk-clear); nothing
 here clears a disk.
 
-Not yet met: a host's device-identity, device-proof, OSD-preparation and
-device-readback calls, and the cluster observation's per-OSD configuration
+Not yet met: a host's device-identity, device-proof, OSD-preparation (its
+owned clears included) and device-readback calls, and the cluster observation's per-OSD configuration
 reads, run per-disk or per-OSD native commands whose ceilings are not admitted
 against the call's 640 s worker budget, on virtual and physical hosts alike, so a slow host
 ends the call ambiguous rather than refusing by name; tracked as
@@ -1207,10 +1207,16 @@ without claiming that any disk was erased. Unknown or missing history refuses.
 
 Live checks exclude the OS root device and its backing devices, boot media,
 mounted filesystems, swap, foreign signatures, foreign OSDs and devices owned by
-another operation. A declared OSD disk that holds a partition table, filesystem,
-LVM or other signature this operation did not write refuses with the named
-token `device-not-empty`, and one that holds a Ceph OSD of another cluster or
-one this operation did not create, on the disk or in the cluster map, refuses
+another operation. Path spelling and native “available” status alone are
+insufficient. Aliases, multipath views, partitions, overlapping selections and
+replacement devices must resolve without ambiguity; unsupported layouts or
+unreadable inventory refuse before mutation. Native drivegroups cannot
+authorize later-attached devices.
+
+A declared OSD disk that holds a partition table, filesystem, LVM or other
+signature this operation did not write refuses with the named token
+`device-not-empty`, and one that holds a Ceph OSD of another cluster or one
+this operation did not create, on the disk or in the cluster map, refuses
 `foreign-osd`; both are coded `lifecycle.unsupported`, because no retry clears
 them. Their remedy names `wipefs --no-act <disk>` to see what the disk holds
 and, for a disk of a Ceph cluster the operator destroyed or abandoned, either
@@ -1219,11 +1225,74 @@ declaring it in its Machine's `spec.hardware.clearOnInstall`
 Machine again, or clearing it on the host after confirming the disk. The
 refusal's detail names the token and the code site that refused, never the
 disk: a native worker's cause carries no value, so the host and device are
-not reported. Path spelling and native “available” status alone are
-insufficient. Aliases, multipath views, partitions, overlapping selections and
-replacement devices must resolve without ambiguity; unsupported layouts or
-unreadable inventory refuse before mutation. Native drivegroups cannot
-authorize later-attached devices.
+not reported.
+
+An intent-marked data disk that holds LVM metadata without a complete OSD tag
+set, the shape an interrupted `ceph-volume` creation leaves, refuses
+`osd-partial`, coded `lifecycle.unknown`, because an interrupted creation and a
+foreign write cannot be told apart, except in one bounded owned clear. OSD
+preparation clears the disk only when every read-only proof holds: the host's
+OSD device intent record is this operation's; no OSD identity record is
+retained for the disk; it is a data device of exactly one declared OSD service
+on the host, and that service declares no DB or WAL devices, since
+`ceph-volume` creates their volumes before it tags the block volume; `wipefs`
+reports exactly one LVM signature and nothing on the disk is mounted; `pvs`
+shows exactly one PV on it, in a volume group named `ceph-<uuid>` holding no
+other PV; `lvs` shows exactly one volume in that group, named
+`osd-block-<osd fsid>`, whose tags all start with `ceph.`, with no
+`ceph.osd_id`, a `ceph.cluster_fsid` absent or this cluster's and a
+`ceph.type` absent or `block`, and whose OSD fsid names no OSD this host
+recorded; that volume is active as the disk's only holder and is itself held
+by nothing, so an open dm-crypt mapping refuses; and no process on the host
+runs `ceph-volume`. A volume group without its block volume refuses, because
+no OSD in the map can be attributed to it.
+
+The clear records its intent, which names the disk by its declared stable
+alias, serial and size, the PV's UUID and the OSD fsid; reads `pvs` and `lvs`
+again and requires the same PVs and volumes, because `--destroy` removes
+every PV of the disk's volume group; and runs
+`cephadm --image <frozen image> ceph-volume --fsid <fsid> -- lvm zap --destroy <disk>`
+through the verified host cephadm, bounded at 120 s. It proves every declared
+disk again as the first proof did, so the cleared disk must read empty; when
+`/etc/lvm/devices/system.devices` lists the PV and `pvs` shows no PV of that
+UUID on any disk, it removes only that entry with
+`lvmdevices --yes --delpvid <PV UUID>`; then it records completion. A failed
+zap refuses `osd-clear-failed`; a disk that does not read empty, or a
+devices-file entry that survives, refuses `osd-clear-unproved`. Both are coded
+`lifecycle.unknown` and keep the intent: a replay admits the same disk's PV
+with its volume group and no volume, or without a volume group, zaps it again,
+and settles a disk already empty without a zap. A record whose serial or size
+differs from the disk now behind its alias refuses `osd-partial`. Each disk is
+cleared at most once per operation; a later partial shape on it refuses
+`osd-partial`. DB and WAL disks have no clear.
+
+`ceph-volume` allocates the OSD ID, with `ceph osd new`, before it creates the
+volume, and a killed creation skips its rollback, so the cleared volume's OSD
+fsid may still name an OSD in the map that no disk will ever start, while the
+OSD service already submitted can create the disk's OSD again. Cluster
+observation, including the bootstrap state an apply reads before any host's
+OSD preparation, therefore counts an OSD whose metadata names no device and
+whose map entry never booted against no declared disk instead of refusing
+`foreign-osd`, and such an OSD keeps the cluster unready, named in the
+not-ready detail as `unbooted@osd.<id>.<osd fsid>`, so the apply goes on
+to OSD preparation and the services call; every other OSD beyond the declared
+disks still refuses `foreign-osd`. A clear whose completion was never
+recorded completes in OSD preparation when the disk now holds a complete OSD
+carrying neither the OSD fsid nor the PV UUID its intent proved, since the
+zap evidently ran: it drops the PV's devices-file entry as above and records
+completion with no zap. Each host's OSD preparation returns the
+OSD fsids of its completed clears, also once the disk holds an OSD of another
+fsid again, and the bootstrap host's services call,
+before it submits any service, reads `ceph osd dump`: an fsid no OSD carries
+is settled; an OSD of that fsid that never booted (down, `up_from` 0, its state
+`exists` and `new`) is recorded and purged with
+`ceph osd purge-new osd.<id> --yes-i-really-mean-it`, then the map must no
+longer hold it, or the call refuses `osd-orphan-unproved`; an OSD of that fsid
+that booted refuses `osd-orphan-booted` with no purge. Both are coded
+`lifecycle.unknown`. Since every OSD preparation reports every completed
+clear, a purge that an interrupted, lost or refused services call left
+undone is finished by the next apply. The devices file's
+interaction, the clear and the purge are unqualified on a live RHEL host.
 
 Provisioning records the relation between cluster FSID, OSD identity, Machine,
 physical device identity and DB/WAL allocation. Existing owned OSDs are reused

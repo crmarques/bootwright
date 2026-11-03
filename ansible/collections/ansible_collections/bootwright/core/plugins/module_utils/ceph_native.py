@@ -110,6 +110,16 @@ MANAGER_FAILURES = ("native-command", "native-timeout", "native-output")
 # util-linux draws lsblk's device tree in the NAME column: without it, JSON output is a flat list whose disks carry no
 # children, which hides every partition, logical volume and dm-crypt mapping beneath them.
 DEVICE_TREE = ("/usr/bin/lsblk", "--json", "--bytes", "--paths", "--output", "NAME,PATH,TYPE,SERIAL,SIZE,FSTYPE,MOUNTPOINTS")
+# A disk this operation's own interrupted OSD creation left behind: ceph-volume names its volume group ceph-<uuid> and the
+# block volume osd-block-<OSD fsid>. One bounded native zap clears it, once per disk; see owned_partial_osd.
+OSD_CLEAR_VERSION = "ceph-osd-device-clear-v1"
+OSD_CLEAR_SECONDS = 120
+CEPH_VOLUME_GROUP = re.compile(r"ceph-[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}\Z")
+CEPH_VOLUME_BLOCK = re.compile(r"osd-block-[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}\Z")
+OSD_UUID = re.compile(r"[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}\Z")
+LVM_UUID = re.compile(r"[A-Za-z0-9]{6}(?:-[A-Za-z0-9]{4}){5}-[A-Za-z0-9]{6}\Z")
+LVM_DEVICES_FILE = "/etc/lvm/devices/system.devices"
+PROC_ROOT = "/proc"
 LICENSE_STORE_OPTION = "mon_config_key_max_entry_size"
 LICENSE_STORE_FLOOR = 1 << 20
 # Health checks that never block day-0 readiness: call-home egress is the operator's network, not the cluster's state.
@@ -121,6 +131,8 @@ HEALTH_CHECK = re.compile(r"[A-Z][A-Z0-9_]{0,63}\Z")
 MONMAP_CREATED = re.compile(r"([0-9]{4}-[0-9]{2}-[0-9]{2})[T ]([0-9]{2}:[0-9]{2}:[0-9]{2})(?:\.([0-9]{1,9}))?(Z|[+-][0-9]{2}:?[0-9]{2})?\Z")
 INCARNATION = re.compile(r"[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{6}Z\Z")
 PENDING_DAEMON = re.compile(r"(mon|mgr)\.[a-zA-Z0-9][a-zA-Z0-9_.-]{0,127}\Z")
+# A never-booted OSD that names no device, by its ID and OSD fsid: the next apply purges it when an owned clear left it.
+PENDING_OSD = re.compile(r"unbooted@osd\.[0-9]{1,5}\.[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}\Z")
 # Each admitted daemon type: (executor, host rule identity|request|service, counted toward readiness, image rule).
 DAEMON_TYPES = {
     "mon": ("cluster", "identity", True, "ceph"),
@@ -593,7 +605,7 @@ def package_url(value):
 
 
 def scope_checks(request):
-    require(request["version"] == "ceph-core-v37")
+    require(request["version"] == "ceph-core-v38")
     if "security" in request:
         security = request["security"]
         require(isinstance(security, dict) and set(security) == {"fips", "cephxKeyType"})
@@ -899,6 +911,52 @@ def read_regular(path, maximum=MAX_INPUT, private=False):
         data = handle.read(maximum + 1)
         require(len(data) == info.st_size, "file")
         return data
+
+
+def volume_tool_running():
+    """Whether any process on the host runs ceph-volume, whose own OSD creation may be writing a disk right now."""
+    names = os.listdir(PROC_ROOT)
+    require(len(names) <= 1 << 20, "osd-partial")
+    for name in names:
+        if not name.isdigit():
+            continue
+        try:
+            fd = os.open(os.path.join(PROC_ROOT, name, "cmdline"), os.O_RDONLY | os.O_NOFOLLOW | os.O_CLOEXEC)
+        except (FileNotFoundError, ProcessLookupError):
+            continue
+        try:
+            arguments = os.read(fd, 1 << 16).split(b"\0")
+        except ProcessLookupError:
+            continue
+        finally:
+            os.close(fd)
+        if any(os.path.basename(argument) == b"ceph-volume" for argument in arguments):
+            return True
+    return False
+
+
+def never_booted(item):
+    """An OSD `ceph osd new` created that never booted: down, never up, and still flagged new."""
+    state = item.get("state")
+    return (type(item.get("up")) is int and item["up"] == 0 and type(item.get("up_from")) is int and item["up_from"] == 0
+            and isinstance(state, list) and "exists" in state and "new" in state)
+
+
+def unstarted_osd(item, osds):
+    """The one map entry of an OSD whose metadata names no device and that never booted, or None: no disk proves it, and it proves no readiness."""
+    entries = [value for value in osds if value.get("osd") == item.get("id")]
+    if type(item.get("id")) is int and "device_ids" not in item and not item.get("devices") and len(entries) == 1 and never_booted(entries[0]):
+        return entries[0]
+    return None
+
+
+def lvm_devices_lists(identifier):
+    """Whether the host's LVM devices file holds an entry for the PV of this unhyphenated UUID."""
+    try:
+        content = read_regular(LVM_DEVICES_FILE, maximum=1 << 20)
+    except FileNotFoundError:
+        return False
+    return any(b"PVID=" + identifier.encode("ascii") in line.split() for line in content.splitlines() if not line.lstrip().startswith(b"#"))
 
 
 def private_write(path, data):
@@ -2034,7 +2092,7 @@ class Worker:
         return {"version": "ceph-osd-device-intent-v1", "owner": self.request["owner"], "fsid": self.request["fsid"],
                 "host": self.host["name"], "devices": self.host["devices"], "image": self.request["image"]}
 
-    def owned_osd_device(self, actual, item, signatures):
+    def owned_osd_device(self, actual, item, signatures, device, alias):
         require(self.markers.owned() and self.markers.read("osd-device-intent.json") == self.osd_device_scope(), "device-not-empty")
         require(item.get("fstype") in (None, "", "LVM2_member") and not any(item.get("mountpoints") or []), "device-not-empty")
         require(all(isinstance(value, dict) and value.get("type") == "LVM2_member" for value in signatures), "device-not-empty")
@@ -2042,7 +2100,7 @@ class Worker:
         require(isinstance(output, dict) and isinstance(output.get("report"), list) and len(output["report"]) == 1, "native-output")
         rows = output["report"][0].get("lv")
         require(isinstance(rows, list) and len(rows) <= 1024, "native-output")
-        candidates = []
+        listed = []
         for row in rows:
             require(isinstance(row, dict) and isinstance(row.get("devices"), str), "native-output")
             paths = [part.strip().split("(", 1)[0] for part in row["devices"].split(",")]
@@ -2050,17 +2108,21 @@ class Worker:
                 continue
             require(paths == [actual] and isinstance(row.get("lv_tags"), str), "foreign-osd")
             tags = {}
-            for tag in row["lv_tags"].split(","):
+            for tag in row["lv_tags"].split(",") if row["lv_tags"] else []:
                 key, separator, value = tag.strip().partition("=")
                 require(separator and key not in tags, "foreign-osd")
                 tags[key] = value
+            listed.append((row, tags))
+        if not listed or any("ceph.osd_id" not in tags for unused, tags in listed):
+            return self.owned_partial_osd(actual, item, signatures, listed, rows, device, alias)
+        candidates = []
+        for row, tags in listed:
             require(tags.get("ceph.cluster_fsid") == self.request["fsid"] and tags.get("ceph.type") == "block", "foreign-osd")
             require(re.fullmatch(r"[0-9]+", tags.get("ceph.osd_id", "")) is not None
                     and re.fullmatch(r"[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}", tags.get("ceph.osd_fsid", "")), "foreign-osd")
             require(isinstance(row.get("lv_uuid"), str) and row["lv_uuid"] and isinstance(row.get("lv_path"), str), "foreign-osd")
             children = item.get("children") or []
-            specs = [s["spec"] for s in self.request["services"] if s["service_type"] == "osd"
-                     and self.host["name"] in s["placement"]["hosts"] and any(os.path.realpath(path) == actual for path in s["spec"]["data_devices"]["paths"])]
+            specs = self.osd_data_specs(actual)
             require(len(specs) == 1 and len(children) == 1, "foreign-osd")
             self.prove_osd_crypto(row, tags, children, specs[0])
             candidates.append({"path": actual, "id": int(tags["ceph.osd_id"]), "uuid": tags["ceph.osd_fsid"], "lvUUID": row["lv_uuid"]})
@@ -2068,6 +2130,163 @@ class Worker:
         retained = self.markers.read(self.osd_identity_marker(actual))
         require(retained is None or retained == candidates[0], "foreign-osd")
         return candidates[0]
+
+    def osd_data_specs(self, actual):
+        return [s["spec"] for s in self.request["services"] if s["service_type"] == "osd"
+                and self.host["name"] in s["placement"]["hosts"] and any(os.path.realpath(path) == actual for path in s["spec"]["data_devices"]["paths"])]
+
+    def owned_partial_osd(self, actual, item, signatures, listed, rows, device, alias):
+        """The clear of a declared data disk that holds only this operation's own interrupted OSD creation; any other
+        partial shape refuses osd-partial, since an interrupted creation and a foreign write cannot otherwise be told apart.
+
+        Every condition is read-only: the intent the caller proved, no retained OSD identity, one declared OSD service
+        without DB or WAL devices, one LVM signature, exactly one PV whose volume group ceph-volume named and that holds no
+        other PV, exactly one block volume ceph-volume named, whose name carries the OSD fsid ceph-volume allocated,
+        carrying no OSD ID and no other cluster's FSID, active as the disk's only holder and itself held by nothing,
+        nothing mounted, and no ceph-volume running on the host. A disk this operation already cleared once is never
+        cleared again. A clear an interrupted call left unfinished also admits its volume group without a volume, or its
+        PV without a volume group, of the same recorded PV, disk and OSD fsid."""
+        require(all(tags.get("ceph.cluster_fsid", self.request["fsid"]) == self.request["fsid"] for unused, tags in listed), "foreign-osd")
+        retained = self.osd_clear_record(alias, device)
+        require(self.markers.read(self.osd_cleared_marker(alias)) is None, "osd-partial")
+        specs = self.osd_data_specs(actual)
+        require(self.markers.read(self.osd_identity_marker(actual)) is None and len(specs) == 1
+                and not specs[0].get("db_devices") and not specs[0].get("wal_devices"), "osd-partial")
+        require(len(signatures) == 1 and not any(item.get("mountpoints") or []), "osd-partial")
+        volumes = self.physical_volumes()
+        mine = [value for value in volumes if value["pv_name"] == actual]
+        require(len(mine) == 1 and LVM_UUID.fullmatch(mine[0]["pv_uuid"]) is not None, "osd-partial")
+        volume = mine[0]
+        group = volume["vg_name"]
+        if group:
+            require(CEPH_VOLUME_GROUP.fullmatch(group) is not None and [value for value in volumes if value["vg_name"] == group] == [volume], "osd-partial")
+        prefix = "/dev/" + group + "/"
+        require(group or not listed, "osd-partial")
+        require(len(listed) <= 1 and all(not isinstance(row.get("lv_path"), str) or not row["lv_path"].startswith(prefix)
+                                         or any(row is mine_row for mine_row, unused in listed) for row in rows), "osd-partial")
+        children = item.get("children") or []
+        require(len(children) == len(listed), "osd-partial")
+        osd = ""
+        for (row, tags), child in zip(listed, children):
+            path = row.get("lv_path")
+            require(isinstance(path, str) and path.startswith(prefix) and CEPH_VOLUME_BLOCK.fullmatch(path[len(prefix):]) is not None, "osd-partial")
+            require(all(key.startswith("ceph.") for key in tags) and "ceph.osd_id" not in tags and tags.get("ceph.type", "block") == "block", "osd-partial")
+            require(isinstance(child, dict) and child.get("type") == "lvm" and not any(child.get("mountpoints") or []) and not child.get("children")
+                    and isinstance(child.get("path"), str) and os.path.realpath(child["path"]) == os.path.realpath(path), "osd-partial")
+            osd = path[len(prefix) + len("osd-block-"):]
+        record = {"version": OSD_CLEAR_VERSION, "owner": self.request["owner"], "fsid": self.request["fsid"], "host": self.host["name"],
+                  "device": alias, "serial": device["serial"], "sizeBytes": device["sizeBytes"], "pvUUID": volume["pv_uuid"], "osdUUID": osd}
+        if retained is None:
+            # Without its block volume the OSD fsid ceph-volume allocated is unknown, so no OSD in the map can be attributed to it.
+            require(osd, "osd-partial")
+        else:
+            require({key: value for key, value in retained.items() if key != "osdUUID"} == {key: value for key, value in record.items() if key != "osdUUID"}
+                    and osd in ("", retained["osdUUID"]), "osd-partial")
+            record = retained
+        require(not volume_tool_running(), "osd-partial")
+        return {"record": record, "path": actual, "shape": self.partial_shape(actual, group, volumes, rows)}
+
+    def physical_volumes(self):
+        output = self.command(["/usr/sbin/pvs", "--reportformat", "json", "--options", "pv_name,pv_uuid,vg_name"])
+        require(isinstance(output, dict) and isinstance(output.get("report"), list) and len(output["report"]) == 1, "native-output")
+        volumes = output["report"][0].get("pv")
+        require(isinstance(volumes, list) and len(volumes) <= 1024, "native-output")
+        require(all(isinstance(value, dict) and all(isinstance(value.get(key), str) for key in ("pv_name", "pv_uuid", "vg_name"))
+                    for value in volumes), "native-output")
+        return volumes
+
+    def logical_volumes(self):
+        output = self.command(["/usr/sbin/lvs", "--reportformat", "json", "--options", "lv_path,lv_uuid,lv_tags,devices"])
+        require(isinstance(output, dict) and isinstance(output.get("report"), list) and len(output["report"]) == 1, "native-output")
+        rows = output["report"][0].get("lv")
+        require(isinstance(rows, list) and len(rows) <= 1024 and all(isinstance(row, dict) for row in rows), "native-output")
+        return rows
+
+    @staticmethod
+    def partial_shape(actual, group, volumes, rows):
+        """The PVs and volumes a zap of this disk touches: ceph-volume's --destroy removes every PV of the disk's volume group."""
+        prefix = "/dev/" + group + "/"
+        return canonical({"pvs": [value for value in volumes if value["pv_name"] == actual or group and value["vg_name"] == group],
+                          "lvs": [row for row in rows if actual in str(row.get("devices", "")) or group and str(row.get("lv_path", "")).startswith(prefix)]})
+
+    def osd_clear_record(self, alias, device, stage=b"clear"):
+        """A retained clear record, which names the disk by its declared stable alias, serial and size."""
+        record = self.markers.read(self.osd_clear_marker(alias, stage))
+        require(record is None or isinstance(record, dict) and record.get("version") == OSD_CLEAR_VERSION and record.get("device") == alias
+                and record.get("serial") == device["serial"] and record.get("sizeBytes") == device["sizeBytes"]
+                and isinstance(record.get("pvUUID"), str) and LVM_UUID.fullmatch(record["pvUUID"]) is not None
+                and isinstance(record.get("osdUUID"), str) and (record["osdUUID"] == "" or OSD_UUID.fullmatch(record["osdUUID"]) is not None),
+                "osd-partial")
+        return record
+
+    @staticmethod
+    def osd_clear_marker(alias, stage=b"clear"):
+        """A clear's intent, or with stage b"cleared" its completion: OSD device records keyed by the stable alias, apart from the identity record."""
+        return "osd-device-" + hashlib.sha256(stage + b"\x00" + alias.encode()).hexdigest() + ".json"
+
+    @classmethod
+    def osd_cleared_marker(cls, alias):
+        return cls.osd_clear_marker(alias, b"cleared")
+
+    def clear_partial_osds(self):
+        """Zap each disk owned_partial_osd proved, after its intent and an unchanged re-read of its PVs and volumes; prove every
+        disk empty again; then complete each clear, dropping only the zapped PV's own LVM devices-file entry once no PV of that
+        UUID remains, a step an interrupted call's replay finishes."""
+        recorded = {row["uuid"] for row in self.observed_device_ids}
+        require(all(clear["record"]["osdUUID"] not in recorded for clear in self.osd_clears), "osd-partial")
+        if self.osd_clears:
+            self.verify_tool()
+        for clear in self.osd_clears:
+            record, actual = clear["record"], clear["path"]
+            self.markers.write(self.osd_clear_marker(record["device"]), record)
+            volumes, rows = self.physical_volumes(), self.logical_volumes()
+            group = next((value["vg_name"] for value in volumes if value["pv_name"] == actual), "")
+            require(self.partial_shape(actual, group, volumes, rows) == clear["shape"] and not volume_tool_running(), "osd-partial")
+            try:
+                self.command([self.tool, "--image", self.request["image"], "ceph-volume", "--fsid", self.request["fsid"], "--",
+                              "lvm", "zap", "--destroy", actual], timeout=OSD_CLEAR_SECONDS, json_result=False)
+            except NativeFailure as error:
+                refused = Refusal("osd-clear-failed")
+                refused.native_error = error.native_error
+                raise refused from None
+        cleared = [clear["record"]["device"] for clear in self.osd_clears]
+        self.devices()
+        require(not self.osd_clears and set(cleared) <= {record["device"] for record in self.osd_settled}, "osd-clear-unproved")
+        for record in self.osd_settled:
+            identifier = record["pvUUID"].replace("-", "")
+            if lvm_devices_lists(identifier):
+                require(all(value["pv_uuid"] != record["pvUUID"] for value in self.physical_volumes()), "osd-clear-unproved")
+                self.command(["/usr/sbin/lvmdevices", "--yes", "--delpvid", identifier], json_result=False)
+                require(not lvm_devices_lists(identifier), "osd-clear-unproved")
+            self.markers.write(self.osd_cleared_marker(record["device"]), record)
+            if record["osdUUID"]:
+                self.osd_orphans.append(record["osdUUID"])
+
+    def purge_orphan_osds(self, orphans):
+        """Purge only the never-booted OSD each completed clear's zapped volume named, settled from the map: none is done."""
+        changed = False
+        for osd in orphans:
+            matches = [value for value in self.osd_map() if value.get("uuid") == osd]
+            require(len(matches) <= 1, "osd-orphan-unproved")
+            if not matches:
+                continue
+            item = matches[0]
+            require(type(item.get("osd")) is int and item["osd"] >= 0 and never_booted(item), "osd-orphan-booted")
+            self.markers.write(self.osd_purge_marker(osd), {"version": OSD_CLEAR_VERSION, "fsid": self.request["fsid"], "osdUUID": osd, "id": item["osd"]})
+            self.ceph("osd", "purge-new", "osd." + str(item["osd"]), "--yes-i-really-mean-it", json_result=False)
+            require(all(value.get("uuid") != osd for value in self.osd_map()), "osd-orphan-unproved")
+            changed = True
+        return changed
+
+    def osd_map(self):
+        osdmap = self.ceph("osd", "dump")
+        require(isinstance(osdmap, dict) and isinstance(osdmap.get("osds"), list) and len(osdmap["osds"]) <= 65536
+                and all(isinstance(item, dict) for item in osdmap["osds"]), "native-output")
+        return osdmap["osds"]
+
+    @staticmethod
+    def osd_purge_marker(osd):
+        return "osd-device-" + hashlib.sha256(b"purge\x00" + osd.encode()).hexdigest() + ".json"
 
     @staticmethod
     def osd_identity_marker(path):
@@ -2096,7 +2315,7 @@ class Worker:
 
     def devices(self):
         physical = self.physical_devices()
-        self.observed_device_ids = []
+        self.observed_device_ids, self.osd_clears, self.osd_settled, self.osd_orphans = [], [], [], []
         if self.markers.owned() and self.markers.read("registry-file.json") is not None:
             self.prove_registry()
         observed = self.command(list(DEVICE_TREE))
@@ -2144,10 +2363,28 @@ class Worker:
             require(isinstance(signatures, dict) and isinstance(signatures.get("signatures"), list), "device-not-empty")
             if item.get("children") or item.get("fstype") or any(item.get("mountpoints") or []) or signatures["signatures"]:
                 require(device["path"] not in auxiliary_device_paths(self.request, self.host["name"]), "device-not-empty")
-                self.observed_device_ids.append(self.owned_osd_device(actual, item, signatures["signatures"]))
+                found = self.owned_osd_device(actual, item, signatures["signatures"], device, alias)
+                (self.osd_clears if "record" in found else self.observed_device_ids).append(found)
+                if "record" in found:
+                    continue
+                observed = found["uuid"]
             else:
                 require(self.markers.read(self.osd_identity_marker(actual)) is None, "foreign-osd")
+                observed = ""
+            pending, done = self.osd_clear_record(alias, device), self.osd_clear_record(alias, device, b"cleared")
+            require(done is None or done == pending, "osd-partial")
+            if pending is not None and done is None and (not observed or self.zapped_before(actual, pending, observed)):
+                self.osd_settled.append(pending)
+            elif done is not None and done["osdUUID"] and done["osdUUID"] != observed:
+                # A completed clear names its orphan even after the OSD service created the disk's OSD again.
+                self.osd_orphans.append(done["osdUUID"])
         return {"devices": len(self.host["devices"])}
+
+    def zapped_before(self, actual, pending, observed):
+        """Whether a clear whose completion was never recorded zapped the disk before the OSD service created a complete OSD on it
+        again: that OSD carries neither the OSD fsid nor the PV the clear's intent proved, so the clear completes and names its orphan."""
+        mine = [value["pv_uuid"] for value in self.physical_volumes() if value["pv_name"] == actual]
+        return bool(pending["osdUUID"]) and pending["osdUUID"] != observed and len(mine) == 1 and mine[0] != pending["pvUUID"]
 
     def osd_prepare(self):
         require(self.markers.owned(), "ownership")
@@ -2158,6 +2395,10 @@ class Worker:
         if retained is None:
             self.markers.write("osd-device-intent.json", scope)
         changed = retained is None
+        if self.osd_clears or self.osd_settled:
+            self.clear_partial_osds()
+            changed = True
+        orphans = sorted(set(self.osd_orphans))
         for row in self.observed_device_ids:
             marker = self.osd_identity_marker(row["path"])
             previous = self.markers.read(marker)
@@ -2165,7 +2406,7 @@ class Worker:
             if previous is None:
                 self.markers.write(marker, row)
                 changed = True
-        return {"changed": changed}
+        return {"changed": changed, "orphans": orphans} if orphans else {"changed": changed}
 
     def authorize(self, private):
         """Add only the separately owned cluster key to an existing account."""
@@ -3422,11 +3663,12 @@ class Worker:
             self.prove_service_projections(projections, observed, scope)
         return {key: value for key, value in observed.items() if key not in projections}
 
-    def services(self, devices=None, service=None):
+    def services(self, devices=None, service=None, orphans=None):
         require(self.markers.owned(), "ownership")
         require(self.ceph("fsid") == {"fsid": self.request["fsid"]}, "ownership")
         self.prove_registry()
         self.provider_registry_absent()
+        purged = self.purge_orphan_osds(orphans or [])
         if self.request["clusterSSHTransport"] == "verifiedTunnel":
             require(self.device_identities(devices) is not None, "device-identity")
             self.manager_retry(self.verify_tunnel_configuration)
@@ -3465,7 +3707,7 @@ class Worker:
         for prefix, intent in completions:
             require(observed.get(prefix[len("service-"):]) == intent["service"], "not-ready")
             self.markers.write(prefix + "-complete.json", intent)
-        return {"changed": changed}
+        return {"changed": changed or purged}
 
     def stretch_locate(self):
         from ansible_collections.bootwright.core.plugins.module_utils import ceph_native_stretch
@@ -4052,7 +4294,12 @@ class Worker:
                 # The manager serves each daemon's running configuration.
                 with self.manager_served():
                     self.config_effective(item["id"])
-        require(len(metadata) <= len(devices), "foreign-osd")
+        # A never-booted OSD naming no device, such as the one an interrupted creation leaves once an owned clear zapped
+        # its volume, counts against no declared disk and keeps the cluster unready, so the next apply reaches its purge.
+        unstarted = [entry for entry in (unstarted_osd(item, osdmap["osds"]) for item in metadata) if entry is not None]
+        require(len(metadata) - len(unstarted) <= len(devices), "foreign-osd")
+        named = ["unbooted@osd." + str(entry["osd"]) + "." + str(entry.get("uuid")) for entry in unstarted]
+        self.blocking = ([entry for entry in named if PENDING_OSD.fullmatch(entry)] + self.blocking)[:16]
         return ready
 
     def observe_resource(self, evidence, ready):
@@ -4088,6 +4335,13 @@ def dispatch(envelope):
         envelope = {key: value for key, value in envelope.items() if key != "service"}
     else:
         service = None
+    if phase == "services" and "orphans" in envelope:
+        orphans = envelope["orphans"]
+        envelope = {key: value for key, value in envelope.items() if key != "orphans"}
+        require(isinstance(orphans, list) and 0 < len(orphans) <= 4096 and len(set(orphans)) == len(orphans)
+                and all(isinstance(value, str) and OSD_UUID.fullmatch(value) is not None for value in orphans), "request")
+    else:
+        orphans = None
     require(isinstance(envelope, dict) and set(envelope) == {"request", "host", "phase", "private"})
     require(isinstance(envelope["private"], dict))
     from ansible_collections.bootwright.core.plugins.module_utils import ceph_export_native
@@ -4134,7 +4388,7 @@ def dispatch(envelope):
     if phase in ("tunnel_preflight", "bootstrap", "authorize", "tunnel_configure"):
         result = getattr(worker, phase)(envelope["private"])
     elif phase == "services":
-        result = worker.services(devices, service)
+        result = worker.services(devices, service) if orphans is None else worker.services(devices, service, orphans)
     elif phase == "observe":
         # The health checks that kept readiness unproved travel beside the closed evidence, for the refusal's detail only.
         result = dict(worker.observe(), blocking=list(worker.blocking))
