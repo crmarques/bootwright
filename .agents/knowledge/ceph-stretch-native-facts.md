@@ -101,6 +101,10 @@ not the source's `{key=value}` string (B1070); `osd dump`, `osd crush tree`,
 sites) and `osd crush rule dump` read as above, and every OSD sat in its
 short-name host bucket under `default` beside cephadm's empty full-name
 buckets under the sites (B1061).
+`ceph --format json osd getcrushmap` writes a newline before the binary
+map (1929 bytes against 1928 without the flag), which `crushtool -d`
+refuses as `unable to decode`; the worker fetches the map without
+`--format` (B1071).
 
 IBM's CRUSH page
 ([CRUSH map for stretch mode](https://www.ibm.com/docs/en/SSEG27_9.9.1/administration/config-crush-map-stretch-mode.html))

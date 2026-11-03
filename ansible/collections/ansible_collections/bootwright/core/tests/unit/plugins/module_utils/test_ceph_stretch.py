@@ -113,7 +113,8 @@ class World:
         if command in reads:
             return 0, json.dumps(reads[command]).encode()
         if command == ("osd", "getcrushmap"):
-            return 0, b"compiled-crush-map-v" + str(self.crush_version).encode()
+            # As the selected build's CLI does: --format json writes a newline before the binary map.
+            return 0, (b"\n" if "--format" in argv else b"") + b"compiled-crush-map-v" + str(self.crush_version).encode()
         self.effects.append(command)
         code = self.effect(command, data)
         if self.lose == command[:len(self.lose or ())]:
@@ -672,3 +673,8 @@ def test_activation_reads_monitors_whose_locations_are_key_value_lists(monkeypat
     assert native.stretch_locate() == {"changed": True, "stage": "rule-present"}
     assert not [command for command in world.effects if command[:2] == ("mon", "set_location")]
     assert native.stretch_enable() == {"changed": True, "stage": "verified"}
+
+
+def test_the_offline_compile_script_reports_crushtool_failures_by_their_own_stderr(tmp_path):
+    compile(stretch.COMPILE, "<crush-compile>", "exec")
+    assert "check=True" not in stretch.COMPILE and "done.stderr" in stretch.COMPILE

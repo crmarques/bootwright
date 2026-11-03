@@ -49,10 +49,14 @@ SETTLE_READS, SETTLE_INTERVAL = 5, 2
 COMPILE = (
     "import base64,json,subprocess,sys\n"
     "open('/tmp/in','wb').write(base64.b64decode(sys.argv[1],validate=True))\n"
-    "subprocess.run(['/usr/bin/crushtool','-d','/tmp/in','-o','/tmp/map.txt'],check=True,capture_output=True,timeout=30)\n"
+    "def run(*argv):\n"
+    "    done=subprocess.run(list(argv),capture_output=True,timeout=30)\n"
+    "    if done.returncode:\n"
+    "        sys.exit(argv[0]+' exited '+str(done.returncode)+': '+done.stderr.decode('utf-8','replace')[-512:])\n"
+    "run('/usr/bin/crushtool','-d','/tmp/in','-o','/tmp/map.txt')\n"
     "text=open('/tmp/map.txt').read()\n"
     "open('/tmp/map.txt','w').write(text.rstrip('\\n')+'\\n'+sys.argv[2])\n"
-    "subprocess.run(['/usr/bin/crushtool','-c','/tmp/map.txt','-o','/tmp/out'],check=True,capture_output=True,timeout=30)\n"
+    "run('/usr/bin/crushtool','-c','/tmp/map.txt','-o','/tmp/out')\n"
     "print(json.dumps({'map':base64.b64encode(open('/tmp/out','rb').read()).decode()}))\n"
 )
 
@@ -304,7 +308,8 @@ class Activation:
         require(identifier <= 255, "stretch-rule")
         osdmap = self.read("osd", "dump")
         require(isinstance(osdmap, dict) and type(osdmap.get("crush_version")) is int and osdmap["crush_version"] >= 0, "native-output")
-        current = self.worker.ceph("osd", "getcrushmap", json_result=False)
+        # Without --format: with it the CLI writes a newline before the binary map, which crushtool cannot decode (B1071).
+        current = self.worker.ceph_text("osd", "getcrushmap")
         # The map travels as one base64 argument, which Linux bounds at 128 KiB.
         require(isinstance(current, bytes) and 0 < len(current) <= MAX_MAP, "native-output")
         compiled = self.compile(current, self.rule_text(identifier))
