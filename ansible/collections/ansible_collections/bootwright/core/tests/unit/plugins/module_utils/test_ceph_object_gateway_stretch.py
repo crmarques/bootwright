@@ -66,7 +66,11 @@ class StretchMonitor(gw.Monitor):
             self.log.append(("ceph", command, data))
             self.pool_effects.append(command)
             if command[2] == "create":
-                self.pools.append({"pool_name": command[3], "pool_id": 9, "crush_rule": 1 if command[7] == "stretch-rule" else 0, "size": 3, "min_size": 2})
+                # As the monitor does (src/mon/OSDMonitor.cc): a name beginning with "." answers success and creates nothing unconfirmed.
+                if command[3].startswith(".") and "--yes-i-really-mean-it" not in command:
+                    return 0, b""
+                rule = command[command.index("--rule") + 1] if "--rule" in command else ""
+                self.pools.append({"pool_name": command[3], "pool_id": 9, "crush_rule": 1 if rule == "stretch-rule" else 0, "size": 3, "min_size": 2})
             entry = next(pool for pool in self.pools if pool["pool_name"] == ".rgw.root")
             if command[2] == "set":
                 entry[command[4]] = int(command[5])
@@ -84,7 +88,8 @@ def test_a_stretch_gateway_creates_the_rgw_root_on_the_stretch_rule_before_rados
     first_radosgw = tools.index("radosgw-admin")
     created = next(i for i, entry in enumerate(monitor.log) if entry[1][:3] == ("osd", "pool", "create"))
     assert created < first_radosgw and markers.read(ceph_native_object.ROOT_CLAIM) is not None
-    assert monitor.pool_effects == [("osd", "pool", "create", ".rgw.root", "32", "32", "replicated", "stretch-rule", "--autoscale_mode", "on"),
+    assert monitor.pool_effects == [("osd", "pool", "create", ".rgw.root", "32", "32", "replicated", "--rule", "stretch-rule", "--autoscale_mode", "on",
+                                     "--yes-i-really-mean-it"),
                                     ("osd", "pool", "set", ".rgw.root", "size", "4"), ("osd", "pool", "application", "enable", ".rgw.root", "rgw")]
     root = next(pool for pool in monitor.pools if pool["pool_name"] == ".rgw.root")
     assert (root["crush_rule"], root["size"], root["min_size"]) == (1, 4, 2)

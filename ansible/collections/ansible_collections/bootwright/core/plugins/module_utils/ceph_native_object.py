@@ -730,8 +730,9 @@ class ObjectWorker(ceph_native_units.UnitWorker):
         rule = self.rule_dump(self.request["stretch"]["rule"])["rule_id"]
         changed = False
         if self.root_entry() is None:
-            self.ceph("osd", "pool", "create", RGW_ROOT, str(ROOT_PGS), str(ROOT_PGS), "replicated", self.request["stretch"]["rule"],
-                      "--autoscale_mode", "on", json_result=False)
+            # The monitor answers success yet creates nothing for a name beginning with "." unless it is confirmed (B1073).
+            self.ceph("osd", "pool", "create", RGW_ROOT, str(ROOT_PGS), str(ROOT_PGS), "replicated", "--rule", self.request["stretch"]["rule"],
+                      "--autoscale_mode", "on", "--yes-i-really-mean-it", json_result=False)
             changed = True
         entry = self.root_entry()
         require(entry is not None, "not-ready")

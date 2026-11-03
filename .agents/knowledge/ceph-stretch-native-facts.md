@@ -105,6 +105,12 @@ buckets under the sites (B1061).
 map (1929 bytes against 1928 without the flag), which `crushtool -d`
 refuses as `unable to decode`; the worker fetches the map without
 `--format` (B1071).
+`osd pool create` of a name beginning with `.` (`.rgw.root`) answers
+success, `err = 0`, with `pool names beginning with . are not allowed` and
+creates nothing unless `--yes-i-really-mean-it` confirms it
+(`src/mon/OSDMonitor.cc:13628`); its positional argument after the pool
+type is the erasure-code profile, so a replicated pool names its rule with
+`--rule` (B1073).
 
 IBM's CRUSH page
 ([CRUSH map for stretch mode](https://www.ibm.com/docs/en/SSEG27_9.9.1/administration/config-crush-map-stretch-mode.html))
