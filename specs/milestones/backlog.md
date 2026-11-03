@@ -3017,6 +3017,11 @@ the partition check, can produce that refusal. Read-only, the suspected cause
 is timing under CPU contention in those pipelines, such as
 `printf ... | grep -Fqx` under `pipefail`: a nonzero status of either side
 reads as the address missing. It is unconfirmed and was not reproduced.
+It failed again on 2026-11-03, in
+`TestThePhysicalTargetProofComparesTheRootDiskWWNAndSerial/a_WWN_beyond_its_bound`,
+during `make check` of the two-context stretch fixes, with the same MAC
+refusal in place of the expected one; it passed in 5 isolated runs there and 3
+on main. That recurrence meets this item's revive condition.
 
 **Outcome:** the case is deterministic under concurrent gate runs, or its
 cause is recorded. **Requires:** none. **Definition:** `Specified`. **Exit
@@ -6653,7 +6658,9 @@ fleet call still proves the key at apply. The fleet identity is a
 machine-access option that only the storage preflight wiring sets: operator
 sessions never present the fleet key, operator SSH options never redirect it,
 and a Machine that pins no host key is never offered it. D204 is otherwise
-unchanged.
+unchanged. For [B1086](m2.md#b1086) it selects that item's alternative
+A: storage preflight proves peer host names resolve where cephadm writes
+them, with no apply-time refusal and no contract move.
 
 ### D227
 
