@@ -93,6 +93,7 @@ func (b privilegeBoundary) run(ctx context.Context, args []string, stdout, stder
 func (b privilegeBoundary) runElevated(ctx context.Context, classification cli.InvocationClass, args []string, stdout, stderr io.Writer, route controller.Route) int {
 	operation, finish := privilege.Begin(ctx)
 	defer finish()
+	defer preserveTerminalEcho(stdout)()
 	outcome := b.elevate(operation, elevationInvocation(classification, args, route, stdout, stderr))
 	if outcome.Diagnostic != nil {
 		return refuseAtBoundary(classification, stdout, stderr, *outcome.Diagnostic, outcome.ExitCode)
@@ -159,6 +160,9 @@ func interactiveProcess(classification cli.InvocationClass, args []string, stdou
 	_, noColor := os.LookupEnv("NO_COLOR")
 	options := cli.ResolvePresentation(args, cli.PresentationOptions{Columns: columns, NoColor: noColor, Dumb: os.Getenv("TERM") == "dumb"})
 	errorOptions := options
+	if !classification.JSON {
+		options.HoldInputEcho = terminalEchoHold(stdout)
+	}
 	errorOptions.Columns = terminalColumns(stderr)
 	output, errors := cli.WithPresentation(stdout, options), cli.WithPresentation(stderr, errorOptions)
 	confirmationTerminal, confirmationOutput := stdinTerminal, errors

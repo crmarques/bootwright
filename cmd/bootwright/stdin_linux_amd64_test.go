@@ -240,3 +240,48 @@ func TestTerminalColumnsDefersProbeUntilProgressNeedsIt(t *testing.T) {
 		t.Fatal("closed descriptor was admitted as a terminal")
 	}
 }
+
+func TestTerminalEchoHoldSilencesOnlyTheRedrawnTerminal(t *testing.T) {
+	_, slave := openTestTerminal(t)
+	echo := func() uint32 {
+		t.Helper()
+		var settings syscall.Termios
+		if err := termiosControl(int(slave.Fd()), syscall.TCGETS, &settings); err != nil {
+			t.Fatal(err)
+		}
+		return settings.Lflag & echoFlags
+	}
+	original := echo()
+	if original&syscall.ECHO == 0 {
+		t.Fatal("test terminal starts without echo")
+	}
+	hold := terminalEchoHold(slave)
+	if hold == nil {
+		t.Fatal("terminal offered no echo hold")
+	}
+	release := hold()
+	if echo() != 0 {
+		t.Fatalf("held terminal still echoes: %#x", echo())
+	}
+	release()
+	if echo() != original {
+		t.Fatalf("released echo = %#x, want %#x", echo(), original)
+	}
+
+	restore := preserveTerminalEcho(slave)
+	hold()
+	restore()
+	if echo() != original {
+		t.Fatalf("preserved echo = %#x, want %#x", echo(), original)
+	}
+
+	read, write, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer read.Close()
+	defer write.Close()
+	if terminalEchoHold(write) != nil {
+		t.Fatal("pipe offered an echo hold")
+	}
+}

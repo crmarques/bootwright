@@ -34,3 +34,7 @@ func (secretTerminal) ReadHidden(ctx context.Context, _ string, _ []byte) (int, 
 	}
 	return 0, errors.New("a terminal prompt requires Linux on amd64")
 }
+
+func terminalEchoHold(io.Writer) func() func() { return nil }
+
+func preserveTerminalEcho(io.Writer) func() { return func() {} }

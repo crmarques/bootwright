@@ -511,3 +511,40 @@ func TestDeferredWidthDeclinesTerminalRedraw(t *testing.T) {
 		t.Fatalf("non-terminal got cursor controls: %q", out.String())
 	}
 }
+
+// An echoed key moves the cursor below the drawn block, so the next redraw
+// stops one row short and leaves the block's first line behind.
+func TestTerminalProgressHoldsInputEchoWhileRowsAreDrawn(t *testing.T) {
+	holds, releases := 0, 0
+	hold := func() func() {
+		holds++
+		return func() { releases++ }
+	}
+	clock := newManualClock()
+	var out bytes.Buffer
+	presenter := &progressPresenter{out: WithPresentation(&out, PresentationOptions{Color: "never", HoldInputEcho: hold}), clock: clock.clock(), columns: fixedColumns(80)}
+	ctx := context.Background()
+	assertHeld := func(wantHolds, wantReleases int) {
+		t.Helper()
+		if holds != wantHolds || releases != wantReleases {
+			t.Fatalf("holds = %d, releases = %d, want %d and %d", holds, releases, wantHolds, wantReleases)
+		}
+	}
+	presenter.report(ctx, progressEvent{Heading: "Progress", Label: "Serve artifacts", Status: "running", Position: 1, Total: 2})
+	clock.advance(3 * time.Second)
+	presenter.report(ctx, progressEvent{Heading: "Progress", Label: "Resolve names", Status: "running", Position: 2, Total: 2})
+	assertHeld(1, 0)
+	presenter.report(ctx, progressEvent{Heading: "Progress", Label: "Resolve names", Status: "done", Position: 2, Total: 2})
+	assertHeld(1, 0)
+	presenter.report(ctx, progressEvent{Heading: "Progress", Label: "Serve artifacts", Status: "done", Position: 1, Total: 2})
+	assertHeld(1, 1)
+	presenter.report(ctx, progressEvent{Heading: "Checks", Label: "Read power", Status: "running"})
+	assertHeld(2, 1)
+	presenter.finish()
+	assertHeld(2, 2)
+
+	appended := &progressPresenter{out: WithPresentation(&out, PresentationOptions{Color: "never", HoldInputEcho: hold}), clock: clock.clock()}
+	appended.report(ctx, progressEvent{Heading: "Progress", Label: "Serve artifacts", Status: "running"})
+	appended.finish()
+	assertHeld(2, 2)
+}

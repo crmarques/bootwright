@@ -89,9 +89,10 @@ type progressPresenter struct {
 	steps []*progressStep
 	// drawn is how many lines of the terminal the running block occupies, so a
 	// redraw knows how far up its first line is.
-	drawn      int
-	generation int
-	stop       func() bool
+	drawn       int
+	releaseEcho func()
+	generation  int
+	stop        func() bool
 }
 
 type progressStep struct {
@@ -325,6 +326,7 @@ func (p *progressPresenter) closeLine() {
 		io.WriteString(p.out, "\n")
 		p.drawn = 0
 	}
+	p.holdEcho(false)
 	p.stopHeartbeat()
 	p.steps = nil
 }
@@ -394,9 +396,19 @@ func (p *progressPresenter) redraw(now time.Time) {
 			out.WriteString(fitDisplayRow(row, room))
 		}
 	}
+	p.holdEcho(len(rows) != 0)
 	p.drawn = len(rows)
 	if out.Len() != 0 {
 		io.WriteString(p.out, out.String())
+	}
+}
+
+func (p *progressPresenter) holdEcho(live bool) {
+	if hold := presentationFor(p.out).HoldInputEcho; live && hold != nil && p.releaseEcho == nil {
+		p.releaseEcho = hold()
+	} else if !live && p.releaseEcho != nil {
+		p.releaseEcho()
+		p.releaseEcho = nil
 	}
 }
 

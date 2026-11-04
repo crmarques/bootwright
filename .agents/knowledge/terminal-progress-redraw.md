@@ -99,3 +99,23 @@ step never settles, so it holds nothing back. The presenter does not know
 which positions have yet to start, so it only waits for steps already
 running; waiting for unstarted ones would withhold outcomes for as long as a
 dependency or resource wait lasts.
+
+## A stale meter above settled rows (2026-11-04)
+
+`apply` showed a second lifecycle meter with an older count, such as
+`4/7 blocks done` above `[5/7]` and `[6/7]` and `6/7` below them. One line
+written onto the terminal from outside the presenter does that: its newline
+leaves the cursor a row below the block, the next cursor-up stops one row
+short, the erase wipes the stray text along with the rest, and the block's
+first line, the meter, stays behind. The usual writer is the terminal echoing
+an Enter typed while the operation runs. The presenter now turns echo off on
+the redrawn terminal while its block holds rows, through `HoldInputEcho`
+(composition: `terminalEchoHold`). The hold acts on the output's terminal,
+not standard input, so a run with piped input is covered too. It skips a
+process in the background, since setting the terminal there raises SIGTTOU,
+and `runElevated` restores the echo it found in case the child dies holding
+it. Another process writing to the same terminal still displaces the block,
+and nothing in the presenter can see that.
+
+Evidence: `TestTerminalProgressHoldsInputEchoWhileRowsAreDrawn` and
+`TestTerminalEchoHoldSilencesOnlyTheRedrawnTerminal`.

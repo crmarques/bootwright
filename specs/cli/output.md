@@ -156,8 +156,12 @@ retaining results and log locations. A dumb terminal uses the static form.
 JSON and YAML emit no progress. A redraw refreshes each second, remeasures
 available cells, keeps each active row on one physical line and may elide its
 subject to fit. Cursor movement is limited to carriage return, erase-line and
-moving up across rows the presenter owns. A heading change, result or log field
-closes the owned block before further output. A settled row scrolls above it
+moving up across rows the presenter owns. While the block holds rows, keyboard
+echo is off on the redrawn terminal, and it returns when the block empties or
+closes, because an echoed key would move the cursor below the owned rows. A
+process in the terminal's background leaves echo alone, and an elevated
+relaunch restores the echo it found when the child exits. A heading change,
+result or log field closes the owned block before further output. A settled row scrolls above it
 in position order: a step that settles while an earlier-numbered step of the
 same total still runs keeps its outcome in the block, and an appended stream
 withholds it, until every earlier running step settles. Closing the block

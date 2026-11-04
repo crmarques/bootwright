@@ -11509,3 +11509,23 @@ budget ([B900](m2.md#b900)). **Unverified live:** the frozen image's
 `ceph-volume lvm zap --destroy` and `ceph osd purge-new`, the RHEL devices
 file and `lvmdevices --delpvid`, and whether cephadm's periodic inventory
 makes the running-ceph-volume check refuse transiently.
+
+### X295 — Progress keeps keyboard echo off its redrawn block
+
+**Items:** B1091 (new, 2026-11-04, owner request). **Kind:** product.
+**Owner:** CLI.
+
+`apply` sometimes showed a second meter with an older count above settled
+rows. One line echoed onto the terminal, usually an Enter typed during the
+run, moved the cursor below the redrawn block. The redraw then stopped one row
+short and left the meter behind. Keyboard echo is now
+[off while the block holds rows](../cli/output.md#long-running-progress), and
+an elevated relaunch restores the echo it found. Output written to the
+terminal by another process can still displace the block. Effects, outcomes
+and receipts are unchanged.
+
+`TestTerminalProgressHoldsInputEchoWhileRowsAreDrawn` holds the presenter to
+one hold per live block, released when it empties or closes and never taken
+when rows are appended. `TestTerminalEchoHoldSilencesOnlyTheRedrawnTerminal`
+drives a pseudo-terminal. The delivering commit records the gates and their
+results.

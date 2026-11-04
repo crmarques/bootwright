@@ -14,6 +14,7 @@ type PresentationOptions struct {
 	ASCII                                    bool
 	Width                                    int
 	Columns                                  func() int
+	HoldInputEcho                            func() (release func())
 	NoColor, Dumb                            bool
 }
 
