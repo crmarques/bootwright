@@ -11653,3 +11653,23 @@ design.
 progress row after the refresh fails and requires the warning after it; it
 failed against the previous supervisor. The delivering commit records the
 gates and their results.
+
+### X297 — A refresh that never worked stops without a warning
+
+**Items:** B1103 (new, 2026-11-04, owner request). **Kind:** product.
+**Owner:** CLI.
+
+The owner kept seeing `[WARN] sudo credential refresh stopped` on every
+elevated run, once beside a destroy confirmation prompt (from a build older
+than [X296](#x296--the-sudo-refresh-warning-waits-for-the-elevated-child)).
+Sudo 1.9.17 keys a cached credential by terminal, session and account, and the
+elevated sudo and the refresh share all three. A first `sudo -n -v` that fails
+therefore means the policy left no reusable credential, as a zero timeout or a
+`NOPASSWD` rule does, and the warning had nothing to report. The supervisor
+now [warns](../cli.md#local-privilege-and-user-identity) only when a refresh
+fails after an earlier one succeeded; refresh still stops at the first failure
+and the elevated command is unchanged.
+
+`TestARefreshWarningNeverReachesJSONStandardError` gains a case whose only
+refresh fails and requires no warning; it failed against the previous
+supervisor. The delivering commit records the gates and their results.

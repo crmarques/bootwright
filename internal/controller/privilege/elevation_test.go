@@ -235,16 +235,19 @@ func TestASessionElevationKeepsTheChildsStatusAndRefusesWithTwoFiftyFive(t *test
 // error and never a JSON one's, which stays empty around the child's document.
 // The refresh fails once the child announced, and the warning waits for the
 // child to exit, because a line written meanwhile displaces the progress block
-// the child redraws on the same terminal.
+// the child redraws on the same terminal. A first refresh that fails found no
+// reusable credential to keep, so it stops without a warning.
 func TestARefreshWarningNeverReachesJSONStandardError(t *testing.T) {
-	const warning = "[WARN] sudo credential refresh stopped; the operation continued.\n"
+	const row, warning = "  [RUNNING]  [1/1] Install\n", "[WARN] sudo credential refresh stopped; the operation continued.\n"
 	for _, test := range []struct {
 		name                string
 		json                bool
+		refreshes           []int
 		row, stdout, stderr string
 	}{
-		{name: "JSON", json: true, stdout: `{"exitCode":0}` + "\n"},
-		{name: "human", row: "  [RUNNING]  [1/1] Install\n", stdout: "[OK] done\n", stderr: "  [RUNNING]  [1/1] Install\n" + warning},
+		{name: "JSON", json: true, refreshes: []int{0, 1}, stdout: `{"exitCode":0}` + "\n"},
+		{name: "human", refreshes: []int{0, 1}, row: row, stdout: "[OK] done\n", stderr: row + warning},
+		{name: "never refreshed", refreshes: []int{1}, row: row, stdout: "[OK] done\n", stderr: row},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			synctest.Test(t, func(t *testing.T) {
@@ -259,8 +262,13 @@ func TestARefreshWarningNeverReachesJSONStandardError(t *testing.T) {
 					}
 				})
 				elevator.Executor = executorFunc(func(_ context.Context, c Command) (int, error) {
-					if slices.Equal(c.Arguments, []string{"-n", "-ll"}) || slices.Equal(c.Arguments, []string{"-n", "-u", "#0", "-v"}) {
+					if slices.Equal(c.Arguments, []string{"-n", "-ll"}) {
 						return 1, nil
+					}
+					if slices.Equal(c.Arguments, []string{"-n", "-u", "#0", "-v"}) {
+						code := test.refreshes[0]
+						test.refreshes = test.refreshes[1:]
+						return code, nil
 					}
 					io.WriteString(c.Error, startAnnouncement)
 					close(announced)

@@ -165,7 +165,7 @@ func (s *Supervisor) Run(ctx context.Context, args []string) (int, error) {
 	childArgs = append(childArgs, args...)
 	refreshCtx, stopRefresh := context.WithCancel(ctx)
 	finished := make(chan struct{})
-	refreshStopped := false
+	refreshed, refreshStopped := false, false
 	go func() {
 		defer close(finished)
 		if interval == 0 {
@@ -176,9 +176,10 @@ func (s *Supervisor) Run(ctx context.Context, args []string) (int, error) {
 			code, err := options.Executor.Run(refresh, Command{Executable: options.Sudo, Arguments: []string{"-n", "-u", "#0", "-v"}, Environment: append([]string(nil), environment...), Output: io.Discard, Error: io.Discard})
 			cancel()
 			if err != nil || code != 0 {
-				refreshStopped = refreshCtx.Err() == nil
+				refreshStopped = refreshed && refreshCtx.Err() == nil
 				return
 			}
+			refreshed = true
 		}
 	}()
 	code, err := options.Executor.Run(ctx, Command{Executable: options.Sudo, Arguments: childArgs, Environment: environment, Input: options.Input, Output: options.Output, Error: options.Error, Elevated: true})

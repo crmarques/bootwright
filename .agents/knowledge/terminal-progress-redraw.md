@@ -119,7 +119,9 @@ and nothing in the presenter can see that. One such writer was Bootwright's
 own supervisor: when its `sudo -n -v` refresh failed it printed
 `[WARN] sudo credential refresh stopped` while the elevated child was still
 redrawing, the redraw then wiped the warning and left the stale meter. The
-supervisor now holds that warning until the child exits (X296).
+supervisor now holds that warning until the child exits (X296), and gives it
+only when a refresh that had worked fails (X297): a first failure means sudo
+kept no credential to refresh.
 
 Evidence: `TestTerminalProgressHoldsInputEchoWhileRowsAreDrawn`,
 `TestTerminalEchoHoldSilencesOnlyTheRedrawnTerminal` and
