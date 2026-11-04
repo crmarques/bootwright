@@ -57,7 +57,21 @@ on 2026-09-28:
   emulated controller is on another host imports through this surface and
   removes the certificate after the boot
   ([B743](../../specs/milestones/m3.md#b743)). Until that case's first run,
-  nothing has driven it against the image.
+  nothing has driven the device surface against the image.
+- The TLS half of that trust was driven against the pinned image on
+  2026-11-04, without network: a leaf shaped like Bootwright's
+  `tlsCertificate` output (CA:FALSE, critical `digitalSignature`, `serverAuth`,
+  no key identifiers) verifies as the `requests` `verify=` anchor under the
+  image's Python 3.12 and OpenSSL 3.0, also with `VERIFY_X509_STRICT` and
+  `PARTIAL_CHAIN` added, and an unrelated certificate fails with
+  `CERTIFICATE_VERIFY_FAILED`. A self-signed serving leaf is a usable anchor.
+- `SUSHY_EMULATOR_ALLOWED_INSTANCES` filters the Systems collection and its
+  routes only. The Managers collection lists every domain on the hypervisor,
+  sorted by UUID, and the VirtualMedia routes under
+  `/redfish/v1/Systems/<identity>/VirtualMedia` check no instance access, so
+  one Machine's credential reaches every domain's device on that host
+  ([B1098](../../specs/milestones/backlog.md#b1098)). A manual check reaches a
+  Machine's device through `/redfish/v1/Systems`, never `Managers`.
 
 ## The stock command must not be used
 

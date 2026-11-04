@@ -276,6 +276,12 @@ Alias cell.
 | [B1085](#b1085) | new, 2026-11-03 (the D225 lanes' checks) | defect | Storage and Verification tooling | A Ceph tunnel-custody unit test passes whatever filesystem holds `TMPDIR` | Fails only with `TMPDIR` on btrfs; the gate runs on tmpfs `/tmp`; gates no milestone |
 | [B1088](#b1088) | new, 2026-11-03 (D227) | product | Managed OS, with Substrate | A virtual Machine whose emulated BMC is off its image server's host installs through a verified fetch | No consumer installs RHEL on a libvirt host other than the controller's; B743's mechanism serves it once one does |
 | [B1092](#b1092) | new, 2026-11-04 (B1101) | enabling | Controller and Verification tooling | The Go tool catalog and the collection's tool vocabulary cannot drift apart, and a tool refusal outside acquisition is named | B1101 fixed the one drift found; the run still completes without the guard |
+| [B1094](#b1094) | new, 2026-11-04 (X294's first live run) | defect | Controller | A controller stage whose tool publication failed can be retried in place | Destroying the context retires the area and the next apply recovers; gates no milestone |
+| [B1095](#b1095) | new, 2026-11-04 (X294's pre-run review) | defect | Reconciliation, with Substrate | A host one controller drives over SSH keeps that controller's run scratch while the host's own controller sweeps | Only a host that is both a controller and another controller's SSH target; the case runbook keeps the two apart |
+| [B1096](#b1096) | new, 2026-11-04 (X294's pre-run review) | defect | Reconciliation | A host driven over SSH keeps no remote-temp directory after a run | `/run` clears at reboot, and the host's own sweep refuses only after 256 left directories |
+| [B1097](#b1097) | new, 2026-11-04 (X294's pre-run review) | defect | Substrate | An emulated BMC unit starts after the libvirt daemon the host actually runs, after a reboot too | Matters only after a host reboot; a running BMC is unaffected |
+| [B1098](#b1098) | new, 2026-11-04 (X294's pre-run review) | product | Substrate and Security | One emulated BMC's credential cannot change another domain's virtual media on the same host | Upstream sushy-tools behavior; every domain on a lab host is the operator's own |
+| [B1099](#b1099) | new, 2026-11-04 (B1093) | enabling | Substrate | A remote libvirt host proves an existing allocation's reuse credit, and tolerates an absent runtime directory | Admission runs only while a Machine block starts, so the credit decides only a retried machine block |
 
 ### B82
 
@@ -3095,6 +3101,94 @@ named by its fixed reason and the tool's source. Parked because B1101 fixed
 the only drift found.
 **Exit evidence:** the parity test, and a refusal-naming test for a tool
 outside the vocabulary.
+
+### B1094
+
+On 2026-11-04 the controller stage of lab-sno-fips-controller failed while
+publishing its third tool ([B1101](m3.md#b1101)). Its client area
+`/var/lib/bootwright/controller/tools/<digest>/` was left holding `helm` and
+`openshift-clients` while the controller record listed no bundle reservation
+(`"bundles": null`). Every retry, after observation resolved the attempt
+failed, refused `controller.identity: dependency installation requires the
+writable pending bundle capability`; the refusal comes from the request
+builder in `internal/controller/ansiblelocal/installer.go`. Destroying the
+context retired the area, and the next apply published all three tools.
+**Outcome:** a failed publication's area is either kept reserved and writable
+for its retry, or retired so the retry reserves a fresh one; a retry never
+needs a destroy. Parked because the destroy recovers and it gates no
+milestone.
+**Exit evidence:** a test that fails a publication after some tools land,
+then retries the same stage and publishes the rest.
+
+### B1095
+
+The runner's sweep in `internal/reconciliation/ansiblerunner/jobs_linux_amd64.go`
+removes every scratch directory under `/var/lib/bootwright-staging/runs` whose
+job directory is gone. A controller that drives this host over SSH creates its
+run scratch there through `lifecycle_scratch`, while its job directory lives on
+that controller. A command of the host's own context run during such an apply
+therefore finds the remote run's scratch orphaned and removes it between two of
+that run's tasks. The pre-run review of lab-sno-fips-controller found this in
+the code; it was not reproduced live.
+**Outcome:** a sweep removes only scratch its own controller issued.
+**Exit evidence:** a test with a scratch directory another controller issued,
+which a sweep on this host leaves in place.
+
+### B1096
+
+The SSH arm passes `ANSIBLE_REMOTE_TEMP` as `<job>/remote`, with the job under
+the controller's `/run` (`internal/reconciliation/ansiblerunner/process_linux_amd64.go`).
+Ansible creates that directory on the target host and removes only its per-task
+children, so each run leaves a `/run/bootwright-run-*/remote` there. On a host
+that is also a controller, its own sweep counts those directories toward
+`maxRunDirectories` (256) and leaves them alone, because they hold no job
+record.
+**Outcome:** the remote temp directory is removed at the end of each run, or
+placed where the target's sweep never counts it.
+**Exit evidence:** an SSH-arm run that leaves nothing under the target's `/run`.
+
+### B1097
+
+The emulated BMC's quadlet unit
+(`roles/substrate_libvirt_machine/templates/unit.container.j2`) orders itself
+`After=network-online.target libvirtd.service` with `Restart=always`. A host on
+libvirt's modular daemons runs `virtqemud`, not `libvirtd.service`, so after a
+reboot the unit can start before the hypervisor socket answers and restart
+every 100 ms into its start limit.
+**Outcome:** the unit is ordered after the libvirt daemon the host runs, and its
+restarts are paced.
+**Exit evidence:** a rendered-unit test, and one host reboot with the BMC
+answering.
+
+### B1098
+
+The pinned sushy-tools image serves virtual media at
+`/redfish/v1/Systems/<identity>/VirtualMedia` without the instance check its
+Systems routes apply, and lists every domain on the hypervisor under
+`/redfish/v1/Managers`. `SUSHY_EMULATOR_ALLOWED_INSTANCES` therefore confines
+power and boot, not media: one Machine's BMC credential can import a
+certificate into, insert into or eject another domain's device on the same
+host. The pre-run review of lab-sno-fips-controller read this in the image's
+source. [The emulated BMC page](../../.agents/knowledge/sushy-tools-emulated-bmc.md)
+records it.
+**Outcome:** a Machine's BMC answers only for its own domain, by an
+authorizing proxy, a per-domain emulator or an upstream fix.
+**Exit evidence:** a request with one Machine's credential against another
+domain's virtual media, refused.
+
+### B1099
+
+[B1093](m3.md#b1093)'s observation gives an allocation already on the remote
+host no reuse credit and reports it unproved. That decides only a budget that
+would otherwise be exceeded, while that Machine's own block is starting again.
+It also lists `/etc/libvirt/qemu` and `/run/libvirt/qemu` in one `find`, so a
+host where either directory is absent reports its inventory unknown, and every
+failed command yields the same reason.
+**Outcome:** the remote observation proves an existing allocation's credit
+from that host's domain, process and backing-file facts, as the local one does;
+an absent runtime directory counts as no running domain; and each unknown fact
+names the command that failed.
+**Exit evidence:** remote tests for each.
 
 ## Audit remediation (2026-10-26)
 
@@ -6701,3 +6795,18 @@ across hosts. Session clauses, pending the owner's review: the derived trust
 needs no API field; colocated emulated nodes keep `established`; and the
 certificate is removed after every boot, because the emulator's device holds
 one certificate.
+
+### D228
+
+**owner** (2026-11-04): during X294's first lab-sno-fips-controller run,
+preflight found that capacity on the SSH-placed `libvirt-host` is never
+observed, so the apply gate refuses every guest there. Offered a remote
+observation, a nested SNO inside the FIPS controller, or stopping, the owner
+chose "Add remote observation". The remote provider-capacity portion of
+[B490](m2.md#b490) is split out to [B1093](m3.md#b1093) and joins X294.
+Session clauses, pending the owner's review:
+- the observation runs fixed commands over the placement's pinned connection
+  instead of an Ansible read, so it fits a bounded probe;
+- an existing allocation on a remote host gets no reuse credit and is
+  reported unproved;
+- a remote filesystem is never treated as one a local pool shares.
