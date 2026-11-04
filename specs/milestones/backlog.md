@@ -283,6 +283,7 @@ Alias cell.
 | [B1097](#b1097) | new, 2026-11-04 (X294's pre-run review) | defect | Substrate | An emulated BMC unit starts after the libvirt daemon the host actually runs, after a reboot too | Matters only after a host reboot; a running BMC is unaffected |
 | [B1098](#b1098) | new, 2026-11-04 (X294's pre-run review) | product | Substrate and Security | One emulated BMC's credential cannot change another domain's virtual media on the same host | Upstream sushy-tools behavior; every domain on a lab host is the operator's own |
 | [B1099](#b1099) | new, 2026-11-04 (B1093) | enabling | Substrate | A remote libvirt host proves an existing allocation's reuse credit, and tolerates an absent runtime directory | Admission runs only while a Machine block starts, so the credit decides only a retried machine block |
+| [B1124](#b1124) | new, 2026-11-04 (D231) | product | Container cluster | A node with addresses on several secondary networks under `ipForwarding: Global` forwards no traffic between them | `MachineConfig` has no typed source ([B719](m3.md#b719)); the case's clients carry no route through the node |
 
 ### B82
 
@@ -3200,6 +3201,20 @@ from that host's domain, process and backing-file facts, as the local one does;
 an absent runtime directory counts as no running domain; and each unknown fact
 names the command that failed.
 **Exit evidence:** remote tests for each.
+
+### B1124
+
+A MetalLB pool on a secondary network needs the node's address on that
+network and `gatewayConfig.ipForwarding: Global`
+([package metallb](../api/addons.md#package-metallb)), which turns forwarding
+on for every node interface. A node carrying addresses on two isolated
+networks then routes between them for any client that sends through the
+node's address, so the networks stay apart only while their clients carry no
+such route. Found while planning D231's two-VLAN case.
+**Outcome:** a node forwards nothing between its secondary networks, for
+example through node firewall rules a typed `MachineConfig` source renders.
+**Exit evidence:** a run in which a client with a route through the node
+cannot reach the other network.
 
 ## Audit remediation (2026-10-26)
 
@@ -6862,3 +6877,23 @@ result. Session clauses, pending the owner's review:
 - `--tool` runs the named program once per differing file pair, with no
   shell; a pager is not added ([B1117](#b1117));
 - the comparison restores configuration, never data.
+
+### D231
+
+**owner** (2026-11-04): after X294, the owner asked to extend
+lab-sno-fips-controller with TPM2-bound disk encryption, the MetalLB and
+NMState add-ons, and a node on its own network plugged into two isolated
+networks, staging and production, each with its own ingress, where a workload
+in one environment reaches only that environment's example app, whether in
+OpenShift or in a container outside it. Offered two separate managed networks
+or one VLAN trunk, the owner chose the trunk: the node's second NIC carries
+VLANs 10 and 20, and the case builds the host-side trunk bridge, its VLAN
+interfaces and the app containers, which Bootwright only names as an external
+attachment ([product scope](../project.md#product-scope)). Offered a pool
+`serviceAllocation` in the MetalLB package, an e2e-made annotated Service, or
+annotating the router Service, the owner chose `serviceAllocation`, opening
+[B1123](m4.md#b1123) as slice X302. Session clauses, pending the owner's
+review: selectors take `matchLabels` only and no `priority`; the case, not
+Bootwright, owns the namespaces, workloads, IngressControllers and
+EgressFirewalls; and node forwarding between the two networks is parked as
+[B1124](#b1124).

@@ -446,6 +446,10 @@ configuration is `subscription` (`source` defaults to `redhat-operators`),
 | `pools[].addresses` | array of strings | yes | — | 1 to 16 entries, each a CIDR with no host bits set or a `<first>-<last>` range, in canonical IP text. |
 | `pools[].autoAssign` | boolean | no | `true` | `false` serves only Services that request the pool by name. |
 | `pools[].l2.interface` | string | no | — | One node interface name. Omitted, the pool lies on a machine network and is announced on every interface. |
+| `pools[].serviceAllocation` | object | no | — | The Services the pool serves automatically, below. At least one of its three lists is non-empty. |
+| `pools[].serviceAllocation.namespaces` | array of strings | no | `[]` | At most 16 unique namespace names, each a DNS label. |
+| `pools[].serviceAllocation.namespaceSelectors` | array | no | `[]` | At most 16 entries, each `{matchLabels}`: a non-empty map of Kubernetes labels a Service's namespace carries. |
+| `pools[].serviceAllocation.serviceSelectors` | array | no | `[]` | At most 16 entries, each `{matchLabels}`: a non-empty map of Kubernetes labels the Service carries. |
 
 Each pool belongs to one network: either a consumed machine network of the
 bound cluster or, with `l2.interface`, the one subnet that holds the static
@@ -477,6 +481,22 @@ A pool also overlaps no other pool, no cluster or service network, and no
 secondary network's subnets. Pools change only when the cluster is applied
 again after a destroy.
 
+#### Service allocation
+
+A pool with `serviceAllocation` serves automatically only the Services it
+selects: a Service in a listed or selected namespace, when either namespace
+list is non-empty, that matches one service selector, when that list is
+non-empty. Such a pool never serves another Service automatically, and with
+`autoAssign: false` it serves only a Service that names it, as MetalLB's
+allocator does. So pools on different networks can serve different Services
+without the Services naming them: an IngressController publishing through a
+`LoadBalancer` Service cannot name a pool, and its router Service carries
+`ingresscontroller.operator.openshift.io/owning-ingresscontroller: <name>`,
+which a service selector matches. The pool's `IPAddressPool` carries the
+lists as `spec.serviceAllocation`, each selector as `{matchLabels}`.
+
+#### Pool admission
+
 | Fault | Code | Field | Message | Remedy |
 | --- | --- | --- | --- | --- |
 | Non-canonical entry | `api.value` | `$.spec.packages.metallb.pools[<i>].addresses[<j>]` | `address <entry> of pool <pool> is not a canonical CIDR or <first>-<last> range` | `write it as <canonical>` |
@@ -497,6 +517,7 @@ again after a destroy.
 | Network or broadcast address | `api.invariant` | as above | `address <entry> of pool <pool> includes <address>, the network or broadcast address of <subnet>` | `exclude <address> from the pool` |
 | Overlapping network | `api.invariant` | as above | `address <entry> of pool <pool> overlaps <cidr>, the <network kind> of OpenShiftCluster/<cluster>` | `use addresses outside <cidr>` |
 | Overlapping pools | `api.duplicate` | `$.spec.packages.metallb.pools[<i>].addresses[<j>]` of the later pool | `pool <pool> overlaps pool <other> at <address>` | `make the addresses of <pool> and <other> disjoint` |
+| Empty allocation | `api.invariant` | `$.spec.packages.metallb.pools[<i>].serviceAllocation` | `serviceAllocation of pool <pool> selects no Service` | `list namespaces, namespaceSelectors or serviceSelectors, or remove serviceAllocation` |
 
 ### Package fdf
 
