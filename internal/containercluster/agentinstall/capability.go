@@ -308,6 +308,10 @@ func (c MediaCapability) runWithOutputs(ctx context.Context, execution lifecycle
 		if err != nil {
 			return lifecycle.RunResult{}, err
 		}
+		client, err := ToolPath(ctx, execution, Tool{Compatibility: request.Release.Distribution, Kind: clientTool, Version: request.Release.Version}, "oc")
+		if err != nil {
+			return lifecycle.RunResult{}, err
+		}
 		key, err := c.publicHalf(execution, request.SSHKeyRef)
 		if err != nil {
 			return lifecycle.RunResult{}, err
@@ -315,7 +319,7 @@ func (c MediaCapability) runWithOutputs(ctx context.Context, execution lifecycle
 		if request.InstallConfig["fips"] == true && strings.HasPrefix(strings.TrimSpace(key), "ssh-ed25519 ") {
 			return lifecycle.RunResult{}, refusal("controller.unsupported", "FIPS installation refuses the ssh-ed25519 key bound to Secret/"+request.SSHKeyRef, "bind an RSA or ECDSA administration key and repeat the apply")
 		}
-		values["installer"], values["sshKey"] = installer, key
+		values["installer"], values["oc"], values["sshKey"] = installer, client, key
 		// The fetch that proves the publication verifies the listener against
 		// the certificate its Secret binds to this operation, never against
 		// the copy the server installed, which proves only itself.

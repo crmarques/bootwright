@@ -66,8 +66,8 @@ const ImageFile = "agent.iso"
 const workRootPrefix = "/var/lib/bootwright-clusters"
 
 // installerTool is the client kind whose executable builds the image and
-// watches the install, and clientTool is the one that reads the installed
-// cluster back. The controller stage publishes both for the declared release.
+// watches the install, and clientTool reads its release payload and the
+// installed cluster back. The controller stage publishes both.
 const (
 	installerTool = "openshift-install"
 	clientTool    = "openshift-clients"

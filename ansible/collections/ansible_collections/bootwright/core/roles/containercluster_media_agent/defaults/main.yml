@@ -27,6 +27,12 @@ containercluster_media_agent_foreign: >-
   {{ containercluster_media_agent_built_by | length > 0
      and containercluster_media_agent_built_by != bootwright_cluster_media_material.incarnation | default('') }}
 containercluster_media_agent_installer: '{{ bootwright_cluster_media_material.installer }}'
+# The installer reads the release payload through `oc`, which it finds by name
+# on its search path, so the build's path leads with the client the controller
+# stage published for the same release. The build egress adds only its route.
+containercluster_media_agent_environment: >-
+  {{ bootwright_cluster_media_request.buildEgress | default({})
+     | combine({'PATH': (bootwright_cluster_media_material.oc | dirname) ~ ':/usr/bin:/usr/sbin'}) }}
 # The unguessable directory this attempt publishes in. The token is minted by
 # the attempt, so it names a path that exists in no request and no log.
 containercluster_media_agent_directory: >-

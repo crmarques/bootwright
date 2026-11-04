@@ -10,7 +10,10 @@ def test_media_scopes_the_controller_route_and_secret_writer():
     routed = [task for task in tasks if "environment" in task]
     assert len(routed) == 2
     assert {task["name"] for task in routed} == {"Build the image this cluster's nodes boot", "Generate native cluster manifests for encrypted installation"}
-    assert "request.buildEgress" in routed[0]["environment"]
+    assert all(task["environment"] == "{{ containercluster_media_agent_environment }}" for task in routed)
+    defaults = yaml.safe_load((role / "defaults/main.yml").read_text())
+    assert "request.buildEgress" in defaults["containercluster_media_agent_environment"]
+    assert "bootwright_cluster_media_material.oc | dirname" in defaults["containercluster_media_agent_environment"]
     assert routed[0]["no_log"] is True
     writer = next(task for task in tasks if task["name"] == "Write the install configuration with its bound material")
     assert writer["no_log"] is True

@@ -90,7 +90,7 @@ func mediaExecution(t *testing.T, digest string) (lifecycle.Execution, MediaRequ
 				secrets.PublicKeyPart: []byte("ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA cluster\n"),
 			}),
 		},
-		LocateTool: locatorOver(retainedController()),
+		LocateTool: locatorOver(retainedClients()),
 	}, request
 }
 
@@ -210,8 +210,8 @@ func applyRequest(t *testing.T) reconciliation.Block {
 }
 
 // An apply crosses the adapter with its frozen request, the exact installer the
-// controller stage published, and the public half of the cluster key. No
-// private material becomes a value.
+// controller stage published with the client of its release, and the public
+// half of the cluster key. No private material becomes a value.
 func TestAnApplyCrossesTheAdapterWithItsInstallerAndBoundMaterial(t *testing.T) {
 	execution, _ := mediaExecution(t, testDigest)
 	execution.Incarnation = "64769:4242"
@@ -235,6 +235,9 @@ func TestAnApplyCrossesTheAdapterWithItsInstallerAndBoundMaterial(t *testing.T) 
 	if !strings.HasPrefix(request.MaterialValues["installer"], installer) ||
 		!strings.HasSuffix(request.MaterialValues["installer"], "/tools/openshift-install/openshift/4.21.15/openshift-install") {
 		t.Fatalf("installer = %q", request.MaterialValues["installer"])
+	}
+	if !strings.HasSuffix(request.MaterialValues["oc"], "/tools/openshift-clients/openshift/4.21.15/oc") {
+		t.Fatalf("client = %q, want the release's own oc the installer reads the payload with", request.MaterialValues["oc"])
 	}
 	if request.MaterialValues["incarnation"] != "64769:4242" {
 		t.Fatalf("incarnation = %q, want the context's directory identity the receipt records", request.MaterialValues["incarnation"])

@@ -36,6 +36,9 @@ func TestFIPSProjectionAndBoundEd25519RefuseBeforeNativeExecution(t *testing.T) 
 	execution, _ := mediaExecution(t, testDigest)
 	execution.Block.Request = canonical
 	execution.LocateTool = func(_ context.Context, tool controllerscope.InstalledTool) (string, error) {
+		if tool.Kind == "openshift-clients" && tool.Executable == "oc" {
+			return "/synthetic/oc", nil
+		}
 		if tool.Kind != "openshift-install-fips" || tool.Executable != "openshift-install-fips" {
 			t.Fatalf("wrong native tool: %#v", tool)
 		}

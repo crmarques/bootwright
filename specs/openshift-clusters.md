@@ -1124,9 +1124,12 @@ artifact server is placed on, under
 the [process](security.md#process-boundary) and
 [Secret-material](security.md#sensitive-material) rules, composing each
 substrate's pre-boot, boot and disk-boot entry points by fixed qualified name.
-Go locates the exact installer executable; the adapter substitutes bound
-material into the installer inputs and invokes the installer with exact
-argument vectors. No pull secret, private key or captured credential enters an
+Go locates the exact installer executable and the same release's `oc`; the
+adapter substitutes bound material into the installer inputs and invokes the
+installer with exact argument vectors. The installer reads the release payload
+through `oc`, which it finds by name, so the image build's search path is that
+client's directory followed by `/usr/bin:/usr/sbin`, and it finds that `oc`
+before any other on the controller. No pull secret, private key or captured credential enters an
 argument, an environment variable, the evidence or a log.
 
 Both frozen requests carry the controller arm alone: connection `local` and the

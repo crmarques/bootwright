@@ -136,7 +136,7 @@
           - cluster-manifests
           - --dir
           - '{{ containercluster_media_agent_work }}'
-      environment: '{{ bootwright_cluster_media_request.buildEgress | default({}) }}'
+      environment: '{{ containercluster_media_agent_environment }}'
       when: bootwright_cluster_media_request.diskEncryption is defined
       changed_when: true
       no_log: true
@@ -194,7 +194,7 @@
           - '{{ containercluster_media_agent_work }}'
           - --log-level
           - info
-      environment: '{{ bootwright_cluster_media_request.buildEgress | default({}) }}'
+      environment: '{{ containercluster_media_agent_environment }}'
       no_log: true
       register: containercluster_media_agent_built
       changed_when: true
