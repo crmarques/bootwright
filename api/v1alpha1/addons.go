@@ -133,6 +133,16 @@ type MetalLBPool struct {
 	Addresses  []string   `json:"addresses"`
 	AutoAssign bool       `json:"autoAssign"`
 	L2         *MetalLBL2 `json:"l2,omitempty"`
+
+	ServiceAllocation *MetalLBServiceAllocation `json:"serviceAllocation,omitempty"`
+}
+type MetalLBServiceAllocation struct {
+	Namespaces         []string          `json:"namespaces,omitempty"`
+	NamespaceSelectors []MetalLBSelector `json:"namespaceSelectors,omitempty"`
+	ServiceSelectors   []MetalLBSelector `json:"serviceSelectors,omitempty"`
+}
+type MetalLBSelector struct {
+	MatchLabels map[string]string `json:"matchLabels"`
 }
 type MetalLBL2 struct {
 	Interface string `json:"interface,omitempty"`
@@ -149,7 +159,7 @@ func kubevirtPackageSchema() *Shape {
 }
 func addonPackagesSchema() *Shape {
 	metallb := packageBaseSchema()
-	metallb.Fields = append(metallb.Fields, field("pools", named(record(required("name", name()), required("addresses", nonemptyArray(array(nonempty()))), defaulted("autoAssign", boolean(), BoolValue(true)), field("l2", record(field("interface", nonempty())))))))
+	metallb.Fields = append(metallb.Fields, field("pools", named(record(required("name", name()), required("addresses", nonemptyArray(array(nonempty()))), defaulted("autoAssign", boolean(), BoolValue(true)), field("l2", record(field("interface", nonempty()))), field("serviceAllocation", record(field("namespaces", set(name())), field("namespaceSelectors", array(record(required("matchLabels", stringsMap())))), field("serviceSelectors", array(record(required("matchLabels", stringsMap()))))))))))
 	packages := record(field("nmstate", packageBaseSchema()), field("kubevirt", kubevirtPackageSchema()), field("metallb", metallb), field("fdf", fdfPackageSchema()), field("acm", acmPackageSchema()), field("gitops", gitopsPackageSchema()))
 	packages.MembersSelect = true
 	return packages

@@ -1,6 +1,7 @@
 package packages
 
 import (
+	"slices"
 	"time"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
@@ -28,6 +29,9 @@ func renderMetalLB(i addons.Instance) (addons.Rendered, error) {
 		phase := co.Phase{Gate: []co.Check{condition("metallb.io/v1beta1", "MetalLB", "metallb-system", "metallb", "Available"), crd("ipaddresspools.metallb.io"), crd("l2advertisements.metallb.io")}}
 		for _, pool := range config.Pools {
 			spec := api.MapValue(api.FieldValue{Name: "addresses", Value: api.StringList(pool.Addresses...)}, api.FieldValue{Name: "autoAssign", Value: api.BoolValue(pool.AutoAssign)})
+			if allocation := renderServiceAllocation(pool.ServiceAllocation); allocation.Type() == api.Mapping {
+				spec = spec.With("serviceAllocation", allocation)
+			}
 			advertisement := api.MapValue(api.FieldValue{Name: "ipAddressPools", Value: api.StringList(pool.Name)})
 			if pool.L2 != nil && pool.L2.Interface != "" {
 				advertisement = advertisement.With("interfaces", api.StringList(pool.L2.Interface))
@@ -37,4 +41,35 @@ func renderMetalLB(i addons.Instance) (addons.Rendered, error) {
 		result.After = append(result.After, phase)
 	}
 	return result, nil
+}
+
+func renderServiceAllocation(a *api.MetalLBServiceAllocation) api.Value {
+	if a == nil {
+		return api.Value{}
+	}
+	allocation := api.MapValue()
+	if len(a.Namespaces) > 0 {
+		allocation = allocation.With("namespaces", api.StringList(a.Namespaces...))
+	}
+	allocation = withSelectors(allocation, "namespaceSelectors", a.NamespaceSelectors)
+	return withSelectors(allocation, "serviceSelectors", a.ServiceSelectors)
+}
+func withSelectors(allocation api.Value, name string, selectors []api.MetalLBSelector) api.Value {
+	if len(selectors) == 0 {
+		return allocation
+	}
+	items := make([]api.Value, 0, len(selectors))
+	for _, selector := range selectors {
+		keys := make([]string, 0, len(selector.MatchLabels))
+		for key := range selector.MatchLabels {
+			keys = append(keys, key)
+		}
+		slices.Sort(keys)
+		labels := make([]api.FieldValue, 0, len(keys))
+		for _, key := range keys {
+			labels = append(labels, api.FieldValue{Name: key, Value: api.StringValue(selector.MatchLabels[key])})
+		}
+		items = append(items, api.MapValue(api.FieldValue{Name: "matchLabels", Value: api.MapValue(labels...)}))
+	}
+	return allocation.With(name, api.ListValue(items...))
 }

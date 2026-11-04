@@ -98,6 +98,7 @@ func admitPools(i addons.Instance, f addons.ClusterFacts) []api.Issue {
 		base := fmt.Sprintf(".pools[%d]", pi)
 		field := base + ".l2.interface"
 		networks := f.MachineNetworks
+		admitServiceAllocation(pool, base, add)
 		if len(pool.Addresses) < 1 || len(pool.Addresses) > 16 {
 			add("api.value", base+".addresses", "pool "+pool.Name+" must have 1 to 16 address entries", "declare between 1 and 16 address entries")
 			continue

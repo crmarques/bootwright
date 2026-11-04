@@ -10,21 +10,24 @@ Secret namespaces: metallb-system
 Channel and CSV lookup: oc get packagemanifest metallb-operator -n openshift-marketplace -o json
 
 Configuration under spec.packages.metallb:
-  FIELD                                             TYPE                        REQUIRED                                DEFAULT
-  subscription.channel                              string                      required                                none
-  subscription.startingCSV                          string                      required                                none
-  subscription.source                               DNS name                    optional                                redhat-operators
-  subscription.sourceNamespace                      name                        optional                                openshift-marketplace
-  subscription.catalogSource.name                   name                        required in subscription.catalogSource  none
-  subscription.catalogSource.image                  image reference             required in subscription.catalogSource  none
-  subscription.catalogSource.priority               integer                     required in subscription.catalogSource  none
-  subscription.catalogSource.pollInterval           duration                    optional                                none
-  subscription.catalogSource.securityContextConfig  string (legacy|restricted)  optional                                restricted
-  timeout                                           duration                    optional                                30m
-  pools[].name                                      name                        required in pools[]                     none
-  pools[].addresses                                 list of string              required in pools[]                     none
-  pools[].autoAssign                                boolean                     optional                                true
-  pools[].l2.interface                              string                      optional                                none
+  FIELD                                                       TYPE                        REQUIRED                                                    DEFAULT
+  subscription.channel                                        string                      required                                                    none
+  subscription.startingCSV                                    string                      required                                                    none
+  subscription.source                                         DNS name                    optional                                                    redhat-operators
+  subscription.sourceNamespace                                name                        optional                                                    openshift-marketplace
+  subscription.catalogSource.name                             name                        required in subscription.catalogSource                      none
+  subscription.catalogSource.image                            image reference             required in subscription.catalogSource                      none
+  subscription.catalogSource.priority                         integer                     required in subscription.catalogSource                      none
+  subscription.catalogSource.pollInterval                     duration                    optional                                                    none
+  subscription.catalogSource.securityContextConfig            string (legacy|restricted)  optional                                                    restricted
+  timeout                                                     duration                    optional                                                    30m
+  pools[].name                                                name                        required in pools[]                                         none
+  pools[].addresses                                           list of string              required in pools[]                                         none
+  pools[].autoAssign                                          boolean                     optional                                                    true
+  pools[].l2.interface                                        string                      optional                                                    none
+  pools[].serviceAllocation.namespaces                        list of name                optional                                                    none
+  pools[].serviceAllocation.namespaceSelectors[].matchLabels  mapping                     required in pools[].serviceAllocation.namespaceSelectors[]  none
+  pools[].serviceAllocation.serviceSelectors[].matchLabels    mapping                     required in pools[].serviceAllocation.serviceSelectors[]    none
 
 Binding skeleton (replace each <field>):
 apiVersion: bootwright.io/v1alpha1

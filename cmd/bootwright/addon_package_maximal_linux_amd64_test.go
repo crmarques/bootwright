@@ -46,6 +46,16 @@ const maximalPools = `
             addresses:
               - 198.51.100.128-198.51.100.135
 
+            serviceAllocation:
+              namespaces:
+                - apps
+              namespaceSelectors:
+                - matchLabels:
+                    team: blue
+              serviceSelectors:
+                - matchLabels:
+                    tier: edge
+
           - name: routed-services
             autoAssign: true
 

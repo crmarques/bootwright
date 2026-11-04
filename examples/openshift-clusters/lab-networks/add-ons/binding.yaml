@@ -26,6 +26,11 @@ spec:
           l2:
             interface: enp3s0
 
+          serviceAllocation:
+            serviceSelectors:
+              - matchLabels:
+                  ingresscontroller.operator.openshift.io/owning-ingresscontroller: routed
+
     nmstate:
       subscription:
         channel: example-channel

@@ -483,6 +483,10 @@ spec:
           autoAssign: true
           l2:
             interface: enp3s0
+          serviceAllocation:
+            serviceSelectors:
+              - matchLabels:
+                  ingresscontroller.operator.openshift.io/owning-ingresscontroller: routed
         - name: services
           addresses:
             - 198.51.100.128-198.51.100.135
