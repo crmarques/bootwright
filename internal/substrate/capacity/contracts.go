@@ -9,11 +9,12 @@ import (
 )
 
 const (
-	Passed       = "passed"
-	Failed       = "failed"
-	Unknown      = "unknown"
-	Pending      = "pending"
-	ProbeTimeout = 10 * time.Second
+	Passed             = "passed"
+	Failed             = "failed"
+	Unknown            = "unknown"
+	Pending            = "pending"
+	ProbeTimeout       = 10 * time.Second
+	RemoteProbeTimeout = 60 * time.Second
 )
 
 type Quantities struct{ CPU, Memory, Disk int64 }
@@ -23,6 +24,7 @@ type Reserve struct {
 }
 type Allocation struct {
 	Machine, Provider, Host, Pool string
+	Context                       string
 	Domain, UUID                  string
 	Disks                         []string
 	Local                         bool
@@ -32,6 +34,7 @@ type Allocation struct {
 }
 type Target struct {
 	Host, Pool  string
+	Context     string
 	Local       bool
 	Allocations []Allocation
 }

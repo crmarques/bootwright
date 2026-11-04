@@ -217,7 +217,7 @@ func (s Service) capacityChecks(ctx context.Context, catalog api.Catalog, select
 		reserves := capacity.ReservesFromCatalog(catalog, allocations)
 		for i := range allocations {
 			a := &allocations[i]
-			a.Reserve = reserves(capacity.Target{Host: a.Host, Pool: a.Pool, Local: a.Local})
+			a.Reserve = reserves(capacity.Target{Host: a.Host, Pool: a.Pool, Context: a.Context, Local: a.Local})
 		}
 		checks, err := s.Capacity.Check(ctx, allocations, dryRun)
 		if err != nil {

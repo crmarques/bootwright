@@ -55,7 +55,7 @@ func (s Service) CheckCapacity(ctx context.Context, catalog api.Catalog, context
 	}
 	reserves := ReservesFromCatalog(catalog, allocations)
 	for i := range allocations {
-		allocations[i].Reserve = reserves(Target{Host: allocations[i].Host, Pool: allocations[i].Pool, Local: allocations[i].Local})
+		allocations[i].Reserve = reserves(Target{Host: allocations[i].Host, Pool: allocations[i].Pool, Context: allocations[i].Context, Local: allocations[i].Local})
 	}
 	if s.Capacity == nil {
 		return nil, availability.ErrNotImplemented

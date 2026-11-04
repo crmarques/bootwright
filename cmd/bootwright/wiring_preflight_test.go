@@ -74,8 +74,8 @@ func TestContainerOnlyApplyProvesAllDeclaredLibvirtGuestsBeforeAdmission(t *test
 	called := 0
 	checker := capacityCheckFunc(func(_ context.Context, got []capacity.Allocation, dry bool) ([]capacity.Check, error) {
 		called++
-		if dry || len(got) != len(allocations) || !got[0].Reserve.Configured {
-			t.Fatalf("capacity admission lost declared allocation or reserve: %+v dry %t", got, dry)
+		if dry || len(got) != len(allocations) || !got[0].Reserve.Configured || got[0].Context != "lab" {
+			t.Fatalf("capacity admission lost declared allocation, reserve or context: %+v dry %t", got, dry)
 		}
 		return []capacity.Check{{ID: "capacity.memory", Target: got[0].Host, Status: capacity.Failed, Reason: "declared guests exceed available memory"}}, nil
 	})
@@ -88,5 +88,16 @@ func TestContainerOnlyApplyProvesAllDeclaredLibvirtGuestsBeforeAdmission(t *test
 	}
 	if called != 1 {
 		t.Fatalf("continuation with all machine blocks done observed capacity: %d", called)
+	}
+}
+
+func TestRemoteCapacityCommandsRefuseWithoutALifecycleOrAVerifiedRun(t *testing.T) {
+	for name, remote := range map[string]remoteCommands{
+		"no lifecycle":          {},
+		"an unavailable access": {reconciler: &lifecycle.Service{}},
+	} {
+		if out, _, err := remote.Run(context.Background(), "lab", "host", []string{"/usr/bin/nproc"}, 1<<10); err == nil || out != nil {
+			t.Fatalf("%s: output %q, error %v", name, out, err)
+		}
 	}
 }

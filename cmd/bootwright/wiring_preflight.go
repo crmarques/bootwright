@@ -21,7 +21,7 @@ import (
 )
 
 func wireStoragePreflight(state inventory.EffectiveState, reconciler lifecycle.Service, deps serviceDependencies) preflight.Service {
-	return preflight.Service{Graph: effectiveGraph{state: state}, Ownership: machineOwnership{reconciler: reconciler}, Project: libvirt.CapacityAllocations, Capacity: capacity.Budget{Observer: preflightlocal.Observer{}}, Guests: preflight.GuestChecks{Commands: preflightCommands(state, reconciler, deps)}, HostPorts: preflightHostPorts, Selection: currentSelection(deps.Selection)}
+	return preflight.Service{Graph: effectiveGraph{state: state}, Ownership: machineOwnership{reconciler: reconciler}, Project: libvirt.CapacityAllocations, Capacity: capacity.Budget{Observer: remoteObserver(state, &reconciler, deps)}, Guests: preflight.GuestChecks{Commands: preflightCommands(state, reconciler, deps)}, HostPorts: preflightHostPorts, Selection: currentSelection(deps.Selection)}
 }
 
 func libvirtCapacityAdmission(checker capacity.CapacityChecker) lifecycle.ApplyAdmission {
@@ -31,6 +31,42 @@ func libvirtCapacityAdmission(checker capacity.CapacityChecker) lifecycle.ApplyA
 	return func(ctx context.Context, contextName string, catalog api.Catalog, owned map[string]lifecycle.ObjectOwnership, starting []reconciliation.Block) error {
 		return libvirt.AdmitCapacity(ctx, contextName, catalog, owned, starting, checker)
 	}
+}
+
+func remoteObserver(state inventory.EffectiveState, reconciler *lifecycle.Service, deps serviceDependencies) preflightlocal.Observer {
+	return preflightlocal.Observer{Remote: remoteCommands{state: state, reconciler: reconciler, deps: deps}}
+}
+
+func remoteCapacity(state inventory.EffectiveState, reconciler *lifecycle.Service, deps serviceDependencies) capacity.CapacityChecker {
+	return capacity.Budget{Observer: remoteObserver(state, reconciler, deps)}
+}
+
+type remoteCommands struct {
+	state      inventory.EffectiveState
+	reconciler *lifecycle.Service
+	deps       serviceDependencies
+}
+
+func (r remoteCommands) Run(ctx context.Context, contextName, machine string, argv []string, bound int) ([]byte, int, error) {
+	if r.reconciler == nil {
+		return nil, 0, errors.New("verified remote command is unavailable")
+	}
+	capture := &preflightlocal.Capture{Limit: bound}
+	client := sshlocal.New(r.deps.Home, r.deps.Owner, sessionFiles(r.deps.Files))
+	sessions := machineaccess.New(r.state, currentSelection(r.deps.Selection), machineaccess.Options{
+		Lender: *r.reconciler, Ownership: machineOwnership{reconciler: *r.reconciler}, Evidence: machineHostKeys{reconciler: *r.reconciler}, Trust: r.deps.Trust, Launcher: client,
+		Streams: machineaccess.Streams{Out: capture, Err: io.Discard},
+	})
+	result, err := sessions.Exec(ctx, machineaccess.ExecRequest{ContextName: contextName, Names: []string{machine}, Command: argv})
+	if err != nil || result == nil || capture.Overflow {
+		clear(capture.Data)
+		return nil, 0, errors.New("verified bounded remote command did not complete")
+	}
+	if result.ExitCode != 0 {
+		clear(capture.Data)
+		return nil, result.ExitCode, nil
+	}
+	return capture.Data, 0, nil
 }
 
 func preflightCommands(state inventory.EffectiveState, reconciler lifecycle.Service, deps serviceDependencies) preflight.Commands {
@@ -92,7 +128,7 @@ func requestFleetIdentity(request preflight.CommandRequest) func(api.Catalog, ap
 }
 
 func wireContainerPreflight(state inventory.EffectiveState, reconciler lifecycle.Service, deps serviceDependencies) containerpreflight.Service {
-	return containerpreflight.Service{Graph: effectiveGraph{state: state}, Selection: currentSelection(deps.Selection), Ownership: machineOwnership{reconciler: reconciler}, Project: libvirt.CapacityAllocations, Capacity: capacity.Budget{Observer: preflightlocal.Observer{}}, Resolver: containerpreflightlocal.Resolver{}, DNSBlock: dnsServerDefinition().BlockID, Blocks: func(ctx context.Context, name string) (map[string]string, error) {
+	return containerpreflight.Service{Graph: effectiveGraph{state: state}, Selection: currentSelection(deps.Selection), Ownership: machineOwnership{reconciler: reconciler}, Project: libvirt.CapacityAllocations, Capacity: capacity.Budget{Observer: remoteObserver(state, &reconciler, deps)}, Resolver: containerpreflightlocal.Resolver{}, DNSBlock: dnsServerDefinition().BlockID, Blocks: func(ctx context.Context, name string) (map[string]string, error) {
 		result, err := reconciler.Status(ctx, lifecycle.StatusRequest{ContextName: name})
 		if err != nil {
 			return nil, err

@@ -440,7 +440,9 @@ credit only after exact protected domain, process and backing-file proofs.
 Foreign configured domains, including inactive domains, reserve their vCPUs.
 Memory uses observed available memory plus proved owned resident memory; disk
 uses actual backing-filesystem availability plus unique proved allocations.
-Remote provider facts remain unknown until that observer is qualified.
+A provider host on the SSH arm is observed as
+[capacity admission](substrates.md#capacity-admission) states, without reuse
+credit.
 
 Storage preflight reports future Machines whose managed OS installation has
 not started as pending without remote guest probes. Installed or provided OS

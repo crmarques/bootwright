@@ -617,6 +617,32 @@ Pure planning probes nothing, a continuation whose Machine blocks are all done
 is not gated, and [container-cluster preflight](openshift-clusters.md#preflight)
 and storage preflight report the same checks.
 
+A provider host on the SSH arm is observed over its placement connection,
+pinned to its `knownHostsRef` key and authenticated by its `privateKeyRef`.
+The observation runs fixed, read-only commands with absolute paths and no
+shell:
+- `nproc` for its CPUs;
+- `/proc/meminfo` for `MemAvailable`;
+- `stat --file-system` of the pool path, or its nearest existing ancestor, for
+  its disk;
+- the libvirt domain definitions under `/etc/libvirt/qemu` and
+  `/run/libvirt/qemu`, which it lists and then reads in one bounded read.
+
+It parses those bytes exactly as the local observation parses the files it
+reads. A foreign domain reserves its vCPUs, and a remote filesystem never
+compares equal to a local one. Each command has its own output bound: 64 KiB
+for a single fact, enough for both directories' bounded listings, and 16 MiB
+for the domain definitions. The disk walk climbs only past a path `stat`
+reports absent. An untrusted or changed host key, a command that does not
+complete, any other non-zero exit or output past its bound makes that fact
+unknown. The observation of such a host has 60 seconds, since each command
+opens its own session; a local one keeps 10 seconds.
+
+An allocation already on that host receives no reuse credit, because its
+domain, process and backing-file proofs are local reads. It is reported
+unproved, which decides only a budget that would otherwise be exceeded
+([B1093](milestones/m3.md#b1093)).
+
 ## Physical machine realization
 
 The block `machine-<machine>` on a bare-metal provider realizes nothing. A

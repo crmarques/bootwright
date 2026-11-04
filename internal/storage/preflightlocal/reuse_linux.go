@@ -17,18 +17,6 @@ import (
 	"golang.org/x/sys/unix"
 )
 
-type domainXML struct {
-	Name  string `xml:"name"`
-	UUID  string `xml:"uuid"`
-	VCPU  int64  `xml:"vcpu"`
-	Disks []struct {
-		Type   string `xml:"type,attr"`
-		Device string `xml:"device,attr"`
-		Source struct {
-			File string `xml:"file,attr"`
-		} `xml:"source"`
-	} `xml:"devices>disk"`
-}
 type domainStatusXML struct {
 	PID    int       `xml:"pid,attr"`
 	Domain domainXML `xml:"domain"`

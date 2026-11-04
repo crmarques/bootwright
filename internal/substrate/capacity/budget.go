@@ -87,10 +87,10 @@ func allocationGroups(allocations []Allocation) ([]*budgetGroup, error) {
 		key := allocation.Host + "\x00" + allocation.Pool
 		group := groups[key]
 		if group == nil {
-			group = &budgetGroup{target: Target{Host: allocation.Host, Pool: allocation.Pool, Local: allocation.Local}}
+			group = &budgetGroup{target: Target{Host: allocation.Host, Pool: allocation.Pool, Context: allocation.Context, Local: allocation.Local}}
 			groups[key] = group
 		}
-		if group.target.Local != allocation.Local {
+		if group.target.Local != allocation.Local || group.target.Context != allocation.Context {
 			return nil, errors.New("capacity projection contradicts host placement")
 		}
 		var err error
@@ -137,7 +137,11 @@ func (b Budget) observeGroup(ctx context.Context, group *budgetGroup, dryRun boo
 	case b.Observer == nil:
 		row.facts.Reason = "no capacity observer is configured for this host"
 	default:
-		probe, cancel := context.WithTimeout(ctx, ProbeTimeout)
+		timeout := ProbeTimeout
+		if !group.target.Local {
+			timeout = RemoteProbeTimeout
+		}
+		probe, cancel := context.WithTimeout(ctx, timeout)
 		facts, err := b.Observer.Observe(probe, group.target)
 		expired := probe.Err()
 		cancel()

@@ -146,7 +146,11 @@ func assembleServices(deps serviceDependencies) cli.Services {
 	services.DesiredState = wireDesiredState(deps, compiler)
 	services.Controller = wireController(deps.Controller, compiler, deps.Confirmer, deps.AmbientRoute)
 	services.Media = wireMedia(deps.Media)
-	reconciler := wireLifecycle(deps.Lifecycle, deps.Controller, compiler, secrets.binder)
+	var reconciler lifecycle.Service
+	if deps.Lifecycle.Capacity == nil {
+		deps.Lifecycle.Capacity = remoteCapacity(services.DesiredState, &reconciler, deps)
+	}
+	reconciler = wireLifecycle(deps.Lifecycle, deps.Controller, compiler, secrets.binder)
 	services.Lifecycle = reconciler
 	machine := wireMachine(machineDependencies{
 		State: services.DesiredState, Lifecycle: reconciler, Trust: deps.Trust,

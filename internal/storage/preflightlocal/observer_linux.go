@@ -7,7 +7,6 @@ import (
 	"math"
 	"os"
 	"path/filepath"
-	"strconv"
 	"strings"
 
 	"github.com/crmarques/bootwright/internal/storage/preflight"
@@ -15,12 +14,15 @@ import (
 )
 
 // Observer reads existing kernel facts without invoking tools or writing files.
-// Remote targets require a verified remote adapter and are never read locally.
-type Observer struct{}
+// A remote target is observed only through Remote and is never read locally.
+type Observer struct{ Remote RemoteCommands }
 
-func (Observer) Observe(ctx context.Context, target preflight.Target) (preflight.Facts, error) {
+func (o Observer) Observe(ctx context.Context, target preflight.Target) (preflight.Facts, error) {
 	if err := ctx.Err(); err != nil {
 		return preflight.Facts{}, err
+	}
+	if !target.Local && o.Remote != nil {
+		return observeRemote(ctx, o.Remote, target)
 	}
 	if !target.Local {
 		return preflight.Facts{Reason: "verified remote capacity observation is unavailable"}, nil
@@ -71,27 +73,6 @@ func unreadReason(facts preflight.Facts, inventoryFailure string) string {
 }
 func readBounded(path string, limit int64) ([]byte, error) { return readSafe(path, limit) }
 
-func parseMemory(data []byte) (int64, bool) { return parseMemoryKey(data, "MemAvailable:") }
-func parseMemoryKey(data []byte, key string) (int64, bool) {
-	var available int64
-	found := false
-	for line := range strings.SplitSeq(string(data), "\n") {
-		fields := strings.Fields(line)
-		if len(fields) == 0 || fields[0] != key {
-			continue
-		}
-		if found || len(fields) != 3 || fields[2] != "kB" {
-			return 0, false
-		}
-		number, err := strconv.ParseInt(fields[1], 10, 64)
-		if err != nil || number < 0 || number > math.MaxInt64/1024 {
-			return 0, false
-		}
-		available = number * 1024
-		found = true
-	}
-	return available, found
-}
 func availableDisk(path string) (int64, string, error) {
 	if !filepath.IsAbs(path) || filepath.Clean(path) != path {
 		return 0, "", errors.New("capacity pool path is not absolute and clean")
