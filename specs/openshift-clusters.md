@@ -1144,5 +1144,4 @@ publisher-verified RHEL 9 `openshift-install-fips` executable. Controller
 preflight, plan and apply admission require a positive kernel FIPS-mode
 observation and otherwise refuse `controller.unsupported`. Media apply refuses
 an `ssh-ed25519` administration key naming the bound Secret before running the
-installer. These prerequisites make no claim about Bootwright's cryptography;
-real FIPS-host qualification remains [B722](milestones/m3.md#b722).
+installer. These prerequisites make no claim about Bootwright's cryptography.

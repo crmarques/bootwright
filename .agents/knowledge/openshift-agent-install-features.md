@@ -7,7 +7,7 @@ behavior; this page records native facts for
 [B719](../../specs/milestones/m3.md#b719) (install-time manifests),
 [B720](../../specs/milestones/m3.md#b720) (TPM2 disk encryption),
 [B721](../../specs/milestones/m3.md#b721) (installation proxy),
-[B722](../../specs/milestones/m3.md#b722) (FIPS) and
+[B722](../../specs/milestones/delivered.md#x294--a-fips-cluster-built-from-a-controller-off-its-libvirt-host) (FIPS, accepted) and
 [B724](../../specs/milestones/m3.md#b724) (registry mirrors).
 
 Provenance: `R<n>:C<m>` is a claim id of the M3 research, `RV` marks a claim the
@@ -62,8 +62,8 @@ Bootwright selects a separate exact-release `openshift-install-fips` tool for
 FIPS clusters, verifies its RHEL 9 archive against publisher checksums, and
 requires a positive host FIPS observation before planning or apply admission.
 The bound administration key is checked at media apply. These independent
-checks do not qualify execution on a real FIPS-enabled host; that acceptance
-row remains [B722](../../specs/milestones/m3.md#b722).
+checks do not qualify execution on a real FIPS-enabled host; the owner
+accepted that on one node in [B722](../../specs/milestones/delivered.md#x294--a-fips-cluster-built-from-a-controller-off-its-libvirt-host).
 
 ## Disk encryption
 

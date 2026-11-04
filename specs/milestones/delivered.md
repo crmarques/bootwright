@@ -11510,6 +11510,108 @@ budget ([B900](m2.md#b900)). **Unverified live:** the frozen image's
 file and `lvmdevices --delpvid`, and whether cephadm's periodic inventory
 makes the running-ceph-volume check refuse transiently.
 
+### X294 — A FIPS cluster built from a controller off its libvirt host
+
+**Items:** B743, B1093, B1100 and B1101, completed, and B722, completed on the
+owner's choice of a single-node row.
+**Kind:** safety. **Owners:** Container cluster, Substrate, Controller and
+Storage.
+
+The owner accepts, in conversation on 2026-11-04, the single-build run of
+[`e2e/lab-sno-fips-controller`](../../e2e/lab-sno-fips-controller/runbook.md)
+recorded in the [acceptance ledger](../../docs/acceptance.md#ledger), and
+names the five items it completes. B722's section kept lab-fips's three-node
+shape as its acceptance profile unless the owner accepted this single-node
+row instead; the owner chose this row, so lab-fips leaves the M3d profiles.
+The build is commit `51582fd8836cc47957932142ebfa52abeba0a810` with source
+`clean`. The case ran with `openshift.version=4.22.21`,
+`controller.memoryMiB=4096` and `security.tpm2=false`: OpenShift 4.22.21 on
+one node of 8 vCPU, 16 GiB and 120 GiB, built from a FIPS-mode RHEL 9.8
+controller guest of 4 vCPU and 4 GiB whose libvirt host, this Fedora 44
+laptop, it drives as root over SSH.
+
+No item registered an acceptance baseline before the run, so this record
+designates each delivering commit below as its baseline, the owner's
+exception as for B615 under X99 and B1059 under X290; the build descends from
+every one. The run's operation logs were purged with the two contexts, which
+the runbook archives nowhere, so the row carries no log digest.
+
+**What delivered which item.**
+
+- B743: `bc0977ed7` (the verified emulator fetch, D227) and `c671b2df4` (the
+  case's guest repositories and host key).
+- B1101: `18795af70`, built as `a3846260a` (the collection publishes
+  `openshift-install-fips`).
+- B1093: `d483caa75`, built as `6b66beea3` (capacity observed over the SSH
+  placement, D228).
+- B1100: `f92dc4f09`, built as `db74a1f7a` (the image build's search path leads
+  with the release's `oc`).
+- B722: `17acb63d9`, the independent implementation.
+- `51582fd88`, built as `eae9089f8`: the runbook's certificate drill through
+  `/redfish/v1/Systems` and the run notes.
+
+The `task/b1101-integrate` rebase renumbered B1091 to B1101 after a
+collision; each rebased commit is patch-identical to the one built.
+
+**The run**, each check against its item's exit evidence:
+
+- B722 and B1101: the controller stage published `openshift-install-fips`
+  and `openshift-clients` 4.22.21 on a controller whose `fips_enabled` reads
+  1 and whose crypto policy is `FIPS`. Both ran there, and preflight
+  controller was `ready`. The installed node read `fips_enabled` 1 and policy
+  `FIPS`.
+- B1093: `preflight container-cluster` passed `capacity.cpu`,
+  `capacity.memory` and `capacity.disk` for `libvirt-host` from the remote
+  observation (12 CPUs, about 23.8 GB available memory and 253 GB free), and
+  the apply admitted `sno-01` there.
+- B1100: the image build completed (4 m 13 s).
+- B743: `sno-01`'s emulated BMC on the laptop imported the artifact server's
+  certificate, fetched the image from the FIPS controller verified, and the
+  node installed. After the install's eject the device read `Inserted: false`
+  and `VerifyCertificate: true` with no certificate. An unrelated certificate
+  failed the fetch with `CERTIFICATE_VERIFY_FAILED ... self-signed
+  certificate`; the server's own certificate passed verification and the
+  insert failed only on the server's 404 for its root; the restored device
+  read as before.
+- The apply (`op-1869564e74fe3cbfed971784a329b4b6`) finished 7/7 with the
+  handoff ready. OpenShift 4.22.21 was Available with every cluster operator
+  Available, none Progressing or Degraded, `diff --observe` read no
+  differences, and a settle apply had nothing to do.
+
+**The drills.** A Ctrl-C 5 s into the image build left the media and machine
+blocks unknown; the next apply observed both, rebuilt the image and defined
+the machine. A Ctrl-C 10 m 50 s into the bootstrap control plane's handover
+wait left the install block unknown; the next apply resumed the wait without
+another build, insert or power-on and completed it in 31 m 34 s.
+
+**Cleanup.** The FIPS context's destroy
+(`op-485c574980195b6a53437e6f405116a7`) refused `lifecycle.live` while
+`sno-01` ran, then completed 7/7 after `machine stop`, ejecting the media and
+removing the machine, its BMC and pool on the laptop, the work area and the
+services. The bootstrap context's destroy
+(`op-21ffd67967f9ee6c63bfbf8c3ebae4b8`) completed 8/8 after `machine stop`
+with no domain left. Root's SSH authorization, sshd and the host firewall were
+restored and both contexts purged.
+
+**Recorded with the acceptance:**
+
+1. An earlier attempt the same day, on 4.21.15 and builds `a3846260a` to
+   `eae9089f8`, found B1100, B1101 and B1093 and ended when the laptop's
+   out-of-memory killer took `sno-01` during installation, while other
+   workloads ran there. It was destroyed and accepts nothing.
+2. In this run the FIPS controller's resolver step first wrote to the laptop's
+   run directory, so preflight failed resolution until it was repeated with
+   the guest's own; nothing else was repeated.
+3. The node's `lsblk` still listed `sr0` with the agent image's label after the
+   BMC reported the eject; the libvirt side was not read before the destroy,
+   whose own eject succeeded.
+4. TPM2 disk encryption ([B720](m3.md#b720)) was not exercised.
+
+**What stays open.** [B1099](backlog.md#b1099)'s remote reuse credit,
+[B1095](backlog.md#b1095) to [B1098](backlog.md#b1098) and
+[B1094](backlog.md#b1094) from the same runs, and [B1088](backlog.md#b1088),
+the managed-OS twin of B743.
+
 ### X295 — Progress keeps keyboard echo off its redrawn block
 
 **Items:** B1091 (new, 2026-11-04, owner request). **Kind:** product.

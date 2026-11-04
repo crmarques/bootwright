@@ -641,7 +641,7 @@ opens its own session; a local one keeps 10 seconds.
 An allocation already on that host receives no reuse credit, because its
 domain, process and backing-file proofs are local reads. It is reported
 unproved, which decides only a budget that would otherwise be exceeded
-([B1093](milestones/m3.md#b1093)).
+([B1099](milestones/backlog.md#b1099)).
 
 ## Physical machine realization
 

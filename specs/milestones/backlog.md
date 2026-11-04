@@ -3081,7 +3081,7 @@ The managed-OS installation still refuses a virtual Machine whose provider
 host is not its image server's placement Machine
 ([refusal table](../managed-os.md#refusal-table)), because its emulated BMC
 fetches unverified. **Outcome:** that Machine freezes `importCertificate`
-with certificate removal, as [B743](m3.md#b743) does for a container-cluster
+with certificate removal, as [B743](delivered.md#x294--a-fips-cluster-built-from-a-controller-off-its-libvirt-host) does for a container-cluster
 node, and the refusal row lifts. Parked because no case installs RHEL on a
 libvirt host other than the controller's.
 **Exit evidence:** a selection test freezing the verified trust and the
@@ -3089,7 +3089,7 @@ refusal-table test without the row.
 
 ### B1092
 
-[B1101](m3.md#b1101) was a tool kind the Go catalog
+[B1101](delivered.md#x294--a-fips-cluster-built-from-a-controller-off-its-libvirt-host) was a tool kind the Go catalog
 (`internal/controller/bundlelocal/tools.go`) freezes while the collection's
 vocabulary (`tool_files` in `plugins/module_utils/controller_files.py`) did not
 hold it. No test compares the two. The refusal also reached the operator only
@@ -3105,7 +3105,7 @@ outside the vocabulary.
 ### B1094
 
 On 2026-11-04 the controller stage of lab-sno-fips-controller failed while
-publishing its third tool ([B1101](m3.md#b1101)). Its client area
+publishing its third tool ([B1101](delivered.md#x294--a-fips-cluster-built-from-a-controller-off-its-libvirt-host)). Its client area
 `/var/lib/bootwright/controller/tools/<digest>/` was left holding `helm` and
 `openshift-clients` while the controller record listed no bundle reservation
 (`"bundles": null`). Every retry, after observation resolved the attempt
@@ -3178,7 +3178,7 @@ domain's virtual media, refused.
 
 ### B1099
 
-[B1093](m3.md#b1093)'s observation gives an allocation already on the remote
+[B1093](delivered.md#x294--a-fips-cluster-built-from-a-controller-off-its-libvirt-host)'s observation gives an allocation already on the remote
 host no reuse credit and reports it unproved. That decides only a budget that
 would otherwise be exceeded, while that Machine's own block is starting again.
 It also lists `/etc/libvirt/qemu` and `/run/libvirt/qemu` in one `find`, so a
@@ -6786,7 +6786,7 @@ A node whose emulated BMC runs on a Machine other than the artifact server's
 freezes `importCertificate` with certificate removal, the trust a physical
 BMC defaults to, so the emulator imports the server's certificate and
 verifies its fetch, and the refusal row lifts. This revives
-[B743](m3.md#b743) from parked into M3d as slice X294, together with the
+[B743](delivered.md#x294--a-fips-cluster-built-from-a-controller-off-its-libvirt-host) from parked into M3d as slice X294, together with the
 [lab-sno-fips-controller](../../e2e/lab-sno-fips-controller/runbook.md) case
 that runs it. The managed-OS twin of the refusal stays, parked as
 [B1088](#b1088). Remote publication is not taken: it would put a
@@ -6803,7 +6803,7 @@ preflight found that capacity on the SSH-placed `libvirt-host` is never
 observed, so the apply gate refuses every guest there. Offered a remote
 observation, a nested SNO inside the FIPS controller, or stopping, the owner
 chose "Add remote observation". The remote provider-capacity portion of
-[B490](m2.md#b490) is split out to [B1093](m3.md#b1093) and joins X294.
+[B490](m2.md#b490) is split out to [B1093](delivered.md#x294--a-fips-cluster-built-from-a-controller-off-its-libvirt-host) and joins X294.
 Session clauses, pending the owner's review:
 - the observation runs fixed commands over the placement's pinned connection
   instead of an Ansible read, so it fits a bounded probe;

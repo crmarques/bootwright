@@ -16,8 +16,8 @@ served on `fips-controller`. Its insert therefore imports the artifact
 server's certificate, verifies the fetch and removes the certificate after
 the boot ([boot media](../../specs/openshift-clusters.md#boot-media)).
 
-It accepts [B743](../../specs/milestones/m3.md#b743) and rehearses
-[B722](../../specs/milestones/m3.md#b722) on one node, one ledger row per item
+It accepted [B743](../../specs/milestones/delivered.md#x294--a-fips-cluster-built-from-a-controller-off-its-libvirt-host) and, by the owner's choice, [B722](../../specs/milestones/delivered.md#x294--a-fips-cluster-built-from-a-controller-off-its-libvirt-host)
+on one node, one ledger row per item
 run. `security.tpm2=true` adds TPM2-bound LUKS on the node's disk, rehearsing
 [B720](../../specs/milestones/m3.md#b720).
 

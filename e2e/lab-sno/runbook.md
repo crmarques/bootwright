@@ -13,10 +13,10 @@ It accepts [B61](../../specs/milestones/m3.md#b61) with
 [B462](../../specs/milestones/m3.md#b462) (default render),
 [B755](../../specs/milestones/m4.md#b755) (`addons.nmstate`) and
 [B757](../../specs/milestones/m4.md#b757) (`addons.metallb`), one ledger row per
-item run. `security.fips` and `security.tpm2` only rehearse
-[B722](../../specs/milestones/m3.md#b722) and
-[B720](../../specs/milestones/m3.md#b720), which qualify on three nodes in
-[lab-3-nodes-ocp-features](../lab-3-nodes-ocp-features/runbook.md).
+item run. `security.tpm2` only rehearses
+[B720](../../specs/milestones/m3.md#b720), which qualifies on three nodes in
+[lab-3-nodes-ocp-features](../lab-3-nodes-ocp-features/runbook.md); FIPS was
+accepted on one node from a FIPS controller ([B722](../../specs/milestones/delivered.md#x294--a-fips-cluster-built-from-a-controller-off-its-libvirt-host)).
 
 Run every numbered step in order, in one Bash session from the checkout
 being tested. A successful run includes the selected feature checks, deliberate

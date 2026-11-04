@@ -56,8 +56,9 @@ on 2026-09-28:
   host stays `established` and never imports. A container-cluster node whose
   emulated controller is on another host imports through this surface and
   removes the certificate after the boot
-  ([B743](../../specs/milestones/m3.md#b743)). Until that case's first run,
-  nothing has driven the device surface against the image.
+  ([B743](../../specs/milestones/delivered.md#x294--a-fips-cluster-built-from-a-controller-off-its-libvirt-host)). Its first accepted run drove that
+  surface against the image: the import, the verified fetch, a refused
+  unrelated certificate and the removal at eject all behaved as read.
 - The TLS half of that trust was driven against the pinned image on
   2026-11-04, without network: a leaf shaped like Bootwright's
   `tlsCertificate` output (CA:FALSE, critical `digitalSignature`, `serverAuth`,

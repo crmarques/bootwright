@@ -21,7 +21,7 @@ It accepts [B720](../../specs/milestones/m3.md#b720) (TPM2),
 [B725](../../specs/milestones/m3.md#b725) with
 [B703](../../specs/milestones/m1.md#b703) on `ipv6: true`; each is a
 lab-features row of [B728](../../specs/milestones/m3.md#b728), one ledger row
-per item run. [B722](../../specs/milestones/m3.md#b722) (FIPS) needs a
+per item run. FIPS ([B722](../../specs/milestones/delivered.md#x294--a-fips-cluster-built-from-a-controller-off-its-libvirt-host), accepted on one node) needs a
 controller whose `cat /proc/sys/crypto/fips_enabled` prints `1`; otherwise
 `security.fips=true` refuses `controller.unsupported` at plan. Serving certificates
 ([B723](../../specs/milestones/m3.md#b723)) are not specified for install time
