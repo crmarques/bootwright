@@ -976,12 +976,15 @@ def tool_files(tool):
         "kubectl": ["kubectl"],
         "openshift-clients": ["oc", "kubectl"],
         "openshift-install": ["openshift-install"],
+        "openshift-install-fips": ["openshift-install-fips"],
         "virtctl": ["virtctl"],
     }.get(kind)
     if members is None or not isinstance(compatibility, str):
         raise Refused("tool vocabulary")
     allowed = (
-        ("openshift", "okd")
+        ("openshift",)
+        if kind == "openshift-install-fips"
+        else ("openshift", "okd")
         if kind.startswith("openshift-")
         else ("kubevirt",) if kind == "virtctl" else ("",)
     )

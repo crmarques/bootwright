@@ -275,6 +275,7 @@ Alias cell.
 | [B969](#b969) | new, 2026-10-29 (X216) | enabling | Storage | The six storage requirements no example plans become reference-edge rows | `CephClient`, `CephNFSExport` and `CephSMBResource` `filesystemRef` and the three `CephObjectGateway` `spec.pools` references order blocks in code, but the catalog test needs a planned example per row, so they carry a reason meanwhile |
 | [B1085](#b1085) | new, 2026-11-03 (the D225 lanes' checks) | defect | Storage and Verification tooling | A Ceph tunnel-custody unit test passes whatever filesystem holds `TMPDIR` | Fails only with `TMPDIR` on btrfs; the gate runs on tmpfs `/tmp`; gates no milestone |
 | [B1088](#b1088) | new, 2026-11-03 (D227) | product | Managed OS, with Substrate | A virtual Machine whose emulated BMC is off its image server's host installs through a verified fetch | No consumer installs RHEL on a libvirt host other than the controller's; B743's mechanism serves it once one does |
+| [B1092](#b1092) | new, 2026-11-04 (B1101) | enabling | Controller and Verification tooling | The Go tool catalog and the collection's tool vocabulary cannot drift apart, and a tool refusal outside acquisition is named | B1101 fixed the one drift found; the run still completes without the guard |
 
 ### B82
 
@@ -3079,6 +3080,21 @@ node, and the refusal row lifts. Parked because no case installs RHEL on a
 libvirt host other than the controller's.
 **Exit evidence:** a selection test freezing the verified trust and the
 refusal-table test without the row.
+
+### B1092
+
+[B1101](m3.md#b1101) was a tool kind the Go catalog
+(`internal/controller/bundlelocal/tools.go`) freezes while the collection's
+vocabulary (`tool_files` in `plugins/module_utils/controller_files.py`) did not
+hold it. No test compares the two. The refusal also reached the operator only
+as the generic `controller.install` remedy, because `record` in
+`controller_refusal.py` names only acquisition and release-stamp refusals.
+**Outcome:** a test fails when a kind or member list the catalog can freeze
+is absent from the vocabulary, and a tool refusal raised before acquisition is
+named by its fixed reason and the tool's source. Parked because B1101 fixed
+the only drift found.
+**Exit evidence:** the parity test, and a refusal-naming test for a tool
+outside the vocabulary.
 
 ## Audit remediation (2026-10-26)
 

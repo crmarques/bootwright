@@ -429,6 +429,26 @@ class ControllerFilesTests(unittest.TestCase):
                     definition["files"] = [{"member": "linux-amd64/helm", "path": path}]
                 self.assertEqual(files.tool_files(definition), definition["files"])
 
+    # The FIPS-capable installer is the RHEL 9 archive whose one member is
+    # openshift-install-fips, frozen for an openshift release alone
+    # (internal/controller/bundlelocal/tools.go). A FIPS cluster's controller
+    # stage publishes it, and no other compatibility is admitted.
+    def test_the_fips_installer_publishes_its_one_member(self):
+        executable = b"fips-capable installer"
+        data = archive([("openshift-install-fips", executable, "file")])
+        definition = tool(data, "openshift-install-fips", "openshift", "4.21.15")
+        definition["archive"] = "tar.gz"
+        self.retain(definition, data)
+        result = files.prepare_tool(self.location, definition, EGRESS, DEADLINE)
+        self.assertTrue(result["changed"])
+        published = self.root / "tools/openshift-install-fips/openshift/4.21.15/openshift-install-fips"
+        self.assertEqual(published.read_bytes(), executable)
+        okd = tool(data, "openshift-install-fips", "okd", "4.21.15")
+        okd["archive"] = "tar.gz"
+        with self.assertRaises(files.Refused) as refusal:
+            files.tool_files(okd)
+        self.assertEqual(refusal.exception.args, ("tool compatibility",))
+
     def test_frozen_tool_requires_an_exact_release_tag(self):
         for version in ("latest", "", "-1.2.3", "v1.2 3", "1" * 97):
             with self.subTest(version=version):
