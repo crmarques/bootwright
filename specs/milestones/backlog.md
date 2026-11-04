@@ -6822,6 +6822,22 @@ Session clauses, pending the owner's review:
   reported unproved;
 - a remote filesystem is never treated as one a local pool shares.
 
+### D229
+
+**owner** (2026-11-04): the physical BMC under test exposes a drive's serial
+number, capacity, model, media type, protocol and slot but no WWN. The owner
+asked that a physical Machine and a physical Ceph host select a whole disk by
+`serialNumber` and exact `sizeBytes` without a WWN, additively, keeping WWN
+declarations as they are. This authorizes X298 ([B1104](m1.md#b1104)) and
+X299 ([B1105](m2.md#b1105)) out of sequence.
+Session clauses, pending the owner's review:
+- the `/dev/disk/by-serial/` form and its size coming from the erase policy;
+- the alias rule (the `wwn-0x` link, else the first by-id link in byte order
+  that contains the serial);
+- Ceph's serial grammar `[A-Za-z0-9._:+-]{1,128}`;
+- graph-wide uniqueness of a selecting serial;
+- `serial:<serialNumber>` in impacts.
+
 ### D230
 
 **owner** (2026-11-04): asked that `bootwright diff` set the desired state
