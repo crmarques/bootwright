@@ -107,6 +107,19 @@ tar -C "$INPUT_DIR" -cf - fips | ./bin/bootwright machine exec --context "$CTX_B
 ./bin/bootwright machine exec --context "$CTX_BOOT" --name fips-controller -- sh -c 'umask 077; cat > openshift-pull-secret' < ~/openshift-pull-secret
 ```
 
+Hand over `libvirt-host`'s ECDSA host key as one known-hosts line for its
+guest-network address, read from this host's own key file. A FIPS-mode
+`ssh-keyscan` cannot fetch it, because it offers a key exchange the FIPS
+build refuses (`unsupported KEX method mlkem768x25519-sha256`):
+
+```sh
+printf '198.51.100.1 %s\n' "$(cut -d' ' -f1,2 /etc/ssh/ssh_host_ecdsa_key.pub)" | \
+    ./bin/bootwright machine exec --context "$CTX_BOOT" --name fips-controller -- sh -c 'umask 077; cat > libvirt-host.known_hosts'
+./bin/bootwright machine exec --context "$CTX_BOOT" --name fips-controller -- dnf repolist
+```
+
+`dnf repolist` must list `bootwright-dvd-baseos` and `bootwright-dvd-appstream`.
+
 ## 4. Create the FIPS context (FIPS controller)
 
 Open the session and keep it for steps 4 to 8:
@@ -134,9 +147,8 @@ Pin `libvirt-host`'s ECDSA host key. Its fingerprint must equal the one step
 1 printed on the host:
 
 ```sh
-ssh-keyscan -t ecdsa 198.51.100.1 > "$RUN_DIR/libvirt-host.known_hosts"
-ssh-keygen -lf "$RUN_DIR/libvirt-host.known_hosts"
-bootwright secret set --context "$CTX_FIPS" --name libvirt-host-known-hosts --value-file "$RUN_DIR/libvirt-host.known_hosts" --yes
+ssh-keygen -lf ~/libvirt-host.known_hosts
+bootwright secret set --context "$CTX_FIPS" --name libvirt-host-known-hosts --value-file ~/libvirt-host.known_hosts --yes
 bootwright secret show --context "$CTX_FIPS" --name libvirt-host-key --part public-key > ~/libvirt-host-key.pub
 ```
 

@@ -1,6 +1,6 @@
 # RHEL in FIPS mode for the fips context's controller, with the tools the
-# runbook's checks use there. The hosted DVD tree stays its package
-# repository while this context lives.
+# runbook's checks use there. The hosted DVD tree is its package repository
+# while this context lives.
 apiVersion: bootwright.io/v1alpha1
 kind: MachineInstallProfile
 metadata:
@@ -64,6 +64,20 @@ spec:
         - firewalld
         - qemu-guest-agent
         - sshd
+
+    # The installed system's own repositories: the hosted DVD tree, from which
+    # `bootwright controller install` and the controller stage install there.
+    repositories:
+      configure:
+        - id: bootwright-dvd-baseos
+          displayName: RHEL {{ .Values.rhel.version }} BaseOS (hosted DVD tree)
+          baseURL: http://{{ include "address" . }}:8080/os/rhel/tree/BaseOS
+          gpgKeyURL: file:///etc/pki/rpm-gpg/RPM-GPG-KEY-redhat-release
+
+        - id: bootwright-dvd-appstream
+          displayName: RHEL {{ .Values.rhel.version }} AppStream (hosted DVD tree)
+          baseURL: http://{{ include "address" . }}:8080/os/rhel/tree/AppStream
+          gpgKeyURL: file:///etc/pki/rpm-gpg/RPM-GPG-KEY-redhat-release
 
     security:
       selinux:
