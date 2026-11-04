@@ -191,17 +191,27 @@ dig @198.51.100.10 +short mirror.openshift.com                                  
 ```
 
 Point this controller's resolver at its own DNS server, which forwards every
-other name to `CTX_BOOT`'s, then let preflight prove resolution:
+other name to `CTX_BOOT`'s, then let preflight prove resolution. The
+installation configured the guest's DNS through nmstate, which stores it as
+NetworkManager's global DNS and so overrides any per-connection setting.
+Change it the same way:
 
 ```sh
-CONNECTION=$(nmcli -g GENERAL.CONNECTION device show enp1s0)
-sudo nmcli connection modify "$CONNECTION" ipv4.dns 198.51.100.10
-sudo nmcli connection up "$CONNECTION"
+printf 'dns-resolver:\n  config:\n    search:\n    - e2e.example.test\n    server:\n    - 198.51.100.10\n' > "$RUN_DIR/dns.yml"
+sudo nmstatectl apply "$RUN_DIR/dns.yml"
+grep nameserver /etc/resolv.conf                                    # 198.51.100.10
 getent hosts api.sno.e2e.example.test
 bootwright preflight container-cluster --context "$CTX_FIPS"
 ```
 
 Every `resolution.*` and `capacity.*` check must be `passed`.
+
+In the second host terminal, confirm the libvirt host still admits the guest
+network the node joins:
+
+```sh
+sudo firewall-cmd --get-zone-of-interface=virbr-e2e                 # trusted
+```
 
 ## 7. Install and interrupt (FIPS controller)
 
@@ -229,10 +239,24 @@ example, the emulator's OpenSSL refusing the self-signed leaf as its anchor) is
 a product finding, not a pass: record the exact message. Allow over an hour. Keep the operation-log directory the apply names, and record each
 phase's duration.
 
+The image build keeps the installer's own output out of the operation log,
+because its inputs hold the pull secret. When the build fails, read the
+installer's log on this controller:
+
+```sh
+sudo tail -n 60 /var/lib/bootwright-clusters/lab-sno-fips-controller/sno/.openshift_install.log
+```
+
+Run no `CTX_BOOT` command on the host while a `CTX_FIPS` apply runs: both
+contexts drive the host through the same staging root, and a bootstrap run
+reclaims run directories it does not own ([B1095](../../specs/milestones/backlog.md#b1095)).
+
 ## 8. Verify (FIPS controller)
 
-Install an independent `oc` matching `openshift.version`, checked against the
-release's published `sha256sum.txt`. Then:
+Install an independent `oc` matching `openshift.version` from the release's
+RHEL 9 client archive, `openshift-client-linux-amd64-rhel9-<version>.tar.gz`,
+checked with `sha256sum --ignore-missing -c sha256sum.txt` against the
+release's published list. Then:
 
 ```sh
 bootwright status --context "$CTX_FIPS"
@@ -259,8 +283,8 @@ bootwright secret show --context "$CTX_FIPS" --name lab-bmc-credentials --part p
 printf 'user = "admin:%s"\n' "$(cat "$RUN_DIR/bmc.password")" > "$RUN_DIR/bmc.curlrc"
 bmc() { curl -sS --cacert "$RUN_DIR/bmc.crt" -K "$RUN_DIR/bmc.curlrc" -H 'Content-Type: application/json' "$@"; }
 BASE="https://198.51.100.1:8010/redfish/v1"
-MANAGER=$(bmc "$BASE/Managers" | jq -r '.Members[0]."@odata.id"')
-CD="https://198.51.100.1:8010$MANAGER/VirtualMedia/Cd"
+SYSTEM=$(bmc "$BASE/Systems" | jq -r '.Members[0]."@odata.id"')     # sno-01 only: the allowed instance
+CD="https://198.51.100.1:8010$SYSTEM/VirtualMedia/Cd"
 bmc "$CD" | jq '{Inserted, VerifyCertificate}'                       # false, true: the eject keeps verification on
 bmc "$CD/Certificates" | jq '."Members@odata.count"'                 # 0: the eject removed the certificate
 ```
@@ -269,7 +293,7 @@ Import an unrelated certificate, turn verification on and insert the server's
 root. The insert must fail on certificate verification:
 
 ```sh
-openssl req -x509 -newkey ec -pkeyopt ec_paramgen_curve:P-256 -nodes -keyout /dev/null \
+openssl req -x509 -newkey ec -pkeyopt ec_paramgen_curve:P-256 -noenc -keyout /dev/null \
     -subj /CN=unrelated -days 1 -out "$RUN_DIR/unrelated.crt"
 jq -n --rawfile c "$RUN_DIR/unrelated.crt" '{CertificateString: $c, CertificateType: "PEM"}' | bmc -X POST -d @- "$CD/Certificates" -D - -o /dev/null
 bmc -X PATCH -d '{"VerifyCertificate": true}' "$CD"
@@ -326,7 +350,7 @@ if [ -e "$RUN_DIR/root-authorized_keys.before" ]; then
 else
     sudo rm -- /root/.ssh/authorized_keys
 fi
-if [ -e "$RUN_DIR/root-ssh-created" ]; then sudo rmdir -- /root/.ssh; fi
+if [ -e "$RUN_DIR/root-ssh-created" ]; then sudo rmdir -- /root/.ssh || sudo ls -A /root/.ssh; fi   # list what root gained since
 grep -qx active "$RUN_DIR/sshd-before" || sudo systemctl stop sshd
 ```
 
