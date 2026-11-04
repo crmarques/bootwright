@@ -11529,3 +11529,25 @@ one hold per live block, released when it empties or closes and never taken
 when rows are appended. `TestTerminalEchoHoldSilencesOnlyTheRedrawnTerminal`
 drives a pseudo-terminal. The delivering commit records the gates and their
 results.
+
+### X296 — The sudo refresh warning waits for the elevated child
+
+**Items:** B1102 (new, 2026-11-04, owner request). **Kind:** product.
+**Owner:** CLI.
+
+An elevated `apply` still showed a stale lifecycle meter after
+[X295](#x295--progress-keeps-keyboard-echo-off-its-redrawn-block). The
+supervisor wrote `[WARN] sudo credential refresh stopped` on standard error
+the moment a `sudo -n -v` refresh failed, while its child was redrawing
+progress on the same terminal. The next redraw wiped the warning and left the
+block's first line behind. The supervisor now
+[warns once after the child exits](../cli.md#local-privilege-and-user-identity),
+and the warning reads "the operation continued". Refresh, its stop on
+failure and the elevated command are unchanged. Why the refresh failed on the
+reporting host is not established: the warning carries no sudo text by
+design.
+
+`TestARefreshWarningNeverReachesJSONStandardError` has the child write a
+progress row after the refresh fails and requires the warning after it; it
+failed against the previous supervisor. The delivering commit records the
+gates and their results.

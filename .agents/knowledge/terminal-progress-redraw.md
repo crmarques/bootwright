@@ -115,7 +115,12 @@ not standard input, so a run with piped input is covered too. It skips a
 process in the background, since setting the terminal there raises SIGTTOU,
 and `runElevated` restores the echo it found in case the child dies holding
 it. Another process writing to the same terminal still displaces the block,
-and nothing in the presenter can see that.
+and nothing in the presenter can see that. One such writer was Bootwright's
+own supervisor: when its `sudo -n -v` refresh failed it printed
+`[WARN] sudo credential refresh stopped` while the elevated child was still
+redrawing, the redraw then wiped the warning and left the stale meter. The
+supervisor now holds that warning until the child exits (X296).
 
-Evidence: `TestTerminalProgressHoldsInputEchoWhileRowsAreDrawn` and
-`TestTerminalEchoHoldSilencesOnlyTheRedrawnTerminal`.
+Evidence: `TestTerminalProgressHoldsInputEchoWhileRowsAreDrawn`,
+`TestTerminalEchoHoldSilencesOnlyTheRedrawnTerminal` and
+`TestARefreshWarningNeverReachesJSONStandardError`.

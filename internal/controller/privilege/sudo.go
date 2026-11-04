@@ -165,6 +165,7 @@ func (s *Supervisor) Run(ctx context.Context, args []string) (int, error) {
 	childArgs = append(childArgs, args...)
 	refreshCtx, stopRefresh := context.WithCancel(ctx)
 	finished := make(chan struct{})
+	refreshStopped := false
 	go func() {
 		defer close(finished)
 		if interval == 0 {
@@ -175,10 +176,7 @@ func (s *Supervisor) Run(ctx context.Context, args []string) (int, error) {
 			code, err := options.Executor.Run(refresh, Command{Executable: options.Sudo, Arguments: []string{"-n", "-u", "#0", "-v"}, Environment: append([]string(nil), environment...), Output: io.Discard, Error: io.Discard})
 			cancel()
 			if err != nil || code != 0 {
-				if refreshCtx.Err() == nil && options.Error != nil && !options.Quiet {
-					// This warning contains no policy contents or captured sudo text.
-					io.WriteString(options.Error, "[WARN] sudo credential refresh stopped; the active operation continues.\n")
-				}
+				refreshStopped = refreshCtx.Err() == nil
 				return
 			}
 		}
@@ -186,6 +184,10 @@ func (s *Supervisor) Run(ctx context.Context, args []string) (int, error) {
 	code, err := options.Executor.Run(ctx, Command{Executable: options.Sudo, Arguments: childArgs, Environment: environment, Input: options.Input, Output: options.Output, Error: options.Error, Elevated: true})
 	stopRefresh()
 	<-finished
+	// After the child, whose progress shares the terminal; no sudo text.
+	if refreshStopped && options.Error != nil && !options.Quiet {
+		io.WriteString(options.Error, "[WARN] sudo credential refresh stopped; the operation continued.\n")
+	}
 	return code, err
 }
 

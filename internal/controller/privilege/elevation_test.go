@@ -233,17 +233,18 @@ func TestASessionElevationKeepsTheChildsStatusAndRefusesWithTwoFiftyFive(t *test
 
 // The supervisor's own refresh warning reaches a human invocation's standard
 // error and never a JSON one's, which stays empty around the child's document.
-// The refresh fails once the child announced, and the child ends only after
-// the refresh has warned.
+// The refresh fails once the child announced, and the warning waits for the
+// child to exit, because a line written meanwhile displaces the progress block
+// the child redraws on the same terminal.
 func TestARefreshWarningNeverReachesJSONStandardError(t *testing.T) {
-	const warning = "[WARN] sudo credential refresh stopped; the active operation continues.\n"
+	const warning = "[WARN] sudo credential refresh stopped; the operation continued.\n"
 	for _, test := range []struct {
-		name           string
-		json           bool
-		stdout, stderr string
+		name                string
+		json                bool
+		row, stdout, stderr string
 	}{
 		{name: "JSON", json: true, stdout: `{"exitCode":0}` + "\n"},
-		{name: "human", stdout: "[OK] done\n", stderr: warning},
+		{name: "human", row: "  [RUNNING]  [1/1] Install\n", stdout: "[OK] done\n", stderr: "  [RUNNING]  [1/1] Install\n" + warning},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			synctest.Test(t, func(t *testing.T) {
@@ -264,6 +265,7 @@ func TestARefreshWarningNeverReachesJSONStandardError(t *testing.T) {
 					io.WriteString(c.Error, startAnnouncement)
 					close(announced)
 					synctest.Wait()
+					io.WriteString(c.Error, test.row)
 					io.WriteString(c.Output, test.stdout)
 					return 0, nil
 				})
@@ -624,7 +626,7 @@ func TestElevatedStderrWithholdsOnlySudoRefusals(t *testing.T) {
 		{name: "interactive keeps the prompt", mode: "interactive", writes: []string{"[sudo] password for operator: "}, want: "[sudo] password for operator: "},
 		{name: "withheld refusal", mode: "human", writes: []string{passwordNeeded}, held: passwordNeeded},
 		{name: "product diagnostic survives", mode: "human", writes: []string{"[FAIL] context.state: context store is missing registry.json\n"}, want: "[FAIL] context.state: context store is missing registry.json\n"},
-		{name: "refresh warning survives", mode: "human", writes: []string{"[WARN] sudo credential refresh stopped; the active operation continues.\n"}, want: "[WARN] sudo credential refresh stopped; the active operation continues.\n"},
+		{name: "refresh warning survives", mode: "human", writes: []string{"[WARN] sudo credential refresh stopped; the operation continued.\n"}, want: "[WARN] sudo credential refresh stopped; the operation continued.\n"},
 		{name: "split writes rejoin one line", mode: "human", writes: []string{"sudo", ": a password", " is required\n"}, held: passwordNeeded},
 		{name: "refusal before a diagnostic", mode: "human", writes: []string{passwordNeeded + "[FAIL] runtime.privilege: denied\n"}, want: passwordNeeded + "[FAIL] runtime.privilege: denied\n"},
 		{name: "unterminated diagnostic flushes on close", mode: "human", writes: []string{"[FAIL] cli.usage: bad"}, want: "[FAIL] cli.usage: bad"},

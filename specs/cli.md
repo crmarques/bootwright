@@ -365,9 +365,10 @@ The supervisor owns bounded `sudo -n -v` refresh subprocesses during that child.
 Keep the same parent and terminal identity. An unambiguous positive effective
 timeout refreshes at half its duration, including fractional minutes. Zero and
 negative timeouts need no expiry refresh. Unknown policy uses a 30-second
-best-effort interval; never assume a five-minute timeout. Refresh failure or
-timeout warns once on standard error, except in structured mode, whose standard error
-stays empty, and stops refresh without terminating the elevated command.
+best-effort interval; never assume a 5-minute timeout. Refresh failure or
+timeout ends refresh, never the elevated command, and warns once on standard
+error after it exits, except in structured mode, whose standard error stays
+empty.
 Completion/cancellation stops and reaps every refresh process. Never leave a
 daemon or invalidate the user's wider sudo cache. The same `sudo -n -ll`
 listing decides whether a standard-input `secret set` refuses before sudo
