@@ -946,18 +946,8 @@ core and ceph-host evidence carry an optional `specializations` member naming,
 sorted, the specializations the native phases of the execution that wrote it
 applied, absent when none applied. The member is informational: no effect,
 ownership, readiness or identity decision reads it, and it enters no intent or
-digest.
-
-A named refusal ends the attempt with its entry's code. An entry coded
-`lifecycle.unknown` leaves the block's attempt outcome unknown, so the next
-apply observes that block first and resolves it from the observed evidence, a
-host block through its preparation evidence. Only the entries coded `lifecycle.unsupported` (`unsupported-release`,
-`package-license`, `package-platform`, `dashboard-verify`,
-`client-quiescence-unqualified`, `call-home-unqualified`,
-`native-option-undeclared`, `ssh-policy-host-excluded`,
-`ssh-policy-unavailable`, `tunnel-host-key-excluded`, `device-not-empty`,
-`foreign-osd`, `device-*`) leave it failed. A censored failure that names
-no refusal stays the generic adapter failure, failing the attempt.
+digest. [Named refusal outcomes](#named-refusal-outcomes) states how a refusal
+ends the attempt.
 
 ### Cluster execution budget
 
@@ -1120,6 +1110,21 @@ the same host count as the cluster.
 The concurrent rounds are implemented under [B688](milestones/m2.md#b688), and
 the deadline as the only host bound under [B890](milestones/m2.md#b890); the
 live qualification of both remains outstanding.
+
+## Named refusal outcomes
+
+A named refusal of a Ceph block ends the attempt with its entry's code. An
+entry coded `lifecycle.unknown` leaves the block's attempt outcome unknown, so
+the next apply observes that block first and resolves it from the observed
+evidence, a host block through its preparation evidence. Only the entries coded
+`lifecycle.unsupported` (`unsupported-release`, `package-license`,
+`package-platform`, `dashboard-verify`, `client-quiescence-unqualified`,
+`call-home-unqualified`, `native-option-undeclared`,
+`ssh-policy-host-excluded`, `ssh-policy-unavailable`,
+`tunnel-host-key-excluded`, `device-not-empty`, `foreign-osd`,
+`device-serial-absent`, `device-serial-ambiguous`, `device-serial-mismatch`,
+`device-alias`, `device-root`) leave it failed. A censored failure that names
+no refusal stays the generic adapter failure, failing the attempt.
 
 ## Devices and destructive ownership
 

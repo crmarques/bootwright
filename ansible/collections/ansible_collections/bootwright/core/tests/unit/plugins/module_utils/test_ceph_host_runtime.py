@@ -1983,6 +1983,7 @@ def physical_runtime(request_value, tmp_path, monkeypatch):
                "spec": {"data_devices": {"paths": [PHYSICAL_PATH]}}}
     request_value["services"].extend([osd, service])
     monkeypatch.setattr(runtime, "physical_hardware", lambda host: None)
+    monkeypatch.setattr(runtime, "sysfs_serial", lambda node: "serial-1" if node == "/dev/sda" else None)
     monkeypatch.setattr(runtime.os.path, "realpath", lambda path: "/dev/sda" if path == PHYSICAL_PATH else path)
     state = {"disk": {"path": "/dev/sda", "type": "disk", "serial": "serial-1", "size": 1 << 40, "rota": True,
                       "maj:min": "8:0", "wwn": PHYSICAL_WWN, "ro": False, "rm": False},
@@ -2027,6 +2028,27 @@ def test_physical_device_observation_refuses_changed_live_identity(request_value
     with pytest.raises(ceph_native.Refusal, match="device-identity"):
         worker.physical_readback(retained[runtime.DEVICES]["devices"])
     assert markers.records == retained
+
+
+def test_a_wwn_selection_refuses_as_device_root_when_only_the_sysfs_serial_is_the_roots(request_value, tmp_path, monkeypatch):
+    # udev rewrites a / in a serial to _, so lsblk can disagree with the sysfs reading the installer proved the root by.
+    request_value["hosts"][0]["rootSerial"] = "ROOT/1"
+    worker, markers, state = physical_runtime(request_value, tmp_path, monkeypatch)
+    state["disk"]["serial"] = "ROOT_1"
+    state["udev"] = state["udev"].replace("ID_SCSI_SERIAL=serial-1", "ID_SCSI_SERIAL=ROOT_1")
+    monkeypatch.setattr(runtime, "sysfs_serial", lambda node: "ROOT/1")
+    before = copy.deepcopy(markers.records)
+    with pytest.raises(ceph_native.Refusal, match="^device-root$"):
+        worker.device_identity()
+    assert markers.records == before
+
+
+def test_sysfs_serial_reads_the_installers_attribute_and_none_when_absent(tmp_path):
+    node = tmp_path / "class/block/sdq/device"
+    node.mkdir(parents=True)
+    (node / "serial").write_text("ROOT/1\n")
+    assert runtime.sysfs_serial("/dev/sdq", str(tmp_path)) == "ROOT/1"
+    assert runtime.sysfs_serial("/dev/sdr", str(tmp_path)) is None
 
 
 @pytest.mark.parametrize("root_serial,refused", [("serial-1", True), ("serial-2", False), (None, False)])

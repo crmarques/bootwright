@@ -872,8 +872,10 @@ class HostRuntime:
                 and type(item.get("size")) is int and item["size"] == device["sizeBytes"], "device-identity")
         major, minor = (int(value) for value in pair.split(":"))
         require(major > 0 and minor >= 0, "device-identity")
-        # The Machine's root disk, declared by serial, has no WWN admission could compare; no selected disk may be it.
-        require(not self.host.get("rootSerial") or item.get("serial") != self.host["rootSerial"], "device-root")
+        # The Machine's root disk, declared by serial, has no WWN admission could compare; no selected disk may be it,
+        # by udev's serial or by the sysfs reading the installer proved the root by (udev rewrites characters such as /).
+        root = self.host.get("rootSerial")
+        require(not root or item.get("serial") != root and sysfs_serial(actual) != root, "device-root")
         result = {"path": device["path"], "serial": item["serial"], "sizeBytes": item["size"],
                   "rotational": int(rotational), "major": major, "minor": minor}
         if device.get("wwn"):
@@ -1144,6 +1146,14 @@ def physical_hardware(host, root="/sys"):
         physical_machine_identity.prove(host["hardware"]["uuid"], host["hardware"]["macs"], root)
     except ValueError:
         raise Refusal("device-identity") from None
+
+
+def sysfs_serial(node, root="/sys"):
+    """The installer's sysfs serial reading of the whole disk at node, or None when it reads none."""
+    try:
+        return physical_erase_worker.disk_serial(Path(root) / "class/block" / os.path.basename(node))
+    except (physical_erase_worker.Refusal, OSError):
+        return None
 
 
 def serial_disk(serial, root="/sys"):
